@@ -6,6 +6,8 @@ import { useSkills } from "@/composables/use-skills";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { InstallSkillRequest } from "@/composables/use-skill-catalog";
+import { isSameTarget, targetBody, type InstallTarget } from "@/lib/install-target";
+import InstallTargetPicker from "../InstallTargetPicker.vue";
 
 function mapSourceToNumber(source: "GitHub" | "Local" | "Bundled"): number {
   switch (source) {
@@ -18,15 +20,19 @@ function mapSourceToNumber(source: "GitHub" | "Local" | "Bundled"): number {
   }
 }
 
+const target = defineModel<InstallTarget>("target", { required: true });
+
 const { catalog, isLoading, error, installSkill } = useSkillCatalog();
 const { skills: installedSkills, fetchSkills } = useSkills();
 
 const installingSkillName = shallowRef<string | null>(null);
+const installError = shallowRef<string | null>(null);
 
 const hasCatalog = computed(() => catalog.value.length > 0);
 
+/** Installed where the picker points: a skill can also be installed elsewhere. */
 function isInstalled(skillName: string): boolean {
-  return installedSkills.value.some((s) => s.name === skillName);
+  return installedSkills.value.some((s) => s.name === skillName && isSameTarget(s.target, target.value));
 }
 
 async function handleInstall(skillName: string): Promise<void> {
@@ -36,6 +42,7 @@ async function handleInstall(skillName: string): Promise<void> {
   }
 
   installingSkillName.value = skillName;
+  installError.value = null;
 
   try {
     const request: InstallSkillRequest = {
@@ -46,10 +53,13 @@ async function handleInstall(skillName: string): Promise<void> {
       subPath: catalogEntry.subPath ?? catalogEntry.localPath ?? null,
       localPath: catalogEntry.localPath ?? null,
       targetHarnesses: [...catalogEntry.targetHarnesses],
+      ...targetBody(target.value),
     };
 
     await installSkill(request);
     await fetchSkills();
+  } catch (err) {
+    installError.value = err instanceof Error ? err.message : "Failed to install skill.";
   } finally {
     installingSkillName.value = null;
   }
@@ -58,6 +68,12 @@ async function handleInstall(skillName: string): Promise<void> {
 
 <template>
   <div class="space-y-4">
+    <InstallTargetPicker
+      v-model="target"
+      kind="skills"
+      :disabled="installingSkillName !== null"
+    />
+
     <div
       v-if="isLoading"
       class="flex items-center gap-2 text-sm text-muted"
@@ -215,7 +231,20 @@ async function handleInstall(skillName: string): Promise<void> {
     </div>
 
     <div
-      v-if="error && hasCatalog"
+      v-if="installError"
+      class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
+      role="alert"
+    >
+      <AlertCircle
+        :size="16"
+        class="mt-0.5 shrink-0"
+        aria-hidden="true"
+      />
+      <span>{{ installError }}</span>
+    </div>
+
+    <div
+      v-else-if="error && hasCatalog"
       class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
       role="alert"
     >

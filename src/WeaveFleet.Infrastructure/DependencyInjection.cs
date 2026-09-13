@@ -94,6 +94,16 @@ public static class DependencyInjection
     }
 
     /// <summary>
+    /// Adds the startup service that moves skills and tools installed by older Fleet versions to
+    /// where OpenCode reads them. Local mode only. Register before the bundled skills service.
+    /// </summary>
+    public static IServiceCollection AddLegacyInstallMigrationStartupService(this IServiceCollection services)
+    {
+        services.AddHostedService<LegacyInstallMigrationHostedService>();
+        return services;
+    }
+
+    /// <summary>
     /// Adds all infrastructure services (database, repositories, external clients) to the service collection.
     /// </summary>
     public static IServiceCollection AddFleetInfrastructure(
@@ -210,11 +220,15 @@ public static class DependencyInjection
         services.AddSingleton<ISmartLinkWatcher>(sp => sp.GetRequiredService<WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub.SmartLinkWatcherService>());
         services.AddHostedService(sp => sp.GetRequiredService<WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub.SmartLinkWatcherService>());
 
+        // Where harnesses read skills, tools and config: ~/.config/opencode, <repo>/.opencode, …
+        services.AddSingleton(_ => HarnessInstallPaths.FromEnvironment());
+
         // Skill services
         services.AddSingleton<ISkillCatalogService, GitHubSkillCatalogService>();
         services.AddSingleton<ISkillManifestStore, JsonSkillManifestStore>();
         services.AddSingleton<ISkillSyncEngine>(sp => new SkillSyncEngine(
             sp.GetRequiredService<ISkillManifestStore>(),
+            sp.GetRequiredService<HarnessInstallPaths>(),
             sp.GetRequiredService<ILogger<SkillSyncEngine>>(),
             sp.GetService<IHarnessPoolRecycler>()));
         services.AddSingleton<IGitHubSkillFetcher, GitHubSkillFetcher>();
@@ -223,7 +237,10 @@ public static class DependencyInjection
         // Tool services
         services.AddSingleton<IToolCatalogService, GitHubToolCatalogService>();
         services.AddSingleton<IToolManifestStore, JsonToolManifestStore>();
-        services.AddSingleton<IToolInstaller, ToolInstaller>();
+        services.AddSingleton<IToolInstaller>(sp => new ToolInstaller(
+            sp.GetRequiredService<HarnessInstallPaths>(),
+            sp.GetRequiredService<ILogger<ToolInstaller>>(),
+            sp.GetService<IHarnessPoolRecycler>()));
 
         // InstanceTracker is singleton — holds live in-process handles across requests
         services.AddSingleton<InstanceTracker>();

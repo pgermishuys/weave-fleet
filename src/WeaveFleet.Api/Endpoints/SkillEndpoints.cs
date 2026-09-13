@@ -16,10 +16,9 @@ public static class SkillEndpoints
     {
         var group = app.MapGroup("/api/skills").WithTags("Skills");
 
-        // GET /api/skills — list from manifest (with sync status per harness)
+        // GET /api/skills — list from manifest, with where each skill is installed
         group.MapGet("", async (
             ISkillManifestStore manifestStore,
-            ISkillSyncEngine syncEngine,
             IUserContext userContext,
             CancellationToken ct) =>
         {
@@ -34,6 +33,9 @@ public static class SkillEndpoints
                     SubPath: e.SubPath,
                     LocalPath: e.LocalPath,
                     TargetHarnesses: e.TargetHarnesses,
+                    Scope: InstallTargets.ToApi(e.Scope),
+                    ProjectPath: e.ProjectPath,
+                    InstalledPaths: e.InstalledPaths,
                     InstalledAt: e.InstalledAt,
                     UpdatedAt: e.UpdatedAt
                 )).ToArray()
@@ -83,12 +85,13 @@ public static class SkillEndpoints
         .Produces<SkillCatalogResponse>()
         .ProducesProblem(500);
 
-        // POST /api/skills/install — install from catalog/URL/local, add to manifest, sync
+        // POST /api/skills/install — fetch the skill, copy it into each harness at the chosen scope, add to manifest
         group.MapPost("/install", async (
             InstallSkillRequest req,
             ISkillManifestStore manifestStore,
             IGitHubSkillFetcher gitHubFetcher,
             ISkillSyncEngine syncEngine,
+            RepositoryService repositories,
             IUserContext userContext,
             CancellationToken ct) =>
         {
@@ -98,10 +101,14 @@ public static class SkillEndpoints
             if (!IsValidSkillName(req.Name))
                 return Results.BadRequest(new ErrorResponse("Invalid skill name."));
 
-            // Check if skill already exists
+            var target = await InstallTargets.ResolveAsync(req.Scope, req.ProjectPath, repositories, ct);
+            if (target.IsFailure)
+                return InstallTargets.ToErrorResult(target.Error, "Invalid install target");
+
+            // A skill can be installed once per target: globally, and into any number of repositories.
             var manifest = await manifestStore.LoadAsync(userContext.UserId, workspaceId: null, ct);
-            if (manifest.Skills.Any(s => s.Name == req.Name))
-                return Results.Conflict(new ErrorResponse($"Skill '{req.Name}' is already installed."));
+            if (FindEntry(manifest, req.Name, target.Value) is not null)
+                return Results.Conflict(new ErrorResponse($"Skill '{req.Name}' is already installed there."));
 
             // Validate source
             var localPath = req.LocalPath;
@@ -141,7 +148,7 @@ public static class SkillEndpoints
                 return Results.BadRequest(new ErrorResponse("Bundled skills cannot be installed via API."));
             }
 
-            // Add to manifest
+            var now = DateTimeOffset.UtcNow;
             var entry = new SkillManifestEntry
             {
                 Name = req.Name,
@@ -150,28 +157,31 @@ public static class SkillEndpoints
                 Ref = req.Ref,
                 SubPath = req.SubPath,
                 LocalPath = localPath,
-                TargetHarnesses = req.TargetHarnesses ?? [],
-                InstalledAt = DateTimeOffset.UtcNow,
-                UpdatedAt = DateTimeOffset.UtcNow
+                TargetHarnesses = req.TargetHarnesses is { Count: > 0 } ? req.TargetHarnesses : [DefaultHarness],
+                Scope = target.Value.Scope,
+                ProjectPath = target.Value.ProjectPath,
+                InstalledAt = now,
+                UpdatedAt = now
             };
 
-            await manifestStore.AddEntryAsync(userContext.UserId, workspaceId: null, entry, ct);
+            var syncResults = await syncEngine.SyncSkillAsync(entry, ct);
 
-            // Sync to harnesses
-            var syncResults = await syncEngine.SyncSkillAsync(req.Name, ct);
+            // Nothing landed where a harness looks: don't record an install that isn't there.
+            if (!syncResults.Any(r => r.Success))
+            {
+                var detail = string.Join(" ", syncResults.Select(r => r.ErrorMessage).Where(m => m is not null));
+                return syncResults.Any(r => r.Skipped)
+                    ? Results.Conflict(new ErrorResponse(detail))
+                    : Results.Problem(statusCode: 500, title: "Skill installation failed", detail: detail);
+            }
+
+            await manifestStore.AddEntryAsync(userContext.UserId, workspaceId: null, entry.WithSyncedPaths(syncResults), ct);
 
             return Results.Created(
                 $"/api/skills/{req.Name}",
                 new InstallSkillResponse(
                     Name: req.Name,
-                    SyncResults: syncResults.Select(r => new SkillSyncResultDto(
-                        SkillName: r.SkillName,
-                        Harness: r.Harness,
-                        Success: r.Success,
-                        Skipped: r.Skipped,
-                        ErrorMessage: r.ErrorMessage,
-                        TargetPath: r.TargetPath
-                    )).ToArray()
+                    SyncResults: ToDtos(syncResults)
                 )
             );
         })
@@ -181,9 +191,11 @@ public static class SkillEndpoints
         .ProducesProblem(409)
         .ProducesProblem(500);
 
-        // POST /api/skills/{name}/update — pull latest, update manifest, sync
+        // POST /api/skills/{name}/update?scope=&projectPath= — pull latest, copy it over the installed skill
         group.MapPost("/{name}/update", async (
             string name,
+            string? scope,
+            string? projectPath,
             ISkillManifestStore manifestStore,
             IGitHubSkillFetcher gitHubFetcher,
             ISkillSyncEngine syncEngine,
@@ -193,8 +205,12 @@ public static class SkillEndpoints
             if (!IsValidSkillName(name))
                 return Results.BadRequest(new ErrorResponse("Invalid skill name."));
 
+            var target = InstallTargets.Parse(scope, projectPath);
+            if (target.IsFailure)
+                return InstallTargets.ToErrorResult(target.Error, "Invalid install target");
+
             var manifest = await manifestStore.LoadAsync(userContext.UserId, workspaceId: null, ct);
-            var entry = manifest.Skills.FirstOrDefault(s => s.Name == name);
+            var entry = FindEntry(manifest, name, target.Value);
 
             if (entry is null)
                 return Results.NotFound(new ErrorResponse($"Skill '{name}' not found."));
@@ -217,24 +233,15 @@ public static class SkillEndpoints
                     detail: updateResult.Error.Description
                 );
 
-            // Update manifest timestamp
-            var updatedEntry = entry with { UpdatedAt = DateTimeOffset.UtcNow };
+            // Copy the fresh files over the installed ones, then record the new timestamp and paths
+            var syncResults = await syncEngine.SyncSkillAsync(entry, ct);
+            var updatedEntry = entry.WithSyncedPaths(syncResults) with { UpdatedAt = DateTimeOffset.UtcNow };
             await manifestStore.UpdateEntryAsync(userContext.UserId, workspaceId: null, updatedEntry, ct);
-
-            // Sync to harnesses
-            var syncResults = await syncEngine.SyncSkillAsync(name, ct);
 
             return Results.Ok(new UpdateSkillResponse(
                 Name: name,
                 UpdatedAt: updatedEntry.UpdatedAt,
-                SyncResults: syncResults.Select(r => new SkillSyncResultDto(
-                    SkillName: r.SkillName,
-                    Harness: r.Harness,
-                    Success: r.Success,
-                    Skipped: r.Skipped,
-                    ErrorMessage: r.ErrorMessage,
-                    TargetPath: r.TargetPath
-                )).ToArray()
+                SyncResults: ToDtos(syncResults)
             ));
         })
         .WithName("UpdateSkill")
@@ -243,18 +250,25 @@ public static class SkillEndpoints
         .ProducesProblem(404)
         .ProducesProblem(500);
 
-        // DELETE /api/skills/{name} — remove from manifest, remove symlinks, sync
+        // DELETE /api/skills/{name}?scope=&projectPath= — delete the skill folders Fleet installed, then the manifest entry
         group.MapDelete("/{name}", async (
             string name,
+            string? scope,
+            string? projectPath,
             ISkillManifestStore manifestStore,
+            ISkillSyncEngine syncEngine,
             IUserContext userContext,
             CancellationToken ct) =>
         {
             if (!IsValidSkillName(name))
                 return Results.BadRequest(new ErrorResponse("Invalid skill name."));
 
+            var target = InstallTargets.Parse(scope, projectPath);
+            if (target.IsFailure)
+                return InstallTargets.ToErrorResult(target.Error, "Invalid install target");
+
             var manifest = await manifestStore.LoadAsync(userContext.UserId, workspaceId: null, ct);
-            var entry = manifest.Skills.FirstOrDefault(s => s.Name == name);
+            var entry = FindEntry(manifest, name, target.Value);
 
             if (entry is null)
                 return Results.NotFound(new ErrorResponse($"Skill '{name}' not found."));
@@ -262,23 +276,27 @@ public static class SkillEndpoints
             if (entry.Source == SkillSource.Bundled)
                 return Results.BadRequest(new ErrorResponse("Bundled skills cannot be removed."));
 
-            // Remove from manifest
-            await manifestStore.RemoveEntryAsync(userContext.UserId, workspaceId: null, name, ct);
+            // Keep the entry when a folder couldn't be deleted, so the user can retry.
+            var removeResults = await syncEngine.RemoveSkillAsync(entry, ct);
+            var failures = removeResults.Where(r => !r.Success).Select(r => r.ErrorMessage).ToArray();
+            if (failures.Length > 0)
+                return Results.Problem(statusCode: 500, title: "Skill removal failed", detail: string.Join(" ", failures));
 
-            // Note: Sync engine will handle symlink removal on next sync
-            // For immediate cleanup, we could trigger a full sync here, but that's expensive
-            // Instead, we rely on the sync engine to clean up stale symlinks
+            await manifestStore.RemoveEntryAsync(userContext.UserId, workspaceId: null, name, target.Value, ct);
 
             return Results.NoContent();
         })
         .WithName("DeleteSkill")
         .Produces(204)
         .ProducesProblem(400)
-        .ProducesProblem(404);
+        .ProducesProblem(404)
+        .ProducesProblem(500);
 
-        // GET /api/skills/{name}/update-check — check if update available
+        // GET /api/skills/{name}/update-check?scope=&projectPath= — check if update available
         group.MapGet("/{name}/update-check", async (
             string name,
+            string? scope,
+            string? projectPath,
             ISkillManifestStore manifestStore,
             IGitHubSkillFetcher gitHubFetcher,
             IUserContext userContext,
@@ -287,8 +305,12 @@ public static class SkillEndpoints
             if (!IsValidSkillName(name))
                 return Results.BadRequest(new ErrorResponse("Invalid skill name."));
 
+            var target = InstallTargets.Parse(scope, projectPath);
+            if (target.IsFailure)
+                return InstallTargets.ToErrorResult(target.Error, "Invalid install target");
+
             var manifest = await manifestStore.LoadAsync(userContext.UserId, workspaceId: null, ct);
-            var entry = manifest.Skills.FirstOrDefault(s => s.Name == name);
+            var entry = FindEntry(manifest, name, target.Value);
 
             if (entry is null)
                 return Results.NotFound(new ErrorResponse($"Skill '{name}' not found."));
@@ -340,6 +362,22 @@ public static class SkillEndpoints
         return app;
     }
 
+    // OpenCode is the harness Fleet runs; a skill that names none is installed for it.
+    private const string DefaultHarness = "opencode";
+
+    private static SkillManifestEntry? FindEntry(SkillManifest manifest, string name, InstallTarget target) =>
+        manifest.Skills.FirstOrDefault(s => s.Name == name && target.Matches(s.Scope, s.ProjectPath));
+
+    private static SkillSyncResultDto[] ToDtos(IEnumerable<SkillSyncResult> results) =>
+        results.Select(r => new SkillSyncResultDto(
+            SkillName: r.SkillName,
+            Harness: r.Harness,
+            Success: r.Success,
+            Skipped: r.Skipped,
+            ErrorMessage: r.ErrorMessage,
+            TargetPath: r.TargetPath
+        )).ToArray();
+
     /// <summary>
     /// Returns true when <paramref name="name"/> is a valid skill name:
     /// non-empty, not "." or "..", and contains no path separators.
@@ -369,7 +407,9 @@ internal sealed record InstallSkillRequest(
     string? Ref,
     string? SubPath,
     string? LocalPath,
-    IReadOnlyList<string>? TargetHarnesses);
+    IReadOnlyList<string>? TargetHarnesses,
+    string? Scope = null,
+    string? ProjectPath = null);
 
 internal sealed record InstallSkillResponse(
     string Name,
@@ -398,6 +438,9 @@ internal sealed record SkillListItemDto(
     string? SubPath,
     string? LocalPath,
     IReadOnlyList<string> TargetHarnesses,
+    string Scope,
+    string? ProjectPath,
+    IReadOnlyList<string> InstalledPaths,
     DateTimeOffset InstalledAt,
     DateTimeOffset UpdatedAt);
 

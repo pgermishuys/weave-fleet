@@ -1,22 +1,24 @@
-using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Skills;
 using WeaveFleet.Domain.Skills;
+using WeaveFleet.Infrastructure.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Skills;
 
 /// <summary>
-/// Synchronizes skills from ~/.weave/skills/{name}/ to harness discovery paths.
-/// Creates symlinks on macOS/Linux, copies on Windows.
-/// Tracks Fleet-managed skills via a .fleet-managed marker file.
+/// Copies skills from their source (a GitHub clone under ~/.weave/skills, or a local folder) into
+/// harness skill folders, globally or inside a repository. See <see cref="HarnessInstallPaths"/>.
 /// </summary>
+/// <remarks>
+/// Skills are copied on every OS, so a project install can be committed and a global install
+/// doesn't depend on Fleet's cache. A folder that's already there is replaced only when Fleet wrote
+/// it: it's in the entry's <see cref="SkillManifestEntry.InstalledPaths"/>, it's a link or marked
+/// folder from an older Fleet, or it already holds exactly the skill's files.
+/// </remarks>
 public sealed class SkillSyncEngine : ISkillSyncEngine
 {
-    private const string FleetManagedMarker = ".fleet-managed";
-
-    private readonly string _weaveSkillsDir;
-    private readonly Dictionary<string, string> _harnessDiscoveryPaths;
+    private const string LocalOwnerUserId = "local-user";
 
     private static readonly Action<ILogger, int, Exception?> LogPoolRecycled =
         LoggerMessage.Define<int>(LogLevel.Information, new EventId(1, "PoolRecycled"),
@@ -27,240 +29,206 @@ public sealed class SkillSyncEngine : ISkillSyncEngine
             "Failed to recycle pooled harness instances after skill sync.");
 
     private readonly ISkillManifestStore _manifestStore;
+    private readonly HarnessInstallPaths _paths;
     private readonly IHarnessPoolRecycler? _poolRecycler;
     private readonly ILogger<SkillSyncEngine> _logger;
 
     public SkillSyncEngine(
         ISkillManifestStore manifestStore,
+        HarnessInstallPaths paths,
         ILogger<SkillSyncEngine> logger,
-        IHarnessPoolRecycler? poolRecycler = null,
-        string? baseDirectory = null)
+        IHarnessPoolRecycler? poolRecycler = null)
     {
         _manifestStore = manifestStore;
+        _paths = paths;
         _logger = logger;
         _poolRecycler = poolRecycler;
-
-        var baseDir = baseDirectory ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        _weaveSkillsDir = Path.Combine(baseDir, ".weave", "skills");
-        _harnessDiscoveryPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["opencode"] = Path.Combine(baseDir, ".config", "opencode", "skills"),
-            ["claude-code"] = Path.Combine(baseDir, ".claude", "skills")
-        };
     }
 
     public async Task<IReadOnlyList<SkillSyncResult>> SyncAllAsync(CancellationToken cancellationToken = default)
     {
-        // Load manifest for the current user (using "local-user" as default)
-        var manifest = await _manifestStore.LoadAsync("local-user", workspaceId: null, cancellationToken).ConfigureAwait(false);
+        var manifest = await _manifestStore.LoadAsync(LocalOwnerUserId, workspaceId: null, cancellationToken).ConfigureAwait(false);
 
         var results = new List<SkillSyncResult>();
+        var entries = new List<SkillManifestEntry>();
 
         foreach (var skill in manifest.Skills)
         {
-            var skillResults = await SyncSkillInternalAsync(skill, cancellationToken).ConfigureAwait(false);
+            var skillResults = Sync(skill, cancellationToken);
             results.AddRange(skillResults);
+            entries.Add(skill.WithSyncedPaths(skillResults));
         }
 
-        // Recycle idle pooled instances if any skills were successfully synced
-        if (results.Any(r => r.Success) && _poolRecycler is not null)
+        if (results.Any(r => r.Success))
         {
+            await _manifestStore.SaveAsync(manifest with { Skills = entries, UpdatedAt = DateTimeOffset.UtcNow }, cancellationToken)
+                .ConfigureAwait(false);
             await RecyclePooledInstancesAsync(cancellationToken).ConfigureAwait(false);
         }
 
         return results;
     }
 
-    public async Task<IReadOnlyList<SkillSyncResult>> SyncSkillAsync(string skillName, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<SkillSyncResult>> SyncSkillAsync(SkillManifestEntry skill, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(skillName))
-            throw new ArgumentException("Skill name cannot be empty.", nameof(skillName));
+        ArgumentNullException.ThrowIfNull(skill);
+        ArgumentException.ThrowIfNullOrWhiteSpace(skill.Name);
 
-        // Load manifest for the current user
-        var manifest = await _manifestStore.LoadAsync("local-user", workspaceId: null, cancellationToken).ConfigureAwait(false);
+        var results = Sync(skill, cancellationToken);
 
-        var skill = manifest.Skills.FirstOrDefault(s => s.Name.Equals(skillName, StringComparison.OrdinalIgnoreCase));
-        if (skill is null)
-        {
-            return
-            [
-                new SkillSyncResult
-                {
-                    SkillName = skillName,
-                    Harness = "unknown",
-                    Success = false,
-                    Skipped = false,
-                    ErrorMessage = $"Skill '{skillName}' not found in manifest."
-                }
-            ];
-        }
-
-        var results = await SyncSkillInternalAsync(skill, cancellationToken).ConfigureAwait(false);
-
-        // Recycle idle pooled instances if the skill was successfully synced
-        if (results.Any(r => r.Success) && _poolRecycler is not null)
-        {
+        if (results.Any(r => r.Success))
             await RecyclePooledInstancesAsync(cancellationToken).ConfigureAwait(false);
+
+        return results;
+    }
+
+    public async Task<IReadOnlyList<SkillSyncResult>> RemoveSkillAsync(SkillManifestEntry skill, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(skill);
+        ArgumentException.ThrowIfNullOrWhiteSpace(skill.Name);
+
+        var target = InstallTarget.From(skill.Scope, skill.ProjectPath);
+        var results = new List<SkillSyncResult>();
+
+        // Every harness, not just the entry's current ones: the entry may have targeted others before.
+        foreach (var harness in HarnessInstallPaths.SkillHarnesses)
+        {
+            var targetPath = _paths.SkillDirectory(harness, target, skill.Name)!;
+            if (!InstalledFiles.Exists(targetPath) || !IsFleetOwned(skill, targetPath))
+                continue;
+
+            try
+            {
+                InstalledFiles.Delete(targetPath);
+                results.Add(Succeeded(skill.Name, harness, targetPath));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                results.Add(Failed(skill.Name, harness, $"Failed to delete {targetPath}: {ex.Message}", targetPath));
+            }
         }
+
+        if (results.Any(r => r.Success))
+            await RecyclePooledInstancesAsync(cancellationToken).ConfigureAwait(false);
 
         return results;
     }
 
     // ── Private helpers ────────────────────────────────────────────────────────
 
-    private async Task<IReadOnlyList<SkillSyncResult>> SyncSkillInternalAsync(
-        SkillManifestEntry skill,
-        CancellationToken cancellationToken)
+    private List<SkillSyncResult> Sync(SkillManifestEntry skill, CancellationToken cancellationToken)
     {
-        var results = new List<SkillSyncResult>();
-
-        // Resolve source path
-        var sourcePath = Path.Combine(_weaveSkillsDir, skill.Name);
+        var sourcePath = ResolveSource(skill);
         if (!Directory.Exists(sourcePath))
         {
-            // Source doesn't exist - return error for all harnesses
-            foreach (var harness in skill.TargetHarnesses)
-            {
-                results.Add(new SkillSyncResult
-                {
-                    SkillName = skill.Name,
-                    Harness = harness,
-                    Success = false,
-                    Skipped = false,
-                    ErrorMessage = $"Source directory not found: {sourcePath}"
-                });
-            }
-            return results;
+            return skill.TargetHarnesses
+                .Select(harness => Failed(skill.Name, harness, $"Source directory not found: {sourcePath}"))
+                .ToList();
         }
 
-        // Sync to each target harness
-        foreach (var harness in skill.TargetHarnesses)
-        {
-            var result = await SyncToHarnessAsync(skill.Name, sourcePath, harness, cancellationToken).ConfigureAwait(false);
-            results.Add(result);
-        }
-
-        return results;
+        var target = InstallTarget.From(skill.Scope, skill.ProjectPath);
+        return skill.TargetHarnesses
+            .Select(harness => SyncToHarness(skill, sourcePath, harness, target, cancellationToken))
+            .ToList();
     }
 
-    private async Task<SkillSyncResult> SyncToHarnessAsync(
-        string skillName,
+    private SkillSyncResult SyncToHarness(
+        SkillManifestEntry skill,
         string sourcePath,
         string harness,
+        InstallTarget target,
         CancellationToken cancellationToken)
     {
-        // Resolve harness discovery path
-        if (!_harnessDiscoveryPaths.TryGetValue(harness, out var harnessBasePath))
-        {
-            return new SkillSyncResult
-            {
-                SkillName = skillName,
-                Harness = harness,
-                Success = false,
-                Skipped = false,
-                ErrorMessage = $"Unknown harness: {harness}"
-            };
-        }
+        var targetPath = _paths.SkillDirectory(harness, target, skill.Name);
+        if (targetPath is null)
+            return Failed(skill.Name, harness, $"Unknown harness: {harness}");
 
-        var targetPath = Path.Combine(harnessBasePath, skillName);
-        var markerPath = Path.Combine(targetPath, FleetManagedMarker);
+        // A local skill that already lives in the harness folder: replacing it would delete the source.
+        if (InstalledFiles.IsUnder(targetPath, sourcePath) || InstalledFiles.IsUnder(sourcePath, targetPath))
+            return Skipped(skill.Name, harness, $"The skill's source is already in the harness folder: {targetPath}", targetPath);
 
-        // Check if target exists and is user-managed
-        if (Directory.Exists(targetPath) && !File.Exists(markerPath))
+        if (InstalledFiles.Exists(targetPath) && !IsFleetOwned(skill, targetPath) && !InstalledFiles.DirectoriesMatch(sourcePath, targetPath))
         {
-            return new SkillSyncResult
-            {
-                SkillName = skillName,
-                Harness = harness,
-                Success = false,
-                Skipped = true,
-                ErrorMessage = $"Target path exists but is not Fleet-managed (missing {FleetManagedMarker}): {targetPath}",
-                TargetPath = targetPath
-            };
+            return Skipped(skill.Name, harness,
+                $"A skill folder Fleet didn't install is already at {targetPath}. Remove or rename it, then install again.",
+                targetPath);
         }
 
         try
         {
-            // Remove existing Fleet-managed target if present
-            if (Directory.Exists(targetPath))
-            {
-                Directory.Delete(targetPath, recursive: true);
-            }
+            if (InstalledFiles.Exists(targetPath))
+                InstalledFiles.Delete(targetPath);
 
-            // Ensure parent directory exists
-            Directory.CreateDirectory(harnessBasePath);
-
-            // Create symlink on macOS/Linux, copy on Windows
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                await CopyDirectoryAsync(sourcePath, targetPath, cancellationToken).ConfigureAwait(false);
-            }
-            else
-            {
-                Directory.CreateSymbolicLink(targetPath, sourcePath);
-            }
-
-            // Write Fleet-managed marker
-            await File.WriteAllTextAsync(markerPath, $"Managed by Weave Fleet\nSource: {sourcePath}\n", cancellationToken).ConfigureAwait(false);
-
-            return new SkillSyncResult
-            {
-                SkillName = skillName,
-                Harness = harness,
-                Success = true,
-                Skipped = false,
-                TargetPath = targetPath
-            };
+            InstalledFiles.CopyDirectory(sourcePath, targetPath, cancellationToken);
+            return Succeeded(skill.Name, harness, targetPath);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return new SkillSyncResult
-            {
-                SkillName = skillName,
-                Harness = harness,
-                Success = false,
-                Skipped = false,
-                ErrorMessage = $"Failed to sync to {targetPath}: {ex.Message}",
-                TargetPath = targetPath
-            };
+            return Failed(skill.Name, harness, $"Failed to sync to {targetPath}: {ex.Message}", targetPath);
         }
     }
 
+    private string ResolveSource(SkillManifestEntry skill) =>
+        string.IsNullOrWhiteSpace(skill.LocalPath)
+            ? Path.Combine(_paths.SkillCacheDirectory, skill.Name)
+            : skill.LocalPath;
+
     /// <summary>
-    /// Recursively copies a directory and its contents.
+    /// Fleet wrote this folder: it's recorded on the entry, or it's an older Fleet's install
+    /// (a link into the skill cache, or a folder holding the marker file).
     /// </summary>
-    private static async Task CopyDirectoryAsync(string sourceDir, string targetDir, CancellationToken cancellationToken)
+    private bool IsFleetOwned(SkillManifestEntry skill, string targetPath)
     {
-        Directory.CreateDirectory(targetDir);
+        if (skill.InstalledPaths.Any(p => InstalledFiles.SamePath(p, targetPath)))
+            return true;
 
-        // Copy files
-        foreach (var file in Directory.GetFiles(sourceDir))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var fileName = Path.GetFileName(file);
-            var targetFile = Path.Combine(targetDir, fileName);
-            File.Copy(file, targetFile, overwrite: true);
-        }
+        if (InstalledFiles.LinkTarget(targetPath) is { } linkTarget)
+            return InstalledFiles.IsUnder(linkTarget, _paths.SkillCacheDirectory);
 
-        // Copy subdirectories
-        foreach (var subDir in Directory.GetDirectories(sourceDir))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var dirName = Path.GetFileName(subDir);
-            var targetSubDir = Path.Combine(targetDir, dirName);
-            await CopyDirectoryAsync(subDir, targetSubDir, cancellationToken).ConfigureAwait(false);
-        }
+        return File.Exists(Path.Combine(targetPath, InstalledFiles.LegacyManagedMarker));
     }
 
+    private static SkillSyncResult Succeeded(string skillName, string harness, string targetPath) => new()
+    {
+        SkillName = skillName,
+        Harness = harness,
+        Success = true,
+        Skipped = false,
+        TargetPath = targetPath
+    };
+
+    private static SkillSyncResult Skipped(string skillName, string harness, string message, string targetPath) => new()
+    {
+        SkillName = skillName,
+        Harness = harness,
+        Success = false,
+        Skipped = true,
+        ErrorMessage = message,
+        TargetPath = targetPath
+    };
+
+    private static SkillSyncResult Failed(string skillName, string harness, string message, string? targetPath = null) => new()
+    {
+        SkillName = skillName,
+        Harness = harness,
+        Success = false,
+        Skipped = false,
+        ErrorMessage = message,
+        TargetPath = targetPath
+    };
+
     /// <summary>
-    /// Recycles idle pooled harness instances after skill sync.
+    /// Recycles idle pooled harness instances so they pick up the changed skills.
     /// Best-effort: logs warning on failure but does not throw.
     /// </summary>
     private async Task RecyclePooledInstancesAsync(CancellationToken cancellationToken)
     {
+        if (_poolRecycler is null)
+            return;
+
         try
         {
-            var recycledCount = await _poolRecycler!.RecycleIdleInstancesAsync(cancellationToken).ConfigureAwait(false);
+            var recycledCount = await _poolRecycler.RecycleIdleInstancesAsync(cancellationToken).ConfigureAwait(false);
             LogPoolRecycled(_logger, recycledCount, null);
         }
         catch (Exception ex)

@@ -31,6 +31,17 @@ public sealed record ToolManifestEntry
     /// <summary>Local filesystem path (required when Source is Local).</summary>
     public string? LocalPath { get; init; }
 
+    /// <summary>Whether the tool is installed for the user or into one repository.</summary>
+    public InstallScope Scope { get; init; } = InstallScope.Global;
+
+    /// <summary>The repository root when <see cref="Scope"/> is <see cref="InstallScope.Project"/>.</summary>
+    public string? ProjectPath { get; init; }
+
+    /// <summary>
+    /// What Fleet wrote: the tool file for native tools, the config file holding the entry for MCP tools.
+    /// </summary>
+    public string? InstalledPath { get; init; }
+
     /// <summary>Timestamp when the tool was first installed.</summary>
     public required DateTimeOffset InstalledAt { get; init; }
 

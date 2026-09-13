@@ -26,7 +26,7 @@ public interface ISkillManifestStore
     Task SaveAsync(SkillManifest manifest, CancellationToken ct = default);
 
     /// <summary>
-    /// Adds a new skill entry to the manifest.
+    /// Adds a new skill entry to the manifest. A skill may be installed once per install target.
     /// Updates the manifest's UpdatedAt timestamp.
     /// </summary>
     /// <param name="userId">The user ID owning the manifest.</param>
@@ -36,17 +36,18 @@ public interface ISkillManifestStore
     Task AddEntryAsync(string userId, string? workspaceId, SkillManifestEntry entry, CancellationToken ct = default);
 
     /// <summary>
-    /// Removes a skill entry from the manifest by name.
+    /// Removes the skill entry with this name and install target from the manifest.
     /// Updates the manifest's UpdatedAt timestamp.
     /// </summary>
     /// <param name="userId">The user ID owning the manifest.</param>
     /// <param name="workspaceId">Optional workspace ID for workspace-scoped manifests.</param>
     /// <param name="skillName">The name of the skill to remove.</param>
+    /// <param name="target">Where the skill is installed.</param>
     /// <param name="ct">Cancellation token.</param>
-    Task RemoveEntryAsync(string userId, string? workspaceId, string skillName, CancellationToken ct = default);
+    Task RemoveEntryAsync(string userId, string? workspaceId, string skillName, InstallTarget target, CancellationToken ct = default);
 
     /// <summary>
-    /// Updates an existing skill entry in the manifest.
+    /// Updates the existing skill entry with the same name and install target.
     /// Updates the manifest's UpdatedAt timestamp.
     /// </summary>
     /// <param name="userId">The user ID owning the manifest.</param>

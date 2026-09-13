@@ -101,6 +101,7 @@ if (!string.Equals(effectiveEnvironmentName, "Testing", StringComparison.Ordinal
 {
     builder.Services.AddLauncherPatchStartupService();
     builder.Services.AddLegacySessionImportStartupService();
+    builder.Services.AddLegacyInstallMigrationStartupService();
     builder.Services.AddBundledSkillsStartupService();
     builder.Services.AddOpenCodeWarmupStartupService();
 }

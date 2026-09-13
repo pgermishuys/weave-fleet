@@ -5,19 +5,11 @@ import { useToolCatalog } from "@/composables/use-tool-catalog";
 import { useTools } from "@/composables/use-tools";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import type { InstallToolRequest } from "@/composables/use-tool-catalog";
+import { isSameTarget, targetBody, type InstallTarget } from "@/lib/install-target";
+import InstallTargetPicker from "../InstallTargetPicker.vue";
 
-interface InstallToolRequest {
-  name: string;
-  toolType: string;
-  source: number; // SkillSource enum: 0=Bundled, 1=GitHub, 2=Local
-  command: null | string;
-  args: null | string[];
-  env: null | Record<string, string>;
-  repoUrl: null | string;
-  ref: null | string;
-  subPath: null | string;
-  localPath: null | string;
-}
+const target = defineModel<InstallTarget>("target", { required: true });
 
 const { catalog, isLoading, error, installTool } = useToolCatalog();
 const { tools: installedTools, fetchTools } = useTools();
@@ -27,8 +19,9 @@ const installError = shallowRef<string | null>(null);
 
 const hasCatalog = computed(() => catalog.value.length > 0);
 
+/** Installed where the picker points: a tool can also be installed elsewhere. */
 function isInstalled(toolName: string): boolean {
-  return installedTools.value.some((t) => t.name === toolName);
+  return installedTools.value.some((t) => t.name === toolName && isSameTarget(t.target, target.value));
 }
 
 async function handleInstall(toolName: string): Promise<void> {
@@ -52,6 +45,7 @@ async function handleInstall(toolName: string): Promise<void> {
       ref: catalogEntry.ref ?? null,
       subPath: catalogEntry.subPath ?? null,
       localPath: catalogEntry.localPath ?? null,
+      ...targetBody(target.value),
     };
 
     await installTool(request);
@@ -66,6 +60,12 @@ async function handleInstall(toolName: string): Promise<void> {
 
 <template>
   <div class="space-y-4">
+    <InstallTargetPicker
+      v-model="target"
+      kind="tools"
+      :disabled="installingToolName !== null"
+    />
+
     <div
       v-if="isLoading"
       class="flex items-center gap-2 text-sm text-muted"
@@ -229,7 +229,7 @@ async function handleInstall(toolName: string): Promise<void> {
     </div>
 
     <div
-      v-if="error && hasCatalog"
+      v-else-if="error && hasCatalog"
       class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
       role="alert"
     >

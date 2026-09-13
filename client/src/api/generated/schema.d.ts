@@ -2302,6 +2302,8 @@ export interface components {
             filename: null | string;
             data: string;
         };
+        /** @enum {integer} */
+        InstallScope: number;
         InstallSkillRequest: {
             name: string;
             source: components["schemas"]["SkillSource"];
@@ -2310,6 +2312,8 @@ export interface components {
             subPath: null | string;
             localPath: null | string;
             targetHarnesses: null | string[];
+            scope?: null | string;
+            projectPath?: null | string;
         };
         InstallSkillResponse: {
             name: string;
@@ -2328,10 +2332,13 @@ export interface components {
             ref: null | string;
             subPath: null | string;
             localPath: null | string;
+            scope?: null | string;
+            projectPath?: null | string;
         };
         InstallToolResponse: {
             name: string;
             toolType: string;
+            installedPath: string;
             /** Format: date-time */
             installedAt: string;
         };
@@ -2580,6 +2587,9 @@ export interface components {
             subPath: null | string;
             localPath: null | string;
             targetHarnesses: string[];
+            scope: string;
+            projectPath: null | string;
+            installedPaths: string[];
             /** Format: date-time */
             installedAt: string;
             /** Format: date-time */
@@ -2606,6 +2616,9 @@ export interface components {
             subPath?: null | string;
             localPath?: null | string;
             targetHarnesses?: string[];
+            scope?: components["schemas"]["InstallScope"];
+            projectPath?: null | string;
+            installedPaths?: string[];
             /** Format: date-time */
             installedAt: string;
             /** Format: date-time */
@@ -2715,6 +2728,9 @@ export interface components {
             };
             repoUrl: null | string;
             localPath: null | string;
+            scope: string;
+            projectPath: null | string;
+            installedPath: null | string;
             /** Format: date-time */
             installedAt: string;
             /** Format: date-time */
@@ -4915,7 +4931,10 @@ export interface operations {
     };
     UpdateSkill: {
         parameters: {
-            query?: never;
+            query?: {
+                scope?: string;
+                projectPath?: string;
+            };
             header?: never;
             path: {
                 name: string;
@@ -4964,7 +4983,10 @@ export interface operations {
     };
     DeleteSkill: {
         parameters: {
-            query?: never;
+            query?: {
+                scope?: string;
+                projectPath?: string;
+            };
             header?: never;
             path: {
                 name: string;
@@ -5002,7 +5024,10 @@ export interface operations {
     };
     CheckSkillUpdate: {
         parameters: {
-            query?: never;
+            query?: {
+                scope?: string;
+                projectPath?: string;
+            };
             header?: never;
             path: {
                 name: string;
@@ -5171,7 +5196,10 @@ export interface operations {
     };
     DeleteTool: {
         parameters: {
-            query?: never;
+            query?: {
+                scope?: string;
+                projectPath?: string;
+            };
             header?: never;
             path: {
                 name: string;

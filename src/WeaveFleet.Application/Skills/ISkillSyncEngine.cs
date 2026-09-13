@@ -1,3 +1,5 @@
+using WeaveFleet.Domain.Skills;
+
 namespace WeaveFleet.Application.Skills;
 
 /// <summary>
@@ -25,22 +27,47 @@ public sealed record SkillSyncResult
 }
 
 /// <summary>
-/// Synchronizes skills from the manifest to harness discovery paths.
+/// Copies skills into harness skill folders (<c>~/.config/opencode/skills</c>, <c>&lt;repo&gt;/.opencode/skills</c>, …)
+/// and removes them again. Only replaces or deletes folders Fleet wrote.
 /// </summary>
 public interface ISkillSyncEngine
 {
     /// <summary>
-    /// Synchronizes all skills in the manifest to their target harnesses.
+    /// Re-copies every skill in the local user's manifest and records where each one landed.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A collection of sync results for each skill-harness pair.</returns>
     Task<IReadOnlyList<SkillSyncResult>> SyncAllAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Synchronizes a single skill by name to its target harnesses.
+    /// Copies one skill into the skill folder of each of its harnesses, at the entry's install target.
+    /// Doesn't touch the manifest; use <see cref="SkillManifestEntryExtensions.WithSyncedPaths"/> to record the result.
     /// </summary>
-    /// <param name="skillName">The name of the skill to sync.</param>
+    /// <param name="skill">The skill to copy.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A collection of sync results for each harness the skill targets.</returns>
-    Task<IReadOnlyList<SkillSyncResult>> SyncSkillAsync(string skillName, CancellationToken cancellationToken = default);
+    /// <returns>A result per harness; successful results carry the folder written.</returns>
+    Task<IReadOnlyList<SkillSyncResult>> SyncSkillAsync(SkillManifestEntry skill, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes the skill folders Fleet wrote for this entry. Folders Fleet didn't write are left alone.
+    /// </summary>
+    /// <param name="skill">The skill to remove.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A result per folder that was (or failed to be) deleted.</returns>
+    Task<IReadOnlyList<SkillSyncResult>> RemoveSkillAsync(SkillManifestEntry skill, CancellationToken cancellationToken = default);
+}
+
+public static class SkillManifestEntryExtensions
+{
+    /// <summary>
+    /// Adds the folders a sync wrote to the entry's installed paths. Folders from earlier syncs stay:
+    /// Fleet still owns them even when this sync couldn't refresh them.
+    /// </summary>
+    public static SkillManifestEntry WithSyncedPaths(this SkillManifestEntry entry, IEnumerable<SkillSyncResult> results) =>
+        entry with
+        {
+            InstalledPaths = entry.InstalledPaths
+                .Union(results.Where(r => r.Success && r.TargetPath is not null).Select(r => r.TargetPath!))
+                .ToArray()
+        };
 }

@@ -1,8 +1,13 @@
 <script setup lang="ts">
+import { shallowRef } from "vue";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { GLOBAL_TARGET, type InstallTarget } from "@/lib/install-target";
 import InstalledSkillsTab from "./skills/InstalledSkillsTab.vue";
 import CatalogTab from "./skills/CatalogTab.vue";
 import CustomInstallTab from "./skills/CustomInstallTab.vue";
+
+// Shared by the Catalog and Custom tabs, so switching tabs keeps the choice.
+const installTarget = shallowRef<InstallTarget>(GLOBAL_TARGET);
 </script>
 
 <template>
@@ -43,14 +48,14 @@ import CustomInstallTab from "./skills/CustomInstallTab.vue";
         value="catalog"
         class="mt-4"
       >
-        <CatalogTab />
+        <CatalogTab v-model:target="installTarget" />
       </TabsContent>
 
       <TabsContent
         value="custom"
         class="mt-4"
       >
-        <CustomInstallTab />
+        <CustomInstallTab v-model:target="installTarget" />
       </TabsContent>
     </Tabs>
   </section>

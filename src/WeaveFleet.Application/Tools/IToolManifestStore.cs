@@ -1,3 +1,4 @@
+using WeaveFleet.Domain.Skills;
 using WeaveFleet.Domain.Tools;
 
 namespace WeaveFleet.Application.Tools;
@@ -26,7 +27,7 @@ public interface IToolManifestStore
     Task SaveAsync(ToolManifest manifest, CancellationToken ct = default);
 
     /// <summary>
-    /// Adds a new tool entry to the manifest.
+    /// Adds a new tool entry to the manifest. A tool may be installed once per install target.
     /// Updates the manifest's UpdatedAt timestamp.
     /// </summary>
     /// <param name="userId">The user ID owning the manifest.</param>
@@ -36,17 +37,18 @@ public interface IToolManifestStore
     Task AddEntryAsync(string userId, string? workspaceId, ToolManifestEntry entry, CancellationToken ct = default);
 
     /// <summary>
-    /// Removes a tool entry from the manifest by name.
+    /// Removes the tool entry with this name and install target from the manifest.
     /// Updates the manifest's UpdatedAt timestamp.
     /// </summary>
     /// <param name="userId">The user ID owning the manifest.</param>
     /// <param name="workspaceId">Optional workspace ID for workspace-scoped manifests.</param>
     /// <param name="toolName">The name of the tool to remove.</param>
+    /// <param name="target">Where the tool is installed.</param>
     /// <param name="ct">Cancellation token.</param>
-    Task RemoveEntryAsync(string userId, string? workspaceId, string toolName, CancellationToken ct = default);
+    Task RemoveEntryAsync(string userId, string? workspaceId, string toolName, InstallTarget target, CancellationToken ct = default);
 
     /// <summary>
-    /// Updates an existing tool entry in the manifest.
+    /// Updates the existing tool entry with the same name and install target.
     /// Updates the manifest's UpdatedAt timestamp.
     /// </summary>
     /// <param name="userId">The user ID owning the manifest.</param>

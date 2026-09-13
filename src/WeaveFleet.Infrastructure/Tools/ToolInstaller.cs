@@ -1,68 +1,95 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Tools;
 using WeaveFleet.Domain.Common;
+using WeaveFleet.Domain.Skills;
+using WeaveFleet.Domain.Tools;
+using WeaveFleet.Infrastructure.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Tools;
 
 /// <summary>
-/// Service for installing tools to the local filesystem or configuration.
-/// Handles both native tools (copy .ts files) and MCP tools (write to opencode.json).
+/// Installs tools where OpenCode loads them, globally or into a repository (see <see cref="HarnessInstallPaths"/>):
+/// native tools as <c>tools/&lt;name&gt;.ts</c>, MCP servers under <c>mcp</c> in <c>opencode.json</c>.
+/// Never replaces a file or server entry Fleet didn't write, unless it's identical.
 /// </summary>
 public sealed partial class ToolInstaller : IToolInstaller
 {
-    private readonly ILogger<ToolInstaller> _logger;
-    private readonly string? _baseDirectory;
+    /// <summary>Where older Fleet versions registered MCP servers. OpenCode never read it.</summary>
+    internal const string LegacyMcpKey = "mcpServers";
 
-    public ToolInstaller(ILogger<ToolInstaller> logger, string? baseDirectory = null)
+    private const string NewConfig = "{\n  \"$schema\": \"https://opencode.ai/config.json\"\n}\n";
+
+    private static readonly string[] ToolExtensions = [".ts", ".js"];
+
+    // OpenCode reads opencode.json and opencode.jsonc from the same folder and merges them.
+    private static readonly string[] ConfigFileNames = ["opencode.json", "opencode.jsonc"];
+
+    private static readonly JsonDocumentOptions ConfigReadOptions = new()
     {
+        CommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true
+    };
+
+    private readonly HarnessInstallPaths _paths;
+    private readonly ILogger<ToolInstaller> _logger;
+    private readonly IHarnessPoolRecycler? _poolRecycler;
+
+    public ToolInstaller(HarnessInstallPaths paths, ILogger<ToolInstaller> logger, IHarnessPoolRecycler? poolRecycler = null)
+    {
+        _paths = paths;
         _logger = logger;
-        _baseDirectory = baseDirectory;
+        _poolRecycler = poolRecycler;
     }
 
     public async Task<Result<string>> InstallNativeAsync(
         string name,
         string sourcePath,
-        string userId,
-        string? workspaceId = null,
+        InstallTarget target,
         CancellationToken cancellationToken = default)
     {
+        if (ValidateName(name) is { } invalid)
+            return invalid;
+
+        var sourceFile = ResolveToolFile(name, sourcePath);
+        if (sourceFile.IsFailure)
+            return sourceFile.Error;
+
+        var toolsDir = _paths.OpenCodeToolsDirectory(target);
+        var targetPath = Path.Combine(toolsDir, name + Path.GetExtension(sourceFile.Value).ToLowerInvariant());
+
+        if (InstalledFiles.SamePath(sourceFile.Value, targetPath))
+            return FleetError.ValidationError("ToolSource", $"{targetPath} is already in OpenCode's tools folder.");
+
+        // OpenCode loads <name>.ts and <name>.js alike, so either one already there clashes.
+        foreach (var existing in ToolExtensions.Select(ext => Path.Combine(toolsDir, name + ext)).Where(InstalledFiles.Exists))
+        {
+            if (!InstalledFiles.SamePath(existing, targetPath) || !InstalledFiles.FilesMatch(sourceFile.Value, existing))
+            {
+                return Conflict($"{existing} already exists and wasn't installed by Fleet. Remove or rename it, then install again.");
+            }
+        }
+
         try
         {
-            ValidateToolName(name);
-            ValidateUserId(userId);
-            ValidateWorkspaceId(workspaceId);
+            Directory.CreateDirectory(toolsDir);
 
-            if (!File.Exists(sourcePath) && !Directory.Exists(sourcePath))
-            {
-                return FleetError.NotFoundFor("ToolSource", sourcePath);
-            }
-
-            var targetDir = GetNativeToolDirectory(userId, workspaceId);
-            Directory.CreateDirectory(targetDir);
-
-            var targetPath = Path.Combine(targetDir, Path.GetFileName(sourcePath));
-
-            // Copy file or directory
-            if (File.Exists(sourcePath))
-            {
-                File.Copy(sourcePath, targetPath, overwrite: true);
-                Log.NativeToolInstalled(_logger, name, targetPath);
-            }
-            else
-            {
-                CopyDirectory(sourcePath, targetPath);
-                Log.NativeToolInstalled(_logger, name, targetPath);
-            }
-
-            return Result.Success(targetPath);
+            // Copy beside the target, then swap: OpenCode only picks up *.ts and *.js.
+            var tempPath = targetPath + ".fleet-tmp";
+            File.Copy(sourceFile.Value, tempPath, overwrite: true);
+            File.Move(tempPath, targetPath, overwrite: true);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             Log.InstallNativeFailed(_logger, ex, name);
             return new FleetError("ToolInstaller.InstallNativeFailed", $"Failed to install native tool '{name}': {ex.Message}");
         }
+
+        Log.NativeToolInstalled(_logger, name, targetPath);
+        await RecyclePooledInstancesAsync(cancellationToken).ConfigureAwait(false);
+        return targetPath;
     }
 
     public async Task<Result<string>> InstallMcpAsync(
@@ -70,174 +97,209 @@ public sealed partial class ToolInstaller : IToolInstaller
         string command,
         IReadOnlyList<string>? args,
         IReadOnlyDictionary<string, string>? env,
-        string userId,
-        string? workspaceId = null,
+        InstallTarget target,
         CancellationToken cancellationToken = default)
     {
+        if (ValidateName(name) is { } invalid)
+            return invalid;
+
+        if (string.IsNullOrWhiteSpace(command))
+            return FleetError.ValidationError("ToolInstaller", "MCP tool command cannot be empty.");
+
+        var configPath = ResolveConfigFile(_paths.OpenCodeConfigDirectory(target));
+        var server = BuildMcpServer(command, args, env);
+
         try
         {
-            ValidateToolName(name);
-            ValidateUserId(userId);
-            ValidateWorkspaceId(workspaceId);
+            var text = File.Exists(configPath)
+                ? await File.ReadAllTextAsync(configPath, cancellationToken).ConfigureAwait(false)
+                : NewConfig;
 
-            if (string.IsNullOrWhiteSpace(command))
-            {
-                return FleetError.ValidationError("ToolInstaller", "MCP tool command cannot be empty.");
-            }
+            var existing = ReadConfig(text)?["mcp"]?[name];
+            if (existing is not null && !JsonNode.DeepEquals(existing, server))
+                return Conflict($"An MCP server named '{name}' is already in {configPath}. Remove it there, or pick another name.");
 
-            var configPath = GetOpencodeConfigPath(userId, workspaceId);
-            var configDir = Path.GetDirectoryName(configPath)!;
-            Directory.CreateDirectory(configDir);
-
-            // Read existing config or create new
-            JsonObject rootObject;
-            if (File.Exists(configPath))
-            {
-                var existingJson = await File.ReadAllTextAsync(configPath, cancellationToken).ConfigureAwait(false);
-                rootObject = JsonNode.Parse(existingJson)?.AsObject() ?? new JsonObject();
-            }
-            else
-            {
-                rootObject = new JsonObject();
-            }
-
-            // Ensure mcpServers object exists
-            if (!rootObject.TryGetPropertyValue("mcpServers", out var mcpServersNode) || mcpServersNode is not JsonObject)
-            {
-                rootObject["mcpServers"] = new JsonObject();
-            }
-
-            var mcpServers = rootObject["mcpServers"]!.AsObject();
-
-            // Build the tool entry
-            var toolEntry = new JsonObject
-            {
-                ["command"] = command
-            };
-
-            if (args is not null && args.Count > 0)
-            {
-                var argsArray = new JsonArray();
-                foreach (var arg in args)
-                {
-#pragma warning disable IL2026 // Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code
-                    argsArray.Add(JsonValue.Create(arg));
-#pragma warning restore IL2026
-                }
-                toolEntry["args"] = argsArray;
-            }
-
-            if (env is not null && env.Count > 0)
-            {
-                var envObject = new JsonObject();
-                foreach (var kvp in env)
-                {
-                    envObject[kvp.Key] = kvp.Value;
-                }
-                toolEntry["env"] = envObject;
-            }
-
-            // Add or update the tool entry
-            mcpServers[name] = toolEntry;
-
-            // Write back atomically
-            var tempPath = configPath + ".tmp";
-            var options = new JsonSerializerOptions { WriteIndented = true };
-            var json = rootObject.ToJsonString(options);
-            await File.WriteAllTextAsync(tempPath, json, cancellationToken).ConfigureAwait(false);
-            File.Move(tempPath, configPath, overwrite: true);
-
-            Log.McpToolInstalled(_logger, name, configPath);
-            return Result.Success(configPath);
+            await WriteAtomicallyAsync(configPath, JsoncEditor.SetProperty(text, ["mcp", name], server), cancellationToken)
+                .ConfigureAwait(false);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
         {
             Log.InstallMcpFailed(_logger, ex, name);
-            return new FleetError("ToolInstaller.InstallMcpFailed", $"Failed to install MCP tool '{name}': {ex.Message}");
+            return new FleetError("ToolInstaller.InstallMcpFailed", $"Failed to add MCP server '{name}' to {configPath}: {ex.Message}");
         }
+
+        Log.McpToolInstalled(_logger, name, configPath);
+        await RecyclePooledInstancesAsync(cancellationToken).ConfigureAwait(false);
+        return configPath;
+    }
+
+    public async Task<Result<Unit>> UninstallAsync(ToolManifestEntry entry, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+
+        var target = InstallTarget.From(entry.Scope, entry.ProjectPath);
+        var result = entry.ToolType == ToolType.Mcp
+            ? await UninstallMcpAsync(entry, target, cancellationToken).ConfigureAwait(false)
+            : UninstallNative(entry, target);
+
+        if (result.IsSuccess)
+            await RecyclePooledInstancesAsync(cancellationToken).ConfigureAwait(false);
+
+        return result;
     }
 
     // ── Private helpers ────────────────────────────────────────────────────────
 
-    private string GetNativeToolDirectory(string userId, string? workspaceId)
+    private Result<Unit> UninstallNative(ToolManifestEntry entry, InstallTarget target)
     {
-        var baseDir = _baseDirectory ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var configDir = Path.Combine(baseDir, ".config", "weave-fleet", "tools");
+        if (entry.InstalledPath is null)
+            return Unit.Value;
 
-        return workspaceId is null
-            ? Path.Combine(configDir, userId)
-            : Path.Combine(configDir, userId, workspaceId);
-    }
+        var toolsDir = _paths.OpenCodeToolsDirectory(target);
+        var expected = ToolExtensions.Any(ext => InstalledFiles.SamePath(entry.InstalledPath, Path.Combine(toolsDir, entry.Name + ext)));
+        if (!expected)
+            return FleetError.ValidationError("InstalledPath", $"Not deleting {entry.InstalledPath}: it isn't '{entry.Name}' in {toolsDir}.");
 
-    private string GetOpencodeConfigPath(string userId, string? workspaceId)
-    {
-        var baseDir = _baseDirectory ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var configDir = Path.Combine(baseDir, ".config", "opencode");
-
-        return workspaceId is null
-            ? Path.Combine(configDir, "opencode.json")
-            : Path.Combine(configDir, workspaceId, "opencode.json");
-    }
-
-    private static void CopyDirectory(string sourceDir, string targetDir)
-    {
-        Directory.CreateDirectory(targetDir);
-
-        foreach (var file in Directory.GetFiles(sourceDir))
+        try
         {
-            var targetFile = Path.Combine(targetDir, Path.GetFileName(file));
-            File.Copy(file, targetFile, overwrite: true);
+            if (InstalledFiles.Exists(entry.InstalledPath))
+                InstalledFiles.Delete(entry.InstalledPath);
+            return Unit.Value;
         }
-
-        foreach (var subDir in Directory.GetDirectories(sourceDir))
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            var targetSubDir = Path.Combine(targetDir, Path.GetFileName(subDir));
-            CopyDirectory(subDir, targetSubDir);
+            return new FleetError("ToolInstaller.UninstallFailed", $"Failed to delete {entry.InstalledPath}: {ex.Message}");
         }
     }
 
-    private static void ValidateToolName(string name)
+    private async Task<Result<Unit>> UninstallMcpAsync(ToolManifestEntry entry, InstallTarget target, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(name))
-            throw new ArgumentException("Tool name cannot be empty.", nameof(name));
+        var configDir = _paths.OpenCodeConfigDirectory(target);
 
-        if (name.Contains('/', StringComparison.Ordinal) ||
-            name.Contains('\\', StringComparison.Ordinal) ||
-            name.Contains('\0', StringComparison.Ordinal) ||
-            name is "." or "..")
+        // Entries from older Fleet versions have no path; they wrote the legacy key into the global config.
+        var (configPath, key) = entry.InstalledPath is null
+            ? (ResolveConfigFile(configDir), LegacyMcpKey)
+            : (entry.InstalledPath, "mcp");
+
+        if (!ConfigFileNames.Any(fileName => InstalledFiles.SamePath(configPath, Path.Combine(configDir, fileName))))
+            return FleetError.ValidationError("InstalledPath", $"Not editing {configPath}: it isn't OpenCode's config in {configDir}.");
+
+        if (!File.Exists(configPath))
+            return Unit.Value;
+
+        try
         {
-            throw new ArgumentException($"Tool name contains invalid characters: '{name}'", nameof(name));
+            var text = await File.ReadAllTextAsync(configPath, cancellationToken).ConfigureAwait(false);
+            var (updated, removed) = JsoncEditor.RemoveProperty(text, [key, entry.Name]);
+            if (!removed)
+                return Unit.Value;
+
+            // OpenCode doesn't know the legacy key; drop it with its last server.
+            if (key == LegacyMcpKey && ReadConfig(updated)?[LegacyMcpKey] is JsonObject { Count: 0 })
+                updated = JsoncEditor.RemoveProperty(updated, [LegacyMcpKey]).Text;
+
+            await WriteAtomicallyAsync(configPath, updated, cancellationToken).ConfigureAwait(false);
+            return Unit.Value;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
+        {
+            return new FleetError("ToolInstaller.UninstallFailed", $"Failed to remove MCP server '{entry.Name}' from {configPath}: {ex.Message}");
         }
     }
 
-    private static void ValidateUserId(string userId)
+    /// <summary>The tool file to copy: the file itself, or &lt;name&gt;.ts/.js (or the only .ts/.js) in a folder.</summary>
+    private static Result<string> ResolveToolFile(string name, string sourcePath)
     {
-        if (string.IsNullOrWhiteSpace(userId))
-            throw new ArgumentException("userId cannot be empty.", nameof(userId));
-
-        if (userId.Contains('/', StringComparison.Ordinal) ||
-            userId.Contains('\\', StringComparison.Ordinal) ||
-            userId.Contains('\0', StringComparison.Ordinal) ||
-            userId is "." or "..")
+        if (File.Exists(sourcePath))
         {
-            throw new ArgumentException($"userId contains invalid characters: '{userId}'", nameof(userId));
+            return IsToolFile(sourcePath)
+                ? Result.Success(sourcePath)
+                : FleetError.ValidationError("ToolSource", $"A native tool is a .ts or .js file: {sourcePath}");
         }
+
+        if (!Directory.Exists(sourcePath))
+            return FleetError.NotFoundFor("ToolSource", sourcePath);
+
+        var named = ToolExtensions.Select(ext => Path.Combine(sourcePath, name + ext)).FirstOrDefault(File.Exists);
+        if (named is not null)
+            return Result.Success(named);
+
+        var candidates = Directory.EnumerateFiles(sourcePath).Where(IsToolFile).ToList();
+        return candidates.Count == 1
+            ? Result.Success(candidates[0])
+            : FleetError.ValidationError("ToolSource", $"Found no {name}.ts or {name}.js in {sourcePath}.");
     }
 
-    private static void ValidateWorkspaceId(string? workspaceId)
+    private static bool IsToolFile(string path) =>
+        ToolExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The config file to edit: an existing opencode.json or opencode.jsonc, else a new opencode.json.</summary>
+    private static string ResolveConfigFile(string configDir) =>
+        ConfigFileNames.Select(fileName => Path.Combine(configDir, fileName)).FirstOrDefault(File.Exists)
+        ?? Path.Combine(configDir, ConfigFileNames[0]);
+
+    /// <summary>A local MCP server as OpenCode expects it: the command and its arguments in one array.</summary>
+    internal static JsonObject BuildMcpServer(string command, IReadOnlyList<string>? args, IReadOnlyDictionary<string, string>? env)
     {
-        if (workspaceId is null)
+        var commandArray = new JsonArray { (JsonNode)command };
+        foreach (var arg in args ?? [])
+            commandArray.Add((JsonNode)arg);
+
+        var server = new JsonObject
+        {
+            ["type"] = "local",
+            ["command"] = commandArray
+        };
+
+        if (env is { Count: > 0 })
+        {
+            var environment = new JsonObject();
+            foreach (var (key, value) in env)
+                environment[key] = value;
+            server["environment"] = environment;
+        }
+
+        server["enabled"] = true;
+        return server;
+    }
+
+    private static JsonNode? ReadConfig(string text) =>
+        string.IsNullOrWhiteSpace(text) ? null : JsonNode.Parse(text, documentOptions: ConfigReadOptions);
+
+    private static async Task WriteAtomicallyAsync(string path, string content, CancellationToken cancellationToken)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var tempPath = path + ".fleet-tmp";
+        await File.WriteAllTextAsync(tempPath, content, cancellationToken).ConfigureAwait(false);
+        File.Move(tempPath, path, overwrite: true);
+    }
+
+    private static FleetError? ValidateName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || name is "." or ".." || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
+            name.Contains('/', StringComparison.Ordinal) || name.Contains('\\', StringComparison.Ordinal))
+        {
+            return FleetError.ValidationError("ToolName", $"Invalid tool name: '{name}'");
+        }
+
+        return null;
+    }
+
+    private static FleetError Conflict(string message) => new(FleetError.Conflict.Code, message);
+
+    /// <summary>Recycles idle pooled OpenCode instances so they load the changed tools. Best-effort.</summary>
+    private async Task RecyclePooledInstancesAsync(CancellationToken cancellationToken)
+    {
+        if (_poolRecycler is null)
             return;
 
-        if (string.IsNullOrWhiteSpace(workspaceId))
-            throw new ArgumentException("workspaceId cannot be empty when provided.", nameof(workspaceId));
-
-        if (workspaceId.Contains('/', StringComparison.Ordinal) ||
-            workspaceId.Contains('\\', StringComparison.Ordinal) ||
-            workspaceId.Contains('\0', StringComparison.Ordinal) ||
-            workspaceId is "." or "..")
+        try
         {
-            throw new ArgumentException($"workspaceId contains invalid characters: '{workspaceId}'", nameof(workspaceId));
+            await _poolRecycler.RecycleIdleInstancesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Log.PoolRecycleFailed(_logger, ex);
         }
     }
 
@@ -254,5 +316,8 @@ public sealed partial class ToolInstaller : IToolInstaller
 
         [LoggerMessage(Level = LogLevel.Error, Message = "Failed to install MCP tool '{ToolName}'")]
         public static partial void InstallMcpFailed(ILogger logger, Exception ex, string toolName);
+
+        [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to recycle pooled harness instances after a tool change.")]
+        public static partial void PoolRecycleFailed(ILogger logger, Exception ex);
     }
 }
