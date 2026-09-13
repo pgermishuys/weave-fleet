@@ -16,9 +16,24 @@ export interface SessionRowStatus {
   description: string;
 }
 
+/**
+ * How far a quiet session's row fades back: 0 at full contrast, 1 after a day
+ * without activity, 2 after three days. Rows never move; only contrast changes.
+ */
+export type SessionRowDim = 0 | 1 | 2;
+
+const DAY_MS = 24 * 60 * 60_000;
+
+/** Statuses where something is going on. Only these get a glyph on the row. */
+const LIVE_STATUSES = new Set(["active", "waiting_input", "error"]);
+
+function toTimestamp(timestamp: number | string): number {
+  return typeof timestamp === "number" ? timestamp : Number(timestamp) || Date.parse(timestamp);
+}
+
 /** Compact age for list rows: "now", "4m", "2h", "3d", "5w". */
 export function formatCompactAge(timestamp: number | string, now: number): string {
-  const ts = typeof timestamp === "number" ? timestamp : Number(timestamp) || Date.parse(timestamp);
+  const ts = toTimestamp(timestamp);
   if (!Number.isFinite(ts)) return "";
 
   const minutes = Math.floor(Math.max(0, now - ts) / 60_000);
@@ -32,6 +47,24 @@ export function formatCompactAge(timestamp: number | string, now: number): strin
   if (days < 7) return `${days}d`;
 
   return `${Math.floor(days / 7)}w`;
+}
+
+export function isSessionLive(item: SessionListItem): boolean {
+  return LIVE_STATUSES.has(item.sessionStatus);
+}
+
+/** Live sessions never dim. Everything else fades by its last activity. */
+export function sessionRowDim(item: SessionListItem, now: number): SessionRowDim {
+  if (isSessionLive(item)) return 0;
+
+  const time = item.session.time;
+  const ts = toTimestamp(time?.updated ?? time?.created ?? "");
+  if (!Number.isFinite(ts)) return 0;
+
+  const age = now - ts;
+  if (age >= 3 * DAY_MS) return 2;
+  if (age >= DAY_MS) return 1;
+  return 0;
 }
 
 export function sessionRowStatus(item: SessionListItem, now: number): SessionRowStatus {

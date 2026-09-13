@@ -132,6 +132,38 @@ describe("SessionItem", () => {
     expect(retrying.get(".session-meta").text()).toBe("Retry 2");
   });
 
+  it("shows no status glyph on an idle row, and keeps its slot so titles line up", () => {
+    const wrapper = mountSessionItem(createSession({ sessionStatus: "idle", activityStatus: null }));
+
+    expect(wrapper.find(".status-glyph").exists()).toBe(false);
+    expect(wrapper.find(".session-glyph-slot").exists()).toBe(true);
+    expect(wrapper.get(".session-meta").text()).not.toBe("");
+  });
+
+  it("keeps the glyph for sessions that are waiting or stopped by an error", () => {
+    expect(mountSessionItem(createSession({ sessionStatus: "waiting_input" })).find(".status-glyph").exists()).toBe(true);
+    expect(mountSessionItem(createSession({ sessionStatus: "error" })).find(".status-glyph").exists()).toBe(true);
+  });
+
+  it("dims a quiet row by its last activity, but not a live or open one", () => {
+    const DAY = 24 * 60 * 60_000;
+    const quiet = (updated: number) => createSession({
+      sessionStatus: "idle",
+      activityStatus: null,
+      session: { id: "session-1", title: "Fix auth bug", time: { created: updated, updated }, tags: [] },
+    } as Partial<SessionListItem>);
+
+    expect(mountSessionItem(quiet(Date.now() - 60_000)).get("button").classes()).not.toContain("session-item--dim-1");
+    expect(mountSessionItem(quiet(Date.now() - 2 * DAY)).get("button").classes()).toContain("session-item--dim-1");
+    expect(mountSessionItem(quiet(Date.now() - 4 * DAY)).get("button").classes()).toContain("session-item--dim-2");
+
+    const open = mountSessionItem(quiet(Date.now() - 4 * DAY), true);
+    expect(open.get("button").classes()).not.toContain("session-item--dim-2");
+
+    // createSession's default is an active session with ancient timestamps.
+    expect(mountSessionItem(createSession()).get("button").classes().some((c) => c.startsWith("session-item--dim"))).toBe(false);
+  });
+
   it("emits the session when clicked", async () => {
     const session = createSession({
       sessionStatus: "completed",
