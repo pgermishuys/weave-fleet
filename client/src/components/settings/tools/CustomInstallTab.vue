@@ -2,7 +2,12 @@
 import { shallowRef, computed } from "vue";
 import { AlertCircle, Download, LoaderCircle } from "lucide-vue-next";
 import { useTools, type InstallToolRequest } from "@/composables/use-tools";
+import { parseGitHubUrl } from "@/composables/use-skills";
 import { Button } from "@/components/ui/button";
+import { targetBody, type InstallTarget } from "@/lib/install-target";
+import InstallTargetPicker from "../InstallTargetPicker.vue";
+
+const target = defineModel<InstallTarget>("target", { required: true });
 
 const { installTool } = useTools();
 
@@ -33,10 +38,28 @@ function isGitHubUrl(url: string): boolean {
   return url.startsWith("https://github.com/") || url.startsWith("http://github.com/");
 }
 
-function extractNameFromUrl(url: string): string {
-  const trimmed = url.trim().replace(/\/$/, "");
-  const parts = trimmed.split("/");
-  return parts[parts.length - 1] || "tool";
+const TOOL_FILE = /\.(ts|js)$/i;
+
+/** OpenCode names a tool after its file, so a path to visualize.ts installs the tool "visualize". */
+function toolNameFromPath(path: string): string {
+  const last = path.split(/[\\/]/).filter(Boolean).pop() ?? "tool";
+  return last.replace(TOOL_FILE, "");
+}
+
+/**
+ * A GitHub link to a tool: a repository, a folder (/tree/…), or one file (/blob/…/visualize.ts).
+ * For a file, fetch its folder and name the tool after the file.
+ */
+function parseGitHubToolUrl(url: string): { repoUrl: string; ref: string | null; subPath: string | null; name: string } | null {
+  const parsed = parseGitHubUrl(url);
+  if (!parsed) {
+    return null;
+  }
+  if (parsed.subPath && TOOL_FILE.test(parsed.subPath)) {
+    const folder = parsed.subPath.split("/").slice(0, -1).join("/");
+    return { ...parsed, subPath: folder || null, name: toolNameFromPath(parsed.subPath) };
+  }
+  return parsed;
 }
 
 function parseArgs(argsText: string): string[] {
@@ -78,20 +101,24 @@ async function submitNativeInstall(): Promise<void> {
   formError.value = null;
 
   try {
-    const isGitHub = isGitHubUrl(url);
-    const name = extractNameFromUrl(url);
+    const github = isGitHubUrl(url) ? parseGitHubToolUrl(url) : null;
+    if (isGitHubUrl(url) && !github) {
+      formError.value = "Use a GitHub link to a repository, a folder, or a .ts/.js file.";
+      return;
+    }
 
     const request: InstallToolRequest = {
-      name,
+      name: github ? github.name : toolNameFromPath(url),
       toolType: "native",
-      source: isGitHub ? 1 : 2, // 1=GitHub, 2=Local
+      source: github ? 1 : 2, // 1=GitHub, 2=Local
       command: null,
       args: null,
       env: null,
-      repoUrl: isGitHub ? url : null,
-      ref: null,
-      subPath: null,
-      localPath: isGitHub ? null : url,
+      repoUrl: github?.repoUrl ?? null,
+      ref: github?.ref ?? null,
+      subPath: github?.subPath ?? null,
+      localPath: github ? null : url,
+      ...targetBody(target.value),
     };
 
     await installTool(request);
@@ -135,6 +162,7 @@ async function submitMcpInstall(): Promise<void> {
       ref: null,
       subPath: null,
       localPath: null,
+      ...targetBody(target.value),
     };
 
     await installTool(request);
@@ -208,13 +236,19 @@ async function submitInstall(): Promise<void> {
           </p>
         </div>
 
+        <InstallTargetPicker
+          v-model="target"
+          kind="tools"
+          :disabled="isInstalling"
+        />
+
         <label class="grid gap-1 text-sm text-text">
           <span class="text-xs font-medium uppercase tracking-wide text-muted">Tool URL or Path</span>
           <input
             v-model="nativeUrl"
             type="text"
             class="w-full rounded-btn border border-border bg-main-bg px-3 py-2 text-sm text-text outline-none transition-colors placeholder:text-muted focus:border-accent"
-            placeholder="https://github.com/user/tool or /path/to/tool"
+            placeholder="https://github.com/user/repo/blob/main/tool.ts or /path/to/tool.ts"
             :disabled="isInstalling"
           >
         </label>
@@ -270,6 +304,12 @@ async function submitInstall(): Promise<void> {
             Install an MCP server with custom command, arguments, and environment variables.
           </p>
         </div>
+
+        <InstallTargetPicker
+          v-model="target"
+          kind="config"
+          :disabled="isInstalling"
+        />
 
         <label class="grid gap-1 text-sm text-text">
           <span class="text-xs font-medium uppercase tracking-wide text-muted">Name</span>
@@ -363,13 +403,13 @@ async function submitInstall(): Promise<void> {
         </p>
         <ul class="space-y-1">
           <li class="font-mono">
-            https://github.com/username/tool-name
+            https://github.com/username/repo/blob/main/tools/my-tool.ts
           </li>
           <li class="font-mono">
-            /Users/username/.config/opencode/tools/my-tool
+            https://github.com/username/my-tool
           </li>
           <li class="font-mono">
-            ~/tools/custom-tool
+            /Users/username/tools/my-tool.ts
           </li>
         </ul>
       </div>

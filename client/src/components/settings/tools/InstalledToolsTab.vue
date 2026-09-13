@@ -1,33 +1,41 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import { AlertCircle, LoaderCircle, Trash2, Wrench } from "lucide-vue-next";
-import { useTools } from "@/composables/use-tools";
+import { AlertCircle, AlertTriangle, LoaderCircle, Trash2, Wrench } from "lucide-vue-next";
+import { useTools, type ToolRef } from "@/composables/use-tools";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { targetKey, targetLabel } from "@/lib/install-target";
 
 const { tools, isLoading, error, removeTool } = useTools();
 
-const removingToolName = shallowRef<string | null>(null);
-const confirmRemoveToolName = shallowRef<string | null>(null);
+// Busy states are per install: the same tool can be installed globally and in repositories.
+const removingKey = shallowRef<string | null>(null);
+const confirmRemoveKey = shallowRef<string | null>(null);
 
 const hasTools = computed(() => tools.value.length > 0);
 
-async function handleRemove(toolName: string): Promise<void> {
-  removingToolName.value = toolName;
+function keyOf(tool: ToolRef): string {
+  return `${tool.name}|${targetKey(tool.target)}`;
+}
+
+async function handleRemove(tool: ToolRef): Promise<void> {
+  removingKey.value = keyOf(tool);
   try {
-    await removeTool(toolName);
-    confirmRemoveToolName.value = null;
+    await removeTool(tool);
+    confirmRemoveKey.value = null;
+  } catch {
+    // The composable's error shows below the list.
   } finally {
-    removingToolName.value = null;
+    removingKey.value = null;
   }
 }
 
-function confirmRemove(toolName: string): void {
-  confirmRemoveToolName.value = toolName;
+function confirmRemove(tool: ToolRef): void {
+  confirmRemoveKey.value = keyOf(tool);
 }
 
 function cancelRemove(): void {
-  confirmRemoveToolName.value = null;
+  confirmRemoveKey.value = null;
 }
 
 function formatCommand(command: string | null | undefined, args: readonly string[] | null | undefined): string {
@@ -87,7 +95,7 @@ function formatCommand(command: string | null | undefined, args: readonly string
     >
       <article
         v-for="tool in tools"
-        :key="tool.name"
+        :key="keyOf(tool)"
         class="rounded-card border border-border bg-main-bg p-4"
       >
         <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -113,6 +121,12 @@ function formatCommand(command: string | null | undefined, args: readonly string
               >
                 MCP
               </Badge>
+              <Badge
+                variant="outline"
+                :title="tool.target.scope === 'project' ? tool.target.projectPath : 'Every session'"
+              >
+                {{ targetLabel(tool.target) }}
+              </Badge>
             </div>
 
             <p
@@ -135,6 +149,24 @@ function formatCommand(command: string | null | undefined, args: readonly string
             >
               {{ tool.localPath || tool.repoUrl }}
             </p>
+            <p
+              v-if="tool.installedPath"
+              class="mt-1 break-all font-mono text-xs text-muted"
+            >
+              → {{ tool.installedPath }}
+            </p>
+
+            <div
+              v-else
+              class="mt-2 flex items-start gap-2 rounded-card border border-coral/30 bg-coral/10 px-2 py-1 text-xs text-coral"
+            >
+              <AlertTriangle
+                :size="12"
+                class="mt-0.5 shrink-0"
+                aria-hidden="true"
+              />
+              <span>Not anywhere OpenCode looks. Remove it and install it again.</span>
+            </div>
           </div>
 
           <div class="flex flex-wrap gap-2">
@@ -142,11 +174,11 @@ function formatCommand(command: string | null | undefined, args: readonly string
               variant="outline"
               size="sm"
               class="text-red-400 hover:text-red-300 hover:border-red-500/50"
-              :disabled="removingToolName === tool.name"
-              @click="confirmRemoveToolName === tool.name ? handleRemove(tool.name) : confirmRemove(tool.name)"
+              :disabled="removingKey === keyOf(tool)"
+              @click="confirmRemoveKey === keyOf(tool) ? handleRemove(tool) : confirmRemove(tool)"
             >
               <LoaderCircle
-                v-if="removingToolName === tool.name"
+                v-if="removingKey === keyOf(tool)"
                 :size="16"
                 class="animate-spin"
                 aria-hidden="true"
@@ -157,12 +189,12 @@ function formatCommand(command: string | null | undefined, args: readonly string
                 aria-hidden="true"
               />
               <span>
-                {{ removingToolName === tool.name ? "Removing…" : confirmRemoveToolName === tool.name ? "Confirm Remove" : "Remove" }}
+                {{ removingKey === keyOf(tool) ? "Removing…" : confirmRemoveKey === keyOf(tool) ? "Confirm Remove" : "Remove" }}
               </span>
             </Button>
 
             <Button
-              v-if="confirmRemoveToolName === tool.name && removingToolName !== tool.name"
+              v-if="confirmRemoveKey === keyOf(tool) && removingKey !== keyOf(tool)"
               variant="outline"
               size="sm"
               @click="cancelRemove"

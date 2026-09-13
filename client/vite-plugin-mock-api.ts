@@ -226,6 +226,54 @@ const MOCK_SMART_LINKS: Record<string, unknown[]> = {
   ],
 };
 
+// Settings → Skills / Tools: installs globally and into a repository, plus one tool an older
+// Fleet left somewhere OpenCode never looked (no installed path).
+const MOCK_SKILLS = [
+  {
+    name: "fleet-api", source: 1, repoUrl: "https://github.com/pgermishuys/weave-fleet", ref: "main",
+    subPath: "opencode/skills/fleet-api", localPath: "/home/you/.weave/skills/fleet-api", targetHarnesses: ["opencode"],
+    scope: "global", projectPath: null, installedPaths: ["/home/you/.config/opencode/skills/fleet-api"],
+    installedAt: "2026-09-04T19:20:56Z", updatedAt: "2026-09-13T09:01:28Z",
+  },
+  {
+    name: "fleet-api", source: 1, repoUrl: "https://github.com/pgermishuys/weave-fleet", ref: "main",
+    subPath: "opencode/skills/fleet-api", localPath: "/home/you/.weave/skills/fleet-api", targetHarnesses: ["opencode"],
+    scope: "project", projectPath: "/home/you/src/opencode", installedPaths: ["/home/you/src/opencode/.opencode/skills/fleet-api"],
+    installedAt: "2026-09-13T09:30:00Z", updatedAt: "2026-09-13T09:30:00Z",
+  },
+];
+
+const MOCK_SKILL_CATALOG = [
+  {
+    name: "fleet-api", displayName: "Fleet API", description: "Drive Weave Fleet's HTTP API from an agent: sessions, prompts, canvases.",
+    source: 1, repoUrl: "https://github.com/pgermishuys/weave-fleet", ref: "main", subPath: "opencode/skills/fleet-api", localPath: null,
+    targetHarnesses: ["opencode"], author: "pgermishuys", version: "1.0.0", tags: ["fleet"], createdAt: null, updatedAt: null,
+  },
+];
+
+const MOCK_TOOLS = [
+  {
+    name: "visualize", toolType: "native", displayName: null, description: null, command: null, args: null, env: null,
+    repoUrl: "https://github.com/pgermishuys/weave-fleet", localPath: null,
+    scope: "global", projectPath: null, installedPath: null,
+    installedAt: "2026-09-13T09:01:25Z", updatedAt: "2026-09-13T09:01:25Z",
+  },
+  {
+    name: "filesystem", toolType: "mcp", displayName: null, description: null, command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-filesystem", "."], env: null, repoUrl: null, localPath: null,
+    scope: "project", projectPath: "/home/you/src/weave-fleet", installedPath: "/home/you/src/weave-fleet/opencode.json",
+    installedAt: "2026-09-13T09:40:00Z", updatedAt: "2026-09-13T09:40:00Z",
+  },
+];
+
+const MOCK_TOOL_CATALOG = [
+  {
+    name: "visualize", toolType: "native", source: 1, displayName: "Visualize", description: "Render sequence diagrams and flow graphs inline in the conversation.",
+    command: null, args: null, env: null, repoUrl: "https://github.com/pgermishuys/weave-fleet", ref: "main", subPath: "opencode/tools", localPath: null,
+    author: "pgermishuys", version: "1.0.0", tags: ["diagrams"], createdAt: null, updatedAt: null,
+  },
+];
+
 export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
   const mockDir = resolve(__dirname, "src/mocks");
   
@@ -549,11 +597,31 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
       pattern: /^\/api\/repositories$/,
       handler: () => {
         console.log("[mock-api] GET /api/repositories");
-        return new Response(JSON.stringify([]), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
+        return json({
+          repositories: [
+            { name: "weave-fleet", path: "/home/you/src/weave-fleet", parentRoot: "/home/you/src" },
+            { name: "opencode", path: "/home/you/src/opencode", parentRoot: "/home/you/src" },
+          ],
+          scannedAt: Date.now(),
         });
       },
+    },
+    // ─── Skills & tools (read-only: mock requests carry no body) ───────────────
+    {
+      pattern: /^\/api\/skills$/,
+      handler: () => json({ skills: MOCK_SKILLS }),
+    },
+    {
+      pattern: /^\/api\/skills\/catalog$/,
+      handler: () => json({ entries: MOCK_SKILL_CATALOG, isStale: false, cachedAt: null }),
+    },
+    {
+      pattern: /^\/api\/tools$/,
+      handler: () => json({ tools: MOCK_TOOLS }),
+    },
+    {
+      pattern: /^\/api\/tools\/catalog$/,
+      handler: () => json({ entries: MOCK_TOOL_CATALOG, isStale: false, cachedAt: null }),
     },
     // ─── Priority 1: Session Detail & Interaction ───────────────────────────────
     {

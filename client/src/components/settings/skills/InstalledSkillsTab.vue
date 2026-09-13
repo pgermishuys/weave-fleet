@@ -1,53 +1,61 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import { AlertCircle, Brain, LoaderCircle, RefreshCw, Trash2 } from "lucide-vue-next";
-import { useSkills } from "@/composables/use-skills";
+import { AlertCircle, AlertTriangle, Brain, LoaderCircle, RefreshCw, Trash2 } from "lucide-vue-next";
+import { useSkills, type SkillRef } from "@/composables/use-skills";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { targetKey, targetLabel } from "@/lib/install-target";
 
 const { skills, isLoading, error, removeSkill, checkUpdate, updateSkill } = useSkills();
 
-const removingSkillName = shallowRef<string | null>(null);
-const updatingSkillName = shallowRef<string | null>(null);
-const checkingUpdateSkillName = shallowRef<string | null>(null);
-const confirmRemoveSkillName = shallowRef<string | null>(null);
+// Busy states are per install: the same skill can be installed globally and in repositories.
+const removingKey = shallowRef<string | null>(null);
+const updatingKey = shallowRef<string | null>(null);
+const checkingUpdateKey = shallowRef<string | null>(null);
+const confirmRemoveKey = shallowRef<string | null>(null);
 
 const hasSkills = computed(() => skills.value.length > 0);
 
-async function handleCheckUpdate(skillName: string): Promise<void> {
-  checkingUpdateSkillName.value = skillName;
+function keyOf(skill: SkillRef): string {
+  return `${skill.name}|${targetKey(skill.target)}`;
+}
+
+async function handleCheckUpdate(skill: SkillRef): Promise<void> {
+  checkingUpdateKey.value = keyOf(skill);
   try {
-    await checkUpdate(skillName);
+    await checkUpdate(skill);
   } finally {
-    checkingUpdateSkillName.value = null;
+    checkingUpdateKey.value = null;
   }
 }
 
-async function handleUpdate(skillName: string): Promise<void> {
-  updatingSkillName.value = skillName;
+async function handleUpdate(skill: SkillRef): Promise<void> {
+  updatingKey.value = keyOf(skill);
   try {
-    await updateSkill(skillName);
+    await updateSkill(skill);
   } finally {
-    updatingSkillName.value = null;
+    updatingKey.value = null;
   }
 }
 
-async function handleRemove(skillName: string): Promise<void> {
-  removingSkillName.value = skillName;
+async function handleRemove(skill: SkillRef): Promise<void> {
+  removingKey.value = keyOf(skill);
   try {
-    await removeSkill(skillName);
-    confirmRemoveSkillName.value = null;
+    await removeSkill(skill);
+    confirmRemoveKey.value = null;
+  } catch {
+    // The composable's error shows below the list.
   } finally {
-    removingSkillName.value = null;
+    removingKey.value = null;
   }
 }
 
-function confirmRemove(skillName: string): void {
-  confirmRemoveSkillName.value = skillName;
+function confirmRemove(skill: SkillRef): void {
+  confirmRemoveKey.value = keyOf(skill);
 }
 
 function cancelRemove(): void {
-  confirmRemoveSkillName.value = null;
+  confirmRemoveKey.value = null;
 }
 </script>
 
@@ -101,7 +109,7 @@ function cancelRemove(): void {
     >
       <article
         v-for="skill in skills"
-        :key="skill.name"
+        :key="keyOf(skill)"
         class="rounded-card border border-border bg-main-bg p-4"
       >
         <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -115,6 +123,12 @@ function cancelRemove(): void {
               <h3 class="truncate text-sm font-semibold text-text">
                 {{ skill.name }}
               </h3>
+              <Badge
+                variant="outline"
+                :title="skill.target.scope === 'project' ? skill.target.projectPath : 'Every session'"
+              >
+                {{ targetLabel(skill.target) }}
+              </Badge>
               <Badge
                 v-if="skill.updateAvailable"
                 variant="default"
@@ -139,6 +153,25 @@ function cancelRemove(): void {
             <p class="mt-3 break-all font-mono text-xs text-muted">
               {{ skill.path || skill.repoUrl || skill.localPath }}
             </p>
+            <p
+              v-for="installedPath in skill.installedPaths"
+              :key="installedPath"
+              class="mt-1 break-all font-mono text-xs text-muted"
+            >
+              → {{ installedPath }}
+            </p>
+
+            <div
+              v-if="skill.installedPaths.length === 0"
+              class="mt-2 flex items-start gap-2 rounded-card border border-coral/30 bg-coral/10 px-2 py-1 text-xs text-coral"
+            >
+              <AlertTriangle
+                :size="12"
+                class="mt-0.5 shrink-0"
+                aria-hidden="true"
+              />
+              <span>Not in any folder a harness reads. Remove it and install it again.</span>
+            </div>
 
             <div
               v-if="skill.updateCheckError"
@@ -158,11 +191,11 @@ function cancelRemove(): void {
               v-if="skill.source === 'GitHub'"
               variant="outline"
               size="sm"
-              :disabled="checkingUpdateSkillName === skill.name || updatingSkillName === skill.name"
-              @click="handleCheckUpdate(skill.name)"
+              :disabled="checkingUpdateKey === keyOf(skill) || updatingKey === keyOf(skill)"
+              @click="handleCheckUpdate(skill)"
             >
               <LoaderCircle
-                v-if="checkingUpdateSkillName === skill.name"
+                v-if="checkingUpdateKey === keyOf(skill)"
                 :size="16"
                 class="animate-spin"
                 aria-hidden="true"
@@ -172,18 +205,18 @@ function cancelRemove(): void {
                 :size="16"
                 aria-hidden="true"
               />
-              <span>{{ checkingUpdateSkillName === skill.name ? "Checking…" : "Check Update" }}</span>
+              <span>{{ checkingUpdateKey === keyOf(skill) ? "Checking…" : "Check Update" }}</span>
             </Button>
 
             <Button
               v-if="skill.updateAvailable"
               variant="default"
               size="sm"
-              :disabled="updatingSkillName === skill.name"
-              @click="handleUpdate(skill.name)"
+              :disabled="updatingKey === keyOf(skill)"
+              @click="handleUpdate(skill)"
             >
               <LoaderCircle
-                v-if="updatingSkillName === skill.name"
+                v-if="updatingKey === keyOf(skill)"
                 :size="16"
                 class="animate-spin"
                 aria-hidden="true"
@@ -193,18 +226,18 @@ function cancelRemove(): void {
                 :size="16"
                 aria-hidden="true"
               />
-              <span>{{ updatingSkillName === skill.name ? "Updating…" : "Update" }}</span>
+              <span>{{ updatingKey === keyOf(skill) ? "Updating…" : "Update" }}</span>
             </Button>
 
             <Button
               v-if="skill.source !== 'Bundled'"
               variant="destructive"
               size="sm"
-              :disabled="removingSkillName === skill.name"
-              @click="confirmRemoveSkillName === skill.name ? handleRemove(skill.name) : confirmRemove(skill.name)"
+              :disabled="removingKey === keyOf(skill)"
+              @click="confirmRemoveKey === keyOf(skill) ? handleRemove(skill) : confirmRemove(skill)"
             >
               <LoaderCircle
-                v-if="removingSkillName === skill.name"
+                v-if="removingKey === keyOf(skill)"
                 :size="16"
                 class="animate-spin"
                 aria-hidden="true"
@@ -215,12 +248,12 @@ function cancelRemove(): void {
                 aria-hidden="true"
               />
               <span>
-                {{ removingSkillName === skill.name ? "Removing…" : confirmRemoveSkillName === skill.name ? "Confirm Remove" : "Remove" }}
+                {{ removingKey === keyOf(skill) ? "Removing…" : confirmRemoveKey === keyOf(skill) ? "Confirm Remove" : "Remove" }}
               </span>
             </Button>
 
             <Button
-              v-if="confirmRemoveSkillName === skill.name && removingSkillName !== skill.name"
+              v-if="confirmRemoveKey === keyOf(skill) && removingKey !== keyOf(skill)"
               variant="outline"
               size="sm"
               @click="cancelRemove"

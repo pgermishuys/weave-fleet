@@ -1,6 +1,7 @@
 import { readonly, ref, shallowRef, type Ref, type ShallowRef } from "vue";
 import { api, type components } from "@/api/client";
 import { extractApiError } from "@/lib/api-error";
+import { targetQuery, toInstallTarget, type InstallTarget } from "@/lib/install-target";
 
 export type ToolDto = components["schemas"]["ToolDto"];
 export type ToolListResponse = components["schemas"]["ToolListResponse"];
@@ -22,8 +23,13 @@ function mapToolType(toolType: string): "native" | "mcp" {
   }
 }
 
-export interface InstalledTool {
+/** One install of a tool: a tool can be installed globally and into any number of repositories. */
+export interface ToolRef {
   name: string;
+  target: InstallTarget;
+}
+
+export interface InstalledTool extends ToolRef {
   toolType: "native" | "mcp";
   displayName?: string | null;
   description?: string | null;
@@ -32,6 +38,8 @@ export interface InstalledTool {
   env?: Record<string, string> | null;
   repoUrl?: string | null;
   localPath?: string | null;
+  /** The tool file, or the opencode.json holding an MCP server. Null when it isn't anywhere OpenCode looks. */
+  installedPath: string | null;
   installedAt: string;
   updatedAt: string;
 }
@@ -41,7 +49,7 @@ export interface UseToolsResult {
   isLoading: Readonly<ShallowRef<boolean>>;
   error: Readonly<ShallowRef<string | undefined>>;
   fetchTools: () => Promise<void>;
-  removeTool: (name: string) => Promise<void>;
+  removeTool: (tool: ToolRef) => Promise<void>;
   installTool: (request: InstallToolRequest) => Promise<InstallToolResponse | undefined>;
 }
 
@@ -66,6 +74,7 @@ export function useTools(): UseToolsResult {
 
       tools.value = (data.tools ?? []).map((tool) => ({
         name: tool.name,
+        target: toInstallTarget(tool.scope, tool.projectPath),
         toolType: mapToolType(tool.toolType),
         displayName: tool.displayName,
         description: tool.description,
@@ -74,6 +83,7 @@ export function useTools(): UseToolsResult {
         env: tool.env ?? null,
         repoUrl: tool.repoUrl,
         localPath: tool.localPath,
+        installedPath: tool.installedPath ?? null,
         installedAt: tool.installedAt,
         updatedAt: tool.updatedAt,
       }));
@@ -84,12 +94,12 @@ export function useTools(): UseToolsResult {
     }
   }
 
-  async function removeTool(name: string): Promise<void> {
+  async function removeTool(tool: ToolRef): Promise<void> {
     try {
       error.value = undefined;
 
       const { error: apiError } = await api.DELETE("/api/tools/{name}", {
-        params: { path: { name } },
+        params: { path: { name: tool.name }, query: targetQuery(tool.target) },
       });
 
       if (apiError) {

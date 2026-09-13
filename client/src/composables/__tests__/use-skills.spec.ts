@@ -3,7 +3,7 @@ import { useSkills } from "@/composables/use-skills";
 import type { components } from "@/api/client";
 import { flushAll, mountComposable } from "./test-utils";
 
-type SkillManifestEntry = components["schemas"]["SkillManifestEntry"];
+type SkillListItemDto = components["schemas"]["SkillListItemDto"];
 type UpdateCheckResponse = components["schemas"]["UpdateCheckResponse"];
 type UpdateSkillResponse = components["schemas"]["UpdateSkillResponse"];
 type InstallSkillResponse = components["schemas"]["InstallSkillResponse"];
@@ -20,17 +20,23 @@ vi.mock("@/api/client", () => ({
   api: apiMock,
 }));
 
+const GLOBAL = { scope: "global" } as const;
+
 function createSkillEntry(
   name: string,
-  overrides: Partial<SkillManifestEntry> = {},
-): SkillManifestEntry {
+  overrides: Partial<SkillListItemDto> = {},
+): SkillListItemDto {
   return {
     name,
     source: 1,
     repoUrl: `https://github.com/example/${name}`,
     ref: "main",
+    subPath: null,
     localPath: null,
     targetHarnesses: ["opencode"],
+    scope: "global",
+    projectPath: null,
+    installedPaths: [`/home/user/.config/opencode/skills/${name}`],
     installedAt: "2026-01-01T00:00:00Z",
     updatedAt: "2026-01-01T00:00:00Z",
     ...overrides,
@@ -45,7 +51,7 @@ describe("useSkills", () => {
   });
 
   describe("fetchSkills", () => {
-    it("fetches and transforms skills from the manifest endpoint", async () => {
+    it("fetches and transforms skills from the skills endpoint", async () => {
       const manifestResponse = {
         skills: [
           createSkillEntry("skill-one"),
@@ -64,7 +70,7 @@ describe("useSkills", () => {
 
       const { result } = await mountComposable(() => useSkills());
 
-      expect(apiMock.GET).toHaveBeenCalledWith("/api/skills/manifest");
+      expect(apiMock.GET).toHaveBeenCalledWith("/api/skills");
       expect(result.skills.value).toHaveLength(2);
       expect(result.skills.value[0]).toMatchObject({
         name: "skill-one",
@@ -72,6 +78,8 @@ describe("useSkills", () => {
         repoUrl: "https://github.com/example/skill-one",
         ref: "main",
         targetHarnesses: ["opencode"],
+        target: GLOBAL,
+        installedPaths: ["/home/user/.config/opencode/skills/skill-one"],
         // Backward compatibility fields
         description: "https://github.com/example/skill-one",
         path: "https://github.com/example/skill-one",
@@ -171,10 +179,10 @@ describe("useSkills", () => {
         error: undefined,
       });
 
-      const response = await result.checkUpdate("test-skill");
+      const response = await result.checkUpdate({ name: "test-skill", target: GLOBAL });
 
       expect(apiMock.GET).toHaveBeenCalledWith("/api/skills/{name}/update-check", {
-        params: { path: { name: "test-skill" } },
+        params: { path: { name: "test-skill" }, query: { scope: "global" } },
       });
       expect(response).toEqual(updateCheckResponse);
       expect(result.skills.value[0]?.updateAvailable).toBe(true);
@@ -195,7 +203,7 @@ describe("useSkills", () => {
         error: "Failed to check updates",
       });
 
-      const response = await result.checkUpdate("test-skill");
+      const response = await result.checkUpdate({ name: "test-skill", target: GLOBAL });
 
       expect(response).toBeUndefined();
       expect(result.skills.value[0]?.updateCheckError).toBe("Failed to check updates");
@@ -215,7 +223,7 @@ describe("useSkills", () => {
         error: undefined,
       });
 
-      await result.checkUpdate("non-existent");
+      await result.checkUpdate({ name: "non-existent", target: GLOBAL });
 
       // Should not crash, just not update any skill
       expect(result.skills.value).toHaveLength(1);
@@ -255,10 +263,10 @@ describe("useSkills", () => {
         error: undefined,
       });
 
-      const response = await result.updateSkill("test-skill");
+      const response = await result.updateSkill({ name: "test-skill", target: GLOBAL });
 
       expect(apiMock.POST).toHaveBeenCalledWith("/api/skills/{name}/update", {
-        params: { path: { name: "test-skill" } },
+        params: { path: { name: "test-skill" }, query: { scope: "global" } },
       });
       expect(response).toEqual(updateResponse);
       expect(apiMock.GET).toHaveBeenCalledTimes(2); // Initial + refresh
@@ -279,7 +287,7 @@ describe("useSkills", () => {
         error: "Update failed",
       });
 
-      await expect(result.updateSkill("test-skill")).rejects.toThrow("Update failed");
+      await expect(result.updateSkill({ name: "test-skill", target: GLOBAL })).rejects.toThrow("Update failed");
       expect(result.error.value).toBe("Update failed");
     });
 
@@ -296,7 +304,7 @@ describe("useSkills", () => {
         error: undefined,
       });
 
-      await expect(result.updateSkill("test-skill")).rejects.toThrow("No data returned");
+      await expect(result.updateSkill({ name: "test-skill", target: GLOBAL })).rejects.toThrow("No data returned");
     });
   });
 
@@ -323,10 +331,10 @@ describe("useSkills", () => {
         error: undefined,
       });
 
-      await result.removeSkill("skill-one");
+      await result.removeSkill({ name: "skill-one", target: GLOBAL });
 
       expect(apiMock.DELETE).toHaveBeenCalledWith("/api/skills/{name}", {
-        params: { path: { name: "skill-one" } },
+        params: { path: { name: "skill-one" }, query: { scope: "global" } },
       });
       expect(apiMock.GET).toHaveBeenCalledTimes(2); // Initial + refresh
       expect(result.skills.value).toHaveLength(1);
@@ -347,7 +355,7 @@ describe("useSkills", () => {
         error: "Removal failed",
       });
 
-      await expect(result.removeSkill("test-skill")).rejects.toThrow("Removal failed");
+      await expect(result.removeSkill({ name: "test-skill", target: GLOBAL })).rejects.toThrow("Removal failed");
       expect(result.error.value).toBe("Removal failed");
     });
   });
@@ -389,6 +397,8 @@ describe("useSkills", () => {
           localPath: null,
           targetHarnesses: null,
           subPath: null,
+          scope: "global",
+          projectPath: null,
         },
       });
       expect(response).toEqual(installResponse);
@@ -433,6 +443,33 @@ describe("useSkills", () => {
           localPath: "/path/to/local-skill",
           targetHarnesses: null,
           subPath: null,
+          scope: "global",
+          projectPath: null,
+        },
+      });
+    });
+
+    it("installs from a GitHub folder into a repository", async () => {
+      apiMock.GET.mockResolvedValue({ data: { skills: [] }, error: undefined });
+      const { result } = await mountComposable(() => useSkills());
+      apiMock.POST.mockResolvedValueOnce({ data: { name: "my-skill", syncResults: [] }, error: undefined });
+
+      await result.installSkill({
+        url: "https://github.com/example/repo/tree/main/skills/my-skill",
+        target: { scope: "project", projectPath: "/src/app" },
+      });
+
+      expect(apiMock.POST).toHaveBeenCalledWith("/api/skills/install", {
+        body: {
+          name: "my-skill",
+          source: 1,
+          repoUrl: "https://github.com/example/repo.git",
+          ref: "main",
+          localPath: null,
+          targetHarnesses: null,
+          subPath: "skills/my-skill",
+          scope: "project",
+          projectPath: "/src/app",
         },
       });
     });
@@ -466,6 +503,38 @@ describe("useSkills", () => {
         result.installSkill({ url: "https://github.com/example/skill" }),
       ).rejects.toThrow("Installation failed");
       expect(result.error.value).toBe("Installation failed");
+    });
+  });
+
+  describe("install targets", () => {
+    it("keeps a global and a project install of the same skill apart", async () => {
+      apiMock.GET.mockResolvedValueOnce({
+        data: {
+          skills: [
+            createSkillEntry("shared"),
+            createSkillEntry("shared", {
+              scope: "project",
+              projectPath: "/src/app",
+              installedPaths: ["/src/app/.opencode/skills/shared"],
+            }),
+          ],
+        },
+        error: undefined,
+      });
+      const { result } = await mountComposable(() => useSkills());
+
+      expect(result.skills.value.map((s) => s.target)).toEqual([
+        GLOBAL,
+        { scope: "project", projectPath: "/src/app" },
+      ]);
+
+      apiMock.GET.mockResolvedValueOnce({ data: { updateAvailable: true }, error: undefined });
+      await result.checkUpdate({ name: "shared", target: { scope: "project", projectPath: "/src/app" } });
+
+      expect(apiMock.GET).toHaveBeenLastCalledWith("/api/skills/{name}/update-check", {
+        params: { path: { name: "shared" }, query: { scope: "project", projectPath: "/src/app" } },
+      });
+      expect(result.skills.value.map((s) => s.updateAvailable)).toEqual([undefined, true]);
     });
   });
 

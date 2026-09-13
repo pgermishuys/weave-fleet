@@ -3,6 +3,10 @@ import { shallowRef } from "vue";
 import { AlertCircle, Download, LoaderCircle } from "lucide-vue-next";
 import { useSkills } from "@/composables/use-skills";
 import { Button } from "@/components/ui/button";
+import type { InstallTarget } from "@/lib/install-target";
+import InstallTargetPicker from "../InstallTargetPicker.vue";
+
+const target = defineModel<InstallTarget>("target", { required: true });
 
 const { installSkill } = useSkills();
 
@@ -21,7 +25,7 @@ async function submitInstall(): Promise<void> {
   formError.value = null;
 
   try {
-    await installSkill({ url });
+    await installSkill({ url, target: target.value });
     installUrl.value = "";
   } catch (installError) {
     formError.value = installError instanceof Error ? installError.message : "Failed to install skill.";
@@ -46,6 +50,12 @@ async function submitInstall(): Promise<void> {
             Install a skill from a GitHub URL or local file path.
           </p>
         </div>
+
+        <InstallTargetPicker
+          v-model="target"
+          kind="skills"
+          :disabled="isInstalling"
+        />
 
         <label class="grid gap-1 text-sm text-text">
           <span class="text-xs font-medium uppercase tracking-wide text-muted">Skill URL or Path</span>
@@ -101,10 +111,10 @@ async function submitInstall(): Promise<void> {
           https://github.com/username/skill-name
         </li>
         <li class="font-mono">
-          /Users/username/.config/opencode/skills/my-skill
+          https://github.com/username/repo/tree/main/skills/my-skill
         </li>
         <li class="font-mono">
-          ~/skills/custom-skill
+          /Users/username/skills/custom-skill
         </li>
       </ul>
     </div>
