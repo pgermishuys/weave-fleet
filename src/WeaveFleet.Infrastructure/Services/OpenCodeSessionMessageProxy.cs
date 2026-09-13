@@ -23,7 +23,8 @@ public sealed class OpenCodeSessionMessageProxy(
     IDelegationRepository delegationRepository,
     ISessionSnapshotBuilder fallbackSnapshotBuilder,
     IServiceProvider serviceProvider,
-    ILogger<OpenCodeSessionMessageProxy> logger) : ISessionMessageProxy
+    ILogger<OpenCodeSessionMessageProxy> logger,
+    IMessageRepository? messageRepository = null) : ISessionMessageProxy
 {
     private const string IdleStatus = "idle";
     private const string BusyStatus = "busy";
@@ -142,8 +143,7 @@ public sealed class OpenCodeSessionMessageProxy(
                 try
                 {
                     LogFetchingFromHarness(logger, fleetSessionId, null);
-                    var query = new MessageQuery(limit, before);
-                    return await harnessSession.GetMessagesAsync(query, ct).ConfigureAwait(false);
+                    return await GetLiveMessagesAsync(fleetSessionId, harnessSession, limit, before, ct).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
                 {
@@ -166,8 +166,7 @@ public sealed class OpenCodeSessionMessageProxy(
                     if (harnessSession is not null)
                     {
                         LogFetchingFromHarness(logger, fleetSessionId, null);
-                        var query = new MessageQuery(limit, before);
-                        return await harnessSession.GetMessagesAsync(query, ct).ConfigureAwait(false);
+                        return await GetLiveMessagesAsync(fleetSessionId, harnessSession, limit, before, ct).ConfigureAwait(false);
                     }
                 }
                 catch (Exception ex)
@@ -196,8 +195,8 @@ public sealed class OpenCodeSessionMessageProxy(
         CancellationToken ct)
     {
         // Fetch messages from the live harness
-        var query = new MessageQuery(pageSize, cursor);
-        var messagePage = await harnessSession.GetMessagesAsync(query, ct).ConfigureAwait(false);
+        var messagePage = await GetLiveMessagesAsync(session.Id, harnessSession, pageSize, cursor, ct)
+            .ConfigureAwait(false);
 
         // Convert HarnessMessage to MessageLifecyclePayload
         var messages = messagePage.Messages.Select(m => ToMessageLifecyclePayload(m, session.Id)).ToList();
@@ -233,6 +232,45 @@ public sealed class OpenCodeSessionMessageProxy(
             Cursor = messagePage.HasMore && messages.Count > 0 ? messages[0].Info.Id : null,
             IsPartial = false, // Live harness data is complete
         };
+    }
+
+    private async Task<MessagePage> GetLiveMessagesAsync(
+        string fleetSessionId,
+        IHarnessSession harnessSession,
+        int? limit,
+        string? before,
+        CancellationToken ct)
+    {
+        var page = await harnessSession.GetMessagesAsync(new MessageQuery(limit, before), ct).ConfigureAwait(false);
+        return before is null
+            ? await AddPromptsTheHarnessHasNotStoredAsync(fleetSessionId, page).ConfigureAwait(false)
+            : page;
+    }
+
+    /// <summary>
+    /// Adds prompts Fleet saved when it sent them (a new session's first message) that the harness
+    /// hasn't stored yet. The page asks for the snapshot right after create, which can beat the
+    /// harness to it. The harness stores a prompt under the id Fleet saved it with, so a prompt drops
+    /// out as soon as the harness has it; anything older than the harness's newest message is not pending.
+    /// </summary>
+    private async Task<MessagePage> AddPromptsTheHarnessHasNotStoredAsync(string fleetSessionId, MessagePage page)
+    {
+        if (messageRepository is null)
+            return page;
+
+        var saved = await messageRepository.GetBySessionAsync(fleetSessionId, limit: 5, beforeMessageId: null)
+            .ConfigureAwait(false);
+        if (saved.Count == 0)
+            return page;
+
+        var harnessIds = page.Messages.Select(m => m.Id).ToHashSet(StringComparer.Ordinal);
+        var newestInHarness = page.Messages.Count > 0 ? page.Messages.Max(m => m.Timestamp) : DateTimeOffset.MinValue;
+        var pending = MessagePersistenceService.ToHarnessMessages(saved)
+            .Where(m => m.Role == "user" && !harnessIds.Contains(m.Id) && m.Timestamp > newestInHarness)
+            .OrderBy(m => m.Timestamp)
+            .ToList();
+
+        return pending.Count == 0 ? page : page with { Messages = [.. page.Messages, .. pending] };
     }
 
     private static MessageLifecyclePayload ToMessageLifecyclePayload(HarnessMessage message, string fleetSessionId)

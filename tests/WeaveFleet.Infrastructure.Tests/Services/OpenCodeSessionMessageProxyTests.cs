@@ -1121,4 +1121,111 @@ public sealed class OpenCodeSessionMessageProxyTests
         // Verify fallback WAS called
         fallbackSnapshotBuilder.BuildAsyncCalls.Count.ShouldBe(1);
     }
+
+    // ── Prompts Fleet saved that the harness hasn't stored yet ─────────────────
+
+    private static readonly DateTimeOffset _promptSentAt = new(2026, 9, 13, 12, 0, 0, TimeSpan.Zero);
+
+    private static OpenCodeSessionMessageProxy CreateLiveProxy(
+        IReadOnlyList<HarnessMessage> harnessMessages,
+        InMemoryMessageRepository messageRepository)
+    {
+        var sessionRepository = new InMemorySessionRepository();
+        sessionRepository.Seed(new Session
+        {
+            Id = "session-new",
+            InstanceId = "instance-new",
+            HarnessType = "opencode",
+            Title = "Untitled",
+            Status = "active",
+            UserId = "user-1",
+        });
+
+        var instanceTracker = new InstanceTracker();
+        instanceTracker.Register("instance-new", new FakeHarnessSession("instance-new")
+        {
+            GetMessagesBehavior = (_, _) => Task.FromResult(new MessagePage(harnessMessages, false)),
+        });
+
+        return new OpenCodeSessionMessageProxy(
+            sessionRepository,
+            instanceTracker,
+            new SessionActivityTracker(),
+            new InMemoryDelegationRepository(),
+            new FakeSessionSnapshotBuilder(),
+            CreateServiceProvider(new FakeSessionActivator()),
+            NullLogger<OpenCodeSessionMessageProxy>.Instance,
+            messageRepository);
+    }
+
+    private static InMemoryMessageRepository SavedFirstMessage()
+    {
+        var repository = new InMemoryMessageRepository();
+        repository.Seed(MessagePersistenceService.ToPersistedMessage(
+            "session-new",
+            MessagePersistenceService.CreateUserPromptMessage("Fix the login redirect", _promptSentAt, null, "msg_first")));
+        return repository;
+    }
+
+    private static HarnessMessage HarnessMessage(string id, string role, DateTimeOffset timestamp) => new()
+    {
+        Id = id,
+        Role = role,
+        Parts = [new TextPart(id)],
+        Timestamp = timestamp,
+    };
+
+    [Fact]
+    public async Task GetSnapshotAsync_includes_a_saved_prompt_the_harness_has_not_stored_yet()
+    {
+        var proxy = CreateLiveProxy([], SavedFirstMessage());
+
+        var snapshot = await proxy.GetSnapshotAsync("session-new");
+
+        var message = snapshot.Messages.ShouldHaveSingleItem();
+        message.Info.Id.ShouldBe("msg_first");
+        message.Info.Role.ShouldBe("user");
+        message.Parts.ShouldHaveSingleItem().ShouldBeOfType<TextMessageEventPart>().Text.ShouldBe("Fix the login redirect");
+        snapshot.IsPartial.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_shows_the_harness_copy_once_it_has_the_saved_prompt()
+    {
+        var proxy = CreateLiveProxy(
+            [
+                HarnessMessage("msg_first", "user", _promptSentAt.AddMilliseconds(80)),
+                HarnessMessage("msg_reply", "assistant", _promptSentAt.AddSeconds(1)),
+            ],
+            SavedFirstMessage());
+
+        var snapshot = await proxy.GetSnapshotAsync("session-new");
+
+        snapshot.Messages.Select(m => m.Info.Id).ShouldBe(["msg_first", "msg_reply"]);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_leaves_out_a_saved_prompt_older_than_the_harness_newest_message()
+    {
+        // The harness stored this prompt under another id, or it scrolled out of the latest page.
+        var proxy = CreateLiveProxy(
+            [HarnessMessage("msg_later", "user", _promptSentAt.AddMinutes(5))],
+            SavedFirstMessage());
+
+        var snapshot = await proxy.GetSnapshotAsync("session-new");
+
+        snapshot.Messages.Select(m => m.Info.Id).ShouldBe(["msg_later"]);
+    }
+
+    [Fact]
+    public async Task GetMessagesAsync_includes_a_saved_prompt_on_the_latest_page_only()
+    {
+        var proxy = CreateLiveProxy([], SavedFirstMessage());
+
+        var latest = await proxy.GetMessagesAsync("session-new");
+        var older = await proxy.GetMessagesAsync("session-new", limit: 50, before: "msg_reply");
+
+        latest.Messages.ShouldHaveSingleItem().Id.ShouldBe("msg_first");
+        older.Messages.ShouldBeEmpty();
+    }
 }

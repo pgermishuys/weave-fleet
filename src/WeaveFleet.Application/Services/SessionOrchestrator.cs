@@ -50,7 +50,8 @@ public sealed partial class SessionOrchestrator(
     SessionActivityWriteService? sessionActivityWriteService = null,
     GitDiffService? gitDiffService = null,
     ISessionTerminalCleanup? sessionTerminals = null,
-    ISessionAppCleanup? sessionApps = null) : ISessionActivator
+    ISessionAppCleanup? sessionApps = null,
+    IMessageRepository? messageRepository = null) : ISessionActivator
 {
     private readonly DelegationService _delegationService = delegationService;
     private readonly GitDiffService _gitDiffService = gitDiffService ?? new GitDiffService();
@@ -176,7 +177,8 @@ public sealed partial class SessionOrchestrator(
     /// 1. Create or reuse workspace
     /// 2. Spawn harness instance
     /// 3. Persist instance + session records
-    /// 4. Optionally register a completion callback
+    /// 4. Deliver the first message, if any
+    /// 5. Optionally register a completion callback
     /// </summary>
     public async Task<Result<CreateSessionResult>> CreateSessionAsync(
         CreateSessionRequest request,
@@ -262,6 +264,10 @@ public sealed partial class SessionOrchestrator(
         var sessionId = Guid.NewGuid().ToString();
         var gitBaseline = await _gitDiffService.CaptureBaselineAsync(canonicalWorkspaceDirectory, sessionId, ct);
 
+        // A harness that can take the first message after it starts gets it as an ordinary prompt
+        // once the session exists (step 5), so it is saved and delivered like any other message.
+        var sendInitialPromptAfterSpawn = initialPrompt is not null && !harness.Capabilities.RequiresInitialPrompt;
+
         // 2. Spawn harness instance
         using var _ = BeginSessionScope(sessionId);
         IHarnessSession harnessInstance;
@@ -272,7 +278,7 @@ public sealed partial class SessionOrchestrator(
                 SessionId = sessionId,
                 WorkingDirectory = canonicalWorkspaceDirectory,
                 OwnerUserId = userContext.UserId,
-                InitialPrompt = initialPrompt,
+                InitialPrompt = sendInitialPromptAfterSpawn ? null : initialPrompt,
                 Branch = workspace.Branch,
                 ProjectId = projectId,
                 ProjectName = projectName,
@@ -420,10 +426,29 @@ public sealed partial class SessionOrchestrator(
         });
         LogSessionCreated(session.Id, workspace.Id, harnessInstance.InstanceId);
 
-        // Broadcast initial prompt for optimistic UI update.
-        // The harness runtime calls SendPromptAsync directly, bypassing PromptSessionAsync.
-        if (initialPrompt is not null)
+        // 5. Deliver the first message.
+        if (sendInitialPromptAfterSpawn)
         {
+            // The page for this session subscribes only after create returns, too late for the
+            // prompt's broadcast and possibly before the harness has stored the message, so the
+            // message is also saved; the session snapshot shows it until the harness has it.
+            var promptResult = await PromptSessionCoreAsync(
+                sessionId,
+                initialPrompt!,
+                options: null,
+                userMessageId: null,
+                correlationId: null,
+                saveUserMessage: true,
+                ct).ConfigureAwait(false);
+
+            // The session exists either way; the user sees it without the message and can resend.
+            if (promptResult.IsFailure)
+                LogInitialPromptFailed(sessionId, promptResult.Error.Description);
+        }
+        else if (initialPrompt is not null)
+        {
+            // Broadcast initial prompt for optimistic UI update.
+            // The harness runtime calls SendPromptAsync directly, bypassing PromptSessionAsync.
             var userMsg = MessagePersistenceService.CreateUserPromptMessage(initialPrompt, DateTimeOffset.UtcNow);
             await BroadcastUserMessageAsync(sessionId, userMsg, ct).ConfigureAwait(false);
         }
@@ -447,7 +472,7 @@ public sealed partial class SessionOrchestrator(
             DurationSeconds: null,
             UserId: userContext.UserId));
 
-        // 5. Register callback (optional)
+        // 6. Register callback (optional)
         if (request.OnCompleteTargetSessionId is not null && request.OnCompleteTargetInstanceId is not null)
         {
             // Ownership guard: target session must belong to the same user
@@ -669,7 +694,7 @@ public sealed partial class SessionOrchestrator(
         string? correlationId,
         CancellationToken ct)
     {
-        var result = await PromptSessionCoreAsync(id, text, options, userMessageId, correlationId, ct).ConfigureAwait(false);
+        var result = await PromptSessionCoreAsync(id, text, options, userMessageId, correlationId, saveUserMessage: false, ct).ConfigureAwait(false);
         return result.IsSuccess ? Unit.Value : result.Error;
     }
 
@@ -680,7 +705,7 @@ public sealed partial class SessionOrchestrator(
         string? userMessageId,
         string? correlationId,
         CancellationToken ct)
-        => await PromptSessionCoreAsync(id, text, options, userMessageId, correlationId, ct).ConfigureAwait(false);
+        => await PromptSessionCoreAsync(id, text, options, userMessageId, correlationId, saveUserMessage: false, ct).ConfigureAwait(false);
 
     private async Task<Result<PromptSessionResult>> PromptSessionCoreAsync(
         string id,
@@ -688,6 +713,7 @@ public sealed partial class SessionOrchestrator(
         PromptOptions? options,
         string? userMessageId,
         string? correlationId,
+        bool saveUserMessage,
         CancellationToken ct)
     {
         using var promptActivity = FleetInstrumentation.ActivitySource.StartActivity(
@@ -740,6 +766,10 @@ public sealed partial class SessionOrchestrator(
                 : options with { MessageId = generatedMessageId };
 
             await instanceResult.Value.SendPromptAsync(text, promptOptionsWithMessageId, ct);
+
+            // Saved under the id the harness was given, so the snapshot can tell when the harness has its own copy.
+            if (saveUserMessage && messageRepository is not null)
+                await messageRepository.UpsertAsync(MessagePersistenceService.ToPersistedMessage(id, userMsg)).ConfigureAwait(false);
 
             // Persist the model selection so a SPA refresh (which loses local state) can
             // fall back to it on the next prompt instead of silently using the harness
@@ -1879,6 +1909,10 @@ public sealed partial class SessionOrchestrator(
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "Failed to send prompt to session {SessionId}")]
     private partial void LogPromptFailed(Exception ex, string sessionId);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Session {SessionId} was created but its first message could not be sent: {Reason}")]
+    private partial void LogInitialPromptFailed(string sessionId, string reason);
 
     [LoggerMessage(Level = LogLevel.Error,
         Message = "Failed to automatically activate session {SessionId} for harness {HarnessType}")]
