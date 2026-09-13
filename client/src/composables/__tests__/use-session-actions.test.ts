@@ -5,7 +5,6 @@ import {
   useCreateSession,
   useDeleteProject,
   useForkSession,
-  useResumeSession,
 } from "@/composables/use-session-actions";
 import type { CreateSessionResponse, ForkSessionResponse, SessionListItem } from "@/api/client";
 import { useSessionsStore } from "@/stores/sessions";
@@ -233,29 +232,5 @@ describe("useSessionActions", () => {
     await expect(renamePromise).rejects.toThrow("rename failed");
     await flushAll();
     expect(sessionsStore.sessions[0]?.session.title).toBe("Migration");
-  });
-
-  it("turns resume conflicts into user-friendly errors", async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const deferred = createDeferred<{ data: any; error: any; response: Response }>();
-    apiFetchMock.mockReturnValue(deferred.promise);
-
-    const { result } = await mountComposable(() => useResumeSession());
-    const resumePromise = result.resumeSession("session-1");
-
-    expect(result.isResuming.value).toBe(true);
-    expect(result.resumingSessionId.value).toBe("session-1");
-
-    deferred.resolve({
-      data: undefined,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      error: { error: "conflict" } as any,
-      response: createJsonResponse({ error: "conflict" }, 409),
-    });
-
-    await expect(resumePromise).rejects.toThrow("Session is already active");
-    expect(result.error.value).toBe("Session is already active");
-    expect(result.isResuming.value).toBe(false);
-    expect(result.resumingSessionId.value).toBeNull();
   });
 });

@@ -150,7 +150,6 @@ public sealed partial class InProcessOutboxDispatcher(
         {
             "session.started" => "Session started",
             "session.idled" => "Session became idle",
-            "session.stopped" => "Session stopped",
             "session.deleted" => "Session deleted",
             "message.created" => "Message created",
             "message.updated" => "Message updated",

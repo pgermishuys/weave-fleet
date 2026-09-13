@@ -39,15 +39,6 @@ public sealed class DomainEventSerializationTests
                 },
             });
 
-            cases.Add("session.stopped", new SessionStopped
-            {
-                Payload = new SessionStoppedPayload
-                {
-                    SessionId = "session-1",
-                    StoppedAt = "2026-05-16T10:11:12.0000000Z",
-                },
-            });
-
             cases.Add("session.deleted", new SessionDeleted
             {
                 Payload = new SessionDeletedPayload

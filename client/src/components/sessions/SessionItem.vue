@@ -7,9 +7,7 @@ import {
   FolderOpen,
   GitFork,
   Pencil,
-  Play,
   Check,
-  Pause,
   Trash2,
 } from "lucide-vue-next";
 import {
@@ -28,8 +26,6 @@ import {
   useForkSession,
   useMoveSession,
   useRenameSession,
-  useResumeSession,
-  useTerminateSession,
 } from "@/composables/use-session-actions";
 import { useProjects } from "@/composables/use-projects";
 import type { SessionListItem } from "@/api/client";
@@ -72,15 +68,6 @@ const {
   isLoading: isRenaming,
 } = useRenameSession();
 const {
-  terminateSession,
-  isTerminating,
-} = useTerminateSession();
-const {
-  resumeSession,
-  isResuming,
-  resumingSessionId,
-} = useResumeSession();
-const {
   archiveSession,
   isArchiving,
 } = useArchiveSession();
@@ -110,36 +97,19 @@ const rawTitle = computed(() => props.session.session.title ?? "");
 const displayTitle = computed(() => props.session.session.title?.trim() || "Untitled session");
 const now = useRelativeTime();
 const rowStatus = computed(() => sessionRowStatus(props.session, now.value));
-const isRunningSession = computed(() => props.session.lifecycleStatus === "running");
 const isArchivedSession = computed(() => props.session.retentionStatus === "archived");
-const fallbackCanStop = computed(() => isRunningSession.value);
-const fallbackCanResume = computed(() => {
-  switch (props.session.lifecycleStatus) {
-    case "stopped":
-    case "completed":
-    case "disconnected":
-      return true;
-    default:
-      return false;
-  }
-});
 const fallbackCanArchive = computed(() => !isArchivedSession.value);
-const canStop = computed(() => props.session.capabilities?.canStop ?? fallbackCanStop.value);
-const canResume = computed(() => props.session.capabilities?.canResume ?? fallbackCanResume.value);
 const canArchive = computed(() => props.session.capabilities?.canArchive ?? fallbackCanArchive.value);
 const canFork = computed(() => props.session.capabilities?.canFork ?? true);
 const canDelete = computed(() => props.session.capabilities?.canDelete ?? true);
 const hasWorktree = computed(() => props.session.isolationStrategy === "worktree");
 const isForkingCurrentSession = computed(() => isForking.value && forkingSessionId.value === sessionId.value);
-const isResumingCurrentSession = computed(() => isResuming.value && resumingSessionId.value === sessionId.value);
 const isAnyActionPending = computed(() =>
   isArchiving.value
   || isDeleting.value
   || isForkingCurrentSession.value
   || isMoving.value
   || isRenaming.value
-  || isResumingCurrentSession.value
-   || isTerminating.value
 );
 
 const isDraggable = computed(() => !isInlineEditing.value && !isAnyActionPending.value);
@@ -274,26 +244,6 @@ async function handleRename(nextTitle: string): Promise<void> {
   }
 }
 
-async function handleStop(): Promise<void> {
-  try {
-    await terminateSession(sessionId.value, instanceId.value);
-    syncSessionStore({ activityStatus: "idle", lifecycleStatus: "stopped", sessionStatus: "stopped" });
-  } catch {
-    // Errors are handled by the mutation composable state.
-  }
-}
-
-async function handleResume(): Promise<void> {
-  try {
-    syncSessionStore({ activityStatus: "idle", lifecycleStatus: "resuming", sessionStatus: "resuming" });
-    await resumeSession(sessionId.value);
-    syncSessionStore({ activityStatus: "idle", lifecycleStatus: "running", sessionStatus: "idle" });
-  } catch {
-    // Revert to stopped on failure
-    syncSessionStore({ activityStatus: "idle", lifecycleStatus: "stopped", sessionStatus: "stopped" });
-  }
-}
-
 function openCompleteDialog(): void {
   isContextMenuOpen.value = false;
   isCompleteDialogOpen.value = true;
@@ -372,10 +322,7 @@ async function handleDelete(): Promise<void> {
 
 function syncSessionStore(
   patch: Partial<{
-    activityStatus: "busy" | "delegating" | "idle";
-    lifecycleStatus: "running" | "resuming" | "stopped" | "completed" | "disconnected" | "error";
     retentionStatus: "active" | "archived";
-    sessionStatus: "active" | "idle" | "stopped" | "completed" | "disconnected" | "error" | "waiting_input" | "resuming";
   }>,
 ): void {
   sessionsStore.patchSession(sessionId.value, patch);
@@ -457,24 +404,6 @@ function removeSessionFromStore(): void {
       >
         <Pencil class="size-3.5" />
         Rename
-      </ContextMenuItem>
-
-      <ContextMenuItem
-        v-if="canStop"
-        :disabled="isAnyActionPending"
-        @select="handleStop"
-      >
-        <Pause class="size-3.5" />
-        Pause
-      </ContextMenuItem>
-
-      <ContextMenuItem
-        v-if="canResume"
-        :disabled="isAnyActionPending"
-        @select="handleResume"
-      >
-        <Play class="size-3.5" />
-        Resume
       </ContextMenuItem>
 
       <ContextMenuItem

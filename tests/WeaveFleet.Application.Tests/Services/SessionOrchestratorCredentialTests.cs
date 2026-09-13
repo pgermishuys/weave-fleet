@@ -134,7 +134,7 @@ public sealed class SessionOrchestratorCredentialTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task ResumeSessionAsync_LoadsOwnerCredentialsAndPassesArtifactsToResumeAsync()
+    public async Task ActivateSessionAsync_LoadsOwnerCredentialsAndPassesArtifactsToResumeAsync()
     {
         var ownerCredentials = new List<UserCredential>
         {
@@ -173,7 +173,7 @@ public sealed class SessionOrchestratorCredentialTests : IAsyncDisposable
             return Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(artifacts));
         };
 
-        var result = await _sut.ResumeSessionAsync("session-1");
+        var result = await _sut.ActivateSessionAsync("session-1");
 
         result.IsSuccess.ShouldBeTrue();
         _builder.CredentialStore.GetDecryptedCredentialsCalls.ShouldContain("owner-1");
@@ -189,7 +189,7 @@ public sealed class SessionOrchestratorCredentialTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task ResumeSessionAsync_WhenPrepareRuntimeReturnsNotReady_DoesNotResumeOrSpawn()
+    public async Task ActivateSessionAsync_WhenPrepareRuntimeReturnsNotReady_DoesNotResumeOrSpawn()
     {
         _builder.SessionRepository.Seed(new WeaveFleet.Domain.Entities.Session
         {
@@ -216,54 +216,13 @@ public sealed class SessionOrchestratorCredentialTests : IAsyncDisposable
             new RuntimePreparationError("MissingCredential", "Add credentials before resuming.")
         ]);
 
-        var result = await _sut.ResumeSessionAsync("session-2");
+        var result = await _sut.ActivateSessionAsync("session-2");
 
         result.IsFailure.ShouldBeTrue();
         result.Error.Code.ShouldBe("Validation.Session.NotReady");
         result.Error.Description.ShouldBe("Add credentials before resuming.");
         _runtime.ResumeCalls.ShouldBeEmpty();
         _runtime.SpawnCalls.ShouldBeEmpty();
-    }
-
-    [Fact]
-    public async Task ResumeSessionAsync_WhenResumeIsUnsupported_PassesArtifactsThroughToSpawnAsync()
-    {
-        var artifacts = new StubLaunchArtifacts();
-
-        _builder.SessionRepository.Seed(new WeaveFleet.Domain.Entities.Session
-        {
-            Id = "session-3",
-            WorkspaceId = "workspace-3",
-            InstanceId = "inst-old",
-            HarnessType = "opencode",
-            HarnessResumeToken = "resume-token-3",
-            Title = "Fallback Resume",
-            Status = "active",
-            RetentionStatus = "active",
-            Directory = "/tmp/workspace-3",
-            CreatedAt = "2026-01-01",
-            UserId = "owner-3"
-        });
-        _builder.WorkspaceRepository.Seed(new WeaveFleet.Domain.Entities.Workspace
-        {
-            Id = "workspace-3",
-            Directory = "/tmp/workspace-3",
-            CreatedAt = "2026-01-01",
-            UserId = "owner-3"
-        });
-        // Override capabilities to SupportsResume = false
-        var harness = (FakeHarness)_builder.HarnessRegistry.GetByType("opencode")!;
-        harness.Capabilities = new HarnessCapabilities { SupportsResume = false };
-        _runtime.PrepareRuntimeBehavior = (_, _) =>
-            Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(artifacts));
-
-        var result = await _sut.ResumeSessionAsync("session-3");
-
-        result.IsSuccess.ShouldBeTrue();
-        _runtime.SpawnCalls.Count.ShouldBe(1);
-        _runtime.SpawnCalls[0].OwnerUserId.ShouldBe("owner-3");
-        ReferenceEquals(_runtime.SpawnCalls[0].LaunchArtifacts, artifacts).ShouldBeTrue();
-        _runtime.ResumeCalls.ShouldBeEmpty();
     }
 
     private static UserCredential CreateCredential(string userId, string credentialNamespace, string kind, string decryptedValue)

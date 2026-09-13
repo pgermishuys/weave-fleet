@@ -119,18 +119,6 @@ public sealed class SessionEndpointTenantIsolationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task StopSession_ReturnsNotFoundForOtherUsersSession()
-    {
-        // POST /api/sessions/{id}/stop
-        var request = new HttpRequestMessage(HttpMethod.Post, "/api/sessions/sess-other-1/stop");
-        AddCsrfHeader(request);
-
-        var response = await _client!.SendAsync(request);
-
-        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
-    }
-
-    [Fact]
     public async Task SendCommand_WithLegacyUnqualifiedModel_ResolvesUniqueProviderFromCatalog()
     {
         var tracker = _factory!.Services.GetRequiredService<InstanceTracker>();

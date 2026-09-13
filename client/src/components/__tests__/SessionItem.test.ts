@@ -6,8 +6,6 @@ import type { SessionListItem } from "@/api/client";
 function createCapabilities(overrides: Partial<NonNullable<SessionListItem["capabilities"]>> = {}): NonNullable<SessionListItem["capabilities"]> {
   return {
     canPrompt: true,
-    canStop: true,
-    canResume: false,
     canRestart: false,
     canAbort: false,
     canArchive: true,
@@ -15,8 +13,6 @@ function createCapabilities(overrides: Partial<NonNullable<SessionListItem["capa
     canFork: true,
     canDelete: true,
     promptDisabledReason: null,
-    stopDisabledReason: null,
-    resumeDisabledReason: null,
     restartDisabledReason: null,
     abortDisabledReason: null,
     archiveDisabledReason: null,
@@ -194,8 +190,6 @@ describe("SessionItem", () => {
   it("shows_context_actions_enabled_by_session_capabilities", () => {
     const wrapper = mountSessionItem(createSession({
       capabilities: createCapabilities({
-        canStop: true,
-        canResume: true,
         canArchive: true,
         canFork: true,
         canDelete: true,
@@ -203,8 +197,6 @@ describe("SessionItem", () => {
     }));
 
     const text = wrapper.get("[data-testid='context-menu-content']").text();
-    expect(text).toContain("Pause");
-    expect(text).toContain("Resume");
     expect(text).toContain("Complete");
     expect(text).toContain("Fork");
     expect(text).toContain("Permanently Delete");
@@ -213,8 +205,6 @@ describe("SessionItem", () => {
   it("hides_context_actions_disabled_by_session_capabilities", () => {
     const wrapper = mountSessionItem(createSession({
       capabilities: createCapabilities({
-        canStop: false,
-        canResume: false,
         canArchive: false,
         canFork: false,
         canDelete: false,
@@ -222,25 +212,15 @@ describe("SessionItem", () => {
     }));
 
     const text = wrapper.get("[data-testid='context-menu-content']").text();
-    expect(text).not.toContain("Pause");
-    expect(text).not.toContain("Resume");
     expect(text).not.toContain("Complete");
     expect(text).not.toContain("Fork");
     expect(text).not.toContain("Permanently Delete");
   });
 
-  it("hides_resume_and_pause_for_stopped_automatic_session_capabilities", () => {
+  it.each(["running", "stopped"] as const)("never_offers_pause_or_resume_for_a_%s_session", (lifecycleStatus) => {
     const wrapper = mountSessionItem(createSession({
-      sessionStatus: "stopped",
-      instanceStatus: "dead",
-      activityStatus: "idle",
-      lifecycleStatus: "stopped",
-      typedInstanceStatus: "stopped",
-      capabilities: createCapabilities({
-        canPrompt: true,
-        canStop: false,
-        canResume: false,
-      }),
+      sessionStatus: lifecycleStatus === "running" ? "active" : "stopped",
+      lifecycleStatus,
     }));
 
     const text = wrapper.get("[data-testid='context-menu-content']").text();

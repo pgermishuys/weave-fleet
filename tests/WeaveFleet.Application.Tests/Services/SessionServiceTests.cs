@@ -70,16 +70,6 @@ public sealed class SessionServiceTests
     }
 
     [Fact]
-    public async Task StopSessionAsync_WhenOrchestratorSucceeds_ReturnsSuccess()
-    {
-        _builder.SessionRepository.Seed(MakeSession("s-stop"));
-
-        var result = await _sut.StopSessionAsync("s-stop");
-
-        result.IsSuccess.ShouldBeTrue();
-    }
-
-    [Fact]
     public async Task UpdateRetentionAsync_WhenArchived_ArchivesSession()
     {
         _builder.SessionRepository.Seed(new Session

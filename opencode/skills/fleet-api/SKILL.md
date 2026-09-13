@@ -62,8 +62,6 @@ Use this skill when an agent needs to:
 | GET | `/api/sessions/{id}/events` | Get session events | - |
 | POST | `/api/sessions/{id}/prompt` | Send prompt | Body: `SendPromptApiRequest` |
 | POST | `/api/sessions/{id}/abort` | Abort session | - |
-| POST | `/api/sessions/{id}/stop` | Stop session | - |
-| POST | `/api/sessions/{id}/resume` | Resume session | - |
 | POST | `/api/sessions/{id}/fork` | Fork session | Body: `ForkSessionApiRequest` |
 | POST | `/api/sessions/{id}/source-preview` | Preview session source | Body: `PreviewSessionSourceApiRequest` |
 | POST | `/api/sessions/{id}/sources` | Add session source | Body: `AddSessionSourceApiRequest` |

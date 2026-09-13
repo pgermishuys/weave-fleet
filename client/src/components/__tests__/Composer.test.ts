@@ -23,8 +23,6 @@ const mockApi = vi.mocked(api);
 function createCapabilities(overrides: Partial<NonNullable<SessionListItem["capabilities"]>> = {}): NonNullable<SessionListItem["capabilities"]> {
   return {
     canPrompt: true,
-    canStop: true,
-    canResume: false,
     canRestart: false,
     canAbort: false,
     canArchive: false,
@@ -32,8 +30,6 @@ function createCapabilities(overrides: Partial<NonNullable<SessionListItem["capa
     canFork: true,
     canDelete: true,
     promptDisabledReason: null,
-    stopDisabledReason: null,
-    resumeDisabledReason: null,
     restartDisabledReason: null,
     abortDisabledReason: null,
     archiveDisabledReason: null,
@@ -454,14 +450,14 @@ describe("Composer", () => {
     expect(wrapper.get("[data-testid='prompt-send-button']").attributes("disabled")).toBeUndefined();
   });
 
-  it("disables composer for a stopped session when capabilities canPrompt is false", async () => {
+  it("disables composer for an errored session when capabilities canPrompt is false", async () => {
     const wrapper = mountComposer({
       session: createSession({
-        lifecycleStatus: "stopped",
-        sessionStatus: "stopped",
+        lifecycleStatus: "error",
+        sessionStatus: "error",
         capabilities: createCapabilities({
           canPrompt: false,
-          promptDisabledReason: "Manual stopped sessions cannot receive prompts.",
+          promptDisabledReason: "Session is not running.",
         }),
       }),
     });

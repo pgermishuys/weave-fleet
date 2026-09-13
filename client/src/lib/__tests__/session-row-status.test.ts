@@ -47,11 +47,14 @@ describe("sessionRowStatus", () => {
 
   it("names lifecycle states quietly", () => {
     expect(sessionRowStatus(item("completed"), NOW).label).toBe("Done");
-    expect(sessionRowStatus(item("stopped"), NOW).label).toBe("Paused");
     expect(sessionRowStatus(item("error"), NOW)).toEqual({ label: "Error", tone: "error" });
   });
 
   it("shows last activity for idle sessions", () => {
     expect(sessionRowStatus(item("idle"), NOW)).toEqual({ label: "2h", tone: "quiet" });
+  });
+
+  it("shows last activity for stopped sessions, which wake on the next prompt", () => {
+    expect(sessionRowStatus(item("stopped"), NOW)).toEqual({ label: "2h", tone: "quiet" });
   });
 });

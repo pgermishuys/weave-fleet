@@ -183,8 +183,6 @@ public sealed record SessionPreviewEnvelope(
     bool IsTruncated,
     int CharacterCount);
 
-public sealed record ResumeSessionApiResponse(string InstanceId, Session Session);
-
 public sealed record ForkSessionApiResponse(
     string InstanceId,
     string WorkspaceId,

@@ -254,53 +254,6 @@ public static class SessionEndpoints
         })
         .WithName("RejectQuestion");
 
-        // POST /api/sessions/{id}/resume
-        group.MapPost("/{id}/resume", async (
-            string id,
-            SessionOrchestrator orchestrator,
-            SessionService sessionService,
-            SessionCapabilitiesResolver capabilitiesResolver) =>
-        {
-            var guardResult = await GuardSessionCapabilityAsync(
-                id,
-                sessionService,
-                capabilitiesResolver,
-                capabilities => capabilities.CanResume,
-                capabilities => capabilities.ResumeDisabledReason,
-                "Session cannot be resumed.");
-            if (guardResult is not null)
-                return guardResult;
-
-            var result = await orchestrator.ResumeSessionAsync(id);
-            return result.Match(
-                session => Results.Ok(new ResumeSessionApiResponse(
-                    session.InstanceId,
-                    session)),
-                err => err.ToSessionApiResult());
-        })
-        .WithName("ResumeSession");
-
-        // POST /api/sessions/{id}/stop
-        group.MapPost("/{id}/stop", async (
-            string id,
-            SessionService sessionService,
-            SessionCapabilitiesResolver capabilitiesResolver) =>
-        {
-            var guardResult = await GuardSessionCapabilityAsync(
-                id,
-                sessionService,
-                capabilitiesResolver,
-                capabilities => capabilities.CanStop,
-                capabilities => capabilities.StopDisabledReason,
-                "Session cannot be stopped.");
-            if (guardResult is not null)
-                return guardResult;
-
-            var result = await sessionService.StopSessionAsync(id);
-            return result.ToNoContentResult();
-        })
-        .WithName("StopSession");
-
         // POST /api/sessions/{id}/fork
         group.MapPost("/{id}/fork", async (string id, ForkSessionApiRequest req, SessionOrchestrator orchestrator) =>
         {
@@ -663,25 +616,6 @@ public static class SessionEndpoints
             ActionId: usage.ActionId,
             Summary: usage.Summary,
             CreatedAt: usage.CreatedAt);
-
-    private static async Task<IResult?> GuardSessionCapabilityAsync(
-        string id,
-        SessionService sessionService,
-        SessionCapabilitiesResolver capabilitiesResolver,
-        Func<WeaveFleet.Domain.DTOs.SessionActionCapabilities, bool> isAllowed,
-        Func<WeaveFleet.Domain.DTOs.SessionActionCapabilities, string?> getDisabledReason,
-        string fallbackDisabledReason)
-    {
-        var sessionResult = await sessionService.GetSessionAsync(id);
-        if (sessionResult.IsFailure)
-            return sessionResult.Error.ToSessionApiResult();
-
-        var capabilities = capabilitiesResolver.Resolve(sessionResult.Value);
-        if (isAllowed(capabilities))
-            return null;
-
-        return Results.Conflict(new ErrorResponse(getDisabledReason(capabilities) ?? fallbackDisabledReason));
-    }
 
     private static string DeriveSessionStatus(Session s, string activityStatus) =>
         s.Status switch

@@ -24,11 +24,6 @@ export interface SessionIdledPayload {
   sessionId: string;
 }
 
-export interface SessionStoppedPayload {
-  sessionId: string;
-  stoppedAt: string;
-}
-
 export interface SessionDeletedPayload {
   sessionId: string;
 }
@@ -283,11 +278,6 @@ export interface SessionIdled extends EventCursorMetadata {
   payload: SessionIdledPayload;
 }
 
-export interface SessionStopped extends EventCursorMetadata {
-  type: "session.stopped";
-  payload: SessionStoppedPayload;
-}
-
 export interface SessionDeleted extends EventCursorMetadata {
   type: "session.deleted";
   payload: SessionDeletedPayload;
@@ -401,7 +391,6 @@ export function isCanvasEvent(event: DomainEvent): event is CanvasEvent {
 export type DomainEvent =
   | SessionStarted
   | SessionIdled
-  | SessionStopped
   | SessionDeleted
   | SessionArchived
   | TurnStarted

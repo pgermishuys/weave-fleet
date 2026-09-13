@@ -469,38 +469,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/sessions/{id}/resume": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["ResumeSession"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{id}/stop": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["StopSession"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/sessions/{id}/fork": {
         parameters: {
             query?: never;
@@ -2496,8 +2464,6 @@ export interface components {
         };
         SessionActionCapabilities: {
             canPrompt: boolean;
-            canStop: boolean;
-            canResume: boolean;
             canRestart: boolean;
             canAbort: boolean;
             canArchive: boolean;
@@ -2505,8 +2471,6 @@ export interface components {
             canFork: boolean;
             canDelete: boolean;
             promptDisabledReason: null | string;
-            stopDisabledReason: null | string;
-            resumeDisabledReason: null | string;
             restartDisabledReason: null | string;
             abortDisabledReason: null | string;
             archiveDisabledReason: null | string;
@@ -3955,46 +3919,6 @@ export interface operations {
             path: {
                 id: string;
                 requestId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    ResumeSession: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    StopSession: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
             };
             cookie?: never;
         };

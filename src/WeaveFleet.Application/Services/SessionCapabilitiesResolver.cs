@@ -10,7 +10,6 @@ public sealed class SessionCapabilitiesResolver(InstanceTracker instanceTracker,
         ArgumentNullException.ThrowIfNull(session);
 
         return Resolve(
-            session.RuntimeMode,
             session.LifecycleStatus,
             session.RetentionStatus,
             activityTracker.GetEffectiveActivityStatus(session.Id) ?? "idle",
@@ -18,24 +17,18 @@ public sealed class SessionCapabilitiesResolver(InstanceTracker instanceTracker,
     }
 
     public static SessionActionCapabilities Resolve(
-        string? runtimeMode,
         string? lifecycleStatus,
         string? retentionStatus,
         string? activityStatus,
         bool isLive)
     {
-        var normalizedRuntimeMode = Normalize(runtimeMode, "manual");
         var normalizedRetentionStatus = Normalize(retentionStatus, "active");
         var effectiveLifecycleStatus = GetEffectiveLifecycleStatus(lifecycleStatus, isLive);
         var isArchived = string.Equals(normalizedRetentionStatus, "archived", StringComparison.Ordinal);
-        // Runtime mode is the source of truth for lazy activation. Only the explicit automatic
-        // value suppresses Resume in favor of prompt-triggered activation.
-        var isAutomatic = string.Equals(normalizedRuntimeMode, "automatic", StringComparison.Ordinal);
         var isRunning = string.Equals(effectiveLifecycleStatus, "running", StringComparison.Ordinal);
         var isBusy = string.Equals(activityStatus, "busy", StringComparison.Ordinal);
-        var canPrompt = !isArchived && (isRunning || isAutomatic && IsAutomaticPromptableTerminal(effectiveLifecycleStatus));
-        var canStop = !isArchived && isRunning;
-        var canResume = !isArchived && !isAutomatic && IsManualResumableTerminal(effectiveLifecycleStatus);
+        // A session that isn't running wakes on its next prompt.
+        var canPrompt = !isArchived && (isRunning || IsPromptableTerminal(effectiveLifecycleStatus));
         var canRestart = !isArchived;
         var canAbort = !isArchived && isRunning && isBusy;
         var canArchive = !isArchived;
@@ -45,17 +38,13 @@ public sealed class SessionCapabilitiesResolver(InstanceTracker instanceTracker,
 
         return new SessionActionCapabilities(
             CanPrompt: canPrompt,
-            CanStop: canStop,
-            CanResume: canResume,
             CanRestart: canRestart,
             CanAbort: canAbort,
             CanArchive: canArchive,
             CanUnarchive: canUnarchive,
             CanFork: canFork,
             CanDelete: canDelete,
-            PromptDisabledReason: canPrompt ? null : GetPromptDisabledReason(isArchived, isAutomatic, effectiveLifecycleStatus),
-            StopDisabledReason: canStop ? null : GetStopDisabledReason(isArchived, effectiveLifecycleStatus),
-            ResumeDisabledReason: canResume ? null : GetResumeDisabledReason(isArchived, isAutomatic, effectiveLifecycleStatus),
+            PromptDisabledReason: canPrompt ? null : GetPromptDisabledReason(isArchived),
             RestartDisabledReason: canRestart ? null : GetArchivedReadOnlyReason(isArchived),
             AbortDisabledReason: canAbort ? null : GetAbortDisabledReason(isArchived, isRunning, isBusy),
             ArchiveDisabledReason: canArchive ? null : GetAlreadyArchivedReason(isArchived),
@@ -75,11 +64,8 @@ public sealed class SessionCapabilitiesResolver(InstanceTracker instanceTracker,
             : normalized;
     }
 
-    private static bool IsAutomaticPromptableTerminal(string lifecycleStatus) =>
+    private static bool IsPromptableTerminal(string lifecycleStatus) =>
         lifecycleStatus is "stopped" or "disconnected" or "completed";
-
-    private static bool IsManualResumableTerminal(string lifecycleStatus) =>
-        lifecycleStatus is "stopped" or "disconnected";
 
     private static string? GetArchivedReadOnlyReason(bool isArchived) =>
         isArchived ? "Archived sessions are read-only." : null;
@@ -87,39 +73,8 @@ public sealed class SessionCapabilitiesResolver(InstanceTracker instanceTracker,
     private static string? GetAlreadyArchivedReason(bool isArchived) =>
         isArchived ? "Session is already archived." : null;
 
-    private static string? GetPromptDisabledReason(bool isArchived, bool isAutomatic, string lifecycleStatus)
-    {
-        if (isArchived)
-            return "Archived sessions are read-only.";
-
-        if (isAutomatic && IsAutomaticPromptableTerminal(lifecycleStatus))
-            return null;
-
-        return "Resume the session before prompting.";
-    }
-
-    private static string? GetStopDisabledReason(bool isArchived, string lifecycleStatus)
-    {
-        if (isArchived)
-            return "Archived sessions are read-only.";
-
-        return string.Equals(lifecycleStatus, "running", StringComparison.Ordinal)
-            ? null
-            : "Session is not running.";
-    }
-
-    private static string? GetResumeDisabledReason(bool isArchived, bool isAutomatic, string lifecycleStatus)
-    {
-        if (isArchived)
-            return "Archived sessions cannot be resumed.";
-
-        if (isAutomatic)
-            return "Automatic sessions resume on the next prompt.";
-
-        return IsManualResumableTerminal(lifecycleStatus)
-            ? null
-            : "Session is not resumable.";
-    }
+    private static string GetPromptDisabledReason(bool isArchived) =>
+        isArchived ? "Archived sessions are read-only." : "Session is not running.";
 
     private static string? GetAbortDisabledReason(bool isArchived, bool isRunning, bool isBusy)
     {

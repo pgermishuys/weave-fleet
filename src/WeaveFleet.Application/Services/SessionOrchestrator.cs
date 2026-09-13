@@ -471,96 +471,6 @@ public sealed partial class SessionOrchestrator(
         return new CreateSessionResult(session, harnessInstance.InstanceId, workspace.Id);
     }
 
-    // ── Resume ─────────────────────────────────────────────────────────────────
-
-    public async Task<Result<Session>> ResumeSessionAsync(string id, CancellationToken ct = default)
-    {
-        using var _ = BeginSessionScope(id);
-        var session = await sessionRepository.GetByIdAsync(id);
-        if (session is null)
-            return FleetError.NotFoundFor(nameof(Session), id);
-
-        if (string.Equals(session.RetentionStatus, "archived", StringComparison.Ordinal))
-            return FleetError.ValidationError("Session.RetentionStatus", "Archived sessions cannot be resumed.");
-
-        var workspaceResult = await workspaceService.GetWorkspaceDirectoryAsync(session.WorkspaceId);
-        if (workspaceResult.IsFailure)
-            return workspaceResult.Error;
-
-        var harness = harnessRegistry.GetByType(session.HarnessType);
-        if (harness is null)
-            return FleetError.NotFoundFor("Harness", session.HarnessType);
-
-        var harnessRuntime = harnessRegistry.GetRuntimeByType(session.HarnessType);
-        if (harnessRuntime is null)
-            return FleetError.NotFoundFor("HarnessRuntime", session.HarnessType);
-
-        // Load credentials using the session OWNER's userId.
-        // The orchestrator never inspects credential contents — it passes them opaquely to the harness.
-        var ownerCredentials = await credentialStore.GetDecryptedCredentialsAsync(session.UserId);
-        var preparation = await harnessRuntime.PrepareRuntimeAsync(new RuntimePreparationContext
-        {
-            UserId = session.UserId,
-            UserCredentials = ownerCredentials,
-            ModelId = null,
-            WorkingDirectory = workspaceResult.Value
-        }, ct);
-
-        if (preparation is RuntimePreparation.NotReady notReadyResume)
-        {
-            var message = string.Join(" ", notReadyResume.Errors.Select(e => e.Message));
-            return FleetError.ValidationError("Session.NotReady", message);
-        }
-
-        var resumeLaunchArtifacts = ((RuntimePreparation.Ready)preparation).Artifacts;
-
-        IHarnessSession harnessInstance;
-        try
-        {
-            if (session.HarnessResumeToken is not null && harness.Capabilities.SupportsResume)
-            {
-                harnessInstance = await harnessRuntime.ResumeAsync(new HarnessResumeOptions
-                {
-                    SessionId = session.Id,
-                    WorkingDirectory = workspaceResult.Value,
-                    OwnerUserId = session.UserId,
-                    ResumeToken = session.HarnessResumeToken,
-                    LaunchArtifacts = resumeLaunchArtifacts
-                }, ct);
-            }
-            else
-            {
-                harnessInstance = await harnessRuntime.SpawnAsync(new HarnessSpawnOptions
-                {
-                    SessionId = session.Id,
-                    WorkingDirectory = workspaceResult.Value,
-                    OwnerUserId = session.UserId,
-                    LaunchArtifacts = resumeLaunchArtifacts
-                }, ct);
-            }
-        }
-        catch (Exception ex)
-        {
-            LogSpawnFailed(ex, session.HarnessType);
-            return FleetError.Unexpected;
-        }
-
-        await instanceService.RegisterInstanceAsync(
-            id: harnessInstance.InstanceId,
-            port: 0,
-            pid: harnessInstance.ProcessId,
-            directory: workspaceResult.Value,
-            url: string.Empty);
-
-        // Update the DB mapping BEFORE registering: registration starts the relay pump, which
-        // resolves the Fleet session id by instance id from the DB.
-        await sessionRepository.UpdateForResumeAsync(session.Id, harnessInstance.InstanceId);
-        instanceTracker.Register(harnessInstance.InstanceId, harnessInstance);
-
-        session.InstanceId = harnessInstance.InstanceId;
-        return session;
-    }
-
     // ── Fork ───────────────────────────────────────────────────────────────────
 
     public async Task<Result<CreateSessionResult>> ForkSessionAsync(
@@ -1244,56 +1154,6 @@ public sealed partial class SessionOrchestrator(
 
     // ── Delete ─────────────────────────────────────────────────────────────────
 
-    public async Task<Result<Unit>> StopSessionAsync(string id, CancellationToken ct = default)
-    {
-        using var _ = BeginSessionScope(id);
-        var session = await sessionRepository.GetByIdAsync(id);
-        if (session is null)
-            return FleetError.NotFoundFor(nameof(Session), id);
-
-        if (session.Status is "stopped" or "completed" or "error" or "disconnected")
-            return Unit.Value;
-
-        var stoppedAt = DateTime.UtcNow.ToString("O");
-        var liveInstance = instanceTracker.Get(session.InstanceId);
-        if (liveInstance is not null)
-        {
-            await SafeStopAsync(liveInstance, ct);
-            instanceTracker.Remove(session.InstanceId);
-        }
-
-        var instanceUpdateResult = await instanceService.UpdateInstanceStatusAsync(session.InstanceId, "stopped", stoppedAt);
-        if (instanceUpdateResult.IsFailure)
-            return instanceUpdateResult.Error;
-
-        if (sessionActivityWriteService is null)
-        {
-            await sessionRepository.UpdateStatusAsync(id, "stopped", stoppedAt);
-            await eventBroadcaster.BroadcastAsync("sessions", "session_stopped",
-                JsonSerializer.SerializeToElement(new SessionStoppedOutboxPayload(id, stoppedAt), ApplicationJsonContext.Default.SessionStoppedOutboxPayload),
-                session.UserId, ct);
-        }
-        else
-        {
-            await sessionActivityWriteService.WriteAsync(
-                new SessionActivityWriteRequest
-                {
-                    SessionStatusUpdates = [new SessionStatusUpdate { Id = id, Status = "stopped", StoppedAt = stoppedAt }],
-                    OutboxMessages =
-                    [
-                        CreateSessionLifecycleOutboxMessage(
-                            "session_stopped",
-                            JsonSerializer.Serialize(new SessionStoppedOutboxPayload(id, stoppedAt), ApplicationJsonContext.Default.SessionStoppedOutboxPayload),
-                            stoppedAt,
-                            session.UserId)
-                    ]
-                },
-                ct);
-        }
-
-        return Unit.Value;
-    }
-
     public async Task<Result<Unit>> ArchiveSessionAsync(string id, CancellationToken ct = default)
     {
         using var _ = BeginSessionScope(id);
@@ -1749,14 +1609,6 @@ public sealed partial class SessionOrchestrator(
         if (instance is not null)
             return Result.Success<IHarnessSession>(instance);
 
-        if (string.IsNullOrWhiteSpace(session.HarnessResumeToken))
-            return FleetError.NotFoundFor("Instance", session.InstanceId);
-
-        // Do not auto-activate manual sessions that were explicitly stopped or completed.
-        // Automatic sessions (pooled mode) should auto-activate even when stopped.
-        if (session.RuntimeMode is "manual" && session.Status is "stopped" or "completed" or "error")
-            return FleetError.NotFoundFor("Instance", session.InstanceId);
-
         var activationLock = _activationLocks.GetOrAdd(session.Id, static _ => new SemaphoreSlim(1, 1));
         await activationLock.WaitAsync(ct).ConfigureAwait(false);
         try
@@ -1764,13 +1616,6 @@ public sealed partial class SessionOrchestrator(
             var currentSession = await sessionRepository.GetByIdAsync(session.Id).ConfigureAwait(false);
             if (currentSession is null)
                 return FleetError.NotFoundFor(nameof(Session), session.Id);
-
-            if (string.IsNullOrWhiteSpace(currentSession.HarnessResumeToken))
-                return FleetError.NotFoundFor("Instance", currentSession.InstanceId);
-
-            // Re-check status under lock — session may have been stopped concurrently.
-            if (currentSession.RuntimeMode is "manual" && currentSession.Status is "stopped" or "completed" or "error")
-                return FleetError.NotFoundFor("Instance", currentSession.InstanceId);
 
             instance = instanceTracker.Get(currentSession.InstanceId);
             if (instance is not null)
@@ -1787,9 +1632,6 @@ public sealed partial class SessionOrchestrator(
 
     private async Task<Result<IHarnessSession>> ActivateSessionAsync(Session session, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(session.HarnessResumeToken))
-            return FleetError.NotFoundFor("Instance", session.InstanceId);
-
         var workspaceResult = await workspaceService.GetWorkspaceDirectoryAsync(session.WorkspaceId).ConfigureAwait(false);
         if (workspaceResult.IsFailure)
         {
@@ -1826,16 +1668,28 @@ public sealed partial class SessionOrchestrator(
         IHarnessSession harnessInstance;
         try
         {
-            harnessInstance = await harnessRuntime.ResumeAsync(new HarnessResumeOptions
-            {
-                SessionId = session.Id,
-                WorkingDirectory = workspaceResult.Value,
-                OwnerUserId = session.UserId,
-                ResumeToken = session.HarnessResumeToken,
-                ProjectId = session.ProjectId,
-                ProjectName = projectName,
-                LaunchArtifacts = launchArtifacts
-            }, ct).ConfigureAwait(false);
+            // Non-pooled sessions only get a resume token on their first prompt, so one that was
+            // never prompted has nothing to resume: start a fresh harness session instead.
+            harnessInstance = string.IsNullOrWhiteSpace(session.HarnessResumeToken)
+                ? await harnessRuntime.SpawnAsync(new HarnessSpawnOptions
+                {
+                    SessionId = session.Id,
+                    WorkingDirectory = workspaceResult.Value,
+                    OwnerUserId = session.UserId,
+                    ProjectId = session.ProjectId,
+                    ProjectName = projectName,
+                    LaunchArtifacts = launchArtifacts
+                }, ct).ConfigureAwait(false)
+                : await harnessRuntime.ResumeAsync(new HarnessResumeOptions
+                {
+                    SessionId = session.Id,
+                    WorkingDirectory = workspaceResult.Value,
+                    OwnerUserId = session.UserId,
+                    ResumeToken = session.HarnessResumeToken,
+                    ProjectId = session.ProjectId,
+                    ProjectName = projectName,
+                    LaunchArtifacts = launchArtifacts
+                }, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -1864,6 +1718,13 @@ public sealed partial class SessionOrchestrator(
         // Update the DB mapping BEFORE registering: registration starts the relay pump, which
         // resolves the Fleet session id by instance id from the DB.
         await sessionRepository.UpdateForResumeAsync(session.Id, harnessInstance.InstanceId).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(session.HarnessResumeToken) && !string.IsNullOrWhiteSpace(harnessInstance.ResumeToken))
+        {
+            // A fresh pooled spawn creates its OpenCode session up front; keep its token so the next wake resumes it.
+            await sessionRepository.UpdateResumeTokenAsync(session.Id, harnessInstance.ResumeToken).ConfigureAwait(false);
+            session.HarnessResumeToken = harnessInstance.ResumeToken;
+        }
+
         instanceTracker.Register(harnessInstance.InstanceId, harnessInstance);
         session.InstanceId = harnessInstance.InstanceId;
         session.Status = "active";
@@ -1923,7 +1784,6 @@ public sealed partial class SessionOrchestrator(
         string activityStatus,
         string lifecycleStatus)
         => SessionCapabilitiesResolver.Resolve(
-            session.RuntimeMode,
             lifecycleStatus,
             session.RetentionStatus,
             activityStatus,

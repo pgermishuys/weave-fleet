@@ -23,17 +23,6 @@ public sealed record SessionIdled : DomainEvent
 }
 
 /// <summary>
-/// Raised when a Fleet session has been stopped.
-/// </summary>
-public sealed record SessionStopped : DomainEvent
-{
-    /// <summary>
-    /// Gets the strongly typed payload for the session-stopped event.
-    /// </summary>
-    public required SessionStoppedPayload Payload { get; init; }
-}
-
-/// <summary>
 /// Raised when a Fleet session has been deleted.
 /// </summary>
 public sealed record SessionDeleted : DomainEvent
@@ -105,22 +94,6 @@ public sealed record SessionIdledPayload
     /// Gets the Fleet session identifier.
     /// </summary>
     public required string SessionId { get; init; }
-}
-
-/// <summary>
-/// Payload describing a session that has stopped.
-/// </summary>
-public sealed record SessionStoppedPayload
-{
-    /// <summary>
-    /// Gets the Fleet session identifier.
-    /// </summary>
-    public required string SessionId { get; init; }
-
-    /// <summary>
-    /// Gets the ISO-8601 timestamp when the session stopped.
-    /// </summary>
-    public required string StoppedAt { get; init; }
 }
 
 /// <summary>

@@ -33,8 +33,6 @@ const statusLabel = computed(() => {
       return "ERROR";
     case "waiting_input":
       return "WAITING";
-    case "resuming":
-      return "RESUMING";
     default:
       return "IDLE";
   }

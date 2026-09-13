@@ -50,8 +50,6 @@ const sessionStatusIndicator = computed(() => {
   switch (effectiveLifecycleStatus.value) {
     case "disconnected":
       return "disconnected";
-    case "resuming":
-      return "resuming";
     default:
       if (effectiveActivityStatus.value === "retry") {
         return "retry";
@@ -67,8 +65,6 @@ const sessionStatusLabel = computed(() => {
       return "Working";
     case "disconnected":
       return "Disconnected";
-    case "resuming":
-      return "Resuming…";
     case "retry":
       return props.retryAttempt ? `Retrying (attempt ${props.retryAttempt})…` : "Retrying…";
     default:
@@ -92,7 +88,6 @@ const showStoppedBanner = computed(() => {
       return false;
   }
 });
-const showResumingBanner = computed(() => effectiveLifecycleStatus.value === "resuming");
 
 function syncComposerDisabledState(): void {
   if (typeof document === "undefined") {
@@ -351,24 +346,14 @@ onUnmounted(() => {
 
     <div class="session-detail-banners">
       <div
-        v-if="showResumingBanner"
-        data-testid="session-resuming-banner"
-        class="border border-sky-500/30 bg-sky-500/10 px-4 py-3"
-      >
-        <p class="text-sm text-foreground">
-          Resuming session…
-        </p>
-      </div>
-
-      <div
         v-if="showStoppedBanner"
         data-testid="session-stopped-banner"
         class="border border-border bg-muted/40 px-4 py-3"
       >
         <p class="text-sm text-muted-foreground">
           {{ effectiveLifecycleStatus === "disconnected"
-            ? "Connection to this session was lost. Weave will reconnect automatically when the backend becomes reachable again, or you can resume the session from Session actions."
-            : "This session is no longer running. Use Session actions in the right panel to resume or archive it." }}
+            ? "Connection to this session was lost. Weave will reconnect automatically when the backend becomes reachable again, or send a message to reconnect now."
+            : "This session isn't running. Send a message to pick it up again." }}
         </p>
       </div>
 

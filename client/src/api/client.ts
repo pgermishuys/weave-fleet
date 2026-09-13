@@ -183,11 +183,6 @@ export interface PreviewSessionSourceRequest {
   source: SessionSourceSelection;
 }
 
-export interface ResumeSessionResponse {
-  instanceId: string;
-  session: FleetSession;
-}
-
 export interface ForkSessionResponse {
   instanceId: string;
   workspaceId: string;

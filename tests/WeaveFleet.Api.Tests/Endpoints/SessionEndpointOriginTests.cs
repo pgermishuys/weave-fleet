@@ -130,10 +130,6 @@ public sealed class SessionEndpointOriginTests : IAsyncLifetime, IDisposable
         capabilities.ValueKind.ShouldBe(JsonValueKind.Object);
         capabilities.TryGetProperty("canPrompt", out var canPrompt).ShouldBeTrue();
         canPrompt.ValueKind.ShouldBeOneOf(JsonValueKind.True, JsonValueKind.False);
-        capabilities.TryGetProperty("canStop", out var canStop).ShouldBeTrue();
-        canStop.ValueKind.ShouldBeOneOf(JsonValueKind.True, JsonValueKind.False);
-        capabilities.TryGetProperty("canResume", out var canResume).ShouldBeTrue();
-        canResume.ValueKind.ShouldBeOneOf(JsonValueKind.True, JsonValueKind.False);
         capabilities.TryGetProperty("canRestart", out var canRestart).ShouldBeTrue();
         canRestart.ValueKind.ShouldBeOneOf(JsonValueKind.True, JsonValueKind.False);
         capabilities.TryGetProperty("canAbort", out var canAbort).ShouldBeTrue();

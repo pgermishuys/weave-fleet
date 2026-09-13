@@ -54,8 +54,7 @@ function deriveSessionStatus(activityStatus: string, currentSessionStatus?: stri
   if (currentSessionStatus === "stopped" || 
       currentSessionStatus === "completed" || 
       currentSessionStatus === "error" || 
-      currentSessionStatus === "disconnected" ||
-      currentSessionStatus === "resuming") {
+      currentSessionStatus === "disconnected") {
     return currentSessionStatus
   }
 

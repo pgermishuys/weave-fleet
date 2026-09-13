@@ -22,6 +22,6 @@ User preference must also be enabled, so global opt-in alone does not force pool
 ## Rollback
 
 1. Set `Fleet:Harness:PooledOpenCodeHarness=false`.
-2. Existing pooled sessions continue until stopped/resumed; new sessions use non-pooled behavior.
-3. Stop active pooled sessions or restart the API to dispose the pool immediately.
-4. Verify `/api/admin/opencode/pool` reports `instanceCount=0` after active pooled sessions stop and idle TTL expires.
+2. Existing pooled sessions keep running on the pool; new sessions use non-pooled behavior.
+3. Restart the API to dispose the pool immediately.
+4. Verify `/api/admin/opencode/pool` reports `instanceCount=0` after the restart.
