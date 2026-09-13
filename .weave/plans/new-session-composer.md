@@ -139,7 +139,7 @@ Made (2026-09-13):
 
 Open, with a recommendation:
 - **Session title when none is typed**: check in 1.7 whether OpenCode names the session from the first message. If it does, send no title; if not, send the first line (≤ 60 chars).
-- **First message delivery**: started with `initialPrompt`; the live check found the message isn't shown until a reload (see Stage 1 findings). Recommendation: the server fix above, in Stage 1, before this ships.
+- **First message delivery**: started with `initialPrompt`; the live check found the message isn't shown until a reload (see Stage 1 findings). **Approved by the user 2026-09-13**: make the server fix above in Stage 1, before this ships.
 - **Esc on the page**: closes menus only, never leaves (the draft is kept in stage 2 anyway).
 - **Quick-chat folders**: delete with their session (4.3). Needs a yes.
 
