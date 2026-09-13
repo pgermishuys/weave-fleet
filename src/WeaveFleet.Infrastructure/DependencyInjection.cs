@@ -169,6 +169,7 @@ public static class DependencyInjection
         services.AddScoped<TerminalService>();
         services.AddHostedService<TerminalShutdownService>();
         services.AddSingleton<IAppRunner, AppRunner>();
+        services.AddScoped<BrowserBridge>();
         services.AddSingleton<IBackgroundUserScope, BackgroundUserScope>();
         services.AddScoped<AutomationService>();
         services.AddScoped<AutomationExecutionService>();

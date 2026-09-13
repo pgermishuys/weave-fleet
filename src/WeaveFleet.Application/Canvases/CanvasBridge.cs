@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 
@@ -19,10 +20,13 @@ public sealed record CanvasToolOutput(string Title, string Output, string? Canva
 public sealed class CanvasBridge(
     IHarnessCanvasCallerResolver callers,
     IBackgroundUserScope userScope,
-    ICanvasService canvases)
+    ICanvasService canvases,
+    IAppRunner apps)
 {
     /// <summary>The one answer for every call Fleet can't place: unknown token, unknown session, or another process's session.</summary>
     public const string UnknownCallerMessage = "Fleet couldn't match this call to one of its sessions.";
+
+    private const int BrowserLogLines = 40;
 
     public Task<CanvasResult<CanvasToolOutput>> ListAsync(string? bridgeToken, string? harnessSessionId, CancellationToken ct = default)
         => RunAsync(bridgeToken, harnessSessionId, async sessionId =>
@@ -69,9 +73,17 @@ public sealed class CanvasBridge(
                 return CanvasResult.Fail<CanvasToolOutput>(read.Error);
 
             var canvas = await canvases.GetAsync(sessionId, canvasId, ct);
+            var text = read.Value;
+            if (canvas?.Kind == CanvasKinds.Browser
+                && BrowserState.Parse(canvas.StateJson).AppId is { } appId
+                && apps.Find(appId) is { } app)
+            {
+                text += "\n" + BrowserBridge.RenderApp(app, apps.Logs(appId, BrowserLogLines));
+            }
+
             return CanvasResult.Ok(canvas is null
-                ? new CanvasToolOutput(canvasId, read.Value, canvasId)
-                : new CanvasToolOutput($"{canvas.Title} · v{canvas.Version}", read.Value, canvas.Id, canvas.Version));
+                ? new CanvasToolOutput(canvasId, text, canvasId)
+                : new CanvasToolOutput($"{canvas.Title} · v{canvas.Version}", text, canvas.Id, canvas.Version));
         }, ct);
 
     public Task<CanvasResult<CanvasToolOutput>> PatchAsync(

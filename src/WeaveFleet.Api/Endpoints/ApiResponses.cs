@@ -264,7 +264,9 @@ public sealed record CanvasBridgeRequest(
     string? Kind = null,
     string? Title = null,
     JsonNode? State = null,
-    JsonNode? Ops = null);
+    JsonNode? Ops = null,
+    string? Command = null,
+    string? Url = null);
 
 /// <summary>What the tool returns to the harness as-is: a tool-card title, the text the model reads, and metadata.</summary>
 public sealed record CanvasToolResponse(string Title, string Output, CanvasToolMetadata Metadata);

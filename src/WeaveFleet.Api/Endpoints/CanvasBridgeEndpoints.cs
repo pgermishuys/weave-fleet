@@ -1,4 +1,5 @@
 using System.Net;
+using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
 
 namespace WeaveFleet.Api.Endpoints;
@@ -45,6 +46,14 @@ public static class CanvasBridgeEndpoints
         group.MapPost("/focus", async (CanvasBridgeRequest request, HttpContext http, CanvasBridge bridge, CancellationToken ct)
             => ToResult(await bridge.FocusAsync(BridgeToken(http), request.OpenCodeSessionId, request.CanvasId, ct)))
             .WithName("CanvasBridgeFocus");
+
+        group.MapPost("/app-start", async (CanvasBridgeRequest request, HttpContext http, BrowserBridge bridge, CancellationToken ct)
+            => ToResult(await bridge.AppStartAsync(BridgeToken(http), request.OpenCodeSessionId, request.Command, request.Title, ct)))
+            .WithName("CanvasBridgeAppStart");
+
+        group.MapPost("/browser-open", async (CanvasBridgeRequest request, HttpContext http, BrowserBridge bridge, CancellationToken ct)
+            => ToResult(await bridge.BrowserOpenAsync(BridgeToken(http), request.OpenCodeSessionId, request.Url, request.Title, ct)))
+            .WithName("CanvasBridgeBrowserOpen");
 
         return app;
     }

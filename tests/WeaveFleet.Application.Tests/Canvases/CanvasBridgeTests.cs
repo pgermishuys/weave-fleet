@@ -1,6 +1,8 @@
 using System.Text.Json.Nodes;
+using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Tests.Browser;
 using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Application.Tests.Canvases;
@@ -26,6 +28,7 @@ public sealed class CanvasBridgeTests
     private readonly FakeEventBroadcaster _broadcaster = new();
     private readonly ScopedUser _user = new();
     private readonly FakeCallers _callers = new();
+    private readonly FakeAppRunner _apps = new();
     private readonly CanvasService _canvases;
     private readonly CanvasBridge _bridge;
 
@@ -34,7 +37,7 @@ public sealed class CanvasBridgeTests
         _repository.AddSession(SessionId);
         _callers.Add(Token, OpenCodeSessionId, new HarnessCanvasCaller(SessionId, Owner));
         _canvases = new CanvasService(_repository, _broadcaster, _user);
-        _bridge = new CanvasBridge(_callers, _user, _canvases);
+        _bridge = new CanvasBridge(_callers, _user, _canvases, _apps);
     }
 
     private async Task<CanvasToolOutput> OpenFlowAsync()
@@ -188,38 +191,16 @@ public sealed class CanvasBridgeTests
         noTitle.Error!.Message.ShouldBe("\"title\" must be 1-120 characters.");
     }
 
-    /// <summary>The request's own user, until a scope says otherwise, like the real user contexts.</summary>
-    private sealed class ScopedUser : IUserContext, IBackgroundUserScope
+    [Fact]
+    public async Task Reading_a_browser_canvas_adds_its_app_status_and_recent_output()
     {
-        public const string RequestUser = "request-user";
+        var app = _apps.Start(SessionId, "/work/shop", "bun run dev");
+        await _apps.WaitUntilReadyAsync(app.Id, TimeSpan.FromSeconds(1));
+        var opened = await _canvases.OpenAsync(SessionId, CanvasKinds.Browser, "Shop", JsonNode.Parse($$"""{ "url": "http://localhost:5173/", "appId": "{{app.Id}}" }"""));
 
-        private readonly AsyncLocal<string?> _scoped = new();
+        var read = await _bridge.ReadAsync(Token, OpenCodeSessionId, opened.Value!.Canvas.Id);
 
-        public string UserId => _scoped.Value ?? RequestUser;
-        public string? Email => null;
-        public string? DisplayName => UserId;
-        public bool IsAuthenticated => true;
-
-        public IDisposable Begin(string userId)
-        {
-            var previous = _scoped.Value;
-            _scoped.Value = userId;
-            return new Restore(() => _scoped.Value = previous);
-        }
-
-        private sealed class Restore(Action restore) : IDisposable
-        {
-            public void Dispose() => restore();
-        }
-    }
-
-    private sealed class FakeCallers : IHarnessCanvasCallerResolver
-    {
-        private readonly Dictionary<(string Token, string SessionId), HarnessCanvasCaller> _callers = [];
-
-        public void Add(string token, string openCodeSessionId, HarnessCanvasCaller caller) => _callers[(token, openCodeSessionId)] = caller;
-
-        public Task<HarnessCanvasCaller?> ResolveAsync(string bridgeToken, string harnessSessionId, CancellationToken ct = default)
-            => Task.FromResult(_callers.GetValueOrDefault((bridgeToken, harnessSessionId)));
+        read.Value!.Output.ShouldBe(
+            $"browser {opened.Value.Canvas.Id} \"Shop\" v1\nurl http://localhost:5173/\napp {app.Id}\napp {app.Id} running\ncommand bun run dev\nports 5173");
     }
 }
