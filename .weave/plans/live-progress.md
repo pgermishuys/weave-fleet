@@ -41,7 +41,7 @@ Mockup (Today vs Proposed, driven by the real event sequence): https://claude.ai
 - Constraints / assumptions:
   - The agent is never prompted to report progress, and no context is added to its prompts.
   - Plan files are read only from inside the session's directory. They must be `.md` files of 256 KB or less, and symlinks are resolved before the directory check.
-  - Each phase ships as its own PR and leaves Fleet working.
+  - Phases 1 to 3 ship as one pull request (the user's choice, 2026-09-13). Each phase still leaves Fleet working.
 
 ## Objectives
 1. Todo progress on every session row, live, for sessions that aren't open too
@@ -50,7 +50,7 @@ Mockup (Today vs Proposed, driven by the real event sequence): https://claude.ai
 4. No extra tokens
 
 ## Dependencies and Order
-1. **Phase 1: Todos, end to end.** Fleet events, adapter mapping, tracker, storage, push, rows, and replacing the client's tool-name matching. Ships alone.
+1. **Phase 1: Todos, end to end.** Fleet events, adapter mapping, tracker, storage, push, rows, and replacing the client's tool-name matching.
 2. **Phase 2: Plans from checklist files.** `files.written`, the parser, tick detection and the Progress tab. Needs Phase 1's tracker.
 3. **Phase 3: Subagents under their step.** Needs Phase 2's steps.
 4. **Phase 4 (optional): Guess the current step.** Decide after Phases 1 to 3.
