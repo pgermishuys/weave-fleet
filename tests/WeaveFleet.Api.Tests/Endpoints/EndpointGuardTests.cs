@@ -57,19 +57,19 @@ public sealed class EndpointGuardTests
     [Theory]
     [InlineData("stopped")]
     [InlineData("disconnected")]
-    public async Task get_session_returns_manual_nucode_terminal_capabilities(string lifecycleStatus)
+    public async Task get_session_returns_manual_pi_terminal_capabilities(string lifecycleStatus)
     {
         await using var factory = new ApiWebApplicationFactory(authEnabled: false);
         using var client = factory.CreateClient();
-        var sessionId = $"session-nucode-{lifecycleStatus}";
+        var sessionId = $"session-pi-{lifecycleStatus}";
         await InsertSessionAsync(
             factory,
             sessionId: sessionId,
-            instanceId: $"instance-nucode-{lifecycleStatus}",
+            instanceId: $"instance-pi-{lifecycleStatus}",
             lifecycleStatus: lifecycleStatus,
             status: lifecycleStatus,
             runtimeMode: "manual",
-            harnessType: "nucode");
+            harnessType: "pi");
 
         var response = await client.GetAsync($"/api/sessions/{sessionId}");
 

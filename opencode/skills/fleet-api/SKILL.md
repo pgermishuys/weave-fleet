@@ -254,20 +254,6 @@ Use this skill when an agent needs to:
 | GET | `/api/harnesses` | List harnesses |
 | POST | `/api/harnesses/opencode/warmup` | Warmup OpenCode harness |
 
-### NuCode (AI Provider Management)
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/nucode/test-connection` | Test NuCode connection |
-| GET | `/api/nucode/providers` | List NuCode providers |
-| GET | `/api/nucode/providers/{id}` | Get NuCode provider |
-| PUT | `/api/nucode/providers/{id}/credentials` | Store provider credentials (body: `NuCodeStoreCredentialsRequest`) |
-| DELETE | `/api/nucode/providers/{id}/credentials` | Disconnect provider |
-| POST | `/api/nucode/providers/{id}/test` | Test provider connection |
-| POST | `/api/nucode/providers/{id}/auth/device-code` | Initiate device flow |
-| POST | `/api/nucode/providers/{id}/auth/poll` | Poll device flow (body: `NuCodeDevicePollRequest`) |
-| PUT | `/api/nucode/providers/{id}/config` | Configure provider (body: `NuCodeProviderConfigRequest`) |
-
 ### Smart Links
 
 | Method | Path | Description |

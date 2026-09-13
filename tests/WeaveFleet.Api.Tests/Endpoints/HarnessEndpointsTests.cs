@@ -23,7 +23,7 @@ public sealed class HarnessEndpointsTests
         {
             var preferences = scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>();
             await preferences.SetAsync("opencode.enabled", "false");
-            await preferences.SetAsync("nucode.enabled", "true");
+            await preferences.SetAsync("pi.enabled", "true");
         }
 
         var response = await client.GetAsync("/api/harnesses");
@@ -35,11 +35,11 @@ public sealed class HarnessEndpointsTests
         var harnesses = document.RootElement.EnumerateArray().ToList();
 
         GetUserEnabled(harnesses, "opencode").ShouldBeFalse();
-        GetUserEnabled(harnesses, "nucode").ShouldBeTrue();
+        GetUserEnabled(harnesses, "pi").ShouldBeTrue();
     }
 
     [Fact]
-    public async Task get_harnesses_defaults_opencode_enabled_and_nucode_disabled()
+    public async Task get_harnesses_defaults_opencode_enabled_and_pi_disabled()
     {
         await using var factory = new ApiWebApplicationFactory(authEnabled: false);
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
@@ -56,7 +56,7 @@ public sealed class HarnessEndpointsTests
         var harnesses = document.RootElement.EnumerateArray().ToList();
 
         GetUserEnabled(harnesses, "opencode").ShouldBeTrue();
-        GetUserEnabled(harnesses, "nucode").ShouldBeFalse();
+        GetUserEnabled(harnesses, "pi").ShouldBeFalse();
     }
 
     // ── Warmup endpoint — API contract: no caller-controlled parameters ────────────

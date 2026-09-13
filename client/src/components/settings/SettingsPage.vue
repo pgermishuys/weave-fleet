@@ -61,7 +61,7 @@ const pluginSections = computed<readonly DecoratedSettingsSection[]>(() => {
 
     <FeaturesSection v-else-if="activeSection === 'features'" />
 
-    <HarnessesSection v-else-if="activeSection === 'harnesses' || activeSection === 'nucode'" />
+    <HarnessesSection v-else-if="activeSection === 'harnesses'" />
 
     <section
       v-else-if="activeSection === 'plugins'"

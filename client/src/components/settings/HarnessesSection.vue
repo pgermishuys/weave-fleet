@@ -6,18 +6,15 @@ import {
   Cable,
   CheckCircle2,
   CircleDashed,
-  Cpu,
   Hexagon,
   Infinity,
   LoaderCircle,
-  Settings2,
   Star,
   TerminalSquare,
 } from "lucide-vue-next";
 import { useHarnesses } from "@/composables/use-harnesses";
 import { usePreferencesStore } from "@/stores/preferences";
 import type { HarnessInfo } from "@/api/client";
-import NuCodeSettingsPanel from "@/components/settings/NuCodeSettingsPanel.vue";
 
 type HarnessStatus = "ready" | "missing-credentials" | "not-configured" | "disabled";
 
@@ -36,7 +33,6 @@ interface HarnessCard {
   icon: Component;
   status: HarnessStatus;
   enabled: boolean;
-  configurable: boolean;
   canToggle: boolean;
   canDefault: boolean;
 }
@@ -45,11 +41,6 @@ const DEFAULT_HARNESS_TYPE = "opencode";
 const POOLED_OPEN_CODE_MODE_PREFERENCE_KEY = "PooledOpenCodeHarness";
 
 const harnessDisplayMetadata: Record<string, HarnessDisplayMetadata> = {
-  nucode: {
-    eyebrow: "Local harness",
-    description: "In-process AI coding harness for sessions that run inside Weave.",
-    icon: Cpu,
-  },
   opencode: {
     eyebrow: "CLI harness",
     description: "Harness for sessions backed by the OpenCode command-line runtime.",
@@ -76,7 +67,6 @@ const fallbackHarnessMetadata: HarnessDisplayMetadata = {
 const prefsStore = usePreferencesStore();
 const { harnesses: registeredHarnesses } = useHarnesses();
 
-const expandedSettingsId = shallowRef<string | null>(null);
 const isSavingPooledOpenCodeMode = shallowRef(false);
 const pooledOpenCodeModeError = shallowRef<string | null>(null);
 
@@ -84,9 +74,6 @@ onMounted(async () => {
   await prefsStore.refresh();
 });
 
-const nucodeProvider = computed(() => prefsStore.get("nucode.provider", "copilot"));
-
-const nucodeBaseUrl = computed(() => prefsStore.get("nucode.baseUrl", ""));
 const defaultHarnessId = computed(() => prefsStore.get("defaultHarnessType", DEFAULT_HARNESS_TYPE));
 const isPooledOpenCodeModeEnabled = computed(
   () => prefsStore.get(POOLED_OPEN_CODE_MODE_PREFERENCE_KEY, "false") === "true",
@@ -128,20 +115,6 @@ async function togglePooledOpenCodeMode(): Promise<void> {
   }
 }
 
-function formatProvider(value: string): string {
-  switch (value) {
-    case "anthropic":
-      return "Anthropic";
-    case "openai":
-      return "OpenAI";
-    case "custom":
-      return "Custom endpoint";
-    case "copilot":
-    default:
-      return "GitHub Copilot";
-  }
-}
-
 function toHarnessCard(harness: HarnessInfo): HarnessCard {
   const metadata = harnessDisplayMetadata[harness.type] ?? fallbackHarnessMetadata;
   const enabled = prefsStore.get(`${harness.type}.enabled`, harness.type === DEFAULT_HARNESS_TYPE ? "true" : "false") === "true";
@@ -155,7 +128,6 @@ function toHarnessCard(harness: HarnessInfo): HarnessCard {
     icon: metadata.icon,
     status: statusForHarness(harness, enabled),
     enabled,
-    configurable: harness.type === "nucode" && enabled,
     canToggle: true,
     canDefault: true,
   };
@@ -165,19 +137,12 @@ function summaryForHarness(harness: HarnessInfo, enabled: boolean): string {
   if (!enabled) return "Disabled until enabled by the user.";
   if (!harness.available) return harness.reason ?? `${harness.displayName} is registered but not currently available.`;
 
-  if (harness.type === "nucode") {
-    return `${formatProvider(nucodeProvider.value)}`;
-  }
-
   return `Available now. Uses the ${harness.displayName} runtime registered by the backend.`;
 }
 
 function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus {
   if (!enabled) return "disabled";
   if (!harness.available) return "not-configured";
-  if (harness.type === "nucode" && (nucodeProvider.value === "custom" && !nucodeBaseUrl.value)) {
-    return "not-configured";
-  }
 
   return "ready";
 }
@@ -239,7 +204,7 @@ function statusIcon(status: HarnessStatus): Component {
               </h2>
             </div>
             <p class="max-w-2xl text-sm text-muted">
-              Harnesses define the runtimes Weave can use to drive sessions. NuCode now lives as one harness among several possible implementations.
+              Harnesses define the runtimes Weave can use to drive sessions.
             </p>
             <div class="flex flex-wrap items-center gap-2 pt-1 text-xs text-muted">
               <span>Default harness:</span>
@@ -354,34 +319,14 @@ function statusIcon(status: HarnessStatus): Component {
                 {{ defaultHarnessId === harness.id ? "Default" : "Set default" }}
               </button>
 
-              <button
-                v-if="harness.configurable"
-                type="button"
-                class="inline-flex items-center gap-1 rounded-btn border border-border bg-main-bg px-2.5 py-1.5 text-xs font-medium text-text transition-colors hover:border-accent/50"
-                @click="expandedSettingsId = expandedSettingsId === harness.id ? null : harness.id"
-              >
-                <Settings2
-                  :size="12"
-                  aria-hidden="true"
-                />
-                Settings
-              </button>
               <span
-                v-else-if="harness.id !== 'opencode'"
+                v-if="harness.id !== 'opencode'"
                 class="inline-flex items-center rounded-btn px-2.5 py-1.5 text-xs font-medium text-muted"
               >
                 No settings yet
               </span>
             </div>
           </div>
-        </div>
-
-        <!-- Inline settings panel (NuCode only) -->
-        <div
-          v-if="expandedSettingsId === harness.id && harness.id === 'nucode'"
-          class="mt-4 border-t border-border pt-4"
-        >
-          <NuCodeSettingsPanel />
         </div>
 
         <div

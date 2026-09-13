@@ -30,7 +30,7 @@ make Foundry feel snappier.
 ## Fleet Message Pipeline
 
 ```
-Harness (OpenCode/NuCode/Pi)
+Harness (OpenCode/Claude Code/Pi)
     │  IHarnessSession.SubscribeAsync()
     ▼
 HarnessEventRelay.PumpAsync()

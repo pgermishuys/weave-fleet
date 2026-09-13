@@ -203,8 +203,8 @@ public sealed class OpenCodeSessionMessageProxyTests
         {
             Id = sessionId,
             InstanceId = "instance-3",
-            HarnessType = "nucode",
-            Title = "NuCode Session",
+            HarnessType = "claude-code",
+            Title = "Claude Code Session",
             Status = "active",
             UserId = "user-1",
         };
@@ -221,7 +221,7 @@ public sealed class OpenCodeSessionMessageProxyTests
             Session = new SessionSnapshotSession
             {
                 Id = sessionId,
-                Title = "NuCode Session",
+                Title = "Claude Code Session",
                 Status = "active",
             },
             Messages = [],
