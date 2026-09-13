@@ -598,15 +598,11 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
           capabilities: {
             canPrompt: true,
             canAbort: sessionItem.activityStatus === "busy",
-            canResume: sessionItem.lifecycleStatus === "stopped",
-            canStop: sessionItem.lifecycleStatus === "running",
             canFork: true,
             canDelete: true,
             canRename: true,
             promptDisabledReason: null,
             abortDisabledReason: sessionItem.activityStatus !== "busy" ? "Session is not active" : null,
-            resumeDisabledReason: sessionItem.lifecycleStatus !== "stopped" ? "Session is not stopped" : null,
-            stopDisabledReason: sessionItem.lifecycleStatus !== "running" ? "Session is not running" : null,
             forkDisabledReason: null,
             deleteDisabledReason: null,
             renameDisabledReason: null,
@@ -671,28 +667,6 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
         const id = url.pathname.split("/")[3];
         console.log(`[mock-api] POST /api/sessions/${id}/abort`);
         return new Response(JSON.stringify({}), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      },
-    },
-    {
-      pattern: /^\/api\/sessions\/([^/]+)\/resume$/,
-      handler: (url) => {
-        const id = url.pathname.split("/")[3];
-        console.log(`[mock-api] POST /api/sessions/${id}/resume`);
-        return new Response(JSON.stringify({
-          instanceId: `mock-instance-${Date.now()}`,
-          session: {
-            id,
-            title: "Resumed Session",
-            isHidden: false,
-            time: {
-              created: Date.now() - 3600000,
-              updated: Date.now(),
-            },
-          },
-        }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         });

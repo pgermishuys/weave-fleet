@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import { Archive, Square, Trash2 } from "lucide-vue-next";
+import { Archive, Trash2 } from "lucide-vue-next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   useArchiveSession,
   useDeleteSession,
-  useTerminateSession,
 } from "@/composables/use-session-actions";
 import type { SessionListItem } from "@/api/client";
 import { sessionCache } from "@/lib/session-cache";
@@ -29,7 +28,6 @@ const emit = defineEmits<Emits>();
 const sessionsStore = useSessionsStore();
 
 const { archiveSession, isArchiving } = useArchiveSession();
-const { terminateSession, isTerminating } = useTerminateSession();
 const { deleteSession, isDeleting } = useDeleteSession();
 const isDeleteDialogOpen = shallowRef(false);
 
@@ -39,12 +37,10 @@ const displayTitle = computed(() => props.session.session.title?.trim() || "Unti
 const isArchived = computed(() => props.session.retentionStatus === "archived");
 const isRunning = computed(() => props.session.lifecycleStatus === "running");
 const fallbackCanArchive = computed(() => !isArchived.value && !isRunning.value);
-const fallbackCanTerminate = computed(() => isRunning.value);
 const canArchive = computed(() => props.session.capabilities?.canArchive ?? fallbackCanArchive.value);
-const canTerminate = computed(() => props.session.capabilities?.canStop ?? fallbackCanTerminate.value);
 const canDelete = computed(() => props.session.capabilities?.canDelete ?? true);
 const isPending = computed(() => {
-  return isArchiving.value || isDeleting.value || isTerminating.value;
+  return isArchiving.value || isDeleting.value;
 });
 
 
@@ -85,24 +81,6 @@ async function handleArchive(): Promise<void> {
   try {
     await archiveSession(sessionId.value);
     sessionsStore.patchSession(sessionId.value, { retentionStatus: "archived" });
-    emit("changed");
-  } catch {
-    // Mutation state is owned by the composable.
-  }
-}
-
-async function handleTerminate(): Promise<void> {
-  if (!canTerminate.value) {
-    return;
-  }
-
-  try {
-    await terminateSession(sessionId.value, instanceId.value);
-    sessionsStore.patchSession(sessionId.value, {
-      activityStatus: "idle",
-      lifecycleStatus: "stopped",
-      sessionStatus: "stopped",
-    });
     emit("changed");
   } catch {
     // Mutation state is owned by the composable.
@@ -178,18 +156,6 @@ function openDeleteDialog(): void {
         </div>
 
         <div class="flex shrink-0 items-center gap-2 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">
-          <Button
-            v-if="canTerminate"
-            data-testid="session-terminate-button"
-            variant="outline"
-            size="icon-sm"
-            :disabled="isPending"
-            aria-label="Terminate session"
-            @click.stop="void handleTerminate()"
-          >
-            <Square class="h-4 w-4" />
-          </Button>
-
           <Button
             v-if="canArchive"
             data-testid="session-archive-button"

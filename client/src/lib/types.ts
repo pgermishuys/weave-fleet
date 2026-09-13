@@ -53,8 +53,6 @@ export type InstanceStatus = "running" | "stopped";
 
 export interface SessionActionCapabilities {
   canPrompt: boolean;
-  canStop: boolean;
-  canResume: boolean;
   canRestart: boolean;
   canAbort: boolean;
   canArchive: boolean;
@@ -62,8 +60,6 @@ export interface SessionActionCapabilities {
   canFork: boolean;
   canDelete: boolean;
   promptDisabledReason: string | null;
-  stopDisabledReason: string | null;
-  resumeDisabledReason: string | null;
   restartDisabledReason: string | null;
   abortDisabledReason: string | null;
   archiveDisabledReason: string | null;

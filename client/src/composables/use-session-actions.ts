@@ -8,7 +8,6 @@ import type {
   ForkSessionRequest,
   ForkSessionResponse,
   ProjectResponse,
-  ResumeSessionResponse,
   SessionListItem,
   SessionSourceSelection,
   UpdateProjectRequest,
@@ -82,30 +81,9 @@ export interface UseForkSessionResult {
   error: Readonly<ShallowRef<string | undefined>>;
 }
 
-export interface UseResumeSessionResult {
-  resumeSession: (sessionId: string) => Promise<ResumeSessionResponse>;
-  isResuming: ComputedRef<boolean>;
-  resumingSessionId: Readonly<ShallowRef<string | null>>;
-  error: Readonly<ShallowRef<string | undefined>>;
-}
-
 export interface UseAbortSessionResult {
   abortSession: (sessionId: string) => Promise<void>;
   isAborting: Readonly<ShallowRef<boolean>>;
-  error: Readonly<ShallowRef<string | undefined>>;
-}
-
-export interface TerminateSessionOptions {
-  cleanupWorkspace?: boolean;
-}
-
-export interface UseTerminateSessionResult {
-  terminateSession: (
-    sessionId: string,
-    instanceId: string,
-    opts?: TerminateSessionOptions,
-  ) => Promise<void>;
-  isTerminating: Readonly<ShallowRef<boolean>>;
   error: Readonly<ShallowRef<string | undefined>>;
 }
 
@@ -510,51 +488,6 @@ export function useForkSession(): UseForkSessionResult {
   };
 }
 
-export function useResumeSession(): UseResumeSessionResult {
-  const error = shallowRef<string | undefined>(undefined);
-  const resumingSessionId = shallowRef<string | null>(null);
-  const isResuming = computed(() => resumingSessionId.value !== null);
-
-  async function resumeSession(sessionId: string): Promise<ResumeSessionResponse> {
-    resumingSessionId.value = sessionId;
-    error.value = undefined;
-
-    try {
-      const { data, error: apiError, response } = await api.POST("/api/sessions/{id}/resume", {
-        params: {
-          path: { id: sessionId },
-        },
-      });
-
-      if (apiError || !response.ok) {
-        if (response.status === 409) {
-          throw new Error("Session is already active");
-        }
-
-        throw new Error(await readErrorMessage(response));
-      }
-
-      // Response body is not typed in schema, use data from openapi-fetch
-      const result = data as unknown as ResumeSessionResponse;
-      trackAction("session.resume", sessionId);
-      return result;
-    } catch (requestError) {
-      const message = requestError instanceof Error ? requestError.message : "Failed to resume session";
-      error.value = message;
-      throw requestError instanceof Error ? requestError : new Error(message);
-    } finally {
-      resumingSessionId.value = null;
-    }
-  }
-
-  return {
-    resumeSession,
-    isResuming,
-    resumingSessionId: readonly(resumingSessionId),
-    error: readonly(error),
-  };
-}
-
 export function useAbortSession(): UseAbortSessionResult {
   const state = createMutationState();
 
@@ -577,37 +510,6 @@ export function useAbortSession(): UseAbortSessionResult {
   return {
     abortSession,
     isAborting: readonly(state.isPending),
-    error: readonly(state.error),
-  };
-}
-
-export function useTerminateSession(): UseTerminateSessionResult {
-  const state = createMutationState();
-
-  async function terminateSession(
-    sessionId: string,
-    instanceId: string,
-    opts?: TerminateSessionOptions,
-  ): Promise<void> {
-    void instanceId;
-    void opts;
-
-    await state.execute(async () => {
-      const { error, response } = await api.POST("/api/sessions/{id}/stop", {
-        params: {
-          path: { id: sessionId },
-        },
-      });
-
-      if (error || !response.ok) {
-        throw new Error(await readErrorMessage(response));
-      }
-    }, "Failed to terminate session");
-  }
-
-  return {
-    terminateSession,
-    isTerminating: readonly(state.isPending),
     error: readonly(state.error),
   };
 }

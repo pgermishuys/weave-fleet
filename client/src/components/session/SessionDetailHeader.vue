@@ -367,8 +367,8 @@ onUnmounted(() => {
       >
         <p class="text-sm text-muted-foreground">
           {{ effectiveLifecycleStatus === "disconnected"
-            ? "Connection to this session was lost. Weave will reconnect automatically when the backend becomes reachable again, or you can resume the session from Session actions."
-            : "This session is no longer running. Use Session actions in the right panel to resume or archive it." }}
+            ? "Connection to this session was lost. Weave will reconnect automatically when the backend becomes reachable again, or send a message to reconnect now."
+            : "This session isn't running. Send a message to pick it up again." }}
         </p>
       </div>
 

@@ -18,8 +18,6 @@ import {
   useArchiveSession,
   useDeleteSession,
   useRenameSession,
-  useResumeSession,
-  useTerminateSession,
 } from "@/composables/use-session-actions";
 import { useSentPrompts } from "@/composables/use-send-prompt";
 import { provideSessionDiffsContext } from "@/composables/use-session-diffs-context";
@@ -202,13 +200,6 @@ const SessionDetailPage = defineComponent({
     const { archiveSession, isArchiving, error: archiveError } = useArchiveSession();
     const { deleteSession, isDeleting, error: deleteError } = useDeleteSession();
     const { renameSession, isLoading: isRenaming, error: renameError } = useRenameSession();
-    const {
-      resumeSession,
-      isResuming,
-      resumingSessionId,
-      error: resumeError,
-    } = useResumeSession();
-    const { terminateSession, isTerminating, error: terminateError } = useTerminateSession();
 
     const selectedSession = computed(() => {
       return sessions.value.find((session) => session.session.id === params.value.id) ?? null;
@@ -455,42 +446,25 @@ const SessionDetailPage = defineComponent({
         return true;
       }
 
-      return capabilities ? !capabilities.canPrompt : effectiveLifecycleStatus.value !== "running";
+      // A session that isn't running wakes on its next prompt.
+      return capabilities ? !capabilities.canPrompt : effectiveLifecycleStatus.value === "error";
     });
 
     const fallbackCanAbort = computed(() => effectiveLifecycleStatus.value === "running" && isActiveActivityStatus(effectiveActivityStatus.value));
-    const fallbackCanResume = computed(() => {
-      switch (effectiveLifecycleStatus.value) {
-        case "stopped":
-        case "completed":
-        case "disconnected":
-          return true;
-        default:
-          return false;
-      }
-    });
-    const fallbackCanStop = computed(() => effectiveLifecycleStatus.value === "running");
     const fallbackCanArchive = computed(() => !isArchived.value && effectiveLifecycleStatus.value !== "running");
     const canAbort = computed(() => effectiveActionCapabilities.value?.canAbort ?? fallbackCanAbort.value);
-    const canResume = computed(() => effectiveActionCapabilities.value?.canResume ?? fallbackCanResume.value);
-    const canStop = computed(() => effectiveActionCapabilities.value?.canStop ?? fallbackCanStop.value);
     const canArchive = computed(() => effectiveActionCapabilities.value?.canArchive ?? fallbackCanArchive.value);
     const canFork = computed(() => effectiveActionCapabilities.value?.canFork ?? true);
     const canDelete = computed(() => effectiveActionCapabilities.value?.canDelete ?? true);
-    const isResumingCurrentSession = computed(() => isResuming.value && resumingSessionId.value === params.value.id);
     const isAnyActionPending = computed(() => isAborting.value
       || isArchiving.value
       || isDeleting.value
-      || isRenaming.value
-      || isResumingCurrentSession.value
-      || isTerminating.value);
+      || isRenaming.value);
     const actionErrors = computed(() => [
       abortError.value,
       archiveError.value,
       deleteError.value,
       renameError.value,
-      resumeError.value,
-      terminateError.value,
     ].filter((message): message is string => Boolean(message)));
 
     const { hasPendingPrompts, sentPrompts } = useSentPrompts(params.value.id);
@@ -593,68 +567,6 @@ const SessionDetailPage = defineComponent({
       try {
         await abortSession(params.value.id);
         refreshRemoteSession();
-      } catch {
-        // Error is exposed inline by the action toolbar.
-      }
-    }
-
-    async function handleResume(): Promise<void> {
-      if (!params.value.id || !canResume.value) {
-        return;
-      }
-
-      try {
-        handleSessionStateChanged({
-          activityStatus: "idle",
-          lifecycleStatus: "resuming",
-          sessionStatus: "resuming",
-        });
-        sessionsStore.patchSession(params.value.id, {
-          activityStatus: "idle",
-          lifecycleStatus: "resuming",
-          sessionStatus: "resuming",
-        });
-
-        const response = await resumeSession(params.value.id);
-        await navigate({
-          to: "/sessions/$id",
-          params: { id: response.session.id },
-          search: {
-            instanceId: response.instanceId,
-            parentSessionId: undefined,
-          },
-        });
-      } catch {
-        handleSessionStateChanged({
-          activityStatus: "idle",
-          lifecycleStatus: "stopped",
-          sessionStatus: "stopped",
-        });
-        sessionsStore.patchSession(params.value.id, {
-          activityStatus: "idle",
-          lifecycleStatus: "stopped",
-          sessionStatus: "stopped",
-        });
-      }
-    }
-
-    async function handleStop(): Promise<void> {
-      if (!params.value.id || !instanceId.value || !canStop.value) {
-        return;
-      }
-
-      try {
-        await terminateSession(params.value.id, instanceId.value);
-        handleSessionStateChanged({
-          activityStatus: "idle",
-          lifecycleStatus: "stopped",
-          sessionStatus: "stopped",
-        });
-        sessionsStore.patchSession(params.value.id, {
-          activityStatus: "idle",
-          lifecycleStatus: "stopped",
-          sessionStatus: "stopped",
-        });
       } catch {
         // Error is exposed inline by the action toolbar.
       }
@@ -780,15 +692,11 @@ const SessionDetailPage = defineComponent({
                 <TerminalToggleButton sessionId={params.value.id} />
                 <SessionActionToolbar
                   canAbort={canAbort.value}
-                  canResume={canResume.value}
-                  canStop={canStop.value}
                   canArchive={canArchive.value}
                   canFork={canFork.value}
                   canDelete={canDelete.value}
                   isPending={isAnyActionPending.value}
                   isAborting={isAborting.value}
-                  isResuming={isResumingCurrentSession.value}
-                  isTerminating={isTerminating.value}
                   isRenaming={isRenaming.value}
                   isDeleting={isDeleting.value}
                   isArchiving={isArchiving.value}
@@ -796,8 +704,6 @@ const SessionDetailPage = defineComponent({
                   hasInstance={Boolean(instanceId.value)}
                   errors={actionErrors.value}
                   onAbort={() => void handleAbort()}
-                  onResume={() => void handleResume()}
-                  onStop={() => void handleStop()}
                   onFork={handleFork}
                   onRename={() => void handleRename()}
                   onDelete={handleDelete}

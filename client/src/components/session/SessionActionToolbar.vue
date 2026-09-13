@@ -1,18 +1,14 @@
 <script setup lang="ts">
-import { Archive, GitFork, Loader2, OctagonX, Pencil, RotateCcw, Square, Trash2 } from "lucide-vue-next";
+import { Archive, GitFork, Loader2, OctagonX, Pencil, Trash2 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 
 const props = withDefaults(defineProps<{
   canAbort?: boolean;
-  canResume?: boolean;
-  canStop?: boolean;
   canArchive?: boolean;
   canFork?: boolean;
   canDelete?: boolean;
   isPending?: boolean;
   isAborting?: boolean;
-  isResuming?: boolean;
-  isTerminating?: boolean;
   isRenaming?: boolean;
   isDeleting?: boolean;
   isArchiving?: boolean;
@@ -26,8 +22,6 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   abort: [];
-  resume: [];
-  stop: [];
   fork: [];
   rename: [];
   delete: [];
@@ -55,46 +49,6 @@ const emit = defineEmits<{
         aria-hidden="true"
       />
       <OctagonX
-        v-else
-        aria-hidden="true"
-      />
-    </Button>
-
-    <Button
-      v-if="props.canResume"
-      variant="toolbar-icon"
-      size="toolbar"
-      data-testid="session-resume-button"
-      :disabled="props.isPending || !props.hasSession"
-      title="Resume"
-      @click="emit('resume')"
-    >
-      <Loader2
-        v-if="props.isResuming"
-        class="session-action-toolbar__spinner"
-        aria-hidden="true"
-      />
-      <RotateCcw
-        v-else
-        aria-hidden="true"
-      />
-    </Button>
-
-    <Button
-      v-if="props.canStop"
-      variant="toolbar-icon-danger"
-      size="toolbar"
-      data-testid="session-stop-button"
-      :disabled="props.isPending || !props.hasSession || !props.hasInstance"
-      title="Stop"
-      @click="emit('stop')"
-    >
-      <Loader2
-        v-if="props.isTerminating"
-        class="session-action-toolbar__spinner"
-        aria-hidden="true"
-      />
-      <Square
         v-else
         aria-hidden="true"
       />

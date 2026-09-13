@@ -49,8 +49,6 @@ let reconnectedHandler: (() => void) | null = null
 function createCapabilities(overrides: Partial<SessionActionCapabilities> = {}): SessionActionCapabilities {
   return {
     canPrompt: false,
-    canStop: false,
-    canResume: false,
     canRestart: false,
     canAbort: false,
     canArchive: false,
@@ -58,8 +56,6 @@ function createCapabilities(overrides: Partial<SessionActionCapabilities> = {}):
     canFork: false,
     canDelete: false,
     promptDisabledReason: null,
-    stopDisabledReason: null,
-    resumeDisabledReason: null,
     restartDisabledReason: null,
     abortDisabledReason: null,
     archiveDisabledReason: null,
