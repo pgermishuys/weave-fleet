@@ -20,7 +20,7 @@ const props = defineProps<{
 interface AppRun {
   id: string;
   command: string;
-  status: "starting" | "running" | "exited";
+  status: "starting" | "running" | "exited" | "stopped";
   exitCode: number | null;
   url: string | null;
   ports: number[];
@@ -53,8 +53,16 @@ const sessionPath = computed(() => `/api/sessions/${encodeURIComponent(props.ses
 const statusLabel = computed(() => {
   const run = app.value;
   if (!run) return "";
-  if (run.status === "exited") return run.exitCode === null ? "stopped" : `exited (${run.exitCode})`;
+  if (run.status === "exited") return run.exitCode === null ? "exited" : `exited (${run.exitCode})`;
   return run.status;
+});
+const isLive = computed(() => app.value?.status === "starting" || app.value?.status === "running");
+/** Shown instead of the page while there's none: the app hasn't served one yet, or isn't running. */
+const waitingText = computed(() => {
+  const status = app.value?.status;
+  if (status === "exited") return "The app exited before it served a page. Its output is below.";
+  if (status === "stopped") return "The app is stopped.";
+  return "Waiting for the app to serve a page…";
 });
 const ports = computed(() => app.value?.ports ?? []);
 const currentPort = computed(() => (target.value ? Number(target.value.port || defaultPort(target.value)) : null));
@@ -71,6 +79,14 @@ function defaultPort(url: URL): string {
 }
 
 async function show(pageUrl: string): Promise<void> {
+  // A starting app has no page yet; the canvas gets one when it answers.
+  if (!pageUrl) {
+    error.value = null;
+    target.value = null;
+    frameSrc.value = "about:blank";
+    return;
+  }
+
   let page: URL;
   try {
     page = new URL(pageUrl);
@@ -301,6 +317,12 @@ onBeforeUnmount(() => {
       >
         {{ error }}
       </p>
+      <p
+        v-else-if="!target"
+        class="browser-canvas__waiting"
+      >
+        {{ waitingText }}
+      </p>
       <iframe
         v-else
         ref="frame"
@@ -338,10 +360,10 @@ onBeforeUnmount(() => {
           @click="appAction('restart')"
         >
           <RotateCcw :size="13" />
-          {{ app.status === "exited" ? "Start" : "Restart" }}
+          {{ isLive ? "Restart" : "Start" }}
         </button>
         <button
-          v-if="app.status !== 'exited'"
+          v-if="isLive"
           type="button"
           class="browser-canvas__text-btn"
           :disabled="busy"
@@ -453,6 +475,15 @@ onBeforeUnmount(() => {
   margin: 0;
   padding: 16px;
   color: var(--error);
+  font-size: 12.5px;
+  background: var(--panel-bg);
+  height: 100%;
+}
+
+.browser-canvas__waiting {
+  margin: 0;
+  padding: 16px;
+  color: var(--muted);
   font-size: 12.5px;
   background: var(--panel-bg);
   height: 100%;
