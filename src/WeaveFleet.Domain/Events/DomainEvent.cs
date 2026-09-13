@@ -8,7 +8,6 @@ namespace WeaveFleet.Domain.Events;
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(SessionStarted), "session.started")]
 [JsonDerivedType(typeof(SessionIdled), "session.idled")]
-[JsonDerivedType(typeof(SessionStopped), "session.stopped")]
 [JsonDerivedType(typeof(SessionDeleted), "session.deleted")]
 [JsonDerivedType(typeof(SessionArchived), "session.archived")]
 [JsonDerivedType(typeof(TurnStarted), "turn.started")]

@@ -368,7 +368,6 @@ public class SessionEventsHub : Hub
     {
         SessionStarted          => "session.started",
         SessionIdled            => "session.idled",
-        SessionStopped          => "session.stopped",
         SessionDeleted          => "session.deleted",
         SessionArchived         => "session.archived",
         TurnStarted             => "turn.started",

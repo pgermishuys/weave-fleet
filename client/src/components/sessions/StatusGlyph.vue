@@ -8,7 +8,7 @@ const props = defineProps<Props>();
 const COLOR_MAP: Record<string, string> = {
   completed: "var(--complete)",
   idle: "var(--status-idle)",
-  resuming: "var(--running)",
+  running: "var(--running)",
   stopped: "var(--muted)",
   disconnected: "var(--muted)",
   error: "var(--error)",
@@ -23,7 +23,7 @@ function statusLabel(status: string): string {
   switch (status) {
     case "active": return "Active";
     case "idle": return "Idle";
-    case "resuming": return "Resuming";
+    case "running": return "Running";
     case "completed": return "Completed";
     case "error": return "Error";
     case "waiting_input": return "Waiting for input";
@@ -49,9 +49,9 @@ function statusLabel(status: string): string {
     <circle cx="4" cy="4" r="4" :fill="statusColor(props.status)" />
   </svg>
 
-  <!-- resuming: pulsing filled circle -->
+  <!-- running (a tool call in progress): pulsing filled circle -->
   <svg
-    v-else-if="props.status === 'resuming'"
+    v-else-if="props.status === 'running'"
     width="8"
     height="8"
     viewBox="0 0 8 8"

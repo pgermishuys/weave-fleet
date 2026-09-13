@@ -36,14 +36,10 @@ export function sessionRowStatus(item: SessionListItem, now: number): SessionRow
       return { label: "Needs input", tone: "attention" };
     case "error":
       return { label: "Error", tone: "error" };
-    case "resuming":
-      return { label: "Resuming", tone: "working" };
     case "active":
       return { label: item.activityStatus === "delegating" ? "Delegating" : "Working", tone: "working" };
     case "completed":
       return { label: "Done", tone: "quiet" };
-    case "stopped":
-      return { label: "Paused", tone: "quiet" };
     case "disconnected":
       return { label: "Offline", tone: "quiet" };
     default: {

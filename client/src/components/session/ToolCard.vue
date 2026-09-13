@@ -78,7 +78,7 @@ watch(shouldShowDiff, (nextValue) => {
 
 const TOOL_STATUS_TO_GLYPH: Record<string, string> = {
   Pending: "idle",
-  Running: "resuming",
+  Running: "running",
   Completed: "completed",
   Error: "error",
 };
