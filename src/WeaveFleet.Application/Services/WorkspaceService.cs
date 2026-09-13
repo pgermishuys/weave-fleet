@@ -61,12 +61,23 @@ public sealed partial class WorkspaceService(
         {
             try
             {
-                workingDirectory = strategy switch
+                switch (strategy)
                 {
-                    "worktree" => await CreateWorktreeAsync(sourceDirectory, branch),
-                    "clone" => await CreateCloneAsync(sourceDirectory, branch),
-                    _ => sourceDirectory
-                };
+                    case "worktree":
+                        (workingDirectory, branch) = await CreateWorktreeAsync(sourceDirectory, branch);
+                        break;
+                    case "clone":
+                        workingDirectory = await CreateCloneAsync(sourceDirectory, branch);
+                        break;
+                    default:
+                        workingDirectory = sourceDirectory;
+                        break;
+                }
+            }
+            catch (GitCommandException ex)
+            {
+                LogWorkspaceCreateFailed(ex, strategy, sourceDirectory);
+                return FleetError.ValidationError("Workspace", $"Couldn't create the {strategy}: {ex.GitMessage}");
             }
             catch (Exception ex)
             {
@@ -224,49 +235,137 @@ public sealed partial class WorkspaceService(
         return Unit.Value;
     }
 
-    private static async Task<string> CreateWorktreeAsync(string sourceDir, string? branch)
+    private static readonly TimeSpan _baseFetchTimeout = TimeSpan.FromSeconds(20);
+
+    /// <summary>
+    /// Creates a worktree next to the repository and returns its directory and branch.
+    /// A requested branch that exists and isn't checked out anywhere is checked out as is.
+    /// Otherwise a new branch starts from the repository's default branch, never from
+    /// whatever the main checkout happens to have checked out. When the branch is checked
+    /// out elsewhere, or the folder is taken, a numeric suffix is added.
+    /// </summary>
+    private async Task<(string Directory, string Branch)> CreateWorktreeAsync(string sourceDir, string? branch)
     {
-        var branchName = branch ?? $"weave-session-{Guid.NewGuid().ToString("N")[..8]}";
+        var requestedBranch = branch ?? $"weave-session-{Guid.NewGuid().ToString("N")[..8]}";
 
         // Place worktree under a dedicated sibling folder to avoid polluting the parent.
         // Naming: {repo-name}-worktrees/{hyphenated-branch-name}
         // e.g. source "C:\repos\my-project" + branch "feature/auth"
         //   → "C:\repos\my-project-worktrees\feature-auth"
         var repoName = Path.GetFileName(sourceDir);
-        var hyphenatedBranch = branchName.Replace('/', '-').Replace('\\', '-');
         var parentDir = Path.GetFullPath(Path.GetDirectoryName(sourceDir) ?? sourceDir);
-        var worktreesRoot = Path.Combine(parentDir, $"{repoName}-worktrees");
-        var worktreeDir = Path.Combine(worktreesRoot, hyphenatedBranch);
+        var worktreesRoot = Path.GetFullPath(Path.Combine(parentDir, $"{repoName}-worktrees"));
+        if (!worktreesRoot.StartsWith(parentDir + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            throw new InvalidOperationException($"Worktree root escapes parent directory: {worktreesRoot}");
 
-        // Guard against path traversal
-        var resolvedWorktreesRoot = Path.GetFullPath(worktreesRoot);
-        var resolvedWorktreeDir = Path.GetFullPath(worktreeDir);
-        if (!resolvedWorktreesRoot.StartsWith(parentDir + Path.DirectorySeparatorChar, StringComparison.Ordinal))
-            throw new InvalidOperationException($"Worktree root escapes parent directory: {resolvedWorktreesRoot}");
-        if (!resolvedWorktreeDir.StartsWith(resolvedWorktreesRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal))
-            throw new InvalidOperationException($"Invalid branch name results in path outside worktree root: {branchName}");
+        // A worktree folder deleted without `git worktree remove` keeps its branch "checked out"
+        // until pruned, which would make `git worktree add` refuse it.
+        await TryRunGitAsync(sourceDir, "worktree", "prune");
 
+        var checkedOutBranches = await GetCheckedOutBranchesAsync(sourceDir);
+        var reuseExistingBranch = !checkedOutBranches.Contains(requestedBranch)
+            && await RefExistsAsync(sourceDir, $"refs/heads/{requestedBranch}");
+
+        var branchName = requestedBranch;
+        if (!reuseExistingBranch)
+        {
+            for (var n = 2; checkedOutBranches.Contains(branchName) || await RefExistsAsync(sourceDir, $"refs/heads/{branchName}"); n++)
+                branchName = $"{requestedBranch}-{n}";
+        }
+
+        var worktreeDir = ResolveFreeWorktreeDirectory(worktreesRoot, branchName);
         Directory.CreateDirectory(worktreesRoot);
 
-        // Check if the branch already exists; if so, check it out rather than creating.
-        var branchExists = false;
-        try
+        if (reuseExistingBranch)
         {
-            await RunGitAsync(sourceDir, "rev-parse", "--verify", branchName);
-            branchExists = true;
-        }
-        catch
-        {
-            // Branch doesn't exist locally — will be created
-        }
-
-        if (branchExists)
             await RunGitAsync(sourceDir, "worktree", "add", worktreeDir, branchName);
+        }
         else
-            await RunGitAsync(sourceDir, "worktree", "add", worktreeDir, "-b", branchName);
+        {
+            var baseRef = await ResolveBaseRefAsync(sourceDir);
+            // --no-track: origin/main is where the branch starts, not where it gets pushed.
+            string[] args = baseRef is null
+                ? ["worktree", "add", "-b", branchName, worktreeDir]
+                : ["worktree", "add", "--no-track", "-b", branchName, worktreeDir, baseRef];
+            await RunGitAsync(sourceDir, args);
+        }
 
-        return worktreeDir;
+        return (worktreeDir, branchName);
     }
+
+    private static string ResolveFreeWorktreeDirectory(string worktreesRoot, string branchName)
+    {
+        var hyphenatedBranch = branchName.Replace('/', '-').Replace('\\', '-');
+        var candidate = Path.GetFullPath(Path.Combine(worktreesRoot, hyphenatedBranch));
+        if (!candidate.StartsWith(worktreesRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            throw new InvalidOperationException($"Invalid branch name results in path outside worktree root: {branchName}");
+
+        var directory = candidate;
+        for (var n = 2; Directory.Exists(directory) || File.Exists(directory); n++)
+            directory = $"{candidate}-{n}";
+
+        return directory;
+    }
+
+    /// <summary>
+    /// The ref new worktree branches start from: <c>origin/&lt;default&gt;</c>, fetched first
+    /// (best effort), when the repository has an origin; otherwise a local <c>main</c> or
+    /// <c>master</c>; otherwise null, meaning the current HEAD.
+    /// </summary>
+    private async Task<string?> ResolveBaseRefAsync(string sourceDir)
+    {
+        var remotes = await TryRunGitAsync(sourceDir, "remote");
+        if (remotes is not null && ParseLines(remotes).Contains("origin"))
+        {
+            var defaultBranch = await ResolveOriginDefaultBranchAsync(sourceDir);
+            if (defaultBranch is not null)
+            {
+                if (await TryRunGitAsync(sourceDir, _baseFetchTimeout, "fetch", "--quiet", "--no-tags", "origin", defaultBranch) is null)
+                    LogBaseFetchFailed(sourceDir, defaultBranch);
+
+                if (await RefExistsAsync(sourceDir, $"refs/remotes/origin/{defaultBranch}"))
+                    return $"origin/{defaultBranch}";
+            }
+        }
+
+        foreach (var candidate in _defaultBranchCandidates)
+        {
+            if (await RefExistsAsync(sourceDir, $"refs/heads/{candidate}"))
+                return candidate;
+        }
+
+        return null;
+    }
+
+    private static readonly string[] _defaultBranchCandidates = ["main", "master"];
+
+    private static async Task<string?> ResolveOriginDefaultBranchAsync(string sourceDir)
+    {
+        var originHead = (await TryRunGitAsync(sourceDir, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"))?.Trim();
+        if (originHead is not null && originHead.StartsWith("origin/", StringComparison.Ordinal))
+            return originHead["origin/".Length..];
+
+        foreach (var candidate in _defaultBranchCandidates)
+        {
+            if (await RefExistsAsync(sourceDir, $"refs/remotes/origin/{candidate}"))
+                return candidate;
+        }
+
+        return null;
+    }
+
+    private static async Task<HashSet<string>> GetCheckedOutBranchesAsync(string sourceDir)
+    {
+        const string branchPrefix = "branch refs/heads/";
+        var porcelain = await RunGitAsync(sourceDir, "worktree", "list", "--porcelain");
+        return ParseLines(porcelain)
+            .Where(line => line.StartsWith(branchPrefix, StringComparison.Ordinal))
+            .Select(line => line[branchPrefix.Length..])
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    private static async Task<bool> RefExistsAsync(string sourceDir, string refName) =>
+        await TryRunGitAsync(sourceDir, "show-ref", "--verify", "--quiet", refName) is not null;
 
     private static async Task<string> CreateCloneAsync(string sourceDir, string? branch)
     {
@@ -282,13 +381,29 @@ public sealed partial class WorkspaceService(
         return cloneDir;
     }
 
-    private static async Task RunGitAsync(string workingDir, params string[] args)
+    private static Task<string> RunGitAsync(string workingDir, params string[] args) =>
+        RunGitAsync(workingDir, timeout: null, args);
+
+    private static async Task<string?> TryRunGitAsync(string workingDir, params string[] args)
+    {
+        try { return await RunGitAsync(workingDir, timeout: null, args); }
+        catch (GitCommandException) { return null; }
+    }
+
+    private static async Task<string?> TryRunGitAsync(string workingDir, TimeSpan timeout, params string[] args)
+    {
+        try { return await RunGitAsync(workingDir, timeout, args); }
+        catch (GitCommandException) { return null; }
+    }
+
+    private static async Task<string> RunGitAsync(string workingDir, TimeSpan? timeout, string[] args)
     {
         using var process = new System.Diagnostics.Process();
         process.StartInfo = new System.Diagnostics.ProcessStartInfo
         {
             FileName = "git",
             WorkingDirectory = workingDir,
+            RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false
@@ -296,12 +411,58 @@ public sealed partial class WorkspaceService(
         foreach (var arg in args)
             process.StartInfo.ArgumentList.Add(arg);
 
-        process.Start();
-        var stderr = await process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
+        // Never wait on a credential prompt nobody can see.
+        process.StartInfo.Environment["GIT_TERMINAL_PROMPT"] = "0";
 
+        process.Start();
+        process.StandardInput.Close();
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
+
+        using var timeoutCts = timeout is { } limit ? new CancellationTokenSource(limit) : new CancellationTokenSource();
+        try
+        {
+            await process.WaitForExitAsync(timeoutCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            try { process.Kill(entireProcessTree: true); }
+            catch (InvalidOperationException) { /* already exited */ }
+            throw new GitCommandException(string.Join(' ', args), $"timed out after {timeout!.Value.TotalSeconds:0} seconds");
+        }
+
+        var stdout = await stdoutTask;
+        var stderr = await stderrTask;
         if (process.ExitCode != 0)
-            throw new InvalidOperationException($"git {string.Join(' ', args)} failed: {stderr}");
+            throw new GitCommandException(string.Join(' ', args), CleanGitMessage(stderr));
+
+        return stdout;
+    }
+
+    /// <summary>
+    /// Turns git's stderr into one readable sentence. Git also writes progress there
+    /// ("Preparing worktree …"), so when it marks lines with "fatal:" or "error:", only those count.
+    /// </summary>
+    private static string CleanGitMessage(string stderr)
+    {
+        string[] prefixes = ["fatal: ", "error: "];
+        var lines = ParseLines(stderr).Where(line => !line.StartsWith("hint:", StringComparison.Ordinal)).ToArray();
+        var marked = lines
+            .Where(line => prefixes.Any(prefix => line.StartsWith(prefix, StringComparison.Ordinal)))
+            .Select(line => line[(line.IndexOf(": ", StringComparison.Ordinal) + 2)..])
+            .ToArray();
+        var message = marked.Length > 0 ? marked : lines;
+        return message.Length > 0 ? string.Join(' ', message) : "git exited with an error";
+    }
+
+    private static string[] ParseLines(string output) =>
+        output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    /// <summary>A git command that exited non-zero; <see cref="GitMessage"/> is fit to show the user.</summary>
+    private sealed class GitCommandException(string command, string gitMessage)
+        : Exception($"git {command} failed: {gitMessage}")
+    {
+        public string GitMessage { get; } = gitMessage;
     }
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to create workspace with strategy {Strategy} for {Dir}")]
@@ -309,4 +470,7 @@ public sealed partial class WorkspaceService(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to delete clone/managed directory: {Dir}")]
     private partial void LogCloneDeleteFailed(Exception ex, string dir);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't fetch origin/{Branch} in {Dir}; starting the worktree from the last fetched copy")]
+    private partial void LogBaseFetchFailed(string dir, string branch);
 }
