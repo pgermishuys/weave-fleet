@@ -206,10 +206,10 @@
 
 /*
  * The global focus ring is an !important rule in the base layer, which an unlayered rule can't
- * beat. These fields sit inside a frame that already shows focus, so drop the ring in-layer.
+ * beat. These fields sit inside a frame that already shows focus, so drop the ring in-layer
+ * (ComposerFrame does the same for the message box).
  */
 @layer base {
-  .new-session__textarea:focus-visible,
   .ns-folder-search__input:focus-visible,
   .ns-base-search__input:focus-visible {
     border-color: transparent !important;

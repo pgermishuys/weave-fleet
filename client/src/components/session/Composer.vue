@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, shallowRef, ref, useTemplat
 import { storeToRefs } from "pinia";
 import { ArrowUp, Paperclip, SquareTerminal, X, CircleX } from "lucide-vue-next";
 import AutocompletePopup from "@/components/session/AutocompletePopup.vue";
+import ComposerFrame from "@/components/session/ComposerFrame.vue";
 import AgentSelector from "@/components/session/AgentSelector.vue";
 import ModelSelector from "@/components/session/ModelSelector.vue";
 import EffortToggle from "@/components/session/EffortToggle.vue";
@@ -627,9 +628,8 @@ function handleKeydown(event: KeyboardEvent): void {
       {{ sendError || pasteError }}
     </div>
 
-    <div
-      class="composer-box"
-      :class="{ 'composer-box--dragging': isDragging }"
+    <ComposerFrame
+      :dragging="isDragging"
       @dragover="handleDragOver"
       @dragleave="handleDragLeave"
       @drop="handleDrop"
@@ -667,7 +667,7 @@ function handleKeydown(event: KeyboardEvent): void {
 
       <textarea
         ref="textarea"
-        class="composer-box__textarea"
+        class="composer-frame__textarea"
         data-testid="prompt-input"
         :value="draft.text"
         :disabled="isDisabled"
@@ -753,7 +753,7 @@ function handleKeydown(event: KeyboardEvent): void {
         @change="handleFileInput"
       >
 
-      <div class="composer-toolbar">
+      <template #toolbar>
         <Button
           variant="toolbar-icon"
           size="toolbar"
@@ -789,7 +789,7 @@ function handleKeydown(event: KeyboardEvent): void {
         <Button
           variant="default"
           size="toolbar-lg"
-          class="composer-send ml-auto"
+          class="composer-frame__send"
           data-testid="prompt-send-button"
           aria-label="Send"
           title="Send"
@@ -805,8 +805,8 @@ function handleKeydown(event: KeyboardEvent): void {
         >
           {{ queue.length }} queued
         </span>
-      </div>
-    </div>
+      </template>
+    </ComposerFrame>
 
     <Teleport to="body">
       <div
@@ -853,21 +853,6 @@ function handleKeydown(event: KeyboardEvent): void {
   line-height: 1.5;
 }
 
-.composer-box {
-  position: relative;
-  max-width: 760px;
-  margin: 0 auto;
-  border: 1px solid var(--border);
-  border-radius: calc(var(--radius-panel) + 2px);
-  background: var(--card-bg);
-  box-shadow: 0 10px 28px -18px rgba(0, 0, 0, 0.5);
-  transition: border-color var(--transition);
-}
-
-.composer-box:focus-within {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
-}
-
 .input-history {
   position: absolute;
   bottom: 100%;
@@ -907,52 +892,10 @@ function handleKeydown(event: KeyboardEvent): void {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
-.composer-box__textarea {
-  width: 100%;
-  min-height: 52px;
-  max-height: 180px;
-  padding: 14px 16px 6px;
-  border: none;
-  background: transparent;
-  color: var(--text);
-  resize: none;
-  outline: none;
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-/* The box's focus-within border already shows focus; skip the global inner ring. */
-.composer-box__textarea:focus-visible {
-  box-shadow: none !important;
-}
-
-.composer-box__textarea::placeholder {
-  color: var(--muted);
-}
-
-.composer-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 4px 8px 8px;
-}
-
-.composer-send {
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border-radius: 999px;
-}
-
 .queue-badge {
   font-size: 11px;
   color: var(--muted);
   white-space: nowrap;
-}
-
-.composer-box--dragging {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 5%, var(--card-bg));
 }
 
 .terminal-context-strip {

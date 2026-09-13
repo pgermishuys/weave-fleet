@@ -5,6 +5,7 @@ import { useNavigate, useSearch } from "@tanstack/vue-router";
 import { ArrowUp, CircleDot, GitPullRequest, LoaderCircle, X } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import { Button } from "@/components/ui/button";
+import ComposerFrame from "@/components/session/ComposerFrame.vue";
 import MessageBubble from "@/components/session/MessageBubble.vue";
 import BasePicker from "@/components/sessions/new-session/BasePicker.vue";
 import FolderPicker from "@/components/sessions/new-session/FolderPicker.vue";
@@ -441,7 +442,7 @@ onUnmounted(() => {
         {{ errorMessage }}
       </div>
 
-      <div class="new-session__box">
+      <ComposerFrame>
         <div
           v-if="gitHubPreset"
           class="new-session__attachments"
@@ -480,7 +481,7 @@ onUnmounted(() => {
 
         <textarea
           ref="textarea"
-          class="new-session__textarea"
+          class="composer-frame__textarea new-session__textarea"
           data-testid="new-session-message"
           aria-label="First message"
           rows="2"
@@ -491,7 +492,7 @@ onUnmounted(() => {
           @keydown="handleKeydown"
         />
 
-        <div class="new-session__toolbar">
+        <template #toolbar>
           <HarnessPicker
             v-if="showHarnessPicker"
             v-model="harnessType"
@@ -502,7 +503,7 @@ onUnmounted(() => {
           <Button
             variant="default"
             size="toolbar-lg"
-            class="new-session__send"
+            class="composer-frame__send"
             data-testid="create-session-submit"
             aria-label="Start session"
             title="Start session (Enter)"
@@ -518,8 +519,8 @@ onUnmounted(() => {
               class="size-4"
             />
           </Button>
-        </div>
-      </div>
+        </template>
+      </ComposerFrame>
 
       <div class="new-session__strip">
         <FolderPicker
@@ -715,19 +716,6 @@ onUnmounted(() => {
   line-height: 1.5;
 }
 
-.new-session__box {
-  position: relative;
-  border: 1px solid var(--border);
-  border-radius: calc(var(--radius-panel) + 2px);
-  background: var(--card-bg);
-  box-shadow: 0 10px 28px -18px rgba(0, 0, 0, 0.5);
-  transition: border-color var(--transition);
-}
-
-.new-session__box:focus-within {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
-}
-
 .new-session__attachments {
   display: flex;
   flex-wrap: wrap;
@@ -796,38 +784,9 @@ onUnmounted(() => {
   height: 12px;
 }
 
+/* Room for two lines before anything is typed. */
 .new-session__textarea {
-  display: block;
-  width: 100%;
   min-height: 64px;
-  max-height: 180px;
-  padding: 14px 16px 6px;
-  border: none;
-  background: transparent;
-  color: var(--text);
-  font-size: 14px;
-  line-height: 1.5;
-  outline: none;
-  resize: none;
-}
-
-.new-session__textarea::placeholder {
-  color: var(--muted);
-}
-
-.new-session__toolbar {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 4px 8px 8px;
-}
-
-.new-session__send {
-  width: 30px;
-  height: 30px;
-  margin-left: auto;
-  padding: 0;
-  border-radius: 999px;
 }
 
 .new-session__strip {
