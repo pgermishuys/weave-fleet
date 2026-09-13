@@ -10,7 +10,7 @@ Ground truth from the spike and the codebase (2026-09-13). Don't re-check these:
 
 - **The spike works.** Claude Sonnet 5, given "Can you just host it and show me?" in a Bun app, read `package.json` and called `fleet_app_start` with `bun --hot server.ts` on its own. Given "Can you host Fleet and show me?" in a Fleet worktree, it found `serve-scratch.sh` through `AGENTS.md` and ran it. Screenshots: `mockups/canvas/browser-agent-*.png`.
 - **Hot reload survives the proxy.** A CSS edit to the Bun app hot-swapped in the canvas without a page reload (checked by marking `window` before the edit and finding the mark after). An HTML edit made Bun do a full reload, also automatic. Fleet did nothing in either case; the dev server's websocket went through the proxy.
-- **Not yet checked: `dotnet watch`.** The Fleet demo used `dotnet run`, which doesn't reload at all. `dotnet watch` injects a browser-refresh script that connects to a **separate** websocket port, not the page's origin. That works by accident on the same machine and breaks from another device.
+- **`dotnet watch` (checked in Task 1, see Findings).** It injects a browser-refresh script that connects to a **separate** websocket port. Through the spike proxy it doesn't work even on the same machine: the script isn't injected into framed pages, and the refresh socket refuses the proxy's `Origin`. Routing the socket through the gateway (approach A) fixes both, on the same machine and from another device.
 - **Spike code, by layer:**
   - Runner: `src/WeaveFleet.Application/Browser/IAppRunner.cs`, `src/WeaveFleet.Infrastructure/Browser/AppRunner.cs`, `LinuxListeningPorts.cs`. Runs are in memory. Page detection: printed URLs, "listening" lines first, only on ports the process tree listens on, page must answer 2xx/3xx/HTML (any answer after 15 s). `PORT` is set to a free port that stays the same across restarts. `BROWSER=none`, `NO_COLOR=1`, `DOTNET_WATCH_SUPPRESS_LAUNCH_BROWSER=1`, `DOTNET_WATCH_RESTART_ON_RUDE_EDIT=1`.
   - Proxy: `src/WeaveFleet.Api/Browser/PreviewProxies.cs`. One loopback Kestrel (`CreateEmptyBuilder` + `UseKestrelCore`) per app origin, reached as `{slug}.localhost:{port}`. Strips `X-Frame-Options`, `frame-ancestors` and HSTS, rewrites redirects to the app, drops cookie `Domain`, passes websockets through (subprotocols kept), injects `<script src="/__fleet_browser/nav.js">` into HTML.
@@ -74,7 +74,7 @@ Ground truth from the spike and the codebase (2026-09-13). Don't re-check these:
 
 ### Live-update loop
 - The bridge reports `hmr: vite | bun | webpack | next | dotnet-watch | none` from what the page loads (`/@vite/client`, `/_bun/hmr`, `__webpack_hmr`, `/_next/webpack-hmr`, `aspnetcore-browser-refresh.js`).
-- `dotnet watch`: Task 1 decides between rewriting the refresh endpoint in the served script so it goes through the gateway, and setting `DOTNET_WATCH_AUTO_RELOAD_WS_HOSTNAME` (to confirm) so the socket is reachable and proxying it as a second target.
+- `dotnet watch` (decided in Task 1): the gateway sends `Sec-Fetch-Dest: document` upstream for framed pages, rewrites the refresh endpoint in the served `/_framework/aspnetcore-browser-refresh.js` to `/__fleet_browser/ws/{port}` on the preview's own origin, and forwards that socket to the refresh server with the app's `Origin`. Details under Findings.
 - Fallback when `hmr: none`: the runner watches the run's folder (ignoring `.git`, `node_modules`, `bin`, `obj`, `dist`, `.next`, `target`), debounces 300 ms, then restarts the app if its command doesn't watch files (the page didn't come back after the previous edit, or the run is marked `restartOnChange`), and tells the canvas to reload once the page answers again.
 - "Build failed": known output lines per tool set status `build-failed` (`dotnet watch ❌`/`error CS…`, Vite's `[vite] Internal server error`, `error TS…` from `tsc -w`). The table lives in one place and is covered by tests. Unknown tools just show running/exited.
 
@@ -83,11 +83,11 @@ Ground truth from the spike and the codebase (2026-09-13). Don't re-check these:
 
 ## Tasks
 
-- [ ] 0. Land the spike as the base
+- [x] 0. Land the spike as the base
   - **What**: Move the spike from `spike/browser-canvas` onto `feat/browser-canvas` as reviewed commits (runner, proxy, canvas kind, tools, client, tests, screenshots). No behaviour change.
   - **Acceptance**: Builds; the spike's tests pass (Application 107 canvas + browser, Api 10, Infrastructure 11, client canvas tests on Node 22 with `npm ci`).
 
-- [ ] 1. Spike: `dotnet watch` through the gateway
+- [x] 1. Spike: `dotnet watch` through the gateway
   - **What**: A Razor Pages app and a Blazor Server app under `dotnet watch`, run by the runner and viewed through the proxy. On the same machine, then from another device against a proxy on Fleet's host. Edit a `.cshtml`, a `.razor` and a `.css`; record what updates and how (hot reload vs refresh vs nothing). Find where the refresh endpoint comes from, and try both approaches from the design.
   - **Output**: Findings appended to this plan; decides Task 5's `dotnet watch` approach.
   - **Depends on**: 0.
@@ -142,9 +142,76 @@ Ground truth from the spike and the codebase (2026-09-13). Don't re-check these:
 
 ## Risks
 - **Ports share cookies.** With the `HostPort` strategy, a preview at `desktop:41234` and Fleet at `desktop:2113` are different origins but the same site, and cookies ignore ports. The previewed app's JavaScript (including its npm dependencies) could read Fleet's non-HttpOnly cookies, such as the CSRF token, and cookies marked SameSite=Lax count as same-site. Mitigations: prefer `WildcardHost` when configured; make every Fleet cookie HttpOnly where possible; consider giving Fleet's own cookies a `__Host-` prefix and a per-port name. Needs a decision in Task 4.
-- **`dotnet watch` can't be routed through the gateway cleanly.** If neither approach in Task 1 works from another device, ASP.NET gets the Fleet fallback (reload after rebuild) off the machine: slower, loses page state, still automatic.
+- ~~**`dotnet watch` can't be routed through the gateway cleanly.**~~ Resolved in Task 1: approach A works from another device. What's left is that the rewrite depends on the literal in the SDK's refresh script; a test pins it, and if it stops matching, ASP.NET gets the Fleet fallback (reload after the app answers again).
+- **inotify instances run out with `dotnet watch`.** Each `dotnet watch` took 51 of the 128 inotify instances a user gets by default on Linux; the third one crashed. See Findings.
+- **Memory on small machines.** A `dotnet watch` app costs ~450 MB (watch, `dotnet run`, the app) plus MSBuild nodes. On the 7 GB dev machine, two of them plus builds triggered the OOM killer, which picked the installed Fleet's OpenCode process. See Findings.
 - **Dev-server settings that bypass the proxy**, e.g. Vite `server.hmr.host/clientPort` or an absolute asset base URL. Same machine: works anyway. Another device: hot reload silently stops. The bridge's `hello` could detect a websocket that never connects and show a hint.
 - **File-watcher limits** (inotify) on big repos for the fallback. It only runs for apps without hot reload, with the ignore list.
 - **Firewalls block random ports** on Fleet's host. `Fleet:Browser:PortRange` lets the user open a known range.
 - **Model behaviour drifts** (starting servers with bash, restarting hot-reloading apps). Task 7's scenarios are the regression check; rerun them when the tool descriptions change.
 - **OpenCode plugin loading changes** (same risk as canvases): the live plugin test fails on an upgrade that breaks it.
+
+## Findings
+
+### Task 0 (2026-09-13)
+- `feat/browser-canvas` branches from `origin/main` (`5db0fdd`, which was 6 commits ahead of the spike's base; no overlapping files). Six commits: canvas kind, app runner, preview proxy and app endpoints, agent tools, client canvas, plan and screenshots. Each builds on its own.
+- Checks: Application 107 (canvas and browser), Infrastructure 11, Api 195 (includes the 10 browser tests, run with a scratch `HOME`), client lint (0 errors, none of the warnings in changed files), `vue-tsc`, vitest 419/419 on Node 22 with `npm ci` in a clean worktree.
+- The spike had rewritten the line endings of `EndpointExtensions.cs` (mixed CRLF/LF, a 191-line diff for a one-line change); the commit keeps the original endings.
+- Review notes that no task covers yet:
+  - `AppRunner.MonitorAsync` is fire-and-forget: an unexpected exception ends page detection for that run silently. Catch and log it (Task 2).
+  - `BrowserBridge` finds "other ports" with `Url.Contains($":{port}")`, so port 80 matches `:8080`. Compare parsed ports (Task 2).
+  - Runs inherit Fleet's whole environment (`Fleet__*`, `ASPNETCORE_*`, and a scratch `HOME` in dev runs). Strip `Fleet__*` at least (Task 2).
+  - The canvas's "Open in a new tab" opens the target's `localhost` URL, which is wrong from another device (Task 6).
+
+### Task 1: `dotnet watch` through the gateway (2026-09-13)
+Setup: SDK 10.0.112, `dotnet new webapp` (Razor Pages) and `dotnet new blazor --interactivity Server`, run by the runner in a scratch Fleet and viewed in the canvas with Playwright. "Another device" is Chromium in a `pasta` network namespace (`-T none -U none`), where `localhost` is the browser's own machine and Fleet is reached at a mapped address. Scripts are in `.poc-runtime/pw/` (`watch-edit.mjs`); the prototype is `.poc-runtime/dotnet-watch-gateway.patch` (not committed).
+
+**How the refresh works.** `dotnet watch` starts the app with `ASPNETCORE_AUTO_RELOAD_WS_ENDPOINT=wss://localhost:A,ws://localhost:B` and a hosting-startup middleware that adds `<script src="/_framework/aspnetcore-browser-refresh.js">` before `</body>`. The app serves that script with the endpoints as a literal: `const webSocketUrls = 'wss://localhost:A,ws://localhost:B'.split(',');`. Both refresh servers listen on 127.0.0.1 and belong to the `dotnet-watch` process, so they're in the run's process tree.
+
+**Why the spike proxy gets nothing, even on the same machine:**
+1. The middleware skips injection when `Sec-Fetch-Dest: iframe` (injects for `document` or no header, and only when the request accepts HTML). Canvas pages are always framed, so there is no refresh script at all.
+2. The refresh server checks `Origin`: the app's URL gets 101; the proxy's origin gets 403, and so does no `Origin` at all.
+
+Unpatched spike, same machine: `.cshtml`, global CSS and scoped CSS never updated. Blazor's interactive markup did update, because it arrives over Blazor's own `/_blazor` socket, which the proxy passes through.
+
+**Approach A (chosen): route the refresh socket through the gateway.** The prototype is 3 changes to `PreviewProxies`:
+- Send `Sec-Fetch-Dest: document` upstream when the browser says `iframe`. The preview should get what a top-level page gets.
+- In `/_framework/aspnetcore-browser-refresh.js`, replace `'…ws://localhost:B…'.split(',')` with `[(location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/__fleet_browser/ws/B']`.
+- Forward websocket `/__fleet_browser/ws/{port}` to `ws://localhost:{port}/`. The existing websocket forwarding already sends the app's `Origin`, which passes the check.
+
+Results with approach A (warm, meaning after the first edit following a start):
+
+| Edit | Razor Pages, same machine | Razor Pages, other device | Blazor Server, same machine | Opened directly (control) |
+|---|---|---|---|---|
+| Markup (`.cshtml` / interactive `.razor`) | 0.2 s, full reload | 0.4 s, full reload | 0.3 s, page kept | same as through the gateway |
+| Global CSS (`wwwroot/…css`) | 0.1–0.2 s, kept | 0.2 s, kept | 0.1 s, kept | 0.1 s |
+| Scoped CSS (`*.cshtml.css` / `*.razor.css`) | 0.1 s, kept | 0.2 s, kept | 0.1 s, kept | 0.1 s |
+| First edit after start | 3.8 s | 3.4–3.6 s | 3.8 s | about the same |
+| Rude edit (field `int` → `long`), auto-restart | — | — | 12.6 s, full reload | 9.7 s, full reload |
+
+The gateway adds nothing measurable. Razor Pages markup always does a full reload (`dotnet watch` sends `AspNetCoreHotReloadApplied` and its script reloads). Blazor keeps the page. Scoped CSS: `dotnet watch` names the bundle `BlazorApp.css` while the page links `BlazorApp.<hash>.styles.css`, so its script falls back to refetching every local stylesheet, which works. Rude edits take 10–13 s either way: rebuild, restart, then Blazor's reconnect backoff reloads the page.
+
+**Approach B (rejected): `dotnet watch`'s own settings.**
+- `DOTNET_WATCH_AUTO_RELOAD_WS_PORT` crashes `dotnet watch` ("address already in use"): its ws and wss servers both bind that port.
+- `DOTNET_WATCH_AUTO_RELOAD_WS_HOSTNAME` binds that address, but the script then advertises **only** `wss://`, with the development certificate for `localhost`/127.0.0.1. Another device would have to trust that certificate.
+- `DOTNET_WATCH_AUTO_RELOAD_WS_ORIGINS` with one origin wasn't honoured (403 on both ports; format not checked further).
+- It would also put an unauthenticated socket on the network.
+
+**For Task 4 (gateway):**
+- The refresh route must only forward to ports owned by the run (the refresh servers are in its process tree, so the planned ownership check covers them).
+- Rewrite `Sec-Fetch-Dest: iframe` to `document` on every proxied request.
+- Rewrite only that exact script path, only when the literal matches, and pass anything else through unchanged. Pin the SDK 10.0.112 script in a test so an SDK change fails the test instead of silently breaking.
+
+**For Task 5 (live-update loop):**
+- `hmr: dotnet-watch` when the page loads `aspnetcore-browser-refresh.js`.
+- Rude edits: when a `dotnet-watch` run's app process is replaced and the page answers again, Fleet can reload the canvas instead of waiting for Blazor's backoff (12.6 s now).
+- Build failures print `dotnet watch ❌` lines, as expected in the design.
+
+**For Task 2 (runner) and Task 8 (matrix):**
+- **ASP.NET ignores `PORT`.** The port comes from `launchSettings.json` (`applicationUrl`, fixed per project, 5281 here). Two runs of the same project, such as two sessions on worktrees of one repo, collide: the second fails with "address already in use". To check: pass `--urls http://localhost:$PORT` after `--` (command-line arguments should override the launch profile).
+- **Refresh ports are reported as app ports.** The tool result says "It also listens on 36013, 37715" and the port picker offers them. Filter out ports whose listener is the `dotnet-watch` process, or ports named in the refresh script.
+- **inotify:** each `dotnet watch` took 51 inotify instances for a template app; the default per-user limit is 128, and the third concurrent run crashed ("The configured user limit (128) on the number of inotify instances has been reached"). Recognise that line and say what to do (raise `fs.inotify.max_user_instances`, or `DOTNET_USE_POLLING_FILE_WATCHER=1`, not yet checked). The 3-per-session cap may not be reachable with ASP.NET apps on a default Linux machine.
+- **SIGTERM doesn't stop `dotnet watch`:** it stops the app and waits for a file change. The runner's tree kill (SIGKILL) works; a graceful stop must fall back to it.
+- **Memory:** `dotnet watch` ~220 MB, `dotnet run` ~107 MB, the app ~105 MB, plus MSBuild nodes and the compiler server (536 MB, shared). On 2026-09-13 at 01:06 the dev machine (7.1 GB) ran out of memory with two apps, a Fleet build and another session's build running. The kernel killed the installed Fleet's OpenCode process and systemd restarted `fleet.service`. Consider raising `oom_score_adj` for app runs (no privilege needed to raise it), so the kernel picks a preview before Fleet or OpenCode. Run ASP.NET fixtures in the matrix one at a time.
+- **Fixtures:** the Razor template's own `a.navbar-brand` scoped rule never applies (a tag-helper anchor gets no scope attribute); edit a rule on an element that carries it (`.border-bottom` on the `<nav>`). Measure warm edits after one warm-up edit, and rude edits separately (10–13 s, which doesn't meet Decision 4's 2 s; the bar should apply to warm, non-rude edits).
+- Seen once, not investigated: after a rude-edit restart, reverting the file logged "No C# changes to apply" and the app kept serving the edited markup until a restart.
