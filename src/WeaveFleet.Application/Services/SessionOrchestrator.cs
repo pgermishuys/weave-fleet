@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application;
 using WeaveFleet.Application.Analytics;
+using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.DTOs;
@@ -48,7 +49,8 @@ public sealed partial class SessionOrchestrator(
     ILogger<SessionOrchestrator> logger,
     SessionActivityWriteService? sessionActivityWriteService = null,
     GitDiffService? gitDiffService = null,
-    ISessionTerminalCleanup? sessionTerminals = null) : ISessionActivator
+    ISessionTerminalCleanup? sessionTerminals = null,
+    ISessionAppCleanup? sessionApps = null) : ISessionActivator
 {
     private readonly DelegationService _delegationService = delegationService;
     private readonly GitDiffService _gitDiffService = gitDiffService ?? new GitDiffService();
@@ -1191,7 +1193,24 @@ public sealed partial class SessionOrchestrator(
         }
 
         await EndTerminalsAsync(id, ct);
+        await StopAppsAsync(id, ct);
         return Unit.Value;
+    }
+
+    /// <summary>Stops the apps Fleet runs for the session (dev servers). Best effort: it never fails the caller.</summary>
+    private async Task StopAppsAsync(string sessionId, CancellationToken ct)
+    {
+        if (sessionApps is null)
+            return;
+
+        try
+        {
+            await sessionApps.StopSessionAppsAsync(sessionId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogAppCleanupFailed(ex, sessionId);
+        }
     }
 
     /// <summary>Ends the session's terminals and deletes their scrollback. Best effort: it never fails the caller.</summary>
@@ -1236,8 +1255,9 @@ public sealed partial class SessionOrchestrator(
             instanceTracker.Remove(session.InstanceId);
         }
 
-        // End the session's terminals before its folder goes: a shell inside a worktree keeps it open on Windows.
+        // End the session's terminals and apps before its folder goes: a process inside a worktree keeps it open on Windows.
         await EndTerminalsAsync(id, ct);
+        await StopAppsAsync(id, ct);
 
         // Clean up workspace directory (worktree/clone) — best effort, must not block deletion
         try
@@ -1848,6 +1868,9 @@ public sealed partial class SessionOrchestrator(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to end the terminals of session {SessionId}")]
     private partial void LogTerminalCleanupFailed(Exception ex, string sessionId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to stop the apps of session {SessionId}")]
+    private partial void LogAppCleanupFailed(Exception ex, string sessionId);
 
     [LoggerMessage(Level = LogLevel.Error,
         Message = "Failed to retrieve messages for session {SessionId} — returning error result")]

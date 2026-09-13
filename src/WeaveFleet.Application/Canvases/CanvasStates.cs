@@ -183,6 +183,7 @@ public sealed class SequenceState
 /// <summary>
 /// The state of a <see cref="CanvasKinds.Browser"/> canvas: the page to show and, when Fleet started the
 /// app, the run it belongs to. The proxy address isn't stored; it changes every time Fleet starts.
+/// <see cref="Url"/> is empty while that app is starting and hasn't served a page yet.
 /// </summary>
 public sealed class BrowserState
 {

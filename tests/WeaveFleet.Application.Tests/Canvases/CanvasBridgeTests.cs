@@ -3,6 +3,7 @@ using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Tests.Browser;
+using WeaveFleet.Domain.Entities;
 using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Application.Tests.Canvases;
@@ -29,15 +30,17 @@ public sealed class CanvasBridgeTests
     private readonly ScopedUser _user = new();
     private readonly FakeCallers _callers = new();
     private readonly FakeAppRunner _apps = new();
+    private readonly InMemoryAppRunRepository _runs = new();
     private readonly CanvasService _canvases;
     private readonly CanvasBridge _bridge;
 
     public CanvasBridgeTests()
     {
         _repository.AddSession(SessionId);
+        _runs.AddSession(SessionId);
         _callers.Add(Token, OpenCodeSessionId, new HarnessCanvasCaller(SessionId, Owner));
         _canvases = new CanvasService(_repository, _broadcaster, _user);
-        _bridge = new CanvasBridge(_callers, _user, _canvases, _apps);
+        _bridge = new CanvasBridge(_callers, _user, _canvases, new AppRunService(_apps, _runs, new InMemorySessionRepository(), _user));
     }
 
     private async Task<CanvasToolOutput> OpenFlowAsync()
@@ -194,7 +197,7 @@ public sealed class CanvasBridgeTests
     [Fact]
     public async Task Reading_a_browser_canvas_adds_its_app_status_and_recent_output()
     {
-        var app = _apps.Start(SessionId, "/work/shop", "bun run dev");
+        var app = (await _apps.StartAsync(new AppRunRequest("app_1", SessionId, Owner, "/work/shop", "bun run dev"))).App!;
         await _apps.WaitUntilReadyAsync(app.Id, TimeSpan.FromSeconds(1));
         var opened = await _canvases.OpenAsync(SessionId, CanvasKinds.Browser, "Shop", JsonNode.Parse($$"""{ "url": "http://localhost:5173/", "appId": "{{app.Id}}" }"""));
 
@@ -202,5 +205,31 @@ public sealed class CanvasBridgeTests
 
         read.Value!.Output.ShouldBe(
             $"browser {opened.Value.Canvas.Id} \"Shop\" v1\nurl http://localhost:5173/\napp {app.Id}\napp {app.Id} running\ncommand bun run dev\nports 5173");
+    }
+
+    [Fact]
+    public async Task An_app_Fleet_ran_before_it_restarted_reads_as_stopped()
+    {
+        await _runs.UpsertAsync(new AppRun
+        {
+            Id = "app_old", SessionId = SessionId, UserId = Owner, Command = "bun run dev", Directory = "/work/shop",
+            Port = 41000, Status = "stopped", Url = "http://localhost:41000/", CreatedAt = "2026-09-13T08:00:00Z", UpdatedAt = "2026-09-13T08:00:00Z",
+        });
+        var opened = await _canvases.OpenAsync(SessionId, CanvasKinds.Browser, "Shop", JsonNode.Parse("""{ "url": "http://localhost:41000/", "appId": "app_old" }"""));
+
+        var read = await _bridge.ReadAsync(Token, OpenCodeSessionId, opened.Value!.Canvas.Id);
+
+        read.Value!.Output.ShouldEndWith("app app_old stopped\ncommand bun run dev");
+    }
+
+    [Fact]
+    public async Task Another_users_app_is_left_out_of_a_read()
+    {
+        await _apps.StartAsync(new AppRunRequest("app_theirs", SessionId, "someone-else", "/work/shop", "bun run dev"));
+        var opened = await _canvases.OpenAsync(SessionId, CanvasKinds.Browser, "Shop", JsonNode.Parse("""{ "url": "http://localhost:5173/", "appId": "app_theirs" }"""));
+
+        var read = await _bridge.ReadAsync(Token, OpenCodeSessionId, opened.Value!.Canvas.Id);
+
+        read.Value!.Output.ShouldNotContain("command");
     }
 }

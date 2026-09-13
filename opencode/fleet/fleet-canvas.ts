@@ -132,6 +132,7 @@ export const FleetCanvasPlugin = async () => ({
         "Don't start dev servers with bash: they never exit, and the user can't see them.",
         "Fleet runs the command in the session's folder, keeps it running, finds the page it serves and waits until it answers (up to 3 minutes).",
         "Fleet sets PORT to a free port; servers that ignore PORT keep their own port, and Fleet finds it.",
+        "ASP.NET ignores PORT: append `-- --urls http://localhost:$PORT` (%PORT% on Windows) to dotnet run or dotnet watch so two copies of the project don't collide.",
         "Prefer a command that reloads on changes (npm run dev, bun --hot, dotnet watch). Calling this again with the same command restarts the app.",
         "If it fails, the result has the last lines of output: fix the problem and call it again.",
       ].join(" "),

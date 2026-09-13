@@ -291,6 +291,9 @@ public sealed record AppRunResponse(
     DateTimeOffset StartedAt,
     IReadOnlyList<string> Logs);
 
+/// <summary>Output lines after the ones the client has, and the <c>after</c> to ask with next time.</summary>
+public sealed record AppOutputResponse(IReadOnlyList<string> Lines, long Next);
+
 // ── Session Sources ──────────────────────────────────────────────────────────
 
 public sealed record SessionSourceCatalogResponse(

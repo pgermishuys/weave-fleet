@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
@@ -664,6 +665,42 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
         canvasEvents[2].Data.GetRawText().ShouldBe(
             $$$"""{"type":"canvas.updated","eventId":null,"properties":{"sessionId":"{{{sessionId}}}","canvasId":"{{{canvasId}}}","kind":"diagram","title":"Session event flow","version":2,"actor":"user","state":{"direction":"TB","nodes":[{"id":"n1","label":"NuCode session","detail":"NuCode/Sessions","x":20,"y":44.5,"placedByUser":true},{"id":"n2","label":"SessionEventsHub"}],"edges":[{"id":"e1","from":"n1","to":"n2","label":"publishes","style":"solid"}]},"summary":"1 box moved"}}""");
         canvasEvents[0].Data.GetProperty("properties").GetProperty("summary").GetString().ShouldBe("+2 boxes, +1 edge");
+    }
+
+    [Fact]
+    public async Task Hub_sends_app_updated_with_the_exact_wire_shape()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var sessionId = await CreateSessionAsync();
+        await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
+        await WaitForBroadcasterSubscriberAsync();
+
+        // Act: run a command that exits at once
+        using var scope = _server.Services.CreateScope();
+        var started = await scope.ServiceProvider.GetRequiredService<AppRunService>().StartAsync(sessionId, "echo hi; exit 0");
+        started.App.ShouldNotBeNull(started.Problem);
+        var appId = started.App.Id;
+
+        // Assert: app.updated for the start and the exit; the last is the run as it ended
+        List<ReceivedEvent> appEvents = [];
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < deadline)
+        {
+            appEvents = _receivedEvents.ToArray()
+                .Where(e => e.Data.GetProperty("type").GetString() == "app.updated")
+                .ToList();
+            if (appEvents.Any(e => e.Data.GetProperty("properties").GetProperty("reason").GetString() == "exited"))
+                break;
+            await _eventReceived.WaitAsync(TimeSpan.FromMilliseconds(100));
+        }
+
+        appEvents.Count.ShouldBe(2, $"Raw events: {string.Join("; ", _rawEvents)}");
+        appEvents.ShouldAllBe(e => e.Topic == $"session:{sessionId}");
+        appEvents[0].Data.GetProperty("properties").GetProperty("reason").GetString().ShouldBe("started");
+        appEvents[1].Data.GetRawText().ShouldBe(
+            $$$"""{"type":"app.updated","eventId":null,"properties":{"sessionId":"{{{sessionId}}}","appId":"{{{appId}}}","command":"echo hi; exit 0","status":"exited","ports":[],"exitCode":0,"reason":"exited"}}""");
     }
 
     [Fact]

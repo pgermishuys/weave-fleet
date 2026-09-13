@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;
@@ -44,6 +45,7 @@ public sealed class SessionOrchestratorBuilder
     private IUserContext _userContext = new TestUserContext("test-user");
     private FleetOptions _options = new();
     private GitDiffService? _gitDiffService;
+    private ISessionAppCleanup? _sessionApps;
 
     public SessionOrchestratorBuilder WithUserContext(IUserContext userContext)
     {
@@ -60,6 +62,12 @@ public sealed class SessionOrchestratorBuilder
     public SessionOrchestratorBuilder WithGitDiffService(GitDiffService gitDiffService)
     {
         _gitDiffService = gitDiffService;
+        return this;
+    }
+
+    public SessionOrchestratorBuilder WithSessionApps(ISessionAppCleanup sessionApps)
+    {
+        _sessionApps = sessionApps;
         return this;
     }
 
@@ -127,6 +135,7 @@ public sealed class SessionOrchestratorBuilder
             ActivityTracker,
             NullLogger<SessionOrchestrator>.Instance,
             sessionActivityWriteService: null,
-            gitDiffService: _gitDiffService);
+            gitDiffService: _gitDiffService,
+            sessionApps: _sessionApps);
     }
 }

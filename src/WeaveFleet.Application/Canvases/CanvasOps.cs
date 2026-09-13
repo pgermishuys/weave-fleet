@@ -623,7 +623,7 @@ public static class CanvasOps
 
             case CanvasOpNames.SetPage:
                 r.AllowOnly("url", "appId");
-                return new SetPageOp(r.Source("url"), r.OptionalText("appId"));
+                return new SetPageOp(r.Page("url"), r.OptionalText("appId"));
 
             default:
                 r.AllowOnly("source");
@@ -689,7 +689,7 @@ public static class CanvasOps
 
         var reader = new FieldReader(root, "state");
         reader.AllowOnly("url", "appId");
-        return [(new SetPageOp(reader.Source("url"), reader.OptionalText("appId")), "state")];
+        return [(new SetPageOp(reader.Page("url"), reader.OptionalText("appId")), "state")];
     }
 
     /// <summary>Unwraps a JSON object or array that was sent as a string.</summary>
@@ -791,6 +791,9 @@ public static class CanvasOps
                 throw Error($"\"{name}\" can't be empty.");
             return value;
         }
+
+        /// <summary>A browser page address. Empty is allowed here; the state validator decides when (a starting app).</summary>
+        public string Page(string name) => ReadString(name, required: true)!.Trim();
 
         public string? OneOf(string name, IReadOnlyList<string> values, bool required)
         {

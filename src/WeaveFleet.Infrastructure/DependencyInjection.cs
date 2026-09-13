@@ -138,6 +138,7 @@ public static class DependencyInjection
         services.AddScoped<IBoardRepository, BoardRepository>();
         services.AddScoped<ISmartLinkRepository, SmartLinkRepository>();
         services.AddScoped<ICanvasRepository, CanvasRepository>();
+        services.AddScoped<IAppRunRepository, AppRunRepository>();
         services.AddScoped<IAutomationRepository, AutomationRepository>();
         services.AddScoped<IAutomationEventLedgerRepository, AutomationEventLedgerRepository>();
 
@@ -168,7 +169,12 @@ public static class DependencyInjection
         services.AddSingleton<ISessionTerminalCleanup>(sp => sp.GetRequiredService<TerminalManager>());
         services.AddScoped<TerminalService>();
         services.AddHostedService<TerminalShutdownService>();
-        services.AddSingleton<IAppRunner, AppRunner>();
+        services.AddSingleton<AppRunner>();
+        services.AddSingleton<IAppRunner>(sp => sp.GetRequiredService<AppRunner>());
+        services.AddSingleton<ISessionAppCleanup>(sp => sp.GetRequiredService<AppRunner>());
+        services.AddScoped<AppRunService>();
+        services.AddScoped<AppRunRecorder>();
+        services.AddHostedService<AppRunRecorderService>();
         services.AddScoped<BrowserBridge>();
         services.AddSingleton<IBackgroundUserScope, BackgroundUserScope>();
         services.AddScoped<AutomationService>();

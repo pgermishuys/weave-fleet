@@ -128,6 +128,7 @@ internal sealed record QuickChatSourceInput;
 [JsonSerializable(typeof(CanvasUpdatedPayload))]
 [JsonSerializable(typeof(CanvasRefPayload))]
 [JsonSerializable(typeof(TerminalPayload))]
+[JsonSerializable(typeof(AppUpdatedPayload))]
 internal sealed partial class ApplicationJsonContext : JsonSerializerContext
 {
 }

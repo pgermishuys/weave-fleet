@@ -165,6 +165,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(BrowserProxyRequest))]
 [JsonSerializable(typeof(BrowserProxyResponse))]
 [JsonSerializable(typeof(AppRunResponse))]
+[JsonSerializable(typeof(AppOutputResponse))]
 // Session Sources
 [JsonSerializable(typeof(SessionSourceCatalogResponse))]
 [JsonSerializable(typeof(SessionSourceItem))]

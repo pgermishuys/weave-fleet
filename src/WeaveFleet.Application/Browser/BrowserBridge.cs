@@ -2,7 +2,6 @@ using System.Text;
 using System.Text.Json.Nodes;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Services;
-using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Browser;
 
@@ -14,14 +13,17 @@ public sealed class BrowserBridge(
     IHarnessCanvasCallerResolver callers,
     IBackgroundUserScope userScope,
     ICanvasService canvases,
-    ISessionRepository sessions,
-    IAppRunner apps)
+    AppRunService apps)
 {
     /// <summary>Long enough for a first <c>dotnet run</c> or <c>npm install</c>-then-serve on a cold machine.</summary>
     public static readonly TimeSpan ReadyTimeout = TimeSpan.FromMinutes(3);
 
     private const int FailureLogLines = 30;
 
+    /// <summary>
+    /// Starts the command and shows its tab at once, "starting"; the page follows when it answers. The call
+    /// still waits for that, so it can tell the agent the address or why there isn't one.
+    /// </summary>
     public Task<CanvasResult<CanvasToolOutput>> AppStartAsync(
         string? bridgeToken,
         string? harnessSessionId,
@@ -34,15 +36,13 @@ public sealed class BrowserBridge(
             if (string.IsNullOrEmpty(command))
                 return Invalid("\"command\" is required, e.g. \"npm run dev\" or \"dotnet watch\".");
 
-            var session = await sessions.GetByIdAsync(sessionId);
-            if (session is null || string.IsNullOrWhiteSpace(session.Directory) || !System.IO.Directory.Exists(session.Directory))
-                return Invalid("This session has no folder on this machine to run the command in.");
+            var started = await apps.StartAsync(sessionId, command);
+            if (started.App is not { } app)
+                return Invalid(started.Problem ?? "The app couldn't be started.");
 
-            var active = apps.FindActive(sessionId, command);
-            var restarted = active is not null;
-            var app = active is null ? apps.Start(sessionId, session.Directory, command) : await apps.RestartAsync(active.Id);
-            if (app is null)
-                return Invalid("The app stopped while it was being restarted. Call fleet_app_start again.");
+            var shown = await OpenPageAsync(sessionId, title, await ShownUrlAsync(sessionId, title, app.Id, ct), app.Id, ct);
+            if (!shown.IsSuccess)
+                return CanvasResult.Fail<CanvasToolOutput>(shown.Error);
 
             var ready = await apps.WaitUntilReadyAsync(app.Id, ReadyTimeout, ct);
             if (ready.Url is null)
@@ -53,11 +53,12 @@ public sealed class BrowserBridge(
                 return CanvasResult.Fail<CanvasToolOutput>(opened.Error);
 
             var canvas = opened.Value.Canvas;
-            var current = apps.Find(app.Id) ?? app;
+            var current = await apps.GetAsync(sessionId, app.Id) ?? app;
             var output = new StringBuilder()
-                .Append(restarted ? "Restarted " : "Running ").Append('`').Append(command).Append("` (").Append(app.Id).Append(") in ").Append(session.Directory).Append('.')
+                .Append(started.Restarted ? "Restarted " : "Running ").Append('`').Append(command).Append("` (").Append(app.Id).Append(") in ").Append(app.Directory).Append('.')
                 .Append("\nShowing ").Append(ready.Url).Append(" in ").Append(CanvasText.CanvasName(canvas)).Append('.');
-            var otherPorts = current.Ports.Where(port => !ready.Url.Contains($":{port}", StringComparison.Ordinal)).ToList();
+            var shownPort = new Uri(ready.Url).Port;
+            var otherPorts = current.Ports.Where(port => port != shownPort).ToList();
             if (otherPorts.Count > 0)
                 output.Append("\nIt also listens on ").AppendJoin(", ", otherPorts).Append('.');
             output.Append("\nCalling fleet_app_start again with the same command restarts it. fleet_canvas_read shows its status and recent output.");
@@ -108,8 +109,24 @@ public sealed class BrowserBridge(
         var state = new JsonObject { ["url"] = url };
         if (appId is not null)
             state["appId"] = appId;
-        return await canvases.OpenAsync(sessionId, CanvasKinds.Browser, string.IsNullOrWhiteSpace(title) ? "Browser" : title, state, ct);
+        return await canvases.OpenAsync(sessionId, CanvasKinds.Browser, TitleOrDefault(title), state, ct);
     }
+
+    /// <summary>The page the tab already shows for this app, so a restart doesn't blank it; empty ("starting") otherwise.</summary>
+    private async Task<string> ShownUrlAsync(string sessionId, string? title, string appId, CancellationToken ct)
+    {
+        var name = TitleOrDefault(title);
+        var tab = (await canvases.ListAsync(sessionId, ct))
+            .Select(item => item.Canvas)
+            .FirstOrDefault(canvas => canvas.Kind == CanvasKinds.Browser && canvas.Title == name);
+        if (tab is null)
+            return string.Empty;
+
+        var state = BrowserState.Parse(tab.StateJson);
+        return state.AppId == appId ? state.Url : string.Empty;
+    }
+
+    private static string TitleOrDefault(string? title) => string.IsNullOrWhiteSpace(title) ? "Browser" : title.Trim();
 
     private string FailureText(string appId, string problem)
     {

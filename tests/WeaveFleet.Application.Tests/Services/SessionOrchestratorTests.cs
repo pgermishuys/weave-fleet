@@ -1237,6 +1237,52 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
         _builder.EventBroadcaster.Broadcasts.ShouldContain(b => b.Topic == "sessions" && b.Type == "session_archived");
     }
 
+    [Theory]
+    [InlineData("archive")]
+    [InlineData("delete")]
+    public async Task Archiving_or_deleting_a_session_stops_its_apps(string action)
+    {
+        var apps = new RecordingSessionApps();
+        var builder = new SessionOrchestratorBuilder().WithSessionApps(apps);
+        builder.InstanceRepository.Seed(new Instance
+        {
+            Id = "inst-apps",
+            Directory = "/tmp",
+            Url = string.Empty,
+            Status = "running",
+            CreatedAt = "2026-01-01"
+        });
+        builder.SessionRepository.Seed(new Session
+        {
+            Id = "s-apps",
+            InstanceId = "inst-apps",
+            Title = "Apps",
+            Status = "active",
+            RetentionStatus = "active",
+            Directory = "/tmp",
+            CreatedAt = "2026-01-01"
+        });
+        var sut = builder.Build();
+
+        var result = action == "archive"
+            ? await sut.ArchiveSessionAsync("s-apps")
+            : await sut.DeleteSessionAsync("s-apps");
+
+        result.IsSuccess.ShouldBeTrue();
+        apps.Stopped.ShouldBe(["s-apps"]);
+    }
+
+    private sealed class RecordingSessionApps : WeaveFleet.Application.Browser.ISessionAppCleanup
+    {
+        public List<string> Stopped { get; } = [];
+
+        public Task StopSessionAppsAsync(string sessionId, CancellationToken ct = default)
+        {
+            Stopped.Add(sessionId);
+            return Task.CompletedTask;
+        }
+    }
+
     [Fact]
     public async Task UnarchiveSessionAsync_WhenArchived_ReturnsError()
     {

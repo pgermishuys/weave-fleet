@@ -21,7 +21,7 @@ public sealed class CanvasBridge(
     IHarnessCanvasCallerResolver callers,
     IBackgroundUserScope userScope,
     ICanvasService canvases,
-    IAppRunner apps)
+    AppRunService apps)
 {
     /// <summary>The one answer for every call Fleet can't place: unknown token, unknown session, or another process's session.</summary>
     public const string UnknownCallerMessage = "Fleet couldn't match this call to one of its sessions.";
@@ -76,7 +76,7 @@ public sealed class CanvasBridge(
             var text = read.Value;
             if (canvas?.Kind == CanvasKinds.Browser
                 && BrowserState.Parse(canvas.StateJson).AppId is { } appId
-                && apps.Find(appId) is { } app)
+                && await apps.GetAsync(sessionId, appId) is { } app)
             {
                 text += "\n" + BrowserBridge.RenderApp(app, apps.Logs(appId, BrowserLogLines));
             }

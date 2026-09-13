@@ -74,8 +74,9 @@ public static class DiagramStateValidator
 
 public static class BrowserStateValidator
 {
+    /// <summary>The page has to be on this machine. It can be empty while the app Fleet started has yet to serve one.</summary>
     public static CanvasError? Validate(BrowserState state)
-        => LoopbackUrl.TryParse(state.Url, out _)
+        => LoopbackUrl.TryParse(state.Url, out _) || (state.Url.Length == 0 && !string.IsNullOrEmpty(state.AppId))
             ? null
             : new CanvasError(CanvasErrorKind.Invalid, LoopbackUrl.Requirement);
 }

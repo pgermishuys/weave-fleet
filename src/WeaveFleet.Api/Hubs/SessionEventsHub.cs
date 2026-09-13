@@ -385,6 +385,7 @@ public class SessionEventsHub : Hub
         CanvasFocused           => "canvas.focused",
         TerminalOpened          => "terminal.opened",
         TerminalClosed          => "terminal.closed",
+        AppUpdated              => "app.updated",
         _ => domainEvent.GetType().Name,
     };
 }

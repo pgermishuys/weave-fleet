@@ -9,7 +9,7 @@ namespace WeaveFleet.Api.Endpoints;
 
 /// <summary>
 /// What a browser canvas needs from the user's side: a proxy in front of the page, and the status, output,
-/// restart and stop of the app Fleet runs for it.
+/// start, restart and stop of the app Fleet runs for it. Apps are found only through the current user's session.
 /// </summary>
 public static class BrowserEndpoints
 {
@@ -40,49 +40,61 @@ public static class BrowserEndpoints
         .Produces(422)
         .WithName("GetBrowserProxy");
 
-        // GET /api/sessions/{id}/apps/{appId} — status and recent output of an app Fleet runs
-        group.MapGet("/{id}/apps/{appId}", async (string id, string appId, SessionService sessionService, IAppRunner apps) =>
+        // GET /api/sessions/{id}/apps/{appId} — status and recent output of an app Fleet runs or ran
+        group.MapGet("/{id}/apps/{appId}", async (string id, string appId, SessionService sessionService, AppRunService apps) =>
         {
             var session = await sessionService.GetSessionAsync(id);
             if (session.IsFailure)
                 return session.Error.ToSessionApiResult();
 
-            var run = apps.Find(appId);
-            return run is null || run.SessionId != id
-                ? Results.NotFound(new ErrorResponse($"App {appId} not found."))
-                : Results.Ok(ToResponse(run, apps));
+            var run = await apps.GetAsync(id, appId);
+            return run is null ? AppNotFound(appId) : Results.Ok(ToResponse(run, apps));
         })
         .Produces<AppRunResponse>(200)
         .Produces(404)
         .WithName("GetSessionApp");
 
-        // POST /api/sessions/{id}/apps/{appId}/restart — stop the app and run the same command again
-        group.MapPost("/{id}/apps/{appId}/restart", async (string id, string appId, SessionService sessionService, IAppRunner apps) =>
+        // GET /api/sessions/{id}/apps/{appId}/output?after={n} — output after the first n lines
+        group.MapGet("/{id}/apps/{appId}/output", async (string id, string appId, long? after, SessionService sessionService, AppRunService apps) =>
         {
             var session = await sessionService.GetSessionAsync(id);
             if (session.IsFailure)
                 return session.Error.ToSessionApiResult();
-            if (apps.Find(appId) is not { } run || run.SessionId != id)
-                return Results.NotFound(new ErrorResponse($"App {appId} not found."));
 
-            var restarted = await apps.RestartAsync(appId);
-            return restarted is null ? Results.NotFound(new ErrorResponse($"App {appId} not found.")) : Results.Ok(ToResponse(restarted, apps));
+            var output = await apps.OutputAsync(id, appId, Math.Max(0, after ?? 0));
+            return output is null ? AppNotFound(appId) : Results.Ok(new AppOutputResponse(output.Lines, output.Next));
+        })
+        .Produces<AppOutputResponse>(200)
+        .Produces(404)
+        .WithName("GetSessionAppOutput");
+
+        // POST /api/sessions/{id}/apps/{appId}/restart — run the same command again, or start a stopped app
+        group.MapPost("/{id}/apps/{appId}/restart", async (string id, string appId, SessionService sessionService, AppRunService apps) =>
+        {
+            var session = await sessionService.GetSessionAsync(id);
+            if (session.IsFailure)
+                return session.Error.ToSessionApiResult();
+
+            var started = await apps.RestartAsync(id, appId);
+            if (started.App is { } run)
+                return Results.Ok(ToResponse(run, apps));
+            return started.IsNotFound
+                ? AppNotFound(appId)
+                : Results.Conflict(new ErrorResponse(started.Problem ?? "The app couldn't be started."));
         })
         .Produces<AppRunResponse>(200)
         .Produces(404)
+        .Produces(409)
         .WithName("RestartSessionApp");
 
         // POST /api/sessions/{id}/apps/{appId}/stop — stop the app and its whole process tree
-        group.MapPost("/{id}/apps/{appId}/stop", async (string id, string appId, SessionService sessionService, IAppRunner apps) =>
+        group.MapPost("/{id}/apps/{appId}/stop", async (string id, string appId, SessionService sessionService, AppRunService apps) =>
         {
             var session = await sessionService.GetSessionAsync(id);
             if (session.IsFailure)
                 return session.Error.ToSessionApiResult();
-            if (apps.Find(appId) is not { } run || run.SessionId != id)
-                return Results.NotFound(new ErrorResponse($"App {appId} not found."));
 
-            await apps.StopAsync(appId);
-            return Results.NoContent();
+            return await apps.StopAsync(id, appId) ? Results.NoContent() : AppNotFound(appId);
         })
         .Produces(204)
         .Produces(404)
@@ -91,11 +103,13 @@ public static class BrowserEndpoints
         return app;
     }
 
-    private static AppRunResponse ToResponse(AppRunSnapshot run, IAppRunner apps)
+    private static IResult AppNotFound(string appId) => Results.NotFound(new ErrorResponse($"App {appId} not found."));
+
+    private static AppRunResponse ToResponse(AppRunSnapshot run, AppRunService apps)
         => new(
             run.Id,
             run.Command,
-            run.Status.ToString().ToLowerInvariant(),
+            AppRunRecorder.StatusText(run.Status),
             run.ExitCode,
             run.Url,
             run.Ports,

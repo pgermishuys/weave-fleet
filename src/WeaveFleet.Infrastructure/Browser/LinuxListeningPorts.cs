@@ -2,6 +2,12 @@ using System.Globalization;
 
 namespace WeaveFleet.Infrastructure.Browser;
 
+/// <summary>Ports a process tree listens on: the app's, and its dev tools' (see <see cref="LinuxListeningPorts.ForProcessTree"/>).</summary>
+internal sealed record TreePorts(IReadOnlyList<int> App, IReadOnlyList<int> Helper)
+{
+    public static readonly TreePorts None = new([], []);
+}
+
 /// <summary>
 /// The TCP ports a process and its descendants listen on, read from <c>/proc</c>: socket inodes from each
 /// process's <c>fd</c> links, matched against the LISTEN rows of <c>/proc/net/tcp</c> and <c>tcp6</c>.
@@ -11,32 +17,52 @@ internal static class LinuxListeningPorts
 {
     private const string ListenState = "0A";
 
-    public static IReadOnlyList<int> ForProcessTree(int rootPid)
+    /// <summary>
+    /// The ports the tree listens on. Ports of dev tools that serve no page themselves (<c>dotnet watch</c>'s
+    /// browser-refresh servers) come back as <see cref="TreePorts.Helper"/>, apart from the app's.
+    /// </summary>
+    public static TreePorts ForProcessTree(int rootPid)
     {
         if (!OperatingSystem.IsLinux())
-            return [];
+            return TreePorts.None;
 
         try
         {
             var inodes = new HashSet<long>();
+            var helperInodes = new HashSet<long>();
             foreach (var pid in ProcessTree(rootPid))
-                AddSocketInodes(pid, inodes);
+                AddSocketInodes(pid, IsHelper(pid) ? helperInodes : inodes);
 
-            if (inodes.Count == 0)
-                return [];
+            if (inodes.Count == 0 && helperInodes.Count == 0)
+                return TreePorts.None;
 
-            return ReadTable("/proc/net/tcp").Concat(ReadTable("/proc/net/tcp6"))
-                .Where(listener => inodes.Contains(listener.Inode))
-                .Select(listener => listener.Port)
-                .Distinct()
-                .Order()
-                .ToList();
+            var listeners = ReadTable("/proc/net/tcp").Concat(ReadTable("/proc/net/tcp6")).ToList();
+            return new TreePorts(PortsOf(listeners, inodes), PortsOf(listeners, helperInodes));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return [];
+            return TreePorts.None;
         }
     }
+
+    /// <summary>Whether a process's command line (NULs as spaces) is a dev tool that listens for its own reasons, not the app.</summary>
+    internal static bool IsHelperCommandLine(string cmdline)
+        => cmdline.Contains("dotnet-watch", StringComparison.Ordinal);
+
+    private static bool IsHelper(int pid)
+    {
+        try
+        {
+            return IsHelperCommandLine(File.ReadAllText($"/proc/{pid}/cmdline").Replace('\0', ' '));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private static List<int> PortsOf(List<(int Port, long Inode)> listeners, HashSet<long> inodes)
+        => [.. listeners.Where(listener => inodes.Contains(listener.Inode)).Select(listener => listener.Port).Distinct().Order()];
 
     /// <summary>LISTEN rows of a <c>/proc/net/tcp</c>-format table: the local port and the socket inode.</summary>
     internal static IEnumerable<(int Port, long Inode)> ParseListeners(string table)
