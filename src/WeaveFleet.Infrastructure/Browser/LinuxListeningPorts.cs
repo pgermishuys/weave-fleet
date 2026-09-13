@@ -1,0 +1,155 @@
+using System.Globalization;
+
+namespace WeaveFleet.Infrastructure.Browser;
+
+/// <summary>
+/// The TCP ports a process and its descendants listen on, read from <c>/proc</c>: socket inodes from each
+/// process's <c>fd</c> links, matched against the LISTEN rows of <c>/proc/net/tcp</c> and <c>tcp6</c>.
+/// Works for any framework, since it doesn't depend on what the process prints. Empty on other platforms.
+/// </summary>
+internal static class LinuxListeningPorts
+{
+    private const string ListenState = "0A";
+
+    public static IReadOnlyList<int> ForProcessTree(int rootPid)
+    {
+        if (!OperatingSystem.IsLinux())
+            return [];
+
+        try
+        {
+            var inodes = new HashSet<long>();
+            foreach (var pid in ProcessTree(rootPid))
+                AddSocketInodes(pid, inodes);
+
+            if (inodes.Count == 0)
+                return [];
+
+            return ReadTable("/proc/net/tcp").Concat(ReadTable("/proc/net/tcp6"))
+                .Where(listener => inodes.Contains(listener.Inode))
+                .Select(listener => listener.Port)
+                .Distinct()
+                .Order()
+                .ToList();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>LISTEN rows of a <c>/proc/net/tcp</c>-format table: the local port and the socket inode.</summary>
+    internal static IEnumerable<(int Port, long Inode)> ParseListeners(string table)
+    {
+        foreach (var line in table.Split('\n').Skip(1))
+        {
+            var fields = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (fields.Length < 10 || fields[3] != ListenState)
+                continue;
+
+            var local = fields[1];
+            var colon = local.LastIndexOf(':');
+            if (colon < 0
+                || !int.TryParse(local.AsSpan(colon + 1), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var port)
+                || !long.TryParse(fields[9], NumberStyles.None, CultureInfo.InvariantCulture, out var inode))
+            {
+                continue;
+            }
+
+            yield return (port, inode);
+        }
+    }
+
+    /// <summary>The parent pid from a <c>/proc/{pid}/stat</c> line. The name can hold spaces and parentheses, so fields count from the last ')'.</summary>
+    internal static int? ParentPid(string stat)
+    {
+        var close = stat.LastIndexOf(')');
+        if (close < 0)
+            return null;
+
+        var fields = stat[(close + 1)..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return fields.Length > 1 && int.TryParse(fields[1], NumberStyles.None, CultureInfo.InvariantCulture, out var parent) ? parent : null;
+    }
+
+    private static List<int> ProcessTree(int rootPid)
+    {
+        var children = new Dictionary<int, List<int>>();
+        foreach (var dir in Directory.EnumerateDirectories("/proc"))
+        {
+            if (!int.TryParse(Path.GetFileName(dir), NumberStyles.None, CultureInfo.InvariantCulture, out var pid))
+                continue;
+
+            string stat;
+            try
+            {
+                stat = File.ReadAllText(Path.Combine(dir, "stat"));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                continue; // The process ended while we looked.
+            }
+
+            if (ParentPid(stat) is { } parent)
+            {
+                if (!children.TryGetValue(parent, out var list))
+                    children[parent] = list = [];
+                list.Add(pid);
+            }
+        }
+
+        var tree = new List<int> { rootPid };
+        for (var i = 0; i < tree.Count; i++)
+        {
+            if (children.TryGetValue(tree[i], out var list))
+                tree.AddRange(list);
+        }
+
+        return tree;
+    }
+
+    private static void AddSocketInodes(int pid, HashSet<long> inodes)
+    {
+        IEnumerable<string> fds;
+        try
+        {
+            fds = Directory.EnumerateFileSystemEntries($"/proc/{pid}/fd").ToList();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return;
+        }
+
+        foreach (var fd in fds)
+        {
+            string? target;
+            try
+            {
+                target = new FileInfo(fd).LinkTarget;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                continue;
+            }
+
+            // "socket:[123456]"
+            if (target is { Length: > 9 }
+                && target.StartsWith("socket:[", StringComparison.Ordinal)
+                && long.TryParse(target.AsSpan(8, target.Length - 9), NumberStyles.None, CultureInfo.InvariantCulture, out var inode))
+            {
+                inodes.Add(inode);
+            }
+        }
+    }
+
+    private static List<(int Port, long Inode)> ReadTable(string path)
+    {
+        try
+        {
+            return ParseListeners(File.ReadAllText(path)).ToList();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
+    }
+}
