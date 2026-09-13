@@ -140,10 +140,23 @@ describe("SessionItem", () => {
       progress: { sessionId: "session-1", kind: "todos", done: 0, total: 0, current: null },
     }));
 
+    // A working session without progress shows no word either: its glyph says it's working.
     for (const wrapper of [withoutProgress, emptyList]) {
       expect(wrapper.find(".progress-ring").exists()).toBe(false);
-      expect(wrapper.get(".session-meta").text()).toBe("Working");
+      expect(wrapper.find(".session-progress__count").exists()).toBe(false);
+      expect(wrapper.find(".session-meta").exists()).toBe(false);
     }
+  });
+
+  it("shows the count instead of the age for a quiet session", () => {
+    const wrapper = mountSessionItem(createSession({
+      sessionStatus: "idle",
+      activityStatus: "idle",
+      progress: { sessionId: "session-1", kind: "plan", done: 11, total: 17, current: "Add migration" },
+    }));
+
+    expect(wrapper.get(".session-progress__count").text()).toBe("11/17");
+    expect(wrapper.find(".session-meta").exists()).toBe(false);
   });
 
   it("renders the session title and current status", () => {
