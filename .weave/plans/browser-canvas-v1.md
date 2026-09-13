@@ -32,7 +32,7 @@ Ground truth from the spike and the codebase (2026-09-13). Don't re-check these:
 3. **Fleet never reloads a page that has hot reload.** It reloads or restarts only when the page has no hot-reload client or the command doesn't watch files. Otherwise it would throw away the page's state.
 4. **Acceptance bar:** after a file edit, the canvas shows the change within ~2 s on every stack in the test matrix. Stacks with hot reload keep the page (no full reload) for style and component edits.
 5. **Runs are stored, but not restarted on their own when Fleet starts.** After a Fleet restart the canvas shows "stopped" with a Start button. Starting processes nobody asked for would be surprising.
-6. **A session's apps stop when the session stops, is archived or is deleted.** Caps: 3 running apps per session and 10 per Fleet (configurable). Starting past a cap fails with a message naming the running apps.
+6. **A session's apps stop when the session is archived or deleted, and when Fleet stops** (sessions have no stop since PR #191). Caps: 3 running apps per session and 10 per Fleet (configurable). Starting past a cap fails with a message naming the running apps.
 7. **Pooled OpenCode only**, like canvases. The tools stay harness-neutral; MCP for Claude Code comes later.
 8. **Nothing is pushed into the agent's context.** It reads status and output with `fleet_canvas_read` when it wants ([[dont-inject-agent-context-unasked]]).
 9. **The address a preview gets (decided with the user 2026-09-13, "for now"):** `*.localhost` when the browser is on Fleet's machine; a wildcard host name when the user configures one (`Fleet:Browser:PreviewHost = "*.fleet.home.example"`), which keeps cookies apart; otherwise a port per preview on Fleet's host (no DNS needed, but ports share cookies, see Risks). All three sit behind one address-strategy interface, which the cloud later reuses. Revisit if the cookie mitigations in Task 4 fall short.
@@ -325,7 +325,7 @@ Open items, with where they came from. Tick them here as they're done.
 - [x] Task 2: raise `oom_score_adj` for app runs (Linux).
 - [ ] Decide what caps look like on a 7 GB machine (defaults are 3 per session, 10 per Fleet; three `dotnet watch` apps don't fit in 7 GB with builds running).
 - [x] Task 2: the live acceptance check (SIGKILL with an app running, then restart; stop/archive/delete; a 4th app refused).
-- [ ] When PR #191 merges: rebase, drop the session-stop hook with it, and reword Decision 6 (apps stop on archive, delete and Fleet restart).
+- [x] When PR #191 merges: rebase, drop the session-stop hook with it, and reword Decision 6 (done 2026-09-13).
 - [x] Task 4: build approach A from `browser-canvas-v1-dotnet-watch.patch` properly: exact-path rewrite, a test pinning the SDK 10.0.112 script. The refresh route only forwards to ports named in a served refresh script.
 - [x] Task 6 (done in Task 4): "Open in a new tab" opens the preview's address.
 - [ ] Close preview listeners when their app stops or their session is archived/deleted (Task 4 leaves them until Fleet stops).
