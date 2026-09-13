@@ -153,6 +153,11 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(IReadOnlyList<SessionOriginRecordDto>))]
 [JsonSerializable(typeof(WeaveFleet.Application.DTOs.DelegationDto))]
 [JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Application.DTOs.DelegationDto>))]
+// Terminals
+[JsonSerializable(typeof(TerminalResponse))]
+[JsonSerializable(typeof(List<TerminalResponse>))]
+[JsonSerializable(typeof(CreateTerminalRequest))]
+[JsonSerializable(typeof(TerminalControlMessage))]
 // Canvases
 [JsonSerializable(typeof(CanvasResponse))]
 [JsonSerializable(typeof(List<CanvasResponse>))]

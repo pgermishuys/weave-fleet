@@ -50,6 +50,8 @@ export default defineConfig(({ mode }) => ({
       "/api": {
         target: "http://localhost:5001",
         changeOrigin: true,
+        // Terminal sockets live under /api (…/terminals/{id}/socket).
+        ws: true,
       },
       "/ws": {
         target: "ws://localhost:5001",

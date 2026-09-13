@@ -21,6 +21,8 @@ export interface Command {
   action: () => void;
   keywords?: string[];
   disabled?: boolean;
+  /** The global shortcut also works while typing in a field (the composer, the terminal). */
+  allowInEditable?: boolean;
   /** Sub-commands shown when this command is selected (drills into a nested level) */
   subCommands?: Command[];
   /** Dynamic sub-command generator — called when selected if subCommands is not set */

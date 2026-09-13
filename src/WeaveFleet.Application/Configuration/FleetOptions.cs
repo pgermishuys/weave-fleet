@@ -79,6 +79,34 @@ public sealed class FleetOptions
         }
     }
 
+    // ─── Terminals ───────────────────────────────────────────────────────────
+
+    /// <summary>Terminal drawer configuration.</summary>
+    public TerminalOptions Terminal { get; set; } = new();
+
+    /// <summary>
+    /// Where terminal scrollback is saved. When <see cref="TerminalOptions.HistoryDirectory"/> is empty,
+    /// defaults to "terminals" in the same directory as <see cref="DatabasePath"/>.
+    /// </summary>
+    public string ResolvedTerminalHistoryDirectory
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(Terminal.HistoryDirectory))
+                return Terminal.HistoryDirectory;
+
+            var dir = Path.GetDirectoryName(Path.GetFullPath(DatabasePath));
+            return Path.Combine(dir ?? ".", "terminals");
+        }
+    }
+
+    /// <summary>
+    /// Whether the terminal drawer is on. <see cref="TerminalOptions.Enabled"/> wins when set; otherwise it's
+    /// on in local mode and off when Fleet is hosted (<see cref="AuthOptions.Enabled"/>), where a shell would
+    /// run as the service user on a shared machine.
+    /// </summary>
+    public bool TerminalEnabled => Terminal.Enabled ?? !Auth.Enabled;
+
     // ─── Claude Code ─────────────────────────────────────────────────────────
 
     /// <summary>Claude Code harness configuration.</summary>
@@ -199,6 +227,28 @@ public sealed class AuthOptions
 
     /// <summary>Auth cookie expiry in minutes. Default: 1440 (24 h).</summary>
     public int CookieExpirationMinutes { get; set; } = 1440;
+}
+
+/// <summary>Terminal drawer configuration.</summary>
+public sealed class TerminalOptions
+{
+    /// <summary>Turns the terminal drawer on or off. Unset: on in local mode, off when auth is enabled.</summary>
+    public bool? Enabled { get; set; }
+
+    /// <summary>Where scrollback is saved. Empty: "terminals" next to the database.</summary>
+    public string HistoryDirectory { get; set; } = string.Empty;
+
+    /// <summary>Lines of scrollback kept per terminal. Default: 5,000.</summary>
+    public int MaxHistoryLines { get; set; } = 5_000;
+
+    /// <summary>Bytes of scrollback kept per terminal. Default: 2 MB.</summary>
+    public int MaxHistoryBytes { get; set; } = 2 * 1024 * 1024;
+
+    /// <summary>Terminals one session can have. Default: 8.</summary>
+    public int MaxTerminalsPerSession { get; set; } = 8;
+
+    /// <summary>Shells running at once across all sessions. Default: 32.</summary>
+    public int MaxLiveTerminals { get; set; } = 32;
 }
 
 /// <summary>Cloud-mode configuration.</summary>

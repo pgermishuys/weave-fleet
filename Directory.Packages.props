@@ -20,6 +20,8 @@
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
+    <!-- Terminals: Unix PTY through a native shim, ConPTY on Windows -->
+    <PackageVersion Include="Porta.Pty" Version="2.2.2" />
     <!-- Utilities -->
     <PackageVersion Include="Ulid" Version="1.4.1" />
     <PackageVersion Include="Cronos" Version="0.9.0" />

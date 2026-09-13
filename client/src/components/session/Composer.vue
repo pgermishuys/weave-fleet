@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, shallowRef, ref, useTemplateRef, watch } from "vue";
 import { storeToRefs } from "pinia";
-import { ArrowUp, Paperclip, X, CircleX } from "lucide-vue-next";
+import { ArrowUp, Paperclip, SquareTerminal, X, CircleX } from "lucide-vue-next";
 import AutocompletePopup from "@/components/session/AutocompletePopup.vue";
 import AgentSelector from "@/components/session/AgentSelector.vue";
 import ModelSelector from "@/components/session/ModelSelector.vue";
@@ -17,6 +17,8 @@ import { useIsMobile } from "@/composables/use-media-query";
 import { useSendCommand } from "@/composables/use-send-command";
 import { useModels } from "@/composables/use-models";
 import { useDraftAttachments } from "@/composables/use-draft-attachments";
+import { useDraftTerminalContext } from "@/composables/use-draft-terminal-context";
+import { formatTerminalContext, terminalLineRange } from "@/lib/format-terminal-context";
 import { useSendPrompt } from "@/composables/use-send-prompt";
 import { parseSlashCommand } from "@/lib/slash-command-utils";
 import { trackAction } from "@/lib/track-action";
@@ -65,6 +67,11 @@ let statusIndicatorDotsTimer: ReturnType<typeof setInterval> | null = null;
 let pasteErrorTimer: ReturnType<typeof setTimeout> | null = null;
 
 const { attachments: pendingAttachments, addAttachment, removeAttachment: removeDraftAttachment, clearAttachments } = useDraftAttachments(props.sessionId);
+const {
+  contexts: terminalContexts,
+  removeContext: removeTerminalContext,
+  clearContexts: clearTerminalContexts,
+} = useDraftTerminalContext(props.sessionId);
 const pasteError = shallowRef<string | undefined>(undefined);
 const isDragging = shallowRef(false);
 const lightboxUrl = shallowRef<string | null>(null);
@@ -165,7 +172,8 @@ function handleFileInput(event: Event): void {
   input.value = "";
 }
 
-const hasContent = computed(() => draft.text.trim().length > 0 || pendingAttachments.value.length > 0);
+const hasContent = computed(() =>
+  draft.text.trim().length > 0 || pendingAttachments.value.length > 0 || terminalContexts.value.length > 0);
 
 const STATUS_INDICATOR_LINGER_MS = 1600;
 const STATUS_INDICATOR_DOTS_INTERVAL_MS = 400;
@@ -480,9 +488,19 @@ function sendCurrentDraft(): boolean {
     return sendCommand(parsedCommand.command, parsedCommand.args);
   }
 
+  // Terminal lines go in front of what was typed, as fenced blocks. If the send is refused, the draft is put back.
+  const typed = draft.text;
+  const withTerminalLines = terminalContexts.value.length > 0;
+  if (withTerminalLines) setText(formatTerminalContext(terminalContexts.value, typed));
+
   const attachments: ImageAttachment[] = pendingAttachments.value.map(({ mime, filename, data }) => ({ mime, filename, data }));
   clearAttachments();
-  return sendPrompt(attachments.length > 0 ? attachments : undefined);
+  const sent = sendPrompt(attachments.length > 0 ? attachments : undefined);
+  if (withTerminalLines) {
+    if (sent) clearTerminalContexts();
+    else setText(typed);
+  }
+  return sent;
 }
 
 function handleSend(): void {
@@ -491,14 +509,15 @@ function handleSend(): void {
   }
 
   const text = draft.text.trim();
-  if (!text && pendingAttachments.value.length === 0) {
+  if (!text && pendingAttachments.value.length === 0 && terminalContexts.value.length === 0) {
     return;
   }
 
   inputHistory.push(text);
 
   if (sessionStatus.value === "busy") {
-    enqueue(text);
+    enqueue(formatTerminalContext(terminalContexts.value, text));
+    clearTerminalContexts();
     setText("");
     void nextTick(() => {
       resizeTextarea();
@@ -692,6 +711,37 @@ function handleKeydown(event: KeyboardEvent): void {
             <X class="attachment-chip__remove-icon" />
           </button>
         </div>
+      </div>
+
+      <div
+        v-if="terminalContexts.length > 0"
+        class="terminal-context-strip"
+        aria-label="Terminal lines in this message"
+      >
+        <span
+          v-for="context in terminalContexts"
+          :key="context.id"
+          class="terminal-context-chip"
+          :title="context.text"
+        >
+          <SquareTerminal
+            class="terminal-context-chip__icon"
+            aria-hidden="true"
+          />
+          <span>{{ context.label }}</span>
+          <span class="terminal-context-chip__range">{{ terminalLineRange(context.from, context.to) }}</span>
+          <button
+            type="button"
+            class="terminal-context-chip__remove"
+            :aria-label="`Remove ${context.label} ${terminalLineRange(context.from, context.to)}`"
+            @click="removeTerminalContext(context.id)"
+          >
+            <X
+              class="terminal-context-chip__remove-icon"
+              aria-hidden="true"
+            />
+          </button>
+        </span>
       </div>
 
       <input
@@ -903,6 +953,68 @@ function handleKeydown(event: KeyboardEvent): void {
 .composer-box--dragging {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 5%, var(--card-bg));
+}
+
+.terminal-context-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px 2px;
+}
+
+.terminal-context-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 4px 0 8px;
+  border-radius: calc(var(--radius-btn) - 1px);
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.terminal-context-chip__icon {
+  width: 12px;
+  height: 12px;
+}
+
+.terminal-context-chip__range {
+  font-family: var(--font-mono-stack);
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+.terminal-context-chip__remove {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+  transition: opacity var(--transition), background-color var(--transition);
+}
+
+.terminal-context-chip__remove:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.terminal-context-chip__remove:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  opacity: 1;
+}
+
+.terminal-context-chip__remove-icon {
+  width: 11px;
+  height: 11px;
 }
 
 .attachment-strip {

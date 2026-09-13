@@ -92,7 +92,8 @@ public static class ConfigEndpoints
                 fleetOptions.Cloud.Enabled,
                 fleetOptions.Auth.Enabled,
                 fleetOptions.Auth.TokenAuthEnabled,
-                availableHarnesses));
+                availableHarnesses,
+                fleetOptions.TerminalEnabled));
         })
         .AllowAnonymous()
         .Produces<ClientConfigResponse>(StatusCodes.Status200OK)
@@ -106,7 +107,8 @@ internal sealed record ClientConfigResponse(
     bool CloudMode,
     bool AuthEnabled,
     bool TokenAuthEnabled,
-    IReadOnlyList<string> AvailableHarnesses);
+    IReadOnlyList<string> AvailableHarnesses,
+    bool TerminalEnabled);
 
 internal sealed record ConfigPathsResponse(string ConfigDirectory, string UserConfigPath);
 #pragma warning restore IL2026

@@ -10,6 +10,8 @@ import FilesChangedView from "@/components/session/FilesChangedView.vue";
 import ForkSessionDialog from "@/components/session/ForkSessionDialog.vue";
 import SessionActionToolbar from "@/components/session/SessionActionToolbar.vue";
 import SessionDetailHeader from "@/components/session/SessionDetailHeader.vue";
+import TerminalDrawer from "@/components/terminal/TerminalDrawer.vue";
+import TerminalToggleButton from "@/components/terminal/TerminalToggleButton.vue";
 import { useDiffs } from "@/composables/use-diffs";
 import {
   useAbortSession,
@@ -21,6 +23,7 @@ import {
 } from "@/composables/use-session-actions";
 import { useSentPrompts } from "@/composables/use-send-prompt";
 import { provideSessionDiffsContext } from "@/composables/use-session-diffs-context";
+import { useSessionTerminals } from "@/composables/use-session-terminals";
 import { apiFetch } from "@/lib/api-client";
 import type { SessionActionCapabilities, SessionListItem, SessionOrigin } from "@/api/client";
 import type { SessionActivityStatus } from "@/lib/types";
@@ -175,6 +178,7 @@ const SessionDetailPage = defineComponent({
   name: "SessionDetailPage",
   setup(_props, { expose }) {
     const params = Route.useParams();
+    useSessionTerminals(() => params.value.id);
     const search = Route.useSearch();
     const navigate = Route.useNavigate();
     const sessionsStore = useSessionsStore();
@@ -772,6 +776,8 @@ const SessionDetailPage = defineComponent({
           >
             {{
               actions: () => (
+                <>
+                <TerminalToggleButton sessionId={params.value.id} />
                 <SessionActionToolbar
                   canAbort={canAbort.value}
                   canResume={canResume.value}
@@ -797,6 +803,7 @@ const SessionDetailPage = defineComponent({
                   onDelete={handleDelete}
                   onArchive={() => void handleArchive()}
                 />
+                </>
               ),
             }}
           </SessionDetailHeader>
@@ -926,6 +933,11 @@ const SessionDetailPage = defineComponent({
             }}
           />
         )}
+        <TerminalDrawer
+          key={params.value.id}
+          sessionId={params.value.id}
+          directory={selectedSession.value?.workspaceDirectory ?? remoteSession.value?.workspaceDirectory ?? null}
+        />
         <ConfirmDeleteSessionDialog
           v-model:open={isDeleteDialogOpen.value}
           isDeleting={isDeleting.value}

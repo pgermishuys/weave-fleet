@@ -4,6 +4,7 @@ import { useSessionsStore } from "@/stores/sessions";
 import Composer from "@/components/session/Composer.vue";
 import type { SessionListItem } from "@/api/client";
 import { createModelSelectionKey } from "@/composables/use-models";
+import { addDraftTerminalContext, clearDraftTerminalContext } from "@/composables/use-draft-terminal-context";
 
 vi.mock("@/api/client", () => ({
   api: {
@@ -297,6 +298,63 @@ describe("Composer", () => {
       })
     );
     expect(wrapper.emitted("promptSent")).toHaveLength(1);
+  });
+
+  it("sends terminal lines ahead of the message, then drops their chips", async () => {
+    clearDraftTerminalContext("session-1");
+    addDraftTerminalContext("session-1", {
+      terminalId: "t1",
+      label: "zsh",
+      from: 9,
+      to: 11,
+      text: "FAIL  use-sessions.test.ts\nAssertionError: expected 1, got 2",
+    });
+    const wrapper = mountComposer();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+
+    expect(wrapper.get(".terminal-context-chip").text()).toContain("zsh");
+    expect(wrapper.get(".terminal-context-chip__range").text()).toBe("lines 9–11");
+
+    await textarea.setValue("Why does this fail?");
+    textarea.element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await flushPromises();
+
+    expect(mockApi.POST).toHaveBeenCalledWith(
+      "/api/sessions/{id}/prompt",
+      expect.objectContaining({
+        body: expect.objectContaining({
+          text: "Terminal zsh, lines 9–11:\n```text\nFAIL  use-sessions.test.ts\nAssertionError: expected 1, got 2\n```\n\nWhy does this fail?",
+        }),
+      }),
+    );
+    expect(wrapper.find(".terminal-context-chip").exists()).toBe(false);
+  });
+
+  it("sends terminal lines with nothing typed", async () => {
+    clearDraftTerminalContext("session-1");
+    addDraftTerminalContext("session-1", { terminalId: "t1", label: "zsh", from: 3, to: 3, text: "npm ERR! missing script" });
+    const wrapper = mountComposer();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+
+    textarea.element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await flushPromises();
+
+    expect(mockApi.POST).toHaveBeenCalledWith(
+      "/api/sessions/{id}/prompt",
+      expect.objectContaining({
+        body: expect.objectContaining({ text: "Terminal zsh, line 3:\n```text\nnpm ERR! missing script\n```" }),
+      }),
+    );
+  });
+
+  it("removes terminal lines from the message", async () => {
+    clearDraftTerminalContext("session-1");
+    addDraftTerminalContext("session-1", { terminalId: "t1", label: "zsh", from: 3, to: 3, text: "x" });
+    const wrapper = mountComposer();
+
+    await wrapper.get(".terminal-context-chip__remove").trigger("click");
+
+    expect(wrapper.find(".terminal-context-chip").exists()).toBe(false);
   });
 
   it("routes slash commands to the command endpoint", async () => {

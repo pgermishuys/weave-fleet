@@ -1,0 +1,1201 @@
+<title>Fleet Terminal Drawer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  /* page chrome (same system as the Canvas and Feel Pass mockups) */
+  --page: #ECEDF2;
+  --surface: #F7F7FA;
+  --ink: #15161C;
+  --ink-2: #3B3E4A;
+  --muted: #5F6374;
+  --rule: #D5D7E0;
+  --accent: #4F5FC0;
+  --on-accent: #FFFFFF;
+  --coral: #BF4A2A;
+  --on-coral: #FFFFFF;
+  --focus: #4F5FC0;
+
+  /* Fleet: client/src/assets/main.css [data-theme="light"] */
+  --f-chrome: #F3F2EF;
+  --f-sheet: #FFFFFF;
+  --f-raised: #FFFFFF;
+  --f-line: rgba(26, 25, 24, 0.09);
+  --f-text: #1A1918;
+  --f-text-2: #34322F;
+  --f-muted: #6E6A65;
+  --f-faint: #A29E98;
+  --f-hover: rgba(26, 25, 24, 0.05);
+  --f-active: rgba(26, 25, 24, 0.09);
+  --f-accent: #5B6EC7;
+  --f-accent-ink: #4557B5;
+  --f-accent-soft: rgba(91, 110, 199, 0.12);
+  --f-run: #16a34a;
+  --f-wait: #b45309;
+  --f-wait-soft: rgba(217, 119, 6, 0.13);
+  --f-done: #2563eb;
+  --f-err: #dc2626;
+  --f-add-bg: rgba(22, 163, 74, 0.09);
+  --f-del-bg: rgba(220, 38, 38, 0.07);
+  --f-shadow: 0 1px 2px rgba(26, 25, 24, 0.04), 0 12px 32px -18px rgba(26, 25, 24, 0.18);
+  --f-pop-shadow: 0 10px 30px -12px rgba(26, 25, 24, 0.28), 0 1px 2px rgba(26, 25, 24, 0.06);
+
+  /* terminal: xterm theme built from Fleet tokens */
+  --t-bg: #FAF9F7;
+  --t-ink: #2A2826;
+  --t-dim: #8A857F;
+  --t-sel: rgba(91, 110, 199, 0.22);
+  --t-red: #C4302B;
+  --t-green: #1A7F37;
+  --t-yellow: #9A6700;
+  --t-blue: #4557B5;
+  --t-magenta: #8250DF;
+  --t-cyan: #0E7490;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #101116;
+    --surface: #171820;
+    --ink: #E7E8EE;
+    --ink-2: #C4C6D2;
+    --muted: #8C90A3;
+    --rule: #272A35;
+    --accent: #8D98F2;
+    --on-accent: #0E1030;
+    --coral: #EE7753;
+    --on-coral: #1A0D08;
+    --focus: #8D98F2;
+
+    --f-chrome: #0D0D10;
+    --f-sheet: #141418;
+    --f-raised: #1B1B20;
+    --f-line: rgba(255, 255, 255, 0.075);
+    --f-text: #E8E8EC;
+    --f-text-2: #C9C9D1;
+    --f-muted: #8E8E9A;
+    --f-faint: #65656F;
+    --f-hover: rgba(255, 255, 255, 0.045);
+    --f-active: rgba(255, 255, 255, 0.085);
+    --f-accent: #6366F1;
+    --f-accent-ink: #A2A7FA;
+    --f-accent-soft: rgba(99, 102, 241, 0.18);
+    --f-run: #4ade80;
+    --f-wait: #fbbf24;
+    --f-wait-soft: rgba(251, 191, 36, 0.13);
+    --f-done: #60a5fa;
+    --f-err: #f87171;
+    --f-add-bg: rgba(74, 222, 128, 0.08);
+    --f-del-bg: rgba(248, 113, 113, 0.08);
+    --f-shadow: none;
+    --f-pop-shadow: 0 14px 34px -12px rgba(0, 0, 0, 0.75);
+
+    --t-bg: #0F0F12;
+    --t-ink: #D6D6DD;
+    --t-dim: #6B6B76;
+    --t-sel: rgba(99, 102, 241, 0.32);
+    --t-red: #F87171;
+    --t-green: #4ADE80;
+    --t-yellow: #FBBF24;
+    --t-blue: #A2A7FA;
+    --t-magenta: #C4A5FA;
+    --t-cyan: #67E8F9;
+  }
+}
+
+:root[data-theme="dark"] {
+  --page: #101116;
+  --surface: #171820;
+  --ink: #E7E8EE;
+  --ink-2: #C4C6D2;
+  --muted: #8C90A3;
+  --rule: #272A35;
+  --accent: #8D98F2;
+  --on-accent: #0E1030;
+  --coral: #EE7753;
+  --on-coral: #1A0D08;
+  --focus: #8D98F2;
+
+  --f-chrome: #0D0D10;
+  --f-sheet: #141418;
+  --f-raised: #1B1B20;
+  --f-line: rgba(255, 255, 255, 0.075);
+  --f-text: #E8E8EC;
+  --f-text-2: #C9C9D1;
+  --f-muted: #8E8E9A;
+  --f-faint: #65656F;
+  --f-hover: rgba(255, 255, 255, 0.045);
+  --f-active: rgba(255, 255, 255, 0.085);
+  --f-accent: #6366F1;
+  --f-accent-ink: #A2A7FA;
+  --f-accent-soft: rgba(99, 102, 241, 0.18);
+  --f-run: #4ade80;
+  --f-wait: #fbbf24;
+  --f-wait-soft: rgba(251, 191, 36, 0.13);
+  --f-done: #60a5fa;
+  --f-err: #f87171;
+  --f-add-bg: rgba(74, 222, 128, 0.08);
+  --f-del-bg: rgba(248, 113, 113, 0.08);
+  --f-shadow: none;
+  --f-pop-shadow: 0 14px 34px -12px rgba(0, 0, 0, 0.75);
+
+  --t-bg: #0F0F12;
+  --t-ink: #D6D6DD;
+  --t-dim: #6B6B76;
+  --t-sel: rgba(99, 102, 241, 0.32);
+  --t-red: #F87171;
+  --t-green: #4ADE80;
+  --t-yellow: #FBBF24;
+  --t-blue: #A2A7FA;
+  --t-magenta: #C4A5FA;
+  --t-cyan: #67E8F9;
+}
+
+/* ───────────── Page chrome ───────────── */
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+body {
+  background: var(--page);
+  color: var(--ink);
+  font-family: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 1340px; margin: 0 auto; padding-inline: 24px; padding-block: 36px 64px; }
+.intro { display: grid; gap: 10px; max-width: 76ch; }
+.eyebrow {
+  margin: 0;
+  font-family: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+}
+h1 { margin: 0; font-size: 34px; line-height: 1.1; font-weight: 600; letter-spacing: -0.02em; text-wrap: balance; }
+.lede { margin: 0; color: var(--ink-2); font-size: 15.5px; max-width: 68ch; }
+.lede code, .note code, .keys code, .ship code, .callout code { font-family: "Geist Mono", ui-monospace, monospace; font-size: 0.86em; }
+
+.toolbar { margin-top: 28px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.seg { display: inline-flex; padding: 3px; gap: 2px; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); }
+.seg button {
+  appearance: none; border: 0; background: transparent; color: var(--muted); font: inherit;
+  font-size: 13.5px; font-weight: 500; height: 32px; padding: 0 14px; border-radius: 7px; cursor: pointer;
+  transition: background 120ms ease-out, color 120ms ease-out;
+}
+.seg button:hover { color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--page); }
+.btn {
+  appearance: none; display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px;
+  border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); color: var(--ink);
+  font: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer;
+  transition: border-color 120ms ease-out, background 120ms ease-out;
+}
+.btn:hover { border-color: color-mix(in srgb, var(--ink) 35%, var(--rule)); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.primary:hover { background: color-mix(in srgb, var(--accent) 88%, var(--ink)); }
+.btn[hidden] { display: none; }
+.check { display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 4px; font-size: 13.5px; color: var(--ink-2); cursor: pointer; }
+.check input { width: 16px; height: 16px; accent-color: var(--coral); margin: 0; }
+kbd {
+  display: inline-block; min-width: 20px; padding: 1px 6px; border: 1px solid var(--rule); border-bottom-width: 2px;
+  border-radius: 5px; background: var(--surface); font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11.5px; line-height: 1.5; text-align: center; color: var(--ink);
+}
+.spacer { flex: 1; }
+
+.caption { margin: 14px 0 0; min-height: 48px; display: flex; align-items: flex-start; gap: 10px; font-size: 14px; color: var(--ink-2); max-width: 110ch; }
+.caption .dot { flex-shrink: 0; margin-top: 7px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+
+.stage {
+  margin-top: 10px; width: 100%; max-width: 1282px; aspect-ratio: 1282 / 782; position: relative;
+  border: 1px solid var(--rule); border-radius: 12px; overflow: hidden; background: var(--surface);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 24px 48px -32px rgba(0, 0, 0, 0.35);
+}
+.stage-note { display: none; margin: 8px 0 0; font-size: 12.5px; color: var(--muted); }
+@media (max-width: 760px) { .stage-note { display: block; } }
+
+section.block { margin-top: 48px; }
+.block-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 24px; }
+.block h2 { margin: 0; font-size: 21px; font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
+.block-head p { margin: 0; font-size: 13.5px; color: var(--muted); max-width: 70ch; }
+
+.note-grid { list-style: none; margin: 16px 0 0; padding: 0; display: grid; grid-template-columns: 1fr; gap: 12px; }
+@media (min-width: 640px) { .note-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .note-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.note {
+  display: flex; flex-direction: column; gap: 10px; padding: 16px 16px 14px; border: 1px solid var(--rule);
+  border-radius: 12px; background: var(--surface); transition: border-color 140ms ease-out, box-shadow 140ms ease-out; outline: none;
+}
+.note:hover, .note:focus-visible { border-color: color-mix(in srgb, var(--coral) 60%, var(--rule)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--coral) 14%, transparent); }
+.note-top { display: flex; align-items: center; gap: 10px; }
+.note h3 { margin: 0; font-size: 15px; line-height: 1.3; font-weight: 600; text-wrap: balance; }
+.note p { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--ink-2); }
+.spec {
+  margin-top: auto; display: block; padding: 7px 9px; border-radius: 7px; background: var(--page);
+  font-family: "Geist Mono", ui-monospace, monospace; font-size: 11.5px; line-height: 1.5; color: var(--ink-2); overflow-wrap: anywhere;
+}
+.letter {
+  flex-shrink: 0; display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--coral); color: var(--on-coral); font-family: "Geist Mono", ui-monospace, monospace; font-size: 11px; font-weight: 500;
+}
+.tag {
+  display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 5px; border: 1px solid var(--rule);
+  font-family: "Geist Mono", ui-monospace, monospace; font-size: 10.5px; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--muted); white-space: nowrap; margin-left: auto;
+}
+.tag.v1 { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, var(--rule)); }
+
+.two-col { margin-top: 16px; display: grid; gap: 24px; grid-template-columns: 1fr; align-items: start; }
+@media (min-width: 980px) { .two-col { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); } }
+
+.keys-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 12px; background: var(--surface); }
+.keys { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 13.5px; }
+.keys th, .keys td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--rule); }
+.keys tr:last-child td { border-bottom: 0; }
+.keys th {
+  font-family: "Geist Mono", ui-monospace, monospace; font-size: 10.5px; font-weight: 500; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--muted);
+}
+.keys td:first-child { white-space: nowrap; width: 1%; }
+.keys td:nth-child(2) { color: var(--muted); }
+.keys .stays { color: var(--accent); font-weight: 500; }
+
+.ship { display: grid; gap: 18px; }
+.ship h3 { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+.ship ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px; }
+.ship li { font-size: 13.5px; line-height: 1.5; color: var(--ink-2); padding-left: 14px; position: relative; }
+.ship li::before { content: ""; position: absolute; left: 0; top: 0.68em; width: 6px; height: 1px; background: var(--muted); }
+.ship .later li { color: var(--muted); }
+.callout { padding: 16px 18px; border-radius: 12px; background: var(--surface); border: 1px solid color-mix(in srgb, var(--coral) 40%, var(--rule)); display: grid; gap: 6px; }
+.callout strong { font-weight: 600; }
+.callout p { margin: 0; font-size: 13.5px; color: var(--ink-2); }
+
+.foot { margin-top: 36px; padding-top: 16px; border-top: 1px solid var(--rule); font-family: "Geist Mono", ui-monospace, monospace; font-size: 11.5px; line-height: 1.7; color: var(--muted); max-width: 120ch; }
+
+:where(button, input, [tabindex]):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+@media (max-width: 520px) {
+  .wrap { padding-inline: 16px; padding-block: 24px 48px; }
+  h1 { font-size: 28px; }
+  .spacer { display: none; }
+}
+/* ───────────── Mock frame: Fleet 0.18 after the canvas work ───────────── */
+
+.frame {
+  position: absolute; top: 0; left: 0; width: 1280px; height: 780px; transform-origin: 0 0; overflow: hidden;
+  display: flex; flex-direction: column;
+  font-family: "Inter", "Inter Variable", system-ui, -apple-system, sans-serif; font-size: 13px; line-height: 1.4;
+  color: var(--f-text); background: var(--f-chrome);
+  --mono: "JetBrains Mono", "JetBrains Mono Variable", ui-monospace, monospace;
+  --drawer-h: 272px;
+}
+:where(.frame) button { font: inherit; color: inherit; appearance: none; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
+.frame .ic { display: block; flex-shrink: 0; }
+
+.app { flex: 1; min-height: 0; display: flex; padding: 8px 8px 4px 0; }
+
+.rail { width: 52px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0; }
+.rail-logo { width: 26px; height: 18px; margin: 4px 0 14px; display: grid; place-items: center; color: var(--f-accent); }
+.rail-item { width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; color: var(--f-muted); }
+.rail-item.active { background: var(--f-active); color: var(--f-text); }
+.rail-fill { flex: 1; }
+
+.sessions { width: 256px; flex-shrink: 0; padding: 2px 6px 0 0; display: flex; flex-direction: column; min-height: 0; }
+.s-actions { display: flex; gap: 6px; padding: 0 6px 8px; }
+.s-btn { height: 32px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; font-weight: 500; }
+.s-btn.primary { flex: 1; background: var(--f-raised); border: 1px solid var(--f-line); }
+.s-btn.secondary { width: 32px; color: var(--f-muted); }
+.s-search { margin: 0 6px 10px; height: 32px; border-radius: 8px; background: var(--f-hover); display: flex; align-items: center; gap: 8px; padding: 0 10px; color: var(--f-faint); font-size: 13px; }
+.s-list { padding: 0 6px; }
+.g-head { height: 26px; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 6px; color: var(--f-muted); font-size: 12px; font-weight: 600; }
+.g-head .g-count { margin-left: auto; font-weight: 500; color: var(--f-faint); font-variant-numeric: tabular-nums; }
+.group + .group { margin-top: 10px; }
+.row { height: 32px; display: flex; align-items: center; gap: 9px; padding: 0 10px; border-radius: 8px; color: var(--f-text-2); font-size: 13px; margin: 2px 0; }
+.row[aria-current="true"] { background: var(--f-active); color: var(--f-text); font-weight: 500; }
+.row .r-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .r-meta { margin-left: auto; flex-shrink: 0; font-size: 12px; font-weight: 400; color: var(--f-faint); font-variant-numeric: tabular-nums; }
+.row .r-meta.needs { padding: 1px 7px; border-radius: 6px; background: var(--f-wait-soft); color: var(--f-wait); font-weight: 500; font-size: 11.5px; }
+.glyph { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; border: 1.5px solid var(--f-faint); }
+.glyph.run { background: var(--f-run); border-color: var(--f-run); }
+.glyph.wait { background: var(--f-wait); border-color: var(--f-wait); transform: rotate(45deg); border-radius: 1px; }
+.glyph.done { border: 0; width: 10px; height: 10px; background: none; color: var(--f-done); }
+
+.sheet { flex: 1; min-width: 0; display: flex; background: var(--f-sheet); border: 1px solid var(--f-line); border-radius: 12px; overflow: hidden; box-shadow: var(--f-shadow); }
+
+.convo { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.c-head { height: 58px; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 12px 0 18px; border-bottom: 1px solid var(--f-line); }
+.c-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.c-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; min-width: 0; }
+.c-title .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.c-state { font-size: 11.5px; font-weight: 500; color: var(--f-muted); background: var(--f-hover); padding: 1px 7px; border-radius: 6px; }
+.c-sub { font-size: 12px; color: var(--f-muted); display: flex; gap: 6px; white-space: nowrap; min-width: 0; }
+.c-sub .mono { font-family: var(--mono); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; }
+.c-actions { display: flex; align-items: center; gap: 2px; color: var(--f-muted); }
+.c-actions .div { width: 1px; height: 16px; background: var(--f-line); margin-inline: 3px; }
+.icon-btn { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; color: var(--f-muted); flex-shrink: 0; position: relative; transition: background 150ms ease-out, color 150ms ease-out; }
+.icon-btn:hover { background: var(--f-hover); color: var(--f-text); }
+.icon-btn[aria-pressed="true"] { background: var(--f-active); color: var(--f-text); }
+.icon-btn .run-dot { position: absolute; top: 5px; right: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--f-run); box-shadow: 0 0 0 2px var(--f-sheet); }
+
+.c-stream { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; padding: 18px 24px 8px; }
+.msg { max-width: 540px; margin: 0 auto 16px; }
+.msg.user { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.msg.user .bubble { max-width: 88%; background: var(--f-hover); border: 1px solid var(--f-line); border-radius: 14px 14px 4px 14px; padding: 9px 13px; font-size: 13.5px; line-height: 1.55; }
+.msg.user .quote { max-width: 88%; margin: 0; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--f-line); background: var(--t-bg); font-family: var(--mono); font-size: 11px; line-height: 1.5; color: var(--t-ink); white-space: pre; overflow: hidden; }
+.msg.user .quote .qh { display: block; margin-bottom: 4px; font-family: "Inter", system-ui, sans-serif; font-size: 11px; color: var(--f-muted); }
+.msg.assistant { font-size: 13.5px; line-height: 1.62; }
+.msg p { margin: 0 0 9px; }
+.msg p:last-child { margin-bottom: 0; }
+.msg code { font-family: var(--mono); font-size: 12px; padding: 1px 5px; border-radius: 5px; background: var(--f-hover); }
+.msg.enter { animation: rise 220ms ease-out both; }
+@keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.tools { margin: 4px 0 12px; padding: 4px; border: 1px solid var(--f-line); border-radius: 10px; background: color-mix(in srgb, var(--f-hover) 60%, transparent); }
+.tool { height: 28px; display: flex; align-items: center; gap: 9px; padding: 0 8px; border-radius: 6px; font-size: 12.5px; min-width: 0; }
+.tool .ic { color: var(--f-faint); }
+.tool .t-label { font-weight: 500; flex-shrink: 0; }
+.tool .t-detail { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 11.5px; color: var(--f-muted); }
+.tool .t-status { margin-left: auto; flex-shrink: 0; font-family: var(--mono); font-size: 11.5px; display: inline-flex; gap: 6px; font-variant-numeric: tabular-nums; }
+.add { color: var(--f-run); }
+.del { color: var(--f-err); }
+
+.composer { flex-shrink: 0; padding: 4px 20px 12px; }
+.cmp-box { max-width: 540px; margin: 0 auto; border: 1px solid var(--f-line); border-radius: 14px; background: var(--f-raised); transition: border-color 150ms ease-out; }
+.cmp-box.focus { border-color: color-mix(in srgb, var(--f-accent) 55%, transparent); }
+.cmp-ctx { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px 0; }
+.cmp-ctx:empty { display: none; }
+.ctx-chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 6px 0 8px; border-radius: 7px; background: var(--f-accent-soft); color: var(--f-accent-ink); font-size: 12px; font-weight: 500; animation: rise 200ms ease-out both; }
+.ctx-chip .ln { font-family: var(--mono); font-size: 11px; opacity: 0.85; }
+.ctx-chip button { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 4px; opacity: 0.7; }
+.ctx-chip button:hover { opacity: 1; background: var(--f-accent-soft); }
+.cmp-input { display: block; width: 100%; min-height: 40px; padding: 11px 16px 3px; border: 0; outline: 0; resize: none; background: transparent; font: inherit; font-size: 13.5px; color: var(--f-text); }
+.cmp-input::placeholder { color: var(--f-faint); }
+.cmp-foot { display: flex; align-items: center; gap: 2px; padding: 2px 8px 8px; font-size: 12px; color: var(--f-muted); }
+.cmp-chip { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; border-radius: 7px; }
+.cmp-chip .ic { color: var(--f-faint); }
+.cmp-send { margin-left: auto; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--f-accent); color: #fff; transition: transform 150ms ease-out, opacity 150ms ease-out; }
+.cmp-send[disabled] { opacity: 0.4; cursor: default; }
+.cmp-send:not([disabled]):hover { transform: scale(1.06); }
+
+/* ── terminal drawer ── */
+.drawer { height: var(--drawer-h); flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; border-top: 1px solid var(--f-line); background: var(--t-bg); position: relative; transition: height 200ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.drawer.dragging { transition: none; }
+.drawer.closed { height: 0; border-top-color: transparent; overflow: hidden; }
+.drawer.focused { border-top-color: color-mix(in srgb, var(--f-accent) 60%, transparent); }
+.grip { position: absolute; left: 0; right: 0; top: -4px; height: 8px; cursor: row-resize; z-index: 3; display: grid; place-items: center; }
+.grip::after { content: ""; width: 36px; height: 3px; border-radius: 2px; background: var(--f-faint); opacity: 0; transition: opacity 150ms ease-out; }
+.grip:hover::after, .drawer.dragging .grip::after { opacity: 0.7; }
+.drawer-head { height: 36px; flex-shrink: 0; display: flex; align-items: center; gap: 2px; padding: 0 6px 0 8px; border-bottom: 1px solid var(--f-line); }
+.ttab { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 6px 0 8px; border-radius: 7px; font-size: 12.5px; color: var(--f-muted); white-space: nowrap; transition: background 150ms ease-out, color 150ms ease-out; }
+.ttab:hover { background: var(--f-hover); color: var(--f-text); }
+.ttab[aria-selected="true"] { background: var(--f-active); color: var(--f-text); font-weight: 500; }
+.ttab .ic { color: var(--f-faint); }
+.ttab .proc { width: 6px; height: 6px; border-radius: 50%; background: var(--f-run); }
+.ttab .x { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 4px; color: var(--f-faint); opacity: 0; transition: opacity 120ms ease-out; }
+.ttab:hover .x, .ttab[aria-selected="true"] .x { opacity: 1; }
+.ttab .x:hover { background: var(--f-hover); color: var(--f-text); }
+.drawer-head .icon-btn { width: 26px; height: 26px; }
+.drawer-meta { margin-left: auto; display: flex; align-items: center; gap: 10px; padding-right: 6px; font-family: var(--mono); font-size: 11px; color: var(--f-faint); white-space: nowrap; min-width: 0; }
+.drawer-meta .cwd { overflow: hidden; text-overflow: ellipsis; max-width: 210px; }
+.drawer-meta .size { font-variant-numeric: tabular-nums; }
+
+.term { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; padding: 8px 14px 10px; font-family: var(--mono); font-size: 12px; line-height: 1.45; color: var(--t-ink); outline: none; cursor: text; user-select: text; }
+.term ::selection { background: var(--t-sel); }
+.tl { white-space: pre; min-height: 1.45em; }
+.term .d { color: var(--t-dim); }
+.term .r { color: var(--t-red); }
+.term .g { color: var(--t-green); }
+.term .y { color: var(--t-yellow); }
+.term .b { color: var(--t-blue); }
+.term .m { color: var(--t-magenta); }
+.term .c { color: var(--t-cyan); }
+.term .bold { font-weight: 500; }
+.term .inv-r { background: var(--t-red); color: var(--t-bg); padding: 0 2px; }
+.term .inv-g { background: var(--t-green); color: var(--t-bg); padding: 0 2px; }
+.term .link { text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 45%, transparent); text-underline-offset: 2px; cursor: pointer; }
+.term .cur { display: inline-block; width: 7px; height: 14px; vertical-align: -2px; background: var(--t-ink); opacity: 0.35; }
+.term:focus .cur { opacity: 1; animation: blink 1.1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+.attach-pop { position: absolute; z-index: 6; transform: translate(-50%, calc(-100% - 6px)); display: flex; gap: 2px; padding: 3px; border-radius: 9px; background: var(--f-raised); border: 1px solid var(--f-line); box-shadow: var(--f-pop-shadow); animation: rise 150ms ease-out both; }
+.attach-pop button { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; border-radius: 6px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+.attach-pop button:hover { background: var(--f-hover); }
+.attach-pop .ask { color: var(--f-accent-ink); }
+.attach-pop .ic { color: currentColor; }
+
+/* ── right panel ── */
+.rp { width: 392px; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--f-line); }
+.rp-head { height: 58px; flex-shrink: 0; display: flex; align-items: center; gap: 2px; padding: 0 8px 0 10px; border-bottom: 1px solid var(--f-line); }
+.ptab { height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; border-radius: 7px; font-size: 13px; color: var(--f-muted); white-space: nowrap; }
+.ptab[aria-selected="true"] { background: var(--f-active); color: var(--f-text); font-weight: 500; }
+.ptab .count { font-size: 12px; color: var(--f-muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+.head-fill { flex: 1; }
+.changes { padding: 8px 8px 6px; }
+.change { height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border-radius: 8px; font-size: 13px; color: var(--f-text-2); }
+.change.on { background: var(--f-active); color: var(--f-text); }
+.change .ic { color: var(--f-faint); }
+.change .f-dir { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--f-faint); font-size: 12px; }
+.change .f-num { flex-shrink: 0; font-family: var(--mono); font-size: 11.5px; display: inline-flex; gap: 6px; font-variant-numeric: tabular-nums; }
+.viewer { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 4px 12px 12px; border-top: 1px solid var(--f-line); margin-top: 4px; }
+.v-head { height: 36px; flex-shrink: 0; display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.v-head .lbl { color: var(--f-muted); }
+.v-head .path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 11.5px; }
+.diff-box { flex: 1; min-height: 0; border: 1px solid var(--f-line); border-radius: 10px; overflow: hidden; }
+.diff { margin: 0; white-space: pre; overflow: hidden; font-family: var(--mono); font-size: 11.5px; line-height: 1.65; padding: 6px 0; color: var(--f-text-2); }
+.diff span { display: block; padding: 0 12px; }
+.diff .h { color: var(--f-faint); }
+.diff .a { background: var(--f-add-bg); }
+.diff .dl { background: var(--f-del-bg); }
+
+/* ── status bar (App shell footer) ── */
+.statusbar { height: 26px; flex-shrink: 0; display: flex; align-items: center; gap: 14px; padding: 0 12px; font-size: 11.5px; color: var(--f-muted); white-space: nowrap; overflow: hidden; }
+.statusbar .hint { display: inline-flex; align-items: center; gap: 5px; }
+.statusbar .k { font-family: var(--mono); font-size: 10.5px; padding: 0 5px; height: 17px; line-height: 17px; border-radius: 4px; background: var(--f-active); color: var(--f-text-2); font-weight: 500; }
+.statusbar .sb-fill { flex: 1; }
+.statusbar .sb-state { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; color: var(--f-text-2); }
+.statusbar .sb-state i { width: 7px; height: 7px; border-radius: 50%; background: var(--f-run); }
+.statusbar .owner { color: var(--f-accent-ink); font-weight: 500; }
+.statusbar .flash { color: var(--f-wait); font-weight: 500; animation: rise 180ms ease-out both; }
+
+/* pins */
+.pins { position: absolute; inset: 0; pointer-events: none; z-index: 20; }
+.pin {
+  position: absolute; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; transform: translate(-50%, -50%);
+  background: var(--coral); color: var(--on-coral); font-family: "Geist Mono", ui-monospace, monospace; font-size: 10.5px; font-weight: 500; line-height: 1;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--coral) 25%, transparent), 0 2px 6px rgba(0, 0, 0, 0.25);
+  transition: transform 140ms ease-out;
+}
+.pin.on { transform: translate(-50%, -50%) scale(1.2); }
+.frame.no-pins .pins { display: none; }
+.frame .hl { outline: 2px solid var(--coral) !important; outline-offset: -2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .frame *, .frame *::before, .frame *::after { animation: none !important; transition: none !important; }
+  .seg button, .btn, .note { transition: none; }
+}
+</style>
+<div class="wrap">
+  <header class="intro">
+    <p class="eyebrow">Weave Fleet 0.18.0 · UI proposal · 12 Sep 2026</p>
+    <h1>A terminal under the chat</h1>
+    <p class="lede">Each session gets a real shell in its own folder, in a drawer below the composer, the way t3code does it. The drawer spans the conversation column only, so Changes stays open beside it. The agent never reads it. You select lines and add them to your message. Try it: click the terminal and type, drag the top edge, select a few lines, or press <kbd>Ctrl</kbd> <kbd>J</kbd>.</p>
+  </header>
+
+  <div class="toolbar">
+    <div class="seg" role="group" aria-label="Scenario">
+      <button type="button" id="sc-shell" data-scenario="shell" aria-pressed="true">Your shell</button>
+      <button type="button" id="sc-dev" data-scenario="dev" aria-pressed="false">Dev server running</button>
+      <button type="button" id="sc-tests" data-scenario="tests" aria-pressed="false">Tests failed</button>
+    </div>
+    <button type="button" class="btn primary" id="select-fail" hidden><span data-icon="scan" data-size="14"></span>Select the failure</button>
+    <button type="button" class="btn" id="toggle-drawer"><span data-icon="terminal" data-size="14"></span><span id="toggle-label">Hide terminal</span></button>
+    <span class="spacer"></span>
+    <label class="check" for="pins-toggle"><input type="checkbox" id="pins-toggle" checked>Show notes on the mockup</label>
+  </div>
+
+  <p class="caption" aria-live="polite"><span class="dot"></span><span id="caption-text"></span></p>
+
+  <div class="stage" id="stage">
+    <div class="frame" id="frame">
+      <div class="app">
+        <aside class="rail" aria-label="Primary navigation">
+          <div class="rail-logo" data-icon="weave" data-size="22"></div>
+          <span class="rail-item active" data-icon="message" data-size="18"></span>
+          <span class="rail-item" data-icon="grid" data-size="18"></span>
+          <span class="rail-fill"></span>
+          <span class="rail-item" data-icon="puzzle" data-size="18"></span>
+          <span class="rail-item" data-icon="zap" data-size="18"></span>
+          <span class="rail-item" data-icon="chart" data-size="18"></span>
+          <span class="rail-item" data-icon="settings" data-size="18"></span>
+        </aside>
+
+        <section class="sessions" aria-label="Sessions">
+          <div class="s-actions">
+            <span class="s-btn primary"><span data-icon="plus" data-size="14"></span>New Session</span>
+            <span class="s-btn secondary" data-icon="folderplus" data-size="16"></span>
+          </div>
+          <div class="s-search"><span data-icon="search" data-size="13"></span>Filter sessions</div>
+          <div class="s-list">
+            <div class="group">
+              <div class="g-head"><span data-icon="chevron" data-size="12"></span>weave-fleet<span class="g-count">4</span></div>
+              <div class="row" aria-current="true"><span class="glyph"></span><span class="r-title">Push session list over SignalR</span><span class="r-meta">Idle</span></div>
+              <div class="row"><span class="glyph wait"></span><span class="r-title">Fix SignalR reconnect after sleep</span><span class="r-meta needs">Needs input</span></div>
+              <div class="row"><span class="glyph run"></span><span class="r-title">Terminal drawer spike</span><span class="r-meta">Working</span></div>
+              <div class="row"><span class="glyph done" data-icon="check" data-size="10"></span><span class="r-title">Bump version to 0.18.0</span><span class="r-meta">Done</span></div>
+            </div>
+            <div class="group">
+              <div class="g-head"><span data-icon="chevron" data-size="12"></span>nucode<span class="g-count">2</span></div>
+              <div class="row"><span class="glyph"></span><span class="r-title">LSP diagnostics for C# files</span><span class="r-meta">3h</span></div>
+              <div class="row"><span class="glyph"></span><span class="r-title">MCP tool timeout handling</span><span class="r-meta">1d</span></div>
+            </div>
+          </div>
+        </section>
+
+        <div class="sheet">
+          <section class="convo" aria-label="Conversation">
+            <header class="c-head">
+              <div class="c-main">
+                <div class="c-title"><span class="t">Push session list over SignalR</span><span class="c-state">Idle</span></div>
+                <div class="c-sub"><span>weave-fleet</span>·<span>OpenCode</span>·<span class="mono">~/source/weave-fleet</span></div>
+              </div>
+              <div class="c-actions">
+                <button type="button" class="icon-btn" id="term-toggle" aria-pressed="true" aria-label="Terminal (Ctrl J)" title="Terminal (Ctrl J)"><span data-icon="terminal" data-size="15"></span><span class="run-dot" id="run-dot" hidden></span></button>
+                <span class="div"></span>
+                <span class="icon-btn" data-icon="fork" data-size="14"></span>
+                <span class="icon-btn" data-icon="pencil" data-size="14"></span>
+                <span class="icon-btn" data-icon="archive" data-size="14"></span>
+              </div>
+            </header>
+
+            <div class="c-stream" id="stream">
+              <div class="msg user"><div class="bubble">Replace the 15s poll in <code>use-sessions.ts</code> with the hub push. I'll run the tests myself.</div></div>
+              <div class="msg assistant">
+                <p>The session list now updates from <code>sessions.updated</code> on the hub. I kept the poll as a fallback for when the socket is down.</p>
+                <div class="tools">
+                  <div class="tool"><span data-icon="pencil" data-size="14"></span><span class="t-label">Edit</span><span class="t-detail">client/src/composables/use-sessions.ts</span><span class="t-status"><span class="add">+18</span><span class="del">−41</span></span></div>
+                  <div class="tool"><span data-icon="filetext" data-size="14"></span><span class="t-label">Write</span><span class="t-detail">client/src/composables/use-session-push.ts</span><span class="t-status"><span class="add">+62</span></span></div>
+                  <div class="tool"><span data-icon="pencil" data-size="14"></span><span class="t-label">Edit</span><span class="t-detail">client/src/stores/sessions.ts</span><span class="t-status"><span class="add">+9</span><span class="del">−3</span></span></div>
+                </div>
+                <p>Run <code>npx vitest run sessions</code> when you're ready.</p>
+              </div>
+            </div>
+
+            <div class="composer">
+              <div class="cmp-box" id="cmp-box">
+                <div class="cmp-ctx" id="cmp-ctx"></div>
+                <textarea class="cmp-input" id="cmp-input" rows="1" placeholder="Type a message…" aria-label="Message"></textarea>
+                <div class="cmp-foot">
+                  <span class="cmp-chip"><span data-icon="paperclip" data-size="13"></span></span>
+                  <span class="cmp-chip"><span data-icon="bot" data-size="13"></span>Default</span>
+                  <span class="cmp-chip"><span data-icon="sparkle" data-size="13"></span>Claude Sonnet 5</span>
+                  <button type="button" class="cmp-send" id="send" aria-label="Send" disabled><span data-icon="arrowup" data-size="15"></span></button>
+                </div>
+              </div>
+            </div>
+
+            <div class="drawer" id="drawer">
+              <div class="grip" id="grip" role="separator" aria-orientation="horizontal" aria-label="Resize terminal" title="Drag to resize, double-click to reset"></div>
+              <div class="drawer-head">
+                <div role="tablist" aria-label="Terminals" id="ttabs" style="display:flex;gap:2px"></div>
+                <button type="button" class="icon-btn" id="new-term" aria-label="New terminal" title="New terminal (Ctrl Shift `)"><span data-icon="plus" data-size="14"></span></button>
+                <div class="drawer-meta" id="drawer-meta"><span class="cwd" id="cwd"></span><span class="size" id="size"></span></div>
+                <span class="icon-btn" title="Clear" data-icon="eraser" data-size="13"></span>
+                <button type="button" class="icon-btn" id="hide-drawer" aria-label="Hide terminal (Ctrl J)" title="Hide terminal (Ctrl J)"><span data-icon="chevron" data-size="15"></span></button>
+              </div>
+              <div class="term" id="term" tabindex="0" role="textbox" aria-label="Terminal" aria-multiline="true"></div>
+            </div>
+          </section>
+
+          <aside class="rp" aria-label="Right panel">
+            <div class="rp-head">
+              <span class="ptab" aria-selected="true"><span data-icon="compare" data-size="14"></span>Changes <span class="count">3</span></span>
+              <span class="ptab"><span data-icon="folder" data-size="14"></span>Files</span>
+              <span class="ptab"><span data-icon="paperclip" data-size="14"></span>Context</span>
+              <span class="head-fill"></span>
+              <span class="icon-btn" data-icon="maximize" data-size="14"></span>
+              <span class="icon-btn" data-icon="panelclose" data-size="15"></span>
+            </div>
+            <div class="changes">
+              <div class="change on"><span data-icon="filetext" data-size="14"></span><span>use-sessions.ts</span><span class="f-dir">client/src/composables</span><span class="f-num"><span class="add">+18</span><span class="del">−41</span></span></div>
+              <div class="change"><span data-icon="filetext" data-size="14"></span><span>use-session-push.ts</span><span class="f-dir">client/src/composables</span><span class="f-num"><span class="add">+62</span></span></div>
+              <div class="change"><span data-icon="filetext" data-size="14"></span><span>sessions.ts</span><span class="f-dir">client/src/stores</span><span class="f-num"><span class="add">+9</span><span class="del">−3</span></span></div>
+            </div>
+            <div class="viewer">
+              <div class="v-head"><span class="lbl">Diff:</span><span class="path">client/src/composables/use-sessions.ts</span></div>
+              <div class="diff-box"><pre class="diff"><span class="h">@@ -198,14 +198,21 @@ export function useSessions()</span><span>   const hub = useSessionHub();</span><span class="dl">-  const timer = setInterval(refresh, 15_000);</span><span class="a">+  let timer: number | undefined;</span><span class="a">+  const startFallback = () =&gt; {</span><span class="a">+    timer ??= setInterval(refresh, 15_000);</span><span class="a">+  };</span><span> </span><span class="a">+  hub.onDisconnected(startFallback);</span><span class="a">+  hub.on("sessions.updated", applyPush);</span><span class="a">+  startFallback();</span><span> </span><span>   onScopeDispose(() =&gt; {</span><span>     clearInterval(timer);</span><span>   });</span></pre></div>
+            </div>
+          </aside>
+        </div>
+      </div>
+
+      <footer class="statusbar" id="statusbar"></footer>
+      <div class="pins" id="pins" aria-hidden="true"></div>
+    </div>
+  </div>
+  <p class="stage-note">The mockup is a 1280px Fleet window scaled down. It's easier to try on a wider screen.</p>
+
+  <section class="block" aria-labelledby="notes-h">
+    <div class="block-head">
+      <h2 id="notes-h">What's on the mockup</h2>
+      <p>Hover a note to find it on the mockup. Tags say whether it's in the first version.</p>
+    </div>
+    <ol class="note-grid" id="notes">
+      <li class="note" tabindex="0" data-pin="A">
+        <div class="note-top"><span class="letter">A</span><h3>A drawer under the chat</h3><span class="tag v1">First version</span></div>
+        <p>It sits below the composer and spans the conversation column only, so a diff and its test run are visible together. Drag the top edge to resize; double-click resets it.</p>
+        <code class="spec">272px default · 140px to 60% of the sheet · height kept per window</code>
+      </li>
+      <li class="note" tabindex="0" data-pin="B">
+        <div class="note-top"><span class="letter">B</span><h3>Tabs named by what's running</h3><span class="tag">Later</span></div>
+        <p>A tab shows <code>npm</code> rather than <code>zsh</code> while a command runs, with a green dot. Closing it asks first if something is still running. Each tab is its own shell in the session's folder.</p>
+        <code class="spec">server checks the shell's child process · every 1s, backing off to 60s</code>
+      </li>
+      <li class="note" tabindex="0" data-pin="C">
+        <div class="note-top"><span class="letter">C</span><h3>Select lines, add them to your message</h3><span class="tag v1">First version</span></div>
+        <p>The agent can't see the terminal. Select output and it goes into the composer as a chip with the terminal and line range, so you choose what it reads and what it costs.</p>
+        <code class="spec">chip “zsh · lines 9–11” → sent as a fenced block in your message</code>
+      </li>
+      <li class="note" tabindex="0" data-pin="D">
+        <div class="note-top"><span class="letter">D</span><h3>Hiding it doesn't stop it</h3><span class="tag v1">First version</span></div>
+        <p>The shell runs on the server. Hide the drawer and the dev server keeps going; the header button gets a green dot while anything runs. Closing a tab ends that shell; archiving the session ends them all.</p>
+        <code class="spec">Ctrl J / ⌘ J toggles · shells live until tab close, archive or idle timeout</code>
+      </li>
+      <li class="note" tabindex="0" data-pin="E">
+        <div class="note-top"><span class="letter">E</span><h3>The shell gets the keyboard</h3><span class="tag v1">First version</span></div>
+        <p>While the terminal has focus, Esc, Ctrl K, Ctrl B and Ctrl [ go to the shell, not Fleet. The status bar says so. Try pressing Esc in the terminal.</p>
+        <code class="spec">Fleet keeps Ctrl J, Ctrl Shift B and the platform copy/paste keys</code>
+      </li>
+      <li class="note" tabindex="0" data-pin="F">
+        <div class="note-top"><span class="letter">F</span><h3>Output survives a reload</h3><span class="tag v1">First version</span></div>
+        <p>Scrollback is saved on the server, so a page reload or a Fleet restart brings it back. Terminal queries are stripped before replay, or the shell prints the answers as junk at the prompt.</p>
+        <code class="spec">~/.weave/terminals/{session}/{terminal}.log · 5,000 lines</code>
+      </li>
+    </ol>
+  </section>
+
+  <section class="block" aria-labelledby="keys-h">
+    <div class="block-head">
+      <h2 id="keys-h">Keys while the terminal has focus</h2>
+      <p>These Fleet shortcuts are also everyday shell keys. The shell wins while it has focus; click the conversation to get them back.</p>
+    </div>
+    <div class="two-col">
+      <div class="keys-wrap">
+        <table class="keys">
+          <thead><tr><th>Key</th><th>Fleet today</th><th>In the terminal</th></tr></thead>
+          <tbody>
+            <tr><td><kbd>Esc</kbd></td><td>Interrupt the session</td><td>Goes to the shell: vim, less, fzf</td></tr>
+            <tr><td><kbd>Ctrl</kbd> <kbd>K</kbd></td><td>Command palette</td><td>Deletes to the end of the line</td></tr>
+            <tr><td><kbd>Ctrl</kbd> <kbd>B</kbd></td><td>Toggle the sidebar</td><td>Back one character, tmux prefix</td></tr>
+            <tr><td><kbd>Ctrl</kbd> <kbd>[</kbd> <kbd>]</kbd></td><td>Previous / next session</td><td><kbd>Ctrl</kbd> <kbd>[</kbd> is Escape in a terminal</td></tr>
+            <tr><td><kbd>Ctrl</kbd> <kbd>C</kbd></td><td>Copy</td><td>Stops the running command. Copy is <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>C</kbd>, or <kbd>⌘</kbd> <kbd>C</kbd> on a Mac</td></tr>
+            <tr><td><kbd>Ctrl</kbd> <kbd>J</kbd></td><td>Not bound</td><td class="stays">Stays with Fleet: show or hide the terminal</td></tr>
+            <tr><td><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>B</kbd></td><td>Toggle the right panel</td><td class="stays">Stays with Fleet</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="ship">
+        <div>
+          <h3>First version</h3>
+          <ul>
+            <li>A shell per terminal tab on the server, in the session's folder: macOS, Linux and Windows</li>
+            <li>A terminal socket of its own, separate from session events and the database</li>
+            <li>xterm.js themed from Fleet's tokens, in the drawer shown here</li>
+            <li>Saved scrollback, Fleet's own variables kept out of the shell, and the socket's Origin checked</li>
+            <li>Select lines and add them to your message</li>
+            <li>Turned off when Fleet is hosted for several people</li>
+          </ul>
+        </div>
+        <div class="later">
+          <h3>Later</h3>
+          <ul>
+            <li>Tabs named after the running command, and a prompt before closing one</li>
+            <li>Split terminals side by side</li>
+            <li>Dev-server addresses opening in a browser canvas</li>
+            <li>Terminals the agent starts itself, for dev servers and watch mode</li>
+          </ul>
+        </div>
+        <div class="callout">
+          <strong>One decision for you</strong>
+          <p>Terminals belong to a session here: switching sessions switches the drawer, and each shell starts in that session's worktree. The alternative is one set of terminals per project, shared by its sessions. Per session matches t3code and keeps worktrees apart.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <p class="foot">The shell and tokens match Fleet 0.18.0 (client/src/assets/main.css on main). The drawer follows t3code's ThreadTerminalDrawer.tsx and apps/server/src/terminal/Manager.ts. The session, files and terminal output are examples, and the shell only knows a few commands: ls, git status, pwd, clear, npx vitest run sessions, npm run dev:mock.</p>
+</div>
+<script>
+(() => {
+  const ICON = {
+    weave: '<path d="M2 5l4.5 14L12 8l5.5 11L22 5"/>',
+    grid: '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
+    message: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    messageplus: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 7v6"/><path d="M9 10h6"/>',
+    puzzle: '<path d="M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z"/>',
+    zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
+    chart: '<path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+    settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+    plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+    search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+    chevron: '<path d="m6 9 6 6 6-6"/>',
+    chevronup: '<path d="m18 15-6-6-6 6"/>',
+    folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+    folderplus: '<path d="M12 10v6"/><path d="M9 13h6"/><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+    filetext: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+    compare: '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/>',
+    terminal: '<polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/>',
+    panelclose: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m8 9 3 3-3 3"/>',
+    arrowup: '<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>',
+    bot: '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    sparkle: '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>',
+    paperclip: '<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
+    maximize: '<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" x2="14" y1="3" y2="10"/><line x1="3" x2="10" y1="21" y2="14"/>',
+    fork: '<circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9"/><path d="M12 12v3"/>',
+    pencil: '<path d="M21.17 6.81a1 1 0 0 0-3.99-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/>',
+    archive: '<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
+    eraser: '<path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/>',
+    scan: '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/>',
+    copy: '<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>'
+  };
+  const icon = (name, size = 16) =>
+    `<svg class="ic" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[name] || ''}</svg>`;
+  const hydrate = (root = document) => root.querySelectorAll('[data-icon]').forEach((el) => {
+    if (el.dataset.done) return;
+    el.dataset.done = '1';
+    el.insertAdjacentHTML('afterbegin', icon(el.dataset.icon, el.dataset.size || 16));
+  });
+  hydrate();
+
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  /* ── example terminal output (lines are HTML, one per terminal row) ── */
+  const PROMPT = '<span class="b bold">client</span> <span class="m">feat/session-push</span> <span class="g">❯</span> ';
+  const cmd = (text) => PROMPT + esc(text);
+
+  const SHELL = [
+    cmd('git status --short'),
+    ' <span class="y">M</span> src/composables/use-sessions.ts',
+    ' <span class="y">M</span> src/stores/sessions.ts',
+    '<span class="r">??</span> src/composables/use-session-push.ts',
+    cmd('ls src/composables | head -4'),
+    'use-content-panel.ts',
+    'use-session-push.ts',
+    'use-session-stream.ts',
+    'use-sessions.ts'
+  ];
+
+  const TEST_OUTPUT = [
+    '',
+    ' <span class="c bold">RUN</span>  <span class="c">v4.1.2</span> <span class="d">~/source/weave-fleet/client</span>',
+    '',
+    ' <span class="g">✓</span> src/stores/__tests__/sessions.test.ts <span class="d">(9 tests)</span> <span class="d">41ms</span>',
+    ' <span class="y">❯</span> src/composables/__tests__/use-sessions.test.ts <span class="d">(14 tests |</span> <span class="r">1 failed</span><span class="d">)</span> <span class="d">88ms</span>',
+    '   <span class="r">×</span> drops the 15s poll once the hub pushes <span class="d">12ms</span>',
+    '',
+    ' <span class="inv-r bold">FAIL</span> <span class="d">use-sessions.test.ts &gt;</span> drops the 15s poll once the hub pushes',
+    '<span class="r bold">AssertionError</span><span class="r">: expected "fetch" to be called 1 times, but got 2 times</span>',
+    ' <span class="c">❯</span> <span class="d">src/composables/__tests__/</span>use-sessions.test.ts<span class="d">:212:31</span>',
+    '',
+    ' <span class="d">Test Files</span>  <span class="r bold">1 failed</span> <span class="d">|</span> <span class="g">1 passed</span> <span class="d">(2)</span>',
+    '      <span class="d">Tests</span>  <span class="r bold">1 failed</span> <span class="d">|</span> <span class="g">22 passed</span> <span class="d">(23)</span>',
+    '   <span class="d">Duration</span>  1.94s'
+  ];
+  /* lines 9–11 of the test run: FAIL, the assertion and where it happened */
+  const FAIL_FROM = 9;
+  const FAIL_TO = 11;
+
+  const DEV_OUTPUT = [
+    '',
+    '<span class="d">&gt; weave-fleet-client@0.14.0 dev:mock</span>',
+    '<span class="d">&gt; vite --port 3002 --mode mock</span>',
+    '',
+    '  <span class="g bold">VITE</span> <span class="g">v8.0.4</span>  <span class="d">ready in</span> <span class="bold">412</span> <span class="d">ms</span>',
+    '',
+    '  <span class="g">➜</span>  <span class="bold">Local</span>:   <span class="c link" data-link="1">http://localhost:3002/</span>',
+    '  <span class="g">➜</span>  <span class="d">Network: use</span> <span class="bold">--host</span> <span class="d">to expose</span>',
+    '  <span class="g">➜</span>  <span class="d">press</span> <span class="bold">h + enter</span> <span class="d">to show help</span>',
+    '<span class="d">10:41:07</span> <span class="c bold">[vite]</span> <span class="g">(client)</span> hmr update <span class="d">/src/composables/use-sessions.ts</span>',
+    '<span class="d">10:41:12</span> <span class="c bold">[vite]</span> <span class="g">(client)</span> hmr update <span class="d">/src/stores/sessions.ts</span> <span class="y">(x2)</span>'
+  ];
+
+  const SCENARIOS = {
+    shell: {
+      caption: 'A shell in the session’s folder. Click it and type: try <b>git status</b>, <b>ls</b> or <b>npx vitest run sessions</b>. The agent can’t see any of this.',
+      terms: () => [{ id: 't1', label: 'zsh', proc: false, lines: SHELL.slice(), input: '' }],
+      active: 't1'
+    },
+    dev: {
+      caption: '<b>npm run dev:mock</b> is running in a second tab, named after the command, with a green dot. Hide the drawer with <b>Ctrl J</b>: the server keeps running, and the terminal button in the header keeps the dot. <b>Ctrl C</b> in the tab stops it.',
+      terms: () => [
+        { id: 't1', label: 'zsh', proc: false, lines: SHELL.slice(), input: '' },
+        { id: 't2', label: 'npm', proc: true, lines: [cmd('npm run dev:mock')].concat(DEV_OUTPUT), input: '' }
+      ],
+      active: 't2'
+    },
+    tests: {
+      caption: 'The test run failed. Select the failure lines, or use <b>Select the failure</b>, and add them to your message. That’s the only way terminal output reaches the agent.',
+      terms: () => [
+        { id: 't1', label: 'zsh', proc: false, lines: [cmd('npx vitest run sessions')].concat(TEST_OUTPUT), input: '' },
+        { id: 't2', label: 'npm', proc: true, lines: [cmd('npm run dev:mock')].concat(DEV_OUTPUT), input: '' }
+      ],
+      active: 't1'
+    }
+  };
+  const frame = $('#frame');
+  const stage = $('#stage');
+  const drawer = $('#drawer');
+  const term = $('#term');
+  const input = $('#cmp-input');
+  const stream = $('#stream');
+  const CHAR_W = 7.22;
+  const ROW_H = 17.4;
+  const DEFAULT_H = 272;
+
+  const state = { scenario: 'shell', terms: [], active: 't1', open: true, focused: false, attached: [], flash: null, closeArm: null, nextId: 3 };
+  const baseStream = stream.innerHTML;
+  const activeTerm = () => state.terms.find((t) => t.id === state.active);
+
+  /* ── scale the 1280×780 frame into the stage ── */
+  let scale = 1;
+  function fit() {
+    scale = stage.clientWidth / 1282;
+    frame.style.transform = `scale(${scale})`;
+    placePins();
+  }
+  new ResizeObserver(fit).observe(stage);
+
+  /* ── terminal tabs + output ── */
+  function renderTabs() {
+    $('#ttabs').innerHTML = state.terms.map((t) => {
+      const on = t.id === state.active;
+      return `<button type="button" class="ttab${t.proc ? ' running' : ''}" role="tab" aria-selected="${on}" data-term="${t.id}">${icon('terminal', 13)}<span>${esc(t.label)}</span>${t.proc ? '<span class="proc" aria-label="running"></span>' : ''}<span class="x" role="button" aria-label="Close ${esc(t.label)}" data-close="${t.id}">${icon('x', 11)}</span></button>`;
+    }).join('');
+    $('#run-dot').hidden = !state.terms.some((t) => t.proc);
+  }
+
+  function renderTerm() {
+    const t = activeTerm();
+    if (!t) { term.innerHTML = ''; return; }
+    const rows = t.lines.map((html, i) => `<div class="tl" data-n="${i + 1}">${html || ' '}</div>`);
+    const last = t.proc ? '<span class="cur"></span>' : `${PROMPT}${esc(t.input)}<span class="cur"></span>`;
+    rows.push(`<div class="tl" data-n="${t.lines.length + 1}">${last}</div>`);
+    term.innerHTML = rows.join('');
+    term.scrollTop = term.scrollHeight;
+    hidePop();
+  }
+
+  function renderMeta() {
+    const h = drawer.getBoundingClientRect().height / scale;
+    const cols = Math.max(20, Math.floor((term.clientWidth - 28) / CHAR_W));
+    const rows = Math.max(3, Math.floor((h - 36 - 18) / ROW_H));
+    $('#cwd').textContent = '~/source/weave-fleet/client';
+    $('#size').textContent = `${cols}×${rows}`;
+  }
+
+  function renderDrawer() {
+    drawer.classList.toggle('closed', !state.open);
+    drawer.classList.toggle('focused', state.focused);
+    $('#term-toggle').setAttribute('aria-pressed', String(state.open));
+    $('#toggle-label').textContent = state.open ? 'Hide terminal' : 'Show terminal';
+    renderMeta();
+  }
+
+  /* ── status bar: who has the keyboard ── */
+  const k = (s) => `<span class="k">${s}</span>`;
+  function renderStatus() {
+    let left;
+    if (state.flash) {
+      left = `<span class="flash">${state.flash}</span>`;
+    } else if (state.focused) {
+      left = `<span class="owner">Terminal has the keyboard</span><span class="hint">${k('Esc')} ${k('Ctrl K')} ${k('Ctrl B')} go to the shell</span><span class="hint">${k('Ctrl J')} Hide terminal</span><span class="hint">${k('Ctrl Shift C')} Copy</span>`;
+    } else {
+      left = `<span class="hint">${k('Ctrl K')} Command Palette</span><span class="hint">${k('Ctrl [ ]')} Prev / Next Session</span><span class="hint">${k('Ctrl B')} Sidebar</span><span class="hint">${k('Esc')} Cancel</span><span class="hint">${k('Ctrl J')} Terminal</span>`;
+    }
+    $('#statusbar').innerHTML = `${left}<span class="sb-fill"></span><span class="sb-state"><i></i>IDLE</span><span>opencode</span><span>18.4k tokens</span>`;
+  }
+  let flashTimer;
+  function flash(text) {
+    state.flash = text;
+    renderStatus();
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => { state.flash = null; renderStatus(); }, 3200);
+  }
+
+  /* ── a tiny pretend shell ── */
+  function run(t, line) {
+    const text = line.trim();
+    t.lines.push(cmd(line));
+    if (!text) return;
+    if (text === 'clear') { t.lines = []; return; }
+    if (text === 'ls') { t.lines.push('<span class="b bold">node_modules</span>  package.json  <span class="b bold">public</span>  <span class="b bold">src</span>  vite.config.ts  vitest.config.ts'); return; }
+    if (text === 'pwd') { t.lines.push('/home/dev/source/weave-fleet/client'); return; }
+    if (/^git status/.test(text)) { t.lines.push(...SHELL.slice(1, 4)); return; }
+    if (/^(npx vitest|npm (run )?test)/.test(text)) { t.lines.push(...TEST_OUTPUT); return; }
+    if (/^npm run dev/.test(text)) {
+      t.proc = true;
+      t.label = 'npm';
+      t.lines.push(...DEV_OUTPUT.slice(0, 9));
+      renderTabs();
+      return;
+    }
+    if (/^echo( |$)/.test(text)) { t.lines.push(esc(text.slice(5))); return; }
+    t.lines.push(`zsh: command not found: ${esc(text.split(/\s+/)[0])}`);
+  }
+
+  function stopProcess(t) {
+    t.lines.push('^C');
+    t.proc = false;
+    t.label = t.id === 't1' ? 'zsh' : 'zsh ' + t.id.slice(1);
+    renderTabs();
+  }
+
+  term.addEventListener('keydown', (e) => {
+    const t = activeTerm();
+    if (!t) return;
+    const ctrl = e.ctrlKey || e.metaKey;
+    const key = e.key.toLowerCase();
+    if (ctrl && key === 'j') return; // Fleet keeps this one
+    if (e.key === 'Tab') return;      // let focus leave in the mockup
+    if (e.key === 'Escape') { e.preventDefault(); flash('Esc went to the shell. Click the conversation, then Esc interrupts the session.'); return; }
+    if (ctrl && e.shiftKey && key === 'c') { e.preventDefault(); flash('Copied the selection.'); return; }
+    if (ctrl && key === 'k') { e.preventDefault(); t.input = ''; flash('Ctrl K deleted to the end of the line. The command palette opens when the terminal isn’t focused.'); renderTerm(); return; }
+    if (ctrl && key === 'b') { e.preventDefault(); flash('Ctrl B went to the shell (back one character). The sidebar toggles when the terminal isn’t focused.'); return; }
+    if (ctrl && key === 'c') {
+      e.preventDefault();
+      if (t.proc) stopProcess(t);
+      else { t.lines.push(cmd(t.input) + '^C'); t.input = ''; }
+      renderTerm();
+      return;
+    }
+    if (ctrl && key === 'l') { e.preventDefault(); t.lines = []; renderTerm(); return; }
+    if (t.proc) { if (!ctrl && e.key.length === 1) e.preventDefault(); return; }
+    if (e.key === 'Enter') { e.preventDefault(); run(t, t.input); t.input = ''; renderTerm(); return; }
+    if (e.key === 'Backspace') { e.preventDefault(); t.input = t.input.slice(0, -1); renderTerm(); return; }
+    if (!ctrl && !e.altKey && e.key.length === 1) { e.preventDefault(); t.input += e.key; renderTerm(); }
+  });
+  term.addEventListener('paste', (e) => {
+    const t = activeTerm();
+    if (!t || t.proc) return;
+    e.preventDefault();
+    t.input += (e.clipboardData.getData('text') || '').split('\n')[0];
+    renderTerm();
+  });
+  term.addEventListener('focus', () => { state.focused = true; renderDrawer(); renderStatus(); });
+  term.addEventListener('blur', () => { state.focused = false; renderDrawer(); renderStatus(); });
+  term.addEventListener('click', (e) => {
+    if (e.target.closest('[data-link]')) flash('Links open in your browser. With a browser canvas later, they’d open beside the chat.');
+  });
+
+  /* ── select lines → add them to the message ── */
+  let pop = null;
+  let picked = null;
+  function hidePop() { if (pop) { pop.remove(); pop = null; } picked = null; }
+  function lineOf(node) {
+    const el = (node.nodeType === 1 ? node : node.parentElement)?.closest('.tl');
+    return el && term.contains(el) ? el : null;
+  }
+  function onSelection() {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) { hidePop(); return; }
+    const a = lineOf(sel.anchorNode);
+    const b = lineOf(sel.focusNode);
+    if (!a || !b) { hidePop(); return; }
+    const from = Math.min(+a.dataset.n, +b.dataset.n);
+    const to = Math.max(+a.dataset.n, +b.dataset.n);
+    const t = activeTerm();
+    const text = $$('.tl', term).filter((el) => +el.dataset.n >= from && +el.dataset.n <= to).map((el) => el.textContent.replace(/\s+$/, '')).join('\n');
+    if (!text.trim()) { hidePop(); return; }
+    picked = { label: t.label, from, to, text };
+    const r = sel.getRangeAt(0).getBoundingClientRect();
+    const d = drawer.getBoundingClientRect();
+    const x = Math.min(Math.max((r.left + r.width / 2 - d.left) / scale, 150), d.width / scale - 150);
+    const y = Math.max((r.top - d.top) / scale, 44);
+    if (pop) pop.remove();
+    pop = document.createElement('div');
+    pop.className = 'attach-pop';
+    pop.style.left = x + 'px';
+    pop.style.top = y + 'px';
+    const range = from === to ? `line ${from}` : `lines ${from}–${to}`;
+    pop.innerHTML = `<button type="button" class="ask" data-attach="1">${icon('messageplus', 13)}Add ${range} to message</button><button type="button" data-copy="1">${icon('copy', 13)}Copy</button>`;
+    pop.addEventListener('mousedown', (ev) => ev.preventDefault());
+    drawer.appendChild(pop);
+  }
+  term.addEventListener('mouseup', () => setTimeout(onSelection, 0));
+  term.addEventListener('keyup', (e) => { if (e.shiftKey) onSelection(); });
+  term.addEventListener('scroll', hidePop);
+
+  function attach() {
+    if (!picked) return;
+    state.attached.push(picked);
+    window.getSelection()?.removeAllRanges();
+    hidePop();
+    renderChips();
+    input.placeholder = 'Ask about the attached lines…';
+    input.focus();
+  }
+  function renderChips() {
+    $('#cmp-ctx').innerHTML = state.attached.map((a, i) =>
+      `<span class="ctx-chip">${icon('terminal', 12)}${esc(a.label)} <span class="ln">${a.from === a.to ? 'line ' + a.from : 'lines ' + a.from + '–' + a.to}</span><button type="button" aria-label="Remove" data-unattach="${i}">${icon('x', 11)}</button></span>`).join('');
+    updateSend();
+  }
+  function updateSend() { $('#send').disabled = !input.value.trim() && !state.attached.length; }
+  input.addEventListener('input', updateSend);
+  input.addEventListener('focus', () => $('#cmp-box').classList.add('focus'));
+  input.addEventListener('blur', () => $('#cmp-box').classList.remove('focus'));
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+
+  function send() {
+    if ($('#send').disabled) return;
+    const quotes = state.attached.map((a) =>
+      `<pre class="quote"><span class="qh">${esc(a.label)} · ${a.from === a.to ? 'line ' + a.from : 'lines ' + a.from + '–' + a.to}</span>${esc(a.text)}</pre>`).join('');
+    const text = input.value.trim();
+    const failure = state.attached.some((a) => a.text.includes('called 1 times'));
+    stream.insertAdjacentHTML('beforeend', `<div class="msg user enter">${quotes}${text ? `<div class="bubble">${esc(text)}</div>` : ''}</div>`);
+    state.attached = [];
+    input.value = '';
+    input.placeholder = 'Type a message…';
+    renderChips();
+    stream.scrollTop = stream.scrollHeight;
+    if (failure) {
+      setTimeout(() => {
+        stream.insertAdjacentHTML('beforeend', '<div class="msg assistant enter"><p><code>startFallback()</code> runs on mount, before the hub connects, so the first fetch comes from the fallback timer and the second from the push. I’ll start the fallback only on disconnect.</p></div>');
+        stream.scrollTop = stream.scrollHeight;
+      }, reduce.matches ? 0 : 700);
+    }
+  }
+
+  function selectFailure() {
+    state.open = true;
+    state.active = 't1';
+    renderTabs(); renderTerm(); renderDrawer();
+    const a = $(`.tl[data-n="${FAIL_FROM}"]`, term);
+    const b = $(`.tl[data-n="${FAIL_TO}"]`, term);
+    if (!a || !b) return;
+    a.scrollIntoView({ block: 'nearest' });
+    const range = document.createRange();
+    range.setStartBefore(a.firstChild || a);
+    range.setEndAfter(b.lastChild || b);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    onSelection();
+  }
+
+  /* ── drawer: toggle and resize ── */
+  function toggleDrawer(open = !state.open) {
+    state.open = open;
+    hidePop();
+    renderDrawer();
+    if (open) term.focus();
+    else if (document.activeElement === term) term.blur();
+    setTimeout(placePins, reduce.matches ? 0 : 220);
+  }
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'j') { e.preventDefault(); toggleDrawer(); }
+  });
+
+  const grip = $('#grip');
+  grip.addEventListener('pointerdown', (e) => {
+    const startY = e.clientY;
+    const startH = drawer.getBoundingClientRect().height / scale;
+    const maxH = Math.round($('.sheet').getBoundingClientRect().height / scale * 0.6);
+    drawer.classList.add('dragging');
+    grip.setPointerCapture(e.pointerId);
+    const move = (ev) => {
+      const h = Math.min(Math.max(startH - (ev.clientY - startY) / scale, 140), maxH);
+      frame.style.setProperty('--drawer-h', Math.round(h) + 'px');
+      renderMeta();
+      hidePop();
+    };
+    const up = () => {
+      drawer.classList.remove('dragging');
+      grip.removeEventListener('pointermove', move);
+      grip.removeEventListener('pointerup', up);
+      placePins();
+    };
+    grip.addEventListener('pointermove', move);
+    grip.addEventListener('pointerup', up);
+  });
+  grip.addEventListener('dblclick', () => { frame.style.setProperty('--drawer-h', DEFAULT_H + 'px'); setTimeout(() => { renderMeta(); placePins(); }, 220); });
+
+  /* ── clicks ── */
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('button, [data-close]');
+    if (!b) return;
+    const d = b.dataset;
+    if (d.scenario) { setScenario(d.scenario); return; }
+    if (b.id === 'select-fail') { selectFailure(); return; }
+    if (b.id === 'toggle-drawer' || b.id === 'term-toggle' || b.id === 'hide-drawer') { toggleDrawer(); return; }
+    if (d.attach) { attach(); return; }
+    if (d.copy) { window.getSelection()?.removeAllRanges(); hidePop(); flash('Copied the selection.'); return; }
+    if (d.unattach !== undefined) { state.attached.splice(+d.unattach, 1); renderChips(); return; }
+    if (b.id === 'send') { send(); return; }
+    if (d.close) {
+      e.stopPropagation();
+      const t = state.terms.find((x) => x.id === d.close);
+      if (t.proc && state.closeArm !== t.id) {
+        state.closeArm = t.id;
+        flash(`${t.label} is still running. Click × again to stop it and close the tab.`);
+        setTimeout(() => { if (state.closeArm === t.id) state.closeArm = null; }, 3200);
+        return;
+      }
+      state.closeArm = null;
+      state.terms = state.terms.filter((x) => x.id !== t.id);
+      if (!state.terms.length) { state.open = false; state.terms = [{ id: 't' + state.nextId++, label: 'zsh', proc: false, lines: [], input: '' }]; }
+      if (state.active === t.id) state.active = state.terms[state.terms.length - 1].id;
+      renderTabs(); renderTerm(); renderDrawer(); placePins();
+      return;
+    }
+    if (d.term) { state.active = d.term; renderTabs(); renderTerm(); term.focus(); placePins(); return; }
+    if (b.id === 'new-term') {
+      if (state.terms.length >= 4) { flash('Four terminals per session in this mockup.'); return; }
+      const n = state.nextId++;
+      state.terms.push({ id: 't' + n, label: 'zsh ' + (state.terms.length + 1), proc: false, lines: [], input: '' });
+      state.active = 't' + n;
+      renderTabs(); renderTerm(); term.focus(); placePins();
+    }
+  });
+
+  /* ── scenarios ── */
+  function setScenario(name) {
+    const sc = SCENARIOS[name];
+    state.scenario = name;
+    state.terms = sc.terms();
+    state.active = sc.active;
+    state.attached = [];
+    state.open = true;
+    state.nextId = 3;
+    stream.innerHTML = baseStream;
+    hydrate(stream);
+    input.value = '';
+    input.placeholder = 'Type a message…';
+    $$('[data-scenario]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.scenario === name)));
+    $('#select-fail').hidden = name !== 'tests';
+    $('#caption-text').innerHTML = sc.caption;
+    renderTabs(); renderTerm(); renderChips(); renderDrawer(); renderStatus();
+    setTimeout(placePins, reduce.matches ? 0 : 220);
+  }
+
+  /* ── pins ── */
+  const PINS = [
+    { id: 'A', el: () => drawer, at: (r) => [r.left + r.width * 0.3, r.top] },
+    { id: 'B', el: () => $('.ttab.running') || $('.ttab[aria-selected="true"]'), at: (r) => [r.right - 2, r.top + 2] },
+    { id: 'C', el: () => $('#cmp-box'), at: (r) => [r.left, r.top] },
+    { id: 'D', el: () => $('#term-toggle'), at: (r) => [r.left, r.bottom - 2] },
+    { id: 'E', el: () => $('#statusbar'), at: (r) => [r.left + 30, r.top - 6] },
+    { id: 'F', el: () => $('#drawer-meta'), at: (r) => [r.left + r.width / 2, r.top - 1] }
+  ];
+  function placePins() {
+    const f = frame.getBoundingClientRect();
+    $('#pins').innerHTML = PINS.map((p) => {
+      const el = p.el();
+      if (!el) return '';
+      const r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) return '';
+      const rel = { left: (r.left - f.left) / scale, top: (r.top - f.top) / scale, right: (r.right - f.left) / scale, bottom: (r.bottom - f.top) / scale, width: r.width / scale, height: r.height / scale };
+      const [x, y] = p.at(rel);
+      return `<span class="pin" data-for="${p.id}" style="left:${x}px;top:${y}px">${p.id}</span>`;
+    }).join('');
+  }
+  $('#pins-toggle').addEventListener('change', (e) => frame.classList.toggle('no-pins', !e.target.checked));
+  $$('.note').forEach((n) => {
+    const on = () => {
+      const p = PINS.find((x) => x.id === n.dataset.pin);
+      p.el()?.classList.add('hl');
+      $(`.pin[data-for="${p.id}"]`)?.classList.add('on');
+    };
+    const off = () => { $$('.hl', frame).forEach((x) => x.classList.remove('hl')); $$('.pin.on').forEach((x) => x.classList.remove('on')); };
+    n.addEventListener('mouseenter', on); n.addEventListener('focus', on);
+    n.addEventListener('mouseleave', off); n.addEventListener('blur', off);
+  });
+
+  setScenario('shell');
+  fit();
+})();
+</script>

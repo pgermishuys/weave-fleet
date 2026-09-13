@@ -260,6 +260,14 @@ export interface CanvasUpdatedPayload {
   summary: string;
 }
 
+/** A terminal tab in a session's drawer. `exitCode` is there only when the shell ended on its own. */
+export interface TerminalPayload {
+  sessionId: string;
+  terminalId: string;
+  title: string;
+  exitCode?: number | null;
+}
+
 export interface CanvasRefPayload {
   sessionId: string;
   canvasId: string;
@@ -368,6 +376,24 @@ export interface CanvasFocused extends EventCursorMetadata {
 
 export type CanvasEvent = CanvasUpdated | CanvasClosed | CanvasFocused;
 
+/** A terminal tab was added to the session's drawer. Not persisted. */
+export interface TerminalOpened extends EventCursorMetadata {
+  type: "terminal.opened";
+  payload: TerminalPayload;
+}
+
+/** A terminal tab went away: closed by someone, or its shell ended. Not persisted. */
+export interface TerminalClosed extends EventCursorMetadata {
+  type: "terminal.closed";
+  payload: TerminalPayload;
+}
+
+export type TerminalEvent = TerminalOpened | TerminalClosed;
+
+export function isTerminalEvent(event: DomainEvent): event is TerminalEvent {
+  return event.type === "terminal.opened" || event.type === "terminal.closed";
+}
+
 export function isCanvasEvent(event: DomainEvent): event is CanvasEvent {
   return event.type === "canvas.updated" || event.type === "canvas.closed" || event.type === "canvas.focused";
 }
@@ -392,4 +418,6 @@ export type DomainEvent =
   | FilesChanged
   | CanvasUpdated
   | CanvasClosed
-  | CanvasFocused;
+  | CanvasFocused
+  | TerminalOpened
+  | TerminalClosed;

@@ -10,6 +10,7 @@ using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.SessionSources;
+using WeaveFleet.Application.Terminals;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.DTOs;
 using WeaveFleet.Domain.Entities;
@@ -46,7 +47,8 @@ public sealed partial class SessionOrchestrator(
     SessionActivityTracker sessionActivityTracker,
     ILogger<SessionOrchestrator> logger,
     SessionActivityWriteService? sessionActivityWriteService = null,
-    GitDiffService? gitDiffService = null) : ISessionActivator
+    GitDiffService? gitDiffService = null,
+    ISessionTerminalCleanup? sessionTerminals = null) : ISessionActivator
 {
     private readonly DelegationService _delegationService = delegationService;
     private readonly GitDiffService _gitDiffService = gitDiffService ?? new GitDiffService();
@@ -1328,7 +1330,24 @@ public sealed partial class SessionOrchestrator(
                 ct);
         }
 
+        await EndTerminalsAsync(id, ct);
         return Unit.Value;
+    }
+
+    /// <summary>Ends the session's terminals and deletes their scrollback. Best effort: it never fails the caller.</summary>
+    private async Task EndTerminalsAsync(string sessionId, CancellationToken ct)
+    {
+        if (sessionTerminals is null)
+            return;
+
+        try
+        {
+            await sessionTerminals.EndSessionAsync(sessionId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogTerminalCleanupFailed(ex, sessionId);
+        }
     }
 
 #pragma warning disable CA1822 // Interface method cannot be static
@@ -1356,6 +1375,9 @@ public sealed partial class SessionOrchestrator(
             await SafeDeleteAsync(liveInstance, ct);
             instanceTracker.Remove(session.InstanceId);
         }
+
+        // End the session's terminals before its folder goes: a shell inside a worktree keeps it open on Windows.
+        await EndTerminalsAsync(id, ct);
 
         // Clean up workspace directory (worktree/clone) — best effort, must not block deletion
         try
@@ -1963,6 +1985,9 @@ public sealed partial class SessionOrchestrator(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to stop instance {InstanceId}")]
     private partial void LogStopFailed(Exception ex, string instanceId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to end the terminals of session {SessionId}")]
+    private partial void LogTerminalCleanupFailed(Exception ex, string sessionId);
 
     [LoggerMessage(Level = LogLevel.Error,
         Message = "Failed to retrieve messages for session {SessionId} — returning error result")]
