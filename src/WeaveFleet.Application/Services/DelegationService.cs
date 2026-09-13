@@ -255,7 +255,7 @@ public sealed class DelegationService(
 
         var capabilities = session is not null && capabilitiesResolver is not null
             ? capabilitiesResolver.Resolve(session)
-            : SessionCapabilitiesResolver.Resolve(null, null, null, activityStatus, isLive: false);
+            : SessionCapabilitiesResolver.Resolve(null, null, activityStatus, isLive: false);
 
         return JsonSerializer.SerializeToElement(
             new ActivityStatusBroadcastPayload(sessionId, activityStatus, capabilities),

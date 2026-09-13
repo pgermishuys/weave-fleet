@@ -74,7 +74,7 @@ internal static class SessionPropagation
 
         var capabilities = session is not null
             ? capabilitiesResolver.Resolve(session)
-            : SessionCapabilitiesResolver.Resolve(null, null, null, activityStatus, isLive: false);
+            : SessionCapabilitiesResolver.Resolve(null, null, activityStatus, isLive: false);
 
         return InfrastructureJsonContext.SerializeActivityStatus(sessionId, activityStatus, capabilities);
     }

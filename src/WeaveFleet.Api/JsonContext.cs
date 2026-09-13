@@ -138,7 +138,6 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(CreateSessionApiResponse))]
 [JsonSerializable(typeof(PreviewSessionResponse))]
 [JsonSerializable(typeof(SessionPreviewEnvelope))]
-[JsonSerializable(typeof(ResumeSessionApiResponse))]
 [JsonSerializable(typeof(ForkSessionApiResponse))]
 [JsonSerializable(typeof(HarnessMessage))]
 [JsonSerializable(typeof(IReadOnlyList<HarnessMessage>))]

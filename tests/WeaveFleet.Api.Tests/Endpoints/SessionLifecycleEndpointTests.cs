@@ -14,16 +14,6 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 public sealed class SessionLifecycleEndpointTests
 {
     [Fact]
-    public async Task StopSession_WhenSuccessful_ReturnsNoContent()
-    {
-        var service = BuildSessionService(MakeSession("session-1", "active", "active"));
-
-        var result = await InvokeStopSession("session-1", service);
-
-        result.ShouldBeOfType<NoContent>();
-    }
-
-    [Fact]
     public async Task UpdateRetention_WhenArchiving_ReturnsNoContent()
     {
         var service = BuildSessionService(MakeSession("session-1", "stopped", "active"));
@@ -102,14 +92,6 @@ public sealed class SessionLifecycleEndpointTests
         call.Statuses.ShouldBeNull();
         call.ProjectId.ShouldBeNull();
         call.RetentionStatuses.ShouldBeNull();
-    }
-
-    private static async Task<IResult> InvokeStopSession(string id, SessionService sessionService)
-    {
-        var result = await sessionService.StopSessionAsync(id);
-        return result.Match<IResult>(
-            _ => TypedResults.NoContent(),
-            error => ToApiResult(error));
     }
 
     private static async Task<IResult> InvokeUpdateRetention(string id, UpdateSessionRetentionRequest request, SessionService sessionService)

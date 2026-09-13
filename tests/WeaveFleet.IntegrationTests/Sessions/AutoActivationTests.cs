@@ -39,8 +39,8 @@ public sealed class AutoActivationTests
 
         var sessionId = createResult.Value.Session.Id;
         await builder.SessionRepository.UpdateResumeTokenAsync(sessionId, "oc-auto-resume");
-        var stopResult = await sut.StopSessionAsync(sessionId, CancellationToken.None);
-        stopResult.IsSuccess.ShouldBeTrue();
+        tracker.Remove(createResult.Value.InstanceId);
+        await builder.SessionRepository.UpdateStatusAsync(sessionId, "stopped", DateTime.UtcNow.ToString("O"));
 
         var resumedHarness = new FakeHarnessSession("inst-resumed") { ResumeToken = "oc-auto-resume" };
         runtime.DefaultSession = resumedHarness;
@@ -134,7 +134,7 @@ public sealed class AutoActivationTests
 
     [Fact]
     [Trait("Category", "Integration")]
-    public async Task manual_stopped_session_prompt_returns_instance_not_found_error()
+    public async Task manual_session_stopped_by_fleet_restart_auto_activates_on_prompt()
     {
         using var directory = new TempDirectory();
         var builder = CreateManualBuilder();
@@ -153,18 +153,19 @@ public sealed class AutoActivationTests
 
         var sessionId = createResult.Value.Session.Id;
         await builder.SessionRepository.UpdateResumeTokenAsync(sessionId, "manual-resume");
-        var stopResult = await sut.StopSessionAsync(sessionId, CancellationToken.None);
-        stopResult.IsSuccess.ShouldBeTrue();
+        tracker.Remove(createResult.Value.InstanceId);
+        (await builder.SessionRepository.MarkAllNonTerminalStoppedAsync(DateTime.UtcNow.ToString("O"))).ShouldBe(1);
 
         var resumedSession = new FakeHarnessSession("inst-manual-resumed") { ResumeToken = "manual-resume" };
         runtime.DefaultSession = resumedSession;
         var promptResult = await sut.PromptSessionAsync(sessionId, "hello manual", options: null, CancellationToken.None);
 
-        promptResult.IsFailure.ShouldBeTrue();
-        promptResult.Error.Code.ShouldBe("Instance.NotFound");
-        runtime.ResumeCalls.ShouldBeEmpty();
-        resumedSession.SendPromptCalls.ShouldBeEmpty();
-        tracker.Get("inst-manual-resumed").ShouldBeNull();
+        promptResult.IsSuccess.ShouldBeTrue();
+        runtime.ResumeCalls.Count.ShouldBe(1);
+        runtime.ResumeCalls[0].ResumeToken.ShouldBe("manual-resume");
+        resumedSession.SendPromptCalls.Count.ShouldBe(1);
+        resumedSession.SendPromptCalls[0].Text.ShouldBe("hello manual");
+        tracker.Get("inst-manual-resumed").ShouldBeSameAs(resumedSession);
     }
 
     [Fact]

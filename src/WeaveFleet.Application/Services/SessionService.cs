@@ -35,16 +35,6 @@ public sealed class SessionService(
         return Result.Success(sessions);
     }
 
-    public async Task<Result<Unit>> StopSessionAsync(string id)
-    {
-        SetSessionTag(id);
-        var result = await sessionOrchestrator.StopSessionAsync(id);
-        if (result.IsFailure)
-            return result.Error;
-
-        return Unit.Value;
-    }
-
     public async Task<Result<Unit>> UpdateRetentionAsync(string id, string retentionStatus)
     {
         SetSessionTag(id);

@@ -149,14 +149,13 @@ internal sealed partial class InProcessFanOutService : BackgroundService
 
         if (session is null)
         {
-            return SessionCapabilitiesResolver.Resolve(null, null, null, activityStatus, isLive: false);
+            return SessionCapabilitiesResolver.Resolve(null, null, activityStatus, isLive: false);
         }
 
         // Use the parsed activityStatus from the event (not the tracker) to compute capabilities
         // for this specific broadcast. The tracker may not yet reflect this status change.
         var isLive = instanceTracker.Get(session.InstanceId) is not null;
         return SessionCapabilitiesResolver.Resolve(
-            session.RuntimeMode,
             session.LifecycleStatus,
             session.RetentionStatus,
             activityStatus ?? "idle",

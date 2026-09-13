@@ -547,6 +547,49 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task prompt_session_async_when_manual_session_is_stopped_resumes_and_sends_prompt()
+    {
+        var runtime = _builder.RegisterHarness("claude-code", "Claude Code", new HarnessCapabilities { SupportsResume = true });
+        await using var resumedSession = new FakeHarnessSession("inst-manual-resumed");
+        runtime.DefaultSession = resumedSession;
+        _builder.WorkspaceRepository.Seed(new Workspace
+        {
+            Id = "workspace-manual",
+            Directory = "/tmp/manual-session",
+            IsolationStrategy = "existing",
+            CreatedAt = "2026-01-01",
+            UserId = "user-1"
+        });
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "s-manual",
+            WorkspaceId = "workspace-manual",
+            InstanceId = "inst-manual-stopped",
+            Title = "Manual",
+            Status = "stopped",
+            Directory = "/tmp/manual-session",
+            CreatedAt = "2026-01-01",
+            RetentionStatus = "active",
+            HarnessType = "claude-code",
+            RuntimeMode = "manual",
+            HarnessResumeToken = "resume-token-manual",
+            UserId = "user-1"
+        });
+        var sut = BuildSutWithTracker();
+
+        var result = await sut.PromptSessionAsync("s-manual", "hello");
+
+        result.IsSuccess.ShouldBeTrue();
+        runtime.ResumeCalls.Count.ShouldBe(1);
+        runtime.ResumeCalls[0].ResumeToken.ShouldBe("resume-token-manual");
+        resumedSession.SendPromptCalls.Count.ShouldBe(1);
+        var stored = await _builder.SessionRepository.GetByIdAsync("s-manual");
+        stored.ShouldNotBeNull();
+        stored.InstanceId.ShouldBe("inst-manual-resumed");
+        stored.LifecycleStatus.ShouldBe("running");
+    }
+
+    [Fact]
     public async Task prompt_session_async_when_automatic_activation_is_concurrent_resumes_once_and_both_prompts_succeed()
     {
         var runtime = _builder.RegisterHarness("opencode", "OpenCode", new HarnessCapabilities { SupportsResume = true });
@@ -991,161 +1034,6 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task ResumeSessionAsync_UsesStoredHarnessType()
-    {
-        var session = new Session
-        {
-            Id = "s-resume",
-            InstanceId = "inst-old",
-            WorkspaceId = "ws-1",
-            HarnessType = "claude-code",
-            Title = "T",
-            Status = "active",
-            Directory = "/tmp",
-            CreatedAt = "2026-01-01"
-        };
-        _builder.SessionRepository.Seed(session);
-        _builder.WorkspaceRepository.Seed(new Domain.Entities.Workspace
-        {
-            Id = "ws-1",
-            Directory = "/tmp",
-            CreatedAt = "2026-01-01"
-        });
-        var runtime = _builder.RegisterHarness("claude-code", "Claude Code", new HarnessCapabilities { SupportsResume = false });
-        runtime.DefaultSession = _defaultSession;
-
-        var result = await _sut.ResumeSessionAsync("s-resume");
-
-        result.IsSuccess.ShouldBeTrue();
-        _builder.HarnessRegistry.GetByTypeCalls.ShouldContain("claude-code");
-        _builder.HarnessRegistry.GetByTypeCalls.ShouldNotContain("opencode");
-    }
-
-    [Fact]
-    public async Task ResumeSessionAsync_WhenTokenPresent_AndSupportsResume_CallsResumeAsync()
-    {
-        var session = new Session
-        {
-            Id = "s-resume-token",
-            InstanceId = "inst-old",
-            WorkspaceId = "ws-2",
-            HarnessType = "opencode",
-            HarnessResumeToken = "existing-session-token",
-            Title = "T",
-            Status = "active",
-            RetentionStatus = "active",
-            Directory = "/tmp",
-            CreatedAt = "2026-01-01"
-        };
-        _builder.SessionRepository.Seed(session);
-        _builder.WorkspaceRepository.Seed(new Domain.Entities.Workspace
-        {
-            Id = "ws-2",
-            Directory = "/tmp",
-            CreatedAt = "2026-01-01"
-        });
-        var runtime = _builder.RegisterHarness("opencode", "OpenCode", new HarnessCapabilities { SupportsResume = true });
-        runtime.DefaultSession = _defaultSession;
-
-        var result = await _sut.ResumeSessionAsync("s-resume-token");
-
-        result.IsSuccess.ShouldBeTrue();
-        runtime.ResumeCalls.Count.ShouldBe(1);
-        runtime.ResumeCalls[0].ResumeToken.ShouldBe("existing-session-token");
-        runtime.SpawnCalls.ShouldBeEmpty();
-    }
-
-    [Fact]
-    public async Task ResumeSessionAsync_WhenTokenNull_FallsBackToSpawnAsync()
-    {
-        var session = new Session
-        {
-            Id = "s-resume-notok",
-            InstanceId = "inst-old",
-            WorkspaceId = "ws-3",
-            HarnessType = "opencode",
-            HarnessResumeToken = null,
-            Title = "T",
-            Status = "active",
-            RetentionStatus = "active",
-            Directory = "/tmp",
-            CreatedAt = "2026-01-01"
-        };
-        _builder.SessionRepository.Seed(session);
-        _builder.WorkspaceRepository.Seed(new Domain.Entities.Workspace
-        {
-            Id = "ws-3",
-            Directory = "/tmp",
-            CreatedAt = "2026-01-01"
-        });
-        var runtime = _builder.RegisterHarness("opencode", "OpenCode", new HarnessCapabilities { SupportsResume = true });
-        runtime.DefaultSession = _defaultSession;
-
-        var result = await _sut.ResumeSessionAsync("s-resume-notok");
-
-        result.IsSuccess.ShouldBeTrue();
-        runtime.SpawnCalls.Count.ShouldBe(1);
-        runtime.ResumeCalls.ShouldBeEmpty();
-    }
-
-    [Fact]
-    public async Task ResumeSessionAsync_WhenTokenPresent_ButSupportsResumeFalse_FallsBackToSpawnAsync()
-    {
-        var session = new Session
-        {
-            Id = "s-resume-nosupp",
-            InstanceId = "inst-old",
-            WorkspaceId = "ws-4",
-            HarnessType = "opencode",
-            HarnessResumeToken = "some-token",
-            Title = "T",
-            Status = "active",
-            RetentionStatus = "active",
-            Directory = "/tmp",
-            CreatedAt = "2026-01-01"
-        };
-        _builder.SessionRepository.Seed(session);
-        _builder.WorkspaceRepository.Seed(new Domain.Entities.Workspace
-        {
-            Id = "ws-4",
-            Directory = "/tmp",
-            CreatedAt = "2026-01-01"
-        });
-        var runtime = _builder.RegisterHarness("opencode", "OpenCode", new HarnessCapabilities { SupportsResume = false });
-        runtime.DefaultSession = _defaultSession;
-
-        var result = await _sut.ResumeSessionAsync("s-resume-nosupp");
-
-        result.IsSuccess.ShouldBeTrue();
-        runtime.SpawnCalls.Count.ShouldBe(1);
-        runtime.ResumeCalls.ShouldBeEmpty();
-    }
-
-    [Fact]
-    public async Task ResumeSessionAsync_WhenArchived_ReturnsValidationFailure()
-    {
-        var session = new Session
-        {
-            Id = "s-archived-resume",
-            InstanceId = "inst-old",
-            WorkspaceId = "ws-1",
-            HarnessType = "opencode",
-            Title = "Archived",
-            Status = "stopped",
-            RetentionStatus = "archived",
-            Directory = "/tmp",
-            CreatedAt = "2026-01-01"
-        };
-        _builder.SessionRepository.Seed(session);
-
-        var result = await _sut.ResumeSessionAsync("s-archived-resume");
-
-        result.IsFailure.ShouldBeTrue();
-        result.Error.Code.ShouldBe("Validation.Session.RetentionStatus");
-        _builder.HarnessRegistry.GetByTypeCalls.ShouldBeEmpty();
-    }
-
-    [Fact]
     public async Task ForkSessionAsync_InheritsParentHarnessType()
     {
         using var tempDirectory = new TempDirectory();
@@ -1293,30 +1181,6 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
         result.IsSuccess.ShouldBeTrue();
         _builder.DelegationRepository.DeleteByParentSessionIdCalls.ShouldContain("parent-1");
         _builder.SessionRepository.All.ShouldNotContain(s => s.Id == "parent-1");
-    }
-
-    [Fact]
-    public async Task StopSessionAsync_WhenRunning_StopsInstanceAndBroadcastsStopped()
-    {
-        _builder.SessionRepository.Seed(new Session
-        {
-            Id = "s-stop",
-            InstanceId = "inst-1",
-            Title = "Stop",
-            Status = "active",
-            RetentionStatus = "active",
-            Directory = "/tmp",
-            CreatedAt = "2026-01-01"
-        });
-        _tracker.Register("inst-1", _defaultSession);
-        var sut = BuildSutWithTracker();
-
-        var result = await sut.StopSessionAsync("s-stop");
-
-        result.IsSuccess.ShouldBeTrue();
-        _defaultSession.StopCalled.ShouldBeTrue();
-        _builder.SessionRepository.UpdateStatusCalls.ShouldContain(c => c.Id == "s-stop" && c.Status == "stopped");
-        _builder.EventBroadcaster.Broadcasts.ShouldContain(b => b.Topic == "sessions" && b.Type == "session_stopped");
     }
 
     [Fact]

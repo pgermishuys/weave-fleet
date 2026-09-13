@@ -357,7 +357,7 @@ public sealed class HarnessEventRelay : BackgroundService
 
         var capabilities = session is not null
             ? capabilitiesResolver.Resolve(session)
-            : SessionCapabilitiesResolver.Resolve(null, null, null, activityStatus, isLive: false);
+            : SessionCapabilitiesResolver.Resolve(null, null, activityStatus, isLive: false);
 
         return InfrastructureJsonContext.SerializeActivityStatus(
             sessionId,

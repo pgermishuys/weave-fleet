@@ -14,46 +14,6 @@ public sealed class EndpointGuardTests
 {
     private const string _userId = "local-user";
 
-    [Fact]
-    public async Task resume_returns_conflict_when_automatic_session_resume_is_not_allowed()
-    {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = factory.CreateClient();
-        await InsertSessionAsync(
-            factory,
-            sessionId: "session-auto-resume-guard",
-            instanceId: "instance-auto-resume-guard",
-            lifecycleStatus: "stopped",
-            status: "stopped",
-            runtimeMode: "automatic");
-
-        var response = await client.PostAsync("/api/sessions/session-auto-resume-guard/resume", content: null);
-
-        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
-        var json = await response.Content.ReadFromJsonAsync<JsonElement>(JsonSerializerOptions.Web);
-        json.GetProperty("error").GetString().ShouldBe("Automatic sessions resume on the next prompt.");
-    }
-
-    [Fact]
-    public async Task stop_returns_conflict_when_session_is_not_running()
-    {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = factory.CreateClient();
-        await InsertSessionAsync(
-            factory,
-            sessionId: "session-stop-guard",
-            instanceId: "instance-stop-guard",
-            lifecycleStatus: "stopped",
-            status: "stopped",
-            runtimeMode: "manual");
-
-        var response = await client.PostAsync("/api/sessions/session-stop-guard/stop", content: null);
-
-        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
-        var json = await response.Content.ReadFromJsonAsync<JsonElement>(JsonSerializerOptions.Web);
-        json.GetProperty("error").GetString().ShouldBe("Session is not running.");
-    }
-
     [Theory]
     [InlineData("stopped")]
     [InlineData("disconnected")]
@@ -76,28 +36,10 @@ public sealed class EndpointGuardTests
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         var json = await response.Content.ReadFromJsonAsync<JsonElement>(JsonSerializerOptions.Web);
         var capabilities = json.GetProperty("capabilities");
-        capabilities.GetProperty("canResume").GetBoolean().ShouldBeTrue();
-        capabilities.GetProperty("canPrompt").GetBoolean().ShouldBeFalse();
-        capabilities.GetProperty("resumeDisabledReason").ValueKind.ShouldBe(JsonValueKind.Null);
-        capabilities.GetProperty("promptDisabledReason").GetString().ShouldBe("Resume the session before prompting.");
-    }
-
-    private static async Task InsertSessionAsync(
-        ApiWebApplicationFactory factory,
-        string sessionId,
-        string instanceId,
-        string lifecycleStatus,
-        string status,
-        string runtimeMode)
-    {
-        await InsertSessionAsync(
-            factory,
-            sessionId,
-            instanceId,
-            lifecycleStatus,
-            status,
-            runtimeMode,
-            harnessType: "opencode");
+        capabilities.GetProperty("canPrompt").GetBoolean().ShouldBeTrue();
+        capabilities.GetProperty("promptDisabledReason").ValueKind.ShouldBe(JsonValueKind.Null);
+        capabilities.TryGetProperty("canResume", out _).ShouldBeFalse();
+        capabilities.TryGetProperty("canStop", out _).ShouldBeFalse();
     }
 
     private static async Task InsertSessionAsync(
