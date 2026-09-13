@@ -1,5 +1,6 @@
 import type { Component } from 'vue'
 import {
+  AppWindow,
   FileText,
   Pencil,
   Search,
@@ -22,6 +23,8 @@ const iconMap: Record<string, Component> = {
   task: GitBranch,
   webfetch: Globe,
   question: MessageCircleQuestion,
+  fleet_app_start: AppWindow,
+  fleet_browser_open: Globe,
 }
 
 const labelMap: Record<string, string> = {
@@ -35,6 +38,8 @@ const labelMap: Record<string, string> = {
   task: 'Task',
   webfetch: 'Web Fetch',
   question: 'Question',
+  fleet_app_start: 'Run app',
+  fleet_browser_open: 'Open page',
 }
 
 export function getToolIcon(kind: string): Component {

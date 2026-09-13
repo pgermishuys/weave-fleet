@@ -29,6 +29,7 @@ interface ToolCardItem {
   initiallyCollapsed?: boolean;
   preview?: string;
   isPatternTool?: boolean;
+  canvasId?: string;
 }
 
 interface ImageAttachmentDisplay {
@@ -52,6 +53,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   "expand-visual": [payload: VisualPayload];
+  "show-canvas": [canvasId: string];
 }>();
 
 const lightboxUrl = ref<string | null>(null);
@@ -208,7 +210,9 @@ function handleExpandVisual(payload: VisualPayload): void {
               :initially-collapsed="tool.initiallyCollapsed"
               :preview="tool.preview"
               :is-pattern-tool="tool.isPatternTool"
+              :canvas-id="tool.canvasId"
               @expand-visual="handleExpandVisual"
+              @show-canvas="emit('show-canvas', $event)"
             />
           </div>
 

@@ -13,6 +13,20 @@ function create_tool_part(state: unknown, tool = "bash"): AccumulatedToolPart {
 }
 
 describe("toToolCardItem", () => {
+  it("shows a browser tool's title and address, and the canvas it opened", () => {
+    const done = toToolCardItem(create_tool_part({
+      status: "completed",
+      input: { command: "npm run dev", title: "Shop" },
+      title: "Shop · http://localhost:5173/",
+      output: "Running `npm run dev` (app_1) in /work/shop.",
+      metadata: { canvasId: "cv_1", version: 2 },
+    }, "fleet_app_start"));
+    const running = toToolCardItem(create_tool_part({ status: "running", input: { command: "npm run dev", title: "Shop" } }, "fleet_app_start"));
+
+    expect(done).toMatchObject({ title: "Shop · http://localhost:5173/", canvasId: "cv_1", kind: "fleet_app_start" });
+    expect(running).toMatchObject({ title: "Shop · npm run dev", canvasId: undefined });
+  });
+
   it("uses_result_as_output_when_output_is_absent", () => {
     const item = toToolCardItem(create_tool_part({
       status: "completed",

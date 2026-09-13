@@ -27,6 +27,8 @@ const props = withDefaults(
     initiallyCollapsed?: boolean;
     preview?: string;
     isPatternTool?: boolean;
+    /** A canvas the tool opened or changed: the card offers to show it. */
+    canvasId?: string;
   }>(),
   {
     kind: "Tool",
@@ -37,11 +39,13 @@ const props = withDefaults(
     initiallyCollapsed: false,
     preview: "",
     isPatternTool: false,
+    canvasId: undefined,
   },
 );
 
 const emit = defineEmits<{
   "expand-visual": [payload: VisualPayload];
+  "show-canvas": [canvasId: string];
 }>();
 
 const workspaceUiStore = useWorkspaceUiStore();
@@ -111,6 +115,10 @@ function handleToggle(event: Event): void {
   isCollapsed.value = !target.open;
 }
 
+function handleShowCanvas(): void {
+  if (props.canvasId) emit("show-canvas", props.canvasId);
+}
+
 function handleExpandVisual(): void {
   if (visualPayload.value) {
     emit("expand-visual", visualPayload.value);
@@ -134,6 +142,15 @@ function handleExpandVisual(): void {
       <span class="tool-header__label">{{ displayLabel }}</span>
       <span v-if="isPatternTool" class="tool-header__pattern">{{ title }}</span>
       <span v-else class="tool-header__detail">{{ title }}</span>
+      <button
+        v-if="canvasId && status === 'Completed'"
+        type="button"
+        class="tool-header__show"
+        data-testid="tool-card-show"
+        @click.prevent.stop="handleShowCanvas"
+      >
+        Show
+      </button>
       <span
         v-if="status === 'Running' || status === 'Error'"
         class="tool-header__status"
@@ -279,6 +296,30 @@ function handleExpandVisual(): void {
   font-size: 12px;
   font-weight: 500;
   color: var(--accent);
+}
+
+.tool-header__show {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: calc(var(--radius-btn) - 2px);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+  transition: background var(--transition);
+}
+
+.tool-header__show:hover {
+  background: var(--accent-dim);
+}
+
+.tool-header__show:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.tool-header__show + .tool-header__done {
+  margin-left: 0;
 }
 
 .tool-header__status,

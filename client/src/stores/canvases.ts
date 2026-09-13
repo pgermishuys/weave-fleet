@@ -145,6 +145,8 @@ function persistBoolean(key: string, value: boolean): void {
 export const useCanvasesStore = defineStore("canvases", () => {
   const bySession = shallowRef<Record<string, SessionCanvases>>({});
   const widened = shallowRef(readStoredBoolean(WIDENED_STORAGE_KEY));
+  /** Tab id → when its content last updated itself (a browser page's hot reload), for a brief pulse on the tab. */
+  const updatedAt = shallowRef<Record<string, number>>({});
 
   function sessionCanvases(sessionId: string): SessionCanvases {
     return bySession.value[sessionId] ?? defaultSessionCanvases();
@@ -286,6 +288,10 @@ export const useCanvasesStore = defineStore("canvases", () => {
     }
   }
 
+  function markUpdated(tabId: string): void {
+    updatedAt.value = { ...updatedAt.value, [tabId]: Date.now() };
+  }
+
   function setKnownVisuals(sessionId: string, payloads: VisualPayload[]): void {
     update(sessionId, (current) => ({ ...current, knownVisuals: payloads }));
   }
@@ -302,6 +308,7 @@ export const useCanvasesStore = defineStore("canvases", () => {
   return {
     bySession,
     widened,
+    updatedAt,
     sessionCanvases,
     activate,
     open,
@@ -311,6 +318,7 @@ export const useCanvasesStore = defineStore("canvases", () => {
     setServerCanvases,
     applyCanvasEvent,
     setKnownVisuals,
+    markUpdated,
     setWidened,
     toggleWidened,
   };

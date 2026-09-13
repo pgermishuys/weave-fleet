@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { Maximize2, Minimize2, Plus, X } from "lucide-vue-next";
+import { Globe, Maximize2, Minimize2, Plus, X } from "lucide-vue-next";
 import { useResizeObserver } from "@vueuse/core";
 import {
   DropdownMenu,
@@ -10,6 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import BrowserOpenDialog from "@/components/canvas/BrowserOpenDialog.vue";
 import type { UseDiffsResult } from "@/composables/use-diffs";
 import { closeServerCanvas } from "@/composables/use-server-canvases";
 import {
@@ -163,6 +164,42 @@ function openVisual(payload: VisualPayload): void {
   store.openVisual(props.sessionId, payload);
 }
 
+const browserDialogOpen = ref(false);
+
+// A tab whose page updated itself (a hot reload) pulses once. The class comes off and back on so a second
+// update restarts the animation.
+const pulsingIds = ref(new Set<string>());
+const pulseTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function pulseTab(id: string): void {
+  clearTimeout(pulseTimers.get(id));
+  const without = new Set(pulsingIds.value);
+  without.delete(id);
+  pulsingIds.value = without;
+  requestAnimationFrame(() => {
+    pulsingIds.value = new Set(pulsingIds.value).add(id);
+    pulseTimers.set(id, setTimeout(() => {
+      const next = new Set(pulsingIds.value);
+      next.delete(id);
+      pulsingIds.value = next;
+      pulseTimers.delete(id);
+    }, 1400));
+  });
+}
+
+watch(
+  () => store.updatedAt,
+  (next, previous) => {
+    for (const [id, at] of Object.entries(next)) {
+      if (previous?.[id] !== at && openIds.value.has(id)) pulseTab(id);
+    }
+  },
+);
+
+onBeforeUnmount(() => {
+  for (const timer of pulseTimers.values()) clearTimeout(timer);
+});
+
 const activeProps = computed(() => {
   const canvas = activeCanvas.value;
   if (canvas.kind === "browser" && canvas.browser && canvas.server) {
@@ -199,6 +236,7 @@ const activeProps = computed(() => {
           :class="{
             'canvas-tab--active': canvas.id === activeCanvas.id,
             'canvas-tab--entering': canvas.id === enteringId,
+            'canvas-tab--updated': pulsingIds.has(canvas.id),
           }"
           role="tab"
           :aria-selected="canvas.id === activeCanvas.id"
@@ -282,6 +320,15 @@ const activeProps = computed(() => {
               class="canvas-picker__hint"
             >Open</span>
           </DropdownMenuItem>
+          <DropdownMenuItem
+            class="canvas-picker__item"
+            data-testid="canvas-picker-browser"
+            @select="browserDialogOpen = true"
+          >
+            <Globe aria-hidden="true" />
+            <span>Browser…</span>
+            <span class="canvas-picker__hint">Run or open a page</span>
+          </DropdownMenuItem>
           <template v-if="conversationVisuals.length > 0">
             <DropdownMenuSeparator />
             <DropdownMenuLabel class="canvas-picker__group">
@@ -332,6 +379,11 @@ const activeProps = computed(() => {
     </div>
 
     <slot name="below-header" />
+
+    <BrowserOpenDialog
+      v-model:open="browserDialogOpen"
+      :session-id="sessionId"
+    />
 
     <div class="canvas-host__body">
       <KeepAlive :max="8">
@@ -477,6 +529,27 @@ const activeProps = computed(() => {
   animation: canvas-tab-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
+.canvas-tab--updated {
+  animation: canvas-tab-updated 1.2s ease-out;
+}
+
+.canvas-tab--updated .canvas-tab__icon {
+  animation: canvas-tab-updated-icon 1.2s ease-out;
+}
+
+@keyframes canvas-tab-updated {
+  from {
+    background-color: color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+}
+
+@keyframes canvas-tab-updated-icon {
+  from,
+  40% {
+    color: var(--accent);
+  }
+}
+
 @keyframes canvas-tab-in {
   from {
     opacity: 0;
@@ -535,7 +608,9 @@ const activeProps = computed(() => {
     transition: none;
   }
 
-  .canvas-tab--entering {
+  .canvas-tab--entering,
+  .canvas-tab--updated,
+  .canvas-tab--updated .canvas-tab__icon {
     animation: none;
   }
 }

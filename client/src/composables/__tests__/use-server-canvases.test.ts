@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from "pinia";
 import { shallowRef } from "vue";
 import type { DomainEvent } from "@/lib/domain-events";
 import type { ServerCanvasSnapshot } from "@/lib/server-canvas";
+import { useAppRunsStore } from "@/stores/app-runs";
 import { serverCanvasTabId, useCanvasesStore } from "@/stores/canvases";
 import { flushAll, mountComposable } from "./test-utils";
 
@@ -162,5 +163,37 @@ describe("closeServerCanvas", () => {
 
     expect(serverTabs("s1").map((canvas) => canvas.id)).toEqual([serverCanvasTabId("cv_1")]);
     warn.mockRestore();
+  });
+
+  it("keeps the session's apps current and pulses the tabs of a page Fleet reloaded", async () => {
+    const shop: ServerCanvasSnapshot = { canvasId: "cv_shop", kind: "browser", title: "Shop", version: 1, state: { url: "http://localhost:5173/", appId: "app_1" } };
+    apiFetchMock.mockResolvedValue(jsonResponse([shop, diagram("cv_2", 1, ["A"])]));
+    const { useServerCanvases } = await import("@/composables/use-server-canvases");
+    const { wrapper } = await mountComposable(() => useServerCanvases(shallowRef("s1")));
+    const app = { sessionId: "s1", appId: "app_1", command: "npm run dev", url: "http://localhost:5173/", ports: [5173], exitCode: null };
+
+    onEvent?.({ type: "app.updated", payload: { ...app, status: "running", reason: "ready" } });
+    onEvent?.({ type: "app.updated", payload: { ...app, sessionId: "s2", appId: "app_9", status: "running", reason: "ready" } });
+
+    expect(useAppRunsStore().byId.app_1?.status).toBe("running");
+    expect(useAppRunsStore().byId.app_9).toBeUndefined();
+    expect(useCanvasesStore().updatedAt).toEqual({});
+
+    onEvent?.({ type: "app.updated", payload: { ...app, status: "running", reason: "reloaded" } });
+
+    expect(Object.keys(useCanvasesStore().updatedAt)).toEqual([serverCanvasTabId("cv_shop")]);
+    wrapper.unmount();
+  });
+
+  it("brings a canvas forward here and through Fleet, which reopens a closed one", async () => {
+    const store = useCanvasesStore();
+    store.setServerCanvases("s1", [diagram("cv_1", 1, ["A"]), diagram("cv_2", 1, ["B"])]);
+    apiFetchMock.mockResolvedValue(jsonResponse(diagram("cv_1", 1, ["A"])));
+    const { focusServerCanvas } = await import("@/composables/use-server-canvases");
+
+    await focusServerCanvas("s1", "cv_1");
+
+    expect(store.sessionCanvases("s1").activeId).toBe(serverCanvasTabId("cv_1"));
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/sessions/s1/canvases/cv_1/focus", { method: "POST" });
   });
 });

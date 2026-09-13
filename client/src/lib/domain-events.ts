@@ -255,6 +255,27 @@ export interface CanvasUpdatedPayload {
   summary: string;
 }
 
+/**
+ * An app Fleet runs for a session, usually a dev server a browser canvas shows. `stopped` means Fleet stopped
+ * it; `exited` that it ended on its own. `build-failed` comes with the live-update loop.
+ */
+export type AppRunStatus = "starting" | "running" | "build-failed" | "exited" | "stopped";
+
+/** What just happened to an app: started, ready, restarted, stopped, exited, build-failed or reloaded. */
+export type AppChangeReason = "started" | "ready" | "restarted" | "stopped" | "exited" | "build-failed" | "reloaded";
+
+export interface AppUpdatedPayload {
+  sessionId: string;
+  appId: string;
+  command: string;
+  status: AppRunStatus;
+  /** The page Fleet found, once one answered. */
+  url: string | null;
+  ports: number[];
+  exitCode: number | null;
+  reason: AppChangeReason;
+}
+
 /** A terminal tab in a session's drawer. `exitCode` is there only when the shell ended on its own. */
 export interface TerminalPayload {
   sessionId: string;
@@ -366,6 +387,16 @@ export interface CanvasFocused extends EventCursorMetadata {
 
 export type CanvasEvent = CanvasUpdated | CanvasClosed | CanvasFocused;
 
+/** An app Fleet runs for the session changed: the app as it is now, and why. Not persisted. */
+export interface AppUpdated extends EventCursorMetadata {
+  type: "app.updated";
+  payload: AppUpdatedPayload;
+}
+
+export function isAppEvent(event: DomainEvent): event is AppUpdated {
+  return event.type === "app.updated";
+}
+
 /** A terminal tab was added to the session's drawer. Not persisted. */
 export interface TerminalOpened extends EventCursorMetadata {
   type: "terminal.opened";
@@ -409,4 +440,5 @@ export type DomainEvent =
   | CanvasClosed
   | CanvasFocused
   | TerminalOpened
-  | TerminalClosed;
+  | TerminalClosed
+  | AppUpdated;
