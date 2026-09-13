@@ -170,6 +170,7 @@ public sealed record GetSessionResponse(
     double? TotalCost,
     string? HarnessType,
     string? ProjectId,
+    string? ProjectName,
     SessionOriginDto? Origin,
     SessionActionCapabilities Capabilities);
 

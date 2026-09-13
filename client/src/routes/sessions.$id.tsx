@@ -43,6 +43,9 @@ interface SessionDetailResponse {
   isolationStrategy?: string | null;
   branch?: string | null;
   title?: string | null;
+  createdAt?: string | null;
+  projectId?: string | null;
+  projectName?: string | null;
   status?: string | null;
   activityStatus?: string | null;
   lifecycleStatus?: string | null;
@@ -110,6 +113,9 @@ function normalizeSessionDetailResponse(payload: unknown): SessionDetailResponse
     isolationStrategy: getStringField(value, "isolationStrategy", "IsolationStrategy"),
     branch: getStringField(value, "branch", "Branch"),
     title: getStringField(value, "title", "Title"),
+    createdAt: getStringField(value, "createdAt", "CreatedAt"),
+    projectId: getStringField(value, "projectId", "ProjectId"),
+    projectName: getStringField(value, "projectName", "ProjectName"),
     status: getStringField(value, "status", "Status"),
     activityStatus: getStringField(value, "activityStatus", "ActivityStatus"),
     lifecycleStatus: getStringField(value, "lifecycleStatus", "LifecycleStatus"),
@@ -121,6 +127,12 @@ function normalizeSessionDetailResponse(payload: unknown): SessionDetailResponse
     harnessType: getStringField(value, "harnessType", "HarnessType"),
     tags: Array.isArray(value.tags ?? value.Tags) ? (value.tags ?? value.Tags) as string[] : undefined,
   };
+}
+
+function sessionTimeFromCreatedAt(createdAt: string | null | undefined): { created: number; updated: number } {
+  const createdMs = createdAt ? Date.parse(createdAt) : Number.NaN;
+  const created = Number.isFinite(createdMs) ? createdMs : Date.now();
+  return { created, updated: created };
 }
 
 function normalizeLifecycleStatus(value: string | null | undefined): "running" | "completed" | "stopped" | "error" | "disconnected" | null {
@@ -262,7 +274,9 @@ const SessionDetailPage = defineComponent({
             session: {
               id: nextRemoteSession.id ?? sessionId,
               title: nextRemoteSession.title ?? selectedSession.value?.session.title ?? "Untitled session",
-              time: selectedSession.value?.session.time ?? { created: 0, updated: 0 },
+              // A session opened before the list has it (e.g. just created) needs its real age,
+              // not the epoch, or the sidebar shows it as decades old.
+              time: selectedSession.value?.session.time ?? sessionTimeFromCreatedAt(nextRemoteSession.createdAt),
               tags: nextRemoteSession.tags ?? selectedSession.value?.session.tags ?? [],
             },
             instanceStatus: selectedSession.value?.instanceStatus ?? "running",
@@ -277,8 +291,9 @@ const SessionDetailPage = defineComponent({
             isHidden: selectedSession.value?.isHidden ?? false,
             totalTokens: selectedSession.value?.totalTokens,
             totalCost: selectedSession.value?.totalCost,
-            projectId: selectedSession.value?.projectId ?? null,
-            projectName: selectedSession.value?.projectName ?? null,
+            // The server's project wins: a new session lands in Scratch, not "Ungrouped".
+            projectId: nextRemoteSession.projectId ?? selectedSession.value?.projectId ?? null,
+            projectName: nextRemoteSession.projectName ?? selectedSession.value?.projectName ?? null,
             capabilities: nextRemoteSession.capabilities ?? selectedSession.value?.capabilities,
             origin: nextRemoteSession.origin ?? selectedSession.value?.origin ?? null,
             harnessType: nextRemoteSession.harnessType ?? selectedSession.value?.harnessType ?? null,
