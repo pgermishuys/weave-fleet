@@ -936,22 +936,6 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
       },
     },
     {
-      pattern: /^\/api\/repositories\/info$/,
-      handler: (url) => {
-        const path = url.searchParams.get("path") ?? "";
-        console.log(`[mock-api] GET /api/repositories/info?path=${path}`);
-        return json({
-          repository: {
-            name: path.split("/").pop() ?? path,
-            path,
-            branch: path.endsWith("/weave-fleet") ? "feat/browser-canvas" : "main",
-            lastCommit: null,
-            remoteUrl: null,
-          },
-        });
-      },
-    },
-    {
       pattern: /^\/api\/repositories\/detail$/,
       handler: (url) => {
         const path = url.searchParams.get("path") ?? "";

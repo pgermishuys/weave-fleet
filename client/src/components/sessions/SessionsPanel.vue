@@ -339,7 +339,7 @@ function handleToggleProject(projectId: string): void {
   expandedProjects[projectId] = !(expandedProjects[projectId] ?? true);
 }
 
-function openNewSessionDialog(projectId: string | null): void {
+function openNewSessionPage(projectId: string | null): void {
   sidebarStore.setActiveRail("sessions");
   void router.navigate({
     to: "/sessions/new",
@@ -351,11 +351,11 @@ function openNewSessionDialog(projectId: string | null): void {
 }
 
 function handleNewSession(): void {
-  openNewSessionDialog(null);
+  openNewSessionPage(null);
 }
 
 function handleProjectSessionCreate(projectId: string): void {
-  openNewSessionDialog(projectId);
+  openNewSessionPage(projectId);
 }
 
 function handleNewProject(): void {
@@ -579,15 +579,6 @@ function handleCompleteCancel(): void {
 </script>
 
 <template>
-  <!-- NewSessionDialog disconnected - now using /sessions/new route -->
-  <!--
-  <NewSessionDialog
-    v-model:open="newSessionDialogModel"
-    :initial-project-id="newSessionDialogProjectId"
-    :initial-source="newSessionDialogInitialSource"
-    @created="handleSessionCreated"
-  />
-  -->
   <NewProjectDialog
     v-model:open="isNewProjectDialogOpen"
     @created="handleProjectCreated"

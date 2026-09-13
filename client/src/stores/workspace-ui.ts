@@ -43,9 +43,8 @@ function hasContent(draft: NewSessionDraft): boolean {
 
 export const useWorkspaceUiStore = defineStore("workspace-ui", () => {
   const inlineToolDiffs = shallowRef(false);
-  const newSessionDialogOpen = shallowRef(false);
-  const newSessionDialogProjectId = shallowRef<string | null>(null);
-  const newSessionDialogInitialSource = shallowRef<GitHubSessionSourcePreset | null>(null);
+  /** A GitHub issue or pull request handed to the New Session page ("start session"). */
+  const newSessionInitialSource = shallowRef<GitHubSessionSourcePreset | null>(null);
   const newSessionDraft = shallowRef<NewSessionDraft | null>(null);
   /** Whether the New Session page is showing (a session started from it opens only if it is). */
   const isNewSessionPageOpen = shallowRef(false);
@@ -74,27 +73,8 @@ export const useWorkspaceUiStore = defineStore("workspace-ui", () => {
     inlineToolDiffs.value = !inlineToolDiffs.value;
   }
 
-  function openNewSessionDialog(projectId: string | null = null, initialSource: GitHubSessionSourcePreset | null = null): void {
-    newSessionDialogProjectId.value = projectId;
-    newSessionDialogInitialSource.value = initialSource;
-    newSessionDialogOpen.value = true;
-  }
-
-  function closeNewSessionDialog(): void {
-    setNewSessionDialogOpen(false);
-  }
-
-  function setNewSessionDialogOpen(open: boolean): void {
-    newSessionDialogOpen.value = open;
-
-    if (!open) {
-      newSessionDialogProjectId.value = null;
-      newSessionDialogInitialSource.value = null;
-    }
-  }
-
   function setNewSessionInitialSource(source: GitHubSessionSourcePreset | null): void {
-    newSessionDialogInitialSource.value = source;
+    newSessionInitialSource.value = source;
   }
 
   /**
@@ -136,18 +116,13 @@ export const useWorkspaceUiStore = defineStore("workspace-ui", () => {
 
   return {
     inlineToolDiffs,
-    newSessionDialogOpen,
-    newSessionDialogProjectId,
-    newSessionDialogInitialSource,
+    newSessionInitialSource,
     newSessionDraft,
     newSessionDraftRow,
     isNewSessionPageOpen,
     sessionRowKeys,
     setInlineToolDiffs,
     toggleInlineToolDiffs,
-    openNewSessionDialog,
-    closeNewSessionDialog,
-    setNewSessionDialogOpen,
     setNewSessionInitialSource,
     openNewSessionDraft,
     leaveNewSessionDraft,

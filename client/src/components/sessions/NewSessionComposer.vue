@@ -38,7 +38,7 @@ const navigate = useNavigate();
 const search = useSearch({ from: "/sessions/new" });
 const { config } = storeToRefs(useAppShellStore());
 const workspaceUiStore = useWorkspaceUiStore();
-const { newSessionDialogInitialSource } = storeToRefs(workspaceUiStore);
+const { newSessionInitialSource } = storeToRefs(workspaceUiStore);
 const { enabledHarnesses, defaultHarnessType } = useEnabledHarnesses();
 const defaults = useNewSessionDefaults();
 const isMobile = useIsMobile();
@@ -87,8 +87,8 @@ if (restored && folder.value) {
   hasChosenFolder.value = true;
 }
 // A GitHub "start session" hands its issue over through the store; the draft keeps it from here.
-if (newSessionDialogInitialSource.value) {
-  gitHubPreset.value = newSessionDialogInitialSource.value;
+if (newSessionInitialSource.value) {
+  gitHubPreset.value = newSessionInitialSource.value;
   hasChosenFolder.value = false;
   workspaceUiStore.setNewSessionInitialSource(null);
 }
@@ -344,7 +344,7 @@ function handleInput(event: Event): void {
 watch(areRepositoriesReady, applyInitialFolder, { immediate: true });
 
 // A GitHub "start session" can arrive while the page is already open.
-watch(newSessionDialogInitialSource, (preset) => {
+watch(newSessionInitialSource, (preset) => {
   if (preset) {
     gitHubPreset.value = preset;
     hasChosenFolder.value = false;

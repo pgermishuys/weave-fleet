@@ -515,7 +515,7 @@ describe("NewSessionComposer", () => {
         source: { key: { providerId: "builtin.github" }, input: { number: 42, repositoryPath: rocket.path } },
       });
       expect(options).not.toHaveProperty("initialPrompt");
-      expect(useWorkspaceUiStore().newSessionDialogInitialSource).toBeNull();
+      expect(useWorkspaceUiStore().newSessionInitialSource).toBeNull();
     });
 
     it("offers no folder-less choices while the issue is attached", async () => {
@@ -537,7 +537,7 @@ describe("NewSessionComposer", () => {
       await view.get("[aria-label='Remove issue #42']").trigger("click");
 
       expect(view.find("[data-testid='new-session-github-attachment']").exists()).toBe(false);
-      expect(useWorkspaceUiStore().newSessionDialogInitialSource).toBeNull();
+      expect(useWorkspaceUiStore().newSessionInitialSource).toBeNull();
       expect(view.get("[data-testid='create-session-submit']").attributes("disabled")).toBeDefined();
     });
   });
