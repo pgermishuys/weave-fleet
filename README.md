@@ -35,6 +35,12 @@ Health check:
 curl -fsS http://127.0.0.1:5000/healthz
 ```
 
+### From another device
+
+`fleet --host 0.0.0.0` listens on every address, so you can open Fleet from another machine on your network.
+
+App previews in the Browser tab follow Fleet: each preview gets its own port on the address Fleet listens on. With `--host 0.0.0.0`, anyone who can reach this machine can open a running preview without signing in to Fleet, so only do this on a network you trust. The app itself stays on `localhost`. To let previews through a firewall, give them a fixed range with `Fleet__Browser__PortRange=41000-41099`.
+
 ## Common commands
 
 - `fleet version`

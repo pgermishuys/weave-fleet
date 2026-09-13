@@ -107,6 +107,11 @@ public sealed class FleetOptions
     /// </summary>
     public bool TerminalEnabled => Terminal.Enabled ?? !Auth.Enabled;
 
+    // ─── Browser canvas ──────────────────────────────────────────────────────
+
+    /// <summary>Apps Fleet runs for browser canvases.</summary>
+    public BrowserOptions Browser { get; set; } = new();
+
     // ─── Claude Code ─────────────────────────────────────────────────────────
 
     /// <summary>Claude Code harness configuration.</summary>
@@ -249,6 +254,22 @@ public sealed class TerminalOptions
 
     /// <summary>Shells running at once across all sessions. Default: 32.</summary>
     public int MaxLiveTerminals { get; set; } = 32;
+}
+
+/// <summary>Apps Fleet runs for browser canvases (dev servers, usually).</summary>
+public sealed class BrowserOptions
+{
+    /// <summary>Apps one session can run at once. Default: 3.</summary>
+    public int MaxAppsPerSession { get; set; } = 3;
+
+    /// <summary>Apps running at once across all sessions. Default: 10.</summary>
+    public int MaxApps { get; set; } = 10;
+
+    /// <summary>
+    /// Ports previews listen on, e.g. <c>"41000-41099"</c>, for a firewall that only lets a known range through.
+    /// Empty: any free port. Previews listen on the address Fleet listens on (<see cref="FleetOptions.Host"/>).
+    /// </summary>
+    public string PortRange { get; set; } = string.Empty;
 }
 
 /// <summary>Cloud-mode configuration.</summary>

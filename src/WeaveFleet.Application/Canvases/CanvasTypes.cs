@@ -11,7 +11,10 @@ public static class CanvasKinds
     /// <summary>Mermaid sequence diagram source. Only the agent edits it.</summary>
     public const string Sequence = "sequence";
 
-    public static bool IsKnown(string kind) => kind is Diagram or Sequence;
+    /// <summary>A page of a web app running on this machine, shown through Fleet's preview proxy. Only the agent sets the page.</summary>
+    public const string Browser = "browser";
+
+    public static bool IsKnown(string kind) => kind is Diagram or Sequence or Browser;
 }
 
 public static class CanvasLimits

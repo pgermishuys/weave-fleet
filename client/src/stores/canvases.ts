@@ -1,7 +1,13 @@
 import { defineStore } from "pinia";
 import { shallowRef } from "vue";
 import type { CanvasEvent } from "@/lib/domain-events";
-import { serverCanvasPayload, type ServerCanvasKind, type ServerCanvasSnapshot } from "@/lib/server-canvas";
+import {
+  browserPage,
+  serverCanvasPayload,
+  type BrowserPage,
+  type ServerCanvasKind,
+  type ServerCanvasSnapshot,
+} from "@/lib/server-canvas";
 import type { VisualPayload } from "@/lib/visual-payload";
 
 /**
@@ -14,7 +20,10 @@ import type { VisualPayload } from "@/lib/visual-payload";
  * changes them, and the user can only close them.
  */
 
-export type CanvasKind = "changes" | "files" | "context" | "visual";
+export type CanvasKind = "changes" | "files" | "context" | "visual" | "browser";
+
+/** Canvases that exist once per session and open from the + menu or on their own. */
+export type BuiltInCanvasKind = Exclude<CanvasKind, "visual" | "browser">;
 
 /** Identifies a canvas the server stores. */
 export interface ServerCanvasRef {
@@ -28,8 +37,10 @@ export interface CanvasInstance {
   kind: CanvasKind;
   /** Present on visual canvases: the diagram or document to render. */
   payload?: VisualPayload;
-  /** Present on server canvases, which are visual canvases the agent keeps up to date. */
+  /** Present on server canvases, which are visual or browser canvases the agent keeps up to date. */
   server?: ServerCanvasRef;
+  /** Present on browser canvases: the page and its tab title. */
+  browser?: BrowserPage & { title: string };
 }
 
 export interface SessionCanvases {
@@ -75,6 +86,15 @@ export function serverCanvasTabId(canvasId: string): string {
 }
 
 function toServerCanvasInstance(canvas: ServerCanvasSnapshot): CanvasInstance | null {
+  if (canvas.kind === "browser") {
+    return {
+      id: serverCanvasTabId(canvas.canvasId),
+      kind: "browser",
+      browser: { ...browserPage(canvas.state), title: canvas.title },
+      server: { canvasId: canvas.canvasId, kind: "browser", version: canvas.version },
+    };
+  }
+
   const payload = serverCanvasPayload(canvas);
   if (!payload) return null;
 
@@ -125,6 +145,8 @@ function persistBoolean(key: string, value: boolean): void {
 export const useCanvasesStore = defineStore("canvases", () => {
   const bySession = shallowRef<Record<string, SessionCanvases>>({});
   const widened = shallowRef(readStoredBoolean(WIDENED_STORAGE_KEY));
+  /** Tab id → when its content last updated itself (a browser page's hot reload), for a brief pulse on the tab. */
+  const updatedAt = shallowRef<Record<string, number>>({});
 
   function sessionCanvases(sessionId: string): SessionCanvases {
     return bySession.value[sessionId] ?? defaultSessionCanvases();
@@ -146,7 +168,7 @@ export const useCanvasesStore = defineStore("canvases", () => {
   }
 
   /** Open (or focus) one of the built-in singleton canvases. */
-  function open(sessionId: string, kind: Exclude<CanvasKind, "visual">): void {
+  function open(sessionId: string, kind: BuiltInCanvasKind): void {
     update(sessionId, (current) => {
       const exists = current.canvases.some((canvas) => canvas.id === kind);
       return {
@@ -163,7 +185,7 @@ export const useCanvasesStore = defineStore("canvases", () => {
    * session has something to show in it. Once introduced (even if closed later), it
    * isn't added again.
    */
-  function introduce(sessionId: string, kind: Exclude<CanvasKind, "visual">): void {
+  function introduce(sessionId: string, kind: BuiltInCanvasKind): void {
     update(sessionId, (current) => {
       if (current.introduced?.includes(kind)) return current;
       const exists = current.canvases.some((canvas) => canvas.id === kind);
@@ -266,6 +288,10 @@ export const useCanvasesStore = defineStore("canvases", () => {
     }
   }
 
+  function markUpdated(tabId: string): void {
+    updatedAt.value = { ...updatedAt.value, [tabId]: Date.now() };
+  }
+
   function setKnownVisuals(sessionId: string, payloads: VisualPayload[]): void {
     update(sessionId, (current) => ({ ...current, knownVisuals: payloads }));
   }
@@ -282,6 +308,7 @@ export const useCanvasesStore = defineStore("canvases", () => {
   return {
     bySession,
     widened,
+    updatedAt,
     sessionCanvases,
     activate,
     open,
@@ -291,6 +318,7 @@ export const useCanvasesStore = defineStore("canvases", () => {
     setServerCanvases,
     applyCanvasEvent,
     setKnownVisuals,
+    markUpdated,
     setWidened,
     toggleWidened,
   };

@@ -19,7 +19,12 @@ export interface ToolCardItem {
   initiallyCollapsed?: boolean;
   preview?: string;
   isPatternTool?: boolean;
+  /** The canvas a Fleet canvas tool opened or changed, which the card can bring forward. */
+  canvasId?: string;
 }
+
+/** Fleet's browser tools; their card reads "title · address" once the page answered. */
+const BROWSER_TOOLS = new Set(["fleet_app_start", "fleet_browser_open"]);
 
 const tool_output_keys = ["output", "result", "content", "error", "message", "stdout", "stderr"] as const;
 const fallback_excluded_keys = new Set(["input", "status", "summary", "diff", "diffLines", "patch"]);
@@ -57,9 +62,11 @@ function buildPreview(output: string | undefined, summary: string | undefined): 
 export function toToolCardItem(part: AccumulatedToolPart): ToolCardItem {
   const state = asRecord(part.state);
   const input = asRecord(state?.input);
-  const title = getToolLabel(part.tool, input) || part.tool;
   const output = getToolOutput(state);
   const summary = getStringValue(state?.summary);
+  const shownTitle = BROWSER_TOOLS.has(part.tool) ? getStringValue(state?.title) : undefined;
+  const title = shownTitle ?? (getToolLabel(part.tool, input) || part.tool);
+  const canvasId = getStringValue(asRecord(state?.metadata)?.canvasId);
 
   return {
     id: part.partId,
@@ -72,6 +79,7 @@ export function toToolCardItem(part: AccumulatedToolPart): ToolCardItem {
     initiallyCollapsed: state?.status !== "error",
     preview: buildPreview(output, summary),
     isPatternTool: part.tool === "glob" || part.tool === "grep",
+    canvasId,
   };
 }
 

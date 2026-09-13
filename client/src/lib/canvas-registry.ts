@@ -1,5 +1,6 @@
 import type { Component } from "vue";
 import { FileText, FolderTree, GitCompare, Globe, Paperclip, Workflow } from "lucide-vue-next";
+import BrowserCanvas from "@/components/canvas/BrowserCanvas.vue";
 import ChangesCanvas from "@/components/canvas/ChangesCanvas.vue";
 import FilesCanvas from "@/components/canvas/FilesCanvas.vue";
 import VisualCanvas from "@/components/canvas/VisualCanvas.vue";
@@ -28,6 +29,7 @@ export const CANVAS_TYPES: Record<CanvasKind, CanvasTypeDefinition> = {
   files: { kind: "files", label: "Files", icon: FolderTree, component: FilesCanvas },
   context: { kind: "context", label: "Context", icon: Paperclip, component: SessionContextCanvas },
   visual: { kind: "visual", label: "Diagram", icon: Workflow, component: VisualCanvas },
+  browser: { kind: "browser", label: "Browser", icon: Globe, component: BrowserCanvas },
 };
 
 /** Built-in canvases a person can open from the + menu. */
@@ -45,6 +47,7 @@ export function visualIcon(payload: VisualPayload): Component {
 }
 
 export function canvasTitle(canvas: CanvasInstance): string {
+  if (canvas.browser) return canvas.browser.title;
   return canvas.payload ? visualCanvasTitle(canvas.payload) : CANVAS_TYPES[canvas.kind].label;
 }
 

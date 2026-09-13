@@ -194,4 +194,18 @@ describe("CanvasHost", () => {
     expect(wrapper.get('[aria-label="Narrow canvas"]').attributes("aria-pressed")).toBe("true");
     wrapper.unmount();
   });
+
+  it("pulses a tab whose page updated itself", async () => {
+    const wrapper = mountHost();
+    const store = useCanvasesStore();
+    await flushPromises();
+
+    store.markUpdated("files");
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    await flushPromises();
+
+    expect(wrapper.get("#tab-files").classes()).toContain("canvas-tab--updated");
+    expect(wrapper.get("#tab-changes").classes()).not.toContain("canvas-tab--updated");
+    wrapper.unmount();
+  });
 });

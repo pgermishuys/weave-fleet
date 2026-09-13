@@ -264,12 +264,55 @@ public sealed record CanvasBridgeRequest(
     string? Kind = null,
     string? Title = null,
     JsonNode? State = null,
-    JsonNode? Ops = null);
+    JsonNode? Ops = null,
+    string? Command = null,
+    string? Url = null);
 
 /// <summary>What the tool returns to the harness as-is: a tool-card title, the text the model reads, and metadata.</summary>
 public sealed record CanvasToolResponse(string Title, string Output, CanvasToolMetadata Metadata);
 
 public sealed record CanvasToolMetadata(string? CanvasId, int? Version);
+
+/// <summary>Ask for the preview proxy in front of a page on this machine.</summary>
+public sealed record BrowserProxyRequest(string? Url);
+
+/// <summary>
+/// The preview in front of <c>Target</c>. The browser loads it at <c>Origin</c>: <c>http://{Slug}.localhost:{Port}</c>
+/// on Fleet's machine, or the host the browser used to reach Fleet with the preview's port.
+/// </summary>
+public sealed record BrowserProxyResponse(string Slug, int Port, string Target, string Origin);
+
+/// <summary>A command Fleet runs for a session, with its recent output.</summary>
+public sealed record AppRunResponse(
+    string Id,
+    string Command,
+    string Status,
+    int? ExitCode,
+    string? Url,
+    IReadOnlyList<int> Ports,
+    IReadOnlyList<string> PrintedUrls,
+    DateTimeOffset StartedAt,
+    IReadOnlyList<string> Logs);
+
+/// <summary>Output lines after the ones the client has, and the <c>after</c> to ask with next time.</summary>
+public sealed record AppOutputResponse(IReadOnlyList<string> Lines, long Next);
+
+/// <summary>
+/// A session's apps, oldest first (without output), and the command that last served a page in its project,
+/// which the browser canvas's + menu offers.
+/// </summary>
+public sealed record SessionAppsResponse(IReadOnlyList<AppRunResponse> Apps, string? PreviewCommand);
+
+/// <summary>Run a command in the session's folder and show it in a browser canvas, titled by the command unless given a title.</summary>
+public sealed record AppStartRequest(string? Command, string? Title);
+
+/// <summary>The app that was started (or already ran) and the canvas that shows it.</summary>
+public sealed record AppPreviewResponse(AppRunResponse App, string CanvasId);
+
+/// <summary>Show a page on this machine in a browser canvas, titled by its host and port unless given a title.</summary>
+public sealed record BrowserOpenRequest(string? Url, string? Title);
+
+public sealed record BrowserOpenResponse(string CanvasId);
 
 // ── Session Sources ──────────────────────────────────────────────────────────
 

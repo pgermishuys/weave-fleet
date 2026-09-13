@@ -31,7 +31,7 @@ public static class TerminalEnvironment
         {
             if (entry.Key is not string key || entry.Value is not string value)
                 continue;
-            if (IsRemoved(key))
+            if (IsFleetOwned(key))
                 continue;
             env[key] = value;
         }
@@ -48,7 +48,8 @@ public static class TerminalEnvironment
         return env;
     }
 
-    private static bool IsRemoved(string key)
+    /// <summary>Whether a variable belongs to Fleet and must not reach a process Fleet starts for the user (app runs too).</summary>
+    public static bool IsFleetOwned(string key)
     {
         foreach (var prefix in RemovedPrefixes)
         {

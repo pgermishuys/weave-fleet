@@ -92,7 +92,7 @@ export const FleetCanvasPlugin = async () => ({
     },
 
     fleet_canvas_read: {
-      description: "Read a canvas as compact text: every box and edge by id, or the Mermaid source.",
+      description: "Read a canvas as compact text: every box and edge by id, the Mermaid source, or a browser canvas's page with its app's status and recent output.",
       args: { canvasId },
       execute: (args: { canvasId: string }, context: ToolContext) =>
         callFleet("read", context, { canvasId: args.canvasId }),
@@ -123,6 +123,50 @@ export const FleetCanvasPlugin = async () => ({
       args: { canvasId },
       execute: (args: { canvasId: string }, context: ToolContext) =>
         callFleet("focus", context, { canvasId: args.canvasId }),
+    },
+
+    fleet_app_start: {
+      description: [
+        "Run the project's web app and show it to the user in a browser canvas beside the chat.",
+        "Use this when the user asks to run, host, serve, preview or see the app, whatever it's built with (npm, bun, dotnet, python, cargo...).",
+        "Don't start dev servers with bash: they never exit, and the user can't see them.",
+        "Fleet runs the command in the session's folder, keeps it running, finds the page it serves and waits until it answers (up to 3 minutes).",
+        "Fleet sets PORT to a free port; servers that ignore PORT keep their own port, and Fleet finds it.",
+        "ASP.NET ignores PORT: append `-- --urls http://localhost:$PORT` (%PORT% on Windows) to dotnet run or dotnet watch so two copies of the project don't collide.",
+        "Prefer a command that reloads on changes (npm run dev, bun --hot, dotnet watch). Calling this again with the same command restarts the app.",
+        "If it fails, the result has the last lines of output: fix the problem and call it again.",
+      ].join(" "),
+      args: {
+        command: {
+          type: "string",
+          description: "The shell command that serves the app, e.g. \"npm run dev\" or \"dotnet watch --project src/Web\". Read package.json, the README or the project files first.",
+        },
+        title: {
+          type: "string",
+          description: "Short title for the canvas tab, e.g. \"Storefront\".",
+        },
+      },
+      execute: (args: { command: string; title: string }, context: ToolContext) =>
+        callFleet("app-start", context, { command: args.command, title: args.title }),
+    },
+
+    fleet_browser_open: {
+      description: [
+        "Show a page that's already running on this machine in a browser canvas beside the chat, e.g. a server the user started or one in a container.",
+        "To run the app first, use fleet_app_start instead. Only http and https addresses on this machine work.",
+      ].join(" "),
+      args: {
+        url: {
+          type: "string",
+          description: "The page's address, e.g. \"http://localhost:5173/\".",
+        },
+        title: {
+          type: "string",
+          description: "Short title for the canvas tab.",
+        },
+      },
+      execute: (args: { url: string; title: string }, context: ToolContext) =>
+        callFleet("browser-open", context, { url: args.url, title: args.title }),
     },
   },
 })

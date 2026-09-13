@@ -30,6 +30,13 @@
     <PackageReference Include="OpenTelemetry.Instrumentation.Http" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The script the preview gateway adds to previewed pages; the client's mock mode serves the same file. -->
+    <None Remove="Browser\preview-bridge.js" />
+    <Content Remove="Browser\preview-bridge.js" />
+    <EmbeddedResource Include="Browser\preview-bridge.js" LogicalName="browser/preview-bridge.js" />
+  </ItemGroup>
+
   <!-- Copy frontend SPA build output to wwwroot/ before building the backend.
        The Condition means: skip if client/dist/index.html doesn't exist yet
        (allows backend-only development without a frontend build). -->

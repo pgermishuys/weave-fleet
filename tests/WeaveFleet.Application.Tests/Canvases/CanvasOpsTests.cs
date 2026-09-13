@@ -135,6 +135,38 @@ public sealed class CanvasOpsTests
     }
 
     [Fact]
+    public void Open_Browser_KeepsThePageAndItsApp()
+    {
+        var opened = CanvasOps.Open(CanvasKinds.Browser, JsonNode.Parse("""{"url":" http://localhost:5173/shop ","appId":"app_1"}"""));
+
+        opened.IsSuccess.ShouldBeTrue(opened.Error?.Message);
+        opened.Value.StateJson.ShouldBe("""{"url":"http://localhost:5173/shop","appId":"app_1"}""");
+        opened.Value.Summary.ShouldBe("http://localhost:5173/shop");
+    }
+
+    [Theory]
+    [InlineData("""{"url":"https://example.com/"}""")]
+    [InlineData("""{"url":"ftp://localhost/"}""")]
+    [InlineData("""{"url":"not a url"}""")]
+    public void Open_Browser_OnlyTakesPagesOnThisMachine(string state)
+    {
+        var opened = CanvasOps.Open(CanvasKinds.Browser, JsonNode.Parse(state));
+
+        opened.IsSuccess.ShouldBeFalse();
+        opened.Error.Message.ShouldBe(LoopbackUrl.Requirement);
+    }
+
+    [Fact]
+    public void Replace_Browser_ChangesOnlyWhenThePageOrAppChanges()
+    {
+        var current = CanvasOps.Open(CanvasKinds.Browser, JsonNode.Parse("""{"url":"http://localhost:5173/","appId":"app_1"}""")).Value!.StateJson;
+
+        CanvasOps.Replace(CanvasKinds.Browser, current, JsonNode.Parse("""{"url":"http://localhost:5173/","appId":"app_1"}""")).Value.ShouldBeEmpty();
+        CanvasOps.Replace(CanvasKinds.Browser, current, JsonNode.Parse("""{"url":"http://localhost:5173/","appId":"app_2"}""")).Value
+            .ShouldHaveSingleItem().ShouldBe(new SetPageOp("http://localhost:5173/", "app_2"));
+    }
+
+    [Fact]
     public void Open_UnknownKind_IsRejected()
     {
         var opened = CanvasOps.Open("markdown", JsonNode.Parse("{}"));

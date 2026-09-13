@@ -74,4 +74,17 @@ describe("ToolCard", () => {
     expect(diffRows[1]?.attributes("data-diff-type")).toBe("remove");
     expect(diffRows[2]?.attributes("data-diff-type")).toBe("add");
   });
+
+  it("offers to show the canvas a finished tool opened", async () => {
+    const props = { id: "tool-card-app", title: "Shop · http://localhost:5173/", kind: "fleet_app_start", canvasId: "cv_1", initiallyCollapsed: true };
+    const running = mount(ToolCard, { props: { ...props, status: "Running" } });
+    const done = mount(ToolCard, { props: { ...props, status: "Completed" } });
+
+    expect(running.find('[data-testid="tool-card-show"]').exists()).toBe(false);
+    expect(done.get('[data-testid="tool-card-header"]').text()).toContain("Run app");
+    await done.get('[data-testid="tool-card-show"]').trigger("click");
+
+    expect(done.emitted("show-canvas")).toEqual([["cv_1"]]);
+    expect(done.get('[data-testid="tool-card"]').attributes("open")).toBeUndefined();
+  });
 });

@@ -10,8 +10,10 @@
  */
 
 import type { Plugin, ViteDevServer, PreviewServer } from "vite";
+import type { IncomingMessage } from "http";
 import { readFileSync } from "fs";
 import { resolve } from "path";
+import { startMockPreview, type MockPreview } from "./mock-preview";
 
 interface MockRoute {
   pattern: RegExp;
@@ -73,7 +75,7 @@ const MOCK_FILES: Record<string, string> = {
 // in memory until Vite restarts.
 interface MockCanvas {
   canvasId: string;
-  kind: "diagram" | "sequence";
+  kind: "diagram" | "sequence" | "browser";
   title: string;
   version: number;
   state: Record<string, unknown>;
@@ -156,7 +158,86 @@ function seedMockCanvases(): MockCanvas[] {
       closed: false,
       revision: 0,
     },
+    {
+      canvasId: "cv_mock_browser",
+      kind: "browser",
+      title: "Storefront",
+      version: 2,
+      state: { url: "http://localhost:5173/", appId: MOCK_APP_ID },
+      closed: false,
+      revision: 0,
+    },
   ];
+}
+
+// Apps Fleet runs for a session (browser canvas, Task 6 of browser-canvas-v1). Every mock session starts
+// with one running app, shown by the "Storefront" browser canvas; its page is mock-preview.ts.
+// Script its states on 3099, with a mock session open:
+//   curl -X POST localhost:3099/api/mock/sessions/<id>/apps/app_mock_storefront/<step>
+// where <step> is starting, running, build-failed, exited, stopped, hot-update, reload, reloaded or log.
+const MOCK_APP_ID = "app_mock_storefront";
+const MOCK_APP_URL = "http://localhost:5173/";
+const MOCK_THEMES = ["#c2410c", "#0f766e", "#7c3aed", "#be123c"];
+
+interface MockApp {
+  id: string;
+  sessionId: string;
+  command: string;
+  status: "starting" | "running" | "build-failed" | "exited" | "stopped";
+  exitCode: number | null;
+  url: string | null;
+  ports: number[];
+  output: string[];
+  startTimer?: ReturnType<typeof setTimeout>;
+}
+
+function seedMockApp(sessionId: string): MockApp {
+  return {
+    id: MOCK_APP_ID,
+    sessionId,
+    command: "npm run dev",
+    status: "running",
+    exitCode: null,
+    url: MOCK_APP_URL,
+    ports: [5173],
+    output: [
+      "$ npm run dev",
+      "",
+      "> storefront@0.1.0 dev",
+      "> vite",
+      "",
+      "  VITE v8.0.3  ready in 412 ms",
+      "",
+      "  ➜  Local:   http://localhost:5173/",
+      "  ➜  Network: use --host to expose",
+    ],
+  };
+}
+
+function toAppResponse(app: MockApp) {
+  return {
+    id: app.id,
+    command: app.command,
+    status: app.status,
+    exitCode: app.exitCode,
+    url: app.url,
+    ports: app.ports,
+    printedUrls: app.url ? [app.url] : [],
+    startedAt: new Date().toISOString(),
+    logs: app.output.slice(-200),
+  };
+}
+
+/** The request as a fetch Request, with its body: mock handlers read JSON bodies with req.json(). */
+async function toMockRequest(req: IncomingMessage, url: URL): Promise<Request> {
+  const method = req.method ?? "GET";
+  let body: string | undefined;
+  if (method !== "GET" && method !== "HEAD") {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(chunk as Buffer);
+    body = Buffer.concat(chunks).toString("utf8") || undefined;
+  }
+  return new Request(url.toString(), { method, headers: req.headers as HeadersInit, body });
 }
 
 function toCanvasResponse(canvas: MockCanvas) {
@@ -286,7 +367,80 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
   };
 
   let devServer: ViteDevServer | undefined;
+  let preview: MockPreview | undefined;
+  let themeIndex = 0;
+  let nextAppNumber = 1;
+  let nextCanvasNumber = 1;
   const canvasesBySession = new Map<string, MockCanvas[]>();
+  const appsBySession = new Map<string, MockApp[]>();
+
+  function sessionApps(sessionId: string): MockApp[] {
+    let apps = appsBySession.get(sessionId);
+    if (!apps) {
+      apps = [seedMockApp(sessionId)];
+      appsBySession.set(sessionId, apps);
+    }
+    return apps;
+  }
+
+  function findApp(sessionId: string, appId: string): MockApp | undefined {
+    return sessionApps(sessionId).find((app) => app.id === appId);
+  }
+
+  function pushAppUpdated(app: MockApp, reason: string): void {
+    pushHubEvent(app.sessionId, "app.updated", {
+      sessionId: app.sessionId,
+      appId: app.id,
+      command: app.command,
+      status: app.status,
+      url: app.url,
+      ports: app.ports,
+      exitCode: app.exitCode,
+      reason,
+    });
+  }
+
+  function setApp(app: MockApp, status: MockApp["status"], reason: string, exitCode: number | null = null): void {
+    clearTimeout(app.startTimer);
+    app.status = status;
+    app.exitCode = exitCode;
+    if (status === "running") {
+      app.url = MOCK_APP_URL;
+      app.ports = [5173];
+    } else if (status !== "build-failed") {
+      app.ports = [];
+    }
+    pushAppUpdated(app, reason);
+  }
+
+  /** Starts (or restarts) the app; it serves its page after a moment unless `stay` keeps it starting. */
+  function startApp(app: MockApp, reason: "started" | "restarted", stay = false): void {
+    setApp(app, "starting", reason);
+    // Like Fleet's runner: a line between runs, then the new run's output.
+    if (app.output.length > 0) app.output.push("── restarted by Fleet ──");
+    app.output.push(`$ ${app.command}`, "", "> vite", "");
+    if (stay) return;
+    app.startTimer = setTimeout(() => {
+      app.output.push("  VITE v8.0.3  ready in 388 ms", "", `  ➜  Local:   ${MOCK_APP_URL}`);
+      setApp(app, "running", "ready");
+    }, 1500);
+  }
+
+  function openBrowserCanvas(sessionId: string, title: string, state: Record<string, unknown>): MockCanvas {
+    const canvases = sessionCanvases(sessionId);
+    let canvas = canvases.find((candidate) => candidate.title === title);
+    if (canvas) {
+      canvas.state = state;
+      canvas.closed = false;
+      canvas.version += 1;
+    } else {
+      canvas = { canvasId: `cv_mock_browser_${nextCanvasNumber++}`, kind: "browser", title, version: 1, state, closed: false, revision: 0 };
+      canvases.push(canvas);
+    }
+    pushCanvasUpdated(sessionId, canvas, "opened");
+    pushHubEvent(sessionId, "canvas.focused", { sessionId, canvasId: canvas.canvasId });
+    return canvas;
+  }
   const terminalsBySession = new Map<string, { list: MockTerminal[]; next: number }>();
 
   function sessionTerminals(sessionId: string): { list: MockTerminal[]; next: number } {
@@ -367,6 +521,152 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
       },
     },
 
+    // ─── Browser canvas: apps and previews ──────────────────────────────────────
+    {
+      pattern: /^\/api\/sessions\/([^/]+)\/browser\/proxy$/,
+      handler: async (url, req) => {
+        const body = (await req.json().catch(() => ({}))) as { url?: string };
+        if (!preview) return json({ error: "The mock preview isn't running." }, 409);
+        const port = Number(new URL(body.url ?? MOCK_APP_URL).port || 80);
+        return json({ slug: "pmock", port, target: body.url ?? MOCK_APP_URL, origin: preview.origin });
+      },
+    },
+    {
+      pattern: /^\/api\/sessions\/([^/]+)\/browser$/,
+      handler: async (url, req) => {
+        const id = decodeURIComponent(url.pathname.split("/")[3]);
+        const body = (await req.json().catch(() => ({}))) as { url?: string };
+        let page: URL;
+        try {
+          page = new URL(body.url ?? "");
+        } catch {
+          return json({ error: "\"url\" must be an http or https address on this machine, e.g. http://localhost:5173/." }, 422);
+        }
+        console.log(`[mock-api] POST /api/sessions/${id}/browser ${page}`);
+        return json({ canvasId: openBrowserCanvas(id, page.host, { url: page.toString() }).canvasId });
+      },
+    },
+    {
+      pattern: /^\/api\/sessions\/([^/]+)\/apps$/,
+      handler: async (url, req) => {
+        const id = decodeURIComponent(url.pathname.split("/")[3]);
+        const apps = sessionApps(id);
+        console.log(`[mock-api] ${req.method} /api/sessions/${id}/apps`);
+        if (req.method === "GET") {
+          return json({ apps: apps.map((app) => ({ ...toAppResponse(app), logs: [] })), previewCommand: "npm run dev" });
+        }
+
+        const command = (((await req.json().catch(() => ({}))) as { command?: string }).command ?? "").trim();
+        if (!command) return json({ error: "\"command\" is required, e.g. \"npm run dev\"." }, 422);
+        const live = apps.filter((app) => app.status === "starting" || app.status === "running" || app.status === "build-failed");
+
+        let app = apps.find((candidate) => candidate.command === command);
+        if (!app || !live.includes(app)) {
+          if (live.length >= 3) {
+            return json({ error: `This session already runs 3 apps, its limit: ${live.map((running) => `\`${running.command}\` (${running.id})`).join(", ")}.` }, 409);
+          }
+          if (!app) {
+            app = { id: `app_mock_${nextAppNumber++}`, sessionId: id, command, status: "stopped", exitCode: null, url: null, ports: [], output: [] };
+            apps.push(app);
+          }
+          startApp(app, "started");
+        }
+
+        const showing = sessionCanvases(id).find((canvas) => canvas.kind === "browser" && !canvas.closed && canvas.state.appId === app.id);
+        const canvas = showing ?? openBrowserCanvas(id, command.slice(0, 120), { url: app.status === "running" ? app.url ?? "" : "", appId: app.id });
+        if (showing) pushHubEvent(id, "canvas.focused", { sessionId: id, canvasId: showing.canvasId });
+        return json({ app: toAppResponse(app), canvasId: canvas.canvasId });
+      },
+    },
+    {
+      pattern: /^\/api\/sessions\/([^/]+)\/apps\/([^/]+)$/,
+      handler: (url) => {
+        const [, , , rawId, , rawAppId] = url.pathname.split("/");
+        const app = findApp(decodeURIComponent(rawId), decodeURIComponent(rawAppId));
+        return app ? json(toAppResponse(app)) : json({ error: `App ${rawAppId} not found.` }, 404);
+      },
+    },
+    {
+      pattern: /^\/api\/sessions\/([^/]+)\/apps\/([^/]+)\/output$/,
+      handler: (url) => {
+        const [, , , rawId, , rawAppId] = url.pathname.split("/");
+        const app = findApp(decodeURIComponent(rawId), decodeURIComponent(rawAppId));
+        if (!app) return json({ error: `App ${rawAppId} not found.` }, 404);
+        const after = Math.max(0, Number(url.searchParams.get("after") ?? 0) || 0);
+        return json({ lines: app.output.slice(after), next: app.output.length });
+      },
+    },
+    {
+      pattern: /^\/api\/sessions\/([^/]+)\/apps\/([^/]+)\/(restart|stop)$/,
+      handler: (url, req) => {
+        const [, , , rawId, , rawAppId, action] = url.pathname.split("/");
+        const app = findApp(decodeURIComponent(rawId), decodeURIComponent(rawAppId));
+        console.log(`[mock-api] ${req.method} /api/sessions/${rawId}/apps/${rawAppId}/${action}`);
+        if (!app) return json({ error: `App ${rawAppId} not found.` }, 404);
+        if (action === "stop") {
+          if (app.status !== "stopped" && app.status !== "exited") setApp(app, "stopped", "stopped");
+          return new Response(null, { status: 204 });
+        }
+        const wasLive = app.status === "starting" || app.status === "running" || app.status === "build-failed";
+        startApp(app, wasLive ? "restarted" : "started");
+        return json(toAppResponse(app));
+      },
+    },
+    {
+      pattern: /^\/api\/mock\/sessions\/([^/]+)\/apps\/([^/]+)\/([a-z-]+)$/,
+      handler: (url) => {
+        const [, , , , rawId, , rawAppId, step] = url.pathname.split("/");
+        const app = findApp(decodeURIComponent(rawId), decodeURIComponent(rawAppId));
+        if (!app) return json({ error: `App ${rawAppId} not found.` }, 404);
+
+        switch (step) {
+          case "starting":
+            startApp(app, "restarted", true);
+            break;
+          case "running":
+            setApp(app, "running", "ready");
+            break;
+          case "build-failed":
+            app.output.push(
+              "[vite] Internal server error: /src/App.tsx: Unexpected token (14:2)",
+              "  12 |   return (",
+              "  13 |     <main>",
+              "> 14 |   </div>",
+              "     |   ^",
+            );
+            setApp(app, "build-failed", "build-failed");
+            break;
+          case "exited":
+            app.output.push("node:internal/modules/cjs/loader:1228", "  throw err;", "Error: Cannot find module './server/routes'", "npm ERR! code 1");
+            setApp(app, "exited", "exited", 1);
+            break;
+          case "stopped":
+            setApp(app, "stopped", "stopped");
+            break;
+          case "hot-update": {
+            themeIndex = (themeIndex + 1) % MOCK_THEMES.length;
+            app.output.push(`[vite] hmr update /src/theme.css`);
+            preview?.send({ type: "update", css: `:root { --brand: ${MOCK_THEMES[themeIndex]}; }` });
+            break;
+          }
+          case "reload":
+            app.output.push("[vite] page reload index.html");
+            preview?.send({ type: "full-reload" });
+            break;
+          case "reloaded":
+            pushAppUpdated(app, "reloaded");
+            break;
+          case "log":
+            app.output.push(`[vite] ${new Date().toLocaleTimeString()} GET /cart 200`);
+            break;
+          default:
+            return json({ error: `Unknown step ${step}` }, 400);
+        }
+        console.log(`[mock-api] ${app.id} in ${rawId}: ${step} (${app.status})`);
+        return json(toAppResponse(app));
+      },
+    },
+
     // ─── Canvases ───────────────────────────────────────────────────────────────
     // Try on 3099, with a mock session open:
     //   curl -X POST localhost:3099/api/mock/sessions/<id>/canvases/cv_mock_diagram/revise
@@ -377,6 +677,21 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
         const id = decodeURIComponent(url.pathname.split("/")[3]);
         console.log(`[mock-api] GET /api/sessions/${id}/canvases`);
         return json(sessionCanvases(id).filter((canvas) => !canvas.closed).map(toCanvasResponse));
+      },
+    },
+    {
+      pattern: /^\/api\/sessions\/([^/]+)\/canvases\/([^/]+)\/focus$/,
+      handler: (url) => {
+        const [, , , rawId, , rawCanvasId] = url.pathname.split("/");
+        const id = decodeURIComponent(rawId);
+        const canvas = sessionCanvases(id).find((candidate) => candidate.canvasId === decodeURIComponent(rawCanvasId));
+        if (!canvas) return json({ error: "Canvas not found" }, 404);
+        if (canvas.closed) {
+          canvas.closed = false;
+          pushCanvasUpdated(id, canvas, "reopened");
+        }
+        pushHubEvent(id, "canvas.focused", { sessionId: id, canvasId: canvas.canvasId });
+        return json(toCanvasResponse(canvas));
       },
     },
     {
@@ -1544,6 +1859,14 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
 
       console.log("[mock-api] Enabled - intercepting /api/* and /healthz requests");
       devServer = server;
+
+      void startMockPreview(resolve(__dirname, "../src/WeaveFleet.Api/Browser/preview-bridge.js"))
+        .then((started) => {
+          preview = started;
+          console.log(`[mock-api] Mock preview app at ${started.origin}`);
+        })
+        .catch((error) => console.warn("[mock-api] Mock preview app didn't start:", error));
+      server.httpServer?.once("close", () => preview?.close());
       
       server.middlewares.use((req, res, next) => {
         const url = new URL(req.url || "/", `http://${req.headers.host}`);
@@ -1551,12 +1874,8 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
         // Find matching route
         for (const route of routes) {
           if (route.pattern.test(url.pathname)) {
-            const mockRequest = new Request(url.toString(), {
-              method: req.method,
-              headers: req.headers as HeadersInit,
-            });
-            
-            Promise.resolve(route.handler(url, mockRequest))
+            toMockRequest(req, url)
+              .then((mockRequest) => route.handler(url, mockRequest))
               .then((response) => {
                 res.statusCode = response.status;
                 response.headers.forEach((value, key) => {
@@ -1596,12 +1915,8 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
         // Find matching route
         for (const route of routes) {
           if (route.pattern.test(url.pathname)) {
-            const mockRequest = new Request(url.toString(), {
-              method: req.method,
-              headers: req.headers as HeadersInit,
-            });
-            
-            Promise.resolve(route.handler(url, mockRequest))
+            toMockRequest(req, url)
+              .then((mockRequest) => route.handler(url, mockRequest))
               .then((response) => {
                 res.statusCode = response.status;
                 response.headers.forEach((value, key) => {

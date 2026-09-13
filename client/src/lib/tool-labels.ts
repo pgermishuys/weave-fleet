@@ -70,6 +70,14 @@ export function getToolLabel(
       return "grep";
     }
 
+    case "fleet_app_start":
+    case "fleet_browser_open": {
+      const what = typeof input?.command === "string" && input.command ? input.command : input?.url;
+      const title = typeof input?.title === "string" && input.title ? input.title : "";
+      if (typeof what === "string" && what) return title ? `${title} · ${truncate(what, 60)}` : truncate(what, 60);
+      return title || toolName;
+    }
+
     case "webfetch": {
       if (typeof input?.url === "string" && input.url) {
         return input.url;

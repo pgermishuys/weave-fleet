@@ -17,6 +17,7 @@ import { diagLog } from "@/lib/message-diagnostics";
 import { useSessionsStore } from "@/stores/sessions";
 import { dispatchSessionUpsert } from "@/lib/session-sync";
 import { useCanvasesStore } from "@/stores/canvases";
+import { focusServerCanvas } from "@/composables/use-server-canvases";
 import { useSidebarStore } from "@/stores/sidebar";
 import { mergeMessagesByTimestamp } from "@/lib/merge-messages";
 
@@ -686,6 +687,11 @@ function handleExpandVisual(payload: VisualPayload): void {
   canvasesStore.openVisual(props.sessionId, payload);
   sidebarStore.setRightPanelCollapsed(false);
 }
+
+function handleShowCanvas(canvasId: string): void {
+  void focusServerCanvas(props.sessionId, canvasId);
+  sidebarStore.setRightPanelCollapsed(false);
+}
 </script>
 
 <template>
@@ -762,6 +768,7 @@ function handleExpandVisual(payload: VisualPayload): void {
           :show-identity="message.showIdentity"
           :cluster-position="message.clusterPosition"
           @expand-visual="handleExpandVisual"
+          @show-canvas="handleShowCanvas"
         />
         <div
           v-if="message.optimisticStatus === 'needs_retry'"
