@@ -165,6 +165,14 @@ function openVisual(payload: VisualPayload): void {
 
 const activeProps = computed(() => {
   const canvas = activeCanvas.value;
+  if (canvas.kind === "browser" && canvas.browser && canvas.server) {
+    return {
+      sessionId: props.sessionId,
+      canvasId: canvas.server.canvasId,
+      url: canvas.browser.url,
+      appId: canvas.browser.appId,
+    };
+  }
   if (canvas.kind !== "visual" || !canvas.payload) return { sessionId: props.sessionId };
   return canvas.server ? { payload: canvas.payload, readonly: true } : { payload: canvas.payload };
 });

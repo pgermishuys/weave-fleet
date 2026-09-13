@@ -222,6 +222,20 @@ describe("useCanvasesStore server canvases", () => {
     expect(store.sessionCanvases(SESSION).canvases).toHaveLength(2);
   });
 
+  it("shows a browser canvas as a browser tab with its page, app and title", () => {
+    const store = useCanvasesStore();
+    const browser = wire<CanvasUpdated>(`{"type":"canvas.updated","eventId":null,"properties":{"sessionId":"${SESSION}","canvasId":"cv_b","kind":"browser","title":"Bun Shop","version":1,"actor":"agent","state":{"url":"http://localhost:5173/","appId":"app_1"},"summary":"http://localhost:5173/"}}`);
+
+    store.applyCanvasEvent(browser);
+
+    expect(store.sessionCanvases(SESSION).canvases.at(-1)).toEqual({
+      id: serverCanvasTabId("cv_b"),
+      kind: "browser",
+      browser: { url: "http://localhost:5173/", appId: "app_1", title: "Bun Shop" },
+      server: { canvasId: "cv_b", kind: "browser", version: 1 },
+    });
+  });
+
   it("replaces only the server canvases when a list loads", () => {
     const store = useCanvasesStore();
     store.openVisual(SESSION, flow);

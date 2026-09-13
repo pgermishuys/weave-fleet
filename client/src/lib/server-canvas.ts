@@ -15,7 +15,13 @@ export interface ServerCanvasSnapshot {
   state: unknown;
 }
 
-export type ServerCanvasKind = "diagram" | "sequence";
+export type ServerCanvasKind = "diagram" | "sequence" | "browser";
+
+/** A browser canvas: a page on this machine, and the app Fleet runs for it, if any. */
+export interface BrowserPage {
+  url: string;
+  appId?: string;
+}
 
 type FlowDirection = "TB" | "LR" | "BT" | "RL";
 
@@ -46,7 +52,14 @@ export type DiagramFlowContent = {
 const DIRECTIONS = new Set<string>(["TB", "LR", "BT", "RL"]);
 
 export function isServerCanvasKind(kind: string): kind is ServerCanvasKind {
-  return kind === "diagram" || kind === "sequence";
+  return kind === "diagram" || kind === "sequence" || kind === "browser";
+}
+
+export function browserPage(state: unknown): BrowserPage {
+  const record = asRecord(state);
+  const page: BrowserPage = { url: typeof record.url === "string" ? record.url : "" };
+  if (typeof record.appId === "string" && record.appId) page.appId = record.appId;
+  return page;
 }
 
 /** Maps a server canvas to the payload the visual renderers take, or null for a kind this client can't show. */
