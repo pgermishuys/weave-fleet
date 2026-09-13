@@ -40,6 +40,7 @@ Ground truth from the spike and the codebase (2026-09-13). Don't re-check these:
 11. **The app stays on `localhost`; Fleet's proxy is what listens on the network (decided with the user 2026-09-13).** This is the same idea as VS Code's and Codespaces' port forwarding. The canvas loads the preview at the host name the browser used to reach Fleet (`location.hostname`), not an address Fleet looks up (the box has several: LAN, Tailscale, container bridges). Considered and rejected:
     - **Make the app listen on 0.0.0.0 and load it directly.** Every framework needs its own switch (Vite `--host`, Next `-H`, ASP.NET `--urls`, Django's `ALLOWED_HOSTS`), and it puts unauthenticated dev servers on the network (Vite and webpack-dev-server have had file-disclosure bugs). Pages that forbid framing show blank. `dotnet watch` still wouldn't refresh, and the address bar and back/forward lose the injected script. A possible later option: load an app directly when it already listens on 0.0.0.0.
     - **Stream a headless browser on the Linux box into the canvas.** Worse feel (scrolling, typing, selection, no dev tools), a few hundred MB per preview, and a large project of its own. A browser on the Linux box is still wanted later so the agent can take screenshots; that's separate from how the user views the page.
+12. **No pass for previews in V1 (decided with the user 2026-09-13: "a security measure I don't need").** The planned token-and-cookie "sign-in" for previews reachable off the machine is deferred, and so are the per-session port ownership check and the cookie-sharing mitigations (all three only matter with more than one user or an untrusted network). Instead, preview listeners bind to the address Fleet itself binds (`Fleet:Host`): a Fleet on localhost keeps its previews on localhost; a Fleet opened to the network exposes its previews to the same network, without Fleet's login, for as long as the preview exists. Say so in the docs. The gateway keeps a place for the pass, so it can be added later without redoing it.
 
 ## Scope
 - In scope:
@@ -58,8 +59,8 @@ Ground truth from the spike and the codebase (2026-09-13). Don't re-check these:
   - Containers: `docker compose` ports aren't visible to the runner. `fleet_browser_open` with the URL still works.
 - Constraints:
   - AOT-safe throughout: source-generated JSON, no reflection-based proxy libraries.
-  - A preview reachable from the network requires auth. A preview on loopback is no more exposed than the dev server itself.
-  - The gateway only proxies ports that belong to one of the session's runs, or a loopback URL the agent or user opened explicitly for that session.
+  - ~~A preview reachable from the network requires auth.~~ Deferred (Decision 12): previews listen where Fleet listens. A preview on loopback is no more exposed than the dev server itself.
+  - ~~The gateway only proxies ports that belong to one of the session's runs, or a loopback URL the agent or user opened explicitly for that session.~~ Deferred with the pass (Decision 12).
 
 ## Design
 
@@ -108,10 +109,10 @@ Ground truth from the spike and the codebase (2026-09-13). Don't re-check these:
   - **Depends on**: 2 (interface).
 
 - [ ] 4. Gateway
-  - **What**: `PreviewGateway` with the three address strategies (Decision 9), auth for off-machine strategies, streaming HTML injection, per-session port ownership check, styled stopped/unreachable pages, config (`Fleet:Browser:PreviewHost`, `Fleet:Browser:PortRange`).
-  - **Files**: `src/WeaveFleet.Api/Browser/PreviewGateway.cs` (from `PreviewProxies.cs`), strategies, `BrowserEndpoints.cs`, `FleetOptions` (Browser section).
-  - **Acceptance**: From another device, a Vite app previews and hot-reloads through `HostPort`; without the token cookie the preview port answers 401. A streamed page's first bytes arrive before the whole response is ready. A URL on a loopback port that doesn't belong to the session is refused.
-  - **Tests**: the existing live proxy test extended to each strategy; auth; streaming (upstream writes, pauses, writes).
+  - **What** (trimmed by the 2026-09-13 decisions: no wildcard host, no pass, no ownership check): `PreviewGateway` with two address strategies (`*.localhost` when the browser is on Fleet's machine, a port per preview on Fleet's host otherwise), listeners bound where Fleet binds (Decision 12), the origin chosen by the server from the host the browser used, streaming HTML injection, the `dotnet watch` refresh route (approach A), styled stopped/unreachable pages, `Fleet:Browser:PortRange`, and "Open in a new tab" opening the preview's address.
+  - **Files**: `src/WeaveFleet.Api/Browser/PreviewGateway.cs` (from `PreviewProxies.cs`), `BrowserEndpoints.cs`, `FleetOptions` (Browser section), `BrowserCanvas.vue`.
+  - **Acceptance**: From another device, a Vite app previews and hot-reloads through a preview port; a `dotnet watch` Razor app refreshes through it too. A streamed page's first bytes arrive before the whole response is ready. A Fleet on localhost opens no preview port on the network.
+  - **Tests**: the existing live proxy test extended to each strategy; binding; streaming (upstream writes, pauses, writes); the refresh-script rewrite pinned to SDK 10.0.112.
   - **Depends on**: 0; can run in parallel with 2–3.
 
 - [ ] 5. Live-update loop
@@ -145,7 +146,7 @@ Ground truth from the spike and the codebase (2026-09-13). Don't re-check these:
 0 first. 1 and 4 can start right after 0 (1 is research, 4 is gateway work). 2 → 3. 5 needs 1, 2 and 4. 6 can start in mock mode once 2 fixes the event shapes. 7 and 8 need 5. 9 is last.
 
 ## Risks
-- **Ports share cookies.** With the `HostPort` strategy, a preview at `desktop:41234` and Fleet at `desktop:2113` are different origins but the same site, and cookies ignore ports. The previewed app's JavaScript (including its npm dependencies) could read Fleet's non-HttpOnly cookies, such as the CSRF token, and cookies marked SameSite=Lax count as same-site. Mitigations: prefer `WildcardHost` when configured; make every Fleet cookie HttpOnly where possible; consider giving Fleet's own cookies a `__Host-` prefix and a per-port name. Needs a decision in Task 4.
+- **Ports share cookies.** With the `HostPort` strategy, a preview at `desktop:41234` and Fleet at `desktop:2113` are different origins but the same site, and cookies ignore ports. The previewed app's JavaScript (including its npm dependencies) could read Fleet's non-HttpOnly cookies, such as the CSRF token, and cookies marked SameSite=Lax count as same-site. Mitigations: prefer `WildcardHost` when configured; make every Fleet cookie HttpOnly where possible; consider giving Fleet's own cookies a `__Host-` prefix and a per-port name. Deferred with the pass (Decision 12): the previewed app is code the user chose to run.
 - ~~**`dotnet watch` can't be routed through the gateway cleanly.**~~ Resolved in Task 1: approach A works from another device. What's left is that the rewrite depends on the literal in the SDK's refresh script; a test pins it, and if it stops matching, ASP.NET gets the Fleet fallback (reload after the app answers again).
 - **inotify instances run out with `dotnet watch`.** Each `dotnet watch` took 51 of the 128 inotify instances a user gets by default on Linux; the third one crashed. See Findings.
 - **Memory on small machines.** A `dotnet watch` app costs ~450 MB (watch, `dotnet run`, the app) plus MSBuild nodes. On the 7 GB dev machine, two of them plus builds triggered the OOM killer, which picked the installed Fleet's OpenCode process. See Findings.
@@ -302,7 +303,8 @@ Open items, with where they came from. Tick them here as they're done.
 - [ ] Decide what caps look like on a 7 GB machine (defaults are 3 per session, 10 per Fleet; three `dotnet watch` apps don't fit in 7 GB with builds running).
 - [x] Task 2: the live acceptance check (SIGKILL with an app running, then restart; stop/archive/delete; a 4th app refused).
 - [ ] When PR #191 merges: rebase, drop the session-stop hook with it, and reword Decision 6 (apps stop on archive, delete and Fleet restart).
-- [ ] Task 4: build approach A from `browser-canvas-v1-dotnet-watch.patch` properly: ownership check on the refresh port, exact-path rewrite, a test pinning the SDK 10.0.112 script.
+- [ ] Task 4: build approach A from `browser-canvas-v1-dotnet-watch.patch` properly: exact-path rewrite, a test pinning the SDK 10.0.112 script. (The refresh port's ownership check is deferred with the pass, Decision 12.)
+- [ ] After V1: the preview pass (token + cookie), the per-session port ownership check, and the cookie-sharing mitigations (Decision 12). Needed before Fleet is hosted for more than one user or used on an untrusted network.
 - [ ] Task 5: reload the canvas as soon as a `dotnet watch` app answers again after a rude-edit restart (12.6 s now, because of Blazor's backoff).
 - [ ] Task 6: "Open in a new tab" must open the preview's address, not the target's `localhost`, when viewed from another device.
 - [ ] Task 3: nothing has run on macOS or Windows yet.
