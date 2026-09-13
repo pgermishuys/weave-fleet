@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SessionListItem } from "@/api/client";
-import { formatCompactAge, sessionRowStatus } from "@/lib/session-row-status";
+import { formatCompactAge, isSessionLive, sessionRowDim, sessionRowStatus } from "@/lib/session-row-status";
 
 const NOW = Date.UTC(2026, 8, 12, 12, 0, 0);
 const MIN = 60_000;
@@ -63,5 +63,44 @@ describe("sessionRowStatus", () => {
 
   it("shows last activity for stopped sessions, which wake on the next prompt", () => {
     expect(sessionRowStatus(item("stopped"), NOW)).toEqual({ label: "2h", tone: "quiet", description: "Idle" });
+  });
+});
+
+describe("isSessionLive", () => {
+  it.each(["active", "waiting_input", "error"])("treats %s as live", (status) => {
+    expect(isSessionLive(item(status))).toBe(true);
+  });
+
+  it.each(["idle", "stopped", "completed", "disconnected"])("treats %s as quiet", (status) => {
+    expect(isSessionLive(item(status))).toBe(false);
+  });
+});
+
+describe("sessionRowDim", () => {
+  const DAY = 24 * 60 * MIN;
+
+  it("keeps a session at full contrast within a day of its last activity", () => {
+    expect(sessionRowDim(item("idle", {}, NOW - (DAY - MIN)), NOW)).toBe(0);
+  });
+
+  it("dims after a day without activity, and further after three", () => {
+    expect(sessionRowDim(item("idle", {}, NOW - DAY), NOW)).toBe(1);
+    expect(sessionRowDim(item("idle", {}, NOW - (3 * DAY - MIN)), NOW)).toBe(1);
+    expect(sessionRowDim(item("idle", {}, NOW - 3 * DAY), NOW)).toBe(2);
+    expect(sessionRowDim(item("completed", {}, NOW - 10 * DAY), NOW)).toBe(2);
+  });
+
+  it("never dims live sessions, however old their last activity", () => {
+    for (const status of ["active", "waiting_input", "error"]) {
+      expect(sessionRowDim(item(status, {}, NOW - 10 * DAY), NOW)).toBe(0);
+    }
+  });
+
+  it("falls back to the creation time, and stays bright without either", () => {
+    const createdOnly = item("idle", { session: { id: "s1", title: "Session", time: { created: NOW - 2 * DAY } } } as Partial<SessionListItem>);
+    expect(sessionRowDim(createdOnly, NOW)).toBe(1);
+
+    const noTime = item("idle", { session: { id: "s1", title: "Session" } } as Partial<SessionListItem>);
+    expect(sessionRowDim(noTime, NOW)).toBe(0);
   });
 });
