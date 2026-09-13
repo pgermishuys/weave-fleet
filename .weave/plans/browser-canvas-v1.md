@@ -36,6 +36,10 @@ Ground truth from the spike and the codebase (2026-09-13). Don't re-check these:
 7. **Pooled OpenCode only**, like canvases. The tools stay harness-neutral; MCP for Claude Code comes later.
 8. **Nothing is pushed into the agent's context.** It reads status and output with `fleet_canvas_read` when it wants ([[dont-inject-agent-context-unasked]]).
 9. **The address a preview gets (decided with the user 2026-09-13, "for now"):** `*.localhost` when the browser is on Fleet's machine; a wildcard host name when the user configures one (`Fleet:Browser:PreviewHost = "*.fleet.home.example"`), which keeps cookies apart; otherwise a port per preview on Fleet's host (no DNS needed, but ports share cookies, see Risks). All three sit behind one address-strategy interface, which the cloud later reuses. Revisit if the cookie mitigations in Task 4 fall short.
+10. **Viewing from another device is core, not an extra (decided with the user 2026-09-13).** The user's main setup is Fleet on a Linux box, used from a browser on a Windows machine on the same network. Fleet's interface, and so the Browser canvas inside it, runs in that Windows browser. There, `localhost` means the Windows machine, so the canvas can only show an app that the Windows browser can reach over the network.
+11. **The app stays on `localhost`; Fleet's proxy is what listens on the network (decided with the user 2026-09-13).** This is the same idea as VS Code's and Codespaces' port forwarding. The canvas loads the preview at the host name the browser used to reach Fleet (`location.hostname`), not an address Fleet looks up (the box has several: LAN, Tailscale, container bridges). Considered and rejected:
+    - **Make the app listen on 0.0.0.0 and load it directly.** Every framework needs its own switch (Vite `--host`, Next `-H`, ASP.NET `--urls`, Django's `ALLOWED_HOSTS`), and it puts unauthenticated dev servers on the network (Vite and webpack-dev-server have had file-disclosure bugs). Pages that forbid framing show blank. `dotnet watch` still wouldn't refresh, and the address bar and back/forward lose the injected script. A possible later option: load an app directly when it already listens on 0.0.0.0.
+    - **Stream a headless browser on the Linux box into the canvas.** Worse feel (scrolling, typing, selection, no dev tools), a few hundred MB per preview, and a large project of its own. A browser on the Linux box is still wanted later so the agent can take screenshots; that's separate from how the user views the page.
 
 ## Scope
 - In scope:
@@ -245,7 +249,7 @@ Asked by the user after Tasks 0–1: is this a good feature with decent function
   - The scope is 9 tasks: three address strategies, auth, port detection on three OSes, and a 7-stack matrix.
   - Maintenance: the `dotnet watch` fix depends on the SDK script's literal, and dev-server settings like Vite's HMR host can bypass the proxy.
   - The cheap alternative, a link that opens `localhost:5173` in a new tab, gets most of the value on the same machine but none from another device.
-- **Deciding question for the user:** how much viewing from another device matters. If it's mostly the same machine, the payoff is smaller and a trimmed V1 is enough.
+- **Deciding question for the user:** how much viewing from another device matters. **Answered 2026-09-13:** it's the user's main setup (Linux box, Windows browser), so it's core (Decision 10), and the proxy listening on the network is a core part of V1 (Decision 11).
 
 **Proposed changes to V1 (not agreed yet; the user decides):**
 1. Trim the scope:
@@ -260,7 +264,7 @@ Asked by the user after Tasks 0–1: is this a good feature with decent function
 ## Follow-ups
 Open items, with where they came from. Tick them here as they're done.
 
-- [ ] **Decide** the proposed changes above (user).
+- [ ] **Decide** the proposed changes above (user). Still open: whether the wildcard host name is in V1 or later (proposal 1), and proposals 2–4. Settled: viewing from another device is core; the proxy, not the app, listens on the network (Decisions 10–11).
 - [ ] **Draft PR #189** (opened 2026-09-13) for `feat/browser-canvas`: keep it a draft, since it ships agent tools that start processes, and don't merge before Tasks 2, 4 and 6 at least. Until Task 4, the proxy endpoint proxies any loopback URL for an authenticated user.
 - [ ] Task 2: catch and log exceptions in `AppRunner.MonitorAsync`; compare parsed ports in `BrowserBridge` (`:80` vs `:8080`); strip `Fleet__*` from app runs (Task 0 review notes).
 - [ ] Task 2: give ASP.NET runs their port (`DOTNET_URLS` for single-project `dotnet run`/`watch`, `-- --urls` in the tool description). Check that an Aspire AppHost isn't broken by it (untested).
