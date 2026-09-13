@@ -19,7 +19,7 @@ import {
   useResumeSession,
   useTerminateSession,
 } from "@/composables/use-session-actions";
-import { incrementPendingPrompts, useSentPrompts } from "@/composables/use-send-prompt";
+import { useSentPrompts } from "@/composables/use-send-prompt";
 import { provideSessionDiffsContext } from "@/composables/use-session-diffs-context";
 import { apiFetch } from "@/lib/api-client";
 import type { SessionActionCapabilities, SessionListItem, SessionOrigin } from "@/api/client";
@@ -554,8 +554,9 @@ const SessionDetailPage = defineComponent({
     );
 
     function handlePromptSent(): void {
+      // sendPrompt already counted this prompt as pending; counting it again here left
+      // one pending forever, so the header stayed on "Working" after the reply.
       optimisticWorking.value = true;
-      incrementPendingPrompts(params.value.id);
       sessionsStore.patchSession(params.value.id, {
         activityStatus: "busy",
         lifecycleStatus: "running",
