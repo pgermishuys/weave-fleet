@@ -225,6 +225,24 @@ public sealed record GetSessionStatusResponse(
     string? RetentionStatus,
     string? ArchivedAt);
 
+// ── Terminals ────────────────────────────────────────────────────────────────
+
+/// <summary>
+/// A terminal tab. <c>status</c> is <c>running</c>, or <c>stopped</c> for one saved before Fleet restarted:
+/// attaching to it starts a new shell under its old scrollback.
+/// </summary>
+public sealed record TerminalResponse(
+    string Id,
+    string Title,
+    string Status,
+    DateTimeOffset CreatedAt);
+
+/// <summary>The size of the terminal the browser will show, so the shell starts at the right width.</summary>
+public sealed record CreateTerminalRequest(int? Cols = null, int? Rows = null);
+
+/// <summary>A text message from the browser on a terminal socket: <c>resize</c> or <c>clear</c>.</summary>
+public sealed record TerminalControlMessage(string? Type, int? Cols = null, int? Rows = null);
+
 // ── Canvases ─────────────────────────────────────────────────────────────────
 
 /// <summary>

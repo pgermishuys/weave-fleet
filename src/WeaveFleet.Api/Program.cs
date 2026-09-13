@@ -564,6 +564,9 @@ app.Use(async (context, next) =>
 app.UseAuthentication();
 app.UseAuthorization();
 
+// Terminal sockets are plain WebSockets on API routes; SignalR only adds this inside its own hub pipeline.
+app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(30) });
+
 app.MapOpenApi();
 
 // Origin validation for SignalR hubs

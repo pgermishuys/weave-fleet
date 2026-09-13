@@ -26,7 +26,7 @@ Ground truth from the codebase (2026-09-13). Don't re-check these:
 2. **Terminals belong to a session.** Each shell starts in the session's folder, and switching sessions switches the drawer. This was the mockup's recommendation, and the user approved the mockup.
 3. **The agent never sees the terminal.** Terminal output reaches the agent only when the user selects lines and sends them. There's no agent tool in this plan.
 4. **All three platforms.** Linux is built and tested here. The user runs the macOS and Windows checklist at the end of this plan before merge.
-5. **Output doesn't go through SignalR or domain events.** Each attached terminal gets a raw WebSocket: binary frames carry bytes, text frames carry small JSON control messages. Only lifecycle changes (opened, exited, closed) go out as session events, so a second window sees tabs appear and disappear.
+5. **Output doesn't go through SignalR or domain events.** Each attached terminal gets a raw WebSocket: binary frames carry bytes, text frames carry small JSON control messages. Only lifecycle changes (opened, closed) go out as session events, so a second window sees tabs appear and disappear.
 6. **Scrollback is saved to disk** under app data: at most 5,000 lines or 2 MB per terminal. Query sequences are stripped before saving. It's deleted when the tab closes or the session is archived or deleted.
 7. **After a Fleet restart, reopening a saved terminal starts a new shell under its old scrollback**, with a dim `— Fleet restarted —` line between them. Shells themselves don't survive a restart.
 8. **Off when Fleet is hosted** (`Auth.Enabled`): a shell there runs as the service user on a shared machine. Local mode keeps it on, including remote access with a token, because the agents there already run shell commands with the same rights. `FleetOptions.Terminal.Enabled` overrides the default either way.
@@ -137,10 +137,18 @@ components/terminal/TerminalView.vue     one xterm per terminal, kept alive whil
     - Application exposes internals to `WeaveFleet.Infrastructure.Tests` too, so the real-shell test can swap the process environment.
     - Tests: 22 in `TerminalManagerTests`/`TerminalServiceTests` with a fake PTY and an in-memory store; one real-shell test in `TerminalManagerRealShellTests` (folder, no `Fleet__` leak, output survives a restart). Full Application (521), Infrastructure (796), Api (180) and Integration (76) suites pass.
 
-- [ ] 4. Endpoints and socket
+- [x] 4. Endpoints and socket (done 2026-09-13)
   - **Files**: `src/WeaveFleet.Api/Endpoints/TerminalEndpoints.cs` (new); `EndpointExtensions.cs`; `Program.cs` (`UseWebSockets`); `SessionEventsHub.ResolveDomainEventType`; JSON context entries; `terminalEnabled` in the client config endpoint.
   - **Acceptance**: The REST calls and the socket protocol in Design. A foreign `Origin` gets 403 before the upgrade. Another user's session gets 404. The feature flag off gives 404 everywhere and `terminalEnabled: false`. A slow socket is dropped without slowing the others.
   - **Tests**: `tests/WeaveFleet.IntegrationTests/Terminals/` with a real Kestrel server and `ClientWebSocket`; a SignalR contract test for the three events.
+  - **As built**:
+    - `TerminalEndpoints` (in `apiScope`): `GET` and `POST /api/sessions/{id}/terminals`, `DELETE …/{terminalId}`, and `GET …/{terminalId}/socket?cols=&rows=` (left out of OpenAPI). Errors are `{ "error": "…" }`: `NotFound` 404, `Unavailable` and `LimitReached` 409, `SpawnFailed` 500. `POST` returns 201 with `TerminalResponse(id, title, status: "running" | "stopped", createdAt)`; its body `{ cols, rows }` is optional (120×30).
+    - `TerminalSocket.RunAsync` sends the scrollback in 16 KB binary frames, then `{"type":"ready"}`, then pumps frames; `exit` carries `exitCode` (null when Fleet ended the shell). Input binary goes to the shell a fragment at a time; text control messages are capped at 4 KB. **Never cancel a pending WebSocket receive**: .NET aborts the socket, and the browser sees a reset instead of a close. So when the shell ends, the server sends its close frame, waits up to 2 s for the client's reply, then aborts. Close codes: 1000 (shell ended, or detached), 4001 (fell behind: reconnect), 1001 (Fleet stopping).
+    - Origin check (`TerminalSocket.IsOriginAllowed`), stricter than the hub's, which allows any origin in local mode: no `Origin` (not a browser; auth still applies), the request's own host, `Auth.AllowedOrigins`, and in Development any `localhost`, `127.0.0.1` or `*.localhost` origin (the Vite dev server). A foreign origin gets 403 before the upgrade.
+    - `app.UseWebSockets` (30 s keep-alive) after authorization. `ClientConfigResponse.TerminalEnabled` reports `FleetOptions.TerminalEnabled`.
+    - Session events leave out null fields (the application JSON context's convention), so `terminal.closed` has no `exitCode` when Fleet ended the shell. The client treats a missing `exitCode` as null.
+    - The history store now takes its folder from the `FleetOptions` in DI, so a host that swaps the options (the integration test server) writes where it expects.
+    - Tests: 6 in `TerminalEndpointTests` on the existing `SignalRTestServer` (open, echo, resize, close with a clean 1000; a second connection gets the scrollback; foreign origin 403; unknown session 404 for REST and socket; `terminalEnabled`; `terminal.opened` and `terminal.closed` over the hub).
 
 - [ ] 5. Client API, socket and store
   - **Files**: `client/src/lib/terminal-api.ts`, `terminal-socket.ts`, `client/src/stores/terminals.ts`; mock REST in `vite-plugin-mock-api.ts`; the mock transport (the mockup's pretend shell); reducer cases for the three events; `bun add @xterm/xterm @xterm/addon-fit @xterm/addon-web-links`.
