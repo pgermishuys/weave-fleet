@@ -118,7 +118,18 @@ describe("SessionItem", () => {
     expect(wrapper.get(".session-title").text()).toBe("Fix auth bug");
     expect(wrapper.get("button").attributes("aria-current")).toBe("true");
     expect(wrapper.get("button").classes()).toContain("active");
-    expect(wrapper.get(".status-glyph").attributes("aria-label")).toBe("Active");
+    expect(wrapper.get(".status-glyph").attributes("aria-label")).toBe("Working");
+    expect(wrapper.find(".session-meta").exists()).toBe(false);
+  });
+
+  it("names delegation and retries on the glyph, and shows the retry attempt", () => {
+    const delegating = mountSessionItem(createSession({ activityStatus: "delegating" }));
+    expect(delegating.get(".status-glyph").attributes("aria-label")).toBe("Delegating");
+
+    const retrying = mountSessionItem(createSession({ activityStatus: "retry", retryAttempt: 2 }));
+    expect(retrying.get(".status-glyph").classes()).toContain("status-glyph--retry");
+    expect(retrying.get(".status-glyph").attributes("aria-label")).toBe("Retrying (attempt 2)");
+    expect(retrying.get(".session-meta").text()).toBe("Retry 2");
   });
 
   it("emits the session when clicked", async () => {

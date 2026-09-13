@@ -1,9 +1,20 @@
 <script setup lang="ts">
+import { computed } from "vue";
+
 interface Props {
   status: string;
+  /** Activity of an active session; "retry" turns the working dots amber. */
+  activity?: string | null;
+  /** Overrides the spoken label, e.g. "Delegating" or "Retrying (attempt 2)". */
+  label?: string;
 }
 
 const props = defineProps<Props>();
+
+const ariaLabel = computed(() => props.label ?? statusLabel(props.status));
+
+// Each dot's clockwise position from the top-left, in the grid's row-major order.
+const QUAD_DOTS = [0, 1, 3, 2] as const;
 
 const COLOR_MAP: Record<string, string> = {
   completed: "var(--complete)",
@@ -21,7 +32,7 @@ function statusColor(status: string): string {
 
 function statusLabel(status: string): string {
   switch (status) {
-    case "active": return "Active";
+    case "active": return "Working";
     case "idle": return "Idle";
     case "running": return "Running";
     case "completed": return "Completed";
@@ -35,19 +46,21 @@ function statusLabel(status: string): string {
 </script>
 
 <template>
-  <!-- active: filled circle -->
-  <svg
+  <!-- active: four dots in a square; the missing one travels clockwise -->
+  <span
     v-if="props.status === 'active'"
-    width="8"
-    height="8"
-    viewBox="0 0 8 8"
-    fill="none"
-    aria-hidden="false"
-    :aria-label="statusLabel(props.status)"
-    class="status-glyph status-glyph--live"
+    role="img"
+    :aria-label="ariaLabel"
+    :title="ariaLabel"
+    class="status-glyph status-glyph--working"
+    :class="{ 'status-glyph--retry': props.activity === 'retry' }"
   >
-    <circle cx="4" cy="4" r="4" :fill="statusColor(props.status)" />
-  </svg>
+    <i
+      v-for="slot in QUAD_DOTS"
+      :key="slot"
+      :style="{ animationDelay: `${(slot - 4) * 200}ms` }"
+    />
+  </span>
 
   <!-- running (a tool call in progress): pulsing filled circle -->
   <svg
@@ -57,7 +70,7 @@ function statusLabel(status: string): string {
     viewBox="0 0 8 8"
     fill="none"
     aria-hidden="false"
-    :aria-label="statusLabel(props.status)"
+    :aria-label="ariaLabel"
     class="status-glyph status-glyph--pulsing"
   >
     <circle cx="4" cy="4" r="4" :fill="statusColor(props.status)" />
@@ -71,7 +84,7 @@ function statusLabel(status: string): string {
     viewBox="0 0 8 8"
     fill="none"
     aria-hidden="false"
-    :aria-label="statusLabel(props.status)"
+    :aria-label="ariaLabel"
     class="status-glyph"
   >
     <circle cx="4" cy="4" r="3" :stroke="statusColor(props.status)" stroke-width="1.5" />
@@ -85,7 +98,7 @@ function statusLabel(status: string): string {
     viewBox="0 0 8 8"
     fill="none"
     aria-hidden="false"
-    :aria-label="statusLabel(props.status)"
+    :aria-label="ariaLabel"
     class="status-glyph"
   >
     <polygon points="4,0.5 7.5,7.5 0.5,7.5" :fill="statusColor(props.status)" />
@@ -99,7 +112,7 @@ function statusLabel(status: string): string {
     viewBox="0 0 8 8"
     fill="none"
     aria-hidden="false"
-    :aria-label="statusLabel(props.status)"
+    :aria-label="ariaLabel"
     class="status-glyph"
   >
     <polygon points="4,0.5 7.5,4 4,7.5 0.5,4" :fill="statusColor(props.status)" />
@@ -113,7 +126,7 @@ function statusLabel(status: string): string {
     viewBox="0 0 8 8"
     fill="none"
     aria-hidden="false"
-    :aria-label="statusLabel(props.status)"
+    :aria-label="ariaLabel"
     class="status-glyph"
   >
     <polyline points="1,4.5 3.2,6.5 7,1.5" :stroke="statusColor(props.status)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
@@ -127,7 +140,7 @@ function statusLabel(status: string): string {
     viewBox="0 0 8 8"
     fill="none"
     aria-hidden="false"
-    :aria-label="statusLabel(props.status)"
+    :aria-label="ariaLabel"
     class="status-glyph"
   >
     <rect x="1" y="1" width="6" height="6" :fill="statusColor(props.status)" />
@@ -144,22 +157,43 @@ function statusLabel(status: string): string {
   animation: glyph-pulse 1.2s ease-in-out infinite;
 }
 
-/* Working sessions breathe slowly. Stepped timing keeps it to a handful of
-   repaints per cycle instead of one per frame. */
-.status-glyph--live {
-  animation: status-live var(--transition-pulse) infinite;
+/* Working: a 2×2 square of dots, 8px like the other glyphs. The missing dot
+   ticks clockwise, one step every 200ms. Stepped timing means four repaints
+   per cycle instead of one per frame. Text colour, because colour is kept for
+   states that need the user. */
+.status-glyph--working {
+  display: grid;
+  grid-template-columns: repeat(2, 3px);
+  grid-auto-rows: 3px;
+  gap: 2px;
+  color: var(--text);
 }
 
-@keyframes status-live {
-  0%, 40% { opacity: 1; animation-timing-function: steps(6); }
-  50%, 90% { opacity: 0.45; animation-timing-function: steps(6); }
-  100% { opacity: 1; }
+.status-glyph--working i {
+  display: block;
+  border-radius: 50%;
+  background: currentColor;
+  animation: status-quad 800ms steps(1, end) infinite;
+}
+
+.status-glyph--retry {
+  color: var(--status-waiting);
+}
+
+@keyframes status-quad {
+  0% { opacity: 0.16; }
+  25%, 100% { opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .status-glyph--live,
+  .status-glyph--working i,
   .status-glyph--pulsing {
     animation: none;
+  }
+
+  /* Hold one frame: the top-left dot missing. */
+  .status-glyph--working i:first-child {
+    opacity: 0.16;
   }
 }
 

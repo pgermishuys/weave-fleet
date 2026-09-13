@@ -359,7 +359,11 @@ function removeSessionFromStore(): void {
             :aria-current="active ? 'true' : undefined"
             @click="handleSelect"
           >
-            <StatusGlyph :status="session.sessionStatus" />
+            <StatusGlyph
+              :status="session.sessionStatus"
+              :activity="session.activityStatus"
+              :label="rowStatus.description"
+            />
 
             <span class="session-copy">
               <span class="session-title">{{ displayTitle }}</span>
@@ -378,7 +382,11 @@ function removeSessionFromStore(): void {
           class="session-item session-item--editing"
           :class="{ active }"
         >
-          <StatusGlyph :status="session.sessionStatus" />
+          <StatusGlyph
+            :status="session.sessionStatus"
+            :activity="session.activityStatus"
+            :label="rowStatus.description"
+          />
 
           <span class="session-copy">
             <input
@@ -570,8 +578,8 @@ function removeSessionFromStore(): void {
   white-space: nowrap;
 }
 
-.session-meta--working {
-  color: var(--muted);
+.session-meta--retry {
+  color: var(--status-waiting);
 }
 
 .session-meta--attention {
