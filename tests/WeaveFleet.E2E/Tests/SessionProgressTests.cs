@@ -79,11 +79,19 @@ public sealed class SessionProgressTests : E2ETestBase,
 
             try
             {
-                // Two turns, each reporting that the agent wrote the plan file.
+                // Two turns, each reporting that the agent wrote the plan file; the second also brings a todo list.
                 var written = MakeHarnessEvent(EventTypes.FilesWritten, new { messageId = "msg-plan", paths = new[] { planPath } });
+                var todos = MakeHarnessEvent(EventTypes.TodosReported, new
+                {
+                    items = new object[]
+                    {
+                        new { content = "Find every index on the dead tables", status = "completed" },
+                        new { content = "Drop them in the migration", status = "in_progress" },
+                    },
+                });
                 ConfigureScenario(builder => builder
                     .WithPromptResponse(response => Turn(response, written))
-                    .WithPromptResponse(response => Turn(response, written)));
+                    .WithPromptResponse(response => Turn(response, written, todos)));
 
                 var sessionId = await CreateSessionAsync("Plan progress");
                 var detail = new SessionDetailPage(Page);
@@ -105,6 +113,8 @@ public sealed class SessionProgressTests : E2ETestBase,
                 await Assertions.Expect(Page.Locator(".progress-group__title")).ToHaveTextAsync(["Phase 1: Migrate", "Phase 2: Check"]);
                 await Assertions.Expect(Page.Locator(".progress-step--ticked")).ToContainTextAsync("Write the migration");
                 await Assertions.Expect(Page.Locator(".progress-step--current")).ToContainTextAsync("Drop the indexes");
+                await Assertions.Expect(Page.Locator(".progress-step--current .progress-todo")).ToHaveTextAsync(
+                    ["Find every index on the dead tables", "Drop them in the migration"]);
                 await Assertions.Expect(Page.Locator(".progress-strip")).ToHaveCountAsync(0);
             }
             finally
@@ -128,13 +138,16 @@ public sealed class SessionProgressTests : E2ETestBase,
         return new Uri(Page.Url).AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Last();
     }
 
-    /// <summary>A turn: busy, the given event, then idle.</summary>
-    private static PromptResponseBuilder Turn(PromptResponseBuilder response, HarnessEvent evt)
-        => response
-            .AddEvent(MakeHarnessEvent(EventTypes.SessionStatus, new { sessionId = "_placeholder_", status = new { type = "busy" } }))
-            .AddEvent(evt, TimeSpan.FromMilliseconds(100))
+    /// <summary>A turn: busy, the given events, then idle.</summary>
+    private static PromptResponseBuilder Turn(PromptResponseBuilder response, params HarnessEvent[] events)
+    {
+        response.AddEvent(MakeHarnessEvent(EventTypes.SessionStatus, new { sessionId = "_placeholder_", status = new { type = "busy" } }));
+        foreach (var evt in events)
+            response.AddEvent(evt, TimeSpan.FromMilliseconds(100));
+        return response
             .AddEvent(MakeHarnessEvent(EventTypes.SessionStatus, new { sessionId = "_placeholder_", status = new { type = "idle" } }), TimeSpan.FromMilliseconds(100))
             .AddEvent(MakeHarnessEvent(EventTypes.SessionIdle, new { sessionId = "_placeholder_" }), TimeSpan.FromMilliseconds(50));
+    }
 
     private static HarnessEvent MakeHarnessEvent(string type, object payload)
         => new()
