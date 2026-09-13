@@ -179,3 +179,34 @@ public sealed class SequenceState
         return Encoding.UTF8.GetString(buffer.WrittenSpan);
     }
 }
+
+/// <summary>
+/// The state of a <see cref="CanvasKinds.Browser"/> canvas: the page to show and, when Fleet started the
+/// app, the run it belongs to. The proxy address isn't stored; it changes every time Fleet starts.
+/// </summary>
+public sealed class BrowserState
+{
+    public string Url { get; set; } = string.Empty;
+    public string? AppId { get; set; }
+
+    public static BrowserState Parse(string json)
+    {
+        var root = JsonNode.Parse(json)?.AsObject() ?? throw new FormatException("Browser state is not a JSON object.");
+        return new BrowserState { Url = (string?)root["url"] ?? string.Empty, AppId = (string?)root["appId"] };
+    }
+
+    public string ToJson()
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer, CanvasJson.WriterOptions))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("url", Url);
+            if (AppId is not null)
+                writer.WriteString("appId", AppId);
+            writer.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
+}

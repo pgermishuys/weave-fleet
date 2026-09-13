@@ -16,6 +16,7 @@ public static class CanvasOpNames
     public const string SetDirection = "setDirection";
     public const string MoveNode = "moveNode";
     public const string SetSource = "setSource";
+    public const string SetPage = "setPage";
 }
 
 /// <summary>
@@ -80,6 +81,12 @@ public sealed record SetSourceOp(string Source) : CanvasOp
     public override string Name => CanvasOpNames.SetSource;
 }
 
+/// <summary>Points a browser canvas at a page. <see cref="AppId"/> is the Fleet-run app serving it, if any.</summary>
+public sealed record SetPageOp(string Url, string? AppId) : CanvasOp
+{
+    public override string Name => CanvasOpNames.SetPage;
+}
+
 /// <summary>
 /// An accepted change: the new state JSON, the ops as they were applied (to store as the revision),
 /// and a short summary for tool cards, e.g. "+2 boxes, −1 edge".
@@ -103,13 +110,16 @@ public static class CanvasOps
 
     private static readonly string[] AgentSequenceOps = [CanvasOpNames.SetSource];
 
-    private static readonly string[] AllOps = [.. AgentDiagramOps, CanvasOpNames.MoveNode, .. AgentSequenceOps];
+    private static readonly string[] AgentBrowserOps = [CanvasOpNames.SetPage];
+
+    private static readonly string[] AllOps = [.. AgentDiagramOps, CanvasOpNames.MoveNode, .. AgentSequenceOps, .. AgentBrowserOps];
 
     public static IReadOnlyList<string> AllowedOps(string kind, CanvasActor actor) => (kind, actor) switch
     {
         (CanvasKinds.Diagram, CanvasActor.Agent) => AgentDiagramOps,
         (CanvasKinds.Diagram, CanvasActor.User) => UserDiagramOps,
         (CanvasKinds.Sequence, CanvasActor.Agent) => AgentSequenceOps,
+        (CanvasKinds.Browser, CanvasActor.Agent) => AgentBrowserOps,
         _ => [],
     };
 
@@ -117,6 +127,7 @@ public static class CanvasOps
     {
         CanvasKinds.Diagram => new DiagramState().ToJson(),
         CanvasKinds.Sequence => new SequenceState().ToJson(),
+        CanvasKinds.Browser => new BrowserState().ToJson(),
         _ => throw new ArgumentException($"Unknown canvas kind \"{kind}\".", nameof(kind)),
     };
 
@@ -168,7 +179,12 @@ public static class CanvasOps
         List<(CanvasOp Op, string Where)> ops;
         try
         {
-            ops = kind == CanvasKinds.Diagram ? DiagramOpsFromState(Unwrap(state)) : SequenceOpsFromState(Unwrap(state));
+            ops = kind switch
+            {
+                CanvasKinds.Diagram => DiagramOpsFromState(Unwrap(state)),
+                CanvasKinds.Browser => BrowserOpsFromState(Unwrap(state)),
+                _ => SequenceOpsFromState(Unwrap(state)),
+            };
         }
         catch (CanvasFormatException ex)
         {
@@ -195,6 +211,14 @@ public static class CanvasOps
             var source = SequenceState.Parse(target.Value.StateJson).Source;
             IReadOnlyList<CanvasOp> sourceOps = SequenceState.Parse(stateJson).Source == source ? [] : [new SetSourceOp(source)];
             return CanvasResult.Ok(sourceOps);
+        }
+
+        if (kind == CanvasKinds.Browser)
+        {
+            var page = BrowserState.Parse(target.Value.StateJson);
+            var shown = BrowserState.Parse(stateJson);
+            IReadOnlyList<CanvasOp> pageOps = shown.Url == page.Url && shown.AppId == page.AppId ? [] : [new SetPageOp(page.Url, page.AppId)];
+            return CanvasResult.Ok(pageOps);
         }
 
         var current = DiagramState.Parse(stateJson);
@@ -280,9 +304,12 @@ public static class CanvasOps
                 return CanvasResult.Fail<CanvasChange>(CanvasErrorKind.Invalid, $"{Where(where, ops, i)}: the {ActorName(actor)} can't use {ops[i].Name} on a {kind} canvas.");
         }
 
-        return kind == CanvasKinds.Diagram
-            ? ApplyDiagram(DiagramState.Parse(stateJson), actor, ops, where)
-            : ApplySequence(ops);
+        return kind switch
+        {
+            CanvasKinds.Diagram => ApplyDiagram(DiagramState.Parse(stateJson), actor, ops, where),
+            CanvasKinds.Browser => ApplyBrowser(ops),
+            _ => ApplySequence(ops),
+        };
     }
 
     private static CanvasResult<CanvasChange> ApplyDiagram(
@@ -426,6 +453,24 @@ public static class CanvasOps
         return CanvasResult.Ok<CanvasChange>(new CanvasChange(json, ops, CanvasText.Summarize(ops)));
     }
 
+    private static CanvasResult<CanvasChange> ApplyBrowser(IReadOnlyList<CanvasOp> ops)
+    {
+        var state = new BrowserState();
+        foreach (var op in ops)
+        {
+            if (op is SetPageOp set)
+            {
+                state.Url = set.Url;
+                state.AppId = set.AppId;
+            }
+        }
+
+        if (BrowserStateValidator.Validate(state) is { } invalid)
+            return CanvasResult.Fail<CanvasChange>(invalid);
+
+        return CanvasResult.Ok<CanvasChange>(new CanvasChange(state.ToJson(), ops, CanvasText.Summarize(ops)));
+    }
+
     /// <summary>Serializes applied ops for <c>canvas_revisions.ops_json</c>.</summary>
     public static string ToJson(IReadOnlyList<CanvasOp> ops)
     {
@@ -482,6 +527,10 @@ public static class CanvasOps
                         break;
                     case SetSourceOp set:
                         writer.WriteString("source", set.Source);
+                        break;
+                    case SetPageOp page:
+                        writer.WriteString("url", page.Url);
+                        WriteOptional(writer, "appId", page.AppId);
                         break;
                 }
                 writer.WriteEndObject();
@@ -572,6 +621,10 @@ public static class CanvasOps
                 r.AllowOnly("id", "x", "y");
                 return new MoveNodeOp(r.Id("id"), r.Number("x"), r.Number("y"));
 
+            case CanvasOpNames.SetPage:
+                r.AllowOnly("url", "appId");
+                return new SetPageOp(r.Source("url"), r.OptionalText("appId"));
+
             default:
                 r.AllowOnly("source");
                 return new SetSourceOp(r.Source("source"));
@@ -627,6 +680,16 @@ public static class CanvasOps
         var reader = new FieldReader(root, "state");
         reader.AllowOnly("source");
         return [(new SetSourceOp(reader.Source("source")), "state.source")];
+    }
+
+    private static List<(CanvasOp Op, string Where)> BrowserOpsFromState(JsonNode? state)
+    {
+        if (state is not JsonObject root)
+            throw new CanvasFormatException("\"state\" must be an object with \"url\".");
+
+        var reader = new FieldReader(root, "state");
+        reader.AllowOnly("url", "appId");
+        return [(new SetPageOp(reader.Source("url"), reader.OptionalText("appId")), "state")];
     }
 
     /// <summary>Unwraps a JSON object or array that was sent as a string.</summary>

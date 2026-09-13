@@ -72,6 +72,46 @@ public static class DiagramStateValidator
     private static CanvasError Invalid(string message) => new(CanvasErrorKind.Invalid, message);
 }
 
+public static class BrowserStateValidator
+{
+    public static CanvasError? Validate(BrowserState state)
+        => LoopbackUrl.TryParse(state.Url, out _)
+            ? null
+            : new CanvasError(CanvasErrorKind.Invalid, LoopbackUrl.Requirement);
+}
+
+/// <summary>
+/// The pages a browser canvas can show: http or https on this machine. Fleet proxies them, so anything
+/// else would let a canvas make Fleet fetch arbitrary hosts.
+/// </summary>
+public static class LoopbackUrl
+{
+    public const string Requirement = "\"url\" must be an http or https address on this machine, e.g. http://localhost:5173/.";
+
+    public static bool TryParse(string? value, out Uri uri)
+    {
+        uri = null!;
+        if (!Uri.TryCreate(value?.Trim(), UriKind.Absolute, out var parsed))
+            return false;
+        if (parsed.Scheme != Uri.UriSchemeHttp && parsed.Scheme != Uri.UriSchemeHttps)
+            return false;
+        if (!IsLoopbackHost(parsed.Host))
+            return false;
+
+        uri = parsed;
+        return true;
+    }
+
+    /// <summary><c>0.0.0.0</c> and <c>[::]</c> count: servers print the address they bound, and that means "this machine".</summary>
+    public static bool IsLoopbackHost(string host)
+        => host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+           || host.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase)
+           || (System.Net.IPAddress.TryParse(host.Trim('[', ']'), out var address)
+               && (System.Net.IPAddress.IsLoopback(address)
+                   || address.Equals(System.Net.IPAddress.Any)
+                   || address.Equals(System.Net.IPAddress.IPv6Any)));
+}
+
 public static class SequenceStateValidator
 {
     public static CanvasError? Validate(SequenceState state)

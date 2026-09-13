@@ -32,6 +32,15 @@ public static class CanvasText
             return text.ToString();
         }
 
+        if (canvas.Kind == CanvasKinds.Browser)
+        {
+            var page = BrowserState.Parse(canvas.StateJson);
+            text.Append("\nurl ").Append(page.Url);
+            if (page.AppId is not null)
+                text.Append("\napp ").Append(page.AppId);
+            return text.ToString();
+        }
+
         var state = DiagramState.Parse(canvas.StateJson);
         text.Append(' ').Append(state.Direction);
         if (state.Nodes.Count == 0)
@@ -87,6 +96,7 @@ public static class CanvasText
         var movedBoxes = new HashSet<string>(StringComparer.Ordinal);
         string? direction = null;
         SetSourceOp? source = null;
+        SetPageOp? page = null;
 
         foreach (var op in ops)
         {
@@ -104,6 +114,7 @@ public static class CanvasText
                 case MoveNodeOp move: movedBoxes.Add(move.Id); break;
                 case SetDirectionOp set: direction = set.Direction; break;
                 case SetSourceOp set: source = set; break;
+                case SetPageOp set: page = set; break;
             }
         }
 
@@ -126,6 +137,8 @@ public static class CanvasText
             parts.Add("direction " + direction);
         if (source is not null)
             parts.Add(Plural(source.Source.Split('\n').Length, "line"));
+        if (page is not null)
+            parts.Add(page.Url);
 
         return parts.Count == 0 ? "no changes" : string.Join(", ", parts);
     }
