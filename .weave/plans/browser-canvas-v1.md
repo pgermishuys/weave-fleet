@@ -208,7 +208,17 @@ The gateway adds nothing measurable. Razor Pages markup always does a full reloa
 - Build failures print `dotnet watch ❌` lines, as expected in the design.
 
 **For Task 2 (runner) and Task 8 (matrix):**
-- **ASP.NET ignores `PORT`.** The port comes from `launchSettings.json` (`applicationUrl`, fixed per project, 5281 here). Two runs of the same project, such as two sessions on worktrees of one repo, collide: the second fails with "address already in use". To check: pass `--urls http://localhost:$PORT` after `--` (command-line arguments should override the launch profile).
+- **ASP.NET ignores `PORT`.** The port comes from `launchSettings.json` (`applicationUrl`, fixed per project, 5281 here). Two runs of the same project, such as two sessions on worktrees of one repo, collide: the second fails with "address already in use". The documented settings are `ASPNETCORE_URLS`/`DOTNET_URLS`, but `dotnet run` and `dotnet watch` apply the launch profile, and its `applicationUrl` overwrites `ASPNETCORE_URLS` in the app's environment (the docs say so too: "Configuring the `applicationUrl` sets the `ASPNETCORE_URLS` environment variable and overrides values set in the environment"). Measured on SDK 10.0.112 (`.poc-runtime/url-matrix.sh`):
+
+  | Setting | `WebApplicationBuilder` app (.NET 6+ templates) | Generic Host app (`Host.CreateDefaultBuilder`) |
+  |---|---|---|
+  | `ASPNETCORE_URLS` | ignored (profile's 5281 wins), `dotnet run` and `dotnet watch` | not tested (same overwrite applies) |
+  | `ASPNETCORE_HTTP_PORTS` | ignored (the profile's URLS win) | not tested |
+  | `DOTNET_URLS` | **works** (`DOTNET_` outranks `ASPNETCORE_` for `WebApplicationBuilder`) | ignored (profile wins) |
+  | `-- --urls http://localhost:$PORT` | **works** | **works** |
+  | `--no-launch-profile` + `ASPNETCORE_URLS` | works, but loses the profile's `ASPNETCORE_ENVIRONMENT=Development` | not tested |
+
+  For Task 2: set `DOTNET_URLS=http://localhost:$PORT` for single-project `dotnet run`/`dotnet watch` commands. Not for every command: an Aspire AppHost (or anything starting several .NET apps) would pass it to every service, and they'd all try to bind one port (not tested; that follows from the precedence). The tool description tells the agent to append `-- --urls http://localhost:$PORT` for ASP.NET, which also covers Generic Host apps. Apps that configure Kestrel endpoints themselves (Fleet does) ignore all of these; port detection still finds them.
 - **Refresh ports are reported as app ports.** The tool result says "It also listens on 36013, 37715" and the port picker offers them. Filter out ports whose listener is the `dotnet-watch` process, or ports named in the refresh script.
 - **inotify:** each `dotnet watch` took 51 inotify instances for a template app; the default per-user limit is 128, and the third concurrent run crashed ("The configured user limit (128) on the number of inotify instances has been reached"). Recognise that line and say what to do (raise `fs.inotify.max_user_instances`, or `DOTNET_USE_POLLING_FILE_WATCHER=1`, not yet checked). The 3-per-session cap may not be reachable with ASP.NET apps on a default Linux machine.
 - **SIGTERM doesn't stop `dotnet watch`:** it stops the app and waits for a file change. The runner's tree kill (SIGKILL) works; a graceful stop must fall back to it.
