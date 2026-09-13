@@ -11,6 +11,7 @@ using WeaveFleet.Application.Plugins;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Skills;
+using WeaveFleet.Application.Terminals;
 using WeaveFleet.Application.Tools;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Analytics;
@@ -28,6 +29,7 @@ using WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
 using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Infrastructure.SessionSources;
 using WeaveFleet.Infrastructure.Skills;
+using WeaveFleet.Infrastructure.Terminals;
 using WeaveFleet.Infrastructure.Tools;
 
 namespace WeaveFleet.Infrastructure;
@@ -148,6 +150,7 @@ public static class DependencyInjection
         services.AddScoped<SmartLinkService>();
         services.AddScoped<ICanvasService, CanvasService>();
         services.AddScoped<CanvasBridge>();
+        services.AddSingleton<IPtyFactory, PortaPtyFactory>();
         services.AddSingleton<IBackgroundUserScope, BackgroundUserScope>();
         services.AddScoped<AutomationService>();
         services.AddScoped<AutomationExecutionService>();

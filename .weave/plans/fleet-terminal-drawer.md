@@ -98,10 +98,15 @@ components/terminal/TerminalView.vue     one xterm per terminal, kept alive whil
   - **Output**: "Task 0 findings" at the end of this plan, with the choice for Task 1. Spawning a managed process with `fork` in a multi-threaded runtime is the main risk to look at.
   - **Depends on**: None.
 
-- [ ] 1. PTY layer
+- [x] 1. PTY layer (done 2026-09-13)
   - **Files**: `src/WeaveFleet.Application/Terminals/IPtyFactory.cs`, `IPtyProcess.cs` (new); `src/WeaveFleet.Infrastructure/Terminals/` (Unix and Windows implementations per Task 0); registration in `DependencyInjection.cs`.
   - **Acceptance**: Task 0's (a)–(e) as tests. Output arrives as bytes, split wherever the OS splits it. Exit fires once. `Dispose` kills the tree and never throws.
   - **Tests**: `tests/WeaveFleet.Infrastructure.Tests/Terminals/` on Linux, marked so they're skipped on other OSes until the checklist runs.
+  - **As built**:
+    - `IPtyFactory` and `IPtyProcess` (with `PtySpawnOptions` and `PtyExit`) all live in `IPtyFactory.cs`. `PortaPtyFactory` and `PortaPtyProcess` are the one implementation for every OS, registered as a singleton.
+    - `PtySpawnOptions.Environment` is the child's whole environment. The factory turns it into Porta.Pty's changes, setting every other variable in Fleet's environment to empty so it's removed. Task 3 builds that environment; nothing leaks by default.
+    - `Exited` completes once with `PtyExit(code, Killed: false)` for a normal exit, or `PtyExit(null, Killed: true)` after `Kill` or `DisposeAsync`. `ReadAsync` returns 0 instead of throwing once the terminal closes (Linux reports EIO). Write, resize and kill after exit do nothing.
+    - 11 tests, all Linux-only by an early return, like `ProcessGroupHelperTests`. They use `bash --norc --noprofile -i` so the machine's rc files don't matter.
 
 - [ ] 2. Scrollback: history, cleaning and files
   - **Files**: `src/WeaveFleet.Application/Terminals/TerminalHistory.cs`, `TerminalReplaySanitizer.cs`; `src/WeaveFleet.Infrastructure/Terminals/TerminalHistoryStore.cs` (new).
