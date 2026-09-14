@@ -31,9 +31,10 @@ All in the server. Worth having even if the app never ships.
    database (`~/.weave/fleet.lock` for installs) before the migrator, the orphan kill or anything
    else touches the data. A second Fleet on the same database prints who holds it and exits with
    code 75. The lock is released when the process ends, however it ends.
-   - The lock is taken after `builder.Build()`, so `WebApplicationFactory` hosts (which stop
-     the entry point at `Build`) never take it. It is named after the database file, not the
-     directory, because test databases share the temp directory.
+   - Test hosts (the `Testing` environment) skip it: `WebApplicationFactory` runs `Program`
+     past `Build`, integration tests run several hosts in one process, and many of them share
+     the default database path while their real database comes from DI. The lock is named after
+     the database file, not the directory, because test databases share the temp directory.
 2. **Instance file.** Once Kestrel is listening, Fleet writes `<db name>.instance.json` next to
    the lock: pid, loopback URL, version, database path, whether it runs for the app, start time.
    Owner-only permissions on Unix. Deleted on shutdown; a leftover one is stale, since whoever

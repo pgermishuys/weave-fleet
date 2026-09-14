@@ -96,8 +96,9 @@ builder.Services.Configure<FleetOptions>(
 // builder.Environment.EnvironmentName snapshot captured by WebApplication.CreateBuilder(args), so we
 // must consult configuration directly to see the overridden value.
 var effectiveEnvironmentName = builder.Configuration["ASPNETCORE_ENVIRONMENT"] ?? builder.Environment.EnvironmentName;
-if (!string.Equals(effectiveEnvironmentName, "Testing", StringComparison.OrdinalIgnoreCase) &&
-    !string.Equals(effectiveEnvironmentName, "Test", StringComparison.OrdinalIgnoreCase))
+var isTestHost = string.Equals(effectiveEnvironmentName, "Testing", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(effectiveEnvironmentName, "Test", StringComparison.OrdinalIgnoreCase);
+if (!isTestHost)
 {
     builder.Services.AddLauncherPatchStartupService();
     builder.Services.AddLegacySessionImportStartupService();
@@ -417,10 +418,11 @@ builder.WebHost.UseUrls(fleetOptions.ListenUrl);
 
 var app = builder.Build();
 
-// One Fleet per database: the orphan kill below would otherwise kill another Fleet's live agents. Taken after
-// Build, so WebApplicationFactory hosts (which stop the entry point at Build) never take it.
-var instanceLock = FleetInstanceLock.TryAcquire(fleetOptions.DatabasePath);
-if (instanceLock is null)
+// One Fleet per database: the orphan kill below would otherwise kill another Fleet's live agents. Test hosts
+// skip it: they run side by side in one process, and many share the default path while their real database
+// comes from DI.
+var instanceLock = isTestHost ? null : FleetInstanceLock.TryAcquire(fleetOptions.DatabasePath);
+if (!isTestHost && instanceLock is null)
 {
     var holder = FleetInstanceLock.ReadInstance(fleetOptions.DatabasePath);
     Console.Error.WriteLine(holder is null
@@ -432,6 +434,9 @@ if (instanceLock is null)
 
 app.Lifetime.ApplicationStarted.Register(() =>
 {
+    if (instanceLock is null)
+        return;
+
     var url = app.Services.GetRequiredService<WeaveFleet.Application.Services.ILocalFleetUrl>().TryGet();
     if (url is null)
         return;
@@ -444,7 +449,7 @@ app.Lifetime.ApplicationStarted.Register(() =>
         fleetOptions.Desktop.Enabled,
         DateTimeOffset.UtcNow));
 });
-app.Lifetime.ApplicationStopped.Register(instanceLock.Dispose);
+app.Lifetime.ApplicationStopped.Register(() => instanceLock?.Dispose());
 
 if (!fleetOptions.Auth.Enabled)
 {
