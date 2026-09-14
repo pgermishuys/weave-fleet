@@ -63,6 +63,10 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(10, "PermissionApprovalFailed"),
             "Failed to auto-approve permission request {RequestId}");
 
+    private static readonly Action<ILogger, string, Exception?> LogOffTheRecordForkLeft =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(11, "OffTheRecordForkLeft"),
+            "Could not delete off-the-record fork {ForkId}; the next ask in its directory will remove it");
+
     private readonly IOpenCodeInstanceHandle _instanceHandle;
     private readonly string _workingDirectory;
     private readonly ILogger<OpenCodeHarnessSession> _logger;
@@ -233,6 +237,140 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             ct).ConfigureAwait(false);
 
         _status = HarnessSessionStatus.Running;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Asks a fork of the OpenCode session, so the parent's history is untouched, with the parent's last
+    /// model, agent and variant, so the request matches what the provider has cached and the conversation
+    /// is read from cache. Tools stay in the request: leaving them out changes the cached prefix and
+    /// misses the cache. Instead every tool on the fork needs approval that never comes, so a tool call
+    /// waits until the timeout aborts it. The fork is deleted either way.
+    /// </remarks>
+    public async Task<string?> AskOffTheRecordAsync(string prompt, CancellationToken ct)
+    {
+        var parentId = _openCodeSessionId;
+        if (parentId is null)
+        {
+            return null;
+        }
+
+        var http = _instanceHandle.HttpClient;
+        var lastPrompt = await FindLastPromptAsync(parentId, ct).ConfigureAwait(false);
+        if (lastPrompt is null)
+        {
+            return null;
+        }
+
+        await DeleteLeftoverForksAsync(ct).ConfigureAwait(false);
+
+        var fork = await http.ForkSessionAsync(parentId, new OpenCodeForkRequest(), _workingDirectory, ct).ConfigureAwait(false);
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(OffTheRecordTimeout);
+
+            await http.UpdateSessionAsync(fork.Id, new OpenCodeSessionUpdateRequest
+            {
+                Title = OffTheRecordSessionTitle,
+                Permission = [new OpenCodePermissionRule { Permission = "*", Pattern = "*", Action = "ask" }],
+            }, _workingDirectory, timeout.Token).ConfigureAwait(false);
+
+            var model = lastPrompt.Model is { ProviderId: { Length: > 0 } providerId, ModelId: { Length: > 0 } modelId }
+                ? new OpenCodeModelRefRequest { ProviderId = providerId, ModelId = modelId }
+                : null;
+
+            var answer = await http.SendMessageAsync(fork.Id, new OpenCodePromptRequest
+            {
+                Parts = [new OpenCodePromptTextPart { Text = prompt }],
+                Agent = lastPrompt.Agent,
+                Model = model,
+                Variant = lastPrompt.Variant,
+            }, _workingDirectory, timeout.Token).ConfigureAwait(false);
+
+            var text = string.Concat((answer?.Parts ?? [])
+                .OfType<OpenCodeTextPart>()
+                .Where(p => p.Synthetic != true && p.Ignored != true)
+                .Select(p => p.Text)).Trim();
+            return text.Length > 0 ? text : null;
+        }
+        finally
+        {
+            await DeleteOffTheRecordForkAsync(fork.Id).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Title given to the throwaway forks <see cref="AskOffTheRecordAsync"/> makes, so the next ask in the
+    /// same directory can find any a crash left behind.
+    /// </summary>
+    internal const string OffTheRecordSessionTitle = "fleet-recap";
+
+    private static readonly TimeSpan OffTheRecordTimeout = TimeSpan.FromSeconds(45);
+    private const int LastPromptPageSize = 50;
+    private const int LastPromptMaxPages = 10;
+
+    private async Task<OpenCodeUserMessage?> FindLastPromptAsync(string openCodeSessionId, CancellationToken ct)
+    {
+        string? before = null;
+        for (var page = 0; page < LastPromptMaxPages; page++)
+        {
+            var messages = await _instanceHandle.HttpClient.GetMessagesAsync(
+                openCodeSessionId, _workingDirectory, LastPromptPageSize, before, ct).ConfigureAwait(false);
+
+            for (var i = messages.Count - 1; i >= 0; i--)
+            {
+                if (messages[i].Info is OpenCodeUserMessage prompt)
+                {
+                    return prompt;
+                }
+            }
+
+            if (messages.Count < LastPromptPageSize)
+            {
+                return null;
+            }
+
+            before = messages[0].Info.Id;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Deletes forks a crash left behind in this directory. OpenCode lists sessions per directory, so this
+    /// runs before each ask rather than at startup. Forks younger than an ask can take may still be in use
+    /// by another session's ask, so they're left alone.
+    /// </summary>
+    private async Task DeleteLeftoverForksAsync(CancellationToken ct)
+    {
+        var sessions = await _instanceHandle.HttpClient.ListSessionsAsync(_workingDirectory, ct).ConfigureAwait(false);
+        var cutoff = DateTimeOffset.UtcNow - OffTheRecordTimeout - TimeSpan.FromSeconds(30);
+        foreach (var session in sessions)
+        {
+            if (session.Title == OffTheRecordSessionTitle
+                && session.Time is { } time
+                && DateTimeOffset.FromUnixTimeMilliseconds(time.Created) < cutoff)
+            {
+                await DeleteOffTheRecordForkAsync(session.Id).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private async Task DeleteOffTheRecordForkAsync(string forkId)
+    {
+        // Not the caller's token: the fork must go even when the caller gave up. Aborting first
+        // stops a tool call that is waiting for approval.
+        using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        try
+        {
+            await _instanceHandle.HttpClient.AbortAsync(forkId, _workingDirectory, cleanup.Token).ConfigureAwait(false);
+            await _instanceHandle.HttpClient.DeleteSessionAsync(forkId, _workingDirectory, cleanup.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
+        {
+            LogOffTheRecordForkLeft(_logger, forkId, ex);
+        }
     }
 
     /// <inheritdoc />

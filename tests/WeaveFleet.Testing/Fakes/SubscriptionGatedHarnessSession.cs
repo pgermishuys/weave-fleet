@@ -112,6 +112,9 @@ public sealed class SubscriptionGatedHarnessSession : IHarnessSession
     public Task<HealthCheckResult> CheckHealthAsync(CancellationToken ct)
         => Task.FromResult(new HealthCheckResult(true, null));
 
+    public Task<string?> AskOffTheRecordAsync(string prompt, CancellationToken ct)
+        => Task.FromResult<string?>(null);
+
     public Task<string?> GetActivityStatusAsync(CancellationToken ct)
         => Task.FromResult<string?>("idle");
 

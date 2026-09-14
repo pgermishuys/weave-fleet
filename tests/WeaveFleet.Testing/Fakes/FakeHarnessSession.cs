@@ -123,6 +123,18 @@ public sealed class FakeHarnessSession : IHarnessSession
     public Task<HealthCheckResult> CheckHealthAsync(CancellationToken ct)
         => Task.FromResult(new HealthCheckResult(true, null));
 
+    /// <summary>Answer returned by <see cref="AskOffTheRecordAsync"/>; null means "can't answer".</summary>
+    public string? OffTheRecordAnswer { get; set; }
+
+    /// <summary>Prompts passed to <see cref="AskOffTheRecordAsync"/>, in order.</summary>
+    public List<string> OffTheRecordPrompts { get; } = [];
+
+    public Task<string?> AskOffTheRecordAsync(string prompt, CancellationToken ct)
+    {
+        OffTheRecordPrompts.Add(prompt);
+        return Task.FromResult(OffTheRecordAnswer);
+    }
+
     public Task<string?> GetActivityStatusAsync(CancellationToken ct)
         => GetActivityStatusBehavior?.Invoke(ct) ?? Task.FromResult<string?>("idle");
 

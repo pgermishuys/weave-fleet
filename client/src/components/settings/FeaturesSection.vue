@@ -1,14 +1,30 @@
 <script setup lang="ts">
-import { shallowRef } from "vue";
+import { computed, shallowRef } from "vue";
 import { LoaderCircle } from "lucide-vue-next";
 import { useBoardFeature } from "@/composables/use-board-feature";
+import { SESSION_RECAP_PREFERENCE_KEY } from "@/composables/use-session-recap";
 import { usePreferencesStore } from "@/stores/preferences";
 
 const preferencesStore = usePreferencesStore();
+preferencesStore.ensureLoaded();
 const { isBoardFeatureEnabled, setBoardFeatureEnabled } = useBoardFeature();
 
 const isSavingBoardFeature = shallowRef(false);
 const boardFeatureError = shallowRef<string | null>(null);
+
+const isSessionRecapEnabled = computed(
+  () => preferencesStore.get(SESSION_RECAP_PREFERENCE_KEY, "false") === "true",
+);
+const isSavingSessionRecap = shallowRef(false);
+
+async function toggleSessionRecap(): Promise<void> {
+  isSavingSessionRecap.value = true;
+  try {
+    await preferencesStore.set(SESSION_RECAP_PREFERENCE_KEY, isSessionRecapEnabled.value ? "false" : "true");
+  } finally {
+    isSavingSessionRecap.value = false;
+  }
+}
 
 async function toggleBoardFeature(): Promise<void> {
   const enabled = !isBoardFeatureEnabled.value;
@@ -76,6 +92,42 @@ async function toggleBoardFeature(): Promise<void> {
           <span
             class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
             :class="isBoardFeatureEnabled ? 'translate-x-5' : 'translate-x-0'"
+          />
+        </button>
+      </div>
+    </div>
+
+    <div class="mt-3 flex items-start justify-between gap-4 rounded-card border border-border bg-main-bg p-4">
+      <div>
+        <p class="text-sm font-medium text-text">
+          Session recap
+        </p>
+        <p class="mt-1 text-xs text-muted">
+          When a turn finishes while you're looking at something else, write a one-line recap above the
+          composer for when you come back. Each recap is one extra request to the session's model.
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <LoaderCircle
+          v-if="isSavingSessionRecap"
+          :size="16"
+          class="animate-spin text-muted"
+          aria-hidden="true"
+        />
+        <button
+          type="button"
+          role="switch"
+          :aria-checked="isSessionRecapEnabled"
+          :disabled="preferencesStore.isLoading || isSavingSessionRecap"
+          aria-label="Enable session recap"
+          class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-main-bg disabled:cursor-not-allowed disabled:opacity-60"
+          :class="isSessionRecapEnabled ? 'bg-accent' : 'bg-border'"
+          @click="toggleSessionRecap"
+        >
+          <span
+            class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+            :class="isSessionRecapEnabled ? 'translate-x-5' : 'translate-x-0'"
           />
         </button>
       </div>

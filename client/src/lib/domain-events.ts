@@ -390,6 +390,27 @@ export interface CanvasFocused extends EventCursorMetadata {
 
 export type CanvasEvent = CanvasUpdated | CanvasClosed | CanvasFocused;
 
+/**
+ * A session's recap: one or two sentences Fleet wrote while you were away, on
+ * the goal, the current task and the next action. `text` is empty when your
+ * next prompt cleared it.
+ */
+export interface SessionRecapPayload {
+  sessionId: string;
+  text?: string | null;
+  writtenAt?: string | null;
+}
+
+/** Fleet wrote or cleared the session's recap. Not persisted. */
+export interface SessionRecap extends EventCursorMetadata {
+  type: "session.recap";
+  payload: SessionRecapPayload;
+}
+
+export function isSessionRecapEvent(event: DomainEvent): event is SessionRecap {
+  return event.type === "session.recap";
+}
+
 /** An app Fleet runs for the session changed: the app as it is now, and why. Not persisted. */
 export interface AppUpdated extends EventCursorMetadata {
   type: "app.updated";
@@ -444,4 +465,5 @@ export type DomainEvent =
   | CanvasFocused
   | TerminalOpened
   | TerminalClosed
-  | AppUpdated;
+  | AppUpdated
+  | SessionRecap;

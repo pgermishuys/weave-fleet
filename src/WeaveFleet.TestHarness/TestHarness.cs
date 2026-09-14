@@ -30,6 +30,7 @@ public sealed class TestHarness : IHarness
         SupportsForking = true,
         SupportsResume = true,
         SupportsImageAttachments = true,
-        SupportsStreaming = true
+        SupportsStreaming = true,
+        SupportsOffTheRecordPrompt = true
     };
 }

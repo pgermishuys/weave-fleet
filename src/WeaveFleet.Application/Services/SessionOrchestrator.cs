@@ -10,6 +10,7 @@ using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Recaps;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Terminals;
 using WeaveFleet.Domain.Common;
@@ -51,7 +52,8 @@ public sealed partial class SessionOrchestrator(
     GitDiffService? gitDiffService = null,
     ISessionTerminalCleanup? sessionTerminals = null,
     ISessionAppCleanup? sessionApps = null,
-    IMessageRepository? messageRepository = null) : ISessionActivator
+    IMessageRepository? messageRepository = null,
+    SessionRecapService? sessionRecaps = null) : ISessionActivator
 {
     private readonly DelegationService _delegationService = delegationService;
     private readonly GitDiffService _gitDiffService = gitDiffService ?? new GitDiffService();
@@ -792,6 +794,10 @@ public sealed partial class SessionOrchestrator(
 
             await instanceResult.Value.SendPromptAsync(text, promptOptionsWithMessageId, ct);
 
+            // Your reply is what a recap waits for: it clears the current one and counts toward the next.
+            if (sessionRecaps is not null)
+                await sessionRecaps.OnPromptSentAsync(id, sessionResult.Value.UserId, ct).ConfigureAwait(false);
+
             // Saved under the id the harness was given, so the snapshot can tell when the harness has its own copy.
             if (saveUserMessage && messageRepository is not null)
                 await messageRepository.UpsertAsync(MessagePersistenceService.ToPersistedMessage(id, userMsg)).ConfigureAwait(false);
@@ -1309,6 +1315,8 @@ public sealed partial class SessionOrchestrator(
             await SafeDeleteAsync(liveInstance, ct);
             instanceTracker.Remove(session.InstanceId);
         }
+
+        sessionRecaps?.Forget(id);
 
         // End the session's terminals and apps before its folder goes: a process inside a worktree keeps it open on Windows.
         await EndTerminalsAsync(id, ct);

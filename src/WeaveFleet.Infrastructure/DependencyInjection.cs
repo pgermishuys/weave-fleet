@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Browser;
@@ -9,6 +10,7 @@ using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Plugins;
+using WeaveFleet.Application.Recaps;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Skills;
@@ -267,6 +269,11 @@ public static class DependencyInjection
         // for initial-state snapshots on WebSocket subscribe (page refresh support).
         services.AddSingleton<SessionActivityTracker>();
         services.AddSingleton<SessionCapabilitiesResolver>();
+
+        // SessionRecapService is singleton — owns per-session recap timers and which tabs are looking.
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<IRecapPreference, RecapPreference>();
+        services.AddSingleton<SessionRecapService>();
 
         // EventBroadcaster is singleton — pub/sub hub shared across all requests
         services.AddSingleton<IEventBroadcaster, InMemoryEventBroadcaster>();

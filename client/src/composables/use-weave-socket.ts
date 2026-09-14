@@ -12,6 +12,7 @@ export {
   isWeaveSocketConnected,
   onReconnect,
   onDisconnect,
+  setSessionFocus,
   _resetForTesting,
   _getSubscriberCount,
   _isConnected,

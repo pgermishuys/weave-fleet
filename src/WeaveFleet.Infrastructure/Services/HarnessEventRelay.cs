@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.Events;
+using WeaveFleet.Application.Recaps;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
@@ -65,6 +66,7 @@ public sealed class HarnessEventRelay : BackgroundService
     private readonly ConcurrentDictionary<string, long> _internalPumpDedupKeys = new();
     private readonly SmartLinkDetector? _smartLinkDetector;
     private readonly SessionProgressObserver? _progressObserver;
+    private readonly SessionRecapService? _recaps;
     private CancellationToken _stoppingToken;
 
     public HarnessEventRelay(
@@ -75,7 +77,8 @@ public sealed class HarnessEventRelay : BackgroundService
         IServiceScopeFactory scopeFactory,
         ILogger<HarnessEventRelay> logger,
         SmartLinkDetector? smartLinkDetector = null,
-        SessionProgressObserver? progressObserver = null)
+        SessionProgressObserver? progressObserver = null,
+        SessionRecapService? recaps = null)
     {
         _tracker = tracker;
         _broadcaster = broadcaster;
@@ -85,6 +88,7 @@ public sealed class HarnessEventRelay : BackgroundService
         _logger = logger;
         _smartLinkDetector = smartLinkDetector;
         _progressObserver = progressObserver;
+        _recaps = recaps;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -290,6 +294,7 @@ public sealed class HarnessEventRelay : BackgroundService
                             parsedStatus.RetryAttempt,
                             parsedStatus.RetryMessage,
                             parsedStatus.RetryNext);
+                        _recaps?.OnActivityChanged(targetFleetSessionId, parsedStatus.Status);
 
                         await _broadcaster.BroadcastAsync(
                             "sessions",
@@ -485,6 +490,7 @@ public sealed class HarnessEventRelay : BackgroundService
             {
                 // Update tracker and broadcast correction
                 _activityTracker.Update(fleetSessionId, currentActivityStatus, sessionUserId);
+                _recaps?.OnActivityChanged(fleetSessionId, currentActivityStatus);
                 await _broadcaster.BroadcastAsync(
                     "sessions",
                     "activity_status",

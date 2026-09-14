@@ -5,6 +5,7 @@ import { storeToRefs } from "pinia";
 import ConfirmDeleteSessionDialog from "@/components/sessions/ConfirmDeleteSessionDialog.vue";
 import ActivityStream from "@/components/session/ActivityStream.vue";
 import Composer from "@/components/session/Composer.vue";
+import RecapLine from "@/components/session/RecapLine.vue";
 import DiffsTray from "@/components/session/DiffsTray.vue";
 import FilesChangedView from "@/components/session/FilesChangedView.vue";
 import ForkSessionDialog from "@/components/session/ForkSessionDialog.vue";
@@ -22,6 +23,7 @@ import {
 } from "@/composables/use-session-actions";
 import { useSentPrompts } from "@/composables/use-send-prompt";
 import { provideSessionDiffsContext } from "@/composables/use-session-diffs-context";
+import { useSessionRecap } from "@/composables/use-session-recap";
 import { useSessionTerminals } from "@/composables/use-session-terminals";
 import { apiFetch } from "@/lib/api-client";
 import type { SessionActionCapabilities, SessionListItem, SessionOrigin } from "@/api/client";
@@ -190,6 +192,7 @@ const SessionDetailPage = defineComponent({
   setup(_props, { expose }) {
     const params = Route.useParams();
     useSessionTerminals(() => params.value.id);
+    const recap = useSessionRecap(() => params.value.id);
     const search = Route.useSearch();
     const navigate = Route.useNavigate();
     const sessionsStore = useSessionsStore();
@@ -843,6 +846,7 @@ const SessionDetailPage = defineComponent({
         {viewMode.value === "chat" ? (
           <>
             <ActivityStream key={`${params.value.id}-${instanceId.value}`} sessionId={params.value.id} />
+            <RecapLine recap={recap.value} />
             <Composer
               ref={composerRef}
               sessionId={params.value.id}

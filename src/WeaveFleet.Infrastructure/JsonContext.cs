@@ -149,6 +149,7 @@ internal sealed partial class HarnessEventJsonContext : JsonSerializerContext
 [JsonSerializable(typeof(OpenCodeSessionInfo))]
 [JsonSerializable(typeof(List<OpenCodeSessionInfo>))]
 [JsonSerializable(typeof(OpenCodeCreateSessionRequest))]
+[JsonSerializable(typeof(OpenCodeSessionUpdateRequest))]
 [JsonSerializable(typeof(OpenCodeMessageWithParts))]
 [JsonSerializable(typeof(List<OpenCodeMessageWithParts>))]
 [JsonSerializable(typeof(OpenCodePromptRequest))]

@@ -32,6 +32,9 @@ public sealed record HarnessCapabilities
 
     /// <summary>The harness sends the files the agent writes as <see cref="EventTypes.FilesWritten"/> events.</summary>
     public bool ReportsFileWrites { get; init; }
+
+    /// <summary>Whether <see cref="IHarnessSession.AskOffTheRecordAsync"/> can answer (used for session recaps).</summary>
+    public bool SupportsOffTheRecordPrompt { get; init; }
 }
 
 /// <summary>Whether a harness binary/service is available on this machine.</summary>

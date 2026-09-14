@@ -94,6 +94,23 @@ public sealed class TestHarnessSession : IHarnessSession
         => Task.FromResult(new HealthCheckResult(Healthy: true, Message: null));
 
     /// <inheritdoc/>
+    /// <remarks>A scripted answer naming the last prompt, so recaps can be checked without a model.</remarks>
+    public Task<string?> AskOffTheRecordAsync(string prompt, CancellationToken ct)
+    {
+        string? lastPrompt;
+        lock (_messagesGate)
+        {
+            lastPrompt = _messages.LastOrDefault(m => m.Role == "user")?.Parts.OfType<TextPart>().FirstOrDefault()?.Text;
+        }
+
+        if (string.IsNullOrWhiteSpace(lastPrompt))
+            return Task.FromResult<string?>(null);
+
+        var asked = lastPrompt.Length > 80 ? string.Concat(lastPrompt.AsSpan(0, 80), "…") : lastPrompt;
+        return Task.FromResult<string?>($"You asked the test harness \"{asked}\" and it replied. Next, send another prompt.");
+    }
+
+    /// <inheritdoc/>
     public Task<string?> GetActivityStatusAsync(CancellationToken ct)
         => Task.FromResult<string?>("idle");
 

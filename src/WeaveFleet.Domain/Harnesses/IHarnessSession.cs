@@ -35,6 +35,13 @@ public interface IHarnessSession : IAsyncDisposable
     /// <summary>Send a user prompt to the agent.</summary>
     Task SendPromptAsync(string text, PromptOptions? options, CancellationToken ct);
 
+    /// <summary>
+    /// Ask a one-shot question that sees the whole conversation but leaves no trace in it: nothing is
+    /// added to the session's history and no tools run. Returns the answer's text, or null when the
+    /// harness can't do this or the session has no prompt to answer from yet. Used for session recaps.
+    /// </summary>
+    Task<string?> AskOffTheRecordAsync(string prompt, CancellationToken ct);
+
     /// <summary>Execute a slash command on the agent.</summary>
     Task SendCommandAsync(CommandOptions options, CancellationToken ct);
 

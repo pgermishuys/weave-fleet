@@ -1,5 +1,5 @@
 import type { DelegationDto } from "@/lib/client-types";
-import type { MessageLifecyclePayload } from "@/lib/domain-events";
+import type { MessageLifecyclePayload, SessionRecapPayload } from "@/lib/domain-events";
 
 export interface SessionSnapshotSession {
   id: string;
@@ -28,6 +28,8 @@ export interface SessionSnapshot {
   cursor: string | null;
   /** Indicates whether this snapshot is partial due to unavailability of the live harness. */
   isPartial: boolean;
+  /** The recap Fleet wrote while you were away, until your next prompt. */
+  recap?: SessionRecapPayload | null;
 }
 
 export interface SessionHistoryPage {

@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.SignalR;
 using WeaveFleet.Api.Endpoints;
 using WeaveFleet.Application.Events;
+using WeaveFleet.Application.Recaps;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Events;
 
@@ -21,6 +22,7 @@ public class SessionEventsHub : Hub
     private readonly ILogger<SessionEventsHub> _logger;
     private readonly ISessionMessageProxy _proxy;
     private readonly IHubContext<SessionEventsHub> _hubContext;
+    private readonly SessionRecapService _recaps;
 
     // Per-connection state: subscribed topics
     private static readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> ConnectionTopics = new();
@@ -61,13 +63,15 @@ public class SessionEventsHub : Hub
         IUserContext userContext,
         ILogger<SessionEventsHub> logger,
         ISessionMessageProxy proxy,
-        IHubContext<SessionEventsHub> hubContext)
+        IHubContext<SessionEventsHub> hubContext,
+        SessionRecapService recaps)
     {
         _broadcaster = broadcaster;
         _userContext = userContext;
         _logger = logger;
         _proxy = proxy;
         _hubContext = hubContext;
+        _recaps = recaps;
     }
 
     /// <summary>
@@ -112,6 +116,9 @@ public class SessionEventsHub : Hub
     public override Task OnDisconnectedAsync(Exception? exception)
     {
         var connectionId = Context.ConnectionId;
+
+        // A closed tab isn't looking at anything any more.
+        _recaps.RemoveConnection(connectionId);
 
         // Cancel the pump task
         if (ConnectionCancellations.TryRemove(connectionId, out var cts))
@@ -203,7 +210,7 @@ public class SessionEventsHub : Hub
         var snapshot = await _proxy.GetSnapshotAsync(sessionId, pageSize: 100, cursor: null);
 
         // Remove lastEventId from snapshot (client dedup watermark no longer needed)
-        return snapshot with { LastEventId = null };
+        return snapshot with { LastEventId = null, Recap = _recaps.Get(sessionId) };
     }
 
     /// <summary>
@@ -241,6 +248,24 @@ public class SessionEventsHub : Hub
 
         if (_logger.IsEnabled(LogLevel.Debug))
             LogUnsubscribed(_logger, connectionId, topic, null);
+    }
+
+    /// <summary>
+    /// Tells Fleet whether this tab is looking at a session: it's the open session, the tab is visible
+    /// and the window has focus. A turn that ends while no tab is looking gets a recap a few minutes later.
+    /// Only sessions this connection has subscribed to count, since subscribing is where access is checked.
+    /// </summary>
+    public Task SetSessionFocusAsync(string sessionId, bool focused)
+    {
+        var connectionId = Context.ConnectionId;
+        if (focused
+            && (!ConnectionTopics.TryGetValue(connectionId, out var topics) || !topics.ContainsKey($"session:{sessionId}")))
+        {
+            return Task.CompletedTask;
+        }
+
+        _recaps.SetFocus(connectionId, sessionId, focused);
+        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -370,6 +395,7 @@ public class SessionEventsHub : Hub
         SessionIdled            => "session.idled",
         SessionDeleted          => "session.deleted",
         SessionArchived         => "session.archived",
+        SessionRecapUpdated     => "session.recap",
         TurnStarted             => "turn.started",
         TurnEnded               => "turn.ended",
         MessageCreated          => "message.created",
