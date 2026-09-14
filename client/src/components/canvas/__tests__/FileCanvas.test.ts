@@ -123,7 +123,6 @@ describe("FileCanvas", () => {
     });
     await flushPromises();
 
-    const record = useFileBuffersStore().record("s1", "src/app.ts");
     type("b");
 
     expect(canvases.sessionCanvases("s1").canvases.find((canvas) => canvas.file)?.file?.preview).toBe(false);

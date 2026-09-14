@@ -1,5 +1,5 @@
 import { flushPromises, mount } from "@vue/test-utils";
-import { defineComponent, h, ref } from "vue";
+import { defineComponent, h } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import GoToFileDialog from "@/components/canvas/GoToFileDialog.vue";
 import { useCanvasesStore } from "@/stores/canvases";
@@ -35,7 +35,7 @@ vi.mock("@/composables/use-sidebar-mobile", () => ({ useSidebarMobile: () => ({ 
 vi.mock("@/components/ui/dialog", () => {
   const pass = (name: string) => defineComponent({ name, props: { open: Boolean }, setup: (_p, { slots }) => () => h("div", slots.default?.()) });
   return {
-    Dialog: defineComponent({ name: "Dialog", props: { open: Boolean }, setup: (props, { slots }) => () => (props.open ? h("div", slots.default?.()) : null) }),
+    Dialog: defineComponent({ name: "DialogStub", props: { open: Boolean }, setup: (props, { slots }) => () => (props.open ? h("div", slots.default?.()) : null) }),
     DialogContent: pass("DialogContent"),
     DialogTitle: pass("DialogTitle"),
     DialogDescription: pass("DialogDescription"),
