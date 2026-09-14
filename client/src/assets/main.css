@@ -298,8 +298,9 @@
     outline: none !important;
   }
 
-  /* The file editor's text area is the whole canvas; its cursor and active line show focus. */
-  .cm-editor .cm-content:focus-visible {
+  /* Fields that fill their own box show focus with the caret: the file editor, Go to file. */
+  .cm-editor .cm-content:focus-visible,
+  .go-to-file__input input:focus-visible {
     box-shadow: none !important;
   }
 

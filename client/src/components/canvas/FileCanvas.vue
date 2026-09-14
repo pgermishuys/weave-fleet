@@ -14,6 +14,7 @@ import { createDeletedView, markStripe, setMerge } from "@/lib/code-editor/merge
 import { getVisualRenderer } from "@/lib/visual-renderer-registry";
 import { hasRenderedView, useCanvasesStore, type FileView } from "@/stores/canvases";
 import { useFileBuffersStore, type FileBufferRecord } from "@/stores/file-buffers";
+import { useGoToFileStore } from "@/stores/go-to-file";
 
 const props = defineProps<{
   sessionId: string;
@@ -25,6 +26,7 @@ const buffers = useFileBuffersStore();
 const canvases = useCanvasesStore();
 const sharedDiffs = inject<UseDiffsResult | null>("sharedDiffs", null);
 const annotate = useCanvasAnnotate();
+const goToFile = useGoToFileStore();
 
 const info = computed(() => buffers.info(props.sessionId, props.path));
 const ready = computed(() => info.value?.status === "ready");
@@ -108,6 +110,7 @@ async function attach(): Promise<void> {
   if (!editorHost.value || !current.state) return;
   if (attached === current && editor && current.view === editor) {
     editor.requestMeasure();
+    focusIfPicked();
     return;
   }
 
@@ -119,6 +122,12 @@ async function attach(): Promise<void> {
   revision.value++;
   applyMerge();
   refreshStripe();
+  focusIfPicked();
+}
+
+/** A file picked in Go to file takes the keyboard straight away. */
+function focusIfPicked(): void {
+  if (editor && goToFile.takeFocus(props.sessionId, props.path)) editor.focus();
 }
 
 /** The merge view the editor should show: Compare while comparing, Diff in Diff, else none. */

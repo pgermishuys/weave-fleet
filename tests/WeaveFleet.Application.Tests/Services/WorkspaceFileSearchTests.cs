@@ -44,6 +44,20 @@ public sealed class WorkspaceFileSearchTests
     }
 
     [Fact]
+    public async Task Search_FindsFuzzyMatches_AfterEveryPlainMatch()
+    {
+        using var repository = new RealGitRepository();
+        Write(repository.Path, "client/src/components/canvas/FileCanvas.vue", "client/src/fcanv-notes.md", "docs/readme.md");
+
+        var entries = (await WorkspaceFileSearch.FindAsync(repository.Path, "fcanv", limit: 50)).ToList();
+
+        entries[0].ShouldBe("client/src/fcanv-notes.md");
+        entries.ShouldContain("client/src/components/canvas/FileCanvas.vue");
+        entries.ShouldNotContain("docs/readme.md");
+        (await WorkspaceFileSearch.FindAsync(repository.Path, "cmp/cnv/FlCnv", limit: 50)).ShouldContain("client/src/components/canvas/FileCanvas.vue");
+    }
+
+    [Fact]
     public async Task GitRepository_LeavesOutIgnoredFiles_ButKeepsUntrackedOnes()
     {
         using var repository = new RealGitRepository();

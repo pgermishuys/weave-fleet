@@ -18,6 +18,7 @@ export const DEFAULT_KEYBINDINGS: KeyBindingsConfig = {
   "new-session":        { paletteHotkey: "n", globalShortcut: { key: "n", platformModifier: true, metaKey: true } },
   "refresh-sessions":   { paletteHotkey: "r", globalShortcut: null },
   "focus-prompt":       { paletteHotkey: "/", globalShortcut: null },
+  "go-to-file":         { paletteHotkey: null, globalShortcut: { key: "p", platformModifier: true } },
   "interrupt-session":  { paletteHotkey: null, globalShortcut: { key: "Escape" } },
   "copy-session-id":    { paletteHotkey: null, globalShortcut: null },
   "toggle-diff-view":   { paletteHotkey: "d", globalShortcut: { key: "d", platformModifier: true, metaKey: true } },

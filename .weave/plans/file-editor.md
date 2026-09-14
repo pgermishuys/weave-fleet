@@ -316,9 +316,26 @@ the current content.
   file, flashed the line and pulsed the tab.
 
 ### Task 6: Go to file
-- [ ] Ctrl P / Cmd P registered in `command-registry.ts` (no existing binding), plus a palette
+- [x] Ctrl P / Cmd P registered in `command-registry.ts` (no existing binding), plus a palette
       entry. A small dialog with fuzzy match over `find/files`; ↑↓, Enter, Esc.
-- [ ] Test: filtering and Enter opens a kept tab.
+- [x] Test: filtering and Enter opens a kept tab.
+
+**As built.**
+- A `go-to-file` command (Ctrl P / ⌘P, `allowInEditable`, so it works from the editor and the
+  composer) in `use-commands.ts`, with a default binding in `keybinding-types.ts`. It also
+  shows in the palette as *Go to File…*. The terminal keeps Ctrl P for its shell history.
+- `GoToFileDialog.vue` is mounted once in `AppShell`, with state in `stores/go-to-file.ts`.
+  With nothing typed it lists the files already open. Enter opens a kept tab, brings the right
+  panel out (or the phone sheet), and the editor takes focus.
+- *Fuzzy:* `find/files` only matched substrings, and at 50 results a client-side fuzzy filter
+  would have nothing to work with. So `WorkspaceFileSearch` now also returns matches where the
+  letters appear in order in the name (rank 4), then in the path (rank 5). These come after
+  every substring match, so the composer's `@` results keep their order and only gain matches at
+  the end. The mock API matches the same way.
+- Tests: 4 for the dialog (open files, filtering without folders, Enter opens a kept tab and
+  queues focus, no matches), plus 1 server test for fuzzy ranking. Checked in mock mode: Ctrl P,
+  `mauth` → `src/middleware/auth.ts`, Enter opens it with the cursor in the editor, and Ctrl P
+  works again from inside the editor.
 
 ### Task 7: Verify and ship
 - [ ] Client suite, lint and `lint:design` on Node 22 with `npm ci` (CI parity); .NET suites.

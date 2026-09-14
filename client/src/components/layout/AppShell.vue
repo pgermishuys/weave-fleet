@@ -11,6 +11,7 @@ import { useLocation } from "@tanstack/vue-router";
 import { useElementSize } from "@vueuse/core";
 import { storeToRefs } from "pinia";
 import CommandPalette from "@/components/CommandPalette.vue";
+import GoToFileDialog from "@/components/canvas/GoToFileDialog.vue";
 import TauriUpdateDialog from "@/components/TauriUpdateDialog.vue";
 import BoardRightPanel from "@/components/board/BoardRightPanel.vue";
 import CenterContent from "@/components/layout/CenterContent.vue";
@@ -337,6 +338,7 @@ function onGutterPointerDown(e: PointerEvent): void {
     <StatusBar />
 
     <CommandPalette />
+    <GoToFileDialog />
     <TauriUpdateDialog />
   </div>
 </template>

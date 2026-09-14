@@ -7,6 +7,7 @@ import {
   Copy,
   Download,
   Eraser,
+  FileSearch,
   Focus,
   GitBranchPlus,
   LayoutGrid,
@@ -40,6 +41,7 @@ import { useKeybindingsStore } from "@/stores/keybindings";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSidebarStore } from "@/stores/sidebar";
 import { useAppShellStore } from "@/stores/app-shell";
+import { useGoToFileStore } from "@/stores/go-to-file";
 import { useTerminalsStore } from "@/stores/terminals";
 import { useThemeStore, type ThemeSelection } from "@/stores/theme";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
@@ -77,6 +79,7 @@ export function useCommands() {
   const workspaceUiStore = useWorkspaceUiStore();
   const appShellStore = useAppShellStore();
   const terminalsStore = useTerminalsStore();
+  const goToFileStore = useGoToFileStore();
   const { toggleSidebar, isMobileNav, mobileDrawerOpen, isRightPanelVisible, toggleRightPanel } = useSidebarMobile();
   const { abortSession } = useAbortSession();
   const { forkSession } = useForkSession();
@@ -94,6 +97,13 @@ export function useCommands() {
   /** The session whose terminal Ctrl J toggles: the one open on screen, when Fleet has terminals on. */
   const terminalSessionId = computed(() => {
     if (!appShellStore.config.terminalEnabled || !pathname.value.startsWith("/sessions/")) return null;
+    const id = getCurrentSessionId(pathname.value, activeSessionId.value);
+    return id && id !== "new" ? id : null;
+  });
+
+  /** The session Go to file searches: the one open on screen. */
+  const fileSessionId = computed(() => {
+    if (!pathname.value.startsWith("/sessions/")) return null;
     const id = getCurrentSessionId(pathname.value, activeSessionId.value);
     return id && id !== "new" ? id : null;
   });
@@ -335,6 +345,22 @@ export function useCommands() {
         keywords: ["reload", "sync", "refresh"],
         action: () => {
           void refreshSessions().catch(() => {});
+        },
+      },
+      {
+        id: "go-to-file",
+        label: "Go to File…",
+        description: fileSessionId.value ? "Open a file from this session by name." : "Open a session to find its files.",
+        icon: FileSearch,
+        category: "Session",
+        paletteHotkey: bindings.value["go-to-file"]?.paletteHotkey ?? undefined,
+        globalShortcut: bindings.value["go-to-file"]?.globalShortcut ?? undefined,
+        // Works from the editor and the composer too.
+        allowInEditable: true,
+        keywords: ["file", "open", "find", "quick open", "editor"],
+        disabled: fileSessionId.value === null,
+        action: () => {
+          if (fileSessionId.value) goToFileStore.show(fileSessionId.value);
         },
       },
       {

@@ -1591,10 +1591,16 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
           }
         }
         const isFolder = (entry: string) => entry.endsWith("/");
+        // Like the server: the query's letters in order ("mauth" finds middleware/auth.ts).
+        const inOrder = (text: string, q: string) => {
+          let next = 0;
+          for (const c of text) if (next < q.length && c === q[next]) next++;
+          return next === q.length;
+        };
         const byFoldersThenName = (a: string, b: string) => Number(isFolder(b)) - Number(isFolder(a)) || a.localeCompare(b);
         const files = query === "" || query.endsWith("/")
           ? [...entries].filter((entry) => entry.startsWith(query) && entry !== query && !entry.slice(query.length).replace(/\/$/, "").includes("/")).sort(byFoldersThenName)
-          : [...entries].filter((entry) => entry.toLowerCase().includes(query.toLowerCase())).sort(byFoldersThenName);
+          : [...entries].filter((entry) => inOrder(entry.toLowerCase(), query.toLowerCase())).sort(byFoldersThenName);
         return new Response(JSON.stringify({ sessionId: id, files }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
