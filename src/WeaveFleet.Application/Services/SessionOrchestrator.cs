@@ -1493,25 +1493,12 @@ public sealed partial class SessionOrchestrator(
         if (sessionResult.IsFailure)
             return sessionResult.Error;
 
-        var instanceResult = await GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
-        if (instanceResult.IsFailure)
-            return instanceResult.Error;
-
-        if (string.IsNullOrWhiteSpace(query) || !Directory.Exists(sessionResult.Value.Directory))
+        // Only the filesystem is read, so the session's harness stays asleep.
+        if (!Directory.Exists(sessionResult.Value.Directory))
             return Result.Success<IReadOnlyList<string>>(Array.Empty<string>());
 
-        // Normalize query separators to the OS path separator for consistent matching
-        var normalizedQuery = query.Replace('/', Path.DirectorySeparatorChar)
-                                   .Replace('\\', Path.DirectorySeparatorChar);
-
-        var files = Directory
-            .EnumerateFiles(sessionResult.Value.Directory, "*", SearchOption.AllDirectories)
-            .Select(f => f[sessionResult.Value.Directory.Length..].TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
-            .Where(relative => relative.Contains(normalizedQuery, StringComparison.OrdinalIgnoreCase))
-            .Take(50)
-            .ToArray();
-
-        return Result.Success<IReadOnlyList<string>>(files);
+        var matches = await WorkspaceFileSearch.FindAsync(sessionResult.Value.Directory, query, limit: 50, ct).ConfigureAwait(false);
+        return Result.Success(matches);
     }
 
     public async Task<Result<BrowseDirectoryResult>> BrowseSessionDirectoryAsync(

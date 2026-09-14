@@ -20,6 +20,7 @@ import { useModels } from "@/composables/use-models";
 import { useDraftAttachments } from "@/composables/use-draft-attachments";
 import { useDraftTerminalContext } from "@/composables/use-draft-terminal-context";
 import { formatTerminalContext, terminalLineRange } from "@/lib/format-terminal-context";
+import { splitDraftReferences } from "@/lib/composer-references";
 import { useSendPrompt } from "@/composables/use-send-prompt";
 import { parseSlashCommand } from "@/lib/slash-command-utils";
 import { trackAction } from "@/lib/track-action";
@@ -285,6 +286,11 @@ function syncDisabledStateFromPage(): void {
 onMounted(() => {
   syncDisabledStateFromPage();
 
+  if (typeof ResizeObserver !== "undefined" && textareaRef.value) {
+    mirrorResizeObserver = new ResizeObserver(() => syncMirror());
+    mirrorResizeObserver.observe(textareaRef.value);
+  }
+
   if (typeof document === "undefined") {
     return;
   }
@@ -303,6 +309,8 @@ onMounted(() => {
 onUnmounted(() => {
   disabledStateObserver?.disconnect();
   disabledStateObserver = null;
+  mirrorResizeObserver?.disconnect();
+  mirrorResizeObserver = null;
   clearStatusIndicatorTimer();
   stopStatusIndicatorDots();
   clearPasteError();
@@ -325,6 +333,26 @@ const { queue, enqueue } = useMessageQueue(
 );
 
 const textareaRef = useTemplateRef<HTMLTextAreaElement>("textarea");
+const mirrorRef = useTemplateRef<HTMLDivElement>("mirror");
+let mirrorResizeObserver: ResizeObserver | null = null;
+
+/**
+ * The mirror sits behind the (transparent) text area with the same text laid out the same way, so
+ * `@` references can be tinted where they sit. Keep its height, line width and scroll in step.
+ */
+function syncMirror(): void {
+  const textarea = textareaRef.value;
+  const mirror = mirrorRef.value;
+  if (!textarea || !mirror) {
+    return;
+  }
+
+  mirror.style.height = `${textarea.offsetHeight}px`;
+  // A scrollbar narrows the text area's lines; narrow the mirror's to match.
+  const scrollbarWidth = textarea.offsetWidth - textarea.clientWidth;
+  mirror.style.paddingRight = `${parseFloat(getComputedStyle(textarea).paddingRight) + scrollbarWidth}px`;
+  mirror.scrollTop = textarea.scrollTop;
+}
 
 function focusPrompt(): void {
   textareaRef.value?.focus();
@@ -343,6 +371,7 @@ const autocomplete = useAutocomplete({
   inputRef: textareaRef,
   cursorPosition,
 });
+const draftSegments = computed(() => splitDraftReferences(draft.text, cursorPosition.value));
 
 const selectedAgentId = computed({
   get: () => draft.agentId,
@@ -442,6 +471,7 @@ function resizeTextarea(): void {
 
   textarea.style.height = "0px";
   textarea.style.height = `${Math.min(textarea.scrollHeight, 140)}px`;
+  syncMirror();
 }
 
 watch(
@@ -641,6 +671,7 @@ function handleKeydown(event: KeyboardEvent): void {
         :selected-value="hasValidSessionId ? autocomplete.selectedValue.value : null"
         :error="hasValidSessionId ? autocomplete.error.value : undefined"
         :on-select="autocomplete.onSelect"
+        :on-open-folder="autocomplete.onOpenFolder"
       />
 
       <div
@@ -665,20 +696,41 @@ function handleKeydown(event: KeyboardEvent): void {
         </button>
       </div>
 
-      <textarea
-        ref="textarea"
-        class="composer-frame__textarea"
-        data-testid="prompt-input"
-        :value="draft.text"
-        :disabled="isDisabled"
-        rows="1"
-        placeholder="Type a message…"
-        @input="handleInput"
-        @keydown="handleKeydown"
-        @keyup="handleCursorPositionChange"
-        @click="handleCursorPositionChange"
-        @paste="handlePaste"
-      />
+      <div class="composer-input">
+        <!--
+          No whitespace between these nodes: the mirror lays text out as the text area does. The
+          trailing space gives a draft that ends in a newline its last line, as the text area has.
+        -->
+        <!-- eslint-disable vue/multiline-html-element-content-newline, vue/singleline-html-element-content-newline -->
+        <div
+          ref="mirror"
+          class="composer-frame__textarea composer-input__mirror"
+          data-testid="prompt-references"
+          aria-hidden="true"
+        ><template
+          v-for="(segment, index) in draftSegments"
+          :key="index"
+        ><span
+          v-if="segment.reference"
+          class="composer-reference"
+        >{{ segment.text }}</span><template v-else>{{ segment.text }}</template></template>{{ " " }}</div>
+        <!-- eslint-enable vue/multiline-html-element-content-newline, vue/singleline-html-element-content-newline -->
+        <textarea
+          ref="textarea"
+          class="composer-frame__textarea"
+          data-testid="prompt-input"
+          :value="draft.text"
+          :disabled="isDisabled"
+          rows="1"
+          placeholder="Type a message…"
+          @input="handleInput"
+          @keydown="handleKeydown"
+          @keyup="handleCursorPositionChange"
+          @click="handleCursorPositionChange"
+          @scroll="syncMirror"
+          @paste="handlePaste"
+        />
+      </div>
 
       <div
         v-if="pendingAttachments.length > 0"
@@ -851,6 +903,41 @@ function handleKeydown(event: KeyboardEvent): void {
   color: var(--error);
   font-size: 12px;
   line-height: 1.5;
+}
+
+.composer-input {
+  position: relative;
+}
+
+/* Above the mirror, which only paints the reference tints behind the text. */
+.composer-input > textarea {
+  position: relative;
+}
+
+.composer-input__mirror {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  min-height: 0;
+  max-height: none;
+  overflow: hidden;
+  color: transparent;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  pointer-events: none;
+  user-select: none;
+}
+
+.composer-reference {
+  --reference-tint: color-mix(in srgb, var(--accent) 28%, transparent);
+
+  border-radius: 4px;
+  background: var(--reference-tint);
+  /* Widen the tint past the text without moving it. */
+  box-shadow: -3px 0 0 var(--reference-tint), 3px 0 0 var(--reference-tint);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 
 .input-history {

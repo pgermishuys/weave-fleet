@@ -27,7 +27,9 @@ const { rootEntries, rootLoading, error, refresh, selectFile } = fileBrowser
 // Search functionality
 const searchQuery = ref('')
 const isSearching = computed(() => searchQuery.value.trim().length >= 2)
-const findFiles = useFindFiles(sessionIdRef, searchQuery)
+const findFiles = useFindFiles(sessionIdRef, () => (isSearching.value ? searchQuery.value : null))
+// The search also finds folders (they end in "/"); only files open here.
+const foundFiles = computed(() => findFiles.files.value.filter((path) => !path.endsWith('/')))
 
 async function handleRefresh() {
   await refresh()
@@ -41,8 +43,8 @@ function handleSearchKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') {
     clearSearch()
     ;(event.target as HTMLInputElement)?.blur()
-  } else if (event.key === 'Enter' && findFiles.files.value.length > 0) {
-    handleResultClick(findFiles.files.value[0])
+  } else if (event.key === 'Enter' && foundFiles.value.length > 0) {
+    handleResultClick(foundFiles.value[0])
   }
 }
 
@@ -97,7 +99,7 @@ function handleResultClick(path: string) {
         <p class="file-browser-panel__error-text">{{ findFiles.error.value }}</p>
       </div>
 
-      <div v-else-if="findFiles.files.value.length === 0" class="file-browser-panel__empty">
+      <div v-else-if="foundFiles.length === 0" class="file-browser-panel__empty">
         <p class="file-browser-panel__empty-text">No files found</p>
         <p class="file-browser-panel__empty-hint">
           Try a different search query
@@ -106,7 +108,7 @@ function handleResultClick(path: string) {
 
       <div v-else class="file-browser-panel__results">
         <button
-          v-for="file in findFiles.files.value"
+          v-for="file in foundFiles"
           :key="file"
           class="file-browser-panel__result-item"
           @click="handleResultClick(file)"

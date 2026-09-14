@@ -1536,6 +1536,31 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
       },
     },
     {
+      // Composer @ references: an empty q or one ending in "/" lists that folder; anything else searches.
+      pattern: /^\/api\/sessions\/([^/]+)\/find\/files$/,
+      handler: (url) => {
+        const id = url.pathname.split("/")[3];
+        const query = (url.searchParams.get("q") ?? "").trim();
+        console.log(`[mock-api] GET find/files q=${query}`);
+        const entries = new Set<string>();
+        for (const file of Object.keys(MOCK_FILES)) {
+          entries.add(file);
+          for (let slash = file.indexOf("/"); slash !== -1; slash = file.indexOf("/", slash + 1)) {
+            entries.add(file.slice(0, slash + 1));
+          }
+        }
+        const isFolder = (entry: string) => entry.endsWith("/");
+        const byFoldersThenName = (a: string, b: string) => Number(isFolder(b)) - Number(isFolder(a)) || a.localeCompare(b);
+        const files = query === "" || query.endsWith("/")
+          ? [...entries].filter((entry) => entry.startsWith(query) && entry !== query && !entry.slice(query.length).replace(/\/$/, "").includes("/")).sort(byFoldersThenName)
+          : [...entries].filter((entry) => entry.toLowerCase().includes(query.toLowerCase())).sort(byFoldersThenName);
+        return new Response(JSON.stringify({ sessionId: id, files }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    {
       pattern: /^\/api\/sessions\/([^/]+)\/files\/content$/,
       handler: (url) => {
         const path = url.searchParams.get("path") ?? "";
@@ -1585,10 +1610,10 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
     },
     // ─── Priority 2: Instance/Agent/Command/Models ──────────────────────────────
     {
-      pattern: /^\/api\/instances\/([^/]+)\/agents$/,
+      pattern: /^\/api\/(instances|sessions)\/([^/]+)\/agents$/,
       handler: (url) => {
         const id = url.pathname.split("/")[3];
-        console.log(`[mock-api] GET /api/instances/${id}/agents`);
+        console.log(`[mock-api] GET ${url.pathname}`);
         return new Response(JSON.stringify({
           instanceId: id,
           agents: [
@@ -1621,10 +1646,10 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
       },
     },
     {
-      pattern: /^\/api\/instances\/([^/]+)\/commands$/,
+      pattern: /^\/api\/(instances|sessions)\/([^/]+)\/commands$/,
       handler: (url) => {
         const id = url.pathname.split("/")[3];
-        console.log(`[mock-api] GET /api/instances/${id}/commands`);
+        console.log(`[mock-api] GET ${url.pathname}`);
         return new Response(JSON.stringify({
           instanceId: id,
           commands: [

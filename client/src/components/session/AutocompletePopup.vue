@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick } from "vue";
-import { AlertCircle, Bot, FileText, Folder, LoaderCircle, Terminal } from "lucide-vue-next";
+import { AlertCircle, Bot, ChevronRight, FileText, Folder, LoaderCircle, Terminal } from "lucide-vue-next";
 import type { AutocompleteItem } from "@/composables/use-autocomplete";
 
 defineOptions({
@@ -14,6 +14,8 @@ interface AutocompletePopupProps {
   selectedValue: string | null;
   error?: string;
   onSelect: (value: string) => void;
+  /** Lists a folder's contents instead of referencing the folder. */
+  onOpenFolder?: (value: string) => void;
 }
 
 interface ItemGroup {
@@ -37,8 +39,8 @@ watch(() => props.selectedValue, (val) => {
 
 const groupDefinitions: ReadonlyArray<{ key: AutocompleteItem["group"]; label: string }> = [
   { key: "command", label: "Commands" },
+  { key: "file", label: "Files & folders" },
   { key: "agent", label: "Agents" },
-  { key: "file", label: "Files" },
 ];
 
 const groupedItems = computed<ItemGroup[]>(() => {
@@ -51,8 +53,14 @@ const groupedItems = computed<ItemGroup[]>(() => {
     .filter((group) => group.items.length > 0);
 });
 
+const selectedItem = computed(() => props.items.find((item) => item.value === props.selectedValue) ?? null);
+
 function isSelected(item: AutocompleteItem): boolean {
   return item.value === props.selectedValue;
+}
+
+function isFolder(item: AutocompleteItem): boolean {
+  return item.group === "file" && item.meta === "dir";
 }
 
 function handleItemMouseDown(event: MouseEvent): void {
@@ -72,8 +80,96 @@ function handleSelect(value: string): void {
     role="listbox"
     aria-label="Autocomplete suggestions"
   >
+    <!-- Results stay up while newer ones load; the states below only show when there's nothing to list. -->
+    <div v-if="groupedItems.length > 0">
+      <section
+        v-for="group in groupedItems"
+        :key="group.key"
+        class="autocomplete-popup__group"
+      >
+        <div class="autocomplete-popup__group-label">
+          {{ group.label }}
+        </div>
+
+        <div
+          v-for="item in group.items"
+          :key="item.id"
+          class="autocomplete-popup__row"
+          :class="{ 'autocomplete-popup__row--selected': isSelected(item) }"
+        >
+          <button
+            :data-value="item.value"
+            type="button"
+            class="autocomplete-popup__item"
+            :aria-selected="isSelected(item)"
+            @mousedown="handleItemMouseDown"
+            @click="handleSelect(item.value)"
+          >
+            <span class="autocomplete-popup__icon-wrap">
+              <Terminal
+                v-if="item.group === 'command'"
+                class="autocomplete-popup__icon"
+                aria-hidden="true"
+              />
+
+              <span
+                v-else-if="item.group === 'agent'"
+                class="autocomplete-popup__agent-icon-wrap"
+              >
+                <Bot
+                  class="autocomplete-popup__icon"
+                  aria-hidden="true"
+                />
+                <span
+                  v-if="item.meta"
+                  class="autocomplete-popup__agent-dot"
+                  :style="{ backgroundColor: item.meta }"
+                  aria-hidden="true"
+                />
+              </span>
+
+              <Folder
+                v-else-if="item.meta === 'dir'"
+                class="autocomplete-popup__icon autocomplete-popup__icon--folder"
+                aria-hidden="true"
+              />
+
+              <FileText
+                v-else
+                class="autocomplete-popup__icon"
+                aria-hidden="true"
+              />
+            </span>
+
+            <span class="autocomplete-popup__content">
+              <span class="autocomplete-popup__label">{{ item.label }}</span>
+              <span
+                v-if="item.description"
+                class="autocomplete-popup__description"
+              >{{ item.description }}</span>
+            </span>
+          </button>
+
+          <button
+            v-if="isFolder(item) && onOpenFolder"
+            type="button"
+            class="autocomplete-popup__open"
+            :aria-label="`Open ${item.label}`"
+            title="Open folder (Tab)"
+            @mousedown="handleItemMouseDown"
+            @click="onOpenFolder(item.value)"
+          >
+            <ChevronRight
+              class="autocomplete-popup__open-icon"
+              aria-hidden="true"
+            />
+          </button>
+        </div>
+      </section>
+    </div>
+
     <div
-      v-if="isLoading"
+      v-else-if="isLoading"
       class="autocomplete-popup__state"
     >
       <LoaderCircle
@@ -96,78 +192,22 @@ function handleSelect(value: string): void {
     </div>
 
     <div
-      v-else-if="groupedItems.length === 0"
+      v-else
       class="autocomplete-popup__state"
     >
       No results
     </div>
 
-    <div v-else>
-      <section
-        v-for="group in groupedItems"
-        :key="group.key"
-        class="autocomplete-popup__group"
-      >
-        <div class="autocomplete-popup__group-label">
-          {{ group.label }}
-        </div>
-
-        <button
-          v-for="item in group.items"
-          :key="item.id"
-          :data-value="item.value"
-          type="button"
-          class="autocomplete-popup__item"
-          :class="{ 'autocomplete-popup__item--selected': isSelected(item) }"
-          :aria-selected="isSelected(item)"
-          @mousedown="handleItemMouseDown"
-          @click="handleSelect(item.value)"
-        >
-          <span class="autocomplete-popup__icon-wrap">
-            <Terminal
-              v-if="item.group === 'command'"
-              class="autocomplete-popup__icon"
-              aria-hidden="true"
-            />
-
-            <span
-              v-else-if="item.group === 'agent'"
-              class="autocomplete-popup__agent-icon-wrap"
-            >
-              <Bot
-                class="autocomplete-popup__icon"
-                aria-hidden="true"
-              />
-              <span
-                v-if="item.meta"
-                class="autocomplete-popup__agent-dot"
-                :style="{ backgroundColor: item.meta }"
-                aria-hidden="true"
-              />
-            </span>
-
-            <Folder
-              v-else-if="item.meta === 'dir'"
-              class="autocomplete-popup__icon"
-              aria-hidden="true"
-            />
-
-            <FileText
-              v-else
-              class="autocomplete-popup__icon"
-              aria-hidden="true"
-            />
-          </span>
-
-          <span class="autocomplete-popup__content">
-            <span class="autocomplete-popup__label">{{ item.label }}</span>
-            <span
-              v-if="item.description"
-              class="autocomplete-popup__description"
-            >{{ item.description }}</span>
-          </span>
-        </button>
-      </section>
+    <div
+      v-if="selectedItem?.group === 'file'"
+      class="autocomplete-popup__hint"
+    >
+      <template v-if="isFolder(selectedItem)">
+        <kbd>Tab</kbd> open folder · <kbd>Enter</kbd> reference it
+      </template>
+      <template v-else>
+        <kbd>Enter</kbd> reference it
+      </template>
     </div>
   </div>
 </template>
@@ -205,9 +245,20 @@ function handleSelect(value: string): void {
   text-transform: uppercase;
 }
 
+.autocomplete-popup__row {
+  display: flex;
+  align-items: stretch;
+}
+
+.autocomplete-popup__row:hover,
+.autocomplete-popup__row--selected {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
 .autocomplete-popup__item {
   display: flex;
-  width: 100%;
+  min-width: 0;
+  flex: 1;
   align-items: flex-start;
   gap: 10px;
   padding: 9px 12px;
@@ -218,14 +269,50 @@ function handleSelect(value: string): void {
   text-align: left;
 }
 
-.autocomplete-popup__item:hover,
-.autocomplete-popup__item--selected {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-}
-
-.autocomplete-popup__item:focus-visible {
+.autocomplete-popup__item:focus-visible,
+.autocomplete-popup__open:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
+}
+
+.autocomplete-popup__open {
+  display: inline-grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 36px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.autocomplete-popup__open:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--text);
+}
+
+.autocomplete-popup__open-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.autocomplete-popup__hint {
+  position: sticky;
+  bottom: 0;
+  padding: 6px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.autocomplete-popup__hint kbd {
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: inherit;
+  font-size: 10px;
 }
 
 .autocomplete-popup__icon-wrap,
@@ -244,6 +331,10 @@ function handleSelect(value: string): void {
   width: 16px;
   height: 16px;
   color: var(--muted);
+}
+
+.autocomplete-popup__icon--folder {
+  color: var(--accent);
 }
 
 .autocomplete-popup__agent-dot {

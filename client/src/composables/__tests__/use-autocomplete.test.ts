@@ -107,6 +107,10 @@ function configureApiFetch(): void {
   });
 }
 
+function findFilesQuery(q: string) {
+  return expect.objectContaining({ params: expect.objectContaining({ query: { q } }) });
+}
+
 async function mountAutocomplete(initialValue: string, cursor: number, sessionId: Ref<string> | string = "instance-1") {
   const value = shallowRef(initialValue);
   const cursorPosition = shallowRef(cursor);
@@ -181,26 +185,73 @@ describe("useAutocomplete", () => {
     cursorPosition.value = value.value.length;
     await flushAll();
 
-    expect(mockApi.GET).not.toHaveBeenCalledWith("/api/sessions/{id}/find/files", expect.anything());
+    expect(mockApi.GET).not.toHaveBeenCalledWith("/api/sessions/{id}/find/files", findFilesQuery("al"));
 
     await vi.advanceTimersByTimeAsync(299);
-    expect(mockApi.GET).not.toHaveBeenCalledWith("/api/sessions/{id}/find/files", expect.anything());
+    expect(mockApi.GET).not.toHaveBeenCalledWith("/api/sessions/{id}/find/files", findFilesQuery("al"));
 
     await vi.advanceTimersByTimeAsync(1);
     await flushAll();
 
-    expect(mockApi.GET).toHaveBeenCalledWith("/api/sessions/{id}/find/files", expect.objectContaining({
-      params: expect.objectContaining({
-        query: { q: "al" },
-      }),
-    }));
-    expect(result.items.value.map((item) => item.label)).toEqual(["@alpha", "src/alpha.ts", "src/components/"]);
+    expect(mockApi.GET).toHaveBeenCalledWith("/api/sessions/{id}/find/files", findFilesQuery("al"));
+    expect(result.items.value.map((item) => item.label)).toEqual(["alpha.ts", "components/", "@alpha"]);
+    expect(result.items.value.map((item) => item.description)).toEqual(["src/", "src/", "Planner"]);
 
     value.value = "hello@al";
     cursorPosition.value = value.value.length;
     await flushAll();
 
     expect(result.isOpen.value).toBe(false);
+  });
+
+  it("lists the session folder as soon as @ is typed, files and folders before agents", async () => {
+    vi.useFakeTimers();
+
+    const { result } = await mountAutocomplete("look at @", 9);
+    await vi.advanceTimersByTimeAsync(0);
+    await flushAll();
+
+    expect(mockApi.GET).toHaveBeenCalledWith("/api/sessions/{id}/find/files", findFilesQuery(""));
+    expect(result.items.value.map((item) => item.group)).toEqual(["file", "file", "agent", "agent"]);
+  });
+
+  it("opens a folder on Tab and references it on Enter", async () => {
+    vi.useFakeTimers();
+
+    const { result, value, cursorPosition } = await mountAutocomplete("look at @comp", 13);
+    await vi.advanceTimersByTimeAsync(300);
+    await flushAll();
+
+    result.onKeyDown(createKeyboardEvent("ArrowDown"));
+    expect(result.selectedValue.value).toBe("@src/components/ ");
+
+    const tabEvent = createKeyboardEvent("Tab");
+    result.onKeyDown(tabEvent);
+    await vi.advanceTimersByTimeAsync(0);
+    await flushAll();
+
+    expect(tabEvent.defaultPrevented).toBe(true);
+    expect(value.value).toBe("look at @src/components/");
+    expect(cursorPosition.value).toBe(value.value.length);
+    expect(result.isOpen.value).toBe(true);
+    expect(mockApi.GET).toHaveBeenCalledWith("/api/sessions/{id}/find/files", findFilesQuery("src/components/"));
+
+    result.onKeyDown(createKeyboardEvent("ArrowDown"));
+    result.onKeyDown(createKeyboardEvent("Enter"));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(value.value).toBe("look at @src/components/ ");
+    expect(result.isOpen.value).toBe(false);
+  });
+
+  it("doesn't search files while typing a slash command", async () => {
+    vi.useFakeTimers();
+
+    await mountAutocomplete("/he", 3);
+    await vi.advanceTimersByTimeAsync(300);
+    await flushAll();
+
+    expect(mockApi.GET).not.toHaveBeenCalledWith("/api/sessions/{id}/find/files", expect.anything());
   });
 
   it("wraps arrow navigation, selects on Tab, and reopens after Escape when typing resumes", async () => {
