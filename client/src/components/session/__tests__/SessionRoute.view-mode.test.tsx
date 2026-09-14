@@ -58,6 +58,12 @@ vi.mock("@/composables/use-session-terminals", () => ({
   closeTerminalTab: vi.fn(),
 }));
 
+// The real one reports focus over the session hub, which these tests don't connect to.
+vi.mock("@/composables/use-session-recap", () => ({
+  useSessionRecap: () => ({ value: null }),
+  SESSION_RECAP_PREFERENCE_KEY: "SessionRecap",
+}));
+
 vi.mock("@/components/session/ActivityStream.vue", () => ({
   default: {
     name: "ActivityStreamStub",
