@@ -108,6 +108,10 @@ const textHtml = computed(() => markdownRenderer.render(props.text));
   white-space: pre-wrap;
   word-wrap: break-word;
   margin: 0;
+  /* Reasoning is secondary; keep its Markdown structure uncoloured. */
+  --md-heading: currentColor;
+  --md-heading-rule: transparent;
+  --md-marker: var(--muted);
 }
 
 .reasoning-row__timestamp {
