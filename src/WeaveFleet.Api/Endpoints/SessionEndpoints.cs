@@ -508,13 +508,11 @@ public static class SessionEndpoints
         })
         .WithName("GetSessionAgents");
 
-        // GET /api/sessions/{id}/find/files?q= — session-scoped file search
+        // GET /api/sessions/{id}/find/files?q= — files and folders for composer @ references.
+        // An empty q, or one ending in "/", lists that folder; anything else searches. Folders end in "/".
         group.MapGet("/{id}/find/files", async (string id, string? q, SessionOrchestrator orchestrator, CancellationToken ct) =>
         {
-            if (string.IsNullOrWhiteSpace(q))
-                return Results.Ok(new InstanceFilesResponse(id, Array.Empty<string>()));
-
-            var result = await orchestrator.FindSessionFilesAsync(id, q, ct);
+            var result = await orchestrator.FindSessionFilesAsync(id, q ?? string.Empty, ct);
             return result.Match(
                 files => Results.Ok(new InstanceFilesResponse(id, files.ToArray())),
                 err => err.ToSessionApiResult());

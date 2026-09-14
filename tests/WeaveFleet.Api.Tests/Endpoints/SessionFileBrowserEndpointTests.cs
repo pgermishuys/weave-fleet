@@ -200,6 +200,34 @@ public sealed class SessionFileBrowserEndpointTests : IAsyncDisposable
         contentResult.Content.ShouldBe("test content from file");
     }
 
+    [Fact]
+    public async Task find_files_lists_folders_for_empty_and_folder_queries_and_searches_otherwise()
+    {
+        Directory.CreateDirectory(Path.Combine(_tempDirectory.Path, "src", "components"));
+        await File.WriteAllTextAsync(Path.Combine(_tempDirectory.Path, "src", "components", "Button.vue"), "");
+        await File.WriteAllTextAsync(Path.Combine(_tempDirectory.Path, "README.md"), "");
+
+        var createResponse = await _client.PostAsJsonAsync("/api/sessions", new
+        {
+            directory = _tempDirectory.Path,
+            title = "Find Files Test"
+        });
+        createResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var sessionId = (await createResponse.Content.ReadFromJsonAsync<CreateSessionApiResponse>())!.Session.Id;
+
+        async Task<string[]> Find(string query)
+        {
+            var response = await _client.GetAsync($"/api/sessions/{sessionId}/find/files?q={Uri.EscapeDataString(query)}");
+            response.StatusCode.ShouldBe(HttpStatusCode.OK);
+            var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+            return body.GetProperty("files").EnumerateArray().Select(file => file.GetString()!).ToArray();
+        }
+
+        (await Find("")).ShouldBe(["src/", "README.md"]);
+        (await Find("src/")).ShouldBe(["src/components/"]);
+        (await Find("comp")).ShouldBe(["src/components/", "src/components/Button.vue"]);
+    }
+
     private sealed class TempDirectory : IDisposable
     {
         public TempDirectory()
