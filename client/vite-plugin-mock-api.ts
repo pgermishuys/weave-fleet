@@ -479,6 +479,27 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
     return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
   }
 
+  const MOCK_FOLDERS: Record<string, { isGitRepo: boolean }> = {
+    "/home/you/src/weave-fleet": { isGitRepo: true },
+    "/home/you/src/opencode": { isGitRepo: true },
+    "/home/you/src/notes": { isGitRepo: false },
+    "/home/you/work/agent-playbook": { isGitRepo: true },
+    "/home/you/Downloads": { isGitRepo: false },
+  };
+  /** Folders added to the workspace roots from the new-session page. */
+  const addedRoots = new Set<string>();
+
+  function mockRepositories() {
+    const added = [...addedRoots]
+      .filter((path) => MOCK_FOLDERS[path]?.isGitRepo)
+      .map((path) => ({ name: path.split("/").pop() ?? path, path, parentRoot: path }));
+    return [
+      { name: "weave-fleet", path: "/home/you/src/weave-fleet", parentRoot: "/home/you/src" },
+      { name: "opencode", path: "/home/you/src/opencode", parentRoot: "/home/you/src" },
+      ...added,
+    ];
+  }
+
   const routes: MockRoute[] = [
     // ─── Terminals ──────────────────────────────────────────────────────────────
     // The shell itself is pretend and runs in the browser (terminal-mock-shell.ts);
@@ -861,21 +882,45 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
     },
     {
       pattern: /^\/api\/workspace-roots$/,
-      handler: () => {
+      handler: async (_url, req) => {
+        if (req.method === "POST") {
+          const { path } = await req.json() as { path: string };
+          console.log(`[mock-api] POST /api/workspace-roots ${path}`);
+          if (!MOCK_FOLDERS[path]) return json({ error: `Path does not exist: ${path}` }, 400);
+          addedRoots.add(path);
+          return json({ id: `mock-root-${addedRoots.size + 1}`, path });
+        }
         console.log("[mock-api] GET /api/workspace-roots");
-        return new Response(JSON.stringify({
+        return json({
           roots: [
-            {
-              id: "mock-root-1",
-              path: "C:\\Users\\demo\\projects",
-              source: "user",
-              exists: true,
-            },
+            { id: "mock-root-1", path: "/home/you/src", source: "user", exists: true },
+            ...[...addedRoots].map((path, index) => ({ id: `mock-root-${index + 2}`, path, source: "user", exists: true })),
           ],
-        }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
         });
+      },
+    },
+    // Folders the new-session "Browse for a folder" view knows about. Anything under /home/you/src
+    // is inside the workspace roots; the others are until someone adds them.
+    {
+      pattern: /^\/api\/directories\/inspect$/,
+      handler: (url) => {
+        const typed = (url.searchParams.get("path") ?? "").trim();
+        const path = Object.keys(MOCK_FOLDERS).find((known) => known.toLowerCase() === typed.replaceAll("\\", "/").toLowerCase()) ?? typed;
+        console.log(`[mock-api] GET /api/directories/inspect?path=${typed}`);
+        const folder = MOCK_FOLDERS[path];
+        return json({
+          path,
+          exists: Boolean(folder),
+          isGitRepo: folder?.isGitRepo ?? false,
+          isWithinRoots: Boolean(folder) && (path.startsWith("/home/you/src/") || addedRoots.has(path)),
+        });
+      },
+    },
+    {
+      pattern: /^\/api\/repositories\/refresh$/,
+      handler: () => {
+        console.log("[mock-api] POST /api/repositories/refresh");
+        return json({ repositories: mockRepositories(), scannedAt: Date.now() });
       },
     },
     {
@@ -912,13 +957,7 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
       pattern: /^\/api\/repositories$/,
       handler: () => {
         console.log("[mock-api] GET /api/repositories");
-        return json({
-          repositories: [
-            { name: "weave-fleet", path: "/home/you/src/weave-fleet", parentRoot: "/home/you/src" },
-            { name: "opencode", path: "/home/you/src/opencode", parentRoot: "/home/you/src" },
-          ],
-          scannedAt: Date.now(),
-        });
+        return json({ repositories: mockRepositories(), scannedAt: Date.now() });
       },
     },
     {

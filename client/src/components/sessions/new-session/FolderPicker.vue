@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, shallowRef, useId, useTemplateRef, watch } from "vue";
-import { ArrowLeft, Check, ChevronDown, Folder, FolderGit2, FolderOpen, MessageSquare, Search } from "lucide-vue-next";
-import type { ScannedRepository } from "@/api/client";
+import { ArrowLeft, Check, ChevronDown, Folder, FolderGit2, FolderOpen, FolderPlus, MessageSquare, Search } from "lucide-vue-next";
+import type { FolderInspection, ScannedRepository } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import DirectoryPickerPopover from "@/components/ui/DirectoryPickerPopover.vue";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useDirectoryBrowser } from "@/composables/use-directory-browser";
+import { addFolderToFleet, folderForInspection, inspectFolder } from "@/lib/folder-access";
 import { tildePath } from "@/lib/new-session-plan";
 import type { NewSessionFolder } from "@/lib/new-session-request";
 
@@ -23,6 +24,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   "update:folder": [folder: NewSessionFolder];
   closeAutoFocus: [event: Event];
+  /** A folder was added to the workspace roots, so the repository list is out of date. */
+  folderAdded: [];
 }>();
 
 const open = defineModel<boolean>("open", { default: false });
@@ -46,7 +49,12 @@ const directoryDraft = shallowRef("");
 const isDirectoryPickerOpen = shallowRef(false);
 const searchInput = useTemplateRef<HTMLInputElement>("search");
 const directoryInput = useTemplateRef<HTMLInputElement>("directory");
-const directoryBrowser = useDirectoryBrowser();
+// Any folder on this computer: one outside the workspace roots can be added from here.
+const directoryBrowser = useDirectoryBrowser(false, { unconstrained: true });
+const browseStatus = shallowRef<"idle" | "checking" | "adding">("idle");
+const browseError = shallowRef<string | null>(null);
+/** A folder that was picked but is outside the workspace roots, waiting to be added. */
+const folderToAdd = shallowRef<FolderInspection | null>(null);
 
 function baseName(path: string): string {
   return path.split(/[/\\]/).filter(Boolean).pop() ?? path;
@@ -118,7 +126,7 @@ const options = computed<FolderOption[]>(() => {
       id: "browse",
       group: "Other",
       title: "Browse for a folder…",
-      detail: "Any folder, git or not",
+      detail: "Any repository or folder on this computer",
       mono: false,
       icon: "browse",
       isSelected: props.folder?.kind === "directory",
@@ -177,8 +185,14 @@ function scrollHighlightedIntoView(): void {
   });
 }
 
+function resetBrowseCheck(): void {
+  browseError.value = null;
+  folderToAdd.value = null;
+}
+
 function showBrowse(): void {
   directoryDraft.value = props.folder?.kind === "directory" ? props.folder.path : "";
+  resetBrowseCheck();
   view.value = "browse";
   void nextTick(() => directoryInput.value?.focus());
 }
@@ -188,10 +202,52 @@ function showList(): void {
   void nextTick(() => searchInput.value?.focus());
 }
 
-function useDirectory(path = directoryDraft.value): void {
+/**
+ * Uses the typed or picked folder: a git checkout becomes a repository (so it can get a
+ * worktree), anything else a plain folder. One outside the workspace roots asks to be added first.
+ */
+async function useDirectory(path = directoryDraft.value): Promise<void> {
   const trimmed = path.trim();
-  if (trimmed) {
-    choose({ kind: "directory", path: trimmed });
+  if (!trimmed || browseStatus.value !== "idle") {
+    return;
+  }
+
+  directoryDraft.value = trimmed;
+  resetBrowseCheck();
+  browseStatus.value = "checking";
+  try {
+    const inspection = await inspectFolder(trimmed);
+    if (!inspection.exists) {
+      browseError.value = "There's no folder at that path.";
+    } else if (!inspection.isWithinRoots) {
+      directoryDraft.value = inspection.path;
+      folderToAdd.value = inspection;
+    } else {
+      choose(folderForInspection(inspection));
+    }
+  } catch (error) {
+    browseError.value = error instanceof Error ? error.message : "Couldn't check that folder.";
+  } finally {
+    browseStatus.value = "idle";
+  }
+}
+
+async function addAndUseFolder(): Promise<void> {
+  const inspection = folderToAdd.value;
+  if (!inspection || browseStatus.value !== "idle") {
+    return;
+  }
+
+  browseStatus.value = "adding";
+  try {
+    await addFolderToFleet(inspection.path);
+    emit("folderAdded");
+    choose(folderForInspection(inspection));
+  } catch (error) {
+    folderToAdd.value = null;
+    browseError.value = error instanceof Error ? error.message : "Couldn't add that folder.";
+  } finally {
+    browseStatus.value = "idle";
   }
 }
 
@@ -373,7 +429,15 @@ const chipLabel = computed(() => {
             v-if="!hasRepositoryMatches"
             class="ns-pop__note"
           >
-            {{ query.trim() ? `No repository matches “${query.trim()}”.` : "No repositories found in your workspace roots." }}
+            <template v-if="query.trim()">
+              No repository matches “{{ query.trim() }}”.
+            </template>
+            <template v-else-if="allowBrowse">
+              No repositories yet. Browse for a folder to add one.
+            </template>
+            <template v-else>
+              No repositories found in your workspace roots.
+            </template>
           </p>
         </div>
       </template>
@@ -408,7 +472,8 @@ const chipLabel = computed(() => {
               placeholder="/path/to/folder"
               autocomplete="off"
               spellcheck="false"
-              @keydown.enter.prevent="useDirectory()"
+              @input="resetBrowseCheck"
+              @keydown.enter.prevent="folderToAdd ? addAndUseFolder() : useDirectory()"
             >
             <DirectoryPickerPopover
               :browser="directoryBrowser"
@@ -434,14 +499,63 @@ const chipLabel = computed(() => {
             </DirectoryPickerPopover>
           </div>
         </div>
+        <p
+          v-if="browseError"
+          class="ns-folder-error"
+          role="alert"
+        >
+          {{ browseError }}
+        </p>
+        <div
+          v-else-if="folderToAdd"
+          class="ns-folder-add"
+          role="status"
+          data-testid="new-session-add-folder"
+        >
+          <FolderPlus
+            class="ns-folder-add__icon"
+            aria-hidden="true"
+          />
+          <div class="ns-folder-add__text">
+            <p class="ns-folder-add__title">
+              {{ baseName(folderToAdd.path) }} isn't in Fleet yet
+            </p>
+            <p class="ns-folder-add__detail">
+              {{ folderToAdd.isGitRepo
+                ? "Add this repository to work in its checkout or in new worktrees beside it."
+                : "Add this folder so sessions can work in it." }}
+              You can remove it in Settings.
+            </p>
+          </div>
+        </div>
         <div class="ns-folder-actions">
+          <template v-if="folderToAdd">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              :disabled="browseStatus !== 'idle'"
+              @click="resetBrowseCheck"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              :disabled="browseStatus !== 'idle'"
+              @click="addAndUseFolder()"
+            >
+              {{ browseStatus === "adding" ? "Adding…" : folderToAdd.isGitRepo ? "Add repository" : "Add folder" }}
+            </Button>
+          </template>
           <Button
+            v-else
             type="button"
             size="sm"
-            :disabled="!directoryDraft.trim()"
+            :disabled="!directoryDraft.trim() || browseStatus !== 'idle'"
             @click="useDirectory()"
           >
-            Use this folder
+            {{ browseStatus === "checking" ? "Checking…" : "Use this folder" }}
           </Button>
         </div>
       </template>
@@ -498,6 +612,50 @@ const chipLabel = computed(() => {
 .ns-folder-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 6px;
   padding: 0 8px 6px;
+}
+
+.ns-folder-error {
+  margin: 0 8px 8px;
+  color: var(--error);
+  font-size: 12.5px;
+}
+
+.ns-folder-add {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px;
+  margin: 0 8px 8px;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: calc(var(--radius-btn) - 2px);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.ns-folder-add__icon {
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  color: var(--accent);
+}
+
+.ns-folder-add__text {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.ns-folder-add__title {
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ns-folder-add__detail {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 </style>

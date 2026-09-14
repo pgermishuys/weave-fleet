@@ -12,6 +12,9 @@ import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   createSession: vi.fn(),
+  refreshRepositories: vi.fn(),
+  inspectFolder: vi.fn(),
+  addFolderToFleet: vi.fn(),
   search: { value: { projectId: undefined as string | undefined, source: undefined as string | undefined } },
 }));
 
@@ -32,8 +35,14 @@ vi.mock("@/composables/use-repositories", () => ({
     isLoading: shallowRef(false),
     error: shallowRef(null),
     scannedAt: shallowRef(1),
-    refresh: vi.fn(),
+    refresh: mocks.refreshRepositories,
   }),
+}));
+
+vi.mock("@/lib/folder-access", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/folder-access")>()),
+  inspectFolder: mocks.inspectFolder,
+  addFolderToFleet: mocks.addFolderToFleet,
 }));
 
 vi.mock("@/composables/use-projects", () => ({
@@ -161,6 +170,14 @@ beforeEach(() => {
     session: { id: "session-1", title: "New", time: { created: 0, updated: 0 }, tags: [] },
   });
   mocks.search.value = { projectId: undefined, source: undefined };
+  mocks.refreshRepositories.mockReset().mockResolvedValue(undefined);
+  mocks.addFolderToFleet.mockReset().mockResolvedValue(undefined);
+  mocks.inspectFolder.mockReset().mockImplementation(async (path: string) => ({
+    path,
+    exists: true,
+    isGitRepo: false,
+    isWithinRoots: true,
+  }));
   repositories.value = [rocket, comet];
   worktrees.value = [];
   harnesses.value = [opencode];
@@ -582,6 +599,72 @@ describe("NewSessionComposer", () => {
 
     expect(view.get("[data-testid='new-session-folder-chip']").text()).toContain("/srv/scratch");
     expect(view.find("[data-testid='new-session-workspace-chip']").exists()).toBe(false);
+  });
+
+  describe("browsing for a folder", () => {
+    async function browseTo(view: VueWrapper, path: string): Promise<void> {
+      await openFolderMenu(view);
+      await folderOption("Browse for a folder").trigger("click");
+      await flushPromises();
+      const input = inDocument().get<HTMLInputElement>("#new-session-directory");
+      await input.setValue(path);
+      await input.trigger("keydown", { key: "Enter" });
+      await flushPromises();
+    }
+
+    function button(label: string) {
+      const found = inDocument().findAll("button").find((candidate) => candidate.text() === label);
+      if (!found) {
+        throw new Error(`No button "${label}"`);
+      }
+      return found;
+    }
+
+    it("uses a git folder as a repository, so it can get a new worktree", async () => {
+      mocks.inspectFolder.mockResolvedValue({ path: "/home/me/deep/agent-playbook", exists: true, isGitRepo: true, isWithinRoots: true });
+      const view = await mountComposer();
+
+      await browseTo(view, "/home/me/deep/agent-playbook");
+      await type(view, "Tidy the README");
+      await pressEnter(view);
+
+      expect(view.get("[data-testid='new-session-folder-chip']").text()).toContain("agent-playbook");
+      const [directory, options] = lastCreateCall();
+      expect(directory).toBe("/home/me/deep/agent-playbook");
+      expect(options.isolationStrategy).toBe("worktree");
+      expect(options.source).toMatchObject({
+        key: { providerId: "builtin.repository" },
+        input: { repositoryPath: "/home/me/deep/agent-playbook", isolationStrategy: "worktree" },
+      });
+    });
+
+    it("offers to add a folder outside the workspace roots, then uses it", async () => {
+      mocks.inspectFolder.mockResolvedValue({ path: "C:\\source\\agent-playbook", exists: true, isGitRepo: true, isWithinRoots: false });
+      const view = await mountComposer();
+
+      await browseTo(view, "c:/source/agent-playbook");
+
+      expect(inDocument().get("[data-testid='new-session-add-folder']").text()).toContain("agent-playbook isn't in Fleet yet");
+      expect(mocks.addFolderToFleet).not.toHaveBeenCalled();
+
+      await button("Add repository").trigger("click");
+      await flushPromises();
+
+      expect(mocks.addFolderToFleet).toHaveBeenCalledWith("C:\\source\\agent-playbook");
+      expect(mocks.refreshRepositories).toHaveBeenCalled();
+      expect(view.get("[data-testid='new-session-folder-chip']").text()).toContain("agent-playbook");
+      expect(view.find("[data-testid='new-session-workspace-chip']").exists()).toBe(true);
+    });
+
+    it("says so when the folder doesn't exist", async () => {
+      mocks.inspectFolder.mockResolvedValue({ path: "/nope", exists: false, isGitRepo: false, isWithinRoots: false });
+      const view = await mountComposer();
+
+      await browseTo(view, "/nope");
+
+      expect(inDocument().get("[role='alert']").text()).toBe("There's no folder at that path.");
+      expect(view.get("[data-testid='new-session-folder-chip']").text()).not.toContain("/nope");
+    });
   });
 
   it("remembers the choices a session was created with", async () => {

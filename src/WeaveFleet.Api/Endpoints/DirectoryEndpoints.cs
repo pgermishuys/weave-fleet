@@ -33,6 +33,22 @@ public static class DirectoryEndpoints
         })
         .WithName("GetDirectories");
 
+        // GET /api/directories/inspect?path= — whether a folder exists, is a git repository,
+        // and is inside the workspace roots
+        group.MapGet("/directories/inspect", async (
+            string path,
+            DirectoryService directoryService,
+            CancellationToken ct) =>
+        {
+            var inspection = await directoryService.InspectFolderAsync(path, ct);
+            return Results.Ok(new FolderInspectionResponse(
+                inspection.Path,
+                inspection.Exists,
+                inspection.IsGitRepo,
+                inspection.IsWithinRoots));
+        })
+        .WithName("InspectDirectory");
+
         return app;
     }
 }
@@ -42,6 +58,12 @@ public sealed record DirectoryListingResponse(
     string? CurrentPath,
     string? ParentPath,
     IReadOnlyList<string> Roots);
+
+public sealed record FolderInspectionResponse(
+    string Path,
+    bool Exists,
+    bool IsGitRepo,
+    bool IsWithinRoots);
 
 public sealed record DirectoryEntryResponse(
     string Name,

@@ -310,6 +310,10 @@ public sealed partial class RepositoryService(
 
         if (IsGitRepo(canonicalDirectory))
         {
+            // A linked worktree is a checkout of a repository listed elsewhere, not a repository of its own.
+            if (GitPaths.IsLinkedWorktree(canonicalDirectory))
+                return;
+
             var info = await BuildRepositoryInfoAsync(canonicalDirectory, ct).ConfigureAwait(false);
             _cache[canonicalDirectory] = info;
             return; // don't recurse into git repos
@@ -332,8 +336,7 @@ public sealed partial class RepositoryService(
         }
     }
 
-    private static bool IsGitRepo(string path) =>
-        Directory.Exists(Path.Combine(path, ".git"));
+    private static bool IsGitRepo(string path) => GitPaths.IsRepository(path);
 
     private async Task<RepositoryInfo> BuildRepositoryInfoAsync(string path, CancellationToken ct)
     {

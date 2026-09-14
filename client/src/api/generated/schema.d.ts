@@ -1013,6 +1013,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/directories/inspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["InspectDirectory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/open-directory": {
         parameters: {
             query?: never;
@@ -4749,6 +4765,26 @@ export interface operations {
             query?: {
                 path?: string;
                 unconstrained?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    InspectDirectory: {
+        parameters: {
+            query: {
+                path: string;
             };
             header?: never;
             path?: never;
