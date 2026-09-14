@@ -249,7 +249,7 @@ public sealed class SessionFileWriteTests : IDisposable
         var path = WriteFile("win.cs", original);
 
         var read = await _sut.ReadSessionFileAsync(SessionId, "win.cs");
-        read.Value.Content.ShouldBe("﻿one\r\ntwo\r\n");
+        read.Value.Content.ShouldBe("\uFEFFone\r\ntwo\r\n");
 
         // The editor sends back the text it was given, BOM included.
         var edited = read.Value.Content!.Replace("two", "TWO");
