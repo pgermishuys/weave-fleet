@@ -471,11 +471,18 @@ public sealed class SessionRepository(
     public async Task<IReadOnlyDictionary<string, string>> GetActiveChildToParentMappingAsync()
     {
         using var conn = connectionFactory.CreateConnection();
+        // A child whose delegations have all finished no longer works for its parent, even if
+        // its own activity status went stale, so it is left out.
         var pairs = await conn.QueryAsync(
             """
-            SELECT id, parent_session_id
-            FROM sessions
-            WHERE parent_session_id IS NOT NULL AND status = 'active' AND user_id = @UserId
+            SELECT s.id, s.parent_session_id
+            FROM sessions s
+            WHERE s.parent_session_id IS NOT NULL AND s.status = 'active' AND s.user_id = @UserId
+              AND NOT (
+                EXISTS (SELECT 1 FROM delegations d WHERE d.child_session_id = s.id)
+                AND NOT EXISTS (
+                  SELECT 1 FROM delegations d
+                  WHERE d.child_session_id = s.id AND d.status NOT IN ('completed', 'error', 'cancelled')))
             """,
             cmd => { cmd.AddParameter("UserId", userContext.UserId); },
             r => (ChildId: r.GetString(r.GetOrdinal("id")), ParentId: r.GetString(r.GetOrdinal("parent_session_id"))));

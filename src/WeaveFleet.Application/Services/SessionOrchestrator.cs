@@ -56,6 +56,7 @@ public sealed partial class SessionOrchestrator(
     private readonly DelegationService _delegationService = delegationService;
     private readonly GitDiffService _gitDiffService = gitDiffService ?? new GitDiffService();
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _activationLocks = new();
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> DelegatedChildLocks = new(StringComparer.Ordinal);
 
     private sealed class NoOpUserPreferenceRepository : IUserPreferenceRepository
     {
@@ -528,6 +529,28 @@ public sealed partial class SessionOrchestrator(
         string childHarnessSessionId,
         string title,
         CancellationToken ct = default)
+    {
+        // The harness announces a child from session.created and again from every task part
+        // update, often at the same moment. Without the lock both callers miss the lookup and
+        // each creates a child, so one harness session ends up as two Fleet sessions.
+        // The lock is static because each caller resolves its own scoped orchestrator.
+        var childLock = DelegatedChildLocks.GetOrAdd(childHarnessSessionId, static _ => new SemaphoreSlim(1, 1));
+        await childLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            return await EnsureDelegatedChildSessionCoreAsync(parentSessionId, childHarnessSessionId, title, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            childLock.Release();
+        }
+    }
+
+    private async Task<Result<Session>> EnsureDelegatedChildSessionCoreAsync(
+        string parentSessionId,
+        string childHarnessSessionId,
+        string title,
+        CancellationToken ct)
     {
         var parent = await sessionRepository.GetByIdAsync(parentSessionId);
         if (parent is null)
