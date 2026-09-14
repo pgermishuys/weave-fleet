@@ -46,12 +46,15 @@ export function setMerge(record: FileBufferRecord, merge: { kind: MergeKind; ori
   commit(record, { effects: mergeSlot.reconfigure(merge ? mergeExtension(merge.kind, merge.original) : []) });
 }
 
-/** Mark the lines that differ from the git base (or from disk, for a file git sees as unchanged). */
-export function markStripe(record: FileBufferRecord, base: Text | null): void {
+/**
+ * Mark the lines that differ from the git base (or from disk, for a file git sees as unchanged).
+ * `hidden` clears the stripe: the merge views have a change gutter of their own.
+ */
+export function markStripe(record: FileBufferRecord, base: Text | null, hidden = false): void {
   const doc = record.state?.doc;
   if (!doc) return;
   const reference = base ?? record.savedDoc;
-  commit(record, { effects: markChangedLines(doc, reference ? changedLines(reference, doc) : []) });
+  commit(record, { effects: markChangedLines(doc, reference && !hidden ? changedLines(reference, doc) : []) });
 }
 
 /** A deleted file: its last version, read-only, as all removed lines. */

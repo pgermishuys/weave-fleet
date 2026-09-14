@@ -75,7 +75,7 @@ let stripeTimer: ReturnType<typeof setTimeout> | undefined;
 function refreshStripe(): void {
   clearTimeout(stripeTimer);
   const current = record();
-  if (current) markStripe(current, gitBase.value);
+  if (current) markStripe(current, gitBase.value, comparing.value || view.value === "diff");
 }
 
 function onUpdate(update: ViewUpdate): void {
@@ -145,7 +145,9 @@ function applyMerge(): void {
 }
 
 watch([view, comparing, () => conflict.value?.hash, gitBase], () => {
-  if (attached) applyMerge();
+  if (!attached) return;
+  applyMerge();
+  refreshStripe();
 });
 watch(gitBase, refreshStripe);
 watch(() => info.value?.status, (status) => {
@@ -294,7 +296,6 @@ function addToMessage(): void {
   <div
     ref="root"
     class="file-canvas"
-    :class="{ 'file-canvas--merge': comparing || view === 'diff' }"
     :data-path="path"
   >
     <div class="file-canvas__bar">
@@ -678,11 +679,6 @@ function addToMessage(): void {
 
 .file-canvas__editor :deep(.cm-editor) {
   height: 100%;
-}
-
-/* The merge view has its own change gutter; the stripe would repeat it. */
-.file-canvas--merge .file-canvas__editor :deep(.cm-agent-gutter) {
-  display: none;
 }
 
 .file-canvas__rendered {
