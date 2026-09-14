@@ -173,7 +173,7 @@ function handleSearchKeydown(event: KeyboardEvent): void {
 
 function scrollHighlightedIntoView(): void {
   void nextTick(() => {
-    document.getElementById(optionDomId(highlightedIndex.value))?.scrollIntoView({ block: "nearest" });
+    document.getElementById(optionDomId(highlightedIndex.value))?.scrollIntoView?.({ block: "nearest" });
   });
 }
 
