@@ -19,7 +19,7 @@ import IconRail from "@/components/layout/IconRail.vue";
 import StatusBar from "@/components/layout/StatusBar.vue";
 import SessionsV2RightPanel from "@/components/sessions/SessionsV2RightPanel.vue";
 import { Menu } from "lucide-vue-next";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { useCommands } from "@/composables/use-commands";
 import { useWeaveSocket } from "@/composables/use-weave-socket";
@@ -54,7 +54,7 @@ const sidebarStore = useSidebarStore();
 const { isMobileNav, mobileDrawerOpen, openDrawer, closeDrawer } = useSidebarMobile();
 const { isBoardFeatureEnabled } = useBoardFeature();
 
-const { panelCollapsed, activeRail } = storeToRefs(sidebarStore);
+const { panelCollapsed, activeRail, rightPanelSheetOpen } = storeToRefs(sidebarStore);
 
 const isSettingsRoute = computed(() => pathname.value.startsWith("/settings"));
 
@@ -130,14 +130,32 @@ const MIN_CONVERSATION_WIDTH = 480;
 const canvasesStore = useCanvasesStore();
 const workspaceSheetRef = shallowRef<HTMLElement | null>(null);
 const { width: workspaceSheetWidth } = useElementSize(workspaceSheetRef);
-const sessionsRightPanelWidth = computed(() =>
-  canvasesStore.widened
-    ? Math.max(
-      rightPanelWidth.value,
-      Math.min(WIDENED_RIGHT_PANEL_WIDTH, Math.round(workspaceSheetWidth.value - MIN_CONVERSATION_WIDTH)),
-    )
-    : rightPanelWidth.value,
+const MIN_RIGHT_PANEL_WIDTH = 280;
+
+// Room for the panel beside a readable conversation (unlimited until the sheet is measured).
+const inlineRoom = computed(() =>
+  workspaceSheetWidth.value > 0 ? Math.round(workspaceSheetWidth.value - MIN_CONVERSATION_WIDTH) : Infinity,
 );
+
+// The panel is a column only while the conversation keeps that room beside it at the panel's
+// narrowest. Otherwise (phones, narrow windows) it's a sheet over the conversation, closed
+// until asked for, and it closes when the page changes.
+const rightPanelFits = computed(() => !isMobileNav.value && inlineRoom.value >= MIN_RIGHT_PANEL_WIDTH);
+const showInlineRightPanel = computed(() => showRightPanel.value && rightPanelFits.value);
+const showRightPanelSheet = computed(() => showRightPanel.value && !rightPanelFits.value);
+
+watch(rightPanelFits, (fits) => sidebarStore.setRightPanelAsSheet(!fits), { immediate: true });
+watch(pathname, () => sidebarStore.setRightPanelSheetOpen(false));
+
+const sessionsRightPanelWidth = computed(() =>
+  Math.min(
+    inlineRoom.value,
+    canvasesStore.widened
+      ? Math.max(rightPanelWidth.value, Math.min(WIDENED_RIGHT_PANEL_WIDTH, inlineRoom.value))
+      : rightPanelWidth.value,
+  ),
+);
+const boardRightPanelWidth = computed(() => Math.min(inlineRoom.value, rightPanelWidth.value));
 
 // --- Left gutter (context panel ↔ conversation) ---
 const contextPanelRef = shallowRef<InstanceType<typeof ContextPanel> | null>(null);
@@ -181,7 +199,7 @@ function onGutterPointerDown(e: PointerEvent): void {
 
   isGutterDragging.value = true;
   const startX = e.clientX;
-  const startWidth = rightPanelWidth.value;
+  const startWidth = Math.min(rightPanelWidth.value, inlineRoom.value);
   document.body.style.cursor = "col-resize";
   document.body.style.userSelect = "none";
 
@@ -189,8 +207,8 @@ function onGutterPointerDown(e: PointerEvent): void {
     const delta = startX - e.clientX;
     const mainEl = document.querySelector(".main");
     const appWidth = mainEl?.getBoundingClientRect().width ?? window.innerWidth;
-    const maxWidth = appWidth * 0.5;
-    rightPanelWidth.value = Math.max(200, Math.min(maxWidth, startWidth + delta));
+    const maxWidth = Math.min(appWidth * 0.5, inlineRoom.value);
+    rightPanelWidth.value = Math.max(MIN_RIGHT_PANEL_WIDTH, Math.min(maxWidth, startWidth + delta));
   };
 
   const onUp = () => {
@@ -218,14 +236,41 @@ function onGutterPointerDown(e: PointerEvent): void {
       :open="mobileDrawerOpen"
       @update:open="(v) => !v && closeDrawer()"
     >
+      <!-- The sheet's own close button would sit on the sessions header; tapping outside closes it. -->
       <SheetContent
         side="left"
-        class="w-[280px] p-0 gap-0"
+        class="w-[min(340px,calc(100%-56px))] sm:max-w-[340px] p-0 gap-0 [&>button]:hidden"
       >
-        <div class="flex h-full">
+        <div class="flex h-full min-w-0">
           <IconRail />
-          <ContextPanel />
+          <ContextPanel fill />
         </div>
+      </SheetContent>
+    </Sheet>
+
+    <!-- Phones and narrow windows: the right panel as a sheet over the conversation -->
+    <Sheet
+      v-if="showRightPanelSheet"
+      :open="rightPanelSheetOpen"
+      @update:open="sidebarStore.setRightPanelSheetOpen"
+    >
+      <!-- The panel's header has its own close button. -->
+      <SheetContent
+        side="right"
+        class="w-[calc(100%-40px)] max-w-[480px] sm:max-w-[480px] p-0 gap-0 [&>button]:hidden"
+        :aria-describedby="undefined"
+      >
+        <SheetTitle class="sr-only">
+          Right panel
+        </SheetTitle>
+        <SessionsV2RightPanel
+          v-if="showSessionsV2Panel"
+          in-sheet
+        />
+        <BoardRightPanel
+          v-else
+          in-sheet
+        />
       </SheetContent>
     </Sheet>
 
@@ -268,20 +313,22 @@ function onGutterPointerDown(e: PointerEvent): void {
         </CenterContent>
 
         <div
-          v-if="showRightPanel"
+          v-if="showInlineRightPanel"
           class="resize-gutter"
           :class="{ active: isGutterDragging }"
           @pointerdown.prevent="onGutterPointerDown"
         />
 
-        <SessionsV2RightPanel
-          v-if="showSessionsV2Panel"
-          :width="sessionsRightPanelWidth"
-        />
-        <BoardRightPanel
-          v-else-if="showBoardPanel"
-          :width="rightPanelWidth"
-        />
+        <template v-if="showInlineRightPanel">
+          <SessionsV2RightPanel
+            v-if="showSessionsV2Panel"
+            :width="sessionsRightPanelWidth"
+          />
+          <BoardRightPanel
+            v-else
+            :width="boardRightPanelWidth"
+          />
+        </template>
       </div>
     </div>
 

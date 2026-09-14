@@ -22,8 +22,8 @@ import {
   summarizeChecks,
   type SmartLink,
 } from "@/lib/smart-links";
+import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { useCanvasesStore } from "@/stores/canvases";
-import { useSidebarStore } from "@/stores/sidebar";
 import { useSmartLinksStore } from "@/stores/smart-links";
 
 const MAX_CHIPS = 3;
@@ -35,7 +35,7 @@ const props = defineProps<{
 
 const smartLinks = useSmartLinksStore();
 const canvases = useCanvasesStore();
-const sidebar = useSidebarStore();
+const { showRightPanel } = useSidebarMobile();
 
 watch(
   () => props.sessionId,
@@ -86,7 +86,7 @@ function checkIcon(link: SmartLink) {
 }
 
 function show(target: string): void {
-  sidebar.setRightPanelCollapsed(false);
+  showRightPanel();
   canvases.introduce(props.sessionId, "context");
   canvases.open(props.sessionId, "context");
   smartLinks.requestFocus(props.sessionId, target);

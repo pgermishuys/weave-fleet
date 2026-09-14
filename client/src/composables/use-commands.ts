@@ -77,7 +77,7 @@ export function useCommands() {
   const workspaceUiStore = useWorkspaceUiStore();
   const appShellStore = useAppShellStore();
   const terminalsStore = useTerminalsStore();
-  const { toggleSidebar, isMobileNav, mobileDrawerOpen } = useSidebarMobile();
+  const { toggleSidebar, isMobileNav, mobileDrawerOpen, isRightPanelVisible, toggleRightPanel } = useSidebarMobile();
   const { abortSession } = useAbortSession();
   const { forkSession } = useForkSession();
   const router = useRouter();
@@ -516,13 +516,13 @@ export function useCommands() {
       },
       {
         id: "toggle-right-panel",
-        label: sidebarStore.rightPanelCollapsed ? "Show Right Panel" : "Hide Right Panel",
-        description: sidebarStore.rightPanelCollapsed ? "Expand the right detail panel." : "Collapse the right detail panel.",
+        label: isRightPanelVisible.value ? "Hide Right Panel" : "Show Right Panel",
+        description: isRightPanelVisible.value ? "Collapse the right detail panel." : "Expand the right detail panel.",
         icon: PanelRightClose,
         category: "View",
         globalShortcut: bindings.value["toggle-right-panel"]?.globalShortcut ?? undefined,
         keywords: ["panel", "details", "todo", "collapse", "expand", "right"],
-        action: () => sidebarStore.toggleRightPanelCollapsed(),
+        action: toggleRightPanel,
       },
       {
         id: "toggle-terminal",
