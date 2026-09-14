@@ -37,6 +37,21 @@ public sealed class LegacyDataMigratorTests
     }
 
     [Fact]
+    public void Should_leave_the_legacy_db_alone_while_another_fleet_is_running_on_it()
+    {
+        using var tempDirectory = new TemporaryDirectory();
+        var legacyDatabasePath = tempDirectory.GetPath("fleet.db");
+        var fleetDatabasePath = tempDirectory.GetPath("active-fleet.db");
+        File.WriteAllText(legacyDatabasePath, "live-db");
+        using var runningFleet = FleetInstanceLock.TryAcquire(legacyDatabasePath);
+
+        LegacyDataMigrator.BackupLegacyAgentDb(fleetDatabasePath, legacyDatabasePath, NullLogger.Instance);
+
+        File.ReadAllText(legacyDatabasePath).ShouldBe("live-db");
+        File.Exists(legacyDatabasePath + ".legacy-backup").ShouldBeFalse();
+    }
+
+    [Fact]
     public void Should_skip_when_source_does_not_exist()
     {
         using var tempDirectory = new TemporaryDirectory();
