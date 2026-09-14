@@ -1,0 +1,23 @@
+{
+  "name": "fleet-desktop",
+  "productName": "Fleet",
+  "version": "0.23.0",
+  "private": true,
+  "description": "Weave Fleet as a desktop app",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json && electron .",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "electron": "44.3.0",
+    "typescript": "5.9.3",
+    "vitest": "^4.1.2"
+  },
+  "trustedDependencies": [
+    "electron"
+  ]
+}
