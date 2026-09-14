@@ -267,6 +267,58 @@ public sealed class RepositoryServiceTests
         detail.DefaultBase.ShouldBe(new DefaultWorktreeBase("main", "origin/main"));
     }
 
+    [Fact]
+    public async Task ResolveRepositoryPathAsync_AcceptsALinkedWorktree_WhoseDotGitIsAFile()
+    {
+        using var repository = new RealGitRepository();
+        var worktreePath = repository.CreateWorktree("feature-x");
+        var service = CreateServiceWithRoot(repository.ParentPath);
+
+        var result = await service.ResolveRepositoryPathAsync(worktreePath);
+
+        result.IsSuccess.ShouldBeTrue($"Expected success but got: {(result.IsFailure ? result.Error.Description : "")}");
+        result.Value.ShouldBe(WorkspaceRootService.CanonicalizePath(worktreePath));
+    }
+
+    [Fact]
+    public async Task ScanRepositoriesAsync_ListsTheRepository_ButNotItsLinkedWorktrees()
+    {
+        using var repository = new RealGitRepository();
+        repository.CreateWorktree("feature-x");
+        var service = CreateServiceWithRoot(repository.ParentPath);
+
+        var repositories = await service.ScanRepositoriesAsync();
+
+        repositories.Select(r => r.Path).ShouldBe([WorkspaceRootService.CanonicalizePath(repository.Path)]);
+    }
+
+    [Fact]
+    public async Task ARootThatIsARepository_AlsoAllowsTheWorktreesFolderBesideIt()
+    {
+        using var repository = new RealGitRepository();
+        var worktreePath = repository.CreateWorktree("feature-x");
+        var service = CreateServiceWithRoot(repository.Path);
+
+        var repositories = await service.ScanRepositoriesAsync();
+        var worktree = await service.ResolveExistingWorktreeAsync(repository.Path, worktreePath);
+
+        repositories.Select(r => r.Path).ShouldBe([WorkspaceRootService.CanonicalizePath(repository.Path)]);
+        worktree.IsSuccess.ShouldBeTrue($"Expected success but got: {(worktree.IsFailure ? worktree.Error.Description : "")}");
+    }
+
+    [Fact]
+    public async Task ARootThatIsARepository_DoesNotAllowItsOtherSiblings()
+    {
+        using var repository = new RealGitRepository();
+        var sibling = System.IO.Path.Combine(repository.ParentPath, "other");
+        Directory.CreateDirectory(sibling);
+        var service = CreateServiceWithRoot(repository.Path);
+
+        var result = await service.ValidatePathWithinRootsAsync(sibling);
+
+        result.IsFailure.ShouldBeTrue();
+    }
+
     private static RepositoryService CreateServiceWithRoot(string root)
     {
         var workspaceRootRepository = new InMemoryWorkspaceRootRepository();

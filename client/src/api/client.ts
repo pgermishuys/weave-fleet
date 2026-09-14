@@ -235,6 +235,14 @@ export interface DirectoryListResponse {
   roots: string[];
 }
 
+/** One folder as the new-session folder picker sees it. */
+export interface FolderInspection {
+  path: string;
+  exists: boolean;
+  isGitRepo: boolean;
+  isWithinRoots: boolean;
+}
+
 export interface FileDiffItem {
   file: string;
   before: string;

@@ -28,7 +28,7 @@ public sealed partial class DirectoryService(
                     Name: Path.GetFileName(r.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
                          ?? r,
                     FullPath: r,
-                    IsGitRepo: Directory.Exists(Path.Combine(r, ".git")),
+                    IsGitRepo: GitPaths.IsRepository(r),
                     IsRoot: true))
                 .ToList();
 
@@ -73,7 +73,7 @@ public sealed partial class DirectoryService(
                 .Select(d => new DirectoryEntry(
                     Name: Path.GetFileName(d),
                     FullPath: d,
-                    IsGitRepo: Directory.Exists(Path.Combine(d, ".git")),
+                    IsGitRepo: GitPaths.IsRepository(d),
                     IsRoot: false))
                 .ToList();
         }
@@ -145,7 +145,7 @@ public sealed partial class DirectoryService(
                 .Select(d => new DirectoryEntry(
                     Name: Path.GetFileName(d),
                     FullPath: d,
-                    IsGitRepo: Directory.Exists(Path.Combine(d, ".git")),
+                    IsGitRepo: GitPaths.IsRepository(d),
                     IsRoot: false))
                 .ToList();
         }
@@ -160,6 +160,33 @@ public sealed partial class DirectoryService(
             CurrentPath: normalised,
             ParentPath: parent,
             Roots: []));
+    }
+
+    /// <summary>
+    /// Describes one folder for the new-session folder picker: whether it exists, whether it is a
+    /// git repository, and whether it is inside the workspace roots (so a session can use it).
+    /// </summary>
+    public async Task<FolderInspection> InspectFolderAsync(string path, CancellationToken ct = default)
+    {
+        string normalised;
+        try
+        {
+            normalised = WorkspaceRootService.CanonicalizePath(path.Trim());
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            return new FolderInspection(path, Exists: false, IsGitRepo: false, IsWithinRoots: false);
+        }
+
+        if (!Directory.Exists(normalised))
+            return new FolderInspection(normalised, Exists: false, IsGitRepo: false, IsWithinRoots: false);
+
+        var allowedRoots = await workspaceRootService.GetAllowedRootsAsync().ConfigureAwait(false);
+        return new FolderInspection(
+            normalised,
+            Exists: true,
+            IsGitRepo: GitPaths.IsRepository(normalised),
+            IsWithinRoots: WorkspaceRootService.IsPathWithinRoots(normalised, allowedRoots));
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
@@ -199,6 +226,13 @@ public sealed record DirectoryListingResult(
     string? CurrentPath,
     string? ParentPath,
     IReadOnlyList<string> Roots);
+
+/// <summary>What the folder picker needs to know about one folder.</summary>
+public sealed record FolderInspection(
+    string Path,
+    bool Exists,
+    bool IsGitRepo,
+    bool IsWithinRoots);
 
 /// <summary>A single directory entry.</summary>
 public sealed record DirectoryEntry(

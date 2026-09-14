@@ -210,7 +210,16 @@ public sealed class GitHubSessionSourceProvider(
 
     private async Task<Result<WorkspaceIntent>> ResolveWorkspaceIntentAsync(GitHubSourceInput input, CancellationToken cancellationToken)
     {
-        var repositoryPath = input.RepositoryPath!.Trim();
+        // The same check the repository source makes: inside a workspace root, and a git repository.
+        var repositoryPathResult = await repositoryService.ResolveRepositoryPathAsync(input.RepositoryPath!.Trim(), cancellationToken);
+        if (repositoryPathResult.IsFailure)
+        {
+            return FleetError.ValidationError(
+                "SessionSource.Input.RepositoryPath",
+                repositoryPathResult.Error.Description);
+        }
+
+        var repositoryPath = repositoryPathResult.Value;
         var isolationStrategy = NormalizeIsolationStrategy(input.IsolationStrategy);
 
         var baseBranch = WorktreeBaseInput.Normalize(
@@ -224,7 +233,7 @@ public sealed class GitHubSessionSourceProvider(
             && !string.IsNullOrWhiteSpace(input.ExistingWorktreePath))
         {
             var worktreeResult = await repositoryService.ResolveExistingWorktreeAsync(
-                WorkspaceRootService.CanonicalizePath(repositoryPath),
+                repositoryPath,
                 input.ExistingWorktreePath,
                 cancellationToken);
             if (worktreeResult.IsFailure)

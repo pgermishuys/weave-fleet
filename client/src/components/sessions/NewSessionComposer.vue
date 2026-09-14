@@ -44,7 +44,7 @@ const { enabledHarnesses, defaultHarnessType } = useEnabledHarnesses();
 const defaults = useNewSessionDefaults();
 const isMobile = useIsMobile();
 
-const { repositories, scannedAt, error: repositoriesError } = useRepositories();
+const { repositories, scannedAt, error: repositoriesError, refresh: refreshRepositories } = useRepositories();
 const { projects } = useProjects();
 const { createSession, isLoading: isCreating, error: createError } = useCreateSession();
 const sessionsStore = useSessionsStore();
@@ -533,6 +533,7 @@ onUnmounted(() => {
           :disabled="isStarting"
           @update:folder="setFolder($event, true)"
           @close-auto-focus="returnFocusToMessage"
+          @folder-added="refreshRepositories"
         />
         <template v-if="folder?.kind === 'repository'">
           <span

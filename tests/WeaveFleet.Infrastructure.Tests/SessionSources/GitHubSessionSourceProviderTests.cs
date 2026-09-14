@@ -25,7 +25,8 @@ public sealed class GitHubSessionSourceProviderTests
     [Fact]
     public async Task ResolveAsync_ForStartSession_ReturnsHybridWorkspaceAndContext()
     {
-        var (provider, _) = CreateProvider();
+        using var repository = new RealGitRepository();
+        var (provider, _) = CreateProvider(workspaceRoot: repository.ParentPath);
 
         var result = await provider.ResolveAsync(new SessionSourceSelection
         {
@@ -41,16 +42,16 @@ public sealed class GitHubSessionSourceProviderTests
                 owner = "acme",
                 repo = "rocket",
                 number = 42,
-                repositoryPath = "/tmp/rocket",
+                repositoryPath = repository.Path,
                 isolationStrategy = "worktree",
                 branch = "feature/pr-42"
             })
         }, CancellationToken.None);
 
-        result.IsSuccess.ShouldBeTrue();
+        result.IsSuccess.ShouldBeTrue($"Expected success but got: {(result.IsFailure ? result.Error.Description : "")}");
         result.Value.Descriptor.Kind.ShouldBe(SessionSourceKinds.Hybrid);
         result.Value.Input.WorkspaceIntent.ShouldNotBeNull();
-        result.Value.Input.WorkspaceIntent.Directory.ShouldBe("/tmp/rocket");
+        result.Value.Input.WorkspaceIntent.Directory.ShouldBe(WorkspaceRootService.CanonicalizePath(repository.Path));
         result.Value.Input.WorkspaceIntent.IsolationStrategy.ShouldBe("worktree");
         result.Value.Input.WorkspaceIntent.Branch.ShouldBe("feature/pr-42");
         result.Value.Input.ContextEnvelope.ShouldNotBeNull();
@@ -229,14 +230,15 @@ public sealed class GitHubSessionSourceProviderTests
     [Fact]
     public async Task ResolveAsync_ForStartSession_PassesTheChosenBaseAndFetch()
     {
-        var (provider, _) = CreateProvider();
+        using var repository = new RealGitRepository();
+        var (provider, _) = CreateProvider(workspaceRoot: repository.ParentPath);
 
         var result = await provider.ResolveAsync(StartSessionFromPullRequest42(new
         {
             owner = "acme",
             repo = "rocket",
             number = 42,
-            repositoryPath = "/tmp/rocket",
+            repositoryPath = repository.Path,
             isolationStrategy = "worktree",
             branch = "feature/pr-42",
             baseBranch = "origin/release/2.0",
@@ -251,21 +253,66 @@ public sealed class GitHubSessionSourceProviderTests
     [Fact]
     public async Task ResolveAsync_ForStartSession_RejectsABase_WithAnExistingWorktree()
     {
-        var (provider, _) = CreateProvider();
+        using var repository = new RealGitRepository();
+        var (provider, _) = CreateProvider(workspaceRoot: repository.ParentPath);
 
         var result = await provider.ResolveAsync(StartSessionFromPullRequest42(new
         {
             owner = "acme",
             repo = "rocket",
             number = 42,
-            repositoryPath = "/tmp/rocket",
+            repositoryPath = repository.Path,
             isolationStrategy = "worktree",
-            existingWorktreePath = "/tmp/rocket-worktrees/pr-42",
+            existingWorktreePath = Path.Combine(repository.ParentPath, "repo-worktrees", "pr-42"),
             baseBranch = "origin/main"
         }), CancellationToken.None);
 
         result.IsFailure.ShouldBeTrue();
         result.Error.Description.ShouldBe("A base branch can only be chosen for a new worktree.");
+    }
+
+    [Theory]
+    [InlineData("worktree")]
+    [InlineData("clone")]
+    [InlineData("existing")]
+    public async Task ResolveAsync_ForStartSession_RejectsARepositoryPathOutsideTheWorkspaceRoots(string isolationStrategy)
+    {
+        using var allowed = new RealGitRepository();
+        using var elsewhere = new RealGitRepository();
+        var (provider, _) = CreateProvider(workspaceRoot: allowed.ParentPath);
+
+        var result = await provider.ResolveAsync(StartSessionFromPullRequest42(new
+        {
+            owner = "acme",
+            repo = "rocket",
+            number = 42,
+            repositoryPath = elsewhere.Path,
+            isolationStrategy
+        }), CancellationToken.None);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Description.ShouldContain("outside allowed workspace roots");
+    }
+
+    [Fact]
+    public async Task ResolveAsync_ForStartSession_RejectsARepositoryPathThatIsNotARepository()
+    {
+        using var repository = new RealGitRepository();
+        var notARepository = Path.Combine(repository.ParentPath, "plain");
+        Directory.CreateDirectory(notARepository);
+        var (provider, _) = CreateProvider(workspaceRoot: repository.ParentPath);
+
+        var result = await provider.ResolveAsync(StartSessionFromPullRequest42(new
+        {
+            owner = "acme",
+            repo = "rocket",
+            number = 42,
+            repositoryPath = notARepository,
+            isolationStrategy = "worktree"
+        }), CancellationToken.None);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Description.ShouldBe("Path is not a git repository.");
     }
 
     private static SessionSourceSelection StartSessionFromPullRequest42(object input) => new()

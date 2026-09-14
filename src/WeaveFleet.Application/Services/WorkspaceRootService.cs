@@ -89,12 +89,21 @@ public sealed class WorkspaceRootService(
 
     /// <summary>
     /// Returns all allowed local source roots (union of DB + env) for path-validation purposes.
+    /// A root that is itself a repository also allows the <c>{repo}-worktrees</c> folder beside it,
+    /// where Fleet creates that repository's worktrees.
     /// </summary>
     public async Task<IReadOnlyList<string>> GetAllowedRootsAsync()
     {
-        var roots = await ListRootsAsync();
-        return roots
+        var roots = (await ListRootsAsync())
             .Select(root => CanonicalizePath(root.Path))
+            .ToList();
+
+        var worktreeFolders = roots
+            .Where(GitPaths.IsRepository)
+            .Select(root => CanonicalizePath(GitPaths.WorktreesFolderFor(root)));
+
+        return roots
+            .Concat(worktreeFolders)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
