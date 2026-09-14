@@ -122,6 +122,11 @@ public sealed class FleetOptions
     /// <summary>Automatic update configuration.</summary>
     public UpdateOptions Update { get; set; } = new();
 
+    // ─── Desktop ──────────────────────────────────────────────────────────────
+
+    /// <summary>Settings for a Fleet the desktop app started.</summary>
+    public DesktopOptions Desktop { get; set; } = new();
+
     // ─── Auth ──────────────────────────────────────────────────────────────────
 
     /// <summary>Authentication configuration (Clerk/OIDC).</summary>
@@ -304,6 +309,17 @@ public sealed class UpdateOptions
 
     /// <summary>Interval in hours between periodic update checks while running. Default: 4. Set to 0 to disable.</summary>
     public int CheckIntervalHours { get; set; } = 4;
+}
+
+/// <summary>Settings for a Fleet the desktop app started.</summary>
+public sealed class DesktopOptions
+{
+    /// <summary>
+    /// Set by the desktop app when it starts Fleet. Fleet leaves updates to the app (staging one would write
+    /// inside the app bundle) and exits when its standard input closes, so a crashed app never leaves a Fleet
+    /// behind holding the database lock. Default: false.
+    /// </summary>
+    public bool Enabled { get; set; }
 }
 
 /// <summary>Configuration for the Claude Code harness.</summary>

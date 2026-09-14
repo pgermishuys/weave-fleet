@@ -20,6 +20,9 @@ public enum UpdateStatus
 
     /// <summary>An error occurred during the check or download.</summary>
     Error,
+
+    /// <summary>The desktop app updates Fleet, so Fleet doesn't check or download.</summary>
+    Managed,
 }
 
 /// <summary>Immutable snapshot of the current update state.</summary>

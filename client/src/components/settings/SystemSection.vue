@@ -17,6 +17,8 @@ const statusLabel = computed(() => {
       return `v${updateStatus.value.latestVersion} ready — restart to apply`;
     case "error":
       return "Update check failed";
+    case "managed":
+      return "Updates come from the Fleet app";
     default:
       return "Checking for updates…";
   }
@@ -45,7 +47,8 @@ const isCheckingOrDownloading = computed(
 const canCheck = computed(
   () =>
     updateStatus.value?.status !== "downloading" &&
-    updateStatus.value?.status !== "staged",
+    updateStatus.value?.status !== "staged" &&
+    updateStatus.value?.status !== "managed",
 );
 
 const canDownload = computed(() => updateStatus.value?.status === "available");

@@ -1,3 +1,6 @@
+using Microsoft.Extensions.Logging.Abstractions;
+using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Infrastructure.Services;
 
 namespace WeaveFleet.Infrastructure.Tests.Services;
@@ -54,6 +57,44 @@ public sealed class UpdateCheckServiceTests
             assetName.ShouldEndWith(".zip");
         else
             assetName.ShouldEndWith(".tar.gz");
+    }
+
+    // ── Desktop mode ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task a_fleet_the_desktop_app_started_reports_updates_as_managed()
+    {
+        var (service, stateHolder) = CreateDesktopService();
+
+        await service.StartAsync(CancellationToken.None);
+        await service.ExecuteTask!;
+
+        stateHolder.State.Status.ShouldBe(UpdateStatus.Managed);
+    }
+
+    [Fact]
+    public async Task a_fleet_the_desktop_app_started_never_checks_github()
+    {
+        var (service, stateHolder) = CreateDesktopService();
+
+        // The factory throws if anything asks it for a client.
+        await service.CheckForUpdateAsync(CancellationToken.None);
+
+        stateHolder.State.ShouldBe(UpdateState.Initial);
+    }
+
+    private static (UpdateCheckService Service, UpdateStateHolder StateHolder) CreateDesktopService()
+    {
+        var factory = new ThrowingHttpClientFactory();
+        var stateHolder = new UpdateStateHolder();
+        var options = new FleetOptions { Desktop = new DesktopOptions { Enabled = true } };
+        var download = new UpdateDownloadService(factory, stateHolder, NullLogger<UpdateDownloadService>.Instance);
+        return (new UpdateCheckService(factory, options, stateHolder, download, NullLogger<UpdateCheckService>.Instance), stateHolder);
+    }
+
+    private sealed class ThrowingHttpClientFactory : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => throw new InvalidOperationException("No HTTP in desktop mode.");
     }
 
     // ── GetRuntimeIdentifier ──────────────────────────────────────────────────
