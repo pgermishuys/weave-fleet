@@ -7,9 +7,10 @@ import { openBuffer } from "@/lib/code-editor/buffers";
 import { fileCanvasId, useCanvasesStore } from "@/stores/canvases";
 import { useFileBuffersStore } from "@/stores/file-buffers";
 
-const { readSessionFileMock, handlers } = vi.hoisted(() => ({
+const { readSessionFileMock, handlers, topics } = vi.hoisted(() => ({
   readSessionFileMock: vi.fn(),
   handlers: [] as ((event: DomainEvent) => void)[],
+  topics: [] as string[],
 }));
 
 vi.mock("@/api/session-files", () => ({
@@ -19,7 +20,8 @@ vi.mock("@/api/session-files", () => ({
 
 vi.mock("@/composables/use-weave-socket", () => ({
   useWeaveSocket: () => ({
-    subscribeV2: (_topic: string, _onSnapshot: unknown, onEvent: (event: DomainEvent) => void) => {
+    subscribeV2: (topic: string, _onSnapshot: unknown, onEvent: (event: DomainEvent) => void) => {
+      topics.push(topic);
       handlers.push(onEvent);
       return () => handlers.splice(handlers.indexOf(onEvent), 1);
     },
@@ -56,6 +58,7 @@ describe("useFileLiveUpdates", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     handlers.length = 0;
+    topics.length = 0;
     readSessionFileMock.mockReset();
   });
 
@@ -125,11 +128,15 @@ describe("useFileLiveUpdates", () => {
     wrapper.unmount();
   });
 
-  it("re-reads open files at the end of a turn, which catches shell edits", async () => {
+  it.each([
+    // Relayed events carry the harness's payload: OpenCode's session id, not Fleet's.
+    ["session.idled", { sessionID: "ses_opencode", status: { type: "idle" } }],
+    ["turn.ended", { sessionID: "ses_opencode", messageID: "m1", index: 0, reason: null, cost: 0 }],
+  ])("re-reads open files when the agent stops (%s), which catches shell edits", async (type, payload) => {
     const { wrapper, record } = await setup();
     readSessionFileMock.mockResolvedValue(disk("sed did this\n", "h3"));
 
-    emit({ type: "turn.ended", payload: { sessionID: "s1", messageID: "m1", index: 0, reason: null, cost: 0 } });
+    emit({ type, payload });
     await settle();
 
     expect(record.state?.doc.toString()).toBe("sed did this\n");
@@ -148,11 +155,9 @@ describe("useFileLiveUpdates", () => {
     wrapper.unmount();
   });
 
-  it("ignores another session's events", async () => {
+  it("listens on the session's own topic", async () => {
     const { wrapper } = await setup();
-    emit({ type: "files.changed", payload: { sessionId: "s2", files: [{ path: "src/app.ts", changeType: "change" }] } });
-    await settle();
-    expect(readSessionFileMock).not.toHaveBeenCalled();
+    expect(topics).toEqual(["session:s1"]);
     wrapper.unmount();
   });
 });

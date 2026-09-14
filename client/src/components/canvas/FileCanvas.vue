@@ -221,6 +221,7 @@ function useAgents(): void {
   comparing.value = false;
   useDiskVersion(props.sessionId, props.path);
   refreshStripe();
+  editor?.focus();
 }
 
 function compare(): void {
@@ -233,6 +234,8 @@ function doneComparing(): void {
   comparing.value = false;
   toast(info.value?.dirty ? "Merged. Save to write it." : "You took the agent's version");
   refreshStripe();
+  // Back to the editor, so Ctrl S saves the merge.
+  editor?.focus();
 }
 
 // ─── Add to message ──────────────────────────────────────────────────────────

@@ -19,7 +19,7 @@ export function isSameFile(eventPath: string, openPath: string): boolean {
 
 /**
  * Keeps open files in step with the disk. An open file is read again when the agent changes it
- * (`files.changed`), at the end of every turn (shell edits such as `sed` emit no file event), when
+ * (`files.changed`), when the agent stops working (shell edits such as `sed` emit no file event), when
  * its tab becomes active, and when the window gets focus back. The editor side decides what a
  * new version means: a clean buffer updates in place, a dirty one gets the conflict bar.
  */
@@ -69,11 +69,14 @@ export function useFileLiveUpdates(sessionId: MaybeRefOrGetter<string | null | u
       const unsubscribe = subscribeV2(
         `session:${id}`,
         () => {},
+        // The topic is this session's, so the payload's session id isn't checked: relayed turn
+        // events carry the harness's own id (OpenCode's `ses_…`), not Fleet's.
         (event: DomainEvent) => {
-          if (event.type === "files.changed" && event.payload.sessionId === id) {
+          if (event.type === "files.changed") {
             const changed = event.payload.files.map((file) => file.path);
             queue(openPaths().filter((path) => changed.some((eventPath) => isSameFile(eventPath, path))));
-          } else if (event.type === "turn.ended" && event.payload.sessionID === id) {
+          } else if (event.type === "turn.ended" || event.type === "session.idled") {
+            // The agent stopped: pooled OpenCode says so with session.idled, not turn.ended.
             queue(openPaths());
           }
         },
