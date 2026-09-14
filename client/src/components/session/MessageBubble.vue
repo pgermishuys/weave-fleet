@@ -278,8 +278,11 @@ function handleExpandVisual(payload: VisualPayload): void {
   min-width: 0;
 }
 
+/* Cap at the bubble's width: as a cross-axis item under align-items: flex-end
+   it would otherwise size to the widest unwrapped <pre> line and spill left. */
 .message--user .msg-content {
   width: auto;
+  max-width: 100%;
 }
 
 /* Out of flow so hidden timestamps don't add space between messages. */
