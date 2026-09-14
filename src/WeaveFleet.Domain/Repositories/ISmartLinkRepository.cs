@@ -36,9 +36,16 @@ public interface ISmartLinkRepository
 
     /// <summary>
     /// Returns links the watcher should check now: links still waiting for details, and open links on
-    /// running sessions last checked before <paramref name="checkedBefore"/>. Not user-scoped.
+    /// running sessions last checked before <paramref name="checkedBefore"/> when the session is in
+    /// <paramref name="busySessionIds"/>, or before <paramref name="quietCheckedBefore"/> when it isn't.
+    /// Not user-scoped.
     /// </summary>
-    Task<IReadOnlyList<SmartLink>> ListDueForEnrichmentAsync(string checkedBefore, int limit, CancellationToken ct);
+    Task<IReadOnlyList<SmartLink>> ListDueForEnrichmentAsync(
+        string checkedBefore,
+        string quietCheckedBefore,
+        IReadOnlyCollection<string> busySessionIds,
+        int limit,
+        CancellationToken ct);
 
     /// <summary>Writes the watcher's results for a link. Not user-scoped.</summary>
     Task UpdateEnrichmentAsync(SmartLink link, CancellationToken ct);

@@ -94,4 +94,26 @@ public sealed class SmartLinkDetectorTests
 
         queued.Select(q => q.SessionId).ShouldBe(["s1", "s2"]);
     }
+
+    [Fact]
+    public void ActiveSince_returns_sessions_that_sent_any_event_since_the_cutoff()
+    {
+        var clock = new StubClock(DateTimeOffset.Parse("2026-09-14T09:00:00Z", System.Globalization.CultureInfo.InvariantCulture));
+        var detector = new SmartLinkDetector(clock);
+
+        detector.Observe("early", "u1", EventTypes.MessageUpdated, null);
+        clock.Now = clock.Now.AddMinutes(10);
+        detector.Observe("late", null, "session.status", null);
+
+        detector.ActiveSince(clock.Now.AddMinutes(-5)).ShouldBe(["late"]);
+        // Sessions older than a cutoff are forgotten.
+        detector.ActiveSince(clock.Now.AddMinutes(-20)).ShouldBe(["late"]);
+    }
+
+    private sealed class StubClock(DateTimeOffset now) : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = now;
+
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
 }

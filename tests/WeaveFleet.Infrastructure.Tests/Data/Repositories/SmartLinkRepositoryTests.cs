@@ -183,8 +183,47 @@ public sealed class SmartLinkRepositoryTests
             await repo.UpdateEnrichmentAsync(link, CancellationToken.None);
         }
 
-        var due = await repo.ListDueForEnrichmentAsync("2026-03-01T00:00:00.0000000Z", 10, CancellationToken.None);
+        var due = await repo.ListDueForEnrichmentAsync(
+            "2026-03-01T00:00:00.0000000Z", "2026-03-01T00:00:00.0000000Z", [], 10, CancellationToken.None);
 
         due.Select(l => l.Id).ShouldBe([pending.Id, staleRunning.Id], ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task ListDueForEnrichment_uses_the_longer_interval_for_quiet_sessions()
+    {
+        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
+        using var _ = keeper;
+        var (_, _, active) = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, TestUserContext.DefaultUserId);
+        var (_, _, quiet) = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, TestUserContext.DefaultUserId);
+        using (var conn = factory.CreateConnection())
+            conn.Execute("UPDATE sessions SET lifecycle_status = 'running' WHERE id IN (@A, @Q)", new { A = active.Id, Q = quiet.Id });
+
+        var repo = new SmartLinkRepository(factory, new TestUserContext());
+        var activeLink = Link(active.Id, "https://github.com/o/r/pull/1", "o/r#1", SmartLinkRelationships.Own);
+        var quietLink = Link(quiet.Id, "https://github.com/o/r/pull/2", "o/r#2", SmartLinkRelationships.Own);
+        var quietStale = Link(quiet.Id, "https://github.com/o/r/pull/3", "o/r#3", SmartLinkRelationships.Own);
+        foreach (var (link, checkedAt) in new[]
+                 {
+                     (activeLink, "2026-05-01T00:00:00.0000000Z"),
+                     (quietLink, "2026-05-01T00:00:00.0000000Z"),
+                     (quietStale, "2026-03-01T00:00:00.0000000Z"),
+                 })
+        {
+            await repo.InsertDetectedAsync(link, false, CancellationToken.None);
+            link.EnrichmentStatus = SmartLinkEnrichmentStatuses.Resolved;
+            link.LastCheckedAt = checkedAt;
+            link.UpdatedAt = checkedAt;
+            await repo.UpdateEnrichmentAsync(link, CancellationToken.None);
+        }
+
+        var due = await repo.ListDueForEnrichmentAsync(
+            checkedBefore: "2026-06-01T00:00:00.0000000Z",
+            quietCheckedBefore: "2026-04-01T00:00:00.0000000Z",
+            busySessionIds: [active.Id],
+            limit: 10,
+            CancellationToken.None);
+
+        due.Select(l => l.Id).ShouldBe([activeLink.Id, quietStale.Id], ignoreOrder: true);
     }
 }

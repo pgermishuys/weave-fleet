@@ -17,8 +17,10 @@ namespace WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
 /// <summary>
 /// The one place that talks to GitHub about smart links. Each cycle it stores links the
 /// <see cref="SmartLinkDetector"/> found, adds links for sessions started from GitHub, looks up the pull
-/// request opened from each running session's branch, and refreshes link details. Conditional requests
-/// keep unchanged responses off the rate limit. Changes are pushed to the owner on the "sessions" topic.
+/// request opened from each busy session's branch, and refreshes link details. Sessions stay running until
+/// archived, so quiet ones are checked less often. Conditional requests keep unchanged responses off the
+/// rate limit, and a request is sent once per cycle however many sessions share it. Changes are pushed to
+/// the owner on the "sessions" topic.
 /// </summary>
 internal sealed partial class SmartLinkWatcherService(
     IServiceScopeFactory scopeFactory,
@@ -26,12 +28,16 @@ internal sealed partial class SmartLinkWatcherService(
     SmartLinkDetector detector,
     IEventBroadcaster broadcaster,
     RepositoryService repositoryService,
-    ILogger<SmartLinkWatcherService> logger) : BackgroundService, ISmartLinkWatcher
+    ILogger<SmartLinkWatcherService> logger,
+    TimeProvider? timeProvider = null) : BackgroundService, ISmartLinkWatcher
 {
     internal const string UpdatedEventType = "smart_link.updated";
 
     private static readonly TimeSpan Tick = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan QuietRefreshInterval = TimeSpan.FromMinutes(5);
+    // A session counts as busy for this long after its last event, long enough to see its CI finish.
+    private static readonly TimeSpan BusyWindow = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan SourceSyncInterval = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan BranchLookupInterval = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan ErrorBackoff = TimeSpan.FromMinutes(5);
@@ -39,6 +45,7 @@ internal sealed partial class SmartLinkWatcherService(
     private const int DueBatchSize = 100;
     private const int MaxLogLines = 200;
 
+    private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
     private readonly SemaphoreSlim _wake = new(0, 1);
     private readonly ConcurrentDictionary<string, DateTimeOffset> _retryAfter = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, DateTimeOffset> _userPausedUntil = new(StringComparer.Ordinal);
@@ -121,13 +128,14 @@ internal sealed partial class SmartLinkWatcherService(
         ct.ThrowIfCancellationRequested();
     }
 
-    private async Task RunCycleAsync(CancellationToken ct)
+    internal async Task RunCycleAsync(CancellationToken ct)
     {
         using var scope = scopeFactory.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<ISmartLinkRepository>();
         var gitHubService = scope.ServiceProvider.GetRequiredService<GitHubService>();
-        var tokens = new TokenCache(gitHubService);
-        var now = DateTimeOffset.UtcNow;
+        var cycle = new Cycle(gitHubService, gitHubApiProxy);
+        var now = _time.GetUtcNow();
+        var busy = detector.ActiveSince(now - BusyWindow);
 
         await StoreDetectedAsync(repository, ct).ConfigureAwait(false);
 
@@ -139,11 +147,14 @@ internal sealed partial class SmartLinkWatcherService(
 
         if (now - _lastBranchLookup >= BranchLookupInterval)
         {
+            // The first lookup after startup covers every session; after that a branch only gets a new
+            // pull request when someone works in it.
+            var onlySessions = _lastBranchLookup == DateTimeOffset.MinValue ? null : busy;
             _lastBranchLookup = now;
-            await LookUpBranchPullRequestsAsync(repository, tokens, ct).ConfigureAwait(false);
+            await LookUpBranchPullRequestsAsync(repository, cycle, onlySessions, ct).ConfigureAwait(false);
         }
 
-        await RefreshDueLinksAsync(repository, tokens, ct).ConfigureAwait(false);
+        await RefreshDueLinksAsync(repository, cycle, busy, ct).ConfigureAwait(false);
     }
 
     // ── Detection ────────────────────────────────────────────────────────────
@@ -177,7 +188,15 @@ internal sealed partial class SmartLinkWatcherService(
 
     // ── Branch lookup ────────────────────────────────────────────────────────
 
-    private async Task LookUpBranchPullRequestsAsync(ISmartLinkRepository repository, TokenCache tokens, CancellationToken ct)
+    /// <summary>
+    /// Finds pull requests opened from each session's branch, for the sessions in
+    /// <paramref name="onlySessions"/>, or every session when it is null.
+    /// </summary>
+    private async Task LookUpBranchPullRequestsAsync(
+        ISmartLinkRepository repository,
+        Cycle cycle,
+        IReadOnlySet<string>? onlySessions,
+        CancellationToken ct)
     {
         var targets = await repository.ListBranchTargetsAsync(ct).ConfigureAwait(false);
         _branchBySession = targets.ToDictionary(t => t.SessionId, t => t.Branch, StringComparer.Ordinal);
@@ -186,8 +205,10 @@ internal sealed partial class SmartLinkWatcherService(
         {
             if (ct.IsCancellationRequested || IsPaused(target.UserId))
                 continue;
+            if (onlySessions is not null && !onlySessions.Contains(target.SessionId))
+                continue;
 
-            var token = await tokens.GetAsync(target.UserId, ct).ConfigureAwait(false);
+            var token = await cycle.GetTokenAsync(target.UserId, ct).ConfigureAwait(false);
             if (token is null)
                 continue;
 
@@ -195,8 +216,9 @@ internal sealed partial class SmartLinkWatcherService(
             if (remote is not { } repo)
                 continue;
 
+            // Sessions on the same branch ask the same question; the cycle sends it once.
             var head = Uri.EscapeDataString($"{repo.Owner}:{target.Branch}");
-            var response = await gitHubApiProxy.GetConditionalAsync(
+            var response = await cycle.GetAsync(
                 token,
                 $"repos/{repo.Owner}/{repo.Repo}/pulls?head={head}&state=all&per_page=5",
                 ct).ConfigureAwait(false);
@@ -247,11 +269,17 @@ internal sealed partial class SmartLinkWatcherService(
 
     // ── Refresh ──────────────────────────────────────────────────────────────
 
-    private async Task RefreshDueLinksAsync(ISmartLinkRepository repository, TokenCache tokens, CancellationToken ct)
+    private async Task RefreshDueLinksAsync(
+        ISmartLinkRepository repository,
+        Cycle cycle,
+        IReadOnlySet<string> busySessions,
+        CancellationToken ct)
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = _time.GetUtcNow();
         var due = await repository.ListDueForEnrichmentAsync(
             (now - RefreshInterval).UtcDateTime.ToString("O"),
+            (now - QuietRefreshInterval).UtcDateTime.ToString("O"),
+            busySessions,
             DueBatchSize,
             ct).ConfigureAwait(false);
 
@@ -268,20 +296,20 @@ internal sealed partial class SmartLinkWatcherService(
 
             try
             {
-                await RefreshLinkAsync(repository, tokens, link, ct).ConfigureAwait(false);
+                await RefreshLinkAsync(repository, cycle, link, ct).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 LogLinkError(ex, link.Id);
-                _retryAfter[link.Id] = DateTimeOffset.UtcNow + ErrorBackoff;
+                _retryAfter[link.Id] = _time.GetUtcNow() + ErrorBackoff;
             }
         }
     }
 
-    private async Task RefreshLinkAsync(ISmartLinkRepository repository, TokenCache tokens, SmartLink link, CancellationToken ct)
+    private async Task RefreshLinkAsync(ISmartLinkRepository repository, Cycle cycle, SmartLink link, CancellationToken ct)
     {
         var before = VisibleState(link);
-        var token = await tokens.GetAsync(link.UserId, ct).ConfigureAwait(false);
+        var token = await cycle.GetTokenAsync(link.UserId, ct).ConfigureAwait(false);
 
         if (token is null)
         {
@@ -293,16 +321,18 @@ internal sealed partial class SmartLinkWatcherService(
         else
         {
             _branchBySession.TryGetValue(link.SessionId, out var sessionBranch);
-            var outcome = await EnrichAsync(link, token, sessionBranch, ct).ConfigureAwait(false);
+            var outcome = await EnrichAsync(link, cycle, token, sessionBranch, ct).ConfigureAwait(false);
             switch (outcome)
             {
                 case EnrichOutcome.RateLimited:
                     return;
                 case EnrichOutcome.NotFound:
-                    _retryAfter[link.Id] = DateTimeOffset.UtcNow + NotFoundBackoff;
+                    _retryAfter[link.Id] = _time.GetUtcNow() + NotFoundBackoff;
                     break;
+                // A not-connected link is due every cycle, so a token GitHub refuses needs a backoff too.
+                case EnrichOutcome.NotConnected:
                 case EnrichOutcome.Error:
-                    _retryAfter[link.Id] = DateTimeOffset.UtcNow + ErrorBackoff;
+                    _retryAfter[link.Id] = _time.GetUtcNow() + ErrorBackoff;
                     break;
                 default:
                     _retryAfter.TryRemove(link.Id, out _);
@@ -310,7 +340,7 @@ internal sealed partial class SmartLinkWatcherService(
             }
         }
 
-        var checkedAt = DateTime.UtcNow.ToString("O");
+        var checkedAt = _time.GetUtcNow().UtcDateTime.ToString("O");
         link.LastCheckedAt = checkedAt;
         var changed = VisibleState(link) != before;
         if (changed)
@@ -330,7 +360,7 @@ internal sealed partial class SmartLinkWatcherService(
         Error,
     }
 
-    private async Task<EnrichOutcome> EnrichAsync(SmartLink link, string token, string? sessionBranch, CancellationToken ct)
+    private async Task<EnrichOutcome> EnrichAsync(SmartLink link, Cycle cycle, string token, string? sessionBranch, CancellationToken ct)
     {
         if (!GitHubLinkParser.TryParseUrl(link.Url, out var reference))
         {
@@ -342,7 +372,7 @@ internal sealed partial class SmartLinkWatcherService(
 
         if (link.ResourceType != GitHubLinkReference.PullRequest)
         {
-            var issueResponse = await gitHubApiProxy.GetConditionalAsync(
+            var issueResponse = await cycle.GetAsync(
                 token, $"repos/{reference.Owner}/{reference.Repo}/issues/{reference.Number}", ct).ConfigureAwait(false);
 
             var failure = ClassifyFailure(link, issueResponse);
@@ -362,7 +392,7 @@ internal sealed partial class SmartLinkWatcherService(
             link.ResourceType = GitHubLinkReference.PullRequest;
         }
 
-        var prResponse = await gitHubApiProxy.GetConditionalAsync(
+        var prResponse = await cycle.GetAsync(
             token, $"repos/{reference.Owner}/{reference.Repo}/pulls/{reference.Number}", ct).ConfigureAwait(false);
 
         var prFailure = ClassifyFailure(link, prResponse);
@@ -376,11 +406,11 @@ internal sealed partial class SmartLinkWatcherService(
         {
             var sha = pr["head"]?["sha"]?.GetValue<string>();
             if (sha is not null)
-                await RefreshChecksAsync(link, reference, token, sha, metadata, ct).ConfigureAwait(false);
+                await RefreshChecksAsync(link, reference, cycle, token, sha, metadata, ct).ConfigureAwait(false);
 
             // Review activity bumps the pull request's updated_at, so a 304 means threads are unchanged.
             if (!prResponse.NotModified || metadata["reviewThreads"] is null)
-                await RefreshReviewThreadsAsync(reference, token, metadata, ct).ConfigureAwait(false);
+                await RefreshReviewThreadsAsync(reference, cycle, token, metadata, ct).ConfigureAwait(false);
         }
 
         link.MetadataJson = metadata.ToJsonString();
@@ -421,7 +451,7 @@ internal sealed partial class SmartLinkWatcherService(
     }
 
     private bool IsPaused(string userId)
-        => _userPausedUntil.TryGetValue(userId, out var until) && until > DateTimeOffset.UtcNow;
+        => _userPausedUntil.TryGetValue(userId, out var until) && until > _time.GetUtcNow();
 
     internal static void ApplyIssue(SmartLink link, GitHubLinkReference reference, JsonObject issue, JsonObject metadata)
     {
@@ -505,12 +535,13 @@ internal sealed partial class SmartLinkWatcherService(
     private async Task RefreshChecksAsync(
         SmartLink link,
         GitHubLinkReference reference,
+        Cycle cycle,
         string token,
         string sha,
         JsonObject metadata,
         CancellationToken ct)
     {
-        var response = await gitHubApiProxy.GetConditionalAsync(
+        var response = await cycle.GetAsync(
             token, $"repos/{reference.Owner}/{reference.Repo}/commits/{sha}/check-runs", ct).ConfigureAwait(false);
         if (HandleRateLimit(link.UserId, response) || response.Body is null)
             return;
@@ -519,11 +550,12 @@ internal sealed partial class SmartLinkWatcherService(
         metadata["ci"] = CiToJson(ci);
 
         if (string.Equals(ci.CiStatus, "failure", StringComparison.OrdinalIgnoreCase))
-            await CaptureCiFailuresAsync(reference, token, sha, ci, metadata, ct).ConfigureAwait(false);
+            await CaptureCiFailuresAsync(reference, cycle, token, sha, ci, metadata, ct).ConfigureAwait(false);
     }
 
     private async Task CaptureCiFailuresAsync(
         GitHubLinkReference reference,
+        Cycle cycle,
         string token,
         string sha,
         GitHubCiStatusResponse ci,
@@ -549,7 +581,7 @@ internal sealed partial class SmartLinkWatcherService(
             string? logContent = null;
             if (failedRun.Id > 0)
             {
-                var rawLog = await gitHubApiProxy.FetchTextAsync(
+                var rawLog = await cycle.FetchTextAsync(
                     token,
                     $"repos/{reference.Owner}/{reference.Repo}/actions/jobs/{failedRun.Id}/logs",
                     ct).ConfigureAwait(false);
@@ -565,14 +597,15 @@ internal sealed partial class SmartLinkWatcherService(
                 failedRun.Conclusion ?? string.Empty,
                 failedRun.HtmlUrl ?? string.Empty,
                 logContent,
-                DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture)));
+                _time.GetUtcNow().UtcDateTime.ToString("O", CultureInfo.InvariantCulture)));
         }
 
         SetCiFailures(metadata, ciFailures);
     }
 
-    private async Task RefreshReviewThreadsAsync(
+    private static async Task RefreshReviewThreadsAsync(
         GitHubLinkReference reference,
+        Cycle cycle,
         string token,
         JsonObject metadata,
         CancellationToken ct)
@@ -584,7 +617,7 @@ internal sealed partial class SmartLinkWatcherService(
             ["number"] = JsonValue.Create(reference.Number),
         };
 
-        var response = await gitHubApiProxy.PostGraphQLAsync(token, GitHubEndpointMappings.ReviewThreadsQuery, variables, ct).ConfigureAwait(false);
+        var response = await cycle.PostGraphQLAsync(token, GitHubEndpointMappings.ReviewThreadsQuery, variables, ct).ConfigureAwait(false);
         if (response?["data"]?["repository"]?["pullRequest"] is null)
             return;
 
@@ -683,12 +716,18 @@ internal sealed partial class SmartLinkWatcherService(
         await broadcaster.BroadcastAsync("sessions", UpdatedEventType, payload, link.UserId, ct).ConfigureAwait(false);
     }
 
-    /// <summary>Looks up each user's GitHub token once per cycle.</summary>
-    private sealed class TokenCache(GitHubService gitHubService)
+    /// <summary>
+    /// One cycle's lookups: each user's GitHub token once, and each GitHub request once, so sessions on the
+    /// same branch and links to the same pull request share a call.
+    /// </summary>
+    private sealed class Cycle(GitHubService gitHubService, GitHubApiProxy proxy)
     {
         private readonly Dictionary<string, string?> _tokens = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, GitHubApiResponse> _responses = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, JsonNode?> _graphQL = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, string?> _texts = new(StringComparer.Ordinal);
 
-        public async Task<string?> GetAsync(string userId, CancellationToken ct)
+        public async Task<string?> GetTokenAsync(string userId, CancellationToken ct)
         {
             if (!_tokens.TryGetValue(userId, out var token))
             {
@@ -698,6 +737,45 @@ internal sealed partial class SmartLinkWatcherService(
 
             return token;
         }
+
+        public async Task<GitHubApiResponse> GetAsync(string token, string path, CancellationToken ct)
+        {
+            var key = Key(token, path);
+            if (!_responses.TryGetValue(key, out var response))
+            {
+                response = await proxy.GetConditionalAsync(token, path, ct).ConfigureAwait(false);
+                _responses[key] = response;
+            }
+
+            // A JSON node belongs to one parent, so every caller gets its own copy.
+            return response with { Body = response.Body?.DeepClone() };
+        }
+
+        public async Task<JsonNode?> PostGraphQLAsync(string token, string query, JsonObject variables, CancellationToken ct)
+        {
+            var key = Key(token, query + variables.ToJsonString());
+            if (!_graphQL.TryGetValue(key, out var response))
+            {
+                response = await proxy.PostGraphQLAsync(token, query, variables, ct).ConfigureAwait(false);
+                _graphQL[key] = response;
+            }
+
+            return response?.DeepClone();
+        }
+
+        public async Task<string?> FetchTextAsync(string token, string path, CancellationToken ct)
+        {
+            var key = Key(token, path);
+            if (!_texts.TryGetValue(key, out var text))
+            {
+                text = await proxy.FetchTextAsync(token, path, ct).ConfigureAwait(false);
+                _texts[key] = text;
+            }
+
+            return text;
+        }
+
+        private static string Key(string token, string request) => $"{token}\n{request}";
     }
 
     // ── CI failure metadata ──────────────────────────────────────────────────

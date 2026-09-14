@@ -235,11 +235,21 @@ public sealed class SmartLinkRepository : ISmartLinkRepository
     private static string Rank(string expression) =>
         $"CASE {expression} WHEN 'origin' THEN 3 WHEN 'own' THEN 2 WHEN 'pinned' THEN 1 ELSE 0 END";
 
-    public async Task<IReadOnlyList<SmartLink>> ListDueForEnrichmentAsync(string checkedBefore, int limit, CancellationToken ct)
+    public async Task<IReadOnlyList<SmartLink>> ListDueForEnrichmentAsync(
+        string checkedBefore,
+        string quietCheckedBefore,
+        IReadOnlyCollection<string> busySessionIds,
+        int limit,
+        CancellationToken ct)
     {
+        var busy = busySessionIds.ToList();
+        var isBusy = busy.Count == 0
+            ? "0"
+            : $"sl.session_id IN ({string.Join(", ", busy.Select((_, i) => $"@Busy{i}"))})";
+
         using var conn = _connectionFactory.CreateConnection();
         return await conn.QueryAsync(
-            """
+            $$"""
             SELECT sl.*
             FROM smart_links sl
             INNER JOIN sessions s ON s.id = sl.session_id
@@ -248,7 +258,9 @@ public sealed class SmartLinkRepository : ISmartLinkRepository
               AND (
                     sl.enrichment_status IN ('pending', 'not_connected')
                  OR sl.last_checked_at IS NULL
-                 OR (sl.is_terminal = 0 AND s.lifecycle_status = 'running' AND sl.last_checked_at < @CheckedBefore)
+                 OR (sl.is_terminal = 0 AND s.lifecycle_status = 'running' AND (
+                        sl.last_checked_at < @QuietCheckedBefore
+                     OR (sl.last_checked_at < @CheckedBefore AND {{isBusy}})))
               )
             ORDER BY
                 CASE sl.enrichment_status WHEN 'pending' THEN 0 WHEN 'not_connected' THEN 2 ELSE 1 END,
@@ -259,6 +271,9 @@ public sealed class SmartLinkRepository : ISmartLinkRepository
             cmd =>
             {
                 cmd.AddParameter("CheckedBefore", checkedBefore);
+                cmd.AddParameter("QuietCheckedBefore", quietCheckedBefore);
+                for (var i = 0; i < busy.Count; i++)
+                    cmd.AddParameter($"Busy{i}", busy[i]);
                 cmd.AddParameter("Limit", limit);
             },
             MapSmartLink,

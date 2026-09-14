@@ -72,13 +72,20 @@ public sealed class InMemorySmartLinkRepository : ISmartLinkRepository
 
     public Task<int> InsertMissingSourceLinksAsync(string? sessionId, CancellationToken ct) => Task.FromResult(0);
 
-    public Task<IReadOnlyList<SmartLink>> ListDueForEnrichmentAsync(string checkedBefore, int limit, CancellationToken ct)
+    public Task<IReadOnlyList<SmartLink>> ListDueForEnrichmentAsync(
+        string checkedBefore,
+        string quietCheckedBefore,
+        IReadOnlyCollection<string> busySessionIds,
+        int limit,
+        CancellationToken ct)
     {
         IReadOnlyList<SmartLink> result = [.. _store
             .Where(l => !l.IsDismissed
                 && (l.EnrichmentStatus is SmartLinkEnrichmentStatuses.Pending or SmartLinkEnrichmentStatuses.NotConnected
                     || l.LastCheckedAt is null
-                    || (!l.IsTerminal && string.CompareOrdinal(l.LastCheckedAt, checkedBefore) < 0)))
+                    || (!l.IsTerminal && string.CompareOrdinal(
+                        l.LastCheckedAt,
+                        busySessionIds.Contains(l.SessionId) ? checkedBefore : quietCheckedBefore) < 0)))
             .Take(limit)];
         return Task.FromResult(result);
     }
@@ -91,8 +98,11 @@ public sealed class InMemorySmartLinkRepository : ISmartLinkRepository
         return Task.CompletedTask;
     }
 
+    /// <summary>What <see cref="ListBranchTargetsAsync"/> returns.</summary>
+    public List<SmartLinkBranchTarget> BranchTargets { get; } = [];
+
     public Task<IReadOnlyList<SmartLinkBranchTarget>> ListBranchTargetsAsync(CancellationToken ct)
-        => Task.FromResult<IReadOnlyList<SmartLinkBranchTarget>>([]);
+        => Task.FromResult<IReadOnlyList<SmartLinkBranchTarget>>([.. BranchTargets]);
 
     public Task DeleteBySessionIdAsync(string sessionId)
     {
