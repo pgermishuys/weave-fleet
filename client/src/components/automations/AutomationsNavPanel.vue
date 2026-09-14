@@ -197,11 +197,12 @@ function handleCreate(): void {
 }
 
 .status-dot--enabled {
-  background: var(--color-success);
+  background: var(--running);
 }
 
+/* An outline, so "off" still reads as a dot and not as a missing one. */
 .status-dot--disabled {
-  background: var(--color-text-tertiary);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--muted) 70%, transparent);
 }
 
 .automation-name {

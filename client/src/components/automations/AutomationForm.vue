@@ -14,10 +14,13 @@ import {
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import type { Automation, CreateAutomationRequest } from "@/composables/use-automations";
 import { useAutomations } from "@/composables/use-automations";
+import { browserTimeZone, describeEventType, scheduleTimeZone } from "@/lib/automations";
 
 interface Props {
   initialValues?: Partial<Automation>;
   mode: "create" | "edit";
+  /** Why the server refused the last Create or Save, shown until the next attempt. */
+  submitError?: string | null;
 }
 
 const props = defineProps<Props>();
@@ -46,6 +49,28 @@ const eventCatalogError = shallowRef<string | null>(null);
 const advancedOpen = shallowRef(false);
 
 const { fetchEventCatalog } = useAutomations();
+
+/** Schedules are saved in the browser's zone, so a cron's hours are the person's own. */
+const timeZone = browserTimeZone();
+const timeZoneLabel = scheduleTimeZone(timeZone);
+
+/** Saving an older schedule moves it into this browser's zone; say so before it happens. */
+const timeZoneChangeNote = computed(() => {
+  if (props.mode !== "edit" || triggerType.value !== "schedule") {
+    return null;
+  }
+  const saved = scheduleTimeZone(props.initialValues?.timeZone);
+  return saved === timeZoneLabel ? null : `Saved in ${saved}. Saving changes it to ${timeZoneLabel}.`;
+});
+
+/** The catalog's events, plus the one this automation already waits for if the server no longer sends it. */
+const eventOptions = computed(() => {
+  const options = [...eventCatalog.value];
+  if (triggerConfig.value && !options.includes(triggerConfig.value)) {
+    options.push(triggerConfig.value);
+  }
+  return options;
+});
 
 const trimmedName = computed(() => name.value.trim());
 const trimmedPrompt = computed(() => prompt.value.trim());
@@ -132,7 +157,7 @@ const dialogError = computed(() => {
     return validationMessage.value;
   }
 
-  return eventCatalogError.value;
+  return props.submitError ?? eventCatalogError.value;
 });
 
 const canSubmit = computed(() => {
@@ -232,6 +257,7 @@ function handleSubmit(): void {
     agent: agent.value.trim() || null,
     targetType: targetType.value,
     targetTags: targetTags.value.length > 0 ? targetTags.value : undefined,
+    timeZone,
   };
 
   emit("submit", data);
@@ -358,8 +384,15 @@ watch(
         v-model="triggerConfig"
         placeholder="0 0 * * *"
       />
-      <p class="text-xs text-muted-foreground opacity-50">
-        Standard cron format (minute hour day month weekday)
+      <p class="text-xs text-muted-foreground">
+        Standard cron format (minute hour day month weekday), in {{ timeZoneLabel }} time
+      </p>
+      <p
+        v-if="timeZoneChangeNote"
+        class="text-xs text-muted-foreground"
+        data-testid="automation-time-zone-change"
+      >
+        {{ timeZoneChangeNote }}
       </p>
     </div>
 
@@ -386,15 +419,15 @@ watch(
         v-model="triggerConfig"
       >
         <SelectTrigger class="w-full">
-          <SelectValue placeholder="Select an event type…" />
+          <SelectValue placeholder="Select an event…" />
         </SelectTrigger>
         <SelectContent>
           <SelectItem
-            v-for="eventType in eventCatalog"
+            v-for="eventType in eventOptions"
             :key="eventType"
             :value="eventType"
           >
-            {{ eventType }}
+            {{ describeEventType(eventType) }}
           </SelectItem>
         </SelectContent>
       </Select>

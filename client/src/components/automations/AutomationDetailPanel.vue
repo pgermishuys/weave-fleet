@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useAutomationsNav } from '@/composables/use-automations-nav'
 import { useAutomations } from '@/composables/use-automations'
 import AutomationForm from '@/components/automations/AutomationForm.vue'
@@ -16,8 +16,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Play, Edit, Trash2 } from 'lucide-vue-next'
+import { AlertCircle, Play, Edit, Trash2 } from 'lucide-vue-next'
 import type { CreateAutomationRequest } from '@/composables/use-automations'
+import { describeEventType, eventTypeOf, scheduleTimeZone } from '@/lib/automations'
 
 const { viewMode, activeAutomationId, setActiveAutomation, clearSelection } = useAutomationsNav()
 const {
@@ -34,6 +35,30 @@ const isEditingInline = ref(false)
 const deleteConfirmOpen = ref(false)
 const automationToDelete = ref<string | null>(null)
 const isTogglingEnabled = ref(false)
+/** Why the server refused the last Create or Save; the form shows it. */
+const formError = ref<string | null>(null)
+/** Why the switch, Run now or Delete failed, or that a run started. */
+const actionMessage = ref<{ kind: 'error' | 'info'; text: string } | null>(null)
+let actionMessageTimer: ReturnType<typeof setTimeout> | undefined
+
+function messageOf(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback
+}
+
+function showAction(kind: 'error' | 'info', text: string) {
+  clearTimeout(actionMessageTimer)
+  actionMessage.value = { kind, text }
+  if (kind === 'info') {
+    actionMessageTimer = setTimeout(() => { actionMessage.value = null }, 4000)
+  }
+}
+
+// A message belongs to the automation it was about.
+watch([activeAutomationId, viewMode], () => {
+  formError.value = null
+  actionMessage.value = null
+  isEditingInline.value = false
+})
 
 const currentAutomation = computed(() => {
   if (!activeAutomationId.value) return null
@@ -41,27 +66,39 @@ const currentAutomation = computed(() => {
 })
 
 async function handleCreate(data: CreateAutomationRequest) {
-  const newAutomation = await createAutomation(data)
-  if (newAutomation) {
+  formError.value = null
+  try {
+    const newAutomation = await createAutomation(data)
     setActiveAutomation(newAutomation.id)
+  } catch (e) {
+    formError.value = messageOf(e, 'Couldn\'t create the automation.')
   }
 }
 
 function handleCancelCreate() {
+  formError.value = null
   clearSelection()
 }
 
 async function handleUpdate(data: CreateAutomationRequest) {
   if (!currentAutomation.value) return
-  await updateAutomation(currentAutomation.value.id, data)
-  isEditingInline.value = false
+  formError.value = null
+  try {
+    await updateAutomation(currentAutomation.value.id, data)
+    isEditingInline.value = false
+  } catch (e) {
+    formError.value = messageOf(e, 'Couldn\'t save the automation.')
+  }
 }
 
 function handleCancelEdit() {
+  formError.value = null
   isEditingInline.value = false
 }
 
 function startEdit() {
+  formError.value = null
+  actionMessage.value = null
   isEditingInline.value = true
 }
 
@@ -72,15 +109,25 @@ function startDelete(id: string) {
 
 async function confirmDelete() {
   if (!automationToDelete.value) return
-  await deleteAutomation(automationToDelete.value)
-  clearSelection()
-  deleteConfirmOpen.value = false
-  automationToDelete.value = null
+  try {
+    await deleteAutomation(automationToDelete.value)
+    clearSelection()
+  } catch (e) {
+    showAction('error', messageOf(e, 'Couldn\'t delete the automation.'))
+  } finally {
+    deleteConfirmOpen.value = false
+    automationToDelete.value = null
+  }
 }
 
 async function handlePlay() {
   if (!currentAutomation.value) return
-  await runAutomation(currentAutomation.value.id)
+  try {
+    await runAutomation(currentAutomation.value.id)
+    showAction('info', 'Run started. It shows up in Sessions.')
+  } catch (e) {
+    showAction('error', messageOf(e, 'Couldn\'t start a run.'))
+  }
 }
 
 async function handleToggleEnabled(enabled: boolean) {
@@ -93,16 +140,20 @@ async function handleToggleEnabled(enabled: boolean) {
       await disableAutomation(currentAutomation.value.id)
     }
   } catch (e) {
-    console.error('[AutomationDetailPanel] toggle failed:', e)
+    showAction('error', messageOf(e, enabled ? 'Couldn\'t switch it on.' : 'Couldn\'t switch it off.'))
   } finally {
     isTogglingEnabled.value = false
   }
 }
 
-function formatTriggerConfig(config: string | undefined): string {
-  if (!config) return 'None'
-  return config
-}
+/** When it runs, in words: the cron and its zone, or the event it waits for. */
+const triggerSummary = computed(() => {
+  const automation = currentAutomation.value
+  if (!automation) return ''
+  if (automation.triggerType === 'event') return describeEventType(eventTypeOf(automation.triggerConfig))
+  if (automation.triggerType === 'schedule') return `${automation.triggerConfig} (${scheduleTimeZone(automation.timeZone)})`
+  return automation.triggerConfig || 'None'
+})
 
 function formatTargetType(targetType: string | undefined): string {
   if (!targetType) return 'New Session'
@@ -136,6 +187,7 @@ function formatTargetType(targetType: string | undefined): string {
     >
       <AutomationForm
         mode="create"
+        :submit-error="formError"
         @submit="handleCreate"
         @cancel="handleCancelCreate"
       />
@@ -154,6 +206,7 @@ function formatTargetType(targetType: string | undefined): string {
         <AutomationForm
           mode="edit"
           :initial-values="currentAutomation"
+          :submit-error="formError"
           @submit="handleUpdate"
           @cancel="handleCancelEdit"
         />
@@ -213,6 +266,24 @@ function formatTargetType(targetType: string | undefined): string {
 
         <!-- Content sections -->
         <div class="flex-1 space-y-6 p-6">
+          <div
+            v-if="actionMessage"
+            :class="[
+              'flex items-start gap-3 border px-4 py-3 text-sm',
+              actionMessage.kind === 'error'
+                ? 'border-destructive/30 bg-destructive/10 text-destructive'
+                : 'border-border bg-card text-muted-foreground',
+            ]"
+            :role="actionMessage.kind === 'error' ? 'alert' : 'status'"
+            data-testid="automation-action-message"
+          >
+            <AlertCircle
+              v-if="actionMessage.kind === 'error'"
+              class="mt-0.5 h-4 w-4 shrink-0"
+            />
+            <p>{{ actionMessage.text }}</p>
+          </div>
+
           <!-- Prompt section -->
           <div class="rounded-lg border bg-card p-4">
             <h3 class="mb-2 text-sm font-medium text-muted-foreground">
@@ -233,8 +304,17 @@ function formatTargetType(targetType: string | undefined): string {
                 <Badge>{{ currentAutomation.triggerType }}</Badge>
               </div>
               <div>
-                <span class="font-medium">Configuration:</span>
-                <code class="ml-2 rounded bg-muted px-1.5 py-0.5 text-xs font-mono">{{ formatTriggerConfig(currentAutomation.triggerConfig) }}</code>
+                <span class="font-medium">{{ currentAutomation.triggerType === 'event' ? 'When:' : 'Configuration:' }}</span>
+                <span
+                  v-if="currentAutomation.triggerType === 'event'"
+                  class="ml-2"
+                  data-testid="automation-trigger-summary"
+                >{{ triggerSummary }}</span>
+                <code
+                  v-else
+                  class="ml-2 rounded bg-muted px-1.5 py-0.5 text-xs font-mono"
+                  data-testid="automation-trigger-summary"
+                >{{ triggerSummary }}</code>
               </div>
               <div>
                 <span class="text-muted-foreground">Target:</span>

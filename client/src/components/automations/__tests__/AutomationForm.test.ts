@@ -79,3 +79,45 @@ describe('AutomationForm - Dirty State Tracking', () => {
     expect(saveButton.attributes('disabled')).toBeUndefined()
   })
 })
+
+describe('AutomationForm - what the server and the clock say', () => {
+  it('shows why the server refused the last submit', async () => {
+    const wrapper = mount(AutomationForm, {
+      props: { mode: 'create', submitError: 'Invalid cron expression: bad format' },
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[role="alert"]').text()).toContain('Invalid cron expression: bad format')
+  })
+
+  it('warns that saving an older UTC schedule moves it into this browser\'s zone', async () => {
+    const wrapper = mount(AutomationForm, {
+      props: {
+        mode: 'edit',
+        initialValues: { id: 'old', name: 'Old', prompt: 'p', triggerType: 'schedule', triggerConfig: '0 9 * * 1', timeZone: null },
+      },
+    })
+    await flushPromises()
+
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    const note = wrapper.find('[data-testid="automation-time-zone-change"]')
+    if (zone === 'UTC') {
+      expect(note.exists()).toBe(false)
+    } else {
+      expect(note.text()).toBe(`Saved in UTC. Saving changes it to ${zone}.`)
+    }
+  })
+
+  it('sends the browser\'s time zone with a schedule', async () => {
+    const wrapper = mount(AutomationForm, { props: { mode: 'create' } })
+    await flushPromises()
+
+    await wrapper.find('#automation-name').setValue('Weekly digest')
+    await wrapper.find('#automation-prompt').setValue('Summarise the open PRs')
+    await wrapper.find('#automation-trigger-config').setValue('0 9 * * 1')
+    await wrapper.find('form').trigger('submit')
+
+    const [[request]] = wrapper.emitted('submit') as [[{ timeZone: string | null }]]
+    expect(request.timeZone).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone)
+  })
+})
