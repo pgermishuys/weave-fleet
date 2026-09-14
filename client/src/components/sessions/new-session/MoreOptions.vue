@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { Ellipsis } from "lucide-vue-next";
 import type { ProjectResponse } from "@/api/client";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const props = defineProps<{
   projects: readonly ProjectResponse[];
@@ -25,10 +26,15 @@ const selectedProjectName = computed(() => {
   return userProjects.value.find((project) => project.id === projectId.value)?.name ?? null;
 });
 
-function handleProjectChange(event: Event): void {
-  const value = (event.target as HTMLSelectElement).value;
-  projectId.value = value || null;
-}
+/** Select items can't carry an empty value, so Scratch gets a sentinel that maps back to null. */
+const SCRATCH = "__scratch__";
+
+const selectValue = computed({
+  get: () => projectId.value ?? SCRATCH,
+  set: (value: string) => {
+    projectId.value = value === SCRATCH ? null : value;
+  },
+});
 </script>
 
 <template>
@@ -69,23 +75,26 @@ function handleProjectChange(event: Event): void {
           for="new-session-project"
           class="ns-field__label"
         >Project</label>
-        <select
-          id="new-session-project"
-          class="ns-field__input"
-          :value="projectId ?? ''"
-          @change="handleProjectChange"
-        >
-          <option value="">
-            Scratch
-          </option>
-          <option
-            v-for="project in userProjects"
-            :key="project.id"
-            :value="project.id"
+        <Select v-model="selectValue">
+          <SelectTrigger
+            id="new-session-project"
+            class="ns-field__input ns-field__select"
           >
-            {{ project.name }}
-          </option>
-        </select>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent class="ns-select-content">
+            <SelectItem :value="SCRATCH">
+              Scratch
+            </SelectItem>
+            <SelectItem
+              v-for="project in userProjects"
+              :key="project.id"
+              :value="project.id"
+            >
+              {{ project.name }}
+            </SelectItem>
+          </SelectContent>
+        </Select>
       </div>
       <div class="ns-field">
         <label
@@ -124,5 +133,20 @@ function handleProjectChange(event: Event): void {
 <style>
 .ns-more {
   width: 300px;
+}
+
+/* Match the text inputs beside it: same height, no default select sizing. */
+.ns-field__select {
+  height: auto;
+  cursor: pointer;
+}
+
+.ns-select-content {
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius-btn) - 2px);
+  background: var(--card-bg);
+  color: var(--text);
+  box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.35);
+  font-size: 13px;
 }
 </style>
