@@ -130,6 +130,7 @@ internal sealed record QuickChatSourceInput;
 [JsonSerializable(typeof(SessionRecapPayload))]
 [JsonSerializable(typeof(TerminalPayload))]
 [JsonSerializable(typeof(AppUpdatedPayload))]
+[JsonSerializable(typeof(FilesChangedPayload))]
 internal sealed partial class ApplicationJsonContext : JsonSerializerContext
 {
 }

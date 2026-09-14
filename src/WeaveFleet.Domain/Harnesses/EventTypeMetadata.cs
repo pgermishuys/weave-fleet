@@ -184,6 +184,15 @@ public static class EventTypeMetadata
             IsAdvisory = false,
             IsActivitySignal = false,
         },
+        // Translated to files.changed, which tells open views to reload a file. Nothing to persist or replay.
+        EventTypes.FileWatcherUpdated => new EventClassification
+        {
+            IsKnown = true,
+            IsDurable = false,
+            IsEphemeralRelay = true,
+            IsAdvisory = true,
+            IsActivitySignal = false,
+        },
         // Read by the progress tracker in the relay, which pushes its own progress events, so they aren't broadcast.
         EventTypes.TodosReported or EventTypes.FilesWritten => new EventClassification
         {

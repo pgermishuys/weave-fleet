@@ -35,6 +35,7 @@ public sealed class EventTypeMetadataTests
     [InlineData(EventTypes.SessionIdle)]
     [InlineData(EventTypes.MessagePartDelta)]
     [InlineData(EventTypes.Error)]
+    [InlineData(EventTypes.FileWatcherUpdated)]
     [InlineData("permission.request")]
     [InlineData("permission.denied")]
     public void EphemeralRelayEventTypes_AreClassifiedAsEphemeralRelay(string eventType)

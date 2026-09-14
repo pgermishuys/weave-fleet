@@ -122,8 +122,8 @@ Source: `mockups/editor/fleet-editor.html` (the editor bundle is built from `moc
     stay as the other safety nets.
 
 ### Task 1: Server, hash on read and a save endpoint
-- [ ] `ReadFileResult` and `ReadSessionFileResponse` gain `Hash` (SHA-256 hex of the file bytes).
-- [ ] `SessionOrchestrator.WriteSessionFileAsync(sessionId, path, content, baseHash, ct)`:
+- [x] `ReadFileResult` and `ReadSessionFileResponse` gain `Hash` (SHA-256 hex of the file bytes).
+- [x] `SessionOrchestrator.WriteSessionFileAsync(sessionId, path, content, baseHash, ct)`:
   - same validation as `ReadSessionFileAsync` (required path, session directory exists,
     `IsSameOrChildPath`), plus:
     - resolve symlinks and refuse targets outside the session directory
@@ -136,16 +136,35 @@ Source: `mockups/editor/fleet-editor.html` (the editor bundle is built from `moc
   - write in place (open the existing file, truncate, write) so the inode and permissions
     (such as `+x`) stay; UTF-8 without adding a BOM
   - return the new hash
-- [ ] `PUT /api/sessions/{id}/files/content` with body `{ path, content, baseHash }` →
+- [x] `PUT /api/sessions/{id}/files/content` with body `{ path, content, baseHash }` →
       `200 { hash }`, `409 { content, hash }`, `400`, `404`. Same auth and session lookup as the
       read endpoint.
-- [ ] After a save, publish `FilesChanged` for the session and path, so the Changes canvas and
+- [x] After a save, publish `FilesChanged` for the session and path, so the Changes canvas and
       other open windows refresh. Check how the orchestrator reaches the event broadcaster first.
-- [ ] Structured log line per save (session, path, user), to follow the constitution's data rule.
-- [ ] Regenerate the client's OpenAPI types.
-- [ ] Tests (Application): traversal, symlink out, `.git/`, too large, binary, missing file,
+- [x] Structured log line per save (session, path, user), to follow the constitution's data rule.
+- [x] Classify `file.watcher.updated` as an ephemeral relay event so `files.changed` reaches
+      clients (Task 0 found it dropped), and map OpenCode's `event` field to `changeType`.
+- [x] Regenerate the client's OpenAPI types.
+- [x] Tests (Application): traversal, symlink out, `.git/`, too large, binary, missing file,
       stale hash → conflict, CRLF and BOM bytes preserved, permissions kept on Unix.
       Tests (API): 200 and 409 shapes.
+
+**As built.** `SessionOrchestrator.FileWrites.cs` holds the save: `WriteSessionFileAsync`,
+`HashFileBytes` (SHA-256, lowercase hex) and `ResolveRealPath`, which follows every symlink
+along the path, like realpath(3). A symlink that stays inside the session can be saved through.
+The read endpoint uses the same `DecodeText` rule, so "binary" means the same on read and save.
+The `FileMode.Truncate` write keeps the inode; a hard-link test proves it. The server writes the
+string as it's given, so a BOM survives because the client sends U+FEFF back. The per-file lock
+is keyed by the real path. A save broadcasts `files.changed` with the relative path. An agent
+edit broadcasts the absolute path, because OpenCode sends one; the client accepts both.
+`InProcessFanOutService` now sends Fleet's `{ sessionId, files }` payload for `FilesChanged`.
+Without that, the classification fix alone would have delivered OpenCode's raw `{ file, event }`
+under the `files.changed` type. The regenerated `schema.d.ts` also picks up canvases,
+terminals, apps and bridge routes that had never been generated. The client still calls those
+through its own hand-written modules. Tests: 23 in `SessionFileWriteTests`, 2 in the API tests,
+plus translator, fan-out and classification tests. Checked live in the scratch Fleet: an agent
+edit and a save each reach a SignalR client as `files.changed`, and a stale save gets 409 with
+the current content.
 
 ### Task 2: Client editor core
 - [ ] `client/src/lib/code-editor/`: the extension set (line numbers, history, folding, bracket
@@ -193,6 +212,8 @@ Source: `mockups/editor/fleet-editor.html` (the editor bundle is built from `moc
 ### Task 5: Live updates
 - [ ] Subscribe to `files.changed` for the session. For each open path, and on tab activation and
       window focus, re-read the file and apply the rule above. Pulse with `store.markUpdated`.
+- [ ] Also re-check open files on `turn.ended`, which catches shell edits (Task 0: `sed` emits
+      no file event).
 - [ ] Debounce bursts (the agent edits a file several times in one turn) the way `use-diffs`
       does (500 ms).
 - [ ] Tests: event → clean buffer updates; event → dirty buffer shows the bar; no request when
