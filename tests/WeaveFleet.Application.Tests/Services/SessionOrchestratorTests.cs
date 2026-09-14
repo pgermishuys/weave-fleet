@@ -1277,6 +1277,41 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task EnsureDelegatedChildSessionAsync_WhenCalledConcurrentlyForSameChild_CreatesOneSession()
+    {
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "parent-1",
+            InstanceId = "inst-parent",
+            WorkspaceId = "ws-1",
+            HarnessType = "opencode",
+            Title = "Parent",
+            Status = "active",
+            Directory = "/tmp/parent",
+            CreatedAt = "2026-01-01"
+        });
+
+        var runtime = _builder.RegisterHarness("opencode", "OpenCode", new HarnessCapabilities { SupportsResume = true });
+        var resumeCount = 0;
+        runtime.ResumeBehavior = async (_, ct) =>
+        {
+            // Hold the first caller inside creation so the second arrives before the insert.
+            var call = Interlocked.Increment(ref resumeCount);
+            await Task.Delay(50, ct);
+            return new FakeHarnessSession($"inst-child-{call}");
+        };
+
+        var results = await Task.WhenAll(
+            _sut.EnsureDelegatedChildSessionAsync("parent-1", "oc-child-race", "thread"),
+            _sut.EnsureDelegatedChildSessionAsync("parent-1", "oc-child-race", "thread"));
+
+        results.ShouldAllBe(r => r.IsSuccess);
+        results[0].Value.Id.ShouldBe(results[1].Value.Id);
+        runtime.ResumeCalls.Count.ShouldBe(1);
+        _builder.SessionRepository.InsertedSessions.Count(s => s.OpencodeSessionId == "oc-child-race").ShouldBe(1);
+    }
+
+    [Fact]
     public async Task DeleteSessionAsync_WhenSessionIsDelegationChild_CompletesDelegationBeforeDelete()
     {
         var session = new Session

@@ -261,4 +261,40 @@ public sealed class SessionListEndpointAggregationTests : IAsyncLifetime, IDispo
         standaloneSession.GetProperty("activityStatus").GetString().ShouldBe("idle");
         standaloneSession.GetProperty("sessionStatus").GetString().ShouldBe("idle");
     }
+
+    [Theory]
+    [InlineData("running", "active")]
+    [InlineData("completed", "idle")]
+    [InlineData("error", "idle")]
+    [InlineData("cancelled", "idle")]
+    public async Task ListSessions_WhenTrackerBusyChildHasDelegation_FollowsDelegationStatus(string delegationStatus, string expectedParentStatus)
+    {
+        // A child can stay "busy" in the tracker after its sub agent finished, when its idle
+        // event never reached it. Once the delegation is over, that must not pin the parent.
+        using var scope = _factory!.Services.CreateScope();
+        var connectionFactory = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>();
+        using (var connection = connectionFactory.CreateConnection())
+        {
+            await connection.ExecuteAsync(
+                "INSERT INTO delegations (id, parent_session_id, child_session_id, parent_tool_call_id, title, status) VALUES (@Id, @ParentSessionId, @ChildSessionId, @ParentToolCallId, @Title, @Status)",
+                new
+                {
+                    Id = "delegation-1",
+                    ParentSessionId = "session-parent",
+                    ChildSessionId = "session-child",
+                    ParentToolCallId = "tool-call-1",
+                    Title = "spindle",
+                    Status = delegationStatus
+                });
+        }
+
+        var activityTracker = scope.ServiceProvider.GetRequiredService<Application.Services.SessionActivityTracker>();
+        activityTracker.Update("session-child", "busy", _userId);
+
+        var sessions = await _client!.GetFromJsonAsync<JsonElement[]>("/api/sessions", JsonSerializerOptions.Web);
+
+        sessions.ShouldNotBeNull();
+        var parentSession = sessions.Single(s => s.GetProperty("session").GetProperty("id").GetString() == "session-parent");
+        parentSession.GetProperty("sessionStatus").GetString().ShouldBe(expectedParentStatus);
+    }
 }

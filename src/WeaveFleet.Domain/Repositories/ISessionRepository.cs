@@ -32,6 +32,7 @@ public interface ISessionRepository
     Task UpdateResumeTokenAsync(string id, string resumeToken);
     Task<IReadOnlyList<Session>> GetActiveChildrenAsync(string parentDbId);
     Task<IReadOnlySet<string>> GetIdsWithActiveChildrenAsync();
+    /// <summary>Maps active child sessions to their parents, leaving out children whose delegations have all finished.</summary>
     Task<IReadOnlyDictionary<string, string>> GetActiveChildToParentMappingAsync();
     Task<IReadOnlyList<Session>> GetForWorkspaceAsync(string workspaceId);
     Task<IReadOnlyList<Session>> GetForWorkspaceAsync(string workspaceId, IReadOnlyList<string>? retentionStatuses);
