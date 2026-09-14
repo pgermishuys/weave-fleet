@@ -20,5 +20,5 @@
     "types": ["vite/client", "vitest/globals"]
   },
   "include": ["src/vite-env.d.ts", "**/*.ts", "**/*.tsx", "**/*.mts", "**/*.vue"],
-  "exclude": ["node_modules", "dist", "src-tauri"]
+  "exclude": ["node_modules", "dist"]
 }
