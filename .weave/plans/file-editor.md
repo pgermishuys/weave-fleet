@@ -338,13 +338,51 @@ the current content.
   works again from inside the editor.
 
 ### Task 7: Verify and ship
-- [ ] Client suite, lint and `lint:design` on Node 22 with `npm ci` (CI parity); .NET suites.
-- [ ] Live check in a scratch Fleet (scratch HOME, never the real one): open, edit, save; the
+- [x] Client suite, lint and `lint:design` on Node 22 with `npm ci` (CI parity); .NET suites.
+- [x] Live check in a scratch Fleet (scratch HOME, never the real one): open, edit, save; the
       agent edits a clean file (updates in place) and a dirty one (bar, each action); Ctrl P;
       add to message; Markdown and HTML rendered/source; a phone-width sheet; a light and a
       dark theme.
-- [ ] Native AOT publish still has 0 warnings.
-- [ ] PR with before/after screenshots under `mockups/editor/`.
+- [x] Native AOT publish still has 0 warnings.
+- [x] PR with before/after screenshots under `mockups/editor/`.
+
+**As built (2026-09-14).**
+- *Client, as CI runs it:* a clean `npm ci` on Node 22, then `npm run lint` (0 errors), typecheck,
+  and vitest (97 files, 865 tests, exit 0). `bun install --frozen-lockfile` accepts `bun.lock`.
+  `lint:design` reports 9, all in untouched files, the same as main.
+- *.NET*, each project on its own with a scratch HOME: Domain 82, Application 653, Infrastructure
+  948, TestHarness 36, Api 232, Integration 88, E2E 11. The two OIDC E2E tests need a trusted
+  dev certificate in the scratch HOME, as CI's "Trust dev certs" step sets up; with one, they
+  pass.
+- *Live*, in a scratch Fleet (scratch HOME, port 5131, real OpenCode 1.18.30, scripted model),
+  16/16 checks (`.poc-runtime/pw/live-editor.mjs`):
+  - open, edit and save
+  - the agent edits a clean file, and it updates in place
+  - the agent edits a dirty file: the bar, then Use the agent's, Keep mine, and Compare with one
+    agent hunk taken, Done and save
+  - a `sed` edit shows up when the agent goes idle
+  - Ctrl P
+  - a BOM + CRLF file keeps its bytes through a save
+  - Add to message
+  - Markdown rendered with unsaved edits; HTML in its frame
+  - Changes opens Diff
+
+  Also checked: the phone sheet at 400 px (the file opens and the Save button saves), and the
+  editor in all ten themes. The live check found three bugs, all fixed:
+  - Pooled OpenCode ends a turn with `session.idled`, never `turn.ended`, and relayed turn events
+    carry OpenCode's `ses_…` id. So the end-of-turn re-read never ran and `sed` edits didn't
+    show. The listener now trusts the session topic and also reacts to `session.idled`. (The same
+    `turn.ended` check in `use-diffs` is dead code too; with `files.changed` now delivered,
+    Changes refreshes during turns anyway.)
+  - After Compare's Done, focus stayed on the button, so Ctrl S did nothing. The editor takes
+    focus again after Done and after Use the agent's.
+  - The change stripe showed beside the merge views' own gutter in Diff. Its marks are cleared
+    there now.
+- *Native AOT* publish (linux-x64): 0 warnings. The AOT binary, run with a scratch HOME, served
+  the read hash, a save that keeps CRLF, a 409 with the current content, a 400 for traversal,
+  and `files.changed` in Fleet's shape over SignalR.
+- Screenshots in `mockups/editor/` (before/after Files and Changes from mock mode on main and on
+  this branch; the rest from mock mode and the live scratch Fleet).
 
 ## Out of scope
 
