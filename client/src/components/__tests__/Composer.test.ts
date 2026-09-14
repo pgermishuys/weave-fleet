@@ -407,6 +407,25 @@ describe("Composer", () => {
     expect(body.model).toEqual({ providerID: "provider-2", modelID: "shared-model" });
   });
 
+  it("marks @ references behind the text once they're typed, and sends them as plain text", async () => {
+    const wrapper = mountComposer();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+
+    await textarea.setValue("look at @src/ap");
+    expect(wrapper.findAll(".composer-reference")).toHaveLength(0);
+
+    await textarea.setValue("look at @src/app.ts and @docs/ please");
+    expect(wrapper.findAll(".composer-reference").map((reference) => reference.text())).toEqual(["@src/app.ts", "@docs/"]);
+    expect(wrapper.get("[data-testid='prompt-references']").text()).toBe("look at @src/app.ts and @docs/ please");
+
+    textarea.element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await flushPromises();
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const promptCall = (mockApi.POST.mock.calls as any[]).find(([url]) => url === "/api/sessions/{id}/prompt");
+    expect((promptCall?.[1]?.body as { text?: string }).text).toBe("look at @src/app.ts and @docs/ please");
+  });
+
   it("does not intercept Shift+Enter and does not render autocomplete when sessionId is blank", async () => {
     const wrapper = mountComposer({ sessionId: "   " });
     const textarea = wrapper.get("[data-testid='prompt-input']");

@@ -29,6 +29,7 @@ export interface UseAutocompleteResult {
   selectedIndex: Readonly<Ref<number>>;
   onKeyDown: (event: KeyboardEvent) => void;
   onSelect: (value: string) => void;
+  onOpenFolder: (value: string) => void;
   onClose: () => void;
 }
 
@@ -200,7 +201,8 @@ export function useAutocomplete({
 
   const { data: commands, isLoading: commandsLoading, error: commandsError } = useSessionCommands(sessionId);
   const { data: agents, isLoading: agentsLoading, error: agentsError } = useSessionAgents(sessionId);
-  const { files, isLoading: filesLoading, error: filesError } = useFindFiles(sessionId, filterText);
+  const mentionQuery = computed(() => (computedTrigger.value?.type === "mention" ? filterText.value : null));
+  const { files, isLoading: filesLoading, error: filesError } = useFindFiles(sessionId, mentionQuery);
 
   const isSuppressed = computed(() => suppressedValue.value !== null && suppressedValue.value === value.value);
   const isOpen = computed(() => computedTrigger.value !== null && !isSuppressed.value);
@@ -239,27 +241,33 @@ export function useAutocomplete({
 
     const fileItems: AutocompleteItem[] = files.value.map((filePath) => {
       const isDirectory = filePath.endsWith("/");
-      const segments = filePath.replace(/\/$/, "").split("/");
-      const shortName = `${segments[segments.length - 1]}${isDirectory ? "/" : ""}`;
-      const displayPath = filePath.length > 40 ? `…${filePath.slice(-39)}` : filePath;
+      const trimmedPath = filePath.replace(/\/$/, "");
+      const nameStart = trimmedPath.lastIndexOf("/") + 1;
+      const parent = trimmedPath.slice(0, nameStart);
 
       return {
         id: `file:${filePath}`,
-        label: displayPath,
-        description: shortName !== displayPath ? shortName : undefined,
+        label: filePath.slice(nameStart),
+        description: parent.length > 48 ? `…${parent.slice(-47)}` : parent || undefined,
         group: "file",
         value: `@${filePath} `,
         meta: isDirectory ? "dir" : undefined,
       };
     });
 
-    return [...agentItems, ...fileItems];
+    // Files and folders first: they're what @ is mostly for.
+    return [...fileItems, ...agentItems];
   });
 
   const clampedIndex = computed(() => items.value.length === 0
     ? 0
     : Math.min(selectedIndex.value, items.value.length - 1));
   const selectedValue = computed(() => items.value[clampedIndex.value]?.value ?? null);
+
+  /** Opens a folder in the popup: the text becomes `@folder/` and the folder's contents are listed. */
+  function onOpenFolder(itemValue: string): void {
+    onSelect(itemValue.trimEnd());
+  }
 
   function onSelect(itemValue: string): void {
     const trigger = computedTrigger.value;
@@ -281,6 +289,8 @@ export function useAutocomplete({
     }
 
     setValue(newValue);
+    // Move the tracked caret now, not on keyup, so an opened folder lists its contents straight away.
+    cursorPosition.value = newCursor;
     selectedIndex.value = 0;
     suppressedValue.value = null;
 
@@ -321,7 +331,11 @@ export function useAutocomplete({
         const item = items.value[clampedIndex.value];
         if (item) {
           event.preventDefault();
-          onSelect(item.value);
+          if (event.key === "Tab" && item.meta === "dir") {
+            onOpenFolder(item.value);
+          } else {
+            onSelect(item.value);
+          }
         }
         break;
       }
@@ -364,6 +378,7 @@ export function useAutocomplete({
     selectedIndex: readonly(selectedIndex),
     onKeyDown,
     onSelect,
+    onOpenFolder,
     onClose,
   };
 }

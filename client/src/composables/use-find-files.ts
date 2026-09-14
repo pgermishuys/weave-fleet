@@ -12,7 +12,14 @@ export interface UseFindFilesResult {
   error: Readonly<ShallowRef<string | undefined>>;
 }
 
-export function useFindFiles(sessionId: MaybeRefOrGetter<string | null | undefined>, query: MaybeRefOrGetter<string>): UseFindFilesResult {
+const SEARCH_DEBOUNCE_MS = 300;
+
+/**
+ * Files and folders in the session's directory; folders end in "/". A null query asks for nothing.
+ * An empty query, or one ending in "/", lists that folder straight away; anything else is a search,
+ * debounced while typing.
+ */
+export function useFindFiles(sessionId: MaybeRefOrGetter<string | null | undefined>, query: MaybeRefOrGetter<string | null>): UseFindFilesResult {
   const files = ref<string[]>([]);
   const isLoading = shallowRef(false);
   const error = shallowRef<string | undefined>(undefined);
@@ -52,34 +59,42 @@ export function useFindFiles(sessionId: MaybeRefOrGetter<string | null | undefin
   watch(
     [currentSessionId, currentQuery],
     ([activeSessionId, nextQuery]) => {
-      const trimmedQuery = nextQuery.trim();
       cleanupPending();
 
-      if (!activeSessionId || trimmedQuery === "") {
+      if (!activeSessionId || nextQuery === null) {
         files.value = [];
         isLoading.value = false;
         error.value = undefined;
         return;
       }
 
+      const trimmedQuery = nextQuery.trim();
+      const isListing = trimmedQuery === "" || trimmedQuery.endsWith("/");
+      isLoading.value = true;
+
       timeoutId = setTimeout(() => {
-        controller = new AbortController();
-        isLoading.value = true;
+        const request = new AbortController();
+        controller = request;
         error.value = undefined;
 
-        void fetchFiles(activeSessionId, trimmedQuery, controller.signal)
+        void fetchFiles(activeSessionId, trimmedQuery, request.signal)
           .catch((fetchError: unknown) => {
-            if (fetchError instanceof DOMException && fetchError.name === "AbortError") {
+            if (request.signal.aborted) {
               return;
             }
 
             error.value = fetchError instanceof Error ? fetchError.message : "Failed to search files";
           })
           .finally(() => {
+            // A newer request owns the loading state once this one is aborted.
+            if (request.signal.aborted) {
+              return;
+            }
+
             isLoading.value = false;
             controller = undefined;
           });
-      }, 300);
+      }, isListing ? 0 : SEARCH_DEBOUNCE_MS);
     },
     { immediate: true },
   );
