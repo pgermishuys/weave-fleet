@@ -14,6 +14,7 @@ import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { useDraftState } from "@/composables/use-draft-state";
 import { provideCanvasAnnotate } from "@/composables/use-canvas-annotation";
 import { useDiffs } from "@/composables/use-diffs";
+import { useFileLiveUpdates } from "@/composables/use-file-live-updates";
 import { useServerCanvases } from "@/composables/use-server-canvases";
 import { useCanvasesStore } from "@/stores/canvases";
 import { useSessionsStore } from "@/stores/sessions";
@@ -60,6 +61,9 @@ watch(
 
 // Server canvases stay in sync while the panel is collapsed, so they're current when it opens.
 useServerCanvases(activeSessionId);
+
+// Open files follow the agent's edits: a clean file updates in place, an edited one gets the conflict bar.
+useFileLiveUpdates(activeSessionId);
 
 const selectedSession = computed(() =>
   sessions.value.find((s) => s.session.id === activeSessionId.value) ?? null,

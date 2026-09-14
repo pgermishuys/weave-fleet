@@ -289,14 +289,31 @@ the current content.
   for the tree node's click timing.
 
 ### Task 5: Live updates
-- [ ] Subscribe to `files.changed` for the session. For each open path, and on tab activation and
+- [x] Subscribe to `files.changed` for the session. For each open path, and on tab activation and
       window focus, re-read the file and apply the rule above. Pulse with `store.markUpdated`.
-- [ ] Also re-check open files on `turn.ended`, which catches shell edits (Task 0: `sed` emits
+- [x] Also re-check open files on `turn.ended`, which catches shell edits (Task 0: `sed` emits
       no file event).
-- [ ] Debounce bursts (the agent edits a file several times in one turn) the way `use-diffs`
+- [x] Debounce bursts (the agent edits a file several times in one turn) the way `use-diffs`
       does (500 ms).
-- [ ] Tests: event → clean buffer updates; event → dirty buffer shows the bar; no request when
+- [x] Tests: event → clean buffer updates; event → dirty buffer shows the bar; no request when
       the hash matches.
+
+**As built.** `composables/use-file-live-updates.ts`, used in `SessionsV2RightPanel` beside
+`useDiffs`.
+- Event paths are matched by suffix (`isSameFile`): OpenCode sends absolute paths and a save
+  sends relative ones, so the session directory isn't needed.
+- `files.changed` and `turn.ended` are debounced 500 ms, so a burst of edits is read once. Tab
+  activation and window focus check at once.
+- The editor module is imported on first use, and it's already loaded whenever a buffer exists,
+  so the session chunk doesn't grow.
+- The tab pulses (`markUpdated`) both for an in-place update and for a new conflict. That's a
+  small addition, so a conflict on a tab you aren't looking at still gets noticed.
+- `refreshBuffer` skips files with a save in flight, because the save's own `files.changed` can
+  arrive before its HTTP response. Once the save is done, the hash matches and nothing happens.
+- Tests: 8 (path matching; a clean buffer updates and pulses; a dirty buffer gets the bar; the
+  same hash changes nothing; closed files aren't read and a burst reads once; `turn.ended`;
+  focus; another session's events). Checked in mock mode: the mock agent edit updated the open
+  file, flashed the line and pulsed the tab.
 
 ### Task 6: Go to file
 - [ ] Ctrl P / Cmd P registered in `command-registry.ts` (no existing binding), plus a palette
