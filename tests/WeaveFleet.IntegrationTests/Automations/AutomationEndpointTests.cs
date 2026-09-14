@@ -9,6 +9,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using WeaveFleet.Api.Contracts;
+using WeaveFleet.Api.Endpoints;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Harnesses;
@@ -86,7 +87,7 @@ public sealed class AutomationEndpointTests : IAsyncLifetime, IDisposable
         body.MaxConcurrentRuns.ShouldBe(2);
         body.MaxRunsPerHour.ShouldBe(5);
         body.TimeoutMinutes.ShouldBe(15);
-        body.IsEnabled.ShouldBeFalse(); // Automations are created disabled by default
+        body.IsEnabled.ShouldBeTrue(); // Switched on when created: the person just asked for it
         body.Model.ShouldBe("claude-3-5-sonnet-20241022");
         body.Agent.ShouldBe("loom");
         body.CreatedAt.ShouldNotBeNullOrEmpty();
@@ -346,10 +347,48 @@ public sealed class AutomationEndpointTests : IAsyncLifetime, IDisposable
 
         var body = await response.Content.ReadFromJsonAsync<string[]>();
         body.ShouldNotBeNull();
-        body.Length.ShouldBeGreaterThan(0);
-        body.ShouldContain("session.created");
-        body.ShouldContain("session.idle");
-        body.ShouldContain("message.created");
+        // Only the outbox message types that reach the automation dispatcher; a trigger matches them exactly.
+        body.ShouldBe(["session_created", "session_archived", "session_deleted", "delegation.created", "delegation.updated"]);
+    }
+
+    [Fact]
+    public async Task POST_create_keeps_the_schedule_time_zone()
+    {
+        var request = new CreateAutomationRequest(
+            Name: "Weekly digest",
+            Prompt: "Summarise the open PRs",
+            TriggerType: "schedule",
+            TriggerConfig: "0 9 * * 1",
+            TimeZone: "Africa/Johannesburg");
+
+        var response = await _http.PostAsJsonAsync("/api/automations", request);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Created);
+        var body = await response.Content.ReadFromJsonAsync<AutomationResponse>();
+        body.ShouldNotBeNull();
+        body.TimeZone.ShouldBe("Africa/Johannesburg");
+
+        var fetched = await _http.GetFromJsonAsync<AutomationResponse>($"/api/automations/{body.Id}");
+        fetched.ShouldNotBeNull();
+        fetched.TimeZone.ShouldBe("Africa/Johannesburg");
+    }
+
+    [Fact]
+    public async Task POST_create_rejects_an_unknown_time_zone()
+    {
+        var request = new CreateAutomationRequest(
+            Name: "Weekly digest",
+            Prompt: "Summarise the open PRs",
+            TriggerType: "schedule",
+            TriggerConfig: "0 9 * * 1",
+            TimeZone: "Mars/Olympus_Mons");
+
+        var response = await _http.PostAsJsonAsync("/api/automations", request);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var error = await response.Content.ReadFromJsonAsync<ApiErrorResponse>();
+        error.ShouldNotBeNull();
+        error.Error.ShouldContain("Mars/Olympus_Mons");
     }
 }
 

@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Infrastructure.Services;
@@ -59,8 +60,7 @@ public sealed partial class AutomationSchedulerService : BackgroundService
         {
             try
             {
-                var cron = CronExpression.Parse(automation.TriggerConfig);
-                var nextOccurrence = cron.GetNextOccurrence(windowStart.UtcDateTime, TimeZoneInfo.Utc, inclusive: true);
+                var nextOccurrence = NextOccurrenceUtc(automation, windowStart.UtcDateTime);
 
                 if (nextOccurrence is null || nextOccurrence > now.UtcDateTime) continue;
 
@@ -97,6 +97,31 @@ public sealed partial class AutomationSchedulerService : BackgroundService
             }
         }
     }
+
+    /// <summary>
+    /// The automation's next run at or after <paramref name="fromUtc"/>, in UTC. The cron expression is read in
+    /// the automation's time zone, so "0 9 * * 1" means 09:00 on the person's clock; no zone means UTC.
+    /// </summary>
+    internal DateTime? NextOccurrenceUtc(Automation automation, DateTime fromUtc)
+    {
+        var cron = CronExpression.Parse(automation.TriggerConfig);
+        return cron.GetNextOccurrence(fromUtc, ResolveTimeZone(automation), inclusive: true);
+    }
+
+    private TimeZoneInfo ResolveTimeZone(Automation automation)
+    {
+        if (string.IsNullOrWhiteSpace(automation.TimeZone))
+            return TimeZoneInfo.Utc;
+
+        if (TimeZoneInfo.TryFindSystemTimeZoneById(automation.TimeZone, out var zone))
+            return zone;
+
+        LogUnknownTimeZone(automation.Id, automation.TimeZone);
+        return TimeZoneInfo.Utc;
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Automation {AutomationId} has unknown time zone '{TimeZone}'; using UTC")]
+    private partial void LogUnknownTimeZone(string automationId, string timeZone);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Error in automation scheduler poll")]
     private partial void LogSchedulerPollError(Exception ex);

@@ -191,16 +191,19 @@ public sealed partial class AutomationExecutionService(
     /// <summary>
     /// Builds a SessionSourceSelection for tracking automation provenance.
     /// </summary>
-    private static SessionSourceSelection BuildSessionSource(Automation automation, string? eventType)
+    internal static SessionSourceSelection BuildSessionSource(Automation automation, string? eventType)
     {
-        // Build input JSON manually to avoid trimming issues
-        var inputJson = $$"""
-            {
-                "automationId": "{{automation.Id}}",
-                "automationName": "{{automation.Name}}",
-                "trigger": "{{eventType ?? "schedule"}}"
-            }
-            """;
+        // Written by hand rather than serialized, which keeps it trim-safe; the writer escapes quotes and
+        // backslashes in the name, so a name like `Check "flaky" tests` still makes valid JSON.
+        using var buffer = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("automationId", automation.Id);
+            writer.WriteString("automationName", automation.Name);
+            writer.WriteString("trigger", eventType ?? "schedule");
+            writer.WriteEndObject();
+        }
 
         return new SessionSourceSelection
         {
@@ -210,7 +213,7 @@ public sealed partial class AutomationExecutionService(
                 SourceType = "automation",
                 ActionId = SessionSourceActions.StartSession
             },
-            Input = JsonDocument.Parse(inputJson).RootElement.Clone()
+            Input = JsonDocument.Parse(buffer.ToArray()).RootElement.Clone()
         };
     }
 

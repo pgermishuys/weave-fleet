@@ -9,11 +9,15 @@ namespace WeaveFleet.Api.Endpoints;
 
 public static class AutomationEndpoints
 {
+    /// <summary>
+    /// The event types an automation can wait for: the outbox message types that reach
+    /// <c>AutomationEventDispatcherService</c>. Offer nothing else here, because a trigger only fires when its
+    /// event type equals one of these exactly.
+    /// </summary>
     private static readonly string[] EventCatalog =
     [
-        "session.created", "session.idle", "session.status", "session.deleted",
-        "message.created", "message.updated",
-        "delegation.created", "delegation.updated", "delegation.completed"
+        "session_created", "session_archived", "session_deleted",
+        "delegation.created", "delegation.updated"
     ];
 
     public static IEndpointRouteBuilder MapAutomationEndpoints(this IEndpointRouteBuilder app)
@@ -26,7 +30,8 @@ public static class AutomationEndpoints
             var result = await service.CreateAsync(
                 request.Name, request.Prompt, request.TriggerType, request.TriggerConfig,
                 request.MaxConcurrentRuns, request.MaxRunsPerHour, request.TimeoutMinutes,
-                request.WorkspaceId, request.Model, request.Agent, request.TargetTags, request.TargetType);
+                request.WorkspaceId, request.Model, request.Agent, request.TargetTags, request.TargetType,
+                request.TimeZone);
             return result.Match(
                 automation => Results.Created($"/api/automations/{automation.Id}", MapToResponse(automation)),
                 error => error.Code switch
@@ -43,7 +48,8 @@ public static class AutomationEndpoints
             var result = await service.UpdateAsync(id,
                 request.Name, request.Prompt, request.TriggerType, request.TriggerConfig,
                 request.MaxConcurrentRuns, request.MaxRunsPerHour, request.TimeoutMinutes,
-                request.WorkspaceId, request.Model, request.Agent, request.TargetTags, request.TargetType);
+                request.WorkspaceId, request.Model, request.Agent, request.TargetTags, request.TargetType,
+                request.TimeZone);
             return result.Match(
                 automation => Results.Ok(MapToResponse(automation)),
                 error => error.Code switch
@@ -134,7 +140,7 @@ public static class AutomationEndpoints
     private static AutomationResponse MapToResponse(Automation a) => new(
         a.Id, a.Name, a.Prompt, a.TriggerType, a.TriggerConfig,
         a.MaxConcurrentRuns, a.MaxRunsPerHour, a.TimeoutMinutes,
-        a.IsEnabled, a.WorkspaceId, a.Model, a.Agent, a.CreatedAt, a.UpdatedAt, a.TargetTags, a.TargetType);
+        a.IsEnabled, a.WorkspaceId, a.Model, a.Agent, a.CreatedAt, a.UpdatedAt, a.TargetTags, a.TargetType, a.TimeZone);
 }
 
 #pragma warning restore IL2026

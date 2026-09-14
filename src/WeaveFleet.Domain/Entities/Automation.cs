@@ -20,6 +20,11 @@ public sealed class Automation
     public string? Agent { get; set; }
     public List<string> TargetTags { get; set; } = [];
     public string TargetType { get; set; } = "new_session";
+    /// <summary>
+    /// The IANA time zone a schedule's cron expression is read in, e.g. "Africa/Johannesburg".
+    /// Null means UTC, which is how automations made before time zones were stored keep running.
+    /// </summary>
+    public string? TimeZone { get; set; }
     public string CreatedAt { get; set; } = string.Empty;
     public string? UpdatedAt { get; set; }
     public string UserId { get; set; } = string.Empty;

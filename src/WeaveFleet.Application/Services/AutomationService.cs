@@ -13,8 +13,8 @@ public sealed class AutomationService(
     IUserContext userContext)
 {
     /// <summary>
-    /// Creates a new automation with the specified configuration.
-    /// Validates cron expressions for schedule-type triggers.
+    /// Creates a new automation with the specified configuration, switched on: the person just asked for it.
+    /// Validates cron expressions and time zones for schedule-type triggers.
     /// </summary>
     public async Task<Result<Automation>> CreateAsync(
         string name,
@@ -28,22 +28,12 @@ public sealed class AutomationService(
         string? model = null,
         string? agent = null,
         List<string>? targetTags = null,
-        string? targetType = null)
+        string? targetType = null,
+        string? timeZone = null)
     {
-        // Validate cron expression if trigger type is schedule
-        if (triggerType.Equals("schedule", StringComparison.OrdinalIgnoreCase))
-        {
-            try
-            {
-                CronExpression.Parse(triggerConfig);
-            }
-            catch (Exception ex)
-            {
-                return FleetError.ValidationError(
-                    "TriggerConfig",
-                    $"Invalid cron expression: {ex.Message}");
-            }
-        }
+        var scheduleError = ValidateSchedule(triggerType, triggerConfig, timeZone);
+        if (scheduleError is not null)
+            return scheduleError;
 
         var automation = new Automation
         {
@@ -55,13 +45,14 @@ public sealed class AutomationService(
             MaxConcurrentRuns = maxConcurrentRuns,
             MaxRunsPerHour = maxRunsPerHour,
             TimeoutMinutes = timeoutMinutes,
-            IsEnabled = false,
+            IsEnabled = true,
             IsDeleted = false,
             WorkspaceId = workspaceId,
             Model = model,
             Agent = agent,
             TargetTags = targetTags ?? [],
             TargetType = targetType ?? "new_session",
+            TimeZone = NormalizeTimeZone(timeZone),
             CreatedAt = DateTime.UtcNow.ToString("O"),
             UserId = userContext.UserId
         };
@@ -72,7 +63,7 @@ public sealed class AutomationService(
 
     /// <summary>
     /// Updates an existing automation.
-    /// Validates cron expressions for schedule-type triggers.
+    /// Validates cron expressions and time zones for schedule-type triggers.
     /// </summary>
     public async Task<Result<Automation>> UpdateAsync(
         string id,
@@ -87,26 +78,16 @@ public sealed class AutomationService(
         string? model = null,
         string? agent = null,
         List<string>? targetTags = null,
-        string? targetType = null)
+        string? targetType = null,
+        string? timeZone = null)
     {
         var existing = await automationRepository.GetByIdAsync(id);
         if (existing is null)
             return FleetError.NotFoundFor(nameof(Automation), id);
 
-        // Validate cron expression if trigger type is schedule
-        if (triggerType.Equals("schedule", StringComparison.OrdinalIgnoreCase))
-        {
-            try
-            {
-                CronExpression.Parse(triggerConfig);
-            }
-            catch (Exception ex)
-            {
-                return FleetError.ValidationError(
-                    "TriggerConfig",
-                    $"Invalid cron expression: {ex.Message}");
-            }
-        }
+        var scheduleError = ValidateSchedule(triggerType, triggerConfig, timeZone);
+        if (scheduleError is not null)
+            return scheduleError;
 
         existing.Name = name;
         existing.Prompt = prompt;
@@ -120,6 +101,7 @@ public sealed class AutomationService(
         existing.Agent = agent;
         existing.TargetTags = targetTags ?? [];
         existing.TargetType = targetType ?? "new_session";
+        existing.TimeZone = NormalizeTimeZone(timeZone);
         existing.UpdatedAt = DateTime.UtcNow.ToString("O");
 
         await automationRepository.UpdateAsync(existing);
@@ -198,4 +180,34 @@ public sealed class AutomationService(
 
         return automation;
     }
+
+    private static FleetError? ValidateSchedule(string triggerType, string triggerConfig, string? timeZone)
+    {
+        if (!triggerType.Equals("schedule", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        try
+        {
+            CronExpression.Parse(triggerConfig);
+        }
+        catch (Exception ex)
+        {
+            return FleetError.ValidationError(
+                "TriggerConfig",
+                $"Invalid cron expression: {ex.Message}");
+        }
+
+        var zone = NormalizeTimeZone(timeZone);
+        if (zone is not null && !TimeZoneInfo.TryFindSystemTimeZoneById(zone, out _))
+        {
+            return FleetError.ValidationError(
+                "TimeZone",
+                $"Unknown time zone '{zone}'. Use an IANA name such as 'Europe/London'.");
+        }
+
+        return null;
+    }
+
+    private static string? NormalizeTimeZone(string? timeZone) =>
+        string.IsNullOrWhiteSpace(timeZone) ? null : timeZone.Trim();
 }

@@ -12,7 +12,8 @@ public sealed record CreateAutomationRequest(
     string? Model = null,
     string? Agent = null,
     List<string>? TargetTags = null,
-    string? TargetType = null);
+    string? TargetType = null,
+    string? TimeZone = null);
 
 public sealed record UpdateAutomationRequest(
     string Name,
@@ -26,7 +27,8 @@ public sealed record UpdateAutomationRequest(
     string? Model = null,
     string? Agent = null,
     List<string>? TargetTags = null,
-    string? TargetType = null);
+    string? TargetType = null,
+    string? TimeZone = null);
 
 public sealed record AutomationResponse(
     string Id,
@@ -44,6 +46,7 @@ public sealed record AutomationResponse(
     string CreatedAt,
     string? UpdatedAt,
     List<string>? TargetTags,
-    string TargetType);
+    string TargetType,
+    string? TimeZone);
 
 public sealed record AutomationListResponse(IReadOnlyList<AutomationResponse> Automations);
