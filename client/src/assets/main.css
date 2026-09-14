@@ -298,6 +298,12 @@
     outline: none !important;
   }
 
+  /* Fields that fill their own box show focus with the caret: the file editor, Go to file. */
+  .cm-editor .cm-content:focus-visible,
+  .go-to-file__input input:focus-visible {
+    box-shadow: none !important;
+  }
+
   html {
     font-family: var(--font-sans-stack);
     -webkit-font-smoothing: antialiased;

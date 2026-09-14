@@ -26,8 +26,10 @@ public static class WorkspaceFileSearch
 
     /// <summary>
     /// An empty query, or one ending in <c>/</c>, lists that folder's children, folders first.
-    /// Anything else returns paths containing the query, best first: name is the query, name starts
-    /// with it, name contains it, path contains it; then shallower paths, then alphabetical.
+    /// Anything else returns matching paths, best first: name is the query, name starts with it,
+    /// name contains it, path contains it; then fuzzy matches, where the query's characters appear
+    /// in order in the name, then in the path (so "fcanv" finds FileCanvas.vue); then shallower
+    /// paths, then alphabetical.
     /// </summary>
     public static async Task<IReadOnlyList<string>> FindAsync(string directory, string query, int limit, CancellationToken ct = default)
     {
@@ -73,14 +75,29 @@ public static class WorkspaceFileSearch
         if (matchesPathOnly)
         {
             if (path.StartsWith(query, StringComparison.OrdinalIgnoreCase)) return 0;
-            return path.Contains(query, StringComparison.OrdinalIgnoreCase) ? 3 : -1;
+            if (path.Contains(query, StringComparison.OrdinalIgnoreCase)) return 3;
+            return InOrder(path, query) ? 5 : -1;
         }
 
         var name = path[(path.LastIndexOf('/') + 1)..];
         if (name.Equals(query, StringComparison.OrdinalIgnoreCase)) return 0;
         if (name.StartsWith(query, StringComparison.OrdinalIgnoreCase)) return 1;
         if (name.Contains(query, StringComparison.OrdinalIgnoreCase)) return 2;
-        return path.Contains(query, StringComparison.OrdinalIgnoreCase) ? 3 : -1;
+        if (path.Contains(query, StringComparison.OrdinalIgnoreCase)) return 3;
+        if (InOrder(name, query)) return 4;
+        return InOrder(path, query) ? 5 : -1;
+    }
+
+    /// <summary>Whether every character of <paramref name="query"/> appears in <paramref name="text"/>, in order.</summary>
+    private static bool InOrder(string text, string query)
+    {
+        var next = 0;
+        foreach (var c in text)
+        {
+            if (next < query.Length && char.ToLowerInvariant(c) == char.ToLowerInvariant(query[next]))
+                next++;
+        }
+        return next == query.Length;
     }
 
     private static int Depth(string entry) => entry.TrimEnd('/').Count(c => c == '/');

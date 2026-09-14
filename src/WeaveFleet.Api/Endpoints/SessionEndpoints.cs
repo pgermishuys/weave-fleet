@@ -543,13 +543,30 @@ public static class SessionEndpoints
                     fileResult.Path,
                     fileResult.Content,
                     fileResult.IsBinary,
-                    fileResult.IsTruncated)),
+                    fileResult.IsTruncated,
+                    fileResult.Hash)),
                 err => err.ToSessionApiResult());
         })
         .Produces<ReadSessionFileResponse>(200)
         .Produces(404)
         .Produces(400)
         .WithName("ReadSessionFile");
+
+        // PUT /api/sessions/{id}/files/content — save a file from the editor. 409 when the file changed since it was read.
+        group.MapPut("/{id}/files/content", async (string id, WriteSessionFileRequest req, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        {
+            var result = await orchestrator.WriteSessionFileAsync(id, req.Path, req.Content, req.BaseHash, ct);
+            return result.Match(
+                write => write.Saved
+                    ? Results.Ok(new WriteSessionFileResponse(write.Hash))
+                    : Results.Conflict(new WriteSessionFileConflictResponse(write.CurrentContent, write.Hash)),
+                err => err.ToSessionApiResult());
+        })
+        .Produces<WriteSessionFileResponse>(200)
+        .Produces<WriteSessionFileConflictResponse>(409)
+        .Produces(404)
+        .Produces(400)
+        .WithName("WriteSessionFile");
 
         return app;
     }
@@ -1089,7 +1106,18 @@ internal sealed record ReadSessionFileResponse(
     string Path,
     string? Content,
     bool IsBinary,
-    bool IsTruncated);
+    bool IsTruncated,
+    string? Hash);
+
+// ── Write file types ───────────────────────────────────────────────────────────
+
+/// <param name="BaseHash">The hash the read endpoint returned for the content this edit started from.</param>
+internal sealed record WriteSessionFileRequest(string? Path, string? Content, string? BaseHash);
+
+internal sealed record WriteSessionFileResponse(string Hash);
+
+/// <summary>The file changed since it was read: what's on disk now. Content is null if it's no longer text.</summary>
+internal sealed record WriteSessionFileConflictResponse(string? Content, string Hash);
 
 // ── FleetError → IResult helper ─────────────────────────────────────────────
 

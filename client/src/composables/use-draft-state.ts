@@ -84,3 +84,14 @@ export function clearDraftText(sessionId: string): void {
 
   draft.text = "";
 }
+
+/**
+ * Add an `@` reference (`@src/app.ts:14-18`) to the end of a session's draft, followed by a space
+ * so the composer draws it as a pill. Nothing is sent.
+ */
+export function appendDraftReference(sessionId: string, reference: string): void {
+  // The composer fills in the agent and model when it mounts, as it does for any new draft.
+  const draft = ensureDraft(sessionId, { agentId: "", modelId: "" });
+  const separator = draft.text.length === 0 || /\s$/.test(draft.text) ? "" : " ";
+  draft.text = `${draft.text}${separator}${reference} `;
+}

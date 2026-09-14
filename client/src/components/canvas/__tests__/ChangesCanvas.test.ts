@@ -4,6 +4,7 @@ import { ref } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ChangesCanvas from "@/components/canvas/ChangesCanvas.vue";
 import type { FileDiffItem } from "@/api/client";
+import { useCanvasesStore } from "@/stores/canvases";
 
 const { readSessionFileMock } = vi.hoisted(() => ({
   readSessionFileMock: vi.fn(),
@@ -57,42 +58,25 @@ describe("ChangesCanvas", () => {
     expect(rows[1]?.get(".changes-canvas__change-name").text()).toBe("App.vue");
     expect(rows[1]?.get(".changes-canvas__change-dir").text()).toBe("src/components");
     expect(rows[1]?.get(".changes-canvas__change-stats").text()).toBe("+3−1");
-    expect(wrapper.find(".canvas-file-viewer").exists()).toBe(false);
   });
 
-  it("opens the diff for a clicked file and loads its content", async () => {
+  it("opens a clicked file in its own kept tab, in Diff", async () => {
     sharedDiffs.diffs.value = [
       { file: "src/a.ts", status: "modified", additions: 1, deletions: 1, before: "const a = 1;\n", after: "const a = 2;\n" },
     ] as FileDiffItem[];
-    readSessionFileMock.mockResolvedValue({ content: "const a = 2;\n", isBinary: false });
-
-    const wrapper = mountCanvas();
-    await flushPromises();
-
-    await wrapper.get(".changes-canvas__change").trigger("click");
-    await flushPromises();
-
-    expect(readSessionFileMock).toHaveBeenCalledWith("s1", "src/a.ts");
-    expect(wrapper.get(".changes-canvas__change").classes()).toContain("changes-canvas__change--selected");
-    expect(wrapper.get(".canvas-file-viewer__label").text()).toBe("Diff:");
-    expect(wrapper.get(".canvas-file-viewer__path").text()).toBe("src/a.ts");
-    expect(wrapper.get('[aria-label="Show diff"]').attributes("aria-pressed")).toBe("true");
-  });
-
-  it("closes the viewer and returns the list to full height", async () => {
-    sharedDiffs.diffs.value = [
-      { file: "src/a.ts", status: "modified", additions: 1, deletions: 0, before: "", after: "x\n" },
-    ] as FileDiffItem[];
-    readSessionFileMock.mockResolvedValue({ content: "x\n", isBinary: false });
 
     const wrapper = mountCanvas();
     await flushPromises();
     await wrapper.get(".changes-canvas__change").trigger("click");
-    await flushPromises();
 
-    await wrapper.get('[aria-label="Close file"]').trigger("click");
-
-    expect(wrapper.find(".canvas-file-viewer").exists()).toBe(false);
-    expect(wrapper.get(".canvas-split").classes()).not.toContain("canvas-split--with-viewer");
+    const state = useCanvasesStore().sessionCanvases("s1");
+    expect(state.activeId).toBe("file:src/a.ts");
+    expect(state.canvases.find((canvas) => canvas.id === "file:src/a.ts")?.file).toEqual({
+      path: "src/a.ts",
+      preview: false,
+      view: "diff",
+    });
+    expect(readSessionFileMock).not.toHaveBeenCalled();
+    expect(wrapper.get(".changes-canvas__change").classes()).toContain("changes-canvas__change--open");
   });
 });

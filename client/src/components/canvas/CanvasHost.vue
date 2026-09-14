@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import BrowserOpenDialog from "@/components/canvas/BrowserOpenDialog.vue";
+import UnsavedFileDialog from "@/components/canvas/UnsavedFileDialog.vue";
 import type { UseDiffsResult } from "@/composables/use-diffs";
 import { closeServerCanvas } from "@/composables/use-server-canvases";
 import {
@@ -29,6 +30,7 @@ import {
   visualCanvasTitle,
   type CanvasInstance,
 } from "@/stores/canvases";
+import { useFileBuffersStore } from "@/stores/file-buffers";
 
 const props = withDefaults(defineProps<{
   sessionId: string;
@@ -41,6 +43,7 @@ const props = withDefaults(defineProps<{
 });
 
 const store = useCanvasesStore();
+const fileBuffers = useFileBuffersStore();
 const sharedDiffs = inject<UseDiffsResult | null>("sharedDiffs", null);
 
 const state = computed(() => store.sessionCanvases(props.sessionId));
@@ -129,12 +132,53 @@ function activate(canvas: CanvasInstance): void {
   store.activate(props.sessionId, canvas.id);
 }
 
+function isUnsaved(canvas: CanvasInstance): boolean {
+  return !!canvas.file && fileBuffers.isDirty(props.sessionId, canvas.file.path);
+}
+
+// Closing a file with unsaved changes asks first.
+const closingFile = ref<CanvasInstance | null>(null);
+const closingSaving = ref(false);
+
 function close(canvas: CanvasInstance): void {
   if (canvas.server) {
     void closeServerCanvas(props.sessionId, canvas.server.canvasId);
     return;
   }
+  if (isUnsaved(canvas)) {
+    closingFile.value = canvas;
+    return;
+  }
   store.close(props.sessionId, canvas.id);
+}
+
+function discardAndClose(): void {
+  const canvas = closingFile.value;
+  closingFile.value = null;
+  if (canvas) store.close(props.sessionId, canvas.id);
+}
+
+async function saveAndClose(): Promise<void> {
+  const canvas = closingFile.value;
+  if (!canvas?.file) return;
+  closingSaving.value = true;
+  try {
+    const { saveBuffer } = await import("@/lib/code-editor/buffers");
+    const outcome = await saveBuffer(props.sessionId, canvas.file.path);
+    closingFile.value = null;
+    if (outcome.kind === "saved") {
+      store.close(props.sessionId, canvas.id);
+    } else {
+      // The file changed on disk, or the save was refused: show the tab and its bar.
+      store.activate(props.sessionId, canvas.id);
+    }
+  } finally {
+    closingSaving.value = false;
+  }
+}
+
+function keepPreview(canvas: CanvasInstance): void {
+  if (canvas.file?.preview) store.keepFile(props.sessionId, canvas.file.path);
 }
 
 function onTabKeydown(event: KeyboardEvent): void {
@@ -207,6 +251,9 @@ onBeforeUnmount(() => {
 
 const activeProps = computed(() => {
   const canvas = activeCanvas.value;
+  if (canvas.kind === "file" && canvas.file) {
+    return { sessionId: props.sessionId, path: canvas.file.path, view: canvas.file.view };
+  }
   if (canvas.kind === "browser" && canvas.browser && canvas.server) {
     return {
       sessionId: props.sessionId,
@@ -242,13 +289,16 @@ const activeProps = computed(() => {
             'canvas-tab--active': canvas.id === activeCanvas.id,
             'canvas-tab--entering': canvas.id === enteringId,
             'canvas-tab--updated': pulsingIds.has(canvas.id),
+            'canvas-tab--preview': canvas.file?.preview,
           }"
           role="tab"
           :aria-selected="canvas.id === activeCanvas.id"
           :aria-controls="panelId(canvas)"
           :tabindex="canvas.id === activeCanvas.id ? 0 : -1"
-          :title="canvasTitle(canvas)"
+          :title="canvas.file ? canvas.file.path : canvasTitle(canvas)"
+          :data-testid="canvas.file ? `file-tab-${canvas.file.path}` : undefined"
           @click="activate(canvas)"
+          @dblclick="keepPreview(canvas)"
           @auxclick.middle="isCanvasClosable(canvas) && close(canvas)"
         >
           <component
@@ -276,12 +326,19 @@ const activeProps = computed(() => {
           <span
             v-if="isCanvasClosable(canvas)"
             class="canvas-tab__close"
+            :class="{ 'canvas-tab__close--unsaved': isUnsaved(canvas) }"
             role="button"
-            :aria-label="`Close ${canvasTitle(canvas)}`"
+            :aria-label="isUnsaved(canvas) ? `Close ${canvasTitle(canvas)} (unsaved changes)` : `Close ${canvasTitle(canvas)}`"
             @click.stop="close(canvas)"
           >
+            <span
+              v-if="isUnsaved(canvas)"
+              class="canvas-tab__unsaved-dot"
+              aria-hidden="true"
+            />
             <X
               :size="12"
+              class="canvas-tab__close-icon"
               aria-hidden="true"
             />
           </span>
@@ -389,6 +446,15 @@ const activeProps = computed(() => {
     <BrowserOpenDialog
       v-model:open="browserDialogOpen"
       :session-id="sessionId"
+    />
+
+    <UnsavedFileDialog
+      :open="closingFile !== null"
+      :path="closingFile?.file?.path ?? ''"
+      :saving="closingSaving"
+      @update:open="!$event && (closingFile = null)"
+      @save="saveAndClose"
+      @discard="discardAndClose"
     />
 
     <div class="canvas-host__body">
@@ -529,6 +595,32 @@ const activeProps = computed(() => {
 .canvas-tab__close:hover {
   background-color: color-mix(in srgb, var(--text) 10%, transparent);
   color: var(--text);
+}
+
+/* A preview tab: the next file you single-click takes its place. */
+.canvas-tab--preview .canvas-tab__label {
+  font-style: italic;
+}
+
+/* Unsaved changes: a dot where the close button is, which turns back into × on hover. */
+.canvas-tab__close--unsaved {
+  opacity: 1;
+}
+
+.canvas-tab__unsaved-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.canvas-tab__close--unsaved .canvas-tab__close-icon,
+.canvas-tab__close--unsaved:hover .canvas-tab__unsaved-dot {
+  display: none;
+}
+
+.canvas-tab__close--unsaved:hover .canvas-tab__close-icon {
+  display: block;
 }
 
 .canvas-tab--entering {

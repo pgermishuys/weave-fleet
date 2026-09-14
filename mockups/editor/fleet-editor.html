@@ -1,0 +1,2147 @@
+<title>Fleet File Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* ── Page tokens: taken from Fleet's own light and dark themes ─────────── */
+:root {
+  --page: #F3F2EF;
+  --paper: #FFFFFF;
+  --ink: #1A1918;
+  --ink-2: #5f5b56;
+  --line: rgba(26, 25, 24, 0.1);
+  --accent: #5B6EC7;
+  --accent-ink: #4455a8;
+  --accent-soft: rgba(91, 110, 199, 0.12);
+  --good: #15803d;
+  --good-soft: rgba(22, 163, 74, 0.12);
+  --later: #6E6A65;
+  --bad: #b91c1c;
+  --bad-soft: rgba(220, 38, 38, 0.1);
+  --frame-shadow: 0 1px 2px rgba(26, 25, 24, 0.05), 0 28px 56px -32px rgba(26, 25, 24, 0.4);
+  --sans: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #0b0b0e;
+    --paper: #141418;
+    --ink: #e8e8ec;
+    --ink-2: #9a9aa6;
+    --line: rgba(255, 255, 255, 0.08);
+    --accent: #818cf8;
+    --accent-ink: #a5b0ff;
+    --accent-soft: rgba(129, 140, 248, 0.14);
+    --good: #4ade80;
+    --good-soft: rgba(74, 222, 128, 0.12);
+    --later: #9a9aa6;
+    --bad: #f87171;
+    --bad-soft: rgba(248, 113, 113, 0.12);
+    --frame-shadow: 0 30px 60px -32px rgba(0, 0, 0, 0.85);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #0b0b0e;
+  --paper: #141418;
+  --ink: #e8e8ec;
+  --ink-2: #9a9aa6;
+  --line: rgba(255, 255, 255, 0.08);
+  --accent: #818cf8;
+  --accent-ink: #a5b0ff;
+  --accent-soft: rgba(129, 140, 248, 0.14);
+  --good: #4ade80;
+  --good-soft: rgba(74, 222, 128, 0.12);
+  --later: #9a9aa6;
+  --bad: #f87171;
+  --bad-soft: rgba(248, 113, 113, 0.12);
+  --frame-shadow: 0 30px 60px -32px rgba(0, 0, 0, 0.85);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font: 15px/1.6 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+.wrap {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding-inline: 24px;
+  padding-block: 48px 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 64px;
+}
+@media (max-width: 600px) { .wrap { padding-inline: 16px; padding-block: 28px 64px; gap: 48px; } }
+.prose { max-width: 68ch; }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+h1 { font-size: 34px; line-height: 1.12; font-weight: 650; letter-spacing: -0.025em; }
+h2 { font-size: 21px; line-height: 1.25; font-weight: 620; letter-spacing: -0.015em; }
+h3 { font-size: 15px; line-height: 1.35; font-weight: 620; }
+p { margin: 0; }
+code, .mono { font-family: var(--mono); font-size: 0.86em; }
+p code, li code, td code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+a { color: var(--accent-ink); }
+.eyebrow {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.muted { color: var(--ink-2); }
+section { display: flex; flex-direction: column; gap: 20px; }
+.intro { display: flex; flex-direction: column; gap: 16px; }
+.lede { font-size: 17px; line-height: 1.55; color: var(--ink-2); max-width: 64ch; }
+.lede strong { color: var(--ink); font-weight: 600; }
+.pick {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  max-width: 72ch;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  font-size: 15px;
+}
+.pick b { color: var(--accent-ink); font-weight: 650; white-space: nowrap; }
+
+/* ── Option switcher ─────────────────────────────────────────────────── */
+.opts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 960px) { .opts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .opts { grid-template-columns: 1fr; } }
+.opt {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 12px;
+  row-gap: 2px;
+  align-items: baseline;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 150ms ease-out, border-color 150ms ease-out;
+}
+.opt:hover { background: var(--paper); }
+.opt[aria-selected="true"] { background: var(--paper); border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.opt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.opt-letter {
+  grid-row: span 2;
+  font: 600 13px/1 var(--mono);
+  color: var(--ink-2);
+  padding-top: 3px;
+}
+.opt[aria-selected="true"] .opt-letter { color: var(--accent-ink); }
+.opt-name { font-weight: 620; font-size: 15px; }
+.opt-line { font-size: 13px; line-height: 1.45; color: var(--ink-2); }
+.opt-tag {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: 2px;
+}
+
+/* ── Controls above the frame ────────────────────────────────────────── */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  font-size: 13px;
+}
+.controls .label { font-size: 11.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); margin-right: 2px; }
+.cbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font: 500 13px var(--sans);
+  cursor: pointer;
+  transition: border-color 150ms ease-out, background 150ms ease-out;
+}
+.cbtn:hover:not(:disabled) { border-color: var(--accent); }
+.cbtn:disabled { opacity: 0.55; cursor: default; }
+.cbtn:focus-visible, .seg-page button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cbtn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.cbtn .i { width: 14px; height: 14px; }
+.seg-page {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+}
+.seg-page button {
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-2);
+  font: 500 12.5px var(--sans);
+  cursor: pointer;
+}
+.seg-page button[aria-pressed="true"] { background: var(--accent-soft); color: var(--ink); }
+.controls .grow { flex: 1; }
+.hint { font-size: 13px; color: var(--ink-2); max-width: 90ch; }
+.hint kbd, .kbd {
+  font: 500 11.5px var(--mono);
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--paper);
+  color: var(--ink);
+}
+.frame-scroll {
+  overflow-x: auto;
+  padding-bottom: 6px;
+  border-radius: 16px;
+}
+
+/* ── Notes under the frame ───────────────────────────────────────────── */
+.notes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 28px;
+}
+@media (max-width: 860px) { .notes { grid-template-columns: 1fr; gap: 18px; } }
+.note { display: flex; flex-direction: column; gap: 6px; padding-top: 12px; border-top: 1px solid var(--line); }
+.note p { font-size: 14.5px; line-height: 1.6; }
+.note .eyebrow { font-size: 11px; }
+.size { font: 500 13px var(--mono); color: var(--ink-2); }
+
+/* ── Shared-behaviour list ───────────────────────────────────────────── */
+.grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px 40px;
+}
+@media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+.grid2 > div { display: flex; flex-direction: column; gap: 8px; padding-top: 14px; border-top: 1px solid var(--line); }
+.grid2 p { font-size: 14.5px; }
+
+/* ── Tables ──────────────────────────────────────────────────────────── */
+.tscroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; min-width: 720px; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 11px 14px 11px 0; border-bottom: 1px solid var(--line); line-height: 1.5; }
+thead th { font-size: 11.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); padding-bottom: 8px; }
+tbody th { font-weight: 620; width: 20%; }
+td.num { font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+.win { color: var(--good); font-weight: 600; }
+.verdict { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.v-ship { background: var(--good-soft); color: var(--good); }
+.v-later { background: var(--line); color: var(--later); }
+.v-no { background: var(--bad-soft); color: var(--bad); }
+.foot { font-size: 13px; color: var(--ink-2); max-width: 90ch; }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; }
+@media (max-width: 860px) { .two { grid-template-columns: 1fr; } }
+.two ul, .two ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; font-size: 14.5px; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Fleet frame — values copied from client/src/assets/main.css and the
+   canvas components (CanvasHost, CanvasFileViewer, FileBrowserPanel).
+   ═══════════════════════════════════════════════════════════════════════ */
+.fleet[data-fleet="dark"] {
+  --chrome: #0d0d10;
+  --panel-bg: #141418;
+  --card-bg: #1b1b20;
+  --border: rgba(255, 255, 255, 0.075);
+  --text: #e8e8ec;
+  --muted: #8e8e9a;
+  --accent: #6366f1;
+  --accent-dim: rgba(99, 102, 241, 0.15);
+  --running: #22c55e;
+  --idle: #f59e0b;
+  --error: #ef4444;
+  --sheet-shadow: none;
+  --hover: rgba(255, 255, 255, 0.05);
+  --active: rgba(232, 232, 236, 0.09);
+  --chip: rgba(255, 255, 255, 0.06);
+  --gutter: #4f4f5a;
+  --sel: rgba(99, 102, 241, 0.34);
+  --sel-match: rgba(99, 102, 241, 0.16);
+  --bracket: rgba(99, 102, 241, 0.28);
+  --active-line: rgba(255, 255, 255, 0.028);
+  --agent: #818cf8;
+  --agent-flash: rgba(99, 102, 241, 0.3);
+  --diff-add-bg: rgba(34, 197, 94, 0.1);
+  --diff-add-strong: rgba(34, 197, 94, 0.26);
+  --diff-del-bg: rgba(239, 68, 68, 0.1);
+  --diff-del-strong: rgba(239, 68, 68, 0.3);
+  --warn-bg: rgba(245, 158, 11, 0.12);
+  --warn-ink: #fbbf24;
+  --pop-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.7);
+  --pill-bg: rgba(99, 102, 241, 0.24);
+  --syn-keyword: #b69cff;
+  --syn-string: #9ccf8a;
+  --syn-number: #f2a672;
+  --syn-comment: #686874;
+  --syn-fn: #82aaff;
+  --syn-type: #e7c27d;
+  --syn-prop: #cdd0dc;
+  --syn-def: #eeeef2;
+  --syn-punct: #8e8e9a;
+}
+.fleet[data-fleet="light"] {
+  --chrome: #F3F2EF;
+  --panel-bg: #FFFFFF;
+  --card-bg: #FFFFFF;
+  --border: rgba(26, 25, 24, 0.09);
+  --text: #1A1918;
+  --muted: #6E6A65;
+  --accent: #5B6EC7;
+  --accent-dim: rgba(91, 110, 199, 0.12);
+  --running: #16a34a;
+  --idle: #d97706;
+  --error: #dc2626;
+  --sheet-shadow: 0 1px 2px rgba(26, 25, 24, 0.04), 0 12px 32px -18px rgba(26, 25, 24, 0.18);
+  --hover: rgba(26, 25, 24, 0.05);
+  --active: rgba(26, 25, 24, 0.075);
+  --chip: rgba(26, 25, 24, 0.05);
+  --gutter: #b2ada7;
+  --sel: rgba(91, 110, 199, 0.24);
+  --sel-match: rgba(91, 110, 199, 0.12);
+  --bracket: rgba(91, 110, 199, 0.22);
+  --active-line: rgba(26, 25, 24, 0.03);
+  --agent: #5B6EC7;
+  --agent-flash: rgba(91, 110, 199, 0.24);
+  --diff-add-bg: rgba(22, 163, 74, 0.09);
+  --diff-add-strong: rgba(22, 163, 74, 0.22);
+  --diff-del-bg: rgba(220, 38, 38, 0.08);
+  --diff-del-strong: rgba(220, 38, 38, 0.2);
+  --warn-bg: rgba(217, 119, 6, 0.1);
+  --warn-ink: #92400e;
+  --pop-shadow: 0 16px 40px -14px rgba(26, 25, 24, 0.3);
+  --pill-bg: rgba(91, 110, 199, 0.16);
+  --syn-keyword: #6a48c4;
+  --syn-string: #3d7a36;
+  --syn-number: #b4541a;
+  --syn-comment: #9a948d;
+  --syn-fn: #2d5db6;
+  --syn-type: #8a5f00;
+  --syn-prop: #3b3a38;
+  --syn-def: #1A1918;
+  --syn-punct: #6E6A65;
+}
+.fleet {
+  --font-sans-stack: var(--sans);
+  --font-mono-stack: var(--mono);
+  --radius-btn: 8px;
+  position: relative;
+  display: grid;
+  grid-template-columns: 52px 244px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) 30px;
+  height: 680px;
+  min-width: 1100px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--chrome);
+  color: var(--text);
+  font: 13px/1.45 var(--sans);
+  box-shadow: var(--frame-shadow);
+}
+.fleet[hidden] { display: none; }
+.fleet button { font: inherit; color: inherit; }
+.fleet .i { width: 15px; height: 15px; flex-shrink: 0; }
+.fleet .i-sm { width: 13px; height: 13px; }
+.fleet .grow { flex: 1; }
+.fleet .mono { font-family: var(--mono); font-size: 12px; }
+
+.f-rail { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 0; }
+.f-logo { width: 30px; height: 24px; margin-bottom: 6px; color: var(--accent); }
+.rb {
+  display: grid; place-items: center;
+  width: 36px; height: 36px;
+  border: 0; border-radius: 10px;
+  background: transparent; color: var(--muted);
+  cursor: pointer;
+}
+.rb.on { background: var(--active); color: var(--text); }
+.rb .i { width: 17px; height: 17px; }
+
+.f-side { display: flex; flex-direction: column; gap: 6px; padding: 12px 10px 12px 4px; min-width: 0; }
+.s-new {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  height: 34px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--panel-bg); font-weight: 500; cursor: pointer;
+}
+.s-filter {
+  display: flex; align-items: center; gap: 8px;
+  height: 32px; padding: 0 10px; margin-bottom: 8px;
+  border-radius: 8px; background: var(--chip); color: var(--muted);
+}
+.s-group { display: flex; align-items: center; gap: 6px; padding: 6px 8px 4px; font-weight: 600; color: var(--muted); font-size: 12.5px; }
+.s-group span:last-child { margin-left: auto; font-weight: 500; }
+.s-item {
+  display: flex; align-items: center; gap: 8px;
+  height: 32px; padding: 0 10px; border-radius: 8px;
+  color: var(--text); white-space: nowrap;
+}
+.s-item.on { background: var(--active); font-weight: 500; }
+.s-item .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.s-item .st { color: var(--muted); font-size: 12px; font-weight: 400; }
+.s-item.dim { color: var(--muted); }
+.s-ring { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--muted); flex-shrink: 0; }
+.s-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--running); flex-shrink: 0; }
+
+.f-sheet {
+  grid-column: 3;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  margin: 8px 8px 0 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel-bg);
+  box-shadow: var(--sheet-shadow);
+}
+.f-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.f-head {
+  display: flex; align-items: center; gap: 12px;
+  min-height: 56px; padding: 0 14px 0 18px;
+  border-bottom: 1px solid var(--border);
+}
+.f-title { display: flex; align-items: center; gap: 8px; font-size: 14.5px; font-weight: 600; white-space: nowrap; }
+.f-chip { padding: 1px 7px; border-radius: 6px; background: var(--chip); color: var(--muted); font-size: 12px; font-weight: 500; }
+.f-meta { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.f-meta .i { width: 12px; height: 12px; }
+.f-head-icons { display: flex; gap: 2px; margin-left: auto; color: var(--muted); }
+.ib {
+  display: grid; place-items: center;
+  width: 28px; height: 28px;
+  border: 0; border-radius: 8px;
+  background: transparent; color: var(--muted); cursor: pointer;
+  transition: background 150ms ease-out, color 150ms ease-out;
+}
+.ib:hover, .ib[aria-pressed="true"] { background: var(--hover); color: var(--text); }
+.ib:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.f-convo { flex: 1; min-height: 0; overflow-y: auto; padding: 22px 26px 10px; display: flex; flex-direction: column; gap: 16px; scroll-behavior: smooth; }
+.m-user {
+  align-self: flex-end;
+  max-width: 78%;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card-bg);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.m-agent { display: flex; flex-direction: column; gap: 10px; font-size: 13.5px; line-height: 1.6; max-width: 640px; }
+.m-agent code, .m-user code { font-family: var(--mono); font-size: 12px; padding: 1px 5px; border-radius: 5px; background: var(--chip); }
+.ref { padding: 1px 4px; border-radius: 4px; background: var(--pill-bg); }
+.tools { display: flex; flex-direction: column; gap: 2px; }
+.tool {
+  display: flex; align-items: center; gap: 8px;
+  height: 28px; padding: 0 8px; margin-left: -8px;
+  border: 0; border-radius: 7px;
+  background: transparent; color: var(--muted);
+  font-size: 12.5px; text-align: left; white-space: nowrap;
+}
+.tool .p { color: var(--text); font-family: var(--mono); font-size: 12px; }
+.tool[data-open] { cursor: pointer; }
+.tool[data-open]:hover { background: var(--hover); }
+.tool[data-open]:hover .p { text-decoration: underline; text-decoration-color: var(--muted); text-underline-offset: 3px; }
+.tool.new { animation: f-rise 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.add { color: var(--running); font-family: var(--mono); font-size: 12px; }
+.del { color: var(--error); font-family: var(--mono); font-size: 12px; }
+.ok { color: var(--running); }
+.m-queued { animation: f-rise 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+
+.f-composer {
+  margin: 6px 22px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card-bg);
+  transition: border-color 150ms ease-out, box-shadow 200ms ease-out;
+}
+.f-composer.bump { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+.f-input { min-height: 46px; padding: 12px 16px 4px; font-size: 13.5px; line-height: 1.7; }
+.f-input .ph { color: var(--muted); }
+.pill { display: inline-block; margin-right: 4px; padding: 0 5px; border-radius: 5px; background: var(--pill-bg); color: var(--text); font-size: 13px; animation: f-pop 220ms ease-out; }
+.f-cbar { display: flex; align-items: center; gap: 12px; padding: 4px 10px 10px 14px; color: var(--muted); font-size: 12.5px; }
+.f-cbar span { display: inline-flex; align-items: center; gap: 4px; color: var(--text); }
+.f-send { display: grid; place-items: center; width: 30px; height: 30px; margin-left: auto; border-radius: 50%; background: var(--accent); color: #fff; opacity: 0.55; }
+.f-send .i { width: 14px; height: 14px; }
+
+.f-status {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; gap: 16px;
+  padding: 0 14px;
+  color: var(--muted); font-size: 11.5px; white-space: nowrap;
+}
+.f-status kbd { font: 600 10.5px var(--sans); padding: 1px 5px; border-radius: 4px; background: var(--chip); color: var(--text); margin-right: 5px; }
+.f-status .right { margin-left: auto; display: flex; gap: 14px; align-items: center; }
+.f-status .live { display: inline-flex; align-items: center; gap: 6px; color: var(--text); font-weight: 600; }
+.f-status .live::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--running); }
+
+/* Canvas */
+.f-canvas {
+  flex: none;
+  width: 440px;
+  display: flex; flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid var(--border);
+  transition: width 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.f-canvas.wide { width: 62%; }
+.c-head { display: flex; align-items: center; gap: 2px; min-height: 56px; padding: 0 8px 0 10px; border-bottom: 1px solid var(--border); }
+.c-tabs { position: relative; display: flex; align-items: center; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; scroll-behavior: smooth; }
+.c-tab .lbl { max-width: 110px; }
+.c-tab {
+  display: inline-flex; flex-shrink: 0; align-items: center; gap: 6px;
+  max-width: 180px; height: 28px; padding: 0 9px;
+  border: 0; border-radius: 8px;
+  background: transparent; color: var(--muted);
+  font-size: 13px; white-space: nowrap; cursor: pointer;
+  transition: background-color 150ms ease-out, color 150ms ease-out;
+}
+.c-tab:hover:not(.on) { background: var(--hover); color: var(--text); }
+.c-tab.on { background: var(--active); color: var(--text); font-weight: 500; }
+.c-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.c-tab .i { width: 14px; height: 14px; }
+.c-tab .lbl { overflow: hidden; text-overflow: ellipsis; }
+.c-tab.preview .lbl { font-style: italic; }
+.c-tab .count { font-size: 12px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
+.c-tab .x { display: grid; place-items: center; width: 16px; height: 16px; margin-right: -4px; border-radius: 4px; color: var(--muted); }
+.c-tab .x .i { width: 12px; height: 12px; }
+.c-tab .x .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text); }
+.c-tab .x .ix { display: none; }
+.c-tab:hover .x .dot { display: none; }
+.c-tab:hover .x .ix { display: block; }
+.c-tab .x.clean .ix { display: block; opacity: 0; }
+.c-tab.on .x.clean .ix, .c-tab:hover .x.clean .ix { opacity: 1; }
+.c-tab.pulse { animation: tab-pulse 1.2s ease-out; }
+.c-tab.pulse .i { animation: tab-pulse-icon 1.2s ease-out; }
+.c-tab.enter { animation: tab-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes tab-pulse { from { background-color: color-mix(in srgb, var(--accent) 24%, transparent); } }
+@keyframes tab-pulse-icon { from, 40% { color: var(--accent); } }
+@keyframes tab-in { from { opacity: 0; transform: translateX(8px) scale(0.96); } }
+@keyframes f-rise { from { opacity: 0; transform: translateY(6px); } }
+@keyframes f-pop { from { transform: scale(0.85); opacity: 0; } }
+.c-body { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.c-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.c-panel[hidden] { display: none; }
+
+/* Changes list */
+.ch-list { padding: 8px; display: flex; flex-direction: column; gap: 1px; }
+.ch-row { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; text-align: left; }
+.ch-row:hover { background: var(--hover); }
+.ch-row .dir { color: var(--muted); }
+.ch-row .n { margin-left: auto; }
+.ch-row .i { color: var(--muted); }
+
+/* File tree, as FileBrowserPanel */
+.ft { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; min-height: 0; }
+.ft-search {
+  display: flex; align-items: center; gap: 6px;
+  height: 30px; margin: 0 8px 0 10px; padding: 0 10px;
+  border-radius: 8px; background: var(--chip); color: var(--muted); font-size: 13px;
+}
+.ft-rows { display: flex; flex-direction: column; overflow-y: auto; min-height: 0; padding-bottom: 8px; }
+.t-row {
+  display: flex; align-items: center; gap: 6px;
+  height: 26px; margin: 0 6px; padding: 0 8px 0 calc(8px + var(--d) * 14px);
+  border: 0; border-radius: 7px;
+  background: transparent; color: var(--text);
+  font-size: 13px; text-align: left; cursor: pointer; white-space: nowrap;
+}
+.t-row:hover { background: var(--hover); }
+.t-row.sel { background: var(--active); font-weight: 500; }
+.t-row .i { width: 14px; height: 14px; color: var(--muted); }
+.t-row .chev { width: 12px; height: 12px; color: var(--muted); }
+.t-row .sp { width: 12px; flex-shrink: 0; }
+.t-row .n { margin-left: auto; }
+.t-row:focus-visible, .ch-row:focus-visible, .tool:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* Split, as CanvasSplit */
+.split { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.split .ft { flex: 0 0 auto; height: 232px; }
+.split-gutter { flex: 0 0 5px; margin: 0 12px; border-top: 1px solid var(--border); }
+.viewer { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 4px 12px 12px; }
+.v-head { display: flex; align-items: center; gap: 8px; min-height: 32px; }
+.v-file { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.v-label { color: var(--muted); font-size: 12px; }
+.v-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 12px; }
+.toggle { display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--chip); }
+.toggle button {
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  min-width: 26px; height: 22px; padding: 0 6px;
+  border: 0; border-radius: 6px;
+  background: transparent; color: var(--muted); font-size: 12px; cursor: pointer;
+}
+.toggle button.on { background: var(--active); color: var(--text); }
+.toggle button:disabled { opacity: 0.45; cursor: not-allowed; }
+.toggle .i { width: 13px; height: 13px; }
+.v-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.today {
+  flex: 1; min-height: 0; overflow: auto;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--card-bg);
+  position: relative;
+}
+.today .cm-gutters { display: none; }
+.today .cm-activeLine { background: transparent; }
+.today .cm-content { padding: 10px 4px; }
+.today-lang { position: absolute; top: 6px; right: 10px; z-index: 2; font: 500 11px var(--mono); color: var(--muted); }
+.save-state { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.save-state .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--idle); }
+.save-btn {
+  height: 24px; padding: 0 9px;
+  border: 1px solid var(--border); border-radius: 7px;
+  background: var(--card-bg); color: var(--text);
+  font-size: 12px; font-weight: 500; cursor: pointer;
+}
+.save-btn:hover { border-color: var(--accent); }
+.save-btn kbd { font: 500 10.5px var(--sans); color: var(--muted); margin-left: 4px; }
+
+/* File panel for tabs */
+.fp { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.fp-bar { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 10px 0 14px; border-bottom: 1px solid var(--border); }
+.crumbs { display: flex; align-items: center; gap: 3px; min-width: 0; overflow: hidden; color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.crumbs b { color: var(--text); font-weight: 500; }
+.crumbs .i { width: 11px; height: 11px; }
+.fp-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+/* Editor pane */
+.pane { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.pane-cm, .pane-diff { flex: 1; min-height: 0; overflow: hidden; }
+.pane-cm[hidden], .pane-diff[hidden] { display: none; }
+.pane .cm-editor { height: 100%; }
+.pane .cm-editor.cm-focused { outline: none; }
+.pane-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+  padding: 8px 12px;
+  background: var(--warn-bg); color: var(--text);
+  font-size: 12.5px; line-height: 1.45;
+  border-bottom: 1px solid var(--border);
+  animation: f-rise 240ms ease-out;
+}
+.pane-bar[hidden] { display: none; }
+.pane-bar.info { background: var(--accent-dim); }
+.pane-bar b { font-weight: 600; }
+.pb-actions { display: flex; gap: 6px; margin-left: auto; }
+.pb-actions button {
+  height: 24px; padding: 0 9px;
+  border: 1px solid var(--border); border-radius: 7px;
+  background: var(--card-bg); color: var(--text); font-size: 12px; font-weight: 500; cursor: pointer;
+}
+.pb-actions button:hover { border-color: var(--accent); }
+.pb-actions button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.sel-chip {
+  position: absolute; left: 0; top: 0; z-index: 5;
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 28px; padding: 0 10px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--card-bg); color: var(--text);
+  font-size: 12px; font-weight: 500; white-space: nowrap;
+  box-shadow: var(--pop-shadow); cursor: pointer;
+  animation: f-pop 140ms ease-out;
+}
+.sel-chip:hover { border-color: var(--accent); }
+.sel-chip[hidden] { display: none; }
+.sel-chip .i { width: 13px; height: 13px; color: var(--accent); }
+@keyframes cm-agent-flash { from { background-color: var(--agent-flash); } to { background-color: transparent; } }
+
+/* Toast */
+.f-toast {
+  position: absolute; left: 50%; bottom: 44px; z-index: 20;
+  padding: 7px 12px; border-radius: 9px;
+  background: var(--text); color: var(--panel-bg);
+  font-size: 12.5px; font-weight: 500;
+  transform: translate(-50%, 8px); opacity: 0; pointer-events: none;
+  transition: opacity 160ms ease-out, transform 160ms ease-out;
+}
+.f-toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* Go to file (B) */
+.pal { position: absolute; inset: 0; z-index: 30; display: flex; justify-content: center; padding-top: 70px; background: rgba(0, 0, 0, 0.18); }
+.pal[hidden] { display: none; }
+.pal-box {
+  width: 520px; max-height: 360px; display: flex; flex-direction: column;
+  border: 1px solid var(--border); border-radius: 12px;
+  background: var(--card-bg); box-shadow: var(--pop-shadow); overflow: hidden;
+  animation: f-pop 140ms ease-out;
+}
+.pal-in { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px; border-bottom: 1px solid var(--border); color: var(--muted); }
+.pal-in input { flex: 1; border: 0; outline: 0; background: transparent; color: var(--text); font: 14px var(--sans); }
+.pal-list { overflow-y: auto; padding: 6px; }
+.pal-item { display: flex; align-items: center; gap: 8px; width: 100%; height: 32px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; text-align: left; cursor: pointer; }
+.pal-item.on { background: var(--accent-dim); }
+.pal-item .dir { color: var(--muted); font-size: 12px; }
+.pal-item .i { color: var(--muted); width: 14px; height: 14px; }
+.pal-foot { padding: 8px 14px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11.5px; }
+
+/* Rendered Markdown and HTML */
+.rendered { flex: 1; min-height: 0; overflow: auto; padding: 16px 22px 28px; font-size: 13.5px; line-height: 1.65; }
+.rendered.html { padding: 0; background: #fff; }
+.rendered iframe { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
+.rendered h1 { margin: 2px 0 10px; font-size: 19px; font-weight: 600; letter-spacing: -0.01em; color: var(--accent); }
+.rendered h2 { margin: 18px 0 8px; font-size: 15px; font-weight: 600; color: var(--accent); }
+.rendered p { margin: 0 0 10px; }
+.rendered ul { margin: 0 0 10px; padding-left: 20px; }
+.rendered li { margin: 3px 0; }
+.rendered li::marker { color: var(--accent); }
+.rendered code { padding: 1px 5px; border-radius: 5px; background: var(--chip); font-family: var(--mono); font-size: 12px; }
+.rendered a { color: var(--accent); }
+
+/* Focus mode (C) */
+.fleet.focus { grid-template-columns: 52px minmax(0, 1fr); }
+.fleet.focus .f-sheet { grid-column: 2; }
+.fc-tree { flex: none; width: 224px; display: flex; flex-direction: column; border-right: 1px solid var(--border); }
+.fc-tree-head { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 10px 0 16px; font-weight: 600; font-size: 12.5px; color: var(--muted); }
+.fc-center { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.fc-tabs { display: flex; align-items: center; gap: 2px; height: 44px; padding: 0 8px; border-bottom: 1px solid var(--border); }
+.fc-exit { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; }
+.fc-exit:hover { color: var(--text); border-color: var(--accent); }
+.fc-exit kbd { font: 500 10.5px var(--sans); }
+.drawer { flex: none; display: flex; flex-direction: column; border-top: 1px solid var(--border); height: 188px; transition: height 200ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.drawer.closed { height: 34px; }
+.drawer-head { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 8px 0 12px; font-size: 12px; color: var(--muted); }
+.drawer-head .c-tab { height: 24px; font-size: 12px; }
+.term { flex: 1; min-height: 0; overflow: auto; padding: 4px 16px 10px; font: 12px/1.6 var(--mono); color: var(--text); white-space: pre; }
+.term .g { color: var(--running); }
+.term .m { color: var(--muted); }
+.term .a { color: var(--accent); }
+.term .cur { display: inline-block; width: 7px; height: 14px; vertical-align: -2px; background: var(--text); animation: blink 1.1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.fc-chat { flex: none; width: 360px; display: flex; flex-direction: column; border-left: 1px solid var(--border); }
+.fc-chat .f-head { min-height: 44px; padding: 0 12px 0 16px; }
+.fc-chat .f-title { font-size: 13px; }
+.fc-chat .f-convo { padding: 16px 16px 8px; }
+.fc-chat .m-user { max-width: 92%; }
+.fc-chat .f-composer { margin: 6px 12px 12px; }
+
+/* Peek (D) */
+.peek {
+  display: flex; flex-direction: column;
+  height: 340px; margin: 2px 0 4px;
+  border: 1px solid var(--border); border-radius: 12px;
+  background: var(--panel-bg); overflow: hidden;
+  box-shadow: var(--sheet-shadow);
+  animation: f-rise 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.peek-head { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 6px 0 12px; border-bottom: 1px solid var(--border); background: var(--card-bg); }
+.peek-head .p { font-family: var(--mono); font-size: 12px; }
+.peek-head .i { color: var(--muted); }
+.peek .pane { background: var(--panel-bg); }
+.f-convo .m-agent.wide { max-width: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fleet *, .opt, .cbtn { animation: none !important; transition: none !important; }
+}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+    <symbol id="i-chev-r" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-chev-d" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></symbol>
+    <symbol id="i-file-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+    <symbol id="i-file-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M9 15h6"/><path d="M12 18v-6"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+    <symbol id="i-msg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+    <symbol id="i-msg-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 7v6"/><path d="M9 10h6"/></symbol>
+    <symbol id="i-max" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" x2="14" y1="3" y2="10"/><line x1="3" x2="10" y1="21" y2="14"/></symbol>
+    <symbol id="i-min" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" x2="21" y1="10" y2="3"/><line x1="3" x2="10" y1="21" y2="14"/></symbol>
+    <symbol id="i-compare" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/></symbol>
+    <symbol id="i-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12h-8"/><path d="M21 6H8"/><path d="M21 18h-8"/><path d="M3 6v4c0 1.1.9 2 2 2h3"/><path d="M3 10v6c0 1.1.9 2 2 2h3"/></symbol>
+    <symbol id="i-term" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></symbol>
+    <symbol id="i-clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></symbol>
+    <symbol id="i-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></symbol>
+    <symbol id="i-panel" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></symbol>
+    <symbol id="i-puzzle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19.439 7.85c-.049.322.059.648.289.878l1.568 1.568c.47.47.706 1.087.706 1.704s-.235 1.233-.706 1.704l-1.611 1.611a.98.98 0 0 1-.837.276c-.47-.07-.802-.48-.968-.925a2.501 2.501 0 1 0-3.214 3.214c.446.166.855.497.925.968a.979.979 0 0 1-.276.837l-1.61 1.61a2.404 2.404 0 0 1-1.705.707 2.402 2.402 0 0 1-1.704-.706l-1.568-1.568a1.026 1.026 0 0 0-.877-.29c-.493.074-.84.504-1.02.968a2.5 2.5 0 1 1-3.237-3.237c.464-.18.894-.527.967-1.02a1.026 1.026 0 0 0-.289-.877l-1.568-1.568A2.402 2.402 0 0 1 1.998 12c0-.617.236-1.234.706-1.704L4.23 8.77c.24-.24.581-.353.917-.303.515.077.877.528 1.073 1.01a2.5 2.5 0 1 0 3.259-3.259c-.482-.196-.933-.558-1.01-1.073-.05-.336.062-.676.303-.917l1.525-1.525A2.402 2.402 0 0 1 12 1.998c.617 0 1.234.236 1.704.706l1.568 1.568c.23.23.556.338.877.29.493-.074.84-.504 1.02-.968a2.5 2.5 0 1 1 3.237 3.237c-.464.18-.894.527-.967 1.02Z"/></symbol>
+    <symbol id="i-zap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></symbol>
+    <symbol id="i-bot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M12 8V4"/><path d="M9 13v2"/><path d="M15 13v2"/></symbol>
+    <symbol id="i-logo" viewBox="0 0 40 28" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5l7.5 18L20 7l9.5 16L37 5"/></symbol>
+  </defs>
+</svg>
+
+<div class="wrap">
+  <header class="intro">
+    <p class="eyebrow">Fleet proposal · editing files · 14 Sep 2026</p>
+    <h1>Open a file, fix it, and keep working with the agent</h1>
+    <p class="lede">Today a file opens <strong>read-only</strong> under the Files tree, as a highlighted code block. These are four places a real editor could live in Fleet. Each frame below runs the actual editor I'd use, <strong>CodeMirror&nbsp;6</strong>, themed with Fleet's own colours: type in it, press save, select lines, and trigger an agent edit to see what happens to your changes.</p>
+    <p class="pick"><b>Chosen</b><span>B, where files open as tabs in the canvas, built on CodeMirror 6. Markdown and HTML keep their rendered view, with the source one click away.</span></p>
+  </header>
+
+  <section aria-labelledby="options-h">
+    <h2 id="options-h" class="prose">Four places for an editor</h2>
+    <div class="opts" role="tablist" aria-label="Editor placements">
+      <button class="opt" role="tab" id="tab-a" data-opt="a" aria-selected="false" aria-controls="stage"><span class="opt-letter">A</span><span class="opt-name">Edit where you read</span><span class="opt-line">The viewer under the Files tree becomes the editor.</span></button>
+      <button class="opt" role="tab" id="tab-b" data-opt="b" aria-selected="true" aria-controls="stage"><span class="opt-letter">B</span><span class="opt-name">Files open as tabs <span class="opt-tag">Chosen</span></span><span class="opt-line">Each file gets its own canvas tab, next to Changes.</span></button>
+      <button class="opt" role="tab" id="tab-c" data-opt="c" aria-selected="false" aria-controls="stage"><span class="opt-letter">C</span><span class="opt-name">Focus mode</span><span class="opt-line">The editor takes the middle; the chat moves to the side.</span></button>
+      <button class="opt" role="tab" id="tab-d" data-opt="d" aria-selected="false" aria-controls="stage"><span class="opt-letter">D</span><span class="opt-name">Peek from the chat</span><span class="opt-line">Open the agent's edit inline and fix it right there.</span></button>
+    </div>
+
+    <div class="controls" id="controls">
+      <span class="label">Try it</span>
+      <button class="cbtn primary" id="agent-edit" type="button"><svg class="i"><use href="#i-bot"/></svg><span>Agent edits auth.ts</span></button>
+      <button class="cbtn" id="reset" type="button">Reset</button>
+      <span class="seg-page" id="seg-today" role="group" aria-label="Today or proposed" hidden><button type="button" id="today-btn" data-v="today" aria-pressed="false">Today</button><button type="button" id="proposed-btn" data-v="proposed" aria-pressed="true">Proposed</button></span>
+      <button class="cbtn" id="goto" type="button" hidden><svg class="i"><use href="#i-search"/></svg>Go to file <span class="kbd mod-p">Ctrl P</span></button>
+      <button class="cbtn" id="drawer-btn" type="button" hidden><svg class="i"><use href="#i-term"/></svg>Terminal <span class="kbd">Ctrl J</span></button>
+      <span class="grow"></span>
+      <span class="label">Fleet theme</span>
+      <span class="seg-page" role="group" aria-label="Fleet theme"><button type="button" id="fleet-dark" data-t="dark">Dark</button><button type="button" id="fleet-light" data-t="light">Light</button></span>
+    </div>
+    <p class="hint" id="hint">Type in the editor and press <kbd class="mod-s">Ctrl S</kbd> to save. Select a few lines to add them to the message. For completion, type <code>ver</code> (words in the file), <code>try</code> (a snippet) or <code>from "../</code> (paths in the repo). To see the conflict bar, change auth.ts first and then press <em>Agent edits auth.ts</em>.</p>
+
+    <div class="frame-scroll" id="stage" role="tabpanel" aria-label="Mockup">
+      <div class="fleet" id="fleet-a" data-fleet="dark" hidden></div>
+      <div class="fleet" id="fleet-b" data-fleet="dark" hidden></div>
+      <div class="fleet focus" id="fleet-c" data-fleet="dark" hidden></div>
+      <div class="fleet" id="fleet-d" data-fleet="dark" hidden></div>
+    </div>
+
+    <div class="notes" data-notes="a" hidden>
+      <div class="note"><p class="eyebrow">How you get there</p><p>Click a file in Files, as you do today. The code is editable straight away and <span class="mod-s">Ctrl S</span> saves. The File/Diff switch stays; Diff becomes editable, so you can revert one hunk of the agent's change.</p></div>
+      <div class="note"><p class="eyebrow">Why it fits</p><p>It's the smallest change. <code>CanvasFileViewer</code> swaps its fenced-code block for the editor and nothing else moves. The tree stays in view while you work.</p></div>
+      <div class="note"><p class="eyebrow">Watch out</p><p>One file at a time, in the bottom half of a 440&nbsp;px panel. Widen helps, but it's a viewer that learned to type, not a place to work.</p><p class="size">Rough size: 2 days, save endpoint included</p></div>
+    </div>
+    <div class="notes" data-notes="b">
+      <div class="note"><p class="eyebrow">How you get there</p><p>Click a file in Files or Changes, or press <span class="mod-p">Ctrl P</span> anywhere in the session. One click opens an <em>italic</em> preview tab that the next click replaces; typing in it or double-clicking keeps it. The dot on a tab means unsaved.</p></div>
+      <div class="note"><p class="eyebrow">Why it fits</p><p>It reuses what the canvas already does: overflowing tabs, KeepAlive (your undo history survives switching tabs), the accent pulse when a tab updates, and Widen. A file opened from Changes opens straight in Diff.</p></div>
+      <div class="note"><p class="eyebrow">Watch out</p><p>The tab strip gets busy next to Changes, Files, Progress and Browser. Preview tabs and KeepAlive's 8-tab cap keep that in check.</p><p class="size">Rough size: 3–4 days</p></div>
+    </div>
+    <div class="notes" data-notes="c" hidden>
+      <div class="note"><p class="eyebrow">How you get there</p><p>Double-click a file tab, or <span class="mod-e">Ctrl E</span>. The tree, your file tabs and the terminal drawer come with you; the conversation keeps working in the right column. <span class="mod-e">Ctrl E</span> again puts the chat back in the middle.</p></div>
+      <div class="note"><p class="eyebrow">Why it fits</p><p>This is the lightweight IDE: tree, tabs, editor, terminal and the agent on one screen, inside the same session. It's option B's tabs and editor in a different layout, not a second editor.</p></div>
+      <div class="note"><p class="eyebrow">Watch out</p><p>A second layout to maintain, and on a phone it's just B. Worth building once people actually edit in Fleet, not before.</p><p class="size">Rough size: 3 days on top of B</p></div>
+    </div>
+    <div class="notes" data-notes="d" hidden>
+      <div class="note"><p class="eyebrow">How you get there</p><p>Click an <em>Edited</em> or <em>Wrote</em> row in the conversation, or a file in Changes. The agent's change opens inline as an editable diff: reject a hunk, tweak a line, save.</p></div>
+      <div class="note"><p class="eyebrow">Why it fits</p><p>You fix the change where you noticed it, without moving over to the canvas. Good for the edit that is almost right.</p></div>
+      <div class="note"><p class="eyebrow">Watch out</p><p>An editor inside a scrolling conversation fights the scroll and the stick-to-bottom behaviour; allow one peek at a time. Better as a follow-up to B than a first step.</p><p class="size">Rough size: 2 days after B</p></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="md-h">
+    <div class="prose" style="display:flex;flex-direction:column;gap:10px">
+      <h2 id="md-h">Markdown and HTML keep their rendered view</h2>
+      <p class="muted">They open rendered, as they do today, with <em>Rendered · Source · Diff</em> in the tab's bar. Rendered shows your unsaved edits, not only what's on disk, so you can write a README and check it before saving. Rendered Markdown keeps today's annotations, and HTML still renders in a sandboxed frame. Opened from Changes, a file starts in Diff. Try <code>docs/auth.md</code> and <code>public/status.html</code> in frame B.</p>
+    </div>
+  </section>
+
+  <section aria-labelledby="shared-h">
+    <h2 id="shared-h" class="prose">What every option does the same way</h2>
+    <div class="grid2">
+      <div>
+        <h3>The agent edits a file you have open</h3>
+        <p>If you haven't changed it, the editor updates in place: the new lines flash, keep an indigo stripe in the gutter, and the tab pulses. If you have unsaved changes, nothing is overwritten. A bar offers <em>Compare</em>, <em>Keep mine</em> or <em>Use the agent's</em>.</p>
+      </div>
+      <div>
+        <h3>Saving can't clobber the agent</h3>
+        <p>Save sends the hash of the file as you opened it. If it changed on disk since, the server refuses the write and you get the same bar. The agent isn't told anything: it reads files from disk, and OpenCode already makes it re-read a file that changed since its last read. No tokens are spent on your edits.</p>
+      </div>
+      <div>
+        <h3>Asking about lines</h3>
+        <p>Select lines and choose <em>Add to message</em>. The composer gets <code>@src/middleware/auth.ts:14-18</code> as a reference pill, the same pill <code>@</code> mentions make. Nothing is sent until you send it.</p>
+      </div>
+      <div>
+        <h3>On the phone</h3>
+        <p>CodeMirror is built for touch, so the file opens full height in the phone sheet with the same Save and the same conflict bar. Monaco doesn't support mobile browsers, which is one reason it isn't my pick.</p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="complete-h">
+    <div class="prose" style="display:flex;flex-direction:column;gap:10px">
+      <h2 id="complete-h">Autocomplete, in four tiers</h2>
+      <p class="muted">"Small autocomplete" is the first two tiers. They cost nothing to run and are live in the frames above.</p>
+    </div>
+    <div class="tscroll">
+      <table>
+        <thead><tr><th scope="col">Tier</th><th scope="col">What you get</th><th scope="col">Where it comes from</th><th scope="col">What it costs</th><th scope="col">Proposal</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Words and keywords</th><td>Names already in the file, language keywords, snippets like <code>try</code> and <code>for</code></td><td>CodeMirror, in the browser</td><td>Nothing</td><td><span class="verdict v-ship">Ship</span></td></tr>
+          <tr><th scope="row">Repo paths</th><td>Import paths inside <code>from "…"</code>, file names</td><td>The file list Fleet already builds for <code>@</code> mentions (<code>git ls-files</code>, cached 10&nbsp;s)</td><td>One request per session</td><td><span class="verdict v-ship">Ship</span></td></tr>
+          <tr><th scope="row">Language server</th><td>Types, go to definition, errors as you type</td><td>A language server Fleet starts per worktree</td><td>Memory per language on the Fleet machine, and a new kind of process to manage</td><td><span class="verdict v-later">Later</span></td></tr>
+          <tr><th scope="row">AI completions</th><td>Grey suggested text as you type</td><td>A model, through the harness</td><td>Tokens every time you pause typing</td><td><span class="verdict v-no">Not proposed</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="lib-h">
+    <div class="prose" style="display:flex;flex-direction:column;gap:10px">
+      <h2 id="lib-h">CodeMirror 6 or Monaco</h2>
+      <p class="muted">Monaco's one real advantage is TypeScript IntelliSense out of the box, and only for TypeScript and JavaScript. Fleet sessions run in C#, Go and Python repos too, so real code intelligence needs a language server either way. CodeMirror is about a twelfth of the download, works on the phone, and picks up every Fleet theme through the CSS variables the app already has.</p>
+    </div>
+    <div class="tscroll">
+      <table>
+        <thead><tr><th scope="col"></th><th scope="col">CodeMirror 6</th><th scope="col">Monaco</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Download, gzip</th><td class="num"><span class="win">210 KB</span> with diff view and 5 languages</td><td class="num">1.0 MB editor + 1.5 MB TypeScript worker + 92 KB editor worker + 24 KB CSS ≈ 2.6 MB</td></tr>
+          <tr><th scope="row">Loading</th><td>A lazy chunk, fetched the first time a file opens</td><td>Same, plus web workers Fleet has to serve</td></tr>
+          <tr><th scope="row">Phone and touch</th><td class="win">Supported</td><td>Not supported on mobile browsers</td></tr>
+          <tr><th scope="row">Fleet themes</th><td class="win">Colours are CSS variables, so all themes work with no extra code</td><td>Its own theme format; each Fleet theme needs a Monaco theme</td></tr>
+          <tr><th scope="row">Diff view</th><td><code>@codemirror/merge</code>: editable, revert per hunk (used in the frames)</td><td>Built-in diff editor, excellent</td></tr>
+          <tr><th scope="row">Code intelligence</th><td>Through a language server (tier 3)</td><td class="win">TypeScript and JavaScript built in; other languages need a language server</td></tr>
+          <tr><th scope="row">Feels like</th><td>A light editor</td><td>VS Code</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="foot">Measured on 14 Sep 2026 with <code>esbuild --minify</code> and <code>gzip -9</code>. CodeMirror: <code>codemirror</code> 6.0.2 with JavaScript/TypeScript, JSON, Markdown, CSS, HTML, autocomplete and <code>@codemirror/merge</code>, 631 KB raw. The frames on this page run that exact bundle. Monaco: <code>monaco-editor</code> 0.56.0, editor API plus the TypeScript contribution (3.9 MB raw), its <code>ts.worker</code> (7.0 MB raw) and <code>editor.worker</code>.</p>
+  </section>
+
+  <section aria-labelledby="build-h">
+    <h2 id="build-h" class="prose">What option B takes</h2>
+    <div class="two">
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <p class="eyebrow">Work</p>
+        <ul>
+          <li><strong>Save endpoint.</strong> <code>PUT /api/sessions/{id}/files/content</code> with the hash you opened; <code>409</code> with the current text if the file changed. It refuses truncated and binary files, which the read endpoint already flags.</li>
+          <li><strong>Knowing when a file changed.</strong> Open editors listen to whatever refreshes the Changes canvas. I haven't checked how live that refresh is; if it polls, the editor also re-checks the hash when its tab comes back into focus.</li>
+          <li><strong>Client.</strong> A <code>file</code> kind in <code>canvas-registry.ts</code>, <code>FileEditor.vue</code> as a lazy chunk, and the existing Markdown and HTML renderers behind the <em>Rendered</em> switch.</li>
+        </ul>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <p class="eyebrow">Decided</p>
+        <ol>
+          <li>B, files open as tabs.</li>
+          <li>Markdown and HTML open rendered, with Rendered · Source · Diff.</li>
+          <li>No agent tool for opening files. The agent never opens tabs; you do. Clickable <code>file:line</code> paths in its replies could come later, as separate work.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ── Sample repository ──────────────────────────────────────────────── -->
+<script type="text/plain" id="f-auth-head">
+import type { Request, Response, NextFunction } from "express";
+import { verifyToken, type TokenClaims } from "../lib/jwt";
+
+export interface AuthedRequest extends Request {
+  user?: TokenClaims;
+}
+
+/** Rejects requests without a valid bearer token. */
+export async function authenticate(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const [scheme, token] = (req.headers.authorization ?? "").split(" ");
+
+  if (scheme !== "Bearer" || !token) {
+    res.status(401).json({ error: "Missing bearer token" });
+    return;
+  }
+
+  try {
+    const claims = await verifyToken(token, { algorithms: ["HS256"] });
+    if (claims.exp * 1000 < Date.now()) {
+      res.status(401).json({ error: "Token expired" });
+      return;
+    }
+    req.user = claims;
+    next();
+  } catch {
+    res.status(401).json({ error: "Invalid token" });
+  }
+}
+</script>
+<script type="text/plain" id="f-auth-v1">
+import type { Request, Response, NextFunction } from "express";
+import { verifyToken, type TokenClaims } from "../lib/jwt";
+import { logger } from "../lib/logger";
+
+// Case-insensitive, and tolerant of extra spaces after the scheme.
+const BEARER = /^bearer +(.+)$/i;
+
+export interface AuthedRequest extends Request {
+  user?: TokenClaims;
+}
+
+/** Rejects requests without a valid bearer token. */
+export async function authenticate(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const match = BEARER.exec(req.headers.authorization ?? "");
+
+  if (!match) {
+    res.status(401).json({ error: "Missing bearer token" });
+    return;
+  }
+
+  try {
+    const claims = await verifyToken(match[1], { algorithms: ["HS256"] });
+    if (claims.exp * 1000 < Date.now()) {
+      res.status(401).json({ error: "Token expired" });
+      return;
+    }
+    req.user = claims;
+    next();
+  } catch (error) {
+    logger.warn("auth.rejected", { path: req.path, error });
+    res.status(401).json({ error: "Invalid token" });
+  }
+}
+</script>
+<script type="text/plain" id="f-auth-v2">
+import type { Request, Response, NextFunction } from "express";
+import { verifyToken, type TokenClaims } from "../lib/jwt";
+import { logger } from "../lib/logger";
+
+// Case-insensitive, and tolerant of extra spaces after the scheme.
+const BEARER = /^bearer +(.+)$/i;
+
+/** Seconds of clock drift allowed between clients and this server. */
+const CLOCK_TOLERANCE = 30;
+
+export interface AuthedRequest extends Request {
+  user?: TokenClaims;
+}
+
+/** Rejects requests without a valid bearer token. */
+export async function authenticate(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const match = BEARER.exec(req.headers.authorization ?? "");
+
+  if (!match) {
+    res.status(401).json({ error: "Missing bearer token" });
+    return;
+  }
+
+  try {
+    req.user = await verifyToken(match[1], {
+      algorithms: ["HS256"],
+      clockTolerance: CLOCK_TOLERANCE,
+    });
+    next();
+  } catch (error) {
+    logger.warn("auth.rejected", { path: req.path, error });
+    res.status(401).json({ error: "Invalid token" });
+  }
+}
+</script>
+<script type="text/plain" id="f-test">
+import { describe, it, expect } from "vitest";
+import request from "supertest";
+import { app } from "../src/app";
+import { signToken } from "../src/lib/jwt";
+
+describe("authenticate", () => {
+  const token = signToken({ sub: "user-1" }, { expiresIn: "5m" });
+
+  it("accepts a lowercase bearer prefix", async () => {
+    const res = await request(app)
+      .get("/api/users/me")
+      .set("Authorization", "bearer " + token);
+    expect(res.status).toBe(200);
+  });
+
+  it("accepts extra spaces after the scheme", async () => {
+    const res = await request(app)
+      .get("/api/users/me")
+      .set("Authorization", "Bearer   " + token);
+    expect(res.status).toBe(200);
+  });
+
+  it("rejects a missing token", async () => {
+    const res = await request(app).get("/api/users/me");
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe("Missing bearer token");
+  });
+});
+</script>
+<script type="text/plain" id="f-jwt">
+import jwt, { type SignOptions, type VerifyOptions } from "jsonwebtoken";
+import { config } from "./config";
+
+export interface TokenClaims {
+  sub: string;
+  exp: number;
+  roles?: string[];
+}
+
+export function signToken(claims: Omit<TokenClaims, "exp">, options: SignOptions = {}): string {
+  return jwt.sign(claims, config.jwtSecret, { algorithm: "HS256", ...options });
+}
+
+export async function verifyToken(token: string, options: VerifyOptions = {}): Promise<TokenClaims> {
+  return jwt.verify(token, config.jwtSecret, options) as TokenClaims;
+}
+</script>
+<script type="text/plain" id="f-config">
+export const config = {
+  port: Number(process.env.PORT ?? 3000),
+  jwtSecret: process.env.JWT_SECRET ?? "dev-only-secret",
+  logLevel: process.env.LOG_LEVEL ?? "info",
+};
+</script>
+<script type="text/plain" id="f-logger">
+import pino from "pino";
+import { config } from "./config";
+
+export const logger = pino({ level: config.logLevel });
+</script>
+<script type="text/plain" id="f-index">
+export { authenticate, type AuthedRequest } from "./auth";
+export { rateLimit } from "./rate-limit";
+</script>
+<script type="text/plain" id="f-rate">
+import type { Request, Response, NextFunction } from "express";
+
+const WINDOW_MS = 60_000;
+const hits = new Map<string, number[]>();
+
+export function rateLimit(limit = 120) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const now = Date.now();
+    const recent = (hits.get(req.ip ?? "") ?? []).filter((t) => now - t < WINDOW_MS);
+    recent.push(now);
+    hits.set(req.ip ?? "", recent);
+    if (recent.length > limit) return res.status(429).json({ error: "Too many requests" });
+    next();
+  };
+}
+</script>
+<script type="text/plain" id="f-users">
+import { Router } from "express";
+import { authenticate, type AuthedRequest } from "../middleware";
+
+export const users = Router();
+
+users.get("/me", authenticate, (req: AuthedRequest, res) => {
+  res.json({ id: req.user?.sub, roles: req.user?.roles ?? [] });
+});
+</script>
+<script type="text/plain" id="f-app">
+import express from "express";
+import { rateLimit } from "./middleware";
+import { users } from "./routes/users";
+
+export const app = express();
+
+app.use(express.json());
+app.use(rateLimit());
+app.use("/api/users", users);
+</script>
+<script type="text/plain" id="f-md-head">
+# Authentication
+
+Protected routes use the `authenticate` middleware.
+
+- Send `Authorization: Bearer <token>`.
+- Tokens are verified with HS256.
+- Invalid or missing tokens get a 401 with an `error` message.
+</script>
+<script type="text/plain" id="f-md">
+# Authentication
+
+Protected routes use the `authenticate` middleware.
+
+- Send `Authorization: Bearer <token>`. The scheme is case-insensitive.
+- Tokens are verified with HS256.
+- Invalid or missing tokens get a 401 with an `error` message.
+</script>
+<script type="text/plain" id="f-pkg">
+{
+  "name": "fleet-core-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "pino": "^9.7.0"
+  }
+}
+</script>
+<script type="text/plain" id="f-status">
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <style>
+      body { margin: 0; padding: 24px; font: 14px/1.5 system-ui, sans-serif; color: #1a1918; background: #fff; }
+      h1 { margin: 0 0 12px; font-size: 20px; }
+      .ok { color: #15803d; font-weight: 600; }
+      dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+      dt { color: #6e6a65; }
+    </style>
+  </head>
+  <body>
+    <h1>API status</h1>
+    <dl>
+      <dt>Auth</dt><dd class="ok">Healthy</dd>
+      <dt>Tokens verified, last hour</dt><dd>1,284</dd>
+      <dt>Rejected</dt><dd>17</dd>
+    </dl>
+  </body>
+</html>
+</script>
+<script type="text/plain" id="f-readme">
+# fleet-core-api
+
+The API behind the storefront. Run `npm run dev` and open http://localhost:3000.
+</script>
+
+<script src="fleetcm.js"></script>
+<script>
+(function () {
+  "use strict";
+  const CM = window.FleetCM;
+  const NL = "\n";
+  const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+  const MOD = IS_MAC ? "⌘" : "Ctrl ";
+  document.querySelectorAll(".mod-s").forEach((el) => (el.textContent = MOD + "S"));
+  document.querySelectorAll(".mod-p").forEach((el) => (el.textContent = MOD + "P"));
+  document.querySelectorAll(".mod-e").forEach((el) => (el.textContent = MOD + "E"));
+
+  const AUTH = "src/middleware/auth.ts";
+  const text = (id) => {
+    const t = document.getElementById(id).textContent;
+    return t.replace(/^[\r\n]+/, "").trimEnd() + NL;
+  };
+  const SOURCES = {
+    "src/lib/config.ts": ["f-config"],
+    "src/lib/jwt.ts": ["f-jwt"],
+    "src/lib/logger.ts": ["f-logger"],
+    "src/middleware/auth.ts": ["f-auth-head", "f-auth-v1"],
+    "src/middleware/index.ts": ["f-index"],
+    "src/middleware/rate-limit.ts": ["f-rate"],
+    "src/routes/users.ts": ["f-users"],
+    "src/app.ts": ["f-app"],
+    "tests/auth.test.ts": [null, "f-test"],
+    "docs/auth.md": ["f-md-head", "f-md"],
+    "public/status.html": ["f-status"],
+    "package.json": ["f-pkg"],
+    "README.md": ["f-readme"],
+  };
+  const PATHS = Object.keys(SOURCES);
+  const AUTH_V2 = text("f-auth-v2");
+  const TREE = [
+    { d: "src", c: [{ d: "lib", c: ["config.ts", "jwt.ts", "logger.ts"] }, { d: "middleware", c: ["auth.ts", "index.ts", "rate-limit.ts"] }, { d: "routes", c: ["users.ts"] }, "app.ts"] },
+    { d: "tests", c: ["auth.test.ts"] },
+    { d: "docs", c: ["auth.md"] },
+    { d: "public", c: ["status.html"] },
+    "package.json",
+    "README.md",
+  ];
+  const IMPORTS = ["../lib/jwt", "../lib/logger", "../lib/config", "./index", "./rate-limit", "../routes/users", "../app", "express", "jsonwebtoken", "pino"];
+
+  function makeWs() {
+    const ws = { head: {}, disk: {}, subs: new Set() };
+    for (const p of PATHS) {
+      const [h, d] = SOURCES[p];
+      ws.head[p] = h ? text(h) : "";
+      ws.disk[p] = d ? text(d) : ws.head[p];
+    }
+    ws.on = (fn) => ws.subs.add(fn);
+    ws.emit = () => ws.subs.forEach((fn) => fn());
+    return ws;
+  }
+
+  // ── Small helpers ─────────────────────────────────────────────────────
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const icon = (n, cls) => '<svg class="i ' + (cls || "") + '" aria-hidden="true"><use href="#i-' + n + '"/></svg>';
+  const el = (html) => { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstElementChild; };
+  const baseName = (p) => p.slice(p.lastIndexOf("/") + 1);
+  const dirName = (p) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
+  const fileIcon = (p) => (/[.]md$/.test(p) ? "file-text" : "file");
+
+  function lcsTable(A, B) {
+    const n = A.length, m = B.length;
+    const dp = Array.from({ length: n + 1 }, () => new Int32Array(m + 1));
+    for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) dp[i][j] = A[i] === B[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    return dp;
+  }
+  const splitLines = (s) => (s ? s.replace(/[\r\n]+$/, "").split(NL) : []);
+  // 1-based line numbers in b that aren't in a.
+  function changedLines(a, b) {
+    const A = splitLines(a), B = splitLines(b);
+    const dp = lcsTable(A, B);
+    const out = [];
+    let i = 0, j = 0;
+    while (j < B.length) {
+      if (i < A.length && A[i] === B[j]) { i++; j++; }
+      else if (i < A.length && dp[i + 1][j] >= dp[i][j + 1]) i++;
+      else { out.push(j + 1); j++; }
+    }
+    return out;
+  }
+  function stats(a, b) {
+    const A = splitLines(a), B = splitLines(b);
+    const common = lcsTable(A, B)[0][0];
+    return { add: B.length - common, del: A.length - common };
+  }
+  const statHTML = (s) => (s.add ? '<span class="add">+' + s.add + "</span>" : "") + (s.del ? ' <span class="del">−' + s.del + "</span>" : "");
+
+  function toast(frame, msg) {
+    const t = frame.querySelector(".f-toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => t.classList.remove("show"), 1800);
+  }
+
+  function addPill(frame, ref) {
+    const c = frame.querySelector(".f-composer");
+    const input = c.querySelector(".f-input");
+    input.querySelector(".ph").hidden = true;
+    input.querySelector(".pills").appendChild(el('<span class="pill">' + esc(ref) + "</span>"));
+    c.classList.remove("bump");
+    void c.offsetWidth;
+    c.classList.add("bump");
+    setTimeout(() => c.classList.remove("bump"), 700);
+  }
+
+  // ── Editor pane: CodeMirror plus save, conflicts and "add to message" ─
+  class Pane {
+    constructor(ws, path, o) {
+      this.ws = ws; this.path = path; this.o = o || {};
+      this.mode = "edit"; this.diff = null; this.conflict = false;
+      this.el = el('<div class="pane"><div class="pane-bar" hidden></div><div class="pane-cm"></div><div class="pane-diff" hidden></div><button type="button" class="sel-chip" hidden>' + icon("msg-plus") + "<span></span></button></div>");
+      this.bar = this.el.querySelector(".pane-bar");
+      this.cmEl = this.el.querySelector(".pane-cm");
+      this.diffEl = this.el.querySelector(".pane-diff");
+      this.chip = this.el.querySelector(".sel-chip");
+      this.base = ws.disk[path];
+      this.view = CM.createEditor(this.cmEl, {
+        doc: this.base, path, readOnly: !!this.o.readOnly,
+        importFiles: IMPORTS,
+        onChange: () => this.changed(),
+        onSave: () => this.save(),
+        onSelection: (v) => this.selection(v),
+        onBlur: () => setTimeout(() => this.hideChip(), 150),
+      });
+      this.view.scrollDOM.addEventListener("scroll", () => this.hideChip());
+      this.chip.addEventListener("mousedown", (e) => e.preventDefault());
+      this.chip.addEventListener("click", () => {
+        if (this.selRef && this.o.frame) addPill(this.o.frame, this.selRef);
+        this.hideChip();
+      });
+      this.bar.addEventListener("click", (e) => {
+        const b = e.target.closest("button[data-a]");
+        if (b) this.resolve(b.dataset.a);
+      });
+      if (!this.o.readOnly) this.mark();
+      if (this.o.mode === "diff") this.setMode("diff");
+    }
+    get text() { return this.diff ? this.diff.state.doc.toString() : this.view.state.doc.toString(); }
+    get dirty() { return this.text !== this.base; }
+    get hasChanges() { return this.ws.head[this.path] !== this.text; }
+    mark(flash) { CM.markAgentLines(this.view, changedLines(this.ws.head[this.path], this.view.state.doc.toString()), flash); }
+    changed() { if (this.o.onEdit) this.o.onEdit(this); this.emit(); }
+    emit() { if (this.o.onState) this.o.onState(this); }
+    focus() { (this.diff || this.view).focus(); }
+    measure() { (this.diff || this.view).requestMeasure(); }
+    save() {
+      if (this.o.readOnly) return;
+      if (this.ws.disk[this.path] !== this.base) { this.showConflict(); return; }
+      if (!this.dirty) { toast(this.o.frame, "No changes to save"); return; }
+      this.ws.disk[this.path] = this.text;
+      this.base = this.text;
+      toast(this.o.frame, "Saved " + this.path);
+      this.emit(); this.ws.emit();
+    }
+    agentEdit(next) {
+      const prev = this.ws.disk[this.path];
+      this.ws.disk[this.path] = next;
+      if (this.dirty || this.mode === "compare") { this.showConflict(); this.ws.emit(); return false; }
+      this.base = next;
+      CM.setDocMinimal(this.view, next);
+      this.mark(changedLines(prev, next));
+      if (this.mode === "diff") { this.destroyDiff(); this.openDiff(this.ws.head[this.path], next); }
+      this.emit(); this.ws.emit();
+      return true;
+    }
+    openDiff(before, after) {
+      this.cmEl.hidden = true; this.diffEl.hidden = false;
+      this.diff = CM.createUnifiedDiff(this.diffEl, { before, after, path: this.path, onChange: () => this.changed() });
+    }
+    destroyDiff() {
+      if (!this.diff) return "";
+      const t = this.diff.state.doc.toString();
+      this.diff.destroy(); this.diff = null; this.diffEl.innerHTML = "";
+      this.diffEl.hidden = true; this.cmEl.hidden = false;
+      return t;
+    }
+    setMode(m) {
+      if (m === this.mode) return;
+      if (this.mode === "compare") return;
+      if (m === "diff") {
+        this.openDiff(this.ws.head[this.path], this.view.state.doc.toString());
+      } else {
+        const t = this.destroyDiff();
+        CM.setDocMinimal(this.view, t);
+        this.mark();
+        this.view.requestMeasure();
+      }
+      this.mode = m; this.hideChip(); this.emit();
+    }
+    showConflict() {
+      this.conflict = true;
+      this.bar.className = "pane-bar";
+      this.bar.innerHTML = '<span><b>The agent changed ' + esc(baseName(this.path)) + " while you were editing.</b> Nothing was overwritten.</span>" +
+        '<span class="pb-actions"><button type="button" data-a="compare">Compare</button><button type="button" data-a="mine">Keep mine</button><button type="button" data-a="theirs">Use the agent\'s</button></span>';
+      this.bar.hidden = false;
+      this.emit();
+    }
+    clearBar() { this.conflict = false; this.bar.hidden = true; this.bar.innerHTML = ""; }
+    resolve(a) {
+      const disk = this.ws.disk[this.path];
+      if (a === "mine") {
+        const mine = this.text;
+        this.ws.disk[this.path] = mine; this.base = mine;
+        this.clearBar();
+        toast(this.o.frame, "Saved your version of " + baseName(this.path));
+      } else if (a === "theirs") {
+        if (this.mode === "diff") { this.destroyDiff(); this.mode = "edit"; }
+        CM.setDocMinimal(this.view, disk);
+        this.base = disk; this.clearBar(); this.mark();
+      } else if (a === "compare") {
+        const mine = this.mode === "diff" ? this.destroyDiff() : this.view.state.doc.toString();
+        this.mode = "compare";
+        this.openDiff(disk, mine);
+        this.bar.className = "pane-bar info";
+        this.bar.innerHTML = "<span><b>Red is the agent's version, green is yours.</b> Reject a hunk to take the agent's lines, then press Done and save.</span>" +
+          '<span class="pb-actions"><button type="button" class="primary" data-a="done">Done</button></span>';
+      } else if (a === "done") {
+        const merged = this.destroyDiff();
+        this.mode = "edit";
+        CM.setDocMinimal(this.view, merged);
+        this.base = disk; this.clearBar(); this.mark();
+        this.view.requestMeasure();
+        toast(this.o.frame, this.dirty ? "Merged. Save to write it." : "You took the agent's version");
+      }
+      this.emit(); this.ws.emit();
+    }
+    selection(v) {
+      if (this.o.readOnly || !this.o.frame) return;
+      const s = v.state.selection.main;
+      if (s.empty || !v.hasFocus) { this.hideChip(); return; }
+      const doc = v.state.doc;
+      const a = doc.lineAt(s.from).number;
+      let b = doc.lineAt(s.to).number;
+      if (b > a && doc.lineAt(s.to).from === s.to) b--;
+      this.selRef = "@" + this.path + ":" + (a === b ? a : a + "-" + b);
+      const c = v.coordsAtPos(s.head);
+      if (!c) { this.hideChip(); return; }
+      this.chip.querySelector("span").textContent = a === b ? "Add line " + a + " to message" : "Add lines " + a + "–" + b + " to message";
+      this.chip.hidden = false;
+      const r = this.el.getBoundingClientRect();
+      const w = this.chip.offsetWidth;
+      const x = Math.min(Math.max(8, c.left - r.left - w / 2), r.width - w - 8);
+      let y = c.bottom - r.top + 8;
+      if (y + 36 > r.height) y = c.top - r.top - 36;
+      this.chip.style.transform = "translate(" + Math.round(x) + "px," + Math.round(y) + "px)";
+    }
+    hideChip() { this.chip.hidden = true; }
+    destroy() { this.destroyDiff(); this.view.destroy(); }
+  }
+
+  // ── Shared chrome ─────────────────────────────────────────────────────
+  function railHTML() {
+    return '<aside class="f-rail"><svg class="f-logo" aria-hidden="true"><use href="#i-logo"/></svg>' +
+      '<button class="rb on" type="button" aria-label="Sessions">' + icon("msg") + "</button>" +
+      '<button class="rb" type="button" aria-label="GitHub">' + icon("branch") + "</button>" +
+      '<span class="grow"></span>' +
+      ["puzzle", "zap", "chart", "gear"].map((n) => '<button class="rb" type="button" aria-label="' + n + '">' + icon(n) + "</button>").join("") +
+      "</aside>";
+  }
+  function sideHTML() {
+    return '<aside class="f-side">' +
+      '<button class="s-new" type="button">' + icon("plus", "i-sm") + "New Session</button>" +
+      '<div class="s-filter">' + icon("search", "i-sm") + "Filter sessions</div>" +
+      '<div class="s-group">' + icon("chev-d", "i-sm") + "<span>Fleet Core</span><span>2</span></div>" +
+      '<div class="s-item on"><span class="s-ring"></span><span class="t">Fix bearer token parsing</span><span class="st">Idle</span></div>' +
+      '<div class="s-item"><span class="s-dot"></span><span class="t">Storefront checkout copy</span><span class="st">Working</span></div>' +
+      '<div class="s-group">' + icon("chev-d", "i-sm") + "<span>Documentation</span><span>1</span></div>" +
+      '<div class="s-item dim">' + icon("check", "i-sm") + '<span class="t">Update auth docs for v2</span><span class="st">Done</span></div>' +
+      "</aside>";
+  }
+  function headHTML() {
+    return '<header class="f-head"><div><div class="f-title">Fix bearer token parsing <span class="f-chip">Idle</span></div>' +
+      '<div class="f-meta">Fleet Core · OpenCode · ' + icon("branch") + '<span class="mono">feat/auth-bearer</span></div></div>' +
+      '<div class="f-head-icons">' + ["term", "branch", "pencil", "trash", "panel"].map((n) => '<span class="ib">' + icon(n) + "</span>").join("") + "</div></header>";
+  }
+  function convoHTML(ws) {
+    const s = stats(ws.head[AUTH], ws.disk[AUTH]);
+    const t = stats("", ws.disk["tests/auth.test.ts"]);
+    return '<div class="m-user">Requests with a lowercase <code>bearer</code> prefix get a 401. Fix the header parsing in <span class="ref">@src/middleware/auth.ts</span> and add a test.</div>' +
+      '<div class="m-agent">' +
+      '<div class="tools">' +
+      '<div class="tool">' + icon("file", "i-sm") + 'Read <span class="p">src/middleware/auth.ts</span></div>' +
+      '<button type="button" class="tool" data-open="' + AUTH + '">' + icon("pencil", "i-sm") + 'Edited <span class="p">src/middleware/auth.ts</span> ' + statHTML(s) + "</button>" +
+      '<button type="button" class="tool" data-open="tests/auth.test.ts">' + icon("file-plus", "i-sm") + 'Wrote <span class="p">tests/auth.test.ts</span> ' + statHTML(t) + "</button>" +
+      '<button type="button" class="tool" data-open="docs/auth.md">' + icon("pencil", "i-sm") + 'Edited <span class="p">docs/auth.md</span> ' + statHTML(stats(ws.head["docs/auth.md"], ws.disk["docs/auth.md"])) + "</button>" +
+      '<div class="tool">' + icon("term", "i-sm") + 'Ran <span class="p">npm test</span> <span class="ok">14 passed</span></div>' +
+      "</div>" +
+      "<p>The header was split on a single space and compared with <code>\"Bearer\"</code> exactly, so <code>bearer</code> and double spaces failed. It now matches a case-insensitive pattern, logs rejected tokens, and there are tests for both cases.</p>" +
+      "</div>";
+  }
+  function composerHTML() {
+    return '<div class="f-composer"><div class="f-input"><span class="pills"></span><span class="ph">Type a message...</span></div>' +
+      '<div class="f-cbar">' + icon("clip", "i-sm") + "<span>Default " + icon("chev-d", "i-sm") + "</span><span>Default " + icon("chev-d", "i-sm") + '</span><span class="f-send">' + icon("up") + "</span></div></div>";
+  }
+  function statusHTML() {
+    return '<footer class="f-status"><span><kbd>Ctrl K</kbd>Command Palette</span><span><kbd>Ctrl [ ]</kbd>Prev / Next Session</span><span><kbd>Ctrl B</kbd>Sidebar</span><span><kbd>Ctrl J</kbd>Terminal</span>' +
+      '<span class="right"><span class="live">IDLE</span><span>opencode</span><span>12,500 tokens</span></span></footer><div class="f-toast" role="status" aria-live="polite"></div>';
+  }
+  function shell(frame, ws, canvasHTML) {
+    frame.innerHTML = railHTML() + sideHTML() +
+      '<div class="f-sheet"><main class="f-main">' + headHTML() + '<div class="f-convo">' + convoHTML(ws) + "</div>" + composerHTML() + "</main>" +
+      '<section class="f-canvas">' + canvasHTML + "</section></div>" + statusHTML();
+  }
+  // The follow-up turn the "Agent edits" button plays.
+  function appendTurn(frame, prev, next) {
+    const convo = frame.querySelector(".f-convo");
+    convo.appendChild(el('<div class="m-user m-queued">Also allow 30 seconds of clock skew. Some clients drift.</div>'));
+    convo.appendChild(el('<div class="m-agent m-queued"><div class="tools"><button type="button" class="tool new" data-open="' + AUTH + '">' + icon("pencil", "i-sm") + 'Edited <span class="p">src/middleware/auth.ts</span> ' + statHTML(stats(prev, next)) + "</button></div></div>"));
+    convo.scrollTop = convo.scrollHeight;
+  }
+
+  function renderTree(container, ws, st) {
+    const rows = [];
+    (function walk(nodes, prefix, depth) {
+      for (const n of nodes) {
+        if (typeof n === "string") {
+          const p = prefix + n;
+          const s = stats(ws.head[p], ws.disk[p]);
+          rows.push('<button type="button" class="t-row' + (st.selected === p ? " sel" : "") + '" style="--d:' + depth + '" data-file="' + p + '"><span class="sp"></span>' + icon(fileIcon(p)) + "<span>" + esc(n) + '</span><span class="n">' + (s.add ? '<span class="add">+' + s.add + "</span>" : "") + "</span></button>");
+        } else {
+          const p = prefix + n.d;
+          const open = st.open.has(p);
+          rows.push('<button type="button" class="t-row" style="--d:' + depth + '" data-dir="' + p + '" aria-expanded="' + open + '">' + icon(open ? "chev-d" : "chev-r", "chev") + icon("folder") + "<span>" + esc(n.d) + "</span></button>");
+          if (open) walk(n.c, p + "/", depth + 1);
+        }
+      }
+    })(TREE, "", 0);
+    container.innerHTML = rows.join("");
+  }
+  function wireTree(container, ws, st) {
+    let clickTimer = null;
+    container.addEventListener("click", (e) => {
+      const b = e.target.closest(".t-row");
+      if (!b) return;
+      if (b.dataset.dir) {
+        const d = b.dataset.dir;
+        st.open.has(d) ? st.open.delete(d) : st.open.add(d);
+        renderTree(container, ws, st);
+        return;
+      }
+      const p = b.dataset.file;
+      clearTimeout(clickTimer);
+      if (e.detail >= 2) { st.onOpen(p, true); return; }
+      clickTimer = setTimeout(() => st.onOpen(p, false), st.dblDelay || 0);
+    });
+    ws.on(() => renderTree(container, ws, st));
+    renderTree(container, ws, st);
+  }
+  function changesHTML(ws) {
+    const rows = PATHS.filter((p) => ws.head[p] !== ws.disk[p]).map((p) => {
+      const s = stats(ws.head[p], ws.disk[p]);
+      return '<button type="button" class="ch-row" data-file="' + p + '">' + icon(fileIcon(p)) + "<span>" + esc(baseName(p)) + '</span><span class="dir">' + esc(dirName(p)) + '</span><span class="n add">+' + s.add + "</span></button>";
+    });
+    return rows.join("");
+  }
+  const changedCount = (ws) => PATHS.filter((p) => ws.head[p] !== ws.disk[p]).length;
+
+  function saveStateHTML(pane) {
+    if (!pane || pane.o.readOnly) return "";
+    if (pane.conflict) return '<span class="save-state"><span class="dot" style="background:var(--error)"></span>Changed on disk</span>';
+    if (pane.dirty) return '<span class="save-state"><span class="dot"></span>Unsaved<button type="button" class="save-btn" data-save>Save<kbd>' + MOD + "S</kbd></button></span>";
+    return "";
+  }
+
+  // ═════════════════════════════════════════════════════════════════════
+  // A — Edit where you read
+  // ═════════════════════════════════════════════════════════════════════
+  function buildA(frame) {
+    const ws = makeWs();
+    const api = { ws, variant: "proposed" };
+    shell(frame, ws,
+      '<div class="c-head"><div class="c-tabs">' +
+      '<button type="button" class="c-tab">' + icon("compare") + '<span class="lbl">Changes</span><span class="count" data-count></span></button>' +
+      '<button type="button" class="c-tab on">' + icon("tree") + '<span class="lbl">Files</span></button>' +
+      '</div><span class="ib">' + icon("plus") + '</span><span class="grow"></span><span class="ib">' + icon("max") + '</span><span class="ib">' + icon("panel") + "</span></div>" +
+      '<div class="c-body"><div class="split"><div class="ft"><div class="ft-search">' + icon("search", "i-sm") + 'Search files...</div><div class="ft-rows"></div></div>' +
+      '<div class="split-gutter"></div>' +
+      '<div class="viewer"><div class="v-head"><div class="v-file"><span class="v-label">File:</span><span class="v-path"></span></div><span data-state></span>' +
+      '<div class="toggle"><button type="button" data-v="file" class="on" aria-label="Show file">' + icon("file-text") + '</button><button type="button" data-v="diff" aria-label="Show diff">' + icon("compare") + "</button></div>" +
+      '<button type="button" class="ib" aria-label="Close file">' + icon("x", "i-sm") + "</button></div>" +
+      '<div class="v-body"></div></div></div></div>');
+
+    const st = { open: new Set(["src", "src/middleware", "tests"]), selected: AUTH };
+    const body = frame.querySelector(".v-body");
+    const pathEl = frame.querySelector(".v-path");
+    const stateEl = frame.querySelector("[data-state]");
+    const toggle = frame.querySelector(".toggle");
+    const panes = new Map();
+    let today = null;
+    const countEl = frame.querySelector("[data-count]");
+
+    function refreshHead() {
+      const pane = panes.get(st.selected);
+      pathEl.textContent = st.selected;
+      stateEl.innerHTML = api.variant === "proposed" ? saveStateHTML(pane) : "";
+      const mode = api.variant === "proposed" && pane ? pane.mode : "edit";
+      toggle.querySelector('[data-v="file"]').classList.toggle("on", mode !== "diff");
+      toggle.querySelector('[data-v="diff"]').classList.toggle("on", mode === "diff");
+      toggle.querySelector('[data-v="diff"]').disabled = api.variant === "today" || ws.head[st.selected] === ws.disk[st.selected] && !(pane && pane.dirty);
+      countEl.textContent = changedCount(ws) || "";
+    }
+    function show(path) {
+      st.selected = path;
+      renderTree(frame.querySelector(".ft-rows"), ws, st);
+      body.innerHTML = "";
+      if (today) { today.destroy(); today = null; }
+      if (api.variant === "today") {
+        const box = el('<div class="today"><span class="today-lang">' + esc(path.split(".").pop()) + "</span></div>");
+        body.appendChild(box);
+        today = CM.createEditor(box, { doc: ws.disk[path], path, readOnly: true });
+      } else {
+        let pane = panes.get(path);
+        if (!pane) {
+          pane = new Pane(ws, path, { frame, onState: refreshHead });
+          panes.set(path, pane);
+        }
+        body.appendChild(pane.el);
+        pane.measure();
+      }
+      refreshHead();
+    }
+    wireTree(frame.querySelector(".ft-rows"), ws, Object.assign(st, { onOpen: (p) => show(p) }));
+    toggle.addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-v]");
+      const pane = panes.get(st.selected);
+      if (!b || b.disabled || !pane || api.variant === "today") return;
+      pane.setMode(b.dataset.v === "diff" ? "diff" : "edit");
+      refreshHead();
+    });
+    stateEl.addEventListener("click", (e) => { if (e.target.closest("[data-save]")) panes.get(st.selected).save(); });
+    frame.querySelector(".f-convo").addEventListener("click", (e) => {
+      const t = e.target.closest("[data-open]");
+      if (t) show(t.dataset.open);
+    });
+    ws.on(refreshHead);
+
+    api.setVariant = (v) => { api.variant = v; show(st.selected); };
+    api.agentEdit = () => {
+      const prev = ws.disk[AUTH];
+      appendTurn(frame, prev, AUTH_V2);
+      const pane = panes.get(AUTH);
+      if (api.variant === "proposed" && pane) pane.agentEdit(AUTH_V2);
+      else { ws.disk[AUTH] = AUTH_V2; ws.emit(); if (st.selected === AUTH) show(AUTH); }
+    };
+    api.destroy = () => { panes.forEach((p) => p.destroy()); if (today) today.destroy(); };
+    api.shown = () => panes.forEach((p) => p.measure());
+    show(AUTH);
+    return api;
+  }
+
+  // ═════════════════════════════════════════════════════════════════════
+  // B — Files open as tabs
+  // ═════════════════════════════════════════════════════════════════════
+  function renderMarkdown(src) {
+    const inline = (s) => esc(s)
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/[*][*]([^*]+)[*][*]/g, "<strong>$1</strong>")
+      .replace(/(https?:[/][/][^ )]*[^ ).])/g, '<a href="$1">$1</a>');
+    const out = [];
+    let para = [], list = [];
+    const flush = () => {
+      if (para.length) out.push("<p>" + inline(para.join(" ")) + "</p>");
+      if (list.length) out.push("<ul>" + list.map((li) => "<li>" + inline(li) + "</li>").join("") + "</ul>");
+      para = []; list = [];
+    };
+    for (const line of src.split(NL)) {
+      const h = /^(#{1,3}) (.*)$/.exec(line);
+      if (h) { flush(); out.push("<h" + h[1].length + ">" + inline(h[2]) + "</h" + h[1].length + ">"); }
+      else if (/^- /.test(line)) { if (para.length) flush(); list.push(line.slice(2)); }
+      else if (!line.trim()) flush();
+      else { if (list.length) flush(); para.push(line.trim()); }
+    }
+    flush();
+    return out.join("");
+  }
+  const isRenderable = (p) => /[.](md|html)$/.test(p);
+  function renderInto(box, path, src) {
+    if (/[.]md$/.test(path)) { box.className = "rendered md"; box.innerHTML = renderMarkdown(src); return; }
+    box.className = "rendered html";
+    box.innerHTML = "";
+    const frameEl = document.createElement("iframe");
+    frameEl.setAttribute("sandbox", "");
+    frameEl.setAttribute("title", "Rendered " + baseName(path));
+    frameEl.srcdoc = src;
+    box.appendChild(frameEl);
+  }
+
+  function buildB(frame) {
+    const ws = makeWs();
+    const api = { ws };
+    shell(frame, ws,
+      '<div class="c-head"><div class="c-tabs" role="tablist" aria-label="Canvases"></div><span class="ib" title="Open a canvas">' + icon("plus") + '</span><span class="grow"></span>' +
+      '<button type="button" class="ib" data-widen aria-pressed="false" aria-label="Widen canvas" title="Widen canvas">' + icon("max") + '</button><span class="ib">' + icon("panel") + "</span></div>" +
+      '<div class="c-body"></div>');
+    frame.appendChild(el('<div class="pal" hidden><div class="pal-box" role="dialog" aria-label="Go to file"><label class="pal-in">' + icon("search") + '<input id="pal-b-input" type="text" placeholder="Go to file" autocomplete="off"></label><div class="pal-list" role="listbox"></div><div class="pal-foot">↑↓ to move · Enter to open · Esc to close · paths come from the same list as @ mentions</div></div></div>'));
+
+    const tabsEl = frame.querySelector(".c-tabs");
+    const bodyEl = frame.querySelector(".c-body");
+    const canvas = frame.querySelector(".f-canvas");
+    const tabs = [{ id: "changes" }, { id: "files" }];
+    const panels = new Map();
+    const panes = new Map();
+    const pulsing = new Set();
+    let active = "changes";
+    let entering = null;
+    const st = { open: new Set(["src", "src/middleware", "tests"]), selected: null, dblDelay: 220 };
+
+    // Changes
+    const changesPanel = el('<div class="c-panel"><div class="ch-list"></div></div>');
+    const renderChanges = () => { changesPanel.querySelector(".ch-list").innerHTML = changesHTML(ws); };
+    changesPanel.addEventListener("click", (e) => { const r = e.target.closest("[data-file]"); if (r) openFile(r.dataset.file, { pin: true, view: "diff" }); });
+    renderChanges(); ws.on(renderChanges);
+    panels.set("changes", changesPanel); bodyEl.appendChild(changesPanel);
+    // Files
+    const filesPanel = el('<div class="c-panel"><div class="ft" style="flex:1"><div class="ft-search">' + icon("search", "i-sm") + 'Search files...</div><div class="ft-rows"></div></div></div>');
+    panels.set("files", filesPanel); bodyEl.appendChild(filesPanel);
+    wireTree(filesPanel.querySelector(".ft-rows"), ws, Object.assign(st, { onOpen: (p, pin) => openFile(p, { pin }) }));
+
+    const tabId = (p) => "file:" + p;
+    const fileTab = (p) => tabs.find((t) => t.path === p);
+    const crumbsHTML = (path) => { const parts = path.split("/"); return parts.map((s, i) => (i === parts.length - 1 ? "<b>" + esc(s) + "</b>" : esc(s) + icon("chev-r"))).join(""); };
+
+    function openFile(path, opts) {
+      opts = opts || {};
+      let t = fileTab(path);
+      if (!t) {
+        const prev = tabs.find((x) => x.preview);
+        if (!opts.pin && prev && !panes.get(prev.path).dirty) closeTab(prev.id, true);
+        t = { id: tabId(path), path, preview: !opts.pin, view: isRenderable(path) ? "rendered" : "edit" };
+        tabs.push(t);
+        entering = t.id;
+        const r = isRenderable(path);
+        const panel = el('<div class="c-panel"><div class="fp"><div class="fp-bar"><span class="crumbs">' + crumbsHTML(path) + '</span><span class="grow"></span><span data-state></span>' +
+          '<div class="toggle">' + (r ? '<button type="button" data-m="rendered">Rendered</button>' : "") + '<button type="button" data-m="edit">' + (r ? "Source" : "Edit") + '</button><button type="button" data-m="diff">Diff</button></div></div>' +
+          '<div class="fp-pane"><div class="rendered" hidden></div></div></div></div>');
+        panels.set(t.id, panel);
+        bodyEl.appendChild(panel);
+        const pane = new Pane(ws, path, { frame });
+        pane.o.onEdit = () => { if (t.preview) { t.preview = false; renderTabs(); } };
+        pane.o.onState = () => {
+          renderTabs(); refreshBar(t);
+          if (t.view === "rendered") renderInto(panel.querySelector(".rendered"), path, pane.text);
+        };
+        panes.set(path, pane);
+        panel.querySelector(".fp-pane").appendChild(pane.el);
+        panel.querySelector(".toggle").addEventListener("click", (e) => {
+          const b = e.target.closest("button[data-m]");
+          if (b && !b.disabled) setView(t, b.dataset.m);
+        });
+        panel.querySelector("[data-state]").addEventListener("click", (e) => { if (e.target.closest("[data-save]")) pane.save(); });
+      } else if (opts.pin) {
+        t.preview = false;
+      }
+      if (opts.view) t.view = opts.view;
+      st.selected = path;
+      renderTree(filesPanel.querySelector(".ft-rows"), ws, st);
+      activate(t.id);
+      setView(t, t.view);
+      return t;
+    }
+    function setView(t, v) {
+      const pane = panes.get(t.path), panel = panels.get(t.id);
+      const box = panel.querySelector(".rendered");
+      t.view = v;
+      if (v === "rendered") {
+        if (pane.mode === "diff") pane.setMode("edit");
+        pane.el.hidden = true; box.hidden = false;
+        renderInto(box, t.path, pane.text);
+      } else {
+        box.hidden = true; pane.el.hidden = false;
+        pane.setMode(v === "diff" ? "diff" : "edit");
+        pane.measure();
+      }
+      refreshBar(t);
+    }
+    function refreshBar(t) {
+      const pane = panes.get(t.path), panel = panels.get(t.id);
+      if (!pane || !panel) return;
+      panel.querySelector("[data-state]").innerHTML = saveStateHTML(pane);
+      panel.querySelectorAll("[data-m]").forEach((b) => b.classList.toggle("on", b.dataset.m === t.view));
+      panel.querySelector('[data-m="diff"]').disabled = !pane.hasChanges && t.view !== "diff";
+    }
+    function closeTab(id, silent) {
+      const i = tabs.findIndex((t) => t.id === id);
+      if (i < 0 || id === "changes" || id === "files") return;
+      const t = tabs[i];
+      tabs.splice(i, 1);
+      panes.get(t.path).destroy(); panes.delete(t.path);
+      panels.get(id).remove(); panels.delete(id);
+      if (active === id) active = (tabs[i] || tabs[i - 1]).id;
+      if (!silent) activate(active);
+    }
+    function activate(id) {
+      active = id;
+      panels.forEach((p, key) => (p.hidden = key !== id));
+      const t = tabs.find((x) => x.id === id);
+      if (t && t.path && t.view !== "rendered") panes.get(t.path).measure();
+      renderTabs();
+    }
+    function pulse(id) {
+      pulsing.delete(id); renderTabs();
+      requestAnimationFrame(() => { pulsing.add(id); renderTabs(); setTimeout(() => { pulsing.delete(id); renderTabs(); }, 1300); });
+    }
+    function renderTabs() {
+      tabsEl.innerHTML = tabs.map((t) => {
+        const on = t.id === active ? " on" : "";
+        const fx = (pulsing.has(t.id) ? " pulse" : "") + (t.id === entering ? " enter" : "");
+        if (t.id === "changes") return '<button type="button" role="tab" class="c-tab' + on + '" data-tab="changes" aria-selected="' + !!on + '">' + icon("compare") + '<span class="lbl">Changes</span><span class="count">' + (changedCount(ws) || "") + "</span></button>";
+        if (t.id === "files") return '<button type="button" role="tab" class="c-tab' + on + '" data-tab="files" aria-selected="' + !!on + '">' + icon("tree") + '<span class="lbl">Files</span></button>';
+        const pane = panes.get(t.path);
+        const dirty = pane && (pane.dirty || pane.conflict);
+        return '<button type="button" role="tab" class="c-tab' + on + fx + (t.preview ? " preview" : "") + '" data-tab="' + t.id + '" title="' + esc(t.path) + (t.preview ? " (preview)" : "") + '" aria-selected="' + !!on + '">' +
+          icon(fileIcon(t.path)) + '<span class="lbl">' + esc(baseName(t.path)) + "</span>" +
+          '<span class="x' + (dirty ? "" : " clean") + '" data-close="' + t.id + '" role="button" aria-label="Close ' + esc(baseName(t.path)) + '">' + (dirty ? '<span class="dot"></span>' : "") + icon("x", "ix") + "</span></button>";
+      }).join("");
+      entering = null;
+      // Keep the active tab in view, as CanvasHost does.
+      const onTab = tabsEl.querySelector(".c-tab.on");
+      if (onTab) {
+        const l = onTab.offsetLeft, r = l + onTab.offsetWidth;
+        if (l < tabsEl.scrollLeft) tabsEl.scrollLeft = l - 8;
+        else if (r > tabsEl.scrollLeft + tabsEl.clientWidth) tabsEl.scrollLeft = r - tabsEl.clientWidth + 8;
+      }
+    }
+    tabsEl.addEventListener("click", (e) => {
+      const x = e.target.closest("[data-close]");
+      if (x) { e.stopPropagation(); closeTab(x.dataset.close); return; }
+      const b = e.target.closest("[data-tab]");
+      if (b) activate(b.dataset.tab);
+    });
+    tabsEl.addEventListener("dblclick", (e) => {
+      const b = e.target.closest("[data-tab]");
+      const t = b && tabs.find((x) => x.id === b.dataset.tab);
+      if (t && t.preview) { t.preview = false; renderTabs(); }
+    });
+
+    frame.querySelector("[data-widen]").addEventListener("click", (e) => {
+      const on = canvas.classList.toggle("wide");
+      const b = e.currentTarget;
+      b.setAttribute("aria-pressed", on);
+      b.setAttribute("aria-label", on ? "Narrow canvas" : "Widen canvas");
+      b.title = on ? "Narrow canvas" : "Widen canvas";
+      b.innerHTML = icon(on ? "min" : "max");
+    });
+    frame.querySelector(".f-convo").addEventListener("click", (e) => {
+      const t = e.target.closest("[data-open]");
+      if (t) openFile(t.dataset.open, { pin: true });
+    });
+    ws.on(renderTabs);
+
+    // Go to file
+    const pal = frame.querySelector(".pal");
+    const palIn = pal.querySelector("input");
+    const palList = pal.querySelector(".pal-list");
+    let palItems = [], palIdx = 0;
+    function fuzzy(q, s) { let i = 0; for (const ch of s.toLowerCase()) if (ch === q[i]) i++; return i === q.length; }
+    function renderPal() {
+      const q = palIn.value.trim().toLowerCase();
+      palItems = PATHS.filter((p) => !q || fuzzy(q, p));
+      palIdx = Math.min(palIdx, Math.max(0, palItems.length - 1));
+      palList.innerHTML = palItems.map((p, i) => '<button type="button" role="option" class="pal-item' + (i === palIdx ? " on" : "") + '" data-p="' + p + '">' + icon(fileIcon(p)) + "<span>" + esc(baseName(p)) + '</span><span class="dir">' + esc(dirName(p)) + "</span></button>").join("") || '<div class="pal-item" style="color:var(--muted)">No files match</div>';
+    }
+    api.openPalette = () => { pal.hidden = false; palIn.value = ""; palIdx = 0; renderPal(); palIn.focus(); };
+    const closePal = () => { pal.hidden = true; };
+    palIn.addEventListener("input", () => { palIdx = 0; renderPal(); });
+    palIn.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowDown") { palIdx = Math.min(palIdx + 1, palItems.length - 1); renderPal(); e.preventDefault(); }
+      else if (e.key === "ArrowUp") { palIdx = Math.max(palIdx - 1, 0); renderPal(); e.preventDefault(); }
+      else if (e.key === "Enter" && palItems[palIdx]) { const p = palItems[palIdx]; closePal(); openFile(p, { pin: true }); setTimeout(() => panes.get(p).focus(), 30); }
+      else if (e.key === "Escape") { closePal(); }
+    });
+    palList.addEventListener("click", (e) => { const b = e.target.closest("[data-p]"); if (b) { closePal(); openFile(b.dataset.p, { pin: true }); } });
+    pal.addEventListener("mousedown", (e) => { if (e.target === pal) closePal(); });
+    frame.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") { e.preventDefault(); api.openPalette(); }
+    });
+
+    api.agentEdit = () => {
+      const prev = ws.disk[AUTH];
+      appendTurn(frame, prev, AUTH_V2);
+      const pane = panes.get(AUTH);
+      if (pane) pane.agentEdit(AUTH_V2); else { ws.disk[AUTH] = AUTH_V2; ws.emit(); }
+      const t = fileTab(AUTH);
+      if (t) pulse(t.id);
+    };
+    api.destroy = () => panes.forEach((p) => p.destroy());
+    api.shown = () => panes.forEach((p) => p.measure());
+    openFile(AUTH, { pin: true });
+    openFile("docs/auth.md", { pin: false });
+    activate(tabId(AUTH));
+    return api;
+  }
+
+  // ═════════════════════════════════════════════════════════════════════
+  // C — Focus mode
+  // ═════════════════════════════════════════════════════════════════════
+  function buildC(frame) {
+    const ws = makeWs();
+    const api = { ws };
+    frame.innerHTML = railHTML() +
+      '<div class="f-sheet">' +
+      '<div class="fc-tree"><div class="fc-tree-head">' + icon("tree", "i-sm") + 'fleet-core-api<span class="grow"></span></div><div class="ft" style="flex:1;padding-top:0"><div class="ft-search">' + icon("search", "i-sm") + 'Search files...</div><div class="ft-rows"></div></div></div>' +
+      '<div class="fc-center"><div class="fc-tabs"><div class="c-tabs"></div><span class="grow"></span><button type="button" class="fc-exit" title="Put the conversation back in the middle">' + icon("min", "i-sm") + 'Exit focus <kbd>' + MOD + 'E</kbd></button></div>' +
+      '<div class="c-body"></div>' +
+      '<div class="drawer"><div class="drawer-head"><button type="button" class="c-tab on">' + icon("term") + '<span class="lbl">npm test</span></button><button type="button" class="c-tab">' + icon("term") + '<span class="lbl">zsh</span></button><span class="grow"></span><button type="button" class="ib" data-drawer aria-label="Hide terminal">' + icon("chev-d", "i-sm") + "</button></div>" +
+      '<div class="term"><span class="m">~/fleet-core-api</span> <span class="a">feat/auth-bearer</span> $ npm test\n\n <span class="g">✓</span> tests/auth.test.ts <span class="m">(3)</span>\n <span class="g">✓</span> tests/users.test.ts <span class="m">(11)</span>\n\n <span class="m">Test Files</span>  <span class="g">2 passed</span> (2)\n      <span class="m">Tests</span>  <span class="g">14 passed</span> (14)\n   <span class="m">Duration</span>  812ms\n\n<span class="m">~/fleet-core-api</span> <span class="a">feat/auth-bearer</span> $ <span class="cur"></span></div></div>' +
+      "</div>" +
+      '<div class="fc-chat"><header class="f-head"><div class="f-title">Fix bearer token parsing <span class="f-chip">Idle</span></div><span class="grow"></span><span class="ib">' + icon("panel") + "</span></header>" +
+      '<div class="f-convo">' + convoHTML(ws) + "</div>" + composerHTML() + "</div>" +
+      "</div>" + statusHTML();
+
+    const tabsEl = frame.querySelector(".c-tabs");
+    const bodyEl = frame.querySelector(".c-body");
+    const tabs = [];
+    const panes = new Map();
+    let active = null;
+    const st = { open: new Set(["src", "src/middleware", "src/lib", "tests"]), selected: AUTH };
+
+    function open(path) {
+      if (!panes.has(path)) {
+        const pane = new Pane(ws, path, { frame, onState: renderTabs });
+        panes.set(path, pane);
+        tabs.push(path);
+        bodyEl.appendChild(pane.el);
+      }
+      active = path; st.selected = path;
+      panes.forEach((p, k) => (p.el.hidden = k !== path));
+      panes.get(path).measure();
+      renderTree(frame.querySelector(".ft-rows"), ws, st);
+      renderTabs();
+    }
+    function renderTabs() {
+      tabsEl.innerHTML = tabs.map((p) => {
+        const pane = panes.get(p);
+        const dirty = pane.dirty || pane.conflict;
+        return '<button type="button" class="c-tab' + (p === active ? " on" : "") + (p === api.pulse ? " pulse" : "") + '" data-tab="' + p + '" title="' + esc(p) + '">' + icon(fileIcon(p)) + '<span class="lbl">' + esc(baseName(p)) + '</span><span class="x' + (dirty ? "" : " clean") + '">' + (dirty ? '<span class="dot"></span>' : "") + icon("x", "ix") + "</span></button>";
+      }).join("");
+    }
+    tabsEl.addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) open(b.dataset.tab); });
+    wireTree(frame.querySelector(".ft-rows"), ws, Object.assign(st, { onOpen: (p) => open(p) }));
+    frame.querySelector(".f-convo").addEventListener("click", (e) => { const t = e.target.closest("[data-open]"); if (t) open(t.dataset.open); });
+    frame.querySelector(".fc-exit").addEventListener("click", () => toast(frame, "Back to the conversation in the middle (option B's layout)"));
+    const drawer = frame.querySelector(".drawer");
+    api.toggleDrawer = () => {
+      const closed = drawer.classList.toggle("closed");
+      const b = frame.querySelector("[data-drawer]");
+      b.innerHTML = icon(closed ? "chev-r" : "chev-d", "i-sm");
+      b.setAttribute("aria-label", closed ? "Show terminal" : "Hide terminal");
+    };
+    frame.querySelector("[data-drawer]").addEventListener("click", api.toggleDrawer);
+    frame.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "j") { e.preventDefault(); api.toggleDrawer(); }
+    });
+    api.agentEdit = () => {
+      const prev = ws.disk[AUTH];
+      appendTurn(frame, prev, AUTH_V2);
+      const pane = panes.get(AUTH);
+      if (pane) pane.agentEdit(AUTH_V2); else { ws.disk[AUTH] = AUTH_V2; ws.emit(); }
+      api.pulse = AUTH; renderTabs();
+      setTimeout(() => { api.pulse = null; renderTabs(); }, 1300);
+    };
+    api.destroy = () => panes.forEach((p) => p.destroy());
+    api.shown = () => panes.forEach((p) => p.measure());
+    open("tests/auth.test.ts");
+    open(AUTH);
+    return api;
+  }
+
+  // ═════════════════════════════════════════════════════════════════════
+  // D — Peek from the chat
+  // ═════════════════════════════════════════════════════════════════════
+  function buildD(frame) {
+    const ws = makeWs();
+    const api = { ws };
+    shell(frame, ws,
+      '<div class="c-head"><div class="c-tabs"><button type="button" class="c-tab on">' + icon("compare") + '<span class="lbl">Changes</span><span class="count" data-count></span></button>' +
+      '<button type="button" class="c-tab">' + icon("tree") + '<span class="lbl">Files</span></button></div><span class="ib">' + icon("plus") + '</span><span class="grow"></span><span class="ib">' + icon("max") + '</span><span class="ib">' + icon("panel") + "</span></div>" +
+      '<div class="c-body"><div class="ch-list"></div></div>');
+    const convo = frame.querySelector(".f-convo");
+    const list = frame.querySelector(".ch-list");
+    const countEl = frame.querySelector("[data-count]");
+    const renderChanges = () => { list.innerHTML = changesHTML(ws); countEl.textContent = changedCount(ws) || ""; };
+    renderChanges(); ws.on(renderChanges);
+    frame.querySelector(".m-agent").classList.add("wide");
+
+    let peek = null;
+    function openPeek(path, anchor) {
+      if (peek && peek.path === path) { peek.pane.focus(); return; }
+      closePeek();
+      anchor = anchor || convo.querySelector('.tool[data-open="' + path + '"]');
+      const s = stats(ws.head[path], ws.disk[path]);
+      const box = el('<div class="peek"><div class="peek-head">' + icon(fileIcon(path), "i-sm") + '<span class="p">' + esc(path) + "</span>" + statHTML(s) + '<span class="grow"></span><span data-state></span>' +
+        '<div class="toggle"><button type="button" data-m="diff" class="on">Diff</button><button type="button" data-m="edit">Edit</button></div>' +
+        '<button type="button" class="save-btn" data-tab>Open as tab</button><button type="button" class="ib" data-close aria-label="Close">' + icon("x", "i-sm") + "</button></div></div>");
+      const pane = new Pane(ws, path, {
+        frame, mode: "diff",
+        // Called from the constructor too, before `pane` is assigned, so use the argument.
+        onState: (p) => {
+          box.querySelector("[data-state]").innerHTML = saveStateHTML(p);
+          box.querySelector('[data-m="diff"]').classList.toggle("on", p.mode === "diff");
+          box.querySelector('[data-m="edit"]').classList.toggle("on", p.mode === "edit");
+        },
+      });
+      box.appendChild(pane.el);
+      box.addEventListener("click", (e) => {
+        const m = e.target.closest("button[data-m]");
+        if (m) { pane.setMode(m.dataset.m); pane.emit(); }
+        if (e.target.closest("[data-close]")) closePeek();
+        if (e.target.closest("[data-save]")) pane.save();
+        if (e.target.closest("[data-tab]")) toast(frame, "Opens " + baseName(path) + " as a canvas tab, as in option B");
+      });
+      anchor.insertAdjacentElement("afterend", box);
+      peek = { path, pane, box };
+      pane.measure();
+      box.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+    function closePeek() { if (!peek) return; peek.pane.destroy(); peek.box.remove(); peek = null; }
+    convo.addEventListener("click", (e) => {
+      if (e.target.closest(".peek")) return;
+      const t = e.target.closest("[data-open]");
+      if (t) openPeek(t.dataset.open, t);
+    });
+    list.addEventListener("click", (e) => { const r = e.target.closest("[data-file]"); if (r) openPeek(r.dataset.file); });
+
+    api.agentEdit = () => {
+      const prev = ws.disk[AUTH];
+      if (peek && peek.path === AUTH) peek.pane.agentEdit(AUTH_V2);
+      else { ws.disk[AUTH] = AUTH_V2; ws.emit(); }
+      appendTurn(frame, prev, AUTH_V2);
+    };
+    api.destroy = closePeek;
+    api.shown = () => { if (peek) peek.pane.measure(); };
+    openPeek(AUTH);
+    return api;
+  }
+
+  // ── Page wiring ───────────────────────────────────────────────────────
+  const BUILDERS = { a: buildA, b: buildB, c: buildC, d: buildD };
+  const built = {};
+  let current = "b";
+  let fleetTheme = (() => {
+    const t = document.documentElement.getAttribute("data-theme");
+    if (t === "light" || t === "dark") return t;
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  })();
+
+  const agentBtn = document.getElementById("agent-edit");
+  const edited = {};
+  function syncControls() {
+    document.getElementById("seg-today").hidden = current !== "a";
+    document.getElementById("goto").hidden = current !== "b";
+    document.getElementById("drawer-btn").hidden = current !== "c";
+    agentBtn.disabled = !!edited[current];
+    agentBtn.querySelector("span").textContent = edited[current] ? "Agent edited auth.ts" : "Agent edits auth.ts";
+    const v = built.a ? built.a.variant : "proposed";
+    document.getElementById("today-btn").setAttribute("aria-pressed", v === "today");
+    document.getElementById("proposed-btn").setAttribute("aria-pressed", v === "proposed");
+    document.getElementById("fleet-dark").setAttribute("aria-pressed", fleetTheme === "dark");
+    document.getElementById("fleet-light").setAttribute("aria-pressed", fleetTheme === "light");
+  }
+  function select(opt) {
+    current = opt;
+    document.querySelectorAll(".opt").forEach((b) => b.setAttribute("aria-selected", b.dataset.opt === opt));
+    document.querySelectorAll("[data-notes]").forEach((n) => (n.hidden = n.dataset.notes !== opt));
+    document.getElementById("stage").setAttribute("aria-labelledby", "tab-" + opt);
+    for (const k of Object.keys(BUILDERS)) document.getElementById("fleet-" + k).hidden = k !== opt;
+    const frame = document.getElementById("fleet-" + opt);
+    if (!built[opt]) built[opt] = BUILDERS[opt](frame);
+    else if (built[opt].shown) built[opt].shown();
+    syncControls();
+  }
+  document.querySelectorAll(".opt").forEach((b) => b.addEventListener("click", () => select(b.dataset.opt)));
+  document.querySelector(".opts").addEventListener("keydown", (e) => {
+    const keys = ["a", "b", "c", "d"];
+    let i = keys.indexOf(current);
+    if (e.key === "ArrowRight") i = (i + 1) % 4; else if (e.key === "ArrowLeft") i = (i + 3) % 4; else return;
+    e.preventDefault(); select(keys[i]); document.getElementById("tab-" + keys[i]).focus();
+  });
+  agentBtn.addEventListener("click", () => {
+    built[current].agentEdit();
+    edited[current] = true;
+    syncControls();
+  });
+  document.getElementById("reset").addEventListener("click", () => {
+    const variant = current === "a" && built.a ? built.a.variant : null;
+    built[current].destroy();
+    built[current] = BUILDERS[current](document.getElementById("fleet-" + current));
+    if (variant && variant !== "proposed") built.a.setVariant(variant);
+    edited[current] = false;
+    syncControls();
+  });
+  document.getElementById("seg-today").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-v]");
+    if (b && built.a) { built.a.setVariant(b.dataset.v); syncControls(); }
+  });
+  document.getElementById("goto").addEventListener("click", () => built.b && built.b.openPalette());
+  document.getElementById("drawer-btn").addEventListener("click", () => built.c && built.c.toggleDrawer());
+  function applyTheme() {
+    document.querySelectorAll(".fleet").forEach((f) => f.setAttribute("data-fleet", fleetTheme));
+    syncControls();
+  }
+  document.querySelectorAll("[data-t]").forEach((b) => b.addEventListener("click", () => { fleetTheme = b.dataset.t; applyTheme(); }));
+  // Keep the browser's own Save / Print dialogs out of the way inside a frame.
+  document.getElementById("stage").addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") e.preventDefault();
+  });
+  applyTheme();
+  select("b");
+})();
+</script>

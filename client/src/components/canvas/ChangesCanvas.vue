@@ -1,18 +1,14 @@
 <script setup lang="ts">
 import { computed, inject } from "vue";
 import { FileText } from "lucide-vue-next";
-import CanvasSplit from "@/components/canvas/CanvasSplit.vue";
-import CanvasFileViewer from "@/components/canvas/CanvasFileViewer.vue";
-import { provideContentPanelContext } from "@/composables/use-content-panel";
-import { readFilePayload } from "@/composables/use-file-browser";
 import type { UseDiffsResult } from "@/composables/use-diffs";
+import { fileCanvasId, useCanvasesStore } from "@/stores/canvases";
 
 const props = defineProps<{
   sessionId: string;
 }>();
 
-const sessionIdRef = computed<string | null>(() => props.sessionId || null);
-const contentPanel = provideContentPanelContext(sessionIdRef);
+const canvases = useCanvasesStore();
 const sharedDiffs = inject<UseDiffsResult>("sharedDiffs");
 
 const changedFiles = computed(() =>
@@ -31,77 +27,57 @@ const changedFiles = computed(() =>
     }),
 );
 
-const selectedFilePath = computed(() => contentPanel.filesContext.value.selectedFilePath);
+// A changed file opens in its own tab, in Diff; a file has one place.
+function openChange(path: string): void {
+  canvases.openFile(props.sessionId, path, { keep: true, view: "diff" });
+}
 
-async function openChange(path: string): Promise<void> {
-  contentPanel.selectFile(path);
-  contentPanel.setViewMode("diff");
-
-  if (!props.sessionId) return;
-
-  try {
-    contentPanel.showFile(await readFilePayload(props.sessionId, path));
-  } catch {
-    // Deleted files can't be read; the diff still shows what changed.
-    contentPanel.showFile({
-      $type: "markdown",
-      content: `This file can't be read from the session. Switch to the diff to see what changed.`,
-      sourceFilePath: path,
-      sourceText: "",
-      viewMode: "rendered",
-    });
-  }
+function isOpen(path: string): boolean {
+  return canvases.sessionCanvases(props.sessionId).canvases.some((canvas) => canvas.id === fileCanvasId(path));
 }
 </script>
 
 <template>
   <div class="changes-canvas">
-    <CanvasSplit :show-viewer="selectedFilePath !== null">
-      <template #list>
-        <p
-          v-if="changedFiles.length === 0"
-          class="changes-canvas__empty"
-        >
-          No changes in this session yet.
-        </p>
-        <div
-          v-else
-          class="changes-canvas__list"
-        >
-          <button
-            v-for="change in changedFiles"
-            :key="change.file"
-            type="button"
-            class="changes-canvas__change"
-            :class="{ 'changes-canvas__change--selected': selectedFilePath === change.file }"
-            :title="change.file"
-            :data-status="change.status"
-            @click="openChange(change.file)"
-          >
-            <FileText
-              :size="14"
-              class="changes-canvas__change-icon"
-              aria-hidden="true"
-            />
-            <span class="changes-canvas__change-name">{{ change.name }}</span>
-            <span class="changes-canvas__change-dir">{{ change.dir }}</span>
-            <span class="changes-canvas__change-stats">
-              <span
-                v-if="change.additions > 0"
-                class="changes-canvas__change-adds"
-              >+{{ change.additions }}</span>
-              <span
-                v-if="change.deletions > 0"
-                class="changes-canvas__change-dels"
-              >−{{ change.deletions }}</span>
-            </span>
-          </button>
-        </div>
-      </template>
-      <template #viewer>
-        <CanvasFileViewer />
-      </template>
-    </CanvasSplit>
+    <p
+      v-if="changedFiles.length === 0"
+      class="changes-canvas__empty"
+    >
+      No changes in this session yet.
+    </p>
+    <div
+      v-else
+      class="changes-canvas__list"
+    >
+      <button
+        v-for="change in changedFiles"
+        :key="change.file"
+        type="button"
+        class="changes-canvas__change"
+        :class="{ 'changes-canvas__change--open': isOpen(change.file) }"
+        :title="change.file"
+        :data-status="change.status"
+        @click="openChange(change.file)"
+      >
+        <FileText
+          :size="14"
+          class="changes-canvas__change-icon"
+          aria-hidden="true"
+        />
+        <span class="changes-canvas__change-name">{{ change.name }}</span>
+        <span class="changes-canvas__change-dir">{{ change.dir }}</span>
+        <span class="changes-canvas__change-stats">
+          <span
+            v-if="change.additions > 0"
+            class="changes-canvas__change-adds"
+          >+{{ change.additions }}</span>
+          <span
+            v-if="change.deletions > 0"
+            class="changes-canvas__change-dels"
+          >−{{ change.deletions }}</span>
+        </span>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -111,6 +87,7 @@ async function openChange(path: string): Promise<void> {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
 }
 
 .changes-canvas__list {
@@ -147,9 +124,10 @@ async function openChange(path: string): Promise<void> {
   color: var(--text);
 }
 
-.changes-canvas__change--selected {
-  background: color-mix(in srgb, var(--text) 9%, transparent);
+/* Files already open in a tab read a little stronger. */
+.changes-canvas__change--open .changes-canvas__change-name {
   color: var(--text);
+  font-weight: 500;
 }
 
 .changes-canvas__change[data-status="deleted"] .changes-canvas__change-name {

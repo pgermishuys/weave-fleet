@@ -304,7 +304,8 @@ internal sealed class DomainEventTranslator
         var path = GetStringProperty(payload, "path", "filePath", "file");
         if (path is not null)
         {
-            var changeType = GetStringProperty(payload, "changeType", "type") ?? "updated";
+            // OpenCode sends { file, event: "add" | "change" | "unlink" }.
+            var changeType = GetStringProperty(payload, "changeType", "type", "event") ?? "updated";
             files.Add(new FileChangeEntry { Path = path, ChangeType = changeType });
         }
 

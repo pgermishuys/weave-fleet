@@ -1625,27 +1625,17 @@ public sealed partial class SessionOrchestrator(
         try
         {
             var fileInfo = new FileInfo(targetFilePath);
-            const int maxFileContentBytes = 512 * 1024;
-            if (fileInfo.Length > maxFileContentBytes)
+            if (fileInfo.Length > MaxEditableFileBytes)
             {
                 return new ReadFileResult(path, Content: null, IsBinary: false, IsTruncated: true);
             }
 
             var bytes = await File.ReadAllBytesAsync(targetFilePath, ct).ConfigureAwait(false);
-            if (bytes.Contains((byte)0))
-            {
-                return new ReadFileResult(path, Content: null, IsBinary: true, IsTruncated: false);
-            }
-
-            try
-            {
-                var content = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetString(bytes);
-                return new ReadFileResult(path, content, IsBinary: false, IsTruncated: false);
-            }
-            catch (System.Text.DecoderFallbackException)
-            {
-                return new ReadFileResult(path, Content: null, IsBinary: true, IsTruncated: false);
-            }
+            var hash = HashFileBytes(bytes);
+            var content = DecodeText(bytes);
+            return content is null
+                ? new ReadFileResult(path, Content: null, IsBinary: true, IsTruncated: false, hash)
+                : new ReadFileResult(path, content, IsBinary: false, IsTruncated: false, hash);
         }
         catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException or UnauthorizedAccessException)
         {
@@ -2092,4 +2082,5 @@ public sealed record BrowseDirectoryResult(IReadOnlyList<BrowseEntry> Entries, s
 public sealed record BrowseEntry(string Name, string RelativePath, bool IsDirectory);
 
 /// <summary>Result of reading a session file.</summary>
-public sealed record ReadFileResult(string Path, string? Content, bool IsBinary, bool IsTruncated);
+/// <param name="Hash">SHA-256 of the file's bytes as lowercase hex; null when the file was too large to read.</param>
+public sealed record ReadFileResult(string Path, string? Content, bool IsBinary, bool IsTruncated, string? Hash = null);

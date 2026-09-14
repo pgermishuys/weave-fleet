@@ -1,0 +1,403 @@
+# File editor: files open as tabs
+
+Click a file in Files or Changes, or press Ctrl P, and it opens in its own canvas tab as an
+editable file: CodeMirror 6 with Fleet's syntax colours and small autocomplete. Ctrl S saves.
+If the agent changes the file while you have it open, a file you haven't touched updates in
+place. A file you have changed is never overwritten: a bar offers Compare, Keep mine or Use the
+agent's. Markdown and HTML still open rendered, with the source one click away.
+
+Mockup (option B): https://claude.ai/code/artifact/30a718b9-2013-4d0b-ae43-05b760332088
+Source: `mockups/editor/fleet-editor.html` (the editor bundle is built from `mockups/editor/cm-entry.js`).
+
+## Decisions already made
+
+- **Option B, files open as tabs.** Not the in-place viewer (A), focus mode (C) or the chat peek (D).
+- **CodeMirror 6, not Monaco.** Measured 2026-09-14: 210 KB gzip with the merge view and 5
+  languages, against ~2.6 MB for Monaco and its workers. CodeMirror works on phones, and its
+  colours can come from Fleet's CSS variables, so every theme works without extra code.
+- **Markdown and HTML open rendered**, with `Rendered · Source · Diff` in the tab bar. Rendered
+  shows the unsaved buffer. Markdown keeps today's annotations; HTML keeps `HtmlRenderer`'s
+  sandboxed iframe.
+- **The agent never opens tabs.** There is no agent tool in this work. Clickable `file:line`
+  paths in replies may come later as separate work.
+- **Nothing about your edits goes to the agent.** It reads files from disk. The server's hash
+  check stops a save from overwriting the agent's work.
+- **Autocomplete is tiers 1 and 2 only:** words, keywords and snippets from the file, plus import
+  paths from the repo's file list. No language server, no AI completion.
+
+## Behaviour
+
+- **Opening.** One click in Files opens a *preview* tab (italic label). The next single click
+  replaces it, unless it has unsaved changes. Typing in it, double-clicking the tab or
+  double-clicking the file in the tree keeps it. Opening from Changes, Ctrl P or a tool row in
+  the conversation keeps the tab too. An already open file is focused, not opened twice.
+- **Views.** Code files: `Edit · Diff`. Markdown/HTML: `Rendered · Source · Diff`. Files open in
+  Rendered or Edit; from Changes they open in Diff. Diff is the git base against the buffer,
+  editable, with a revert button per hunk (`@codemirror/merge` unified view). Diff is disabled
+  when the file has no changes.
+- **Unsaved changes.** The tab shows a dot instead of the close ×. Closing a tab with unsaved
+  changes asks first. A `beforeunload` prompt appears while any buffer is unsaved.
+- **Saving.** Ctrl S (Cmd S on macOS) while the editor has focus, or the Save button in the bar
+  (phones). The request carries the hash of the file as last read. On success the dot goes and a
+  toast says "Saved src/…".
+- **The agent changes an open file.** Triggers: `files.changed` for that path, the tab becoming
+  active, and the window regaining focus. When any of these happens, Fleet reads the file again,
+  and if the hash differs:
+  - **no unsaved changes:** apply the change as a minimal edit (the cursor and scroll mostly stay
+    put), flash the changed lines and pulse the tab.
+  - **unsaved changes:** show the bar. *Compare* opens the merge view (the agent's version against
+    yours; reject hunks to take the agent's lines, then Done and save). *Keep mine* saves your
+    buffer over the current file. *Use the agent's* replaces your buffer.
+- **A save that loses the race** (the file changed after the last read) gets a 409 from the
+  server and shows the same bar.
+- **Agent-changed lines.** A thin accent stripe in the gutter marks lines that differ from the
+  git base. This is the same data the Changes canvas shows.
+- **Add to message.** Select lines and a chip offers "Add lines 14–18 to message". It appends
+  `@src/middleware/auth.ts:14-18 ` to the session's draft (drawn as a reference pill by
+  `composer-references.ts`) and focuses the composer. Nothing is sent until you send.
+- **Go to file.** Ctrl P anywhere in a session (and a command palette entry) opens a fuzzy file
+  picker fed by `GET /api/sessions/{id}/find/files`. Enter opens the file as a kept tab.
+- **Files you can't edit.** Over 512 KB, binary, or not valid UTF-8: the tab opens read-only and
+  says why ("Too large to edit here (over 512 KB)"). The read endpoint already flags all three.
+- **Phone.** The tab strip and editor fill the sheet. Save is the button, since there's no Ctrl S.
+
+## Changes
+
+### Task 0: Spike (half a day)
+- [x] Add CodeMirror to the client as a lazy chunk. Check its real size in Fleet's Vite build
+      and that the initial bundle doesn't grow.
+- [x] Round-trip a CRLF file, a file with a BOM, and a file without a trailing newline through
+      an EditorState and back, byte for byte. CodeMirror joins lines with `\n` by default; set
+      `EditorState.lineSeparator` from the file.
+- [x] In a scratch Fleet (scratch HOME) with a real OpenCode session, confirm that an agent edit
+      emits `files.changed` with the edited path. Also check whether a `bash`/`sed` edit emits
+      it. If it doesn't, the focus and hash re-checks cover it; write down what we found.
+- [x] Try `@codemirror/language-data` (lazy loaders for ~100 languages, including C#, Go, Python
+      and Rust) against a fixed set of language packages. Pick whichever keeps the chunk small.
+
+**As built (2026-09-14).**
+- *Size.* A lazy `import()` puts CodeMirror in its own chunks. The initial bundle stays the same
+  (+55 bytes for the import stub). The editor with the mockup's fixed set (JS/TS, JSON, Markdown,
+  CSS, HTML, merge) is one 210 KB gzip chunk.
+- *Languages: `@codemirror/language-data` chosen.* The core (state, view, commands, search,
+  autocomplete, merge, the language list) is 141 KB gzip, and each language loads when a file of
+  that type opens: TS/JS +42 KB, C# +8 KB, Python +28 KB, Go +21 KB, Rust +34 KB, JSON +10 KB,
+  Markdown +81 KB (it pulls in HTML, CSS and JS for embedded code). So a TS file costs 183 KB
+  against 210 KB, and C#, Python, Go, Rust, YAML and SQL get highlighting. The build output
+  grows by 1.8 MB on disk (115 small language chunks, fetched only when used). Import-path
+  completion attaches to the JS/TS language once it has loaded, so `lang-javascript` stays out
+  of the core. Direct dependencies: state, view, language, language-data, commands, search,
+  autocomplete, merge, `@lezer/highlight`.
+- *Line endings and BOM:* `client/src/lib/code-editor/text-format.ts`, with 19 tests (LF, CRLF,
+  CR, mixed, stray CR, BOM, no trailing newline, empty, non-ASCII). Everything round-trips byte
+  for byte. What it takes:
+  - `lineSeparator` is set to the file's most common break. Then a mixed file keeps its odd
+    breaks as characters and saves back unchanged.
+  - Save with `state.sliceDoc()`. `doc.toString()` always joins with `\n`, even with
+    `lineSeparator` set.
+  - Pasted and dropped text is converted to the file's break with
+    `EditorView.clipboardInputFilter`. Otherwise an LF paste lands inside one line of a CRLF file.
+  - The server's `UTF8Encoding.GetString` keeps a BOM as U+FEFF. The client strips it on read
+    and puts it back on save, so the server writes the string as UTF-8 without adding anything.
+  - If the agent's version changes the break style or the BOM, the buffer can't take it as a
+    minimal edit. It gets a new state instead.
+- *`files.changed`: today it never reaches the browser.* In a scratch Fleet with OpenCode 1.18.30
+  and a scripted model:
+  - The `edit` and `write` tools make OpenCode emit `file.watcher.updated` with
+    `{ file: <absolute path>, event: "add" | "change" | "unlink" }`. Fleet translates it to
+    `FilesChanged`, and then `InProcessEventPublisher` drops it: "Publish dropped for unclassified
+    event type file.watcher.updated". `EventTypeMetadata.Classify` has no entry for it. So the
+    `files.changed` handlers in `use-diffs` and `use-file-browser` never run today, and Changes
+    only refreshes on `turn.ended`.
+  - A `bash` `sed -i` edit emits no file event, and neither does an edit made outside the agent.
+    OpenCode has no filesystem watcher running here; the event comes from its own edit and write
+    tools. The `patch` parts at the end of each step do list the files `sed` touched, but that
+    is OpenCode-specific.
+- *Plan changes this leads to (small; the decisions stand):*
+  - **Task 1** also classifies `file.watcher.updated` as an ephemeral relay event, so
+    `files.changed` reaches clients. It maps OpenCode's `event` field to `changeType` too.
+    Paths arrive absolute; the client matches them against the session directory.
+  - **Task 5** also re-checks open files on `turn.ended`. That catches shell edits at the end of
+    each turn without anything harness-specific. Focus, tab activation and the save-time hash
+    stay as the other safety nets.
+
+### Task 1: Server, hash on read and a save endpoint
+- [x] `ReadFileResult` and `ReadSessionFileResponse` gain `Hash` (SHA-256 hex of the file bytes).
+- [x] `SessionOrchestrator.WriteSessionFileAsync(sessionId, path, content, baseHash, ct)`:
+  - same validation as `ReadSessionFileAsync` (required path, session directory exists,
+    `IsSameOrChildPath`), plus:
+    - resolve symlinks and refuse targets outside the session directory
+    - refuse anything under `.git/`
+    - the file must already exist (no create in this work)
+    - content must stay under 512 KB once UTF-8 encoded
+    - refuse a file the read endpoint would call binary
+  - a per-file `SemaphoreSlim` around check-and-write
+  - if the current hash ≠ `baseHash`, return a conflict with the current content and hash
+  - write in place (open the existing file, truncate, write) so the inode and permissions
+    (such as `+x`) stay; UTF-8 without adding a BOM
+  - return the new hash
+- [x] `PUT /api/sessions/{id}/files/content` with body `{ path, content, baseHash }` →
+      `200 { hash }`, `409 { content, hash }`, `400`, `404`. Same auth and session lookup as the
+      read endpoint.
+- [x] After a save, publish `FilesChanged` for the session and path, so the Changes canvas and
+      other open windows refresh. Check how the orchestrator reaches the event broadcaster first.
+- [x] Structured log line per save (session, path, user), to follow the constitution's data rule.
+- [x] Classify `file.watcher.updated` as an ephemeral relay event so `files.changed` reaches
+      clients (Task 0 found it dropped), and map OpenCode's `event` field to `changeType`.
+- [x] Regenerate the client's OpenAPI types.
+- [x] Tests (Application): traversal, symlink out, `.git/`, too large, binary, missing file,
+      stale hash → conflict, CRLF and BOM bytes preserved, permissions kept on Unix.
+      Tests (API): 200 and 409 shapes.
+
+**As built.** `SessionOrchestrator.FileWrites.cs` holds the save: `WriteSessionFileAsync`,
+`HashFileBytes` (SHA-256, lowercase hex) and `ResolveRealPath`, which follows every symlink
+along the path, like realpath(3). A symlink that stays inside the session can be saved through.
+The read endpoint uses the same `DecodeText` rule, so "binary" means the same on read and save.
+The `FileMode.Truncate` write keeps the inode; a hard-link test proves it. The server writes the
+string as it's given, so a BOM survives because the client sends U+FEFF back. The per-file lock
+is keyed by the real path. A save broadcasts `files.changed` with the relative path. An agent
+edit broadcasts the absolute path, because OpenCode sends one; the client accepts both.
+`InProcessFanOutService` now sends Fleet's `{ sessionId, files }` payload for `FilesChanged`.
+Without that, the classification fix alone would have delivered OpenCode's raw `{ file, event }`
+under the `files.changed` type. The regenerated `schema.d.ts` also picks up canvases,
+terminals, apps and bridge routes that had never been generated. The client still calls those
+through its own hand-written modules. Tests: 23 in `SessionFileWriteTests`, 2 in the API tests,
+plus translator, fan-out and classification tests. Checked live in the scratch Fleet: an agent
+edit and a save each reach a SignalR client as `files.changed`, and a stale save gets 409 with
+the current content.
+
+### Task 2: Client editor core
+- [x] `client/src/lib/code-editor/`: the extension set (line numbers, history, folding, bracket
+      matching, close brackets, search, autocompletion), language by file name, and the theme.
+      The theme maps highlight tags to the existing `--syntax-*` tokens that `markdown.css` uses
+      for code blocks, and chrome to `--text`, `--muted`, `--border`, `--accent`. Check all nine
+      themes.
+- [x] Completion sources: `completeAnyWord`, the language's own (keywords, snippets, locals),
+      and import paths inside `from "…"` / `import("…")` from `find/files` (cached per session).
+- [x] Gutter stripe and line flash as small extensions (the mockup's `cm-entry.js` has both).
+- [x] `stores/file-buffers.ts`: per session and path, keep `{ state: EditorState (markRaw),
+      baseHash, diskText, conflict }`. Buffers live outside the components, because
+      `CanvasHost`'s `KeepAlive :max="8"` evicts the 9th tab and would lose unsaved text and
+      undo history. The `beforeunload` guard reads this store.
+- [x] Unit tests (vitest): line-ending round trip, dirty/clean/conflict transitions, minimal
+      change application.
+
+**As built.** All under `client/src/lib/code-editor/`:
+- `theme.ts`: syntax colours from `--syntax-*` (plus `--md-heading` for Markdown headings), and
+  chrome, selection, search, diff and the stripe from `--text`, `--muted`, `--accent`,
+  `--running` and `--error` through `color-mix`. No theme needs its own rule.
+- `languages.ts`: `language-data` by file name, plus aliases for .NET project files
+  (`.csproj`, `.props`, `.slnx`) and `.env`.
+- `completion.ts`: `completeAnyWord` and import paths. The language adds keywords, snippets and
+  locals itself. Import paths list one folder at a time from `find/files?q=<folder>/` (cached
+  10 s), which is the endpoint's own folder listing, instead of the whole repo's file list.
+  `./`, `../` and `@/` resolve against the file (`@/` means the nearest `src/`). Package imports
+  get nothing.
+- `agent-lines.ts`: the stripe marks lines that differ from the git base. The diff is by line:
+  each distinct line is encoded as one character and passed to `@codemirror/merge`'s `diff`.
+  `Chunk.build` merges nearby changes, and its character diff can't tell which line an inserted
+  line belongs to.
+- `minimal-change.ts`: compares documents, not strings, so a CRLF break counts as one position
+  and the insert keeps its lines whatever the separator.
+- `file-buffer.ts`: the transitions (load, dirty, apply a disk change, conflict, saved, take the
+  agent's version, rebase after Compare). They go through the mounted view when there is one.
+  "Use the agent's" is its own undo step (`isolateHistory`).
+- `buffers.ts`: the API side (open, refresh, save, overwrite).
+- `stores/file-buffers.ts`: reactive info per buffer (status, dirty, conflict, saving), plus a
+  plain record holding the `EditorState`. It has only type imports from CodeMirror, so it stays
+  out of the lazy chunk.
+- Tests: 63 in `code-editor/__tests__` and the store. The theme is checked across all themes in
+  Task 7's screenshots.
+
+### Task 3: File tabs in the canvas
+- [x] `CanvasKind` gains `"file"`, and `CanvasInstance.file = { path, preview, view }`. Tab id
+      `file:<path>`.
+- [x] Store: `openFile(sessionId, path, { keep?, view? })` with the preview rule, plus `keepFile`
+      and `setFileView`. `close` asks when the buffer is dirty.
+- [x] `canvas-registry.ts`: `file` → `FileCanvas` as an async component (the lazy chunk). Title =
+      file name, icon by type. `CanvasHost`: italic preview label, unsaved dot in place of ×,
+      double-click keeps; pass `{ sessionId, path }` in `activeProps`.
+- [x] `FilesCanvas`: the tree fills the canvas and a click opens a tab. `CanvasSplit` and
+      `CanvasFileViewer` retire from Files.
+- [x] `ChangesCanvas`: a click opens the file tab in Diff. Its split viewer retires, so a file has
+      one place.
+- [x] ~~Tool rows in the conversation that name a file (Edited/Wrote) open the tab, if they
+      link to the viewer today.~~ They don't: tool rows show the path as text only. Skipped.
+- [x] Tests: store preview rules (replace clean preview, keep dirty preview, focus existing),
+      CanvasHost renders preview/dirty states.
+
+**As built.**
+- `canvases.openFile(sessionId, path, { keep, view })`: a clean preview is replaced *in place*
+  (same tab position) and its buffer dropped. An unsaved preview becomes a kept tab, and the new
+  file opens beside it. Opening a file that's already open focuses it, and can change its view
+  or keep it.
+- `FileView` is `rendered | edit | diff`; for Markdown and HTML, `edit` is labelled Source. The
+  default is Rendered for `.md`/`.html`, otherwise Edit. Changes opens tabs in Diff.
+- `close` drops the file's buffer. `CanvasHost` asks through `UnsavedFileDialog` (Save and
+  close / Close without saving / Cancel); Save and close keeps the tab open if the save hits a
+  conflict. The unsaved dot turns into × on hover, so the tab can still be closed with the mouse.
+- `FileCanvas` loads as an async component. It attaches to the store's buffer on mount *and* on
+  activation, because KeepAlive can hand back a cached canvas for a reopened file. The buffers
+  store no longer destroys views; the canvas that made a view destroys it.
+- The `beforeunload` guard (`use-unsaved-files-guard.ts`) is in `App.vue`.
+- `CanvasSplit.vue` and `CanvasFileViewer.vue` are deleted. The Files tree fills its canvas.
+  Changes rows that are open as tabs read stronger.
+- Opening a file loads 135 KB gzip (plus its language); the initial bundle is +20 bytes.
+
+### Task 4: FileCanvas
+- [x] The bar: breadcrumb, save state (Unsaved + Save button / Changed on disk), view toggle.
+- [x] Views: the editor; Rendered through `MarkdownRenderer` (annotatable, as today) and
+      `HtmlRenderer`, fed from the buffer; Diff through `unifiedMergeView` with the git base
+      from `sharedDiffs` (`FileDiffItem.before`).
+- [x] Save, conflict bar (Compare / Keep mine / Use the agent's), read-only states.
+- [x] Selection chip → `appendDraftReference(sessionId, ref)` (new, in `use-draft-state.ts`),
+      then `weave:command-focus-prompt`.
+- [x] Tests: component tests for save success, 409 → bar, each bar action, read-only states.
+
+**As built.**
+- One `EditorView` per file canvas. Diff and Compare are the same editor with
+  `unifiedMergeView` put into a compartment (`merge.ts`), so switching views keeps the undo
+  history and there's no second editor to sync. Diff compares against `FileDiffItem.before`, or
+  the saved text when git sees the file as unchanged. Its hunks have Revert only. Compare's
+  hunks have *Take the agent's* and *Keep mine*. Diff is disabled with no git change and no
+  unsaved edit. A deleted file (from Changes) shows its last version as a read-only diff.
+- Rendered reads the buffer (a revision counter bumps on each change), so unsaved edits show.
+  Markdown stays annotatable through `useCanvasAnnotate`; HTML renders in `HtmlRenderer`'s
+  sandboxed iframe. `lib/file-payload.ts` had no users left and is deleted.
+- The bar: breadcrumb (folders hidden under a 430 px container query, for the phone sheet),
+  Unsaved + Save (⌘S / Ctrl S), Saving…, Changed on disk, and the view toggle. There's no
+  app-wide toast, so the canvas has a small one of its own (`aria-live`).
+- Keep mine sends the conflict's hash, so it overwrites exactly the version the bar showed.
+- `appendDraftReference` in `use-draft-state.ts`, then `weave:command-focus-prompt`.
+- Found in the mock-mode screenshots and fixed:
+  - Tree double-click could never keep a tab, because the first click switched the canvas away
+    from the tree. A single click now waits one double-click interval (250 ms), as the
+    mockup's tree did. Tree rows are `user-select: none`, so a double-click no longer leaves a
+    text selection that spread into the rendered Markdown.
+  - The gutter was transparent, so code scrolled sideways showed through the line numbers. It
+    is on `--panel-bg` now.
+  - JetBrains Mono's `//` ligature lost a slash in the (synthesized) italic comments, so
+    ligatures are off in the editor.
+  - Fleet's global `*:focus-visible` ring outlined the whole editor. It's turned off for
+    `.cm-content` in the same layer.
+  - Per-hunk buttons sat over the code with the code showing between them; they have a backing
+    now.
+- The mock API (`vite-plugin-mock-api.ts`) now gives a hash, answers `PUT files/content` with
+  409 on a stale hash, and has `POST /api/mock/agent-edit` to stand in for the agent.
+- Tests: 13 in `FileCanvas.test.ts` (save, Ctrl S, a preview kept on typing, 409 → bar, each bar
+  action, too large, binary, Markdown rendered from the buffer, Diff, Add to message), plus 2
+  for the tree node's click timing.
+
+### Task 5: Live updates
+- [x] Subscribe to `files.changed` for the session. For each open path, and on tab activation and
+      window focus, re-read the file and apply the rule above. Pulse with `store.markUpdated`.
+- [x] Also re-check open files on `turn.ended`, which catches shell edits (Task 0: `sed` emits
+      no file event).
+- [x] Debounce bursts (the agent edits a file several times in one turn) the way `use-diffs`
+      does (500 ms).
+- [x] Tests: event → clean buffer updates; event → dirty buffer shows the bar; no request when
+      the hash matches.
+
+**As built.** `composables/use-file-live-updates.ts`, used in `SessionsV2RightPanel` beside
+`useDiffs`.
+- Event paths are matched by suffix (`isSameFile`): OpenCode sends absolute paths and a save
+  sends relative ones, so the session directory isn't needed.
+- `files.changed` and `turn.ended` are debounced 500 ms, so a burst of edits is read once. Tab
+  activation and window focus check at once.
+- The editor module is imported on first use, and it's already loaded whenever a buffer exists,
+  so the session chunk doesn't grow.
+- The tab pulses (`markUpdated`) both for an in-place update and for a new conflict. That's a
+  small addition, so a conflict on a tab you aren't looking at still gets noticed.
+- `refreshBuffer` skips files with a save in flight, because the save's own `files.changed` can
+  arrive before its HTTP response. Once the save is done, the hash matches and nothing happens.
+- Tests: 8 (path matching; a clean buffer updates and pulses; a dirty buffer gets the bar; the
+  same hash changes nothing; closed files aren't read and a burst reads once; `turn.ended`;
+  focus; another session's events). Checked in mock mode: the mock agent edit updated the open
+  file, flashed the line and pulsed the tab.
+
+### Task 6: Go to file
+- [x] Ctrl P / Cmd P registered in `command-registry.ts` (no existing binding), plus a palette
+      entry. A small dialog with fuzzy match over `find/files`; ↑↓, Enter, Esc.
+- [x] Test: filtering and Enter opens a kept tab.
+
+**As built.**
+- A `go-to-file` command (Ctrl P / ⌘P, `allowInEditable`, so it works from the editor and the
+  composer) in `use-commands.ts`, with a default binding in `keybinding-types.ts`. It also
+  shows in the palette as *Go to File…*. The terminal keeps Ctrl P for its shell history.
+- `GoToFileDialog.vue` is mounted once in `AppShell`, with state in `stores/go-to-file.ts`.
+  With nothing typed it lists the files already open. Enter opens a kept tab, brings the right
+  panel out (or the phone sheet), and the editor takes focus.
+- *Fuzzy:* `find/files` only matched substrings, and at 50 results a client-side fuzzy filter
+  would have nothing to work with. So `WorkspaceFileSearch` now also returns matches where the
+  letters appear in order in the name (rank 4), then in the path (rank 5). These come after
+  every substring match, so the composer's `@` results keep their order and only gain matches at
+  the end. The mock API matches the same way.
+- Tests: 4 for the dialog (open files, filtering without folders, Enter opens a kept tab and
+  queues focus, no matches), plus 1 server test for fuzzy ranking. Checked in mock mode: Ctrl P,
+  `mauth` → `src/middleware/auth.ts`, Enter opens it with the cursor in the editor, and Ctrl P
+  works again from inside the editor.
+
+### Task 7: Verify and ship
+- [x] Client suite, lint and `lint:design` on Node 22 with `npm ci` (CI parity); .NET suites.
+- [x] Live check in a scratch Fleet (scratch HOME, never the real one): open, edit, save; the
+      agent edits a clean file (updates in place) and a dirty one (bar, each action); Ctrl P;
+      add to message; Markdown and HTML rendered/source; a phone-width sheet; a light and a
+      dark theme.
+- [x] Native AOT publish still has 0 warnings.
+- [x] PR with before/after screenshots under `mockups/editor/`.
+
+**As built (2026-09-14).**
+- *Client, as CI runs it:* a clean `npm ci` on Node 22, then `npm run lint` (0 errors), typecheck,
+  and vitest (97 files, 865 tests, exit 0). `bun install --frozen-lockfile` accepts `bun.lock`.
+  `lint:design` reports 9, all in untouched files, the same as main.
+- *.NET*, each project on its own with a scratch HOME: Domain 82, Application 653, Infrastructure
+  948, TestHarness 36, Api 232, Integration 88, E2E 11. The two OIDC E2E tests need a trusted
+  dev certificate in the scratch HOME, as CI's "Trust dev certs" step sets up; with one, they
+  pass.
+- *Live*, in a scratch Fleet (scratch HOME, port 5131, real OpenCode 1.18.30, scripted model),
+  16/16 checks (`.poc-runtime/pw/live-editor.mjs`):
+  - open, edit and save
+  - the agent edits a clean file, and it updates in place
+  - the agent edits a dirty file: the bar, then Use the agent's, Keep mine, and Compare with one
+    agent hunk taken, Done and save
+  - a `sed` edit shows up when the agent goes idle
+  - Ctrl P
+  - a BOM + CRLF file keeps its bytes through a save
+  - Add to message
+  - Markdown rendered with unsaved edits; HTML in its frame
+  - Changes opens Diff
+
+  Also checked: the phone sheet at 400 px (the file opens and the Save button saves), and the
+  editor in all ten themes. The live check found three bugs, all fixed:
+  - Pooled OpenCode ends a turn with `session.idled`, never `turn.ended`, and relayed turn events
+    carry OpenCode's `ses_…` id. So the end-of-turn re-read never ran and `sed` edits didn't
+    show. The listener now trusts the session topic and also reacts to `session.idled`. (The same
+    `turn.ended` check in `use-diffs` is dead code too; with `files.changed` now delivered,
+    Changes refreshes during turns anyway.)
+  - After Compare's Done, focus stayed on the button, so Ctrl S did nothing. The editor takes
+    focus again after Done and after Use the agent's.
+  - The change stripe showed beside the merge views' own gutter in Diff. Its marks are cleared
+    there now.
+- *Native AOT* publish (linux-x64): 0 warnings. The AOT binary, run with a scratch HOME, served
+  the read hash, a save that keeps CRLF, a 409 with the current content, a 400 for traversal,
+  and `files.changed` in Fleet's shape over SignalR.
+- Screenshots in `mockups/editor/` (before/after Files and Changes from mock mode on main and on
+  this branch; the rest from mock mode and the live scratch Fleet).
+
+## Out of scope
+
+The agent opening files; clickable `file:line` paths in replies; focus mode (C) and the chat
+peek (D); language servers and AI completion; creating, renaming or deleting files; editing
+files over 512 KB.
+
+## Risks
+
+- **Lost work on tab eviction or reload.** Buffers live in a store, and `beforeunload` warns
+  while any buffer is unsaved. Unsaved buffers don't survive a reload; that's acceptable for now.
+- **Line endings and BOMs.** Covered by Task 0 and the server tests. A save must not rewrite a
+  file the user didn't change.
+- **Edits that don't emit `files.changed`** (shell commands, other tools). The focus re-check and
+  the save-time hash check cover them; the worst case is the bar appearing on save.
+- **Write access in hosted mode.** Saving needs the same access as reading the file and
+  prompting the agent, which can already write. Symlink and `.git/` checks stop writes outside
+  the worktree.

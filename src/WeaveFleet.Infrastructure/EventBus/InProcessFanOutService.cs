@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Services;
@@ -89,7 +90,12 @@ internal sealed partial class InProcessFanOutService : BackgroundService
         var payload = evt.Payload.HasValue
             ? evt.Payload.Value
             : InfrastructureJsonContext.EmptyObject;
-        if (eventType == EventTypes.SessionStatus)
+        // The harness's raw file event is harness-specific; clients get Fleet's own files.changed shape.
+        if (domainEvent is FilesChanged filesChanged)
+        {
+            payload = JsonSerializer.SerializeToElement(filesChanged.Payload, InfrastructureJsonContext.Default.FilesChangedPayload);
+        }
+        else if (eventType == EventTypes.SessionStatus)
         {
             payload = await EnrichSessionStatusPayloadAsync(payload, sessionId, activityStatus, ct)
                 .ConfigureAwait(false);

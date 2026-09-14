@@ -27,6 +27,12 @@ class IntersectionObserverMock implements IntersectionObserver {
   unobserve(): void {}
 }
 
+// jsdom has no layout; CodeMirror measures text ranges when it scrolls or draws the cursor.
+if (typeof Range !== "undefined" && !Range.prototype.getClientRects) {
+  Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
+  Range.prototype.getBoundingClientRect = () => new DOMRect();
+}
+
 config.global.stubs = {
   teleport: true,
 };

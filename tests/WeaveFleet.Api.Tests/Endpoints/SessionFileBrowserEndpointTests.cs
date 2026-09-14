@@ -228,6 +228,76 @@ public sealed class SessionFileBrowserEndpointTests : IAsyncDisposable
         (await Find("comp")).ShouldBe(["src/components/", "src/components/Button.vue"]);
     }
 
+    [Fact]
+    public async Task saving_a_file_returns_the_new_hash_and_a_stale_save_returns_409_with_the_current_file()
+    {
+        var path = Path.Combine(_tempDirectory.Path, "app.ts");
+        await File.WriteAllTextAsync(path, "const one = 1;\n");
+
+        var createResponse = await _client.PostAsJsonAsync("/api/sessions", new
+        {
+            directory = _tempDirectory.Path,
+            title = "Save Test"
+        });
+        var sessionId = (await createResponse.Content.ReadFromJsonAsync<CreateSessionApiResponse>())!.Session.Id;
+
+        var read = await _client.GetFromJsonAsync<JsonElement>($"/api/sessions/{sessionId}/files/content?path=app.ts");
+        var readHash = read.GetProperty("hash").GetString();
+        readHash.ShouldNotBeNullOrEmpty();
+
+        var save = await _client.PutAsJsonAsync($"/api/sessions/{sessionId}/files/content", new
+        {
+            path = "app.ts",
+            content = "const one = 111;\n",
+            baseHash = readHash,
+        });
+        save.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var saved = await save.Content.ReadFromJsonAsync<JsonElement>();
+        var newHash = saved.GetProperty("hash").GetString();
+        newHash.ShouldNotBe(readHash);
+        (await File.ReadAllTextAsync(path)).ShouldBe("const one = 111;\n");
+
+        // Saving again from the first read loses: the file changed since.
+        var stale = await _client.PutAsJsonAsync($"/api/sessions/{sessionId}/files/content", new
+        {
+            path = "app.ts",
+            content = "const one = 2;\n",
+            baseHash = readHash,
+        });
+        stale.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        var conflict = await stale.Content.ReadFromJsonAsync<JsonElement>();
+        conflict.GetProperty("content").GetString().ShouldBe("const one = 111;\n");
+        conflict.GetProperty("hash").GetString().ShouldBe(newHash);
+        (await File.ReadAllTextAsync(path)).ShouldBe("const one = 111;\n");
+    }
+
+    [Fact]
+    public async Task saving_outside_the_session_is_400_and_a_missing_file_is_404()
+    {
+        var createResponse = await _client.PostAsJsonAsync("/api/sessions", new
+        {
+            directory = _tempDirectory.Path,
+            title = "Save Errors Test"
+        });
+        var sessionId = (await createResponse.Content.ReadFromJsonAsync<CreateSessionApiResponse>())!.Session.Id;
+
+        var traversal = await _client.PutAsJsonAsync($"/api/sessions/{sessionId}/files/content", new
+        {
+            path = "../outside.txt",
+            content = "x",
+            baseHash = "abc",
+        });
+        traversal.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+
+        var missing = await _client.PutAsJsonAsync($"/api/sessions/{sessionId}/files/content", new
+        {
+            path = "missing.txt",
+            content = "x",
+            baseHash = "abc",
+        });
+        missing.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
     private sealed class TempDirectory : IDisposable
     {
         public TempDirectory()

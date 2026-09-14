@@ -322,6 +322,9 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(IReadOnlyList<BrowseEntryDto>))]
 [JsonSerializable(typeof(List<BrowseEntryDto>))]
 [JsonSerializable(typeof(ReadSessionFileResponse))]
+[JsonSerializable(typeof(WriteSessionFileRequest))]
+[JsonSerializable(typeof(WriteSessionFileResponse))]
+[JsonSerializable(typeof(WriteSessionFileConflictResponse))]
 // Session prompts
 [JsonSerializable(typeof(SendPromptApiResponse))]
 // Automations

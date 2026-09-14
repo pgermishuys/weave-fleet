@@ -259,6 +259,67 @@ public sealed class InProcessFanOutServiceTests
     }
 
     [Fact]
+    public async Task files_changed_is_broadcast_in_fleet_shape_not_the_harness_payload()
+    {
+        var channels = new InProcessChannels();
+        var broadcaster = new FakeEventBroadcaster();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await using var serviceProvider = new ServiceCollection().BuildServiceProvider();
+        var service = new InProcessFanOutService(
+            channels,
+            broadcaster,
+            new PipelineLatencyMetrics(),
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<InProcessFanOutService>.Instance);
+
+        await service.StartAsync(cts.Token);
+        try
+        {
+            channels.FanOut.Writer.TryWrite(new InProcessEnvelope(
+                @event: new HarnessEvent
+                {
+                    Type = EventTypes.FileWatcherUpdated,
+                    SessionId = "oc-files",
+                    Timestamp = DateTimeOffset.UtcNow,
+                    Payload = JsonSerializer.SerializeToElement(new { file = "/repo/src/app.ts", @event = "change" }),
+                },
+                messageId: "sess-files:1",
+                tenant: "tenant.default",
+                projectId: "proj-1",
+                sessionId: "sess-files",
+                eventType: EventTypes.FileWatcherUpdated,
+                userId: "user-1",
+                harnessType: "opencode",
+                internalPumpDedupKey: 1,
+                isDurable: false)
+            {
+                DomainEvent = new FilesChanged
+                {
+                    Payload = new FilesChangedPayload
+                    {
+                        SessionId = "sess-files",
+                        Files = [new FileChangeEntry { Path = "/repo/src/app.ts", ChangeType = "change" }],
+                    },
+                },
+            }).ShouldBeTrue();
+
+            await WaitForBroadcastsAsync(broadcaster, expectedCount: 1, cts.Token);
+
+            var broadcast = broadcaster.Broadcasts.Single();
+            broadcast.Topic.ShouldBe("session:sess-files");
+            broadcast.Payload.GetProperty("sessionId").GetString().ShouldBe("sess-files");
+            var file = broadcast.Payload.GetProperty("files")[0];
+            file.GetProperty("path").GetString().ShouldBe("/repo/src/app.ts");
+            file.GetProperty("changeType").GetString().ShouldBe("change");
+        }
+        finally
+        {
+            await cts.CancelAsync();
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
     public async Task advisory_events_are_broadcast_without_event_id()
     {
         var channels = new InProcessChannels();

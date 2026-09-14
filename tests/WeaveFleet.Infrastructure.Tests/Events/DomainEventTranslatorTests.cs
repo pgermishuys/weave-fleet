@@ -11,6 +11,26 @@ namespace WeaveFleet.Infrastructure.Tests.Events;
 public sealed class DomainEventTranslatorTests
 {
     [Fact]
+    public void Should_translate_an_opencode_file_watcher_event_to_files_changed()
+    {
+        var translator = CreateTranslator();
+
+        var result = translator.Translate(new HarnessEvent
+        {
+            Type = EventTypes.FileWatcherUpdated,
+            SessionId = "oc-1",
+            FleetSessionId = "fleet-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new { file = "/repo/src/app.ts", @event = "add" }),
+        });
+
+        var changed = result.ShouldBeOfType<FilesChanged>();
+        changed.Payload.SessionId.ShouldBe("fleet-1");
+        changed.Payload.Files.ShouldHaveSingleItem().Path.ShouldBe("/repo/src/app.ts");
+        changed.Payload.Files[0].ChangeType.ShouldBe("add");
+    }
+
+    [Fact]
     public void Should_translate_message_created()
     {
         var translator = CreateTranslator();
