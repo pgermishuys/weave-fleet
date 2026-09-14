@@ -18,12 +18,15 @@ public sealed record DetectedSmartLink(
 /// <summary>
 /// Finds GitHub pull requests and issues in message parts as they stream through the relay and queues
 /// them for <see cref="SmartLinkWatcherService"/>. Text parts count as mentions. A pull request URL in the
-/// output of a tool call that ran <c>gh pr create</c> is the session's own pull request.
+/// output of a tool call that ran <c>gh pr create</c> is the session's own pull request. Also notes when
+/// each session last sent an event, so the watcher checks busy sessions more often than quiet ones.
 /// </summary>
-public sealed class SmartLinkDetector
+public sealed class SmartLinkDetector(TimeProvider? timeProvider = null)
 {
     private const int MaxSeen = 20_000;
     private const int MaxCollectedChars = 64 * 1024;
+
+    private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
 
     private readonly Channel<DetectedSmartLink> _channel = Channel.CreateBounded<DetectedSmartLink>(
         new BoundedChannelOptions(1_000) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
@@ -31,10 +34,30 @@ public sealed class SmartLinkDetector
     // Text parts are re-sent as they stream, so remember what was already queued.
     private readonly ConcurrentDictionary<string, byte> _seen = new(StringComparer.OrdinalIgnoreCase);
 
+    private readonly ConcurrentDictionary<string, DateTimeOffset> _lastEventAt = new(StringComparer.Ordinal);
+
     public ChannelReader<DetectedSmartLink> Reader => _channel.Reader;
+
+    /// <summary>Sessions that sent an event at or after <paramref name="since"/>. Forgets the rest.</summary>
+    public IReadOnlySet<string> ActiveSince(DateTimeOffset since)
+    {
+        var active = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var entry in _lastEventAt)
+        {
+            if (entry.Value >= since)
+                active.Add(entry.Key);
+            else
+                _lastEventAt.TryRemove(entry);
+        }
+
+        return active;
+    }
 
     public void Observe(string sessionId, string? userId, string eventType, JsonElement? payload)
     {
+        if (!string.IsNullOrEmpty(sessionId))
+            _lastEventAt[sessionId] = _time.GetUtcNow();
+
         if (eventType != EventTypes.MessagePartUpdated || string.IsNullOrEmpty(userId) || payload is not { } value)
             return;
 
