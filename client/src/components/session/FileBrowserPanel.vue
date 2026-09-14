@@ -44,13 +44,13 @@ function handleSearchKeydown(event: KeyboardEvent) {
     clearSearch()
     ;(event.target as HTMLInputElement)?.blur()
   } else if (event.key === 'Enter' && foundFiles.value.length > 0) {
-    handleResultClick(foundFiles.value[0])
+    handleResultClick(foundFiles.value[0], true)
   }
 }
 
-function handleResultClick(path: string) {
+function handleResultClick(path: string, keep = false) {
   contentPanel.selectFile(path)
-  selectFile(path)
+  selectFile(path, { keep })
 }
 </script>
 

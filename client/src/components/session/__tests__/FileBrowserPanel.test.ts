@@ -140,7 +140,19 @@ describe("FileBrowserPanel", () => {
       await resultItems[0]?.trigger("click");
 
       expect(mockContentPanel.selectFile).toHaveBeenCalledWith("src/main.ts");
-      expect(mockFileBrowser.selectFile).toHaveBeenCalledWith("src/main.ts");
+      expect(mockFileBrowser.selectFile).toHaveBeenCalledWith("src/main.ts", { keep: false });
+    });
+
+    it("opens_the_first_search_result_as_a_kept_tab_on_enter", async () => {
+      mockFindFiles.files.value = ["src/main.ts"];
+
+      const wrapper = mountPanel();
+      const searchInput = wrapper.find(".file-browser-panel__search-input");
+      await searchInput.setValue("main");
+      await flushPromises();
+      await searchInput.trigger("keydown", { key: "Enter" });
+
+      expect(mockFileBrowser.selectFile).toHaveBeenCalledWith("src/main.ts", { keep: true });
     });
   });
 });

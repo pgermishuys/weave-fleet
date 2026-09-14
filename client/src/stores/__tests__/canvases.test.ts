@@ -3,7 +3,8 @@ import { createPinia, setActivePinia } from "pinia";
 import { toDomainEvent } from "@/composables/use-signalr-socket";
 import type { CanvasClosed, CanvasEvent, CanvasFocused, CanvasUpdated } from "@/lib/domain-events";
 import type { VisualPayload } from "@/lib/visual-payload";
-import { serverCanvasTabId, useCanvasesStore, visualCanvasId, visualCanvasTitle } from "@/stores/canvases";
+import { fileCanvasId, serverCanvasTabId, useCanvasesStore, visualCanvasId, visualCanvasTitle } from "@/stores/canvases";
+import { useFileBuffersStore } from "@/stores/file-buffers";
 
 const flow: VisualPayload = {
   $type: "visual/flow",
@@ -254,5 +255,102 @@ describe("useCanvasesStore server canvases", () => {
     ]);
     expect(serverTab(store)?.server?.version).toBe(2);
     expect(state.activeId).toBe("changes");
+  });
+});
+
+describe("useCanvasesStore file tabs", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    localStorage.clear();
+  });
+
+  const files = () => useCanvasesStore().sessionCanvases("s1").canvases.filter((canvas) => canvas.file).map((canvas) => canvas.file);
+
+  it("opens a file as an active preview tab, in Edit, or Rendered for Markdown and HTML", () => {
+    const store = useCanvasesStore();
+    store.openFile("s1", "src/app.ts");
+    expect(store.sessionCanvases("s1").activeId).toBe(fileCanvasId("src/app.ts"));
+    expect(files()).toEqual([{ path: "src/app.ts", preview: true, view: "edit" }]);
+
+    store.openFile("s1", "docs/guide.md", { keep: true });
+    store.openFile("s1", "public/index.html", { keep: true });
+    expect(files().map((file) => file?.view)).toEqual(["edit", "rendered", "rendered"]);
+  });
+
+  it("the next single click replaces a clean preview in place", () => {
+    const store = useCanvasesStore();
+    store.openFile("s1", "a.ts");
+    const before = store.sessionCanvases("s1").canvases.findIndex((canvas) => canvas.file);
+    useFileBuffersStore().ensure("s1", "a.ts");
+
+    store.openFile("s1", "b.ts");
+
+    expect(files()).toEqual([{ path: "b.ts", preview: true, view: "edit" }]);
+    expect(store.sessionCanvases("s1").canvases.findIndex((canvas) => canvas.file)).toBe(before);
+    expect(useFileBuffersStore().record("s1", "a.ts")).toBeUndefined();
+  });
+
+  it("keeps a preview with unsaved changes and opens the next file beside it", () => {
+    const store = useCanvasesStore();
+    const buffers = useFileBuffersStore();
+    store.openFile("s1", "a.ts");
+    buffers.ensure("s1", "a.ts");
+    buffers.patch("s1", "a.ts", { dirty: true });
+
+    store.openFile("s1", "b.ts");
+
+    expect(files()).toEqual([
+      { path: "a.ts", preview: false, view: "edit" },
+      { path: "b.ts", preview: true, view: "edit" },
+    ]);
+    expect(buffers.record("s1", "a.ts")).toBeDefined();
+  });
+
+  it("a kept open doesn't replace the preview", () => {
+    const store = useCanvasesStore();
+    store.openFile("s1", "a.ts");
+    store.openFile("s1", "b.ts", { keep: true });
+    expect(files()).toEqual([
+      { path: "a.ts", preview: true, view: "edit" },
+      { path: "b.ts", preview: false, view: "edit" },
+    ]);
+  });
+
+  it("focuses a file that's open already instead of opening it twice", () => {
+    const store = useCanvasesStore();
+    store.openFile("s1", "a.ts", { keep: true });
+    store.openFile("s1", "b.ts", { keep: true });
+
+    store.openFile("s1", "a.ts", { view: "diff" });
+
+    expect(files()).toHaveLength(2);
+    expect(store.sessionCanvases("s1").activeId).toBe(fileCanvasId("a.ts"));
+    expect(files()[0]).toEqual({ path: "a.ts", preview: false, view: "diff" });
+  });
+
+  it("opening a preview again with keep keeps it", () => {
+    const store = useCanvasesStore();
+    store.openFile("s1", "a.ts");
+    store.openFile("s1", "a.ts", { keep: true });
+    expect(files()[0]?.preview).toBe(false);
+  });
+
+  it("keepFile and setFileView change only that tab", () => {
+    const store = useCanvasesStore();
+    store.openFile("s1", "a.md");
+    store.keepFile("s1", "a.md");
+    store.setFileView("s1", "a.md", "edit");
+    expect(files()).toEqual([{ path: "a.md", preview: false, view: "edit" }]);
+  });
+
+  it("closing a file tab drops its buffer", () => {
+    const store = useCanvasesStore();
+    store.openFile("s1", "a.ts", { keep: true });
+    useFileBuffersStore().ensure("s1", "a.ts");
+
+    store.close("s1", fileCanvasId("a.ts"));
+
+    expect(files()).toEqual([]);
+    expect(useFileBuffersStore().record("s1", "a.ts")).toBeUndefined();
   });
 });

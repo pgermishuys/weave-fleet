@@ -4,6 +4,7 @@ import { getActivePinia } from "pinia";
 import { defineComponent, type Ref, ref, h } from "vue";
 import { provideContentPanelContext, type ContentPanelContext } from "@/composables/use-content-panel";
 import type { useFileBrowser as UseFileBrowserType } from "@/composables/use-file-browser";
+import { useCanvasesStore } from "@/stores/canvases";
 import { flushAll } from "./test-utils";
 
 type FileBrowser = ReturnType<typeof UseFileBrowserType>;
@@ -75,33 +76,24 @@ describe("use-file-browser", () => {
     subscribeV2Mock.mockImplementation(() => () => {});
   });
 
-  it("selectFile reads the file and shows it in the canvas viewer", async () => {
-    readSessionFileMock.mockResolvedValue({ content: "hello", isBinary: false });
-
+  it("selectFile opens the file as a preview tab", async () => {
     const sessionId = ref<string | null>("session-1");
-    const { contentPanel, fileBrowser } = await mountFileBrowserHarness(sessionId);
+    const { fileBrowser } = await mountFileBrowserHarness(sessionId);
 
-    await fileBrowser.selectFile("src/main.ts");
-    await flushAll();
+    fileBrowser.selectFile("src/main.ts");
 
-    expect(readSessionFileMock).toHaveBeenCalledWith("session-1", "src/main.ts");
-    expect(contentPanel.filePayload.value).toMatchObject({
-      sourceFilePath: "src/main.ts",
-      sourceText: "hello",
-    });
+    const tab = useCanvasesStore().sessionCanvases("session-1").canvases.find((canvas) => canvas.file);
+    expect(tab?.file).toEqual({ path: "src/main.ts", preview: true, view: "edit" });
+    expect(readSessionFileMock).not.toHaveBeenCalled();
   });
 
-  it("selectFile shows a notice instead of binary content", async () => {
-    readSessionFileMock.mockResolvedValue({ content: "", isBinary: true });
-
+  it("selectFile with keep opens a kept tab", async () => {
     const sessionId = ref<string | null>("session-1");
-    const { contentPanel, fileBrowser } = await mountFileBrowserHarness(sessionId);
+    const { fileBrowser } = await mountFileBrowserHarness(sessionId);
 
-    await fileBrowser.selectFile("assets/logo.png");
-    await flushAll();
+    fileBrowser.selectFile("README.md", { keep: true });
 
-    expect(contentPanel.filePayload.value?.$type).toBe("markdown");
-    expect(contentPanel.filePayload.value?.content).toContain("Cannot display binary file");
-    expect(contentPanel.filePayload.value?.sourceFilePath).toBe("assets/logo.png");
+    const tab = useCanvasesStore().sessionCanvases("session-1").canvases.find((canvas) => canvas.file);
+    expect(tab?.file).toEqual({ path: "README.md", preview: false, view: "rendered" });
   });
 });

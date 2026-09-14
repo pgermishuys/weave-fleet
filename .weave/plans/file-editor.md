@@ -210,21 +210,39 @@ the current content.
   Task 7's screenshots.
 
 ### Task 3: File tabs in the canvas
-- [ ] `CanvasKind` gains `"file"`, and `CanvasInstance.file = { path, preview, view }`. Tab id
+- [x] `CanvasKind` gains `"file"`, and `CanvasInstance.file = { path, preview, view }`. Tab id
       `file:<path>`.
-- [ ] Store: `openFile(sessionId, path, { keep?, view? })` with the preview rule, plus `keepFile`
+- [x] Store: `openFile(sessionId, path, { keep?, view? })` with the preview rule, plus `keepFile`
       and `setFileView`. `close` asks when the buffer is dirty.
-- [ ] `canvas-registry.ts`: `file` → `FileCanvas` as an async component (the lazy chunk). Title =
+- [x] `canvas-registry.ts`: `file` → `FileCanvas` as an async component (the lazy chunk). Title =
       file name, icon by type. `CanvasHost`: italic preview label, unsaved dot in place of ×,
       double-click keeps; pass `{ sessionId, path }` in `activeProps`.
-- [ ] `FilesCanvas`: the tree fills the canvas and a click opens a tab. `CanvasSplit` and
+- [x] `FilesCanvas`: the tree fills the canvas and a click opens a tab. `CanvasSplit` and
       `CanvasFileViewer` retire from Files.
-- [ ] `ChangesCanvas`: a click opens the file tab in Diff. Its split viewer retires, so a file has
+- [x] `ChangesCanvas`: a click opens the file tab in Diff. Its split viewer retires, so a file has
       one place.
-- [ ] Tool rows in the conversation that name a file (Edited/Wrote) open the tab, if they
-      link to the viewer today.
-- [ ] Tests: store preview rules (replace clean preview, keep dirty preview, focus existing),
+- [x] ~~Tool rows in the conversation that name a file (Edited/Wrote) open the tab, if they
+      link to the viewer today.~~ They don't: tool rows show the path as text only. Skipped.
+- [x] Tests: store preview rules (replace clean preview, keep dirty preview, focus existing),
       CanvasHost renders preview/dirty states.
+
+**As built.**
+- `canvases.openFile(sessionId, path, { keep, view })`: a clean preview is replaced *in place*
+  (same tab position) and its buffer dropped. An unsaved preview becomes a kept tab, and the new
+  file opens beside it. Opening a file that's already open focuses it, and can change its view
+  or keep it.
+- `FileView` is `rendered | edit | diff`; for Markdown and HTML, `edit` is labelled Source. The
+  default is Rendered for `.md`/`.html`, otherwise Edit. Changes opens tabs in Diff.
+- `close` drops the file's buffer. `CanvasHost` asks through `UnsavedFileDialog` (Save and
+  close / Close without saving / Cancel); Save and close keeps the tab open if the save hits a
+  conflict. The unsaved dot turns into × on hover, so the tab can still be closed with the mouse.
+- `FileCanvas` loads as an async component. It attaches to the store's buffer on mount *and* on
+  activation, because KeepAlive can hand back a cached canvas for a reopened file. The buffers
+  store no longer destroys views; the canvas that made a view destroys it.
+- The `beforeunload` guard (`use-unsaved-files-guard.ts`) is in `App.vue`.
+- `CanvasSplit.vue` and `CanvasFileViewer.vue` are deleted. The Files tree fills its canvas.
+  Changes rows that are open as tabs read stronger.
+- Opening a file loads 135 KB gzip (plus its language); the initial bundle is +20 bytes.
 
 ### Task 4: FileCanvas
 - [ ] The bar: breadcrumb, save state (Unsaved + Save button / Changed on disk), view toggle.

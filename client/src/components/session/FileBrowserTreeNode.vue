@@ -110,10 +110,15 @@ async function toggleDirectory() {
   }
 }
 
-async function handleFileClick() {
+function handleFileClick() {
   if (!fileBrowser) return
   contentPanel.selectFile(props.entry.relativePath)
-  await fileBrowser.selectFile(props.entry.relativePath)
+  fileBrowser.selectFile(props.entry.relativePath)
+}
+
+// A double-click keeps the tab instead of opening it as a preview.
+function handleFileDoubleClick() {
+  fileBrowser?.selectFile(props.entry.relativePath, { keep: true })
 }
 </script>
 
@@ -142,7 +147,9 @@ async function handleFileClick() {
       class="file-browser-tree-node__file"
       :class="{ 'file-browser-tree-node__file--selected': isSelected }"
       :style="indentStyle"
+      :data-testid="`file-node-${entry.relativePath}`"
       @click="handleFileClick"
+      @dblclick="handleFileDoubleClick"
     >
       <span class="file-browser-tree-node__file-dot" />
       <span class="file-browser-tree-node__name">{{ entry.name }}</span>

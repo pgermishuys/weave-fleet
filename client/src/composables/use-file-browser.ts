@@ -1,35 +1,13 @@
 import { ref, watch, type Ref } from 'vue'
-import { browseSessionDirectory, readSessionFile } from '@/api/session-files'
+import { browseSessionDirectory } from '@/api/session-files'
 import type { BrowseDirectoryEntry } from '@/api/client'
-import { buildPayloadForFile } from '@/lib/file-payload'
 import { useWeaveSocket } from '@/composables/use-weave-socket'
-import { useContentPanelContext } from '@/composables/use-content-panel'
 import type { DomainEvent } from '@/lib/domain-events'
-import type { VisualPayload } from '@/lib/visual-payload'
-
-/**
- * Reads a session file and builds the payload the file viewer renders.
- * Binary files get a short markdown notice instead of their bytes.
- */
-export async function readFilePayload(sessionId: string, path: string): Promise<VisualPayload> {
-  const response = await readSessionFile(sessionId, path)
-
-  if (response.isBinary) {
-    return {
-      $type: 'markdown',
-      content: `# Binary File\n\nCannot display binary file: \`${path}\`\n\nThis file is a binary file and cannot be previewed as text.`,
-      sourceFilePath: path,
-      sourceText: '',
-      viewMode: 'rendered',
-    }
-  }
-
-  return buildPayloadForFile(path, response.content || '')
-}
+import { useCanvasesStore } from '@/stores/canvases'
 
 export function useFileBrowser(sessionId: Ref<string | null>) {
   const { subscribeV2 } = useWeaveSocket()
-  const contentPanel = useContentPanelContext()
+  const canvases = useCanvasesStore()
 
   // State
   const rootEntries = ref<BrowseDirectoryEntry[]>([])
@@ -104,20 +82,15 @@ export function useFileBrowser(sessionId: Ref<string | null>) {
     return loadingDirs.value.has(path)
   }
 
-  async function selectFile(path: string): Promise<void> {
+  /** Open a file in its own tab: a preview tab, or a kept one (double-click, Enter in search). */
+  function selectFile(path: string, options: { keep?: boolean } = {}): void {
     if (!sessionId.value) {
       error.value = 'No session ID provided'
       return
     }
 
     error.value = null
-
-    try {
-      contentPanel.showFile(await readFilePayload(sessionId.value, path))
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : `Failed to read file: ${path}`
-      console.error('[useFileBrowser] selectFile error:', err)
-    }
+    canvases.openFile(sessionId.value, path, { keep: options.keep })
   }
 
   async function refresh(): Promise<void> {

@@ -9,6 +9,7 @@ import {
   type ServerCanvasSnapshot,
 } from "@/lib/server-canvas";
 import type { VisualPayload } from "@/lib/visual-payload";
+import { useFileBuffersStore } from "@/stores/file-buffers";
 
 /**
  * Session-scoped canvas state for the right panel.
@@ -20,10 +21,23 @@ import type { VisualPayload } from "@/lib/visual-payload";
  * changes them, and the user can only close them.
  */
 
-export type CanvasKind = "changes" | "files" | "context" | "progress" | "visual" | "browser";
+export type CanvasKind = "changes" | "files" | "context" | "progress" | "visual" | "browser" | "file";
 
 /** Canvases that exist once per session and open from the + menu or on their own. */
-export type BuiltInCanvasKind = Exclude<CanvasKind, "visual" | "browser">;
+export type BuiltInCanvasKind = Exclude<CanvasKind, "visual" | "browser" | "file">;
+
+/**
+ * How a file tab shows its file. Code files have Edit and Diff; Markdown and HTML also have
+ * Rendered, and their Edit is labelled Source.
+ */
+export type FileView = "rendered" | "edit" | "diff";
+
+export interface FileTab {
+  path: string;
+  /** A preview tab (italic) is replaced by the next file you single-click, unless it has unsaved changes. */
+  preview: boolean;
+  view: FileView;
+}
 
 /** Identifies a canvas the server stores. */
 export interface ServerCanvasRef {
@@ -41,6 +55,8 @@ export interface CanvasInstance {
   server?: ServerCanvasRef;
   /** Present on browser canvases: the page and its tab title. */
   browser?: BrowserPage & { title: string };
+  /** Present on file tabs: the file and how it's shown. */
+  file?: FileTab;
 }
 
 export interface SessionCanvases {
@@ -79,6 +95,25 @@ export function visualCanvasTitle(payload: VisualPayload): string {
 
 export function visualCanvasId(payload: VisualPayload): string {
   return `visual:${visualCanvasTitle(payload)}`;
+}
+
+export function fileCanvasId(path: string): string {
+  return `file:${path}`;
+}
+
+/** Markdown and HTML open rendered; everything else opens in the editor. */
+export function hasRenderedView(path: string): boolean {
+  return /\.(md|markdown|mdx|html?)$/i.test(path);
+}
+
+export function defaultFileView(path: string): FileView {
+  return hasRenderedView(path) ? "rendered" : "edit";
+}
+
+export interface OpenFileOptions {
+  /** Keep the tab instead of opening it as a preview. */
+  keep?: boolean;
+  view?: FileView;
 }
 
 export function serverCanvasTabId(canvasId: string): string {
@@ -225,7 +260,92 @@ export const useCanvasesStore = defineStore("canvases", () => {
   function close(sessionId: string, canvasId: string): void {
     if (FIXED_CANVAS_IDS.has(canvasId)) return;
 
+    const closing = sessionCanvases(sessionId).canvases.find((canvas) => canvas.id === canvasId);
     update(sessionId, (current) => withoutCanvas(current, canvasId));
+    if (closing?.file) useFileBuffersStore().remove(sessionId, closing.file.path);
+  }
+
+  /**
+   * Open a file in its own tab, or focus it if it's open already. A single click opens a preview
+   * tab, which takes the place of the previous preview unless that one has unsaved changes (then
+   * it's kept). Opening with `keep` (a double click, Changes, Go to file) makes a kept tab.
+   */
+  function openFile(sessionId: string, path: string, options: OpenFileOptions = {}): string {
+    const id = fileCanvasId(path);
+    const keep = options.keep ?? false;
+    const buffers = useFileBuffersStore();
+    let replacedPath: string | null = null;
+
+    update(sessionId, (current) => {
+      const existing = current.canvases.find((canvas) => canvas.id === id);
+      if (existing?.file) {
+        const file: FileTab = {
+          ...existing.file,
+          preview: existing.file.preview && !keep,
+          view: options.view ?? existing.file.view,
+        };
+        return {
+          ...current,
+          canvases: current.canvases.map((canvas) => (canvas.id === id ? { ...canvas, file } : canvas)),
+          activeId: id,
+        };
+      }
+
+      const tab: CanvasInstance = {
+        id,
+        kind: "file",
+        file: { path, preview: !keep, view: options.view ?? defaultFileView(path) },
+      };
+      const previewIndex = current.canvases.findIndex((canvas) => canvas.file?.preview);
+      const preview = previewIndex >= 0 ? current.canvases[previewIndex] : undefined;
+
+      if (!keep && preview?.file && !buffers.isDirty(sessionId, preview.file.path)) {
+        replacedPath = preview.file.path;
+        return {
+          ...current,
+          canvases: current.canvases.map((canvas, index) => (index === previewIndex ? tab : canvas)),
+          activeId: id,
+        };
+      }
+
+      // An unsaved preview stays open as a kept tab.
+      const canvases = current.canvases.map((canvas) =>
+        !keep && canvas.file?.preview ? { ...canvas, file: { ...canvas.file, preview: false } } : canvas,
+      );
+      return { ...current, canvases: [...canvases, tab], activeId: id };
+    });
+
+    if (replacedPath) buffers.remove(sessionId, replacedPath);
+    return id;
+  }
+
+  /** Keep a preview tab: typing in it or double-clicking it. */
+  function keepFile(sessionId: string, path: string): void {
+    const id = fileCanvasId(path);
+    update(sessionId, (current) => {
+      const tab = current.canvases.find((canvas) => canvas.id === id);
+      if (!tab?.file?.preview) return current;
+      return {
+        ...current,
+        canvases: current.canvases.map((canvas) =>
+          canvas.id === id && canvas.file ? { ...canvas, file: { ...canvas.file, preview: false } } : canvas,
+        ),
+      };
+    });
+  }
+
+  function setFileView(sessionId: string, path: string, view: FileView): void {
+    const id = fileCanvasId(path);
+    update(sessionId, (current) => {
+      const tab = current.canvases.find((canvas) => canvas.id === id);
+      if (!tab?.file || tab.file.view === view) return current;
+      return {
+        ...current,
+        canvases: current.canvases.map((canvas) =>
+          canvas.id === id && canvas.file ? { ...canvas, file: { ...canvas.file, view } } : canvas,
+        ),
+      };
+    });
   }
 
   /**
@@ -314,6 +434,9 @@ export const useCanvasesStore = defineStore("canvases", () => {
     open,
     introduce,
     openVisual,
+    openFile,
+    keepFile,
+    setFileView,
     close,
     setServerCanvases,
     applyCanvasEvent,

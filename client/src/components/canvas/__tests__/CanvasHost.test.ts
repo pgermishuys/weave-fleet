@@ -6,6 +6,7 @@ import CanvasHostComponent from "@/components/canvas/CanvasHost.vue";
 import type { FileDiffItem } from "@/api/client";
 import type { VisualPayload } from "@/lib/visual-payload";
 import { serverCanvasTabId, useCanvasesStore, visualCanvasId } from "@/stores/canvases";
+import { useFileBuffersStore } from "@/stores/file-buffers";
 
 // Mount through a props-only type: the named slots on CanvasHost don't fit the
 // mount() typings of @vue/test-utils 2.2.7, the version package-lock pins for CI.
@@ -29,6 +30,36 @@ vi.mock("@/components/canvas/ChangesCanvas.vue", () => stubCanvas("ChangesCanvas
 vi.mock("@/components/canvas/FilesCanvas.vue", () => stubCanvas("FilesCanvas", "sessionId"));
 vi.mock("@/components/canvas/VisualCanvas.vue", () => stubCanvas("VisualCanvas", "payload"));
 vi.mock("@/components/session-context/SessionContextCanvas.vue", () => stubCanvas("SessionContextCanvas", "sessionId"));
+vi.mock("@/components/canvas/FileCanvas.vue", () => ({
+  default: defineComponent({
+    name: "FileCanvas",
+    props: { sessionId: String, path: String, view: String },
+    setup(props) {
+      return () => h("div", { class: "stub-FileCanvas" }, `${props.path} ${props.view}`);
+    },
+  }),
+}));
+
+// The real dialog renders through reka-ui's portal; a stub shows its buttons while it's open.
+vi.mock("@/components/canvas/UnsavedFileDialog.vue", () => ({
+  default: defineComponent({
+    name: "UnsavedFileDialog",
+    props: { open: Boolean, path: String, saving: Boolean },
+    emits: ["save", "discard", "update:open"],
+    setup(props, { emit }) {
+      return () => props.open
+        ? h("div", { class: "stub-unsaved" }, [
+          h("p", `Save changes before closing? ${props.path}`),
+          h("button", { "data-testid": "unsaved-save", onClick: () => emit("save") }, "Save and close"),
+          h("button", { "data-testid": "unsaved-discard", onClick: () => emit("discard") }, "Close without saving"),
+        ])
+        : null;
+    },
+  }),
+}));
+
+const { saveBufferMock } = vi.hoisted(() => ({ saveBufferMock: vi.fn() }));
+vi.mock("@/lib/code-editor/buffers", () => ({ saveBuffer: saveBufferMock }));
 
 const { closeServerCanvasMock } = vi.hoisted(() => ({ closeServerCanvasMock: vi.fn() }));
 vi.mock("@/composables/use-server-canvases", () => ({ closeServerCanvas: closeServerCanvasMock }));
@@ -219,5 +250,99 @@ describe("CanvasHost", () => {
     expect(wrapper.get("#tab-files").classes()).toContain("canvas-tab--updated");
     expect(wrapper.get("#tab-changes").classes()).not.toContain("canvas-tab--updated");
     wrapper.unmount();
+  });
+
+  describe("file tabs", () => {
+    async function openedFile(path: string, keep = false) {
+      const wrapper = mountHost();
+      useCanvasesStore().openFile("s1", path, { keep });
+      await flushPromises();
+      return { wrapper, tab: () => wrapper.get(`[data-testid="file-tab-${path}"]`) };
+    }
+
+    it("shows a file tab by name with its path, and passes the file to the canvas", async () => {
+      const { wrapper, tab } = await openedFile("src/app.ts");
+      expect(tab().get(".canvas-tab__label").text()).toBe("app.ts");
+      expect(tab().attributes("title")).toBe("src/app.ts");
+      expect(tab().attributes("aria-selected")).toBe("true");
+      expect(wrapper.get(".stub-FileCanvas").text()).toBe("src/app.ts edit");
+      wrapper.unmount();
+    });
+
+    it("draws a preview tab in italics and keeps it on double-click", async () => {
+      const { wrapper, tab } = await openedFile("src/app.ts");
+      expect(tab().classes()).toContain("canvas-tab--preview");
+
+      await tab().trigger("dblclick");
+
+      expect(tab().classes()).not.toContain("canvas-tab--preview");
+      wrapper.unmount();
+    });
+
+    it("shows a dot instead of the close button while the file has unsaved changes", async () => {
+      const { wrapper, tab } = await openedFile("src/app.ts", true);
+      expect(tab().find(".canvas-tab__unsaved-dot").exists()).toBe(false);
+
+      const buffers = useFileBuffersStore();
+      buffers.ensure("s1", "src/app.ts");
+      buffers.patch("s1", "src/app.ts", { dirty: true });
+      await flushPromises();
+
+      expect(tab().find(".canvas-tab__unsaved-dot").exists()).toBe(true);
+      expect(tab().get(".canvas-tab__close").attributes("aria-label")).toBe("Close app.ts (unsaved changes)");
+      wrapper.unmount();
+    });
+
+    it("closes a clean file straight away", async () => {
+      const { wrapper, tab } = await openedFile("src/app.ts", true);
+      await tab().get(".canvas-tab__close").trigger("click");
+      await flushPromises();
+      expect(wrapper.find('[data-testid="file-tab-src/app.ts"]').exists()).toBe(false);
+      wrapper.unmount();
+    });
+
+    it("asks before closing a file with unsaved changes, and can close without saving", async () => {
+      const { wrapper, tab } = await openedFile("src/app.ts", true);
+      const buffers = useFileBuffersStore();
+      buffers.ensure("s1", "src/app.ts");
+      buffers.patch("s1", "src/app.ts", { dirty: true });
+      await flushPromises();
+
+      await tab().get(".canvas-tab__close").trigger("click");
+      await flushPromises();
+      expect(wrapper.get(".stub-unsaved").text()).toContain("Save changes before closing? src/app.ts");
+      expect(wrapper.find('[data-testid="file-tab-src/app.ts"]').exists()).toBe(true);
+
+      await wrapper.get('[data-testid="unsaved-discard"]').trigger("click");
+      await flushPromises();
+
+      expect(wrapper.find('[data-testid="file-tab-src/app.ts"]').exists()).toBe(false);
+      expect(buffers.record("s1", "src/app.ts")).toBeUndefined();
+      wrapper.unmount();
+    });
+
+    it("saves and closes, or keeps the tab open when the save hits a conflict", async () => {
+      const { wrapper, tab } = await openedFile("src/app.ts", true);
+      const buffers = useFileBuffersStore();
+      buffers.ensure("s1", "src/app.ts");
+      buffers.patch("s1", "src/app.ts", { dirty: true });
+      await flushPromises();
+
+      saveBufferMock.mockResolvedValueOnce({ kind: "conflict" });
+      await tab().get(".canvas-tab__close").trigger("click");
+      await flushPromises();
+      await wrapper.get('[data-testid="unsaved-save"]').trigger("click");
+      await flushPromises();
+      expect(saveBufferMock).toHaveBeenCalledWith("s1", "src/app.ts");
+      expect(wrapper.find('[data-testid="file-tab-src/app.ts"]').exists()).toBe(true);
+
+      saveBufferMock.mockResolvedValueOnce({ kind: "saved" });
+      await tab().get(".canvas-tab__close").trigger("click");
+      await flushPromises();
+      await wrapper.get('[data-testid="unsaved-save"]').trigger("click");
+      await flushPromises();
+      expect(wrapper.find('[data-testid="file-tab-src/app.ts"]').exists()).toBe(false);
+      wrapper.unmount();
+    });
   });
 });

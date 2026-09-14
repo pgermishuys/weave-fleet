@@ -102,9 +102,8 @@ export const useFileBuffersStore = defineStore("file-buffers", () => {
   }
 
   function remove(sessionId: string, path: string): void {
+    // A mounted editor belongs to its canvas, which destroys it when it's unmounted or reused.
     const key = fileBufferKey(sessionId, path);
-    const existing = records.get(key);
-    existing?.view?.destroy();
     records.delete(key);
     if (!(key in infos.value)) return;
     const rest = { ...infos.value };
