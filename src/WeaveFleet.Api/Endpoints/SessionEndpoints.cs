@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using WeaveFleet.Api;
 using WeaveFleet.Application.DTOs;
+using WeaveFleet.Application.Progress;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Entities;
@@ -28,6 +29,8 @@ public static class SessionEndpoints
             IWorkspaceRepository workspaceRepository,
             SessionActivityTracker activityTracker,
             SessionCapabilitiesResolver capabilitiesResolver,
+            SessionProgressReader progressReader,
+            CancellationToken ct,
             int limit = 100,
             int offset = 0,
             string? status = null,
@@ -69,7 +72,13 @@ public static class SessionEndpoints
                     var workspacesById = (await workspaceRepository.ListAsync())
                         .ToDictionary(workspace => workspace.Id, StringComparer.Ordinal);
 
-                    return Results.Ok(sessions.Select(session => ToListResponse(session, parentIdsWithBusyChildren, projectNamesById, originsBySessionId, activityTracker, capabilitiesResolver, workspacesById)).ToList());
+                    var progressBySessionId = await progressReader.GetSummariesAsync(
+                        sessions.Select(session => session.Id).ToArray(), ct);
+
+                    return Results.Ok(sessions.Select(session => ToListResponse(session, parentIdsWithBusyChildren, projectNamesById, originsBySessionId, activityTracker, capabilitiesResolver, workspacesById) with
+                    {
+                        Progress = progressBySessionId.GetValueOrDefault(session.Id),
+                    }).ToList());
                 },
                 error => Task.FromResult(Results.Problem(error.Description) as IResult));
         })
@@ -339,6 +348,18 @@ public static class SessionEndpoints
                 error => Task.FromResult(error.ToSessionApiResult()));
         })
         .WithName("GetSessionDiffs");
+
+        // GET /api/sessions/{id}/progress — the session's todo list and counts; 204 when there's nothing to show
+        group.MapGet("/{id}/progress", async (string id, SessionService sessionService, SessionProgressReader progressReader, CancellationToken ct) =>
+        {
+            var result = await sessionService.GetSessionAsync(id);
+            return await result.Match<Task<IResult>>(
+                async session => await progressReader.GetAsync(session, ct) is { } progress
+                    ? Results.Ok(progress)
+                    : Results.NoContent(),
+                error => Task.FromResult(error.ToSessionApiResult()));
+        })
+        .WithName("GetSessionProgress");
 
         // GET /api/sessions/{id}/status
         group.MapGet("/{id}/status", async (string id, SessionService sessionService, SessionActivityTracker activityTracker) =>

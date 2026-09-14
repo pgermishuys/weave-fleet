@@ -11,6 +11,7 @@ using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Events;
+using WeaveFleet.Infrastructure.Progress;
 
 namespace WeaveFleet.Infrastructure.Services;
 
@@ -63,6 +64,7 @@ public sealed class HarnessEventRelay : BackgroundService
     private readonly ConcurrentDictionary<string, Task> _pumpTasks = new();
     private readonly ConcurrentDictionary<string, long> _internalPumpDedupKeys = new();
     private readonly SmartLinkDetector? _smartLinkDetector;
+    private readonly SessionProgressObserver? _progressObserver;
     private CancellationToken _stoppingToken;
 
     public HarnessEventRelay(
@@ -72,7 +74,8 @@ public sealed class HarnessEventRelay : BackgroundService
         SessionActivityTracker activityTracker,
         IServiceScopeFactory scopeFactory,
         ILogger<HarnessEventRelay> logger,
-        SmartLinkDetector? smartLinkDetector = null)
+        SmartLinkDetector? smartLinkDetector = null,
+        SessionProgressObserver? progressObserver = null)
     {
         _tracker = tracker;
         _broadcaster = broadcaster;
@@ -81,6 +84,7 @@ public sealed class HarnessEventRelay : BackgroundService
         _scopeFactory = scopeFactory;
         _logger = logger;
         _smartLinkDetector = smartLinkDetector;
+        _progressObserver = progressObserver;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -235,6 +239,7 @@ public sealed class HarnessEventRelay : BackgroundService
 
                 var eventToTranslate = eventToPublish with { FleetSessionId = targetFleetSessionId };
                 var domainEvent = translator.Translate(eventToTranslate);
+                _progressObserver?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
                 _logger.LogDebug("[Relay:Pump] Translated type={Type} domainEvent={DomainEvent} targetSession={TargetSession}",
                     evt.Type, domainEvent?.GetType().Name ?? "null", targetFleetSessionId);
 

@@ -1,7 +1,9 @@
 using System.Text.Json;
 using WeaveFleet.Application;
 using WeaveFleet.Application.DTOs;
+using WeaveFleet.Application.Progress;
 using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Services;
@@ -13,7 +15,8 @@ public sealed class DelegationService(
     SessionActivityWriteService? sessionActivityWriteService,
     SessionActivityTracker? activityTracker,
     ISessionRepository? sessionRepository,
-    SessionCapabilitiesResolver? capabilitiesResolver)
+    SessionCapabilitiesResolver? capabilitiesResolver,
+    ISessionProgressObserver? progressObserver = null)
 {
     private static readonly HashSet<string> TerminalStatuses = new(StringComparer.Ordinal)
     {
@@ -54,10 +57,12 @@ public sealed class DelegationService(
     {
     }
 
+    /// <param name="description">What the subagent was asked to do, when the harness says; only passed on to progress.</param>
     public async Task<DelegationDto> HandleDelegationDetectedAsync(
         string parentSessionId,
         string parentToolCallId,
-        string title)
+        string title,
+        string? description = null)
     {
         ValidateRequired(parentSessionId, nameof(parentSessionId));
         ValidateRequired(parentToolCallId, nameof(parentToolCallId));
@@ -95,6 +100,7 @@ public sealed class DelegationService(
                 CancellationToken.None);
         }
 
+        ObserveForProgress(delegation, new DelegationCreated { Payload = CreatedPayload(delegation) with { Description = description } });
         return ToDto(delegation);
     }
 
@@ -166,6 +172,7 @@ public sealed class DelegationService(
         if (shouldUpdateChild)
             activityTracker?.RegisterChild(childSessionId, parentSessionId);
 
+        ObserveForProgress(delegation, new DelegationUpdated { Payload = UpdatedPayload(delegation) });
         return ToDto(delegation);
     }
 
@@ -216,6 +223,8 @@ public sealed class DelegationService(
                 CancellationToken.None);
         }
 
+        ObserveForProgress(delegation, new DelegationCompleted { Payload = CompletedPayload(delegation) });
+
         if (delegation.ChildSessionId is not null && activityTracker is not null)
         {
             activityTracker.UnregisterChild(delegation.ChildSessionId);
@@ -242,6 +251,44 @@ public sealed class DelegationService(
 
         return ToDto(delegation);
     }
+
+    /// <summary>Hands the delegation to progress tracking, which shows subagents under the plan step they work on.</summary>
+    private void ObserveForProgress(Delegation delegation, DomainEvent domainEvent)
+        => progressObserver?.Observe(delegation.ParentSessionId, userContext.UserId, domainEvent);
+
+    private static DelegationCreatedPayload CreatedPayload(Delegation delegation) => new()
+    {
+        DelegationId = delegation.Id,
+        ParentSessionId = delegation.ParentSessionId,
+        ParentToolCallId = delegation.ParentToolCallId,
+        ChildSessionId = delegation.ChildSessionId,
+        Title = delegation.Title,
+        Status = delegation.Status,
+        CreatedAt = delegation.CreatedAt,
+    };
+
+    private static DelegationUpdatedPayload UpdatedPayload(Delegation delegation) => new()
+    {
+        DelegationId = delegation.Id,
+        ParentSessionId = delegation.ParentSessionId,
+        ParentToolCallId = delegation.ParentToolCallId,
+        ChildSessionId = delegation.ChildSessionId,
+        Title = delegation.Title,
+        Status = delegation.Status,
+        CreatedAt = delegation.CreatedAt,
+    };
+
+    private static DelegationCompletedPayload CompletedPayload(Delegation delegation) => new()
+    {
+        DelegationId = delegation.Id,
+        ParentSessionId = delegation.ParentSessionId,
+        ParentToolCallId = delegation.ParentToolCallId,
+        ChildSessionId = delegation.ChildSessionId,
+        Title = delegation.Title,
+        Status = delegation.Status,
+        CreatedAt = delegation.CreatedAt,
+        CompletedAt = delegation.CompletedAt ?? delegation.UpdatedAt,
+    };
 
     private async Task<JsonElement> BuildActivityStatusPayloadAsync(string sessionId, string activityStatus)
     {

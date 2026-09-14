@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
@@ -86,6 +87,10 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     /// the tool call ID) can reply to the correct OpenCode question endpoint.
     /// </summary>
     private readonly ConcurrentDictionary<string, string> _toolCallToQuestionId = new();
+
+    // Tool calls already reported as files.written, so a re-sent completed part isn't reported twice.
+    private const int MaxRememberedFileWrites = 10_000;
+    private readonly ConcurrentDictionary<string, byte> _reportedFileWrites = new(StringComparer.Ordinal);
 
     private sealed record OpenCodeAgentModelInfo(string? ProviderId, string? ModelId);
 
@@ -338,6 +343,15 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
                 FleetSessionId = !isParentEvent ? routedFleetSessionId : null
             };
 
+            // The todo list becomes Fleet's own event, so nothing past the adapter sees "todo.updated".
+            if (sseEvt.Type == OpenCodeMapper.TodoUpdatedEventType)
+            {
+                var todosEvent = OpenCodeMapper.TryMapTodosReported(sseEvt, harnessEvent.SessionId, harnessEvent.FleetSessionId);
+                if (todosEvent is not null)
+                    yield return todosEvent;
+                continue;
+            }
+
             if (harnessEvent.Type is EventTypes.MessageCreated or EventTypes.MessageUpdated)
                 harnessEvent = await EnrichWithModelInfoWhenMissingAsync(harnessEvent, ct).ConfigureAwait(false);
 
@@ -366,6 +380,15 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
                 _ = TryAutoApprovePermissionAsync(harnessEvent);
 
             yield return harnessEvent;
+
+            // Files the agent wrote become Fleet's own event, once per tool call (a completed part can be sent again).
+            if (OpenCodeMapper.TryMapFilesWritten(sseEvt, harnessEvent.SessionId, harnessEvent.FleetSessionId, _workingDirectory) is { } written)
+            {
+                if (_reportedFileWrites.Count >= MaxRememberedFileWrites)
+                    _reportedFileWrites.Clear();
+                if (_reportedFileWrites.TryAdd(written.CallId, 0))
+                    yield return written.Event;
+            }
 
             // Emit synthetic tool-result event if this is a completed tool part with output
             var toolResultEvent = TryBuildToolResultEvent(sseEvt, harnessEvent);
@@ -677,6 +700,25 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<TodoEntry>?> GetTodosAsync(CancellationToken ct)
+    {
+        var openCodeSessionId = _openCodeSessionId;
+        if (!_instanceHandle.IsRunning || string.IsNullOrWhiteSpace(openCodeSessionId))
+            return null;
+
+        try
+        {
+            var todos = await _instanceHandle.HttpClient.GetTodosAsync(openCodeSessionId, _workingDirectory, ct).ConfigureAwait(false);
+            return OpenCodeMapper.ToTodoEntries(todos);
+        }
+        catch (Exception) when (!ct.IsCancellationRequested)
+        {
+            // Best-effort query — return null on failure
+            return null;
+        }
+    }
+
+    /// <inheritdoc />
     public Task WaitForEventSubscriptionAsync(CancellationToken ct)
     {
         // Delegate to the instance handle, which signals readiness when the SSE stream is connected.
@@ -975,7 +1017,8 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             var delegation = await delegationService.HandleDelegationDetectedAsync(
                 extraction.ParentSessionId,
                 extraction.ToolCallId,
-                extraction.Title).ConfigureAwait(false);
+                extraction.Title,
+                extraction.Description).ConfigureAwait(false);
 
             if (!string.IsNullOrWhiteSpace(extraction.ChildSessionId))
             {

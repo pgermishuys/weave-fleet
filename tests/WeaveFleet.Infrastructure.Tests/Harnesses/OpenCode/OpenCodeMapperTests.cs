@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Shouldly;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 
@@ -844,6 +845,21 @@ public sealed class OpenCodeMapperTests
         result.Title.ShouldBe("reviewer");
         result.Status.ShouldBe("pending");
         result.ChildSessionId.ShouldBeNull();
+        result.Description.ShouldBe("Review the patch");
+    }
+
+    [Fact]
+    public void TryExtractDelegation_TaskToolWithoutDescription_HasNoDescription()
+    {
+        var evt = new OpenCodeSseEvent
+        {
+            Type = "message.part.updated",
+            Properties = JsonDocument.Parse("""
+                { "part": { "type": "tool", "tool": "task", "callID": "tool-1", "state": { "status": "running", "input": { "subagent_type": "reviewer" } } } }
+                """).RootElement,
+        };
+
+        OpenCodeMapper.TryExtractDelegation(evt, "fleet-parent")!.Description.ShouldBeNull();
     }
 
     [Fact]
@@ -1110,5 +1126,231 @@ public sealed class OpenCodeMapperTests
         var result = OpenCodeMapper.TryExtractDelegation(evt, "fleet-parent");
 
         result.ShouldBeNull();
+    }
+
+    // ---------------------------------------------------------------------------
+    // TryMapTodosReported — todo.updated (shape checked against OpenCode 1.18.30)
+    // ---------------------------------------------------------------------------
+
+    [Fact]
+    public void TryMapTodosReported_TodoUpdated_MapsToFleetEvent()
+    {
+        var evt = TodoUpdatedEvent(
+            """
+            {
+              "sessionID": "oc-1",
+              "todos": [
+                { "content": "Write DROP TABLE statements", "status": "completed", "priority": "high" },
+                { "content": "Drop the associated indexes", "status": "in_progress", "priority": "medium" },
+                { "content": "Start the app on a fresh database", "status": "pending", "priority": "low" }
+              ]
+            }
+            """);
+
+        var result = OpenCodeMapper.TryMapTodosReported(evt, "oc-1", fleetSessionId: null);
+
+        result.ShouldNotBeNull();
+        result.Type.ShouldBe(EventTypes.TodosReported);
+        result.SessionId.ShouldBe("oc-1");
+        result.FleetSessionId.ShouldBeNull();
+        var payload = result.Payload!.Value;
+        payload.GetProperty("items").GetArrayLength().ShouldBe(3);
+        var second = payload.GetProperty("items")[1];
+        second.GetProperty("content").GetString().ShouldBe("Drop the associated indexes");
+        second.GetProperty("status").GetString().ShouldBe(TodoStatuses.InProgress);
+        second.GetProperty("priority").GetString().ShouldBe("medium");
+        payload.GetRawText().ShouldNotContain("todos");
+    }
+
+    [Fact]
+    public void TryMapTodosReported_ChildSession_KeepsTheRoutedFleetSession()
+    {
+        var evt = TodoUpdatedEvent("""{ "sessionID": "oc-child", "todos": [ { "content": "Delete SnapshotMergeTests.cs", "status": "pending", "priority": "medium" } ] }""");
+
+        var result = OpenCodeMapper.TryMapTodosReported(evt, "oc-child", fleetSessionId: "fleet-child");
+
+        result.ShouldNotBeNull();
+        result.FleetSessionId.ShouldBe("fleet-child");
+        result.Payload!.Value.GetProperty("sessionId").GetString().ShouldBe("fleet-child");
+    }
+
+    [Fact]
+    public void TryMapTodosReported_EmptyList_MapsToEmptyItems()
+    {
+        var evt = TodoUpdatedEvent("""{ "sessionID": "oc-1", "todos": [] }""");
+
+        var result = OpenCodeMapper.TryMapTodosReported(evt, "oc-1", fleetSessionId: null);
+
+        result.ShouldNotBeNull();
+        result.Payload!.Value.GetProperty("items").GetArrayLength().ShouldBe(0);
+    }
+
+    [Fact]
+    public void TryMapTodosReported_DropsItemsWithoutContent_AndNormalizesStatus()
+    {
+        var evt = TodoUpdatedEvent(
+            """
+            {
+              "sessionID": "oc-1",
+              "todos": [
+                { "content": "", "status": "completed", "priority": "high" },
+                { "status": "completed" },
+                { "content": "Ship it", "status": "blocked", "priority": "" }
+              ]
+            }
+            """);
+
+        var result = OpenCodeMapper.TryMapTodosReported(evt, "oc-1", fleetSessionId: null);
+
+        var items = result!.Payload!.Value.GetProperty("items");
+        items.GetArrayLength().ShouldBe(1);
+        items[0].GetProperty("content").GetString().ShouldBe("Ship it");
+        items[0].GetProperty("status").GetString().ShouldBe(TodoStatuses.Pending);
+        items[0].TryGetProperty("priority", out _).ShouldBeFalse();
+    }
+
+    [Theory]
+    [InlineData("message.part.updated", """{ "sessionID": "oc-1", "todos": [] }""")]
+    [InlineData("todo.updated", """{ "sessionID": "oc-1" }""")]
+    [InlineData("todo.updated", """{ "sessionID": "oc-1", "todos": "nope" }""")]
+    [InlineData("todo.updated", """{ "sessionID": "oc-1", "todos": [ 42 ] }""")]
+    public void TryMapTodosReported_OtherEventsAndBadPayloads_ReturnNull(string type, string properties)
+    {
+        var evt = new OpenCodeSseEvent { Type = type, Properties = JsonDocument.Parse(properties).RootElement };
+
+        OpenCodeMapper.TryMapTodosReported(evt, "oc-1", fleetSessionId: null).ShouldBeNull();
+    }
+
+    [Fact]
+    public void ToTodoEntries_MapsGetTodoResponseItems()
+    {
+        var entries = OpenCodeMapper.ToTodoEntries(
+        [
+            new OpenCodeTodo { Content = "Add the endpoint", Status = "completed", Priority = "high" },
+            new OpenCodeTodo { Content = " ", Status = "pending" },
+            null,
+            new OpenCodeTodo { Content = "Write tests", Status = "cancelled" },
+        ]);
+
+        entries.Select(entry => (entry.Content, entry.Status, entry.Priority)).ShouldBe(
+        [
+            ("Add the endpoint", TodoStatuses.Completed, "high"),
+            ("Write tests", TodoStatuses.Cancelled, null),
+        ]);
+    }
+
+    private static OpenCodeSseEvent TodoUpdatedEvent(string properties)
+        => new() { Type = "todo.updated", Properties = JsonDocument.Parse(properties).RootElement };
+
+    // ---------------------------------------------------------------------------
+    // TryMapFilesWritten — edit, write and apply_patch tool parts
+    // ---------------------------------------------------------------------------
+
+    private static OpenCodeSseEvent ToolPart(string tool, string status, string input, string callId = "call-1")
+        => new()
+        {
+            Type = "message.part.updated",
+            Properties = JsonDocument.Parse($$"""
+                {
+                  "part": {
+                    "id": "prt_1",
+                    "sessionID": "oc-1",
+                    "messageID": "msg-1",
+                    "type": "tool",
+                    "tool": "{{tool}}",
+                    "callID": "{{callId}}",
+                    "state": { "status": "{{status}}", "input": {{input}} }
+                  }
+                }
+                """).RootElement,
+        };
+
+    private static readonly string WorkDir = Path.Combine(Path.GetTempPath(), "fleet-work");
+
+    [Theory]
+    [InlineData("edit")]
+    [InlineData("write")]
+    public void TryMapFilesWritten_CompletedEditOrWrite_ReportsItsFile(string tool)
+    {
+        var planPath = Path.Combine(WorkDir, ".weave", "plans", "thin-proxy.md");
+        var evt = ToolPart(tool, "completed", JsonSerializer.Serialize(new { filePath = planPath, oldString = "- [ ] 11.", newString = "- [x] 11." }));
+
+        var result = OpenCodeMapper.TryMapFilesWritten(evt, "oc-1", "fleet-1", WorkDir);
+
+        result.ShouldNotBeNull();
+        result.Value.CallId.ShouldBe("call-1");
+        result.Value.Event.Type.ShouldBe(EventTypes.FilesWritten);
+        result.Value.Event.FleetSessionId.ShouldBe("fleet-1");
+        var payload = result.Value.Event.Payload!.Value;
+        payload.GetProperty("messageId").GetString().ShouldBe("msg-1");
+        payload.GetProperty("paths").EnumerateArray().Select(p => p.GetString()).ShouldBe([planPath]);
+    }
+
+    [Fact]
+    public void TryMapFilesWritten_RelativePath_ResolvesAgainstTheWorkingDirectory()
+    {
+        var evt = ToolPart("write", "completed", """{ "filePath": "docs/plan.md", "content": "- [ ] One" }""");
+
+        var result = OpenCodeMapper.TryMapFilesWritten(evt, "oc-1", null, WorkDir);
+
+        result!.Value.Event.Payload!.Value.GetProperty("paths")[0].GetString()
+            .ShouldBe(Path.GetFullPath(Path.Combine(WorkDir, "docs", "plan.md")));
+    }
+
+    [Fact]
+    public void TryMapFilesWritten_ApplyPatch_ReportsEveryFileItWrites()
+    {
+        var patch = string.Join("\n",
+            "*** Begin Patch",
+            "*** Update File: .weave/plans/thin-proxy.md",
+            "@@",
+            "-- [ ] 11. Add migration",
+            "+- [x] 11. Add migration",
+            "*** Add File: src/New.cs",
+            "+class New {}",
+            "*** Update File: src/Old.cs",
+            "*** Move to: src/Renamed.cs",
+            "*** Delete File: src/Gone.cs",
+            "*** End Patch");
+        var evt = ToolPart("apply_patch", "completed", JsonSerializer.Serialize(new { patchText = patch }));
+
+        var result = OpenCodeMapper.TryMapFilesWritten(evt, "oc-1", null, WorkDir);
+
+        result!.Value.Event.Payload!.Value.GetProperty("paths").EnumerateArray().Select(p => p.GetString()).ShouldBe(
+        [
+            Path.GetFullPath(Path.Combine(WorkDir, ".weave/plans/thin-proxy.md")),
+            Path.GetFullPath(Path.Combine(WorkDir, "src/New.cs")),
+            Path.GetFullPath(Path.Combine(WorkDir, "src/Old.cs")),
+            Path.GetFullPath(Path.Combine(WorkDir, "src/Renamed.cs")),
+        ]);
+    }
+
+    [Theory]
+    [InlineData("edit", "running")]
+    [InlineData("edit", "pending")]
+    [InlineData("edit", "error")]
+    [InlineData("bash", "completed")]
+    [InlineData("read", "completed")]
+    public void TryMapFilesWritten_CallsThatWroteNothing_ReturnNull(string tool, string status)
+    {
+        var evt = ToolPart(tool, status, """{ "filePath": "/work/a.md", "command": "ls" }""");
+
+        OpenCodeMapper.TryMapFilesWritten(evt, "oc-1", null, WorkDir).ShouldBeNull();
+    }
+
+    [Fact]
+    public void TryMapFilesWritten_OtherEvents_ReturnNull()
+    {
+        var evt = new OpenCodeSseEvent { Type = "todo.updated", Properties = JsonDocument.Parse("""{ "todos": [] }""").RootElement };
+
+        OpenCodeMapper.TryMapFilesWritten(evt, "oc-1", null, WorkDir).ShouldBeNull();
+    }
+
+    [Fact]
+    public void TryMapFilesWritten_RelativePathWithoutAWorkingDirectory_IsSkipped()
+    {
+        var evt = ToolPart("write", "completed", """{ "filePath": "docs/plan.md" }""");
+
+        OpenCodeMapper.TryMapFilesWritten(evt, "oc-1", null, workingDirectory: "").ShouldBeNull();
     }
 }

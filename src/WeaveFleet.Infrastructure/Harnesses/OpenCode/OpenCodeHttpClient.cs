@@ -119,6 +119,17 @@ internal sealed class OpenCodeHttpClient
         return session.ParentId;
     }
 
+    /// <summary>GET /session/{sessionId}/todo?directory={directory}</summary>
+    public async Task<IReadOnlyList<OpenCodeTodo>> GetTodosAsync(
+        string sessionId,
+        string directory,
+        CancellationToken ct)
+    {
+        var url = BuildUrl($"/session/{Uri.EscapeDataString(sessionId)}/todo", directory);
+        return await GetAsync(url, OpenCodeJsonContext.Default.ListOpenCodeTodo, ct).ConfigureAwait(false)
+               ?? [];
+    }
+
     /// <summary>GET /session?directory={directory}</summary>
     public async Task<IReadOnlyList<OpenCodeSessionInfo>> ListSessionsAsync(
         string directory,

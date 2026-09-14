@@ -24,6 +24,7 @@ using WeaveFleet.Infrastructure;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
+using WeaveFleet.Infrastructure.Progress;
 using TestHarnessClass = WeaveFleet.TestHarness.TestHarness;
 using TestHarnessRuntimeClass = WeaveFleet.TestHarness.TestHarnessRuntime;
 
@@ -665,6 +666,54 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
         canvasEvents[2].Data.GetRawText().ShouldBe(
             $$$"""{"type":"canvas.updated","eventId":null,"properties":{"sessionId":"{{{sessionId}}}","canvasId":"{{{canvasId}}}","kind":"diagram","title":"Session event flow","version":2,"actor":"user","state":{"direction":"TB","nodes":[{"id":"n1","label":"NuCode session","detail":"NuCode/Sessions","x":20,"y":44.5,"placedByUser":true},{"id":"n2","label":"SessionEventsHub"}],"edges":[{"id":"e1","from":"n1","to":"n2","label":"publishes","style":"solid"}]},"summary":"1 box moved"}}""");
         canvasEvents[0].Data.GetProperty("properties").GetProperty("summary").GetString().ShouldBe("+2 boxes, +1 edge");
+    }
+
+    [Fact]
+    public async Task Hub_sends_session_progress_to_the_row_and_the_open_session_with_the_exact_wire_shape()
+    {
+        var sessionId = await CreateSessionAsync();
+        await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
+        await _hub.InvokeAsync("SubscribeToSessionsTopicAsync");
+        await WaitForBroadcasterSubscriberAsync();
+
+        // Act: a todo list arrives, as the relay would hand it over after translating a harness event
+        var observer = _server.Services.GetRequiredService<SessionProgressObserver>();
+        observer.Observe(sessionId, "local-user", new TodosReported
+        {
+            Payload = new TodosReportedPayload
+            {
+                SessionId = sessionId,
+                Items =
+                [
+                    new TodoEntry { Content = "Write the migration", Status = TodoStatuses.Completed, Priority = "high" },
+                    new TodoEntry { Content = "Drop the indexes", Status = TodoStatuses.InProgress },
+                ],
+            },
+        });
+
+        // Assert: the row summary on "sessions" and the full detail on the session's topic
+        List<ReceivedEvent> progressEvents = [];
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < deadline)
+        {
+            progressEvents = _receivedEvents.ToArray()
+                .Where(e => e.Data.GetProperty("type").GetString() is "session_progress" or "progress.updated")
+                .ToList();
+            if (progressEvents.Count >= 2)
+                break;
+            await _eventReceived.WaitAsync(TimeSpan.FromMilliseconds(100));
+        }
+
+        progressEvents.Count.ShouldBe(2, $"Raw events: {string.Join("; ", _rawEvents)}");
+        var row = progressEvents.Single(e => e.Topic == "sessions");
+        row.Data.GetRawText().ShouldBe(
+            $$$"""{"type":"session_progress","eventId":null,"properties":{"sessionId":"{{{sessionId}}}","kind":"todos","done":1,"total":2,"current":"Drop the indexes"}}""");
+
+        var detail = progressEvents.Single(e => e.Topic == $"session:{sessionId}");
+        var updatedAt = detail.Data.GetProperty("properties").GetProperty("updatedAt").GetString();
+        DateTimeOffset.TryParse(updatedAt, out _).ShouldBeTrue();
+        detail.Data.GetRawText().ShouldBe(
+            $$$"""{"type":"progress.updated","eventId":null,"properties":{"sessionId":"{{{sessionId}}}","kind":"todos","done":1,"total":2,"current":"Drop the indexes","todos":[{"content":"Write the migration","status":"completed","priority":"high"},{"content":"Drop the indexes","status":"in_progress"}],"updatedAt":"{{{updatedAt}}}","subagents":[]}}""");
     }
 
     [Fact]

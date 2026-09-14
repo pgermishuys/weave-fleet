@@ -275,6 +275,8 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(WeaveFleet.Application.DTOs.UpdateSessionTitleRequest))]
 [JsonSerializable(typeof(WeaveFleet.Application.DTOs.MoveSessionRequest))]
 [JsonSerializable(typeof(WeaveFleet.Application.DTOs.SessionListResponse))]
+[JsonSerializable(typeof(WeaveFleet.Application.DTOs.SessionProgressDto))]
+[JsonSerializable(typeof(WeaveFleet.Application.DTOs.SessionProgressSummaryDto))]
 [JsonSerializable(typeof(WeaveFleet.Application.DTOs.FleetSummaryResponse))]
 [JsonSerializable(typeof(WeaveFleet.Application.DTOs.CreateProjectRequest))]
 [JsonSerializable(typeof(WeaveFleet.Application.DTOs.UpdateProjectRequest))]

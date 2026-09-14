@@ -494,8 +494,141 @@ public sealed class DomainEventTranslatorTests
         result.ShouldBeNull();
     }
 
+    [Fact]
+    public void Should_translate_todos_reported_for_the_routed_fleet_session()
+    {
+        var translator = CreateTranslator();
+
+        var result = translator.Translate(CreateTodosEvent(new
+        {
+            items = new object[]
+            {
+                new { content = "Write the migration", status = "completed", priority = "high" },
+                new { content = "Drop the indexes", status = "in_progress" },
+                new { content = "Start the app", status = "pending", priority = "low" },
+            }
+        }));
+
+        var todos = result.ShouldBeOfType<TodosReported>();
+        todos.Payload.SessionId.ShouldBe("fleet-1");
+        todos.Payload.Items.Select(item => (item.Content, item.Status, item.Priority)).ShouldBe(
+        [
+            ("Write the migration", TodoStatuses.Completed, "high"),
+            ("Drop the indexes", TodoStatuses.InProgress, null),
+            ("Start the app", TodoStatuses.Pending, "low"),
+        ]);
+    }
+
+    [Fact]
+    public void Should_translate_an_empty_todo_list()
+    {
+        var translator = CreateTranslator();
+
+        var result = translator.Translate(CreateTodosEvent(new { items = Array.Empty<object>() }));
+
+        result.ShouldBeOfType<TodosReported>().Payload.Items.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Should_drop_todo_items_without_content_and_treat_unknown_statuses_as_pending()
+    {
+        var translator = CreateTranslator();
+
+        var result = translator.Translate(CreateTodosEvent(new
+        {
+            items = new object[]
+            {
+                new { content = "   ", status = "completed" },
+                new { status = "completed" },
+                new { content = "Ship it", status = "blocked" },
+                new { content = "Tidy up" },
+            }
+        }));
+
+        result.ShouldBeOfType<TodosReported>().Payload.Items.Select(item => (item.Content, item.Status)).ShouldBe(
+        [
+            ("Ship it", TodoStatuses.Pending),
+            ("Tidy up", TodoStatuses.Pending),
+        ]);
+    }
+
+    [Fact]
+    public void Should_return_null_for_a_todos_reported_event_without_a_payload()
+    {
+        var translator = CreateTranslator();
+
+        var result = translator.Translate(new HarnessEvent
+        {
+            Type = EventTypes.TodosReported,
+            SessionId = "harness-1",
+            FleetSessionId = "fleet-1",
+            Timestamp = DateTimeOffset.UtcNow
+        });
+
+        result.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Should_classify_todos_reported_as_known_but_not_broadcast()
+    {
+        var classification = EventTypeMetadata.Classify(EventTypes.TodosReported);
+
+        classification.IsKnown.ShouldBeTrue();
+        classification.IsDurable.ShouldBeFalse();
+        classification.IsEphemeralRelay.ShouldBeFalse();
+    }
+
+    private static readonly string[] WrittenPaths = ["/work/a.md", "/work/a.md", " ", "/work/b.cs"];
+
+    [Fact]
+    public void Should_translate_files_written_for_the_routed_fleet_session()
+    {
+        var translator = CreateTranslator();
+
+        var result = translator.Translate(new HarnessEvent
+        {
+            Type = EventTypes.FilesWritten,
+            SessionId = "harness-1",
+            FleetSessionId = "fleet-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new { messageId = "msg-1", paths = WrittenPaths }),
+        });
+
+        var written = result.ShouldBeOfType<FilesWritten>();
+        written.Payload.SessionId.ShouldBe("fleet-1");
+        written.Payload.MessageId.ShouldBe("msg-1");
+        written.Payload.Paths.ShouldBe(["/work/a.md", "/work/b.cs"]);
+    }
+
+    [Fact]
+    public void Should_return_null_for_files_written_without_paths()
+    {
+        var translator = CreateTranslator();
+
+        var result = translator.Translate(new HarnessEvent
+        {
+            Type = EventTypes.FilesWritten,
+            SessionId = "harness-1",
+            FleetSessionId = "fleet-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new { paths = Array.Empty<string>() }),
+        });
+
+        result.ShouldBeNull();
+    }
+
     private static DomainEventTranslator CreateTranslator()
         => new(NullLogger<DomainEventTranslator>.Instance);
+
+    private static HarnessEvent CreateTodosEvent(object payload)
+        => new()
+        {
+            Type = EventTypes.TodosReported,
+            SessionId = "harness-1",
+            FleetSessionId = "fleet-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(payload)
+        };
 
     private static HarnessEvent CreateDelegationEvent(string eventType, object payload)
         => new()

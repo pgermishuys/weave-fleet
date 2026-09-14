@@ -60,6 +60,12 @@ public sealed class FakeHarnessSession : IHarnessSession
     /// </summary>
     public Func<CancellationToken, Task<string?>>? GetActivityStatusBehavior { get; set; }
 
+    /// <summary>
+    /// What <see cref="IHarnessSession.GetTodosAsync"/> returns. <c>null</c> (the default) means the harness
+    /// can't report a todo list.
+    /// </summary>
+    public IReadOnlyList<WeaveFleet.Domain.Events.TodoEntry>? Todos { get; set; }
+
     // ── Event emission (for streaming tests) ─────────────────────────────────
 
     public void Emit(HarnessEvent evt) => _channel.Writer.TryWrite(evt);
@@ -119,6 +125,9 @@ public sealed class FakeHarnessSession : IHarnessSession
 
     public Task<string?> GetActivityStatusAsync(CancellationToken ct)
         => GetActivityStatusBehavior?.Invoke(ct) ?? Task.FromResult<string?>("idle");
+
+    public Task<IReadOnlyList<WeaveFleet.Domain.Events.TodoEntry>?> GetTodosAsync(CancellationToken ct)
+        => Task.FromResult(Todos);
 
     public Task WaitForEventSubscriptionAsync(CancellationToken ct)
     {

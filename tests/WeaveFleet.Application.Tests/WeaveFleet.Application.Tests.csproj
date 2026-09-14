@@ -18,6 +18,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="Progress\Fixtures\*.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\WeaveFleet.Application\WeaveFleet.Application.csproj" />
     <ProjectReference Include="..\WeaveFleet.Testing\WeaveFleet.Testing.csproj" />
   </ItemGroup>

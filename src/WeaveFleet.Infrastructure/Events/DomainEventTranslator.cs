@@ -64,6 +64,8 @@ internal sealed class DomainEventTranslator
             DelegationUpdatedEventType => TranslateDelegationUpdated(evt),
             DelegationCompletedEventType => TranslateDelegationCompleted(evt),
             EventTypes.FileWatcherUpdated => TranslateFileWatcherUpdated(evt),
+            EventTypes.TodosReported => TranslateTodosReported(evt),
+            EventTypes.FilesWritten => TranslateFilesWritten(evt),
 
             // message.removed and message.part.removed are durable persistence signals only.
             EventTypes.MessageRemoved or EventTypes.MessagePartRemoved => null,
@@ -337,6 +339,48 @@ internal sealed class DomainEventTranslator
             {
                 SessionId = sessionId,
                 Files = files
+            }
+        };
+    }
+
+    private static TodosReported? TranslateTodosReported(HarnessEvent evt)
+    {
+        var payload = DeserializePayload(evt, InfrastructureJsonContext.Default.TodosReportedPayload);
+        if (payload is null)
+            return null;
+
+        // Any harness can send this event, so drop items with no text and treat unknown statuses as pending.
+        var items = payload.Items
+            .Where(item => item is not null && !string.IsNullOrWhiteSpace(item.Content))
+            .Select(item => item with { Status = TodoStatuses.Normalize(item.Status) })
+            .ToList();
+
+        return new TodosReported
+        {
+            Payload = new TodosReportedPayload
+            {
+                SessionId = ResolveSessionId(evt),
+                Items = items,
+            }
+        };
+    }
+
+    private static FilesWritten? TranslateFilesWritten(HarnessEvent evt)
+    {
+        var payload = DeserializePayload(evt, InfrastructureJsonContext.Default.FilesWrittenPayload);
+        var paths = payload?.Paths
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (payload is null || paths is not { Count: > 0 })
+            return null;
+
+        return new FilesWritten
+        {
+            Payload = payload with
+            {
+                SessionId = ResolveSessionId(evt),
+                Paths = paths,
             }
         };
     }

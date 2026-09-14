@@ -112,6 +112,53 @@ function mountSessionItem(session: SessionListItem, active = false) {
 }
 
 describe("SessionItem", () => {
+  it("shows a progress ring and count instead of the status word while working", () => {
+    const wrapper = mountSessionItem(createSession({
+      progress: { sessionId: "session-1", kind: "todos", done: 3, total: 7, current: "Drop the indexes" },
+    }));
+
+    expect(wrapper.find(".progress-ring").exists()).toBe(true);
+    expect(wrapper.get(".session-progress__count").text()).toBe("3/7");
+    expect(wrapper.find(".session-meta").exists()).toBe(false);
+    expect(wrapper.get(".session-progress").attributes("title")).toBe("3 of 7 done. Now: Drop the indexes");
+  });
+
+  it("keeps words the user has to act on next to the ring", () => {
+    const wrapper = mountSessionItem(createSession({
+      sessionStatus: "waiting_input",
+      progress: { sessionId: "session-1", kind: "todos", done: 5, total: 8, current: null },
+    }));
+
+    expect(wrapper.find(".progress-ring").exists()).toBe(true);
+    expect(wrapper.find(".session-progress__count").exists()).toBe(false);
+    expect(wrapper.get(".session-meta").text()).toBe("Needs input");
+  });
+
+  it("shows no ring for a session without progress or with an empty list", () => {
+    const withoutProgress = mountSessionItem(createSession());
+    const emptyList = mountSessionItem(createSession({
+      progress: { sessionId: "session-1", kind: "todos", done: 0, total: 0, current: null },
+    }));
+
+    // A working session without progress shows no word either: its glyph says it's working.
+    for (const wrapper of [withoutProgress, emptyList]) {
+      expect(wrapper.find(".progress-ring").exists()).toBe(false);
+      expect(wrapper.find(".session-progress__count").exists()).toBe(false);
+      expect(wrapper.find(".session-meta").exists()).toBe(false);
+    }
+  });
+
+  it("shows the count instead of the age for a quiet session", () => {
+    const wrapper = mountSessionItem(createSession({
+      sessionStatus: "idle",
+      activityStatus: "idle",
+      progress: { sessionId: "session-1", kind: "plan", done: 11, total: 17, current: "Add migration" },
+    }));
+
+    expect(wrapper.get(".session-progress__count").text()).toBe("11/17");
+    expect(wrapper.find(".session-meta").exists()).toBe(false);
+  });
+
   it("renders the session title and current status", () => {
     const wrapper = mountSessionItem(createSession(), true);
 
