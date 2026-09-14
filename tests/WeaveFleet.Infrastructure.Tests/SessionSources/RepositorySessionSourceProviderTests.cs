@@ -173,6 +173,104 @@ public sealed class RepositorySessionSourceProviderTests
         result.Value.Input.WorkspaceIntent.Branch.ShouldBe("feature-test");
     }
 
+    [Fact]
+    public async Task ResolveAsync_PassesTheChosenBaseAndFetch_ForANewWorktree()
+    {
+        using var repository = new GitRepositoryFixture();
+        var provider = CreateProvider(repository.ParentPath);
+
+        var result = await provider.ResolveAsync(RepositorySelection(new
+        {
+            repositoryPath = repository.Path,
+            isolationStrategy = "worktree",
+            branch = "fleet/hotfix",
+            baseBranch = " origin/release/2.0 ",
+            fetchOrigin = false
+        }), CancellationToken.None);
+
+        result.IsSuccess.ShouldBeTrue($"Expected success but got: {(result.IsFailure ? result.Error.Description : "")}");
+        result.Value.Input.WorkspaceIntent.ShouldNotBeNull();
+        result.Value.Input.WorkspaceIntent.BaseBranch.ShouldBe("origin/release/2.0");
+        result.Value.Input.WorkspaceIntent.FetchOrigin.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task ResolveAsync_DefaultsToTheRepositoryDefaultAndFetching()
+    {
+        using var repository = new GitRepositoryFixture();
+        var provider = CreateProvider(repository.ParentPath);
+
+        var result = await provider.ResolveAsync(RepositorySelection(new
+        {
+            repositoryPath = repository.Path,
+            isolationStrategy = "worktree"
+        }), CancellationToken.None);
+
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.Input.WorkspaceIntent!.BaseBranch.ShouldBeNull();
+        result.Value.Input.WorkspaceIntent.FetchOrigin.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task ResolveAsync_RejectsABase_ForTheCurrentCheckout()
+    {
+        using var repository = new GitRepositoryFixture();
+        var provider = CreateProvider(repository.ParentPath);
+
+        var result = await provider.ResolveAsync(RepositorySelection(new
+        {
+            repositoryPath = repository.Path,
+            isolationStrategy = "existing",
+            baseBranch = "origin/main"
+        }), CancellationToken.None);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Description.ShouldBe("A base branch can only be chosen for a new worktree.");
+    }
+
+    [Fact]
+    public async Task ResolveAsync_RejectsABaseGitWouldReadAsAnOption()
+    {
+        using var repository = new GitRepositoryFixture();
+        var provider = CreateProvider(repository.ParentPath);
+
+        var result = await provider.ResolveAsync(RepositorySelection(new
+        {
+            repositoryPath = repository.Path,
+            isolationStrategy = "worktree",
+            baseBranch = "--upload-pack=touch /tmp/x"
+        }), CancellationToken.None);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Code.ShouldStartWith("Validation.");
+    }
+
+    private static SessionSourceSelection RepositorySelection(object input) => new()
+    {
+        Key = SessionSourceCatalog.RepositoryStartSession.Key,
+        Input = JsonSerializer.SerializeToElement(input)
+    };
+
+    private static RepositorySessionSourceProvider CreateProvider(string workspaceRoot)
+    {
+        var workspaceRootRepository = new InMemoryWorkspaceRootRepository();
+        workspaceRootRepository.Seed(new WorkspaceRoot
+        {
+            Id = "root-1",
+            Path = workspaceRoot,
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IWorkspaceRootRepository>(workspaceRootRepository);
+        var userContext = new TestUserContext();
+        services.AddSingleton<IUserContext>(userContext);
+        services.AddScoped(_ => new WorkspaceRootService(workspaceRootRepository, userContext));
+        var scopeFactory = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+
+        return new RepositorySessionSourceProvider(new RepositoryService(scopeFactory, NullLogger<RepositoryService>.Instance));
+    }
+
     private sealed class GitRepositoryFixture : IDisposable
     {
         public GitRepositoryFixture()

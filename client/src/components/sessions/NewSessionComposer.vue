@@ -5,7 +5,9 @@ import { useNavigate, useSearch } from "@tanstack/vue-router";
 import { ArrowUp, CircleDot, GitPullRequest, LoaderCircle, X } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import { Button } from "@/components/ui/button";
+import ComposerFrame from "@/components/session/ComposerFrame.vue";
 import MessageBubble from "@/components/session/MessageBubble.vue";
+import BasePicker from "@/components/sessions/new-session/BasePicker.vue";
 import FolderPicker from "@/components/sessions/new-session/FolderPicker.vue";
 import HarnessPicker from "@/components/sessions/new-session/HarnessPicker.vue";
 import MoreOptions from "@/components/sessions/new-session/MoreOptions.vue";
@@ -15,7 +17,7 @@ import { useIsMobile } from "@/composables/use-media-query";
 import { useNewSessionDefaults } from "@/composables/use-new-session-defaults";
 import { useProjects } from "@/composables/use-projects";
 import { useRepositories } from "@/composables/use-repositories";
-import { useRepositoryInfo } from "@/composables/use-repository-info";
+import { useRepositoryDetail } from "@/composables/use-repository-detail";
 import { seedSentPrompt } from "@/composables/use-send-prompt";
 import { useCreateSession } from "@/composables/use-session-actions";
 import { useWorktrees } from "@/composables/use-worktrees";
@@ -37,7 +39,7 @@ const navigate = useNavigate();
 const search = useSearch({ from: "/sessions/new" });
 const { config } = storeToRefs(useAppShellStore());
 const workspaceUiStore = useWorkspaceUiStore();
-const { newSessionDialogInitialSource } = storeToRefs(workspaceUiStore);
+const { newSessionInitialSource } = storeToRefs(workspaceUiStore);
 const { enabledHarnesses, defaultHarnessType } = useEnabledHarnesses();
 const defaults = useNewSessionDefaults();
 const isMobile = useIsMobile();
@@ -54,13 +56,29 @@ const { draft, restored } = workspaceUiStore.openNewSessionDraft({
   folder: null,
   hasChosenFolder: false,
   workspace: { kind: "new" },
+  baseBranch: null,
+  fetchOrigin: true,
+  branchName: "",
   title: "",
   tags: "",
   projectId: null,
   harnessType: defaultHarnessType.value,
   gitHubPreset: null,
 });
-const { message, folder, workspace, title, tags, projectId, harnessType, gitHubPreset, hasChosenFolder } = toRefs(draft);
+const {
+  message,
+  folder,
+  workspace,
+  baseBranch,
+  fetchOrigin,
+  branchName,
+  title,
+  tags,
+  projectId,
+  harnessType,
+  gitHubPreset,
+  hasChosenFolder,
+} = toRefs(draft);
 // A project in the address wins (a project's "+"); otherwise a restored draft keeps its own.
 if (search.value.projectId || !restored) {
   projectId.value = search.value.projectId ?? null;
@@ -70,8 +88,8 @@ if (restored && folder.value) {
   hasChosenFolder.value = true;
 }
 // A GitHub "start session" hands its issue over through the store; the draft keeps it from here.
-if (newSessionDialogInitialSource.value) {
-  gitHubPreset.value = newSessionDialogInitialSource.value;
+if (newSessionInitialSource.value) {
+  gitHubPreset.value = newSessionInitialSource.value;
   hasChosenFolder.value = false;
   workspaceUiStore.setNewSessionInitialSource(null);
 }
@@ -86,7 +104,7 @@ const textareaRef = useTemplateRef<HTMLTextAreaElement>("textarea");
 
 const repositoryPath = computed(() => (folder.value?.kind === "repository" ? folder.value.path : null));
 const { worktrees, isLoading: isLoadingWorktrees } = useWorktrees({ repositoryPath });
-const { info: repositoryInfo } = useRepositoryInfo(repositoryPath);
+const { detail: repositoryDetail, isLoading: isLoadingRepositoryDetail } = useRepositoryDetail(repositoryPath);
 
 const isCloudMode = computed(() => config.value.cloudMode);
 const areRepositoriesReady = computed(() => scannedAt.value !== null || repositoriesError.value !== null);
@@ -94,7 +112,15 @@ const showHarnessPicker = computed(() => enabledHarnesses.value.length > 1);
 const hasMessage = computed(() => message.value.trim().length > 0);
 const isStarting = computed(() => isCreating.value || draft.isStarting);
 const canSend = computed(() => !isStarting.value && (hasMessage.value || gitHubPreset.value !== null));
-const currentBranch = computed(() => repositoryInfo.value?.branch ?? null);
+const currentBranch = computed(() => repositoryDetail.value?.branch ?? null);
+const defaultBase = computed(() => repositoryDetail.value?.defaultBase ?? null);
+
+/** Where a new worktree starts: the chosen base, else the default once the repository's detail is in. */
+const newWorktreeBase = computed(() => {
+  if (baseBranch.value) return baseBranch.value;
+  if (!repositoryDetail.value) return null;
+  return defaultBase.value ?? currentBranch.value;
+});
 
 const recentFolders = computed(() => defaults.recentFolders(repositories.value));
 
@@ -102,8 +128,11 @@ const newBranch = computed(() => {
   if (folder.value?.kind !== "repository" || workspace.value.kind !== "new") {
     return undefined;
   }
-  return resolveNewWorktreeBranch({ message: message.value, gitHubPreset: gitHubPreset.value });
+  return resolveNewWorktreeBranch({ branch: branchName.value, message: message.value, gitHubPreset: gitHubPreset.value });
 });
+
+/** The name the message (or the GitHub issue) gives the new branch, for the name field's placeholder. */
+const generatedBranch = computed(() => resolveNewWorktreeBranch({ message: message.value, gitHubPreset: gitHubPreset.value }));
 
 const planParts = computed(() => {
   const selected = workspace.value;
@@ -115,6 +144,9 @@ const planParts = computed(() => {
     existingBranch: selected.kind === "existing"
       ? worktrees.value.find((worktree) => worktree.path === selected.path)?.branch ?? null
       : null,
+    defaultBranch: repositoryDetail.value?.defaultBranch ?? null,
+    base: newWorktreeBase.value,
+    fetchOrigin: fetchOrigin.value,
   });
 });
 
@@ -165,6 +197,12 @@ function resizeTextarea(): void {
 }
 
 function setFolder(next: NewSessionFolder, chosen: boolean): void {
+  // A base or branch name belongs to the repository it was picked in.
+  if (next.kind !== folder.value?.kind || (next.kind !== "none" && folder.value?.kind !== "none" && next.path !== folder.value?.path)) {
+    baseBranch.value = null;
+    fetchOrigin.value = true;
+    branchName.value = "";
+  }
   folder.value = next;
   hasChosenFolder.value ||= chosen;
   validationError.value = null;
@@ -228,6 +266,9 @@ async function submit(withoutMessage: boolean): Promise<void> {
     tags: tags.value.split(","),
     harnessType: resolvedHarnessType.value || undefined,
     gitHubPreset: gitHubPreset.value,
+    branch: branchName.value,
+    baseBranch: baseBranch.value,
+    fetchOrigin: fetchOrigin.value,
   });
 
   if (!request.ok) {
@@ -304,7 +345,7 @@ function handleInput(event: Event): void {
 watch(areRepositoriesReady, applyInitialFolder, { immediate: true });
 
 // A GitHub "start session" can arrive while the page is already open.
-watch(newSessionDialogInitialSource, (preset) => {
+watch(newSessionInitialSource, (preset) => {
   if (preset) {
     gitHubPreset.value = preset;
     hasChosenFolder.value = false;
@@ -401,7 +442,7 @@ onUnmounted(() => {
         {{ errorMessage }}
       </div>
 
-      <div class="new-session__box">
+      <ComposerFrame>
         <div
           v-if="gitHubPreset"
           class="new-session__attachments"
@@ -440,7 +481,7 @@ onUnmounted(() => {
 
         <textarea
           ref="textarea"
-          class="new-session__textarea"
+          class="composer-frame__textarea new-session__textarea"
           data-testid="new-session-message"
           aria-label="First message"
           rows="2"
@@ -451,7 +492,7 @@ onUnmounted(() => {
           @keydown="handleKeydown"
         />
 
-        <div class="new-session__toolbar">
+        <template #toolbar>
           <HarnessPicker
             v-if="showHarnessPicker"
             v-model="harnessType"
@@ -462,7 +503,7 @@ onUnmounted(() => {
           <Button
             variant="default"
             size="toolbar-lg"
-            class="new-session__send"
+            class="composer-frame__send"
             data-testid="create-session-submit"
             aria-label="Start session"
             title="Start session (Enter)"
@@ -478,8 +519,8 @@ onUnmounted(() => {
               class="size-4"
             />
           </Button>
-        </div>
-      </div>
+        </template>
+      </ComposerFrame>
 
       <div class="new-session__strip">
         <FolderPicker
@@ -509,6 +550,19 @@ onUnmounted(() => {
             @update:workspace="workspace = $event"
             @close-auto-focus="returnFocusToMessage"
           />
+          <BasePicker
+            v-if="workspace.kind === 'new'"
+            v-model:base-branch="baseBranch"
+            v-model:fetch-origin="fetchOrigin"
+            v-model:branch-name="branchName"
+            :branches="repositoryDetail?.branches ?? []"
+            :default-base="defaultBase"
+            :current-branch="currentBranch"
+            :is-loading="isLoadingRepositoryDetail || !repositoryDetail"
+            :generated-branch="generatedBranch"
+            :disabled="isStarting"
+            @close-auto-focus="returnFocusToMessage"
+          />
         </template>
         <div class="new-session__strip-end">
           <MoreOptions
@@ -535,6 +589,10 @@ onUnmounted(() => {
             v-if="part.code"
             class="new-session__plan-code"
           >{{ part.text }}</code>
+          <span
+            v-else-if="part.warn"
+            class="new-session__plan-warn"
+          >{{ part.text }}</span>
           <template v-else>
             {{ part.text }}
           </template>
@@ -658,19 +716,6 @@ onUnmounted(() => {
   line-height: 1.5;
 }
 
-.new-session__box {
-  position: relative;
-  border: 1px solid var(--border);
-  border-radius: calc(var(--radius-panel) + 2px);
-  background: var(--card-bg);
-  box-shadow: 0 10px 28px -18px rgba(0, 0, 0, 0.5);
-  transition: border-color var(--transition);
-}
-
-.new-session__box:focus-within {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
-}
-
 .new-session__attachments {
   display: flex;
   flex-wrap: wrap;
@@ -739,38 +784,9 @@ onUnmounted(() => {
   height: 12px;
 }
 
+/* Room for two lines before anything is typed. */
 .new-session__textarea {
-  display: block;
-  width: 100%;
   min-height: 64px;
-  max-height: 180px;
-  padding: 14px 16px 6px;
-  border: none;
-  background: transparent;
-  color: var(--text);
-  font-size: 14px;
-  line-height: 1.5;
-  outline: none;
-  resize: none;
-}
-
-.new-session__textarea::placeholder {
-  color: var(--muted);
-}
-
-.new-session__toolbar {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 4px 8px 8px;
-}
-
-.new-session__send {
-  width: 30px;
-  height: 30px;
-  margin-left: auto;
-  padding: 0;
-  border-radius: 999px;
 }
 
 .new-session__strip {
@@ -806,6 +822,10 @@ onUnmounted(() => {
   color: var(--text);
   font-family: var(--font-mono-stack);
   font-size: 11.5px;
+}
+
+.new-session__plan-warn {
+  color: var(--status-waiting);
 }
 
 .new-session__no-message {

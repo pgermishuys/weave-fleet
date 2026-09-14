@@ -5,6 +5,7 @@ using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Testing.Fakes;
 using WeaveFleet.Testing.Fakes.Repositories;
+using WeaveFleet.Testing.Fixtures;
 
 namespace WeaveFleet.Application.Tests.Services;
 
@@ -230,5 +231,59 @@ public sealed class RepositoryServiceTests
             if (Directory.Exists(Path))
                 Directory.Delete(Path, recursive: true);
         }
+    }
+
+    [Fact]
+    public void ParseBranchRefs_NamesLocalAndOriginBranchesAsGitShowsThem()
+    {
+        var output = string.Join('\n',
+            "refs/heads/main\0abc1234\02026-09-13T10:00:00+02:00\0initial",
+            "refs/remotes/origin/HEAD\0abc1234\02026-09-13T10:00:00+02:00\0initial",
+            "refs/remotes/origin/release/2.0\0def5678\02026-09-12T09:00:00+02:00\0cut 2.0");
+
+        var branches = RepositoryService.ParseBranchRefs(output);
+
+        branches.ShouldBe([
+            new BranchRef("main", false, "abc1234", "initial", "2026-09-13T10:00:00+02:00"),
+            new BranchRef("origin/release/2.0", true, "def5678", "cut 2.0", "2026-09-12T09:00:00+02:00"),
+        ]);
+    }
+
+    [Fact]
+    public async Task GetRepositoryDetailAsync_ListsOriginBranchesAndTheDefaultBase()
+    {
+        using var repository = new RealGitRepository();
+        repository.AddOrigin();
+        repository.PushToOrigin("cut 2.0", "release/2.0");
+        repository.Git("fetch", "origin");
+        repository.Git("checkout", "-b", "feature/x");
+        var service = CreateServiceWithRoot(repository.ParentPath);
+
+        var detail = await service.GetRepositoryDetailAsync(repository.Path);
+
+        detail.ShouldNotBeNull();
+        detail.Branches.Select(b => b.Name).ShouldBe(["feature/x", "main", "origin/main", "origin/release/2.0"], ignoreOrder: true);
+        detail.Branches.Single(b => b.Name == "origin/release/2.0").IsRemote.ShouldBeTrue();
+        detail.DefaultBase.ShouldBe(new DefaultWorktreeBase("main", "origin/main"));
+    }
+
+    private static RepositoryService CreateServiceWithRoot(string root)
+    {
+        var workspaceRootRepository = new InMemoryWorkspaceRootRepository();
+        workspaceRootRepository.Seed(new WorkspaceRoot
+        {
+            Id = "root-1",
+            Path = root,
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
+
+        var userContext = new TestUserContext();
+        var services = new ServiceCollection();
+        services.AddSingleton<WeaveFleet.Domain.Repositories.IWorkspaceRootRepository>(workspaceRootRepository);
+        services.AddSingleton<IUserContext>(userContext);
+        services.AddScoped(_ => new WorkspaceRootService(workspaceRootRepository, userContext));
+
+        var scopeFactory = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+        return new RepositoryService(scopeFactory, NullLogger<RepositoryService>.Instance);
     }
 }

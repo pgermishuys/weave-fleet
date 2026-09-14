@@ -22,40 +22,15 @@ describe("useWorkspaceUiStore", () => {
     });
   }
 
-  it("clears dialog context when the dialog closes", () => {
+  it("holds a GitHub issue for the New Session page until the page takes it", () => {
     const store = useWorkspaceUiStore();
     const preset = createPreset(42, "Fix flaky create session flow");
 
-    store.openNewSessionDialog("project-1", preset);
+    store.setNewSessionInitialSource(preset);
+    expect(store.newSessionInitialSource).toEqual(preset);
 
-    expect(store.newSessionDialogOpen).toBe(true);
-    expect(store.newSessionDialogProjectId).toBe("project-1");
-    expect(store.newSessionDialogInitialSource).toEqual(preset);
-
-    store.setNewSessionDialogOpen(false);
-
-    expect(store.newSessionDialogOpen).toBe(false);
-    expect(store.newSessionDialogProjectId).toBeNull();
-    expect(store.newSessionDialogInitialSource).toBeNull();
-  });
-
-  it("replaces stale GitHub context after close and reopen", () => {
-    const store = useWorkspaceUiStore();
-    const firstPreset = createPreset(42, "First issue");
-    const secondPreset = createPreset(73, "Second issue");
-
-    store.openNewSessionDialog("project-1", firstPreset);
-    store.closeNewSessionDialog();
-
-    expect(store.newSessionDialogOpen).toBe(false);
-    expect(store.newSessionDialogInitialSource).toBeNull();
-
-    store.openNewSessionDialog(null, secondPreset);
-
-    expect(store.newSessionDialogOpen).toBe(true);
-    expect(store.newSessionDialogProjectId).toBeNull();
-    expect(store.newSessionDialogInitialSource).toEqual(secondPreset);
-    expect(store.newSessionDialogInitialSource).not.toEqual(firstPreset);
+    store.setNewSessionInitialSource(null);
+    expect(store.newSessionInitialSource).toBeNull();
   });
 
   describe("new session draft", () => {
@@ -64,6 +39,9 @@ describe("useWorkspaceUiStore", () => {
       folder: null,
       hasChosenFolder: false,
       workspace: { kind: "new" as const },
+      baseBranch: null,
+      fetchOrigin: true,
+      branchName: "",
       title: "",
       tags: "",
       projectId: null,

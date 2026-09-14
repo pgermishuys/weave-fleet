@@ -226,6 +226,48 @@ public sealed class GitHubSessionSourceProviderTests
         result.Error.Description.ShouldContain("not a known worktree");
     }
 
+    [Fact]
+    public async Task ResolveAsync_ForStartSession_PassesTheChosenBaseAndFetch()
+    {
+        var (provider, _) = CreateProvider();
+
+        var result = await provider.ResolveAsync(StartSessionFromPullRequest42(new
+        {
+            owner = "acme",
+            repo = "rocket",
+            number = 42,
+            repositoryPath = "/tmp/rocket",
+            isolationStrategy = "worktree",
+            branch = "feature/pr-42",
+            baseBranch = "origin/release/2.0",
+            fetchOrigin = false
+        }), CancellationToken.None);
+
+        result.IsSuccess.ShouldBeTrue($"Expected success but got: {(result.IsFailure ? result.Error.Description : "")}");
+        result.Value.Input.WorkspaceIntent!.BaseBranch.ShouldBe("origin/release/2.0");
+        result.Value.Input.WorkspaceIntent.FetchOrigin.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task ResolveAsync_ForStartSession_RejectsABase_WithAnExistingWorktree()
+    {
+        var (provider, _) = CreateProvider();
+
+        var result = await provider.ResolveAsync(StartSessionFromPullRequest42(new
+        {
+            owner = "acme",
+            repo = "rocket",
+            number = 42,
+            repositoryPath = "/tmp/rocket",
+            isolationStrategy = "worktree",
+            existingWorktreePath = "/tmp/rocket-worktrees/pr-42",
+            baseBranch = "origin/main"
+        }), CancellationToken.None);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Description.ShouldBe("A base branch can only be chosen for a new worktree.");
+    }
+
     private static SessionSourceSelection StartSessionFromPullRequest42(object input) => new()
     {
         Key = new SessionSourceKey

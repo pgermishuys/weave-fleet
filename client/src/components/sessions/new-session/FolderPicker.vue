@@ -173,7 +173,7 @@ function handleSearchKeydown(event: KeyboardEvent): void {
 
 function scrollHighlightedIntoView(): void {
   void nextTick(() => {
-    document.getElementById(optionDomId(highlightedIndex.value))?.scrollIntoView({ block: "nearest" });
+    document.getElementById(optionDomId(highlightedIndex.value))?.scrollIntoView?.({ block: "nearest" });
   });
 }
 
@@ -210,8 +210,12 @@ watch(open, (isOpen) => {
   if (isOpen) {
     query.value = "";
     view.value = "list";
-    const selected = options.value.findIndex((option) => option.isSelected);
-    highlightedIndex.value = selected >= 0 ? selected : 0;
+    // After the query watcher, which would put the highlight back on the first row.
+    void nextTick(() => {
+      const selected = options.value.findIndex((option) => option.isSelected);
+      highlightedIndex.value = selected >= 0 ? selected : 0;
+      scrollHighlightedIntoView();
+    });
   } else {
     isDirectoryPickerOpen.value = false;
   }

@@ -193,7 +193,9 @@ public sealed class GitHubSessionSourceProvider(
                     new SessionSourceInputField("repositoryPath", "string", true, null, "Canonical local repository directory path."),
                     new SessionSourceInputField("isolationStrategy", "string", false, ["existing", "worktree", "clone"], "Repository workspace isolation mode."),
                     new SessionSourceInputField("branch", "string", false, null, "Optional branch for isolated workspaces."),
-                    new SessionSourceInputField("existingWorktreePath", "string", false, null, "Existing worktree of the repository to run in, instead of creating one.")
+                    new SessionSourceInputField("existingWorktreePath", "string", false, null, "Existing worktree of the repository to run in, instead of creating one."),
+                    new SessionSourceInputField("baseBranch", "string", false, null, "Where a new worktree starts: origin/<name> or a local branch. Defaults to the repository's default branch."),
+                    new SessionSourceInputField("fetchOrigin", "boolean", false, null, "Fetch an origin/… base before starting from it. Defaults to true.")
                 ]
                 :
                 [
@@ -211,6 +213,13 @@ public sealed class GitHubSessionSourceProvider(
         var repositoryPath = input.RepositoryPath!.Trim();
         var isolationStrategy = NormalizeIsolationStrategy(input.IsolationStrategy);
 
+        var baseBranch = WorktreeBaseInput.Normalize(
+            input.BaseBranch,
+            isolationStrategy,
+            usesExistingWorktree: !string.IsNullOrWhiteSpace(input.ExistingWorktreePath));
+        if (baseBranch.IsFailure)
+            return baseBranch.Error;
+
         if (string.Equals(isolationStrategy, "worktree", StringComparison.Ordinal)
             && !string.IsNullOrWhiteSpace(input.ExistingWorktreePath))
         {
@@ -224,7 +233,12 @@ public sealed class GitHubSessionSourceProvider(
             return new WorkspaceIntent(worktreeResult.Value.Path, "existing", worktreeResult.Value.Branch);
         }
 
-        return new WorkspaceIntent(repositoryPath, isolationStrategy, NormalizeBranch(input.Branch, input.IsolationStrategy));
+        return new WorkspaceIntent(
+            repositoryPath,
+            isolationStrategy,
+            NormalizeBranch(input.Branch, input.IsolationStrategy),
+            baseBranch.Value,
+            input.FetchOrigin ?? true);
     }
 
     private static string NormalizeIsolationStrategy(string? isolationStrategy)

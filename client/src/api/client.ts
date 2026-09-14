@@ -384,6 +384,10 @@ export interface RepositoryDetail {
   remotes: RemoteInfo[];
   readmeContent: string | null;
   readmeFilename: string | null;
+  /** The default branch, e.g. `main`; null when there's neither an origin default nor a local main or master. */
+  defaultBranch: string | null;
+  /** Where a new worktree starts when no base is chosen, e.g. `origin/main`; null means the current HEAD. */
+  defaultBase: string | null;
 }
 
 export interface RepositoryDetailResponse {
