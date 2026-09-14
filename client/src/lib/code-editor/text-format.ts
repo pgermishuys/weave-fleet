@@ -13,7 +13,7 @@ export interface TextFormat {
   bom: boolean;
 }
 
-const BOM = "﻿";
+const BOM = "\uFEFF";
 
 /** Pick the file's most common line break. Ties and files without breaks use `\n`. */
 function dominantSeparator(text: string): TextFormat["lineSeparator"] {

@@ -167,20 +167,47 @@ edit and a save each reach a SignalR client as `files.changed`, and a stale save
 the current content.
 
 ### Task 2: Client editor core
-- [ ] `client/src/lib/code-editor/`: the extension set (line numbers, history, folding, bracket
+- [x] `client/src/lib/code-editor/`: the extension set (line numbers, history, folding, bracket
       matching, close brackets, search, autocompletion), language by file name, and the theme.
       The theme maps highlight tags to the existing `--syntax-*` tokens that `markdown.css` uses
       for code blocks, and chrome to `--text`, `--muted`, `--border`, `--accent`. Check all nine
       themes.
-- [ ] Completion sources: `completeAnyWord`, the language's own (keywords, snippets, locals),
+- [x] Completion sources: `completeAnyWord`, the language's own (keywords, snippets, locals),
       and import paths inside `from "…"` / `import("…")` from `find/files` (cached per session).
-- [ ] Gutter stripe and line flash as small extensions (the mockup's `cm-entry.js` has both).
-- [ ] `stores/file-buffers.ts`: per session and path, keep `{ state: EditorState (markRaw),
+- [x] Gutter stripe and line flash as small extensions (the mockup's `cm-entry.js` has both).
+- [x] `stores/file-buffers.ts`: per session and path, keep `{ state: EditorState (markRaw),
       baseHash, diskText, conflict }`. Buffers live outside the components, because
       `CanvasHost`'s `KeepAlive :max="8"` evicts the 9th tab and would lose unsaved text and
       undo history. The `beforeunload` guard reads this store.
-- [ ] Unit tests (vitest): line-ending round trip, dirty/clean/conflict transitions, minimal
+- [x] Unit tests (vitest): line-ending round trip, dirty/clean/conflict transitions, minimal
       change application.
+
+**As built.** All under `client/src/lib/code-editor/`:
+- `theme.ts`: syntax colours from `--syntax-*` (plus `--md-heading` for Markdown headings), and
+  chrome, selection, search, diff and the stripe from `--text`, `--muted`, `--accent`,
+  `--running` and `--error` through `color-mix`. No theme needs its own rule.
+- `languages.ts`: `language-data` by file name, plus aliases for .NET project files
+  (`.csproj`, `.props`, `.slnx`) and `.env`.
+- `completion.ts`: `completeAnyWord` and import paths. The language adds keywords, snippets and
+  locals itself. Import paths list one folder at a time from `find/files?q=<folder>/` (cached
+  10 s), which is the endpoint's own folder listing, instead of the whole repo's file list.
+  `./`, `../` and `@/` resolve against the file (`@/` means the nearest `src/`). Package imports
+  get nothing.
+- `agent-lines.ts`: the stripe marks lines that differ from the git base. The diff is by line:
+  each distinct line is encoded as one character and passed to `@codemirror/merge`'s `diff`.
+  `Chunk.build` merges nearby changes, and its character diff can't tell which line an inserted
+  line belongs to.
+- `minimal-change.ts`: compares documents, not strings, so a CRLF break counts as one position
+  and the insert keeps its lines whatever the separator.
+- `file-buffer.ts`: the transitions (load, dirty, apply a disk change, conflict, saved, take the
+  agent's version, rebase after Compare). They go through the mounted view when there is one.
+  "Use the agent's" is its own undo step (`isolateHistory`).
+- `buffers.ts`: the API side (open, refresh, save, overwrite).
+- `stores/file-buffers.ts`: reactive info per buffer (status, dirty, conflict, saving), plus a
+  plain record holding the `EditorState`. It has only type imports from CodeMirror, so it stays
+  out of the lazy chunk.
+- Tests: 63 in `code-editor/__tests__` and the store. The theme is checked across all themes in
+  Task 7's screenshots.
 
 ### Task 3: File tabs in the canvas
 - [ ] `CanvasKind` gains `"file"`, and `CanvasInstance.file = { path, preview, view }`. Tab id

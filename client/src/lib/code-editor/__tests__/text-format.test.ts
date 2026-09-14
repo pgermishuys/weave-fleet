@@ -28,8 +28,8 @@ describe("text format round trip", () => {
     "mixed, mostly CRLF": "a\r\nb\nc\r\nd\r\n",
     "mixed, mostly LF": "a\nb\r\nc\nd\n",
     "LF with a stray CR": "a\rb\nc\n",
-    "BOM + CRLF": "﻿one\r\ntwo\r\n",
-    "BOM, no newline": "﻿x",
+    "BOM + CRLF": "\uFEFFone\r\ntwo\r\n",
+    "BOM, no newline": "\uFEFFx",
     "empty": "",
     "only a newline": "\n",
     "blank lines at the end": "a\n\n\n",
@@ -44,7 +44,7 @@ describe("text format round trip", () => {
   }
 
   it("keeps the BOM out of the editor text", () => {
-    const { state, format } = open("﻿hello\r\n");
+    const { state, format } = open("\uFEFFhello\r\n");
     expect(format).toEqual({ lineSeparator: "\r\n", bom: true });
     expect(state.doc.line(1).text).toBe("hello");
   });
