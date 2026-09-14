@@ -4,14 +4,18 @@ import { storeToRefs } from "pinia";
 import BoardActivityPanel from "@/components/board/BoardActivityPanel.vue";
 import BoardSummaryPanel from "@/components/board/BoardSummaryPanel.vue";
 import RightPanelTabs from "@/components/layout/RightPanelTabs.vue";
+import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { useSidebarStore } from "@/stores/sidebar";
 
 interface Props {
   width?: number;
+  /** The panel fills a sheet over the page (phones, narrow windows), and collapsing closes it. */
+  inSheet?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   width: 360,
+  inSheet: false,
 });
 
 const sidebarStore = useSidebarStore();
@@ -38,23 +42,22 @@ function handleTabSelect(tabId: string): void {
   }
 }
 
-function handleCollapse(): void {
-  sidebarStore.setRightPanelCollapsed(true);
-}
+const { hideRightPanel } = useSidebarMobile();
 </script>
 
 <template>
   <aside
-    v-if="!rightPanelCollapsed"
+    v-if="!rightPanelCollapsed || props.inSheet"
     class="right-panel"
-    :style="{ width: `${props.width}px`, minWidth: '280px' }"
+    :class="{ 'right-panel--sheet': props.inSheet }"
+    :style="props.inSheet ? undefined : { width: `${props.width}px`, minWidth: '280px' }"
     aria-label="Right panel"
   >
     <RightPanelTabs
       :tabs="boardTabs"
       :active-tab="activeTabId"
       @select="handleTabSelect"
-      @collapse="handleCollapse"
+      @collapse="hideRightPanel"
     />
 
     <div class="right-content">
@@ -74,6 +77,12 @@ function handleCollapse(): void {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.right-panel--sheet {
+  flex: 1;
+  width: 100%;
+  border-left: 0;
 }
 
 .right-content {

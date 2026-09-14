@@ -131,6 +131,11 @@ const activePanelKey = computed(() => {
   return isContextPanelKey(rail, panelComponents.value) ? rail : "sessions";
 });
 
+const props = defineProps<{
+  /** Fill the container instead of the resizable width (the phone menu drawer). */
+  fill?: boolean;
+}>();
+
 const MIN_WIDTH = 200;
 const MAX_WIDTH = 500;
 const panelWidth = shallowRef(280);
@@ -146,7 +151,8 @@ defineExpose({ panelWidth, isResizing, resizeBy });
 <template>
   <aside
     class="context-panel"
-    :style="{ width: `${panelWidth}px`, minWidth: `${panelWidth}px` }"
+    :class="{ 'context-panel--fill': props.fill }"
+    :style="props.fill ? undefined : { width: `${panelWidth}px`, minWidth: `${panelWidth}px` }"
     aria-label="Context panel"
   >
     <component
@@ -163,6 +169,11 @@ defineExpose({ panelWidth, isResizing, resizeBy });
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.context-panel--fill {
+  flex: 1;
+  min-width: 0;
 }
 
 .context-panel :deep(.context-panel__content) {

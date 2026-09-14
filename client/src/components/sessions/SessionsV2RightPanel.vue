@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, provide, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
-import { PanelRightClose } from "lucide-vue-next";
+import { PanelRightClose, X } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import AnnotationPopover from "@/components/annotations/AnnotationPopover.vue";
 import CanvasHost from "@/components/canvas/CanvasHost.vue";
@@ -10,6 +10,7 @@ import SessionMetadataHeader from "@/components/session/SessionMetadataHeader.vu
 import { useSessionProgress } from "@/composables/use-session-progress";
 import { useAnnotation } from "@/composables/use-annotation";
 import { useSendPrompt } from "@/composables/use-send-prompt";
+import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { useDraftState } from "@/composables/use-draft-state";
 import { provideCanvasAnnotate } from "@/composables/use-canvas-annotation";
 import { useDiffs } from "@/composables/use-diffs";
@@ -26,10 +27,13 @@ import type { AnnotationAnchor } from "@/lib/annotation-types";
 
 interface Props {
   width?: number;
+  /** The panel fills a sheet over the conversation (phones, narrow windows): no rail, no Widen, and collapsing closes it. */
+  inSheet?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   width: 360,
+  inSheet: false,
 });
 
 const sidebarStore = useSidebarStore();
@@ -118,14 +122,7 @@ const tabBadges = computed<Record<string, CanvasTabBadge>>(() => {
   };
 });
 
-
-function handleExpand(): void {
-  sidebarStore.setRightPanelCollapsed(false);
-}
-
-function handleCollapse(): void {
-  sidebarStore.setRightPanelCollapsed(true);
-}
+const { showRightPanel, hideRightPanel } = useSidebarMobile();
 
 // Animate the width only when Widen is toggled, never while the gutter is dragged.
 const isResizingForWiden = ref(false);
@@ -179,33 +176,35 @@ provideCanvasAnnotate((anchor: AnnotationAnchor, position: { x: number; y: numbe
 
 <template>
   <CollapsedRightRail
-    v-if="rightPanelCollapsed"
+    v-if="rightPanelCollapsed && !props.inSheet"
     :done="progress?.done ?? 0"
     :total="progress?.total ?? 0"
-    @expand="handleExpand"
+    @expand="showRightPanel"
   />
 
   <aside
     v-else
     class="right-panel"
-    :class="{ 'right-panel--widening': isResizingForWiden }"
-    :style="{ width: `${props.width}px`, minWidth: '280px' }"
+    :class="{ 'right-panel--widening': isResizingForWiden, 'right-panel--sheet': props.inSheet }"
+    :style="props.inSheet ? undefined : { width: `${props.width}px`, minWidth: '280px' }"
     aria-label="Right panel"
   >
     <CanvasHost
       :session-id="activeSessionId ?? ''"
       :tab-badges="tabBadges"
+      :widenable="!props.inSheet"
     >
       <template #header-actions>
         <Button
           variant="toolbar-icon"
           size="toolbar"
           class="right-panel__collapse"
-          aria-label="Collapse right panel"
-          title="Collapse right panel"
-          @click="handleCollapse"
+          :aria-label="props.inSheet ? 'Close right panel' : 'Collapse right panel'"
+          :title="props.inSheet ? 'Close right panel' : 'Collapse right panel'"
+          @click="hideRightPanel"
         >
-          <PanelRightClose />
+          <X v-if="props.inSheet" />
+          <PanelRightClose v-else />
         </Button>
       </template>
       <template #below-header>
@@ -238,6 +237,12 @@ provideCanvasAnnotate((anchor: AnnotationAnchor, position: { x: number; y: numbe
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.right-panel--sheet {
+  flex: 1;
+  width: 100%;
+  border-left: 0;
 }
 
 .right-panel--widening {

@@ -30,10 +30,15 @@ import {
   type CanvasInstance,
 } from "@/stores/canvases";
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   sessionId: string;
   tabBadges?: Partial<Record<string, CanvasTabBadge>>;
-}>();
+  /** Off where the panel already fills the screen (the phone sheet). */
+  widenable?: boolean;
+}>(), {
+  tabBadges: undefined,
+  widenable: true,
+});
 
 const store = useCanvasesStore();
 const sharedDiffs = inject<UseDiffsResult | null>("sharedDiffs", null);
@@ -357,6 +362,7 @@ const activeProps = computed(() => {
       <span class="canvas-host__spacer" />
 
       <button
+        v-if="props.widenable"
         type="button"
         class="canvas-host__icon-btn"
         :aria-pressed="store.widened"
