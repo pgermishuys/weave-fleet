@@ -11,6 +11,7 @@
 
 import type { Plugin, ViteDevServer, PreviewServer } from "vite";
 import type { IncomingMessage } from "http";
+import { createHash } from "crypto";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import { startMockPreview, type MockPreview } from "./mock-preview";
@@ -67,7 +68,8 @@ const MOCK_FILES: Record<string, string> = {
   "src/middleware/logger.ts": "export function requestLogger(req, _res, next) {\n  console.log(req.method, req.url);\n  next();\n}\n",
   "src/utils/token.ts": "export function readBearer(header?: string) {\n  return header?.startsWith('Bearer ') ? header.slice(7) : null;\n}\n",
   "package.json": "{\n  \"name\": \"auth-service\",\n  \"private\": true\n}\n",
-  "README.md": "# auth-service\n\nExample project for Fleet's mock mode.\n"
+  "README.md": "# auth-service\n\nExample project for Fleet's mock mode.\n",
+  "public/status.html": "<!doctype html>\n<html>\n  <body style=\"font-family: system-ui; padding: 24px\">\n    <h1>auth-service</h1>\n    <p>Status: <strong>up</strong></p>\n  </body>\n</html>\n"
 };
 
 // Server canvases (Fleet Canvas step 2): what the agent has drawn in a session.
@@ -1600,21 +1602,45 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
       },
     },
     {
+      // Mock mode only: stand in for the agent editing a file, so the editor's live update and
+      // conflict bar can be tried. Body: { sessionId, path, content }.
+      pattern: /^\/api\/mock\/agent-edit$/,
+      handler: async (_url, req) => {
+        const body = await req.json() as { sessionId: string; path: string; content: string };
+        console.log(`[mock-api] agent edits ${body.path}`);
+        MOCK_FILES[body.path] = body.content;
+        pushHubEvent(body.sessionId, "files.changed", {
+          sessionId: body.sessionId,
+          files: [{ path: body.path, changeType: "change" }],
+        });
+        return json({ ok: true });
+      },
+    },
+    {
+      // Files as the editor sees them: the read carries a hash, and a save must send it back.
       pattern: /^\/api\/sessions\/([^/]+)\/files\/content$/,
-      handler: (url) => {
+      handler: async (url, req) => {
+        const hash = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
+        if (req.method === "PUT") {
+          const body = await req.json() as { path?: string; content?: string; baseHash?: string };
+          const path = body.path ?? "";
+          console.log(`[mock-api] PUT files/content ${path}`);
+          const current = MOCK_FILES[path];
+          if (current === undefined) return json({ error: "File not found" }, 404);
+          if (hash(current) !== body.baseHash) return json({ content: current, hash: hash(current) }, 409);
+          MOCK_FILES[path] = body.content ?? "";
+          pushHubEvent(url.pathname.split("/")[3], "files.changed", {
+            sessionId: url.pathname.split("/")[3],
+            files: [{ path, changeType: "change" }],
+          });
+          return json({ hash: hash(MOCK_FILES[path]) });
+        }
+
         const path = url.searchParams.get("path") ?? "";
         console.log(`[mock-api] GET files/content ${path}`);
         const content = MOCK_FILES[path];
-        if (content === undefined) {
-          return new Response(JSON.stringify({ error: "File not found" }), {
-            status: 404,
-            headers: { "Content-Type": "application/json" },
-          });
-        }
-        return new Response(JSON.stringify({ path, content, isBinary: false, isTruncated: false }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
+        if (content === undefined) return json({ error: "File not found" }, 404);
+        return json({ path, content, isBinary: false, isTruncated: false, hash: hash(content) });
       },
     },
     {

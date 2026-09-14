@@ -35,13 +35,15 @@ const mix = (color: string, percent: number) => `color-mix(in srgb, ${color} ${p
 const fleetChrome = EditorView.theme({
   "&": { color: "var(--text)", backgroundColor: "transparent", fontSize: "12.5px", height: "100%" },
   "&.cm-focused": { outline: "none" },
-  ".cm-scroller": { fontFamily: "var(--font-mono-stack)", lineHeight: "1.6" },
+  // No ligatures: JetBrains Mono's "//" ligature loses a slash in (synthesized) italic comments.
+  ".cm-scroller": { fontFamily: "var(--font-mono-stack)", lineHeight: "1.6", fontVariantLigatures: "none" },
   ".cm-content": { caretColor: "var(--accent)", padding: "6px 0" },
   ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--accent)", borderLeftWidth: "2px" },
   "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
     backgroundColor: `${mix("var(--accent)", 30)} !important`,
   },
-  ".cm-gutters": { backgroundColor: "transparent", color: mix("var(--muted)", 70), border: "none" },
+  // Opaque, so code scrolled sideways doesn't show through the line numbers. The canvas sits on --panel-bg.
+  ".cm-gutters": { backgroundColor: "var(--panel-bg)", color: mix("var(--muted)", 70), border: "none" },
   ".cm-lineNumbers .cm-gutterElement": { padding: "0 10px 0 8px", minWidth: "34px" },
   ".cm-activeLine": { backgroundColor: mix("var(--text)", 3) },
   ".cm-activeLineGutter": { backgroundColor: "transparent", color: "var(--text)" },
@@ -91,10 +93,14 @@ const fleetChrome = EditorView.theme({
   ".cm-changeGutter": { width: "3px", paddingLeft: "0" },
   ".cm-changedLineGutter": { background: "var(--running)" },
   ".cm-deletedLineGutter": { background: "var(--error)" },
-  ".cm-chunkButtons": { position: "absolute", insetInlineEnd: "8px" },
+  // Per-hunk buttons float over the end of the line; a backing keeps the code under them out of the way.
+  ".cm-chunkButtons": {
+    position: "absolute", insetInlineEnd: "6px", display: "flex", gap: "4px", padding: "2px",
+    borderRadius: "7px", background: "var(--panel-bg)", boxShadow: "0 1px 6px rgba(0, 0, 0, 0.25)",
+  },
   ".cm-chunkButtons button": {
     fontFamily: "var(--font-sans-stack)", fontSize: "11px", border: "1px solid var(--border)", borderRadius: "5px",
-    background: "var(--card-bg)", color: "var(--text)", padding: "1px 8px", marginLeft: "4px", cursor: "pointer",
+    background: "var(--card-bg)", color: "var(--text)", padding: "1px 8px", cursor: "pointer",
   },
   ".cm-chunkButtons button:hover": { background: mix("var(--text)", 8) },
   "@keyframes cm-agent-flash": { from: { backgroundColor: mix("var(--accent)", 28) }, to: { backgroundColor: "transparent" } },

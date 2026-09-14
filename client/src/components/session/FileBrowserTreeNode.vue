@@ -1,3 +1,8 @@
+<script lang="ts">
+// Shared by every node, so a click on another file cancels a pending one.
+let pendingClick: ReturnType<typeof setTimeout> | undefined
+</script>
+
 <script setup lang="ts">
 import { computed, inject } from 'vue'
 import { ChevronRight, ChevronDown, Loader2 } from 'lucide-vue-next'
@@ -110,15 +115,20 @@ async function toggleDirectory() {
   }
 }
 
-function handleFileClick() {
+// A single click opens a preview tab, which takes the canvas away from the tree. Wait one
+// double-click interval first, so a double-click can open the file as a kept tab instead.
+const DOUBLE_CLICK_MS = 250
+
+function handleFileClick(event: MouseEvent) {
   if (!fileBrowser) return
   contentPanel.selectFile(props.entry.relativePath)
-  fileBrowser.selectFile(props.entry.relativePath)
-}
-
-// A double-click keeps the tab instead of opening it as a preview.
-function handleFileDoubleClick() {
-  fileBrowser?.selectFile(props.entry.relativePath, { keep: true })
+  clearTimeout(pendingClick)
+  if (event.detail >= 2) {
+    fileBrowser.selectFile(props.entry.relativePath, { keep: true })
+    return
+  }
+  const path = props.entry.relativePath
+  pendingClick = setTimeout(() => fileBrowser.selectFile(path), DOUBLE_CLICK_MS)
 }
 </script>
 
@@ -149,7 +159,6 @@ function handleFileDoubleClick() {
       :style="indentStyle"
       :data-testid="`file-node-${entry.relativePath}`"
       @click="handleFileClick"
-      @dblclick="handleFileDoubleClick"
     >
       <span class="file-browser-tree-node__file-dot" />
       <span class="file-browser-tree-node__name">{{ entry.name }}</span>
@@ -196,6 +205,7 @@ function handleFileDoubleClick() {
 .file-browser-tree-node__directory,
 .file-browser-tree-node__file {
   display: flex;
+  user-select: none;
   align-items: center;
   gap: 8px;
   padding: 4px 8px;

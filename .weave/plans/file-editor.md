@@ -245,14 +245,48 @@ the current content.
 - Opening a file loads 135 KB gzip (plus its language); the initial bundle is +20 bytes.
 
 ### Task 4: FileCanvas
-- [ ] The bar: breadcrumb, save state (Unsaved + Save button / Changed on disk), view toggle.
-- [ ] Views: the editor; Rendered through `MarkdownRenderer` (annotatable, as today) and
+- [x] The bar: breadcrumb, save state (Unsaved + Save button / Changed on disk), view toggle.
+- [x] Views: the editor; Rendered through `MarkdownRenderer` (annotatable, as today) and
       `HtmlRenderer`, fed from the buffer; Diff through `unifiedMergeView` with the git base
       from `sharedDiffs` (`FileDiffItem.before`).
-- [ ] Save, conflict bar (Compare / Keep mine / Use the agent's), read-only states.
-- [ ] Selection chip → `appendDraftReference(sessionId, ref)` (new, in `use-draft-state.ts`),
+- [x] Save, conflict bar (Compare / Keep mine / Use the agent's), read-only states.
+- [x] Selection chip → `appendDraftReference(sessionId, ref)` (new, in `use-draft-state.ts`),
       then `weave:command-focus-prompt`.
-- [ ] Tests: component tests for save success, 409 → bar, each bar action, read-only states.
+- [x] Tests: component tests for save success, 409 → bar, each bar action, read-only states.
+
+**As built.**
+- One `EditorView` per file canvas. Diff and Compare are the same editor with
+  `unifiedMergeView` put into a compartment (`merge.ts`), so switching views keeps the undo
+  history and there's no second editor to sync. Diff compares against `FileDiffItem.before`, or
+  the saved text when git sees the file as unchanged. Its hunks have Revert only. Compare's
+  hunks have *Take the agent's* and *Keep mine*. Diff is disabled with no git change and no
+  unsaved edit. A deleted file (from Changes) shows its last version as a read-only diff.
+- Rendered reads the buffer (a revision counter bumps on each change), so unsaved edits show.
+  Markdown stays annotatable through `useCanvasAnnotate`; HTML renders in `HtmlRenderer`'s
+  sandboxed iframe. `lib/file-payload.ts` had no users left and is deleted.
+- The bar: breadcrumb (folders hidden under a 430 px container query, for the phone sheet),
+  Unsaved + Save (⌘S / Ctrl S), Saving…, Changed on disk, and the view toggle. There's no
+  app-wide toast, so the canvas has a small one of its own (`aria-live`).
+- Keep mine sends the conflict's hash, so it overwrites exactly the version the bar showed.
+- `appendDraftReference` in `use-draft-state.ts`, then `weave:command-focus-prompt`.
+- Found in the mock-mode screenshots and fixed:
+  - Tree double-click could never keep a tab, because the first click switched the canvas away
+    from the tree. A single click now waits one double-click interval (250 ms), as the
+    mockup's tree did. Tree rows are `user-select: none`, so a double-click no longer leaves a
+    text selection that spread into the rendered Markdown.
+  - The gutter was transparent, so code scrolled sideways showed through the line numbers. It
+    is on `--panel-bg` now.
+  - JetBrains Mono's `//` ligature lost a slash in the (synthesized) italic comments, so
+    ligatures are off in the editor.
+  - Fleet's global `*:focus-visible` ring outlined the whole editor. It's turned off for
+    `.cm-content` in the same layer.
+  - Per-hunk buttons sat over the code with the code showing between them; they have a backing
+    now.
+- The mock API (`vite-plugin-mock-api.ts`) now gives a hash, answers `PUT files/content` with
+  409 on a stale hash, and has `POST /api/mock/agent-edit` to stand in for the agent.
+- Tests: 13 in `FileCanvas.test.ts` (save, Ctrl S, a preview kept on typing, 409 → bar, each bar
+  action, too large, binary, Markdown rendered from the buffer, Diff, Add to message), plus 2
+  for the tree node's click timing.
 
 ### Task 5: Live updates
 - [ ] Subscribe to `files.changed` for the session. For each open path, and on tab activation and
