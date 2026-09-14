@@ -45,6 +45,39 @@ public sealed record SessionArchived : DomainEvent
 }
 
 /// <summary>
+/// Raised when Fleet writes a recap for a session you stepped away from, or clears it when you send
+/// your next prompt.
+/// </summary>
+public sealed record SessionRecapUpdated : DomainEvent
+{
+    /// <summary>
+    /// Gets the strongly typed payload for the session-recap event.
+    /// </summary>
+    public required SessionRecapPayload Payload { get; init; }
+}
+
+/// <summary>
+/// A session's recap: one or two sentences on the goal, the current task and the next action.
+/// </summary>
+public sealed record SessionRecapPayload
+{
+    /// <summary>
+    /// Gets the Fleet session identifier.
+    /// </summary>
+    public required string SessionId { get; init; }
+
+    /// <summary>
+    /// Gets the recap text, or null when the recap was cleared.
+    /// </summary>
+    public string? Text { get; init; }
+
+    /// <summary>
+    /// Gets when Fleet wrote the recap (ISO 8601), or null when it was cleared.
+    /// </summary>
+    public string? WrittenAt { get; init; }
+}
+
+/// <summary>
 /// Payload describing a started session.
 /// </summary>
 public sealed record SessionStartedPayload

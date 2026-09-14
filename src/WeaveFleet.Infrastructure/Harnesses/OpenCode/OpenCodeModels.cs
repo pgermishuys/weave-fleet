@@ -75,6 +75,21 @@ internal sealed record OpenCodeSessionTime
     [JsonPropertyName("archived")] public long? Archived { get; init; }
 }
 
+/// <summary>Request body for PATCH /session/:id. Only the fields that are set change.</summary>
+internal sealed record OpenCodeSessionUpdateRequest
+{
+    [JsonPropertyName("title")] public string? Title { get; init; }
+    [JsonPropertyName("permission")] public IReadOnlyList<OpenCodePermissionRule>? Permission { get; init; }
+}
+
+/// <summary>One rule of a session's permission ruleset, e.g. <c>{ "*", "*", "ask" }</c>.</summary>
+internal sealed record OpenCodePermissionRule
+{
+    [JsonPropertyName("permission")] public required string Permission { get; init; }
+    [JsonPropertyName("pattern")] public required string Pattern { get; init; }
+    [JsonPropertyName("action")] public required string Action { get; init; }
+}
+
 /// <summary>Request body for POST /session.</summary>
 internal sealed record OpenCodeCreateSessionRequest
 {

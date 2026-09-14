@@ -153,15 +153,64 @@ internal sealed class OpenCodeHttpClient
         return response.IsSuccessStatusCode;
     }
 
-    /// <summary>POST /session/{sessionId}/message?directory={directory}</summary>
-    public async Task<OpenCodeMessageWithParts> SendMessageAsync(
+    /// <summary>PATCH /session/{sessionId}?directory={directory}</summary>
+    public async Task UpdateSessionAsync(
+        string sessionId,
+        OpenCodeSessionUpdateRequest request,
+        string directory,
+        CancellationToken ct)
+    {
+        var url = BuildUrl($"/session/{Uri.EscapeDataString(sessionId)}", directory);
+        ValidateDirectoryScope(url);
+        var requestBody = JsonSerializer.Serialize(request, OpenCodeJsonContext.Default.OpenCodeSessionUpdateRequest);
+        LogRequest(_logger, $"PATCH {url}", null);
+        LogRequestBody(_logger, requestBody, null);
+
+        using var content = new StringContent(requestBody, Encoding.UTF8, "application/json");
+        using var response = await _httpClient.PatchAsync(url, content, ct).ConfigureAwait(false);
+        LogResponse(_logger, (int)response.StatusCode, url, null);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            LogRequestFailed(_logger, (int)response.StatusCode, url, null);
+            response.EnsureSuccessStatusCode();
+        }
+    }
+
+    /// <summary>POST /session/{sessionId}/message?directory={directory} — waits for the reply.</summary>
+    /// <remarks>
+    /// Parsed by hand, like <see cref="GetMessagesAsync"/>: the reply's <c>role</c> and part <c>type</c>
+    /// discriminators may not come first. Returns null when the reply isn't a user or assistant message.
+    /// </remarks>
+    public async Task<OpenCodeMessageWithParts?> SendMessageAsync(
         string sessionId,
         OpenCodePromptRequest request,
         string directory,
         CancellationToken ct)
     {
         var url = BuildUrl($"/session/{Uri.EscapeDataString(sessionId)}/message", directory);
-        return await PostAsync(url, request, OpenCodeJsonContext.Default.OpenCodePromptRequest, OpenCodeJsonContext.Default.OpenCodeMessageWithParts, ct).ConfigureAwait(false);
+        ValidateDirectoryScope(url);
+        var requestBody = JsonSerializer.Serialize(request, OpenCodeJsonContext.Default.OpenCodePromptRequest);
+        LogRequest(_logger, $"POST {url}", null);
+        LogRequestBody(_logger, requestBody, null);
+
+        using var content = new StringContent(requestBody, Encoding.UTF8, "application/json");
+        using var response = await _httpClient.PostAsync(url, content, ct).ConfigureAwait(false);
+        LogResponse(_logger, (int)response.StatusCode, url, null);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var responseBody = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            LogRequestFailed(_logger, (int)response.StatusCode, url, null);
+            LogResponseBody(_logger, responseBody, null);
+            response.EnsureSuccessStatusCode();
+        }
+
+        using var doc = await JsonDocument.ParseAsync(
+            await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false), cancellationToken: ct)
+            .ConfigureAwait(false);
+
+        return DeserializeMessage(doc.RootElement);
     }
 
     /// <summary>POST /session/{sessionId}/prompt_async?directory={directory} — fire and forget (204).</summary>
@@ -273,36 +322,42 @@ internal sealed class OpenCodeHttpClient
 
         foreach (var element in array.EnumerateArray())
         {
-            if (element.ValueKind != JsonValueKind.Object)
-                continue;
-
-            if (!element.TryGetProperty("info", out var infoEl) || infoEl.ValueKind != JsonValueKind.Object)
-                continue;
-
-            // Read role from raw JSON — avoid polymorphic deserialization of the abstract base type,
-            // which requires the discriminator to be the first property in STJ polymorphism.
-            if (!infoEl.TryGetProperty("role", out var roleEl))
-                continue;
-
-            var role = roleEl.GetString();
-            if (role is not ("user" or "assistant"))
-                continue;
-
-            OpenCodeMessageInfo? info = role == "assistant"
-                ? OpenCodeMessageDeserializer.DeserializeAssistantMessage(infoEl)
-                : OpenCodeMessageDeserializer.DeserializeUserMessage(infoEl);
-
-            if (info is null)
-                continue;
-
-            var parts = element.TryGetProperty("parts", out var partsEl)
-                ? DeserializeParts(partsEl)
-                : [];
-
-            result.Add(new OpenCodeMessageWithParts { Info = info, Parts = parts });
+            if (DeserializeMessage(element) is { } message)
+                result.Add(message);
         }
 
         return result;
+    }
+
+    private static OpenCodeMessageWithParts? DeserializeMessage(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+            return null;
+
+        if (!element.TryGetProperty("info", out var infoEl) || infoEl.ValueKind != JsonValueKind.Object)
+            return null;
+
+        // Read role from raw JSON — avoid polymorphic deserialization of the abstract base type,
+        // which requires the discriminator to be the first property in STJ polymorphism.
+        if (!infoEl.TryGetProperty("role", out var roleEl))
+            return null;
+
+        var role = roleEl.GetString();
+        if (role is not ("user" or "assistant"))
+            return null;
+
+        OpenCodeMessageInfo? info = role == "assistant"
+            ? OpenCodeMessageDeserializer.DeserializeAssistantMessage(infoEl)
+            : OpenCodeMessageDeserializer.DeserializeUserMessage(infoEl);
+
+        if (info is null)
+            return null;
+
+        var parts = element.TryGetProperty("parts", out var partsEl)
+            ? DeserializeParts(partsEl)
+            : [];
+
+        return new OpenCodeMessageWithParts { Info = info, Parts = parts };
     }
 
     /// <summary>

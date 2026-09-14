@@ -218,6 +218,10 @@ internal sealed class PiHarnessSession : IHarnessSession
         }
     }
 
+    /// <inheritdoc />
+    public Task<string?> AskOffTheRecordAsync(string prompt, CancellationToken ct)
+        => Task.FromResult<string?>(null);
+
     public Task<string?> GetActivityStatusAsync(CancellationToken ct)
     {
         // Pi doesn't have a status query endpoint, so we return null

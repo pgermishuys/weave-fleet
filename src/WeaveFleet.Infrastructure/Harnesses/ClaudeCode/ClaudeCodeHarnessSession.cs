@@ -244,6 +244,10 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     }
 
     /// <inheritdoc />
+    public Task<string?> AskOffTheRecordAsync(string prompt, CancellationToken ct)
+        => Task.FromResult<string?>(null);
+
+    /// <inheritdoc />
     public Task<string?> GetActivityStatusAsync(CancellationToken ct)
     {
         // ClaudeCode doesn't have a status query endpoint, so we return null

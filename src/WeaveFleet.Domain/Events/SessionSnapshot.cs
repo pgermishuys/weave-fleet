@@ -26,6 +26,11 @@ public sealed record SessionSnapshot
     /// </summary>
     public required string ActivityStatus { get; init; }
 
+    /// <summary>
+    /// Gets the recap Fleet wrote while you were away, until you send your next prompt.
+    /// </summary>
+    public SessionRecapPayload? Recap { get; init; }
+
     private readonly long? _lastEventId;
 
     /// <summary>

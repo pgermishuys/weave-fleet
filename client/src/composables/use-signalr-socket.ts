@@ -385,6 +385,19 @@ export function isWeaveSocketConnected(): boolean {
   return connection?.state === HubConnectionState.Connected
 }
 
+/**
+ * Tells Fleet whether this tab is looking at a session, so it can write a
+ * recap for turns that end while no one is. The server only counts sessions
+ * this connection has subscribed to; after a reconnect, say it again once the
+ * snapshot is back.
+ */
+export function setSessionFocus(sessionId: string, focused: boolean): void {
+  if (connection?.state !== HubConnectionState.Connected) return
+  void connection.invoke("SetSessionFocusAsync", sessionId, focused).catch((error: unknown) => {
+    console.warn(`Failed to report focus for session ${sessionId}:`, error)
+  })
+}
+
 export function onReconnect(callback: () => void): () => void {
   const id = String(reconnectCallbackNextId++)
   reconnectCallbacks.set(id, callback)
