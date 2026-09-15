@@ -1,7 +1,15 @@
 import { onMounted, onUnmounted, readonly, ref, shallowRef, type Ref, type ShallowRef } from "vue";
 import { api } from "@/api/client";
 
-export type UpdateStatusKind = "unknown" | "uptodate" | "available" | "downloading" | "staged" | "error";
+export type UpdateStatusKind =
+  | "unknown"
+  | "uptodate"
+  | "available"
+  | "downloading"
+  | "staged"
+  | "error"
+  /** The desktop app updates Fleet; the server doesn't check. */
+  | "managed";
 
 export interface UpdateStatus {
   currentVersion: string;

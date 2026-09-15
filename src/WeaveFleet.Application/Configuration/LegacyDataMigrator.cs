@@ -66,6 +66,13 @@ public static class LegacyDataMigrator
             return;
         }
 
+        // An installed Fleet keeps its live database at the legacy path. Never move one that's in use.
+        if (FleetInstanceLock.IsHeld(legacyDatabasePath))
+        {
+            LogLegacyAgentBackupSkippedInUse(logger, legacyDatabasePath, null);
+            return;
+        }
+
         if (File.Exists(backupDatabasePath))
         {
             LogLegacyAgentBackupTargetExists(logger, legacyDatabasePath, backupDatabasePath, null);
@@ -176,4 +183,8 @@ public static class LegacyDataMigrator
     private static readonly Action<ILogger, string, string, Exception?> LogLegacyAgentBackupCreated =
         LoggerMessage.Define<string, string>(LogLevel.Information, new EventId(12, "LegacyAgentBackupCreated"),
             "Legacy agent DB backup: moved {Source} -> {Target} using copy and delete.");
+
+    private static readonly Action<ILogger, string, Exception?> LogLegacyAgentBackupSkippedInUse =
+        LoggerMessage.Define<string>(LogLevel.Information, new EventId(13, "LegacyAgentBackupSkippedInUse"),
+            "Legacy agent DB backup: another Fleet is running on {Source}; leaving it in place.");
 }

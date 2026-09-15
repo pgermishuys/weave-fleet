@@ -96,8 +96,9 @@ builder.Services.Configure<FleetOptions>(
 // builder.Environment.EnvironmentName snapshot captured by WebApplication.CreateBuilder(args), so we
 // must consult configuration directly to see the overridden value.
 var effectiveEnvironmentName = builder.Configuration["ASPNETCORE_ENVIRONMENT"] ?? builder.Environment.EnvironmentName;
-if (!string.Equals(effectiveEnvironmentName, "Testing", StringComparison.OrdinalIgnoreCase) &&
-    !string.Equals(effectiveEnvironmentName, "Test", StringComparison.OrdinalIgnoreCase))
+var isTestHost = string.Equals(effectiveEnvironmentName, "Testing", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(effectiveEnvironmentName, "Test", StringComparison.OrdinalIgnoreCase);
+if (!isTestHost)
 {
     builder.Services.AddLauncherPatchStartupService();
     builder.Services.AddLegacySessionImportStartupService();
@@ -148,6 +149,13 @@ builder.Services.AddSingleton<WeaveFleet.Api.Browser.PreviewGateway>();
 builder.Services.AddSingleton(_ => WeaveFleet.Application.Services.KeyFileConfig.Load());
 builder.Services.AddSingleton<WeaveFleet.Application.Services.KeyFileScanner>();
 builder.Services.AddSingleton<WeaveFleet.Application.Services.ILocalFleetUrl, WeaveFleet.Api.LocalFleetUrl>();
+if (fleetOptions.Desktop.Enabled)
+{
+    builder.Services.AddHostedService(sp => new WeaveFleet.Api.Desktop.StandardInputWatcher(
+        Console.OpenStandardInput,
+        sp.GetRequiredService<IHostApplicationLifetime>(),
+        sp.GetRequiredService<ILogger<WeaveFleet.Api.Desktop.StandardInputWatcher>>()));
+}
 #pragma warning restore IL2026
 builder.Services.AddHealthChecks();
 
@@ -409,6 +417,39 @@ builder.Services.AddOpenApi(options =>
 builder.WebHost.UseUrls(fleetOptions.ListenUrl);
 
 var app = builder.Build();
+
+// One Fleet per database: the orphan kill below would otherwise kill another Fleet's live agents. Test hosts
+// skip it: they run side by side in one process, and many share the default path while their real database
+// comes from DI.
+var instanceLock = isTestHost ? null : FleetInstanceLock.TryAcquire(fleetOptions.DatabasePath);
+if (!isTestHost && instanceLock is null)
+{
+    var holder = FleetInstanceLock.ReadInstance(fleetOptions.DatabasePath);
+    Console.Error.WriteLine(holder is null
+        ? $"Another Fleet is already using {Path.GetFullPath(fleetOptions.DatabasePath)}."
+        : $"Another Fleet (pid {holder.Pid}, {holder.Url}) is already using {holder.DatabasePath}.");
+    Console.Error.WriteLine("Stop it first, or give this one its own data directory (fleet --data-dir <path>).");
+    Environment.Exit(FleetInstanceLock.InUseExitCode);
+}
+
+app.Lifetime.ApplicationStarted.Register(() =>
+{
+    if (instanceLock is null)
+        return;
+
+    var url = app.Services.GetRequiredService<WeaveFleet.Application.Services.ILocalFleetUrl>().TryGet();
+    if (url is null)
+        return;
+
+    instanceLock.WriteInstanceFile(new FleetInstanceInfo(
+        Environment.ProcessId,
+        url,
+        FleetInstrumentation.ServiceVersion.Split('+')[0],
+        Path.GetFullPath(fleetOptions.DatabasePath),
+        fleetOptions.Desktop.Enabled,
+        DateTimeOffset.UtcNow));
+});
+app.Lifetime.ApplicationStopped.Register(() => instanceLock?.Dispose());
 
 if (!fleetOptions.Auth.Enabled)
 {

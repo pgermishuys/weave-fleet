@@ -7,11 +7,12 @@ namespace WeaveFleet.Application.Terminals;
 /// (secrets included) arrive as <c>Fleet__*</c>, the launchers set <c>ASPNETCORE_*</c> and a bare
 /// <c>URLS</c> (a shell that kept either would move the user's own <c>dotnet run</c> onto Fleet's port, and
 /// <c>URLS</c> outranks the launch profile), the launcher sets <c>WEAVE_FLEET_*</c>, and OpenCode's server
-/// credentials never belong in a shell.
+/// credentials never belong in a shell. <c>ELECTRON_*</c> comes from the desktop app (or an editor Fleet was
+/// started from): a shell that kept <c>ELECTRON_RUN_AS_NODE</c> would start every Electron app as plain Node.
 /// </summary>
 public static class TerminalEnvironment
 {
-    private static readonly string[] RemovedPrefixes = ["Fleet__", "FLEET_", "WEAVE_FLEET_", "ASPNETCORE_"];
+    private static readonly string[] RemovedPrefixes = ["Fleet__", "FLEET_", "WEAVE_FLEET_", "ASPNETCORE_", "ELECTRON_"];
 
     private static readonly string[] RemovedNames =
     [

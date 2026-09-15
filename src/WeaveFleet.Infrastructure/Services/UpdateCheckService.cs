@@ -27,6 +27,13 @@ public sealed partial class UpdateCheckService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (options.Desktop.Enabled)
+        {
+            stateHolder.SetState(UpdateState.Initial with { Status = UpdateStatus.Managed });
+            LogManagedByDesktop();
+            return;
+        }
+
         // Only run update checks from an installed layout (VERSION file exists next to the binary).
         if (!IsInstalledLayout())
         {
@@ -66,6 +73,9 @@ public sealed partial class UpdateCheckService(
     /// <summary>Performs an update check and triggers download if a newer version is found.</summary>
     public async Task CheckForUpdateAsync(CancellationToken ct)
     {
+        if (options.Desktop.Enabled)
+            return;
+
         try
         {
             LogChecking(options.Update.GitHubRepo);
@@ -199,6 +209,9 @@ public sealed partial class UpdateCheckService(
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Running in dev/repo layout — skipping update check.")]
     private partial void LogDevLayout();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "The desktop app updates Fleet — skipping update checks.")]
+    private partial void LogManagedByDesktop();
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Checking for Fleet updates from {Repo}.")]
     private partial void LogChecking(string repo);
