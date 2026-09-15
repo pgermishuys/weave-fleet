@@ -57,13 +57,33 @@ For each tag, the workflow builds and publishes self-contained artifacts for:
 - `win-x64`
 - `win-arm64`
 
+It also builds the desktop app (`desktop/`, through `.github/workflows/desktop-packages.yml`) with the same AOT
+server inside, and smoke-tests each packaged app before anything is published.
+
 It then publishes a GitHub Release containing:
 
 - 4 platform archives (`.tar.gz` on Unix, `.zip` on Windows)
+- desktop installers: `Fleet-<version>-linux-x86_64.AppImage`, `Fleet-<version>-linux-amd64.deb`,
+  `Fleet-<version>-mac-arm64.dmg` (and `.zip`), `Fleet-<version>-win-x64-setup.exe`, `Fleet-<version>-win-arm64-setup.exe`
 - per-asset `.sha256` files
 - merged `checksums.txt`
 - `install.sh`
 - `install.ps1`
+
+The desktop packages take their version from the tag; `desktop/package.json`'s version only matters in development.
+To build the installers without releasing, run the **Desktop packages** workflow by hand: they come out as workflow
+artifacts.
+
+### Desktop installers are unsigned for now
+
+- **macOS:** the app is ad-hoc signed, not notarised. The first time, macOS says it can't verify the developer: open
+  System Settings → Privacy & Security and choose **Open Anyway**. It can't update itself until it's signed.
+- **Windows:** SmartScreen shows "Windows protected your PC": choose **More info → Run anyway**.
+- **Linux:** nothing to do. The AppImage needs FUSE 2 (`libfuse2`); the `.deb` installs to `/opt/Fleet`.
+
+Signing isn't wired yet (Phase 3 of `.weave/plans/desktop-app.md`). It will need a Developer ID certificate and App
+Store Connect API key for macOS, and Azure Trusted Signing for Windows, as t3code's `docs/operations/release.md`
+describes.
 
 ## Deferred work status
 
