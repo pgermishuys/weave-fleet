@@ -614,6 +614,14 @@ internal sealed record OpenCodeModelVariant
     [JsonPropertyName("body")] public IReadOnlyDictionary<string, JsonElement>? Body { get; init; }
 }
 
+/// <summary>The part of GET /config that says what a prompt gets when it names no agent or model.</summary>
+internal sealed record OpenCodeConfigDefaults
+{
+    /// <summary><c>provider/model</c>, e.g. <c>anthropic/claude-sonnet-4-5</c>.</summary>
+    [JsonPropertyName("model")] public string? Model { get; init; }
+    [JsonPropertyName("default_agent")] public string? DefaultAgent { get; init; }
+}
+
 /// <summary>Full providers response from GET /provider.</summary>
 internal sealed record OpenCodeProvidersResponse
 {

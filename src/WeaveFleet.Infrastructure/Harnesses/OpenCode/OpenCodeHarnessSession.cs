@@ -888,15 +888,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     {
         await EnsureConnectedAsync(ct).ConfigureAwait(false);
         var agents = await _instanceHandle.HttpClient.GetAgentsAsync(_workingDirectory, ct).ConfigureAwait(false);
-        return agents.Select(a => new AgentInfo
-        {
-            Name = a.Name ?? string.Empty,
-            Description = a.Description,
-            Mode = a.Mode,
-            Hidden = a.Hidden ?? false,
-            ModelProviderId = a.Model?.ProviderId,
-            ModelId = a.Model?.ModelId,
-        }).ToList();
+        return OpenCodeMapper.ToAgentInfos(agents);
     }
 
     /// <inheritdoc />
@@ -904,22 +896,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     {
         await EnsureConnectedAsync(ct).ConfigureAwait(false);
         var response = await _instanceHandle.HttpClient.GetProvidersAsync(_workingDirectory, ct).ConfigureAwait(false);
-        // Only return connected providers (ones where credentials are configured).
-        var connectedSet = response.Connected?.ToHashSet(StringComparer.Ordinal)
-            ?? new HashSet<string>(StringComparer.Ordinal);
-        return response.All
-            .Where(p => connectedSet.Contains(p.Id))
-            .Select(p => new ProviderInfo
-            {
-                Id = p.Id,
-                Name = p.Name,
-                Models = p.Models.Values.Select(m => new ModelInfo
-                {
-                    Id = m.Id,
-                    Name = m.Name,
-                    Variants = m.Variants?.Keys.ToList(),
-                }).ToList(),
-            }).ToList();
+        return OpenCodeMapper.ToConnectedProviderInfos(response);
     }
 
     /// <inheritdoc />

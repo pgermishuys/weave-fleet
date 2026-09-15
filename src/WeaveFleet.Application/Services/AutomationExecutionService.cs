@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Services;
@@ -88,10 +89,14 @@ public sealed partial class AutomationExecutionService(
             Title = $"Automation: {automation.Name}",
             InitialPrompt = finalPrompt,
             ProjectId = null, // Automations use default/scratch project
-            HarnessType = null, // Use default harness
+            // Null is the default harness at run time; an automation with an agent or model keeps theirs.
+            HarnessType = automation.HarnessType,
             // Where it runs comes from the automation source (AutomationSessionSourceProvider).
             Source = BuildSessionSource(automation, eventType),
-            SourceReference = $"automation:{automation.Id}"
+            SourceReference = $"automation:{automation.Id}",
+            Agent = automation.Agent,
+            ProviderId = SplitModel(automation.Model).ProviderId,
+            ModelId = SplitModel(automation.Model).ModelId,
         };
 
         var result = await sessionOrchestrator.CreateSessionAsync(request, ct);
@@ -132,10 +137,12 @@ public sealed partial class AutomationExecutionService(
         string finalPrompt,
         CancellationToken ct)
     {
-        var result = await sessionOrchestrator.PromptSessionAsync(
+        // The automation's agent and model apply to this run only, and only on the harness they were picked
+        // from; otherwise the session answers with its own.
+        var result = await sessionOrchestrator.PromptSessionOnceAsync(
             targetSession.Id,
             finalPrompt,
-            options: null,
+            ChoicesFor(automation, targetSession),
             ct);
 
         if (result.IsSuccess)
@@ -146,6 +153,29 @@ public sealed partial class AutomationExecutionService(
 
         LogExecutionFailed(automation.Id, automation.Name, result.Error.Code, result.Error.Description);
         return null;
+    }
+
+    private static PromptOptions? ChoicesFor(Automation automation, Session targetSession)
+    {
+        if (automation.HarnessType is not null
+            && !string.Equals(automation.HarnessType, targetSession.HarnessType, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var (providerId, modelId) = SplitModel(automation.Model);
+        return automation.Agent is null && modelId is null
+            ? null
+            : new PromptOptions { Agent = automation.Agent, ProviderId = providerId, ModelId = modelId };
+    }
+
+    /// <summary><c>provider/model</c> split at the first slash (model ids may have slashes of their own).</summary>
+    internal static (string? ProviderId, string? ModelId) SplitModel(string? model)
+    {
+        var slash = model?.IndexOf('/', StringComparison.Ordinal) ?? -1;
+        return slash > 0 && slash < model!.Length - 1
+            ? (model[..slash], model[(slash + 1)..])
+            : (null, null);
     }
 
     /// <summary>

@@ -539,6 +539,14 @@ internal sealed class OpenCodeHttpClient
         return await GetAsync(url, OpenCodeJsonContext.Default.OpenCodeProvidersResponse, ct).ConfigureAwait(false);
     }
 
+    /// <summary>GET /config?directory={directory}, read only for its default agent and model.</summary>
+    public async Task<OpenCodeConfigDefaults> GetConfigDefaultsAsync(string directory, CancellationToken ct)
+    {
+        var url = BuildUrl("/config", directory);
+        return await GetAsync(url, OpenCodeJsonContext.Default.OpenCodeConfigDefaults, ct).ConfigureAwait(false)
+               ?? new OpenCodeConfigDefaults();
+    }
+
     /// <summary>GET /session/status?directory={directory}</summary>
     public async Task<Dictionary<string, OpenCodeSessionStatus>> GetSessionStatusAsync(
         string directory,

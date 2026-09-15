@@ -25,6 +25,8 @@ export interface Automation {
   isolation?: string | null;
   /** Where a run's worktree starts; null for the repository's default. */
   baseBranch?: string | null;
+  /** The harness runs use, kept with an agent or model; null for the default harness at run time. */
+  harnessType?: string | null;
   /** When it runs next (ISO, UTC); null when it's off or waits for an event. */
   nextRunAt?: string | null;
   lastRun?: AutomationRun | null;
@@ -70,6 +72,8 @@ export interface CreateAutomationRequest {
   timeZone?: string | null;
   isolation?: string | null;
   baseBranch?: string | null;
+  /** The harness `model` and `agent` were picked from; ignored without either. */
+  harnessType?: string | null;
 }
 
 export type UpdateAutomationRequest = CreateAutomationRequest;

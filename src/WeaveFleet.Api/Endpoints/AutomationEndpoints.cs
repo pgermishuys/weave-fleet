@@ -33,7 +33,7 @@ public static class AutomationEndpoints
                 request.Name, request.Prompt, request.TriggerType, request.TriggerConfig,
                 request.MaxConcurrentRuns, request.MaxRunsPerHour, request.TimeoutMinutes,
                 request.WorkspaceId, request.Model, request.Agent, request.TargetTags, request.TargetType,
-                request.TimeZone, request.Isolation, request.BaseBranch);
+                request.TimeZone, request.Isolation, request.BaseBranch, request.HarnessType);
             return result.IsSuccess
                 ? Results.Created($"/api/automations/{result.Value.Id}", MapToResponse(result.Value, null, time))
                 : ErrorResult(result.Error);
@@ -52,7 +52,7 @@ public static class AutomationEndpoints
                 request.Name, request.Prompt, request.TriggerType, request.TriggerConfig,
                 request.MaxConcurrentRuns, request.MaxRunsPerHour, request.TimeoutMinutes,
                 request.WorkspaceId, request.Model, request.Agent, request.TargetTags, request.TargetType,
-                request.TimeZone, request.Isolation, request.BaseBranch);
+                request.TimeZone, request.Isolation, request.BaseBranch, request.HarnessType);
             if (result.IsFailure)
                 return ErrorResult(result.Error);
 
@@ -192,7 +192,7 @@ public static class AutomationEndpoints
         a.Id, a.Name, a.Prompt, a.TriggerType, a.TriggerConfig,
         a.MaxConcurrentRuns, a.MaxRunsPerHour, a.TimeoutMinutes,
         a.IsEnabled, a.WorkspaceId, a.Model, a.Agent, a.CreatedAt, a.UpdatedAt, a.TargetTags, a.TargetType, a.TimeZone,
-        a.Isolation, a.BaseBranch,
+        a.Isolation, a.BaseBranch, a.HarnessType,
         a.IsEnabled ? AutomationSchedule.NextOccurrenceUtc(a, time.GetUtcNow().UtcDateTime)?.ToString("O") : null,
         lastRun);
 }

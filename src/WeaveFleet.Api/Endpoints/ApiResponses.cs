@@ -151,6 +151,17 @@ public sealed record InstanceAgentItem(
 
 public sealed record InstanceAgentModelRef(string ProviderID, string ModelID);
 
+/// <summary>
+/// What a harness offers in a folder before a session exists there. <c>Supported</c> is false when the harness
+/// can't say without a session; the lists are then empty.
+/// </summary>
+public sealed record HarnessCatalogResponse(
+    bool Supported,
+    IReadOnlyList<InstanceAgentItem> Agents,
+    IReadOnlyList<InstanceProviderItem> Providers,
+    string? DefaultAgent,
+    InstanceAgentModelRef? DefaultModel);
+
 public sealed record InstanceFilesResponse(
     string InstanceId,
     IReadOnlyList<string> Files);

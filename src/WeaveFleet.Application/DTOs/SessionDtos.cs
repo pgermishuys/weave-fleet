@@ -35,6 +35,19 @@ public sealed record SessionListResponse(
 
     /// <summary>How far along the session is, when Fleet has seen a todo list or plan for it.</summary>
     public SessionProgressSummaryDto? Progress { get; init; }
+
+    /// <summary>The agent a prompt that names none goes to; null for the harness's default.</summary>
+    public string? SelectedAgent { get; init; }
+
+    /// <summary>The model a prompt that names none gets; null for the agent's or the harness's default.</summary>
+    public SessionModelChoiceDto? SelectedModel { get; init; }
+}
+
+/// <summary>A model as the harness names one.</summary>
+public sealed record SessionModelChoiceDto(string ProviderID, string ModelID)
+{
+    public static SessionModelChoiceDto? Of(string? providerId, string? modelId) =>
+        string.IsNullOrWhiteSpace(providerId) || string.IsNullOrWhiteSpace(modelId) ? null : new(providerId, modelId);
 }
 
 /// <summary>

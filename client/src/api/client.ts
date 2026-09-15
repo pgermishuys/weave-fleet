@@ -222,6 +222,26 @@ export interface AvailableProvider {
   models: AvailableModel[];
 }
 
+/** A model as `{ providerID, modelID }`, the way the harness names one. */
+export interface ModelReference {
+  providerID: string;
+  modelID: string;
+}
+
+/**
+ * What a harness offers in a folder before a session exists there (`GET /api/harnesses/{type}/catalog`).
+ * `supported` is false when the harness can't say without a session; the lists are then empty.
+ */
+export interface HarnessCatalog {
+  supported: boolean;
+  agents: AutocompleteAgent[];
+  providers: AvailableProvider[];
+  /** The agent a prompt goes to when it names none. */
+  defaultAgent: string | null;
+  /** The model a prompt gets when neither it nor its agent names one; null when only the harness knows. */
+  defaultModel: ModelReference | null;
+}
+
 export interface DirectoryEntry {
   name: string;
   path: string;
@@ -526,6 +546,10 @@ export interface SessionListItem {
   tags: readonly string[];
   /** How far along the session is, when the server has seen a todo list for it. */
   progress?: SessionProgressSummary | null;
+  /** The agent a prompt that names none goes to; null for the harness's default. */
+  selectedAgent?: string | null;
+  /** The model a prompt that names none gets; null for the agent's or the harness's default. */
+  selectedModel?: ModelReference | null;
 }
 
 export interface AnalyticsSummary {

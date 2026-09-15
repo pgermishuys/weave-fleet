@@ -24,6 +24,12 @@ export interface NewSessionDraft {
   harnessType: string;
   /** The profile picked for this session; null follows the harness's default. */
   harnessProfileId: string | null;
+  /** The agent to start with; empty for the folder's default. */
+  agent: string;
+  /** The model to start with, as a model selection key; empty for the agent's default. */
+  model: string;
+  /** The agent or model came from the person, so the folder's remembered ones don't replace them. */
+  hasChosenAgentOrModel: boolean;
   gitHubPreset: GitHubSessionSourcePreset | null;
   /** Set between Enter and the session existing. */
   isStarting: boolean;

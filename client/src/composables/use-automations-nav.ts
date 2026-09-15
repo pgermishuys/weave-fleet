@@ -23,6 +23,12 @@ export interface AutomationComposerState {
   name: string;
   /** Skip a run while the last one is still going. */
   skip: boolean;
+  /** The agent runs go to; empty for the folder's default. */
+  agent: string;
+  /** The model runs use, as a model selection key; empty for the agent's default. */
+  model: string;
+  /** The harness the agent and model come from; null for the default harness. */
+  harnessType: string | null;
 }
 
 export function freshComposerState(): AutomationComposerState {
@@ -37,6 +43,9 @@ export function freshComposerState(): AutomationComposerState {
     targetType: "new_session",
     name: "",
     skip: true,
+    agent: "",
+    model: "",
+    harnessType: null,
   };
 }
 

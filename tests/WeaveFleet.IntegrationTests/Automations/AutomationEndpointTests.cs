@@ -66,7 +66,7 @@ public sealed class AutomationEndpointTests : IAsyncLifetime, IDisposable
             MaxRunsPerHour: 5,
             TimeoutMinutes: 15,
             WorkspaceId: null,
-            Model: "claude-3-5-sonnet-20241022",
+            Model: "anthropic/claude-3-5-sonnet-20241022",
             Agent: "loom");
 
         // Act
@@ -88,7 +88,7 @@ public sealed class AutomationEndpointTests : IAsyncLifetime, IDisposable
         body.MaxRunsPerHour.ShouldBe(5);
         body.TimeoutMinutes.ShouldBe(15);
         body.IsEnabled.ShouldBeTrue(); // Switched on when created: the person just asked for it
-        body.Model.ShouldBe("claude-3-5-sonnet-20241022");
+        body.Model.ShouldBe("anthropic/claude-3-5-sonnet-20241022");
         body.Agent.ShouldBe("loom");
         body.CreatedAt.ShouldNotBeNullOrEmpty();
     }

@@ -4,18 +4,23 @@ import { computed, nextTick, onMounted, shallowRef, useTemplateRef, watch } from
 import { ArrowUp, LoaderCircle } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import { Button } from "@/components/ui/button";
+import AgentSelector from "@/components/session/AgentSelector.vue";
 import ComposerFrame from "@/components/session/ComposerFrame.vue";
+import ModelSelector from "@/components/session/ModelSelector.vue";
 import BasePicker from "@/components/sessions/new-session/BasePicker.vue";
 import FolderPicker from "@/components/sessions/new-session/FolderPicker.vue";
 import WorkspacePicker from "@/components/sessions/new-session/WorkspacePicker.vue";
 import AutomationMoreOptions from "@/components/automations/AutomationMoreOptions.vue";
 import AutomationRunsInPicker from "@/components/automations/AutomationRunsInPicker.vue";
 import AutomationWhenPicker from "@/components/automations/AutomationWhenPicker.vue";
+import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
+import { useHarnessCatalog } from "@/composables/use-harness-catalog";
 import { useIsMobile } from "@/composables/use-media-query";
 import { useNewSessionDefaults } from "@/composables/use-new-session-defaults";
 import { useRepositories } from "@/composables/use-repositories";
 import { useRepositoryDetail } from "@/composables/use-repository-detail";
 import type { AutomationComposerState } from "@/composables/use-automations-nav";
+import { describeDefaults, modelFromKey, modelToPath } from "@/lib/agent-model-choice";
 import { autoName, parseSchedule, promptFrom, toTrigger, type When } from "@/lib/automation-schedule";
 import { browserTimeZone, describeAutomationPlan } from "@/lib/automations";
 import type { NewSessionFolder } from "@/lib/new-session-request";
@@ -63,6 +68,31 @@ const isWorktree = computed(() => state.value.folder?.kind === "repository" && s
 const recentFolders = computed(() => defaults.recentFolders(repositories.value));
 const areRepositoriesReady = computed(() => scannedAt.value !== null || repositoriesError.value !== null);
 
+// Runs use the automation's own harness when it has an agent or model, else the default one.
+const { defaultHarnessType } = useEnabledHarnesses();
+const harnessType = computed(() => state.value.harnessType ?? defaultHarnessType.value);
+/** A run's folder, as the harness sees it: a worktree of the repository is a checkout of it; none for a quick chat. */
+const catalogDirectory = computed(() => {
+  const folder = state.value.folder;
+  return folder && folder.kind !== "none" ? folder.path : null;
+});
+const { catalog, agents, models, isSupported: offersAgentsAndModels } = useHarnessCatalog(
+  computed(() => (state.value.folder ? harnessType.value : "")),
+  catalogDirectory,
+);
+const defaultLabels = computed(() => describeDefaults(
+  offersAgentsAndModels.value ? catalog.value : null,
+  { agent: state.value.agent, model: state.value.model },
+));
+const agentChoice = computed({
+  get: () => state.value.agent,
+  set: (value: string) => { state.value.agent = value; },
+});
+const modelChoice = computed({
+  get: () => state.value.model,
+  set: (value: string) => { state.value.model = value; },
+});
+
 /** The schedule words in the text; ignored once the When menu has chosen. */
 const hit = computed(() => parseSchedule(state.value.text));
 const activeHit = computed(() => (state.value.manualWhen ? null : hit.value));
@@ -104,7 +134,7 @@ const plan = computed(() => describeAutomationPlan({
   legacyFolderless: Boolean(props.automation && !props.automation.isolation && !props.automation.workspaceId),
 }));
 
-/** What the server is sent. Model, agent and the per-hour and timeout limits aren't shown, so they're kept. */
+/** What the server is sent. The per-hour and timeout limits aren't shown, so they're kept. */
 const request = computed<CreateAutomationRequest | null>(() => {
   const schedule = when.value;
   if (!schedule || !prompt.value) return null;
@@ -121,8 +151,10 @@ const request = computed<CreateAutomationRequest | null>(() => {
     maxRunsPerHour: existing?.maxRunsPerHour ?? 10,
     timeoutMinutes: existing?.timeoutMinutes ?? 30,
     workspaceId,
-    model: existing?.model ?? null,
-    agent: existing?.agent ?? null,
+    model: modelToPath(modelFromKey(state.value.model)),
+    agent: state.value.agent || null,
+    // An agent or model only means something on the harness it came from.
+    harnessType: state.value.agent || state.value.model ? harnessType.value : null,
     targetType: state.value.targetType,
     targetTags: existing?.targetTags ? [...existing.targetTags] : [],
     timeZone,
@@ -147,6 +179,8 @@ const isDirty = computed(() => {
     || (next.isolation ?? null) !== (existing.isolation ?? (existing.workspaceId ? "existing" : null))
     || (next.baseBranch ?? null) !== (existing.baseBranch ?? null)
     || next.targetType !== (existing.targetType ?? "new_session")
+    || (next.agent ?? null) !== (existing.agent ?? null)
+    || (next.model ?? null) !== (existing.model ?? null)
     || next.maxConcurrentRuns !== existing.maxConcurrentRuns;
 });
 
@@ -264,6 +298,24 @@ defineExpose({ focusMessage });
       </div>
 
       <template #toolbar>
+        <template v-if="offersAgentsAndModels">
+          <AgentSelector
+            v-model="agentChoice"
+            :agents="agents"
+            :default-label="defaultLabels.agentLabel"
+            :default-description="defaultLabels.agentDescription"
+            :disabled="busy"
+            test-id="automation-agent"
+          />
+          <ModelSelector
+            v-model="modelChoice"
+            :models="models"
+            :default-label="defaultLabels.modelLabel"
+            :default-description="defaultLabels.modelDescription"
+            :disabled="busy"
+            test-id="automation-model"
+          />
+        </template>
         <Button
           v-if="showSend"
           variant="default"

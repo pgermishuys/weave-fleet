@@ -19,6 +19,7 @@ import { useSendCommand } from "@/composables/use-send-command";
 import { useModels } from "@/composables/use-models";
 import { useDraftAttachments } from "@/composables/use-draft-attachments";
 import { useDraftTerminalContext } from "@/composables/use-draft-terminal-context";
+import { describeSessionDefaults } from "@/lib/agent-model-choice";
 import { formatTerminalContext, terminalLineRange } from "@/lib/format-terminal-context";
 import { splitDraftReferences } from "@/lib/composer-references";
 import { useSendPrompt } from "@/composables/use-send-prompt";
@@ -42,7 +43,7 @@ const emit = defineEmits<{
   promptSent: [];
 }>();
 
-const { agents } = useAgents(props.sessionId);
+const { agents, defaultAgentId } = useAgents(props.sessionId);
 const { abortSession, isAborting } = useAbortSession();
 const { models, defaultModelKey, modelsByKey } = useModels(props.sessionId);
 const { draft, setText, setAgentId, setModelId, setEffort } = useDraftState(props.sessionId, {
@@ -385,6 +386,19 @@ const selectedModelId = computed({
   set: (value: string) => {
     setModelId(value);
   },
+});
+
+/** "Default" is the session's own agent and model, which prompts that name none get; the chips say which. */
+const defaultLabels = computed(() => {
+  const session = sessions.value.find((candidate) => candidate.session.id === props.sessionId);
+  return describeSessionDefaults({
+    sessionAgent: session?.selectedAgent,
+    sessionModel: session?.selectedModel,
+    draftAgent: draft.agentId,
+    defaultAgent: defaultAgentId.value,
+    agents: agents.value,
+    models: models.value,
+  });
 });
 
 const selectedEffort = computed({
@@ -818,10 +832,14 @@ function handleKeydown(event: KeyboardEvent): void {
         <AgentSelector
           v-model="selectedAgentId"
           :agents="agents"
+          :default-label="defaultLabels.agentLabel"
+          :default-description="defaultLabels.agentDescription"
         />
         <ModelSelector
           v-model="selectedModelId"
           :models="models"
+          :default-label="defaultLabels.modelLabel"
+          :default-description="defaultLabels.modelDescription"
         />
         <EffortToggle
           v-if="supportsReasoning"

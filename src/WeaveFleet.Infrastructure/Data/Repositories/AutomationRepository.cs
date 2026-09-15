@@ -27,12 +27,12 @@ public sealed class AutomationRepository : IAutomationRepository
                 id, name, prompt, trigger_type, trigger_config,
                 max_concurrent_runs, max_runs_per_hour, timeout_minutes,
                 is_enabled, is_deleted, workspace_id, model, agent,
-                created_at, updated_at, user_id, target_tags, target_type, time_zone, isolation, base_branch
+                created_at, updated_at, user_id, target_tags, target_type, time_zone, isolation, base_branch, harness_type
             ) VALUES (
                 @Id, @Name, @Prompt, @TriggerType, @TriggerConfig,
                 @MaxConcurrentRuns, @MaxRunsPerHour, @TimeoutMinutes,
                 @IsEnabled, @IsDeleted, @WorkspaceId, @Model, @Agent,
-                @CreatedAt, @UpdatedAt, @UserId, @TargetTags, @TargetType, @TimeZone, @Isolation, @BaseBranch
+                @CreatedAt, @UpdatedAt, @UserId, @TargetTags, @TargetType, @TimeZone, @Isolation, @BaseBranch, @HarnessType
             )
             """,
             cmd =>
@@ -58,6 +58,7 @@ public sealed class AutomationRepository : IAutomationRepository
                 cmd.AddParameter("TimeZone", automation.TimeZone);
                 cmd.AddParameter("Isolation", automation.Isolation);
                 cmd.AddParameter("BaseBranch", automation.BaseBranch);
+                cmd.AddParameter("HarnessType", automation.HarnessType);
             });
     }
 
@@ -82,7 +83,8 @@ public sealed class AutomationRepository : IAutomationRepository
                 target_type = @TargetType,
                 time_zone = @TimeZone,
                 isolation = @Isolation,
-                base_branch = @BaseBranch
+                base_branch = @BaseBranch,
+                harness_type = @HarnessType
             WHERE id = @Id AND user_id = @UserId AND is_deleted = 0
             """,
             cmd =>
@@ -105,6 +107,7 @@ public sealed class AutomationRepository : IAutomationRepository
                 cmd.AddParameter("TimeZone", automation.TimeZone);
                 cmd.AddParameter("Isolation", automation.Isolation);
                 cmd.AddParameter("BaseBranch", automation.BaseBranch);
+                cmd.AddParameter("HarnessType", automation.HarnessType);
             });
     }
 
@@ -240,6 +243,7 @@ public sealed class AutomationRepository : IAutomationRepository
             Isolation = r.GetNullableString(r.GetOrdinal("isolation")),
             BaseBranch = r.GetNullableString(r.GetOrdinal("base_branch")),
             HistoryStartsAt = r.GetNullableString(r.GetOrdinal("history_starts_at")),
+            HarnessType = r.GetNullableString(r.GetOrdinal("harness_type")),
         };
     }
 

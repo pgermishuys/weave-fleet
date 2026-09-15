@@ -43,5 +43,11 @@ public sealed class Session
     /// <inheritdoc cref="SelectedProviderId" />
     public string? SelectedModelId { get; set; }
 
+    /// <summary>
+    /// The agent the session was started with or last prompted with by name. A prompt that names no agent goes
+    /// to it; null means the harness's default agent.
+    /// </summary>
+    public string? SelectedAgent { get; set; }
+
     public List<string> Tags { get; set; } = [];
 }

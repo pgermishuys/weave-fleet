@@ -1,4 +1,4 @@
-import type { CreateSessionResponse, SessionListItem, SessionSourceSelection } from "@/api/client";
+import type { CreateSessionResponse, ModelReference, SessionListItem, SessionSourceSelection } from "@/api/client";
 import type { CreateSessionOptions } from "@/composables/use-session-actions";
 import {
   buildGitHubSessionSourceSelection,
@@ -35,6 +35,10 @@ export interface NewSessionState {
   baseBranch?: string | null;
   /** Fetch an `origin/…` base first (default true). */
   fetchOrigin?: boolean;
+  /** The agent to start with; empty or absent for the harness's default. */
+  agent?: string;
+  /** The model to start with; null or absent for the agent's default. */
+  model?: ModelReference | null;
 }
 
 export interface NewSessionRequest {
@@ -242,6 +246,8 @@ export function buildCreateSessionRequest(state: NewSessionState): BuildNewSessi
       ...(state.harnessProfileId ? { harnessProfileId: state.harnessProfileId } : {}),
       ...(state.projectId ? { projectId: state.projectId } : {}),
       ...(tags.length > 0 ? { tags } : {}),
+      ...(state.agent ? { agent: state.agent } : {}),
+      ...(state.model ? { model: state.model } : {}),
     },
   };
 }
@@ -279,5 +285,7 @@ export function buildCreatedSessionRow(
     projectName: project?.name ?? null,
     harnessType: options.harnessType ?? null,
     tags: response.session.tags ?? [],
+    selectedAgent: options.agent ?? null,
+    selectedModel: options.model ?? null,
   };
 }

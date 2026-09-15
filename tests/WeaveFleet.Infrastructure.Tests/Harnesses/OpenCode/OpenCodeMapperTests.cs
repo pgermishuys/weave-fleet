@@ -528,6 +528,92 @@ public sealed class OpenCodeMapperTests
     }
 
     // ---------------------------------------------------------------------------
+    // ToHarnessCatalog
+    // ---------------------------------------------------------------------------
+
+    private static readonly OpenCodeProvidersResponse CatalogProviders = new()
+    {
+        All =
+        [
+            new OpenCodeProviderInfo
+            {
+                Id = "github-copilot",
+                Name = "GitHub Copilot",
+                Models = new Dictionary<string, OpenCodeProviderModel>
+                {
+                    ["claude-opus-4.7"] = new OpenCodeProviderModel { Id = "claude-opus-4.7", Name = "Claude Opus 4.7" },
+                },
+            },
+            new OpenCodeProviderInfo
+            {
+                Id = "anthropic",
+                Name = "Anthropic",
+                Models = new Dictionary<string, OpenCodeProviderModel>
+                {
+                    ["claude-sonnet-4-6"] = new OpenCodeProviderModel { Id = "claude-sonnet-4-6", Name = "Claude Sonnet 4.6" },
+                },
+            },
+        ],
+        Connected = ["github-copilot"],
+    };
+
+    private static readonly OpenCodeAgentInfo[] CatalogAgents =
+    [
+        new() { Name = "loom", Mode = "primary", Model = new OpenCodeModelRef { ProviderId = "github-copilot", ModelId = "claude-opus-4.7" } },
+        new() { Name = "build", Mode = "primary" },
+        new() { Name = "compaction", Mode = "primary", Hidden = true },
+        new() { Name = "explore", Mode = "subagent" },
+        new() { Name = "plan", Mode = "primary" },
+    ];
+
+    [Fact]
+    public void ToHarnessCatalog_TakesTheDefaultAgentAndModelFromTheConfig()
+    {
+        var catalog = OpenCodeMapper.ToHarnessCatalog(
+            CatalogAgents,
+            CatalogProviders,
+            new OpenCodeConfigDefaults { DefaultAgent = "plan", Model = "openrouter/anthropic/claude-haiku-4.5" });
+
+        catalog.DefaultAgent.ShouldBe("plan");
+        catalog.DefaultModelProviderId.ShouldBe("openrouter");
+        catalog.DefaultModelId.ShouldBe("anthropic/claude-haiku-4.5");
+        catalog.Agents.Count.ShouldBe(5);
+        catalog.Agents[0].ModelId.ShouldBe("claude-opus-4.7");
+    }
+
+    [Fact]
+    public void ToHarnessCatalog_WithoutAConfiguredAgent_DefaultsToBuild()
+    {
+        var catalog = OpenCodeMapper.ToHarnessCatalog(CatalogAgents, CatalogProviders, new OpenCodeConfigDefaults());
+
+        catalog.DefaultAgent.ShouldBe("build");
+        catalog.DefaultModelProviderId.ShouldBeNull();
+        catalog.DefaultModelId.ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData("explore")]
+    [InlineData("compaction")]
+    [InlineData("missing")]
+    public void ToHarnessCatalog_IgnoresAConfiguredAgentThatCantTakeAPrompt(string configured)
+    {
+        var catalog = OpenCodeMapper.ToHarnessCatalog(
+            CatalogAgents,
+            CatalogProviders,
+            new OpenCodeConfigDefaults { DefaultAgent = configured });
+
+        catalog.DefaultAgent.ShouldBe("build");
+    }
+
+    [Fact]
+    public void ToHarnessCatalog_ListsOnlyConnectedProviders()
+    {
+        var catalog = OpenCodeMapper.ToHarnessCatalog(CatalogAgents, CatalogProviders, new OpenCodeConfigDefaults());
+
+        catalog.Providers.ShouldHaveSingleItem().Id.ShouldBe("github-copilot");
+    }
+
+    // ---------------------------------------------------------------------------
     // DateTimeOffsetFromUnixMs
     // ---------------------------------------------------------------------------
 

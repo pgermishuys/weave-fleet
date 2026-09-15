@@ -5,7 +5,9 @@ import { useNavigate, useSearch } from "@tanstack/vue-router";
 import { ArrowUp, CircleDot, GitPullRequest, LoaderCircle, X } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import { Button } from "@/components/ui/button";
+import AgentSelector from "@/components/session/AgentSelector.vue";
 import ComposerFrame from "@/components/session/ComposerFrame.vue";
+import ModelSelector from "@/components/session/ModelSelector.vue";
 import MessageBubble from "@/components/session/MessageBubble.vue";
 import BasePicker from "@/components/sessions/new-session/BasePicker.vue";
 import FolderPicker from "@/components/sessions/new-session/FolderPicker.vue";
@@ -14,6 +16,7 @@ import MoreOptions from "@/components/sessions/new-session/MoreOptions.vue";
 import ProfilePicker from "@/components/sessions/new-session/ProfilePicker.vue";
 import WorkspacePicker from "@/components/sessions/new-session/WorkspacePicker.vue";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
+import { useHarnessCatalog } from "@/composables/use-harness-catalog";
 import { useIsMobile } from "@/composables/use-media-query";
 import { useNewSessionDefaults } from "@/composables/use-new-session-defaults";
 import { useProjects } from "@/composables/use-projects";
@@ -22,6 +25,7 @@ import { useRepositoryDetail } from "@/composables/use-repository-detail";
 import { seedSentPrompt } from "@/composables/use-send-prompt";
 import { useCreateSession } from "@/composables/use-session-actions";
 import { useWorktrees } from "@/composables/use-worktrees";
+import { describeDefaults, keepOffered, modelFromKey } from "@/lib/agent-model-choice";
 import { findRepositoryForGitHubPreset } from "@/lib/github-session-source";
 import { describeNewSession } from "@/lib/new-session-plan";
 import {
@@ -67,6 +71,9 @@ const { draft, restored } = workspaceUiStore.openNewSessionDraft({
   projectId: null,
   harnessType: defaultHarnessType.value,
   harnessProfileId: null,
+  agent: "",
+  model: "",
+  hasChosenAgentOrModel: false,
   gitHubPreset: null,
 });
 const {
@@ -81,6 +88,9 @@ const {
   projectId,
   harnessType,
   harnessProfileId,
+  agent,
+  model,
+  hasChosenAgentOrModel,
   gitHubPreset,
   hasChosenFolder,
 } = toRefs(draft);
@@ -203,6 +213,49 @@ watch(
   { immediate: true },
 );
 
+/**
+ * The folder the harness is asked about for its agents and models: an existing worktree as it is, otherwise the
+ * repository or folder itself (a new worktree is a checkout of it); none for a quick chat. Nothing is asked until
+ * the folder is settled.
+ */
+const catalogHarness = computed(() => (folder.value ? resolvedHarnessType.value : ""));
+const catalogDirectory = computed(() => {
+  const selected = folder.value;
+  if (!selected || selected.kind === "none") {
+    return null;
+  }
+  return selected.kind === "repository" && workspace.value.kind === "existing" ? workspace.value.path : selected.path;
+});
+/** Asked on the profile the session would start with, which can bring agents and models of its own. */
+const catalogProfile = computed(() => (showProfilePicker.value ? selectedProfileId.value : undefined));
+const { catalog, agents, models, isSupported: offersAgentsAndModels, isCurrent: isCatalogCurrent } = useHarnessCatalog(
+  catalogHarness,
+  catalogDirectory,
+  catalogProfile,
+);
+
+/** Sent unless this folder's catalog says the harness can't take an agent or model. */
+const sendsAgentAndModel = computed(() => !(isCatalogCurrent.value && catalog.value?.supported === false));
+const defaultLabels = computed(() => describeDefaults(
+  offersAgentsAndModels.value ? catalog.value : null,
+  { agent: agent.value, model: model.value },
+));
+
+const agentChoice = computed({
+  get: () => agent.value,
+  set: (value: string) => {
+    agent.value = value;
+    hasChosenAgentOrModel.value = true;
+  },
+});
+const modelChoice = computed({
+  get: () => model.value,
+  set: (value: string) => {
+    model.value = value;
+    hasChosenAgentOrModel.value = true;
+  },
+});
+
 function focusMessage(): void {
   textareaRef.value?.focus({ preventScroll: true });
 }
@@ -304,6 +357,8 @@ async function submit(withoutMessage: boolean): Promise<void> {
     branch: branchName.value,
     baseBranch: baseBranch.value,
     fetchOrigin: fetchOrigin.value,
+    agent: sendsAgentAndModel.value ? agent.value : undefined,
+    model: sendsAgentAndModel.value ? modelFromKey(model.value) : null,
   });
 
   if (!request.ok) {
@@ -314,6 +369,9 @@ async function submit(withoutMessage: boolean): Promise<void> {
   validationError.value = null;
   const chosenFolder = folder.value;
   const chosenWorkspace = workspace.value;
+  const chosenAgentAndModel = sendsAgentAndModel.value
+    ? { harnessType: resolvedHarnessType.value, agent: agent.value, model: model.value }
+    : undefined;
   const firstMessage = request.options.initialPrompt ?? null;
   sentAt.value = Date.now();
 
@@ -323,7 +381,7 @@ async function submit(withoutMessage: boolean): Promise<void> {
   try {
     const response = await createSession(request.directory, request.options);
     const sessionId = response.session.id;
-    defaults.remember(chosenFolder, chosenWorkspace);
+    defaults.remember(chosenFolder, chosenWorkspace, chosenAgentAndModel);
 
     // All in one tick: the session page has the message before its history loads, and the
     // session's row replaces the draft row where it stands.
@@ -414,6 +472,30 @@ watch(
   },
   { immediate: true },
 );
+
+// Each folder starts with the agent and model last used there, until the person picks their own.
+watch(
+  [folder, resolvedHarnessType],
+  ([nextFolder, nextHarness]) => {
+    if (!nextFolder || hasChosenAgentOrModel.value) {
+      return;
+    }
+    const remembered = defaults.choiceFor(nextFolder, nextHarness);
+    agent.value = remembered.agent;
+    model.value = remembered.model;
+  },
+  { immediate: true },
+);
+
+// An agent or model this folder doesn't offer (renamed, or remembered from before) goes back to Default.
+watch([catalog, isCatalogCurrent, agent, model], () => {
+  if (!isCatalogCurrent.value || !catalog.value?.supported) {
+    return;
+  }
+  const kept = keepOffered({ agent: agent.value, model: model.value }, catalog.value);
+  agent.value = kept.agent;
+  model.value = kept.model;
+}, { immediate: true });
 
 onMounted(() => {
   focusMessage();
@@ -542,6 +624,24 @@ onUnmounted(() => {
             :disabled="isStarting"
             @close-auto-focus="returnFocusToMessage"
           />
+          <template v-if="offersAgentsAndModels">
+            <AgentSelector
+              v-model="agentChoice"
+              :agents="agents"
+              :default-label="defaultLabels.agentLabel"
+              :default-description="defaultLabels.agentDescription"
+              :disabled="isStarting"
+              test-id="new-session-agent"
+            />
+            <ModelSelector
+              v-model="modelChoice"
+              :models="models"
+              :default-label="defaultLabels.modelLabel"
+              :default-description="defaultLabels.modelDescription"
+              :disabled="isStarting"
+              test-id="new-session-model"
+            />
+          </template>
           <Button
             variant="default"
             size="toolbar-lg"

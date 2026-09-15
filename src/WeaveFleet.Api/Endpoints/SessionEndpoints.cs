@@ -179,6 +179,14 @@ public static class SessionEndpoints
         // POST /api/sessions — create session via orchestrator
         group.MapPost("/", async (CreateSessionApiRequest req, SessionOrchestrator orchestrator) =>
         {
+            // The session doesn't exist yet, so the model can't be checked against its harness; a wrong one
+            // shows up as the first reply's error, as it would for any prompt.
+            if (req.Model is not null
+                && (req.Model.LegacyValue is not null || string.IsNullOrWhiteSpace(req.Model.ProviderId) || string.IsNullOrWhiteSpace(req.Model.ModelId)))
+            {
+                return Results.BadRequest(new ErrorResponse("Model must include both providerID and modelID."));
+            }
+
             var result = await orchestrator.CreateSessionAsync(new CreateSessionRequest
             {
                 Directory = req.Directory,
@@ -192,7 +200,10 @@ public static class SessionEndpoints
                 OnCompleteTargetSessionId = req.OnComplete?.NotifySessionId,
                 OnCompleteTargetInstanceId = req.OnComplete?.NotifyInstanceId,
                 ProjectId = req.ProjectId,
-                Tags = req.Tags
+                Tags = req.Tags,
+                Agent = req.Agent,
+                ProviderId = req.Model?.ProviderId,
+                ModelId = req.Model?.ModelId,
             });
             return result.Match(
                 r => Results.Ok(new CreateSessionApiResponse(
@@ -638,7 +649,9 @@ public static class SessionEndpoints
             Capabilities: capabilitiesResolver.Resolve(s),
             Tags: s.Tags ?? [])
         {
-            Origin = origin
+            Origin = origin,
+            SelectedAgent = s.SelectedAgent,
+            SelectedModel = SessionModelChoiceDto.Of(s.SelectedProviderId, s.SelectedModelId),
         };
     }
 
@@ -807,7 +820,11 @@ public static class SessionEndpoints
                 : null,
             HarnessType: s.HarnessType,
             Capabilities: capabilitiesResolver.Resolve(s),
-            Tags: s.Tags ?? []);
+            Tags: s.Tags ?? [])
+        {
+            SelectedAgent = s.SelectedAgent,
+            SelectedModel = SessionModelChoiceDto.Of(s.SelectedProviderId, s.SelectedModelId),
+        };
     }
 
     private static async Task<ModelResolutionResult> ResolveSessionModelAsync(
@@ -817,21 +834,9 @@ public static class SessionEndpoints
         InstanceTracker tracker,
         CancellationToken ct)
     {
-        // No model in the request → fall back to the session's persisted selection so that
-        // a SPA refresh (which loses local state) doesn't silently drop the model down to
-        // the harness default. SessionOrchestrator.PromptSessionAsync writes the selection
-        // on every successful prompt that resolved to a concrete (provider, model) pair.
+        // No model in the request: SessionOrchestrator gives the prompt the session's own.
         if (model is null)
-        {
-            var stored = await sessionService.GetSessionAsync(sessionId);
-            if (stored.IsSuccess
-                && stored.Value.SelectedProviderId is { Length: > 0 } sp
-                && stored.Value.SelectedModelId is { Length: > 0 } sm)
-            {
-                return new ModelResolutionResult(sp, sm, null);
-            }
             return ModelResolutionResult.Empty;
-        }
 
         var sessionResult = await sessionService.GetSessionAsync(sessionId);
         if (sessionResult.IsFailure)
@@ -862,7 +867,9 @@ internal sealed record CreateSessionApiRequest(
     OnCompleteInfo? OnComplete,
     string? ProjectId,
     List<string>? Tags,
-    string? HarnessProfileId = null);
+    string? HarnessProfileId = null,
+    string? Agent = null,
+    ModelRef? Model = null);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record OnCompleteInfo(string NotifySessionId, string NotifyInstanceId);

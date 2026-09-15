@@ -273,3 +273,24 @@ public sealed record ModelInfo
     public string? Name { get; init; }
     public IReadOnlyList<string>? Variants { get; init; }
 }
+
+/// <summary>
+/// The agents and models a harness offers in a folder, read before any session exists so a new session can
+/// start with them. The defaults are what a prompt that names neither gets.
+/// </summary>
+public sealed record HarnessCatalog
+{
+    public required IReadOnlyList<AgentInfo> Agents { get; init; }
+    public required IReadOnlyList<ProviderInfo> Providers { get; init; }
+
+    /// <summary>The agent a prompt goes to when it names none; null when the harness doesn't say.</summary>
+    public string? DefaultAgent { get; init; }
+
+    /// <summary>
+    /// The model a prompt gets when neither it nor its agent names one; null when only the harness knows
+    /// (it may pick by recent use).
+    /// </summary>
+    public string? DefaultModelProviderId { get; init; }
+    /// <inheritdoc cref="DefaultModelProviderId" />
+    public string? DefaultModelId { get; init; }
+}

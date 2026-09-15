@@ -30,11 +30,13 @@ public sealed class AutomationService(
         string? targetType = null,
         string? timeZone = null,
         string? isolation = null,
-        string? baseBranch = null)
+        string? baseBranch = null,
+        string? harnessType = null)
     {
         var error = AutomationSchedule.Validate(triggerType, triggerConfig, timeZone, DateTime.UtcNow, requireFuture: true)
             ?? ValidateWhere(workspaceId, isolation, baseBranch)
-            ?? ValidateTargetType(targetType);
+            ?? ValidateTargetType(targetType)
+            ?? ValidateModel(model);
         if (error is not null)
             return error;
 
@@ -51,8 +53,9 @@ public sealed class AutomationService(
             IsEnabled = true,
             IsDeleted = false,
             WorkspaceId = workspaceId,
-            Model = model,
-            Agent = agent,
+            Model = NormalizeOptional(model),
+            Agent = NormalizeOptional(agent),
+            HarnessType = HarnessFor(model, agent, harnessType),
             TargetTags = targetTags ?? [],
             TargetType = targetType ?? "new_session",
             TimeZone = NormalizeTimeZone(timeZone),
@@ -86,7 +89,8 @@ public sealed class AutomationService(
         string? targetType = null,
         string? timeZone = null,
         string? isolation = null,
-        string? baseBranch = null)
+        string? baseBranch = null,
+        string? harnessType = null)
     {
         var existing = await automationRepository.GetByIdAsync(id);
         if (existing is null)
@@ -95,7 +99,8 @@ public sealed class AutomationService(
         // A one-off time that has passed is fine on an automation that's off (it already ran); not on one that's on.
         var error = AutomationSchedule.Validate(triggerType, triggerConfig, timeZone, DateTime.UtcNow, requireFuture: existing.IsEnabled)
             ?? ValidateWhere(workspaceId, isolation, baseBranch)
-            ?? ValidateTargetType(targetType);
+            ?? ValidateTargetType(targetType)
+            ?? ValidateModel(model);
         if (error is not null)
             return error;
 
@@ -107,8 +112,9 @@ public sealed class AutomationService(
         existing.MaxRunsPerHour = maxRunsPerHour;
         existing.TimeoutMinutes = timeoutMinutes;
         existing.WorkspaceId = workspaceId;
-        existing.Model = model;
-        existing.Agent = agent;
+        existing.Model = NormalizeOptional(model);
+        existing.Agent = NormalizeOptional(agent);
+        existing.HarnessType = HarnessFor(model, agent, harnessType);
         existing.TargetTags = targetTags ?? [];
         existing.TargetType = targetType ?? "new_session";
         existing.TimeZone = NormalizeTimeZone(timeZone);
@@ -231,6 +237,25 @@ public sealed class AutomationService(
         targetType is null || TargetTypes.Contains(targetType, StringComparer.Ordinal)
             ? null
             : FleetError.ValidationError("TargetType", $"Unknown target '{targetType}'. Use one of: {string.Join(", ", TargetTypes)}.");
+
+    /// <summary>A model is <c>provider/model</c>, split at the first slash: the model part may have slashes of its own.</summary>
+    private static FleetError? ValidateModel(string? model)
+    {
+        if (string.IsNullOrWhiteSpace(model))
+            return null;
+
+        var slash = model.Trim().IndexOf('/', StringComparison.Ordinal);
+        return slash > 0 && slash < model.Trim().Length - 1
+            ? null
+            : FleetError.ValidationError("Model", $"Model '{model}' must be written provider/model, e.g. anthropic/claude-sonnet-4-5.");
+    }
+
+    /// <summary>
+    /// An agent or model only means something on the harness it was picked from, so the automation keeps that
+    /// harness with them. Without either it follows the default harness, as automations always have.
+    /// </summary>
+    private static string? HarnessFor(string? model, string? agent, string? harnessType) =>
+        string.IsNullOrWhiteSpace(model) && string.IsNullOrWhiteSpace(agent) ? null : NormalizeOptional(harnessType);
 
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

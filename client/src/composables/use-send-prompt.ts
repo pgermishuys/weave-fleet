@@ -539,6 +539,14 @@ export function useSendPrompt(sessionId: string) {
       request.model = { providerID: model?.providerId ?? "", modelID: resolvedModelId };
     }
 
+    // The server keeps a named agent or model as the session's own, which "Default" then means.
+    if (selectedSession.value && request.agent) {
+      selectedSession.value.selectedAgent = request.agent;
+    }
+    if (selectedSession.value && request.model?.providerID) {
+      selectedSession.value.selectedModel = request.model;
+    }
+
     if (attachments && attachments.length > 0) {
       request.attachments = attachments;
     }

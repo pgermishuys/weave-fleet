@@ -129,6 +129,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(InstanceCommandItem))]
 [JsonSerializable(typeof(InstanceAgentsResponse))]
 [JsonSerializable(typeof(InstanceAgentItem))]
+[JsonSerializable(typeof(HarnessCatalogResponse))]
 [JsonSerializable(typeof(InstanceAgentModelRef))]
 [JsonSerializable(typeof(InstanceFilesResponse))]
 [JsonSerializable(typeof(List<InstanceProviderItem>))]

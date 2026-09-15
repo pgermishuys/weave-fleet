@@ -1,5 +1,6 @@
 import type { ScannedRepository, WorktreeInfo } from "@/api/client";
 import { usePersistedState } from "@/composables/use-persisted-state";
+import { DEFAULT_CHOICE, type AgentModelChoice } from "@/lib/agent-model-choice";
 import type { NewSessionFolder, NewSessionWorkspace } from "@/lib/new-session-request";
 
 /** `"current"`, `"new"`, or the path of an existing worktree. */
@@ -10,6 +11,8 @@ interface NewSessionDefaults {
   /** Repositories and folders, most recent first. */
   recentFolders: NewSessionFolder[];
   workspaceByRepository: Record<string, RememberedWorkspace>;
+  /** The agent and model last started with, by folder (path, or "none" for a quick chat) and then harness. */
+  choiceByFolder: Record<string, Record<string, AgentModelChoice>>;
 }
 
 export const NEW_SESSION_DEFAULTS_KEY = "weave:new-session:defaults";
@@ -19,6 +22,7 @@ const EMPTY_DEFAULTS: NewSessionDefaults = {
   lastFolder: null,
   recentFolders: [],
   workspaceByRepository: {},
+  choiceByFolder: {},
 };
 
 export interface UseNewSessionDefaultsResult {
@@ -33,8 +37,10 @@ export interface UseNewSessionDefaultsResult {
   workspaceFor: (repositoryPath: string, worktrees: readonly WorktreeInfo[] | null) => NewSessionWorkspace;
   /** The worktree path last used in a repository, if any, so menus can list it first. */
   lastWorktreeFor: (repositoryPath: string) => string | null;
+  /** The agent and model last started with in a folder on a harness; Default for both the first time. */
+  choiceFor: (folder: NewSessionFolder, harnessType: string) => AgentModelChoice;
   /** Records the choices a session was just created with. */
-  remember: (folder: NewSessionFolder, workspace: NewSessionWorkspace) => void;
+  remember: (folder: NewSessionFolder, workspace: NewSessionWorkspace, choice?: { harnessType: string } & AgentModelChoice) => void;
 }
 
 function sameFolder(left: NewSessionFolder, right: NewSessionFolder): boolean {
@@ -42,6 +48,30 @@ function sameFolder(left: NewSessionFolder, right: NewSessionFolder): boolean {
     return left.kind === right.kind;
   }
   return left.kind === right.kind && left.path === right.path;
+}
+
+function folderKey(folder: NewSessionFolder): string {
+  return folder.kind === "none" ? "none" : folder.path;
+}
+
+function isChoice(value: unknown): value is AgentModelChoice {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const choice = value as Partial<Record<keyof AgentModelChoice, unknown>>;
+  return typeof choice.agent === "string" && typeof choice.model === "string";
+}
+
+function normalizeChoices(value: unknown): Record<string, Record<string, AgentModelChoice>> {
+  if (typeof value !== "object" || value === null) {
+    return {};
+  }
+  return Object.fromEntries(Object.entries(value).flatMap(([folder, byHarness]) => {
+    if (typeof byHarness !== "object" || byHarness === null) {
+      return [];
+    }
+    return [[folder, Object.fromEntries(Object.entries(byHarness).filter(([, choice]) => isChoice(choice)))]];
+  })) as Record<string, Record<string, AgentModelChoice>>;
 }
 
 function isFolder(value: unknown): value is NewSessionFolder {
@@ -67,6 +97,7 @@ function normalize(stored: unknown): NewSessionDefaults {
     lastFolder: isFolder(value.lastFolder) ? value.lastFolder : null,
     recentFolders: Array.isArray(value.recentFolders) ? value.recentFolders.filter(isFolder) : [],
     workspaceByRepository: workspaces as Record<string, string>,
+    choiceByFolder: normalizeChoices(value.choiceByFolder),
   };
 }
 
@@ -113,9 +144,24 @@ export function useNewSessionDefaults(): UseNewSessionDefaultsResult {
     return remembered && remembered !== "current" && remembered !== "new" ? remembered : null;
   }
 
-  function remember(folder: NewSessionFolder, workspace: NewSessionWorkspace): void {
+  function choiceFor(folder: NewSessionFolder, harnessType: string): AgentModelChoice {
+    return normalize(stored.value).choiceByFolder[folderKey(folder)]?.[harnessType] ?? DEFAULT_CHOICE;
+  }
+
+  function remember(
+    folder: NewSessionFolder,
+    workspace: NewSessionWorkspace,
+    choice?: { harnessType: string } & AgentModelChoice,
+  ): void {
     setStored((previous) => {
       const current = normalize(previous);
+      const key = folderKey(folder);
+      const choices = choice
+        ? {
+          ...current.choiceByFolder,
+          [key]: { ...current.choiceByFolder[key], [choice.harnessType]: { agent: choice.agent, model: choice.model } },
+        }
+        : current.choiceByFolder;
       const recent = folder.kind === "none"
         ? current.recentFolders
         : [folder, ...current.recentFolders.filter((entry) => !sameFolder(entry, folder))].slice(0, MAX_RECENT_FOLDERS);
@@ -126,6 +172,7 @@ export function useNewSessionDefaults(): UseNewSessionDefaultsResult {
         workspaceByRepository: folder.kind === "repository"
           ? { ...current.workspaceByRepository, [folder.path]: toRemembered(workspace) }
           : current.workspaceByRepository,
+        choiceByFolder: choices,
       };
     });
   }
@@ -135,6 +182,7 @@ export function useNewSessionDefaults(): UseNewSessionDefaultsResult {
     recentFolders,
     workspaceFor,
     lastWorktreeFor,
+    choiceFor,
     remember,
   };
 }

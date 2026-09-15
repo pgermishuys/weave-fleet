@@ -15,7 +15,9 @@ public sealed record CreateAutomationRequest(
     string? TargetType = null,
     string? TimeZone = null,
     string? Isolation = null,
-    string? BaseBranch = null);
+    string? BaseBranch = null,
+    /// <summary>The harness <c>Model</c> and <c>Agent</c> were picked from; ignored without either.</summary>
+    string? HarnessType = null);
 
 public sealed record UpdateAutomationRequest(
     string Name,
@@ -32,7 +34,9 @@ public sealed record UpdateAutomationRequest(
     string? TargetType = null,
     string? TimeZone = null,
     string? Isolation = null,
-    string? BaseBranch = null);
+    string? BaseBranch = null,
+    /// <summary>The harness <c>Model</c> and <c>Agent</c> were picked from; ignored without either.</summary>
+    string? HarnessType = null);
 
 public sealed record AutomationResponse(
     string Id,
@@ -54,6 +58,8 @@ public sealed record AutomationResponse(
     string? TimeZone,
     string? Isolation,
     string? BaseBranch,
+    /// <summary>The harness runs use; null for the default harness at the time of the run.</summary>
+    string? HarnessType,
     /// <summary>When it runs next (UTC, ISO 8601); null when it's off or waits for an event.</summary>
     string? NextRunAt,
     AutomationRunResponse? LastRun);
