@@ -22,6 +22,8 @@ export interface UseAnalyticsFiltersResult {
   setTo: (date: string) => void;
   setProjectId: (id: string) => void;
   resetFilters: () => void;
+  /** True while the filters are the defaults (the last 30 days, every project), so there's nothing to reset. */
+  isDefault: ComputedRef<boolean>;
 }
 
 const STORAGE_KEY = "weave:analytics:filters";
@@ -77,6 +79,13 @@ export function useAnalyticsFilters(): UseAnalyticsFiltersResult {
     setFilters(getDefaultFilters());
   }
 
+  const isDefault = computed(() => {
+    const defaults = getDefaultFilters();
+    return filters.value.from === defaults.from
+      && filters.value.to === defaults.to
+      && filters.value.projectId === defaults.projectId;
+  });
+
   return {
     filters: computed(() => filters.value),
     topProjects,
@@ -84,5 +93,6 @@ export function useAnalyticsFilters(): UseAnalyticsFiltersResult {
     setTo,
     setProjectId,
     resetFilters,
+    isDefault,
   };
 }

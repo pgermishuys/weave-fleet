@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { Card, CardContent } from "@/components/ui/card";
-
 interface Props {
   label: string;
   value: number | string;
@@ -15,33 +13,69 @@ withDefaults(defineProps<Props>(), {
 </script>
 
 <template>
-  <Card class="border-border/80 bg-card/70 py-0 backdrop-blur-sm">
-    <CardContent class="space-y-4 px-5 py-4">
-      <div class="space-y-1">
-        <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-          {{ label }}
-        </p>
-
-        <div class="flex flex-wrap items-end gap-x-3 gap-y-1">
-          <p class="text-3xl font-semibold tracking-tight text-foreground">
-            {{ value }}
-          </p>
-
-          <p
-            v-if="secondary"
-            class="text-sm font-medium text-muted-foreground"
-          >
-            {{ secondary }}
-          </p>
-        </div>
-      </div>
-
-      <p
-        v-if="detail"
-        class="text-sm leading-6 text-muted-foreground"
-      >
-        {{ detail }}
-      </p>
-    </CardContent>
-  </Card>
+  <div class="stat-card">
+    <p class="stat-card__label">
+      {{ label }}
+    </p>
+    <p class="stat-card__value">
+      {{ value }}
+      <span
+        v-if="secondary"
+        class="stat-card__secondary"
+      >{{ secondary }}</span>
+    </p>
+    <p
+      v-if="detail"
+      class="stat-card__detail"
+    >
+      {{ detail }}
+    </p>
+  </div>
 </template>
+
+<style scoped>
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--card-bg);
+}
+
+.stat-card__label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.stat-card__value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 0;
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-card__secondary {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.stat-card__detail {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+</style>

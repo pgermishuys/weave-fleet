@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { RotateCcw } from "lucide-vue-next";
 import {
   Select,
   SelectContent,
@@ -16,6 +15,8 @@ interface Props {
   to: string;
   projectId: string;
   projects: readonly AnalyticsProjectOption[];
+  /** Nothing to reset: the filters are the defaults. */
+  isDefault?: boolean;
 }
 
 interface Emits {
@@ -27,14 +28,8 @@ interface Emits {
 
 const ALL_PROJECTS_VALUE = "__all_projects__";
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), { isDefault: false });
 const emit = defineEmits<Emits>();
-
-const integerFormatter = new Intl.NumberFormat("en-US");
-
-const selectedProject = computed(() => {
-  return props.projects.find((project) => project.id === props.projectId) ?? null;
-});
 
 const selectedProjectValue = computed({
   get: () => props.projectId || ALL_PROJECTS_VALUE,
@@ -43,35 +38,10 @@ const selectedProjectValue = computed({
   },
 });
 
-const projectHint = computed(() => {
-  if (!selectedProject.value) {
-    return "Leave blank to include every project.";
-  }
-
-  return `${integerFormatter.format(selectedProject.value.tokens)} tokens in ${formatAnalyticsCost(selectedProject.value.cost)} spend`;
-});
-
-function formatAnalyticsCost(cost: number): string {
-  if (cost === 0) {
-    return "$0.00";
-  }
-
-  if (cost < 0.01) {
-    return `$${cost.toFixed(3)}`;
-  }
-
-  return `$${cost.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
-
-function handleFromUpdate(value: string | number): void {
-  emit("update:from", String(value));
-}
-
-function handleToUpdate(value: string | number): void {
-  emit("update:to", String(value));
+function onDate(event: Event, which: "update:from" | "update:to"): void {
+  const value = (event.target as HTMLInputElement).value;
+  if (which === "update:from") emit("update:from", value);
+  else emit("update:to", value);
 }
 </script>
 
@@ -81,125 +51,155 @@ function handleToUpdate(value: string | number): void {
     role="group"
     aria-label="Analytics filters"
   >
-    <label
-      class="analytics-filter"
-      for="analytics-filter-from"
-    >
-      <span class="analytics-filter__label">From</span>
-      <Input
-        id="analytics-filter-from"
-        class="w-full"
-        type="date"
-        :model-value="from"
-        @update:model-value="handleFromUpdate"
-      />
-    </label>
-
-    <label
-      class="analytics-filter"
-      for="analytics-filter-to"
-    >
-      <span class="analytics-filter__label">To</span>
-      <Input
-        id="analytics-filter-to"
-        class="w-full"
-        type="date"
-        :model-value="to"
-        @update:model-value="handleToUpdate"
-      />
-    </label>
-
-    <div class="analytics-filter analytics-filter--wide">
+    <div class="analytics-filters__range">
       <label
-        class="analytics-filter__label"
-        for="analytics-filter-project"
+        class="sr-only"
+        for="analytics-filter-from"
+      >From</label>
+      <input
+        id="analytics-filter-from"
+        class="analytics-filters__date"
+        type="date"
+        :value="from"
+        :max="to || undefined"
+        @change="onDate($event, 'update:from')"
       >
-        Project
-      </label>
-      <Select v-model="selectedProjectValue">
-        <SelectTrigger
-          id="analytics-filter-project"
-          class="w-full bg-[var(--surface-2,rgba(255,255,255,0.03))]"
+      <span
+        class="analytics-filters__dash"
+        aria-hidden="true"
+      >–</span>
+      <label
+        class="sr-only"
+        for="analytics-filter-to"
+      >To</label>
+      <input
+        id="analytics-filter-to"
+        class="analytics-filters__date"
+        type="date"
+        :value="to"
+        :min="from || undefined"
+        @change="onDate($event, 'update:to')"
+      >
+    </div>
+
+    <Select v-model="selectedProjectValue">
+      <SelectTrigger
+        id="analytics-filter-project"
+        class="analytics-filters__project"
+        aria-label="Project"
+      >
+        <SelectValue placeholder="All projects" />
+      </SelectTrigger>
+
+      <SelectContent>
+        <SelectItem :value="ALL_PROJECTS_VALUE">
+          All projects
+        </SelectItem>
+        <SelectItem
+          v-for="project in projects"
+          :key="project.id"
+          :value="project.id"
         >
-          <SelectValue placeholder="All projects" />
-        </SelectTrigger>
+          {{ project.name }}
+        </SelectItem>
+      </SelectContent>
+    </Select>
 
-        <SelectContent>
-          <SelectItem :value="ALL_PROJECTS_VALUE">
-            All projects
-          </SelectItem>
-          <SelectItem
-            v-for="project in projects"
-            :key="project.id"
-            :value="project.id"
-          >
-            {{ project.name }}
-          </SelectItem>
-        </SelectContent>
-      </Select>
-      <span class="analytics-filter__hint">{{ projectHint }}</span>
-    </div>
-
-    <div class="analytics-filters__actions">
-      <Button
-        type="button"
-        variant="outline"
-        class="w-full"
-        @click="emit('reset')"
-      >
-        Reset filters
-      </Button>
-    </div>
+    <button
+      type="button"
+      class="analytics-filters__reset"
+      :disabled="props.isDefault"
+      title="Back to the last 30 days, every project"
+      @click="emit('reset')"
+    >
+      <RotateCcw
+        :size="13"
+        aria-hidden="true"
+      />
+      Reset
+    </button>
   </div>
 </template>
 
 <style scoped>
+/* One row of 32px controls, the same height as the view switcher beside it. */
 .analytics-filters {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  min-width: min(100%, 720px);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
-.analytics-filter {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
+.analytics-filters__range {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  background: var(--card-bg);
+}
+
+.analytics-filters__date {
+  height: 30px;
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.analytics-filters__date::-webkit-calendar-picker-indicator {
+  opacity: 0.55;
+  cursor: pointer;
+}
+
+.analytics-filters__dash {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.analytics-filters :deep(.analytics-filters__project) {
+  height: 32px;
+  min-width: 160px;
+  max-width: 220px;
+  padding: 0 10px;
+  border-color: var(--border);
+  border-radius: var(--radius-btn);
+  background: var(--card-bg);
+  font-size: 12.5px;
+}
+
+.analytics-filters__reset {
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
-}
-
-.analytics-filter--wide {
-  min-width: 0;
-}
-
-.analytics-filter__label {
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-btn);
+  background: transparent;
   color: var(--muted);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background-color var(--transition), color var(--transition);
 }
 
-.analytics-filter__hint {
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.4;
+.analytics-filters__reset:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
 }
 
-.analytics-filters__actions {
-  display: flex;
-  align-items: flex-end;
+.analytics-filters__reset:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
-@media (max-width: 1100px) {
-  .analytics-filters {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 720px) {
-  .analytics-filters {
-    grid-template-columns: 1fr;
+@media (prefers-reduced-motion: reduce) {
+  .analytics-filters__reset {
+    transition: none;
   }
 }
 </style>

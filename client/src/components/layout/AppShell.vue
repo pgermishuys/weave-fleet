@@ -63,10 +63,15 @@ const isSettingsRoute = computed(() => pathname.value.startsWith("/settings"));
 // The new-session page has no session yet, so there's nothing for the panel to show.
 const isNewSessionRoute = computed(() => pathname.value === "/sessions/new");
 
+// The panel shows the open session's canvases, so it belongs to a session's page; the dashboard and
+// Analytics are about the whole fleet.
+const isSessionRoute = computed(() => pathname.value.startsWith("/sessions/"));
+
 const showSessionsV2Panel = computed(() =>
   !isSettingsRoute.value
   && !isNewSessionRoute.value
-  && (activeRail.value === "sessions" || activeRail.value === "analytics"),
+  && isSessionRoute.value
+  && activeRail.value === "sessions",
 );
 
 const showBoardPanel = computed(() =>

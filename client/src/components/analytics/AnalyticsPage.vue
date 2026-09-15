@@ -22,7 +22,7 @@ const sessionsSortDir = shallowRef<AnalyticsSessionsSortDir>("desc");
 const isRefreshingAnalytics = shallowRef(false);
 const isRefreshingSessions = shallowRef(false);
 
-const { filters, resetFilters, setFrom, setProjectId, setTo, topProjects } = useAnalyticsFilters();
+const { filters, isDefault, resetFilters, setFrom, setProjectId, setTo, topProjects } = useAnalyticsFilters();
 
 const normalizedProjectId = computed(() => filters.value.projectId.trim());
 const fromDate = computed(() => filters.value.from || undefined);
@@ -262,34 +262,32 @@ function formatFetchMessage(error: string | undefined, fallback: string): string
     aria-label="Analytics dashboard"
   >
     <header class="analytics-page__header">
-      <p class="analytics-page__eyebrow">
-        Fleet insights
+      <h1 class="analytics-page__title">
+        Analytics
+      </h1>
+      <p class="analytics-page__subtitle">
+        Tokens and spend across your sessions, by project and model.
       </p>
-      <div class="analytics-page__heading">
-        <h1 class="analytics-page__title">
-          Analytics
-        </h1>
-        <p class="analytics-page__subtitle">
-          Explore overview metrics, projects, sessions, and models through focused analytics tabs.
-        </p>
-      </div>
     </header>
 
-    <AnalyticsFilters
-      :from="filters.from"
-      :to="filters.to"
-      :project-id="filters.projectId"
-      :projects="filterProjects"
-      @update:from="setFrom"
-      @update:to="setTo"
-      @update:project-id="setProjectId"
-      @reset="resetFilters"
-    />
+    <div class="analytics-page__toolbar">
+      <AnalyticsTabs
+        :active-tab="activeTab"
+        @select="handleTabSelect"
+      />
 
-    <AnalyticsTabs
-      :active-tab="activeTab"
-      @select="handleTabSelect"
-    />
+      <AnalyticsFilters
+        :from="filters.from"
+        :to="filters.to"
+        :project-id="filters.projectId"
+        :projects="filterProjects"
+        :is-default="isDefault"
+        @update:from="setFrom"
+        @update:to="setTo"
+        @update:project-id="setProjectId"
+        @reset="resetFilters"
+      />
+    </div>
 
     <component
       :is="activeTabComponent"
@@ -304,43 +302,38 @@ function formatFetchMessage(error: string | undefined, fallback: string): string
 .analytics-page {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
+  min-width: 0;
 }
 
 .analytics-page__header {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-
-.analytics-page__eyebrow {
-  margin: 0;
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.analytics-page__heading {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 
 .analytics-page__title {
   margin: 0;
   color: var(--text);
-  font-size: 30px;
-  font-weight: 700;
-  line-height: 1.1;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
 }
 
 .analytics-page__subtitle {
   margin: 0;
-  max-width: 760px;
   color: var(--muted);
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.5;
+}
+
+/* The view switcher on the left, the filters on the right; they wrap under each other when narrow. */
+.analytics-page__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
 }
 </style>
