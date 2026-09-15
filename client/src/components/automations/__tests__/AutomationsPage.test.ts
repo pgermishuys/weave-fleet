@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { defineComponent, h, ref, shallowRef } from "vue";
+import { computed, defineComponent, h, ref, shallowRef, type Ref } from "vue";
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
-import type { ScannedRepository } from "@/api/client";
+import type { HarnessCatalog, ScannedRepository } from "@/api/client";
 import type { Automation, AutomationRun } from "@/stores/automations";
 
 const { apiFetchMock, navigate } = vi.hoisted(() => ({ apiFetchMock: vi.fn(), navigate: vi.fn() }));
@@ -24,6 +24,43 @@ vi.mock("@/composables/use-repositories", () => ({
     refresh: vi.fn(),
   }),
 }));
+const catalog: HarnessCatalog = {
+  supported: true,
+  agents: [
+    { name: "loom", mode: "primary", model: { providerID: "github-copilot", modelID: "claude-opus-4.7" } },
+    { name: "tapestry", mode: "primary" },
+  ],
+  providers: [{
+    id: "github-copilot",
+    name: "GitHub Copilot",
+    models: [{ id: "claude-opus-4.7", name: "Claude Opus 4.7" }, { id: "claude-haiku-4.5", name: "Claude Haiku 4.5" }],
+  }],
+  defaultAgent: "loom",
+  defaultModel: null,
+};
+const catalogRequests: { harnessType: string; directory: string | null }[] = [];
+vi.mock("@/composables/use-harness-catalog", async () => {
+  const { toAgentOptions } = await import("@/composables/use-agents");
+  const { toModelOptions } = await import("@/composables/use-models");
+  return {
+    useHarnessCatalog: (harnessType: Ref<string>, directory: Ref<string | null>) => {
+      const shown = computed(() => {
+        if (!harnessType.value) return null;
+        catalogRequests.push({ harnessType: harnessType.value, directory: directory.value });
+        return catalog;
+      });
+      return {
+        catalog: shown,
+        agents: computed(() => toAgentOptions(shown.value?.agents ?? [])),
+        models: computed(() => toModelOptions(shown.value?.providers ?? [])),
+        isSupported: computed(() => shown.value?.supported === true),
+        isCurrent: computed(() => shown.value !== null),
+        isLoading: shallowRef(false),
+        error: shallowRef(null),
+      };
+    },
+  };
+});
 vi.mock("@/composables/use-repository-detail", () => ({
   useRepositoryDetail: () => ({ detail: shallowRef(null), isLoading: shallowRef(false), error: shallowRef(null) }),
 }));
@@ -160,6 +197,7 @@ describe("Automations screen", () => {
     runs = [];
     refuseNext = null;
     sent.length = 0;
+    catalogRequests.length = 0;
     navigate.mockReset();
     apiFetchMock.mockReset();
     apiFetchMock.mockImplementation(async (url: string, init?: RequestInit) => serve(url, init));
@@ -325,6 +363,60 @@ describe("Automations screen", () => {
     await wrapper.find("[data-testid='automation-run']").trigger("click");
 
     expect(navigate).toHaveBeenCalledWith(expect.objectContaining({ to: "/sessions/$id", params: { id: "session-r1" } }));
+  });
+
+  async function pick(chip: "automation-agent" | "automation-model", label: string) {
+    await wrapper.find(`[data-testid='${chip}']`).trigger("click");
+    await flushPromises();
+    const item = wrapper.findAll(".selector-dropdown__item").find((candidate) => candidate.text().startsWith(label));
+    if (!item) throw new Error(`No option "${label}"`);
+    await item.trigger("click");
+    await flushPromises();
+  }
+
+  it("runs a new automation on the agent and model picked for it, on that harness", async () => {
+    await startNew("Every Monday at 9am, summarise the open PRs");
+
+    expect(catalogRequests.at(-1)).toEqual({ harnessType: "opencode", directory: fleet.path });
+    expect(wrapper.find("[data-testid='automation-agent']").text()).toBe("Default (loom)");
+    expect(wrapper.find("[data-testid='automation-model']").text()).toBe("Default (Claude Opus 4.7)");
+
+    await pick("automation-agent", "tapestry");
+    await pick("automation-model", "Claude Haiku 4.5");
+    await wrapper.find("[data-testid='automation-submit']").trigger("click");
+    await flushPromises();
+
+    expect(sent[0]).toMatchObject({
+      method: "POST",
+      body: { agent: "tapestry", model: "github-copilot/claude-haiku-4.5", harnessType: "opencode" },
+    });
+  });
+
+  it("leaves the agent, model and harness empty when both are Default", async () => {
+    await startNew("Every Monday at 9am, summarise the open PRs");
+    await wrapper.find("[data-testid='automation-submit']").trigger("click");
+    await flushPromises();
+
+    expect(sent[0]).toMatchObject({ method: "POST", body: { agent: null, model: null, harnessType: null } });
+  });
+
+  it("shows an automation's agent and model, and offers Save once one changes", async () => {
+    list = [{ ...weekly, agent: "tapestry", model: "github-copilot/claude-haiku-4.5", harnessType: "opencode" }];
+    await openAutomation("a1");
+
+    expect(wrapper.find("[data-testid='automation-agent']").text()).toBe("tapestry");
+    expect(wrapper.find("[data-testid='automation-model']").text()).toBe("Claude Haiku 4.5");
+    expect(wrapper.find("[data-testid='automation-submit']").exists()).toBe(false);
+
+    await pick("automation-model", "Default");
+    await wrapper.find("[data-testid='automation-submit']").trigger("click");
+    await flushPromises();
+
+    expect(sent[0]).toMatchObject({
+      method: "PUT",
+      url: "/api/automations/a1",
+      body: { agent: "tapestry", model: null, harnessType: "opencode" },
+    });
   });
 
   it("offers Save only once something changed, and keeps the schedule it had", async () => {

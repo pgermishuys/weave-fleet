@@ -349,7 +349,11 @@ public sealed partial class SessionOrchestrator(
             UserId = userContext.UserId,
             HarnessResumeToken = harnessInstance.ResumeToken,
             SourceReference = request.SourceReference,
-            Tags = request.Tags ?? []
+            Tags = request.Tags ?? [],
+            // The first message and every prompt after it that names none go to these (PromptSessionCoreAsync).
+            SelectedAgent = string.IsNullOrWhiteSpace(request.Agent) ? null : request.Agent.Trim(),
+            SelectedProviderId = HasModel(request.ProviderId, request.ModelId) ? request.ProviderId!.Trim() : null,
+            SelectedModelId = HasModel(request.ProviderId, request.ModelId) ? request.ModelId!.Trim() : null,
         };
 
         var createdAt = DateTime.UtcNow.ToString("O");
@@ -454,6 +458,7 @@ public sealed partial class SessionOrchestrator(
                 userMessageId: null,
                 correlationId: null,
                 saveUserMessage: true,
+                rememberChoices: true,
                 ct).ConfigureAwait(false);
 
             // The session exists either way; the user sees it without the message and can resend.
@@ -758,7 +763,7 @@ public sealed partial class SessionOrchestrator(
         string? correlationId,
         CancellationToken ct)
     {
-        var result = await PromptSessionCoreAsync(id, text, options, userMessageId, correlationId, saveUserMessage: false, ct).ConfigureAwait(false);
+        var result = await PromptSessionCoreAsync(id, text, options, userMessageId, correlationId, saveUserMessage: false, rememberChoices: true, ct).ConfigureAwait(false);
         return result.IsSuccess ? Unit.Value : result.Error;
     }
 
@@ -769,7 +774,22 @@ public sealed partial class SessionOrchestrator(
         string? userMessageId,
         string? correlationId,
         CancellationToken ct)
-        => await PromptSessionCoreAsync(id, text, options, userMessageId, correlationId, saveUserMessage: false, ct).ConfigureAwait(false);
+        => await PromptSessionCoreAsync(id, text, options, userMessageId, correlationId, saveUserMessage: false, rememberChoices: true, ct).ConfigureAwait(false);
+
+    /// <summary>
+    /// Prompts a session with an agent or model for this prompt only; later prompts that name none still get the
+    /// session's own. Automations prompt existing sessions this way, so a run on a cheaper model doesn't change
+    /// the model the session's owner picked.
+    /// </summary>
+    public async Task<Result<Unit>> PromptSessionOnceAsync(
+        string id,
+        string text,
+        PromptOptions? options,
+        CancellationToken ct = default)
+    {
+        var result = await PromptSessionCoreAsync(id, text, options, userMessageId: null, correlationId: null, saveUserMessage: false, rememberChoices: false, ct).ConfigureAwait(false);
+        return result.IsSuccess ? Unit.Value : result.Error;
+    }
 
     private async Task<Result<PromptSessionResult>> PromptSessionCoreAsync(
         string id,
@@ -778,6 +798,7 @@ public sealed partial class SessionOrchestrator(
         string? userMessageId,
         string? correlationId,
         bool saveUserMessage,
+        bool rememberChoices,
         CancellationToken ct)
     {
         using var promptActivity = FleetInstrumentation.ActivitySource.StartActivity(
@@ -796,6 +817,10 @@ public sealed partial class SessionOrchestrator(
 
         if (string.Equals(sessionResult.Value.RetentionStatus, "archived", StringComparison.Ordinal))
             return FleetError.ValidationError("Session.RetentionStatus", "Archived sessions are read-only.");
+
+        // What the caller named is remembered below; what it left out comes from the session.
+        var requestedOptions = rememberChoices ? options : null;
+        options = WithSessionChoices(options, sessionResult.Value);
 
         var instanceResult = await GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
         if (instanceResult.IsFailure)
@@ -839,14 +864,20 @@ public sealed partial class SessionOrchestrator(
             if (saveUserMessage && messageRepository is not null)
                 await messageRepository.UpsertAsync(MessagePersistenceService.ToPersistedMessage(id, userMsg)).ConfigureAwait(false);
 
-            // Persist the model selection so a SPA refresh (which loses local state) can
-            // fall back to it on the next prompt instead of silently using the harness
-            // default. We only update when both ids are present — the API layer resolves
-            // the provider/model pair via ResolveSessionModelAsync before reaching here.
-            if (options?.ProviderId is { Length: > 0 } providerId
-                && options.ModelId is { Length: > 0 } modelId)
+            // Remember an agent or model the prompt named, so later prompts that name none (after a refresh,
+            // from an automation, or with "Default" picked) keep it rather than drop to the harness's default.
+            // A model is only remembered as a pair; the API resolves the pair before it gets here.
+            if (HasModel(requestedOptions?.ProviderId, requestedOptions?.ModelId)
+                && (requestedOptions!.ProviderId != sessionResult.Value.SelectedProviderId
+                    || requestedOptions.ModelId != sessionResult.Value.SelectedModelId))
             {
-                await sessionRepository.UpdateSelectedModelAsync(id, providerId, modelId);
+                await sessionRepository.UpdateSelectedModelAsync(id, requestedOptions.ProviderId!, requestedOptions.ModelId!);
+            }
+
+            if (requestedOptions?.Agent is { Length: > 0 } agent
+                && !string.Equals(agent, sessionResult.Value.SelectedAgent, StringComparison.Ordinal))
+            {
+                await sessionRepository.UpdateSelectedAgentAsync(id, agent);
             }
 
             return new PromptSessionResult(EventId: null, effectiveCorrelationId);
@@ -1496,6 +1527,27 @@ public sealed partial class SessionOrchestrator(
             UserId: session.UserId));
 
         return Unit.Value;
+    }
+
+    private static bool HasModel(string? providerId, string? modelId)
+        => !string.IsNullOrWhiteSpace(providerId) && !string.IsNullOrWhiteSpace(modelId);
+
+    /// <summary>
+    /// A prompt that names no agent or model gets the session's: the ones it started with or was last given. So
+    /// "Default" in a session means what that session runs on, for people and automations alike.
+    /// </summary>
+    internal static PromptOptions? WithSessionChoices(PromptOptions? options, Session session)
+    {
+        var agent = string.IsNullOrWhiteSpace(options?.Agent) ? session.SelectedAgent : options.Agent;
+        var namesModel = HasModel(options?.ProviderId, options?.ModelId);
+        var useSessionModel = !namesModel && HasModel(session.SelectedProviderId, session.SelectedModelId);
+        if (agent == options?.Agent && !useSessionModel)
+            return options;
+
+        var withChoices = (options ?? new PromptOptions()) with { Agent = agent };
+        return useSessionModel
+            ? withChoices with { ProviderId = session.SelectedProviderId, ModelId = session.SelectedModelId }
+            : withChoices;
     }
 
     // ── Session-scoped capabilities ────────────────────────────────────────────
@@ -2155,6 +2207,17 @@ public sealed record CreateSessionRequest
     /// Optional tags for categorizing and filtering sessions.
     /// </summary>
     public List<string>? Tags { get; init; }
+    /// <summary>
+    /// The agent the session starts with; null for the harness's default. Prompts that name no agent get it too.
+    /// </summary>
+    public string? Agent { get; init; }
+    /// <summary>
+    /// The model the session starts with, used only with <see cref="ModelId"/>; null for the agent's or the
+    /// harness's default. Prompts that name no model get it too.
+    /// </summary>
+    public string? ProviderId { get; init; }
+    /// <inheritdoc cref="ProviderId" />
+    public string? ModelId { get; init; }
 }
 
 /// <summary>Result of a successful <see cref="SessionOrchestrator.CreateSessionAsync"/> call.</summary>

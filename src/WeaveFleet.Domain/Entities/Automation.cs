@@ -16,8 +16,15 @@ public sealed class Automation
     public bool IsEnabled { get; set; }
     public bool IsDeleted { get; set; }
     public string? WorkspaceId { get; set; }
+    /// <summary>The model runs use, as <c>provider/model</c>; null for the agent's or the harness's default.</summary>
     public string? Model { get; set; }
+    /// <summary>The agent runs go to; null for the harness's default.</summary>
     public string? Agent { get; set; }
+    /// <summary>
+    /// The harness runs use, set with <see cref="Model"/> or <see cref="Agent"/> since they only mean something
+    /// on the harness they were picked from. Null means the default harness at the time of the run.
+    /// </summary>
+    public string? HarnessType { get; set; }
     public List<string> TargetTags { get; set; } = [];
     public string TargetType { get; set; } = "new_session";
     /// <summary>

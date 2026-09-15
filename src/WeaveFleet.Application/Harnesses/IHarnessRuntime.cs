@@ -1,3 +1,4 @@
+using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Application.Harnesses;
@@ -46,4 +47,13 @@ public interface IHarnessRuntime
     /// </summary>
     Task<HarnessProfileCheck> CheckProfileAsync(string ownerUserId, string content, CancellationToken ct) =>
         Task.FromResult(HarnessProfileCheck.Passed);
+
+    /// <summary>
+    /// Lists the agents and models this harness offers in <paramref name="directory"/> on <paramref name="profile"/>
+    /// (null for none) without a session, so a new session can start with a chosen one. Null when the harness can't
+    /// list them that way; the new-session composer then offers no choice. <paramref name="directory"/> must already
+    /// be validated by the caller.
+    /// </summary>
+    Task<HarnessCatalog?> GetCatalogAsync(string ownerUserId, string directory, HarnessProfile? profile, CancellationToken ct)
+        => Task.FromResult<HarnessCatalog?>(null);
 }

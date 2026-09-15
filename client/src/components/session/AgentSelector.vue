@@ -3,9 +3,22 @@ import { computed } from "vue";
 import SelectorDropdown from "@/components/session/SelectorDropdown.vue";
 import type { AgentOption } from "@/composables/use-agents";
 
-const props = defineProps<{
-  agents: readonly AgentOption[];
-}>();
+const props = withDefaults(
+  defineProps<{
+    agents: readonly AgentOption[];
+    /** What "Default" says on the chip and in the list, e.g. "Default (loom)". */
+    defaultLabel?: string;
+    defaultDescription?: string;
+    disabled?: boolean;
+    testId?: string;
+  }>(),
+  {
+    defaultLabel: "Default",
+    defaultDescription: "Use the session default agent",
+    disabled: false,
+    testId: undefined,
+  },
+);
 
 const selectedAgentId = defineModel<string>({ required: true });
 
@@ -13,8 +26,8 @@ const items = computed(() => {
   return [
     {
       id: "",
-      label: "Default",
-      description: "Use the session default agent",
+      label: props.defaultLabel,
+      description: props.defaultDescription,
     },
     ...props.agents.map((agent) => ({
       id: agent.id,
@@ -31,5 +44,7 @@ const items = computed(() => {
     label="Agent selector"
     placeholder="Select agent"
     :items="items"
+    :disabled="disabled"
+    :test-id="testId"
   />
 </template>

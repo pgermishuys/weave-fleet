@@ -1685,6 +1685,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/harnesses/{type}/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetHarnessCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workspace-roots": {
         parameters: {
             query?: never;
@@ -2809,6 +2825,8 @@ export interface components {
             projectId: null | string;
             tags: null | string[];
             harnessProfileId?: null | string;
+            agent?: null | string;
+            model?: null | components["schemas"]["ModelRef"];
         };
         CreateTerminalRequest: {
             /** Format: int32 */
@@ -2864,6 +2882,33 @@ export interface components {
         };
         ForkSessionApiRequest: {
             title: null | string;
+        };
+        HarnessCatalogResponse: {
+            supported: boolean;
+            agents: {
+                name: string;
+                description: null | string;
+                mode: string;
+                hidden: boolean;
+                model: null | {
+                    providerID: string;
+                    modelID: string;
+                };
+            }[];
+            providers: {
+                id: string;
+                name: string;
+                models: {
+                    id: string;
+                    name: string;
+                    variants: null | string[];
+                }[];
+            }[];
+            defaultAgent: null | string;
+            defaultModel: null | {
+                providerID: string;
+                modelID: string;
+            };
         };
         ImageAttachmentDto: {
             mime: string;
@@ -6785,6 +6830,31 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    GetHarnessCatalog: {
+        parameters: {
+            query?: {
+                directory?: string;
+                profile?: string;
+            };
+            header?: never;
+            path: {
+                type: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HarnessCatalogResponse"];
+                };
             };
         };
     };

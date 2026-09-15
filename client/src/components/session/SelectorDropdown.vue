@@ -15,9 +15,13 @@ const props = withDefaults(
     items: readonly SelectorItem[];
     label: string;
     placeholder?: string;
+    disabled?: boolean;
+    testId?: string;
   }>(),
   {
     placeholder: "Select",
+    disabled: false,
+    testId: undefined,
   },
 );
 
@@ -97,6 +101,8 @@ function selectItem(itemId: string): void {
       :aria-expanded="isOpen"
       aria-haspopup="listbox"
       :aria-label="label"
+      :disabled="disabled"
+      :data-testid="testId"
       @click="toggleOpen"
     >
       <span class="selector-btn__label">{{ selectedItem?.label ?? placeholder }}</span>
@@ -159,10 +165,13 @@ function selectItem(itemId: string): void {
 <style scoped>
 .selector-dropdown-root {
   position: relative;
+  /* A long label ("Default (Claude Opus 4.7)") gives way in a tight toolbar instead of pushing it wider. */
+  min-width: 0;
 }
 
 .selector-btn {
   display: inline-flex;
+  max-width: 100%;
   align-items: center;
   gap: 5px;
   height: 28px;
@@ -177,7 +186,12 @@ function selectItem(itemId: string): void {
   transition: background var(--transition), color var(--transition);
 }
 
-.selector-btn:hover,
+.selector-btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.selector-btn:hover:not(:disabled),
 .selector-btn[aria-expanded="true"] {
   background: color-mix(in srgb, var(--text) 6%, transparent);
 }
@@ -188,11 +202,16 @@ function selectItem(itemId: string): void {
 }
 
 .selector-btn__label {
+  min-width: 0;
+  overflow: hidden;
   color: color-mix(in srgb, var(--text) 80%, transparent);
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+
 .selector-btn__icon {
+  flex-shrink: 0;
   width: 13px;
   height: 13px;
   transition: transform var(--transition);

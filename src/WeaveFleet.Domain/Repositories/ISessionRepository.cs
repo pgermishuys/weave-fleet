@@ -48,6 +48,10 @@ public interface ISessionRepository
     /// </summary>
     Task UpdateSelectedModelAsync(string id, string providerId, string modelId);
     /// <summary>
+    /// Record the agent a session was prompted with by name, so prompts that name none go to it too.
+    /// </summary>
+    Task UpdateSelectedAgentAsync(string id, string agent);
+    /// <summary>
     /// Update the tags for a session.
     /// </summary>
     Task UpdateTagsAsync(string id, List<string> tags);

@@ -1488,6 +1488,66 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         return true;
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Pooled mode only: it asks the owner's shared OpenCode process, the one a session started in
+    /// <paramref name="directory"/> on <paramref name="profile"/> without a model would join, and starts it if needed. OpenCode then has the
+    /// folder's config loaded, so the session that follows starts sooner. Without pooling it returns null
+    /// rather than start a process of its own.
+    /// </remarks>
+    public async Task<HarnessCatalog?> GetCatalogAsync(string ownerUserId, string directory, HarnessProfile? profile, CancellationToken ct)
+    {
+        if (!await IsPooledModeEnabledAsync(ownerUserId, ct).ConfigureAwait(false))
+            return null;
+
+        HarnessHelpers.ValidateWorkingDirectory(directory);
+
+        IReadOnlyList<UserCredential> credentials = [];
+        using (BackgroundUserContext.BeginScope(ownerUserId))
+        using (var scope = _scopeFactory.CreateScope())
+        {
+            var credentialStore = scope.ServiceProvider.GetService<ICredentialStore>();
+            if (credentialStore is not null)
+                credentials = await credentialStore.GetDecryptedCredentialsAsync(ownerUserId).ConfigureAwait(false);
+        }
+
+        // The same preparation SessionOrchestrator does for a new session, which picks its model later.
+        var preparation = await PrepareRuntimeAsync(new RuntimePreparationContext
+        {
+            UserId = ownerUserId,
+            UserCredentials = credentials,
+            ModelId = null,
+            WorkingDirectory = directory,
+            Profile = profile,
+        }, ct).ConfigureAwait(false);
+        if (preparation is not RuntimePreparation.Ready ready)
+            return null;
+
+        var environmentVariables = GetEnvironmentVariables(ready.Artifacts);
+        var credentialHash = CredentialHasher.HashEnvironment(environmentVariables);
+        var lease = await _pooledInstanceRegistry
+            .AcquireAsync(ownerUserId, credentialHash, environmentVariables, directory, ct)
+            .ConfigureAwait(false);
+
+        try
+        {
+            var client = lease.Instance.HttpClient
+                ?? throw new InvalidOperationException("Pooled OpenCode instance does not expose an HTTP client.");
+
+            var agents = client.GetAgentsAsync(directory, ct);
+            var providers = client.GetProvidersAsync(directory, ct);
+            var config = client.GetConfigDefaultsAsync(directory, ct);
+            await Task.WhenAll(agents, providers, config).ConfigureAwait(false);
+
+            return OpenCodeMapper.ToHarnessCatalog(await agents, await providers, await config);
+        }
+        finally
+        {
+            // The process stays up for its idle time, ready for the session this is for.
+            await lease.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
     /// <summary>
     /// Expires any pending/running question tool parts for the given session.
     /// Called during resume to ensure stale questions are marked as errors

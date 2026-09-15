@@ -63,6 +63,64 @@ public sealed class AutomationServiceTests
     }
 
     [Fact]
+    public async Task Create_keeps_the_harness_an_agent_and_model_were_picked_from()
+    {
+        var result = await _sut.CreateAsync(
+            "Weekly digest", "Summarise the open PRs", "schedule", "0 9 * * 1", 1, 10, 30,
+            model: "openrouter/anthropic/claude-haiku-4.5", agent: " tapestry ", harnessType: "opencode");
+
+        result.IsSuccess.ShouldBeTrue();
+        var stored = (await _repository.GetByIdAsync(result.Value.Id))!;
+        stored.Model.ShouldBe("openrouter/anthropic/claude-haiku-4.5");
+        stored.Agent.ShouldBe("tapestry");
+        stored.HarnessType.ShouldBe("opencode");
+    }
+
+    [Fact]
+    public async Task Create_without_an_agent_or_model_follows_the_default_harness()
+    {
+        var result = await _sut.CreateAsync(
+            "Weekly digest", "Summarise the open PRs", "schedule", "0 9 * * 1", 1, 10, 30,
+            model: " ", agent: null, harnessType: "opencode");
+
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.Model.ShouldBeNull();
+        result.Value.HarnessType.ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData("claude-haiku-4.5")]
+    [InlineData("anthropic/")]
+    [InlineData("/claude-haiku-4.5")]
+    public async Task Create_rejects_a_model_without_its_provider(string model)
+    {
+        var result = await _sut.CreateAsync(
+            "Weekly digest", "Summarise the open PRs", "schedule", "0 9 * * 1", 1, 10, 30,
+            model: model, harnessType: "opencode");
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Code.ShouldStartWith("Validation.");
+        result.Error.Description.ShouldContain("provider/model");
+    }
+
+    [Fact]
+    public async Task Update_back_to_defaults_forgets_the_harness()
+    {
+        var created = await _sut.CreateAsync(
+            "Weekly digest", "Summarise the open PRs", "schedule", "0 9 * * 1", 1, 10, 30,
+            model: "anthropic/claude-haiku-4-5", harnessType: "opencode");
+
+        var result = await _sut.UpdateAsync(
+            created.Value.Id, "Weekly digest", "Summarise the open PRs", "schedule", "0 9 * * 1",
+            1, 10, 30, model: null, agent: null, harnessType: "opencode");
+
+        result.IsSuccess.ShouldBeTrue();
+        var stored = (await _repository.GetByIdAsync(created.Value.Id))!;
+        stored.Model.ShouldBeNull();
+        stored.HarnessType.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task Update_changes_the_time_zone()
     {
         var created = await CreateScheduleAsync("0 9 * * 1", timeZone: null);

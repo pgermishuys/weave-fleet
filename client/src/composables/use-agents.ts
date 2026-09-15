@@ -1,22 +1,25 @@
 import { storeToRefs } from "pinia";
 import { computed, readonly, ref, shallowRef, watch } from "vue";
 import { api } from "@/api/client";
-import type { AutocompleteAgent } from "@/api/client";
+import type { AutocompleteAgent, ModelReference } from "@/api/client";
 import { useSessionsStore } from "@/stores/sessions";
 
 export interface AgentOption {
   id: string;
   name: string;
   description: string;
+  /** The agent's own model, when it has one. */
+  model?: ModelReference;
 }
 
-function toAgentOptions(agents: readonly AutocompleteAgent[]): AgentOption[] {
+export function toAgentOptions(agents: readonly AutocompleteAgent[]): AgentOption[] {
   return agents
     .filter((agent) => !agent.hidden)
     .map((agent) => ({
       id: agent.name,
       name: agent.name,
       description: agent.description ?? "",
+      ...(agent.model?.providerID && agent.model.modelID ? { model: agent.model } : {}),
     }));
 }
 

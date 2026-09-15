@@ -1,9 +1,11 @@
 import { DOMWrapper, flushPromises, mount, type VueWrapper } from "@vue/test-utils";
-import { computed, ref, shallowRef } from "vue";
+import { computed, ref, shallowRef, watchEffect, type Ref } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NO_PROFILE } from "@/api/client";
-import type { BranchInfo, HarnessInfo, HarnessProfile, RepositoryDetail, ScannedRepository, WorktreeInfo } from "@/api/client";
+import type { BranchInfo, HarnessCatalog, HarnessInfo, HarnessProfile, RepositoryDetail, ScannedRepository, WorktreeInfo } from "@/api/client";
 import NewSessionComposer from "@/components/sessions/NewSessionComposer.vue";
+import { toAgentOptions } from "@/composables/use-agents";
+import { toModelOptions } from "@/composables/use-models";
 import { NEW_SESSION_DEFAULTS_KEY } from "@/composables/use-new-session-defaults";
 import { clearSentPrompts, useSentPrompts } from "@/composables/use-send-prompt";
 import { createGitHubSessionSourcePreset } from "@/lib/github-session-source";
@@ -93,6 +95,32 @@ vi.mock("@/composables/use-enabled-harnesses", () => ({
     enabledHarnesses: computed(() => harnesses.value),
     defaultHarnessType: computed(() => "opencode"),
   }),
+}));
+
+const catalog = shallowRef<HarnessCatalog | null>(null);
+const catalogRequests: { harnessType: string; directory: string | null; profile?: string }[] = [];
+
+vi.mock("@/composables/use-harness-catalog", () => ({
+  useHarnessCatalog: (harnessType: Ref<string>, directory: Ref<string | null>, profile?: Ref<string | undefined>) => {
+    watchEffect(() => {
+      if (harnessType.value) {
+        catalogRequests.push({
+          harnessType: harnessType.value,
+          directory: directory.value,
+          ...(profile?.value ? { profile: profile.value } : {}),
+        });
+      }
+    });
+    return {
+      catalog,
+      agents: computed(() => toAgentOptions(catalog.value?.agents ?? [])),
+      models: computed(() => toModelOptions(catalog.value?.providers ?? [])),
+      isSupported: computed(() => catalog.value?.supported === true),
+      isCurrent: computed(() => catalog.value !== null),
+      isLoading: shallowRef(false),
+      error: shallowRef(null),
+    };
+  },
 }));
 
 vi.mock("@/composables/use-session-actions", () => ({
@@ -185,6 +213,8 @@ beforeEach(() => {
   harnesses.value = [opencode];
   createError.value = undefined;
   isCreating.value = false;
+  catalog.value = null;
+  catalogRequests.length = 0;
   repositoryDetail.value = {
     name: "rocket",
     path: "/home/me/src/rocket",
@@ -323,6 +353,22 @@ describe("NewSessionComposer", () => {
         await type(view, "Hello");
         await pressEnter(view);
         expect(lastCreateCall()[1].harnessProfileId).toBe(NO_PROFILE);
+      });
+
+      it("asks for the agents and models on the session's profile", async () => {
+        harnesses.value = [withProfiles];
+        seedProfiles([profile("work", "Work", true), profile("local", "Local")]);
+        rememberFolder({ kind: "directory", path: "/home/me/notes" });
+        const view = await mountComposer();
+
+        expect(catalogRequests.at(-1)).toEqual({ harnessType: "opencode", directory: "/home/me/notes", profile: "work" });
+
+        await view.get("[data-testid='new-session-profile']").trigger("click");
+        await flushPromises();
+        await inDocument().get("[data-testid='new-session-profile-none']").trigger("click");
+        await flushPromises();
+
+        expect(catalogRequests.at(-1)).toEqual({ harnessType: "opencode", directory: "/home/me/notes", profile: NO_PROFILE });
       });
     });
 
@@ -478,6 +524,163 @@ describe("NewSessionComposer", () => {
       expect(view.get("[data-testid='new-session-plan']").text())
         .toContain("Works directly in ~/src/rocket on feature/x. That's not main.");
       expect(view.get(".new-session__plan-warn").text()).toBe(". That's not main.");
+    });
+  });
+
+  describe("agent and model", () => {
+    const copilotCatalog: HarnessCatalog = {
+      supported: true,
+      agents: [
+        { name: "loom", mode: "primary", description: "Main orchestrator", model: { providerID: "github-copilot", modelID: "claude-opus-4.7" } },
+        { name: "tapestry", mode: "primary", model: { providerID: "github-copilot", modelID: "claude-sonnet-5" } },
+        { name: "build", mode: "primary" },
+        { name: "title", mode: "primary", hidden: true },
+      ],
+      providers: [
+        {
+          id: "github-copilot",
+          name: "GitHub Copilot",
+          models: [
+            { id: "claude-opus-4.7", name: "Claude Opus 4.7" },
+            { id: "claude-sonnet-5", name: "Claude Sonnet 5" },
+            { id: "claude-haiku-4.5", name: "Claude Haiku 4.5" },
+          ],
+        },
+      ],
+      defaultAgent: "loom",
+      defaultModel: null,
+    };
+
+    function agentChip(view: VueWrapper) {
+      return view.get("[data-testid='new-session-agent']");
+    }
+
+    function modelChip(view: VueWrapper) {
+      return view.get("[data-testid='new-session-model']");
+    }
+
+    async function pick(view: VueWrapper, chip: "agent" | "model", label: string): Promise<void> {
+      await (chip === "agent" ? agentChip(view) : modelChip(view)).trigger("click");
+      await flushPromises();
+      const item = view.findAll(".selector-dropdown__item").find((candidate) => candidate.text().startsWith(label));
+      if (!item) {
+        throw new Error(`No ${chip} option "${label}"`);
+      }
+      await item.trigger("click");
+      await flushPromises();
+    }
+
+    it("asks the harness about the chosen folder and says what Default is", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path });
+      catalog.value = copilotCatalog;
+      const view = await mountComposer();
+
+      expect(catalogRequests.at(-1)).toEqual({ harnessType: "opencode", directory: rocket.path });
+      expect(agentChip(view).text()).toBe("Default (loom)");
+      expect(modelChip(view).text()).toBe("Default (Claude Opus 4.7)");
+    });
+
+    it("Default's model follows the picked agent", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path });
+      catalog.value = copilotCatalog;
+      const view = await mountComposer();
+
+      await pick(view, "agent", "tapestry");
+
+      expect(agentChip(view).text()).toBe("tapestry");
+      expect(modelChip(view).text()).toBe("Default (Claude Sonnet 5)");
+    });
+
+    it("starts the session with the picked agent and model", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path });
+      catalog.value = copilotCatalog;
+      const view = await mountComposer();
+
+      await pick(view, "agent", "tapestry");
+      await pick(view, "model", "Claude Haiku 4.5");
+      await type(view, "Fix the login redirect");
+      await pressEnter(view);
+
+      expect(lastCreateCall()[1]).toMatchObject({
+        agent: "tapestry",
+        model: { providerID: "github-copilot", modelID: "claude-haiku-4.5" },
+      });
+    });
+
+    it("names no agent or model when both are Default", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path });
+      catalog.value = copilotCatalog;
+      const view = await mountComposer();
+
+      await type(view, "Fix the login redirect");
+      await pressEnter(view);
+
+      expect(lastCreateCall()[1]).not.toHaveProperty("agent");
+      expect(lastCreateCall()[1]).not.toHaveProperty("model");
+    });
+
+    it("remembers the choice for the folder, not for others", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path });
+      catalog.value = copilotCatalog;
+      const first = await mountComposer();
+      await pick(first, "agent", "tapestry");
+      await pick(first, "model", "Claude Haiku 4.5");
+      await type(first, "Fix the login redirect");
+      await pressEnter(first);
+      first.unmount();
+      wrapper = null;
+
+      const again = await mountComposer();
+      expect(agentChip(again).text()).toBe("tapestry");
+      expect(modelChip(again).text()).toBe("Claude Haiku 4.5");
+
+      await openFolderMenu(again);
+      await folderOption("comet").trigger("click");
+      await flushPromises();
+      expect(agentChip(again).text()).toBe("Default (loom)");
+      expect(modelChip(again).text()).toBe("Default (Claude Opus 4.7)");
+    });
+
+    it("drops a remembered agent the folder no longer has", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path });
+      const stored = JSON.parse(localStorage.getItem(NEW_SESSION_DEFAULTS_KEY)!) as Record<string, unknown>;
+      localStorage.setItem(NEW_SESSION_DEFAULTS_KEY, JSON.stringify({
+        ...stored,
+        choiceByFolder: { [rocket.path]: { opencode: { agent: "retired", model: "" } } },
+      }));
+      catalog.value = copilotCatalog;
+      const view = await mountComposer();
+
+      expect(agentChip(view).text()).toBe("Default (loom)");
+      await type(view, "Fix the login redirect");
+      await pressEnter(view);
+      expect(lastCreateCall()[1]).not.toHaveProperty("agent");
+    });
+
+    it("offers no choice, and sends none, when the harness can't list its agents", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path });
+      const stored = JSON.parse(localStorage.getItem(NEW_SESSION_DEFAULTS_KEY)!) as Record<string, unknown>;
+      localStorage.setItem(NEW_SESSION_DEFAULTS_KEY, JSON.stringify({
+        ...stored,
+        choiceByFolder: { [rocket.path]: { opencode: { agent: "tapestry", model: "" } } },
+      }));
+      catalog.value = { supported: false, agents: [], providers: [], defaultAgent: null, defaultModel: null };
+      const view = await mountComposer();
+
+      expect(view.find("[data-testid='new-session-agent']").exists()).toBe(false);
+      expect(view.find("[data-testid='new-session-model']").exists()).toBe(false);
+      await type(view, "Fix the login redirect");
+      await pressEnter(view);
+      expect(lastCreateCall()[1]).not.toHaveProperty("agent");
+    });
+
+    it("asks about an existing worktree as it is", async () => {
+      worktrees.value = [{ path: "/home/me/src/rocket-wt", branch: "fleet/other", commitHash: null }];
+      rememberFolder({ kind: "repository", path: rocket.path }, { [rocket.path]: "/home/me/src/rocket-wt" });
+      catalog.value = copilotCatalog;
+      await mountComposer();
+
+      expect(catalogRequests.at(-1)).toEqual({ harnessType: "opencode", directory: "/home/me/src/rocket-wt" });
     });
   });
 

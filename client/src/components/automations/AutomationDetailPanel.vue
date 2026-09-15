@@ -21,6 +21,7 @@ import {
 import { freshComposerState, useAutomationsNav, type AutomationComposerState } from "@/composables/use-automations-nav";
 import { useAutomations } from "@/composables/use-automations";
 import { useRepositories } from "@/composables/use-repositories";
+import { keyForModel, modelFromPath } from "@/lib/agent-model-choice";
 import { describeDate, fromTrigger, nextRun } from "@/lib/automation-schedule";
 import { describeEventType, describeRunState, describeRunTrigger, eventTypeOf } from "@/lib/automations";
 import type { NewSessionFolder } from "@/lib/new-session-request";
@@ -93,7 +94,15 @@ function stateFor(automation: Automation): AutomationComposerState {
     targetType: automation.targetType ?? "new_session",
     name: automation.name,
     skip: automation.maxConcurrentRuns > 0,
+    agent: automation.agent ?? "",
+    model: keyForStoredModel(automation.model),
+    harnessType: automation.harnessType ?? null,
   };
+}
+
+function keyForStoredModel(path: string | null): string {
+  const model = modelFromPath(path);
+  return model ? keyForModel(model) : "";
 }
 
 function resetEditState(): void {

@@ -530,6 +530,52 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task CreateSessionAsync_WithAgentAndModel_SendsTheFirstMessageToThemAndRemembersThem()
+    {
+        ConfigureHarnessAndScratchProject();
+        using var tempDirectory = new TempDirectory();
+
+        var result = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path,
+            InitialPrompt = "Fix the login redirect",
+            Agent = "tapestry",
+            ProviderId = "openrouter",
+            ModelId = "anthropic/claude-haiku-4.5",
+        });
+
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : null);
+        var options = _defaultSession.SendPromptCalls.ShouldHaveSingleItem().Options.ShouldNotBeNull();
+        options.Agent.ShouldBe("tapestry");
+        options.ProviderId.ShouldBe("openrouter");
+        options.ModelId.ShouldBe("anthropic/claude-haiku-4.5");
+        var stored = (await _builder.SessionRepository.GetByIdAsync(result.Value.Session.Id)).ShouldNotBeNull();
+        stored.SelectedAgent.ShouldBe("tapestry");
+        stored.SelectedProviderId.ShouldBe("openrouter");
+        stored.SelectedModelId.ShouldBe("anthropic/claude-haiku-4.5");
+    }
+
+    [Fact]
+    public async Task CreateSessionAsync_WithAModelButNoProvider_KeepsTheHarnessDefault()
+    {
+        ConfigureHarnessAndScratchProject();
+        using var tempDirectory = new TempDirectory();
+
+        var result = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path,
+            InitialPrompt = "Fix the login redirect",
+            ModelId = "claude-haiku-4.5",
+        });
+
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : null);
+        var options = _defaultSession.SendPromptCalls.ShouldHaveSingleItem().Options.ShouldNotBeNull();
+        options.Agent.ShouldBeNull();
+        options.ModelId.ShouldBeNull();
+        result.Value.Session.SelectedModelId.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task CreateSessionAsync_WithInitialPrompt_WhenHarnessNeedsItAtSpawn_PassesItToSpawn()
     {
         var runtime = _builder.RegisterHarness("opencode", "Needs prompt", new HarnessCapabilities { RequiresInitialPrompt = true });
@@ -949,6 +995,92 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
         stored.ShouldNotBeNull();
         stored.SelectedProviderId.ShouldBe("anthropic");
         stored.SelectedModelId.ShouldBe("claude-sonnet-4-6");
+    }
+
+    [Fact]
+    public async Task PromptSessionAsync_WithoutOptions_SendsTheSessionsAgentAndModel()
+    {
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "s1", InstanceId = "inst-1", Title = "T", Status = "active",
+            Directory = "/tmp", CreatedAt = "2026-01-01", RetentionStatus = "active",
+            SelectedAgent = "tapestry", SelectedProviderId = "anthropic", SelectedModelId = "claude-sonnet-4-6"
+        });
+        _tracker.Register("inst-1", _defaultSession);
+        var sut = BuildSutWithTracker();
+
+        var result = await sut.PromptSessionAsync("s1", "hello");
+
+        result.IsSuccess.ShouldBeTrue();
+        var options = _defaultSession.SendPromptCalls.ShouldHaveSingleItem().Options.ShouldNotBeNull();
+        options.Agent.ShouldBe("tapestry");
+        options.ProviderId.ShouldBe("anthropic");
+        options.ModelId.ShouldBe("claude-sonnet-4-6");
+    }
+
+    [Fact]
+    public async Task PromptSessionAsync_WithANamedModel_UsesItWithTheSessionsAgent()
+    {
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "s1", InstanceId = "inst-1", Title = "T", Status = "active",
+            Directory = "/tmp", CreatedAt = "2026-01-01", RetentionStatus = "active",
+            SelectedAgent = "tapestry", SelectedProviderId = "anthropic", SelectedModelId = "claude-sonnet-4-6"
+        });
+        _tracker.Register("inst-1", _defaultSession);
+        var sut = BuildSutWithTracker();
+
+        var result = await sut.PromptSessionAsync("s1", "hello", new PromptOptions
+        {
+            ProviderId = "openrouter",
+            ModelId = "anthropic/claude-haiku-4.5",
+            Effort = "high",
+        });
+
+        result.IsSuccess.ShouldBeTrue();
+        var options = _defaultSession.SendPromptCalls.ShouldHaveSingleItem().Options.ShouldNotBeNull();
+        options.Agent.ShouldBe("tapestry");
+        options.ProviderId.ShouldBe("openrouter");
+        options.ModelId.ShouldBe("anthropic/claude-haiku-4.5");
+        options.Effort.ShouldBe("high");
+    }
+
+    [Fact]
+    public async Task PromptSessionAsync_WithANamedAgent_RemembersItForLaterPrompts()
+    {
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "s1", InstanceId = "inst-1", Title = "T", Status = "active",
+            Directory = "/tmp", CreatedAt = "2026-01-01", RetentionStatus = "active"
+        });
+        _tracker.Register("inst-1", _defaultSession);
+        var sut = BuildSutWithTracker();
+
+        (await sut.PromptSessionAsync("s1", "plan it", new PromptOptions { Agent = "pattern" })).IsSuccess.ShouldBeTrue();
+        (await sut.PromptSessionAsync("s1", "and again")).IsSuccess.ShouldBeTrue();
+
+        (await _builder.SessionRepository.GetByIdAsync("s1")).ShouldNotBeNull().SelectedAgent.ShouldBe("pattern");
+        _defaultSession.SendPromptCalls.Count.ShouldBe(2);
+        _defaultSession.SendPromptCalls[1].Options.ShouldNotBeNull().Agent.ShouldBe("pattern");
+    }
+
+    [Fact]
+    public async Task PromptSessionAsync_WhenTheSessionHasNoChoices_NamesNoAgentOrModel()
+    {
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "s1", InstanceId = "inst-1", Title = "T", Status = "active",
+            Directory = "/tmp", CreatedAt = "2026-01-01", RetentionStatus = "active"
+        });
+        _tracker.Register("inst-1", _defaultSession);
+        var sut = BuildSutWithTracker();
+
+        (await sut.PromptSessionAsync("s1", "hello")).IsSuccess.ShouldBeTrue();
+
+        var options = _defaultSession.SendPromptCalls.ShouldHaveSingleItem().Options.ShouldNotBeNull();
+        options.Agent.ShouldBeNull();
+        options.ProviderId.ShouldBeNull();
+        options.ModelId.ShouldBeNull();
     }
 
     [Fact]

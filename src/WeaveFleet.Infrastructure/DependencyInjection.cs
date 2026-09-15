@@ -190,6 +190,7 @@ public static class DependencyInjection
         services.AddScoped<IAutomationExecutor>(sp => sp.GetRequiredService<AutomationExecutionService>());
         services.AddScoped<AutomationRunService>();
         services.AddScoped<AutomationDraftService>();
+        services.AddScoped<HarnessCatalogService>();
         services.AddScoped<EventTriggerMatcher>();
         services.AddScoped<SessionActivityWriteService>();
         services.AddScoped<ILegacySessionImporter, LegacySessionImporter>();

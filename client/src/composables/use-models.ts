@@ -18,7 +18,7 @@ export function createModelSelectionKey(providerId: string, modelId: string): st
   return JSON.stringify([providerId, modelId]);
 }
 
-function toModelOptions(providers: readonly AvailableProvider[]): ModelOption[] {
+export function toModelOptions(providers: readonly AvailableProvider[]): ModelOption[] {
   return providers.flatMap((provider) => {
     return provider.models.map((model) => ({
       id: model.id,

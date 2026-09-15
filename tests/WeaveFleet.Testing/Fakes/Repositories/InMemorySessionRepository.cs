@@ -342,6 +342,15 @@ public sealed class InMemorySessionRepository : ISessionRepository
         return Task.CompletedTask;
     }
 
+    public Task UpdateSelectedAgentAsync(string id, string agent)
+    {
+        if (_store.TryGetValue(id, out var session))
+        {
+            session.SelectedAgent = agent;
+        }
+        return Task.CompletedTask;
+    }
+
     public Task UpdateTagsAsync(string id, List<string> tags)
     {
         if (_store.TryGetValue(id, out var session))

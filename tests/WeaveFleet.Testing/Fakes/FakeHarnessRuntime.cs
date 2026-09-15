@@ -1,4 +1,5 @@
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Testing.Fakes;
@@ -98,6 +99,18 @@ public sealed class FakeHarnessRuntime : IHarnessRuntime
     {
         ProfileChecks.Add(content);
         return Task.FromResult(ProfileCheckResult);
+    }
+
+    /// <summary>Answers <see cref="GetCatalogAsync"/>; null (the default) means the harness can't list one.</summary>
+    public Func<string, string, CancellationToken, Task<HarnessCatalog?>>? CatalogBehavior { get; set; }
+
+    /// <summary>The owner, directory and profile id (null for none) <see cref="GetCatalogAsync"/> was asked for.</summary>
+    public List<(string OwnerUserId, string Directory, string? ProfileId)> CatalogCalls { get; } = [];
+
+    public Task<HarnessCatalog?> GetCatalogAsync(string ownerUserId, string directory, HarnessProfile? profile, CancellationToken ct)
+    {
+        CatalogCalls.Add((ownerUserId, directory, profile?.Id));
+        return CatalogBehavior?.Invoke(ownerUserId, directory, ct) ?? Task.FromResult<HarnessCatalog?>(null);
     }
 
     private sealed record FakeRuntimeLaunchArtifacts : RuntimeLaunchArtifacts;

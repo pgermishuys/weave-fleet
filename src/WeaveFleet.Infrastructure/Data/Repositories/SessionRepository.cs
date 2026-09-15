@@ -35,12 +35,12 @@ public sealed class SessionRepository(
                 status, directory, created_at, stopped_at, parent_session_id,
                 lifecycle_status, retention_status, archived_at, is_hidden, total_tokens, total_cost,
                 harness_type, runtime_mode, harness_profile_id, harness_resume_token, git_baseline_ref, git_repo_root, user_id,
-                source_reference, tags)
+                source_reference, tags, selected_agent, selected_provider_id, selected_model_id)
             SELECT @Id, @WorkspaceId, @InstanceId, @ProjectId, @OpencodeSessionId, @Title,
                 @Status, @Directory, @CreatedAt, @StoppedAt, @ParentSessionId,
                 @LifecycleStatus, @RetentionStatus, @ArchivedAt, @IsHidden, @TotalTokens, @TotalCost,
                 @HarnessType, @RuntimeMode, @HarnessProfileId, @HarnessResumeToken, @GitBaselineRef, @GitRepoRoot, @UserId,
-                @SourceReference, @Tags
+                @SourceReference, @Tags, @SelectedAgent, @SelectedProviderId, @SelectedModelId
             FROM workspaces workspace_row
             WHERE workspace_row.id = @WorkspaceId
               AND workspace_row.user_id = @UserId
@@ -81,6 +81,9 @@ public sealed class SessionRepository(
                 cmd.AddParameter("UserId", insertUserId);
                 cmd.AddParameter("SourceReference", session.SourceReference);
                 cmd.AddParameter("Tags", tagsJson);
+                cmd.AddParameter("SelectedAgent", session.SelectedAgent);
+                cmd.AddParameter("SelectedProviderId", session.SelectedProviderId);
+                cmd.AddParameter("SelectedModelId", session.SelectedModelId);
             },
             transaction);
     }
@@ -617,6 +620,19 @@ public sealed class SessionRepository(
             });
     }
 
+    public async Task UpdateSelectedAgentAsync(string id, string agent)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        await conn.ExecuteNonQueryAsync(
+            "UPDATE sessions SET selected_agent = @Agent WHERE id = @Id AND user_id = @UserId",
+            cmd =>
+            {
+                cmd.AddParameter("Id", id);
+                cmd.AddParameter("Agent", agent);
+                cmd.AddParameter("UserId", userContext.UserId);
+            });
+    }
+
     public async Task UpdateTagsAsync(string id, List<string> tags)
     {
         using var conn = connectionFactory.CreateConnection();
@@ -665,6 +681,7 @@ public sealed class SessionRepository(
             UserId = r.GetString(r.GetOrdinal("user_id")),
             SelectedProviderId = r.GetNullableString(r.GetOrdinal("selected_provider_id")),
             SelectedModelId = r.GetNullableString(r.GetOrdinal("selected_model_id")),
+            SelectedAgent = r.GetNullableString(r.GetOrdinal("selected_agent")),
             SourceReference = r.GetNullableString(r.GetOrdinal("source_reference")),
             Tags = tags,
         };

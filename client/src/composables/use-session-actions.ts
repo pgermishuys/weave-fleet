@@ -7,6 +7,7 @@ import type {
   CreateSessionResponse,
   ForkSessionRequest,
   ForkSessionResponse,
+  ModelReference,
   ProjectResponse,
   SessionListItem,
   SessionSourceSelection,
@@ -29,6 +30,10 @@ export interface CreateSessionOptions {
   onComplete?: components["schemas"]["OnCompleteInfo"];
   projectId?: string;
   tags?: string[];
+  /** The agent to start with; left out for the harness's default. */
+  agent?: string;
+  /** The model to start with; left out for the agent's or the harness's default. */
+  model?: ModelReference;
 }
 
 export interface UseCreateSessionResult {
@@ -224,6 +229,8 @@ export function useCreateSession(): UseCreateSessionResult {
         onComplete: opts?.onComplete ?? null,
         projectId: opts?.projectId ?? null,
         tags: opts?.tags ?? null,
+        ...(opts?.agent ? { agent: opts.agent } : {}),
+        ...(opts?.model ? { model: opts.model } : {}),
       };
 
       const { data, error, response } = await api.POST("/api/sessions", {

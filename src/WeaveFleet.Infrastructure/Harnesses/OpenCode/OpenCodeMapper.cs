@@ -369,6 +369,77 @@ internal static class OpenCodeMapper
         return result;
     }
 
+    /// <summary>Maps GET /agent's agents, in OpenCode's order (its default agent first).</summary>
+    internal static IReadOnlyList<AgentInfo> ToAgentInfos(IReadOnlyList<OpenCodeAgentInfo> agents)
+    {
+        return agents.Select(a => new AgentInfo
+        {
+            Name = a.Name ?? string.Empty,
+            Description = a.Description,
+            Mode = a.Mode,
+            Hidden = a.Hidden ?? false,
+            ModelProviderId = a.Model?.ProviderId,
+            ModelId = a.Model?.ModelId,
+        }).ToList();
+    }
+
+    /// <summary>Maps GET /provider to the providers that are connected (have credentials), with their models.</summary>
+    internal static IReadOnlyList<ProviderInfo> ToConnectedProviderInfos(OpenCodeProvidersResponse response)
+    {
+        var connectedSet = response.Connected?.ToHashSet(StringComparer.Ordinal)
+            ?? new HashSet<string>(StringComparer.Ordinal);
+        return response.All
+            .Where(p => connectedSet.Contains(p.Id))
+            .Select(p => new ProviderInfo
+            {
+                Id = p.Id,
+                Name = p.Name,
+                Models = p.Models.Values.Select(m => new ModelInfo
+                {
+                    Id = m.Id,
+                    Name = m.Name,
+                    Variants = m.Variants?.Keys.ToList(),
+                }).ToList(),
+            }).ToList();
+    }
+
+    /// <summary>
+    /// What OpenCode offers in a folder. The default agent is <c>default_agent</c> from its config, else its
+    /// built-in <c>build</c>, else the first primary agent, the order OpenCode itself tries. The default model
+    /// is the config's <c>model</c>; without one OpenCode picks by recent use, which only it knows.
+    /// </summary>
+    internal static HarnessCatalog ToHarnessCatalog(
+        IReadOnlyList<OpenCodeAgentInfo> agents,
+        OpenCodeProvidersResponse providers,
+        OpenCodeConfigDefaults config)
+    {
+        var agentInfos = ToAgentInfos(agents);
+        var selectable = agentInfos
+            .Where(agent => !agent.Hidden && agent.Name.Length > 0 && !string.Equals(agent.Mode, "subagent", StringComparison.Ordinal))
+            .ToList();
+        var defaultAgent = selectable.FirstOrDefault(agent => string.Equals(agent.Name, config.DefaultAgent, StringComparison.Ordinal))
+            ?? selectable.FirstOrDefault(agent => string.Equals(agent.Name, "build", StringComparison.Ordinal))
+            ?? selectable.FirstOrDefault();
+
+        string? defaultProviderId = null;
+        string? defaultModelId = null;
+        var slash = config.Model?.IndexOf('/', StringComparison.Ordinal) ?? -1;
+        if (slash > 0 && slash < config.Model!.Length - 1)
+        {
+            defaultProviderId = config.Model[..slash];
+            defaultModelId = config.Model[(slash + 1)..];
+        }
+
+        return new HarnessCatalog
+        {
+            Agents = agentInfos,
+            Providers = ToConnectedProviderInfos(providers),
+            DefaultAgent = defaultAgent?.Name,
+            DefaultModelProviderId = defaultProviderId,
+            DefaultModelId = defaultModelId,
+        };
+    }
+
     /// <summary>Converts a Unix millisecond timestamp to <see cref="DateTimeOffset"/>.</summary>
     internal static DateTimeOffset DateTimeOffsetFromUnixMs(long ms)
         => DateTimeOffset.FromUnixTimeMilliseconds(ms);

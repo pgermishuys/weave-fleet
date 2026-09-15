@@ -4,6 +4,12 @@ namespace WeaveFleet.Application.SessionSources;
 
 public sealed class QuickChatSessionSourceProvider : ISessionSourceProvider
 {
+    /// <summary>The folder every quick chat gets its own folder in.</summary>
+    public static string BasePath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        ".weave-fleet",
+        "quick-chats");
+
     public string ProviderId => SessionSourceProviderIds.QuickChat;
 
     public IReadOnlyList<SessionSourceDescriptor> GetDescriptors() => [SessionSourceCatalog.QuickChatStartSession];
@@ -16,11 +22,7 @@ public sealed class QuickChatSessionSourceProvider : ISessionSourceProvider
                 FleetError.ValidationError("SessionSource.Key", $"Source '{selection.Key.ProviderId}/{selection.Key.SourceType}/{selection.Key.ActionId}' is not supported by provider '{ProviderId}'."));
         }
 
-        var basePath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".weave-fleet",
-            "quick-chats");
-
+        var basePath = BasePath;
         var uniqueDirName = Guid.NewGuid().ToString("N");
         var fullPath = Path.Combine(basePath, uniqueDirName);
 
