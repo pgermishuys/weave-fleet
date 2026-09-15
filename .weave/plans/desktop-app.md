@@ -116,6 +116,25 @@ today's archives; a headless smoke test (xvfb, scratch `HOME`, `/readyz`, quit, 
 electron-updater against `fleet-releases` (Linux and Windows unsigned; macOS once signed), a
 warning before an update interrupts working sessions, signing turned on by secrets.
 
+### Phase 3 as built, unsigned (2026-09-15)
+
+The user decided to stay unsigned for now. Updates without signing:
+
+- **Windows and the AppImage install updates themselves:** electron-updater downloads in the background (every four
+  hours, and from Help → Check for Updates…), then installs on restart or quit. Settings → System shows a "Fleet app"
+  row with **Restart to update**; restarting asks first if sessions are working, then stops Fleet cleanly.
+- **macOS and the `.deb` only say a new version is out**, with a notification and a **Download** button to the release
+  page: an unsigned Mac app can't install an update, and the `.deb` would need a password prompt.
+- The feed is `pgermishuys/fleet-releases` (GitHub provider). Both Windows builds write `latest.yml`; they're renamed
+  per architecture in the package jobs and merged in the release's publish job
+  (`desktop/scripts/merge-update-manifests.mjs`). electron-updater picks the installer whose name has the machine's
+  architecture in it.
+- **Checked live on Linux** against a local feed: 0.24.0-dev.1 found and downloaded 0.24.0-dev.2, Settings showed
+  it ready, Restart to update replaced the AppImage file and started the new version with its Fleet; a `.deb`-style
+  install showed Download, which opened the release page, and downloaded nothing.
+- **Signing, when it happens:** a Developer ID turns macOS into install mode; Azure Trusted Signing removes the
+  SmartScreen warning. Nothing else changes.
+
 ## Phase 4 (optional)
 
 Homebrew cask, winget, AUR.

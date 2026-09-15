@@ -65,6 +65,8 @@ It then publishes a GitHub Release containing:
 - 4 platform archives (`.tar.gz` on Unix, `.zip` on Windows)
 - desktop installers: `Fleet-<version>-linux-x86_64.AppImage`, `Fleet-<version>-linux-amd64.deb`,
   `Fleet-<version>-mac-arm64.dmg` (and `.zip`), `Fleet-<version>-win-x64-setup.exe`, `Fleet-<version>-win-arm64-setup.exe`
+- the desktop app's update feed: `latest.yml` (Windows, x64 and arm64 merged), `latest-mac.yml`, `latest-linux.yml`,
+  and `.blockmap` files for smaller downloads
 - per-asset `.sha256` files
 - merged `checksums.txt`
 - `install.sh`
@@ -77,9 +79,14 @@ artifacts.
 ### Desktop installers are unsigned for now
 
 - **macOS:** the app is ad-hoc signed, not notarised. The first time, macOS says it can't verify the developer: open
-  System Settings → Privacy & Security and choose **Open Anyway**. It can't update itself until it's signed.
-- **Windows:** SmartScreen shows "Windows protected your PC": choose **More info → Run anyway**.
-- **Linux:** nothing to do. The AppImage needs FUSE 2 (`libfuse2`); the `.deb` installs to `/opt/Fleet`.
+  System Settings → Privacy & Security and choose **Open Anyway**. It can't install updates itself: it says when a new
+  version is out and links to it.
+- **Windows:** SmartScreen shows "Windows protected your PC": choose **More info → Run anyway**. Updates download in
+  the background and install when Fleet restarts.
+- **Linux:** nothing to do. The AppImage needs FUSE 2 (`libfuse2`) and updates itself like Windows; the `.deb`
+  installs to `/opt/Fleet` and says when a new version is out.
+
+The app reads its update feed from `pgermishuys/fleet-releases`, so a release reaches it once the mirror job has run.
 
 Signing isn't wired yet (Phase 3 of `.weave/plans/desktop-app.md`). It will need a Developer ID certificate and App
 Store Connect API key for macOS, and Azure Trusted Signing for Windows, as t3code's `docs/operations/release.md`
