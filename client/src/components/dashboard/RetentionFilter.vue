@@ -47,11 +47,12 @@ function selectOption(value: RetentionFilterValue): void {
     <DropdownMenuTrigger as-child>
       <Button
         data-testid="retention-filter-trigger"
-        variant="outline"
-        class="justify-between gap-2"
+        variant="ghost"
+        size="sm"
+        class="h-7 justify-between gap-1.5 text-[12.5px] font-normal text-muted hover:text-text"
       >
         <span>Show: {{ selectedLabel }}</span>
-        <ChevronDown class="h-4 w-4 text-muted-foreground" />
+        <ChevronDown class="h-3.5 w-3.5" />
       </Button>
     </DropdownMenuTrigger>
 
