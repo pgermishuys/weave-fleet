@@ -63,6 +63,8 @@ internal sealed record ClaudeCodeToolStateContent
 {
     [JsonPropertyName("status")] public required string Status { get; init; }
     [JsonPropertyName("input")] public JsonElement? Input { get; init; }
+    [JsonPropertyName("output")] public JsonElement? Output { get; init; }
+    [JsonPropertyName("error")] public string? Error { get; init; }
 }
 
 internal sealed record ClaudeCodeToolPartContent
@@ -189,10 +191,14 @@ internal sealed partial class OpenCodeJsonContext : JsonSerializerContext
 {
 }
 
-/// <summary>SnakeCaseLower + WhenWritingNull options for Claude Code NDJSON stream.</summary>
+/// <summary>
+/// SnakeCaseLower + WhenWritingNull options for Claude Code NDJSON stream. Claude Code doesn't always
+/// write "type" first (result lines, tool results), so the discriminator is looked for anywhere.
+/// </summary>
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower,
-    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    AllowOutOfOrderMetadataProperties = true)]
 [JsonSerializable(typeof(ClaudeCodeStreamMessage))]
 internal sealed partial class ClaudeCodeJsonContext : JsonSerializerContext
 {

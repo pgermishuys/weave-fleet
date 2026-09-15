@@ -20,7 +20,9 @@ internal sealed record ClaudeCodeProcessOptions
     public string[] AllowedTools { get; init; } = [];
     public int? MaxTurns { get; init; }
     public decimal? MaxBudgetUsd { get; init; }
-    public required TimeSpan ProcessTimeout { get; init; }
+
+    /// <summary>How long the prompt may run before the process is killed. Null = no limit.</summary>
+    public TimeSpan? ProcessTimeout { get; init; }
     public IReadOnlyDictionary<string, string> EnvironmentVariables { get; init; }
         = new Dictionary<string, string>();
 }
@@ -47,7 +49,10 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
         LoggerMessage.Define(LogLevel.Warning, new EventId(4, "ForceKilled"),
             "claude process did not exit within the timeout; force-killing.");
 
+    private const int StderrLinesKept = 10;
+
     private readonly ILogger<ClaudeCodeProcessManager> _logger;
+    private readonly Queue<string> _stderrTail = new();
     private Process? _process;
     private bool _started;
     private bool _disposed;
@@ -68,11 +73,27 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
     /// <summary>OS process ID, if the process has been started.</summary>
     public int? ProcessId => _process?.Id;
 
+    /// <summary><c>true</c> when the process was killed for running past its timeout.</summary>
+    public bool TimedOut { get; private set; }
+
+    /// <summary>The last lines the process wrote to stderr, oldest first.</summary>
+    public IReadOnlyList<string> StderrTail
+    {
+        get
+        {
+            lock (_stderrTail)
+            {
+                return [.. _stderrTail];
+            }
+        }
+    }
+
     /// <summary>
-    /// Spawns the <c>claude</c> CLI process and returns a <see cref="StreamReader"/> for its stdout.
+    /// Spawns the <c>claude</c> CLI process, writes the prompt to its stdin and returns a
+    /// <see cref="StreamReader"/> for its stdout.
     /// The caller is responsible for reading all output before calling <see cref="StopAsync"/> or <see cref="DisposeAsync"/>.
     /// </summary>
-    public Task<StreamReader> StartAsync(ClaudeCodeProcessOptions options, CancellationToken ct)
+    public async Task<StreamReader> StartAsync(ClaudeCodeProcessOptions options, CancellationToken ct)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_started)
@@ -82,24 +103,30 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
 
         ct.ThrowIfCancellationRequested();
 
+        var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
         var psi = new ProcessStartInfo
         {
             FileName = ExecutableResolver.Resolve(options.BinaryPath),
             WorkingDirectory = options.WorkingDirectory,
             UseShellExecute = false,
+            RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            StandardInputEncoding = utf8,
+            StandardOutputEncoding = utf8,
+            StandardErrorEncoding = utf8,
             CreateNoWindow = true,
         };
 
-        // Build argument list safely — avoids shell injection via ArgumentList
+        // Build argument list safely — avoids shell injection via ArgumentList.
+        // The prompt goes to stdin: as an argument, one starting with "-" would be read as an option.
         psi.ArgumentList.Add("-p");
-        psi.ArgumentList.Add(options.Prompt);
 
         psi.ArgumentList.Add("--output-format");
         psi.ArgumentList.Add("stream-json");
 
-        psi.ArgumentList.Add("--bare");
+        // Print mode refuses stream-json output without it.
+        psi.ArgumentList.Add("--verbose");
 
         if (options.SessionId is not null)
         {
@@ -153,6 +180,13 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
         {
             if (e.Data is null) return;
             LogStderr(_logger, e.Data, null);
+
+            lock (_stderrTail)
+            {
+                _stderrTail.Enqueue(e.Data);
+                if (_stderrTail.Count > StderrLinesKept)
+                    _stderrTail.Dequeue();
+            }
         };
 
         _process.Exited += (_, _) =>
@@ -169,19 +203,62 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
 
         LogProcessStarted(_logger, _process.Id, options.WorkingDirectory, null);
 
-        // Apply process timeout via linked CTS (fire-and-forget kill on timeout)
-        var processTimeout = options.ProcessTimeout;
-        _ = Task.Run(async () =>
+        // Closing stdin tells claude the prompt is complete.
+        try
         {
-            await Task.Delay(processTimeout, ct).ConfigureAwait(false);
-            if (!_disposed && _process is { HasExited: false })
-            {
-                LogForceKilled(_logger, null);
-                _process.Kill(entireProcessTree: true);
-            }
-        }, CancellationToken.None);
+            await _process.StandardInput.WriteAsync(options.Prompt.AsMemory(), ct).ConfigureAwait(false);
+            await _process.StandardInput.FlushAsync(ct).ConfigureAwait(false);
+        }
+        catch (IOException)
+        {
+            // claude exited before reading its prompt; stderr and the exit code say why.
+        }
+        finally
+        {
+            _process.StandardInput.Close();
+        }
 
-        return Task.FromResult(_process.StandardOutput);
+        // Apply process timeout (fire-and-forget kill on timeout)
+        if (options.ProcessTimeout is { } processTimeout)
+        {
+            var process = _process;
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(processTimeout, CancellationToken.None).ConfigureAwait(false);
+                if (!_disposed && !process.HasExited)
+                {
+                    LogForceKilled(_logger, null);
+                    TimedOut = true;
+                    process.Kill(entireProcessTree: true);
+                }
+            }, CancellationToken.None);
+        }
+
+        return _process.StandardOutput;
+    }
+
+    /// <summary>
+    /// Waits for the process to exit and for its stderr to drain, up to <paramref name="timeout"/>.
+    /// Returns the exit code, or null if it is still running.
+    /// </summary>
+    public async Task<int?> WaitForExitAsync(TimeSpan timeout)
+    {
+        if (_process is null)
+            return null;
+
+        try
+        {
+            await _process.WaitForExitAsync().WaitAsync(timeout).ConfigureAwait(false);
+            return _process.ExitCode;
+        }
+        catch (TimeoutException)
+        {
+            return null;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
     }
 
     /// <summary>

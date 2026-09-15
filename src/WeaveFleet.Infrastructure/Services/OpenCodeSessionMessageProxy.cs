@@ -117,9 +117,12 @@ public sealed class OpenCodeSessionMessageProxy(
         LogFallingBackToPersisted(logger, fleetSessionId, null);
         var fallbackSnapshot = await fallbackSnapshotBuilder.BuildAsync(fleetSessionId, pageSize, cursor)
             .ConfigureAwait(false);
-        
-        // Mark the snapshot as partial since we couldn't fetch from the live harness
-        return fallbackSnapshot with { IsPartial = true };
+
+        // Mark an OpenCode snapshot as partial since we couldn't fetch from the live harness. Other
+        // harnesses (Claude Code) keep their history in Fleet's database, so theirs is complete.
+        return session.HarnessType == "opencode"
+            ? fallbackSnapshot with { IsPartial = true }
+            : fallbackSnapshot;
     }
 
     /// <inheritdoc />

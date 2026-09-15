@@ -292,6 +292,68 @@ public sealed class ClaudeCodeModelsSerializationTests
     }
 
     [Fact]
+    public void ResultMessage_TypeNotFirst_Deserializes()
+    {
+        // Claude Code writes result lines with "type" near the end.
+        const string json = """
+        {"duration_api_ms":7070,"session_id":"sess-1","total_cost_usd":0.01,"is_error":true,"num_turns":2,
+         "subtype":"error_max_turns","errors":["Reached maximum number of turns (1)"],"type":"result"}
+        """;
+
+        var result = JsonSerializer.Deserialize(json, ClaudeCodeJsonContext.Default.ClaudeCodeStreamMessage);
+
+        var msg = result.ShouldBeOfType<ClaudeCodeResultMessage>();
+        msg.IsError.ShouldBe(true);
+        msg.Subtype.ShouldBe("error_max_turns");
+        msg.Errors.ShouldBe(["Reached maximum number of turns (1)"]);
+    }
+
+    [Fact]
+    public void UserMessage_WithToolResult_Deserializes()
+    {
+        const string json = """
+        {"type":"user","message":{"role":"user","content":[
+          {"tool_use_id":"toolu_1","type":"tool_result","content":"done","is_error":false}]},
+         "parent_tool_use_id":null,"session_id":"sess-1"}
+        """;
+
+        var result = JsonSerializer.Deserialize(json, ClaudeCodeJsonContext.Default.ClaudeCodeStreamMessage);
+
+        var msg = result.ShouldBeOfType<ClaudeCodeUserMessage>();
+        msg.ParentToolUseId.ShouldBeNull();
+        var block = msg.Message!.Content!.ShouldHaveSingleItem().ShouldBeOfType<ClaudeCodeToolResultBlock>();
+        block.ToolUseId.ShouldBe("toolu_1");
+        block.Content.ShouldBe("done");
+    }
+
+    [Fact]
+    public void ToolResultBlock_ContentAsBlocks_ReadsAsText()
+    {
+        // MCP tools and images return a list of content blocks instead of a string.
+        const string json = """
+        {"type":"user","message":{"role":"user","content":[
+          {"tool_use_id":"toolu_1","type":"tool_result","content":[
+            {"type":"text","text":"first"},{"type":"image","source":{"type":"base64","data":"abc"}},{"type":"text","text":"second"}]}]}}
+        """;
+
+        var result = JsonSerializer.Deserialize(json, ClaudeCodeJsonContext.Default.ClaudeCodeStreamMessage);
+
+        var msg = result.ShouldBeOfType<ClaudeCodeUserMessage>();
+        msg.Message!.Content!.ShouldHaveSingleItem().ShouldBeOfType<ClaudeCodeToolResultBlock>()
+            .Content.ShouldBe("first\n[image]\nsecond");
+    }
+
+    [Fact]
+    public void ThinkingBlock_Deserializes()
+    {
+        const string json = """{ "type": "thinking", "thinking": "Let me look.", "signature": "abc" }""";
+
+        var block = JsonSerializer.Deserialize<ClaudeCodeContentBlock>(json, Options);
+
+        block.ShouldBeOfType<ClaudeCodeThinkingBlock>().Thinking.ShouldBe("Let me look.");
+    }
+
+    [Fact]
     public void StreamMessage_MissingTypeDiscriminator_DeserializesAsBaseType()
     {
         const string json = """{ "some_field": "some_value" }""";
