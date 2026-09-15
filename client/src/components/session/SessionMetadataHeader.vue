@@ -6,7 +6,7 @@ import { currentPlanStep, plainText } from "@/lib/session-progress";
 import { useCanvasesStore } from "@/stores/canvases";
 
 /**
- * A one-line summary of the session's progress under the canvas tabs: the plan's current step, or the todo
+ * A one-line summary of the session's progress along the foot of the right panel: the plan's current step, or the todo
  * being worked on. Hidden while the Progress tab is open, which shows it all; clicking it opens that tab.
  * Linked pull requests and issues live in the Context tab.
  */
@@ -47,6 +47,11 @@ const label = computed(() => {
   return `${value.done} of ${value.total} ${unit} done. ${currentLine.value}. Open the Progress tab`;
 });
 
+const percent = computed(() => {
+  const value = progress.value;
+  return value && value.total > 0 ? Math.min(100, (value.done / value.total) * 100) : 0;
+});
+
 function openProgress(): void {
   canvasesStore.open(props.sessionId, "progress");
 }
@@ -61,11 +66,16 @@ function openProgress(): void {
     :title="label"
     @click="openProgress"
   >
+    <span
+      class="progress-strip__bar"
+      :style="{ width: `${percent}%` }"
+      aria-hidden="true"
+    />
     <ProgressRing
       :done="progress.done"
       :total="progress.total"
-      :size="18"
-      :stroke-width="2.5"
+      :size="14"
+      :stroke-width="2"
     />
     <span class="progress-strip__copy">
       <span class="progress-strip__heading">{{ heading }}</span>
@@ -76,57 +86,86 @@ function openProgress(): void {
 </template>
 
 <style scoped>
+/* A status line along the foot of the panel, part of its chrome rather than a card on the canvas. */
 .progress-strip {
+  position: relative;
   display: flex;
+  flex-shrink: 0;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   width: 100%;
-  margin-top: 8px;
-  padding: 7px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  background: var(--card-bg);
-  color: var(--text);
+  height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
   text-align: left;
   cursor: pointer;
-  transition: border-color var(--transition), background var(--transition);
+  transition: background-color var(--transition), color var(--transition);
 }
 
 .progress-strip:hover {
-  border-color: color-mix(in srgb, var(--text) 18%, transparent);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  color: var(--text);
 }
 
 .progress-strip:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline-offset: -2px;
+}
+
+/* How much is done, drawn along the top border. */
+.progress-strip__bar {
+  position: absolute;
+  top: -1px;
+  left: 0;
+  height: 1px;
+  background: var(--accent);
+  transition: width 300ms ease-out;
 }
 
 .progress-strip__copy {
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
+  align-items: baseline;
+  gap: 6px;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .progress-strip__heading {
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 45%;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-  color: var(--muted);
+}
+
+.progress-strip__heading::after {
+  content: "·";
+  margin-left: 6px;
 }
 
 .progress-strip__current {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12.5px;
+  color: var(--text);
 }
 
 .progress-strip__count {
   flex-shrink: 0;
-  font-size: 12px;
-  color: var(--muted);
   font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-strip,
+  .progress-strip__bar {
+    transition: none;
+  }
 }
 </style>

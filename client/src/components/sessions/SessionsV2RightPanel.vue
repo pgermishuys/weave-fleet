@@ -211,11 +211,8 @@ provideCanvasAnnotate((anchor: AnnotationAnchor, position: { x: number; y: numbe
           <PanelRightClose v-else />
         </Button>
       </template>
-      <template #below-header>
-        <SessionMetadataHeader
-          class="right-panel__meta"
-          :session-id="activeSessionId ?? ''"
-        />
+      <template #footer>
+        <SessionMetadataHeader :session-id="activeSessionId ?? ''" />
       </template>
     </CanvasHost>
 
@@ -251,14 +248,6 @@ provideCanvasAnnotate((anchor: AnnotationAnchor, position: { x: number; y: numbe
 
 .right-panel--widening {
   transition: width 200ms cubic-bezier(0.2, 0.8, 0.2, 1), min-width 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.right-panel__meta:empty {
-  display: none;
-}
-
-.right-panel__meta {
-  padding: 0 12px;
 }
 
 @media (prefers-reduced-motion: reduce) {

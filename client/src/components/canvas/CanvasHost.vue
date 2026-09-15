@@ -449,8 +449,6 @@ const activeProps = computed(() => {
       <slot name="header-actions" />
     </div>
 
-    <slot name="below-header" />
-
     <BrowserOpenDialog
       v-model:open="browserDialogOpen"
       :session-id="sessionId"
@@ -477,6 +475,8 @@ const activeProps = computed(() => {
         />
       </KeepAlive>
     </div>
+
+    <slot name="footer" />
   </div>
 </template>
 
