@@ -22,6 +22,8 @@ export interface NewSessionDraft {
   tags: string;
   projectId: string | null;
   harnessType: string;
+  /** The profile picked for this session; null follows the harness's default. */
+  harnessProfileId: string | null;
   gitHubPreset: GitHubSessionSourcePreset | null;
   /** Set between Enter and the session existing. */
   isStarting: boolean;

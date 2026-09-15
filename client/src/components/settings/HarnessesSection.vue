@@ -12,6 +12,7 @@ import {
   Star,
   TerminalSquare,
 } from "lucide-vue-next";
+import HarnessProfilesPanel from "@/components/settings/HarnessProfilesPanel.vue";
 import { useHarnesses } from "@/composables/use-harnesses";
 import { usePreferencesStore } from "@/stores/preferences";
 import type { HarnessInfo } from "@/api/client";
@@ -35,6 +36,7 @@ interface HarnessCard {
   enabled: boolean;
   canToggle: boolean;
   canDefault: boolean;
+  supportsProfiles: boolean;
 }
 
 const DEFAULT_HARNESS_TYPE = "opencode";
@@ -130,6 +132,7 @@ function toHarnessCard(harness: HarnessInfo): HarnessCard {
     enabled,
     canToggle: true,
     canDefault: true,
+    supportsProfiles: harness.capabilities?.supportsProfiles === true,
   };
 }
 
@@ -376,6 +379,16 @@ function statusIcon(status: HarnessStatus): Component {
               </button>
             </div>
           </div>
+        </div>
+
+        <div
+          v-if="harness.supportsProfiles"
+          class="mt-4 border-t border-border pt-4"
+        >
+          <HarnessProfilesPanel
+            :harness-type="harness.id"
+            :harness-name="harness.name"
+          />
         </div>
       </article>
     </section>

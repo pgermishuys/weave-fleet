@@ -23,6 +23,8 @@ export interface CreateSessionOptions {
   branch?: string;
   source?: SessionSourceSelection;
   harnessType?: string;
+  /** The profile to start with, or `NO_PROFILE`; absent lets the server use the harness's default. */
+  harnessProfileId?: string;
   initialPrompt?: string;
   onComplete?: components["schemas"]["OnCompleteInfo"];
   projectId?: string;
@@ -217,6 +219,7 @@ export function useCreateSession(): UseCreateSessionResult {
         branch: opts?.branch ?? null,
         source: opts?.source ?? null,
         harnessType: opts?.harnessType ?? null,
+        harnessProfileId: opts?.harnessProfileId ?? null,
         initialPrompt: opts?.initialPrompt ?? null,
         onComplete: opts?.onComplete ?? null,
         projectId: opts?.projectId ?? null,

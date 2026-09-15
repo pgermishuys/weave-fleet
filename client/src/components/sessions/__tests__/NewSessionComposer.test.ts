@@ -1,11 +1,13 @@
 import { DOMWrapper, flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { computed, ref, shallowRef } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { BranchInfo, HarnessInfo, RepositoryDetail, ScannedRepository, WorktreeInfo } from "@/api/client";
+import { NO_PROFILE } from "@/api/client";
+import type { BranchInfo, HarnessInfo, HarnessProfile, RepositoryDetail, ScannedRepository, WorktreeInfo } from "@/api/client";
 import NewSessionComposer from "@/components/sessions/NewSessionComposer.vue";
 import { NEW_SESSION_DEFAULTS_KEY } from "@/composables/use-new-session-defaults";
 import { clearSentPrompts, useSentPrompts } from "@/composables/use-send-prompt";
 import { createGitHubSessionSourcePreset } from "@/lib/github-session-source";
+import { useHarnessProfilesStore } from "@/stores/harness-profiles";
 import { useSessionsStore } from "@/stores/sessions";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 
@@ -257,6 +259,71 @@ describe("NewSessionComposer", () => {
       harnesses.value = [opencode, pi];
       const several = await mountComposer();
       expect(several.find("[data-testid='new-session-harness']").exists()).toBe(true);
+    });
+
+    describe("profile", () => {
+      const withProfiles = { ...opencode, capabilities: { supportsProfiles: true } } as HarnessInfo;
+
+      function profile(id: string, name: string, isDefault = false): HarnessProfile {
+        return {
+          id, harnessType: "opencode", name, content: `{ "model": "${id}/model" }`, isDefault,
+          openSessions: 0, createdAt: "", updatedAt: "",
+        };
+      }
+
+      function seedProfiles(profiles: HarnessProfile[]): void {
+        const store = useHarnessProfilesStore();
+        store.byHarness = { opencode: profiles };
+        vi.spyOn(store, "load").mockResolvedValue();
+      }
+
+      it("has no chip while there are no profiles, and sends none", async () => {
+        harnesses.value = [withProfiles];
+        seedProfiles([]);
+        rememberFolder({ kind: "directory", path: "/home/me/notes" });
+        const view = await mountComposer();
+
+        expect(view.find("[data-testid='new-session-profile']").exists()).toBe(false);
+        await type(view, "Hello");
+        await pressEnter(view);
+        expect(lastCreateCall()[1].harnessProfileId).toBeUndefined();
+      });
+
+      it("has no chip for a harness without profiles", async () => {
+        seedProfiles([profile("work", "Work", true)]);
+        const view = await mountComposer();
+
+        expect(view.find("[data-testid='new-session-profile']").exists()).toBe(false);
+      });
+
+      it("starts on the default profile and sends it", async () => {
+        harnesses.value = [withProfiles];
+        seedProfiles([profile("work", "Work", true), profile("local", "Local")]);
+        rememberFolder({ kind: "directory", path: "/home/me/notes" });
+        const view = await mountComposer();
+
+        expect(view.get("[data-testid='new-session-profile']").text()).toContain("Work");
+        await type(view, "Hello");
+        await pressEnter(view);
+        expect(lastCreateCall()[1].harnessProfileId).toBe("work");
+      });
+
+      it("sends the profile picked, and none when that's the pick", async () => {
+        harnesses.value = [withProfiles];
+        seedProfiles([profile("work", "Work", true), profile("local", "Local")]);
+        rememberFolder({ kind: "directory", path: "/home/me/notes" });
+        const view = await mountComposer();
+
+        await view.get("[data-testid='new-session-profile']").trigger("click");
+        await flushPromises();
+        await inDocument().get("[data-testid='new-session-profile-none']").trigger("click");
+        await flushPromises();
+
+        expect(view.get("[data-testid='new-session-profile']").text()).toContain("No profile");
+        await type(view, "Hello");
+        await pressEnter(view);
+        expect(lastCreateCall()[1].harnessProfileId).toBe(NO_PROFILE);
+      });
     });
 
     it("shows the project on the more chip when it isn't Scratch", async () => {

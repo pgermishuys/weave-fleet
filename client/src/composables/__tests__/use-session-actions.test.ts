@@ -117,6 +117,7 @@ describe("useSessionActions", () => {
         branch: "feature/tests",
         source: null,
         harnessType: "opencode",
+        harnessProfileId: null,
         initialPrompt: null,
         onComplete: null,
         projectId: "project-1",

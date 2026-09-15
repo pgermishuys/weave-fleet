@@ -271,7 +271,33 @@ export interface HarnessCapabilities {
   supportsImageAttachments: boolean;
   supportsStreaming: boolean;
   supportsDelegation: boolean;
+  /** Sessions can start with a profile: harness config kept in Fleet and picked per session. */
+  supportsProfiles?: boolean;
 }
+
+/** A harness profile, as `GET /api/harnesses/{type}/profiles` lists it. */
+export interface HarnessProfile {
+  id: string;
+  harnessType: string;
+  name: string;
+  /** The config itself; for OpenCode, an opencode.json layered over the user's own. */
+  content: string;
+  isDefault: boolean;
+  /** Sessions that use it and aren't archived. */
+  openSessions: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** What the harness said when it tried a profile. */
+export interface HarnessProfileCheck {
+  ok: boolean;
+  error?: string | null;
+  details?: string[] | null;
+}
+
+/** Sent as `harnessProfileId` to start a session without a profile, even when there's a default. */
+export const NO_PROFILE = "none";
 
 export interface HarnessInfo {
   type: string;
