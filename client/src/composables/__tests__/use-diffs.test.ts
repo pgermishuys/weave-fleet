@@ -102,6 +102,39 @@ describe("useDiffs", () => {
     wrapper.unmount();
   });
 
+  it("keeps the same list when a refresh finds nothing new, and indexes it by path", async () => {
+    const body = {
+      diffs: [
+        { file: "src/App.vue", status: "modified", additions: 3, deletions: 1 },
+        { file: "src/main.ts", status: "added", additions: 9, deletions: 0 },
+      ],
+      available: true,
+    };
+    apiFetchMock.mockImplementation(async () => ({
+      data: structuredClone(body),
+      error: undefined,
+      response: createJsonResponse(body),
+    }));
+
+    const sessionId = shallowRef("session-1");
+    const { useDiffs } = await import("@/composables/use-diffs");
+    const { result, wrapper } = await mountComposable(() => useDiffs(sessionId));
+
+    await result.fetchDiffs();
+    const first = result.diffs.value;
+    expect(result.byFile.value.get("src/main.ts")?.additions).toBe(9);
+
+    await result.fetchDiffs();
+    expect(result.diffs.value).toBe(first);
+
+    body.diffs[1].additions = 10;
+    await result.fetchDiffs();
+    expect(result.diffs.value).not.toBe(first);
+    expect(result.byFile.value.get("src/main.ts")?.additions).toBe(10);
+
+    wrapper.unmount();
+  });
+
   it("tracks_stale_state_until_the_next_successful_fetch", async () => {
     apiFetchMock.mockResolvedValue({
       data: {

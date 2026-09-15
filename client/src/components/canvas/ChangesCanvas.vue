@@ -32,8 +32,10 @@ function openChange(path: string): void {
   canvases.openFile(props.sessionId, path, { keep: true, view: "diff" });
 }
 
+const openIds = computed(() => new Set(canvases.sessionCanvases(props.sessionId).canvases.map((canvas) => canvas.id)));
+
 function isOpen(path: string): boolean {
-  return canvases.sessionCanvases(props.sessionId).canvases.some((canvas) => canvas.id === fileCanvasId(path));
+  return openIds.value.has(fileCanvasId(path));
 }
 </script>
 

@@ -1,8 +1,9 @@
 import { flushPromises, mount } from "@vue/test-utils";
-import { defineComponent, h, ref, type DefineComponent } from "vue";
+import { computed, defineComponent, h, ref, type ComputedRef, type DefineComponent } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import FileCanvasComponent from "@/components/canvas/FileCanvas.vue";
 import type { FileDiffItem } from "@/api/client";
+import { clearDiffBaseCache } from "@/composables/use-diff-base";
 import { useDraftState } from "@/composables/use-draft-state";
 import { useCanvasesStore, type FileView } from "@/stores/canvases";
 import { useFileBuffersStore } from "@/stores/file-buffers";
@@ -19,6 +20,15 @@ vi.mock("@/api/session-files", () => ({
   writeSessionFile: writeSessionFileMock,
 }));
 
+// A changed file's base comes from /diffs/file; answer it from the diff list below.
+vi.mock("@/lib/api-client", () => ({
+  apiFetch: vi.fn(async (url: string) => {
+    const path = new URL(url, "http://fleet").searchParams.get("path");
+    const item = sharedDiffs.diffs.value.find((diff) => diff.file === path);
+    return item ? new Response(JSON.stringify(item), { status: 200 }) : new Response(null, { status: 404 });
+  }),
+}));
+
 vi.mock("@/components/visual-renderers/MarkdownRenderer.vue", () => ({
   default: defineComponent({
     name: "MarkdownRenderer",
@@ -29,7 +39,12 @@ vi.mock("@/components/visual-renderers/MarkdownRenderer.vue", () => ({
   }),
 }));
 
-const sharedDiffs = { diffs: ref<FileDiffItem[]>([]) };
+const sharedDiffs = vi.hoisted(() => ({}) as {
+  diffs: import("vue").Ref<FileDiffItem[]>;
+  byFile: ComputedRef<ReadonlyMap<string, FileDiffItem>>;
+});
+sharedDiffs.diffs = ref<FileDiffItem[]>([]);
+sharedDiffs.byFile = computed(() => new Map(sharedDiffs.diffs.value.map((diff) => [diff.file, diff])));
 
 function file(content: string, hash = "h1") {
   return { path: "src/app.ts", content, hash, isBinary: false, isTruncated: false };
@@ -63,6 +78,7 @@ describe("FileCanvas", () => {
     readSessionFileMock.mockReset();
     writeSessionFileMock.mockReset();
     sharedDiffs.diffs.value = [];
+    clearDiffBaseCache();
   });
 
   afterEach(() => {
