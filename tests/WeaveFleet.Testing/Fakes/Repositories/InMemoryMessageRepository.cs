@@ -48,6 +48,13 @@ public sealed class InMemoryMessageRepository : IMessageRepository
 
     // ── IMessageRepository ───────────────────────────────────────────────────
 
+    public Task<PersistedMessage?> GetFirstUserMessageAsync(string sessionId) =>
+        Task.FromResult(_store.Values
+            .Where(m => m.SessionId == sessionId && m.Role == "user")
+            .OrderBy(m => m.Timestamp, StringComparer.Ordinal)
+            .ThenBy(m => m.Id, StringComparer.Ordinal)
+            .FirstOrDefault());
+
     public Task UpsertAsync(PersistedMessage message)
     {
         _store[(message.Id, message.SessionId)] = message;

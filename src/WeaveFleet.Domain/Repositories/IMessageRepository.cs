@@ -40,6 +40,11 @@ public interface IMessageRepository
     Task<int> CountBySessionAsync(string sessionId);
 
     /// <summary>
+    /// The session's first message from the user (the oldest with role "user"), or null when it has none.
+    /// </summary>
+    Task<PersistedMessage?> GetFirstUserMessageAsync(string sessionId);
+
+    /// <summary>
     /// Check if any messages exist for a session.
     /// </summary>
     Task<bool> HasMessagesAsync(string sessionId);

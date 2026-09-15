@@ -25,6 +25,14 @@ public sealed class Automation
     /// Null means UTC, which is how automations made before time zones were stored keep running.
     /// </summary>
     public string? TimeZone { get; set; }
+    /// <summary>
+    /// How a run gets its folder: "worktree" (a new worktree of <see cref="WorkspaceId"/> each run) or "existing" (the
+    /// folder as it is, or a scratch folder when there is none). Null means the automation was made before this was
+    /// stored and runs as it always has: in its folder, or in the first workspace root.
+    /// </summary>
+    public string? Isolation { get; set; }
+    /// <summary>Where a run's worktree starts (<c>origin/main</c>); null means the repository's default.</summary>
+    public string? BaseBranch { get; set; }
     public string CreatedAt { get; set; } = string.Empty;
     public string? UpdatedAt { get; set; }
     public string UserId { get; set; } = string.Empty;

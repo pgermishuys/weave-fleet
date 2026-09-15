@@ -13,7 +13,9 @@ public sealed record CreateAutomationRequest(
     string? Agent = null,
     List<string>? TargetTags = null,
     string? TargetType = null,
-    string? TimeZone = null);
+    string? TimeZone = null,
+    string? Isolation = null,
+    string? BaseBranch = null);
 
 public sealed record UpdateAutomationRequest(
     string Name,
@@ -28,7 +30,9 @@ public sealed record UpdateAutomationRequest(
     string? Agent = null,
     List<string>? TargetTags = null,
     string? TargetType = null,
-    string? TimeZone = null);
+    string? TimeZone = null,
+    string? Isolation = null,
+    string? BaseBranch = null);
 
 public sealed record AutomationResponse(
     string Id,
@@ -47,6 +51,28 @@ public sealed record AutomationResponse(
     string? UpdatedAt,
     List<string>? TargetTags,
     string TargetType,
-    string? TimeZone);
+    string? TimeZone,
+    string? Isolation,
+    string? BaseBranch,
+    /// <summary>When it runs next (UTC, ISO 8601); null when it's off or waits for an event.</summary>
+    string? NextRunAt,
+    AutomationRunResponse? LastRun);
+
+/// <summary>One run. State is "starting", "running", "done", "failed" or "skipped".</summary>
+public sealed record AutomationRunResponse(
+    string Id,
+    string AutomationId,
+    string Trigger,
+    string? ScheduledFor,
+    string StartedAt,
+    string State,
+    string? SessionId,
+    string? InstanceId,
+    string? Error);
+
+public sealed record AutomationRunListResponse(IReadOnlyList<AutomationRunResponse> Runs);
+
+/// <summary>A new automation's starting point from a session: its first message and where it ran.</summary>
+public sealed record AutomationDraftResponse(string Prompt, string? Folder, string Isolation);
 
 public sealed record AutomationListResponse(IReadOnlyList<AutomationResponse> Automations);

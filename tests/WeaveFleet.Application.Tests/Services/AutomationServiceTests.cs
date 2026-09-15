@@ -88,6 +88,78 @@ public sealed class AutomationServiceTests
         (await _repository.GetByIdAsync(created.Value.Id))!.TimeZone.ShouldBe("Africa/Johannesburg");
     }
 
+    [Fact]
+    public async Task Create_keeps_a_one_off_time_and_where_runs_happen()
+    {
+        var result = await _sut.CreateAsync(
+            "Release notes check", "Check the release notes", "once", "2099-09-21T09:00", 1, 10, 30,
+            workspaceId: "/home/me/source/weave-fleet", timeZone: "Europe/London", isolation: "worktree", baseBranch: "origin/main");
+
+        result.IsSuccess.ShouldBeTrue();
+        var stored = (await _repository.GetByIdAsync(result.Value.Id))!;
+        (stored.TriggerType, stored.TriggerConfig, stored.Isolation, stored.BaseBranch)
+            .ShouldBe(("once", "2099-09-21T09:00", "worktree", "origin/main"));
+    }
+
+    [Fact]
+    public async Task Create_refuses_a_one_off_time_that_has_passed()
+    {
+        var result = await _sut.CreateAsync("Release notes check", "Check the release notes", "once", "2020-01-06T09:00", 1, 10, 30);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Description.ShouldContain("already passed");
+    }
+
+    [Theory]
+    [InlineData(null, "worktree", null, "needs a folder")]
+    [InlineData("/home/me/source/weave-fleet", "existing", "origin/main", "only be chosen when each run gets a new worktree")]
+    [InlineData("/home/me/source/weave-fleet", "clone", null, "not 'clone'")]
+    [InlineData("/home/me/source/weave-fleet", "worktree", "not a branch..", "not a valid branch name")]
+    public async Task Create_checks_where_runs_happen(string? folder, string isolation, string? baseBranch, string expected)
+    {
+        var result = await _sut.CreateAsync(
+            "Weekly digest", "Summarise the open PRs", "schedule", "0 9 * * 1", 1, 10, 30,
+            workspaceId: folder, isolation: isolation, baseBranch: baseBranch);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Description.ShouldContain(expected);
+    }
+
+    [Fact]
+    public async Task Create_refuses_an_unknown_target()
+    {
+        var result = await _sut.CreateAsync(
+            "Weekly digest", "Summarise the open PRs", "schedule", "0 9 * * 1", 1, 10, 30, targetType: "every_session");
+
+        result.IsFailure.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task A_one_off_whose_time_has_passed_cant_be_switched_back_on()
+    {
+        var created = await _sut.CreateAsync("Release notes check", "Check the release notes", "once", "2099-09-21T09:00", 1, 10, 30);
+        await _sut.DisableAsync(created.Value.Id);
+        var stored = (await _repository.GetByIdAsync(created.Value.Id))!;
+        stored.TriggerConfig = "2020-01-06T09:00";
+
+        var result = await _sut.EnableAsync(created.Value.Id);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Description.ShouldContain("Pick a new time");
+    }
+
+    [Fact]
+    public async Task An_automation_that_is_off_can_keep_a_one_off_time_that_has_passed()
+    {
+        var created = await _sut.CreateAsync("Release notes check", "Check the release notes", "once", "2099-09-21T09:00", 1, 10, 30);
+        await _sut.DisableAsync(created.Value.Id);
+
+        var result = await _sut.UpdateAsync(
+            created.Value.Id, "Release notes check (renamed)", "Check the release notes", "once", "2020-01-06T09:00", 1, 10, 30);
+
+        result.IsSuccess.ShouldBeTrue();
+    }
+
     [Theory]
     [InlineData("Check \"flaky\" tests")]
     [InlineData("Back\\slash")]

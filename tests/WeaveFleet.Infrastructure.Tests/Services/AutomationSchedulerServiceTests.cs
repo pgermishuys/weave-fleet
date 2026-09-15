@@ -1,379 +1,251 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Infrastructure.Tests.Services;
 
-[Collection("Sequential")]
-public sealed class AutomationSchedulerServiceTests
+public sealed class AutomationSchedulerServiceTests : IDisposable
 {
-    // ── Cron Timing Logic ──────────────────────────────────────────────────────
+    // Monday 14 September 2026, 09:00 UTC.
+    private static readonly DateTimeOffset NineOnMonday = new(2026, 9, 14, 9, 0, 0, TimeSpan.Zero);
+
+    private readonly FakeAutomationRepository _automations = new();
+    private readonly InMemoryAutomationRunRepository _runs = new();
+    private readonly RecordingExecutor _executor = new();
+    private readonly SessionActivityTracker _activity = new();
+    private readonly Clock _clock = new(NineOnMonday);
+    private readonly AutomationSchedulerService _scheduler;
+
+    public AutomationSchedulerServiceTests()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IAutomationRepository>(_automations);
+        services.AddSingleton<IAutomationRunRepository>(_runs);
+        services.AddSingleton<IAutomationExecutor>(_executor);
+        services.AddSingleton(_activity);
+        services.AddSingleton<TimeProvider>(_clock);
+        services.AddSingleton(typeof(Microsoft.Extensions.Logging.ILogger<>), typeof(NullLogger<>));
+        services.AddScoped<AutomationRunService>();
+        var provider = services.BuildServiceProvider();
+
+        _scheduler = new AutomationSchedulerService(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            _clock,
+            NullLogger<AutomationSchedulerService>.Instance);
+    }
+
+    private Automation Seed(string triggerType, string config, string? timeZone = null, DateTimeOffset? since = null, int maxConcurrentRuns = 1)
+    {
+        var automation = new Automation
+        {
+            Id = $"auto-{_automations.ListAsync().Result.Count + 1}",
+            Name = "Weekly digest",
+            Prompt = "Summarise the open PRs",
+            TriggerType = triggerType,
+            TriggerConfig = config,
+            TimeZone = timeZone,
+            MaxConcurrentRuns = maxConcurrentRuns,
+            IsEnabled = true,
+            UserId = "user-1",
+            CreatedAt = (since ?? NineOnMonday.AddDays(-7)).UtcDateTime.ToString("O"),
+        };
+        _automations.Seed(automation);
+        return automation;
+    }
+
+    public void Dispose() => _scheduler.Dispose();
+
+    private async Task PollAtAsync(DateTimeOffset now)
+    {
+        _clock.Now = now;
+        await _scheduler.PollAsync(CancellationToken.None);
+
+        // Sessions start on the thread pool after the poll; wait until every run has settled.
+        for (var i = 0; i < 100 && _runs.All.Any(run => run.Status == AutomationRunStatus.Starting); i++)
+            await Task.Delay(10);
+    }
 
     [Fact]
-    public async Task Automation_with_cron_that_should_fire_within_window_executes()
+    public async Task A_schedule_that_is_due_runs_once()
     {
-        // Arrange: cron that fires every minute — should always be in the 30s window
+        var automation = Seed("schedule", "0 9 * * 1");
+
+        await PollAtAsync(NineOnMonday.AddSeconds(15));
+        await PollAtAsync(NineOnMonday.AddSeconds(45));
+
+        _executor.Calls.ShouldBe([automation.Id]);
+        var run = _runs.All.ShouldHaveSingleItem();
+        (run.Trigger, run.Status, run.SessionId).ShouldBe(("schedule", "started", "session-1"));
+        run.ScheduledFor.ShouldBe(NineOnMonday.UtcDateTime.ToString("O"));
+    }
+
+    [Fact]
+    public async Task A_schedule_that_is_not_due_does_nothing()
+    {
+        Seed("schedule", "0 0 1 1 *");
+
+        await PollAtAsync(NineOnMonday.AddSeconds(15));
+
+        _executor.Calls.ShouldBeEmpty();
+        _runs.All.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_schedule_runs_on_the_automations_clock()
+    {
+        // 11:00 in Johannesburg is 09:00 UTC; the same cron in UTC isn't due until 11:00 UTC.
+        var johannesburg = Seed("schedule", "0 11 * * 1", "Africa/Johannesburg");
+        Seed("schedule", "0 11 * * 1");
+
+        await PollAtAsync(NineOnMonday.AddSeconds(15));
+
+        _executor.Calls.ShouldBe([johannesburg.Id]);
+    }
+
+    [Fact]
+    public async Task A_run_missed_by_less_than_three_hours_is_caught_up_once()
+    {
+        Seed("schedule", "0 9 * * 1");
+
+        await PollAtAsync(NineOnMonday.AddHours(2));
+        await PollAtAsync(NineOnMonday.AddHours(2).AddSeconds(30));
+
+        _executor.Calls.Count.ShouldBe(1);
+        _runs.All.ShouldHaveSingleItem().Trigger.ShouldBe("catch_up");
+    }
+
+    [Fact]
+    public async Task A_run_missed_by_more_than_three_hours_is_recorded_as_skipped()
+    {
+        Seed("schedule", "0 9 * * 1");
+
+        await PollAtAsync(NineOnMonday.AddHours(5));
+
+        _executor.Calls.ShouldBeEmpty();
+        var run = _runs.All.ShouldHaveSingleItem();
+        run.Status.ShouldBe(AutomationRunStatus.Skipped);
+        run.Error!.ShouldStartWith("Skipped: Fleet wasn't running at Mon 14 Sep, 09:00");
+    }
+
+    [Fact]
+    public async Task Nothing_from_before_it_was_switched_on_runs()
+    {
+        var automation = Seed("schedule", "0 9 * * 1");
+        automation.UpdatedAt = NineOnMonday.AddMinutes(30).UtcDateTime.ToString("O");
+
+        await PollAtAsync(NineOnMonday.AddMinutes(40));
+
+        _runs.All.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_one_off_runs_and_then_switches_itself_off()
+    {
+        var automation = Seed("once", "2026-09-14T11:00", "Africa/Johannesburg");
+
+        await PollAtAsync(NineOnMonday.AddSeconds(10));
+        await PollAtAsync(NineOnMonday.AddSeconds(40));
+
+        _executor.Calls.ShouldBe([automation.Id]);
+        _runs.All.ShouldHaveSingleItem().Trigger.ShouldBe("once");
+        (await _automations.GetByIdAsync(automation.Id))!.IsEnabled.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task A_one_off_missed_by_hours_is_skipped_and_switched_off()
+    {
+        var automation = Seed("once", "2026-09-14T09:00");
+
+        await PollAtAsync(NineOnMonday.AddHours(6));
+
+        _executor.Calls.ShouldBeEmpty();
+        _runs.All.ShouldHaveSingleItem().Status.ShouldBe(AutomationRunStatus.Skipped);
+        (await _automations.GetByIdAsync(automation.Id))!.IsEnabled.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task A_run_is_skipped_while_the_last_one_is_still_going()
+    {
+        Seed("schedule", "0 * * * *");
+        await PollAtAsync(NineOnMonday.AddSeconds(10));
+        _activity.Update("session-1", "busy", "user-1");
+
+        await PollAtAsync(NineOnMonday.AddHours(1).AddSeconds(10));
+
+        _executor.Calls.Count.ShouldBe(1);
+        _runs.All[^1].Status.ShouldBe(AutomationRunStatus.Skipped);
+        _runs.All[^1].Error.ShouldBe("Skipped: the last run was still going.");
+    }
+
+    [Fact]
+    public async Task Runs_left_starting_by_a_crash_are_marked_failed()
+    {
+        await _runs.InsertAsync(new AutomationRun
+        {
+            Id = "run-stuck",
+            AutomationId = "auto-gone",
+            UserId = "user-1",
+            Trigger = "schedule",
+            StartedAt = NineOnMonday.AddHours(-1).UtcDateTime.ToString("O"),
+            Status = AutomationRunStatus.Starting,
+        });
+
+        await PollAtAsync(NineOnMonday);
+
+        var run = _runs.All.ShouldHaveSingleItem();
+        (run.Status, run.Error).ShouldBe(("failed", "Fleet stopped before the run started."));
+    }
+
+    [Fact]
+    public void Handled_until_is_the_later_of_the_last_occurrence_and_when_it_was_switched_on()
+    {
         var automation = new Automation
         {
             Id = "auto-1",
-            Name = "Every Minute",
-            TriggerType = "schedule",
-            TriggerConfig = "* * * * *", // every minute
-            MaxConcurrentRuns = 1,
-            IsEnabled = true
+            CreatedAt = "2026-09-01T00:00:00.0000000Z",
+            UpdatedAt = "2026-09-10T00:00:00.0000000Z",
         };
 
-        var repo = new FakeAutomationRepository([automation]);
-        var tracker = new ExecutionTracker();
-        var scopeFactory = new FakeServiceScopeFactory(repo, tracker);
-
-        var scheduler = new AutomationSchedulerService(scopeFactory, NullLogger<AutomationSchedulerService>.Instance);
-
-        // Act: start and let it poll once
-        await scheduler.StartAsync(CancellationToken.None);
-        await Task.Delay(2000, CancellationToken.None); // give it time to poll and execute Task.Run
-        await scheduler.StopAsync(CancellationToken.None);
-        
-        // Wait for async executions to complete
-        await Task.Delay(1000, CancellationToken.None);
-
-        // Assert: execution should have been called
-        tracker.ExecutedAutomationIds.ShouldContain("auto-1");
+        AutomationSchedulerService.HandledUntilUtc(automation, new Dictionary<string, string>())
+            .ShouldBe(new DateTime(2026, 9, 10, 0, 0, 0, DateTimeKind.Utc));
+        AutomationSchedulerService.HandledUntilUtc(automation, new Dictionary<string, string> { ["auto-1"] = "2026-09-14T09:00:00.0000000Z" })
+            .ShouldBe(new DateTime(2026, 9, 14, 9, 0, 0, DateTimeKind.Utc));
     }
 
-    [Fact]
-    public async Task Automation_with_cron_that_should_not_fire_does_not_execute()
+    // ── Test doubles ─────────────────────────────────────────────────────────
+
+    private sealed class Clock(DateTimeOffset now) : TimeProvider
     {
-        // Arrange: cron that fires once a year — should NOT be in the 30s window
-        var automation = new Automation
-        {
-            Id = "auto-2",
-            Name = "Once a Year",
-            TriggerType = "schedule",
-            TriggerConfig = "0 0 1 1 *", // Jan 1 at midnight
-            MaxConcurrentRuns = 1,
-            IsEnabled = true
-        };
-
-        var repo = new FakeAutomationRepository([automation]);
-        var tracker = new ExecutionTracker();
-        var scopeFactory = new FakeServiceScopeFactory(repo, tracker);
-
-        var scheduler = new AutomationSchedulerService(scopeFactory, NullLogger<AutomationSchedulerService>.Instance);
-
-        // Act: start and let it poll once
-        await scheduler.StartAsync(CancellationToken.None);
-        await Task.Delay(2000, CancellationToken.None);
-        await scheduler.StopAsync(CancellationToken.None);
-        
-        // Wait for async executions
-        await Task.Delay(1000, CancellationToken.None);
-
-        // Assert: execution should NOT have been called
-        tracker.ExecutedAutomationIds.ShouldBeEmpty();
+        public DateTimeOffset Now { get; set; } = now;
+        public override DateTimeOffset GetUtcNow() => Now;
     }
 
-    // ── Concurrent Run Limit Enforcement ───────────────────────────────────────
-
-    [Fact]
-    public async Task Automation_at_max_concurrent_runs_is_skipped()
+    private sealed class RecordingExecutor : IAutomationExecutor
     {
-        // Arrange: automation with max 1 concurrent run
-        // We'll verify by checking that only one execution starts even if we trigger multiple times
-        var automation = new Automation
+        private readonly List<string> _calls = [];
+        public IReadOnlyList<string> Calls
         {
-            Id = "auto-3",
-            Name = "Max One",
-            TriggerType = "schedule",
-            TriggerConfig = "* * * * *", // every minute
-            MaxConcurrentRuns = 1,
-            IsEnabled = true
-        };
-
-        var repo = new FakeAutomationRepository([automation]);
-        var tracker = new ExecutionTracker
-        {
-            // Simulate a long-running execution
-            ExecutionDelay = TimeSpan.FromSeconds(5)
-        };
-        var scopeFactory = new FakeServiceScopeFactory(repo, tracker);
-
-        var scheduler = new AutomationSchedulerService(scopeFactory, NullLogger<AutomationSchedulerService>.Instance);
-
-        // Act: start, let it poll and start one execution
-        await scheduler.StartAsync(CancellationToken.None);
-        await Task.Delay(2000, CancellationToken.None); // first poll starts execution
-        await scheduler.StopAsync(CancellationToken.None);
-        
-        // Wait for execution to complete
-        await Task.Delay(6000, CancellationToken.None);
-
-        // Assert: only one execution should have started
-        tracker.ExecutedAutomationIds.Count.ShouldBe(1);
-    }
-
-    [Fact]
-    public async Task Automation_below_max_concurrent_runs_executes()
-    {
-        // Arrange: automation with max 2 concurrent runs
-        var automation = new Automation
-        {
-            Id = "auto-4",
-            Name = "Max Two",
-            TriggerType = "schedule",
-            TriggerConfig = "* * * * *", // every minute
-            MaxConcurrentRuns = 2,
-            IsEnabled = true
-        };
-
-        var repo = new FakeAutomationRepository([automation]);
-        var tracker = new ExecutionTracker();
-        var scopeFactory = new FakeServiceScopeFactory(repo, tracker);
-
-        var scheduler = new AutomationSchedulerService(scopeFactory, NullLogger<AutomationSchedulerService>.Instance);
-
-        // Act: start and let it poll once
-        await scheduler.StartAsync(CancellationToken.None);
-        await Task.Delay(2000, CancellationToken.None);
-        await scheduler.StopAsync(CancellationToken.None);
-        
-        // Wait for async executions to complete
-        await Task.Delay(1000, CancellationToken.None);
-
-        // Assert: execution should have been called (max 2 allows it)
-        tracker.ExecutedAutomationIds.Count.ShouldBe(1);
-    }
-
-    // ── Graceful Shutdown ──────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task Service_stops_gracefully_on_cancellation()
-    {
-        // Arrange
-        var automation = new Automation
-        {
-            Id = "auto-5",
-            Name = "Graceful",
-            TriggerType = "schedule",
-            TriggerConfig = "* * * * *",
-            MaxConcurrentRuns = 1,
-            IsEnabled = true
-        };
-
-        var repo = new FakeAutomationRepository([automation]);
-        var tracker = new ExecutionTracker();
-        var scopeFactory = new FakeServiceScopeFactory(repo, tracker);
-
-        var scheduler = new AutomationSchedulerService(scopeFactory, NullLogger<AutomationSchedulerService>.Instance);
-
-        // Act: start and immediately cancel
-        using var cts = new CancellationTokenSource();
-        var startTask = scheduler.StartAsync(cts.Token);
-        await cts.CancelAsync();
-
-        // Assert: should complete without throwing
-        await Should.NotThrowAsync(async () => await startTask);
-        await Should.NotThrowAsync(async () => await scheduler.StopAsync(CancellationToken.None));
-    }
-
-    [Fact]
-    public async Task Service_handles_cancellation_during_poll()
-    {
-        // Arrange
-        var automation = new Automation
-        {
-            Id = "auto-6",
-            Name = "Cancel During Poll",
-            TriggerType = "schedule",
-            TriggerConfig = "* * * * *",
-            MaxConcurrentRuns = 1,
-            IsEnabled = true
-        };
-
-        var repo = new FakeAutomationRepository([automation]);
-        var tracker = new ExecutionTracker();
-        var scopeFactory = new FakeServiceScopeFactory(repo, tracker);
-
-        var scheduler = new AutomationSchedulerService(scopeFactory, NullLogger<AutomationSchedulerService>.Instance);
-
-        // Act: start, let it poll once, then cancel
-        using var cts = new CancellationTokenSource();
-        await scheduler.StartAsync(cts.Token);
-        await Task.Delay(500, CancellationToken.None); // let it poll
-        await cts.CancelAsync();
-
-        // Assert: should stop gracefully
-        await Should.NotThrowAsync(async () => await scheduler.StopAsync(CancellationToken.None));
-    }
-
-    // ── Test Doubles ───────────────────────────────────────────────────────────
-
-    private sealed class FakeAutomationRepository : IAutomationRepository
-    {
-        private readonly List<Automation> _automations;
-
-        public FakeAutomationRepository(List<Automation> automations)
-        {
-            _automations = automations;
-        }
-
-        public Task<IReadOnlyList<Automation>> ListEnabledByTriggerTypeAsync(string triggerType)
-        {
-            var result = _automations
-                .Where(a => a.TriggerType == triggerType && a.IsEnabled)
-                .ToList();
-            return Task.FromResult<IReadOnlyList<Automation>>(result);
-        }
-
-        public Task InsertAsync(Automation automation) => throw new NotImplementedException();
-        public Task UpdateAsync(Automation automation) => throw new NotImplementedException();
-        public Task<Automation?> GetByIdAsync(string id) => throw new NotImplementedException();
-        public Task<IReadOnlyList<Automation>> ListAsync(string? workspaceId = null) => throw new NotImplementedException();
-        public Task DeleteAsync(string id) => throw new NotImplementedException();
-        public Task SetEnabledAsync(string id, bool enabled) => throw new NotImplementedException();
-    }
-
-    private sealed class ExecutionTracker
-    {
-        public List<string> ExecutedAutomationIds { get; } = [];
-        public TimeSpan ExecutionDelay { get; set; } = TimeSpan.Zero;
-
-        public async Task RecordExecutionAsync(string automationId, CancellationToken ct)
-        {
-            ExecutedAutomationIds.Add(automationId);
-
-            if (ExecutionDelay > TimeSpan.Zero)
+            get
             {
-                await Task.Delay(ExecutionDelay, ct);
+                lock (_calls)
+                    return [.. _calls];
             }
         }
-    }
 
-    private sealed class FakeServiceScopeFactory : IServiceScopeFactory
-    {
-        private readonly IAutomationRepository _repo;
-        private readonly ExecutionTracker _tracker;
-        private readonly TrackingLogger _logger;
-
-        public FakeServiceScopeFactory(IAutomationRepository repo, ExecutionTracker tracker)
+        public Task<AutomationExecutionOutcome> ExecuteAsync(
+            Automation automation,
+            string? eventType = null,
+            string? eventSummary = null,
+            string? previousSessionId = null,
+            CancellationToken ct = default)
         {
-            _repo = repo;
-            _tracker = tracker;
-            _logger = new TrackingLogger(tracker);
-        }
-
-        public IServiceScope CreateScope()
-        {
-            return new FakeServiceScope(_repo, _tracker, _logger);
-        }
-    }
-
-    private sealed class FakeServiceScope : IServiceScope
-    {
-        private readonly IAutomationRepository _repo;
-        private readonly ExecutionTracker _tracker;
-        private readonly TrackingLogger _logger;
-
-        public FakeServiceScope(IAutomationRepository repo, ExecutionTracker tracker, TrackingLogger logger)
-        {
-            _repo = repo;
-            _tracker = tracker;
-            _logger = logger;
-        }
-
-        public IServiceProvider ServiceProvider => new FakeServiceProvider(_repo, _tracker, _logger);
-
-        public void Dispose()
-        {
-        }
-    }
-
-    private sealed class FakeServiceProvider : IServiceProvider
-    {
-        private readonly IAutomationRepository _repo;
-        private readonly ExecutionTracker _tracker;
-        private readonly TrackingLogger _logger;
-
-        public FakeServiceProvider(IAutomationRepository repo, ExecutionTracker tracker, TrackingLogger logger)
-        {
-            _repo = repo;
-            _tracker = tracker;
-            _logger = logger;
-        }
-
-        public object? GetService(Type serviceType)
-        {
-            if (serviceType == typeof(IAutomationRepository))
-                return _repo;
-            if (serviceType == typeof(AutomationExecutionService))
-            {
-                // Create a real AutomationExecutionService with a tracking logger
-                return new AutomationExecutionService(null!, null!, _logger);
-            }
-            return null;
-        }
-    }
-
-    private sealed class TrackingLogger : ILogger<AutomationExecutionService>
-    {
-        private readonly ExecutionTracker _tracker;
-        public int LogCallCount;
-
-        public TrackingLogger(ExecutionTracker tracker)
-        {
-            _tracker = tracker;
-        }
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
-        {
-            LogCallCount++;
-            
-            try
-            {
-                // Try both structured and formatted approaches
-                var message = formatter(state, exception);
-                
-                // Approach 1: Check formatted message
-                if (message.Contains("Starting automation execution"))
-                {
-                    // Extract automation ID from message
-                    var match = System.Text.RegularExpressions.Regex.Match(message, @"Starting automation execution: ([^\s]+)");
-                    if (match.Success)
-                    {
-                        var automationId = match.Groups[1].Value;
-                        _ = _tracker.RecordExecutionAsync(automationId, CancellationToken.None);
-                        return;
-                    }
-                }
-                
-                // Approach 2: Check structured logging
-                if (state is IEnumerable<KeyValuePair<string, object?>> kvps)
-                {
-                    var dict = kvps.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-                    
-                    if (dict.TryGetValue("{OriginalFormat}", out var format) && 
-                        format?.ToString()?.Contains("Starting automation execution") == true)
-                    {
-                        if (dict.TryGetValue("AutomationId", out var automationId) && automationId != null)
-                        {
-                            _ = _tracker.RecordExecutionAsync(automationId.ToString()!, CancellationToken.None);
-                        }
-                    }
-                }
-            }
-            catch
-            {
-                // Ignore logging errors in tests
-            }
+            lock (_calls)
+                _calls.Add(automation.Id);
+            return Task.FromResult(new AutomationExecutionOutcome("session-1", "instance-1", null));
         }
     }
 }

@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Microsoft.Extensions.Logging.Abstractions;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Infrastructure.Services;
 
@@ -136,11 +136,27 @@ public sealed class AutomationTriggerSourceTests
         InProcessOutboxDispatcher.BuildEventSummary(eventType, Json(payload)).ShouldBe(expected);
     }
 
+    [Theory]
+    [InlineData("Weekly PR digest", "Africa/Johannesburg", "fleet/auto-weekly-pr-digest-20260914-1100")]
+    [InlineData("Check \"flaky\" tests!", null, "fleet/auto-check-flaky-tests-20260914-0900")]
+    [InlineData("🚀", null, "fleet/auto-20260914-0900")]
+    public void Each_run_gets_a_branch_named_after_the_automation_and_the_time(string name, string? timeZone, string expected)
+    {
+        var provider = new WeaveFleet.Infrastructure.SessionSources.AutomationSessionSourceProvider(
+            null!, null!, null!, new FixedClock(new DateTimeOffset(2026, 9, 14, 9, 0, 0, TimeSpan.Zero)));
+
+        provider.RunBranchName(new Automation { Name = name, TimeZone = timeZone }).ShouldBe(expected);
+    }
+
+    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
+
     private static DateTime? NextRun(string cron, string? timeZone, DateTime? from = null)
     {
-        var scheduler = new AutomationSchedulerService(null!, NullLogger<AutomationSchedulerService>.Instance);
         var automation = new Automation { Id = "auto-1", TriggerType = "schedule", TriggerConfig = cron, TimeZone = timeZone };
-        return scheduler.NextOccurrenceUtc(automation, from ?? MondayMidnightUtc);
+        return AutomationSchedule.NextOccurrenceUtc(automation, from ?? MondayMidnightUtc);
     }
 
     private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement.Clone();

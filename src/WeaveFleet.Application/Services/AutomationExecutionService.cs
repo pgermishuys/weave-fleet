@@ -7,25 +7,45 @@ using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Services;
 
+/// <summary>Which session a run used, or why it couldn't start one.</summary>
+public sealed record AutomationExecutionOutcome(string? SessionId, string? InstanceId, string? Error)
+{
+    public static AutomationExecutionOutcome Failed(string error) => new(null, null, error);
+}
+
+/// <summary>Starts an automation's session; <see cref="AutomationRunService"/> records the run around it.</summary>
+public interface IAutomationExecutor
+{
+    Task<AutomationExecutionOutcome> ExecuteAsync(
+        Automation automation,
+        string? eventType = null,
+        string? eventSummary = null,
+        string? previousSessionId = null,
+        CancellationToken ct = default);
+}
+
 /// <summary>
 /// Service that executes an automation by creating a session via SessionOrchestrator.
 /// </summary>
 public sealed partial class AutomationExecutionService(
     SessionOrchestrator sessionOrchestrator,
     ISessionRepository sessionRepository,
-    ILogger<AutomationExecutionService> logger)
+    ILogger<AutomationExecutionService> logger) : IAutomationExecutor
 {
     /// <summary>
-    /// Executes an automation by creating a session with the automation's prompt and configuration.
+    /// Runs an automation: starts a session with its prompt, or prompts the session a target type picks. Never throws;
+    /// the outcome says which session it used, or why it couldn't.
     /// </summary>
     /// <param name="automation">The automation to execute.</param>
     /// <param name="eventType">Optional event type that triggered this execution.</param>
     /// <param name="eventSummary">Optional event summary providing context.</param>
+    /// <param name="previousSessionId">The session the automation's last run started, for the "same_session" target.</param>
     /// <param name="ct">Cancellation token.</param>
-    public async Task ExecuteAsync(
+    public async Task<AutomationExecutionOutcome> ExecuteAsync(
         Automation automation,
         string? eventType = null,
         string? eventSummary = null,
+        string? previousSessionId = null,
         CancellationToken ct = default)
     {
         try
@@ -39,35 +59,25 @@ public sealed partial class AutomationExecutionService(
             var finalPrompt = BuildFinalPrompt(expandedPrompt, eventType, eventSummary);
 
             // 3. Route based on target type
-            var targetType = automation.TargetType ?? "new_session";
-            
-            switch (targetType)
+            return (automation.TargetType ?? "new_session") switch
             {
-                case "most_recent_session":
-                    await ExecuteOnMostRecentSessionAsync(automation, finalPrompt, ct);
-                    break;
-                
-                case "tagged_session":
-                    await ExecuteOnTaggedSessionAsync(automation, finalPrompt, ct);
-                    break;
-                
-                case "new_session":
-                default:
-                    await ExecuteOnNewSessionAsync(automation, finalPrompt, eventType, ct);
-                    break;
-            }
+                "same_session" => await ExecuteOnSameSessionAsync(automation, finalPrompt, eventType, previousSessionId, ct),
+                "most_recent_session" => await ExecuteOnMostRecentSessionAsync(automation, finalPrompt, ct),
+                "tagged_session" => await ExecuteOnTaggedSessionAsync(automation, finalPrompt, ct),
+                _ => await ExecuteOnNewSessionAsync(automation, finalPrompt, eventType, ct),
+            };
         }
         catch (Exception ex)
         {
-            // Errors are logged, not thrown — automation execution is fire-and-forget
             LogExecutionException(ex, automation.Id, automation.Name);
+            return AutomationExecutionOutcome.Failed($"Couldn't start: {ex.Message}");
         }
     }
 
     /// <summary>
     /// Executes automation on a new session.
     /// </summary>
-    private async Task ExecuteOnNewSessionAsync(
+    private async Task<AutomationExecutionOutcome> ExecuteOnNewSessionAsync(
         Automation automation,
         string finalPrompt,
         string? eventType,
@@ -79,8 +89,7 @@ public sealed partial class AutomationExecutionService(
             InitialPrompt = finalPrompt,
             ProjectId = null, // Automations use default/scratch project
             HarnessType = null, // Use default harness
-            Directory = automation.WorkspaceId, // Use automation's workspace if specified
-            IsolationStrategy = string.IsNullOrWhiteSpace(automation.WorkspaceId) ? "clone" : "existing",
+            // Where it runs comes from the automation source (AutomationSessionSourceProvider).
             Source = BuildSessionSource(automation, eventType),
             SourceReference = $"automation:{automation.Id}"
         };
@@ -90,17 +99,59 @@ public sealed partial class AutomationExecutionService(
         if (result.IsSuccess)
         {
             LogExecutionSucceeded(automation.Id, automation.Name, result.Value.Session.Id);
+            return new AutomationExecutionOutcome(result.Value.Session.Id, result.Value.InstanceId, null);
         }
-        else
+
+        LogExecutionFailed(automation.Id, automation.Name, result.Error.Code, result.Error.Description);
+        return AutomationExecutionOutcome.Failed($"Couldn't start: {result.Error.Description}");
+    }
+
+    /// <summary>
+    /// Prompts the session the automation's last run started, so the runs build on one conversation. The first run,
+    /// or one whose session is gone or archived, starts a new session.
+    /// </summary>
+    private async Task<AutomationExecutionOutcome> ExecuteOnSameSessionAsync(
+        Automation automation,
+        string finalPrompt,
+        string? eventType,
+        string? previousSessionId,
+        CancellationToken ct)
+    {
+        var previous = previousSessionId is null ? null : await sessionRepository.GetByIdAsync(previousSessionId);
+        if (previous is null || previous.RetentionStatus == "archived")
+            return await ExecuteOnNewSessionAsync(automation, finalPrompt, eventType, ct);
+
+        return await PromptExistingSessionAsync(automation, previous, finalPrompt, ct)
+            ?? await ExecuteOnNewSessionAsync(automation, finalPrompt, eventType, ct);
+    }
+
+    /// <summary>Prompts a session; null when it couldn't, so the caller can start a new one instead.</summary>
+    private async Task<AutomationExecutionOutcome?> PromptExistingSessionAsync(
+        Automation automation,
+        Session targetSession,
+        string finalPrompt,
+        CancellationToken ct)
+    {
+        var result = await sessionOrchestrator.PromptSessionAsync(
+            targetSession.Id,
+            finalPrompt,
+            options: null,
+            ct);
+
+        if (result.IsSuccess)
         {
-            LogExecutionFailed(automation.Id, automation.Name, result.Error.Code, result.Error.Description);
+            LogExecutionSucceeded(automation.Id, automation.Name, targetSession.Id);
+            return new AutomationExecutionOutcome(targetSession.Id, targetSession.InstanceId, null);
         }
+
+        LogExecutionFailed(automation.Id, automation.Name, result.Error.Code, result.Error.Description);
+        return null;
     }
 
     /// <summary>
     /// Executes automation on the most recent session, falling back to new session if none found.
     /// </summary>
-    private async Task ExecuteOnMostRecentSessionAsync(
+    private async Task<AutomationExecutionOutcome> ExecuteOnMostRecentSessionAsync(
         Automation automation,
         string finalPrompt,
         CancellationToken ct)
@@ -116,33 +167,18 @@ public sealed partial class AutomationExecutionService(
 
         if (sessions.Count > 0)
         {
-            var targetSession = sessions[0];
-            var result = await sessionOrchestrator.PromptSessionAsync(
-                targetSession.Id,
-                finalPrompt,
-                options: null,
-                ct);
+            return await PromptExistingSessionAsync(automation, sessions[0], finalPrompt, ct)
+                ?? AutomationExecutionOutcome.Failed($"Couldn't prompt the most recent session, {sessions[0].Title}.");
+        }
 
-            if (result.IsSuccess)
-            {
-                LogExecutionSucceeded(automation.Id, automation.Name, targetSession.Id);
-            }
-            else
-            {
-                LogExecutionFailed(automation.Id, automation.Name, result.Error.Code, result.Error.Description);
-            }
-        }
-        else
-        {
-            LogNoSessionFoundFallingBack(automation.Id, automation.Name, "most_recent_session");
-            await ExecuteOnNewSessionAsync(automation, finalPrompt, eventType: null, ct);
-        }
+        LogNoSessionFoundFallingBack(automation.Id, automation.Name, "most_recent_session");
+        return await ExecuteOnNewSessionAsync(automation, finalPrompt, eventType: null, ct);
     }
 
     /// <summary>
     /// Executes automation on the most recent session matching target tags, falling back to new session if none found.
     /// </summary>
-    private async Task ExecuteOnTaggedSessionAsync(
+    private async Task<AutomationExecutionOutcome> ExecuteOnTaggedSessionAsync(
         Automation automation,
         string finalPrompt,
         CancellationToken ct)
@@ -150,8 +186,7 @@ public sealed partial class AutomationExecutionService(
         if (automation.TargetTags.Count == 0)
         {
             LogNoTagsSpecifiedFallingBack(automation.Id, automation.Name);
-            await ExecuteOnNewSessionAsync(automation, finalPrompt, eventType: null, ct);
-            return;
+            return await ExecuteOnNewSessionAsync(automation, finalPrompt, eventType: null, ct);
         }
 
         // Query for the most recent session with matching tags
@@ -165,27 +200,12 @@ public sealed partial class AutomationExecutionService(
 
         if (sessions.Count > 0)
         {
-            var targetSession = sessions[0];
-            var result = await sessionOrchestrator.PromptSessionAsync(
-                targetSession.Id,
-                finalPrompt,
-                options: null,
-                ct);
+            return await PromptExistingSessionAsync(automation, sessions[0], finalPrompt, ct)
+                ?? AutomationExecutionOutcome.Failed($"Couldn't prompt the tagged session, {sessions[0].Title}.");
+        }
 
-            if (result.IsSuccess)
-            {
-                LogExecutionSucceeded(automation.Id, automation.Name, targetSession.Id);
-            }
-            else
-            {
-                LogExecutionFailed(automation.Id, automation.Name, result.Error.Code, result.Error.Description);
-            }
-        }
-        else
-        {
-            LogNoSessionFoundFallingBack(automation.Id, automation.Name, $"tagged_session (tags: {string.Join(", ", automation.TargetTags)})");
-            await ExecuteOnNewSessionAsync(automation, finalPrompt, eventType: null, ct);
-        }
+        LogNoSessionFoundFallingBack(automation.Id, automation.Name, $"tagged_session (tags: {string.Join(", ", automation.TargetTags)})");
+        return await ExecuteOnNewSessionAsync(automation, finalPrompt, eventType: null, ct);
     }
 
     /// <summary>

@@ -72,7 +72,7 @@ public sealed partial class AutomationEventDispatcherService : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var matcher = scope.ServiceProvider.GetRequiredService<EventTriggerMatcher>();
         var ledger = scope.ServiceProvider.GetRequiredService<IAutomationEventLedgerRepository>();
-        var executor = scope.ServiceProvider.GetRequiredService<AutomationExecutionService>();
+        var runService = scope.ServiceProvider.GetRequiredService<AutomationRunService>();
         var sessionRepo = scope.ServiceProvider.GetRequiredService<ISessionRepository>();
 
         // Find matching automations
@@ -131,11 +131,10 @@ public sealed partial class AutomationEventDispatcherService : BackgroundService
 
                 // Execute automation
                 LogExecutingAutomation(automation.Id, automation.Name, notification.EventType, notification.EventId);
-                await executor.ExecuteAsync(
+                await runService.RunAsync(
                     automation,
-                    eventType: notification.EventType,
-                    eventSummary: notification.EventSummary,
-                    ct: ct).ConfigureAwait(false);
+                    new AutomationRunTrigger(notification.EventType, EventType: notification.EventType, EventSummary: notification.EventSummary),
+                    ct).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

@@ -144,6 +144,7 @@ public static class DependencyInjection
         services.AddScoped<IAppRunRepository, AppRunRepository>();
         services.AddScoped<IAutomationRepository, AutomationRepository>();
         services.AddScoped<IAutomationEventLedgerRepository, AutomationEventLedgerRepository>();
+        services.AddScoped<IAutomationRunRepository, AutomationRunRepository>();
 
         // Credential storage — user-scoped repositories and application services
         services.AddScoped<IUserPreferenceRepository, DapperUserPreferenceRepository>();
@@ -184,6 +185,9 @@ public static class DependencyInjection
         services.AddSingleton<IBackgroundUserScope, BackgroundUserScope>();
         services.AddScoped<AutomationService>();
         services.AddScoped<AutomationExecutionService>();
+        services.AddScoped<IAutomationExecutor>(sp => sp.GetRequiredService<AutomationExecutionService>());
+        services.AddScoped<AutomationRunService>();
+        services.AddScoped<AutomationDraftService>();
         services.AddScoped<EventTriggerMatcher>();
         services.AddScoped<SessionActivityWriteService>();
         services.AddScoped<ILegacySessionImporter, LegacySessionImporter>();
