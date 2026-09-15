@@ -496,6 +496,117 @@ describe("useSignalRSocket", () => {
       expect(onSnapshot2).toHaveBeenCalledWith(snapshot)
     })
 
+    it("fetches a fresh snapshot for a new subscriber once events have arrived", async () => {
+      // The Files canvas keeps listening to a session you've left. Coming back, the conversation must not be
+      // rebuilt from the snapshot taken when you first opened it: it lacks everything the agent did since.
+      const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
+      const opened = createSessionSnapshot("session-1")
+      const later = { ...createSessionSnapshot("session-1"), activityStatus: "busy" }
+      let answer: SessionSnapshot = opened
+      mockInvokeWithSnapshot(() => answer)
+
+      const { result } = await mountComposable(() => useWeaveSocket())
+      const onSnapshotKept = vi.fn()
+      result.subscribeV2("session-1", onSnapshotKept, vi.fn())
+      await flushAll()
+
+      eventHandler?.("session-1", 10, { type: "session.status", properties: { status: "busy" } })
+      answer = later
+      const onSnapshotBack = vi.fn()
+      result.subscribeV2("session-1", onSnapshotBack, vi.fn())
+      await flushAll()
+
+      expect(mockHubConnection.invoke.mock.calls.filter(([method]) => method === "SubscribeToSessionAsync")).toHaveLength(2)
+      expect(onSnapshotBack).toHaveBeenCalledTimes(1)
+      expect(onSnapshotBack).toHaveBeenCalledWith(later)
+      // The listener that stayed already has its state and keeps it.
+      expect(onSnapshotKept).toHaveBeenCalledTimes(1)
+    })
+
+    it("shares one request between subscribers that join before it's answered", async () => {
+      const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
+      const snapshot = createSessionSnapshot("session-1")
+      mockInvokeWithSnapshot(snapshot)
+
+      const { result } = await mountComposable(() => useWeaveSocket())
+      const onSnapshot1 = vi.fn()
+      const onSnapshot2 = vi.fn()
+      result.subscribeV2("session-1", onSnapshot1, vi.fn())
+      result.subscribeV2("session-1", onSnapshot2, vi.fn())
+      await flushAll()
+
+      expect(mockHubConnection.invoke.mock.calls.filter(([method]) => method === "SubscribeToSessionAsync")).toHaveLength(1)
+      expect(onSnapshot1).toHaveBeenCalledWith(snapshot)
+      expect(onSnapshot2).toHaveBeenCalledWith(snapshot)
+    })
+
+    it("shares the request sent on connecting with subscribers that join before it's answered", async () => {
+      const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
+      const snapshot = createSessionSnapshot("session-1")
+      let connected!: () => void
+      mockHubConnection.start.mockImplementation(() => new Promise<void>((resolve) => {
+        connected = () => {
+          mockHubConnection.state = HubConnectionState.Connected
+          resolve()
+        }
+      }))
+      let answer!: (snapshot: SessionSnapshot) => void
+      mockHubConnection.invoke.mockImplementation((method: string) => {
+        if (method === "SubscribeToSessionAsync") {
+          return new Promise<SessionSnapshot>((resolve) => { answer = resolve })
+        }
+        return Promise.resolve(undefined)
+      })
+
+      const { result } = await mountComposable(() => useWeaveSocket())
+      const onSnapshot1 = vi.fn()
+      result.subscribeV2("session-1", onSnapshot1, vi.fn())
+      connected()
+      await flushAll()
+
+      const onSnapshot2 = vi.fn()
+      result.subscribeV2("session-1", onSnapshot2, vi.fn())
+      answer(snapshot)
+      await flushAll()
+
+      expect(mockHubConnection.invoke.mock.calls.filter(([method]) => method === "SubscribeToSessionAsync")).toHaveLength(1)
+      expect(onSnapshot1).toHaveBeenCalledWith(snapshot)
+      expect(onSnapshot2).toHaveBeenCalledWith(snapshot)
+    })
+
+    it("asks again for a subscriber that joins after an event the pending request may not include", async () => {
+      const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
+      const first = createSessionSnapshot("session-1")
+      const second = { ...createSessionSnapshot("session-1"), activityStatus: "busy" }
+      const answers: Array<(snapshot: SessionSnapshot) => void> = []
+      mockHubConnection.invoke.mockImplementation((method: string) => {
+        if (method === "SubscribeToSessionAsync") {
+          return new Promise<SessionSnapshot>((resolve) => answers.push(resolve))
+        }
+        return Promise.resolve(undefined)
+      })
+
+      const { result } = await mountComposable(() => useWeaveSocket())
+      const onSnapshot1 = vi.fn()
+      result.subscribeV2("session-1", onSnapshot1, vi.fn())
+      await flushAll()
+
+      // The event arrives before the first answer; the second subscriber never heard it.
+      eventHandler?.("session-1", 10, { type: "session.status", properties: { status: "busy" } })
+      const onSnapshot2 = vi.fn()
+      result.subscribeV2("session-1", onSnapshot2, vi.fn())
+
+      answers[0](first)
+      await flushAll()
+      answers[1](second)
+      await flushAll()
+
+      expect(onSnapshot1).toHaveBeenCalledTimes(1)
+      expect(onSnapshot1).toHaveBeenCalledWith(first)
+      expect(onSnapshot2).toHaveBeenCalledTimes(1)
+      expect(onSnapshot2).toHaveBeenCalledWith(second)
+    })
+
     it("handles subscription errors gracefully", async () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
 
