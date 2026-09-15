@@ -116,9 +116,8 @@ function handleSortChange(sort: "created" | "updated" | "comments", direction: "
 .filter-bar {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border);
+  gap: 8px;
+  padding: 10px 0 4px;
 }
 
 .filter-controls {

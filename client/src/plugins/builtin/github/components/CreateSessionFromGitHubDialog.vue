@@ -259,7 +259,7 @@ async function handleCreate(): Promise<void> {
   width: 24px;
   height: 24px;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
@@ -269,7 +269,7 @@ async function handleCreate(): Promise<void> {
 
 .create-session-trigger:hover {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
 }
 
 .dialog-body {

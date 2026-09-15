@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useRouter } from "@tanstack/vue-router";
 import { computed } from "vue";
-import { CheckCircle2, CircleDot, MessageSquare } from "lucide-vue-next";
+import { CheckCircle2, CircleDot, ExternalLink, MessageSquare } from "lucide-vue-next";
 import { formatRelativeTime } from "@/lib/format-utils";
 import CreateSessionFromGitHubDialog from "./components/CreateSessionFromGitHubDialog.vue";
 
@@ -39,16 +39,15 @@ const emit = defineEmits<{
 const router = useRouter();
 
 const statusIcon = computed(() => (props.item.state === "open" ? CircleDot : CheckCircle2));
-const statusClassName = computed(() =>
-  props.item.state === "open" ? "issue-status-icon issue-status-icon--open" : "issue-status-icon issue-status-icon--closed",
-);
+const statusClassName = computed(() => `gh-row__icon gh-row__icon--${props.item.state === "open" ? "open" : "closed"}`);
 const relativeTime = computed(() => formatRelativeTime(props.item.updatedAt));
 
 function getLabelStyle(color: string): { backgroundColor: string; borderColor: string; color: string } {
   return {
     backgroundColor: `#${color}22`,
     borderColor: `#${color}55`,
-    color: `#${color}`,
+    // Tinted toward the text colour so pale labels stay readable on light themes.
+    color: `color-mix(in srgb, #${color} 70%, var(--text))`,
   };
 }
 
@@ -89,7 +88,7 @@ function handleKeydown(event: KeyboardEvent): void {
 
 <template>
   <article
-    class="issue-item"
+    class="gh-row issue-item"
     role="button"
     tabindex="0"
     @click="openIssue"
@@ -102,52 +101,51 @@ function handleKeydown(event: KeyboardEvent): void {
       aria-hidden="true"
     />
 
-    <div class="issue-body">
-      <div class="issue-row issue-row--title">
-        <p class="issue-title">
+    <div class="gh-row__body">
+      <div class="gh-row__line">
+        <p class="gh-row__title">
           {{ item.title }}
         </p>
-        <span class="issue-number">#{{ item.number }}</span>
-      </div>
-
-      <div class="issue-row issue-row--meta">
-        <span class="issue-repo">{{ item.repoFullName }}</span>
-        <div
-          class="issue-labels"
-          aria-label="Issue labels"
-        >
-          <span
-            v-for="label in item.labels"
-            :key="label.name"
-            class="issue-label"
-            :style="getLabelStyle(label.color)"
-            @click.stop="emit('labelClick', label.name)"
-          >
-            {{ label.name }}
-          </span>
-        </div>
-      </div>
-
-      <div class="issue-row issue-row--footer">
-        <img
-          class="issue-avatar"
-          :src="item.user.avatarUrl"
-          :alt="`${item.user.login} avatar`"
-        >
-        <span class="issue-user">{{ item.user.login }}</span>
-        <span class="issue-time">{{ relativeTime }}</span>
         <span
-          v-if="item.comments > 0"
-          class="issue-comments"
+          v-for="label in item.labels"
+          :key="label.name"
+          class="gh-row__label"
+          :style="getLabelStyle(label.color)"
+          @click.stop="emit('labelClick', label.name)"
         >
-          <MessageSquare :size="11" />
-          {{ item.comments }}
+          {{ label.name }}
         </span>
+      </div>
+
+      <div class="gh-row__meta">
+        <span>#{{ item.number }}</span>
+        <span aria-hidden="true">·</span>
+        <img
+          v-if="item.user.avatarUrl"
+          class="gh-row__avatar"
+          :src="item.user.avatarUrl"
+          alt=""
+        >
+        <span>{{ item.user.login }}</span>
+        <span aria-hidden="true">·</span>
+        <span>{{ relativeTime }}</span>
       </div>
     </div>
 
+    <span
+      v-if="item.comments > 0"
+      class="gh-row__side"
+      :aria-label="`${item.comments} comments`"
+    >
+      <MessageSquare
+        :size="12"
+        aria-hidden="true"
+      />
+      {{ item.comments }}
+    </span>
+
     <div
-      class="actions"
+      class="gh-row__actions"
       @click.stop
     >
       <CreateSessionFromGitHubDialog
@@ -161,153 +159,202 @@ function handleKeydown(event: KeyboardEvent): void {
         :repo-full-name="item.repoFullName"
       />
       <a
-        class="link-action"
+        class="gh-row__link"
         :href="item.htmlUrl"
         target="_blank"
         rel="noreferrer noopener"
+        title="Open on GitHub"
+        aria-label="Open on GitHub"
       >
-        Link →
+        <ExternalLink
+          :size="13"
+          aria-hidden="true"
+        />
       </a>
     </div>
   </article>
 </template>
 
 <style scoped>
-.issue-item {
+/* A row in the repo's list, like a session row: title and labels, then who and when. */
+.gh-row {
+  position: relative;
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border);
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-btn);
   cursor: pointer;
-  position: relative;
   outline: none;
+  transition: background-color var(--transition);
 }
 
-.issue-item:hover .link-action,
-.issue-item:focus-within .link-action {
-  opacity: 1;
+.gh-row:hover,
+.gh-row:focus-within {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
 }
 
-.issue-item:hover :deep(.create-session-trigger),
-.issue-item:focus-within :deep(.create-session-trigger) {
-  opacity: 1;
+.gh-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
-.issue-item:focus-visible {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.issue-status-icon {
+.gh-row__icon {
   flex-shrink: 0;
   margin-top: 2px;
 }
 
-.issue-status-icon--open {
-  color: #22c55e;
+.gh-row__icon--open {
+  color: var(--running);
 }
 
-.issue-status-icon--closed {
+.gh-row__icon--closed {
   color: var(--muted);
 }
 
-.issue-body {
+.gh-row__icon--merged {
+  color: var(--queued);
+}
+
+.gh-row__body {
   display: flex;
-  min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 6px;
-  padding-right: 52px;
-}
-
-.issue-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  gap: 3px;
   min-width: 0;
+}
+
+.gh-row__line {
+  display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
 }
 
-.issue-row--title {
-  align-items: flex-start;
-}
-
-.issue-title {
+.gh-row__title {
   margin: 0;
-  min-width: 0;
-  flex: 1;
-  font-size: 11px;
-  font-weight: 600;
   color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
 }
 
-.issue-number {
-  flex-shrink: 0;
-  font-size: 10px;
-  color: var(--muted);
-}
-
-.issue-repo,
-.issue-user,
-.issue-time {
-  font-size: 10px;
-  color: var(--muted);
-}
-
-.issue-labels {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  flex-wrap: wrap;
-}
-
-.issue-label {
+.gh-row__label {
   display: inline-flex;
   align-items: center;
-  min-height: 18px;
-  padding: 0 6px;
+  height: 18px;
+  padding: 0 7px;
   border: 1px solid transparent;
   border-radius: 999px;
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 500;
   cursor: pointer;
 }
 
-.issue-label:hover {
-  filter: brightness(1.2);
+.gh-row__label:hover {
+  filter: brightness(1.15);
 }
 
-.issue-comments {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  margin-left: auto;
-  font-size: 10px;
+.gh-row__draft {
+  height: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
   color: var(--muted);
+  font-size: 11px;
+  line-height: 18px;
 }
 
-.issue-avatar {
-  width: 16px;
-  height: 16px;
+.gh-row__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.gh-row__avatar {
+  width: 14px;
+  height: 14px;
   border-radius: 999px;
   object-fit: cover;
 }
 
-.link-action {
-  font-size: 10px;
-  color: var(--accent);
-  text-decoration: none;
-  opacity: 0;
+.gh-row__branch {
+  overflow: hidden;
+  font-family: var(--font-mono-stack);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.actions {
-  position: absolute;
-  top: 50%;
-  right: 12px;
-  transform: translateY(-50%);
+.gh-row__side {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 4px;
+  min-height: 20px;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-row:hover .gh-row__side,
+.gh-row:focus-within .gh-row__side {
+  visibility: hidden;
+}
+
+/* Start a session or open on GitHub; they take the comment count's place on hover. */
+.gh-row__actions {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.gh-row:hover .gh-row__actions,
+.gh-row:focus-within .gh-row__actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.gh-row__actions :deep(.create-session-trigger) {
+  opacity: 1;
+}
+
+.gh-row__link {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  color: var(--muted);
+}
+
+.gh-row__link:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+
+@media (hover: none) {
+  .gh-row__actions {
+    display: none;
+  }
+
+  .gh-row:hover .gh-row__side {
+    visibility: visible;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gh-row {
+    transition: none;
+  }
 }
 </style>

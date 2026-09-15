@@ -107,13 +107,13 @@ function handleClear() {
 
 .expression-input {
   width: 100%;
-  height: 28px;
-  padding: 0 28px 0 28px;
+  height: 32px;
+  padding: 0 28px 0 30px;
   border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface, var(--sidebar));
+  border-radius: var(--radius-btn);
+  background: var(--card-bg);
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   font-family: var(--font-mono, monospace);
   outline: none;
 }

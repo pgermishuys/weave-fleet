@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import { AlertCircle, CheckCircle2, ChevronDown, Copy, ExternalLink, Github, LoaderCircle, PlugZap, Unplug } from "lucide-vue-next";
+import { AlertCircle, CheckCircle2, ChevronDown, Copy, ExternalLink, Github, LoaderCircle, PlugZap, RefreshCw, Unplug } from "lucide-vue-next";
 import { formatRelativeTime } from "@/lib/format-utils";
 import { useGitHubAuth } from "./composables/use-github-auth";
 import { useGitHubRepos } from "./composables/use-github-repos";
 
 const buttonPrimaryClass = "inline-flex items-center justify-center gap-2 rounded-btn bg-primary px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60";
-const buttonSecondaryClass = "inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-2 text-sm font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60";
+const buttonSecondaryClass = "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-btn border border-border bg-transparent px-3 text-[13px] font-medium text-text transition-colors hover:bg-text/6 disabled:cursor-not-allowed disabled:opacity-60";
+const buttonDangerClass = "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-btn border border-error/40 bg-transparent px-3 text-[13px] font-medium text-error transition-colors hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-60";
 const inputClass = "w-full rounded-btn border border-border bg-main-bg px-3 py-2 text-sm text-text outline-none transition-colors placeholder:text-muted focus:border-accent";
 
 const {
@@ -135,82 +136,91 @@ async function handleRefreshRepos(): Promise<void> {
 
     <div
       v-else-if="isConnected"
-      class="space-y-3 rounded-card border border-green-500/30 bg-green-500/10 p-4"
+      class="github-settings__rows"
     >
-      <div class="flex items-start gap-3">
+      <div class="github-settings__row">
         <CheckCircle2
           :size="18"
-          class="mt-0.5 text-green-300"
+          class="github-settings__ok"
           aria-hidden="true"
         />
-        <div>
-          <p class="text-sm font-semibold text-text">
+        <div class="github-settings__copy">
+          <p class="github-settings__title">
             GitHub is connected
           </p>
-          <p class="mt-1 text-xs text-muted">
-            Repositories and issue context are available to plugin surfaces that depend on GitHub.
+          <p class="github-settings__hint">
+            Fleet can list your repositories, show linked pull requests and issues, and start sessions from them.
           </p>
         </div>
       </div>
 
-      <div class="rounded-card border border-border/70 bg-main-bg/70 p-3">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div class="space-y-1">
-            <p class="text-sm font-medium text-text">
-              Repository cache
-            </p>
-            <p class="text-xs text-muted">
-              {{ repoCacheSummary }}
-            </p>
-            <p
-              v-if="reposError && repos.length > 0"
-              class="text-xs text-red-200"
-            >
-              {{ reposError }}
-            </p>
-          </div>
-
-          <button
-            type="button"
-            :class="buttonSecondaryClass"
-            :disabled="isLoadingRepos || isDisconnecting"
-            @click="handleRefreshRepos"
+      <div class="github-settings__row">
+        <div class="github-settings__copy">
+          <p class="github-settings__title">
+            Repository cache
+          </p>
+          <p class="github-settings__hint">
+            {{ repoCacheSummary }}
+          </p>
+          <p
+            v-if="reposError && repos.length > 0"
+            class="github-settings__error"
           >
-            <LoaderCircle
-              v-if="isLoadingRepos"
-              :size="16"
-              class="animate-spin"
-              aria-hidden="true"
-            />
-            <Github
-              v-else
-              :size="16"
-              aria-hidden="true"
-            />
-            <span>{{ isLoadingRepos ? "Refreshing…" : "Refresh repos" }}</span>
-          </button>
+            {{ reposError }}
+          </p>
         </div>
+
+        <button
+          type="button"
+          :class="buttonSecondaryClass"
+          :disabled="isLoadingRepos || isDisconnecting"
+          @click="handleRefreshRepos"
+        >
+          <LoaderCircle
+            v-if="isLoadingRepos"
+            :size="14"
+            class="animate-spin"
+            aria-hidden="true"
+          />
+          <RefreshCw
+            v-else
+            :size="14"
+            aria-hidden="true"
+          />
+          <span>{{ isLoadingRepos ? "Refreshing…" : "Refresh" }}</span>
+        </button>
       </div>
 
-      <button
-        type="button"
-        :class="buttonSecondaryClass"
-        :disabled="isDisconnecting"
-        @click="handleDisconnectGitHub"
-      >
-        <LoaderCircle
-          v-if="isDisconnecting"
-          :size="16"
-          class="animate-spin"
-          aria-hidden="true"
-        />
-        <Unplug
-          v-else
-          :size="16"
-          aria-hidden="true"
-        />
-        <span>{{ isDisconnecting ? "Disconnecting…" : "Disconnect" }}</span>
-      </button>
+      <div class="github-settings__row">
+        <div class="github-settings__copy">
+          <p class="github-settings__title">
+            Disconnect
+          </p>
+          <p class="github-settings__hint">
+            Forgets the token. Sessions keep their links, but they stop updating.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          :class="buttonDangerClass"
+          :disabled="isDisconnecting"
+          @click="handleDisconnectGitHub"
+        >
+          <LoaderCircle
+            v-if="isDisconnecting"
+            :size="14"
+            class="animate-spin"
+            aria-hidden="true"
+          />
+          <Unplug
+            v-else
+            :size="14"
+            aria-hidden="true"
+          />
+          <span>{{ isDisconnecting ? "Disconnecting…" : "Disconnect" }}</span>
+        </button>
+      </div>
     </div>
 
     <div
@@ -453,3 +463,63 @@ async function handleRefreshRepos(): Promise<void> {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Settings rows: what it is on the left, the action on the right, divided by the theme's border. */
+.github-settings__rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.github-settings__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+}
+
+.github-settings__row:first-child {
+  padding-top: 0;
+}
+
+.github-settings__row:last-child {
+  padding-bottom: 0;
+}
+
+.github-settings__row + .github-settings__row {
+  border-top: 1px solid var(--border);
+}
+
+.github-settings__ok {
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 1px;
+  color: var(--running);
+}
+
+.github-settings__copy {
+  flex: 1;
+  min-width: 220px;
+}
+
+.github-settings__title {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.github-settings__hint {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.github-settings__error {
+  margin: 4px 0 0;
+  color: var(--error);
+  font-size: 12px;
+}
+</style>
