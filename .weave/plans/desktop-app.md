@@ -67,6 +67,27 @@ All in the server. Worth having even if the app never ships.
 - `window.fleetDesktop` bridge (version, update state, open logs) replacing the Tauri helpers.
 - Dev loop against a scratch `HOME` only.
 
+### Phase 1 as built (2026-09-14)
+
+- **No login token.** Fleet signs in every loopback request in local mode (`BearerTokenHandler`), the window's
+  and the main process's alike, so the app passes none and the instance file carries none.
+- **A stable port.** The app's own Fleet prefers the port it used last time (5000 the first time), so the UI's
+  local storage (theme, drafts, remembered choices), which is per origin, survives restarts.
+- **Closing.** macOS: the window hides and the app stays in the Dock. Windows and Linux: with sessions working in
+  the app's own Fleet (`GET /api/desktop/status`, from the activity tracker, counting `busy` and `retry`), the
+  window hides to the tray with a notification; otherwise the app quits. Quitting with sessions working asks
+  first. Opening the app again shows a hidden window. A connected-to Fleet is never stopped.
+- **Crashes.** A crashed Fleet restarts on the same port (immediately, then 1 s, 2 s, 4 s; it gives up after five
+  crashes in a minute and shows the error page). If the app dies, Fleet sees its stdin close and stops.
+- **Right-click menu** with spelling suggestions, cut/copy/paste and link actions: Electron has none by default.
+- **Not done yet:** client code using `window.fleetDesktop` (it arrives with updates in Phase 3), an app ID for
+  Windows notifications (Phase 2, with electron-builder's `appId`), and a real icon (the one in `static/` is cut
+  from the Weave logo). Only Linux has been run; macOS and Windows need a run on those machines.
+- **Checked live** under `xvfb` with Playwright driving the real app and a scratch `HOME` (27 checks: splash, own
+  Fleet in desktop mode on `~/.weave`, login-shell PATH reaches Fleet and `ELECTRON_*` doesn't, links to the
+  browser, quit stops Fleet, crash restart on the same port, app crash stops Fleet, attach without starting a
+  second Fleet, error page, tray on close with sessions working, quit confirmation).
+
 ## Phase 2: packaging and CI
 
 electron-builder with the AOT publish output as `extraResources`; `.dmg` + `.zip`, NSIS x64 and

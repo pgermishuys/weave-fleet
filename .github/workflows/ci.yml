@@ -127,6 +127,36 @@ jobs:
           path: client/test-results/**/*.xml
           reporter: java-junit
 
+  # ── Desktop app ──────────────────────────────────────────────────────────
+  desktop:
+    name: Desktop
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+        working-directory: desktop
+        env:
+          # Type checks and unit tests don't run Electron.
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+
+      - name: Type check
+        run: bun run typecheck
+        working-directory: desktop
+
+      - name: Unit tests
+        run: bunx vitest run
+        working-directory: desktop
+
   # ── Playwright E2E ───────────────────────────────────────────────────────
   # Builds and tests in one job so the E2E project's packages come from its own
   # restore, not from a NuGet cache another job saved.

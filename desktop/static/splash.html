@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Fleet</title>
+<style>
+  :root { --bg: #F3F2EF; --text: #1A1918; --muted: #6E6A65; --accent: #5B6EC7; --track: rgba(26, 25, 24, 0.09); color-scheme: light dark; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0d0d10; --text: #e8e8ec; --muted: #8e8e9a; --accent: #6366f1; --track: rgba(255, 255, 255, 0.075); } }
+  html, body { height: 100%; margin: 0; }
+  body { display: grid; place-items: center; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-user-select: none; user-select: none; }
+  main { display: grid; justify-items: center; gap: 18px; }
+  img { width: 72px; height: 72px; }
+  p { margin: 0; color: var(--muted); }
+  .bar { width: 160px; height: 3px; border-radius: 3px; background: var(--track); overflow: hidden; }
+  .bar::after { content: ""; display: block; width: 40%; height: 100%; border-radius: 3px; background: var(--accent); animation: slide 1.2s ease-in-out infinite; }
+  @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+  @media (prefers-reduced-motion: reduce) { .bar::after { animation: none; width: 100%; opacity: .5; } }
+</style>
+</head>
+<body>
+<main>
+  <img src="icon.png" alt="">
+  <div class="bar" role="progressbar" aria-label="Starting Fleet"></div>
+  <p id="status">Starting Fleet…</p>
+</main>
+<script>
+  const status = new URLSearchParams(location.search).get("status");
+  if (status) document.getElementById("status").textContent = status;
+</script>
+</body>
+</html>

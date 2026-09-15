@@ -100,6 +100,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(OpenCodePoolHealthStatus))]
 [JsonSerializable(typeof(OpenCodePoolInstanceHealth))]
 [JsonSerializable(typeof(UpdateStatusResponse))]
+[JsonSerializable(typeof(DesktopStatusResponse))]
 [JsonSerializable(typeof(RepositoriesListResponse))]
 [JsonSerializable(typeof(RepositoryListItem))]
 [JsonSerializable(typeof(RepositoryInfoResponse))]

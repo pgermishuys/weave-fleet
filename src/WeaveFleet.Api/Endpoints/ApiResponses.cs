@@ -28,6 +28,11 @@ public sealed record UpdateStatusResponse(
     long? DownloadBytesReceived = null,
     long? DownloadBytesTotal = null);
 
+// ── Desktop ─────────────────────────────────────────────────────────────────
+
+/// <summary>What the desktop app needs to know before it closes: how many of your sessions are working.</summary>
+public sealed record DesktopStatusResponse(int WorkingSessions);
+
 // ── Repositories ────────────────────────────────────────────────────────────
 
 public sealed record RepositoriesListResponse(
