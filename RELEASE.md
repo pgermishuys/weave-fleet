@@ -189,7 +189,7 @@ curl -fsSL https://github.com/pgermishuys/fleet-releases/releases/latest/downloa
 export PATH="$HOME/.weave/fleet/bin:$PATH"
 fleet version
 fleet
-curl -fsS http://127.0.0.1:5000/healthz
+curl -fsS http://127.0.0.1:6262/healthz
 ```
 
 ### Windows PowerShell
@@ -198,7 +198,7 @@ curl -fsS http://127.0.0.1:5000/healthz
 irm https://github.com/pgermishuys/fleet-releases/releases/latest/download/install.ps1 | iex
 fleet version
 fleet
-Invoke-WebRequest -UseBasicParsing http://127.0.0.1:5000/healthz
+Invoke-WebRequest -UseBasicParsing http://127.0.0.1:6262/healthz
 ```
 
 ## Vanity URL status

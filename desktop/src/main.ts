@@ -11,7 +11,7 @@ import { installLoginShellEnv } from "./shell-env";
 import { updateMode, Updates, type UpdateState } from "./updates";
 
 const STATIC_DIR = path.join(__dirname, "..", "static");
-const DEFAULT_PORT = 5000;
+const DEFAULT_PORT = 6262;
 
 const paths = resolvePaths({
   env: process.env,

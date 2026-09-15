@@ -27,12 +27,12 @@ fleet
 
 Default URL:
 
-- `http://127.0.0.1:5000`
+- `http://127.0.0.1:6262`
 
 Health check:
 
 ```bash
-curl -fsS http://127.0.0.1:5000/healthz
+curl -fsS http://127.0.0.1:6262/healthz
 ```
 
 ### From another device

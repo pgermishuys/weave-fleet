@@ -151,7 +151,7 @@ echo   --data-dir ^<path^>   Override the data directory (default: %%USERPROFILE
 echo   --profile ^<name^>    Use a profile-specific data directory
 echo.
 echo Environment variables:
-echo   WEAVE_FLEET_PORT                Server port ^(default: 5000^)
+echo   WEAVE_FLEET_PORT                Server port ^(default: 6262^)
 echo   WEAVE_FLEET_HOST                Bind host ^(default: 127.0.0.1^)
 echo   WEAVE_FLEET_DATA_DIR            Data directory ^(default: %%USERPROFILE%%\.weave^)
 echo   Fleet__DatabasePath             SQLite database path override
@@ -319,7 +319,7 @@ call :read_version
 if defined PORT_OVERRIDE (
     set "WEAVE_FLEET_PORT=%PORT_OVERRIDE%"
 ) else if not defined WEAVE_FLEET_PORT (
-    set "WEAVE_FLEET_PORT=5000"
+    set "WEAVE_FLEET_PORT=6262"
 )
 if defined HOST_OVERRIDE (
     set "WEAVE_FLEET_HOST=%HOST_OVERRIDE%"

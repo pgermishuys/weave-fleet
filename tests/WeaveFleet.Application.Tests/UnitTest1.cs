@@ -8,7 +8,7 @@ public sealed class FleetOptionsTests
     public void default_options_have_expected_values()
     {
         var options = new FleetOptions();
-        options.Port.ShouldBe(3000);
+        options.Port.ShouldBe(6262);
         options.Host.ShouldBe("127.0.0.1");
         options.Debug.ShouldBeFalse();
         options.Harness.PooledOpenCodeHarness.ShouldBeTrue();
