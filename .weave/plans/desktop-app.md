@@ -94,6 +94,23 @@ electron-builder with the AOT publish output as `extraResources`; `.dmg` + `.zip
 arm64, AppImage + `.deb`; a packaging job per platform in `release.yml` uploading next to
 today's archives; a headless smoke test (xvfb, scratch `HOME`, `/readyz`, quit, lock released).
 
+### Phase 2 as built (2026-09-15)
+
+- **Name and ID:** "Fleet", `com.pgermishuys.fleet` (user's choice). Linux executable `fleet-desktop`, so it never
+  shadows the `fleet` CLI.
+- **`desktop/electron-builder.config.js`**: the AOT publish (`FLEET_SERVER_DIR`) ships under `resources/fleet`, outside
+  the asar. macOS `.dmg` + `.zip`, ad-hoc signed (`identity: "-"`) with hardened runtime off until a Developer ID
+  exists; Windows NSIS x64 and arm64; Linux AppImage + `.deb`. electron-builder 26 handles the Linux sandbox: the
+  AppImage launcher adds `--no-sandbox` only when the sandbox can't work, and the `.deb` installs an AppArmor
+  profile for Ubuntu 24 and later.
+- **`.github/workflows/desktop-packages.yml`**: per platform, AOT-publishes the server, packages, smoke-tests the
+  packaged app (`desktop/scripts/smoke.mjs`: start on a scratch data directory, its Fleet serves the UI and API, kill
+  the app, Fleet stops and releases the lock), and uploads `release-desktop-<rid>`. Runs on PRs touching `desktop/`,
+  by hand, and from `release.yml`, whose publish job now needs it and picks the installers up with the archives.
+- **Checked locally on Linux** with a JIT publish: the AppImage and `.deb` build; the smoke test passes on the unpacked
+  app; the AppImage itself runs its bundled Fleet in desktop mode and serves the UI (its launcher added
+  `--no-sandbox` on this Ubuntu 26.04).
+
 ## Phase 3: updates and signing
 
 electron-updater against `fleet-releases` (Linux and Windows unsigned; macOS once signed), a
