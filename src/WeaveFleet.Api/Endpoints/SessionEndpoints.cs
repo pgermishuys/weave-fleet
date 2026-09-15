@@ -318,7 +318,8 @@ public static class SessionEndpoints
         })
         .WithName("GetSessionMessages");
 
-        // GET /api/sessions/{id}/diffs
+        // GET /api/sessions/{id}/diffs — the changed files and their line counts, without contents. A session can
+        // change hundreds of files, and this is fetched again whenever the agent edits one.
         group.MapGet("/{id}/diffs", async (
             string id,
             SessionService sessionService,
@@ -329,41 +330,53 @@ public static class SessionEndpoints
             return await result.Match<Task<IResult>>(
                 async session =>
                 {
-                    if (string.IsNullOrWhiteSpace(session.GitRepoRoot)
-                        || string.IsNullOrWhiteSpace(session.GitBaselineRef))
-                    {
-                        return Results.Ok(new GetSessionDiffsResponse([], Available: false));
-                    }
-
-                    var workspacePrefix = TryComputeWorkspacePrefix(session.GitRepoRoot, session.Directory);
-                    if (workspacePrefix is null)
+                    if (!TryGetDiffScope(session, out var repoRoot, out var baselineRef, out var workspacePrefix))
                         return Results.Ok(new GetSessionDiffsResponse([], Available: false));
 
                     var diffAvailability = await gitDiffService.ComputeDiffsWithAvailabilityAsync(
-                        session.GitRepoRoot,
-                        session.GitBaselineRef,
-                        workspacePrefix,
-                        ct);
-                    if (!diffAvailability.Available || diffAvailability.Diffs.Count == 0)
-                    {
-                        return Results.Ok(new GetSessionDiffsResponse(
-                            [],
-                            diffAvailability.Available));
-                    }
-
-                    var diffs = await gitDiffService.ComputeDiffsWithContentAsync(
-                        session.GitRepoRoot,
-                        session.GitBaselineRef,
+                        repoRoot,
+                        baselineRef,
                         workspacePrefix,
                         ct);
 
                     return Results.Ok(new GetSessionDiffsResponse(
-                        diffs.Select(ToFileDiffSummary).ToList(),
+                        diffAvailability.Diffs.Select(ToFileDiffSummary).ToList(),
                         diffAvailability.Available));
                 },
                 error => Task.FromResult(error.ToSessionApiResult()));
         })
         .WithName("GetSessionDiffs");
+
+        // GET /api/sessions/{id}/diffs/file?path= — one changed file with its baseline and current contents
+        group.MapGet("/{id}/diffs/file", async (
+            string id,
+            [FromQuery] string? path,
+            SessionService sessionService,
+            GitDiffService gitDiffService,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return Results.BadRequest(new { error = "path is required" });
+
+            var result = await sessionService.GetSessionAsync(id);
+            return await result.Match<Task<IResult>>(
+                async session =>
+                {
+                    if (!TryGetDiffScope(session, out var repoRoot, out var baselineRef, out var workspacePrefix))
+                        return Results.NotFound();
+
+                    var diff = await gitDiffService.ComputeFileDiffWithContentAsync(
+                        repoRoot,
+                        baselineRef,
+                        workspacePrefix,
+                        path,
+                        ct);
+
+                    return diff is null ? Results.NotFound() : Results.Ok(ToFileDiffSummary(diff));
+                },
+                error => Task.FromResult(error.ToSessionApiResult()));
+        })
+        .WithName("GetSessionFileDiff");
 
         // GET /api/sessions/{id}/progress — the session's todo list and counts; 204 when there's nothing to show
         group.MapGet("/{id}/progress", async (string id, SessionService sessionService, SessionProgressReader progressReader, CancellationToken ct) =>
@@ -697,6 +710,36 @@ public static class SessionEndpoints
             ? "active"
             : DeriveSessionStatus(session, activityStatus);
     }
+
+    private static bool TryGetDiffScope(
+        Session session,
+        out string repoRoot,
+        out string baselineRef,
+        out string workspacePrefix)
+    {
+        repoRoot = session.GitRepoRoot ?? string.Empty;
+        baselineRef = session.GitBaselineRef ?? string.Empty;
+        workspacePrefix = string.Empty;
+        if (string.IsNullOrWhiteSpace(repoRoot) || string.IsNullOrWhiteSpace(baselineRef))
+            return false;
+
+        var prefix = TryComputeWorkspacePrefix(repoRoot, session.Directory);
+        if (prefix is null)
+            return false;
+
+        workspacePrefix = prefix;
+        return true;
+    }
+
+    private static FileDiffSummary ToFileDiffSummary(WeaveFleet.Application.Services.FileDiffSummary diff) =>
+        new(
+            file: diff.Path,
+            status: diff.Status ?? (diff.IsUntracked ? "added" : "modified"),
+            additions: diff.AddedLines ?? 0,
+            deletions: diff.DeletedLines ?? 0)
+        {
+            IsBinary = diff.IsBinary
+        };
 
     private static FileDiffSummary ToFileDiffSummary(WeaveFleet.Application.Services.FileDiffContent diff) =>
         new(

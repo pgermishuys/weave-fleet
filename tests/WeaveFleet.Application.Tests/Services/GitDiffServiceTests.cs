@@ -327,6 +327,56 @@ public sealed class GitDiffServiceTests
     }
 
     [Fact]
+    public async Task compute_file_diff_with_content_reads_only_the_requested_file()
+    {
+        var tempRoot = CreateTempDirectory();
+        var runner = new RecordingGitRunner(
+            new GitCommandResult(0, "1\t1\ta.cs\n1\t1\tb.cs\n", string.Empty),
+            new GitCommandResult(0, "M\ta.cs\nM\tb.cs\n", string.Empty),
+            new GitCommandResult(0, string.Empty, string.Empty),
+            new GitCommandResult(0, "old b\n", string.Empty));
+        var service = new GitDiffService(runner);
+
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(tempRoot, "b.cs"), "new b\n");
+
+            var result = await service.ComputeFileDiffWithContentAsync(tempRoot, "baseline", string.Empty, "b.cs", CancellationToken.None);
+
+            result.ShouldBe(new FileDiffContent(
+                "b.cs",
+                Before: "old b\n",
+                After: "new b\n",
+                IsBinary: false,
+                IsTruncated: false,
+                Additions: 1,
+                Deletions: 1,
+                Status: "modified"));
+            runner.Calls.Count(call => call.Arguments[0] == "show").ShouldBe(1);
+            runner.Calls.Last().Arguments.ShouldBe(["show", "baseline:b.cs"]);
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task compute_file_diff_with_content_returns_null_for_a_file_that_has_not_changed()
+    {
+        var runner = new RecordingGitRunner(
+            new GitCommandResult(0, "1\t1\ta.cs\n", string.Empty),
+            new GitCommandResult(0, "M\ta.cs\n", string.Empty),
+            new GitCommandResult(0, string.Empty, string.Empty));
+        var service = new GitDiffService(runner);
+
+        var result = await service.ComputeFileDiffWithContentAsync("/repo/root", "baseline", string.Empty, "secrets.txt", CancellationToken.None);
+
+        result.ShouldBeNull();
+        runner.Calls.ShouldNotContain(call => call.Arguments[0] == "show");
+    }
+
+    [Fact]
     public async Task compute_diffs_with_content_sets_binary_before_and_after_empty_with_binary_flag()
     {
         var service = new GitDiffService(new RecordingGitRunner(
