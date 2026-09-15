@@ -97,6 +97,48 @@ public sealed class OpenCodeSessionMessageProxyTests
         fallbackSnapshotBuilder.BuildAsyncCalls.ShouldBeEmpty();
     }
 
+    // A session waiting to retry a model error (e.g. a rate limit) is still working. Reported as idle,
+    // it looked finished when you came back to it, though the agent carried on.
+    [Theory]
+    [InlineData("retry", "retry")]
+    [InlineData("busy", "busy")]
+    [InlineData("idle", "idle")]
+    public async Task GetSnapshotAsync_reports_retry_busy_and_idle_as_tracked(string tracked, string expected)
+    {
+        var sessionRepository = new InMemorySessionRepository();
+        sessionRepository.Seed(new Session
+        {
+            Id = "session-retry",
+            InstanceId = "instance-retry",
+            HarnessType = "opencode",
+            Title = "Rate limited",
+            Status = "active",
+            UserId = "user-1",
+        });
+
+        var instanceTracker = new InstanceTracker();
+        instanceTracker.Register("instance-retry", new FakeHarnessSession("instance-retry")
+        {
+            GetMessagesBehavior = (_, _) => Task.FromResult(new MessagePage([], false)),
+        });
+
+        var activityTracker = new SessionActivityTracker();
+        activityTracker.Update("session-retry", tracked, "user-1", retryAttempt: 2);
+
+        var proxy = new OpenCodeSessionMessageProxy(
+            sessionRepository,
+            instanceTracker,
+            activityTracker,
+            new InMemoryDelegationRepository(),
+            new FakeSessionSnapshotBuilder(),
+            CreateServiceProvider(new FakeSessionActivator()),
+            NullLogger<OpenCodeSessionMessageProxy>.Instance);
+
+        var snapshot = await proxy.GetSnapshotAsync("session-retry");
+
+        snapshot.ActivityStatus.ShouldBe(expected);
+    }
+
     [Fact]
     public async Task GetSnapshotAsync_falls_back_to_persisted_when_harness_unavailable()
     {

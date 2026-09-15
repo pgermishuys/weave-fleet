@@ -130,13 +130,20 @@ public sealed class SessionActivityTracker
             foreach (var childId in children.Keys)
             {
                 var child = Get(childId);
-                if (child?.ActivityStatus == "busy")
+                if (IsWorking(child?.ActivityStatus))
                     return "busy";
             }
         }
 
         return own?.ActivityStatus;
     }
+
+    /// <summary>
+    /// True while a session is in a turn: busy, or waiting to retry after a model error (e.g. a rate
+    /// limit). A retrying session hasn't finished, so it must never read as idle.
+    /// </summary>
+    public static bool IsWorking(string? activityStatus)
+        => activityStatus is "busy" or "retry";
 
     /// <summary>
     /// Returns a snapshot of all currently tracked session activity states.

@@ -26,7 +26,8 @@ public sealed class SessionCapabilitiesResolver(InstanceTracker instanceTracker,
         var effectiveLifecycleStatus = GetEffectiveLifecycleStatus(lifecycleStatus, isLive);
         var isArchived = string.Equals(normalizedRetentionStatus, "archived", StringComparison.Ordinal);
         var isRunning = string.Equals(effectiveLifecycleStatus, "running", StringComparison.Ordinal);
-        var isBusy = string.Equals(activityStatus, "busy", StringComparison.Ordinal);
+        // A retrying session is still in its turn, so it can be stopped.
+        var isBusy = SessionActivityTracker.IsWorking(activityStatus);
         // A session that isn't running wakes on its next prompt.
         var canPrompt = !isArchived && (isRunning || IsPromptableTerminal(effectiveLifecycleStatus));
         var canRestart = !isArchived;

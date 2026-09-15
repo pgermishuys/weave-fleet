@@ -167,6 +167,8 @@ function normalizeActivityStatus(value: string | null | undefined): SessionActiv
       return "busy";
     case "delegating":
       return "delegating";
+    case "retry":
+      return "retry";
     case "waiting_input":
       return "waiting_input";
     case "idle":
@@ -176,8 +178,9 @@ function normalizeActivityStatus(value: string | null | undefined): SessionActiv
   }
 }
 
-function isActiveActivityStatus(value: string | null | undefined): value is "busy" | "delegating" {
-  return value === "busy" || value === "delegating";
+// A retrying session is waiting out a model error mid-turn: still working, never idle.
+function isActiveActivityStatus(value: string | null | undefined): value is "busy" | "delegating" | "retry" {
+  return value === "busy" || value === "delegating" || value === "retry";
 }
 
 function isDiffStalingStatus(
@@ -521,8 +524,8 @@ const SessionDetailPage = defineComponent({
       ) ?? "idle";
     });
 
-    // normalizeActivityStatus has no "retry", so a retrying session reads as idle
-    // above. The header names the retry, so it gets the raw value.
+    // A retrying session counts as busy above. The header names the retry, so it
+    // gets the raw value.
     const headerActivityStatus = computed(() =>
       selectedSession.value?.activityStatus === "retry" ? "retry" : effectiveActivityStatus.value,
     );

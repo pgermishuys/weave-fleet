@@ -22,6 +22,7 @@ public sealed class SessionSnapshotBuilder(
 {
     private const string IdleStatus = "idle";
     private const string BusyStatus = "busy";
+    private const string RetryStatus = "retry";
 
     /// <inheritdoc />
     public async Task<SessionSnapshot> BuildAsync(string sessionId, int pageSize = 100, string? cursor = null)
@@ -340,11 +341,14 @@ public sealed class SessionSnapshotBuilder(
             : Math.Max(current.Value, candidate.Value);
     }
 
+    // A retrying session is still working; reporting it as idle made it look done on reopen.
     private static string NormalizeActivityStatus(string? activityStatus)
         => string.Equals(activityStatus, BusyStatus, StringComparison.OrdinalIgnoreCase)
             || string.Equals(activityStatus, "working", StringComparison.OrdinalIgnoreCase)
                 ? BusyStatus
-                : IdleStatus;
+                : string.Equals(activityStatus, RetryStatus, StringComparison.OrdinalIgnoreCase)
+                    ? RetryStatus
+                    : IdleStatus;
 
     private static string EncodeCursor(string messageId)
     {

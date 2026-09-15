@@ -57,7 +57,7 @@ afterEach(() => {
   mockApi.POST.mockReset()
   vi.restoreAllMocks()
 })
-import { applyDomainEvent, createSessionStreamState, type SessionStreamState } from "@/lib/domain-event-reducer"
+import { applyDomainEvent, createSessionStreamState, isStreamWorking, type SessionStreamState } from "@/lib/domain-event-reducer"
 import type { DomainEvent, MessageLifecyclePayload } from "@/lib/domain-events"
 import type { SessionSnapshot, SessionSnapshotDelegation } from "@/lib/session-snapshot"
 
@@ -675,6 +675,22 @@ describe("domain-event-reducer", () => {
 
     expect(state.explicitStatus).toBe("idle")
     expect(state.sessionStatus).toBe("delegating")
+  })
+
+  // Coming back to a session that's retrying a model error (e.g. a rate limit): it's still
+  // working, so the conversation must not look finished.
+  it("hydrates a retrying snapshot as working", () => {
+    const state = createSessionStreamState(createSnapshot({ activityStatus: "retry" }))
+
+    expect(state.sessionStatus).toBe("retry")
+    expect(isStreamWorking(state.sessionStatus)).toBe(true)
+  })
+
+  it("shows work for every status but idle", () => {
+    expect(isStreamWorking("busy")).toBe(true)
+    expect(isStreamWorking("delegating")).toBe(true)
+    expect(isStreamWorking("retry")).toBe(true)
+    expect(isStreamWorking("idle")).toBe(false)
   })
 
   it("hydrates as delegating from busy snapshots with active delegations", () => {

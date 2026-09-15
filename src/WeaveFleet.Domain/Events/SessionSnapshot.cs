@@ -22,7 +22,7 @@ public sealed record SessionSnapshot
 
     /// <summary>
     /// Gets the effective current activity status for the session.
-    /// Expected values are <c>"idle"</c> and <c>"busy"</c>.
+    /// Expected values are <c>"idle"</c>, <c>"busy"</c> and <c>"retry"</c> (still working, waiting to retry a model error).
     /// </summary>
     public required string ActivityStatus { get; init; }
 
