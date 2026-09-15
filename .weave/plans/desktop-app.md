@@ -71,7 +71,7 @@ All in the server. Worth having even if the app never ships.
 
 - **No login token.** Fleet signs in every loopback request in local mode (`BearerTokenHandler`), the window's
   and the main process's alike, so the app passes none and the instance file carries none.
-- **A stable port.** The app's own Fleet prefers the port it used last time (5000 the first time), so the UI's
+- **A stable port.** The app's own Fleet prefers the port it used last time (6262 the first time), so the UI's
   local storage (theme, drafts, remembered choices), which is per origin, survives restarts.
 - **Closing.** macOS: the window hides and the app stays in the Dock. Windows and Linux: with sessions working in
   the app's own Fleet (`GET /api/desktop/status`, from the activity tracker, counting `busy` and `retry`), the

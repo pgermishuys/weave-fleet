@@ -8,8 +8,8 @@ public sealed class FleetOptions
 {
     public const string SectionName = "Fleet";
 
-    /// <summary>TCP port the Kestrel server listens on. Default: 3000.</summary>
-    public int Port { get; set; } = 3000;
+    /// <summary>TCP port the Kestrel server listens on. Default: 6262.</summary>
+    public int Port { get; set; } = 6262;
 
     /// <summary>Host/IP address Kestrel binds to. Default: 127.0.0.1.</summary>
     public string Host { get; set; } = "127.0.0.1";

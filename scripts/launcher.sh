@@ -181,7 +181,7 @@ echo "  --data-dir <path>   Override the data directory (default: ~/.weave)"
 echo "  --profile <name>    Use a profile-specific data directory"
   echo ""
 echo "Environment variables:"
-echo "  WEAVE_FLEET_PORT                Server port (default: 5000)"
+echo "  WEAVE_FLEET_PORT                Server port (default: 6262)"
 echo "  WEAVE_FLEET_HOST                Bind host (default: 127.0.0.1)"
 echo "  WEAVE_FLEET_DATA_DIR            Data directory (default: ~/.weave)"
 echo "  Fleet__DatabasePath             SQLite database path override"
@@ -340,7 +340,7 @@ if [ -n "$PROFILE_NAME" ]; then
 fi
 
 VERSION="$(read_version)"
-PORT="${PORT_OVERRIDE:-${WEAVE_FLEET_PORT:-5000}}"
+PORT="${PORT_OVERRIDE:-${WEAVE_FLEET_PORT:-6262}}"
 HOST="${HOST_OVERRIDE:-${WEAVE_FLEET_HOST:-127.0.0.1}}"
 LISTEN_URL="http://${HOST}:${PORT}"
 DATA_DIR="${DATA_DIR_OVERRIDE:-${WEAVE_FLEET_DATA_DIR:-${HOME}/.weave}}"
