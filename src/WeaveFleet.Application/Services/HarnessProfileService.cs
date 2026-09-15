@@ -135,7 +135,7 @@ public sealed class HarnessProfileService(
     {
         if (RequireSupport(harnessType) is { } unsupported)
             return unsupported;
-        if (Validate("check", content) is { } invalid)
+        if (ValidateContent(content) is { } invalid)
             return invalid;
         return await RunCheckAsync(harnessType, content!, ct).ConfigureAwait(false);
     }
@@ -160,6 +160,11 @@ public sealed class HarnessProfileService(
             return FleetError.ValidationError("Profile.Name", "Give the profile a name.");
         if (name.Trim().Length > MaxNameLength)
             return FleetError.ValidationError("Profile.Name", $"Keep the name to {MaxNameLength} characters.");
+        return ValidateContent(content);
+    }
+
+    private static FleetError? ValidateContent(string? content)
+    {
         if (string.IsNullOrWhiteSpace(content))
             return FleetError.ValidationError("Profile.Content", "The profile is empty. Add the config it should use.");
         if (content.Length > MaxContentLength)
