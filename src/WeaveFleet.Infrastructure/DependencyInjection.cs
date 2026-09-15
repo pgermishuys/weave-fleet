@@ -129,6 +129,7 @@ public static class DependencyInjection
         services.AddScoped<ISessionSourceUsageRepository, SessionSourceUsageRepository>();
         services.AddScoped<IInstanceRepository, InstanceRepository>();
         services.AddScoped<ISessionRepository, SessionRepository>();
+        services.AddScoped<IHarnessProfileRepository, HarnessProfileRepository>();
         services.AddScoped<ISessionCallbackRepository, SessionCallbackRepository>();
         services.AddScoped<IDelegationRepository, DelegationRepository>();
         services.AddScoped<IWorkspaceRootRepository, WorkspaceRootRepository>();
@@ -162,6 +163,7 @@ public static class DependencyInjection
         services.AddScoped<SessionSourceResolutionService>();
         services.AddScoped<GitDiffService>();
         services.AddScoped<SessionOrchestrator>();
+        services.AddScoped<HarnessProfileService>();
         services.AddScoped<ISessionActivator>(sp => sp.GetRequiredService<SessionOrchestrator>());
         services.AddScoped<SessionCallbackService>();
         services.AddScoped<DelegationService>();

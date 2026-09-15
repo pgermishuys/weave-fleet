@@ -9,7 +9,7 @@ import type { SessionOrigin } from "@/api/client";
 import { useHarnesses } from "@/composables/use-harnesses";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSidebarStore } from "@/stores/sidebar";
-import { GitBranch, X, Plus } from "lucide-vue-next";
+import { GitBranch, Layers, X, Plus } from "lucide-vue-next";
 
 interface Props {
   id: string;
@@ -18,6 +18,8 @@ interface Props {
   title?: string | null;
   projectName?: string | null;
   harnessType?: string | null;
+  /** The profile the session started with; it keeps it for as long as it lives. */
+  harnessProfileName?: string | null;
   activityStatus?: string | null;
   lifecycleStatus?: string | null;
   retentionStatus?: string | null;
@@ -296,6 +298,20 @@ onUnmounted(() => {
           >
             {{ harnessLabel }}
           </span>
+          <template v-if="props.harnessProfileName">
+            <span class="session-detail-header__separator">·</span>
+            <span
+              data-testid="session-profile-label"
+              class="session-detail-header__profile"
+              :title="`Started with the ${props.harnessProfileName} profile, which it keeps`"
+            >
+              <Layers
+                :size="11"
+                aria-hidden="true"
+              />
+              {{ props.harnessProfileName }}
+            </span>
+          </template>
           <template v-if="props.branch">
             <span
               v-if="props.projectName || harnessLabel"
@@ -487,6 +503,19 @@ onUnmounted(() => {
   max-width: 14rem;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* The profile reads as a tag on the harness: accent text, findable without competing with the title. */
+.session-detail-header__profile {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  max-width: 12rem;
+  overflow: hidden;
+  color: var(--accent);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .session-detail-header__separator {

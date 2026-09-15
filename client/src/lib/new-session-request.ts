@@ -26,6 +26,8 @@ export interface NewSessionState {
   projectId?: string | null;
   tags?: readonly string[];
   harnessType?: string;
+  /** The profile to start with, or `NO_PROFILE`; absent lets the server use the harness's default. */
+  harnessProfileId?: string;
   gitHubPreset?: GitHubSessionSourcePreset | null;
   /** Branch for a new worktree, instead of the one generated from the message. */
   branch?: string;
@@ -237,6 +239,7 @@ export function buildCreateSessionRequest(state: NewSessionState): BuildNewSessi
       ...(title ? { title } : {}),
       ...(message ? { initialPrompt: message } : {}),
       ...(state.harnessType ? { harnessType: state.harnessType } : {}),
+      ...(state.harnessProfileId ? { harnessProfileId: state.harnessProfileId } : {}),
       ...(state.projectId ? { projectId: state.projectId } : {}),
       ...(tags.length > 0 ? { tags } : {}),
     },

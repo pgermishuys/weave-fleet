@@ -344,6 +344,23 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
             }
         }
 
+        // A profile is an opencode.json layered over the user's own. Its file goes into the environment, so
+        // sessions on different profiles, or on an edited one, land on different pooled processes.
+        if (context.Profile is { } profile)
+        {
+            try
+            {
+                envVars[ProfileEnvironmentVariable] = WriteProfileFile(profile.Content);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                errors.Add(new RuntimePreparationError(
+                    Code: "ProfileNotWritten",
+                    Message: $"Fleet couldn't write the {profile.Name} profile for OpenCode: {ex.Message}",
+                    Guidance: "Check that Fleet can write to its data folder."));
+            }
+        }
+
         if (errors.Count > 0)
             return Task.FromResult<RuntimePreparation>(new RuntimePreparation.NotReady(errors));
 
@@ -968,6 +985,60 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
 
     private string FleetDataDirectory() =>
         Path.GetDirectoryName(Path.GetFullPath(_options.DatabasePath)) ?? Environment.CurrentDirectory;
+
+    internal const string ProfileEnvironmentVariable = "OPENCODE_CONFIG";
+
+    /// <summary>
+    /// Writes a profile's content to a file named by its hash and returns the path. Each version gets its own
+    /// file, so a session that's running keeps the version it started with while new sessions get the edit.
+    /// </summary>
+    internal string WriteProfileFile(string content)
+    {
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content)))[..16].ToLowerInvariant();
+        var directory = Path.Combine(FleetDataDirectory(), "opencode", "profiles");
+        var path = Path.Combine(directory, $"profile-{hash}.json");
+        if (File.Exists(path))
+            return path;
+
+        Directory.CreateDirectory(directory);
+        var temporary = $"{path}.{Guid.NewGuid():N}.tmp";
+        File.WriteAllText(temporary, content);
+        File.Move(temporary, path, overwrite: true);
+        return path;
+    }
+
+    /// <inheritdoc />
+    public async Task<HarnessProfileCheck> CheckProfileAsync(string ownerUserId, string content, CancellationToken ct)
+    {
+        // OpenCode starts, and passes its health check, even when the config is broken: it only reads the config
+        // when a request names a folder. So start the process a session on this profile would use and ask it for
+        // a folder's config. The process stays warm for the idle TTL, ready for that session.
+        var environment = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [ProfileEnvironmentVariable] = WriteProfileFile(content),
+        };
+        var directory = Path.Combine(FleetDataDirectory(), "opencode", "profile-check");
+        Directory.CreateDirectory(directory);
+
+        InstanceLease lease;
+        try
+        {
+            lease = await _pooledInstanceRegistry
+                .AcquireAsync(ownerUserId, CredentialHasher.HashEnvironment(environment), environment, directory, ct)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or TimeoutException or HttpRequestException)
+        {
+            return new HarnessProfileCheck(false, $"OpenCode didn't start with this profile: {ex.Message}");
+        }
+
+        await using (lease.ConfigureAwait(false))
+        {
+            var client = lease.Instance.HttpClient
+                ?? throw new InvalidOperationException("Pooled OpenCode instance does not expose an HTTP client.");
+            return await client.CheckConfigAsync(directory, ct).ConfigureAwait(false);
+        }
+    }
 
     private static IReadOnlyDictionary<string, string> GetEnvironmentVariables(RuntimeLaunchArtifacts? launchArtifacts)
     {

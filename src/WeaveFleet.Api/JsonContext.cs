@@ -344,6 +344,14 @@ internal sealed record ErrorResponse(string Error);
 // Harnesses
 [JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Application.Harnesses.HarnessInfo>))]
 [JsonSerializable(typeof(List<WeaveFleet.Application.Harnesses.HarnessInfo>))]
+// Harness profiles
+[JsonSerializable(typeof(WeaveFleet.Application.Services.HarnessProfileView))]
+[JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Application.Services.HarnessProfileView>))]
+[JsonSerializable(typeof(List<WeaveFleet.Application.Services.HarnessProfileView>))]
+[JsonSerializable(typeof(WeaveFleet.Application.Harnesses.HarnessProfileCheck))]
+[JsonSerializable(typeof(WeaveFleet.Api.Endpoints.SaveHarnessProfileRequest))]
+[JsonSerializable(typeof(WeaveFleet.Api.Endpoints.SetDefaultHarnessProfileRequest))]
+[JsonSerializable(typeof(WeaveFleet.Api.Endpoints.CheckHarnessProfileRequest))]
 // Plugins
 [JsonSerializable(typeof(PluginListResponse))]
 [JsonSerializable(typeof(PluginDescriptorItem))]

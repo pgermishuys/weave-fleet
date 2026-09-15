@@ -93,7 +93,8 @@ public static class SessionEndpoints
             IProjectRepository projectRepository,
             ISessionSourceUsageRepository sessionSourceUsageRepository,
             SessionActivityTracker activityTracker,
-            SessionCapabilitiesResolver capabilitiesResolver) =>
+            SessionCapabilitiesResolver capabilitiesResolver,
+            IHarnessProfileRepository harnessProfiles) =>
         {
             var result = await sessionService.GetSessionAsync(id);
             return await result.Match<Task<IResult>>(
@@ -101,6 +102,7 @@ public static class SessionEndpoints
                 {
                     var workspace = await workspaceRepository.GetByIdAsync(session.WorkspaceId);
                     var project = session.ProjectId is not null ? await projectRepository.GetByIdAsync(session.ProjectId) : null;
+                    var profile = session.HarnessProfileId is not null ? await harnessProfiles.GetByIdAsync(session.HarnessProfileId) : null;
                     var primaryOrigin = await sessionSourceUsageRepository.GetPrimaryBySessionIdAsync(session.Id);
                     var activityStatus = activityTracker.GetEffectiveActivityStatus(session.Id) ?? "idle";
 
@@ -127,7 +129,9 @@ public static class SessionEndpoints
                         ProjectId: session.ProjectId,
                         ProjectName: project?.Name,
                         Origin: primaryOrigin is not null ? ToOriginDto(primaryOrigin) : null,
-                        Capabilities: capabilitiesResolver.Resolve(session)));
+                        Capabilities: capabilitiesResolver.Resolve(session),
+                        HarnessProfileId: session.HarnessProfileId,
+                        HarnessProfileName: profile?.Name));
                 },
                 error => Task.FromResult(error.ToSessionApiResult()));
         })
@@ -182,6 +186,7 @@ public static class SessionEndpoints
                 IsolationStrategy = req.IsolationStrategy,
                 Branch = req.Branch,
                 HarnessType = req.HarnessType,
+                HarnessProfileId = req.HarnessProfileId,
                 InitialPrompt = req.InitialPrompt,
                 Source = req.Source,
                 OnCompleteTargetSessionId = req.OnComplete?.NotifySessionId,
@@ -856,7 +861,8 @@ internal sealed record CreateSessionApiRequest(
     SessionSourceSelection? Source,
     OnCompleteInfo? OnComplete,
     string? ProjectId,
-    List<string>? Tags);
+    List<string>? Tags,
+    string? HarnessProfileId = null);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record OnCompleteInfo(string NotifySessionId, string NotifyInstanceId);

@@ -1157,6 +1157,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/desktop/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetDesktopStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetSessionEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/activity-stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetActivityStream"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/session-sources/catalog": {
         parameters: {
             query?: never;
@@ -1573,6 +1621,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/harnesses/{harnessType}/profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListHarnessProfiles"];
+        put?: never;
+        post: operations["CreateHarnessProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/harnesses/{harnessType}/profiles/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["UpdateHarnessProfile"];
+        post?: never;
+        delete: operations["DeleteHarnessProfile"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/harnesses/{harnessType}/profiles/default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["SetDefaultHarnessProfile"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/harnesses/{harnessType}/profiles/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CheckHarnessProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workspace-roots": {
         parameters: {
             query?: never;
@@ -1635,38 +1747,6 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["RenameWorkspace"];
-        trace?: never;
-    };
-    "/api/sessions/{id}/events": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["GetSessionEvents"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/activity-stream": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["GetActivityStream"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/api/analytics/summary": {
@@ -2090,6 +2170,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/automations/{id}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number | string;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/automations/{id}/enable": {
         parameters: {
             query?: never;
@@ -2189,6 +2306,41 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/automations/draft-from-session/{sessionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    sessionId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2584,6 +2736,9 @@ export interface components {
             /** Format: date-time */
             updatedAt: null | string;
         };
+        CheckHarnessProfileRequest: {
+            content: null | string;
+        };
         ClientConfigResponse: {
             cloudMode: boolean;
             authEnabled: boolean;
@@ -2617,6 +2772,8 @@ export interface components {
             targetTags?: null | string[];
             targetType?: null | string;
             timeZone?: null | string;
+            isolation?: null | string;
+            baseBranch?: null | string;
         };
         CreateBoardCardRequest: {
             laneId: string;
@@ -2651,6 +2808,7 @@ export interface components {
             onComplete: null | components["schemas"]["OnCompleteInfo"];
             projectId: null | string;
             tags: null | string[];
+            harnessProfileId?: null | string;
         };
         CreateTerminalRequest: {
             /** Format: int32 */
@@ -2864,6 +3022,10 @@ export interface components {
             /** Format: int32 */
             position: number | string;
         };
+        SaveHarnessProfileRequest: {
+            name: null | string;
+            content: null | string;
+        };
         SendCommandApiRequest: {
             command: string;
             arguments: null | string;
@@ -2993,6 +3155,9 @@ export interface components {
             created: number | string;
             /** Format: int64 */
             updated: number | string;
+        };
+        SetDefaultHarnessProfileRequest: {
+            profileId: null | string;
         };
         SetPreferenceRequest: {
             value: string;
@@ -3205,6 +3370,8 @@ export interface components {
             targetTags?: null | string[];
             targetType?: null | string;
             timeZone?: null | string;
+            isolation?: null | string;
+            baseBranch?: null | string;
         };
         UpdateBoardCardRequest: {
             title: null | string;
@@ -5678,6 +5845,62 @@ export interface operations {
             };
         };
     };
+    GetDesktopStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetSessionEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetActivityStream: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     GetSessionSourceCatalog: {
         parameters: {
             query?: never;
@@ -6427,6 +6650,144 @@ export interface operations {
             };
         };
     };
+    ListHarnessProfiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                harnessType: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CreateHarnessProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                harnessType: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveHarnessProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    UpdateHarnessProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                harnessType: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveHarnessProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DeleteHarnessProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                harnessType: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    SetDefaultHarnessProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                harnessType: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetDefaultHarnessProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CheckHarnessProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                harnessType: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckHarnessProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     GetWorkspaceRoots: {
         parameters: {
             query?: never;
@@ -6539,44 +6900,6 @@ export interface operations {
                 "application/json": components["schemas"]["RenameWorkspaceRequest"];
             };
         };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    GetSessionEvents: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    GetActivityStream: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
         responses: {
             /** @description OK */
             200: {

@@ -11,6 +11,7 @@ import BasePicker from "@/components/sessions/new-session/BasePicker.vue";
 import FolderPicker from "@/components/sessions/new-session/FolderPicker.vue";
 import HarnessPicker from "@/components/sessions/new-session/HarnessPicker.vue";
 import MoreOptions from "@/components/sessions/new-session/MoreOptions.vue";
+import ProfilePicker from "@/components/sessions/new-session/ProfilePicker.vue";
 import WorkspacePicker from "@/components/sessions/new-session/WorkspacePicker.vue";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { useIsMobile } from "@/composables/use-media-query";
@@ -29,7 +30,9 @@ import {
   resolveNewWorktreeBranch,
   type NewSessionFolder,
 } from "@/lib/new-session-request";
+import { NO_PROFILE } from "@/api/client";
 import { useAppShellStore } from "@/stores/app-shell";
+import { useHarnessProfilesStore } from "@/stores/harness-profiles";
 import { useSessionsStore } from "@/stores/sessions";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 
@@ -63,6 +66,7 @@ const { draft, restored } = workspaceUiStore.openNewSessionDraft({
   tags: "",
   projectId: null,
   harnessType: defaultHarnessType.value,
+  harnessProfileId: null,
   gitHubPreset: null,
 });
 const {
@@ -76,6 +80,7 @@ const {
   tags,
   projectId,
   harnessType,
+  harnessProfileId,
   gitHubPreset,
   hasChosenFolder,
 } = toRefs(draft);
@@ -168,6 +173,35 @@ const resolvedHarnessType = computed(() => {
   }
   return enabledHarnesses.value[0]?.type ?? defaultHarnessType.value;
 });
+
+// Profiles: harness config the person keeps in Fleet. The chip shows only when the harness has them and
+// there's one to pick; with none, the box looks as it always did.
+const harnessProfiles = useHarnessProfilesStore();
+const supportsProfiles = computed(() =>
+  enabledHarnesses.value.find((harness) => harness.type === resolvedHarnessType.value)?.capabilities?.supportsProfiles === true,
+);
+const profiles = computed(() => (supportsProfiles.value ? harnessProfiles.profilesFor(resolvedHarnessType.value) : []));
+const showProfilePicker = computed(() => profiles.value.length > 0);
+/** The picked profile, else the default, else none. A picked profile that's since been deleted falls back too. */
+const selectedProfileId = computed<string>({
+  get: () => {
+    const picked = harnessProfileId.value;
+    if (picked === NO_PROFILE || profiles.value.some((profile) => profile.id === picked)) {
+      return picked as string;
+    }
+    return harnessProfiles.defaultFor(resolvedHarnessType.value)?.id ?? NO_PROFILE;
+  },
+  set: (id) => {
+    harnessProfileId.value = id;
+  },
+});
+watch(
+  [resolvedHarnessType, supportsProfiles],
+  ([type, supported]) => {
+    if (supported) void harnessProfiles.load(type);
+  },
+  { immediate: true },
+);
 
 function focusMessage(): void {
   textareaRef.value?.focus({ preventScroll: true });
@@ -265,6 +299,7 @@ async function submit(withoutMessage: boolean): Promise<void> {
     projectId: projectId.value,
     tags: tags.value.split(","),
     harnessType: resolvedHarnessType.value || undefined,
+    harnessProfileId: showProfilePicker.value ? selectedProfileId.value : undefined,
     gitHubPreset: gitHubPreset.value,
     branch: branchName.value,
     baseBranch: baseBranch.value,
@@ -497,6 +532,13 @@ onUnmounted(() => {
             v-if="showHarnessPicker"
             v-model="harnessType"
             :harnesses="enabledHarnesses"
+            :disabled="isStarting"
+            @close-auto-focus="returnFocusToMessage"
+          />
+          <ProfilePicker
+            v-if="showProfilePicker"
+            v-model="selectedProfileId"
+            :profiles="profiles"
             :disabled="isStarting"
             @close-auto-focus="returnFocusToMessage"
           />

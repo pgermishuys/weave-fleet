@@ -53,7 +53,8 @@ public sealed partial class SessionOrchestrator(
     ISessionTerminalCleanup? sessionTerminals = null,
     ISessionAppCleanup? sessionApps = null,
     IMessageRepository? messageRepository = null,
-    SessionRecapService? sessionRecaps = null) : ISessionActivator
+    SessionRecapService? sessionRecaps = null,
+    IHarnessProfileRepository? harnessProfiles = null) : ISessionActivator
 {
     private readonly DelegationService _delegationService = delegationService;
     private readonly GitDiffService _gitDiffService = gitDiffService ?? new GitDiffService();
@@ -224,6 +225,11 @@ public sealed partial class SessionOrchestrator(
         if (harnessRuntime is null)
             return FleetError.NotFoundFor("HarnessRuntime", harnessType);
 
+        var profileResult = await ResolveNewSessionProfileAsync(harness, request.HarnessProfileId).ConfigureAwait(false);
+        if (profileResult.IsFailure)
+            return profileResult.Error;
+        var profile = profileResult.Value;
+
         // Prepare runtime: load user credentials and call harness preparation pipeline.
         // The orchestrator passes the opaque credential bag to the harness — it does not
         // inspect, interpret, or filter the credentials itself.
@@ -233,7 +239,8 @@ public sealed partial class SessionOrchestrator(
             UserId = userContext.UserId,
             UserCredentials = userCredentials,
             ModelId = null, // model selection happens inside the session, not at creation time
-            WorkingDirectory = workspaceIntent.Directory
+            WorkingDirectory = workspaceIntent.Directory,
+            Profile = profile
         }, ct);
 
         if (preparation is RuntimePreparation.NotReady notReady)
@@ -336,6 +343,7 @@ public sealed partial class SessionOrchestrator(
             CreatedAt = DateTime.UtcNow.ToString("O"),
             HarnessType = harnessType,
             RuntimeMode = runtimeMode,
+            HarnessProfileId = profile?.Id,
             GitBaselineRef = gitBaseline?.RefName,
             GitRepoRoot = gitBaseline?.RepoRoot,
             UserId = userContext.UserId,
@@ -523,6 +531,8 @@ public sealed partial class SessionOrchestrator(
             Title = title ?? $"Fork of {parent.Title}",
             ProjectId = parent.ProjectId,
             HarnessType = parent.HarnessType,
+            // A fork keeps the parent's profile, including none: without the id it would get the default.
+            HarnessProfileId = parent.HarnessProfileId ?? HarnessProfileService.NoProfile,
             IsolationStrategy = "existing",
             IsInternalRequest = true
         }, ct);
@@ -577,6 +587,29 @@ public sealed partial class SessionOrchestrator(
 
         var childSessionId = Guid.NewGuid().ToString();
         var canonicalParentDirectory = WorkspaceRootService.CanonicalizePath(parent.Directory);
+
+        // The child runs inside the parent's harness process, so it has to attach to the one the parent's
+        // profile started. Without the profile it would bind to a process that doesn't know its model.
+        RuntimeLaunchArtifacts? childLaunchArtifacts = null;
+        if (parent.HarnessProfileId is not null)
+        {
+            var parentProfile = await ResolveSessionProfileAsync(parent.HarnessProfileId).ConfigureAwait(false);
+            if (parentProfile.IsFailure)
+                return parentProfile.Error;
+
+            var parentCredentials = await credentialStore.GetDecryptedCredentialsAsync(parent.UserId).ConfigureAwait(false);
+            var preparation = await delegationRuntime.PrepareRuntimeAsync(new RuntimePreparationContext
+            {
+                UserId = parent.UserId,
+                UserCredentials = parentCredentials,
+                WorkingDirectory = canonicalParentDirectory,
+                Profile = parentProfile.Value
+            }, ct).ConfigureAwait(false);
+            if (preparation is RuntimePreparation.NotReady notReady)
+                return FleetError.ValidationError("Session.NotReady", string.Join(" ", notReady.Errors.Select(e => e.Message)));
+            childLaunchArtifacts = ((RuntimePreparation.Ready)preparation).Artifacts;
+        }
+
         IHarnessSession harnessInstance;
         try
         {
@@ -587,7 +620,8 @@ public sealed partial class SessionOrchestrator(
                 OwnerUserId = parent.UserId,
                 ResumeToken = childHarnessSessionId,
                 ProjectId = parent.ProjectId,
-                ProjectName = await ResolveProjectNameAsync(parent.ProjectId)
+                ProjectName = await ResolveProjectNameAsync(parent.ProjectId),
+                LaunchArtifacts = childLaunchArtifacts
             }, ct);
         }
         catch (Exception ex)
@@ -624,6 +658,7 @@ public sealed partial class SessionOrchestrator(
             LifecycleStatus = "running",
             HarnessType = parent.HarnessType,
             RuntimeMode = parent.RuntimeMode,
+            HarnessProfileId = parent.HarnessProfileId,
             HarnessResumeToken = childHarnessSessionId,
             IsHidden = true,
             UserId = userContext.UserId,
@@ -1692,6 +1727,40 @@ public sealed partial class SessionOrchestrator(
         }
     }
 
+    /// <summary>
+    /// The profile a new session starts with: the one asked for, <see cref="HarnessProfileService.NoProfile"/> for
+    /// none, or the harness's default when nothing was asked for.
+    /// </summary>
+    private async Task<Result<HarnessProfile?>> ResolveNewSessionProfileAsync(IHarness harness, string? requestedId)
+    {
+        if (requestedId == HarnessProfileService.NoProfile)
+            return Result.Success<HarnessProfile?>(null);
+
+        var supported = harnessProfiles is not null && HarnessProfileService.Supports(harness, options);
+        if (requestedId is null)
+            return supported ? Result.Success(await harnessProfiles!.GetDefaultAsync(harness.Type).ConfigureAwait(false)) : Result.Success<HarnessProfile?>(null);
+
+        if (!supported)
+            return FleetError.ValidationError("Session.Profile", $"{harness.DisplayName} sessions can't use profiles.");
+
+        var profile = await harnessProfiles!.GetByIdAsync(requestedId).ConfigureAwait(false);
+        if (profile is null || profile.HarnessType != harness.Type)
+            return FleetError.ValidationError("Session.Profile", $"There's no {harness.DisplayName} profile with id '{requestedId}'.");
+        return profile;
+    }
+
+    /// <summary>The profile an existing session started with, as it is now.</summary>
+    private async Task<Result<HarnessProfile?>> ResolveSessionProfileAsync(string? profileId)
+    {
+        if (profileId is null)
+            return Result.Success<HarnessProfile?>(null);
+
+        var profile = harnessProfiles is null ? null : await harnessProfiles.GetByIdAsync(profileId).ConfigureAwait(false);
+        if (profile is null)
+            return FleetError.ValidationError("Session.Profile", "The profile this session started with has been deleted. Start a new session to go on.");
+        return profile;
+    }
+
     private async Task<Result<IHarnessSession>> ActivateSessionAsync(Session session, CancellationToken ct)
     {
         var workspaceResult = await workspaceService.GetWorkspaceDirectoryAsync(session.WorkspaceId).ConfigureAwait(false);
@@ -1708,13 +1777,22 @@ public sealed partial class SessionOrchestrator(
             return FleetError.NotFoundFor("HarnessRuntime", session.HarnessType);
         }
 
+        // The session wakes with its profile as it is now, so an edited profile reaches it here.
+        var profile = await ResolveSessionProfileAsync(session.HarnessProfileId).ConfigureAwait(false);
+        if (profile.IsFailure)
+        {
+            await MarkAutomaticActivationErrorAsync(session, ct).ConfigureAwait(false);
+            return profile.Error;
+        }
+
         var ownerCredentials = await credentialStore.GetDecryptedCredentialsAsync(session.UserId).ConfigureAwait(false);
         var preparation = await harnessRuntime.PrepareRuntimeAsync(new RuntimePreparationContext
         {
             UserId = session.UserId,
             UserCredentials = ownerCredentials,
             ModelId = null,
-            WorkingDirectory = workspaceResult.Value
+            WorkingDirectory = workspaceResult.Value,
+            Profile = profile.Value
         }, ct).ConfigureAwait(false);
 
         if (preparation is RuntimePreparation.NotReady notReady)
@@ -2047,6 +2125,11 @@ public sealed record CreateSessionRequest
     public string? IsolationStrategy { get; init; }
     public string? Branch { get; init; }
     public string? HarnessType { get; init; }
+    /// <summary>
+    /// The profile to start the session with. Null means the harness's default profile, if it has one;
+    /// <see cref="HarnessProfileService.NoProfile"/> means none.
+    /// </summary>
+    public string? HarnessProfileId { get; init; }
     public string? ProjectId { get; init; }
     public string? InitialPrompt { get; init; }
     public SessionSourceSelection? Source { get; init; }

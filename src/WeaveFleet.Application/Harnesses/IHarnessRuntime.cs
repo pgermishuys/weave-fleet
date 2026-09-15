@@ -39,4 +39,11 @@ public interface IHarnessRuntime
     /// support pooled warmup or warmup was skipped (e.g. pooled mode disabled for the user).
     /// </summary>
     Task<bool> WarmupPooledInstanceAsync(string ownerUserId, CancellationToken ct);
+
+    /// <summary>
+    /// Tries a profile's content the way a session would use it, so a broken profile is caught before it's saved.
+    /// Only harnesses that declare <see cref="HarnessCapabilities.SupportsProfiles"/> are asked.
+    /// </summary>
+    Task<HarnessProfileCheck> CheckProfileAsync(string ownerUserId, string content, CancellationToken ct) =>
+        Task.FromResult(HarnessProfileCheck.Passed);
 }

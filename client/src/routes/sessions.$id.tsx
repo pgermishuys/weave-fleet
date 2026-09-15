@@ -58,6 +58,8 @@ interface SessionDetailResponse {
   capabilities?: SessionActionCapabilities;
   origin?: SessionOrigin | null;
   harnessType?: string | null;
+  /** The profile the session started with, if it has one. */
+  harnessProfileName?: string | null;
   tags?: string[];
 }
 
@@ -128,6 +130,7 @@ function normalizeSessionDetailResponse(payload: unknown): SessionDetailResponse
     capabilities: (value.capabilities ?? value.Capabilities) as SessionActionCapabilities | undefined,
     origin,
     harnessType: getStringField(value, "harnessType", "HarnessType"),
+    harnessProfileName: getStringField(value, "harnessProfileName", "HarnessProfileName"),
     tags: Array.isArray(value.tags ?? value.Tags) ? (value.tags ?? value.Tags) as string[] : undefined,
   };
 }
@@ -704,6 +707,7 @@ const SessionDetailPage = defineComponent({
             title={selectedSession.value?.session.title ?? remoteSession.value?.title}
             projectName={selectedSession.value?.projectName ?? null}
             harnessType={selectedSession.value?.harnessType ?? remoteSession.value?.harnessType ?? null}
+            harnessProfileName={remoteSession.value?.harnessProfileName ?? null}
             directory={selectedSession.value?.workspaceDirectory ?? remoteSession.value?.workspaceDirectory ?? null}
             branch={selectedSession.value?.branch ?? remoteSession.value?.branch ?? null}
             activityStatus={headerActivityStatus.value}

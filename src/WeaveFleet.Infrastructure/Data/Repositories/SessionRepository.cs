@@ -34,12 +34,12 @@ public sealed class SessionRepository(
             INSERT INTO sessions (id, workspace_id, instance_id, project_id, opencode_session_id, title,
                 status, directory, created_at, stopped_at, parent_session_id,
                 lifecycle_status, retention_status, archived_at, is_hidden, total_tokens, total_cost,
-                harness_type, runtime_mode, harness_resume_token, git_baseline_ref, git_repo_root, user_id,
+                harness_type, runtime_mode, harness_profile_id, harness_resume_token, git_baseline_ref, git_repo_root, user_id,
                 source_reference, tags)
             SELECT @Id, @WorkspaceId, @InstanceId, @ProjectId, @OpencodeSessionId, @Title,
                 @Status, @Directory, @CreatedAt, @StoppedAt, @ParentSessionId,
                 @LifecycleStatus, @RetentionStatus, @ArchivedAt, @IsHidden, @TotalTokens, @TotalCost,
-                @HarnessType, @RuntimeMode, @HarnessResumeToken, @GitBaselineRef, @GitRepoRoot, @UserId,
+                @HarnessType, @RuntimeMode, @HarnessProfileId, @HarnessResumeToken, @GitBaselineRef, @GitRepoRoot, @UserId,
                 @SourceReference, @Tags
             FROM workspaces workspace_row
             WHERE workspace_row.id = @WorkspaceId
@@ -74,6 +74,7 @@ public sealed class SessionRepository(
                 cmd.AddParameter("TotalCost", session.TotalCost);
                 cmd.AddParameter("HarnessType", session.HarnessType);
                 cmd.AddParameter("RuntimeMode", session.RuntimeMode);
+                cmd.AddParameter("HarnessProfileId", session.HarnessProfileId);
                 cmd.AddParameter("HarnessResumeToken", session.HarnessResumeToken);
                 cmd.AddParameter("GitBaselineRef", session.GitBaselineRef);
                 cmd.AddParameter("GitRepoRoot", session.GitRepoRoot);
@@ -657,6 +658,7 @@ public sealed class SessionRepository(
             TotalCost = r.GetDouble(r.GetOrdinal("total_cost")),
             HarnessType = r.GetString(r.GetOrdinal("harness_type")),
             RuntimeMode = r.GetString(r.GetOrdinal("runtime_mode")),
+            HarnessProfileId = r.GetNullableString(r.GetOrdinal("harness_profile_id")),
             HarnessResumeToken = r.GetNullableString(r.GetOrdinal("harness_resume_token")),
             GitBaselineRef = r.GetNullableString(r.GetOrdinal("git_baseline_ref")),
             GitRepoRoot = r.GetNullableString(r.GetOrdinal("git_repo_root")),

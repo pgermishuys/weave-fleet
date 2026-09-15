@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode;
@@ -80,6 +81,68 @@ internal sealed class OpenCodeHttpClient
     public async Task<OpenCodeHealthResponse> CheckHealthAsync(CancellationToken ct)
     {
         return await GetAsync("/global/health", OpenCodeJsonContext.Default.OpenCodeHealthResponse, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// GET /config?directory={directory}. OpenCode reads a folder's config on the first request that names it, so
+    /// this is where a broken config shows up: a 400 with <c>ConfigJsonError</c> (bad JSON) or
+    /// <c>ConfigInvalidError</c> (a value of the wrong shape).
+    /// </summary>
+    public async Task<HarnessProfileCheck> CheckConfigAsync(string directory, CancellationToken ct)
+    {
+        var url = BuildUrl("/config", directory);
+        ValidateDirectoryScope(url);
+        LogRequest(_logger, $"GET {url}", null);
+        using var response = await _httpClient.GetAsync(url, ct).ConfigureAwait(false);
+        if (response.IsSuccessStatusCode)
+            return HarnessProfileCheck.Passed;
+
+        var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+        return ParseConfigError((int)response.StatusCode, body);
+    }
+
+    internal static HarnessProfileCheck ParseConfigError(int status, string body)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            var name = root.TryGetProperty("name", out var n) ? n.GetString() : null;
+            var data = root.TryGetProperty("data", out var d) && d.ValueKind == JsonValueKind.Object ? d : default;
+
+            if (name == "ConfigInvalidError" && data.ValueKind == JsonValueKind.Object
+                && data.TryGetProperty("issues", out var issues) && issues.ValueKind == JsonValueKind.Array)
+            {
+                var lines = issues.EnumerateArray().Select(issue =>
+                {
+                    var path = issue.TryGetProperty("path", out var p) && p.ValueKind == JsonValueKind.Array
+                        ? string.Join('.', p.EnumerateArray().Select(segment => segment.ToString()))
+                        : string.Empty;
+                    var message = issue.TryGetProperty("message", out var m) ? m.GetString() : null;
+                    return path.Length > 0 ? $"{path}: {message}" : message ?? string.Empty;
+                }).Where(line => line.Length > 0).ToList();
+                return new HarnessProfileCheck(false, "OpenCode rejected a value in this profile.", lines);
+            }
+
+            if (name == "ConfigJsonError" && data.ValueKind == JsonValueKind.Object
+                && data.TryGetProperty("message", out var jsonMessage) && jsonMessage.GetString() is { } text)
+            {
+                // "--- Errors ---\nEndOfFileExpected at line 2, column 1\n   Line 2: { oops\n          ^\n--- End ---"
+                var errors = text.Split("--- Errors ---", 2) is [_, var rest] ? rest.Split("--- End ---")[0] : text;
+                var lines = errors.Split('\n').Select(line => line.TrimEnd()).Where(line => line.Trim().Length > 0).ToList();
+                return new HarnessProfileCheck(false, "This profile isn't valid JSON.", lines);
+            }
+
+            var fallback = data.ValueKind == JsonValueKind.Object && data.TryGetProperty("message", out var message)
+                ? message.GetString()
+                : null;
+            return new HarnessProfileCheck(false, $"OpenCode couldn't load this profile ({name ?? $"HTTP {status}"}).",
+                fallback is null ? null : [fallback]);
+        }
+        catch (JsonException)
+        {
+            return new HarnessProfileCheck(false, $"OpenCode couldn't load this profile (HTTP {status}).");
+        }
     }
 
     // -----------------------------------------------------------------------

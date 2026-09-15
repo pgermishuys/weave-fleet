@@ -39,6 +39,12 @@ public sealed class SessionOrchestratorBuilder
     public InstanceTracker InstanceTracker { get; } = new();
     public SessionActivityTracker ActivityTracker { get; } = new();
     public FakeSessionMessageProxy SessionMessageProxy { get; } = new();
+    public InMemoryHarnessProfileRepository HarnessProfileRepository { get; }
+
+    public SessionOrchestratorBuilder()
+    {
+        HarnessProfileRepository = new InMemoryHarnessProfileRepository(SessionRepository);
+    }
 
     // ── Overridable dependencies ─────────────────────────────────────────────
 
@@ -137,6 +143,7 @@ public sealed class SessionOrchestratorBuilder
             sessionActivityWriteService: null,
             gitDiffService: _gitDiffService,
             sessionApps: _sessionApps,
-            messageRepository: MessageRepository);
+            messageRepository: MessageRepository,
+            harnessProfiles: HarnessProfileRepository);
     }
 }

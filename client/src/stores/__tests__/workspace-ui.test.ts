@@ -46,6 +46,7 @@ describe("useWorkspaceUiStore", () => {
       tags: "",
       projectId: null,
       harnessType: "opencode",
+      harnessProfileId: null,
       gitHubPreset: null,
     };
 

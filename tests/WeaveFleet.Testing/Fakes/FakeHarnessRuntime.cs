@@ -51,6 +51,7 @@ public sealed class FakeHarnessRuntime : IHarnessRuntime
 
     public Task<RuntimePreparation> PrepareRuntimeAsync(RuntimePreparationContext context, CancellationToken ct)
     {
+        PrepareCalls.Add(context);
         if (PrepareRuntimeBehavior is not null)
             return PrepareRuntimeBehavior(context, ct);
         var result = PreparationResult ?? new RuntimePreparation.Ready(new FakeRuntimeLaunchArtifacts());
@@ -83,6 +84,21 @@ public sealed class FakeHarnessRuntime : IHarnessRuntime
 
     /// <summary>Value returned by <see cref="WarmupPooledInstanceAsync"/>. Default: false.</summary>
     public bool WarmupResult { get; set; }
+
+    /// <summary>Every context <see cref="PrepareRuntimeAsync"/> was called with, in order.</summary>
+    public List<RuntimePreparationContext> PrepareCalls { get; } = [];
+
+    /// <summary>What <see cref="CheckProfileAsync"/> answers. Default: the profile works.</summary>
+    public HarnessProfileCheck ProfileCheckResult { get; set; } = HarnessProfileCheck.Passed;
+
+    /// <summary>The content of every profile <see cref="CheckProfileAsync"/> was asked about.</summary>
+    public List<string> ProfileChecks { get; } = [];
+
+    public Task<HarnessProfileCheck> CheckProfileAsync(string ownerUserId, string content, CancellationToken ct)
+    {
+        ProfileChecks.Add(content);
+        return Task.FromResult(ProfileCheckResult);
+    }
 
     private sealed record FakeRuntimeLaunchArtifacts : RuntimeLaunchArtifacts;
 }
