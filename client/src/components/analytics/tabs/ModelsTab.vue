@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue"
 import HorizontalCostBars from "@/components/analytics/charts/HorizontalCostBars.vue"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import type { ModelAnalytics } from "@/api/client"
 import { formatAnalyticsCost } from "@/lib/format-utils"
 
@@ -103,128 +102,114 @@ const emptyStateMessage = computed(() => {
       v-else
       class="models-tab__content"
     >
-      <Card class="border-border/80 bg-card/70 py-0 backdrop-blur-sm">
-        <CardHeader class="gap-3 border-b border-border/60 px-5 py-5">
-          <div class="space-y-1">
-            <CardTitle class="text-base text-foreground">
-              Cost by model
-            </CardTitle>
-            <CardDescription>
-              Model spend is ranked horizontally so the highest-cost model anchors the scale.
-            </CardDescription>
-          </div>
-        </CardHeader>
+      <section
+        class="models-tab__panel"
+        aria-label="Cost by model"
+      >
+        <h2 class="models-tab__title">
+          Cost by model
+        </h2>
+        <HorizontalCostBars
+          :items="chartItems"
+          :empty-message="chartEmptyMessage"
+        />
+      </section>
 
-        <CardContent class="px-5 py-5">
-          <HorizontalCostBars
-            :items="chartItems"
-            :empty-message="chartEmptyMessage"
-          />
-        </CardContent>
-      </Card>
-
-      <Card class="border-border/80 bg-card/70 py-0 backdrop-blur-sm">
-        <CardHeader class="gap-3 border-b border-border/60 px-5 py-5">
-          <div class="space-y-1">
-            <CardTitle class="text-base text-foreground">
-              Model details
-            </CardTitle>
-            <CardDescription>
-              Compare usage, billed cost, estimated cost, and average cost per message across providers.
-            </CardDescription>
-          </div>
-        </CardHeader>
-
-        <CardContent class="px-0 py-0">
-          <div class="models-tab__table-shell">
-            <table class="models-tab__table">
-              <caption class="models-tab__sr-only">
-                Model analytics including model, provider, tokens, cost, estimated cost, messages, and average cost per message.
-              </caption>
-              <thead>
-                <tr>
-                  <th
-                    scope="col"
-                    class="models-tab__head"
-                  >
-                    Model
-                  </th>
-                  <th
-                    scope="col"
-                    class="models-tab__head"
-                  >
-                    Provider
-                  </th>
-                  <th
-                    scope="col"
-                    class="models-tab__head models-tab__head--right"
-                  >
-                    Tokens
-                  </th>
-                  <th
-                    scope="col"
-                    class="models-tab__head models-tab__head--right"
-                  >
-                    Cost
-                  </th>
-                  <th
-                    scope="col"
-                    class="models-tab__head models-tab__head--right"
-                  >
-                    Estimated cost
-                  </th>
-                  <th
-                    scope="col"
-                    class="models-tab__head models-tab__head--right"
-                  >
-                    Messages
-                  </th>
-                  <th
-                    scope="col"
-                    class="models-tab__head models-tab__head--right"
-                  >
-                    Avg cost/msg
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                <tr
-                  v-for="row in tableRows"
-                  :key="row.key"
-                  class="models-tab__row"
+      <section
+        class="models-tab__panel models-tab__panel--table"
+        aria-label="Model details"
+      >
+        <h2 class="models-tab__title">
+          Model details
+        </h2>
+        <div class="models-tab__table-shell">
+          <table class="models-tab__table">
+            <caption class="models-tab__sr-only">
+              Model analytics including model, provider, tokens, cost, estimated cost, messages, and average cost per message.
+            </caption>
+            <thead>
+              <tr>
+                <th
+                  scope="col"
+                  class="models-tab__head"
                 >
-                  <td class="models-tab__cell">
-                    <div class="models-tab__primary">
-                      {{ row.modelId }}
-                    </div>
-                  </td>
-                  <td class="models-tab__cell">
-                    <div class="models-tab__secondary models-tab__secondary--strong">
-                      {{ row.providerId }}
-                    </div>
-                  </td>
-                  <td class="models-tab__cell models-tab__cell--right">
-                    {{ row.formattedTokens }}
-                  </td>
-                  <td class="models-tab__cell models-tab__cell--right">
-                    {{ row.formattedCost }}
-                  </td>
-                  <td class="models-tab__cell models-tab__cell--right">
-                    {{ row.formattedEstimatedCost }}
-                  </td>
-                  <td class="models-tab__cell models-tab__cell--right">
-                    {{ row.formattedMessageCount }}
-                  </td>
-                  <td class="models-tab__cell models-tab__cell--right">
-                    {{ row.formattedAverageCostPerMessage }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+                  Model
+                </th>
+                <th
+                  scope="col"
+                  class="models-tab__head"
+                >
+                  Provider
+                </th>
+                <th
+                  scope="col"
+                  class="models-tab__head models-tab__head--right"
+                >
+                  Tokens
+                </th>
+                <th
+                  scope="col"
+                  class="models-tab__head models-tab__head--right"
+                >
+                  Cost
+                </th>
+                <th
+                  scope="col"
+                  class="models-tab__head models-tab__head--right"
+                >
+                  Estimated cost
+                </th>
+                <th
+                  scope="col"
+                  class="models-tab__head models-tab__head--right"
+                >
+                  Messages
+                </th>
+                <th
+                  scope="col"
+                  class="models-tab__head models-tab__head--right"
+                >
+                  Avg cost/msg
+                </th>
+              </tr>
+            </thead>
+
+            <tbody>
+              <tr
+                v-for="row in tableRows"
+                :key="row.key"
+                class="models-tab__row"
+              >
+                <td class="models-tab__cell">
+                  <div class="models-tab__primary">
+                    {{ row.modelId }}
+                  </div>
+                </td>
+                <td class="models-tab__cell">
+                  <div class="models-tab__secondary models-tab__secondary--strong">
+                    {{ row.providerId }}
+                  </div>
+                </td>
+                <td class="models-tab__cell models-tab__cell--right">
+                  {{ row.formattedTokens }}
+                </td>
+                <td class="models-tab__cell models-tab__cell--right">
+                  {{ row.formattedCost }}
+                </td>
+                <td class="models-tab__cell models-tab__cell--right">
+                  {{ row.formattedEstimatedCost }}
+                </td>
+                <td class="models-tab__cell models-tab__cell--right">
+                  {{ row.formattedMessageCount }}
+                </td>
+                <td class="models-tab__cell models-tab__cell--right">
+                  {{ row.formattedAverageCostPerMessage }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   </section>
 </template>
@@ -236,7 +221,35 @@ const emptyStateMessage = computed(() => {
 
 .models-tab__content {
   display: grid;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.models-tab__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--card-bg);
+}
+
+.models-tab__panel--table {
+  padding: 16px 0 0;
+  overflow: hidden;
+}
+
+.models-tab__panel--table .models-tab__title {
+  padding: 0 16px;
+}
+
+.models-tab__title {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .models-tab__state {
@@ -244,9 +257,8 @@ const emptyStateMessage = computed(() => {
   min-height: 280px;
   align-items: center;
   justify-content: center;
-  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-  border-radius: 20px;
-  background: color-mix(in srgb, var(--card-bg) 70%, transparent);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-card);
   padding: 24px;
   color: var(--muted);
   font-size: 13px;
@@ -263,20 +275,18 @@ const emptyStateMessage = computed(() => {
 
 .models-tab__table {
   width: 100%;
-  min-width: 880px;
+  min-width: 720px;
   border-collapse: collapse;
 }
 
 .models-tab__head {
-  padding: 14px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.02);
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
   color: var(--muted);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-size: 12px;
+  font-weight: 500;
   text-align: left;
-  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .models-tab__head--right {
@@ -284,19 +294,19 @@ const emptyStateMessage = computed(() => {
 }
 
 .models-tab__row {
-  transition: background-color 0.18s ease;
+  transition: background-color var(--transition);
 }
 
 .models-tab__row:hover {
-  background: rgba(255, 255, 255, 0.02);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
 }
 
 .models-tab__row + .models-tab__row {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--border);
 }
 
 .models-tab__cell {
-  padding: 16px 20px;
+  padding: 10px 16px;
   color: var(--text);
   font-size: 13px;
   line-height: 1.5;
@@ -310,7 +320,7 @@ const emptyStateMessage = computed(() => {
 
 .models-tab__primary {
   color: var(--text);
-  font-weight: 600;
+  font-weight: 500;
   overflow-wrap: anywhere;
 }
 

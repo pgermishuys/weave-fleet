@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useRouter } from "@tanstack/vue-router";
 import { computed } from "vue";
-import { GitMerge, GitPullRequest, GitPullRequestClosed, MessageSquare } from "lucide-vue-next";
+import { ExternalLink, GitMerge, GitPullRequest, GitPullRequestClosed, MessageSquare } from "lucide-vue-next";
 import { formatRelativeTime } from "@/lib/format-utils";
 import CreateSessionFromGitHubDialog from "./components/CreateSessionFromGitHubDialog.vue";
 
@@ -52,17 +52,7 @@ const statusIcon = computed(() => {
   }
 });
 
-const statusClassName = computed(() => {
-  switch (props.item.state) {
-    case "merged":
-      return "pull-request-status-icon pull-request-status-icon--merged";
-    case "closed":
-      return "pull-request-status-icon pull-request-status-icon--closed";
-    case "open":
-    default:
-      return "pull-request-status-icon pull-request-status-icon--open";
-  }
-});
+const statusClassName = computed(() => `gh-row__icon gh-row__icon--${props.item.state}`);
 
 const relativeTime = computed(() => formatRelativeTime(props.item.updatedAt));
 
@@ -70,7 +60,8 @@ function getLabelStyle(color: string): { backgroundColor: string; borderColor: s
   return {
     backgroundColor: `#${color}22`,
     borderColor: `#${color}55`,
-    color: `#${color}`,
+    // Tinted toward the text colour so pale labels stay readable on light themes.
+    color: `color-mix(in srgb, #${color} 70%, var(--text))`,
   };
 }
 
@@ -111,7 +102,7 @@ function handleKeydown(event: KeyboardEvent): void {
 
 <template>
   <article
-    class="pull-request-item"
+    class="gh-row pull-request-item"
     role="button"
     tabindex="0"
     @click="openPullRequest"
@@ -124,56 +115,59 @@ function handleKeydown(event: KeyboardEvent): void {
       aria-hidden="true"
     />
 
-    <div class="pull-request-body">
-      <div class="pull-request-row pull-request-row--title">
-        <p class="pull-request-title">
+    <div class="gh-row__body">
+      <div class="gh-row__line">
+        <p class="gh-row__title">
           {{ item.title }}
         </p>
         <span
           v-if="item.draft"
-          class="pull-request-draft"
+          class="gh-row__draft"
         >Draft</span>
-        <span class="pull-request-number">#{{ item.number }}</span>
-      </div>
-
-      <div class="pull-request-row pull-request-row--meta">
-        <span class="pull-request-repo">{{ item.repoFullName }}</span>
-        <div
-          class="pull-request-labels"
-          aria-label="Pull request labels"
-        >
-          <span
-            v-for="label in item.labels"
-            :key="label.name"
-            class="pull-request-label"
-            :style="getLabelStyle(label.color)"
-            @click.stop="emit('labelClick', label.name)"
-          >
-            {{ label.name }}
-          </span>
-        </div>
-      </div>
-
-      <div class="pull-request-row pull-request-row--footer">
-        <img
-          class="pull-request-avatar"
-          :src="item.user.avatarUrl"
-          :alt="`${item.user.login} avatar`"
-        >
-        <span class="pull-request-user">{{ item.user.login }}</span>
-        <span class="pull-request-time">{{ relativeTime }}</span>
         <span
-          v-if="item.comments > 0"
-          class="pull-request-comments"
+          v-for="label in item.labels"
+          :key="label.name"
+          class="gh-row__label"
+          :style="getLabelStyle(label.color)"
+          @click.stop="emit('labelClick', label.name)"
         >
-          <MessageSquare :size="11" />
-          {{ item.comments }}
+          {{ label.name }}
         </span>
+      </div>
+
+      <div class="gh-row__meta">
+        <span>#{{ item.number }}</span>
+        <span aria-hidden="true">·</span>
+        <img
+          v-if="item.user.avatarUrl"
+          class="gh-row__avatar"
+          :src="item.user.avatarUrl"
+          alt=""
+        >
+        <span>{{ item.user.login }}</span>
+        <span aria-hidden="true">·</span>
+        <span>{{ relativeTime }}</span>
+        <template v-if="item.headBranch">
+          <span aria-hidden="true">·</span>
+          <span class="gh-row__branch">{{ item.headBranch }}</span>
+        </template>
       </div>
     </div>
 
+    <span
+      v-if="item.comments > 0"
+      class="gh-row__side"
+      :aria-label="`${item.comments} comments`"
+    >
+      <MessageSquare
+        :size="12"
+        aria-hidden="true"
+      />
+      {{ item.comments }}
+    </span>
+
     <div
-      class="actions"
+      class="gh-row__actions"
       @click.stop
     >
       <CreateSessionFromGitHubDialog
@@ -188,164 +182,202 @@ function handleKeydown(event: KeyboardEvent): void {
         :head-branch="item.headBranch"
       />
       <a
-        class="link-action"
+        class="gh-row__link"
         :href="item.htmlUrl"
         target="_blank"
         rel="noreferrer noopener"
+        title="Open on GitHub"
+        aria-label="Open on GitHub"
       >
-        Link →
+        <ExternalLink
+          :size="13"
+          aria-hidden="true"
+        />
       </a>
     </div>
   </article>
 </template>
 
 <style scoped>
-.pull-request-item {
+/* A row in the repo's list, like a session row: title and labels, then who and when. */
+.gh-row {
+  position: relative;
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border);
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-btn);
   cursor: pointer;
-  position: relative;
   outline: none;
+  transition: background-color var(--transition);
 }
 
-.pull-request-item:hover .link-action,
-.pull-request-item:focus-within .link-action {
-  opacity: 1;
+.gh-row:hover,
+.gh-row:focus-within {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
 }
 
-.pull-request-item:hover :deep(.create-session-trigger),
-.pull-request-item:focus-within :deep(.create-session-trigger) {
-  opacity: 1;
+.gh-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
-.pull-request-item:focus-visible {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.pull-request-status-icon {
+.gh-row__icon {
   flex-shrink: 0;
   margin-top: 2px;
 }
 
-.pull-request-status-icon--open {
-  color: #22c55e;
+.gh-row__icon--open {
+  color: var(--running);
 }
 
-.pull-request-status-icon--closed {
+.gh-row__icon--closed {
   color: var(--muted);
 }
 
-.pull-request-status-icon--merged {
-  color: #a855f7;
+.gh-row__icon--merged {
+  color: var(--queued);
 }
 
-.pull-request-body {
+.gh-row__body {
   display: flex;
-  min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 6px;
-  padding-right: 52px;
-}
-
-.pull-request-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  gap: 3px;
   min-width: 0;
+}
+
+.gh-row__line {
+  display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
 }
 
-.pull-request-row--title {
-  align-items: flex-start;
-}
-
-.pull-request-title {
+.gh-row__title {
   margin: 0;
-  min-width: 0;
-  flex: 1;
-  font-size: 11px;
-  font-weight: 600;
   color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
 }
 
-.pull-request-number,
-.pull-request-repo,
-.pull-request-user,
-.pull-request-time {
-  font-size: 10px;
-  color: var(--muted);
-}
-
-.pull-request-draft {
+.gh-row__label {
   display: inline-flex;
   align-items: center;
-  min-height: 18px;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: rgba(245, 158, 11, 0.16);
-  color: #f59e0b;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.pull-request-labels {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  flex-wrap: wrap;
-}
-
-.pull-request-label {
-  display: inline-flex;
-  align-items: center;
-  min-height: 18px;
-  padding: 0 6px;
+  height: 18px;
+  padding: 0 7px;
   border: 1px solid transparent;
   border-radius: 999px;
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 500;
   cursor: pointer;
 }
 
-.pull-request-label:hover {
-  filter: brightness(1.2);
+.gh-row__label:hover {
+  filter: brightness(1.15);
 }
 
-.pull-request-comments {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  margin-left: auto;
-  font-size: 10px;
+.gh-row__draft {
+  height: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
   color: var(--muted);
+  font-size: 11px;
+  line-height: 18px;
 }
 
-.pull-request-avatar {
-  width: 16px;
-  height: 16px;
+.gh-row__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.gh-row__avatar {
+  width: 14px;
+  height: 14px;
   border-radius: 999px;
   object-fit: cover;
 }
 
-.link-action {
-  font-size: 10px;
-  color: var(--accent);
-  text-decoration: none;
-  opacity: 0;
+.gh-row__branch {
+  overflow: hidden;
+  font-family: var(--font-mono-stack);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.actions {
-  position: absolute;
-  top: 50%;
-  right: 12px;
-  transform: translateY(-50%);
+.gh-row__side {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 4px;
+  min-height: 20px;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.gh-row:hover .gh-row__side,
+.gh-row:focus-within .gh-row__side {
+  visibility: hidden;
+}
+
+/* Start a session or open on GitHub; they take the comment count's place on hover. */
+.gh-row__actions {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.gh-row:hover .gh-row__actions,
+.gh-row:focus-within .gh-row__actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.gh-row__actions :deep(.create-session-trigger) {
+  opacity: 1;
+}
+
+.gh-row__link {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  color: var(--muted);
+}
+
+.gh-row__link:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+
+@media (hover: none) {
+  .gh-row__actions {
+    display: none;
+  }
+
+  .gh-row:hover .gh-row__side {
+    visibility: visible;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gh-row {
+    transition: none;
+  }
 }
 </style>

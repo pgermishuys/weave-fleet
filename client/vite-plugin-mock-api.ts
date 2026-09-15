@@ -1650,11 +1650,22 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
       },
     },
     {
+      pattern: /^\/api\/sessions\/([^/]+)\/diffs\/file$/,
+      handler: (url) => {
+        const item = MOCK_DIFFS.find((diff) => diff.file === url.searchParams.get("path"));
+        return item
+          ? new Response(JSON.stringify(item), { status: 200, headers: { "Content-Type": "application/json" } })
+          : new Response(null, { status: 404 });
+      },
+    },
+    {
       pattern: /^\/api\/sessions\/([^/]+)\/diffs$/,
       handler: (url) => {
         const id = url.pathname.split("/")[3];
         console.log(`[mock-api] GET /api/sessions/${id}/diffs`);
-        return new Response(JSON.stringify({ diffs: MOCK_DIFFS, available: true }), {
+        // Like the server, the list has no contents; /diffs/file has them.
+        const diffs = MOCK_DIFFS.map(({ file, status, additions, deletions }) => ({ file, status, additions, deletions }));
+        return new Response(JSON.stringify({ diffs, available: true }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         });

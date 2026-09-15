@@ -1,6 +1,6 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
-import { ref, type DefineComponent } from "vue";
+import { computed, ref, type DefineComponent } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import FileBrowserPanelComponent from "@/components/session/FileBrowserPanel.vue";
 import type { BrowseDirectoryEntry, FileDiffItem } from "@/api/client";
@@ -26,6 +26,7 @@ const mockFileBrowser = {
 
 const mockDiffs = {
   diffs: ref<FileDiffItem[]>([]),
+  byFile: computed((): ReadonlyMap<string, FileDiffItem> => new Map(mockDiffs.diffs.value.map((diff) => [diff.file, diff]))),
 };
 
 const mockFindFiles = {

@@ -361,14 +361,13 @@ function getSortIcon(sortBy: SessionsTabSortBy) {
 
 .sessions-tab__table {
   width: 100%;
-  min-width: 980px;
+  min-width: 820px;
   border-collapse: collapse;
 }
 
 .sessions-tab__head {
   padding: 0;
   border-bottom: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.02);
   text-align: left;
   vertical-align: middle;
 }
@@ -382,16 +381,15 @@ function getSortIcon(sortBy: SessionsTabSortBy) {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 14px 16px;
+  padding: 8px 16px;
   border: 0;
   background: transparent;
   color: var(--muted);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
-  transition: color 0.18s ease, background-color 0.18s ease;
+  transition: color var(--transition), background-color var(--transition);
 }
 
 .sessions-tab__sort-button:hover,
@@ -400,7 +398,7 @@ function getSortIcon(sortBy: SessionsTabSortBy) {
 }
 
 .sessions-tab__sort-button:focus-visible {
-  outline: 2px solid rgba(99, 102, 241, 0.6);
+  outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 
@@ -409,25 +407,25 @@ function getSortIcon(sortBy: SessionsTabSortBy) {
 }
 
 .sessions-tab__sort-icon {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   flex: 0 0 auto;
 }
 
 .sessions-tab__row {
-  transition: background-color 0.18s ease;
+  transition: background-color var(--transition);
 }
 
 .sessions-tab__row:hover {
-  background: rgba(255, 255, 255, 0.02);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
 }
 
 .sessions-tab__row + .sessions-tab__row {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--border);
 }
 
 .sessions-tab__cell {
-  padding: 16px;
+  padding: 10px 16px;
   color: var(--text);
   font-size: 13px;
   line-height: 1.5;
@@ -441,12 +439,13 @@ function getSortIcon(sortBy: SessionsTabSortBy) {
 
 .sessions-tab__primary {
   color: var(--text);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .sessions-tab__secondary {
-  margin-top: 4px;
+  margin-top: 2px;
   color: var(--muted);
+  font-family: var(--font-mono-stack);
   font-size: 11px;
   word-break: break-all;
 }
@@ -460,19 +459,17 @@ function getSortIcon(sortBy: SessionsTabSortBy) {
 .sessions-tab__model {
   display: inline-flex;
   align-items: center;
-  min-height: 24px;
+  min-height: 22px;
   padding: 2px 8px;
-  border: 1px solid rgba(99, 102, 241, 0.22);
-  border-radius: 999px;
-  background: rgba(99, 102, 241, 0.12);
+  border-radius: 6px;
+  background: var(--accent-dim);
   color: var(--text);
   font-size: 11px;
   line-height: 1.2;
 }
 
 .sessions-tab__model--muted {
-  border-color: rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
   color: var(--muted);
 }
 
@@ -504,13 +501,10 @@ function getSortIcon(sortBy: SessionsTabSortBy) {
 }
 
 @media (max-width: 720px) {
-  .sessions-tab {
-    border-radius: 20px;
-  }
-
   .sessions-tab__sort-button,
   .sessions-tab__cell {
-    padding: 14px;
+    padding-right: 12px;
+    padding-left: 12px;
   }
 }
 </style>

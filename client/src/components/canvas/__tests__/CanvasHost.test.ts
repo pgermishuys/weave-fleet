@@ -1,6 +1,6 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
-import { defineComponent, h, ref, type DefineComponent } from "vue";
+import { computed, defineComponent, h, ref, type DefineComponent } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import CanvasHostComponent from "@/components/canvas/CanvasHost.vue";
 import type { FileDiffItem } from "@/api/client";
@@ -72,6 +72,7 @@ const diagram: VisualPayload = {
 
 const sharedDiffs = {
   diffs: ref<FileDiffItem[]>([]),
+  byFile: computed((): ReadonlyMap<string, FileDiffItem> => new Map(sharedDiffs.diffs.value.map((diff) => [diff.file, diff]))),
 };
 
 function mountHost() {

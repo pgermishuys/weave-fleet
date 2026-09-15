@@ -346,7 +346,12 @@ function subagentsFor(step: SessionPlanStep): SessionSubagent[] {
 </template>
 
 <style scoped>
+/* The canvas scrolls itself; the host's body is a fixed-height column. */
 .progress-canvas {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 12px;

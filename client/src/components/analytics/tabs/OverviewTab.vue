@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed } from "vue"
+import { computed, nextTick, shallowRef, watch } from "vue"
 import {
   CategoryScale,
   Chart as ChartJS,
+  Filler,
   Legend,
   LineElement,
   LinearScale,
@@ -14,11 +15,50 @@ import {
 import { Line } from "vue-chartjs"
 import StatCard from "@/components/analytics/cards/StatCard.vue"
 import HorizontalCostBars from "@/components/analytics/charts/HorizontalCostBars.vue"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import type { AnalyticsSummary, DailyAnalytics, ModelAnalytics } from "@/api/client"
 import type { AnalyticsProjectOption } from "@/composables/use-analytics-filters"
+import { useThemeStore } from "@/stores/theme"
 
-ChartJS.register(CategoryScale, Legend, LineElement, LinearScale, PointElement, Tooltip)
+ChartJS.register(CategoryScale, Filler, Legend, LineElement, LinearScale, PointElement, Tooltip)
+
+interface ChartPalette {
+  tokens: string
+  cost: string
+  text: string
+  muted: string
+  grid: string
+}
+
+// Chart.js draws on a canvas, so it needs the theme's colours as values rather than CSS variables.
+function readPalette(): ChartPalette {
+  const style = getComputedStyle(document.documentElement)
+  const token = (name: string, fallback: string) => style.getPropertyValue(name).trim() || fallback
+  return {
+    tokens: token("--accent", "#6366f1"),
+    cost: token("--running", "#22c55e"),
+    text: token("--text", "#e8e8ec"),
+    muted: token("--muted", "#8e8e9a"),
+    grid: token("--border", "rgba(255, 255, 255, 0.075)"),
+  }
+}
+
+/** A theme colour (hex) made translucent; other formats are returned as they are. */
+function withAlpha(color: string, alpha: number): string {
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color)?.[1]
+  if (!hex) return color
+  const full = hex.length === 3 ? [...hex].map((digit) => digit + digit).join("") : hex
+  const [r, g, b] = [0, 2, 4].map((offset) => parseInt(full.slice(offset, offset + 2), 16))
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+const themeStore = useThemeStore()
+const palette = shallowRef<ChartPalette>(readPalette())
+
+watch(() => themeStore.resolvedThemeId, () => {
+  void nextTick(() => {
+    palette.value = readPalette()
+  })
+})
 
 interface CostBarItem {
   name: string
@@ -199,27 +239,33 @@ const dailyTrendData = computed<ChartData<"line">>(() => ({
     {
       label: "Tokens",
       data: props.daily.map((point) => point.tokens),
-      borderColor: "#8b5cf6",
-      backgroundColor: "rgba(139, 92, 246, 0.18)",
-      pointBackgroundColor: "#8b5cf6",
-      pointBorderColor: "#8b5cf6",
+      borderColor: palette.value.tokens,
+      backgroundColor: withAlpha(palette.value.tokens, 0.14),
+      fill: "origin",
+      borderWidth: 2,
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      pointBackgroundColor: palette.value.tokens,
       tension: 0.35,
       yAxisID: "yTokens",
     },
     {
       label: "Cost",
       data: props.daily.map((point) => point.cost),
-      borderColor: "#22c55e",
-      backgroundColor: "rgba(34, 197, 94, 0.18)",
-      pointBackgroundColor: "#22c55e",
-      pointBorderColor: "#22c55e",
+      borderColor: palette.value.cost,
+      backgroundColor: palette.value.cost,
+      borderWidth: 2,
+      borderDash: [4, 3],
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      pointBackgroundColor: palette.value.cost,
       tension: 0.35,
       yAxisID: "yCost",
     },
   ],
 }))
 
-const dailyTrendOptions: ChartOptions<"line"> = {
+const dailyTrendOptions = computed<ChartOptions<"line">>(() => ({
   responsive: true,
   maintainAspectRatio: false,
   interaction: {
@@ -229,11 +275,13 @@ const dailyTrendOptions: ChartOptions<"line"> = {
   plugins: {
     legend: {
       position: "top",
-      align: "start",
+      align: "end",
       labels: {
-        color: "#e4e4e7",
+        color: palette.value.muted,
         usePointStyle: true,
-        boxWidth: 10,
+        pointStyle: "line",
+        boxWidth: 16,
+        font: { size: 12 },
       },
     },
     tooltip: {
@@ -265,35 +313,43 @@ const dailyTrendOptions: ChartOptions<"line"> = {
   scales: {
     x: {
       ticks: {
-        color: "#a1a1aa",
+        color: palette.value.muted,
+        maxRotation: 0,
+        autoSkipPadding: 16,
+        font: { size: 11 },
       },
       grid: {
-        color: "rgba(255, 255, 255, 0.06)",
+        display: false,
+      },
+      border: {
+        color: palette.value.grid,
       },
     },
     yTokens: {
       type: "linear",
       position: "left",
+      beginAtZero: true,
       ticks: {
-        color: "#a1a1aa",
+        color: palette.value.muted,
+        font: { size: 11 },
         callback(value) {
           return compactNumberFormatter.format(Number(value))
         },
       },
       grid: {
-        color: "rgba(255, 255, 255, 0.06)",
+        color: palette.value.grid,
       },
-      title: {
-        display: true,
-        text: "Tokens",
-        color: "#a1a1aa",
+      border: {
+        display: false,
       },
     },
     yCost: {
       type: "linear",
       position: "right",
+      beginAtZero: true,
       ticks: {
-        color: "#a1a1aa",
+        color: palette.value.muted,
+        font: { size: 11 },
         callback(value) {
           return formatCurrency(Number(value))
         },
@@ -301,14 +357,12 @@ const dailyTrendOptions: ChartOptions<"line"> = {
       grid: {
         drawOnChartArea: false,
       },
-      title: {
-        display: true,
-        text: "Cost",
-        color: "#a1a1aa",
+      border: {
+        display: false,
       },
     },
   },
-}
+}))
 
 function formatCurrency(amount: number): string {
   if (!Number.isFinite(amount) || amount <= 0) {
@@ -343,10 +397,10 @@ function getMaxCost(costs: readonly number[]): number {
 
 <template>
   <section
-    class="space-y-6"
+    class="overview-tab"
     aria-label="Overview analytics"
   >
-    <div class="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
+    <div class="overview-tab__stats">
       <StatCard
         v-for="card in summaryCards"
         :key="card.label"
@@ -357,61 +411,48 @@ function getMaxCost(costs: readonly number[]): number {
       />
     </div>
 
-    <div class="grid gap-4 xl:grid-cols-2">
-      <Card
-        data-testid="analytics-overview-daily-trend"
-        class="border-border/80 bg-card/70 py-0 backdrop-blur-sm xl:col-span-2"
+    <section
+      data-testid="analytics-overview-daily-trend"
+      class="overview-tab__panel"
+      aria-label="Daily tokens and cost"
+    >
+      <header class="overview-tab__panel-head">
+        <h2 class="overview-tab__panel-title">
+          Daily tokens and cost
+        </h2>
+        <p class="overview-tab__panel-meta">
+          Est. total {{ formatCurrency(totalEstimatedCost) }}
+        </p>
+      </header>
+
+      <div
+        v-if="hasDailyData"
+        class="overview-tab__chart"
       >
-        <CardHeader class="gap-3 border-b border-border/60 px-5 py-5">
-          <div class="flex flex-wrap items-start justify-between gap-3">
-            <div class="space-y-1">
-              <CardTitle class="text-base text-foreground">
-                Daily tokens and cost
-              </CardTitle>
-              <CardDescription>
-                Token volume uses the left axis and spend uses the right axis for the selected range.
-              </CardDescription>
-            </div>
+        <Line
+          :data="dailyTrendData"
+          :options="dailyTrendOptions"
+        />
+      </div>
 
-            <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-              Est. total {{ formatCurrency(totalEstimatedCost) }}
-            </p>
-          </div>
-        </CardHeader>
+      <p
+        v-else
+        class="overview-tab__empty"
+      >
+        {{ dailyEmptyMessage }}
+      </p>
+    </section>
 
-        <CardContent class="px-5 py-5">
-          <div
-            v-if="hasDailyData"
-            class="h-[320px] sm:h-[360px]"
-          >
-            <Line
-              :data="dailyTrendData"
-              :options="dailyTrendOptions"
-            />
-          </div>
-
-          <div
-            v-else
-            class="flex min-h-[320px] items-center justify-center border border-dashed border-border/70 bg-muted/20 px-6 py-8 text-center text-sm text-muted-foreground"
-          >
-            {{ dailyEmptyMessage }}
-          </div>
-        </CardContent>
-      </Card>
-
+    <div class="overview-tab__rankings">
       <section
-        class="space-y-3"
+        class="overview-tab__panel"
         aria-label="Top models by cost"
       >
-        <div class="space-y-1 px-1">
-          <h2 class="text-base font-semibold tracking-tight text-foreground">
+        <header class="overview-tab__panel-head">
+          <h2 class="overview-tab__panel-title">
             Top models by cost
           </h2>
-          <p class="text-sm leading-6 text-muted-foreground">
-            Ranked by spend with relative bars. Estimated cost is shown when the model dataset provides it.
-          </p>
-        </div>
-
+        </header>
         <HorizontalCostBars
           :items="modelBarItems"
           :empty-message="modelsEmptyMessage"
@@ -419,18 +460,14 @@ function getMaxCost(costs: readonly number[]): number {
       </section>
 
       <section
-        class="space-y-3"
+        class="overview-tab__panel"
         aria-label="Top projects by cost"
       >
-        <div class="space-y-1 px-1">
-          <h2 class="text-base font-semibold tracking-tight text-foreground">
+        <header class="overview-tab__panel-head">
+          <h2 class="overview-tab__panel-title">
             Top projects by cost
           </h2>
-          <p class="text-sm leading-6 text-muted-foreground">
-            Ranked by spend with relative bars across the current selection.
-          </p>
-        </div>
-
+        </header>
         <HorizontalCostBars
           :items="projectBarItems"
           :empty-message="projectsEmptyMessage"
@@ -439,3 +476,72 @@ function getMaxCost(costs: readonly number[]): number {
     </div>
   </section>
 </template>
+
+<style scoped>
+.overview-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.overview-tab__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.overview-tab__rankings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 12px;
+}
+
+.overview-tab__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--card-bg);
+}
+
+.overview-tab__panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.overview-tab__panel-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.overview-tab__panel-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-tab__chart {
+  height: 300px;
+}
+
+.overview-tab__empty {
+  display: grid;
+  place-items: center;
+  min-height: 240px;
+  margin: 0;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-btn);
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+</style>

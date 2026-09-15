@@ -101,6 +101,24 @@ public sealed class GitDiffService
         return content;
     }
 
+    /// <summary>
+    /// One changed file with its baseline and working-tree contents, or null when <paramref name="path"/> isn't
+    /// among the session's changes.
+    /// </summary>
+    public async Task<FileDiffContent?> ComputeFileDiffWithContentAsync(
+        string repoRoot,
+        string baselineRef,
+        string workspacePrefix,
+        string path,
+        CancellationToken ct)
+    {
+        var result = await ComputeDiffsWithAvailabilityAsync(repoRoot, baselineRef, workspacePrefix, ct).ConfigureAwait(false);
+        var summary = result.Diffs.FirstOrDefault(diff => string.Equals(diff.Path, path, StringComparison.Ordinal));
+        return summary is null
+            ? null
+            : await ToFileDiffContentAsync(repoRoot, baselineRef, summary, ct).ConfigureAwait(false);
+    }
+
     public Task<string?> GetFileContentAsync(string repoRoot, string @ref, string path) =>
         GetFileContentAsync(repoRoot, @ref, path, CancellationToken.None);
 

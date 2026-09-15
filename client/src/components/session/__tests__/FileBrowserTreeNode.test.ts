@@ -25,7 +25,7 @@ function click(element: Element, detail: number) {
 function mountNode() {
   return mount(FileBrowserTreeNode, {
     props: { entry: { name: "app.ts", relativePath: "src/app.ts", isDirectory: false }, depth: 0, sessionId: "s1" },
-    global: { provide: { fileBrowser, diffs: { diffs: ref([]) } } },
+    global: { provide: { fileBrowser, diffs: { diffs: ref([]), byFile: ref(new Map()) } } },
   });
 }
 

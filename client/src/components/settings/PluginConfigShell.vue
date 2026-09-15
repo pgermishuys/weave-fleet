@@ -64,21 +64,9 @@ const statusLabel = computed(() => {
   }
 });
 
-const statusClassName = computed(() => {
-  const status = pluginRuntime.isLoading.value && !pluginStatus.value
-    ? "checking"
-    : pluginStatus.value?.status ?? "disconnected";
-
-  switch (status) {
-    case "connected":
-      return "rounded-full border border-green-500/30 bg-green-500/10 px-2 py-1 text-[10px] font-medium text-green-300";
-    case "error":
-      return "rounded-full border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-medium text-red-200";
-    case "checking":
-      return "rounded-full border border-border bg-main-bg px-2 py-1 text-[10px] font-medium text-muted";
-    default:
-      return "rounded-full border border-border bg-main-bg px-2 py-1 text-[10px] font-medium text-muted";
-  }
+const statusTone = computed(() => {
+  if (pluginRuntime.isLoading.value && !pluginStatus.value) return "checking";
+  return pluginStatus.value?.status ?? "disconnected";
 });
 
 const fallbackState = computed<{
@@ -115,60 +103,47 @@ function handleBack(): void {
 </script>
 
 <template>
-  <section class="grid gap-6">
-    <div class="rounded-card border border-border bg-card-bg p-6 shadow-sm">
-      <div class="flex flex-col gap-4">
-        <button
-          type="button"
-          :class="buttonSecondaryClass"
-          class="w-fit"
-          @click="handleBack"
-        >
-          <ArrowLeft
-            :size="16"
+  <section class="plugin-page">
+    <header class="plugin-page__head">
+      <button
+        type="button"
+        class="plugin-page__back"
+        @click="handleBack"
+      >
+        <ArrowLeft
+          :size="14"
+          aria-hidden="true"
+        />
+        <span>Settings</span>
+      </button>
+
+      <div class="plugin-page__title-row">
+        <span class="plugin-page__icon">
+          <component
+            :is="pluginIcon"
+            :size="18"
             aria-hidden="true"
           />
-          <span>Back to settings</span>
-        </button>
-
-        <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div class="flex items-start gap-3">
-            <div class="rounded-btn border border-border bg-main-bg p-2 text-text">
-              <component
-                :is="pluginIcon"
-                :size="18"
-                aria-hidden="true"
-              />
-            </div>
-
-            <div class="space-y-2">
-              <div class="flex flex-wrap items-center gap-2">
-                <h1 class="text-2xl font-semibold tracking-tight text-text">
-                  {{ descriptor?.displayName ?? fallbackState?.title }}
-                </h1>
-                <span :class="statusClassName">
-                  {{ statusLabel }}
-                </span>
-              </div>
-
-              <p
-                v-if="configPage"
-                class="max-w-3xl text-sm text-muted"
-              >
-                {{ configPage.title }}
-              </p>
-
-              <p
-                v-else
-                class="max-w-3xl text-sm text-muted"
-              >
-                {{ fallbackState?.message }}
-              </p>
-            </div>
-          </div>
-        </div>
+        </span>
+        <h1 class="plugin-page__title">
+          {{ descriptor?.displayName ?? fallbackState?.title }}
+        </h1>
+        <span
+          class="plugin-page__status"
+          :class="`plugin-page__status--${statusTone}`"
+        >
+          <span
+            class="plugin-page__status-dot"
+            aria-hidden="true"
+          />
+          {{ statusLabel }}
+        </span>
       </div>
-    </div>
+
+      <p class="plugin-page__description">
+        {{ configPage ? configPage.title : fallbackState?.message }}
+      </p>
+    </header>
 
     <section
       v-if="fallbackState"
@@ -206,7 +181,7 @@ function handleBack(): void {
 
     <section
       v-else-if="configPage && descriptor"
-      class="rounded-card border border-border bg-card-bg p-6 shadow-sm"
+      class="plugin-page__panel"
     >
       <component
         :is="configPage.component"
@@ -216,3 +191,106 @@ function handleBack(): void {
     </section>
   </section>
 </template>
+
+<style scoped>
+.plugin-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  max-width: 880px;
+}
+
+.plugin-page__head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.plugin-page__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  margin: 0 0 6px -6px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: var(--radius-btn);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background-color var(--transition), color var(--transition);
+}
+
+.plugin-page__back:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
+}
+
+.plugin-page__title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.plugin-page__icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  background: var(--card-bg);
+  color: var(--text);
+}
+
+.plugin-page__title {
+  margin: 0;
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.plugin-page__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.plugin-page__status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.plugin-page__status--connected .plugin-page__status-dot {
+  background: var(--running);
+}
+
+.plugin-page__status--error {
+  color: var(--error);
+}
+
+.plugin-page__status--error .plugin-page__status-dot {
+  background: var(--error);
+}
+
+.plugin-page__description {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.plugin-page__panel {
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--card-bg);
+}
+</style>

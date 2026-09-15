@@ -1,6 +1,6 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ChangesCanvas from "@/components/canvas/ChangesCanvas.vue";
 import type { FileDiffItem } from "@/api/client";
@@ -17,6 +17,7 @@ vi.mock("@/api/session-files", () => ({
 
 const sharedDiffs = {
   diffs: ref<FileDiffItem[]>([]),
+  byFile: computed((): ReadonlyMap<string, FileDiffItem> => new Map(sharedDiffs.diffs.value.map((diff) => [diff.file, diff]))),
 };
 
 function mountCanvas() {

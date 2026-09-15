@@ -60,40 +60,40 @@ function formatCurrency(amount: number): string {
 
 <template>
   <section
-    class="border border-border/80 bg-card/70 p-5 shadow-sm backdrop-blur-sm"
+    class="cost-bars"
     aria-label="Cost ranking"
   >
     <ol
       v-if="rankedItems.length > 0"
-      class="space-y-4"
+      class="cost-bars__list"
     >
       <li
         v-for="item in rankedItems"
         :key="item.key"
-        class="space-y-2"
+        class="cost-bars__item"
       >
-        <div class="flex items-start justify-between gap-4">
-          <div class="min-w-0 space-y-1">
-            <p class="truncate text-sm font-medium text-foreground">
+        <div class="cost-bars__row">
+          <div class="cost-bars__copy">
+            <p class="cost-bars__name">
               {{ item.name }}
             </p>
-            <p class="text-xs text-muted-foreground">
+            <p class="cost-bars__detail">
               {{ item.detail || `${item.formattedCost} of ${item.formattedMaxCost}` }}
             </p>
           </div>
 
-          <span class="shrink-0 text-sm font-semibold tabular-nums text-foreground">
+          <span class="cost-bars__cost">
             {{ item.formattedCost }}
           </span>
         </div>
 
         <div
-          class="h-2 overflow-hidden rounded-full bg-muted/70"
+          class="cost-bars__track"
           role="img"
           :aria-label="`${item.name} cost bar at ${item.width.toFixed(0)} percent`"
         >
           <div
-            class="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
+            class="cost-bars__fill"
             :style="{ width: `${item.width}%` }"
           />
         </div>
@@ -102,9 +102,88 @@ function formatCurrency(amount: number): string {
 
     <p
       v-else
-      class="text-sm text-muted-foreground"
+      class="cost-bars__empty"
     >
       {{ props.emptyMessage }}
     </p>
   </section>
 </template>
+
+<style scoped>
+/* Bare: it sits inside a panel or card that draws the box. */
+.cost-bars__list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cost-bars__item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cost-bars__row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.cost-bars__copy {
+  min-width: 0;
+}
+
+.cost-bars__name {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cost-bars__detail {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.cost-bars__cost {
+  flex-shrink: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.cost-bars__track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.cost-bars__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 300ms ease-out;
+}
+
+.cost-bars__empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cost-bars__fill {
+    transition: none;
+  }
+}
+</style>

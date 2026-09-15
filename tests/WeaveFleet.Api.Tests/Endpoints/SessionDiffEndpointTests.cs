@@ -50,17 +50,36 @@ public sealed class SessionDiffEndpointTests
             var files = diffs.Select(diff => diff.GetProperty("file").GetString()).ToArray();
             files.ShouldBe(["workspace/new.txt", "workspace/tracked.txt"]);
 
+            // The list carries no contents; a file's contents come from /diffs/file.
             var newFile = diffs.Single(diff => diff.GetProperty("file").GetString() == "workspace/new.txt");
-            newFile.GetProperty("before").GetString().ShouldBe(string.Empty);
-            newFile.GetProperty("after").GetString().ShouldBe("inside new\n");
-            newFile.GetProperty("isBinary").GetBoolean().ShouldBeFalse();
-            newFile.GetProperty("isTruncated").GetBoolean().ShouldBeFalse();
+            newFile.GetProperty("status").GetString().ShouldBe("added");
+            newFile.GetProperty("additions").GetInt32().ShouldBe(1);
+            newFile.GetProperty("before").ValueKind.ShouldBe(JsonValueKind.Null);
+            newFile.GetProperty("after").ValueKind.ShouldBe(JsonValueKind.Null);
 
-            var trackedFile = diffs.Single(diff => diff.GetProperty("file").GetString() == "workspace/tracked.txt");
+            var trackedSummary = diffs.Single(diff => diff.GetProperty("file").GetString() == "workspace/tracked.txt");
+            trackedSummary.GetProperty("status").GetString().ShouldBe("modified");
+            trackedSummary.GetProperty("before").ValueKind.ShouldBe(JsonValueKind.Null);
+
+            var newFileResponse = await client.GetAsync("/api/sessions/session-prefix/diffs/file?path=workspace/new.txt");
+            newFileResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+            var newFileJson = await newFileResponse.Content.ReadFromJsonAsync<JsonElement>(JsonSerializerOptions.Web);
+            newFileJson.GetProperty("before").GetString().ShouldBe(string.Empty);
+            newFileJson.GetProperty("after").GetString().ShouldBe("inside new\n");
+            newFileJson.GetProperty("isBinary").GetBoolean().ShouldBeFalse();
+            newFileJson.GetProperty("isTruncated").GetBoolean().ShouldBeFalse();
+
+            var trackedResponse = await client.GetAsync("/api/sessions/session-prefix/diffs/file?path=workspace/tracked.txt");
+            trackedResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+            var trackedFile = await trackedResponse.Content.ReadFromJsonAsync<JsonElement>(JsonSerializerOptions.Web);
             trackedFile.GetProperty("before").GetString().ShouldBe("alpha\nbeta\n");
             trackedFile.GetProperty("after").GetString().ShouldBe("alpha\nbeta changed\ngamma\n");
             trackedFile.GetProperty("isBinary").GetBoolean().ShouldBeFalse();
             trackedFile.GetProperty("isTruncated").GetBoolean().ShouldBeFalse();
+
+            // Only the session's own changes can be read this way.
+            var outsideResponse = await client.GetAsync("/api/sessions/session-prefix/diffs/file?path=outside.txt");
+            outsideResponse.StatusCode.ShouldBe(HttpStatusCode.NotFound);
         }
         finally
         {

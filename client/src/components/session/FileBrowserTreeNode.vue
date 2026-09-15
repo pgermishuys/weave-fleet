@@ -50,7 +50,7 @@ const children = computed(() =>
 // Find diff info for this file
 const diffInfo = computed(() => {
   if (props.entry.isDirectory) return null
-  return diffs.diffs.value.find(d => d.file === props.entry.relativePath)
+  return diffs.byFile.value.get(props.entry.relativePath)
 })
 
 const statusBadge = computed(() => {

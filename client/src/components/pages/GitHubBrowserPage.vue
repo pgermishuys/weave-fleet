@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import { Github, Loader2, Plus, Star, Lock } from "lucide-vue-next";
+import { ChevronRight, Github, Loader2, Lock, Plus, Star } from "lucide-vue-next";
 import { useRouter } from "@tanstack/vue-router";
 import { useGitHubAuth } from "@/plugins/builtin/github/composables/use-github-auth";
 import { useGitHubRepos } from "@/plugins/builtin/github/composables/use-github-repos";
@@ -37,6 +37,10 @@ function navigateToRepo(repo: BookmarkedRepo) {
   void router.navigate({ to: "/github/$owner/$repo", params: { owner: repo.owner, repo: repo.name } });
 }
 
+function openGitHubSettings() {
+  void router.navigate({ to: "/settings/plugins/$pluginId", params: { pluginId: "github" } });
+}
+
 // ─── Add Repository Dialog ────────────────────────────────────────────────────
 const isDialogOpen = shallowRef(false);
 
@@ -62,134 +66,164 @@ async function handleSelectRepo(repo: { full_name: string; name: string; owner_l
 
 <template>
   <div class="github-browser">
-    <!-- Header -->
-    <div class="browser-header">
+    <header class="browser-header">
       <div class="header-text">
         <h1 class="browser-title">
           GitHub
         </h1>
         <p class="browser-subtitle">
-          Browse issues and pull requests for your repositories
+          <span
+            class="status-dot"
+            :class="{
+              'status-dot--connected': !isLoadingStatus && isConnected,
+              'status-dot--disconnected': !isLoadingStatus && !isConnected,
+            }"
+            aria-hidden="true"
+          />
+          <template v-if="isLoadingStatus">
+            Checking the connection…
+          </template>
+          <template v-else-if="isConnected">
+            Connected. Issues and pull requests for the repositories you follow.
+          </template>
+          <template v-else>
+            Not connected
+          </template>
         </p>
       </div>
-      <span
-        v-if="isLoadingStatus"
-        class="status-pill status-pill--loading"
-      >Checking…</span>
-      <span
-        v-else-if="isConnected"
-        class="status-pill status-pill--connected"
-      >Connected</span>
-      <span
-        v-else
-        class="status-pill status-pill--disconnected"
-      >Disconnected</span>
-    </div>
+      <Dialog
+        v-if="isConnected"
+        v-model:open="isDialogOpen"
+      >
+        <DialogTrigger as-child>
+          <Button size="sm">
+            <Plus :size="14" />
+            Add repository
+          </Button>
+        </DialogTrigger>
+        <DialogContent class="add-repo-dialog-content">
+          <DialogHeader>
+            <DialogTitle>Add repository</DialogTitle>
+          </DialogHeader>
+          <Command>
+            <CommandInput placeholder="Search repositories…" />
+            <CommandList>
+              <CommandEmpty>
+                <span
+                  v-if="isLoadingRepos"
+                  class="dialog-loading"
+                >
+                  <Loader2
+                    :size="14"
+                    class="animate-spin"
+                  />
+                  Loading repositories…
+                </span>
+                <span v-else>No repositories found.</span>
+              </CommandEmpty>
+              <CommandGroup>
+                <CommandItem
+                  v-for="repo in availableRepos"
+                  :key="repo.id"
+                  :value="repo.full_name"
+                  @select="handleSelectRepo(repo)"
+                >
+                  <div class="repo-item">
+                    <Github :size="14" />
+                    <span class="repo-item-name">{{ repo.full_name }}</span>
+                    <Lock
+                      v-if="repo.private"
+                      :size="12"
+                      class="repo-item-lock"
+                    />
+                    <span
+                      v-if="repo.language"
+                      class="repo-item-lang"
+                    >{{ repo.language }}</span>
+                    <span
+                      v-if="repo.stargazers_count > 0"
+                      class="repo-item-stars"
+                    >
+                      <Star :size="10" />
+                      {{ repo.stargazers_count }}
+                    </span>
+                  </div>
+                </CommandItem>
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </DialogContent>
+      </Dialog>
+    </header>
 
     <!-- Not connected -->
     <div
       v-if="!isLoadingStatus && !isConnected"
       class="browser-empty"
     >
+      <Github
+        :size="28"
+        class="empty-icon"
+        aria-hidden="true"
+      />
       <p class="empty-title">
-        GitHub is not connected.
+        Connect GitHub to browse issues and pull requests
       </p>
       <p class="empty-subtitle">
-        Connect GitHub in Settings to browse repositories.
+        Fleet uses it to list your repositories and start sessions from an issue or pull request.
       </p>
+      <Button
+        size="sm"
+        class="empty-action"
+        @click="openGitHubSettings"
+      >
+        Connect in Settings
+      </Button>
     </div>
 
     <template v-else-if="isConnected">
-      <!-- Add Repository button + dialog -->
-      <div class="actions-bar">
-        <Dialog v-model:open="isDialogOpen">
-          <DialogTrigger as-child>
-            <Button variant="outline" size="sm">
-              <Plus :size="14" />
-              Add Repository
-            </Button>
-          </DialogTrigger>
-          <DialogContent class="add-repo-dialog-content">
-            <DialogHeader>
-              <DialogTitle>Add Repository</DialogTitle>
-            </DialogHeader>
-            <Command>
-              <CommandInput placeholder="Search repositories…" />
-              <CommandList>
-                <CommandEmpty>
-                  <span
-                    v-if="isLoadingRepos"
-                    class="dialog-loading"
-                  >
-                    <Loader2
-                      :size="14"
-                      class="animate-spin"
-                    />
-                    Loading repositories…
-                  </span>
-                  <span v-else>No repositories found.</span>
-                </CommandEmpty>
-                <CommandGroup>
-                  <CommandItem
-                    v-for="repo in availableRepos"
-                    :key="repo.id"
-                    :value="repo.full_name"
-                    @select="handleSelectRepo(repo)"
-                  >
-                    <div class="repo-item">
-                      <Github :size="14" />
-                      <span class="repo-item-name">{{ repo.full_name }}</span>
-                      <Lock
-                        v-if="repo.private"
-                        :size="12"
-                        class="repo-item-lock"
-                      />
-                      <span
-                        v-if="repo.language"
-                        class="repo-item-lang"
-                      >{{ repo.language }}</span>
-                      <span
-                        v-if="repo.stargazers_count > 0"
-                        class="repo-item-stars"
-                      >
-                        <Star :size="10" />
-                        {{ repo.stargazers_count }}
-                      </span>
-                    </div>
-                  </CommandItem>
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      <!-- Repo cards grid -->
       <div
         v-if="bookmarks.length > 0"
         class="repo-grid"
       >
-        <button
+        <div
           v-for="repo in bookmarks"
           :key="repo.fullName"
           class="repo-card"
+          role="button"
+          tabindex="0"
           @click="navigateToRepo(repo)"
+          @keydown.enter.prevent="navigateToRepo(repo)"
         >
-          <Github :size="16" />
-          <span>{{ repo.fullName }}</span>
-        </button>
+          <span class="repo-card__head">
+            <Github
+              :size="16"
+              class="repo-card__icon"
+              aria-hidden="true"
+            />
+            <span class="repo-card__name">
+              <span class="repo-card__owner">{{ repo.owner }} /</span>
+              {{ repo.name }}
+            </span>
+            <ChevronRight
+              :size="14"
+              class="repo-card__chevron"
+              aria-hidden="true"
+            />
+          </span>
+          <span class="repo-card__url">github.com/{{ repo.fullName }}</span>
+        </div>
       </div>
 
-      <!-- Empty state -->
       <div
         v-else
         class="browser-empty"
       >
         <p class="empty-title">
-          No repositories added yet.
+          No repositories yet
         </p>
         <p class="empty-subtitle">
-          Click 'Add Repository' to get started.
+          Add a repository to see its issues and pull requests here.
         </p>
       </div>
     </template>
@@ -200,6 +234,7 @@ async function handleSelectRepo(repo: { full_name: string; name: string; owner_l
 .github-browser {
   display: flex;
   flex-direction: column;
+  gap: 20px;
   height: 100%;
   overflow: visible;
 }
@@ -207,82 +242,114 @@ async function handleSelectRepo(repo: { full_name: string; name: string; owner_l
 /* ─── Header ──────────────────────────────────────────────────────────────── */
 .browser-header {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 16px 8px;
-  border-bottom: 1px solid var(--border);
+  align-items: flex-end;
+  gap: 12px;
   flex-shrink: 0;
 }
 
 .header-text {
   flex: 1;
+  min-width: 0;
 }
 
 .browser-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
   margin: 0;
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
 }
 
 .browser-subtitle {
-  font-size: 11px;
-  color: var(--muted);
-  margin: 2px 0 0;
-}
-
-.status-pill {
-  font-size: 10px;
-  padding: 2px 8px;
-  border-radius: 999px;
-}
-
-.status-pill--connected {
-  background: rgba(34, 197, 94, 0.15);
-  color: #22c55e;
-}
-
-.status-pill--disconnected {
-  background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
-}
-
-.status-pill--loading {
-  background: var(--sidebar-item-hover);
-  color: var(--muted);
-}
-
-.actions-bar {
   display: flex;
-  padding: 12px 16px;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
   flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.status-dot--connected {
+  background: var(--running);
+}
+
+.status-dot--disconnected {
+  background: var(--error);
 }
 
 /* ─── Repo grid ───────────────────────────────────────────────────────────── */
 .repo-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 12px;
-  padding: 16px;
 }
 
 .repo-card {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 16px;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: 0;
-  background: var(--card, var(--sidebar));
-  cursor: pointer;
-  transition: background var(--transition);
-  text-align: left;
+  border-radius: var(--radius-card);
+  background: var(--card-bg);
   color: var(--text);
-  font-size: 13px;
+  cursor: pointer;
+  transition: border-color var(--transition), background-color var(--transition);
 }
 
 .repo-card:hover {
-  background: var(--bg);
+  border-color: color-mix(in srgb, var(--text) 18%, transparent);
+}
+
+.repo-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.repo-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.repo-card__icon,
+.repo-card__chevron {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.repo-card__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repo-card__owner {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.repo-card__url {
+  overflow: hidden;
+  padding-left: 24px;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ─── Dialog items ────────────────────────────────────────────────────────── */
@@ -314,10 +381,10 @@ async function handleSelectRepo(repo: { full_name: string; name: string; owner_l
 }
 
 .repo-item-lang {
-  font-size: 10px;
+  font-size: 11px;
   padding: 1px 6px;
   border-radius: 999px;
-  background: var(--sidebar-item-hover);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
   color: var(--muted);
   flex-shrink: 0;
 }
@@ -326,7 +393,7 @@ async function handleSelectRepo(repo: { full_name: string; name: string; owner_l
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   flex-shrink: 0;
 }
@@ -337,19 +404,34 @@ async function handleSelectRepo(repo: { full_name: string; name: string; owner_l
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  flex: 1;
-  padding: 32px 16px;
-  text-align: center;
   gap: 6px;
+  padding: 56px 24px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-card);
+  text-align: center;
+}
+
+.empty-icon {
+  margin-bottom: 6px;
+  color: var(--muted);
 }
 
 .empty-title {
-  font-size: 13px;
+  margin: 0;
   color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .empty-subtitle {
-  font-size: 11px;
+  max-width: 420px;
+  margin: 0;
   color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.empty-action {
+  margin-top: 10px;
 }
 </style>

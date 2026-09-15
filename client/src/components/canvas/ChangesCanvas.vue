@@ -32,8 +32,10 @@ function openChange(path: string): void {
   canvases.openFile(props.sessionId, path, { keep: true, view: "diff" });
 }
 
+const openIds = computed(() => new Set(canvases.sessionCanvases(props.sessionId).canvases.map((canvas) => canvas.id)));
+
 function isOpen(path: string): boolean {
-  return canvases.sessionCanvases(props.sessionId).canvases.some((canvas) => canvas.id === fileCanvasId(path));
+  return openIds.value.has(fileCanvasId(path));
 }
 </script>
 
@@ -109,6 +111,9 @@ function isOpen(path: string): boolean {
   gap: 8px;
   min-height: 30px;
   padding: 0 8px;
+  /* Rows off screen skip layout and paint; a session can change hundreds of files. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 30px;
   border: 0;
   border-radius: var(--radius-btn);
   background: transparent;

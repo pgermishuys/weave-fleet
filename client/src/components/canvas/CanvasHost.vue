@@ -13,6 +13,7 @@ import {
 import BrowserOpenDialog from "@/components/canvas/BrowserOpenDialog.vue";
 import UnsavedFileDialog from "@/components/canvas/UnsavedFileDialog.vue";
 import type { UseDiffsResult } from "@/composables/use-diffs";
+import { useDragScroll } from "@/composables/use-drag-scroll";
 import { closeServerCanvas } from "@/composables/use-server-canvases";
 import {
   CANVAS_TYPES,
@@ -108,6 +109,9 @@ function updateTabFades(): void {
 }
 
 useResizeObserver(tablistRef, updateTabFades);
+
+// No scrollbar: tabs past the edge are reached by dragging the strip or turning the wheel over it.
+const { dragging: draggingTabs } = useDragScroll(tablistRef);
 
 // Keep the active tab in view, including ones the agent just opened.
 watch(
@@ -273,7 +277,11 @@ const activeProps = computed(() => {
       <div
         ref="tablistRef"
         class="canvas-tabs"
-        :class="{ 'canvas-tabs--fade-start': fadeStart, 'canvas-tabs--fade-end': fadeEnd }"
+        :class="{
+          'canvas-tabs--fade-start': fadeStart,
+          'canvas-tabs--fade-end': fadeEnd,
+          'canvas-tabs--dragging': draggingTabs,
+        }"
         role="tablist"
         aria-label="Canvases"
         @keydown="onTabKeydown"
@@ -441,8 +449,6 @@ const activeProps = computed(() => {
       <slot name="header-actions" />
     </div>
 
-    <slot name="below-header" />
-
     <BrowserOpenDialog
       v-model:open="browserDialogOpen"
       :session-id="sessionId"
@@ -469,6 +475,8 @@ const activeProps = computed(() => {
         />
       </KeepAlive>
     </div>
+
+    <slot name="footer" />
   </div>
 </template>
 
@@ -501,6 +509,12 @@ const activeProps = computed(() => {
 
 .canvas-tabs::-webkit-scrollbar {
   display: none;
+}
+
+.canvas-tabs--dragging,
+.canvas-tabs--dragging .canvas-tab {
+  cursor: grabbing;
+  user-select: none;
 }
 
 .canvas-tabs--fade-start {

@@ -57,14 +57,11 @@ function getRelativeCostWidth(cost: number, highestCost: number): number {
       <Card
         v-for="project in projectCards"
         :key="project.id"
-        class="projects-tab__card border-border/80 bg-card/70 py-0 backdrop-blur-sm"
+        class="projects-tab__card py-0 shadow-none"
       >
         <CardContent class="projects-tab__content">
           <div class="projects-tab__header">
             <div class="projects-tab__title-block">
-              <p class="projects-tab__eyebrow">
-                Project
-              </p>
               <h3 class="projects-tab__title">
                 {{ project.name }}
               </h3>
@@ -135,7 +132,7 @@ function getRelativeCostWidth(cost: number, highestCost: number): number {
 .projects-tab__grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px;
+  gap: 12px;
 }
 
 .projects-tab__card {
@@ -146,8 +143,8 @@ function getRelativeCostWidth(cost: number, highestCost: number): number {
   display: flex;
   height: 100%;
   flex-direction: column;
-  gap: 20px;
-  padding: 20px;
+  gap: 16px;
+  padding: 16px;
 }
 
 .projects-tab__header {
@@ -161,18 +158,10 @@ function getRelativeCostWidth(cost: number, highestCost: number): number {
   min-width: 0;
 }
 
-.projects-tab__eyebrow {
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 .projects-tab__title {
-  margin-top: 6px;
+  margin: 0;
   color: var(--text);
-  font-size: 1.05rem;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -181,7 +170,8 @@ function getRelativeCostWidth(cost: number, highestCost: number): number {
 .projects-tab__cost {
   flex-shrink: 0;
   color: var(--text);
-  font-size: 1rem;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
   font-weight: 600;
   line-height: 1.4;
   text-align: right;
@@ -207,7 +197,7 @@ function getRelativeCostWidth(cost: number, highestCost: number): number {
 
 .projects-tab__stat-value {
   color: var(--text);
-  font-size: 1.05rem;
+  font-size: 18px;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   line-height: 1.4;
@@ -240,16 +230,16 @@ function getRelativeCostWidth(cost: number, highestCost: number): number {
 }
 
 .projects-tab__bar-track {
-  height: 10px;
+  height: 6px;
   overflow: hidden;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--muted) 18%, transparent);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
 }
 
 .projects-tab__bar-fill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(99, 102, 241, 0.92), rgba(34, 197, 94, 0.8));
+  background: var(--accent);
   transition: width 0.2s ease;
 }
 
@@ -258,9 +248,8 @@ function getRelativeCostWidth(cost: number, highestCost: number): number {
   min-height: 180px;
   align-items: center;
   justify-content: center;
-  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--card-bg) 70%, transparent);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-card);
   padding: 24px;
   text-align: center;
 }
@@ -268,7 +257,7 @@ function getRelativeCostWidth(cost: number, highestCost: number): number {
 .projects-tab__empty-text {
   max-width: 32rem;
   color: var(--muted);
-  font-size: 0.95rem;
+  font-size: 13px;
   line-height: 1.6;
 }
 

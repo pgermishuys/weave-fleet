@@ -3,6 +3,7 @@ import { computed, inject, nextTick, onActivated, onBeforeUnmount, onDeactivated
 import { ChevronRight, MessageSquarePlus } from "lucide-vue-next";
 import { Transaction, type Text } from "@codemirror/state";
 import { EditorView, type ViewUpdate } from "@codemirror/view";
+import { useDiffBase } from "@/composables/use-diff-base";
 import type { UseDiffsResult } from "@/composables/use-diffs";
 import { useCanvasAnnotate } from "@/composables/use-canvas-annotation";
 import { appendDraftReference } from "@/composables/use-draft-state";
@@ -40,10 +41,14 @@ const saveKey = isMac ? "⌘S" : "Ctrl S";
 
 const renderable = computed(() => hasRenderedView(props.path));
 const isHtml = computed(() => /\.html?$/i.test(props.path));
-const diffItem = computed(() => sharedDiffs?.diffs.value.find((diff) => diff.file === props.path) ?? null);
-const gitBase = computed<Text | null>(() => (diffItem.value ? baseText(diffItem.value.before ?? "") : null));
-const hasChanges = computed(() => diffItem.value !== null || (info.value?.dirty ?? false));
-const deleted = computed(() => diffItem.value?.status === "deleted" && info.value?.status === "error");
+const diffItem = computed(() => sharedDiffs?.byFile.value.get(props.path) ?? null);
+const inDiff = computed(() => diffItem.value !== null);
+// The diff list has no contents; the base is fetched once, when the file is among the changes.
+const diffBase = useDiffBase(() => props.sessionId, () => props.path, inDiff);
+const gitBase = computed<Text | null>(() => (inDiff.value && diffBase.value !== null ? baseText(diffBase.value) : null));
+const hasChanges = computed(() => inDiff.value || (info.value?.dirty ?? false));
+const deleted = computed(() =>
+  diffItem.value?.status === "deleted" && info.value?.status === "error" && diffBase.value !== null);
 
 // Compare is a mode of the conflict bar, on top of whichever view the tab is in.
 const comparing = ref(false);
@@ -159,7 +164,7 @@ watch(conflict, (next) => {
 
 function mountDeleted(): void {
   if (!deleted.value || !deletedHost.value || deletedView) return;
-  deletedView = createDeletedView(deletedHost.value, diffItem.value?.before ?? "");
+  deletedView = createDeletedView(deletedHost.value, diffBase.value ?? "");
 }
 watch(deleted, () => void nextTick(mountDeleted));
 

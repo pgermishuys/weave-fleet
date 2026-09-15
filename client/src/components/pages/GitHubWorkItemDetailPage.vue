@@ -356,7 +356,7 @@ async function handleCreateSession(): Promise<void> {
             :disabled="isRefreshing || !createSessionPreset"
             @click="handleCreateSession"
           >
-            Create Session
+            Start a session
           </Button>
 
           <button
@@ -555,31 +555,30 @@ async function handleCreateSession(): Promise<void> {
 .detail-page {
   height: 100%;
   overflow: auto;
-  padding: 24px;
 }
 
 .detail-shell {
   display: flex;
-  max-width: 1080px;
+  max-width: 960px;
   margin: 0 auto;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 
-.detail-hero,
 .detail-panel,
 .detail-state {
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius-card);
   background: var(--card-bg);
 }
 
+/* The title sits on the page, like the other pages' headings; the panels below hold the details. */
 .detail-hero {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  gap: 16px;
-  padding: 24px;
+  gap: 12px 16px;
+  padding: 0 0 4px;
 }
 
 .detail-hero__content {
@@ -587,7 +586,7 @@ async function handleCreateSession(): Promise<void> {
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .detail-status-row {
@@ -607,9 +606,12 @@ async function handleCreateSession(): Promise<void> {
 
 .detail-title {
   margin: 0;
-  font-size: 28px;
-  line-height: 1.2;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
   color: var(--text);
+  text-wrap: balance;
 }
 
 .detail-labels {
@@ -621,19 +623,19 @@ async function handleCreateSession(): Promise<void> {
 .detail-label {
   display: inline-flex;
   align-items: center;
-  min-height: 22px;
+  min-height: 20px;
   padding: 0 8px;
   border: 1px solid transparent;
   border-radius: 999px;
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 500;
 }
 
 .detail-actions {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: center;
+  gap: 6px;
 }
 
 .detail-action-button,
@@ -649,9 +651,9 @@ async function handleCreateSession(): Promise<void> {
   padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-btn);
-  background: rgba(255, 255, 255, 0.04);
+  background: transparent;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 500;
   line-height: 1;
   text-decoration: none;
@@ -660,7 +662,7 @@ async function handleCreateSession(): Promise<void> {
 
 .detail-action-button:hover,
 .detail-link-button:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
 }
 
 .detail-action-button:focus-visible,
@@ -676,23 +678,20 @@ async function handleCreateSession(): Promise<void> {
 
 .detail-metadata {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 16px;
-  padding: 20px 24px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px 16px;
+  padding: 14px 16px;
 }
 
 .detail-meta-item {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 6px;
+  gap: 3px;
 }
 
 .detail-meta-item__label {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -714,8 +713,8 @@ async function handleCreateSession(): Promise<void> {
 }
 
 .detail-author__avatar {
-  width: 24px;
-  height: 24px;
+  width: 18px;
+  height: 18px;
   border-radius: 999px;
   object-fit: cover;
 }
@@ -738,15 +737,19 @@ async function handleCreateSession(): Promise<void> {
 }
 
 .detail-change-list__additions {
-  color: #22c55e;
+  color: var(--running);
+  font-family: var(--font-mono-stack);
+  font-size: 12.5px;
 }
 
 .detail-change-list__deletions {
-  color: #ef4444;
+  color: var(--error);
+  font-family: var(--font-mono-stack);
+  font-size: 12.5px;
 }
 
 .detail-panel {
-  padding: 24px;
+  padding: 16px 20px;
 }
 
 .detail-panel__header {
@@ -754,12 +757,17 @@ async function handleCreateSession(): Promise<void> {
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
+}
+
+.detail-panel__header .detail-panel__title {
+  margin: 0;
 }
 
 .detail-panel__title {
-  margin: 0 0 16px;
-  font-size: 18px;
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--text);
 }
 
@@ -780,7 +788,7 @@ async function handleCreateSession(): Promise<void> {
 
 .detail-panel__banner--warning {
   margin-bottom: 16px;
-  color: #fca5a5;
+  color: var(--error);
 }
 
 .detail-comment-list {
@@ -813,7 +821,7 @@ async function handleCreateSession(): Promise<void> {
 
 .detail-comment__meta,
 .detail-comment__footer a {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -826,6 +834,7 @@ async function handleCreateSession(): Promise<void> {
 
 .detail-markdown {
   color: var(--text);
+  font-size: 13.5px;
   line-height: 1.65;
 }
 
@@ -846,15 +855,24 @@ async function handleCreateSession(): Promise<void> {
   padding-left: 20px;
 }
 
+.detail-markdown :deep(ul) {
+  list-style: disc;
+}
+
+.detail-markdown :deep(ol) {
+  list-style: decimal;
+}
+
 .detail-markdown :deep(pre) {
   overflow: auto;
   padding: 12px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
+  border-radius: var(--radius-btn);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
 }
 
 .detail-markdown :deep(code) {
-  font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace;
+  font-family: var(--font-mono-stack);
+  font-size: 0.9em;
 }
 
 .detail-markdown :deep(a) {
@@ -898,7 +916,7 @@ async function handleCreateSession(): Promise<void> {
 }
 
 .detail-state--error {
-  color: #fca5a5;
+  color: var(--error);
 }
 
 .detail-state__copy {

@@ -6,6 +6,7 @@ import {
   RefreshCw,
   Loader2,
   ArrowLeft,
+  ExternalLink,
 } from "lucide-vue-next";
 import { useRouter } from "@tanstack/vue-router";
 import { useGitHubIssues } from "@/plugins/builtin/github/composables/use-github-issues";
@@ -131,19 +132,42 @@ function goBack() {
     <!-- Header -->
     <div class="repo-header">
       <Button
-        variant="ghost"
-        size="sm"
+        variant="toolbar-icon"
+        size="toolbar"
+        aria-label="Back to repositories"
+        title="Back to repositories"
         @click="goBack"
       >
-        <ArrowLeft :size="14" />
+        <ArrowLeft :size="15" />
       </Button>
-      <span class="repo-name">{{ repoFullName }}</span>
+      <h1 class="repo-name">
+        <span class="repo-name__owner">{{ owner }} /</span>
+        {{ repo }}
+      </h1>
+      <a
+        class="repo-link"
+        :href="`https://github.com/${repoFullName}`"
+        target="_blank"
+        rel="noreferrer noopener"
+      >
+        Open on GitHub
+        <ExternalLink
+          :size="12"
+          aria-hidden="true"
+        />
+      </a>
     </div>
 
     <!-- Tabs -->
-    <div class="tab-bar">
+    <div
+      class="tab-bar"
+      role="tablist"
+      aria-label="Issues and pull requests"
+    >
       <button
         :class="['tab-btn', activeTab === 'issues' && 'tab-btn--active']"
+        role="tab"
+        :aria-selected="activeTab === 'issues'"
         @click="activeTab = 'issues'"
       >
         <CircleDot :size="13" />
@@ -155,10 +179,12 @@ function goBack() {
       </button>
       <button
         :class="['tab-btn', activeTab === 'pulls' && 'tab-btn--active']"
+        role="tab"
+        :aria-selected="activeTab === 'pulls'"
         @click="activeTab = 'pulls'"
       >
         <GitPullRequest :size="13" />
-        Pull Requests
+        Pull requests
         <span
           v-if="pulls.length > 0"
           class="tab-count"
@@ -350,71 +376,96 @@ function goBack() {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 16px 8px;
-  border-bottom: 1px solid var(--border);
+  padding: 0 0 12px;
   flex-shrink: 0;
 }
 
 .repo-name {
-  font-size: 14px;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 18px;
   font-weight: 600;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repo-name__owner {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.repo-link {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--radius-btn);
+  color: var(--muted);
+  font-size: 12.5px;
+  text-decoration: none;
+  transition: background-color var(--transition), color var(--transition);
+}
+
+.repo-link:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
   color: var(--text);
 }
 
-/* ─── Tabs ────────────────────────────────────────────────────────────────── */
+/* ─── Tabs: pills, like the canvas tabs ───────────────────────────────────── */
 .tab-bar {
   display: flex;
-  gap: 0;
+  gap: 2px;
+  padding-bottom: 10px;
   border-bottom: 1px solid var(--border);
-  padding: 0 12px;
   flex-shrink: 0;
 }
 
 .tab-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 8px 10px 7px;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
   border: none;
+  border-radius: var(--radius-btn);
   background: transparent;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  transition: color var(--transition), border-color var(--transition);
+  transition: background-color var(--transition), color var(--transition);
 }
 
 .tab-btn:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
   color: var(--text);
 }
 
 .tab-btn--active {
+  background: color-mix(in srgb, var(--text) 9%, transparent);
   color: var(--text);
-  border-bottom-color: var(--accent);
 }
 
 .tab-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 16px;
-  padding: 0 5px;
-  border-radius: 0;
-  background: var(--sidebar-item-hover);
-  font-size: 10px;
-  font-weight: 600;
   color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ─── Tab content ─────────────────────────────────────────────────────────── */
 .tab-content {
   flex: 1;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
+  gap: 1px;
+  padding-top: 6px;
 }
 
 /* ─── PR filter bar ───────────────────────────────────────────────────────── */
@@ -422,8 +473,7 @@ function goBack() {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--border);
+  padding: 0 4px 6px;
 }
 
 /* ─── List states ─────────────────────────────────────────────────────────── */
@@ -456,12 +506,13 @@ function goBack() {
 .list-empty {
   padding: 40px 16px;
   text-align: center;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted);
 }
 
 .load-more-btn {
-  width: 100%;
-  border-top: 1px solid var(--border);
+  align-self: center;
+  margin-top: 6px;
+  color: var(--muted);
 }
 </style>
