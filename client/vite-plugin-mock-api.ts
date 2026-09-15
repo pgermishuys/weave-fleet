@@ -12,7 +12,7 @@
 import type { Plugin, ViteDevServer, PreviewServer } from "vite";
 import type { IncomingMessage } from "http";
 import { createHash } from "crypto";
-import { readFileSync } from "fs";
+import { readdirSync, readFileSync } from "fs";
 import { resolve } from "path";
 import { startMockPreview, type MockPreview } from "./mock-preview";
 
@@ -357,6 +357,21 @@ const MOCK_TOOL_CATALOG = [
   },
 ];
 
+/** Fleet's built-in skills, read from the repo the way the server reads them, all off. */
+function readBuiltInSkills(folder: string): { name: string; description: string; enabled: boolean }[] {
+  let names: string[];
+  try {
+    names = readdirSync(folder).sort();
+  } catch {
+    return [];
+  }
+  return names.flatMap((name) => {
+    const frontMatter = readFileSync(resolve(folder, name, "SKILL.md"), "utf-8").split("\n---")[0];
+    const description = /^description: (.+)$/m.exec(frontMatter)?.[1]?.trim();
+    return description ? [{ name, description, enabled: false }] : [];
+  });
+}
+
 export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
   const mockDir = resolve(__dirname, "src/mocks");
   
@@ -367,6 +382,7 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
     config: JSON.parse(readFileSync(resolve(mockDir, "config.json"), "utf-8")),
     projects: JSON.parse(readFileSync(resolve(mockDir, "projects.json"), "utf-8")),
   };
+  const builtInSkills = readBuiltInSkills(resolve(__dirname, "../opencode/built-in-skills"));
 
   let devServer: ViteDevServer | undefined;
   let preview: MockPreview | undefined;
@@ -1022,6 +1038,22 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
     {
       pattern: /^\/api\/skills$/,
       handler: () => json({ skills: MOCK_SKILLS }),
+    },
+    {
+      pattern: /^\/api\/skills\/built-in\/?$/,
+      handler: () => json(builtInSkills),
+    },
+    {
+      pattern: /^\/api\/skills\/built-in\/([^/]+)$/,
+      handler: async (url, req) => {
+        const name = decodeURIComponent(url.pathname.split("/")[4]);
+        const skill = builtInSkills.find((candidate) => candidate.name === name);
+        if (!skill) return json({ error: `BuiltInSkill with id '${name}' was not found.` }, 404);
+        const body = (await req.json().catch(() => ({}))) as { enabled?: boolean };
+        skill.enabled = body.enabled === true;
+        console.log(`[mock-api] PUT /api/skills/built-in/${name} → ${skill.enabled ? "on" : "off"}`);
+        return json(skill);
+      },
     },
     {
       pattern: /^\/api\/skills\/catalog$/,

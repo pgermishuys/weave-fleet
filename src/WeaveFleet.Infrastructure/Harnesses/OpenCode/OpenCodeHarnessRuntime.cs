@@ -12,6 +12,7 @@ using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Skills;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
@@ -90,6 +91,7 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
     private long _pooledLeaseGeneration;
     private string? _fleetPluginUri;
     private string? _fleetSkillsPath;
+    private string? _builtInSkillsPath;
 
     /// <summary>Initialises the runtime with required dependencies.</summary>
     public OpenCodeHarnessRuntime(
@@ -313,7 +315,7 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
     public string HarnessType => "opencode";
 
     /// <inheritdoc />
-    public Task<RuntimePreparation> PrepareRuntimeAsync(RuntimePreparationContext context, CancellationToken ct)
+    public async Task<RuntimePreparation> PrepareRuntimeAsync(RuntimePreparationContext context, CancellationToken ct)
     {
         // Step 1: resolve credential requirements for the requested model.
         var requirements = ResolveRequirements(context.ModelId);
@@ -362,10 +364,27 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         }
 
         if (errors.Count > 0)
-            return Task.FromResult<RuntimePreparation>(new RuntimePreparation.NotReady(errors));
+            return new RuntimePreparation.NotReady(errors);
 
-        return Task.FromResult<RuntimePreparation>(
-            new RuntimePreparation.Ready(new OpenCodeLaunchArtifacts(envVars, GetRuntimePreparationModelIds(context.ModelId))));
+        // The built-in skills the owner turned on go into the environment too, so a new session after a change in
+        // Settings gets a process with the new choice, and sessions already running keep theirs.
+        var builtInSkills = await GetBuiltInSkillsAsync(context.UserId).ConfigureAwait(false);
+        if (builtInSkills.Count > 0)
+            envVars[OpenCodeFleetSkills.BuiltInVariable] = string.Join(',', builtInSkills);
+
+        return new RuntimePreparation.Ready(new OpenCodeLaunchArtifacts(envVars, GetRuntimePreparationModelIds(context.ModelId)));
+    }
+
+    /// <summary>The built-in skills the user turned on that this Fleet ships, in name order.</summary>
+    private async Task<IReadOnlyList<string>> GetBuiltInSkillsAsync(string userId)
+    {
+        using var userScope = BackgroundUserContext.BeginScope(userId);
+        using var scope = _scopeFactory.CreateScope();
+        if (scope.ServiceProvider.GetService<IUserPreferenceRepository>() is not { } preferences)
+            return [];
+
+        var enabled = await BuiltInSkillService.GetEnabledAsync(preferences).ConfigureAwait(false);
+        return OpenCodeFleetSkills.BuiltIn.Select(skill => skill.Name).Where(enabled.Contains).ToList();
     }
 
     /// <summary>
@@ -867,8 +886,9 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
                 processEnvironment["FLEET_BRIDGE_TOKEN"] = bridgeToken;
                 plugins.Add(fleetPlugin);
 
-                if (GetFleetSkillsPath() is { } fleetSkills)
-                    processEnvironment[OpenCodeFleetSkills.PathVariable] = fleetSkills;
+                var skillFolders = GetSkillFolders(environmentVariables);
+                if (skillFolders.Count > 0)
+                    processEnvironment[OpenCodeFleetSkills.PathVariable] = string.Join(Path.PathSeparator, skillFolders);
             }
 
             processManager = new OpenCodeProcessManager(
@@ -974,6 +994,47 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         {
             var path = OpenCodeFleetSkills.Install(FleetDataDirectory());
             Volatile.Write(ref _fleetSkillsPath, path);
+            return path;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            LogFleetSkillsInstallFailed(_logger, ex);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The folders a process loads Fleet's skills from: the skills every session gets, and a folder for each built-in
+    /// skill named in <paramref name="environmentVariables"/>.
+    /// </summary>
+    internal List<string> GetSkillFolders(IReadOnlyDictionary<string, string> environmentVariables)
+    {
+        List<string> folders = [];
+        if (GetFleetSkillsPath() is { } fleetSkills)
+            folders.Add(fleetSkills);
+
+        if (!environmentVariables.TryGetValue(OpenCodeFleetSkills.BuiltInVariable, out var names)
+            || GetBuiltInSkillsPath() is not { } builtInSkills)
+            return folders;
+
+        var shipped = OpenCodeFleetSkills.BuiltIn.Select(skill => skill.Name).ToHashSet(StringComparer.Ordinal);
+        folders.AddRange(names.Split(',').Where(shipped.Contains).Select(name => Path.Combine(builtInSkills, name)));
+        return folders;
+    }
+
+    /// <summary>
+    /// Installs the built-in skills on first use and returns their folder, or <c>null</c> if they couldn't be written.
+    /// They don't call Fleet's API, so unlike the Fleet API skill they're offered with auth on too.
+    /// </summary>
+    private string? GetBuiltInSkillsPath()
+    {
+        if (Volatile.Read(ref _builtInSkillsPath) is { } installed)
+            return installed;
+
+        try
+        {
+            var path = OpenCodeFleetSkills.InstallBuiltIn(FleetDataDirectory());
+            Volatile.Write(ref _builtInSkillsPath, path);
             return path;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
