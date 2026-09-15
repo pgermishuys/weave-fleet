@@ -1,5 +1,6 @@
 import * as path from "node:path";
 import { BrowserWindow, Menu, Notification, Tray, app, dialog, ipcMain, nativeImage, nativeTheme, screen, shell } from "electron";
+import * as electronUpdater from "electron-updater";
 import { findRunningFleet } from "./instance";
 import { classifyLink } from "./links";
 import { buildAppMenu, showContextMenu } from "./menu";
@@ -7,6 +8,7 @@ import { resolvePaths } from "./paths";
 import { FleetServer, type FleetServerEvent } from "./server";
 import { restorableBounds, SettingsStore } from "./settings";
 import { installLoginShellEnv } from "./shell-env";
+import { updateMode, Updates, type UpdateState } from "./updates";
 
 const STATIC_DIR = path.join(__dirname, "..", "static");
 const DEFAULT_PORT = 5000;
@@ -26,6 +28,8 @@ let server: FleetServer | null = null;
 /** The Fleet the window shows, and whether the app started it (and so stops it on quit). */
 let fleet: { url: string; owned: boolean } | null = null;
 let quitting = false;
+let updates: Updates;
+let notifiedVersion: string | undefined;
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -40,6 +44,7 @@ async function start(): Promise<void> {
     buildAppMenu(process.platform, {
       openLogs: () => void shell.openPath(app.getPath("logs")),
       openDataFolder: () => void shell.openPath(paths.dataDir),
+      checkForUpdates: () => void checkForUpdatesFromMenu(),
     }),
   );
   ipcMain.on("fleet-desktop:version", (event) => {
@@ -47,7 +52,11 @@ async function start(): Promise<void> {
   });
   ipcMain.handle("fleet-desktop:open-logs", () => shell.openPath(app.getPath("logs")));
   ipcMain.handle("fleet-desktop:retry", () => connect());
+  ipcMain.handle("fleet-desktop:get-update-state", () => updates.state);
+  ipcMain.handle("fleet-desktop:check-for-updates", () => updates.check());
+  ipcMain.handle("fleet-desktop:install-update", () => installUpdate());
 
+  startUpdates();
   createWindow();
   await installLoginShellEnv(process.env, process.platform);
   await connect();
@@ -214,18 +223,85 @@ app.on("before-quit", (event) => {
   });
 });
 
-async function confirmQuit(): Promise<boolean> {
+function confirmQuit(): Promise<boolean> {
+  return confirmStoppingSessions("Quitting Fleet stops them.", "Quit Fleet");
+}
+
+/** Asks before something stops the sessions working in the app's own Fleet; true when none are. */
+async function confirmStoppingSessions(detail: string, proceed: string): Promise<boolean> {
   const working = await workingSessions();
   if (working === 0) return true;
   const { response } = await dialog.showMessageBox({
     type: "warning",
     message: working === 1 ? "A session is still working" : `${working} sessions are still working`,
-    detail: "Quitting Fleet stops them.",
-    buttons: ["Quit Fleet", "Cancel"],
+    detail,
+    buttons: [proceed, "Cancel"],
     defaultId: 1,
     cancelId: 1,
   });
   return response === 0;
+}
+
+function startUpdates(): void {
+  const mode = updateMode({ packaged: app.isPackaged, platform: process.platform, env: process.env });
+  let updater: electronUpdater.AppUpdater | null = null;
+  if (mode !== "off") {
+    updater = electronUpdater.autoUpdater;
+    updater.logger = {
+      info: (message) => console.log(`[updates] ${message}`),
+      warn: (message) => console.warn(`[updates] ${message}`),
+      error: (message) => console.error(`[updates] ${message}`),
+    };
+    // A local update feed, for checking the update path end to end.
+    if (process.env.FLEET_DESKTOP_UPDATE_URL) updater.setFeedURL({ provider: "generic", url: process.env.FLEET_DESKTOP_UPDATE_URL });
+  }
+  updates = new Updates(updater, mode, app.getVersion());
+  updates.on("state", onUpdateState);
+  updates.start();
+}
+
+function onUpdateState(state: UpdateState): void {
+  console.log(`[updates] ${state.status}${state.version ? ` ${state.version}` : ""}${state.error ? `: ${state.error}` : ""}`);
+  window?.webContents.send("fleet-desktop:update-state", state);
+  if (!state.version || state.version === notifiedVersion || !Notification.isSupported()) return;
+  if (state.status === "ready") {
+    notifiedVersion = state.version;
+    const notification = new Notification({ title: `Fleet ${state.version} is ready`, body: "Restart Fleet to update.", silent: true });
+    notification.on("click", showWindow);
+    notification.show();
+  } else if (state.status === "available" && state.releaseUrl) {
+    notifiedVersion = state.version;
+    const url = state.releaseUrl;
+    const notification = new Notification({ title: `Fleet ${state.version} is available`, body: "Click to download it.", silent: true });
+    notification.on("click", () => void shell.openExternal(url));
+    notification.show();
+  }
+}
+
+/** Restarts into a downloaded update, or opens the download page when the app can't install one itself. */
+async function installUpdate(): Promise<void> {
+  const state = updates.state;
+  if (state.status === "available" && state.releaseUrl) {
+    await shell.openExternal(state.releaseUrl);
+    return;
+  }
+  if (state.status !== "ready") return;
+  if (!(await confirmStoppingSessions("Updating restarts Fleet, which stops them.", "Update Now"))) return;
+  quitting = true;
+  await server?.stop();
+  updates.install();
+}
+
+async function checkForUpdatesFromMenu(): Promise<void> {
+  const state = await updates.check();
+  const messages: Partial<Record<UpdateState["status"], string>> = {
+    off: "This build of Fleet doesn't update itself.",
+    idle: `You're on the latest version (${state.currentVersion}).`,
+    error: `Couldn't check for updates: ${state.error ?? "unknown error"}`,
+  };
+  const message = messages[state.status];
+  if (message) await dialog.showMessageBox({ type: state.status === "error" ? "warning" : "info", message });
+  else showWindow();
 }
 
 /** Sessions working in the Fleet the app started, or 0 when that can't be told. */

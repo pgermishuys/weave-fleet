@@ -3,13 +3,32 @@ import { Menu, clipboard, shell, type BrowserWindow, type ContextMenuParams, typ
 export interface MenuActions {
   openLogs: () => void;
   openDataFolder: () => void;
+  checkForUpdates: () => void;
 }
 
 /** The application menu. The Edit roles are what make copy and paste work on macOS. */
 export function buildAppMenu(platform: NodeJS.Platform, actions: MenuActions): Menu {
   const mac = platform === "darwin";
   const template: MenuItemConstructorOptions[] = [
-    ...(mac ? [{ role: "appMenu" as const }] : [{ label: "File", submenu: [{ role: "quit" as const, label: "Quit Fleet" }] }]),
+    ...(mac
+      ? [
+          {
+            label: "Fleet",
+            submenu: [
+              { role: "about" as const },
+              { label: "Check for Updates…", click: actions.checkForUpdates },
+              { type: "separator" as const },
+              { role: "services" as const },
+              { type: "separator" as const },
+              { role: "hide" as const },
+              { role: "hideOthers" as const },
+              { role: "unhide" as const },
+              { type: "separator" as const },
+              { role: "quit" as const },
+            ],
+          },
+        ]
+      : [{ label: "File", submenu: [{ role: "quit" as const, label: "Quit Fleet" }] }]),
     { role: "editMenu" },
     {
       label: "View",
@@ -29,6 +48,7 @@ export function buildAppMenu(platform: NodeJS.Platform, actions: MenuActions): M
     {
       role: "help",
       submenu: [
+        ...(mac ? [] : [{ label: "Check for Updates…", click: actions.checkForUpdates }, { type: "separator" as const }]),
         { label: "Open Logs Folder", click: actions.openLogs },
         { label: "Open Fleet Data Folder", click: actions.openDataFolder },
       ],

@@ -50,7 +50,12 @@ bunx vitest run
 | `src/instance.ts` | Reads the instance file a running Fleet writes |
 | `src/shell-env.ts` | Takes PATH from your login shell, so agents find `opencode`, `node` and `git` |
 | `src/links.ts` | Fleet's pages stay in the window; web links open in your browser |
-| `src/preload.ts` | `window.fleetDesktop`, the bridge the UI can use |
+| `src/updates.ts` | Self-update: installs on Windows and from the AppImage, links to the download on macOS and the `.deb` |
+| `src/preload.ts` | `window.fleetDesktop`, the bridge the UI uses (Settings → System shows the app's updates) |
 | `static/` | The splash and error pages, and the icons |
 | `electron-builder.config.js` | Installers, with the server under `resources/fleet` |
 | `scripts/smoke.mjs` | Starts a packaged app, checks its Fleet, kills the app, checks Fleet stopped |
+| `scripts/merge-update-manifests.mjs` | Merges the two Windows update feeds into one `latest.yml` at release |
+
+To try an update against a local feed, serve a newer build's `release/` folder and start the app with
+`FLEET_DESKTOP_UPDATE_URL=http://127.0.0.1:<port>`. `FLEET_DESKTOP_UPDATES=off` turns updates off.
