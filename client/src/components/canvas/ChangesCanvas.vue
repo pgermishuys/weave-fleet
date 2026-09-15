@@ -111,6 +111,9 @@ function isOpen(path: string): boolean {
   gap: 8px;
   min-height: 30px;
   padding: 0 8px;
+  /* Rows off screen skip layout and paint; a session can change hundreds of files. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 30px;
   border: 0;
   border-radius: var(--radius-btn);
   background: transparent;
