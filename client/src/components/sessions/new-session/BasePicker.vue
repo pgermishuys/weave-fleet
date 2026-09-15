@@ -16,6 +16,10 @@ const props = defineProps<{
   /** The name the new branch gets from the message, shown as the name field's placeholder. */
   generatedBranch: string | undefined;
   disabled?: boolean;
+  /** Leave out the new branch's name (an automation names each run's branch itself). */
+  hideBranchName?: boolean;
+  /** Leave out "Fetch origin first" (an automation always fetches). */
+  hideFetch?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -226,8 +230,14 @@ watch(open, (isOpen) => {
         </p>
       </div>
 
-      <div class="ns-pop__separator" />
-      <div class="ns-base-fetch">
+      <div
+        v-if="!hideFetch"
+        class="ns-pop__separator"
+      />
+      <div
+        v-if="!hideFetch"
+        class="ns-base-fetch"
+      >
         <label
           :for="fetchId"
           class="ns-base-fetch__text"
@@ -244,8 +254,14 @@ watch(open, (isOpen) => {
         />
       </div>
 
-      <div class="ns-pop__separator" />
-      <div class="ns-field">
+      <div
+        v-if="!hideBranchName"
+        class="ns-pop__separator"
+      />
+      <div
+        v-if="!hideBranchName"
+        class="ns-field"
+      >
         <label
           for="new-session-branch-name"
           class="ns-field__label"

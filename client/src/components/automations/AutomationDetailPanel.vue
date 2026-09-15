@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { useAutomationsNav } from '@/composables/use-automations-nav'
-import { useAutomations } from '@/composables/use-automations'
-import AutomationForm from '@/components/automations/AutomationForm.vue'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Switch } from '@/components/ui/switch'
+import { computed, nextTick, onUnmounted, reactive, shallowRef, useTemplateRef, watch } from "vue";
+import { useNavigate } from "@tanstack/vue-router";
+import { AlertCircle, Ellipsis, Play, Trash2 } from "lucide-vue-next";
+import { DropdownMenuItem } from "reka-ui";
+import AutomationComposer from "@/components/automations/AutomationComposer.vue";
+import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
+import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Switch } from "@/components/ui/switch";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,12 +17,17 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import { AlertCircle, Play, Edit, Trash2 } from 'lucide-vue-next'
-import type { CreateAutomationRequest } from '@/composables/use-automations'
-import { describeEventType, eventTypeOf, scheduleTimeZone } from '@/lib/automations'
+} from "@/components/ui/alert-dialog";
+import { freshComposerState, useAutomationsNav, type AutomationComposerState } from "@/composables/use-automations-nav";
+import { useAutomations } from "@/composables/use-automations";
+import { useRepositories } from "@/composables/use-repositories";
+import { describeDate, fromTrigger, nextRun } from "@/lib/automation-schedule";
+import { describeEventType, describeRunState, describeRunTrigger, eventTypeOf } from "@/lib/automations";
+import type { NewSessionFolder } from "@/lib/new-session-request";
+import { useAutomationsStore, type Automation, type AutomationRun, type CreateAutomationRequest } from "@/stores/automations";
 
-const { viewMode, activeAutomationId, setActiveAutomation, clearSelection } = useAutomationsNav()
+const navigate = useNavigate();
+const { viewMode, activeAutomationId, draft, seedSessionId, setActiveAutomation, resetDraft, clearSelection } = useAutomationsNav();
 const {
   automations,
   createAutomation,
@@ -29,367 +36,482 @@ const {
   enableAutomation,
   disableAutomation,
   runAutomation,
-} = useAutomations()
+  fetchRuns,
+  refresh,
+} = useAutomations();
+const store = useAutomationsStore();
+const { repositories } = useRepositories();
 
-const isEditingInline = ref(false)
-const deleteConfirmOpen = ref(false)
-const automationToDelete = ref<string | null>(null)
-const isTogglingEnabled = ref(false)
-/** Why the server refused the last Create or Save; the form shows it. */
-const formError = ref<string | null>(null)
-/** Why the switch, Run now or Delete failed, or that a run started. */
-const actionMessage = ref<{ kind: 'error' | 'info'; text: string } | null>(null)
-let actionMessageTimer: ReturnType<typeof setTimeout> | undefined
+const composerRef = useTemplateRef<InstanceType<typeof AutomationComposer>>("composer");
+const isSubmitting = shallowRef(false);
+const isTogglingEnabled = shallowRef(false);
+const deleteConfirmOpen = shallowRef(false);
+/** Why the server refused the last create or save; shown above the composer. */
+const formError = shallowRef<string | null>(null);
+/** A short note: that a run started, that it was saved, or why the switch, Run now or Delete failed. */
+const notice = shallowRef<{ kind: "error" | "info"; text: string } | null>(null);
+const runs = shallowRef<AutomationRun[]>([]);
+const hasLoadedRuns = shallowRef(false);
+/** The open automation's changes, reset whenever another one opens or it's saved. */
+const editState = reactive<AutomationComposerState>(freshComposerState());
+let noticeTimer: ReturnType<typeof setTimeout> | undefined;
+let pollTimer: ReturnType<typeof setTimeout> | undefined;
+
+const currentAutomation = computed(() => automations.value.find((a) => a.id === activeAutomationId.value) ?? null);
 
 function messageOf(error: unknown, fallback: string): string {
-  return error instanceof Error && error.message ? error.message : fallback
+  return error instanceof Error && error.message ? error.message : fallback;
 }
 
-function showAction(kind: 'error' | 'info', text: string) {
-  clearTimeout(actionMessageTimer)
-  actionMessage.value = { kind, text }
-  if (kind === 'info') {
-    actionMessageTimer = setTimeout(() => { actionMessage.value = null }, 4000)
-  }
+function showNotice(kind: "error" | "info", text: string): void {
+  clearTimeout(noticeTimer);
+  notice.value = { kind, text };
+  if (kind === "info") noticeTimer = setTimeout(() => { notice.value = null; }, 4000);
 }
 
-// A message belongs to the automation it was about.
+function isRepository(path: string): boolean {
+  return repositories.value.some((repository) => repository.path === path);
+}
+
+function folderFor(path: string | null, knownRepository: boolean): NewSessionFolder {
+  if (!path) return { kind: "none" };
+  return knownRepository || isRepository(path) ? { kind: "repository", path } : { kind: "directory", path };
+}
+
+/** The composer's state for an automation as it's saved. */
+function stateFor(automation: Automation): AutomationComposerState {
+  const worktree = automation.isolation === "worktree";
+  return {
+    ...freshComposerState(),
+    text: automation.prompt,
+    manualWhen: fromTrigger(automation.triggerType, automation.triggerConfig)
+      ?? { kind: "cron", expr: automation.triggerConfig },
+    folder: folderFor(automation.workspaceId, worktree),
+    hasChosenFolder: true,
+    workspace: worktree ? { kind: "new" } : { kind: "current" },
+    baseBranch: automation.baseBranch ?? null,
+    targetType: automation.targetType ?? "new_session",
+    name: automation.name,
+    skip: automation.maxConcurrentRuns > 0,
+  };
+}
+
+function resetEditState(): void {
+  const automation = currentAutomation.value;
+  Object.assign(editState, automation ? stateFor(automation) : freshComposerState());
+}
+
+// A note, an error and the unsaved changes belong to the automation they were about.
 watch([activeAutomationId, viewMode], () => {
-  formError.value = null
-  actionMessage.value = null
-  isEditingInline.value = false
-})
+  formError.value = null;
+  notice.value = null;
+  runs.value = [];
+  hasLoadedRuns.value = false;
+  resetEditState();
+  void loadRuns();
+}, { immediate: true });
 
-const currentAutomation = computed(() => {
-  if (!activeAutomationId.value) return null
-  return automations.value.find(a => a.id === activeAutomationId.value) || null
-})
+// The list can arrive after the page opens.
+watch(() => currentAutomation.value?.id, (id, previous) => {
+  if (id && !previous) resetEditState();
+});
 
-async function handleCreate(data: CreateAutomationRequest) {
-  formError.value = null
-  try {
-    const newAutomation = await createAutomation(data)
-    setActiveAutomation(newAutomation.id)
-  } catch (e) {
-    formError.value = messageOf(e, 'Couldn\'t create the automation.')
+// A folder read before the repository list arrived is a repository after all.
+watch(repositories, () => {
+  for (const state of [editState, draft]) {
+    const folder = state.folder;
+    if (folder?.kind === "directory" && isRepository(folder.path)) {
+      state.folder = { kind: "repository", path: folder.path };
+    }
   }
-}
+});
 
-function handleCancelCreate() {
-  formError.value = null
-  clearSelection()
-}
-
-async function handleUpdate(data: CreateAutomationRequest) {
-  if (!currentAutomation.value) return
-  formError.value = null
+// "Repeat on a schedule…": the session's first message and folder, then the person adds when.
+watch(seedSessionId, async (sessionId) => {
+  if (!sessionId) return;
   try {
-    await updateAutomation(currentAutomation.value.id, data)
-    isEditingInline.value = false
-  } catch (e) {
-    formError.value = messageOf(e, 'Couldn\'t save the automation.')
-  }
-}
-
-function handleCancelEdit() {
-  formError.value = null
-  isEditingInline.value = false
-}
-
-function startEdit() {
-  formError.value = null
-  actionMessage.value = null
-  isEditingInline.value = true
-}
-
-function startDelete(id: string) {
-  automationToDelete.value = id
-  deleteConfirmOpen.value = true
-}
-
-async function confirmDelete() {
-  if (!automationToDelete.value) return
-  try {
-    await deleteAutomation(automationToDelete.value)
-    clearSelection()
-  } catch (e) {
-    showAction('error', messageOf(e, 'Couldn\'t delete the automation.'))
+    const seed = await store.fetchDraftFromSession(sessionId);
+    Object.assign(draft, freshComposerState(), {
+      text: seed.prompt,
+      folder: folderFor(seed.folder, seed.isolation === "worktree"),
+      hasChosenFolder: true,
+      workspace: seed.isolation === "worktree" || !seed.folder ? { kind: "new" } : { kind: "current" },
+    });
+    composerRef.value?.focusMessage();
+  } catch (error) {
+    formError.value = messageOf(error, "Couldn't read that session.");
   } finally {
-    deleteConfirmOpen.value = false
-    automationToDelete.value = null
+    seedSessionId.value = null;
   }
-}
+}, { immediate: true });
 
-async function handlePlay() {
-  if (!currentAutomation.value) return
+async function loadRuns(): Promise<void> {
+  clearTimeout(pollTimer);
+  const id = activeAutomationId.value;
+  if (viewMode.value !== "edit" || !id) return;
   try {
-    await runAutomation(currentAutomation.value.id)
-    showAction('info', 'Run started. It shows up in Sessions.')
-  } catch (e) {
-    showAction('error', messageOf(e, 'Couldn\'t start a run.'))
+    const next = await fetchRuns(id);
+    if (activeAutomationId.value === id) {
+      runs.value = next;
+      hasLoadedRuns.value = true;
+    }
+  } catch {
+    // The runs list keeps what it had; the next poll tries again.
+  }
+  // Quickly while a run is starting or going, so its row changes when it finishes; slowly otherwise.
+  const busy = runs.value.some((run) => run.state === "starting" || run.state === "running");
+  pollTimer = setTimeout(() => {
+    void refresh();
+    void loadRuns();
+  }, busy ? 3000 : 20000);
+}
+
+onUnmounted(() => {
+  clearTimeout(pollTimer);
+  clearTimeout(noticeTimer);
+});
+
+async function handleCreate(request: CreateAutomationRequest): Promise<void> {
+  formError.value = null;
+  isSubmitting.value = true;
+  try {
+    const created = await createAutomation(request);
+    resetDraft();
+    setActiveAutomation(created.id);
+    // Opening it clears the page's notes, so the note comes after.
+    await nextTick();
+    const first = created.nextRunAt ? new Date(created.nextRunAt) : null;
+    showNotice("info", first ? `Created and on. First run ${describeDate(first)}.` : "Created and on.");
+  } catch (error) {
+    formError.value = messageOf(error, "Couldn't create the automation.");
+  } finally {
+    isSubmitting.value = false;
   }
 }
 
-async function handleToggleEnabled(enabled: boolean) {
-  if (!currentAutomation.value || isTogglingEnabled.value) return
-  isTogglingEnabled.value = true
+async function handleSave(request: CreateAutomationRequest): Promise<void> {
+  const automation = currentAutomation.value;
+  if (!automation) return;
+  formError.value = null;
+  isSubmitting.value = true;
+  try {
+    await updateAutomation(automation.id, request);
+    resetEditState();
+    showNotice("info", "Saved.");
+  } catch (error) {
+    formError.value = messageOf(error, "Couldn't save the automation.");
+  } finally {
+    isSubmitting.value = false;
+  }
+}
+
+async function handleRunNow(): Promise<void> {
+  const automation = currentAutomation.value;
+  if (!automation) return;
+  try {
+    const run = await runAutomation(automation.id);
+    runs.value = [run, ...runs.value.filter((existing) => existing.id !== run.id)];
+    showNotice("info", "Started a run. It shows below and in Sessions.");
+    void loadRuns();
+  } catch (error) {
+    showNotice("error", messageOf(error, "Couldn't start a run."));
+  }
+}
+
+async function handleToggleEnabled(enabled: boolean): Promise<void> {
+  const automation = currentAutomation.value;
+  if (!automation || isTogglingEnabled.value) return;
+  isTogglingEnabled.value = true;
   try {
     if (enabled) {
-      await enableAutomation(currentAutomation.value.id)
+      await enableAutomation(automation.id);
     } else {
-      await disableAutomation(currentAutomation.value.id)
+      await disableAutomation(automation.id);
     }
-  } catch (e) {
-    showAction('error', messageOf(e, enabled ? 'Couldn\'t switch it on.' : 'Couldn\'t switch it off.'))
+  } catch (error) {
+    showNotice("error", messageOf(error, enabled ? "Couldn't switch it on." : "Couldn't switch it off."));
   } finally {
-    isTogglingEnabled.value = false
+    isTogglingEnabled.value = false;
   }
 }
 
-/** When it runs, in words: the cron and its zone, or the event it waits for. */
-const triggerSummary = computed(() => {
-  const automation = currentAutomation.value
-  if (!automation) return ''
-  if (automation.triggerType === 'event') return describeEventType(eventTypeOf(automation.triggerConfig))
-  if (automation.triggerType === 'schedule') return `${automation.triggerConfig} (${scheduleTimeZone(automation.timeZone)})`
-  return automation.triggerConfig || 'None'
-})
-
-function formatTargetType(targetType: string | undefined): string {
-  if (!targetType) return 'New Session'
-  switch (targetType) {
-    case 'new_session':
-      return 'New Session'
-    case 'most_recent_session':
-      return 'Most Recent Session'
-    case 'tagged_session':
-      return 'Tagged Session'
-    default:
-      return targetType
+async function confirmDelete(): Promise<void> {
+  const automation = currentAutomation.value;
+  if (!automation) return;
+  try {
+    await deleteAutomation(automation.id);
+    clearSelection();
+  } catch (error) {
+    showNotice("error", messageOf(error, "Couldn't delete the automation."));
+  } finally {
+    deleteConfirmOpen.value = false;
   }
 }
+
+/** What the header says beside the switch. */
+const headerMeta = computed(() => {
+  const automation = currentAutomation.value;
+  if (!automation) return "";
+  if (!automation.isEnabled) {
+    if (automation.triggerType === "once" && automation.lastRun) {
+      return `Off. Its one run was ${describeDate(new Date(automation.lastRun.startedAt))}.`;
+    }
+    return "Off. It won't run until you switch it on.";
+  }
+  if (automation.triggerType === "event") {
+    return `Runs when ${describeEventType(eventTypeOf(automation.triggerConfig)).replace(/^A /, "a ").toLowerCase()}`;
+  }
+  return automation.nextRunAt ? `Next run ${describeDate(new Date(automation.nextRunAt))}` : "";
+});
+
+const doneCount = computed(() => runs.value.filter((run) => run.state === "done").length);
+
+/** When a run was for: its schedule time, or when it started. */
+function runTime(run: AutomationRun): string {
+  return describeDate(new Date(run.scheduledFor ?? run.startedAt));
+}
+
+function openRun(run: AutomationRun): void {
+  if (!run.sessionId) return;
+  void navigate({
+    to: "/sessions/$id",
+    params: { id: run.sessionId },
+    search: { instanceId: run.instanceId ?? undefined, parentSessionId: undefined },
+  });
+}
+
+/** The empty runs list says when the first one will be. */
+const firstRunHint = computed(() => {
+  const automation = currentAutomation.value;
+  if (!automation?.isEnabled) return "Switch it on, or press Run now.";
+  if (automation.nextRunAt) return `The first run is ${describeDate(new Date(automation.nextRunAt))}, or press Run now.`;
+  if (automation.triggerType === "event") return "It runs when its event happens, or press Run now.";
+  const when = fromTrigger(automation.triggerType, automation.triggerConfig);
+  const next = when ? nextRun(when) : null;
+  return next ? `The first run is ${describeDate(next)}, or press Run now.` : "Press Run now to try it.";
+});
 </script>
 
 <template>
-  <div class="flex h-full flex-col">
-    <!-- Empty state -->
-    <div
-      v-if="viewMode === 'list'"
-      class="flex h-full items-center justify-center text-muted-foreground"
-    >
-      <p>Select an automation or create a new one</p>
-    </div>
-
-    <!-- Create mode -->
-    <div
-      v-else-if="viewMode === 'create'"
-      class="flex-1 overflow-y-auto p-6"
-    >
-      <AutomationForm
-        mode="create"
-        :submit-error="formError"
-        @submit="handleCreate"
-        @cancel="handleCancelCreate"
-      />
-    </div>
-
-    <!-- Edit mode -->
-    <div
-      v-else-if="viewMode === 'edit' && currentAutomation"
-      class="flex h-full flex-col"
-    >
-      <!-- Inline editing form -->
+  <div class="automation-page">
+    <!-- A new automation -->
+    <template v-if="viewMode === 'create'">
+      <header class="automation-page__header">
+        <h2 class="automation-page__title">
+          New automation
+        </h2>
+        <span class="automation-page__pill">Not saved</span>
+      </header>
+      <div class="automation-page__body">
+        <div class="automation-page__empty">
+          <strong>What should run on its own?</strong>
+          Say what it should do and when. The chips under the box say where it runs.
+        </div>
+      </div>
       <div
-        v-if="isEditingInline"
-        class="flex-1 overflow-y-auto p-6"
+        v-if="formError"
+        class="automation-page__error"
+        role="alert"
+        data-testid="automation-form-error"
       >
-        <AutomationForm
-          mode="edit"
-          :initial-values="currentAutomation"
-          :submit-error="formError"
-          @submit="handleUpdate"
-          @cancel="handleCancelEdit"
+        <AlertCircle
+          class="size-4 shrink-0"
+          aria-hidden="true"
         />
+        {{ formError }}
+      </div>
+      <AutomationComposer
+        ref="composer"
+        v-model:state="draft"
+        :automation="null"
+        :busy="isSubmitting"
+        @submit="handleCreate"
+      />
+    </template>
+
+    <!-- An existing automation: its runs, with its composer underneath -->
+    <template v-else-if="viewMode === 'edit' && currentAutomation">
+      <header class="automation-page__header">
+        <h2
+          class="automation-page__title"
+          data-testid="automation-title"
+        >
+          {{ currentAutomation.name }}
+        </h2>
+        <Switch
+          :model-value="currentAutomation.isEnabled"
+          :disabled="isTogglingEnabled"
+          :aria-label="currentAutomation.isEnabled ? 'On' : 'Off'"
+          data-testid="automation-enabled"
+          @update:model-value="(value: boolean) => handleToggleEnabled(value)"
+        />
+        <span
+          class="automation-page__meta"
+          data-testid="automation-header-meta"
+        >{{ headerMeta }}</span>
+        <span class="automation-page__actions">
+          <Button
+            variant="outline"
+            size="sm"
+            data-testid="automation-run-now"
+            @click="handleRunNow"
+          >
+            <Play
+              class="size-3.5"
+              aria-hidden="true"
+            />
+            Run now
+          </Button>
+          <DropdownMenu :modal="false">
+            <DropdownMenuTrigger as-child>
+              <Button
+                variant="outline"
+                size="icon-sm"
+                aria-label="More"
+                data-testid="automation-more-menu"
+              >
+                <Ellipsis
+                  class="size-4"
+                  aria-hidden="true"
+                />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              class="ns-pop"
+              align="end"
+              :side-offset="6"
+            >
+              <DropdownMenuItem
+                class="ns-option automation-page__danger"
+                data-testid="automation-delete"
+                @select="deleteConfirmOpen = true"
+              >
+                <Trash2
+                  class="ns-option__icon"
+                  aria-hidden="true"
+                />
+                <span class="ns-option__text">
+                  <span class="ns-option__title">Delete</span>
+                </span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </span>
+      </header>
+
+      <div class="automation-page__body">
+        <div
+          v-if="notice"
+          :class="['automation-page__notice', `automation-page__notice--${notice.kind}`]"
+          :role="notice.kind === 'error' ? 'alert' : 'status'"
+          data-testid="automation-action-message"
+        >
+          <AlertCircle
+            v-if="notice.kind === 'error'"
+            class="size-4 shrink-0"
+            aria-hidden="true"
+          />
+          {{ notice.text }}
+        </div>
+
+        <div
+          v-if="hasLoadedRuns && runs.length === 0"
+          class="automation-page__empty"
+          data-testid="automation-no-runs"
+        >
+          <strong>No runs yet</strong>
+          {{ firstRunHint }}
+        </div>
+        <section
+          v-else-if="runs.length > 0"
+          class="automation-runs"
+          aria-label="Runs"
+        >
+          <div class="automation-runs__label">
+            <span>Runs</span>
+            <span>{{ doneCount }} of {{ runs.length }} finished</span>
+          </div>
+          <component
+            :is="run.sessionId ? 'button' : 'div'"
+            v-for="run in runs"
+            :key="run.id"
+            :type="run.sessionId ? 'button' : undefined"
+            class="automation-run"
+            :class="{ 'automation-run--openable': run.sessionId }"
+            data-testid="automation-run"
+            @click="openRun(run)"
+          >
+            <span class="automation-run__glyph">
+              <StatusGlyph
+                v-if="run.state === 'running' || run.state === 'starting'"
+                status="active"
+                :label="describeRunState(run).label"
+              />
+              <StatusGlyph
+                v-else-if="run.state === 'failed'"
+                status="error"
+                label="Failed"
+              />
+            </span>
+            <span class="automation-run__title">
+              {{ runTime(run) }}
+              <small v-if="describeRunTrigger(run.trigger)">{{ describeRunTrigger(run.trigger) }}</small>
+            </span>
+            <span class="automation-run__end">
+              <span
+                v-if="run.sessionId"
+                class="automation-run__open"
+              >Open session →</span>
+              <span
+                class="automation-run__state"
+                :class="`automation-run__state--${describeRunState(run).tone}`"
+              >{{ describeRunState(run).label }}</span>
+            </span>
+            <span
+              v-if="run.error"
+              class="automation-run__why"
+            >{{ run.error }}</span>
+          </component>
+        </section>
       </div>
 
-      <!-- Detail view -->
       <div
-        v-else
-        class="flex flex-1 flex-col overflow-y-auto"
+        v-if="formError"
+        class="automation-page__error"
+        role="alert"
+        data-testid="automation-form-error"
       >
-        <!-- Header with actions -->
-        <div class="border-b p-6">
-          <div class="mb-4 flex items-start justify-between">
-            <div class="flex-1">
-              <h2 class="text-2xl font-semibold">
-                {{ currentAutomation.name }}
-              </h2>
-              <div class="mt-2 flex items-center gap-2">
-                <Switch
-                  :model-value="currentAutomation.isEnabled"
-                  :disabled="isTogglingEnabled"
-                  @update:model-value="(val: boolean) => handleToggleEnabled(val)"
-                />
-                <span class="text-sm text-muted-foreground">
-                  {{ currentAutomation.isEnabled ? 'Enabled' : 'Disabled' }}
-                </span>
-              </div>
-            </div>
-            <div class="flex gap-2">
-              <Button
-                variant="outline"
-                size="icon"
-                title="Run now"
-                @click="handlePlay"
-              >
-                <Play class="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                title="Edit"
-                @click="startEdit"
-              >
-                <Edit class="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                title="Delete"
-                @click="startDelete(currentAutomation.id)"
-              >
-                <Trash2 class="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
+        <AlertCircle
+          class="size-4 shrink-0"
+          aria-hidden="true"
+        />
+        {{ formError }}
+      </div>
+      <AutomationComposer
+        ref="composer"
+        v-model:state="editState"
+        :automation="currentAutomation"
+        :busy="isSubmitting"
+        @submit="handleSave"
+      />
+    </template>
 
-        <!-- Content sections -->
-        <div class="flex-1 space-y-6 p-6">
-          <div
-            v-if="actionMessage"
-            :class="[
-              'flex items-start gap-3 border px-4 py-3 text-sm',
-              actionMessage.kind === 'error'
-                ? 'border-destructive/30 bg-destructive/10 text-destructive'
-                : 'border-border bg-card text-muted-foreground',
-            ]"
-            :role="actionMessage.kind === 'error' ? 'alert' : 'status'"
-            data-testid="automation-action-message"
-          >
-            <AlertCircle
-              v-if="actionMessage.kind === 'error'"
-              class="mt-0.5 h-4 w-4 shrink-0"
-            />
-            <p>{{ actionMessage.text }}</p>
-          </div>
-
-          <!-- Prompt section -->
-          <div class="rounded-lg border bg-card p-4">
-            <h3 class="mb-2 text-sm font-medium text-muted-foreground">
-              Prompt
-            </h3>
-            <p class="whitespace-pre-wrap text-sm">
-              {{ currentAutomation.prompt }}
-            </p>
-          </div>
-
-          <!-- When & Where section -->
-          <div class="rounded-lg border bg-card p-4">
-            <h3 class="mb-3 text-sm font-medium text-muted-foreground">
-              When & Where
-            </h3>
-            <div class="space-y-3 text-sm">
-              <div>
-                <Badge>{{ currentAutomation.triggerType }}</Badge>
-              </div>
-              <div>
-                <span class="font-medium">{{ currentAutomation.triggerType === 'event' ? 'When:' : 'Configuration:' }}</span>
-                <span
-                  v-if="currentAutomation.triggerType === 'event'"
-                  class="ml-2"
-                  data-testid="automation-trigger-summary"
-                >{{ triggerSummary }}</span>
-                <code
-                  v-else
-                  class="ml-2 rounded bg-muted px-1.5 py-0.5 text-xs font-mono"
-                  data-testid="automation-trigger-summary"
-                >{{ triggerSummary }}</code>
-              </div>
-              <div>
-                <span class="text-muted-foreground">Target:</span>
-                <span class="ml-2">{{ formatTargetType(currentAutomation.targetType) }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Policy section -->
-          <div class="rounded-lg border bg-card p-4">
-            <h3 class="mb-3 text-sm font-medium text-muted-foreground">
-              Policy
-            </h3>
-            <div class="grid grid-cols-3 gap-4">
-              <div>
-                <div class="text-xs text-muted-foreground">Max concurrent runs</div>
-                <div class="text-sm font-medium">{{ currentAutomation.maxConcurrentRuns ?? 'Unlimited' }}</div>
-              </div>
-              <div>
-                <div class="text-xs text-muted-foreground">Max runs per hour</div>
-                <div class="text-sm font-medium">{{ currentAutomation.maxRunsPerHour ?? 'Unlimited' }}</div>
-              </div>
-              <div>
-                <div class="text-xs text-muted-foreground">Timeout</div>
-                <div class="text-sm font-medium">{{ currentAutomation.timeoutMinutes ?? 'None' }} minutes</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Metadata footer -->
-          <div class="pt-4 border-t">
-            <div class="flex flex-wrap gap-2 items-center">
-              <Badge
-                v-if="currentAutomation.workspaceId"
-                variant="outline"
-              >
-                Workspace: {{ currentAutomation.workspaceId }}
-              </Badge>
-              <Badge
-                v-if="currentAutomation.model"
-                variant="outline"
-              >
-                Model: {{ currentAutomation.model }}
-              </Badge>
-              <Badge
-                v-if="currentAutomation.agent"
-                variant="outline"
-              >
-                Agent: {{ currentAutomation.agent }}
-              </Badge>
-              <template v-if="currentAutomation.targetTags && currentAutomation.targetTags.length > 0">
-                <Badge
-                  v-for="tag in currentAutomation.targetTags"
-                  :key="tag"
-                  variant="outline"
-                >
-                  Tag: {{ tag }}
-                </Badge>
-              </template>
-              <span class="text-xs text-muted-foreground">
-                Created {{ new Date(currentAutomation.createdAt).toLocaleDateString() }}
-              </span>
-            </div>
-          </div>
-        </div>
+    <div
+      v-else
+      class="automation-page__body"
+    >
+      <div class="automation-page__empty">
+        <strong>Automations</strong>
+        Pick one on the left, or make a new one.
       </div>
     </div>
 
-    <!-- Delete confirmation dialog -->
     <AlertDialog v-model:open="deleteConfirmOpen">
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete Automation</AlertDialogTitle>
+          <AlertDialogTitle>Delete this automation?</AlertDialogTitle>
           <AlertDialogDescription>
-            Are you sure you want to delete this automation? This action cannot be undone.
+            It stops running. The sessions its runs started stay in Sessions.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -402,3 +524,247 @@ function formatTargetType(targetType: string | undefined): string {
     </AlertDialog>
   </div>
 </template>
+
+<style scoped>
+.automation-page {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+
+/* Matches the session header: one row, same height and rule. */
+.automation-page__header {
+  display: flex;
+  min-height: 56px;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  padding: 8px max(1rem, env(safe-area-inset-right)) 8px max(1rem, env(safe-area-inset-left));
+}
+
+.automation-page__title {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.automation-page__pill {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 8px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.automation-page__meta {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.automation-page__actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.automation-page__danger {
+  color: var(--error);
+}
+
+.automation-page__body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 18px 24px 8px;
+}
+
+.automation-page__empty {
+  max-width: 460px;
+  margin: auto;
+  color: var(--muted);
+  font-size: 13.5px;
+  text-align: center;
+}
+
+.automation-page__empty strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.automation-page__notice,
+.automation-page__error {
+  display: flex;
+  width: 100%;
+  max-width: 760px;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 auto 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 9px 12px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.automation-page__notice--error,
+.automation-page__error {
+  border-color: color-mix(in srgb, var(--error) 30%, transparent);
+  background: color-mix(in srgb, var(--error) 10%, transparent);
+  color: var(--error);
+}
+
+.automation-page__error {
+  width: calc(100% - 48px);
+  margin-bottom: 8px;
+}
+
+.automation-runs {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.automation-runs__label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0 10px 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.automation-runs__label span:last-child {
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.automation-run {
+  display: grid;
+  width: 100%;
+  min-height: 34px;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 9px;
+  border: 0;
+  border-radius: var(--radius-btn);
+  padding: 5px 10px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+
+.automation-run--openable {
+  cursor: pointer;
+}
+
+.automation-run--openable:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+.automation-run--openable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.automation-run__glyph {
+  display: grid;
+  width: 10px;
+  place-items: center;
+}
+
+.automation-run__title {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.automation-run__title small {
+  margin-left: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.automation-run__end {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.automation-run__open {
+  color: var(--muted);
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+
+.automation-run:hover .automation-run__open,
+.automation-run:focus-visible .automation-run__open {
+  opacity: 1;
+}
+
+.automation-run__state {
+  color: color-mix(in srgb, var(--muted) 85%, transparent);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.automation-run__state--working {
+  color: var(--running);
+}
+
+.automation-run__state--error {
+  color: var(--error);
+}
+
+.automation-run__state--warn {
+  color: var(--status-waiting);
+}
+
+.automation-run__why {
+  grid-column: 2 / 4;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Clear the fixed menu button that replaces the sidebar on narrow screens. */
+@media (max-width: 716px) {
+  .automation-page__header {
+    padding-left: 44px;
+  }
+
+  .automation-page__meta {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .automation-page__body {
+    padding-inline: 10px;
+  }
+}
+</style>
