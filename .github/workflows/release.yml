@@ -297,7 +297,9 @@ jobs:
           ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
         run: |
           (cd desktop && bun install --frozen-lockfile)
-          node desktop/scripts/merge-update-manifests.mjs release-assets/latest.yml release-assets/latest-win-*.yml
+          # x64 first: its installer becomes the feed's fallback `path` for updaters that don't read `files`.
+          node desktop/scripts/merge-update-manifests.mjs release-assets/latest.yml \
+            release-assets/latest-win-x64.yml release-assets/latest-win-arm64.yml
           rm release-assets/latest-win-*.yml
           ls release-assets/*.yml
 
