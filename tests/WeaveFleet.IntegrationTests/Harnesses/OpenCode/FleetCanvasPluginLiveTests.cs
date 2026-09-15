@@ -2,6 +2,7 @@ extern alias FakeLlm;
 
 using System.Collections.Concurrent;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using FakeLlm::FakeLlmServer;
 using Microsoft.AspNetCore.Hosting;
@@ -114,11 +115,18 @@ public sealed partial class FleetCanvasPluginLiveTests
             offered.ShouldContain("fleet_canvas_focus");
             offered.ShouldContain("user_probe");
 
+            // The plugin added Fleet's skills without dropping the user's own skill path.
+            var turn = llm.Queue.Requests.First(request => OfferedToolNames([request]).Count > 0);
+            turn.ShouldContain("fleet-api");
+            turn.ShouldContain("user-probe-skill");
+
             // A refused call reaches the model as Fleet's own message.
             await WaitForAsync(() => llm.Queue.Requests, requests => requests.Count(r => OfferedToolNames([r]).Count > 0) >= 4, ct);
             llm.Queue.Requests[^1].ShouldContain("No canvas cv_missing in this session. Call fleet_canvas_list to see the open canvases.");
 
-            File.Exists(Path.Combine(Path.GetDirectoryName(dbPath)!, "opencode", OpenCodeFleetPlugin.FileName)).ShouldBeTrue();
+            var dataDirectory = Path.GetDirectoryName(dbPath)!;
+            File.Exists(Path.Combine(dataDirectory, "opencode", OpenCodeFleetPlugin.FileName)).ShouldBeTrue();
+            File.Exists(Path.Combine(dataDirectory, "opencode", "skills", "fleet-api", "SKILL.md")).ShouldBeTrue();
 
             await cts.CancelAsync();
             await collecting;
@@ -144,6 +152,71 @@ public sealed partial class FleetCanvasPluginLiveTests
             (await HasExitedAsync(processId, TimeSpan.FromSeconds(5))).ShouldBeTrue($"opencode process {processId} outlived Fleet.");
     }
 
+    [OpenCodeFact]
+    public async Task A_pooled_session_loads_the_fleet_api_skill_and_reaches_Fleet_with_it()
+    {
+        using var cts = new CancellationTokenSource(Timeout);
+        var ct = cts.Token;
+        var root = Path.Combine(Path.GetTempPath(), $"fleet-skill-live-{Guid.NewGuid():N}");
+        var workspace = Path.Combine(root, "workspace");
+        var dbPath = Path.Combine(root, "fleet", "fleet.db");
+        Directory.CreateDirectory(workspace);
+        Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
+
+        await using var llm = await FakeLlmServerFixture.StartAsync();
+        var processEnvironment = WriteScratchOpenCodeHome(root, llm.BaseUrl);
+        llm.Queue.ToolLessResponse = new ScriptedLlmResponse { Text = "Fleet API" };
+        llm.Queue.Enqueue(new ScriptedLlmResponse
+        {
+            StopReason = "tool_calls",
+            ToolCalls = [new ScriptedToolCall("call_skill", "skill", """{"name":"fleet-api"}""")],
+        });
+        llm.Queue.Enqueue(new ScriptedLlmResponse
+        {
+            StopReason = "tool_calls",
+            ToolCalls =
+            [
+                new ScriptedToolCall("call_curl", "bash", $$"""
+                    {"command":"curl -s \"$FLEET_URL/api/sessions/{{SessionId}}\"","description":"Read this session from Fleet"}
+                    """),
+            ],
+        });
+        llm.Queue.Enqueue(new ScriptedLlmResponse { Text = "Done." });
+
+        var factory = new PooledOpenCodeLiveHost.KestrelFleetFactory(dbPath);
+        try
+        {
+            try { _ = factory.Services; }
+            catch (InvalidCastException) { /* expected: the base class expects a TestServer */ }
+
+            var services = factory.LiveServices;
+            SeedSession(services, workspace);
+
+            var runtime = services.GetRequiredService<OpenCodeHarnessRuntime>();
+            await using var session = await runtime.SpawnAsync(
+                new HarnessSpawnOptions
+                {
+                    SessionId = SessionId,
+                    WorkingDirectory = workspace,
+                    OwnerUserId = Owner,
+                    LaunchArtifacts = new OpenCodeLaunchArtifacts(processEnvironment),
+                },
+                ct);
+
+            await session.SendPromptAsync("How is this session doing in Fleet?", null, ct);
+
+            // The skill's own text reached the model, then the API's answer about this session, fetched with no token.
+            var requests = await WaitForAsync(() => llm.Queue.Requests.ToList(), list => list.Count(r => OfferedToolNames([r]).Count > 0) >= 3, ct);
+            requests.ShouldContain(request => request.Contains("Look it up, don't guess"));
+            requests.ShouldContain(request => request.Contains("workspaceDirectory") && request.Contains("activityStatus"));
+        }
+        finally
+        {
+            await factory.DisposeAsync();
+            try { Directory.Delete(root, recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static async Task<bool> HasExitedAsync(int processId, TimeSpan within)
     {
         var deadline = DateTime.UtcNow + within;
@@ -166,7 +239,10 @@ public sealed partial class FleetCanvasPluginLiveTests
         }
     }
 
-    /// <summary>Loads one plugin of the user's own next to Fleet's, and returns the env for the pooled process.</summary>
+    /// <summary>
+    /// Loads one plugin and one skill path of the user's own next to Fleet's, and returns the env for the pooled
+    /// process.
+    /// </summary>
     private static Dictionary<string, string> WriteScratchOpenCodeHome(string root, Uri llmBaseUrl)
     {
         var userPlugin = Path.Combine(root, "user-probe.ts");
@@ -178,7 +254,22 @@ public sealed partial class FleetCanvasPluginLiveTests
             })
             """);
 
-        return PooledOpenCodeLiveHost.WriteScratchOpenCodeHome(root, llmBaseUrl, userPlugin);
+        var userSkills = Path.Combine(root, "user-skills");
+        Directory.CreateDirectory(Path.Combine(userSkills, "user-probe-skill"));
+        File.WriteAllText(Path.Combine(userSkills, "user-probe-skill", "SKILL.md"), """
+            ---
+            name: user-probe-skill
+            description: A skill from the user's own skill path.
+            ---
+            Nothing to do.
+            """);
+
+        var environment = PooledOpenCodeLiveHost.WriteScratchOpenCodeHome(root, llmBaseUrl, userPlugin);
+        var configPath = Path.Combine(environment["XDG_CONFIG_HOME"], "opencode", "opencode.json");
+        var config = JsonNode.Parse(File.ReadAllText(configPath))!.AsObject();
+        config["skills"] = new JsonObject { ["paths"] = new JsonArray(userSkills) };
+        File.WriteAllText(configPath, config.ToJsonString());
+        return environment;
     }
 
     private static void ScriptModel(ScriptedResponseStore queue)

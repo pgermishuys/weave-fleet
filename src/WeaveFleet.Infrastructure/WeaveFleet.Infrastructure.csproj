@@ -14,6 +14,7 @@
     <EmbeddedResource Include="Migrations\*.sql" />
     <EmbeddedResource Include="AnalyticsMigrations\*.sql" />
     <EmbeddedResource Include="..\..\opencode\fleet\fleet-canvas.ts" LogicalName="opencode/fleet-canvas.ts" />
+    <EmbeddedResource Include="..\..\opencode\skills\**\*" LogicalName="opencode/skills/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

@@ -24,7 +24,7 @@ public sealed record SkillManifestEntry
     public string? LocalPath { get; init; }
 
     /// <summary>List of harness types this skill targets (e.g., "opencode", "aider").</summary>
-    public IReadOnlyList<string> TargetHarnesses { get; init; } = [];
+    public IReadOnlyList<string> TargetHarnesses { get; init => field = value ?? []; } = [];
 
     /// <summary>Whether the skill is installed for the user or into one repository.</summary>
     public InstallScope Scope { get; init; } = InstallScope.Global;
@@ -33,7 +33,11 @@ public sealed record SkillManifestEntry
     public string? ProjectPath { get; init; }
 
     /// <summary>The skill folders Fleet wrote, one per harness. Fleet only replaces or deletes these.</summary>
-    public IReadOnlyList<string> InstalledPaths { get; init; } = [];
+    /// <remarks>
+    /// Manifests from older Fleet versions leave it out, and the JSON source generator then sets null instead of
+    /// keeping the default, so null reads as empty (as it does for <see cref="TargetHarnesses"/>).
+    /// </remarks>
+    public IReadOnlyList<string> InstalledPaths { get; init => field = value ?? []; } = [];
 
     /// <summary>Timestamp when the skill was first installed.</summary>
     public required DateTimeOffset InstalledAt { get; init; }

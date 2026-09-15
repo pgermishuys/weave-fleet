@@ -65,11 +65,15 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
 
     private static readonly Action<ILogger, Exception?> LogCanvasToolsWithoutFleetUrl =
         LoggerMessage.Define(LogLevel.Information, new EventId(9, "CanvasToolsWithoutFleetUrl"),
-            "Starting a pooled OpenCode process without canvas tools: Fleet's port isn't known yet.");
+            "Starting a pooled OpenCode process without canvas tools or Fleet's skills: Fleet's port isn't known yet.");
 
     private static readonly Action<ILogger, Exception?> LogFleetPluginInstallFailed =
         LoggerMessage.Define(LogLevel.Warning, new EventId(10, "FleetPluginInstallFailed"),
-            "Could not write the Fleet OpenCode plugin; pooled sessions start without canvas tools.");
+            "Could not write the Fleet OpenCode plugin; pooled sessions start without canvas tools or Fleet's skills.");
+
+    private static readonly Action<ILogger, Exception?> LogFleetSkillsInstallFailed =
+        LoggerMessage.Define(LogLevel.Warning, new EventId(12, "FleetSkillsInstallFailed"),
+            "Could not write Fleet's OpenCode skills; pooled sessions start without them.");
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly PortAllocator _portAllocator;
@@ -85,6 +89,7 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
     private readonly ConcurrentDictionary<string, PooledSessionMapping> _pooledSessionMappings = new(StringComparer.Ordinal);
     private long _pooledLeaseGeneration;
     private string? _fleetPluginUri;
+    private string? _fleetSkillsPath;
 
     /// <summary>Initialises the runtime with required dependencies.</summary>
     public OpenCodeHarnessRuntime(
@@ -834,9 +839,9 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
             const string username = "opencode";
             var bridgeToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
 
-            // The canvas tools call back into Fleet, so the plugin loads only when the process can be told
-            // where Fleet is. The pool key was hashed from environmentVariables before this, so adding
-            // per-process values here doesn't split the pool.
+            // The canvas tools and the Fleet API skill call back into Fleet, so the plugin loads only when the
+            // process can be told where Fleet is. The plugin adds the skills. The pool key was hashed from
+            // environmentVariables before this, so adding per-process values here doesn't split the pool.
             var processEnvironment = new Dictionary<string, string>(environmentVariables, StringComparer.Ordinal);
             List<string> plugins = [];
             if (ResolveLocalFleetUrl() is { } fleetUrl && GetFleetPluginUri() is { } fleetPlugin)
@@ -844,6 +849,9 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
                 processEnvironment["FLEET_URL"] = fleetUrl;
                 processEnvironment["FLEET_BRIDGE_TOKEN"] = bridgeToken;
                 plugins.Add(fleetPlugin);
+
+                if (GetFleetSkillsPath() is { } fleetSkills)
+                    processEnvironment[OpenCodeFleetSkills.PathVariable] = fleetSkills;
             }
 
             processManager = new OpenCodeProcessManager(
@@ -921,8 +929,7 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
 
         try
         {
-            var dataDirectory = Path.GetDirectoryName(Path.GetFullPath(_options.DatabasePath)) ?? Environment.CurrentDirectory;
-            var uri = OpenCodeFleetPlugin.Install(dataDirectory);
+            var uri = OpenCodeFleetPlugin.Install(FleetDataDirectory());
             Volatile.Write(ref _fleetPluginUri, uri);
             return uri;
         }
@@ -932,6 +939,35 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
             return null;
         }
     }
+
+    /// <summary>
+    /// Installs Fleet's skills on first use and returns their folder, or <c>null</c> if they couldn't be written;
+    /// pooled sessions then run without them, and the next spawn tries again. With auth on, Fleet doesn't trust
+    /// requests from this machine, so the Fleet API skill couldn't reach it and isn't offered.
+    /// </summary>
+    private string? GetFleetSkillsPath()
+    {
+        if (_options.Auth.Enabled)
+            return null;
+
+        if (Volatile.Read(ref _fleetSkillsPath) is { } installed)
+            return installed;
+
+        try
+        {
+            var path = OpenCodeFleetSkills.Install(FleetDataDirectory());
+            Volatile.Write(ref _fleetSkillsPath, path);
+            return path;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            LogFleetSkillsInstallFailed(_logger, ex);
+            return null;
+        }
+    }
+
+    private string FleetDataDirectory() =>
+        Path.GetDirectoryName(Path.GetFullPath(_options.DatabasePath)) ?? Environment.CurrentDirectory;
 
     private static IReadOnlyDictionary<string, string> GetEnvironmentVariables(RuntimeLaunchArtifacts? launchArtifacts)
     {

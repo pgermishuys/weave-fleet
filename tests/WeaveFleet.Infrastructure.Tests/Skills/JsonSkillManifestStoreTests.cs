@@ -40,6 +40,26 @@ public sealed class JsonSkillManifestStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadAsync_ManifestFromBeforeInstalledPaths_GivesEmptyLists()
+    {
+        // Written by a Fleet that didn't record installed paths yet.
+        var path = Path.Combine(_testDir, ".weave", "skills", "local-user.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(path, """
+            {"id":"manifest-local-user","userId":"local-user","skills":[{"name":"fleet-api","source":1,
+            "repoUrl":"https://github.com/pgermishuys/weave-fleet","ref":"main","subPath":"opencode/skills/fleet-api",
+            "installedAt":"2026-09-13T09:01:28+00:00","updatedAt":"2026-09-13T09:01:28+00:00"}],
+            "createdAt":"2026-09-04T19:20:56+00:00","updatedAt":"2026-09-13T09:01:28+00:00"}
+            """);
+
+        var skill = Assert.Single((await _store.LoadAsync("local-user")).Skills);
+
+        Assert.NotNull(skill.InstalledPaths);
+        Assert.Empty(skill.InstalledPaths);
+        Assert.NotNull(skill.TargetHarnesses);
+    }
+
+    [Fact]
     public async Task SaveAsync_ThenLoadAsync_RoundTripsManifest()
     {
         // Arrange
