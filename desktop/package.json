@@ -4,16 +4,23 @@
   "version": "0.23.0",
   "private": true,
   "description": "Weave Fleet as a desktop app",
+  "homepage": "https://github.com/pgermishuys/weave-fleet",
+  "author": {
+    "name": "Pieter Germishuys",
+    "email": "pieter@pieterg.com"
+  },
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json && electron .",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "dist": "tsc -p tsconfig.json && electron-builder --config electron-builder.config.js --publish never"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
     "electron": "44.3.0",
+    "electron-builder": "26.15.3",
     "typescript": "5.9.3",
     "vitest": "^4.1.2"
   },

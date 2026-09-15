@@ -23,6 +23,17 @@ somewhere else while developing:
 FLEET_DESKTOP_DATA_DIR=/tmp/fleet-dev bun run dev
 ```
 
+## Package
+
+```sh
+dotnet publish src/WeaveFleet.Api -c Release -r linux-x64 -o /tmp/fleet-server   # AOT in CI; add -p:PublishAot=false locally
+cd desktop && FLEET_SERVER_DIR=/tmp/fleet-server bun run dist -- --linux --x64
+xvfb-run -a node scripts/smoke.mjs release/linux-unpacked/fleet-desktop --no-sandbox
+```
+
+Installers land in `release/`. CI builds all four platforms in `.github/workflows/desktop-packages.yml`, and the
+Release workflow publishes them.
+
 ## Test
 
 ```sh
@@ -41,3 +52,5 @@ bunx vitest run
 | `src/links.ts` | Fleet's pages stay in the window; web links open in your browser |
 | `src/preload.ts` | `window.fleetDesktop`, the bridge the UI can use |
 | `static/` | The splash and error pages, and the icons |
+| `electron-builder.config.js` | Installers, with the server under `resources/fleet` |
+| `scripts/smoke.mjs` | Starts a packaged app, checks its Fleet, kills the app, checks Fleet stopped |
