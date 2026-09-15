@@ -20,7 +20,7 @@ import {
 } from "@/lib/domain-event-reducer"
 import { prependHistoryPage } from "@/lib/history-merge"
 import type { SessionHistoryPage } from "@/lib/session-snapshot"
-import { useWeaveSocket, type Unsubscribe } from "@/composables/use-weave-socket"
+import { loadSessionHistory, useWeaveSocket, type Unsubscribe } from "@/composables/use-weave-socket"
 import { useSessionsStore } from "@/stores/sessions"
 
 export interface UseSessionStreamResult {
@@ -77,7 +77,7 @@ export function useSessionStream(
   sessionId: MaybeRefOrGetter<string>,
   enabled: MaybeRefOrGetter<boolean> = true,
 ): UseSessionStreamResult {
-  const { subscribeV2, sendV2 } = useWeaveSocket()
+  const { subscribeV2 } = useWeaveSocket()
   const sessionsStore = useSessionsStore()
   const currentSessionId = computed(() => toValue(sessionId))
   const isEnabled = computed(() => toValue(enabled))
@@ -132,20 +132,26 @@ export function useSessionStream(
 
   function loadOlder(): void {
     const activeSessionId = currentSessionId.value
-    if (!isEnabled.value || !activeSessionId || !hasMore.value || isLoadingOlder.value || cursor.value === null) {
+    const requestedCursor = cursor.value
+    if (!isEnabled.value || !activeSessionId || !hasMore.value || isLoadingOlder.value || requestedCursor === null) {
       return
     }
 
     isLoadingOlder.value = true
-    const sent = sendV2({
-      type: "load_history",
-      topic: `session:${activeSessionId}`,
-      cursor: cursor.value,
-    })
+    void loadSessionHistory(activeSessionId, requestedCursor).then((page) => {
+      // Leaving the session already reset the stream.
+      if (currentSessionId.value !== activeSessionId) {
+        return
+      }
 
-    if (!sent) {
+      // A page a newer snapshot (e.g. after a reconnect) has replaced no longer fits.
+      if (page && cursor.value === requestedCursor) {
+        applyHistoryPage(page)
+        return
+      }
+
       isLoadingOlder.value = false
-    }
+    })
   }
 
   watch(

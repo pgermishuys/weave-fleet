@@ -174,8 +174,11 @@ public sealed record HarnessMessage
 /// <summary>Query parameters for paginated message retrieval.</summary>
 public sealed record MessageQuery(int? Limit = null, string? Before = null);
 
-/// <summary>A page of messages with a continuation flag.</summary>
-public sealed record MessagePage(IReadOnlyList<HarnessMessage> Messages, bool HasMore);
+/// <summary>
+/// A page of messages with a continuation flag. <paramref name="Cursor"/>, when the harness pages with its
+/// own cursors, is what to pass as <see cref="MessageQuery.Before"/> for the next older page.
+/// </summary>
+public sealed record MessagePage(IReadOnlyList<HarnessMessage> Messages, bool HasMore, string? Cursor = null);
 
 /// <summary>Result of a health check on a harness instance.</summary>
 public sealed record HealthCheckResult(bool Healthy, string? Message);

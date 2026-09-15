@@ -188,6 +188,55 @@ public sealed class SessionOrchestratorCredentialTests : IAsyncDisposable
         _runtime.SpawnCalls.ShouldBeEmpty();
     }
 
+    // Opening a session wakes it from several requests at once (snapshot, diffs, agents, models), each
+    // with its own scoped orchestrator. Each used to start its own harness for the same session.
+    [Fact]
+    public async Task ActivateSessionAsync_FromConcurrentRequests_ResumesTheSessionOnce()
+    {
+        _builder.SessionRepository.Seed(new WeaveFleet.Domain.Entities.Session
+        {
+            Id = "session-woken-twice",
+            WorkspaceId = "workspace-1",
+            InstanceId = "inst-old",
+            HarnessType = "opencode",
+            HarnessResumeToken = "resume-token-1",
+            Title = "Wake Me",
+            Status = "active",
+            RetentionStatus = "active",
+            Directory = "/tmp/workspace",
+            CreatedAt = "2026-01-01",
+            UserId = "owner-1"
+        });
+        _builder.WorkspaceRepository.Seed(new WeaveFleet.Domain.Entities.Workspace
+        {
+            Id = "workspace-1",
+            Directory = "/tmp/workspace",
+            CreatedAt = "2026-01-01",
+            UserId = "owner-1"
+        });
+
+        var releaseResume = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var resumed = 0;
+        _runtime.ResumeBehavior = async (_, _) =>
+        {
+            var number = Interlocked.Increment(ref resumed);
+            await releaseResume.Task;
+            return new FakeHarnessSession($"inst-woken-{number}");
+        };
+
+        var otherRequest = _builder.Build();
+        var first = _sut.ActivateSessionAsync("session-woken-twice");
+        var second = otherRequest.ActivateSessionAsync("session-woken-twice");
+        await Task.Delay(50);
+        releaseResume.SetResult();
+
+        var results = await Task.WhenAll(first, second);
+
+        resumed.ShouldBe(1);
+        results.ShouldAllBe(result => result.IsSuccess);
+        results[1].Value.ShouldBeSameAs(results[0].Value);
+    }
+
     [Fact]
     public async Task ActivateSessionAsync_WhenPrepareRuntimeReturnsNotReady_DoesNotResumeOrSpawn()
     {

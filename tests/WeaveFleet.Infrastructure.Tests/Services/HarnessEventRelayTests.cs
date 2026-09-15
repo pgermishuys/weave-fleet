@@ -340,6 +340,84 @@ public sealed class HarnessEventRelayTests
         await relay.StopAsync(CancellationToken.None);
     }
 
+    // A pump that throws used to leave its session deaf until the session was woken again: no live
+    // events and no status, so a working session looked idle.
+    [Fact]
+    public async Task Failed_pump_restarts_and_relays_again()
+    {
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker) = BuildDependencies();
+        var tracker = new InstanceTracker();
+        var publisher = new FakeEventPublisher();
+        var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
+        relay.PumpRestartDelay = TimeSpan.FromMilliseconds(20);
+        sessionRepo.Seed(new Session { Id = "fleet-flaky", InstanceId = "instance-flaky", UserId = "u" });
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await relay.StartAsync(cts.Token);
+
+        var instance = new FakeHarnessSession("instance-flaky") { FailingSubscriptions = 2 };
+        tracker.Register("instance-flaky", instance);
+        instance.Emit(new HarnessEvent { Type = EventTypes.SessionStatus, SessionId = "oc-flaky", Timestamp = DateTimeOffset.UtcNow });
+
+        await WaitUntilAsync(() => Task.FromResult(!publisher.Calls.IsEmpty), cts.Token);
+
+        instance.SubscriptionCount.ShouldBe(3);
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Failed_pump_stops_restarting_after_the_limit()
+    {
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker) = BuildDependencies();
+        var tracker = new InstanceTracker();
+        var publisher = new FakeEventPublisher();
+        var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
+        relay.PumpRestartDelay = TimeSpan.FromMilliseconds(1);
+        sessionRepo.Seed(new Session { Id = "fleet-broken", InstanceId = "instance-broken", UserId = "u" });
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await relay.StartAsync(cts.Token);
+
+        var instance = new FakeHarnessSession("instance-broken") { FailingSubscriptions = int.MaxValue };
+        tracker.Register("instance-broken", instance);
+
+        await WaitUntilAsync(() => Task.FromResult(instance.SubscriptionCount >= 1 + HarnessEventRelay.MaxPumpRestarts), cts.Token);
+        await Task.Delay(300, cts.Token);
+
+        instance.SubscriptionCount.ShouldBe(1 + HarnessEventRelay.MaxPumpRestarts);
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Failed_pump_is_not_restarted_once_its_instance_is_removed()
+    {
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker) = BuildDependencies();
+        var tracker = new InstanceTracker();
+        var publisher = new FakeEventPublisher();
+        var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
+        relay.PumpRestartDelay = TimeSpan.FromMilliseconds(200);
+        sessionRepo.Seed(new Session { Id = "fleet-gone", InstanceId = "instance-gone", UserId = "u" });
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await relay.StartAsync(cts.Token);
+
+        var instance = new FakeHarnessSession("instance-gone") { FailingSubscriptions = 1 };
+        tracker.Register("instance-gone", instance);
+        await WaitUntilAsync(() => Task.FromResult(instance.SubscriptionCount == 1), cts.Token);
+        tracker.Remove("instance-gone");
+
+        await Task.Delay(600, cts.Token);
+
+        instance.SubscriptionCount.ShouldBe(1);
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+    }
+
     [Fact]
     public async Task Session_lookup_retries_until_found()
     {

@@ -1217,6 +1217,53 @@ public sealed class OpenCodeSessionMessageProxyTests
         snapshot.Messages.Select(m => m.Info.Id).ShouldBe(["msg_later"]);
     }
 
+    // OpenCode pages with its own cursor and rejects a message id as "before", so the snapshot must
+    // hand out the harness's cursor, and loading older messages must pass it straight back.
+    [Fact]
+    public async Task GetSnapshotAsync_pages_with_the_harness_cursor()
+    {
+        var queries = new List<MessageQuery?>();
+        var sessionRepository = new InMemorySessionRepository();
+        sessionRepository.Seed(new Session
+        {
+            Id = "session-long",
+            InstanceId = "instance-long",
+            HarnessType = "opencode",
+            Title = "Long",
+            Status = "active",
+            UserId = "user-1",
+        });
+        var instanceTracker = new InstanceTracker();
+        instanceTracker.Register("instance-long", new FakeHarnessSession("instance-long")
+        {
+            GetMessagesBehavior = (query, _) =>
+            {
+                queries.Add(query);
+                return Task.FromResult(query?.Before is null
+                    ? new MessagePage([HarnessMessage("msg_new", "assistant", _promptSentAt)], true, "cursor-older")
+                    : new MessagePage([HarnessMessage("msg_old", "user", _promptSentAt.AddMinutes(-5))], false));
+            },
+        });
+        var proxy = new OpenCodeSessionMessageProxy(
+            sessionRepository,
+            instanceTracker,
+            new SessionActivityTracker(),
+            new InMemoryDelegationRepository(),
+            new FakeSessionSnapshotBuilder(),
+            CreateServiceProvider(new FakeSessionActivator()),
+            NullLogger<OpenCodeSessionMessageProxy>.Instance);
+
+        var latest = await proxy.GetSnapshotAsync("session-long");
+        var older = await proxy.GetSnapshotAsync("session-long", cursor: latest.Cursor);
+
+        latest.HasMore.ShouldBeTrue();
+        latest.Cursor.ShouldBe("cursor-older");
+        queries[1]!.Before.ShouldBe("cursor-older");
+        older.Messages.ShouldHaveSingleItem().Info.Id.ShouldBe("msg_old");
+        older.HasMore.ShouldBeFalse();
+        older.Cursor.ShouldBeNull();
+    }
+
     [Fact]
     public async Task GetMessagesAsync_includes_a_saved_prompt_on_the_latest_page_only()
     {

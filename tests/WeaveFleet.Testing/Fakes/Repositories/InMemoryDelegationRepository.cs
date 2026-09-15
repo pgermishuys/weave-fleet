@@ -83,6 +83,18 @@ public sealed class InMemoryDelegationRepository : IDelegationRepository
     public Task UpdateStatusAsync(IDbConnection connection, IDbTransaction? transaction, string id, string status, string updatedAt, string? completedAt)
         => UpdateStatusAsync(id, status, updatedAt, completedAt);
 
+    public Task<int> CancelAllUnfinishedAsync(string completedAt)
+    {
+        var unfinished = _store.Values.Where(d => d.Status is "pending" or "running").ToList();
+        foreach (var delegation in unfinished)
+        {
+            delegation.Status = "cancelled";
+            delegation.UpdatedAt = completedAt;
+            delegation.CompletedAt = completedAt;
+        }
+        return Task.FromResult(unfinished.Count);
+    }
+
     public Task UpdateChildSessionIdAsync(string id, string? childSessionId, string updatedAt)
     {
         UpdateChildSessionIdCalls.Add((id, childSessionId, updatedAt));

@@ -16,7 +16,6 @@ interface TopicV2Callback {
 
 export interface WeaveSocketAPI {
   subscribeV2: (topic: string, onSnapshot: SnapshotCallback, onEvent: DomainEventCallback, onHistory?: HistoryCallback) => Unsubscribe
-  sendV2: (message: unknown) => boolean
 }
 
 interface WeaveSocketTestAPI {
@@ -56,6 +55,12 @@ let disconnectCallbackNextId = 0
 let connection: HubConnection | null = null
 let subscriberCount = 0
 let suspendConnectionsForTesting = false
+
+// SignalR's own automatic reconnect gives up after its last delay. After that, and when the first
+// start fails (e.g. Fleet is restarting), keep trying on this schedule while anything still listens.
+const RECONNECT_DELAYS_MS = [2000, 5000, 10000, 30000]
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let reconnectAttempt = 0
 
 function dispatchSnapshot(topic: string, snapshot: SessionSnapshot): void {
   lastSnapshotsV2.set(topic, snapshot)
@@ -186,6 +191,9 @@ async function connect(): Promise<void> {
     }
     
     notifyDisconnected()
+    // SignalR has given up (or the connection dropped for good). Without this the app stayed
+    // deaf, showing every session as it last was, until a reload.
+    scheduleReconnect()
   })
 
   try {
@@ -194,10 +202,68 @@ async function connect(): Promise<void> {
     await resubscribeAll()
     // Subscribe to global topics (e.g., "sessions" for activity_status events)
     await subscribeToGlobalTopics()
+    reconnectAttempt = 0
   } catch (error) {
     console.error("Failed to start SignalR connection:", error)
-    connection = null
+    if (connection === hubConnection) {
+      connection = null
+    }
+    scheduleReconnect()
   }
+}
+
+function wantsConnection(): boolean {
+  return subscriberCount > 0 && !suspendConnectionsForTesting
+}
+
+function cancelReconnect(): void {
+  if (reconnectTimer !== null) {
+    clearTimeout(reconnectTimer)
+    reconnectTimer = null
+  }
+}
+
+function scheduleReconnect(): void {
+  if (!wantsConnection() || reconnectTimer !== null) {
+    return
+  }
+
+  const delay = RECONNECT_DELAYS_MS[Math.min(reconnectAttempt, RECONNECT_DELAYS_MS.length - 1)]
+  reconnectAttempt += 1
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null
+    void reconnectNow()
+  }, delay)
+}
+
+/** Starts a new connection after the old one closed, then lets listeners catch up on what they missed. */
+async function reconnectNow(): Promise<void> {
+  cancelReconnect()
+  if (!wantsConnection() || connection !== null) {
+    return
+  }
+
+  await connect()
+  if (!isWeaveSocketConnected()) {
+    return
+  }
+
+  // Sessions already got fresh snapshots in connect(); terminals, canvases and progress refresh here.
+  for (const callback of reconnectCallbacks.values()) {
+    callback()
+  }
+}
+
+// Back online or back on the tab: don't wait out the backoff.
+function reconnectIfClosed(): void {
+  if (connection === null && wantsConnection() && (typeof document === "undefined" || document.visibilityState !== "hidden")) {
+    void reconnectNow()
+  }
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("online", reconnectIfClosed)
+  document.addEventListener("visibilitychange", reconnectIfClosed)
 }
 
 async function subscribeToGlobalTopics(): Promise<void> {
@@ -213,6 +279,8 @@ async function subscribeToGlobalTopics(): Promise<void> {
 }
 
 async function disconnect(): Promise<void> {
+  cancelReconnect()
+  reconnectAttempt = 0
   if (connection !== null) {
     try {
       await connection.stop()
@@ -361,6 +429,8 @@ function decrementSubscribers(): void {
 
 export function _resetForTesting(): void {
   void disconnect()
+  cancelReconnect()
+  reconnectAttempt = 0
   subscriberCount = 0
   suspendConnectionsForTesting = false
   topicListenersV2.clear()
@@ -446,15 +516,21 @@ const stableSubscribeV2 = (
   onHistory?: HistoryCallback,
 ): Unsubscribe => addTopicListenerV2(topic, onSnapshot, onEvent, onHistory)
 
-function sendV2Message(message: unknown): boolean {
-  if (connection?.state === HubConnectionState.Connected) {
-    // For SignalR, we don't have a generic send - this would need to be mapped
-    // to specific hub methods based on message type
-    console.warn("sendV2 not fully implemented for SignalR - message:", message)
-    return false
+/**
+ * Loads the page of a session's messages older than `cursor` (the cursor its snapshot or the previous
+ * page returned). Null when there's no connection or the request fails; the caller can try again.
+ */
+export async function loadSessionHistory(sessionId: string, cursor: string): Promise<SessionHistoryPage | null> {
+  if (connection?.state !== HubConnectionState.Connected) {
+    return null
   }
 
-  return false
+  try {
+    return await connection.invoke<SessionHistoryPage>("LoadHistoryAsync", sessionId, cursor)
+  } catch (error) {
+    console.error(`Failed to load older messages for session ${sessionId}:`, error)
+    return null
+  }
 }
 
 function syncTestApi(): void {
@@ -511,6 +587,5 @@ export function useWeaveSocket(): WeaveSocketAPI {
 
   return {
     subscribeV2: stableSubscribeV2,
-    sendV2: sendV2Message,
   }
 }

@@ -284,6 +284,19 @@ internal sealed class OpenCodeHttpClient
         int? limit,
         string? before,
         CancellationToken ct)
+        => (await GetMessagePageAsync(sessionId, directory, limit, before, ct).ConfigureAwait(false)).Messages;
+
+    /// <summary>
+    /// Gets the newest <paramref name="limit"/> messages before <paramref name="before"/>, with OpenCode's
+    /// cursor for the page after it. OpenCode pages with its own opaque cursor (the <c>X-Next-Cursor</c>
+    /// header); a message id as <c>before</c> is rejected with 400.
+    /// </summary>
+    public async Task<OpenCodeMessagePage> GetMessagePageAsync(
+        string sessionId,
+        string directory,
+        int? limit,
+        string? before,
+        CancellationToken ct)
     {
         var sb = new StringBuilder($"/session/{Uri.EscapeDataString(sessionId)}/message?directory={Uri.EscapeDataString(directory)}");
         if (limit.HasValue) sb.Append(System.Globalization.CultureInfo.InvariantCulture, $"&limit={limit.Value}");
@@ -302,14 +315,18 @@ internal sealed class OpenCodeHttpClient
             response.EnsureSuccessStatusCode();
         }
 
+        var nextCursor = response.Headers.TryGetValues("X-Next-Cursor", out var cursors)
+            ? cursors.FirstOrDefault(cursor => !string.IsNullOrWhiteSpace(cursor))
+            : null;
+
         using var doc = await JsonDocument.ParseAsync(
             await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false), cancellationToken: ct)
             .ConfigureAwait(false);
 
         if (doc.RootElement.ValueKind != JsonValueKind.Array)
-            return [];
+            return new OpenCodeMessagePage([], null);
 
-        return DeserializeMessages(doc.RootElement);
+        return new OpenCodeMessagePage(DeserializeMessages(doc.RootElement), nextCursor);
     }
 
     /// <summary>

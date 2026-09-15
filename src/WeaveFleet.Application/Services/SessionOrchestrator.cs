@@ -57,7 +57,9 @@ public sealed partial class SessionOrchestrator(
 {
     private readonly DelegationService _delegationService = delegationService;
     private readonly GitDiffService _gitDiffService = gitDiffService ?? new GitDiffService();
-    private readonly ConcurrentDictionary<string, SemaphoreSlim> _activationLocks = new();
+    // Static because the orchestrator is scoped: opening a session wakes it from several requests at
+    // once, and a per-request lock let each of them start its own harness for the same session.
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> ActivationLocks = new(StringComparer.Ordinal);
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> DelegatedChildLocks = new(StringComparer.Ordinal);
 
     private sealed class NoOpUserPreferenceRepository : IUserPreferenceRepository
@@ -1669,7 +1671,7 @@ public sealed partial class SessionOrchestrator(
         if (instance is not null)
             return Result.Success<IHarnessSession>(instance);
 
-        var activationLock = _activationLocks.GetOrAdd(session.Id, static _ => new SemaphoreSlim(1, 1));
+        var activationLock = ActivationLocks.GetOrAdd(session.Id, static _ => new SemaphoreSlim(1, 1));
         await activationLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {

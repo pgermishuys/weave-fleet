@@ -63,4 +63,49 @@ public sealed class DelegationRepositoryTests
         reloaded.ShouldNotBeNull();
         reloaded.Status.ShouldBe("pending");
     }
+
+    // At startup no sub-agent from the last run can still be going. One left "running" kept its
+    // parent's conversation showing working dots forever.
+    [Fact]
+    public async Task CancelAllUnfinishedAsync_CancelsPendingAndRunningDelegationsOfEveryUser()
+    {
+        var (conn, _, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var alice = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "alice");
+        var bob = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "bob");
+        var aliceRepo = new DelegationRepository(factory, new TestUserContext("alice"));
+        var bobRepo = new DelegationRepository(factory, new TestUserContext("bob"));
+        var pending = await InsertDelegationAsync(aliceRepo, alice.Session.Id, "pending");
+        var running = await InsertDelegationAsync(bobRepo, bob.Session.Id, "running");
+        var completed = await InsertDelegationAsync(aliceRepo, alice.Session.Id, "completed");
+
+        var cancelled = await new DelegationRepository(factory, new TestUserContext())
+            .CancelAllUnfinishedAsync("2026-09-15T08:00:00.0000000Z");
+
+        cancelled.ShouldBe(2);
+        (await aliceRepo.GetByIdAsync(pending.Id))!.Status.ShouldBe("cancelled");
+        var runningAfter = await bobRepo.GetByIdAsync(running.Id);
+        runningAfter!.Status.ShouldBe("cancelled");
+        runningAfter.CompletedAt.ShouldBe("2026-09-15T08:00:00.0000000Z");
+        (await aliceRepo.GetByIdAsync(completed.Id))!.Status.ShouldBe("completed");
+    }
+
+    private static async Task<WeaveFleet.Domain.Entities.Delegation> InsertDelegationAsync(
+        DelegationRepository repo,
+        string parentSessionId,
+        string status)
+    {
+        var delegation = new WeaveFleet.Domain.Entities.Delegation
+        {
+            Id = Guid.NewGuid().ToString(),
+            ParentSessionId = parentSessionId,
+            Title = status,
+            Status = status,
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UpdatedAt = DateTime.UtcNow.ToString("O")
+        };
+        await repo.InsertAsync(delegation);
+        return delegation;
+    }
 }

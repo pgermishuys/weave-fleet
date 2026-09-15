@@ -315,8 +315,9 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         string? before = null;
         for (var page = 0; page < LastPromptMaxPages; page++)
         {
-            var messages = await _instanceHandle.HttpClient.GetMessagesAsync(
+            var messagePage = await _instanceHandle.HttpClient.GetMessagePageAsync(
                 openCodeSessionId, _workingDirectory, LastPromptPageSize, before, ct).ConfigureAwait(false);
+            var messages = messagePage.Messages;
 
             for (var i = messages.Count - 1; i >= 0; i--)
             {
@@ -326,12 +327,13 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
                 }
             }
 
-            if (messages.Count < LastPromptPageSize)
+            // OpenCode pages with its own cursor; a message id as "before" is rejected.
+            if (messagePage.NextCursor is null)
             {
                 return null;
             }
 
-            before = messages[0].Info.Id;
+            before = messagePage.NextCursor;
         }
 
         return null;
@@ -413,19 +415,15 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             return new MessagePage([], false);
         }
 
-        var raw = await _instanceHandle.HttpClient.GetMessagesAsync(
+        var page = await _instanceHandle.HttpClient.GetMessagePageAsync(
             _openCodeSessionId,
             _workingDirectory,
             query?.Limit,
             query?.Before,
             ct).ConfigureAwait(false);
 
-        var messages = OpenCodeMapper.ToHarnessMessages(raw);
-
-        // OpenCode doesn't return a hasMore flag on this endpoint; use limit as heuristic.
-        bool hasMore = query?.Limit.HasValue == true && raw.Count >= query.Limit.Value;
-
-        return new MessagePage(messages, hasMore);
+        // OpenCode's own cursor fetches the older page; there's more exactly when it sends one.
+        return new MessagePage(OpenCodeMapper.ToHarnessMessages(page.Messages), page.NextCursor is not null, page.NextCursor);
     }
 
     /// <inheritdoc />

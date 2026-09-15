@@ -55,6 +55,20 @@ public sealed class HarnessEventRelay : BackgroundService
         LoggerMessage.Define<int>(LogLevel.Warning, new EventId(4, "ShutdownTimeout"),
             "Shutdown timed out waiting for {Count} pump task(s) to complete");
 
+    private static readonly Action<ILogger, string, int, TimeSpan, Exception?> _logPumpRestarting =
+        LoggerMessage.Define<string, int, TimeSpan>(LogLevel.Warning, new EventId(5, "PumpRestarting"),
+            "Restarting the event pump for instance {InstanceId} (attempt {Attempt}) in {Delay}");
+
+    private static readonly Action<ILogger, string, int, Exception?> _logPumpGaveUp =
+        LoggerMessage.Define<string, int>(LogLevel.Error, new EventId(6, "PumpGaveUp"),
+            "Event pump for instance {InstanceId} failed {Attempts} times in a row; not restarting it");
+
+    /// <summary>How many times in a row a failed pump is restarted before the relay gives up on it.</summary>
+    internal const int MaxPumpRestarts = 5;
+
+    /// <summary>A pump that ran this long before failing starts counting its restarts from zero again.</summary>
+    private static readonly TimeSpan HealthyPumpRun = TimeSpan.FromMinutes(1);
+
     private readonly InstanceTracker _tracker;
     private readonly IEventBroadcaster _broadcaster;
     private readonly IEventPublisher _publisher;
@@ -68,6 +82,12 @@ public sealed class HarnessEventRelay : BackgroundService
     private readonly SessionProgressObserver? _progressObserver;
     private readonly SessionRecapService? _recaps;
     private CancellationToken _stoppingToken;
+
+    /// <summary>
+    /// Wait before the first restart of a failed pump; each further attempt doubles it, up to 30 seconds.
+    /// Tests shorten it.
+    /// </summary>
+    internal TimeSpan PumpRestartDelay { get; set; } = TimeSpan.FromSeconds(1);
 
     public HarnessEventRelay(
         InstanceTracker tracker,
@@ -146,7 +166,7 @@ public sealed class HarnessEventRelay : BackgroundService
         }
     }
 
-    private void StartSubscription(string instanceId, IHarnessSession instance)
+    private void StartSubscription(string instanceId, IHarnessSession instance, int failedAttempts = 0)
     {
         var cts = CancellationTokenSource.CreateLinkedTokenSource(_stoppingToken);
         if (!_subscriptions.TryAdd(instanceId, cts))
@@ -155,16 +175,66 @@ public sealed class HarnessEventRelay : BackgroundService
             return;
         }
 
+        var startedAt = Stopwatch.GetTimestamp();
         var task = Task.Run(() => PumpAsync(instanceId, instance, cts.Token), cts.Token);
         _pumpTasks.TryAdd(instanceId, task);
 
         // Remove from tracking when pump completes
         _ = task.ContinueWith(
-            _ => _pumpTasks.TryRemove(instanceId, out Task? _),
+            completed =>
+            {
+                _pumpTasks.TryRemove(instanceId, out Task? _);
+
+                // A pump that throws leaves its session deaf: no live events and no status until the
+                // session is woken again. Restart it while its harness is still registered.
+                if (completed.IsCompletedSuccessfully && completed.Result == PumpOutcome.Failed)
+                {
+                    var attempts = Stopwatch.GetElapsedTime(startedAt) >= HealthyPumpRun ? 1 : failedAttempts + 1;
+                    _ = RestartFailedPumpAsync(instanceId, instance, attempts);
+                }
+            },
             TaskScheduler.Default);
     }
 
-    private async Task PumpAsync(string instanceId, IHarnessSession instance, CancellationToken ct)
+    private async Task RestartFailedPumpAsync(string instanceId, IHarnessSession instance, int attempt)
+    {
+        if (attempt > MaxPumpRestarts)
+        {
+            _logPumpGaveUp(_logger, instanceId, attempt - 1, null);
+            return;
+        }
+
+        var delay = TimeSpan.FromTicks(Math.Min(
+            PumpRestartDelay.Ticks * (1L << (attempt - 1)),
+            TimeSpan.FromSeconds(30).Ticks));
+        _logPumpRestarting(_logger, instanceId, attempt, delay, null);
+
+        try
+        {
+            await Task.Delay(delay, _stoppingToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        // Removed or replaced while we waited: nothing of ours to restart.
+        if (!ReferenceEquals(_tracker.Get(instanceId), instance))
+            return;
+
+        StartSubscription(instanceId, instance, attempt);
+    }
+
+    private enum PumpOutcome
+    {
+        /// <summary>The harness ended its stream, the pump was cancelled, or it never found its session.</summary>
+        Ended,
+
+        /// <summary>The pump threw; its harness may still be alive.</summary>
+        Failed,
+    }
+
+    private async Task<PumpOutcome> PumpAsync(string instanceId, IHarnessSession instance, CancellationToken ct)
     {
         using var pumpActivity = FleetInstrumentation.ActivitySource.StartActivity(
             "fleet.relay.pump",
@@ -201,7 +271,7 @@ public sealed class HarnessEventRelay : BackgroundService
             }
             catch (OperationCanceledException)
             {
-                return;
+                return PumpOutcome.Ended;
             }
         }
 
@@ -209,7 +279,7 @@ public sealed class HarnessEventRelay : BackgroundService
         {
             _logger.LogWarning("[Relay:Pump] Session not found for instance={InstanceId} after 10 retries — aborting pump", instanceId);
             _logSessionNotFound(_logger, instanceId, null);
-            return;
+            return PumpOutcome.Ended;
         }
 
         pumpActivity?.SetTag(FleetInstrumentation.SessionIdTag, fleetSessionId);
@@ -223,6 +293,7 @@ public sealed class HarnessEventRelay : BackgroundService
         // Query the harness's current status and seed the tracker + broadcast if different.
         await ResyncActivityStatusAsync(instance, fleetSessionId, sessionUserId, ct).ConfigureAwait(false);
 
+        var outcome = PumpOutcome.Ended;
         try
         {
             await foreach (var evt in instance.SubscribeAsync(ct).ConfigureAwait(false))
@@ -326,6 +397,7 @@ public sealed class HarnessEventRelay : BackgroundService
         catch (Exception ex)
         {
             _logPumpFailed(_logger, instanceId, ex);
+            outcome = PumpOutcome.Failed;
         }
         finally
         {
@@ -347,6 +419,8 @@ public sealed class HarnessEventRelay : BackgroundService
                 sessionUserId,
                 CancellationToken.None).ConfigureAwait(false);
         }
+
+        return outcome;
     }
 
     private async Task<JsonElement> BuildActivityStatusPayloadAsync(

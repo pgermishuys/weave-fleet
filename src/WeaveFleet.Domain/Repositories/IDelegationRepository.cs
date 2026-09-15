@@ -16,5 +16,11 @@ public interface IDelegationRepository
     Task UpdateChildSessionIdAsync(string id, string? childSessionId, string updatedAt);
     Task UpdateChildSessionIdAsync(IDbConnection connection, IDbTransaction? transaction, string id, string? childSessionId, string updatedAt);
     Task DeleteByParentSessionIdAsync(string parentSessionId);
+
+    /// <summary>
+    /// Recovery, for every user: cancels delegations still pending or running. Called at startup, when no
+    /// turn from the previous run can still be going. Returns how many were cancelled.
+    /// </summary>
+    Task<int> CancelAllUnfinishedAsync(string completedAt);
     Task DeleteByParentSessionIdAsync(IDbConnection connection, IDbTransaction? transaction, string parentSessionId);
 }

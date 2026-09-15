@@ -538,8 +538,12 @@ using (var scope = app.Services.CreateScope())
     var instanceService = scope.ServiceProvider.GetRequiredService<InstanceService>();
     var instanceCount = await instanceService.MarkAllStoppedAsync();
     var sessionCount = await instanceService.MarkAllNonTerminalSessionsStoppedAsync();
-    if (instanceCount > 0 || sessionCount > 0)
-        StartupLog.RecoveryComplete(logger, instanceCount, sessionCount);
+    // A sub-agent still marked running died with the last run; left running, it kept its parent's
+    // conversation showing working dots forever.
+    var delegationCount = await scope.ServiceProvider.GetRequiredService<IDelegationRepository>()
+        .CancelAllUnfinishedAsync(DateTime.UtcNow.ToString("O"));
+    if (instanceCount > 0 || sessionCount > 0 || delegationCount > 0)
+        StartupLog.RecoveryComplete(logger, instanceCount, sessionCount, delegationCount);
 }
 
 // Middleware pipeline
@@ -755,8 +759,8 @@ static string ExpandUserHomePath(string path)
 internal static partial class StartupLog
 {
     [LoggerMessage(Level = LogLevel.Information,
-        Message = "Recovery: marked {Instances} instance(s) and {Sessions} session(s) as stopped.")]
-    public static partial void RecoveryComplete(ILogger logger, int instances, int sessions);
+        Message = "Recovery: marked {Instances} instance(s) and {Sessions} session(s) as stopped, and cancelled {Delegations} unfinished sub-agent(s).")]
+    public static partial void RecoveryComplete(ILogger logger, int instances, int sessions, int delegations);
 
     [LoggerMessage(Level = LogLevel.Information,
         Message = "Startup orphan kill: killing pid {Pid} ({ProcessName}).")]

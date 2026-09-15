@@ -133,6 +133,21 @@ public sealed class DelegationRepository : IDelegationRepository
             ReadDelegation);
     }
 
+    public async Task<int> CancelAllUnfinishedAsync(string completedAt)
+    {
+        // System-level recovery operation — no user filter
+        using var conn = _connectionFactory.CreateConnection();
+        return await conn.ExecuteNonQueryAsync(
+            """
+            UPDATE delegations
+            SET status = 'cancelled',
+                updated_at = @CompletedAt,
+                completed_at = @CompletedAt
+            WHERE status IN ('pending', 'running')
+            """,
+            cmd => { cmd.AddParameter("CompletedAt", completedAt); });
+    }
+
     public async Task UpdateStatusAsync(string id, string status, string updatedAt, string? completedAt)
     {
         using var conn = _connectionFactory.CreateConnection();

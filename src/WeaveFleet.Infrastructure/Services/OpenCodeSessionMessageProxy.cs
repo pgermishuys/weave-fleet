@@ -184,7 +184,7 @@ public sealed class OpenCodeSessionMessageProxy(
 
         // Convert MessageLifecyclePayload to HarnessMessage
         var messages = snapshot.Messages.Select(ToHarnessMessage).ToList();
-        return new MessagePage(messages, snapshot.HasMore);
+        return new MessagePage(messages, snapshot.HasMore, snapshot.Cursor);
     }
 
     private async Task<SessionSnapshot> BuildSnapshotFromHarnessAsync(
@@ -229,7 +229,8 @@ public sealed class OpenCodeSessionMessageProxy(
             ActivityStatus = activityStatus,
             LastEventId = null, // Live harness doesn't use event IDs
             HasMore = messagePage.HasMore,
-            Cursor = messagePage.HasMore && messages.Count > 0 ? messages[0].Info.Id : null,
+            // The harness's own cursor: OpenCode rejects a message id as "before".
+            Cursor = messagePage.HasMore ? messagePage.Cursor : null,
             IsPartial = false, // Live harness data is complete
         };
     }

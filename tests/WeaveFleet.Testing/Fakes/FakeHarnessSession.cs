@@ -113,9 +113,20 @@ public sealed class FakeHarnessSession : IHarnessSession
         => GetMessagesBehavior?.Invoke(query, ct)
            ?? Task.FromResult(new MessagePage([], false));
 
+    /// <summary>How many subscriptions throw before one streams, to test that a failed pump recovers.</summary>
+    public int FailingSubscriptions { get; set; }
+
+    /// <summary>How many times <see cref="SubscribeAsync"/> has been started.</summary>
+    public int SubscriptionCount => Volatile.Read(ref _subscriptionCount);
+
+    private int _subscriptionCount;
+
     public async IAsyncEnumerable<HarnessEvent> SubscribeAsync(
         [EnumeratorCancellation] CancellationToken ct = default)
     {
+        if (Interlocked.Increment(ref _subscriptionCount) <= FailingSubscriptions)
+            throw new InvalidOperationException("Scripted subscription failure.");
+
         await foreach (var evt in _channel.Reader.ReadAllAsync(ct))
             yield return evt;
     }

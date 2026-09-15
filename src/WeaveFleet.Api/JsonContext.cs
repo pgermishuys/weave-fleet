@@ -67,6 +67,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(WsHistoryPagePayload))]
 [JsonSerializable(typeof(WsHistoryPayload))]
 [JsonSerializable(typeof(SessionSnapshot))]
+[JsonSerializable(typeof(WeaveFleet.Api.Hubs.SessionHistoryPage))]
 [JsonSerializable(typeof(DomainEvent))]
 [JsonSerializable(typeof(MessageLifecyclePayload))]
 [JsonSerializable(typeof(MessagePartUpdatedPayload))]
