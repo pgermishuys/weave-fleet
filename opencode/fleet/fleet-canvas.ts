@@ -1,5 +1,5 @@
 /**
- * Fleet canvas tools for pooled OpenCode sessions, and the folder with Fleet's skills.
+ * Fleet canvas tools for pooled OpenCode sessions, and the folders with Fleet's skills.
  *
  * Fleet embeds this file, writes it into its data folder, and loads it through the "plugin" list in
  * OPENCODE_CONFIG_CONTENT. Edit it here, in the Fleet repo: Fleet overwrites the installed copy.
@@ -57,13 +57,15 @@ const canvasId = {
 type Config = { skills?: { paths?: string[] } }
 
 export const FleetCanvasPlugin = async () => ({
-  // Fleet's own skills (fleet-api) are in its data folder. Adding the folder here keeps the user's skill paths:
-  // skills.paths in OPENCODE_CONFIG_CONTENT would replace them.
+  // Fleet's own skills (fleet-api, and the built-in skills the user turned on) are in its data folder, one or more
+  // folders separated like PATH. Adding them here keeps the user's skill paths: skills.paths in OPENCODE_CONFIG_CONTENT
+  // would replace them.
   config: async (config: Config) => {
     const skills = process.env.FLEET_SKILLS_PATH
     if (!skills) return
+    const folders = skills.split(process.platform === "win32" ? ";" : ":").filter(Boolean)
     config.skills ??= {}
-    config.skills.paths = [...(config.skills.paths ?? []), skills]
+    config.skills.paths = [...(config.skills.paths ?? []), ...folders]
   },
 
   tool: {
@@ -140,6 +142,7 @@ export const FleetCanvasPlugin = async () => ({
       description: [
         "Run the project's web app and show it to the user in a browser canvas beside the chat.",
         "Use this when the user asks to run, host, serve, preview or see the app, whatever it's built with (npm, bun, dotnet, python, cargo...).",
+        "Use it too to check that a change you made works in the running app, not only in its tests.",
         "Don't start dev servers with bash: they never exit, and the user can't see them.",
         "Fleet runs the command in the session's folder, keeps it running, finds the page it serves and waits until it answers (up to 3 minutes).",
         "Fleet sets PORT to a free port; servers that ignore PORT keep their own port, and Fleet finds it.",

@@ -164,6 +164,8 @@ public static class DependencyInjection
         services.AddScoped<GitDiffService>();
         services.AddScoped<SessionOrchestrator>();
         services.AddScoped<HarnessProfileService>();
+        services.AddSingleton<IBuiltInSkillCatalog, WeaveFleet.Infrastructure.Harnesses.OpenCode.OpenCodeBuiltInSkillCatalog>();
+        services.AddScoped<BuiltInSkillService>();
         services.AddScoped<ISessionActivator>(sp => sp.GetRequiredService<SessionOrchestrator>());
         services.AddScoped<SessionCallbackService>();
         services.AddScoped<DelegationService>();

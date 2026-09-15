@@ -4,9 +4,12 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Skills;
 using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Testing.Fakes;
+using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode;
 
@@ -138,6 +141,82 @@ public sealed class OpenCodeHarnessPreparationTests
         var ready = result.ShouldBeOfType<RuntimePreparation.Ready>();
         var environmentVariables = GetEnvironmentVariables(ready.Artifacts);
         environmentVariables["ANTHROPIC_API_KEY"].ShouldBe("first-secret");
+    }
+
+    [Fact]
+    public async Task PrepareRuntimeAsync_names_the_built_in_skills_the_user_turned_on_that_Fleet_ships()
+    {
+        var preferences = new InMemoryUserPreferenceRepository();
+        preferences.Seed(BuiltInSkillService.PreferenceKey, "fleet-run,retired-skill,fleet-code-review");
+        var harness = CreateHarness(preferences);
+
+        var result = await harness.PrepareRuntimeAsync(CreateContextWithNullModel(), CancellationToken.None);
+
+        var environmentVariables = GetEnvironmentVariables(result.ShouldBeOfType<RuntimePreparation.Ready>().Artifacts);
+        environmentVariables[OpenCodeFleetSkills.BuiltInVariable].ShouldBe("fleet-code-review,fleet-run");
+    }
+
+    [Fact]
+    public async Task PrepareRuntimeAsync_leaves_the_built_in_skills_out_until_the_user_turns_one_on()
+    {
+        var harness = CreateHarness(new InMemoryUserPreferenceRepository());
+
+        var result = await harness.PrepareRuntimeAsync(CreateContextWithNullModel(), CancellationToken.None);
+
+        GetEnvironmentVariables(result.ShouldBeOfType<RuntimePreparation.Ready>().Artifacts).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void GetSkillFolders_adds_a_folder_for_each_built_in_skill_the_session_names()
+    {
+        using var data = new TempDirectory();
+        var harness = CreateHarness(new InMemoryUserPreferenceRepository(), new FleetOptions { DatabasePath = Path.Combine(data.Path, "fleet.db") });
+
+        var folders = harness.GetSkillFolders(new Dictionary<string, string>
+        {
+            [OpenCodeFleetSkills.BuiltInVariable] = "fleet-run,retired-skill",
+        });
+
+        folders.ShouldBe([
+            Path.Combine(data.Path, "opencode", "skills"),
+            Path.Combine(data.Path, "opencode", "built-in-skills", "fleet-run"),
+        ]);
+        File.Exists(Path.Combine(folders[1], "SKILL.md")).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void GetSkillFolders_offers_built_in_skills_with_auth_on_but_not_the_Fleet_API_skill()
+    {
+        using var data = new TempDirectory();
+        var options = new FleetOptions { DatabasePath = Path.Combine(data.Path, "fleet.db") };
+        options.Auth.Enabled = true;
+        var harness = CreateHarness(new InMemoryUserPreferenceRepository(), options);
+
+        harness.GetSkillFolders(new Dictionary<string, string>()).ShouldBeEmpty();
+        harness.GetSkillFolders(new Dictionary<string, string> { [OpenCodeFleetSkills.BuiltInVariable] = "fleet-mockups" })
+            .ShouldBe([Path.Combine(data.Path, "opencode", "built-in-skills", "fleet-mockups")]);
+    }
+
+    private static OpenCodeHarnessRuntime CreateHarness(IUserPreferenceRepository preferences, FleetOptions? options = null)
+    {
+        return new OpenCodeHarnessRuntime(
+            httpClientFactory: new TestHttpClientFactory(),
+            portAllocator: new PortAllocator(10000, 10099),
+            options: options ?? new FleetOptions(),
+            scopeFactory: TestServiceScopeFactory.Create(services => services.AddSingleton(preferences)),
+            logger: NullLogger<OpenCodeHarnessRuntime>.Instance,
+            loggerFactory: NullLoggerFactory.Instance);
+    }
+
+    private sealed class TempDirectory : IDisposable
+    {
+        public string Path { get; } = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"fleet-skill-folders-{Guid.NewGuid():N}");
+
+        public void Dispose()
+        {
+            if (Directory.Exists(Path))
+                Directory.Delete(Path, recursive: true);
+        }
     }
 
     private static OpenCodeHarnessRuntime CreateHarness()

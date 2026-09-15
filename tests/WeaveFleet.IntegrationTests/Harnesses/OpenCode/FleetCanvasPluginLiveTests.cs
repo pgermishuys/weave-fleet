@@ -217,6 +217,80 @@ public sealed partial class FleetCanvasPluginLiveTests
         }
     }
 
+    [OpenCodeFact]
+    public async Task A_pooled_session_gets_the_built_in_skills_its_owner_turned_on_and_no_others()
+    {
+        using var cts = new CancellationTokenSource(Timeout);
+        var ct = cts.Token;
+        var root = Path.Combine(Path.GetTempPath(), $"fleet-built-in-skill-live-{Guid.NewGuid():N}");
+        var workspace = Path.Combine(root, "workspace");
+        var dbPath = Path.Combine(root, "fleet", "fleet.db");
+        Directory.CreateDirectory(workspace);
+        Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
+
+        await using var llm = await FakeLlmServerFixture.StartAsync();
+        var processEnvironment = WriteScratchOpenCodeHome(root, llm.BaseUrl);
+        llm.Queue.ToolLessResponse = new ScriptedLlmResponse { Text = "Run it" };
+        llm.Queue.Enqueue(new ScriptedLlmResponse
+        {
+            StopReason = "tool_calls",
+            ToolCalls = [new ScriptedToolCall("call_skill", "skill", """{"name":"fleet-run"}""")],
+        });
+        llm.Queue.Enqueue(new ScriptedLlmResponse { Text = "Done." });
+
+        var factory = new PooledOpenCodeLiveHost.KestrelFleetFactory(dbPath);
+        try
+        {
+            try { _ = factory.Services; }
+            catch (InvalidCastException) { /* expected: the base class expects a TestServer */ }
+
+            var services = factory.LiveServices;
+            SeedSession(services, workspace);
+
+            // The owner turns one skill on in Settings, and the runtime prepares the session from that choice.
+            using (BackgroundUserContext.BeginScope(Owner))
+            using (var scope = services.CreateScope())
+                (await scope.ServiceProvider.GetRequiredService<WeaveFleet.Application.Skills.BuiltInSkillService>()
+                    .SetEnabledAsync("fleet-run", enabled: true)).IsSuccess.ShouldBeTrue();
+
+            var runtime = services.GetRequiredService<OpenCodeHarnessRuntime>();
+            var prepared = await runtime.PrepareRuntimeAsync(
+                new RuntimePreparationContext { UserId = Owner, UserCredentials = [], WorkingDirectory = workspace },
+                ct);
+            foreach (var (name, value) in ((OpenCodeLaunchArtifacts)prepared.ShouldBeOfType<RuntimePreparation.Ready>().Artifacts).EnvironmentVariables)
+                processEnvironment[name] = value;
+
+            await using var session = await runtime.SpawnAsync(
+                new HarnessSpawnOptions
+                {
+                    SessionId = SessionId,
+                    WorkingDirectory = workspace,
+                    OwnerUserId = Owner,
+                    LaunchArtifacts = new OpenCodeLaunchArtifacts(processEnvironment),
+                },
+                ct);
+
+            await session.SendPromptAsync("Check that the app runs.", null, ct);
+
+            // OpenCode offers the skill that's on, next to Fleet's own and the user's; not the ones that are off.
+            // Then the skill's text reaches the model when it loads it.
+            var requests = await WaitForAsync(() => llm.Queue.Requests.ToList(), list => list.Count(r => OfferedToolNames([r]).Count > 0) >= 2, ct);
+            var first = requests.First(request => OfferedToolNames([request]).Count > 0);
+            first.ShouldContain("fleet-run");
+            first.ShouldContain("fleet-api");
+            first.ShouldContain("user-probe-skill");
+            first.ShouldNotContain("fleet-simplify");
+            first.ShouldNotContain("fleet-code-review");
+            first.ShouldNotContain("fleet-mockups");
+            requests.ShouldContain(request => request.Contains("Tests show the code does what the tests say."));
+        }
+        finally
+        {
+            await factory.DisposeAsync();
+            try { Directory.Delete(root, recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static async Task<bool> HasExitedAsync(int processId, TimeSpan within)
     {
         var deadline = DateTime.UtcNow + within;
