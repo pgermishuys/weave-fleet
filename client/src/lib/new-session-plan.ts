@@ -1,10 +1,11 @@
 import type { NewSessionFolder, NewSessionWorkspace } from "@/lib/new-session-request";
 
-/** A run of plan-line text; `code` runs are paths and branch names, `warn` runs a caution. */
+/** A run of plan-line text; `code` runs are paths and branch names, `warn` runs a caution, `strong` the key facts. */
 export interface PlanPart {
   text: string;
   code?: boolean;
   warn?: boolean;
+  strong?: boolean;
 }
 
 export interface NewSessionPlanInput {

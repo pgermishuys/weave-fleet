@@ -2616,6 +2616,7 @@ export interface components {
             agent?: null | string;
             targetTags?: null | string[];
             targetType?: null | string;
+            timeZone?: null | string;
         };
         CreateBoardCardRequest: {
             laneId: string;
@@ -3203,6 +3204,7 @@ export interface components {
             agent?: null | string;
             targetTags?: null | string[];
             targetType?: null | string;
+            timeZone?: null | string;
         };
         UpdateBoardCardRequest: {
             title: null | string;

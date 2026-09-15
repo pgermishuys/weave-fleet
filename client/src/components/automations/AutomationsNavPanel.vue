@@ -1,6 +1,12 @@
 <script setup lang="ts">
-import { Plus, Loader2 } from "lucide-vue-next";
+import { computed } from "vue";
+import { Loader2, Pencil, Plus } from "lucide-vue-next";
+import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { useAutomations } from "@/composables/use-automations";
+import { useAutomationsNav } from "@/composables/use-automations-nav";
+import { useRelativeTime } from "@/composables/use-relative-time";
+import { autoName, parseSchedule, promptFrom } from "@/lib/automation-schedule";
+import { automationRowStatus } from "@/lib/automations";
 
 interface Props {
   modelValue: string | null;
@@ -15,6 +21,20 @@ defineProps<Props>();
 const emit = defineEmits<Emits>();
 
 const { automations, isLoading } = useAutomations();
+const { viewMode, draft } = useAutomationsNav();
+const now = useRelativeTime();
+
+/** The draft's row follows what's typed, like a new session's. */
+const draftTitle = computed(() => {
+  const text = draft.text;
+  const hit = draft.manualWhen ? null : parseSchedule(text);
+  return draft.name.trim() || autoName(promptFrom(text, hit)) || "New automation";
+});
+
+const rows = computed(() => automations.value.map((automation) => ({
+  automation,
+  status: automationRowStatus(automation, new Date(now.value)),
+})));
 
 function selectAutomation(id: string): void {
   emit("update:modelValue", id);
@@ -40,33 +60,71 @@ function handleCreate(): void {
       <button
         type="button"
         class="new-automation-btn"
+        data-testid="new-automation"
         @click="handleCreate"
       >
-        <Plus :size="16" aria-hidden="true" />
-        <span>New Automation</span>
+        <Plus
+          :size="16"
+          aria-hidden="true"
+        />
+        <span>New automation</span>
       </button>
     </div>
 
     <nav
-      v-if="!isLoading && automations.length > 0"
+      v-if="viewMode === 'create' || (!isLoading && automations.length > 0)"
       class="automations-nav"
       aria-label="Automations list"
     >
       <button
-        v-for="automation in automations"
+        v-if="viewMode === 'create'"
+        type="button"
+        class="automation-row automation-row--active"
+        aria-current="page"
+        data-testid="automation-draft-row"
+      >
+        <Pencil
+          class="automation-row__draft-icon"
+          aria-hidden="true"
+        />
+        <span class="automation-row__title">{{ draftTitle }}</span>
+        <span class="automation-row__meta">Draft</span>
+      </button>
+      <button
+        v-for="{ automation, status } in rows"
         :key="automation.id"
         type="button"
-        class="automations-nav__item"
-        :class="{ 'automations-nav__item--active': modelValue === automation.id }"
-        :aria-current="modelValue === automation.id ? 'page' : undefined"
+        class="automation-row"
+        :class="{
+          'automation-row--active': modelValue === automation.id && viewMode === 'edit',
+          'automation-row--off': !automation.isEnabled,
+        }"
+        :aria-current="modelValue === automation.id && viewMode === 'edit' ? 'page' : undefined"
+        data-testid="automation-row"
         @click="selectAutomation(automation.id)"
       >
-        <span
-          class="status-dot"
-          :class="automation.isEnabled ? 'status-dot--enabled' : 'status-dot--disabled'"
-          :aria-label="automation.isEnabled ? 'Enabled' : 'Disabled'"
+        <StatusGlyph
+          v-if="status.glyph === 'working'"
+          status="active"
+          label="Running"
         />
-        <span class="automation-name">{{ automation.name }}</span>
+        <StatusGlyph
+          v-else-if="status.glyph === 'error'"
+          status="error"
+          label="Its last run failed"
+        />
+        <span
+          v-else
+          class="automation-row__glyph-slot"
+          aria-hidden="true"
+        />
+        <span class="automation-row__title">{{ automation.name }}</span>
+        <span
+          v-if="status.label"
+          class="automation-row__meta"
+          :class="`automation-row__meta--${status.tone}`"
+          data-testid="automation-row-status"
+        >{{ status.label }}</span>
       </button>
     </nav>
 
@@ -151,64 +209,89 @@ function handleCreate(): void {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 4px;
-  padding: 0 12px 12px;
+  gap: 1px;
+  padding: 0 8px 12px;
   overflow-y: auto;
 }
 
-.automations-nav__item {
+/* The same row as a session's: glyph slot, title, and a word or a time at the end. */
+.automation-row {
   display: flex;
-  align-items: center;
-  gap: 10px;
   width: 100%;
-  min-height: 40px;
-  padding: 0 12px;
-  border: 1px solid transparent;
+  min-width: 0;
+  min-height: 32px;
+  align-items: center;
+  gap: 9px;
+  border: 0;
   border-radius: var(--radius-btn);
+  padding: 0 10px;
   background: transparent;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 500;
+  color: color-mix(in srgb, var(--text) 86%, transparent);
   text-align: left;
-  transition: background-color var(--transition), border-color var(--transition), color var(--transition);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
 }
 
-.automations-nav__item:hover {
-  background: var(--bg);
+.automation-row:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
   color: var(--text);
 }
 
-.automations-nav__item:focus-visible {
+.automation-row--active {
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.automation-row:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline-offset: -2px;
 }
 
-.automations-nav__item--active {
-  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-  background: color-mix(in srgb, var(--panel-bg) 88%, var(--accent) 12%);
-  color: var(--text);
+/* An automation that's off fades back, as a quiet session does. */
+.automation-row--off:not(.automation-row--active) {
+  color: color-mix(in srgb, var(--text) 45%, transparent);
 }
 
-.status-dot {
-  flex-shrink: 0;
+.automation-row__glyph-slot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  flex-shrink: 0;
 }
 
-.status-dot--enabled {
-  background: var(--color-success);
+.automation-row__draft-icon {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  color: var(--muted);
 }
 
-.status-dot--disabled {
-  background: var(--color-text-tertiary);
-}
-
-.automation-name {
-  flex: 1;
+.automation-row__title {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
+  font-size: 13px;
+  line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.automation-row__meta {
+  flex-shrink: 0;
+  color: color-mix(in srgb, var(--muted) 80%, transparent);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.automation-row__meta--working {
+  color: var(--running);
+}
+
+.automation-row__meta--error {
+  color: var(--error);
 }
 
 .automations-nav-empty {

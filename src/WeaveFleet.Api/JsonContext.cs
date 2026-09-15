@@ -332,6 +332,9 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.AutomationResponse))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.AutomationListResponse))]
 [JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Api.Contracts.AutomationResponse>))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.AutomationRunResponse))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.AutomationRunListResponse))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.AutomationDraftResponse))]
 [JsonSerializable(typeof(string[]))]
 // Open directory/file
 [JsonSerializable(typeof(OkBoolResponse))]

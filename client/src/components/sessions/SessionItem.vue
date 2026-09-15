@@ -9,6 +9,7 @@ import {
   GitFork,
   Pencil,
   Check,
+  Repeat,
   Trash2,
 } from "lucide-vue-next";
 import {
@@ -29,6 +30,7 @@ import {
   useRenameSession,
 } from "@/composables/use-session-actions";
 import { useProjects } from "@/composables/use-projects";
+import { useAutomationsNav } from "@/composables/use-automations-nav";
 import type { SessionListItem } from "@/api/client";
 import { sessionCache } from "@/lib/session-cache";
 import { dispatchSessionRemoved } from "@/lib/session-sync";
@@ -54,6 +56,7 @@ const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
 const sessionsStore = useSessionsStore();
 const router = useRouter();
+const { startCreateFromSession } = useAutomationsNav();
 
 const isInlineEditing = shallowRef(false);
 const isContextMenuOpen = shallowRef(false);
@@ -298,6 +301,12 @@ async function handleFork(): Promise<void> {
   }
 }
 
+/** A new automation with this session's first message and folder; the person adds when it runs. */
+function handleRepeatOnSchedule(): void {
+  startCreateFromSession(sessionId.value);
+  void router.navigate({ to: "/automations" });
+}
+
 async function handleMove(projectId: string | null): Promise<void> {
   try {
     await moveSession(sessionId.value, projectId);
@@ -476,6 +485,15 @@ function removeSessionFromStore(): void {
       >
         <GitFork class="size-3.5" />
         Fork
+      </ContextMenuItem>
+
+      <ContextMenuItem
+        :disabled="isAnyActionPending"
+        data-testid="session-repeat-on-schedule"
+        @select="handleRepeatOnSchedule"
+      >
+        <Repeat class="size-3.5" />
+        Repeat on a schedule…
       </ContextMenuItem>
 
       <OpenToolContextSubmenu :directory="session.workspaceDirectory" />

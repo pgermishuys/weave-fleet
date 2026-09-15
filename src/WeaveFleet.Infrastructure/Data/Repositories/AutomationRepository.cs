@@ -27,12 +27,12 @@ public sealed class AutomationRepository : IAutomationRepository
                 id, name, prompt, trigger_type, trigger_config,
                 max_concurrent_runs, max_runs_per_hour, timeout_minutes,
                 is_enabled, is_deleted, workspace_id, model, agent,
-                created_at, updated_at, user_id, target_tags, target_type
+                created_at, updated_at, user_id, target_tags, target_type, time_zone, isolation, base_branch
             ) VALUES (
                 @Id, @Name, @Prompt, @TriggerType, @TriggerConfig,
                 @MaxConcurrentRuns, @MaxRunsPerHour, @TimeoutMinutes,
                 @IsEnabled, @IsDeleted, @WorkspaceId, @Model, @Agent,
-                @CreatedAt, @UpdatedAt, @UserId, @TargetTags, @TargetType
+                @CreatedAt, @UpdatedAt, @UserId, @TargetTags, @TargetType, @TimeZone, @Isolation, @BaseBranch
             )
             """,
             cmd =>
@@ -55,6 +55,9 @@ public sealed class AutomationRepository : IAutomationRepository
                 cmd.AddParameter("UserId", _userContext.UserId);
                 cmd.AddParameter("TargetTags", SerializeTargetTags(automation.TargetTags));
                 cmd.AddParameter("TargetType", automation.TargetType);
+                cmd.AddParameter("TimeZone", automation.TimeZone);
+                cmd.AddParameter("Isolation", automation.Isolation);
+                cmd.AddParameter("BaseBranch", automation.BaseBranch);
             });
     }
 
@@ -76,7 +79,10 @@ public sealed class AutomationRepository : IAutomationRepository
                 agent = @Agent,
                 updated_at = @UpdatedAt,
                 target_tags = @TargetTags,
-                target_type = @TargetType
+                target_type = @TargetType,
+                time_zone = @TimeZone,
+                isolation = @Isolation,
+                base_branch = @BaseBranch
             WHERE id = @Id AND user_id = @UserId AND is_deleted = 0
             """,
             cmd =>
@@ -96,6 +102,9 @@ public sealed class AutomationRepository : IAutomationRepository
                 cmd.AddParameter("UserId", _userContext.UserId);
                 cmd.AddParameter("TargetTags", SerializeTargetTags(automation.TargetTags));
                 cmd.AddParameter("TargetType", automation.TargetType);
+                cmd.AddParameter("TimeZone", automation.TimeZone);
+                cmd.AddParameter("Isolation", automation.Isolation);
+                cmd.AddParameter("BaseBranch", automation.BaseBranch);
             });
     }
 
@@ -205,6 +214,7 @@ public sealed class AutomationRepository : IAutomationRepository
         var updatedAtOrd = r.GetOrdinal("updated_at");
         var targetTagsOrd = r.GetOrdinal("target_tags");
         var targetTypeOrd = r.GetOrdinal("target_type");
+        var timeZoneOrd = r.GetOrdinal("time_zone");
 
         return new Automation
         {
@@ -226,6 +236,10 @@ public sealed class AutomationRepository : IAutomationRepository
             UserId = r.GetString(r.GetOrdinal("user_id")),
             TargetTags = DeserializeTargetTags(r.GetNullableString(targetTagsOrd)),
             TargetType = r.GetString(targetTypeOrd),
+            TimeZone = r.GetNullableString(timeZoneOrd),
+            Isolation = r.GetNullableString(r.GetOrdinal("isolation")),
+            BaseBranch = r.GetNullableString(r.GetOrdinal("base_branch")),
+            HistoryStartsAt = r.GetNullableString(r.GetOrdinal("history_starts_at")),
         };
     }
 

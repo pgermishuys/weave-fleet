@@ -1,4 +1,3 @@
-using Cronos;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
@@ -13,8 +12,8 @@ public sealed class AutomationService(
     IUserContext userContext)
 {
     /// <summary>
-    /// Creates a new automation with the specified configuration.
-    /// Validates cron expressions for schedule-type triggers.
+    /// Creates a new automation with the specified configuration, switched on: the person just asked for it.
+    /// Validates the schedule (a cron or a one-off time), its time zone, and where runs happen.
     /// </summary>
     public async Task<Result<Automation>> CreateAsync(
         string name,
@@ -28,22 +27,16 @@ public sealed class AutomationService(
         string? model = null,
         string? agent = null,
         List<string>? targetTags = null,
-        string? targetType = null)
+        string? targetType = null,
+        string? timeZone = null,
+        string? isolation = null,
+        string? baseBranch = null)
     {
-        // Validate cron expression if trigger type is schedule
-        if (triggerType.Equals("schedule", StringComparison.OrdinalIgnoreCase))
-        {
-            try
-            {
-                CronExpression.Parse(triggerConfig);
-            }
-            catch (Exception ex)
-            {
-                return FleetError.ValidationError(
-                    "TriggerConfig",
-                    $"Invalid cron expression: {ex.Message}");
-            }
-        }
+        var error = AutomationSchedule.Validate(triggerType, triggerConfig, timeZone, DateTime.UtcNow, requireFuture: true)
+            ?? ValidateWhere(workspaceId, isolation, baseBranch)
+            ?? ValidateTargetType(targetType);
+        if (error is not null)
+            return error;
 
         var automation = new Automation
         {
@@ -55,13 +48,16 @@ public sealed class AutomationService(
             MaxConcurrentRuns = maxConcurrentRuns,
             MaxRunsPerHour = maxRunsPerHour,
             TimeoutMinutes = timeoutMinutes,
-            IsEnabled = false,
+            IsEnabled = true,
             IsDeleted = false,
             WorkspaceId = workspaceId,
             Model = model,
             Agent = agent,
             TargetTags = targetTags ?? [],
             TargetType = targetType ?? "new_session",
+            TimeZone = NormalizeTimeZone(timeZone),
+            Isolation = NormalizeOptional(isolation),
+            BaseBranch = NormalizeOptional(baseBranch),
             CreatedAt = DateTime.UtcNow.ToString("O"),
             UserId = userContext.UserId
         };
@@ -72,7 +68,7 @@ public sealed class AutomationService(
 
     /// <summary>
     /// Updates an existing automation.
-    /// Validates cron expressions for schedule-type triggers.
+    /// Validates the schedule (a cron or a one-off time), its time zone, and where runs happen.
     /// </summary>
     public async Task<Result<Automation>> UpdateAsync(
         string id,
@@ -87,26 +83,21 @@ public sealed class AutomationService(
         string? model = null,
         string? agent = null,
         List<string>? targetTags = null,
-        string? targetType = null)
+        string? targetType = null,
+        string? timeZone = null,
+        string? isolation = null,
+        string? baseBranch = null)
     {
         var existing = await automationRepository.GetByIdAsync(id);
         if (existing is null)
             return FleetError.NotFoundFor(nameof(Automation), id);
 
-        // Validate cron expression if trigger type is schedule
-        if (triggerType.Equals("schedule", StringComparison.OrdinalIgnoreCase))
-        {
-            try
-            {
-                CronExpression.Parse(triggerConfig);
-            }
-            catch (Exception ex)
-            {
-                return FleetError.ValidationError(
-                    "TriggerConfig",
-                    $"Invalid cron expression: {ex.Message}");
-            }
-        }
+        // A one-off time that has passed is fine on an automation that's off (it already ran); not on one that's on.
+        var error = AutomationSchedule.Validate(triggerType, triggerConfig, timeZone, DateTime.UtcNow, requireFuture: existing.IsEnabled)
+            ?? ValidateWhere(workspaceId, isolation, baseBranch)
+            ?? ValidateTargetType(targetType);
+        if (error is not null)
+            return error;
 
         existing.Name = name;
         existing.Prompt = prompt;
@@ -120,6 +111,9 @@ public sealed class AutomationService(
         existing.Agent = agent;
         existing.TargetTags = targetTags ?? [];
         existing.TargetType = targetType ?? "new_session";
+        existing.TimeZone = NormalizeTimeZone(timeZone);
+        existing.Isolation = NormalizeOptional(isolation);
+        existing.BaseBranch = NormalizeOptional(baseBranch);
         existing.UpdatedAt = DateTime.UtcNow.ToString("O");
 
         await automationRepository.UpdateAsync(existing);
@@ -134,6 +128,13 @@ public sealed class AutomationService(
         var automation = await automationRepository.GetByIdAsync(id);
         if (automation is null)
             return FleetError.NotFoundFor(nameof(Automation), id);
+
+        if (AutomationSchedule.IsOnce(automation.TriggerType)
+            && AutomationSchedule.OnceUtc(automation.TriggerConfig, automation.TimeZone) is { } at
+            && at <= DateTime.UtcNow)
+        {
+            return FleetError.ValidationError("TriggerConfig", "Its one-off time has passed. Pick a new time, then switch it on.");
+        }
 
         await automationRepository.SetEnabledAsync(id, true);
         return Unit.Value;
@@ -198,4 +199,42 @@ public sealed class AutomationService(
 
         return automation;
     }
+
+    /// <summary>
+    /// Where a run happens: a worktree needs a folder, and only a worktree has a base branch. No isolation (automations
+    /// made before it was stored) keeps the old rules.
+    /// </summary>
+    private static FleetError? ValidateWhere(string? workspaceId, string? isolation, string? baseBranch)
+    {
+        var mode = NormalizeOptional(isolation);
+        if (mode is not (null or "worktree" or "existing"))
+            return FleetError.ValidationError("Isolation", $"Runs can happen in a new worktree ('worktree') or the folder as it is ('existing'), not '{mode}'.");
+
+        if (mode == "worktree" && string.IsNullOrWhiteSpace(workspaceId))
+            return FleetError.ValidationError("Isolation", "A new worktree for each run needs a folder. Pick one, or run in the folder as it is.");
+
+        var branch = NormalizeOptional(baseBranch);
+        if (branch is null)
+            return null;
+
+        if (mode != "worktree")
+            return FleetError.ValidationError("BaseBranch", "A base branch can only be chosen when each run gets a new worktree.");
+
+        return WorkspaceService.IsValidBranchName(branch)
+            ? null
+            : FleetError.ValidationError("BaseBranch", $"'{branch}' is not a valid branch name.");
+    }
+
+    private static readonly string[] TargetTypes = ["new_session", "same_session", "most_recent_session", "tagged_session"];
+
+    private static FleetError? ValidateTargetType(string? targetType) =>
+        targetType is null || TargetTypes.Contains(targetType, StringComparer.Ordinal)
+            ? null
+            : FleetError.ValidationError("TargetType", $"Unknown target '{targetType}'. Use one of: {string.Join(", ", TargetTypes)}.");
+
+    private static string? NormalizeOptional(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string? NormalizeTimeZone(string? timeZone) =>
+        string.IsNullOrWhiteSpace(timeZone) ? null : timeZone.Trim();
 }

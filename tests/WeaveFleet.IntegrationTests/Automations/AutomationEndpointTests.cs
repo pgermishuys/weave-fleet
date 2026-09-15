@@ -9,6 +9,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using WeaveFleet.Api.Contracts;
+using WeaveFleet.Api.Endpoints;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Harnesses;
@@ -86,7 +87,7 @@ public sealed class AutomationEndpointTests : IAsyncLifetime, IDisposable
         body.MaxConcurrentRuns.ShouldBe(2);
         body.MaxRunsPerHour.ShouldBe(5);
         body.TimeoutMinutes.ShouldBe(15);
-        body.IsEnabled.ShouldBeFalse(); // Automations are created disabled by default
+        body.IsEnabled.ShouldBeTrue(); // Switched on when created: the person just asked for it
         body.Model.ShouldBe("claude-3-5-sonnet-20241022");
         body.Agent.ShouldBe("loom");
         body.CreatedAt.ShouldNotBeNullOrEmpty();
@@ -321,8 +322,105 @@ public sealed class AutomationEndpointTests : IAsyncLifetime, IDisposable
         // Act
         var response = await _http.PostAsync($"/api/automations/{created.Id}/run", null);
 
-        // Assert
+        // Assert: the answer is the run it recorded, which the runs list then shows
         response.StatusCode.ShouldBe(HttpStatusCode.Accepted);
+        var run = await response.Content.ReadFromJsonAsync<AutomationRunResponse>();
+        run.ShouldNotBeNull();
+        (run.AutomationId, run.Trigger).ShouldBe((created.Id, "manual"));
+        run.State.ShouldBe("starting");
+
+        var runs = await _http.GetFromJsonAsync<AutomationRunListResponse>($"/api/automations/{created.Id}/runs");
+        runs.ShouldNotBeNull();
+        runs.Runs.ShouldContain(listed => listed.Id == run.Id);
+    }
+
+    [Fact]
+    public async Task GET_runs_returns_404_for_nonexistent_automation()
+    {
+        var response = await _http.GetAsync("/api/automations/nonexistent-id/runs");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task GET_list_says_when_a_schedule_runs_next()
+    {
+        var request = new CreateAutomationRequest(
+            Name: "Weekly digest",
+            Prompt: "Summarise the open PRs",
+            TriggerType: "schedule",
+            TriggerConfig: "0 9 * * 1",
+            TimeZone: "Africa/Johannesburg");
+        var created = await (await _http.PostAsJsonAsync("/api/automations", request)).Content.ReadFromJsonAsync<AutomationResponse>();
+        created.ShouldNotBeNull();
+
+        var list = await _http.GetFromJsonAsync<AutomationListResponse>("/api/automations");
+
+        var listed = list.ShouldNotBeNull().Automations.Single(a => a.Id == created.Id);
+        var next = DateTime.Parse(listed.NextRunAt.ShouldNotBeNull(), null, System.Globalization.DateTimeStyles.RoundtripKind).ToUniversalTime();
+        next.DayOfWeek.ShouldBe(DayOfWeek.Monday);
+        (next.Hour, next.Minute).ShouldBe((7, 0)); // 09:00 in Johannesburg
+        listed.LastRun.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task POST_create_keeps_a_one_off_time_and_where_runs_happen()
+    {
+        var folder = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar);
+        var request = new CreateAutomationRequest(
+            Name: "Release notes check",
+            Prompt: "Check the release notes cover everything merged",
+            TriggerType: "once",
+            TriggerConfig: "2099-09-21T09:00",
+            WorkspaceId: folder,
+            TimeZone: "Europe/London",
+            Isolation: "existing");
+
+        var response = await _http.PostAsJsonAsync("/api/automations", request);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Created);
+        var body = await response.Content.ReadFromJsonAsync<AutomationResponse>();
+        body.ShouldNotBeNull();
+        (body.TriggerType, body.TriggerConfig, body.Isolation, body.WorkspaceId).ShouldBe(("once", "2099-09-21T09:00", "existing", folder));
+        body.NextRunAt.ShouldBe("2099-09-21T08:00:00.0000000Z");
+    }
+
+    [Fact]
+    public async Task POST_create_rejects_a_one_off_time_that_has_passed()
+    {
+        var request = new CreateAutomationRequest(
+            Name: "Release notes check",
+            Prompt: "Check the release notes",
+            TriggerType: "once",
+            TriggerConfig: "2020-01-06T09:00");
+
+        var response = await _http.PostAsJsonAsync("/api/automations", request);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await response.Content.ReadFromJsonAsync<ApiErrorResponse>()).ShouldNotBeNull().Error.ShouldContain("already passed");
+    }
+
+    [Fact]
+    public async Task POST_create_rejects_a_worktree_without_a_folder()
+    {
+        var request = new CreateAutomationRequest(
+            Name: "Weekly digest",
+            Prompt: "Summarise the open PRs",
+            TriggerType: "schedule",
+            TriggerConfig: "0 9 * * 1",
+            Isolation: "worktree");
+
+        var response = await _http.PostAsJsonAsync("/api/automations", request);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task GET_draft_from_session_returns_404_for_an_unknown_session()
+    {
+        var response = await _http.GetAsync("/api/automations/draft-from-session/no-such-session");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     [Fact]
@@ -346,10 +444,48 @@ public sealed class AutomationEndpointTests : IAsyncLifetime, IDisposable
 
         var body = await response.Content.ReadFromJsonAsync<string[]>();
         body.ShouldNotBeNull();
-        body.Length.ShouldBeGreaterThan(0);
-        body.ShouldContain("session.created");
-        body.ShouldContain("session.idle");
-        body.ShouldContain("message.created");
+        // Only the outbox message types that reach the automation dispatcher; a trigger matches them exactly.
+        body.ShouldBe(["session_created", "session_archived", "session_deleted", "delegation.created", "delegation.updated"]);
+    }
+
+    [Fact]
+    public async Task POST_create_keeps_the_schedule_time_zone()
+    {
+        var request = new CreateAutomationRequest(
+            Name: "Weekly digest",
+            Prompt: "Summarise the open PRs",
+            TriggerType: "schedule",
+            TriggerConfig: "0 9 * * 1",
+            TimeZone: "Africa/Johannesburg");
+
+        var response = await _http.PostAsJsonAsync("/api/automations", request);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Created);
+        var body = await response.Content.ReadFromJsonAsync<AutomationResponse>();
+        body.ShouldNotBeNull();
+        body.TimeZone.ShouldBe("Africa/Johannesburg");
+
+        var fetched = await _http.GetFromJsonAsync<AutomationResponse>($"/api/automations/{body.Id}");
+        fetched.ShouldNotBeNull();
+        fetched.TimeZone.ShouldBe("Africa/Johannesburg");
+    }
+
+    [Fact]
+    public async Task POST_create_rejects_an_unknown_time_zone()
+    {
+        var request = new CreateAutomationRequest(
+            Name: "Weekly digest",
+            Prompt: "Summarise the open PRs",
+            TriggerType: "schedule",
+            TriggerConfig: "0 9 * * 1",
+            TimeZone: "Mars/Olympus_Mons");
+
+        var response = await _http.PostAsJsonAsync("/api/automations", request);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var error = await response.Content.ReadFromJsonAsync<ApiErrorResponse>();
+        error.ShouldNotBeNull();
+        error.Error.ShouldContain("Mars/Olympus_Mons");
     }
 }
 

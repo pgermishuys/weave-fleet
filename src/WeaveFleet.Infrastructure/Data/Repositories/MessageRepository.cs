@@ -193,6 +193,26 @@ public sealed class MessageRepository : IMessageRepository
         return (int)result;
     }
 
+    public async Task<PersistedMessage?> GetFirstUserMessageAsync(string sessionId)
+    {
+        using var conn = _connectionFactory.CreateConnection();
+        return await conn.QueryFirstOrDefaultAsync(
+            """
+            SELECT m.*
+            FROM messages m
+            INNER JOIN sessions s ON s.id = m.session_id
+            WHERE m.session_id = @SessionId AND s.user_id = @UserId AND m.role = 'user'
+            ORDER BY m.timestamp ASC, m.id ASC
+            LIMIT 1
+            """,
+            cmd =>
+            {
+                cmd.AddParameter("SessionId", sessionId);
+                cmd.AddParameter("UserId", _userContext.UserId);
+            },
+            ReadMessage);
+    }
+
     public async Task<bool> HasMessagesAsync(string sessionId)
     {
         using var conn = _connectionFactory.CreateConnection();
