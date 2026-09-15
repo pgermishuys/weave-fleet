@@ -311,6 +311,101 @@ describe("useSignalRSocket", () => {
     })
   })
 
+  // SignalR's own reconnect gives up after ~18s. The app then stayed deaf, every session frozen as it
+  // last was, until a reload.
+  describe("reconnecting after the connection closes for good", () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    function dropConnection(): void {
+      mockHubConnection.state = HubConnectionState.Disconnected
+      closeHandler?.()
+    }
+
+    it("starts a new connection, resubscribes sessions and tells listeners", async () => {
+      const { useWeaveSocket, onReconnect } = await import("@/composables/use-signalr-socket")
+      mockInvokeWithSnapshot(createSessionSnapshot("session-1"))
+      const { result } = await mountComposable(() => useWeaveSocket())
+      const onSnapshot = vi.fn()
+      result.subscribeV2("session:session-1", onSnapshot, vi.fn())
+      await flushAll()
+      const reconnected = vi.fn()
+      onReconnect(reconnected)
+
+      dropConnection()
+      await vi.advanceTimersByTimeAsync(2000)
+      await flushAll()
+
+      expect(mockHubConnection.start).toHaveBeenCalledTimes(2)
+      expect(onSnapshot).toHaveBeenCalledTimes(2)
+      expect(reconnected).toHaveBeenCalledTimes(1)
+    })
+
+    it("keeps trying while Fleet is unreachable", async () => {
+      const { useWeaveSocket, _isConnected } = await import("@/composables/use-signalr-socket")
+      await mountComposable(() => useWeaveSocket())
+      mockHubConnection.start
+        .mockRejectedValueOnce(new Error("down"))
+        .mockRejectedValueOnce(new Error("still down"))
+      vi.spyOn(console, "error").mockImplementation(() => {})
+
+      dropConnection()
+      await vi.advanceTimersByTimeAsync(2000)
+      await flushAll()
+      await vi.advanceTimersByTimeAsync(5000)
+      await flushAll()
+      await vi.advanceTimersByTimeAsync(10000)
+      await flushAll()
+
+      expect(mockHubConnection.start).toHaveBeenCalledTimes(4)
+      expect(_isConnected()).toBe(true)
+    })
+
+    it("retries when the first start fails", async () => {
+      mockHubConnection.start.mockRejectedValueOnce(new Error("Fleet is starting"))
+      vi.spyOn(console, "error").mockImplementation(() => {})
+      const { useWeaveSocket, _isConnected } = await import("@/composables/use-signalr-socket")
+
+      await mountComposable(() => useWeaveSocket())
+      expect(_isConnected()).toBe(false)
+
+      await vi.advanceTimersByTimeAsync(2000)
+      await flushAll()
+
+      expect(mockHubConnection.start).toHaveBeenCalledTimes(2)
+      expect(_isConnected()).toBe(true)
+    })
+
+    it("reconnects at once when the browser comes back online", async () => {
+      const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
+      await mountComposable(() => useWeaveSocket())
+
+      dropConnection()
+      window.dispatchEvent(new Event("online"))
+      await flushAll()
+
+      expect(mockHubConnection.start).toHaveBeenCalledTimes(2)
+    })
+
+    it("stays closed once nothing listens any more", async () => {
+      const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
+      const { wrapper } = await mountComposable(() => useWeaveSocket())
+
+      wrapper.unmount()
+      await flushAll()
+      dropConnection()
+      await vi.advanceTimersByTimeAsync(60000)
+      await flushAll()
+
+      expect(mockHubConnection.start).toHaveBeenCalledTimes(1)
+    })
+  })
+
   // Scrolling to the top of a long conversation used to send a message nothing handled, so older
   // messages never loaded.
   describe("older messages", () => {
