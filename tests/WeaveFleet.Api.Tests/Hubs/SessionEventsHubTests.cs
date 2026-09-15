@@ -21,6 +21,7 @@ public sealed class SessionEventsHubTests : IAsyncLifetime
 {
     private ApiWebApplicationFactory? _factory;
     private HubConnection? _connection;
+    private readonly FakeSessionMessageProxy _proxy = new();
 
     public async Task InitializeAsync()
     {
@@ -30,7 +31,7 @@ public sealed class SessionEventsHubTests : IAsyncLifetime
             configureTestServices: services =>
             {
                 // Register a fake message proxy that returns empty snapshots
-                services.AddSingleton<ISessionMessageProxy>(new FakeSessionMessageProxy());
+                services.AddSingleton<ISessionMessageProxy>(_proxy);
             });
         await Task.CompletedTask;
     }
@@ -54,6 +55,46 @@ public sealed class SessionEventsHubTests : IAsyncLifetime
         _connection = await CreateConnectedHubAsync();
 
         _connection.State.ShouldBe(HubConnectionState.Connected);
+    }
+
+    // Scrolling to the top of a long conversation loads the page before the snapshot's cursor.
+    [Fact]
+    public async Task LoadHistory_ReturnsThePageBeforeTheCursor()
+    {
+        string? requestedCursor = null;
+        _proxy.GetSnapshotBehavior = (sessionId, _, cursor, _) =>
+        {
+            requestedCursor = cursor;
+            return Task.FromResult(new SessionSnapshot
+            {
+                Session = new SessionSnapshotSession { Id = sessionId, Title = "Long", Status = "active" },
+                Messages =
+                [
+                    new MessageLifecyclePayload
+                    {
+                        Info = new MessageEventInfo
+                        {
+                            Id = "msg_old",
+                            Role = "user",
+                            SessionId = sessionId,
+                            Time = new MessageEventTime { Created = 1 },
+                        },
+                        Parts = [],
+                    },
+                ],
+                ActivityStatus = "idle",
+                HasMore = true,
+                Cursor = "cursor-oldest",
+            });
+        };
+        _connection = await CreateConnectedHubAsync();
+
+        var page = await _connection.InvokeAsync<SessionHistoryPage>("LoadHistoryAsync", "session-1", "cursor-older");
+
+        requestedCursor.ShouldBe("cursor-older");
+        page.Messages.ShouldHaveSingleItem().Info.Id.ShouldBe("msg_old");
+        page.HasMore.ShouldBeTrue();
+        page.Cursor.ShouldBe("cursor-oldest");
     }
 
     [Fact]

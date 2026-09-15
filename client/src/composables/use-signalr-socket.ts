@@ -16,7 +16,6 @@ interface TopicV2Callback {
 
 export interface WeaveSocketAPI {
   subscribeV2: (topic: string, onSnapshot: SnapshotCallback, onEvent: DomainEventCallback, onHistory?: HistoryCallback) => Unsubscribe
-  sendV2: (message: unknown) => boolean
 }
 
 interface WeaveSocketTestAPI {
@@ -446,15 +445,21 @@ const stableSubscribeV2 = (
   onHistory?: HistoryCallback,
 ): Unsubscribe => addTopicListenerV2(topic, onSnapshot, onEvent, onHistory)
 
-function sendV2Message(message: unknown): boolean {
-  if (connection?.state === HubConnectionState.Connected) {
-    // For SignalR, we don't have a generic send - this would need to be mapped
-    // to specific hub methods based on message type
-    console.warn("sendV2 not fully implemented for SignalR - message:", message)
-    return false
+/**
+ * Loads the page of a session's messages older than `cursor` (the cursor its snapshot or the previous
+ * page returned). Null when there's no connection or the request fails; the caller can try again.
+ */
+export async function loadSessionHistory(sessionId: string, cursor: string): Promise<SessionHistoryPage | null> {
+  if (connection?.state !== HubConnectionState.Connected) {
+    return null
   }
 
-  return false
+  try {
+    return await connection.invoke<SessionHistoryPage>("LoadHistoryAsync", sessionId, cursor)
+  } catch (error) {
+    console.error(`Failed to load older messages for session ${sessionId}:`, error)
+    return null
+  }
 }
 
 function syncTestApi(): void {
@@ -511,6 +516,5 @@ export function useWeaveSocket(): WeaveSocketAPI {
 
   return {
     subscribeV2: stableSubscribeV2,
-    sendV2: sendV2Message,
   }
 }

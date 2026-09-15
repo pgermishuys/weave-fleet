@@ -104,10 +104,11 @@ public sealed class OpenCodeOffTheRecordPromptTests
     public async Task finds_the_last_prompt_on_an_older_page()
     {
         // A long agent turn: the newest page is all assistant steps, the prompt is on the page before.
+        // OpenCode pages with its own cursor (X-Next-Cursor); it rejects a message id as "before".
         var steps = Enumerable.Range(0, 50).Select(i => AssistantMessage($"msg_step_{i:D2}")).ToArray();
         var http = new ScriptedHandler()
-            .On("GET /session/oc-1/message?before=msg_step_00", Messages(UserMessage("msg_0", "openrouter", "anthropic/claude-haiku-4.5")))
-            .On("GET /session/oc-1/message", Messages(steps))
+            .On("GET /session/oc-1/message?before=cursor-older", Messages(UserMessage("msg_0", "openrouter", "anthropic/claude-haiku-4.5")))
+            .On("GET /session/oc-1/message", Messages(steps), nextCursor: "cursor-older")
             .On("GET /session", "[]")
             .On("POST /session/oc-1/fork", """{"id":"fork-1"}""")
             .On("PATCH /session/fork-1", """{"id":"fork-1"}""")
@@ -207,16 +208,16 @@ public sealed class OpenCodeOffTheRecordPromptTests
     /// <summary>Answers requests by "METHOD /path" (plus "?before=" when paging), recording each one in order.</summary>
     private sealed class ScriptedHandler : HttpMessageHandler
     {
-        private readonly Dictionary<string, (string Body, HttpStatusCode Status)> _responses = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, (string Body, HttpStatusCode Status, string? NextCursor)> _responses = new(StringComparer.Ordinal);
         private readonly HashSet<string> _hanging = new(StringComparer.Ordinal);
         private readonly Dictionary<string, TaskCompletionSource> _seen = new(StringComparer.Ordinal);
         private readonly Lock _gate = new();
 
         public List<KeyValuePair<string, string>> Requests { get; } = [];
 
-        public ScriptedHandler On(string key, string body, HttpStatusCode status = HttpStatusCode.OK)
+        public ScriptedHandler On(string key, string body, HttpStatusCode status = HttpStatusCode.OK, string? nextCursor = null)
         {
-            _responses[key] = (body, status);
+            _responses[key] = (body, status, nextCursor);
             return this;
         }
 
@@ -253,10 +254,13 @@ public sealed class OpenCodeOffTheRecordPromptTests
                 throw new InvalidOperationException($"Unscripted request: {key}");
             }
 
-            return new HttpResponseMessage(response.Status)
+            var message = new HttpResponseMessage(response.Status)
             {
                 Content = new StringContent(response.Body, Encoding.UTF8, "application/json"),
             };
+            if (response.NextCursor is not null)
+                message.Headers.Add("X-Next-Cursor", response.NextCursor);
+            return message;
         }
 
         private TaskCompletionSource Seen(string key)

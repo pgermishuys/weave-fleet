@@ -311,6 +311,35 @@ describe("useSignalRSocket", () => {
     })
   })
 
+  // Scrolling to the top of a long conversation used to send a message nothing handled, so older
+  // messages never loaded.
+  describe("older messages", () => {
+    it("loads the page before a cursor from the hub", async () => {
+      const { useWeaveSocket, loadSessionHistory } = await import("@/composables/use-signalr-socket")
+      const page = { messages: createSessionSnapshot("session-1").messages, cursor: "cursor-oldest", hasMore: true }
+      mockHubConnection.invoke.mockImplementation(async (method: string) =>
+        method === "LoadHistoryAsync" ? page : undefined)
+
+      await mountComposable(() => useWeaveSocket())
+
+      await expect(loadSessionHistory("session-1", "cursor-older")).resolves.toEqual(page)
+      expect(mockHubConnection.invoke).toHaveBeenCalledWith("LoadHistoryAsync", "session-1", "cursor-older")
+    })
+
+    it("returns null when the hub call fails, so the caller can try again", async () => {
+      const { useWeaveSocket, loadSessionHistory } = await import("@/composables/use-signalr-socket")
+      mockHubConnection.invoke.mockImplementation(async (method: string) => {
+        if (method === "LoadHistoryAsync") throw new Error("boom")
+        return undefined
+      })
+      vi.spyOn(console, "error").mockImplementation(() => {})
+
+      await mountComposable(() => useWeaveSocket())
+
+      await expect(loadSessionHistory("session-1", "cursor-older")).resolves.toBeNull()
+    })
+  })
+
   describe("snapshot hydration", () => {
     it("delivers snapshot from SubscribeToSessionAsync", async () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")

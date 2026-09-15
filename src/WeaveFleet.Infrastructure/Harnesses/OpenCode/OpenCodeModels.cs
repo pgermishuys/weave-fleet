@@ -18,6 +18,12 @@ internal static class OpenCodeJsonOptions
 // ---------------------------------------------------------------------------
 
 /// <summary>Response from GET /global/health.</summary>
+/// <summary>
+/// A page of OpenCode messages, oldest first. <see cref="NextCursor"/> fetches the page before it; null when
+/// there's nothing older.
+/// </summary>
+internal sealed record OpenCodeMessagePage(IReadOnlyList<OpenCodeMessageWithParts> Messages, string? NextCursor);
+
 internal sealed record OpenCodeHealthResponse
 {
     [JsonPropertyName("healthy")] public bool Healthy { get; init; }

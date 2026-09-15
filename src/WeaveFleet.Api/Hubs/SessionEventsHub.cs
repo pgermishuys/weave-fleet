@@ -214,6 +214,25 @@ public class SessionEventsHub : Hub
     }
 
     /// <summary>
+    /// Loads the page of messages older than <paramref name="cursor"/>, the cursor the snapshot or the
+    /// previous page returned. Scrolling to the top of a long conversation asks for it.
+    /// </summary>
+    public async Task<SessionHistoryPage> LoadHistoryAsync(string sessionId, string cursor)
+    {
+        try
+        {
+            var page = await _proxy.GetSnapshotAsync(sessionId, pageSize: 100, cursor).ConfigureAwait(false);
+            return new SessionHistoryPage(page.Messages, page.HasMore ? page.Cursor : null, page.HasMore);
+        }
+        catch (ArgumentException)
+        {
+            // A cursor from the live harness that the stored copy can't read (the harness went away
+            // in between): nothing older to show from here.
+            return new SessionHistoryPage([], null, false);
+        }
+    }
+
+    /// <summary>
     /// Subscribe to the global "sessions" topic to receive activity_status events for all sessions.
     /// This is used by the session list to update activity badges in real-time.
     /// </summary>
@@ -417,6 +436,15 @@ public class SessionEventsHub : Hub
         _ => domainEvent.GetType().Name,
     };
 }
+
+/// <summary>
+/// A page of older messages, oldest first. <see cref="Cursor"/> loads the page before it; null when there's
+/// nothing older. Matches the client's <c>SessionHistoryPage</c>.
+/// </summary>
+public sealed record SessionHistoryPage(
+    IReadOnlyList<MessageLifecyclePayload> Messages,
+    string? Cursor,
+    bool HasMore);
 
 /// <summary>
 /// Wire envelope sent to the client matching the <c>WebSocketEvent</c> TypeScript interface.
