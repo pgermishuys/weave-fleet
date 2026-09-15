@@ -239,6 +239,7 @@ public sealed class AutomationRepository : IAutomationRepository
             TimeZone = r.GetNullableString(timeZoneOrd),
             Isolation = r.GetNullableString(r.GetOrdinal("isolation")),
             BaseBranch = r.GetNullableString(r.GetOrdinal("base_branch")),
+            HistoryStartsAt = r.GetNullableString(r.GetOrdinal("history_starts_at")),
         };
     }
 

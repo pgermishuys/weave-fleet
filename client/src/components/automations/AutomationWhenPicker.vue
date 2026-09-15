@@ -4,7 +4,7 @@ import { CalendarClock, Check, ChevronDown, Clock, MessageSquareText, Repeat, Za
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAutomationsStore } from "@/stores/automations";
 import { describeEventType, EVENT_TYPES } from "@/lib/automations";
-import { cronOf, hm, localDate, nextRun, whenChip, withTime, type Hm, type When } from "@/lib/automation-schedule";
+import { cronOf, dayName, hm, localDate, nextRun, whenChip, withTime, type Hm, type When } from "@/lib/automation-schedule";
 
 /** The When chip: what the message says, or a schedule, a one-off date, a cron or an event chosen here. */
 
@@ -55,7 +55,8 @@ const onceDate = computed(() => {
   return localDate(nextRun(when)!);
 });
 const today = new Date().getDay();
-const TODAY_NAME = new Intl.DateTimeFormat(undefined, { weekday: "long" }).format(new Date());
+/** The weekly option is the schedule's own day when it has one, otherwise today. */
+const weeklyDay = computed(() => (props.when?.kind === "weekly" && props.when.days.length === 1 ? props.when.days[0] : today));
 const chipLabel = computed(() => whenChip(props.when));
 
 function is(kind: When["kind"], test?: (when: When) => boolean): boolean {
@@ -71,7 +72,7 @@ function chooseRepeat(which: "daily" | "weekdays" | "weekly" | "hourly"): void {
   const t = time.value;
   choose(which === "daily" ? { kind: "weekly", days: [0, 1, 2, 3, 4, 5, 6], t }
     : which === "weekdays" ? { kind: "weekly", days: [1, 2, 3, 4, 5], t }
-      : which === "weekly" ? { kind: "weekly", days: [today], t }
+      : which === "weekly" ? { kind: "weekly", days: [weeklyDay.value], t }
         : { kind: "hours", n: 1 });
 }
 
@@ -213,7 +214,7 @@ function applyCron(): void {
           aria-hidden="true"
         />
         <span class="ns-option__text">
-          <span class="ns-option__title">{{ TODAY_NAME }}s</span>
+          <span class="ns-option__title">{{ dayName(weeklyDay) }}s</span>
           <span class="ns-option__detail">every week at {{ hm(time) }}</span>
         </span>
         <Check

@@ -100,6 +100,8 @@ public sealed class AutomationRunServiceTests
 
         run.Status.ShouldBe(AutomationRunStatus.Started);
         _executor.Calls[^1].EventType.ShouldBe("manual");
+        // The agent gets the prompt as a scheduled run would, with no "[Context] manual: …" in front.
+        _executor.Calls[^1].EventSummary.ShouldBeNull();
     }
 
     [Fact]
@@ -129,7 +131,7 @@ public sealed class AutomationRunServiceTests
 
     private sealed class RecordingExecutor : IAutomationExecutor
     {
-        public List<(string AutomationId, string? EventType, string? PreviousSessionId)> Calls { get; } = [];
+        public List<(string AutomationId, string? EventType, string? PreviousSessionId, string? EventSummary)> Calls { get; } = [];
         public AutomationExecutionOutcome Outcome { get; set; } = new("session-1", "instance-1", null);
 
         public Task<AutomationExecutionOutcome> ExecuteAsync(
@@ -139,7 +141,7 @@ public sealed class AutomationRunServiceTests
             string? previousSessionId = null,
             CancellationToken ct = default)
         {
-            Calls.Add((automation.Id, eventType, previousSessionId));
+            Calls.Add((automation.Id, eventType, previousSessionId, eventSummary));
             return Task.FromResult(Outcome);
         }
     }

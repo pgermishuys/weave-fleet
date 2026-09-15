@@ -126,8 +126,10 @@ export function parseSchedule(text: string): ScheduleHit | null {
  * which is addressed to Fleet rather than the agent.
  */
 export function promptFrom(text: string, hit: ScheduleHit | null): string {
-  let s = hit ? `${text.slice(0, hit.start)} ${text.slice(hit.end)}` : text;
-  s = s.replace(/^\s*(?:please\s+)?(?:can\s+you\s+)?(?:create|make|set\s*up|add|schedule)\s+(?:me\s+)?(?:an?\s+)?(?:automation|job|task)\b\s*(?:that|which|to|for)?\s*/i, "");
+  const withoutSchedule = hit ? `${text.slice(0, hit.start)} ${text.slice(hit.end)}` : text;
+  let s = withoutSchedule.replace(/^\s*(?:please\s+)?(?:can\s+you\s+)?(?:create|make|set\s*up|add|schedule)\s+(?:me\s+)?(?:an?\s+)?(?:automation|job|task)\b\s*(?:that|which|to|for)?\s*/i, "");
+  // Nothing was taken out: the prompt is the text as written.
+  if (!hit && s === withoutSchedule) return text.trim();
   s = s.replace(/[ \t]{2,}/g, " ").replace(/[ \t]+([,.;:])/g, "$1").replace(/^[\s,;:.\-–]+/, "").replace(/^(?:to|and|then)\s+/i, "").replace(/[\s,;:\-–]+$/, "");
   return s ? s[0].toUpperCase() + s.slice(1) : "";
 }
@@ -225,7 +227,7 @@ export function cronOf(when: When): string | null {
     case "hours":
       return when.n === 1 ? "0 * * * *" : `0 */${when.n} * * *`;
     case "minutes":
-      return `*/${when.n} * * * *`;
+      return when.n === 1 ? "* * * * *" : `*/${when.n} * * * *`;
     case "monthly":
       return `${when.t[1]} ${when.t[0]} ${when.dom} * *`;
     case "cron":
@@ -268,6 +270,7 @@ export function fromTrigger(triggerType: string, triggerConfig: string): When | 
   const expr = triggerConfig.trim();
   const [min, hour, dom, month, dow, ...rest] = expr.split(/\s+/);
   if (rest.length > 0 || month !== "*") return { kind: "cron", expr };
+  if (min === "*" && hour === "*" && dom === "*" && dow === "*") return { kind: "minutes", n: 1 };
   if (min === "0" && hour === "*" && dom === "*" && dow === "*") return { kind: "hours", n: 1 };
   const everyHours = /^\*\/(\d{1,2})$/.exec(hour ?? "");
   if (min === "0" && everyHours && dom === "*" && dow === "*") return { kind: "hours", n: Number(everyHours[1]) };
@@ -306,7 +309,7 @@ export function whenChip(when: When | null, from: Date = new Date()): string {
     case "hours":
       return when.n === 1 ? "Every hour" : `Every ${when.n} hours`;
     case "minutes":
-      return `Every ${when.n} min`;
+      return when.n === 1 ? "Every minute" : `Every ${when.n} min`;
     case "monthly":
       return `Monthly, ${ord(when.dom)}`;
     case "cron":
@@ -332,7 +335,7 @@ export function whenSentence(when: When, from: Date = new Date()): string {
     case "hours":
       return when.n === 1 ? "every hour, on the hour" : `every ${when.n} hours, on the hour`;
     case "minutes":
-      return `every ${when.n} minutes`;
+      return when.n === 1 ? "every minute" : `every ${when.n} minutes`;
     case "monthly":
       return `on the ${ord(when.dom)} of every month at ${hm(when.t)}`;
     case "cron":

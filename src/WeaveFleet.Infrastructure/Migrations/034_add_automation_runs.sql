@@ -6,9 +6,14 @@
 -- 'starting', 'started', 'failed' or 'skipped'; whether a started run is still going comes from its session.
 -- scheduled_for is the schedule occurrence a run was for, which is how the scheduler knows what it has handled after
 -- a restart.
+-- history_starts_at is when an automation's runs started being recorded. Automations that exist now get this
+-- moment, so the scheduler doesn't report their last occurrence as missed: it may well have run, unrecorded. New
+-- automations leave it NULL; their history starts when they're made.
 
 ALTER TABLE automations ADD COLUMN isolation TEXT;
 ALTER TABLE automations ADD COLUMN base_branch TEXT;
+ALTER TABLE automations ADD COLUMN history_starts_at TEXT;
+UPDATE automations SET history_starts_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now');
 
 CREATE TABLE IF NOT EXISTS automation_runs (
   id TEXT PRIMARY KEY,

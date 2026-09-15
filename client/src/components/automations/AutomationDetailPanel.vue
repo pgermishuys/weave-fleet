@@ -339,6 +339,7 @@ const firstRunHint = computed(() => {
           {{ currentAutomation.name }}
         </h2>
         <Switch
+          class="automation-page__switch"
           :model-value="currentAutomation.isEnabled"
           :disabled="isTogglingEnabled"
           :aria-label="currentAutomation.isEnabled ? 'On' : 'Off'"
@@ -562,6 +563,11 @@ const firstRunHint = computed(() => {
   color: var(--muted);
   font-size: 11.5px;
   font-weight: 500;
+}
+
+/* The shared switch's off track has no colour here; give it one so "off" is visible. */
+.automation-page__switch[data-state="unchecked"] {
+  background: color-mix(in srgb, var(--text) 22%, transparent);
 }
 
 .automation-page__meta {

@@ -25,7 +25,7 @@ public sealed class AutomationDraftService(
             return FleetError.NotFoundFor("Session", sessionId);
 
         var message = await messageRepository.GetFirstUserMessageAsync(sessionId);
-        var prompt = message is null ? string.Empty : TextOf(message.PartsJson);
+        var prompt = message is null ? string.Empty : WithoutEventContext(TextOf(message.PartsJson));
 
         var workspace = await workspaceRepository.GetByIdAsync(session.WorkspaceId);
         if (workspace is null || workspace.SourceProviderId == SessionSourceProviderIds.QuickChat)
@@ -34,6 +34,16 @@ public sealed class AutomationDraftService(
         var isWorktree = workspace.IsolationStrategy == "worktree";
         var folder = isWorktree ? workspace.SourceDirectory ?? workspace.Directory : workspace.Directory;
         return new AutomationDraft(prompt, folder, isWorktree ? "worktree" : "existing");
+    }
+
+    /// <summary>An event-triggered run's message is "[Context]…[Instruction]…"; the instruction is what was asked.</summary>
+    private static string WithoutEventContext(string text)
+    {
+        const string instruction = "\n\n[Instruction]\n";
+        var at = text.IndexOf(instruction, StringComparison.Ordinal);
+        return text.StartsWith("[Context]\n", StringComparison.Ordinal) && at >= 0
+            ? text[(at + instruction.Length)..].Trim()
+            : text;
     }
 
     private static string TextOf(string partsJson)

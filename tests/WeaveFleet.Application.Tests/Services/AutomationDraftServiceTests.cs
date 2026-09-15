@@ -65,6 +65,15 @@ public sealed class AutomationDraftServiceTests
     }
 
     [Fact]
+    public async Task An_event_runs_session_gives_what_was_asked_without_the_event_context()
+    {
+        SeedSession(new Workspace { Id = "ws-1", Directory = "/home/me/source/t3code", IsolationStrategy = "existing" });
+        SeedMessage("m1", "user", "2026-09-14T09:00:00Z", new TextPart("[Context]\nsession_created: A session started: Fix the build\n\n[Instruction]\nReview the new session's plan."));
+
+        (await _sut.FromSessionAsync("session-1")).Value.Prompt.ShouldBe("Review the new session's plan.");
+    }
+
+    [Fact]
     public async Task A_quick_chat_has_no_folder()
     {
         SeedSession(new Workspace

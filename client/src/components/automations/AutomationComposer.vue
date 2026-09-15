@@ -70,7 +70,8 @@ const activeHit = computed(() => (state.value.manualWhen ? null : hit.value));
 const when = computed<When | null>(() => {
   if (state.value.manualWhen) return state.value.manualWhen;
   const parsed = activeHit.value?.when ?? null;
-  if (parsed?.kind === "weekly" && state.value.forceOnce && parsed.days.length === 1) {
+  // "Just once" answers "on Friday": it applies only while the text still says that.
+  if (parsed?.kind === "weekly" && parsed.ambiguous && state.value.forceOnce && parsed.days.length === 1) {
     return { kind: "once", day: parsed.days[0], t: parsed.t };
   }
   return parsed;
@@ -192,6 +193,11 @@ function handleKeydown(event: KeyboardEvent): void {
 
 function submit(): void {
   if (!canSubmit.value || !request.value) return;
+  // Like a new session: where it runs is a choice, not a silent default.
+  if (!state.value.folder) {
+    isFolderMenuOpen.value = true;
+    return;
+  }
   emit("submit", request.value);
 }
 
@@ -217,6 +223,11 @@ function applyInitialFolder(): void {
 }
 
 watch(areRepositoriesReady, applyInitialFolder, { immediate: true });
+
+// A new schedule phrase is a new question: "Just once" was the answer to the old one.
+watch(() => (hit.value ? state.value.text.slice(hit.value.start, hit.value.end) : null), (phrase, previous) => {
+  if (phrase !== previous) state.value.forceOnce = false;
+});
 watch(() => state.value.text, () => void nextTick(resizeTextarea));
 
 onMounted(() => {
@@ -370,10 +381,10 @@ defineExpose({ focusMessage });
         </template>
       </template>
       <template v-if="plan.ask">
-        <span
+        {{ " " }}<span
           v-if="plan.ask.question"
           class="automation-composer__warn"
-        > {{ plan.ask.question }}</span>
+        >{{ plan.ask.question }}</span>
         {{ " " }}<button
           type="button"
           class="automation-composer__linkish"

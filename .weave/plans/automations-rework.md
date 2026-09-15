@@ -40,3 +40,21 @@ the first three commits on this branch.
 3. The automation page: header with switch, next run, Run now and a menu; the runs list; the composer underneath.
 4. Sidebar rows like session rows: next run, Running, Failed or Off.
 5. "Repeat on a schedule…" in a session's context menu.
+
+## Live check (2026-09-15)
+
+Scratch Fleet on port 5141 with its own HOME, started from the Stage 0 database, so migration 034 ran on real older
+automations. What it found and fixed:
+
+- Upgrading reported each older automation's last occurrence as missed, though it may have run before runs were
+  recorded. Migration 034 now stamps `history_starts_at` on existing automations, and the scheduler starts there.
+- Editing showed Save at once: the prompt was tidied (capitalised) even when nothing was taken out of it.
+- A new automation with no remembered folder silently had no folder; it now asks, like a new session.
+- Run now wrapped the prompt in `[Context] manual: Manual trigger via API`; it now sends the prompt as a schedule does.
+- "Just once" stuck to the draft and turned a later "Every Monday" into a one-off.
+- The off switch was invisible (the shared switch's track colour token isn't defined in this app).
+- The When menu ticked today's weekday for a schedule on another day.
+
+Verified live: a worktree run at the cron minute (branch `fleet/auto-demo-digest-20260915-0835`), a one-off that ran
+once and switched itself off, Run now, a catch-up after a restart 3½ minutes late, a skip after 4 hours, an event run
+that its own session didn't trigger again, "Repeat on a schedule…", and 34 UI checks in Playwright.

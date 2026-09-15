@@ -47,6 +47,7 @@ describe("describeAutomationPlan", () => {
   it("describes the folder as it is, no folder, and continuing one session", () => {
     expect(planFor("Daily at 8, check CI", { worktree: false })).toContain("Each run: a new session in ~/source/weave-fleet as it is.");
     expect(planFor("Daily at 8, check CI", { folder: { kind: "none" } })).toContain("Each run: a new session with no folder.");
+    expect(planFor("Daily at 8, check CI", { folder: null })).toContain("Choose where it runs.");
     expect(planFor("Daily at 8, check CI", { sameSession: true })).toContain("Later runs continue the first run's session.");
   });
 

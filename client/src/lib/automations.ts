@@ -116,14 +116,16 @@ export function describeAutomationPlan(input: AutomationPlanInput): AutomationPl
     }
     if (when.kind === "weekly" && when.ambiguous && !input.forceOnce && input.hit) {
       ask = { question: `Every ${dayName(when.days[0])}, or just once?`, answer: "Just once", action: "just-once" };
-    } else if (input.forceOnce && input.hit?.when.kind === "weekly") {
+    } else if (input.forceOnce && input.hit?.when.kind === "weekly" && input.hit.when.ambiguous) {
       ask = { question: "", answer: `Every ${dayName(input.hit.when.days[0])} instead`, action: "every-week" };
     }
   }
 
   const rest: PlanPart[] = [];
   const session = input.sameSession ? "session" : "new session";
-  if (!folder || folder.kind === "none") {
+  if (!folder) {
+    rest.push({ text: "Choose where it runs." });
+  } else if (folder.kind === "none") {
     rest.push({ text: input.legacyFolderless ? `Each run: a ${session} in your first workspace root.` : `Each run: a ${session} with no folder.` });
   } else if (folder.kind === "repository" && input.worktree) {
     rest.push(

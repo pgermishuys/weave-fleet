@@ -80,10 +80,11 @@ public sealed partial class AutomationRunService(
             ? await PreviousSessionIdAsync(automation.Id, run.Id)
             : null;
 
+        // Run now sends the prompt as a scheduled run would; "manual" only marks where the session came from.
         var outcome = await executionService.ExecuteAsync(
             automation,
             eventType: trigger.EventType ?? (trigger.IsManual ? "manual" : null),
-            eventSummary: trigger.EventSummary ?? (trigger.IsManual ? "Manual trigger via API" : null),
+            eventSummary: trigger.EventSummary,
             previousSessionId,
             ct);
 

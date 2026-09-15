@@ -33,6 +33,11 @@ public sealed class Automation
     public string? Isolation { get; set; }
     /// <summary>Where a run's worktree starts (<c>origin/main</c>); null means the repository's default.</summary>
     public string? BaseBranch { get; set; }
+    /// <summary>
+    /// When this automation's runs started being recorded, for automations made before runs were: the scheduler
+    /// doesn't count anything earlier as missed. Null means since it was made. Set by migration 034 only.
+    /// </summary>
+    public string? HistoryStartsAt { get; set; }
     public string CreatedAt { get; set; } = string.Empty;
     public string? UpdatedAt { get; set; }
     public string UserId { get; set; } = string.Empty;

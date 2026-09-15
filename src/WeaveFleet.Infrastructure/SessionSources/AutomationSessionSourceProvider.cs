@@ -128,7 +128,7 @@ public sealed partial class AutomationSessionSourceProvider(
             {
                 return FleetError.ValidationError(
                     "SessionSource.Automation.WorkspaceId",
-                    $"Automation workspace '{folder}' is not within allowed roots: {canonicalDirectoryResult.Error.Description}");
+                    $"{folder} isn't inside a workspace root. Add it in Settings → Workspace.");
             }
 
             return new WorkspaceIntent(canonicalDirectoryResult.Value, "existing", null);

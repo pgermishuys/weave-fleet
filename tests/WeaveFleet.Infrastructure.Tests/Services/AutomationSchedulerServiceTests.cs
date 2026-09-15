@@ -216,6 +216,18 @@ public sealed class AutomationSchedulerServiceTests : IDisposable
             .ShouldBe(new DateTime(2026, 9, 14, 9, 0, 0, DateTimeKind.Utc));
     }
 
+    [Fact]
+    public async Task An_automation_from_before_runs_were_recorded_isnt_reported_as_missing_its_last_run()
+    {
+        // Its 09:00 run may have happened before this version kept a record of runs.
+        var automation = Seed("schedule", "0 9 * * 1");
+        automation.HistoryStartsAt = "2026-09-14T12:30:00.000Z";
+
+        await PollAtAsync(NineOnMonday.AddHours(4));
+
+        _runs.All.ShouldBeEmpty();
+    }
+
     // ── Test doubles ─────────────────────────────────────────────────────────
 
     private sealed class Clock(DateTimeOffset now) : TimeProvider

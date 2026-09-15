@@ -231,6 +231,17 @@ describe("Automations screen", () => {
     });
   });
 
+  it("asks where it runs when no folder was used before, and opens the folder menu instead of creating", async () => {
+    localStorage.clear();
+    await startNew("Every Monday at 9am, summarise the open PRs");
+
+    expect(wrapper.find("[data-testid='automation-plan']").text()).toContain("Choose where it runs.");
+    await wrapper.find("[data-testid='automation-submit']").trigger("click");
+    await flushPromises();
+
+    expect(sent).toEqual([]);
+  });
+
   it("asks when it should run, and won't create one without it", async () => {
     await startNew("Summarise the open PRs");
 
@@ -248,6 +259,14 @@ describe("Automations screen", () => {
 
     expect(wrapper.find("[data-testid='automation-when-chip']").text()).toContain("Once · Fri 18 Sep");
     expect(wrapper.find("[data-testid='automation-plan-ask']").text()).toBe("Every Friday instead");
+
+    // "Just once" answered that sentence; a new one that says "every" repeats.
+    await wrapper.find("[data-testid='automation-message']").setValue("Every Monday at 9am, summarise the open PRs");
+    await flushPromises();
+    expect(wrapper.find("[data-testid='automation-when-chip']").text()).toContain("Mondays 09:00");
+    await wrapper.find("[data-testid='automation-message']").setValue("Tidy the changelog on Friday.");
+    await flushPromises();
+    expect(wrapper.find("[data-testid='automation-plan']").text()).toContain("Every Friday, or just once?");
   });
 
   it("says why the server refused a create, and keeps the text", async () => {
@@ -309,6 +328,8 @@ describe("Automations screen", () => {
   });
 
   it("offers Save only once something changed, and keeps the schedule it had", async () => {
+    // A prompt as someone typed it, lower case and all, isn't a change.
+    list = [{ ...weekly, prompt: "summarise the open PRs:" }];
     await openAutomation("a1");
     expect(wrapper.find("[data-testid='automation-submit']").exists()).toBe(false);
 

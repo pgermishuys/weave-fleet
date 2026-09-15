@@ -63,6 +63,10 @@ describe("promptFrom", () => {
     expect(promptFrom(text, parseSchedule(text))).toBe("Check whether the v0.24 release notes cover everything.");
   });
 
+  it("leaves a prompt with nothing to take out as it was written", () => {
+    expect(promptFrom("summarise the open PRs:", null)).toBe("summarise the open PRs:");
+  });
+
   it("keeps line breaks in a longer prompt", () => {
     const text = "Every day at 9, check CI.\nThen post the result.";
     expect(promptFrom(text, parseSchedule(text))).toBe("Check CI.\nThen post the result.");
@@ -99,6 +103,7 @@ describe("triggers", () => {
     [{ kind: "hours", n: 1 }, "schedule", "0 * * * *"],
     [{ kind: "hours", n: 2 }, "schedule", "0 */2 * * *"],
     [{ kind: "minutes", n: 15 }, "schedule", "*/15 * * * *"],
+    [{ kind: "minutes", n: 1 }, "schedule", "* * * * *"],
     [{ kind: "monthly", dom: 1, t: [10, 0] }, "schedule", "0 10 1 * *"],
     [{ kind: "once", day: 1, t: [9, 0] }, "once", "2026-09-21T09:00"],
     [{ kind: "event", eventType: "session_created" }, "event", "{\"eventType\":\"session_created\"}"],

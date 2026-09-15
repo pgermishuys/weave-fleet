@@ -150,14 +150,19 @@ public sealed partial class AutomationSchedulerService : BackgroundService
     }
 
     /// <summary>
-    /// The moment up to which an automation's occurrences are dealt with: its last recorded occurrence, or when it
-    /// was last switched on or changed, whichever is later. Nothing before it runs.
+    /// The moment up to which an automation's occurrences are dealt with: its last recorded occurrence, when it was
+    /// last switched on or changed, or when its runs started being recorded, whichever is latest. Nothing before it
+    /// runs, or is reported as missed.
     /// </summary>
     internal static DateTime HandledUntilUtc(Automation automation, IReadOnlyDictionary<string, string> lastScheduled)
     {
-        var since = ParseUtc(automation.UpdatedAt) ?? ParseUtc(automation.CreatedAt) ?? DateTime.MinValue;
-        var last = lastScheduled.TryGetValue(automation.Id, out var value) ? ParseUtc(value) : null;
-        return last > since ? last.Value : since;
+        DateTime?[] candidates =
+        [
+            ParseUtc(automation.UpdatedAt) ?? ParseUtc(automation.CreatedAt),
+            ParseUtc(automation.HistoryStartsAt),
+            lastScheduled.TryGetValue(automation.Id, out var value) ? ParseUtc(value) : null,
+        ];
+        return candidates.Max() ?? DateTime.MinValue;
     }
 
     private static DateTime? ParseUtc(string? value) =>
