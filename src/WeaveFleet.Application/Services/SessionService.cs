@@ -121,7 +121,7 @@ public sealed class SessionService(
         foreach (var session in activeSessions)
         {
             var effectiveStatus = activityTracker.GetEffectiveActivityStatus(session.Id) ?? "idle";
-            if (effectiveStatus == "busy")
+            if (SessionActivityTracker.IsWorking(effectiveStatus))
                 activeCount++;
             else
                 idleCount++;

@@ -6,6 +6,7 @@ import { storeToRefs } from "pinia";
 import MessageBubble from "@/components/session/MessageBubble.vue";
 import ReasoningBlock from "@/components/session/ReasoningBlock.vue";
 import { useSessionStream } from "@/composables/use-session-stream";
+import { isStreamWorking } from "@/lib/domain-event-reducer";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { clearSentPrompts, reconcileSentPrompts, useSentPrompts } from "@/composables/use-send-prompt";
 import { toToolCardItem } from "@/components/session/activity-stream-tool-card";
@@ -274,7 +275,7 @@ watch(
   { immediate: true },
 );
 
-const isStreaming = computed(() => sessionStatus.value === "busy" || sessionStatus.value === "delegating");
+const isStreaming = computed(() => isStreamWorking(sessionStatus.value));
 
 function isNearBottom(element: HTMLElement): boolean {
   return element.scrollHeight - element.scrollTop - element.clientHeight <= SCROLL_BOTTOM_THRESHOLD;

@@ -157,6 +157,34 @@ public sealed class SessionActivityTrackerTests
     }
 
     [Fact]
+    public void GetEffectiveActivityStatus_WhenChildRetrying_ReturnsParentBusy()
+    {
+        var sut = new SessionActivityTracker();
+        sut.Update("parent-1", "idle", "user-1");
+        sut.Update("child-1", "retry", "user-1");
+        sut.RegisterChild("child-1", "parent-1");
+
+        sut.GetEffectiveActivityStatus("parent-1").ShouldBe("busy");
+    }
+
+    [Fact]
+    public void GetEffectiveActivityStatus_WhenRetrying_ReturnsRetry()
+    {
+        var sut = new SessionActivityTracker();
+        sut.Update("session-1", "retry", "user-1");
+
+        sut.GetEffectiveActivityStatus("session-1").ShouldBe("retry");
+    }
+
+    [Theory]
+    [InlineData("busy", true)]
+    [InlineData("retry", true)]
+    [InlineData("idle", false)]
+    [InlineData(null, false)]
+    public void IsWorking_CountsARetryAsWork(string? activityStatus, bool expected)
+        => SessionActivityTracker.IsWorking(activityStatus).ShouldBe(expected);
+
+    [Fact]
     public void UnregisterChild_WhenChildUnregistered_ParentReverts()
     {
         var sut = new SessionActivityTracker();

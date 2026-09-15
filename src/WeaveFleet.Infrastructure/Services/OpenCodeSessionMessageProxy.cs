@@ -28,6 +28,7 @@ public sealed class OpenCodeSessionMessageProxy(
 {
     private const string IdleStatus = "idle";
     private const string BusyStatus = "busy";
+    private const string RetryStatus = "retry";
 
     private static readonly Action<ILogger, string, Exception?> LogFetchingFromHarness =
         LoggerMessage.Define<string>(LogLevel.Debug, new EventId(1, "FetchingFromHarness"),
@@ -467,9 +468,12 @@ public sealed class OpenCodeSessionMessageProxy(
         };
     }
 
+    // A retrying session is still working; reporting it as idle made it look done on reopen.
     private static string NormalizeActivityStatus(string? activityStatus)
         => string.Equals(activityStatus, BusyStatus, StringComparison.OrdinalIgnoreCase)
             || string.Equals(activityStatus, "working", StringComparison.OrdinalIgnoreCase)
                 ? BusyStatus
-                : IdleStatus;
+                : string.Equals(activityStatus, RetryStatus, StringComparison.OrdinalIgnoreCase)
+                    ? RetryStatus
+                    : IdleStatus;
 }

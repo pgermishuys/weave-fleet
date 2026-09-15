@@ -60,7 +60,7 @@ public static class SessionEndpoints
                     foreach (var (childId, parentId) in childToParent)
                     {
                         var childActivityStatus = activityTracker.GetEffectiveActivityStatus(childId);
-                        if (childActivityStatus == "busy")
+                        if (SessionActivityTracker.IsWorking(childActivityStatus))
                         {
                             parentIdsWithBusyChildren.Add(parentId);
                         }

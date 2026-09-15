@@ -27,6 +27,14 @@ const BUSY_ACTIVITY_STATUSES = new Set(["busy", "working"])
 const RETRY_ACTIVITY_STATUSES = new Set(["retry"])
 const ACTIVE_DELEGATION_STATUSES = new Set<DelegationDto["status"]>(["pending", "running"])
 
+/**
+ * Whether the conversation shows the agent at work. Anything but idle is work: a turn,
+ * a sub-agent, or a retry after a model error (e.g. a rate limit) that hasn't given up.
+ */
+export function isStreamWorking(status: SessionStreamStatus): boolean {
+  return status !== "idle"
+}
+
 export function createSessionStreamState(snapshot: SessionSnapshot): SessionStreamState {
   const explicitStatus = toExplicitStatus(snapshot.activityStatus)
   const delegations = snapshot.delegations.map(mapSnapshotDelegation)

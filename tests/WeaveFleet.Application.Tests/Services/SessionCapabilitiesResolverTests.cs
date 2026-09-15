@@ -11,6 +11,7 @@ public sealed class SessionCapabilitiesResolverTests
     private const string Archived = "archived";
     private const string Busy = "busy";
     private const string Idle = "idle";
+    private const string Retry = "retry";
     private const string Running = "running";
     private const string Stopped = "stopped";
     private const string Disconnected = "disconnected";
@@ -144,7 +145,7 @@ public sealed class SessionCapabilitiesResolverTests
     {
         string[] lifecycleStatuses = [Running, Stopped, Completed, Disconnected, Error];
         string[] retentionStatuses = [Active, Archived];
-        string[] activityStatuses = [Idle, Busy];
+        string[] activityStatuses = [Idle, Busy, Retry];
         bool[] liveStates = [true, false];
         var data = new TheoryData<string, string, string, bool>();
 
@@ -200,7 +201,7 @@ public sealed class SessionCapabilitiesResolverTests
     private static bool GetExpectedCanAbort(string lifecycleStatus, string retentionStatus, string activityStatus) =>
         !IsArchived(retentionStatus)
         && string.Equals(lifecycleStatus, Running, StringComparison.Ordinal)
-        && string.Equals(activityStatus, Busy, StringComparison.Ordinal);
+        && IsWorking(activityStatus);
 
     private static string GetExpectedPromptDisabledReason(string retentionStatus) =>
         IsArchived(retentionStatus) ? ArchivedReadOnlyReason : SessionNotRunningReason;
@@ -216,10 +217,13 @@ public sealed class SessionCapabilitiesResolverTests
         if (!string.Equals(lifecycleStatus, Running, StringComparison.Ordinal))
             return SessionNotRunningReason;
 
-        return string.Equals(activityStatus, Busy, StringComparison.Ordinal)
+        return IsWorking(activityStatus)
             ? throw new InvalidOperationException("Expected busy running session to enable abort.")
             : SessionNotBusyReason;
     }
+
+    // A retrying session is still in its turn, so it can be stopped like a busy one.
+    private static bool IsWorking(string activityStatus) => activityStatus is Busy or Retry;
 
     private static bool IsArchived(string retentionStatus) =>
         string.Equals(retentionStatus, Archived, StringComparison.Ordinal);
