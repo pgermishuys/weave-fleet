@@ -1,4 +1,4 @@
--- Migration 035: The agent a session was given, and the harness an automation's agent and model belong to.
+-- Migration 036: The agent a session was given, and the harness an automation's agent and model belong to.
 -- sessions.selected_agent is the agent the session was started with or last prompted with by name; a prompt that
 -- names no agent goes to it, the way selected_provider_id/selected_model_id (migration 018) work for the model.
 -- NULL means the harness's default agent.
