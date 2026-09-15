@@ -35,6 +35,9 @@ public sealed record HarnessCapabilities
 
     /// <summary>Whether <see cref="IHarnessSession.AskOffTheRecordAsync"/> can answer (used for session recaps).</summary>
     public bool SupportsOffTheRecordPrompt { get; init; }
+
+    /// <summary>A session can start with a profile: harness config the user keeps in Fleet and picks per session.</summary>
+    public bool SupportsProfiles { get; init; }
 }
 
 /// <summary>Whether a harness binary/service is available on this machine.</summary>

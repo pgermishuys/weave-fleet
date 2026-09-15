@@ -25,6 +25,8 @@ public sealed class Session
     public double TotalCost { get; set; }
     public string HarnessType { get; set; } = "opencode";
     public string RuntimeMode { get; set; } = "manual";
+    /// <summary>The harness profile the session started with, or null for none. Kept for the session's life.</summary>
+    public string? HarnessProfileId { get; set; }
     public string? HarnessResumeToken { get; set; }
     public string? GitBaselineRef { get; set; }
     public string? GitRepoRoot { get; set; }

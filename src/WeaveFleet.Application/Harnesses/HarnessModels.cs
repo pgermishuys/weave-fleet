@@ -94,6 +94,20 @@ public sealed record RuntimePreparationContext
 
     /// <summary>Working directory for the session.</summary>
     public required string WorkingDirectory { get; init; }
+
+    /// <summary>
+    /// The profile to run the session with, or null for none. The orchestrator doesn't read its content: the
+    /// harness decides what a profile means for its runtime.
+    /// </summary>
+    public HarnessProfile? Profile { get; init; }
+}
+
+/// <summary>What the harness said when it tried a profile's content.</summary>
+/// <param name="Error">What's wrong, in the harness's words. Null when the profile works.</param>
+/// <param name="Details">One line per problem the harness pointed at, if it listed them.</param>
+public sealed record HarnessProfileCheck(bool Ok, string? Error = null, IReadOnlyList<string>? Details = null)
+{
+    public static readonly HarnessProfileCheck Passed = new(true);
 }
 
 /// <summary>

@@ -180,7 +180,9 @@ public sealed record GetSessionResponse(
     string? ProjectId,
     string? ProjectName,
     SessionOriginDto? Origin,
-    SessionActionCapabilities Capabilities);
+    SessionActionCapabilities Capabilities,
+    string? HarnessProfileId = null,
+    string? HarnessProfileName = null);
 
 public sealed record CreateSessionApiResponse(string InstanceId, string WorkspaceId, Session Session);
 

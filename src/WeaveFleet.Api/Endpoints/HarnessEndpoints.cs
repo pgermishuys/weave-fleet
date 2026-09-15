@@ -16,6 +16,7 @@ public static class HarnessEndpoints
         group.MapGet("/harnesses", async (
             IHarnessRegistry registry,
             IUserPreferenceRepository preferences,
+            FleetOptions fleetOptions,
             CancellationToken ct) =>
         {
             var harnesses = await registry.GetAvailabilityAsync(ct);
@@ -23,7 +24,12 @@ public static class HarnessEndpoints
 
             var response = harnesses.Select(harness => harness with
             {
-                UserEnabled = IsHarnessUserEnabled(harness.Type, preferenceValues)
+                UserEnabled = IsHarnessUserEnabled(harness.Type, preferenceValues),
+                // Profiles are off with sign-in on (see HarnessProfileService.Supports).
+                Capabilities = harness.Capabilities with
+                {
+                    SupportsProfiles = harness.Capabilities.SupportsProfiles && !fleetOptions.Auth.Enabled,
+                },
             }).ToList();
 
             return Results.Ok(response);
