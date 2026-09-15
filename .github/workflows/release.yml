@@ -261,10 +261,16 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  desktop:
+    name: Desktop app
+    uses: ./.github/workflows/desktop-packages.yml
+    with:
+      version: ${{ github.ref_name }}
+
   publish:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, desktop]
     timeout-minutes: 15
 
     steps:

@@ -1,0 +1,164 @@
+name: Desktop packages
+
+# Builds the desktop app's installers with the AOT Fleet server inside, and smoke-tests each packaged app: it has to
+# start its bundled Fleet, serve the UI, and take Fleet down with it when it's killed. Runs on pull requests that
+# touch the app, by hand (artifacts only, nothing is released), and from the Release workflow, whose publish job
+# picks up the release-desktop-* artifacts next to the CLI archives.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/desktop-packages.yml'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to stamp on the packages
+        required: false
+        default: 0.0.0-dev
+  workflow_call:
+    inputs:
+      version:
+        description: Version to stamp on the packages; a leading "v" is dropped
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-packages-${{ github.ref }}-${{ inputs.version }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  package:
+    name: Desktop ${{ matrix.rid }}
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            runs_on: ubuntu-latest
+            builder_args: --linux --x64
+            app: release/linux-unpacked/fleet-desktop
+            installers: |
+              desktop/release/Fleet-*.AppImage
+              desktop/release/Fleet-*.deb
+          - rid: osx-arm64
+            runs_on: macos-14
+            builder_args: --mac --arm64
+            app: release/mac-arm64/Fleet.app/Contents/MacOS/Fleet
+            installers: |
+              desktop/release/Fleet-*.dmg
+              desktop/release/Fleet-*.zip
+          - rid: win-x64
+            runs_on: windows-latest
+            builder_args: --win --x64
+            app: release/win-unpacked/Fleet.exe
+            installers: |
+              desktop/release/Fleet-*-setup.exe
+          - rid: win-arm64
+            runs_on: windows-latest
+            builder_args: --win --arm64
+            cross_compile: true
+            installers: |
+              desktop/release/Fleet-*-setup.exe
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Resolve version
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          version="${INPUT_VERSION:-0.0.0-pr.${{ github.event.pull_request.number || 0 }}}"
+          echo "VERSION=${version#v}" >> "$GITHUB_ENV"
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Build Vue client
+        shell: bash
+        working-directory: client
+        run: |
+          corepack enable
+          corepack npm ci
+          npm run build
+
+      - name: Select Xcode 16.2
+        if: runner.os == 'macOS'
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.2'
+
+      - name: Publish AOT server
+        shell: bash
+        run: |
+          dotnet publish src/WeaveFleet.Api/WeaveFleet.Api.csproj \
+            --configuration Release \
+            --runtime "${{ matrix.rid }}" \
+            --output "${{ github.workspace }}/artifacts/publish/${{ matrix.rid }}"
+
+      - name: Install desktop dependencies
+        run: bun install --frozen-lockfile
+        working-directory: desktop
+
+      - name: Package desktop app
+        shell: bash
+        working-directory: desktop
+        env:
+          FLEET_SERVER_DIR: ${{ github.workspace }}/artifacts/publish/${{ matrix.rid }}
+          # Ad-hoc signing on macOS needs no secrets, so pull request builds sign the way releases do.
+          CSC_FOR_PULL_REQUEST: 'true'
+        run: bun run dist -- ${{ matrix.builder_args }} -c.extraMetadata.version="$VERSION"
+
+      - name: Smoke test packaged app (Linux)
+        if: runner.os == 'Linux'
+        working-directory: desktop
+        run: xvfb-run -a node scripts/smoke.mjs ${{ matrix.app }} --no-sandbox
+
+      - name: Smoke test packaged app
+        if: runner.os != 'Linux' && !matrix.cross_compile
+        working-directory: desktop
+        run: node scripts/smoke.mjs ${{ matrix.app }}
+
+      - name: Write checksums
+        shell: bash
+        working-directory: desktop/release
+        run: |
+          for file in Fleet-*.AppImage Fleet-*.deb Fleet-*.dmg Fleet-*.zip Fleet-*-setup.exe; do
+            [ -f "$file" ] || continue
+            node -e 'const f=process.argv[1]; console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync(f)).digest("hex") + "  " + f)' "$file" > "$file.sha256"
+          done
+          ls -la
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-desktop-${{ matrix.rid }}
+          path: |
+            ${{ matrix.installers }}
+            desktop/release/*.sha256
+          if-no-files-found: error
+          retention-days: 7
