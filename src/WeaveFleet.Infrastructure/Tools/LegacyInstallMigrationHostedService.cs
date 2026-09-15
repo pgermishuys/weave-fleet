@@ -19,6 +19,8 @@ namespace WeaveFleet.Infrastructure.Tools;
 /// <item>Native tools were copied to ~/.config/weave-fleet/tools, which OpenCode never read: they're
 /// installed into OpenCode's global tools folder and the old copy is deleted.</item>
 /// <item>MCP servers were written under <c>mcpServers</c>, a key OpenCode doesn't know: they move to <c>mcp</c>.</item>
+/// <item>The catalog's <c>fleet-api</c> skill now comes with Fleet, and its <c>visualize</c> tool gave way to the
+/// canvas tools: Fleet's global installs of both are removed, so an old copy can't shadow the one Fleet ships.</item>
 /// </list>
 /// Anything that would overwrite a file Fleet didn't write is left alone and logged; the Settings
 /// page shows those entries as not installed. Local mode only, like bundled skills.
@@ -26,6 +28,12 @@ namespace WeaveFleet.Infrastructure.Tools;
 public sealed partial class LegacyInstallMigrationHostedService : IHostedService
 {
     private const string LocalOwnerUserId = "local-user";
+
+    /// <summary>Where the catalog's skills and tools came from.</summary>
+    private const string FleetRepoUrl = "https://github.com/pgermishuys/weave-fleet";
+
+    private static readonly string[] RetiredSkills = ["fleet-api"];
+    private static readonly string[] RetiredTools = ["visualize"];
 
     private readonly ISkillManifestStore _skillStore;
     private readonly ISkillSyncEngine _syncEngine;
@@ -62,6 +70,7 @@ public sealed partial class LegacyInstallMigrationHostedService : IHostedService
         {
             await MigrateSkillsAsync(cancellationToken).ConfigureAwait(false);
             await MigrateToolsAsync(cancellationToken).ConfigureAwait(false);
+            await RemoveRetiredAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -174,6 +183,62 @@ public sealed partial class LegacyInstallMigrationHostedService : IHostedService
         return result.Value;
     }
 
+    /// <summary>
+    /// Removes Fleet's global installs of the retired catalog entries, as Settings would. An entry stays when its
+    /// files couldn't be deleted, so the next start tries again. Runs after the moves, so it also removes copies they
+    /// adopted; a file Fleet didn't write stays where it is.
+    /// </summary>
+    internal async Task RemoveRetiredAsync(CancellationToken cancellationToken)
+    {
+        var skills = await _skillStore.LoadAsync(LocalOwnerUserId, workspaceId: null, cancellationToken).ConfigureAwait(false);
+        foreach (var skill in skills.Skills.Where(s => IsRetired(RetiredSkills, s.Name, s.Source, s.RepoUrl, s.Scope)))
+        {
+            var problems = (await _syncEngine.RemoveSkillAsync(skill, cancellationToken).ConfigureAwait(false))
+                .Where(r => !r.Success)
+                .Select(r => r.ErrorMessage ?? "Unknown error")
+                .ToList();
+            if (problems.Count > 0)
+            {
+                LogRetiredNotRemoved(skill.Name, string.Join(" ", problems));
+                continue;
+            }
+
+            await _skillStore.RemoveEntryAsync(skills.UserId, skills.WorkspaceId, skill.Name, InstallTarget.Global, cancellationToken)
+                .ConfigureAwait(false);
+            LogRetiredRemoved(skill.Name);
+        }
+
+        var tools = await _toolStore.LoadAsync(LocalOwnerUserId, workspaceId: null, cancellationToken).ConfigureAwait(false);
+        var legacyToolsDir = Path.Combine(_paths.HomeDirectory, ".config", "weave-fleet", "tools", tools.UserId);
+        foreach (var tool in tools.Tools.Where(t => IsRetired(RetiredTools, t.Name, t.Source, t.RepoUrl, t.Scope)))
+        {
+            var removed = await _installer.UninstallAsync(tool, cancellationToken).ConfigureAwait(false);
+            if (removed.IsFailure)
+            {
+                LogRetiredNotRemoved(tool.Name, removed.Error.Description);
+                continue;
+            }
+
+            // A copy the moves couldn't place still sits in the old folder, which only Fleet used.
+            var legacyCopy = Path.Combine(legacyToolsDir, $"tool-{tool.Name}");
+            if (InstalledFiles.Exists(legacyCopy))
+                InstalledFiles.Delete(legacyCopy);
+
+            await _toolStore.RemoveEntryAsync(tools.UserId, tools.WorkspaceId, tool.Name, InstallTarget.Global, cancellationToken)
+                .ConfigureAwait(false);
+            LogRetiredRemoved(tool.Name);
+        }
+
+        DeleteIfEmpty(legacyToolsDir);
+        DeleteIfEmpty(Path.GetDirectoryName(legacyToolsDir)!);
+    }
+
+    private static bool IsRetired(string[] retired, string name, SkillSource source, string? repoUrl, InstallScope scope) =>
+        scope == InstallScope.Global
+        && source == SkillSource.GitHub
+        && retired.Contains(name, StringComparer.Ordinal)
+        && string.Equals(repoUrl?.TrimEnd('/'), FleetRepoUrl, StringComparison.OrdinalIgnoreCase);
+
     private static void DeleteIfEmpty(string directory)
     {
         if (Directory.Exists(directory) && !Directory.EnumerateFileSystemEntries(directory).Any())
@@ -191,6 +256,12 @@ public sealed partial class LegacyInstallMigrationHostedService : IHostedService
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Left tool '{ToolName}' where it was: {Reason}")]
     private partial void LogToolNotMigrated(string toolName, string reason);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Removed the old catalog install of '{Name}'.")]
+    private partial void LogRetiredRemoved(string name);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not remove the catalog install of '{Name}': {Reason}")]
+    private partial void LogRetiredNotRemoved(string name, string reason);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Moving skills and tools from older Fleet install locations failed; startup continues.")]
     private partial void LogFailed(Exception ex);

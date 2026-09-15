@@ -12,32 +12,14 @@ internal static class OpenCodeFleetPlugin
 
     /// <summary>
     /// Writes the plugin to <c>{dataDirectory}/opencode/fleet-canvas.ts</c> unless an identical copy is already
-    /// there, and returns its <c>file://</c> URI. The write goes through a temp file, so a starting process
-    /// never reads half a file.
+    /// there, and returns its <c>file://</c> URI.
     /// </summary>
     public static string Install(string dataDirectory)
     {
-        var content = ReadEmbedded();
-        var directory = Path.Combine(dataDirectory, "opencode");
-        var path = Path.Combine(directory, FileName);
-
-        if (!File.Exists(path) || !File.ReadAllBytes(path).AsSpan().SequenceEqual(content))
-        {
-            Directory.CreateDirectory(directory);
-            var temp = $"{path}.{Guid.NewGuid():N}.tmp";
-            File.WriteAllBytes(temp, content);
-            File.Move(temp, path, overwrite: true);
-        }
-
+        var path = Path.Combine(dataDirectory, "opencode", FileName);
+        EmbeddedFiles.WriteIfChanged(path, ReadEmbedded());
         return new Uri(path).AbsoluteUri;
     }
 
-    internal static byte[] ReadEmbedded()
-    {
-        using var stream = typeof(OpenCodeFleetPlugin).Assembly.GetManifestResourceStream(ResourceName)
-            ?? throw new InvalidOperationException($"Embedded resource {ResourceName} is missing.");
-        using var buffer = new MemoryStream();
-        stream.CopyTo(buffer);
-        return buffer.ToArray();
-    }
+    internal static byte[] ReadEmbedded() => EmbeddedFiles.Read(ResourceName);
 }

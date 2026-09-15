@@ -1,5 +1,5 @@
 /**
- * Fleet canvas tools for pooled OpenCode sessions.
+ * Fleet canvas tools for pooled OpenCode sessions, and the folder with Fleet's skills.
  *
  * Fleet embeds this file, writes it into its data folder, and loads it through the "plugin" list in
  * OPENCODE_CONFIG_CONTENT. Edit it here, in the Fleet repo: Fleet overwrites the installed copy.
@@ -54,7 +54,18 @@ const canvasId = {
   description: "The canvas id (cv_…) from fleet_canvas_list or fleet_canvas_open.",
 }
 
+type Config = { skills?: { paths?: string[] } }
+
 export const FleetCanvasPlugin = async () => ({
+  // Fleet's own skills (fleet-api) are in its data folder. Adding the folder here keeps the user's skill paths:
+  // skills.paths in OPENCODE_CONFIG_CONTENT would replace them.
+  config: async (config: Config) => {
+    const skills = process.env.FLEET_SKILLS_PATH
+    if (!skills) return
+    config.skills ??= {}
+    config.skills.paths = [...(config.skills.paths ?? []), skills]
+  },
+
   tool: {
     fleet_canvas_list: {
       description: "List the canvases open in this session's side panel: id, kind, title and version.",
