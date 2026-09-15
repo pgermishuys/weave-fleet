@@ -3,7 +3,7 @@ name: Desktop packages
 # Builds the desktop app's installers with the AOT Fleet server inside, and smoke-tests each packaged app: it has to
 # start its bundled Fleet, serve the UI, and take Fleet down with it when it's killed. Runs on pull requests that
 # touch the app, by hand (artifacts only, nothing is released), and from the Release workflow, whose publish job
-# picks up the release-desktop-* artifacts next to the CLI archives.
+# picks up the release-desktop-* artifacts next to the CLI archives. The latest*.yml files are the app's update feed.
 
 on:
   pull_request:
@@ -143,15 +143,21 @@ jobs:
         working-directory: desktop
         run: node scripts/smoke.mjs ${{ matrix.app }}
 
-      - name: Write checksums
+      - name: Collect release files
         shell: bash
         working-directory: desktop/release
         run: |
+          # Both Windows builds write latest.yml; the Release workflow merges them back into one.
+          if [ -f latest.yml ]; then
+            mv latest.yml "latest-win-${RID#win-}.yml"
+          fi
           for file in Fleet-*.AppImage Fleet-*.deb Fleet-*.dmg Fleet-*.zip Fleet-*-setup.exe; do
             [ -f "$file" ] || continue
             node -e 'const f=process.argv[1]; console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync(f)).digest("hex") + "  " + f)' "$file" > "$file.sha256"
           done
           ls -la
+        env:
+          RID: ${{ matrix.rid }}
 
       - name: Upload installers
         uses: actions/upload-artifact@v4
@@ -160,5 +166,7 @@ jobs:
           path: |
             ${{ matrix.installers }}
             desktop/release/*.sha256
+            desktop/release/latest*.yml
+            desktop/release/*.blockmap
           if-no-files-found: error
           retention-days: 7

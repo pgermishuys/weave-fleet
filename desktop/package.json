@@ -21,10 +21,14 @@
     "@types/node": "^25.5.0",
     "electron": "44.3.0",
     "electron-builder": "26.15.3",
+    "js-yaml": "^4",
     "typescript": "5.9.3",
     "vitest": "^4.1.2"
   },
   "trustedDependencies": [
     "electron"
-  ]
+  ],
+  "dependencies": {
+    "electron-updater": "^6.8.9"
+  }
 }

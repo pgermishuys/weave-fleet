@@ -286,6 +286,21 @@ jobs:
           path: release-assets
           merge-multiple: true
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Merge the Windows update feeds
+        shell: bash
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+        run: |
+          (cd desktop && bun install --frozen-lockfile)
+          node desktop/scripts/merge-update-manifests.mjs release-assets/latest.yml release-assets/latest-win-*.yml
+          rm release-assets/latest-win-*.yml
+          ls release-assets/*.yml
+
       - name: Create merged checksums manifest
         shell: bash
         run: |
