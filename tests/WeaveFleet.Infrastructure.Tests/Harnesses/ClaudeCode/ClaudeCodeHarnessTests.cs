@@ -28,11 +28,11 @@ public sealed class ClaudeCodeHarnessTests
     }
 
     [Fact]
-    public void Capabilities_RequiresInitialPrompt_IsTrue()
+    public void Capabilities_RequiresInitialPrompt_IsFalse()
     {
         var harness = CreateHarness();
 
-        harness.Capabilities.RequiresInitialPrompt.ShouldBeTrue();
+        harness.Capabilities.RequiresInitialPrompt.ShouldBeFalse();
     }
 
     [Fact]

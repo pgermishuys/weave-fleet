@@ -12,6 +12,7 @@ internal static class ClaudeCodeMapper
     /// Maps a <see cref="ClaudeCodeAssistantMessage"/> to a <see cref="HarnessMessage"/>.
     /// Content blocks map as:
     ///   "text"        → <see cref="TextPart"/>
+    ///   "thinking"    → <see cref="ReasoningPart"/> (only when it has text)
     ///   "tool_use"    → <see cref="ToolUsePart"/> (State=Running)
     ///   "tool_result" → <see cref="ToolResultPart"/>
     /// </summary>
@@ -90,26 +91,16 @@ internal static class ClaudeCodeMapper
     /// Creates a <c>message.part.updated</c> event for a single message part.
     /// Returns <c>null</c> for unrecognised part types.
     /// </summary>
+    /// <param name="toolOutput">For a finished <see cref="ToolUsePart"/>, what the tool returned.</param>
     internal static HarnessEvent? CreatePartUpdatedEvent(
-        string messageId, string sessionId, MessagePart part, int partIndex)
+        string messageId, string sessionId, MessagePart part, int partIndex, string? toolOutput = null)
     {
         JsonElement? payload = part switch
         {
-            TextPart text => JsonSerializer.SerializeToElement(
-                new ClaudeCodeTextPartPayload
-                {
-                    Part = new ClaudeCodeTextPartContent
-                    {
-                        MessageID = messageId,
-                        SessionID = sessionId,
-                        Type = "text",
-                        Id = $"{messageId}-part-{partIndex}",
-                        Text = text.Text,
-                    }
-                },
-                InfrastructureJsonContext.Default.ClaudeCodeTextPartPayload),
+            TextPart text => SerializeTextPart(messageId, sessionId, "text", text.PartId ?? $"{messageId}-part-{partIndex}", text.Text),
+            ReasoningPart reasoning => SerializeTextPart(messageId, sessionId, "reasoning", reasoning.PartId ?? $"{messageId}-part-{partIndex}", reasoning.Text),
             ToolUsePart tool => JsonSerializer.SerializeToElement(
-                BuildToolPartPayload(messageId, sessionId, tool, partIndex),
+                BuildToolPartPayload(messageId, sessionId, tool, partIndex, toolOutput),
                 InfrastructureJsonContext.Default.ClaudeCodeToolPartPayload),
             ToolResultPart toolResult => ToolResultEventBuilder.BuildPayload(
                 messageId,
@@ -169,13 +160,30 @@ internal static class ClaudeCodeMapper
         return events;
     }
 
+    private static JsonElement SerializeTextPart(string messageId, string sessionId, string type, string partId, string text)
+        => JsonSerializer.SerializeToElement(
+            new ClaudeCodeTextPartPayload
+            {
+                Part = new ClaudeCodeTextPartContent
+                {
+                    MessageID = messageId,
+                    SessionID = sessionId,
+                    Type = type,
+                    Id = partId,
+                    Text = text,
+                }
+            },
+            InfrastructureJsonContext.Default.ClaudeCodeTextPartPayload);
+
     private static ClaudeCodeToolPartPayload BuildToolPartPayload(
-        string messageId, string sessionId, ToolUsePart tool, int partIndex)
+        string messageId, string sessionId, ToolUsePart tool, int partIndex, string? toolOutput)
     {
         var state = new ClaudeCodeToolStateContent
         {
             Status = MapToolUseState(tool.State),
             Input = tool.Arguments.ValueKind != JsonValueKind.Undefined ? tool.Arguments : null,
+            Output = toolOutput is null ? null : ToToolOutput(toolOutput),
+            Error = tool.Error,
         };
 
         return new ClaudeCodeToolPartPayload
@@ -185,12 +193,26 @@ internal static class ClaudeCodeMapper
                 MessageID = messageId,
                 SessionID = sessionId,
                 Type = "tool",
-                Id = $"{messageId}-part-{partIndex}",
+                Id = tool.PartId ?? $"{messageId}-part-{partIndex}",
                 Tool = tool.ToolName,
                 CallID = tool.ToolCallId,
                 State = state,
             }
         };
+    }
+
+    /// <summary>A tool's output as JSON when it is JSON, otherwise as a string, the way a reloaded session reads it.</summary>
+    private static JsonElement ToToolOutput(string content)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(content);
+            return document.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            return JsonSerializer.SerializeToElement(content, InfrastructureJsonContext.Default.String);
+        }
     }
 
     private static string MapToolUseState(ToolUseState state) => state switch
@@ -202,7 +224,7 @@ internal static class ClaudeCodeMapper
         _ => "pending",
     };
 
-    private static HarnessEvent CreateSessionIdleEvent(string sessionId)
+    internal static HarnessEvent CreateSessionIdleEvent(string sessionId)
     {
         return new HarnessEvent
         {
@@ -225,6 +247,10 @@ internal static class ClaudeCodeMapper
                 ? new TextPart(text.Text)
                 : null,
 
+            ClaudeCodeThinkingBlock thinking => !string.IsNullOrEmpty(thinking.Thinking)
+                ? new ReasoningPart(thinking.Thinking)
+                : null,
+
             ClaudeCodeToolUseBlock toolUse => new ToolUsePart(
                 ToolCallId: toolUse.Id ?? string.Empty,
                 ToolName: toolUse.Name ?? string.Empty,
@@ -239,6 +265,23 @@ internal static class ClaudeCodeMapper
 
             _ => null,
         };
+    }
+
+    /// <summary>
+    /// Why a run failed, from its result line (e.g. "Reached maximum number of turns (1)"),
+    /// or null when it succeeded.
+    /// </summary>
+    internal static string? DescribeFailedResult(ClaudeCodeResultMessage result)
+    {
+        if (result.IsError != true && result.Subtype is null or "success")
+            return null;
+
+        if (result.Errors is { Count: > 0 } errors)
+            return string.Join("\n", errors);
+
+        return !string.IsNullOrWhiteSpace(result.Result)
+            ? result.Result.Trim()
+            : result.Subtype ?? "unknown error";
     }
 
     /// <summary>

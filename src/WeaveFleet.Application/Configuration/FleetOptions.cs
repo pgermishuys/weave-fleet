@@ -343,6 +343,9 @@ public sealed class ClaudeCodeOptions
     /// <summary>Maximum budget in USD per prompt. Null = no limit.</summary>
     public decimal? MaxBudgetUsd { get; set; }
 
-    /// <summary>Timeout in seconds for each prompt process. Default: 300 (5 min).</summary>
-    public int ProcessTimeoutSeconds { get; set; } = 300;
+    /// <summary>
+    /// Seconds a prompt may run before its process is killed. Null = no limit (the default), since an
+    /// agent's turn can take much longer than a few minutes.
+    /// </summary>
+    public int? ProcessTimeoutSeconds { get; set; }
 }

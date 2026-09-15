@@ -19,7 +19,9 @@ public sealed class ClaudeCodeHarness : IHarness
     /// <inheritdoc />
     public HarnessCapabilities Capabilities { get; } = new()
     {
-        RequiresInitialPrompt = true,
+        // Each prompt starts its own claude process, so the session can exist before the first one.
+        // The first message is then saved and delivered like any other.
+        RequiresInitialPrompt = false,
         SupportsAgents = false,
         SupportsModelSelection = true,
         SupportsCommands = false,

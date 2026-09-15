@@ -296,6 +296,9 @@ public sealed class OpenCodeSessionMessageProxyTests
         snapshot.ShouldNotBeNull();
         snapshot.Session.Id.ShouldBe(sessionId);
 
+        // Its history is the database, so the page doesn't warn about a lost live connection
+        snapshot.IsPartial.ShouldBeFalse();
+
         // Verify fallback WAS called for non-opencode session
         fallbackSnapshotBuilder.BuildAsyncCalls.ShouldNotBeEmpty();
     }
