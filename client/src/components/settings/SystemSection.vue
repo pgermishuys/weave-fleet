@@ -2,8 +2,13 @@
 import { computed } from "vue";
 import { AlertCircle, CheckCircle2, Download, LoaderCircle, RefreshCw } from "lucide-vue-next";
 import { useUpdateStatus } from "@/composables/use-update-status";
+import DesktopAppUpdates from "@/components/settings/DesktopAppUpdates.vue";
+import { getDesktopBridge } from "@/lib/desktop";
 
 const { updateStatus, isLoading, checkForUpdate, downloadUpdate } = useUpdateStatus();
+const inApp = getDesktopBridge() !== null;
+// In the app's window, a Fleet the app started is updated with the app, so its row says so instead of the server's.
+const showServerUpdates = computed(() => !(inApp && updateStatus.value?.status === "managed"));
 
 const statusLabel = computed(() => {
   switch (updateStatus.value?.status) {
@@ -108,8 +113,13 @@ const downloadProgressLabel = computed(() => {
         </div>
       </div>
 
+      <DesktopAppUpdates v-if="inApp" />
+
       <!-- Update status row -->
-      <div class="flex flex-col gap-2 rounded-card border border-border bg-main-bg px-4 py-3">
+      <div
+        v-if="showServerUpdates"
+        class="flex flex-col gap-2 rounded-card border border-border bg-main-bg px-4 py-3"
+      >
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
             <LoaderCircle
