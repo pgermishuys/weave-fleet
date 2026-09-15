@@ -14,6 +14,20 @@ interface TopicV2Callback {
   onHistory?: HistoryCallback
 }
 
+interface CachedSnapshot {
+  snapshot: SessionSnapshot
+  /** How many events the topic had seen when this snapshot was asked for. */
+  eventCount: number
+}
+
+interface SnapshotRequest {
+  epoch: number
+  /** The topic's event count when the request went out; null while it waits its turn in the topic's queue. */
+  sentAt: number | null
+  /** The listeners this request's snapshot is for. */
+  waiters: Set<TopicV2Callback>
+}
+
 export interface WeaveSocketAPI {
   subscribeV2: (topic: string, onSnapshot: SnapshotCallback, onEvent: DomainEventCallback, onHistory?: HistoryCallback) => Unsubscribe
 }
@@ -37,7 +51,13 @@ declare global {
 const HUB_PATH = "/hubs/session-events"
 
 const topicListenersV2 = new Map<string, Set<TopicV2Callback>>()
-const lastSnapshotsV2 = new Map<string, SessionSnapshot>()
+// A listener that joins a topic others already hold may reuse its last snapshot only while no event has
+// arrived since it was asked for. Otherwise it gets a fresh one: the Files canvas keeps listening to a session
+// while you're on another, and coming back rebuilt the conversation from the snapshot you first opened it with.
+const lastSnapshotsV2 = new Map<string, CachedSnapshot>()
+const topicEventCounts = new Map<string, number>()
+// The latest snapshot request per topic, which listeners that join before it's answered can share.
+const snapshotRequests = new Map<string, SnapshotRequest>()
 const reconnectCallbacks = new Map<string, () => void>()
 const disconnectCallbacks = new Map<string, () => void>()
 
@@ -62,16 +82,63 @@ const RECONNECT_DELAYS_MS = [2000, 5000, 10000, 30000]
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let reconnectAttempt = 0
 
-function dispatchSnapshot(topic: string, snapshot: SessionSnapshot): void {
-  lastSnapshotsV2.set(topic, snapshot)
-  const callbacks = topicListenersV2.get(topic)
-  if (!callbacks) {
-    return
+function eventCountFor(topic: string): number {
+  return topicEventCounts.get(topic) ?? 0
+}
+
+/** The topic's last snapshot, if no event has arrived since it was asked for. */
+function currentSnapshot(topic: string): SessionSnapshot | null {
+  const cached = lastSnapshotsV2.get(topic)
+  return cached && cached.eventCount === eventCountFor(topic) ? cached.snapshot : null
+}
+
+/**
+ * Subscribes the connection to the topic's session and gives the snapshot to the listeners. Unless `fresh`, it
+ * shares a request that hasn't been answered yet when that answer can't miss an event: listeners only hear
+ * events from the moment they join.
+ */
+function requestSnapshot(topic: string, listeners: Iterable<TopicV2Callback>, fresh = false): Promise<void> {
+  if (connection?.state !== HubConnectionState.Connected) {
+    return Promise.resolve()
   }
 
-  for (const callback of callbacks) {
-    callback.onSnapshot(snapshot)
+  const epoch = topicSubscriptionEpochs.get(topic) ?? 0
+  const pending = snapshotRequests.get(topic)
+  if (!fresh && pending && pending.epoch === epoch && (pending.sentAt === null || pending.sentAt === eventCountFor(topic))) {
+    for (const listener of listeners) {
+      pending.waiters.add(listener)
+    }
+    return Promise.resolve()
   }
+
+  const request: SnapshotRequest = { epoch, sentAt: null, waiters: new Set(listeners) }
+  snapshotRequests.set(topic, request)
+  // The hub expects just the session ID (not the "session:" prefixed topic)
+  const sessionId = topic.startsWith("session:") ? topic.slice(8) : topic
+  return queueTopicOperation(topic, async () => {
+    try {
+      request.sentAt = eventCountFor(topic)
+      const snapshot = await connection!.invoke<SessionSnapshot>("SubscribeToSessionAsync", sessionId)
+      // Only dispatch if this is still the current epoch (not stale)
+      if (topicSubscriptionEpochs.get(topic) !== epoch) {
+        return
+      }
+
+      lastSnapshotsV2.set(topic, { snapshot, eventCount: request.sentAt })
+      const current = topicListenersV2.get(topic)
+      for (const waiter of request.waiters) {
+        if (current?.has(waiter)) {
+          waiter.onSnapshot(snapshot)
+        }
+      }
+    } finally {
+      if (snapshotRequests.get(topic) === request) {
+        snapshotRequests.delete(topic)
+      }
+    }
+  }).catch((error) => {
+    console.error(`Failed to subscribe to session ${topic}:`, error)
+  })
 }
 
 function dispatchEventV2(topic: string, event: DomainEvent): void {
@@ -111,6 +178,7 @@ function handleHubEvent(topic: string, eventId: number | null, data: unknown): v
 
   // Dispatch to per-session topic listeners
   if (topicListenersV2.has(topic)) {
+    topicEventCounts.set(topic, (topicEventCounts.get(topic) ?? 0) + 1)
     dispatchEventV2(topic, domainEvent)
   }
 
@@ -139,18 +207,10 @@ async function resubscribeAll(): Promise<void> {
     return
   }
 
-  // Re-subscribe to all active v2 topics (sessions)
+  // Re-subscribe to all active v2 topics (sessions). Every listener gets a fresh snapshot: events may have
+  // been missed while the connection was down.
   const topicsV2 = Array.from(topicListenersV2.keys()).filter((topic) => (topicListenersV2.get(topic)?.size ?? 0) > 0)
-  
-  for (const topic of topicsV2) {
-    try {
-      const sessionId = topic.startsWith("session:") ? topic.slice(8) : topic
-      const snapshot = await connection.invoke<SessionSnapshot>("SubscribeToSessionAsync", sessionId)
-      dispatchSnapshot(topic, snapshot)
-    } catch (error) {
-      console.error(`Failed to resubscribe to session ${topic}:`, error)
-    }
-  }
+  await Promise.all(topicsV2.map((topic) => requestSnapshot(topic, topicListenersV2.get(topic) ?? [], true)))
 }
 
 async function connect(): Promise<void> {
@@ -344,29 +404,18 @@ function addTopicListenerV2(
   if (isFirstSubscriber) {
     currentEpoch = (topicSubscriptionEpochs.get(topic) ?? 0) + 1
     topicSubscriptionEpochs.set(topic, currentEpoch)
+    void requestSnapshot(topic, [callback])
   } else {
     // Adding to existing subscription generation
     currentEpoch = topicSubscriptionEpochs.get(topic) ?? 1
-    // Deliver cached snapshot immediately to additional subscribers
-    const lastSnapshot = lastSnapshotsV2.get(topic)
+    // Reuse the last snapshot while it's current. Without a connection, show the last one anyway:
+    // reconnecting sends every listener a fresh one.
+    const lastSnapshot = currentSnapshot(topic) ?? (isWeaveSocketConnected() ? null : lastSnapshotsV2.get(topic)?.snapshot)
     if (lastSnapshot) {
       onSnapshot(lastSnapshot)
+    } else {
+      void requestSnapshot(topic, [callback])
     }
-  }
-
-  // Subscribe to the session via SignalR, queued to ensure ordering
-  // The hub expects just the session ID (not the "session:" prefixed topic)
-  if (connection?.state === HubConnectionState.Connected && isFirstSubscriber) {
-    const sessionId = topic.startsWith("session:") ? topic.slice(8) : topic
-    queueTopicOperation(topic, async () => {
-      const snapshot = await connection!.invoke<SessionSnapshot>("SubscribeToSessionAsync", sessionId)
-      // Only dispatch if this is still the current epoch (not stale)
-      if (topicSubscriptionEpochs.get(topic) === currentEpoch) {
-        dispatchSnapshot(topic, snapshot)
-      }
-    }).catch((error) => {
-      console.error(`Failed to subscribe to session ${topic}:`, error)
-    })
   }
 
   return () => {
@@ -388,7 +437,8 @@ function addTopicListenerV2(
 
       topicListenersV2.delete(topic)
       lastSnapshotsV2.delete(topic)
-      
+      topicEventCounts.delete(topic)
+
       if (connection?.state === HubConnectionState.Connected) {
         const sessionId = topic.startsWith("session:") ? topic.slice(8) : topic
         // Queue the unsubscribe to ensure it happens after any pending subscribe
@@ -435,6 +485,8 @@ export function _resetForTesting(): void {
   suspendConnectionsForTesting = false
   topicListenersV2.clear()
   lastSnapshotsV2.clear()
+  topicEventCounts.clear()
+  snapshotRequests.clear()
   reconnectCallbacks.clear()
   disconnectCallbacks.clear()
   topicOperationQueues.clear()
@@ -559,7 +611,7 @@ function syncTestApi(): void {
 }
 
 function snapshotHasText(topic: string, text: string): boolean {
-  const snapshot = lastSnapshotsV2.get(topic)
+  const snapshot = lastSnapshotsV2.get(topic)?.snapshot
   if (!snapshot) {
     return false
   }
