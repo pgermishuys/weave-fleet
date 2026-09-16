@@ -24,6 +24,18 @@ internal sealed record ActivityStatusPayload
     [JsonPropertyName("next")] public string? Next { get; init; }
 }
 
+// ── A harness's own session.status event, the way adapters report a turn starting or ending ──────
+
+internal sealed record SessionStatusEventKind
+{
+    [JsonPropertyName("type")] public required string Type { get; init; }
+}
+
+internal sealed record SessionStatusEventPayload
+{
+    [JsonPropertyName("status")] public required SessionStatusEventKind Status { get; init; }
+}
+
 // ── Named types for ClaudeCodeMapper (replace anonymous types) ────────────────────────────────────
 
 internal sealed record ClaudeCodeMapperInfoTime
@@ -81,16 +93,6 @@ internal sealed record ClaudeCodeToolPartContent
 internal sealed record ClaudeCodeToolPartPayload
 {
     [JsonPropertyName("part")] public required ClaudeCodeToolPartContent Part { get; init; }
-}
-
-internal sealed record ClaudeCodeSessionStatusType
-{
-    [JsonPropertyName("type")] public required string Type { get; init; }
-}
-
-internal sealed record ClaudeCodeSessionStatusPayload
-{
-    [JsonPropertyName("status")] public required ClaudeCodeSessionStatusType Status { get; init; }
 }
 
 // ── Session source input types (moved from private nested records in session source providers) ────
@@ -213,7 +215,7 @@ internal sealed partial class ClaudeCodeJsonContext : JsonSerializerContext
 [JsonSerializable(typeof(ClaudeCodeMessageUpdatedPayload))]
 [JsonSerializable(typeof(ClaudeCodeTextPartPayload))]
 [JsonSerializable(typeof(ClaudeCodeToolPartPayload))]
-[JsonSerializable(typeof(ClaudeCodeSessionStatusPayload))]
+[JsonSerializable(typeof(SessionStatusEventPayload))]
 [JsonSerializable(typeof(MessageLifecyclePayload))]
 [JsonSerializable(typeof(MessagePartUpdatedPayload))]
 [JsonSerializable(typeof(MessagePartDeltaStreamedPayload))]

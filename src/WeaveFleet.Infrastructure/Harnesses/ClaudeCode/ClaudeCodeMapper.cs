@@ -127,11 +127,11 @@ internal static class ClaudeCodeMapper
     internal static HarnessEvent CreateSessionStatusEvent(string sessionId, string statusType)
     {
         var payload = JsonSerializer.SerializeToElement(
-            new ClaudeCodeSessionStatusPayload
+            new SessionStatusEventPayload
             {
-                Status = new ClaudeCodeSessionStatusType { Type = statusType }
+                Status = new SessionStatusEventKind { Type = statusType }
             },
-            InfrastructureJsonContext.Default.ClaudeCodeSessionStatusPayload);
+            InfrastructureJsonContext.Default.SessionStatusEventPayload);
 
         return new HarnessEvent
         {

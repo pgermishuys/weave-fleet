@@ -1329,6 +1329,62 @@ public sealed class OpenCodeMapperTests
         => new() { Type = "todo.updated", Properties = JsonDocument.Parse(properties).RootElement };
 
     // ---------------------------------------------------------------------------
+    // TryMapQuestionActivity — question.asked / replied / rejected (OpenCode 1.18.30)
+    // ---------------------------------------------------------------------------
+
+    [Fact]
+    public void TryMapQuestionActivity_QuestionAsked_StopsTheTurnOnTheUser()
+    {
+        var evt = QuestionEvent(
+            "question.asked",
+            """
+            {
+              "id": "que_1",
+              "sessionID": "oc-1",
+              "questions": [{ "header": "Rollback", "question": "Drop the table or rename it?", "options": [] }]
+            }
+            """);
+
+        var result = OpenCodeMapper.TryMapQuestionActivity(evt, "oc-1", "fleet-1");
+
+        result.ShouldNotBeNull();
+        result.Type.ShouldBe(EventTypes.SessionStatus);
+        result.SessionId.ShouldBe("oc-1");
+        result.FleetSessionId.ShouldBe("fleet-1");
+        StatusType(result).ShouldBe(ActivityStatuses.WaitingInput);
+    }
+
+    [Theory]
+    [InlineData("question.replied")]
+    [InlineData("question.rejected")]
+    public void TryMapQuestionActivity_QuestionSettled_StartsTheTurnAgain(string type)
+    {
+        var evt = QuestionEvent(type, """{ "sessionID": "oc-1", "requestID": "que_1" }""");
+
+        var result = OpenCodeMapper.TryMapQuestionActivity(evt, "oc-1", fleetSessionId: null);
+
+        result.ShouldNotBeNull();
+        result.Type.ShouldBe(EventTypes.SessionStatus);
+        StatusType(result).ShouldBe(ActivityStatuses.Busy);
+    }
+
+    [Theory]
+    [InlineData("permission.asked")]
+    [InlineData("message.part.updated")]
+    [InlineData("session.idle")]
+    public void TryMapQuestionActivity_OtherEvents_AreNotQuestions(string type)
+    {
+        OpenCodeMapper.TryMapQuestionActivity(QuestionEvent(type, """{ "sessionID": "oc-1" }"""), "oc-1", null)
+            .ShouldBeNull();
+    }
+
+    private static OpenCodeSseEvent QuestionEvent(string type, string properties)
+        => new() { Type = type, Properties = JsonDocument.Parse(properties).RootElement };
+
+    private static string? StatusType(HarnessEvent evt)
+        => evt.Payload!.Value.GetProperty("status").GetProperty("type").GetString();
+
+    // ---------------------------------------------------------------------------
     // TryMapFilesWritten — edit, write and apply_patch tool parts
     // ---------------------------------------------------------------------------
 

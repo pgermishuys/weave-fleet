@@ -57,6 +57,45 @@ public sealed record SessionRecapUpdated : DomainEvent
 }
 
 /// <summary>
+/// Why Fleet is telling you about a session you weren't looking at.
+/// </summary>
+public static class SessionNotificationReasons
+{
+    /// <summary>The agent stopped on a question only you can answer.</summary>
+    public const string NeedsYou = "needs_you";
+
+    /// <summary>The turn ended.</summary>
+    public const string Finished = "finished";
+}
+
+/// <summary>
+/// One thing worth interrupting you for: a session that needed you, or finished, while you were looking
+/// somewhere else. Sent on the global sessions topic; the browser turns it into a desktop notification.
+/// </summary>
+public sealed record SessionNotificationPayload
+{
+    /// <summary>
+    /// Gets the Fleet session identifier.
+    /// </summary>
+    public required string SessionId { get; init; }
+
+    /// <summary>
+    /// Gets why the session is worth interrupting for: see <see cref="SessionNotificationReasons"/>.
+    /// </summary>
+    public required string Reason { get; init; }
+
+    /// <summary>
+    /// Gets the session's title, for the notification's heading.
+    /// </summary>
+    public required string Title { get; init; }
+
+    /// <summary>
+    /// Gets the one line under the heading.
+    /// </summary>
+    public required string Body { get; init; }
+}
+
+/// <summary>
 /// A session's recap: one or two sentences on the goal, the current task and the next action.
 /// </summary>
 public sealed record SessionRecapPayload

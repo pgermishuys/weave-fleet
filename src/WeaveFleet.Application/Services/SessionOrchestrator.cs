@@ -11,6 +11,7 @@ using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Recaps;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Terminals;
 using WeaveFleet.Domain.Common;
@@ -54,7 +55,8 @@ public sealed partial class SessionOrchestrator(
     ISessionAppCleanup? sessionApps = null,
     IMessageRepository? messageRepository = null,
     SessionRecapService? sessionRecaps = null,
-    IHarnessProfileRepository? harnessProfiles = null) : ISessionActivator
+    IHarnessProfileRepository? harnessProfiles = null,
+    SessionNotifier? sessionNotifier = null) : ISessionActivator
 {
     private readonly DelegationService _delegationService = delegationService;
     private readonly GitDiffService _gitDiffService = gitDiffService ?? new GitDiffService();
@@ -1385,6 +1387,7 @@ public sealed partial class SessionOrchestrator(
         }
 
         sessionRecaps?.Forget(id);
+        sessionNotifier?.Forget(id);
 
         // End the session's terminals and apps before its folder goes: a process inside a worktree keeps it open on Windows.
         await EndTerminalsAsync(id, ct);

@@ -506,7 +506,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
 
             // Track tool-call-ID → question-ID so AnswerQuestionAsync / RejectQuestionAsync
             // can translate the UI-provided tool call ID into the OpenCode question ID.
-            if (harnessEvent.Type == "question.asked")
+            if (harnessEvent.Type == OpenCodeMapper.QuestionAskedEventType)
                 TryCacheQuestionMapping(harnessEvent);
 
             // Auto-approve permission requests (defense-in-depth: config should prevent these,
@@ -516,6 +516,11 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
                 _ = TryAutoApprovePermissionAsync(harnessEvent);
 
             yield return harnessEvent;
+
+            // A pending question is the one thing in a turn only the user can move on: report it as activity,
+            // so the session reads as needing them rather than working.
+            if (OpenCodeMapper.TryMapQuestionActivity(sseEvt, harnessEvent.SessionId, harnessEvent.FleetSessionId) is { } questionActivity)
+                yield return questionActivity;
 
             // Files the agent wrote become Fleet's own event, once per tool call (a completed part can be sent again).
             if (OpenCodeMapper.TryMapFilesWritten(sseEvt, harnessEvent.SessionId, harnessEvent.FleetSessionId, _workingDirectory) is { } written)

@@ -216,6 +216,43 @@ internal static class OpenCodeMapper
         };
     }
 
+    /// <summary>The OpenCode event sent when the agent asks the user a question it cannot answer itself.</summary>
+    internal const string QuestionAskedEventType = "question.asked";
+
+    /// <summary>The OpenCode events sent when a question is answered or dismissed.</summary>
+    internal static readonly string[] QuestionSettledEventTypes = ["question.replied", "question.rejected"];
+
+    /// <summary>
+    /// Maps OpenCode's question events onto a Fleet <see cref="EventTypes.SessionStatus"/> event, so nothing past
+    /// the adapter has to know how this harness asks. A question stops the turn on the user
+    /// (<see cref="ActivityStatuses.WaitingInput"/>); answering or dismissing it starts the turn again
+    /// (<see cref="ActivityStatuses.Busy"/>), which OpenCode never says itself because it was busy throughout.
+    /// Returns <see langword="null"/> for any other event.
+    /// </summary>
+    internal static HarnessEvent? TryMapQuestionActivity(OpenCodeSseEvent evt, string sessionId, string? fleetSessionId)
+    {
+        var status = evt.Type switch
+        {
+            QuestionAskedEventType => ActivityStatuses.WaitingInput,
+            _ when Array.IndexOf(QuestionSettledEventTypes, evt.Type) >= 0 => ActivityStatuses.Busy,
+            _ => null,
+        };
+
+        if (status is null)
+            return null;
+
+        return new HarnessEvent
+        {
+            Type = EventTypes.SessionStatus,
+            SessionId = sessionId,
+            FleetSessionId = fleetSessionId,
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(
+                new SessionStatusEventPayload { Status = new SessionStatusEventKind { Type = status } },
+                InfrastructureJsonContext.Default.SessionStatusEventPayload),
+        };
+    }
+
     /// <summary>
     /// Maps a completed <c>edit</c>, <c>write</c> or <c>apply_patch</c> tool part to Fleet's
     /// <see cref="EventTypes.FilesWritten"/> event, with the call id so the caller reports each call once.

@@ -411,6 +411,27 @@ export function isSessionRecapEvent(event: DomainEvent): event is SessionRecap {
   return event.type === "session.recap";
 }
 
+/**
+ * One thing worth interrupting you for: a session that needed you, or finished, while you were looking
+ * somewhere else. Sent on the global sessions topic; the browser turns it into a desktop notification.
+ */
+export interface SessionNotificationPayload {
+  sessionId: string;
+  reason: "needs_you" | "finished";
+  title: string;
+  body: string;
+}
+
+/** A session you weren't looking at needs you, or finished. Not persisted. */
+export interface SessionNotification extends EventCursorMetadata {
+  type: "session_notification";
+  payload: SessionNotificationPayload;
+}
+
+export function isSessionNotificationEvent(event: DomainEvent): event is SessionNotification {
+  return event.type === "session_notification";
+}
+
 /** An app Fleet runs for the session changed: the app as it is now, and why. Not persisted. */
 export interface AppUpdated extends EventCursorMetadata {
   type: "app.updated";
@@ -466,4 +487,5 @@ export type DomainEvent =
   | TerminalOpened
   | TerminalClosed
   | AppUpdated
-  | SessionRecap;
+  | SessionRecap
+  | SessionNotification;

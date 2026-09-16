@@ -694,7 +694,9 @@ public static class SessionEndpoints
             "completed" => "completed",
             _ => activityStatus switch
             {
-                "idle" => "idle",
+                ActivityStatuses.Idle => "idle",
+                // The one in-turn status the list shows on its own: it needs the user, not the agent.
+                ActivityStatuses.WaitingInput => ActivityStatuses.WaitingInput,
                 _ => "active"
             }
         };
@@ -706,7 +708,8 @@ public static class SessionEndpoints
             return session.Status;
         }
 
-        return parentIdsWithBusyChildren.Contains(session.Id)
+        // A busy child makes its parent read as working, unless the parent is itself stopped on a question.
+        return parentIdsWithBusyChildren.Contains(session.Id) && activityStatus != ActivityStatuses.WaitingInput
             ? "active"
             : DeriveSessionStatus(session, activityStatus);
     }

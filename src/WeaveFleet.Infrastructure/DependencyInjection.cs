@@ -11,6 +11,7 @@ using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Plugins;
 using WeaveFleet.Application.Recaps;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Skills;
@@ -279,10 +280,17 @@ public static class DependencyInjection
         services.AddSingleton<SessionActivityTracker>();
         services.AddSingleton<SessionCapabilitiesResolver>();
 
-        // SessionRecapService is singleton — owns per-session recap timers and which tabs are looking.
+        // Which tabs are looking at which session: the recap waits on it, notifications keep quiet about it.
+        services.AddSingleton<SessionFocusTracker>();
+
+        // SessionRecapService is singleton — owns per-session recap timers.
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<IRecapPreference, RecapPreference>();
         services.AddSingleton<SessionRecapService>();
+
+        // SessionNotifier is singleton — remembers each session's last activity status between events.
+        services.AddSingleton<INotificationPreference, NotificationPreference>();
+        services.AddSingleton<SessionNotifier>();
 
         // EventBroadcaster is singleton — pub/sub hub shared across all requests
         services.AddSingleton<IEventBroadcaster, InMemoryEventBroadcaster>();

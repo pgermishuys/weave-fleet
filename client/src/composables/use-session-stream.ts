@@ -62,10 +62,12 @@ function deriveSessionStatus(activityStatus: string, currentSessionStatus?: stri
   switch (activityStatus) {
     case "idle":
       return "idle"
+    // A session stopped on a question needs the user, so it gets its own status rather than "active".
+    case "waiting_input":
+      return "waiting_input"
     case "busy":
     case "delegating":
     case "retry":
-    case "waiting_input":
       return "active"
     default:
       // Unknown activity status — default to active to be safe

@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Repositories;
 
@@ -30,6 +31,7 @@ public sealed partial class SessionRecapService(
     IHarnessRegistry harnessRegistry,
     IEventBroadcaster eventBroadcaster,
     IRecapPreference preference,
+    SessionFocusTracker focusTracker,
     IServiceScopeFactory scopeFactory,
     TimeProvider timeProvider,
     ILogger<SessionRecapService> logger)
@@ -59,9 +61,6 @@ public sealed partial class SessionRecapService(
 
     private readonly ConcurrentDictionary<string, SessionState> _sessions = new(StringComparer.Ordinal);
 
-    // connection id → the session that tab is looking at
-    private readonly ConcurrentDictionary<string, string> _focus = new(StringComparer.Ordinal);
-
     /// <summary>The session's recap, if Fleet wrote one and no prompt has been sent since.</summary>
     public SessionRecapPayload? Get(string sessionId)
     {
@@ -80,39 +79,25 @@ public sealed partial class SessionRecapService(
     /// </summary>
     public void SetFocus(string connectionId, string sessionId, bool focused)
     {
-        if (focused)
+        var left = focusTracker.SetFocus(connectionId, sessionId, focused);
+
+        if (focused && _sessions.TryGetValue(sessionId, out var state))
         {
-            string? previous = null;
-            _focus.AddOrUpdate(connectionId, sessionId, (_, old) =>
+            lock (state)
             {
-                previous = old;
-                return sessionId;
-            });
-
-            if (_sessions.TryGetValue(sessionId, out var state))
-            {
-                lock (state)
-                {
-                    // Claude Code abandons a recap you came back before; you can read the conversation.
-                    state.CancelPending();
-                }
+                // Claude Code abandons a recap you came back before; you can read the conversation.
+                state.CancelPending();
             }
-
-            // Switching sessions in one tab is leaving the one you were on.
-            if (previous is not null && !string.Equals(previous, sessionId, StringComparison.Ordinal))
-                ScheduleIfAway(previous);
-
-            return;
         }
 
-        if (_focus.TryRemove(new KeyValuePair<string, string>(connectionId, sessionId)))
-            ScheduleIfAway(sessionId);
+        if (left is not null)
+            ScheduleIfAway(left);
     }
 
     /// <summary>Forgets a disconnected tab, which counts as looking away.</summary>
     public void RemoveConnection(string connectionId)
     {
-        if (_focus.TryRemove(connectionId, out var sessionId))
+        if (focusTracker.RemoveConnection(connectionId) is { } sessionId)
             ScheduleIfAway(sessionId);
     }
 
@@ -174,11 +159,9 @@ public sealed partial class SessionRecapService(
         }
     }
 
-    private bool IsWatched(string sessionId) => _focus.Values.Contains(sessionId, StringComparer.Ordinal);
-
     private void ScheduleIfAway(string sessionId)
     {
-        if (IsWatched(sessionId) || !_sessions.TryGetValue(sessionId, out var state))
+        if (focusTracker.IsWatched(sessionId) || !_sessions.TryGetValue(sessionId, out var state))
             return;
 
         lock (state)
@@ -214,7 +197,7 @@ public sealed partial class SessionRecapService(
                 || timeProvider.GetUtcNow() - turnEndedAt >= CacheWindow
                 || state.Failures >= MaxFailuresPerTurn
                 || !state.HasEnoughPrompts
-                || IsWatched(sessionId))
+                || focusTracker.IsWatched(sessionId))
             {
                 return;
             }

@@ -535,6 +535,62 @@ describe("activity_status sessionStatus mapping", () => {
     expect(session?.sessionStatus).toBe("active")
   })
 
+  it("maps activityStatus 'waiting_input' to sessionStatus 'waiting_input'", async () => {
+    const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
+    const { useSessionActivityUpdates } = await import("@/composables/use-session-activity-updates")
+    const { useSessionsStore } = await import("@/stores/sessions")
+
+    await mountComposable(() => {
+      useWeaveSocket()
+      useSessionActivityUpdates()
+    })
+    await flushAll()
+
+    const sessionsStore = useSessionsStore()
+    sessionsStore.setSessions([{
+      session: { id: "test-session", title: "Test", time: { created: 1000, updated: 1000 }, tags: [] },
+      sessionStatus: "idle",
+      activityStatus: "idle",
+      lifecycleStatus: "running",
+      retentionStatus: "active",
+      instanceId: "inst-1",
+      workspaceId: "ws-1",
+      workspaceDirectory: "/test",
+      workspaceDisplayName: null,
+      isolationStrategy: "existing",
+      instanceStatus: "running",
+      parentSessionId: null,
+      sourceDirectory: null,
+      branch: null,
+      archivedAt: null,
+      typedInstanceStatus: "running",
+      isHidden: false,
+      totalTokens: null,
+      totalCost: null,
+      projectId: null,
+      projectName: null,
+      harnessType: "opencode",
+      capabilities: createCapabilities({ canAbort: true }),
+      tags: [],
+    }])
+
+    const wireEvent = {
+      type: "activity_status",
+      properties: {
+        sessionId: "test-session",
+        activityStatus: "waiting_input",
+        capabilities: createCapabilities({ canAbort: true }),
+      },
+    }
+
+    eventHandler?.("sessions", 31, wireEvent)
+    await flushAll()
+
+    const session = sessionsStore.sessions.find((s) => s.session.id === "test-session")
+    expect(session?.activityStatus).toBe("waiting_input")
+    expect(session?.sessionStatus).toBe("waiting_input")
+  })
+
   it("maps activityStatus 'retry' to sessionStatus 'active'", async () => {
     const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
     const { useSessionActivityUpdates } = await import("@/composables/use-session-activity-updates")

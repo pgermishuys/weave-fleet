@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Shouldly;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Application.Tests.Services;
 
@@ -257,6 +258,49 @@ public sealed class SessionActivityTrackerTests
         var sut = new SessionActivityTracker();
 
         Should.NotThrow(() => sut.UnregisterChild("nonexistent"));
+    }
+
+    [Fact]
+    public void GetEffectiveActivityStatus_WhenStoppedOnAQuestion_SaysSoRatherThanBusy()
+    {
+        var sut = new SessionActivityTracker();
+        sut.Update("session-1", ActivityStatuses.WaitingInput, "user-1");
+
+        sut.GetEffectiveActivityStatus("session-1").ShouldBe(ActivityStatuses.WaitingInput);
+    }
+
+    [Fact]
+    public void GetEffectiveActivityStatus_WhenAChildIsStoppedOnAQuestion_SaysSoOnTheParent()
+    {
+        var sut = new SessionActivityTracker();
+        sut.RegisterChild("child-1", "parent-1");
+        sut.Update("parent-1", ActivityStatuses.Idle, "user-1");
+        sut.Update("child-1", ActivityStatuses.WaitingInput, "user-1");
+
+        sut.GetEffectiveActivityStatus("parent-1").ShouldBe(ActivityStatuses.WaitingInput);
+    }
+
+    [Fact]
+    public void GetEffectiveActivityStatus_WhenTheParentIsStoppedOnAQuestion_OutranksABusyChild()
+    {
+        var sut = new SessionActivityTracker();
+        sut.RegisterChild("child-1", "parent-1");
+        sut.Update("parent-1", ActivityStatuses.WaitingInput, "user-1");
+        sut.Update("child-1", ActivityStatuses.Busy, "user-1");
+
+        sut.GetEffectiveActivityStatus("parent-1").ShouldBe(ActivityStatuses.WaitingInput);
+    }
+
+    [Theory]
+    [InlineData(ActivityStatuses.Busy, true, true)]
+    [InlineData(ActivityStatuses.Retry, true, true)]
+    [InlineData(ActivityStatuses.WaitingInput, false, true)]
+    [InlineData(ActivityStatuses.Idle, false, false)]
+    [InlineData(null, false, false)]
+    public void WaitingOnAnAnswerIsInATurnWithoutWorking(string? status, bool working, bool inTurn)
+    {
+        SessionActivityTracker.IsWorking(status).ShouldBe(working);
+        SessionActivityTracker.IsInTurn(status).ShouldBe(inTurn);
     }
 
     [Fact]

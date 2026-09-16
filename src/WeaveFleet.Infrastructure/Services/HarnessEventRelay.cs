@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Recaps;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
@@ -81,6 +82,7 @@ public sealed class HarnessEventRelay : BackgroundService
     private readonly SmartLinkDetector? _smartLinkDetector;
     private readonly SessionProgressObserver? _progressObserver;
     private readonly SessionRecapService? _recaps;
+    private readonly SessionNotifier? _notifier;
     private CancellationToken _stoppingToken;
 
     /// <summary>
@@ -98,7 +100,8 @@ public sealed class HarnessEventRelay : BackgroundService
         ILogger<HarnessEventRelay> logger,
         SmartLinkDetector? smartLinkDetector = null,
         SessionProgressObserver? progressObserver = null,
-        SessionRecapService? recaps = null)
+        SessionRecapService? recaps = null,
+        SessionNotifier? notifier = null)
     {
         _tracker = tracker;
         _broadcaster = broadcaster;
@@ -109,6 +112,7 @@ public sealed class HarnessEventRelay : BackgroundService
         _smartLinkDetector = smartLinkDetector;
         _progressObserver = progressObserver;
         _recaps = recaps;
+        _notifier = notifier;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -366,6 +370,7 @@ public sealed class HarnessEventRelay : BackgroundService
                             parsedStatus.RetryMessage,
                             parsedStatus.RetryNext);
                         _recaps?.OnActivityChanged(targetFleetSessionId, parsedStatus.Status);
+                        _notifier?.OnActivityChanged(targetFleetSessionId, parsedStatus.Status);
 
                         await _broadcaster.BroadcastAsync(
                             "sessions",
@@ -412,6 +417,10 @@ public sealed class HarnessEventRelay : BackgroundService
             // the relay (the only code that knows when a pump ends).
             _activityTracker.Remove(fleetSessionId);
             _activityTracker.ClearPromptTraceContext(fleetSessionId);
+
+            // A pump that ends is a harness going away, not a turn finishing: forget what the session was
+            // doing rather than call its next idle the end of a turn.
+            _notifier?.Forget(fleetSessionId);
             await _broadcaster.BroadcastAsync(
                 "sessions",
                 "activity_status",
