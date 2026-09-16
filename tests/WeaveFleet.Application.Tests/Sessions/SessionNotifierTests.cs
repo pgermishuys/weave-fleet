@@ -152,6 +152,19 @@ public sealed class SessionNotifierTests
         _broadcaster.Broadcasts.ShouldBeEmpty();
     }
 
+    [Fact]
+    public async Task a_turn_it_only_learns_about_on_reconnect_still_counts_as_finished()
+    {
+        // The relay forgets a session when its pump ends and re-reads the harness when a new one starts.
+        await ChangeAsync(ActivityStatuses.Busy);
+        _sut.Forget(SessionId);
+        await ChangeAsync(ActivityStatuses.Busy);
+
+        await ChangeAsync(ActivityStatuses.Idle);
+
+        Payload(Single()).Reason.ShouldBe(SessionNotificationReasons.Finished);
+    }
+
     private async Task ChangeAsync(string activityStatus, string sessionId = SessionId)
     {
         _sut.OnActivityChanged(sessionId, activityStatus);

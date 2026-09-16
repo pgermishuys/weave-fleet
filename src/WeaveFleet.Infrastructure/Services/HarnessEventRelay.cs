@@ -574,6 +574,10 @@ public sealed class HarnessEventRelay : BackgroundService
                 // Update tracker and broadcast correction
                 _activityTracker.Update(fleetSessionId, currentActivityStatus, sessionUserId);
                 _recaps?.OnActivityChanged(fleetSessionId, currentActivityStatus);
+
+                // The notifier forgot this session when its last pump ended: this is how it learns the turn
+                // is still running, so the end of that turn is still worth telling you about.
+                _notifier?.OnActivityChanged(fleetSessionId, currentActivityStatus);
                 await _broadcaster.BroadcastAsync(
                     "sessions",
                     "activity_status",
