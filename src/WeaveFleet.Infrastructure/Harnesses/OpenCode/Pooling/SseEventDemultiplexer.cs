@@ -36,6 +36,10 @@ internal sealed class SseEventDemultiplexer : IAsyncDisposable
     private const string MissingSessionIdReason = "missing_session_id";
     private const string UnboundSessionIdReason = "unbound_session_id";
     private const string UnregisteredConsumerReason = "unregistered_consumer";
+    private const string NoSessionId = "(none)";
+
+    // Bounds each stream's memory of which drops it has already warned about.
+    private const int MaxWarnedDropsPerStream = 1024;
 
     private static readonly Counter<long> DroppedUnattributableEvents = FleetInstrumentation.Meter.CreateCounter<long>(
         "weave_fleet.opencode.sse.unattributable_events.dropped",
@@ -47,11 +51,17 @@ internal sealed class SseEventDemultiplexer : IAsyncDisposable
         "events",
         "OpenCode SSE file watcher events routed to all consumers on a directory stream.");
 
-    private static readonly Action<ILogger, string, string, Exception?> LogDroppedUnattributableEvent =
-        LoggerMessage.Define<string, string>(
+    private static readonly Action<ILogger, string, string, string, string, string, Exception?> LogDroppedUnattributableEvent =
+        LoggerMessage.Define<string, string, string, string, string>(
             LogLevel.Warning,
             new EventId(1, "DroppedUnattributableEvent"),
-            "Dropped unattributable OpenCode SSE event of type {EventType}; reason: {Reason}.");
+            "Dropped unattributable OpenCode SSE event of type {EventType} for OpenCode session {OpenCodeSessionId} on instance {InstanceId} and directory {Directory}; reason: {Reason}. Further drops for this session on this stream are logged at debug level.");
+
+    private static readonly Action<ILogger, string, string, string, string, string, Exception?> LogDroppedUnattributableEventRepeat =
+        LoggerMessage.Define<string, string, string, string, string>(
+            LogLevel.Debug,
+            new EventId(4, "DroppedUnattributableEventRepeat"),
+            "Dropped unattributable OpenCode SSE event of type {EventType} for OpenCode session {OpenCodeSessionId} on instance {InstanceId} and directory {Directory}; reason: {Reason}.");
 
     private static readonly Action<ILogger, string, string, Exception?> LogStreamRestart =
         LoggerMessage.Define<string, string>(
@@ -294,7 +304,7 @@ internal sealed class SseEventDemultiplexer : IAsyncDisposable
         var openCodeSessionId = OpenCodeMapper.TryResolveSessionId(evt);
         if (string.IsNullOrWhiteSpace(openCodeSessionId))
         {
-            RecordDroppedUnattributableEvent(evt, MissingSessionIdReason);
+            RecordDroppedUnattributableEvent(entry, evt, null, MissingSessionIdReason);
             return;
         }
 
@@ -305,7 +315,7 @@ internal sealed class SseEventDemultiplexer : IAsyncDisposable
                 out var consumerId,
                 out var leaseGeneration))
         {
-            RecordDroppedUnattributableEvent(evt, UnboundSessionIdReason);
+            RecordDroppedUnattributableEvent(entry, evt, openCodeSessionId, UnboundSessionIdReason);
             return;
         }
 
@@ -314,20 +324,20 @@ internal sealed class SseEventDemultiplexer : IAsyncDisposable
         {
             if (!entry.Consumers.TryGetValue(consumerId, out consumerEntry))
             {
-                RecordDroppedUnattributableEvent(evt, UnregisteredConsumerReason);
+                RecordDroppedUnattributableEvent(entry, evt, openCodeSessionId, UnregisteredConsumerReason);
                 return;
             }
         }
 
         if (consumerEntry.LeaseGeneration != leaseGeneration)
         {
-            RecordDroppedUnattributableEvent(evt, UnregisteredConsumerReason);
+            RecordDroppedUnattributableEvent(entry, evt, openCodeSessionId, UnregisteredConsumerReason);
             return;
         }
 
         if (!consumerEntry.Channel.Writer.TryWrite(evt))
         {
-            RecordDroppedUnattributableEvent(evt, UnregisteredConsumerReason);
+            RecordDroppedUnattributableEvent(entry, evt, openCodeSessionId, UnregisteredConsumerReason);
         }
     }
 
@@ -371,14 +381,33 @@ internal sealed class SseEventDemultiplexer : IAsyncDisposable
         entry.Cancellation.Cancel();
     }
 
-    private void RecordDroppedUnattributableEvent(OpenCodeSseEvent evt, string reason)
+    private void RecordDroppedUnattributableEvent(
+        DirectoryStreamEntry entry,
+        OpenCodeSseEvent evt,
+        string? openCodeSessionId,
+        string reason)
     {
         Interlocked.Increment(ref _droppedUnattributableEventCount);
         DroppedUnattributableEvents.Add(1, new KeyValuePair<string, object?>("reason", reason));
-        LogDroppedUnattributableEvent(_logger, evt.Type, reason, null);
+
+        // One unbound session drops every event of its turn, so warn once per session and stream
+        // and keep the rest at debug. The session, instance and directory say whose events these are:
+        // a stopped session OpenCode is still running, a subagent, or a directory spelled differently.
+        var sessionId = string.IsNullOrWhiteSpace(openCodeSessionId) ? NoSessionId : openCodeSessionId;
+        var instanceId = entry.Key.Instance.InstanceId;
+        if (entry.TryMarkDropWarned(new DroppedEventKey(sessionId, reason)))
+        {
+            LogDroppedUnattributableEvent(_logger, evt.Type, sessionId, instanceId, entry.Key.Directory, reason, null);
+        }
+        else
+        {
+            LogDroppedUnattributableEventRepeat(_logger, evt.Type, sessionId, instanceId, entry.Key.Directory, reason, null);
+        }
     }
 
     private readonly record struct DirectoryStreamKey(PooledOpenCodeInstance Instance, string Directory);
+
+    private readonly record struct DroppedEventKey(string OpenCodeSessionId, string Reason);
 
     private sealed class DirectoryStreamEntry
     {
@@ -400,6 +429,21 @@ internal sealed class SseEventDemultiplexer : IAsyncDisposable
         public Task Pump { get; set; } = Task.CompletedTask;
 
         private TaskCompletionSource ActiveStreamReady { get; set; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private HashSet<DroppedEventKey> WarnedDrops { get; } = new();
+
+        public bool TryMarkDropWarned(DroppedEventKey key)
+        {
+            lock (Sync)
+            {
+                if (WarnedDrops.Count >= MaxWarnedDropsPerStream && !WarnedDrops.Contains(key))
+                {
+                    WarnedDrops.Clear();
+                }
+
+                return WarnedDrops.Add(key);
+            }
+        }
 
         public Task WaitForActiveStreamAsync()
         {

@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Threading.Channels;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
@@ -85,6 +86,53 @@ public sealed class SseEventDemultiplexerTests
         await thirdRegistration.DisposeAsync();
         await streamFactory.WaitForCancellationAsync(instance, "/repo/two", 1);
         streamFactory.ActiveSubscriptionCount(instance, "/repo/two").ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task unbound_session_drops_warn_once_per_session_with_session_instance_and_directory()
+    {
+        var instance = CreateInstance();
+        var consumerId = Guid.NewGuid();
+        var resolver = new FakeBindingResolver();
+        var streamFactory = new FakeStreamFactory();
+        var logger = new CapturingLogger<SseEventDemultiplexer>();
+        await using var demultiplexer = new SseEventDemultiplexer(
+            resolver,
+            streamFactory,
+            logger,
+            TimeSpan.Zero,
+            TimeSpan.Zero);
+
+        var consumer = Channel.CreateUnbounded<OpenCodeSseEvent>();
+        await using var registration = await demultiplexer.RegisterConsumerAsync(instance, "/repo/one", consumerId, consumer, CancellationToken.None);
+        var stream = await streamFactory.WaitForSubscriptionAsync(instance, "/repo/one", 1);
+
+        await stream.WriteAsync(CreateEvent("message.part.delta", "oc-orphan"));
+        await stream.WriteAsync(CreateEvent("message.part.updated", "oc-orphan"));
+        await stream.WriteAsync(CreateEvent("session.status", "oc-orphan"));
+        await stream.WriteAsync(CreateEvent("message.updated", "oc-other"));
+
+        await WaitForDroppedCountAsync(demultiplexer, 4);
+        // The count is bumped just before the drop is logged, so the last entry can trail it.
+        var timeoutAt = DateTimeOffset.UtcNow.AddSeconds(5);
+        while (logger.Entries.Count < 4 && DateTimeOffset.UtcNow < timeoutAt)
+        {
+            await Task.Delay(10);
+        }
+
+        var drops = logger.Entries.Where(e => e.EventId.Name is "DroppedUnattributableEvent" or "DroppedUnattributableEventRepeat").ToList();
+        drops.Count.ShouldBe(4);
+
+        var warnings = drops.Where(e => e.LogLevel == LogLevel.Warning).ToList();
+        warnings.Select(e => e.Values["OpenCodeSessionId"]).ShouldBe(["oc-orphan", "oc-other"]);
+        warnings.ShouldAllBe(e => (string?)e.Values["InstanceId"] == "instance-1"
+            && (string?)e.Values["Directory"] == "/repo/one"
+            && (string?)e.Values["Reason"] == "unbound_session_id");
+        warnings[0].Values["EventType"].ShouldBe("message.part.delta");
+
+        drops.Where(e => e.LogLevel == LogLevel.Debug)
+            .Select(e => e.Values["EventType"])
+            .ShouldBe(["message.part.updated", "session.status"]);
     }
 
     [Fact]
@@ -473,6 +521,43 @@ public sealed class SseEventDemultiplexerTests
 
         demultiplexer.DroppedUnattributableEventCount.ShouldBe(count);
     }
+
+    private sealed class CapturingLogger<T> : ILogger<T>
+    {
+        public ConcurrentQueue<CapturedLogEntry> Entries { get; } = new();
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull
+        {
+            return null;
+        }
+
+        public bool IsEnabled(LogLevel logLevel)
+        {
+            return true;
+        }
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            var values = new Dictionary<string, object?>(StringComparer.Ordinal);
+            if (state is IEnumerable<KeyValuePair<string, object?>> stateValues)
+            {
+                foreach (var stateValue in stateValues)
+                {
+                    values[stateValue.Key] = stateValue.Value;
+                }
+            }
+
+            Entries.Enqueue(new CapturedLogEntry(logLevel, eventId, values));
+        }
+    }
+
+    private sealed record CapturedLogEntry(LogLevel LogLevel, EventId EventId, IReadOnlyDictionary<string, object?> Values);
 
     private sealed class FakeBindingResolver : IOpenCodeSseEventBindingResolver
     {
