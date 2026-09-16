@@ -5,6 +5,7 @@ using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using WeaveFleet.Application.Recaps;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
@@ -26,6 +27,7 @@ public sealed class SessionRecapServiceTests : IAsyncDisposable
     private readonly FakeHarnessRegistry _harnesses = new();
     private readonly FakeHarnessSession _harness = new("inst-1") { OffTheRecordAnswer = Answer };
     private readonly FakeRecapPreference _preference = new() { Enabled = true };
+    private readonly SessionFocusTracker _focus = new();
     private readonly FakeHarness _openCode = new("opencode", "OpenCode", new HarnessCapabilities { SupportsOffTheRecordPrompt = true });
     private readonly SessionRecapService _sut;
 
@@ -41,6 +43,7 @@ public sealed class SessionRecapServiceTests : IAsyncDisposable
             _harnesses,
             _broadcaster,
             _preference,
+            _focus,
             TestServiceScopeFactory.Create(services => services.AddSingleton<ISessionRepository>(sessions)),
             _clock,
             NullLogger<SessionRecapService>.Instance);

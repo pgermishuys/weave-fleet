@@ -1,6 +1,7 @@
 import { computed, onBeforeUnmount, shallowRef, toValue, watch, type MaybeRefOrGetter, type Ref } from "vue";
 import { isSessionRecapEvent, type SessionRecapPayload } from "@/lib/domain-events";
 import { setSessionFocus, useWeaveSocket } from "@/composables/use-weave-socket";
+import { DESKTOP_NOTIFICATIONS_PREFERENCE_KEY } from "@/composables/use-session-notifications";
 import { usePreferencesStore } from "@/stores/preferences";
 
 /** The Settings → Features switch for session recaps. Off unless turned on. */
@@ -18,10 +19,11 @@ function isLooking(): boolean {
 }
 
 /**
- * The open session's recap, and whether you're looking at it. Fleet writes a
- * recap a few minutes after a turn ends while no tab is looking at the
- * session, so this tells the server when this tab is visible and focused on
- * it. Nothing is reported unless Session recap is on in Settings.
+ * The open session's recap, and whether you're looking at it. Two things wait on
+ * that: Fleet writes a recap a few minutes after a turn ends while no tab is
+ * looking at the session, and it sends a desktop notification when a session you
+ * left needs you. So this tells the server when this tab is visible and focused
+ * on the session, as long as one of the two is on in Settings.
  */
 export function useSessionRecap(
   sessionId: MaybeRefOrGetter<string | null | undefined>,
@@ -30,7 +32,9 @@ export function useSessionRecap(
   preferences.ensureLoaded();
   const { subscribeV2 } = useWeaveSocket();
   const recap = shallowRef<SessionRecapPayload | null>(null);
-  const enabled = computed(() => preferences.get(SESSION_RECAP_PREFERENCE_KEY, "false") === "true");
+  const enabled = computed(() =>
+    preferences.get(SESSION_RECAP_PREFERENCE_KEY, "false") === "true"
+    || preferences.get(DESKTOP_NOTIFICATIONS_PREFERENCE_KEY, "false") === "true");
 
   // The session the server has a subscription for, and what it was last told.
   let subscribedId: string | null = null;

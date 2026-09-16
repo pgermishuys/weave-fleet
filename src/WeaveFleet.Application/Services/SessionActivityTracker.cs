@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Application.Services;
 
@@ -110,8 +111,9 @@ public sealed class SessionActivityTracker
 
     /// <summary>
     /// Returns the effective activity status for <paramref name="sessionId"/>.
-    /// Returns <c>"busy"</c> if the session itself is busy <em>or</em> any registered
-    /// child session is busy. Returns <c>null</c> if the session is not tracked.
+    /// Returns <c>"busy"</c> if the session itself is busy <em>or</em> any registered child session is busy,
+    /// and <c>"waiting_input"</c> if it, or a child, is stopped on a question.
+    /// Returns <c>null</c> if the session is not tracked.
     /// </summary>
     /// <remarks>
     /// This parent-child propagation applies to Fleet DelegationService delegations (separate
@@ -122,20 +124,28 @@ public sealed class SessionActivityTracker
     public string? GetEffectiveActivityStatus(string sessionId)
     {
         var own = Get(sessionId);
-        if (own?.ActivityStatus == "busy")
-            return "busy";
+        if (own?.ActivityStatus == ActivityStatuses.Busy)
+            return ActivityStatuses.Busy;
 
+        // A pending question outranks a busy child: the work can't finish until the user answers.
+        if (own?.ActivityStatus == ActivityStatuses.WaitingInput)
+            return ActivityStatuses.WaitingInput;
+
+        var childNeedsUser = false;
         if (_parentToChildren.TryGetValue(sessionId, out var children))
         {
             foreach (var childId in children.Keys)
             {
-                var child = Get(childId);
-                if (IsWorking(child?.ActivityStatus))
-                    return "busy";
+                var child = Get(childId)?.ActivityStatus;
+                if (IsWorking(child))
+                    return ActivityStatuses.Busy;
+
+                // A child stopped on a question stops its parent too, and only the parent is on the dashboard.
+                childNeedsUser |= child == ActivityStatuses.WaitingInput;
             }
         }
 
-        return own?.ActivityStatus;
+        return childNeedsUser ? ActivityStatuses.WaitingInput : own?.ActivityStatus;
     }
 
     /// <summary>
@@ -143,7 +153,14 @@ public sealed class SessionActivityTracker
     /// limit). A retrying session hasn't finished, so it must never read as idle.
     /// </summary>
     public static bool IsWorking(string? activityStatus)
-        => activityStatus is "busy" or "retry";
+        => activityStatus is ActivityStatuses.Busy or ActivityStatuses.Retry;
+
+    /// <summary>
+    /// True while a session is in a turn, including one stopped on a question. A session waiting on an answer
+    /// isn't working, but its turn hasn't ended either: it can still be aborted, and it isn't finished.
+    /// </summary>
+    public static bool IsInTurn(string? activityStatus)
+        => IsWorking(activityStatus) || activityStatus is ActivityStatuses.WaitingInput;
 
     /// <summary>
     /// Returns a snapshot of all currently tracked session activity states.

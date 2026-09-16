@@ -121,7 +121,8 @@ public sealed class SessionService(
         foreach (var session in activeSessions)
         {
             var effectiveStatus = activityTracker.GetEffectiveActivityStatus(session.Id) ?? "idle";
-            if (SessionActivityTracker.IsWorking(effectiveStatus))
+            // A session stopped on a question is mid-turn, not idle.
+            if (SessionActivityTracker.IsInTurn(effectiveStatus))
                 activeCount++;
             else
                 idleCount++;
