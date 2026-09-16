@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Tests.Canvases;
@@ -20,6 +21,7 @@ public sealed class BrowserBridgeTests : IDisposable
     private readonly ScopedUser _user = new();
     private readonly FakeCallers _callers = new();
     private readonly FakeAppRunner _apps = new();
+    private readonly FakeScreenshotter _shots = new();
     private readonly BrowserBridge _bridge;
 
     public BrowserBridgeTests()
@@ -30,7 +32,7 @@ public sealed class BrowserBridgeTests : IDisposable
         _callers.Add(Token, OpenCodeSessionId, new HarnessCanvasCaller(SessionId, Owner));
         var canvases = new CanvasService(_canvasRepository, new FakeEventBroadcaster(), _user);
         var apps = new AppRunService(_apps, _runs, _sessions, _user);
-        _bridge = new BrowserBridge(_callers, _user, new BrowserPreviews(canvases, apps), apps);
+        _bridge = new BrowserBridge(_callers, _user, new BrowserPreviews(canvases, apps), apps, canvases, _shots);
     }
 
     public void Dispose() => _folder.Delete(recursive: true);
@@ -166,6 +168,122 @@ public sealed class BrowserBridgeTests : IDisposable
         var opened = await _bridge.BrowserOpenAsync(Token, OpenCodeSessionId, "", "Page");
 
         opened.Error!.Message.ShouldBe(LoopbackUrl.Requirement);
+    }
+
+    [Fact]
+    public async Task A_screenshot_shoots_the_page_the_canvas_shows_and_comes_back_as_an_image()
+    {
+        var canvasId = await ShownAppAsync();
+
+        var shot = await _bridge.ScreenshotAsync(Token, OpenCodeSessionId, canvasId, "", "desktop");
+
+        _shots.Requests.ShouldHaveSingleItem().ShouldBe(new ScreenshotRequest("http://localhost:5173/", 1280, 800));
+        var image = shot.Value!.Attachments.ShouldHaveSingleItem();
+        image.Mime.ShouldBe("image/png");
+        image.FileName.ShouldBe("screenshot.png");
+        image.Content.ShouldBe(_shots.NextPng);
+        shot.Value.Title.ShouldBe("Shop · 1280×800");
+        shot.Value.CanvasId.ShouldBe(canvasId);
+        shot.Value.Output.ShouldStartWith("Screenshot of http://localhost:5173/ at 1280×800, from \"Shop\"");
+    }
+
+    [Fact]
+    public async Task A_phone_screenshot_uses_the_narrow_window()
+    {
+        var canvasId = await ShownAppAsync();
+
+        var shot = await _bridge.ScreenshotAsync(Token, OpenCodeSessionId, canvasId, "", "phone");
+
+        _shots.Requests.ShouldHaveSingleItem().ShouldBe(new ScreenshotRequest("http://localhost:5173/", 390, 844));
+        shot.Value!.Title.ShouldBe("Shop · 390×844");
+    }
+
+    [Fact]
+    public async Task A_path_shoots_another_page_of_the_same_app_without_moving_the_canvas()
+    {
+        var canvasId = await ShownAppAsync();
+
+        await _bridge.ScreenshotAsync(Token, OpenCodeSessionId, canvasId, "/settings?tab=theme", "desktop");
+
+        _shots.Requests.ShouldHaveSingleItem().Url.ShouldBe("http://localhost:5173/settings?tab=theme");
+        var canvas = (await _canvasRepository.ListBySessionIdAsync(SessionId)).ShouldHaveSingleItem();
+        BrowserState.Parse(canvas.StateJson).Url.ShouldBe("http://localhost:5173/");
+    }
+
+    [Theory]
+    [InlineData("https://example.com/")]
+    [InlineData("//example.com/")]
+    public async Task A_path_that_leaves_this_machine_is_refused(string path)
+    {
+        var canvasId = await ShownAppAsync();
+
+        var shot = await _bridge.ScreenshotAsync(Token, OpenCodeSessionId, canvasId, path, "desktop");
+
+        shot.Error!.Message.ShouldBe(LoopbackUrl.Requirement);
+        _shots.Requests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task An_unknown_viewport_says_which_ones_there_are()
+    {
+        var canvasId = await ShownAppAsync();
+
+        var shot = await _bridge.ScreenshotAsync(Token, OpenCodeSessionId, canvasId, "", "retina");
+
+        shot.Error!.Message.ShouldBe(ScreenshotViewports.Requirement);
+        _shots.Requests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_screenshot_of_an_app_that_stopped_says_so_with_its_last_output()
+    {
+        var canvasId = await ShownAppAsync();
+        _apps.NextLogs.Add("error: listen EADDRINUSE");
+        await _apps.StopAsync(_apps.Started.ShouldHaveSingleItem().Id);
+
+        var shot = await _bridge.ScreenshotAsync(Token, OpenCodeSessionId, canvasId, "", "desktop");
+
+        shot.Error!.Kind.ShouldBe(CanvasErrorKind.Invalid);
+        shot.Error.Message.ShouldStartWith("The app in this canvas isn't running (stopped), so there's no page to shoot. Start it again with fleet_app_start.");
+        _shots.Requests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_screenshot_of_a_diagram_canvas_says_to_open_a_page_first()
+    {
+        var canvases = new CanvasService(_canvasRepository, new FakeEventBroadcaster(), _user);
+        var diagram = await canvases.OpenAsync(SessionId, CanvasKinds.Sequence, "Flow", JsonNode.Parse("{\"source\":\"sequenceDiagram\"}"));
+
+        var shot = await _bridge.ScreenshotAsync(Token, OpenCodeSessionId, diagram.Value!.Canvas.Id, "", "desktop");
+
+        shot.Error!.Message.ShouldBe($"\"Flow\" ({diagram.Value.Canvas.Id}) is a sequence canvas. Screenshots are of pages: use fleet_app_start or fleet_browser_open first.");
+    }
+
+    [Fact]
+    public async Task A_screenshot_without_a_browser_on_the_machine_says_what_to_install()
+    {
+        var canvasId = await ShownAppAsync();
+        _shots.NextProblem = "No Chrome, Edge or Chromium on this machine, so Fleet can't take screenshots.";
+
+        var shot = await _bridge.ScreenshotAsync(Token, OpenCodeSessionId, canvasId, "", "desktop");
+
+        shot.Error!.Message.ShouldBe(_shots.NextProblem);
+    }
+
+    [Fact]
+    public async Task A_screenshot_of_a_canvas_in_another_session_is_not_found()
+    {
+        var shot = await _bridge.ScreenshotAsync(Token, OpenCodeSessionId, "cv_other", "", "desktop");
+
+        shot.Error!.Kind.ShouldBe(CanvasErrorKind.NotFound);
+        shot.Error.Message.ShouldBe("No canvas cv_other in this session.");
+    }
+
+    /// <summary>A canvas showing a running app, the way fleet_app_start leaves one.</summary>
+    private async Task<string> ShownAppAsync()
+    {
+        var started = await _bridge.AppStartAsync(Token, OpenCodeSessionId, "bun run dev", "Shop");
+        return started.Value!.CanvasId!;
     }
 
     [Fact]

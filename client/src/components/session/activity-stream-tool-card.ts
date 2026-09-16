@@ -23,8 +23,8 @@ export interface ToolCardItem {
   canvasId?: string;
 }
 
-/** Fleet's browser tools; their card reads "title · address" once the page answered. */
-const BROWSER_TOOLS = new Set(["fleet_app_start", "fleet_browser_open"]);
+/** Fleet's browser tools; their card reads "title · address" once the page answered, or "title · size" for a shot. */
+const BROWSER_TOOLS = new Set(["fleet_app_start", "fleet_browser_open", "fleet_browser_screenshot"]);
 
 const tool_output_keys = ["output", "result", "content", "error", "message", "stdout", "stderr"] as const;
 const fallback_excluded_keys = new Set(["input", "status", "summary", "title", "diff", "diffLines", "patch"]);

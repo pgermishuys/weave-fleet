@@ -30,6 +30,10 @@ shell in the background: they never exit, and the user can't see them.
 Then check what you changed, not just that the page loads:
 
 - request the endpoint or page you changed: `curl -si http://localhost:5173/api/items?page=2`
+- if you changed the UI, **look at it**: `fleet_browser_screenshot` on the app's canvas hands you the page as an
+  image. Take one, read it, fix what's wrong, take another. Pass `viewport: "phone"` to check a narrow layout.
+  Each shot costs context (roughly 1,400 tokens for desktop, 500 for phone), so shoot the page you changed,
+  not every page.
 - `fleet_canvas_read` on the app's canvas shows its status and recent output, including errors and stack traces
 - after more changes, call `fleet_app_start` again with the same command to restart it, unless the dev server
   reloads by itself

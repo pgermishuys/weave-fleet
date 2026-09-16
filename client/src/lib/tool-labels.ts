@@ -78,6 +78,12 @@ export function getToolLabel(
       return title || toolName;
     }
 
+    case "fleet_browser_screenshot": {
+      const viewport = typeof input?.viewport === "string" && input.viewport ? input.viewport : "desktop";
+      const path = typeof input?.path === "string" && input.path ? ` ${truncate(input.path, 40)}` : "";
+      return `screenshot${path} (${viewport})`;
+    }
+
     case "webfetch": {
       if (typeof input?.url === "string" && input.url) {
         return input.url;

@@ -184,6 +184,7 @@ public static class DependencyInjection
         services.AddScoped<AppRunService>();
         services.AddScoped<AppRunRecorder>();
         services.AddHostedService<AppRunRecorderService>();
+        services.AddSingleton<IScreenshotter, HeadlessChromeScreenshotter>();
         services.AddScoped<BrowserPreviews>();
         services.AddScoped<BrowserBridge>();
         services.AddSingleton<IBackgroundUserScope, BackgroundUserScope>();
