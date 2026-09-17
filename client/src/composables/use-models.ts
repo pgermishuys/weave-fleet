@@ -1,5 +1,5 @@
 import { storeToRefs } from "pinia";
-import { computed, readonly, ref, shallowRef, watch } from "vue";
+import { computed, readonly, ref, shallowRef, toValue, watch, type MaybeRefOrGetter } from "vue";
 import { api } from "@/api/client";
 import type { AvailableProvider } from "@/api/client";
 import { useSessionsStore } from "@/stores/sessions";
@@ -32,7 +32,7 @@ export function toModelOptions(providers: readonly AvailableProvider[]): ModelOp
   });
 }
 
-export function useModels(sessionId?: string) {
+export function useModels(sessionId?: MaybeRefOrGetter<string | undefined>) {
   const sessionsStore = useSessionsStore();
   const { activeSessionId } = storeToRefs(sessionsStore);
 
@@ -41,7 +41,7 @@ export function useModels(sessionId?: string) {
   const isLoading = shallowRef(false);
   const error = shallowRef<string | undefined>(undefined);
 
-  const resolvedSessionId = computed(() => sessionId ?? activeSessionId.value ?? "");
+  const resolvedSessionId = computed(() => toValue(sessionId) ?? activeSessionId.value ?? "");
   const defaultModelKey = computed(() => models.value[0]?.selectionKey ?? "");
 
   watch(

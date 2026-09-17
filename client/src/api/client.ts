@@ -550,6 +550,8 @@ export interface SessionListItem {
   selectedAgent?: string | null;
   /** The model a prompt that names none gets; null for the agent's or the harness's default. */
   selectedModel?: ModelReference | null;
+  /** Client-only: the model that answered last, from the open stream — what the header names when nothing is chosen. */
+  lastAssistantModelId?: string | null;
 }
 
 export interface AnalyticsSummary {

@@ -39,7 +39,8 @@ interface ImageAttachmentDisplay {
 
 const props = defineProps<{
   author: string;
-  modelId?: string;
+  /** The friendly name of the model that wrote this, resolved by the stream; empty when it names none. */
+  modelName?: string;
   role: "user" | "assistant";
   createdAt?: number;
   body: string;
@@ -62,6 +63,8 @@ const copied = ref(false);
 const now = useRelativeTime();
 const relativeTime = computed(() => props.createdAt ? formatRelativeTime(props.createdAt, now.value) : "");
 const absoluteTime = computed(() => formatAbsoluteTimestamp(props.createdAt));
+// Only the agent's replies say which model wrote them; yours are yours.
+const showModel = computed(() => props.role === "assistant" && Boolean(props.modelName));
 
 // ── Question answer handler (only created when there are question parts) ──
 const questionAnswer = props.sessionId ? useQuestionAnswer(props.sessionId) : null;
@@ -230,7 +233,17 @@ function handleExpandVisual(payload: VisualPayload): void {
       <TooltipProvider v-if="createdAt">
         <Tooltip>
           <TooltipTrigger as-child>
-            <span class="msg-timestamp">{{ relativeTime }}</span>
+            <span class="msg-meta">
+              <template v-if="showModel">
+                <span
+                  class="msg-meta__swatch"
+                  aria-hidden="true"
+                />
+                <span class="msg-meta__model">{{ modelName }}</span>
+                <span class="msg-meta__sep">·</span>
+              </template>
+              {{ relativeTime }}
+            </span>
           </TooltipTrigger>
           <TooltipContent side="top">
             {{ absoluteTime }}
@@ -285,11 +298,24 @@ function handleExpandVisual(payload: VisualPayload): void {
   max-width: 100%;
 }
 
-/* Out of flow so hidden timestamps don't add space between messages. */
-.msg-timestamp {
+/* Which model answered, and when. Out of flow so hover adds no space, and on a
+   surface like every other hover overlay in the stream — bare text here lands on
+   the words of the reply. It sits in the 20px between message groups. */
+.msg-meta {
   position: absolute;
-  top: 5px;
-  right: 34px;
+  bottom: -20px;
+  left: 0;
+  z-index: 1;
+  display: inline-flex;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 7px;
+  height: 20px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card-bg);
+  box-shadow: var(--sheet-shadow);
   color: var(--muted);
   font-size: 11px;
   white-space: nowrap;
@@ -299,14 +325,36 @@ function handleExpandVisual(payload: VisualPayload): void {
   transition: opacity var(--transition);
 }
 
-.message--user .msg-timestamp {
-  top: auto;
-  right: calc(100% + 10px);
-  bottom: 6px;
+.msg-meta__swatch {
+  flex-shrink: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 75%, transparent);
 }
 
-.message:hover .msg-timestamp,
-.message:focus-within .msg-timestamp {
+.msg-meta__model {
+  color: color-mix(in srgb, var(--text) 72%, transparent);
+}
+
+.msg-meta__sep {
+  color: color-mix(in srgb, var(--muted) 65%, transparent);
+}
+
+/* Your own messages sit clear of their text already: outside the bubble, no surface. */
+.message--user .msg-meta {
+  right: calc(100% + 10px);
+  bottom: 6px;
+  left: auto;
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.message:hover .msg-meta,
+.message:focus-within .msg-meta {
   opacity: 1;
 }
 
@@ -410,5 +458,12 @@ function handleExpandVisual(payload: VisualPayload): void {
   font-size: 9px;
   font-weight: 500;
   white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .msg-meta,
+  .msg-copy-btn {
+    transition: none;
+  }
 }
 </style>

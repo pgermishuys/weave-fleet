@@ -71,6 +71,17 @@ export function modelName(catalog: HarnessCatalog, model: ModelReference): strin
   return provider?.models.find((candidate) => candidate.id === model.modelID)?.name ?? model.modelID;
 }
 
+/**
+ * A model id on its own — what a message carries — as a name you can read. Falls back to the id when the session's
+ * catalog doesn't list it (a provider with no key), and to nothing when there is no id at all.
+ */
+export function modelDisplayName(modelId: string | null | undefined, models: readonly ModelOption[]): string {
+  if (!modelId) {
+    return "";
+  }
+  return models.find((candidate) => candidate.id === modelId)?.name ?? modelId;
+}
+
 /** What "Default" means on each picker, e.g. "Default (loom)" and "Default (Claude Opus 4.7)". */
 export interface DefaultLabels {
   agentLabel: string;
