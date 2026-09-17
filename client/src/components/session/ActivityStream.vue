@@ -6,6 +6,8 @@ import { storeToRefs } from "pinia";
 import MessageBubble from "@/components/session/MessageBubble.vue";
 import ReasoningBlock from "@/components/session/ReasoningBlock.vue";
 import { useSessionStream } from "@/composables/use-session-stream";
+import { useModels } from "@/composables/use-models";
+import { modelDisplayName } from "@/lib/agent-model-choice";
 import { isStreamWorking } from "@/lib/domain-event-reducer";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { clearSentPrompts, reconcileSentPrompts, useSentPrompts } from "@/composables/use-send-prompt";
@@ -30,7 +32,7 @@ interface ImageAttachmentDisplay {
 interface ActivityMessage {
   id: string;
   author: string;
-  modelId?: string;
+  modelName?: string;
   senderKey: string;
   role: AccumulatedMessage["role"];
   createdAt?: number;
@@ -70,6 +72,8 @@ const selectedSession = computed(() => {
 const { messages: sessionMessages, delegations, sessionStatus, hasMore, isLoadingOlder, isPartial, loadOlder } = useSessionStream(
   computed(() => props.sessionId),
 );
+// Names for the model ids the messages carry; the catalog belongs to the session on screen.
+const { models } = useModels(() => props.sessionId);
 const { sentPrompts } = useSentPrompts(props.sessionId);
 const streamRef = ref<HTMLElement | null>(null);
 const showJumpToLatest = ref(false);
@@ -168,7 +172,7 @@ const deliveredMessages = computed<ActivityMessage[]>(() => {
       return {
         id: message.messageId,
         author,
-        modelId: message.modelID,
+        modelName: modelDisplayName(message.modelID, models.value),
         senderKey: getSenderKey(message.role, message.agent),
         role: message.role,
         createdAt: message.createdAt,
@@ -191,11 +195,33 @@ const deliveredMessages = computed<ActivityMessage[]>(() => {
     .filter((message) => message.role === "user" || hasVisibleMessageContent(message));
 });
 
+// The header names the model that answers next. A session that was never given one explicitly has only
+// the stream to go on, and the stream is open here — so it puts the last answer's model in the store.
+const lastAssistantModelId = computed(() => {
+  for (let index = sessionMessages.value.length - 1; index >= 0; index -= 1) {
+    const message = sessionMessages.value[index];
+    if (message.role === "assistant" && message.modelID) {
+      return message.modelID;
+    }
+  }
+  return undefined;
+});
+
+watch(
+  [() => props.sessionId, lastAssistantModelId],
+  ([sessionId, modelId]) => {
+    if (modelId) {
+      sessionsStore.patchSession(sessionId, { lastAssistantModelId: modelId });
+    }
+  },
+  { immediate: true },
+);
+
 const optimisticMessages = computed<ActivityMessage[]>(() => {
   return sentPrompts.value.map((prompt): ActivityMessage => ({
     id: `optimistic-${prompt.id}`,
     author: "You",
-    modelId: undefined,
+    modelName: undefined,
     senderKey: "user",
     role: "user",
     createdAt: prompt.createdAt,
@@ -789,7 +815,7 @@ function handleShowCanvas(canvasId: string): void {
         />
         <MessageBubble
           :author="message.author"
-          :model-id="message.modelId"
+          :model-name="message.modelName"
           :role="message.role"
           :created-at="message.createdAt"
           :body="message.body"

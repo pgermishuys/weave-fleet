@@ -7,6 +7,8 @@ import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { Badge } from "@/components/ui/badge";
 import type { SessionOrigin } from "@/api/client";
 import { useHarnesses } from "@/composables/use-harnesses";
+import { useModels } from "@/composables/use-models";
+import { modelDisplayName } from "@/lib/agent-model-choice";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSidebarStore } from "@/stores/sidebar";
 import { GitBranch, Layers, X, Plus } from "lucide-vue-next";
@@ -41,7 +43,9 @@ interface Props {
 
 const props = defineProps<Props>();
 const { harnesses } = useHarnesses();
+const { models } = useModels(() => props.id);
 const sessionsStore = useSessionsStore();
+const { sessions } = storeToRefs(sessionsStore);
 const { sessionListShown } = storeToRefs(useSidebarStore());
 let composerDisabledSyncTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -104,6 +108,12 @@ const harnessLabel = computed(() => {
   if (!type) return null;
   const match = harnesses.value.find((h) => h.type === type);
   return match?.displayName ?? type;
+});
+// The model the next prompt will get: the session's own choice, else whatever answered last.
+const modelLabel = computed(() => {
+  const session = sessions.value.find((candidate) => candidate.session.id === props.id);
+  const modelId = session?.selectedModel?.modelID ?? session?.lastAssistantModelId;
+  return modelDisplayName(modelId, models.value) || null;
 });
 const showStoppedBanner = computed(() => {
   switch (effectiveLifecycleStatus.value) {
@@ -312,6 +322,19 @@ onUnmounted(() => {
               {{ props.harnessProfileName }}
             </span>
           </template>
+          <template v-if="modelLabel">
+            <span
+              v-if="props.projectName || harnessLabel || props.harnessProfileName"
+              class="session-detail-header__separator"
+            >·</span>
+            <span
+              data-testid="session-model-label"
+              class="session-detail-header__model"
+              title="The model the next prompt will get"
+            >
+              {{ modelLabel }}
+            </span>
+          </template>
           <template v-if="props.branch">
             <span
               v-if="props.projectName || harnessLabel"
@@ -498,7 +521,8 @@ onUnmounted(() => {
 }
 
 .session-detail-header__project,
-.session-detail-header__harness {
+.session-detail-header__harness,
+.session-detail-header__model {
   flex-shrink: 0;
   max-width: 14rem;
   overflow: hidden;
