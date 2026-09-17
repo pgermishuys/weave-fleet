@@ -88,6 +88,21 @@ public sealed class DomainEventSerializationTests
                 },
             });
 
+            cases.Add("turn.failed", new TurnFailed
+            {
+                Payload = new TurnFailedPayload
+                {
+                    SessionId = "session-1",
+                    MessageId = "message-1",
+                    Error = new TurnError
+                    {
+                        Name = "APIError",
+                        Message = "The upstream provider is overloaded.",
+                        IsRetryable = true,
+                    },
+                },
+            });
+
             cases.Add("message.created", new MessageCreated
             {
                 Payload = new MessageLifecyclePayload

@@ -58,6 +58,19 @@ export interface TurnEndedPayload {
   completedAt: number | null;
 }
 
+/** A failure the harness reported, normalised server-side so no harness shapes reach the client. */
+export interface TurnError {
+  name: string;
+  message: string;
+  isRetryable: boolean;
+}
+
+export interface TurnFailedPayload {
+  sessionID: string;
+  messageID: string | null;
+  error: TurnError;
+}
+
 export interface MessageEventTime {
   created: number;
   completed: number | null;
@@ -79,6 +92,11 @@ export interface MessageEventInfo {
   time: MessageEventTime;
   cost: number | null;
   tokens: MessageTokenUsage | null;
+  /** Set when the turn this message belongs to failed. Named `turnError` because the harness puts its
+   * own differently shaped `error` on the message; Fleet normalises that into this one. */
+  turnError?: TurnError | null;
+  /** Why the model stopped (e.g. "stop", "length", "error"), when the harness reports it. */
+  finish?: string | null;
 }
 
 export interface BaseMessageEventPart {
@@ -322,6 +340,11 @@ export interface TurnEnded extends EventCursorMetadata {
   payload: TurnEndedPayload;
 }
 
+export interface TurnFailed extends EventCursorMetadata {
+  type: "turn.failed";
+  payload: TurnFailedPayload;
+}
+
 export interface MessageCreated extends EventCursorMetadata {
   type: "message.created";
   payload: MessageLifecyclePayload;
@@ -450,6 +473,7 @@ export type DomainEvent =
   | SessionArchived
   | TurnStarted
   | TurnEnded
+  | TurnFailed
   | MessageCreated
   | MessageUpdated
   | UserPromptCommitted

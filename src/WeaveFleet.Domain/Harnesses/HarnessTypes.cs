@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using WeaveFleet.Domain.Events;
 
 namespace WeaveFleet.Domain.Harnesses;
 
@@ -168,6 +169,12 @@ public sealed record HarnessMessage
 
     /// <summary>The model that produced this message (e.g. "claude-sonnet-4").</summary>
     public string? ModelId { get; init; }
+
+    /// <summary>The failure that ended this message, when the turn it belongs to failed.</summary>
+    public TurnError? Error { get; init; }
+
+    /// <summary>Why the model stopped producing this message (e.g. "stop", "length"), when reported.</summary>
+    public string? Finish { get; init; }
 
     /// <summary>Convenience: concatenated text parts.</summary>
     public string TextContent =>

@@ -60,6 +60,7 @@ internal sealed class DomainEventTranslator
             EventTypes.SessionDeleted => TranslateSessionDeleted(evt),
             EventTypes.SessionStatus => TranslateSessionStatus(evt),
             EventTypes.SessionIdle => TranslateSessionIdle(evt),
+            EventTypes.SessionError => TranslateSessionError(evt),
             DelegationCreatedEventType => TranslateDelegationCreated(evt),
             DelegationUpdatedEventType => TranslateDelegationUpdated(evt),
             DelegationCompletedEventType => TranslateDelegationCompleted(evt),
@@ -70,8 +71,8 @@ internal sealed class DomainEventTranslator
             // message.removed and message.part.removed are durable persistence signals only.
             EventTypes.MessageRemoved or EventTypes.MessagePartRemoved => null,
 
-            // session.updated/session.error/session.compacted/session.diff do not yet have domain-event counterparts.
-            EventTypes.SessionUpdated or EventTypes.SessionError or EventTypes.SessionCompacted or EventTypes.SessionDiff => null,
+            // session.updated/session.compacted/session.diff do not yet have domain-event counterparts.
+            EventTypes.SessionUpdated or EventTypes.SessionCompacted or EventTypes.SessionDiff => null,
 
             // error/server.* are transport/control signals and are intentionally not surfaced as domain events.
             EventTypes.Error or EventTypes.ServerHeartbeat or EventTypes.ServerConnected => null,
@@ -223,6 +224,28 @@ internal sealed class DomainEventTranslator
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Turns a harness failure into <see cref="TurnFailed"/>. The harness follows it with an idle, so the
+    /// activity status is left alone here and <see cref="TranslateSessionIdle"/> still ends the turn: this
+    /// event says why it ended, not that it ended.
+    /// </summary>
+    private TurnFailed? TranslateSessionError(HarnessEvent evt)
+    {
+        var error = HarnessErrorReader.TryReadFromPayload(evt.Payload);
+        if (error is null)
+            return null;
+
+        return new TurnFailed
+        {
+            Payload = new TurnFailedPayload
+            {
+                SessionId = ResolveSessionId(evt),
+                MessageId = _activeTurn?.MessageId ?? _lastAssistantSnapshot?.Context.MessageId,
+                Error = error,
+            },
+        };
     }
 
     private SessionIdled? TranslateSessionIdle(HarnessEvent evt)
@@ -550,9 +573,31 @@ internal sealed class DomainEventTranslator
         var parts = payload.Parts ?? [];
         return payload with
         {
-            Info = payload.Info with { SessionId = sessionId },
+            Info = payload.Info with
+            {
+                SessionId = sessionId,
+                Error = payload.Info.Error ?? ReadMessageError(evt),
+            },
             Parts = parts.Select(part => NormalizeMessageEventPart(part, sessionId)).ToArray(),
         };
+    }
+
+    /// <summary>
+    /// Reads the harness's own <c>info.error</c> off the raw event. The harness shape does not bind to
+    /// <see cref="MessageEventInfo.Error"/>, so it is read here rather than during deserialization.
+    /// </summary>
+    private static TurnError? ReadMessageError(HarnessEvent evt)
+    {
+        if (evt.Payload is not { ValueKind: JsonValueKind.Object } payload)
+            return null;
+
+        var info = TryGetObjectProperty(payload, "info");
+        if (info is null)
+            return null;
+
+        return info.Value.TryGetProperty("error", out var error)
+            ? HarnessErrorReader.TryRead(error)
+            : null;
     }
 
     private static MessagePartUpdatedPayload NormalizeMessagePartUpdatedPayload(HarnessEvent evt, MessagePartUpdatedPayload payload)

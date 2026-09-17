@@ -320,6 +320,77 @@ public sealed class InProcessFanOutServiceTests
     }
 
     [Fact]
+    public async Task turn_failed_is_broadcast_in_fleet_shape_not_the_harness_error()
+    {
+        var channels = new InProcessChannels();
+        var broadcaster = new FakeEventBroadcaster();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await using var serviceProvider = new ServiceCollection().BuildServiceProvider();
+        var service = new InProcessFanOutService(
+            channels,
+            broadcaster,
+            new PipelineLatencyMetrics(),
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<InProcessFanOutService>.Instance);
+
+        await service.StartAsync(cts.Token);
+        try
+        {
+            channels.FanOut.Writer.TryWrite(new InProcessEnvelope(
+                @event: new HarnessEvent
+                {
+                    Type = EventTypes.SessionError,
+                    SessionId = "oc-failed",
+                    Timestamp = DateTimeOffset.UtcNow,
+                    // OpenCode's own doubly-nested shape, which the client must never see.
+                    Payload = JsonSerializer.SerializeToElement(new
+                    {
+                        error = new { name = "APIError", data = new { message = "Overloaded", isRetryable = true } },
+                    }),
+                },
+                messageId: "sess-failed:1",
+                tenant: "tenant.default",
+                projectId: "proj-1",
+                sessionId: "sess-failed",
+                eventType: EventTypes.SessionError,
+                userId: "user-1",
+                harnessType: "opencode",
+                internalPumpDedupKey: 1,
+                isDurable: true)
+            {
+                DomainEvent = new TurnFailed
+                {
+                    Payload = new TurnFailedPayload
+                    {
+                        SessionId = "sess-failed",
+                        MessageId = "message-1",
+                        Error = new TurnError { Name = "APIError", Message = "Overloaded", IsRetryable = true },
+                    },
+                },
+            }).ShouldBeTrue();
+
+            await WaitForBroadcastsAsync(broadcaster, expectedCount: 1, cts.Token);
+
+            var broadcast = broadcaster.Broadcasts.Single();
+            broadcast.Topic.ShouldBe("session:sess-failed");
+            broadcast.DomainEvent.ShouldBeOfType<TurnFailed>();
+            broadcast.Payload.GetProperty("sessionID").GetString().ShouldBe("sess-failed");
+            broadcast.Payload.GetProperty("messageID").GetString().ShouldBe("message-1");
+            var error = broadcast.Payload.GetProperty("error");
+            error.GetProperty("name").GetString().ShouldBe("APIError");
+            error.GetProperty("message").GetString().ShouldBe("Overloaded");
+            error.GetProperty("isRetryable").GetBoolean().ShouldBeTrue();
+            // The harness's own nesting is gone: no error.data for the client to dig through.
+            error.TryGetProperty("data", out _).ShouldBeFalse();
+        }
+        finally
+        {
+            await cts.CancelAsync();
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
     public async Task advisory_events_are_broadcast_without_event_id()
     {
         var channels = new InProcessChannels();

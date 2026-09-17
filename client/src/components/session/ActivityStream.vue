@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import { ArrowUpRight, Bot } from "lucide-vue-next";
+import { ArrowUpRight, Bot, RotateCw, TriangleAlert } from "lucide-vue-next";
 import { useRouter } from "@tanstack/vue-router";
 import { storeToRefs } from "pinia";
 import MessageBubble from "@/components/session/MessageBubble.vue";
@@ -8,11 +8,12 @@ import ReasoningBlock from "@/components/session/ReasoningBlock.vue";
 import { useSessionStream } from "@/composables/use-session-stream";
 import { isStreamWorking } from "@/lib/domain-event-reducer";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
-import { clearSentPrompts, reconcileSentPrompts, useSentPrompts } from "@/composables/use-send-prompt";
+import { clearSentPrompts, reconcileSentPrompts, useSendPrompt, useSentPrompts } from "@/composables/use-send-prompt";
 import { toToolCardItem } from "@/components/session/activity-stream-tool-card";
 import type { ToolCardItem } from "@/components/session/activity-stream-tool-card";
 import type { CommandEventName } from "@/lib/command-events";
 import type { AccumulatedMessage, AccumulatedPart, AccumulatedToolPart, AccumulatedFilePart, AccumulatedReasoningPart } from "@/lib/client-types";
+import type { TurnError } from "@/lib/domain-events";
 import { parseVisualPayload, type VisualPayload } from "@/lib/visual-payload";
 import { isQuestionPart } from "@/lib/question-types";
 import { diagLog } from "@/lib/message-diagnostics";
@@ -43,6 +44,8 @@ interface ActivityMessage {
   optimisticStatus?: "pending" | "confirmed" | "needs_retry";
   clusterPosition: "single" | "first" | "middle" | "last";
   showIdentity: boolean;
+  /** Set when the turn that produced this message failed. */
+  turnError?: TurnError;
 }
 
 interface DelegationLink {
@@ -71,6 +74,21 @@ const { messages: sessionMessages, delegations, sessionStatus, hasMore, isLoadin
   computed(() => props.sessionId),
 );
 const { sentPrompts } = useSentPrompts(props.sessionId);
+const { canSend, retryPrompt } = useSendPrompt(props.sessionId);
+
+/** The prompt a failed turn was answering, which Retry sends again. */
+const lastUserPrompt = computed<string | undefined>(() => {
+  const lastUser = [...sessionMessages.value].reverse().find((message) => message.role === "user");
+  const body = lastUser ? renderMessageBody(lastUser.parts).trim() : "";
+  return body.length > 0 ? body : undefined;
+});
+
+function handleRetryTurn(): void {
+  const prompt = lastUserPrompt.value;
+  if (prompt) {
+    retryPrompt(prompt);
+  }
+}
 const streamRef = ref<HTMLElement | null>(null);
 const showJumpToLatest = ref(false);
 
@@ -186,6 +204,7 @@ const deliveredMessages = computed<ActivityMessage[]>(() => {
         delegationLinks: getDelegationLinks(message),
         clusterPosition: "single" as const,
         showIdentity: true,
+        turnError: message.turnError,
       } satisfies ActivityMessage;
     })
     .filter((message) => message.role === "user" || hasVisibleMessageContent(message));
@@ -613,7 +632,9 @@ function hasVisibleMessageContent(message: ActivityMessage): boolean {
     || message.images.length > 0
     || (message.tools?.length ?? 0) > 0
     || (message.questionParts?.length ?? 0) > 0
-    || message.delegationLinks.length > 0;
+    || message.delegationLinks.length > 0
+    // A turn can fail before it produces anything; the failure is the content.
+    || message.turnError != null;
 }
 
 function hasRenderableAssistantContent(message: AccumulatedMessage): boolean {
@@ -771,6 +792,37 @@ function handleShowCanvas(canvasId: string): void {
           @expand-visual="handleExpandVisual"
           @show-canvas="handleShowCanvas"
         />
+        <div
+          v-if="message.turnError"
+          class="turn-failure"
+          data-testid="turn-failure"
+        >
+          <div class="turn-failure__head">
+            <TriangleAlert
+              class="turn-failure__icon"
+              aria-hidden="true"
+            />
+            <span class="turn-failure__title">This turn stopped early</span>
+          </div>
+          <p class="turn-failure__message">{{ message.turnError.message }}</p>
+          <div class="turn-failure__foot">
+            <span class="turn-failure__name">{{ message.turnError.name }}</span>
+            <button
+              v-if="lastUserPrompt"
+              class="turn-failure__retry"
+              type="button"
+              data-testid="turn-failure-retry"
+              :disabled="!canSend"
+              @click="handleRetryTurn"
+            >
+              <RotateCw
+                class="turn-failure__retry-icon"
+                aria-hidden="true"
+              />
+              Retry
+            </button>
+          </div>
+        </div>
         <div
           v-if="message.optimisticStatus === 'needs_retry'"
           class="optimistic-retry"
@@ -932,6 +984,86 @@ function handleShowCanvas(canvasId: string): void {
 .partial-snapshot-icon {
   font-size: 1rem;
   flex-shrink: 0;
+}
+
+.turn-failure {
+  width: var(--activity-bubble-width);
+  margin: 4px 0 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--error) 35%, var(--border));
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--error) 7%, var(--card-bg));
+  align-self: flex-start;
+}
+
+.turn-failure__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.turn-failure__icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--error);
+}
+
+.turn-failure__title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.turn-failure__message {
+  margin: 6px 0 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.turn-failure__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.turn-failure__name {
+  color: var(--muted);
+  font-size: 11px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.turn-failure__retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-bg);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.turn-failure__retry:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.turn-failure__retry:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.turn-failure__retry-icon {
+  width: 12px;
+  height: 12px;
 }
 
 .optimistic-retry {

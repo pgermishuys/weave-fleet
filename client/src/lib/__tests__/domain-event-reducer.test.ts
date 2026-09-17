@@ -186,6 +186,8 @@ function createMessageLifecyclePayload(
       },
       cost: overrides.cost ?? null,
       tokens: overrides.tokens ?? null,
+      turnError: overrides.turnError ?? null,
+      finish: overrides.finish ?? null,
     },
     parts: text == null
       ? []
@@ -968,5 +970,97 @@ describe("domain-event-reducer", () => {
 
     expect(afterTurnEnded.explicitStatus).toBe("idle")
     expect(afterTurnEnded.sessionStatus).toBe("delegating")
+  })
+})
+
+describe("turn.failed", () => {
+  const error = { name: "APIError", message: "Overloaded", isRetryable: false }
+
+  it("pins the failure to the assistant message the turn produced", () => {
+    const withMessage = applyDomainEvent(createState(), {
+      type: "message.created",
+      payload: createMessageLifecyclePayload({ id: "message-1", role: "assistant", createdAt: 1, text: "Half an ans" }),
+    })
+
+    const failed = applyDomainEvent(withMessage, {
+      type: "turn.failed",
+      payload: { sessionID: "session-1", messageID: "message-1", error },
+    })
+
+    expect(failed.messages).toHaveLength(1)
+    expect(failed.messages[0].turnError).toEqual(error)
+    expect(failed.messages[0].parts).toHaveLength(1)
+  })
+
+  it("falls back to the last assistant message when the failure names none", () => {
+    const withMessages = applyEvents(createState(), [
+      { type: "message.created", payload: createMessageLifecyclePayload({ id: "message-1", role: "user", createdAt: 1, text: "Go" }) },
+      { type: "message.created", payload: createMessageLifecyclePayload({ id: "message-2", role: "assistant", createdAt: 2, text: "On it" }) },
+    ])
+
+    const failed = applyDomainEvent(withMessages, {
+      type: "turn.failed",
+      payload: { sessionID: "session-1", messageID: null, error },
+    })
+
+    expect(failed.messages[0].turnError).toBeUndefined()
+    expect(failed.messages[1].turnError).toEqual(error)
+  })
+
+  it("gives the failure a message of its own when the turn produced none", () => {
+    const withPrompt = applyDomainEvent(createState(), {
+      type: "message.created",
+      payload: createMessageLifecyclePayload({ id: "message-1", role: "user", createdAt: 1, text: "Go" }),
+    })
+
+    const failed = applyDomainEvent(withPrompt, {
+      type: "turn.failed",
+      payload: { sessionID: "session-1", messageID: null, error },
+    })
+
+    expect(failed.messages).toHaveLength(2)
+    expect(failed.messages[1]).toMatchObject({ role: "assistant", sessionId: "session-1", turnError: error })
+  })
+
+  it("stops the session looking busy", () => {
+    const failed = applyDomainEvent(createState({ explicitStatus: "busy", sessionStatus: "busy" }), {
+      type: "turn.failed",
+      payload: { sessionID: "session-1", messageID: null, error },
+    })
+
+    expect(failed.explicitStatus).toBe("idle")
+    expect(failed.sessionStatus).toBe("idle")
+  })
+
+  it("keeps a failure that arrived on the message when it is rebuilt from a snapshot", () => {
+    const state = createSessionStreamState(createSnapshot({
+      messages: [createMessageLifecyclePayload({
+        id: "message-1",
+        role: "assistant",
+        createdAt: 1,
+        text: "Half an ans",
+        turnError: error,
+        finish: "error",
+      })],
+    }))
+
+    expect(state.messages[0].turnError).toEqual(error)
+    expect(state.messages[0].finish).toBe("error")
+  })
+
+  it("keeps the failure when a later message.updated carries nothing new", () => {
+    const failed = applyEvents(createState(), [
+      { type: "message.created", payload: createMessageLifecyclePayload({ id: "message-1", role: "assistant", createdAt: 1, text: "Half an ans" }) },
+      { type: "message.updated", payload: createMessageLifecyclePayload({ id: "message-1", role: "assistant", createdAt: 1, turnError: error }) },
+    ])
+
+    expect(failed.messages[0].turnError).toEqual(error)
+
+    const again = applyDomainEvent(failed, {
+      type: "message.updated",
+      payload: createMessageLifecyclePayload({ id: "message-1", role: "assistant", createdAt: 1 }),
+    })
+
+    expect(again.messages[0].turnError).toEqual(error)
   })
 })
