@@ -7,6 +7,7 @@ import {
   FolderTree,
   GitCompare,
   Globe,
+  History,
   ListChecks,
   Paperclip,
   Workflow,
@@ -15,6 +16,7 @@ import BrowserCanvas from "@/components/canvas/BrowserCanvas.vue";
 import ChangesCanvas from "@/components/canvas/ChangesCanvas.vue";
 import FilesCanvas from "@/components/canvas/FilesCanvas.vue";
 import ProgressCanvas from "@/components/canvas/ProgressCanvas.vue";
+import TurnsCanvas from "@/components/canvas/TurnsCanvas.vue";
 import VisualCanvas from "@/components/canvas/VisualCanvas.vue";
 import SessionContextCanvas from "@/components/session-context/SessionContextCanvas.vue";
 import type { CanvasInstance, CanvasKind } from "@/stores/canvases";
@@ -45,13 +47,14 @@ export const CANVAS_TYPES: Record<CanvasKind, CanvasTypeDefinition> = {
   files: { kind: "files", label: "Files", icon: FolderTree, component: FilesCanvas },
   context: { kind: "context", label: "Context", icon: Paperclip, component: SessionContextCanvas },
   progress: { kind: "progress", label: "Progress", icon: ListChecks, component: ProgressCanvas },
+  turns: { kind: "turns", label: "Turns", icon: History, component: TurnsCanvas },
   visual: { kind: "visual", label: "Diagram", icon: Workflow, component: VisualCanvas },
   browser: { kind: "browser", label: "Browser", icon: Globe, component: BrowserCanvas },
   file: { kind: "file", label: "File", icon: File, component: FileCanvas },
 };
 
 /** Built-in canvases a person can open from the + menu. */
-export const PICKABLE_CANVAS_KINDS = ["context", "progress", "changes", "files"] as const;
+export const PICKABLE_CANVAS_KINDS = ["context", "progress", "changes", "files", "turns"] as const;
 
 const VISUAL_ICONS: Record<VisualPayload["$type"], Component> = {
   "visual/flow": Workflow,

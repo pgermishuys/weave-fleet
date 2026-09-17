@@ -59,6 +59,35 @@ function buildPreview(output: string | undefined, summary: string | undefined): 
 }
 
 
+/**
+ * The parsed input a tool was called with ("filePath", "command", …), or null when it has none.
+ * Exposed so other readers of the conversation (the Turns canvas) don't re-derive tool state shapes.
+ */
+export function toolInput(part: AccumulatedToolPart): Record<string, unknown> | null {
+  return asRecord(asRecord(part.state)?.input);
+}
+
+/** The tool's raw status: "pending" | "running" | "completed" | "error", or undefined. */
+export function toolStatus(part: AccumulatedToolPart): string | undefined {
+  return getStringValue(asRecord(part.state)?.status)?.toLowerCase();
+}
+
+/** The diff lines a harness attached to the call, as an array; empty when it attached none. */
+export function toolDiffLines(part: AccumulatedToolPart): DiffLine[] {
+  return getDiffLines(asRecord(part.state));
+}
+
+/** Anything on the call's state or metadata that looks like a unified diff, as text. */
+export function toolDiffText(part: AccumulatedToolPart): string | undefined {
+  const state = asRecord(part.state);
+  const metadata = asRecord(state?.metadata);
+  for (const candidate of [state?.diff, state?.patch, metadata?.diff, metadata?.patch]) {
+    const text = getStringValue(candidate);
+    if (text) return text;
+  }
+  return undefined;
+}
+
 export function toToolCardItem(part: AccumulatedToolPart): ToolCardItem {
   const state = asRecord(part.state);
   const input = asRecord(state?.input);
