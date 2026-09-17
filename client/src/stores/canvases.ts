@@ -21,7 +21,7 @@ import { useFileBuffersStore } from "@/stores/file-buffers";
  * changes them, and the user can only close them.
  */
 
-export type CanvasKind = "changes" | "files" | "context" | "progress" | "visual" | "browser" | "file";
+export type CanvasKind = "changes" | "files" | "context" | "progress" | "turns" | "visual" | "browser" | "file";
 
 /** Canvases that exist once per session and open from the + menu or on their own. */
 export type BuiltInCanvasKind = Exclude<CanvasKind, "visual" | "browser" | "file">;

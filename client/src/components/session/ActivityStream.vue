@@ -325,6 +325,25 @@ function handleDelegationLinkClick(event: MouseEvent, delegationLink: Delegation
   });
 }
 
+// The Turns canvas asks for a round: scroll to where it began and mark it for a moment.
+const highlightedMessageId = ref<string | null>(null);
+let highlightTimer: ReturnType<typeof setTimeout> | undefined;
+
+function showMessage(messageId: string): void {
+  const target = streamRef.value?.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(messageId)}"]`);
+  if (!target) {
+    return;
+  }
+
+  keepPinnedToBottom = false;
+  target.scrollIntoView({ block: "center", behavior: "smooth" });
+  highlightedMessageId.value = messageId;
+  clearTimeout(highlightTimer);
+  highlightTimer = setTimeout(() => {
+    highlightedMessageId.value = null;
+  }, 1600);
+}
+
 function scrollToTop(): void {
   const element = streamRef.value;
 
@@ -444,6 +463,15 @@ onMounted(() => {
 
     scrollToBottom();
   })));
+  cleanupCallbacks.push(registerWindowCommandListener("weave:command-show-message", ((event: Event) => {
+    const customEvent = event as CustomEvent<{ sessionId?: string; messageId?: string }>;
+
+    if (customEvent.detail?.sessionId !== props.sessionId || !customEvent.detail?.messageId) {
+      return;
+    }
+
+    void nextTick(() => showMessage(customEvent.detail!.messageId!));
+  })));
   cleanupCallbacks.push(registerWindowCommandListener("weave:command-focus-prompt", handleFocusPromptCommand));
   cleanupCallbacks.push(registerWindowCommandListener("weave:command-copy-session-id", handleCopySessionIdCommand));
   cleanupCallbacks.push(registerWindowCommandListener("weave:command-export-conversation", handleExportConversationCommand));
@@ -452,6 +480,7 @@ onMounted(() => {
 onUnmounted(() => {
   mutationObserver?.disconnect();
   mutationObserver = null;
+  clearTimeout(highlightTimer);
 
   for (const cleanup of cleanupCallbacks.splice(0)) {
     cleanup();
@@ -744,9 +773,11 @@ function handleShowCanvas(canvasId: string): void {
         v-for="message in messages"
         :key="message.id"
         class="activity-message"
+        :data-message-id="message.id"
         :class="[
           `activity-message--${message.role}`,
           `activity-message--${message.clusterPosition}`,
+          { 'activity-message--shown': highlightedMessageId === message.id },
         ]"
       >
         <ReasoningBlock
@@ -839,6 +870,20 @@ function handleShowCanvas(canvasId: string): void {
 </template>
 
 <style scoped>
+/* A round brought forward from the Turns canvas is marked just long enough to find it. */
+.activity-message--shown {
+  border-radius: var(--radius-card);
+  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: 4px;
+  transition: outline-color 400ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity-message--shown {
+    transition: none;
+  }
+}
+
 .activity-stream-shell {
   position: relative;
   display: flex;
