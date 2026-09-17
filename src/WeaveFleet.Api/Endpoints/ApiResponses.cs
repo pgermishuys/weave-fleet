@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using WeaveFleet.Application.DTOs;
 using WeaveFleet.Domain.DTOs;
 using WeaveFleet.Domain.Entities;
@@ -296,7 +297,12 @@ public sealed record CanvasBridgeRequest(
 /// What the tool returns to the harness as-is: a tool-card title, the text the model reads, metadata, and any
 /// file that goes with it (a screenshot), base64 for the harness to attach however it carries images.
 /// </summary>
-public sealed record CanvasToolResponse(string Title, string Output, CanvasToolMetadata Metadata, IReadOnlyList<CanvasToolAttachmentResponse>? Attachments = null);
+public sealed record CanvasToolResponse(
+    string Title,
+    string Output,
+    CanvasToolMetadata Metadata,
+    // Only screenshots carry one: every other tool's answer stays the three fields it has always been.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<CanvasToolAttachmentResponse>? Attachments = null);
 
 public sealed record CanvasToolAttachmentResponse(string Mime, string FileName, string Base64);
 
