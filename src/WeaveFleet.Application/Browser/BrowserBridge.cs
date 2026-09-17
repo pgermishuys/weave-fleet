@@ -127,8 +127,10 @@ public sealed class BrowserBridge(
 
             var output = new StringBuilder()
                 .Append("Screenshot of ").Append(target).Append(" at ").Append(width).Append('×').Append(height)
-                .Append(", from ").Append(CanvasText.CanvasName(canvas)).Append('.')
-                .Append("\nThe image is attached: look at it, don't guess. Call this again after a change to see it.");
+                .Append(", from ").Append(CanvasText.CanvasName(canvas)).Append('.');
+            if (image.Note is { } note)
+                output.Append('\n').Append(note);
+            output.Append("\nThe image is attached: look at it, don't guess. Call this again after a change to see it.");
 
             return CanvasResult.Ok(new CanvasToolOutput(
                 $"{canvas.Title} · {width}×{height}",

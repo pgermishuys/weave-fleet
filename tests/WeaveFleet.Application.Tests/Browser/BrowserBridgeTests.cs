@@ -249,6 +249,21 @@ public sealed class BrowserBridgeTests : IDisposable
     }
 
     [Fact]
+    public async Task A_caveat_about_the_picture_is_told_to_the_agent_with_it()
+    {
+        var canvasId = await ShownAppAsync();
+        _shots.NextNote = "The page hadn't finished loading after 10 seconds; this is how far it had got.";
+
+        var shot = await _bridge.ScreenshotAsync(Token, OpenCodeSessionId, canvasId, "", "desktop");
+
+        shot.Value!.Output.ShouldBe(
+            "Screenshot of http://localhost:5173/ at 1280×800, from \"Shop\" (" + canvasId + ")."
+            + "\nThe page hadn't finished loading after 10 seconds; this is how far it had got."
+            + "\nThe image is attached: look at it, don't guess. Call this again after a change to see it.");
+        shot.Value.Attachments.ShouldHaveSingleItem();
+    }
+
+    [Fact]
     public async Task A_screenshot_of_a_diagram_canvas_says_to_open_a_page_first()
     {
         var canvases = new CanvasService(_canvasRepository, new FakeEventBroadcaster(), _user);

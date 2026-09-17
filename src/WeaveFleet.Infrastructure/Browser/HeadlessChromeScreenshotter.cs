@@ -20,7 +20,7 @@ public sealed class HeadlessChromeScreenshotter(FleetOptions options, ILogger<He
     public static readonly TimeSpan IdleTimeout = TimeSpan.FromMinutes(2);
 
     private static readonly TimeSpan LaunchTimeout = TimeSpan.FromSeconds(20);
-    private static readonly TimeSpan LoadTimeout = TimeSpan.FromSeconds(20);
+    private static readonly TimeSpan LoadTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan CaptureTimeout = TimeSpan.FromSeconds(30);
 
     /// <summary>After the load event: enough for a framework to paint its first frame, short enough not to drag.</summary>
@@ -106,12 +106,22 @@ public sealed class HeadlessChromeScreenshotter(FleetOptions options, ILogger<He
             }
 
             (await cdp.SendAsync("Page.enable", sessionId: page, ct: ct)).Dispose();
+            (await cdp.SendAsync("Network.enable", sessionId: page, ct: ct)).Dispose();
+
+            // The whole point of the tool is seeing the change just made. A warm browser that serves the page it
+            // saw a minute ago would show the old one, and the agent would trust it.
+            (await cdp.SendAsync("Network.setCacheDisabled", write => write.WriteBoolean("cacheDisabled", true), page, ct)).Dispose();
+
+            // Not "mobile": that makes Chrome treat a page without a viewport meta tag as 980 CSS px wide and
+            // shrink it to fit, so a narrow shot comes back as the desktop layout in miniature. A plain window of
+            // the asked-for size is what a developer dragging their browser narrow sees, and fires the same
+            // media queries.
             (await cdp.SendAsync("Emulation.setDeviceMetricsOverride", write =>
             {
                 write.WriteNumber("width", request.Width);
                 write.WriteNumber("height", request.Height);
                 write.WriteNumber("deviceScaleFactor", 1);
-                write.WriteBoolean("mobile", request.Height > request.Width);
+                write.WriteBoolean("mobile", false);
             }, page, ct)).Dispose();
 
             using var loaded = cdp.Expect("Page.loadEventFired", page);
@@ -123,8 +133,12 @@ public sealed class HeadlessChromeScreenshotter(FleetOptions options, ILogger<He
                     return ScreenshotOutcome.Fail($"The browser couldn't open {request.Url}: {text}. Is the app still running?");
             }
 
-            if (!await loaded.ArrivedAsync(LoadTimeout, ct))
-                return ScreenshotOutcome.Fail($"{request.Url} didn't finish loading within {LoadTimeout.TotalSeconds:0} seconds.");
+            // A page that never fires "load" still has something on it, and a picture of it says more than an
+            // error does: dev servers hold connections open (HMR sockets, a slow asset), and the agent asked to
+            // see the page, not to hear about its network.
+            var note = await loaded.ArrivedAsync(LoadTimeout, ct)
+                ? null
+                : $"The page hadn't finished loading after {LoadTimeout.TotalSeconds:0} seconds; this is how far it had got.";
 
             await Task.Delay(SettleDelay, ct);
 
@@ -137,7 +151,7 @@ public sealed class HeadlessChromeScreenshotter(FleetOptions options, ILogger<He
             var data = captured.RootElement.GetProperty("result").GetProperty("data").GetString();
             return string.IsNullOrEmpty(data)
                 ? ScreenshotOutcome.Fail("The browser returned an empty screenshot.")
-                : ScreenshotOutcome.Ok(Convert.FromBase64String(data), request.Width, request.Height);
+                : ScreenshotOutcome.Ok(Convert.FromBase64String(data), request.Width, request.Height, note);
         }
         catch (TimeoutException)
         {

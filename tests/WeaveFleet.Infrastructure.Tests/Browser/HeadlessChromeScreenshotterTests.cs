@@ -49,7 +49,7 @@ public sealed class HeadlessChromeScreenshotterTests
         if (Browser() is not { } options)
             return;
 
-        using var site = Site("<body style='margin:0;background:#101317'><h1 style='color:#fff'>Shot</h1>");
+        using var site = new LocalSite("<body style='margin:0;background:#101317'><h1 style='color:#fff'>Shot</h1>");
         await using var screenshots = new HeadlessChromeScreenshotter(options, NullLogger<HeadlessChromeScreenshotter>.Instance);
 
         var shot = await screenshots.CaptureAsync(new ScreenshotRequest(site.Url, 800, 600));
@@ -79,6 +79,44 @@ public sealed class HeadlessChromeScreenshotterTests
         shot.Problem.ShouldNotBeNull();
     }
 
+    [Fact]
+    public async Task A_shot_after_a_change_shows_the_change_and_not_the_page_the_browser_saw_before()
+    {
+        if (Browser() is not { } options)
+            return;
+
+        using var site = new LocalSite("<body style='margin:0;background:#101317'>before");
+        await using var screenshots = new HeadlessChromeScreenshotter(options, NullLogger<HeadlessChromeScreenshotter>.Instance);
+
+        var before = await screenshots.CaptureAsync(new ScreenshotRequest(site.Url, 400, 300));
+        site.Html = "<body style='margin:0;background:#101317'>after";
+        var after = await screenshots.CaptureAsync(new ScreenshotRequest(site.Url, 400, 300));
+
+        after.Image.ShouldNotBeNull().Png.ShouldNotBe(before.Image.ShouldNotBeNull().Png);
+    }
+
+    [Fact]
+    public async Task A_phone_shot_lays_the_page_out_narrow_instead_of_shrinking_the_desktop_one()
+    {
+        if (Browser() is not { } options)
+            return;
+
+        // Red only where a narrow layout applies, and no viewport meta tag — the case Chrome's mobile emulation
+        // renders 980 px wide and scales down, which would show the desktop layout in miniature.
+        using var page = new LocalSite("<style>body{margin:0;background:#00ff00}@media (max-width:500px){body{background:#ff0000}}</style><body>");
+        using var narrow = new LocalSite("<style>body{margin:0;background:#ff0000}</style><body>");
+        await using var screenshots = new HeadlessChromeScreenshotter(options, NullLogger<HeadlessChromeScreenshotter>.Instance);
+
+        var phone = await screenshots.CaptureAsync(new ScreenshotRequest(page.Url, 390, 844));
+        var allRed = await screenshots.CaptureAsync(new ScreenshotRequest(narrow.Url, 390, 844));
+        var desktop = await screenshots.CaptureAsync(new ScreenshotRequest(page.Url, 1280, 800));
+        var desktopRed = await screenshots.CaptureAsync(new ScreenshotRequest(narrow.Url, 1280, 800));
+
+        // Same pixels, same encoder: a phone shot of the page is the all-red page, and a desktop one isn't.
+        phone.Image.ShouldNotBeNull().Png.ShouldBe(allRed.Image.ShouldNotBeNull().Png);
+        desktop.Image.ShouldNotBeNull().Png.ShouldNotBe(desktopRed.Image.ShouldNotBeNull().Png);
+    }
+
     /// <summary>
     /// Options pointing at a browser to drive, or null when this machine has none and the test can only pass by
     /// doing nothing. FLEET_TEST_CHROME names one that <see cref="ChromeFinder"/> wouldn't find (a checkout of
@@ -104,8 +142,6 @@ public sealed class HeadlessChromeScreenshotterTests
     private static int BinaryPrimitives(byte[] png, int offset)
         => System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(offset, 4));
 
-    private static LocalSite Site(string html) => new(html);
-
     /// <summary>A page served on a loopback port, so the test doesn't depend on anything outside this machine.</summary>
     private sealed class LocalSite : IDisposable
     {
@@ -113,20 +149,23 @@ public sealed class HeadlessChromeScreenshotterTests
 
         public LocalSite(string html)
         {
+            Html = html;
             var port = FreePort();
             Url = $"http://127.0.0.1:{port}/";
             _listener.Prefixes.Add(Url);
             _listener.Start();
             _ = Task.Run(async () =>
             {
-                var body = Encoding.UTF8.GetBytes(html);
                 while (_listener.IsListening)
                 {
                     try
                     {
                         var context = await _listener.GetContextAsync();
                         context.Response.ContentType = "text/html; charset=utf-8";
-                        await context.Response.OutputStream.WriteAsync(body);
+                        // What a static file server sends, and what makes a browser cache a page it wasn't
+                        // told to: no Cache-Control, but something to date the file by.
+                        context.Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.AddHours(-2).ToString("R");
+                        await context.Response.OutputStream.WriteAsync(Encoding.UTF8.GetBytes(Html));
                         context.Response.Close();
                     }
                     catch (Exception error) when (error is HttpListenerException or ObjectDisposedException or InvalidOperationException)
@@ -138,6 +177,9 @@ public sealed class HeadlessChromeScreenshotterTests
         }
 
         public string Url { get; }
+
+        /// <summary>What the page says now; changing it is a developer editing their app.</summary>
+        public string Html { get; set; }
 
         public void Dispose()
         {

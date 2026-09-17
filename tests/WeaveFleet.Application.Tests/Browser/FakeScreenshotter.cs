@@ -12,11 +12,14 @@ internal sealed class FakeScreenshotter : IScreenshotter
     /// <summary>Set to fail the next capture the way a missing browser or a dead page would.</summary>
     public string? NextProblem { get; set; }
 
+    /// <summary>Set to hand back a picture with a caveat, as a page that never finished loading does.</summary>
+    public string? NextNote { get; set; }
+
     public Task<ScreenshotOutcome> CaptureAsync(ScreenshotRequest request, CancellationToken ct = default)
     {
         Requests.Add(request);
         return Task.FromResult(NextProblem is { } problem
             ? ScreenshotOutcome.Fail(problem)
-            : ScreenshotOutcome.Ok(NextPng, request.Width, request.Height));
+            : ScreenshotOutcome.Ok(NextPng, request.Width, request.Height, NextNote));
     }
 }

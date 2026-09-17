@@ -3,13 +3,17 @@ namespace WeaveFleet.Application.Browser;
 /// <summary>The page to shoot and the window to shoot it in. The url is always a page on this machine.</summary>
 public sealed record ScreenshotRequest(string Url, int Width, int Height);
 
-/// <summary>A captured page: PNG bytes at the size they were taken.</summary>
-public sealed record Screenshot(byte[] Png, int Width, int Height);
+/// <summary>
+/// A captured page: PNG bytes at the size they were taken. <see cref="Note"/> is set when the picture comes with
+/// a caveat the agent should read before trusting it.
+/// </summary>
+public sealed record Screenshot(byte[] Png, int Width, int Height, string? Note = null);
 
 /// <summary>Either the image, or why there isn't one, in words the agent can act on.</summary>
 public sealed record ScreenshotOutcome(Screenshot? Image, string? Problem)
 {
-    public static ScreenshotOutcome Ok(byte[] png, int width, int height) => new(new Screenshot(png, width, height), null);
+    public static ScreenshotOutcome Ok(byte[] png, int width, int height, string? note = null)
+        => new(new Screenshot(png, width, height, note), null);
 
     public static ScreenshotOutcome Fail(string problem) => new(null, problem);
 }
