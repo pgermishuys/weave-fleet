@@ -81,5 +81,8 @@ public sealed record UpdateSessionTitleRequest(string Title);
 /// <summary>Request DTO for changing a session's retention state.</summary>
 public sealed record UpdateSessionRetentionRequest(string RetentionStatus);
 
-/// <summary>Response DTO for accepted prompt submissions.</summary>
-public sealed record PromptSessionResult(long? EventId, string CorrelationId);
+/// <summary>
+/// Response DTO for accepted prompt submissions. <paramref name="MessageId"/> is the id the harness was given for the
+/// prompt, which its replies name as their parent.
+/// </summary>
+public sealed record PromptSessionResult(long? EventId, string CorrelationId, string? MessageId = null);

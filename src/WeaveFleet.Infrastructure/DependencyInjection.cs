@@ -175,6 +175,9 @@ public static class DependencyInjection
         services.AddScoped<CanvasBridge>();
         services.AddScoped<SessionMessagesFeature>();
         services.AddScoped<SessionMessageBridge>();
+        services.AddScoped<ISessionUpdateSender, SessionUpdateSender>();
+        // Singleton: holds which messages a session asked to hear back about, until the turn handling them ends.
+        services.AddSingleton<SessionUpdates>();
         services.AddSingleton<IPtyFactory, PortaPtyFactory>();
         services.AddSingleton<ITerminalHistoryStore>(sp => new TerminalHistoryStore(sp.GetRequiredService<FleetOptions>().ResolvedTerminalHistoryDirectory));
         services.AddSingleton<TerminalManager>();

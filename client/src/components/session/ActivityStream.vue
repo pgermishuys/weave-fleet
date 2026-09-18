@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { ArrowUpRight, Bot, RotateCw, TriangleAlert } from "lucide-vue-next";
-import { parsePeerMessage, type PeerSender } from "@/lib/session-messages";
+import { parsePeerMessage, parsePeerUpdate, type PeerOutcome, type PeerSender } from "@/lib/session-messages";
 import { useRouter } from "@tanstack/vue-router";
 import { storeToRefs } from "pinia";
 import MessageBubble from "@/components/session/MessageBubble.vue";
@@ -49,8 +49,10 @@ interface ActivityMessage {
   showIdentity: boolean;
   /** Set when the turn that produced this message failed. */
   turnError?: TurnError;
-  /** Set when another Fleet session sent this message with fleet_message. */
+  /** Set when another Fleet session sent this message with fleet_message, or Fleet sent an update about one. */
   peer?: PeerSender;
+  /** Set when this is Fleet's update that a session this one messaged is done. */
+  peerOutcome?: PeerOutcome;
 }
 
 interface DelegationLink {
@@ -190,7 +192,9 @@ const deliveredMessages = computed<ActivityMessage[]>(() => {
     .map((message) => {
       const author = getDisplayAuthor(message);
       const rawBody = renderMessageBody(message.parts);
-      const fromPeer = message.role === "user" ? parsePeerMessage(rawBody) : null;
+      const peerMessage = message.role === "user" ? parsePeerMessage(rawBody) : null;
+      const peerUpdate = message.role === "user" && !peerMessage ? parsePeerUpdate(rawBody) : null;
+      const fromPeer = peerMessage ?? peerUpdate;
 
       return {
         id: message.messageId,
@@ -201,6 +205,7 @@ const deliveredMessages = computed<ActivityMessage[]>(() => {
         createdAt: message.createdAt,
         body: fromPeer ? fromPeer.text : rawBody,
         peer: fromPeer?.peer,
+        peerOutcome: peerUpdate?.outcome,
         images: message.parts
           .filter((part): part is AccumulatedFilePart => part.type === "file" && part.mime.startsWith("image/"))
           .map((part) => ({ url: part.url, filename: part.filename?.trim() || "image" })),
@@ -850,6 +855,7 @@ function handleShowCanvas(canvasId: string): void {
         <a
           v-if="message.peer"
           class="peer-from"
+          :class="{ 'peer-from--failed': message.peerOutcome === 'failed' }"
           :href="`/sessions/${encodeURIComponent(message.peer.sessionId)}`"
           data-testid="peer-from"
           @click="handlePeerLinkClick($event, message.peer)"
@@ -858,8 +864,15 @@ function handleShowCanvas(canvasId: string): void {
             class="peer-from__icon"
             aria-hidden="true"
           />
-          <span class="peer-from__label">From</span>
+          <span
+            v-if="!message.peerOutcome"
+            class="peer-from__label"
+          >From</span>
           <span class="peer-from__title">{{ message.peer.title }}</span>
+          <span
+            v-if="message.peerOutcome"
+            class="peer-from__label peer-from__outcome"
+          >{{ message.peerOutcome }}</span>
           <ArrowUpRight
             class="peer-from__icon"
             aria-hidden="true"
@@ -1310,6 +1323,10 @@ function handleShowCanvas(canvasId: string): void {
 .peer-from:hover {
   border-color: color-mix(in srgb, var(--primary, #6366f1) 24%, var(--border));
   background: color-mix(in srgb, var(--card-bg, var(--panel-bg)) 88%, var(--accent-dim) 12%);
+}
+
+.peer-from--failed .peer-from__outcome {
+  color: var(--error);
 }
 
 .peer-from__icon {

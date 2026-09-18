@@ -298,7 +298,7 @@ public sealed record CanvasBridgeRequest(
 /// Body of a <c>fleet_message</c> call from a harness process: the harness's own id for the calling session, and the
 /// Fleet session to message with the text.
 /// </summary>
-public sealed record SessionMessageBridgeRequest(string? HarnessSessionId, string? SessionId = null, string? Text = null);
+public sealed record SessionMessageBridgeRequest(string? HarnessSessionId, string? SessionId = null, string? Text = null, bool NotifyWhenDone = false);
 
 /// <summary>
 /// What the tool returns to the harness as-is: a tool-card title, the text the model reads, metadata, and any

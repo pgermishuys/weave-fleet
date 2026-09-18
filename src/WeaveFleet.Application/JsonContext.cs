@@ -129,6 +129,7 @@ internal sealed record QuickChatSourceInput;
 [JsonSerializable(typeof(CanvasRefPayload))]
 [JsonSerializable(typeof(SessionRecapPayload))]
 [JsonSerializable(typeof(SessionMessagedPayload))]
+[JsonSerializable(typeof(SessionReportedPayload))]
 [JsonSerializable(typeof(SessionNotificationPayload))]
 [JsonSerializable(typeof(TerminalPayload))]
 [JsonSerializable(typeof(AppUpdatedPayload))]

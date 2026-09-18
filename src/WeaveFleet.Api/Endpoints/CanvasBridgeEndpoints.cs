@@ -70,7 +70,7 @@ public static class CanvasBridgeEndpoints
                     ? await next(context)
                     : UnknownCaller())
             .MapPost("/message", async (SessionMessageBridgeRequest request, HttpContext http, SessionMessageBridge bridge, CancellationToken ct)
-                => ToResult(await bridge.SendAsync(BridgeToken(http), request.HarnessSessionId, request.SessionId, request.Text, ct)))
+                => ToResult(await bridge.SendAsync(BridgeToken(http), request.HarnessSessionId, request.SessionId, request.Text, request.NotifyWhenDone, ct)))
             .WithName("SessionMessageBridgeSend");
 
         return app;

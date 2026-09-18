@@ -253,7 +253,7 @@ export const FleetCanvasPlugin = async () => ({
           fleet_message: {
             description: [
               "Send a message to another Fleet session. It arrives there marked as coming from this session, as a teammate's request, not the user's,",
-              "and wakes the session if it's idle. Its reply stays in that session.",
+              "and wakes the session if it's idle. Its reply stays in that session unless you set notifyWhenDone.",
               "Get the session's id from the Fleet API skill (GET $FLEET_URL/api/sessions). This is the only way to message a session: Fleet refuses prompts from agents through its API.",
             ].join(" "),
             args: {
@@ -265,9 +265,23 @@ export const FleetCanvasPlugin = async () => ({
                 type: "string",
                 description: "The message: what you need from that session and why, with the paths and details it needs to act on its own.",
               },
+              notifyWhenDone: {
+                type: "boolean",
+                description: [
+                  "true only when your own work depends on that session's answer: Fleet then sends you its reply, wrapped in <fleet-session-update>,",
+                  "when the turn that handles your message ends, and starts a turn here to read it. Each update costs a turn, so don't poll or check on it meanwhile.",
+                  "false when you're handing work off or just telling it something.",
+                ].join(" "),
+              },
             },
-            execute: (args: { sessionId: string; text: string }, context: ToolContext) =>
-              callFleet("message", context, { sessionId: args.sessionId, text: args.text }, MESSAGE_PATH),
+            execute: (args: { sessionId: string; text: string; notifyWhenDone: boolean | string }, context: ToolContext) =>
+              callFleet(
+                "message",
+                context,
+                // OpenCode doesn't check args against the schema, and models sometimes send a boolean as a string.
+                { sessionId: args.sessionId, text: args.text, notifyWhenDone: args.notifyWhenDone === true || args.notifyWhenDone === "true" },
+                MESSAGE_PATH,
+              ),
           },
         }
       : {}),
