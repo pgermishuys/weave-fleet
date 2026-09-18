@@ -95,6 +95,12 @@ internal sealed partial class InProcessFanOutService : BackgroundService
         {
             payload = JsonSerializer.SerializeToElement(filesChanged.Payload, InfrastructureJsonContext.Default.FilesChangedPayload);
         }
+        // Same for a failure: the client gets Fleet's normalised turn.failed shape, not the
+        // harness's own error object.
+        else if (domainEvent is TurnFailed turnFailed)
+        {
+            payload = JsonSerializer.SerializeToElement(turnFailed.Payload, InfrastructureJsonContext.Default.TurnFailedPayload);
+        }
         else if (eventType == EventTypes.SessionStatus)
         {
             payload = await EnrichSessionStatusPayloadAsync(payload, sessionId, activityStatus, ct)

@@ -166,6 +166,25 @@ public sealed record MessageEventInfo
     /// Gets the token usage reported for the message.
     /// </summary>
     public MessageTokenUsage? Tokens { get; init; }
+
+    /// <summary>
+    /// Gets the failure that ended this message, when the turn it belongs to failed. It rides on the
+    /// message rather than only on <see cref="TurnFailed"/> so a session reloaded from a snapshot still
+    /// shows why the turn stopped.
+    /// </summary>
+    /// <remarks>
+    /// Serialised as <c>turnError</c>, not <c>error</c>: harnesses put their own differently shaped
+    /// <c>error</c> on the message, and a harness shape would fail to bind to this one. Fleet fills this
+    /// in from that raw shape instead, and the harness's own property is ignored.
+    /// </remarks>
+    [JsonPropertyName("turnError")]
+    public TurnError? Error { get; init; }
+
+    /// <summary>
+    /// Gets the reason the model stopped producing this message (e.g. <c>stop</c>, <c>length</c>), when
+    /// the harness reports one.
+    /// </summary>
+    public string? Finish { get; init; }
 }
 
 /// <summary>

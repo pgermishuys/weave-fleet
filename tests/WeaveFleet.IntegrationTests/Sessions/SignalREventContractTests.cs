@@ -400,6 +400,73 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
             $"Full event: {received.Data.GetRawText()}");
     }
 
+    /// <summary>Matches the camelCase policy the fan-out service serialises domain payloads with.</summary>
+    private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
+
+    [Fact]
+    public async Task Hub_sends_domain_event_type_for_turn_failed()
+    {
+        // session.error (raw) → turn.failed (domain). Without the mapping the hub falls back to the
+        // CLR type name ("TurnFailed"), which the client reducer does not handle, so a failed turn
+        // would silently look like a turn that simply finished.
+        var sessionId = await CreateSessionAsync();
+        var topic = $"session:{sessionId}";
+
+        await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
+        await WaitForBroadcasterSubscriberAsync();
+
+        var broadcaster = _server.Services.GetRequiredService<IEventBroadcaster>();
+
+        // Serialised the way InProcessFanOutService serialises it: camelCase, so the client sees
+        // `error.message`, not `Error.Message`.
+        var payload = JsonSerializer.SerializeToElement(new WeaveFleet.Domain.Events.TurnFailedPayload
+        {
+            SessionId = sessionId,
+            MessageId = "msg-1",
+            Error = new WeaveFleet.Domain.Events.TurnError
+            {
+                Name = "APIError",
+                Message = "Overloaded",
+                IsRetryable = true,
+            },
+        }, WebJson);
+
+        var domainEvent = new WeaveFleet.Domain.Events.TurnFailed
+        {
+            Payload = new WeaveFleet.Domain.Events.TurnFailedPayload
+            {
+                SessionId = sessionId,
+                MessageId = "msg-1",
+                Error = new WeaveFleet.Domain.Events.TurnError
+                {
+                    Name = "APIError",
+                    Message = "Overloaded",
+                    IsRetryable = true,
+                },
+            }
+        };
+
+        await broadcaster.BroadcastAsync(
+            topic,
+            "session.error",   // raw harness type
+            payload,
+            eventId: null,
+            domainEvent: domainEvent,
+            userId: "local-user",
+            ct: CancellationToken.None);
+
+        var received = await WaitForEventAsync(TimeSpan.FromSeconds(5));
+        received.ShouldNotBeNull("No event received");
+
+        var wireType = received.Data.GetProperty("type").GetString();
+        wireType.ShouldBe("turn.failed",
+            $"Hub sent '{wireType}' instead of 'turn.failed'. The client reducer handles 'turn.failed' — " +
+            $"anything else means a failed turn goes idle with no explanation. Full event: {received.Data.GetRawText()}");
+
+        var properties = received.Data.GetProperty("properties");
+        properties.GetProperty("error").GetProperty("message").GetString().ShouldBe("Overloaded");
+    }
+
     [Fact]
     public async Task Hub_sends_domain_event_type_for_session_idled()
     {

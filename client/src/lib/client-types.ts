@@ -11,6 +11,7 @@ import type {
   SessionRetentionStatus,
   InstanceStatus,
 } from "@/lib/types";
+import type { TurnError } from "@/lib/domain-events";
 
 // Re-export status types for consumer convenience
 export type { SessionActivityStatus, SessionActionCapabilities, SessionLifecycleStatus, SessionRetentionStatus, InstanceStatus };
@@ -100,6 +101,10 @@ export interface AccumulatedMessage {
   modelID?: string;
   completedAt?: number;
   parentID?: string;
+  /** Set when the turn that produced this message failed, so the stream can say why it stopped. */
+  turnError?: TurnError;
+  /** Why the model stopped producing this message (e.g. "stop", "length"), when reported. */
+  finish?: string;
 }
 
 // ─── Image Attachment ───────────────────────────────────────────────────────

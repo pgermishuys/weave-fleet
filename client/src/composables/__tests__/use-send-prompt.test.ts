@@ -199,3 +199,33 @@ describe("seedSentPrompt (a new session's first message)", () => {
     expect(hasPendingPrompts.value).toBe(false)
   })
 })
+
+describe("use-send-prompt retry", () => {
+  it("re-sends the failed prompt without touching what is in the composer", async () => {
+    const sessionId = "session-retry-draft"
+    const draft = useDraftState(sessionId, { agentId: "", modelId: "" })
+    draft.setText("something else I started typing")
+
+    mockApi.POST.mockReturnValueOnce(new Promise(() => {}))
+    const sent = useSendPrompt(sessionId).retryPrompt("the prompt that failed")
+    await nextTick()
+
+    expect(sent).toBe(true)
+    expect(draft.draft.text).toBe("something else I started typing")
+    expect(mockApi.POST).toHaveBeenCalledTimes(1)
+    const promptCall = (mockApi.POST.mock.calls as unknown[][]).find(([url]) => url === "/api/sessions/{id}/prompt")
+    expect((promptCall?.[1] as { body: { text: string } }).body.text).toBe("the prompt that failed")
+  })
+
+  it("clears the composer when the draft itself is sent", async () => {
+    const sessionId = "session-retry-normal-send"
+    const draft = useDraftState(sessionId, { agentId: "", modelId: "" })
+    draft.setText("a normal prompt")
+
+    mockApi.POST.mockReturnValueOnce(new Promise(() => {}))
+    useSendPrompt(sessionId).sendPrompt()
+    await nextTick()
+
+    expect(draft.draft.text).toBe("")
+  })
+})

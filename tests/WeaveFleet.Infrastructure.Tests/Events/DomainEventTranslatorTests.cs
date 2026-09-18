@@ -301,7 +301,6 @@ public sealed class DomainEventTranslatorTests
     [InlineData(EventTypes.MessageRemoved)]
     [InlineData(EventTypes.MessagePartRemoved)]
     [InlineData(EventTypes.SessionUpdated)]
-    [InlineData(EventTypes.SessionError)]
     [InlineData(EventTypes.SessionCompacted)]
     [InlineData(EventTypes.SessionDiff)]
     [InlineData(EventTypes.Error)]
@@ -659,6 +658,209 @@ public sealed class DomainEventTranslatorTests
             Timestamp = DateTimeOffset.UtcNow,
             Payload = JsonSerializer.SerializeToElement(payload)
         };
+
+    // --- Failed turns ------------------------------------------------------
+    //
+    // A turn that dies mid-flight (provider 5xx, reset connection, exhausted quota) used to reach the
+    // client as nothing at all: the session simply went idle behind whatever text had already streamed.
+    // These cover the shapes the harnesses actually send.
+
+    [Fact]
+    public void Should_translate_an_opencode_session_error_to_turn_failed()
+    {
+        var translator = CreateTranslator();
+
+        var result = translator.Translate(new HarnessEvent
+        {
+            Type = EventTypes.SessionError,
+            SessionId = "oc-1",
+            FleetSessionId = "fleet-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                sessionID = "oc-1",
+                error = new
+                {
+                    name = "APIError",
+                    data = new
+                    {
+                        message = "Connection reset by server",
+                        isRetryable = true,
+                        metadata = new { code = "ECONNRESET" },
+                    },
+                },
+            }),
+        });
+
+        var failed = result.ShouldBeOfType<TurnFailed>();
+        failed.Payload.SessionId.ShouldBe("fleet-1");
+        failed.Payload.Error.Name.ShouldBe("APIError");
+        failed.Payload.Error.Message.ShouldBe("Connection reset by server");
+        failed.Payload.Error.IsRetryable.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Should_translate_a_flat_session_error_to_turn_failed()
+    {
+        // Pi sends { "message": "..." } with no wrapper.
+        var translator = CreateTranslator();
+
+        var result = translator.Translate(new HarnessEvent
+        {
+            Type = EventTypes.SessionError,
+            SessionId = "pi-1",
+            FleetSessionId = "fleet-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new { message = "Pi assistant message was aborted." }),
+        });
+
+        var failed = result.ShouldBeOfType<TurnFailed>();
+        failed.Payload.Error.Message.ShouldBe("Pi assistant message was aborted.");
+        failed.Payload.Error.Name.ShouldBe("Error");
+        failed.Payload.Error.IsRetryable.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Should_translate_a_session_error_that_only_names_the_failure()
+    {
+        var translator = CreateTranslator();
+
+        var result = translator.Translate(new HarnessEvent
+        {
+            Type = EventTypes.SessionError,
+            SessionId = "oc-1",
+            FleetSessionId = "fleet-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new { error = new { name = "ProviderAuthError" } }),
+        });
+
+        var failed = result.ShouldBeOfType<TurnFailed>();
+        failed.Payload.Error.Name.ShouldBe("ProviderAuthError");
+        failed.Payload.Error.Message.ShouldBe("ProviderAuthError");
+    }
+
+    [Fact]
+    public void Should_drop_a_session_error_with_nothing_to_show()
+    {
+        var translator = CreateTranslator();
+
+        var result = translator.Translate(new HarnessEvent
+        {
+            Type = EventTypes.SessionError,
+            SessionId = "oc-1",
+            FleetSessionId = "fleet-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new { error = new { } }),
+        });
+
+        result.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Should_name_the_assistant_message_a_failed_turn_belongs_to()
+    {
+        var translator = CreateTranslator();
+
+        translator.Translate(new HarnessEvent
+        {
+            Type = EventTypes.MessageCreated,
+            SessionId = "oc-1",
+            FleetSessionId = "fleet-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                info = new
+                {
+                    id = "msg_1",
+                    role = "assistant",
+                    sessionID = "oc-1",
+                    time = new { created = 1L },
+                },
+                parts = Array.Empty<object>(),
+            }),
+        });
+
+        var result = translator.Translate(new HarnessEvent
+        {
+            Type = EventTypes.SessionError,
+            SessionId = "oc-1",
+            FleetSessionId = "fleet-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                error = new { name = "APIError", data = new { message = "boom" } },
+            }),
+        });
+
+        result.ShouldBeOfType<TurnFailed>().Payload.MessageId.ShouldBe("msg_1");
+    }
+
+    [Fact]
+    public void Should_carry_a_harness_message_error_onto_the_message_info()
+    {
+        // The error also rides on the message, so a reloaded session still shows why the turn stopped.
+        var translator = CreateTranslator();
+
+        var result = translator.Translate(new HarnessEvent
+        {
+            Type = EventTypes.MessageUpdated,
+            SessionId = "oc-1",
+            FleetSessionId = "fleet-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                info = new
+                {
+                    id = "msg_1",
+                    role = "assistant",
+                    sessionID = "oc-1",
+                    time = new { created = 1L },
+                    finish = "error",
+                    error = new
+                    {
+                        name = "APIError",
+                        data = new { message = "Connection reset by server", isRetryable = true },
+                    },
+                },
+                parts = Array.Empty<object>(),
+            }),
+        });
+
+        var updated = result.ShouldBeOfType<MessageUpdated>();
+        updated.Payload.Info.Error.ShouldNotBeNull();
+        updated.Payload.Info.Error!.Message.ShouldBe("Connection reset by server");
+        updated.Payload.Info.Finish.ShouldBe("error");
+    }
+
+    [Fact]
+    public void Should_leave_a_healthy_message_without_an_error()
+    {
+        var translator = CreateTranslator();
+
+        var result = translator.Translate(new HarnessEvent
+        {
+            Type = EventTypes.MessageUpdated,
+            SessionId = "oc-1",
+            FleetSessionId = "fleet-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                info = new
+                {
+                    id = "msg_1",
+                    role = "assistant",
+                    sessionID = "oc-1",
+                    time = new { created = 1L },
+                    finish = "stop",
+                },
+                parts = Array.Empty<object>(),
+            }),
+        });
+
+        var updated = result.ShouldBeOfType<MessageUpdated>();
+        updated.Payload.Info.Error.ShouldBeNull();
+        updated.Payload.Info.Finish.ShouldBe("stop");
+    }
 
     private sealed class ListLogger<T> : ILogger<T>
     {
