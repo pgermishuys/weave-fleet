@@ -185,6 +185,12 @@ function keepPreview(canvas: CanvasInstance): void {
   if (canvas.file?.preview) store.keepFile(props.sessionId, canvas.file.path);
 }
 
+function togglePin(canvas: CanvasInstance): void {
+  if (!canvas.file) return;
+  if (canvas.file.preview) store.keepFile(props.sessionId, canvas.file.path);
+  else store.unpinFile(props.sessionId, canvas.file.path);
+}
+
 function onTabKeydown(event: KeyboardEvent): void {
   const list = canvases.value;
   const index = list.findIndex((canvas) => canvas.id === activeCanvas.value.id);
@@ -332,13 +338,17 @@ const activeProps = computed(() => {
             :aria-label="props.tabBadges[canvas.id]?.label"
           >{{ props.tabBadges[canvas.id]?.count }}</span>
           <span
-            v-if="canvas.file?.preview"
+            v-if="canvas.file"
             class="canvas-tab__pin"
+            :class="{ 'canvas-tab__pin--pinned': !canvas.file.preview }"
             role="button"
-            :aria-label="`Pin ${canvasTitle(canvas)}`"
-            title="Pin: keep this tab open when you open another file"
+            :aria-label="`${canvas.file.preview ? 'Pin' : 'Unpin'} ${canvasTitle(canvas)}`"
+            :aria-pressed="!canvas.file.preview"
+            :title="canvas.file.preview
+              ? 'Pin: keep this tab open when you open another file'
+              : 'Unpin: the next file you open replaces this tab'"
             :data-testid="`file-tab-pin-${canvas.file.path}`"
-            @click.stop="keepPreview(canvas)"
+            @click.stop="togglePin(canvas)"
           >
             <Pin
               :size="12"
@@ -628,6 +638,11 @@ const activeProps = computed(() => {
 .canvas-tab__close:hover {
   background-color: color-mix(in srgb, var(--text) 10%, transparent);
   color: var(--text);
+}
+
+/* A pinned tab's pin is filled in. */
+.canvas-tab__pin--pinned svg {
+  fill: currentColor;
 }
 
 /* A preview tab: the next file you single-click takes its place. */
