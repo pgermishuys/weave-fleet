@@ -547,6 +547,12 @@ using (var scope = app.Services.CreateScope())
 }
 
 // Middleware pipeline
+
+// An agent process started with messages between sessions on calls Fleet under /agent/{token}. The prefix comes off
+// before routing, so its calls reach the same endpoints and the endpoints can tell them apart.
+app.UseAgentRequests();
+app.UseRouting();
+
 app.UseCors();
 
 app.Use(async (context, next) =>

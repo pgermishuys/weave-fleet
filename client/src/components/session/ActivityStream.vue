@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { ArrowUpRight, Bot, RotateCw, TriangleAlert } from "lucide-vue-next";
+import { parsePeerMessage, type PeerSender } from "@/lib/session-messages";
 import { useRouter } from "@tanstack/vue-router";
 import { storeToRefs } from "pinia";
 import MessageBubble from "@/components/session/MessageBubble.vue";
@@ -48,6 +49,8 @@ interface ActivityMessage {
   showIdentity: boolean;
   /** Set when the turn that produced this message failed. */
   turnError?: TurnError;
+  /** Set when another Fleet session sent this message with fleet_message. */
+  peer?: PeerSender;
 }
 
 interface DelegationLink {
@@ -186,6 +189,8 @@ const deliveredMessages = computed<ActivityMessage[]>(() => {
   return sessionMessages.value
     .map((message) => {
       const author = getDisplayAuthor(message);
+      const rawBody = renderMessageBody(message.parts);
+      const fromPeer = message.role === "user" ? parsePeerMessage(rawBody) : null;
 
       return {
         id: message.messageId,
@@ -194,7 +199,8 @@ const deliveredMessages = computed<ActivityMessage[]>(() => {
         senderKey: getSenderKey(message.role, message.agent),
         role: message.role,
         createdAt: message.createdAt,
-        body: renderMessageBody(message.parts),
+        body: fromPeer ? fromPeer.text : rawBody,
+        peer: fromPeer?.peer,
         images: message.parts
           .filter((part): part is AccumulatedFilePart => part.type === "file" && part.mime.startsWith("image/"))
           .map((part) => ({ url: part.url, filename: part.filename?.trim() || "image" })),
@@ -368,6 +374,13 @@ function handleDelegationLinkClick(event: MouseEvent, delegationLink: Delegation
     params: { id: sessionId },
     search: { instanceId, parentSessionId },
   });
+}
+
+function handlePeerLinkClick(event: MouseEvent, peer: PeerSender): void {
+  // A modified click opens the sender elsewhere, as a link would.
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+  event.preventDefault();
+  void router.navigate({ to: "/sessions/$id", params: { id: peer.sessionId }, search: { instanceId: undefined, parentSessionId: undefined } });
 }
 
 // The Turns canvas asks for a round: scroll to where it began and mark it for a moment.
@@ -834,6 +847,24 @@ function handleShowCanvas(canvasId: string): void {
           :summary="reasoning.summary"
           :created-at="message.createdAt"
         />
+        <a
+          v-if="message.peer"
+          class="peer-from"
+          :href="`/sessions/${encodeURIComponent(message.peer.sessionId)}`"
+          data-testid="peer-from"
+          @click="handlePeerLinkClick($event, message.peer)"
+        >
+          <Bot
+            class="peer-from__icon"
+            aria-hidden="true"
+          />
+          <span class="peer-from__label">From</span>
+          <span class="peer-from__title">{{ message.peer.title }}</span>
+          <ArrowUpRight
+            class="peer-from__icon"
+            aria-hidden="true"
+          />
+        </a>
         <MessageBubble
           :author="message.author"
           :model-name="message.modelName"
@@ -1258,6 +1289,42 @@ function handleShowCanvas(canvasId: string): void {
       calc(32 * var(--size)) 0 var(--color-1),
       calc(-32 * var(--size)) 0 var(--color-2);
   }
+}
+
+.peer-from {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: min(100%, 380px);
+  margin: 0 0 6px;
+  padding: 4px 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--card-bg, var(--panel-bg)) 96%, var(--accent-dim) 4%);
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-decoration: none;
+  transition: border-color var(--transition) ease, background-color var(--transition) ease;
+}
+
+.peer-from:hover {
+  border-color: color-mix(in srgb, var(--primary, #6366f1) 24%, var(--border));
+  background: color-mix(in srgb, var(--card-bg, var(--panel-bg)) 88%, var(--accent-dim) 12%);
+}
+
+.peer-from__icon {
+  flex-shrink: 0;
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.peer-from__title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .delegation-links {

@@ -11,6 +11,7 @@ using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Skills;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
@@ -367,7 +368,20 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         if (builtInSkills.Count > 0)
             envVars[OpenCodeFleetSkills.BuiltInVariable] = string.Join(',', builtInSkills);
 
+        // Messages between sessions change the process's tools and its FLEET_URL, so sessions with it on and off
+        // never share a process.
+        if (await IsSessionMessagesEnabledAsync(context.UserId).ConfigureAwait(false))
+            envVars[SessionMessages.EnvironmentVariable] = "1";
+
         return new RuntimePreparation.Ready(new OpenCodeLaunchArtifacts(envVars, GetRuntimePreparationModelIds(context.ModelId)));
+    }
+
+    private async Task<bool> IsSessionMessagesEnabledAsync(string userId)
+    {
+        using var userScope = BackgroundUserContext.BeginScope(userId);
+        using var scope = _scopeFactory.CreateScope();
+        return scope.ServiceProvider.GetService<SessionMessagesFeature>() is { } feature
+            && await feature.IsEnabledAsync().ConfigureAwait(false);
     }
 
     /// <summary>The built-in skills the user turned on that this Fleet ships, in name order.</summary>
@@ -876,7 +890,11 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
             List<string> plugins = [];
             if (ResolveLocalFleetUrl() is { } fleetUrl && GetFleetPluginUri() is { } fleetPlugin)
             {
-                processEnvironment["FLEET_URL"] = fleetUrl;
+                // With messages on, the process reaches Fleet under a path that names it, so Fleet can refuse its
+                // prompts to other sessions: those go through fleet_message, which says who sent them.
+                processEnvironment["FLEET_URL"] = HasSessionMessages(environmentVariables)
+                    ? $"{fleetUrl.TrimEnd('/')}{SessionMessages.AgentPathPrefix}/{bridgeToken}"
+                    : fleetUrl;
                 processEnvironment["FLEET_BRIDGE_TOKEN"] = bridgeToken;
                 plugins.Add(fleetPlugin);
 
@@ -1001,6 +1019,9 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
     /// The folders a process loads Fleet's skills from: the skills every session gets, and a folder for each built-in
     /// skill named in <paramref name="environmentVariables"/>.
     /// </summary>
+    private static bool HasSessionMessages(IReadOnlyDictionary<string, string> environmentVariables)
+        => environmentVariables.TryGetValue(SessionMessages.EnvironmentVariable, out var value) && value == "1";
+
     internal List<string> GetSkillFolders(IReadOnlyDictionary<string, string> environmentVariables)
     {
         List<string> folders = [];

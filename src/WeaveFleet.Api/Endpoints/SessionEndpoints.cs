@@ -5,6 +5,7 @@ using WeaveFleet.Api;
 using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Progress;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
@@ -177,8 +178,12 @@ public static class SessionEndpoints
         .WithName("GetSessionDelegations");
 
         // POST /api/sessions — create session via orchestrator
-        group.MapPost("/", async (CreateSessionApiRequest req, SessionOrchestrator orchestrator) =>
+        group.MapPost("/", async (CreateSessionApiRequest req, SessionOrchestrator orchestrator, HttpContext http, SessionMessagesFeature sessionMessages) =>
         {
+            // With messages on, an agent gives a new session its task through fleet_message, which says who sent it.
+            if (!string.IsNullOrWhiteSpace(req.InitialPrompt) && http.IsAgentRequest() && await sessionMessages.IsEnabledAsync())
+                return Results.Conflict(new ErrorResponse("Start the session without an initialPrompt, then use the fleet_message tool to give it the task."));
+
             // The session doesn't exist yet, so the model can't be checked against its harness; a wrong one
             // shows up as the first reply's error, as it would for any prompt.
             if (req.Model is not null
@@ -236,8 +241,13 @@ public static class SessionEndpoints
         .WithName("AddSessionSource");
 
         // POST /api/sessions/{id}/prompt
-        group.MapPost("/{id}/prompt", async (string id, SendPromptApiRequest req, SessionOrchestrator orchestrator, SessionService sessionService, InstanceTracker tracker, CancellationToken ct) =>
+        group.MapPost("/{id}/prompt", async (string id, SendPromptApiRequest req, SessionOrchestrator orchestrator, SessionService sessionService, InstanceTracker tracker, HttpContext http, SessionMessagesFeature sessionMessages, CancellationToken ct) =>
         {
+            // With messages on, agents message sessions through fleet_message, which says who sent it; this path
+            // would make the text look like the user's.
+            if (http.IsAgentRequest() && await sessionMessages.IsEnabledAsync())
+                return Results.Conflict(new ErrorResponse(SessionMessages.UseTheToolMessage));
+
             var modelResolution = await ResolveSessionModelAsync(id, req.Model, sessionService, tracker, ct);
             if (modelResolution.ErrorResult is not null)
                 return modelResolution.ErrorResult;

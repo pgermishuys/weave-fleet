@@ -12,13 +12,19 @@
  */
 
 const BRIDGE_PATH = "/api/bridge/canvas/"
+const MESSAGE_PATH = "/api/bridge/session/message"
 
 type PermissionRequest = { permission: string; patterns: string[]; always: string[]; metadata: Record<string, unknown> }
 type ToolContext = { sessionID: string; ask?: (request: PermissionRequest) => Promise<void> }
 type Attachment = { type: "file"; mime: string; url: string; filename: string }
 type ToolResult = { title: string; output: string; metadata: Record<string, unknown>; attachments?: Attachment[] }
 
-async function callFleet(tool: string, context: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
+async function callFleet(
+  tool: string,
+  context: ToolContext,
+  args: Record<string, unknown>,
+  path = BRIDGE_PATH + tool,
+): Promise<ToolResult> {
   const url = process.env.FLEET_URL
   const token = process.env.FLEET_BRIDGE_TOKEN
   if (!url || !token) {
@@ -27,7 +33,7 @@ async function callFleet(tool: string, context: ToolContext, args: Record<string
 
   let response: Response
   try {
-    response = await fetch(url + BRIDGE_PATH + tool, {
+    response = await fetch(url + path, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: "Bearer " + token },
       body: JSON.stringify({ ...args, harnessSessionId: context.sessionID }),
@@ -239,5 +245,31 @@ export const FleetCanvasPlugin = async () => ({
       execute: (args: { canvasId: string; path: string; viewport: string }, context: ToolContext) =>
         callFleet("screenshot", context, { canvasId: args.canvasId, path: args.path, viewport: args.viewport }),
     },
+
+    // Only in processes started with messages between sessions on. Fleet then refuses prompts from agents through
+    // its API, so this is the one way to message a session, and the message says which session sent it.
+    ...(process.env.FLEET_SESSION_MESSAGES === "1"
+      ? {
+          fleet_message: {
+            description: [
+              "Send a message to another Fleet session. It arrives there marked as coming from this session, as a teammate's request, not the user's,",
+              "and wakes the session if it's idle. Its reply stays in that session.",
+              "Get the session's id from the Fleet API skill (GET $FLEET_URL/api/sessions). This is the only way to message a session: Fleet refuses prompts from agents through its API.",
+            ].join(" "),
+            args: {
+              sessionId: {
+                type: "string",
+                description: "The Fleet id of the session to message, from GET $FLEET_URL/api/sessions. Not an OpenCode session id.",
+              },
+              text: {
+                type: "string",
+                description: "The message: what you need from that session and why, with the paths and details it needs to act on its own.",
+              },
+            },
+            execute: (args: { sessionId: string; text: string }, context: ToolContext) =>
+              callFleet("message", context, { sessionId: args.sessionId, text: args.text }, MESSAGE_PATH),
+          },
+        }
+      : {}),
   },
 })

@@ -160,6 +160,12 @@ public sealed class HarnessOptions
     /// Default: 60.
     /// </summary>
     public int PooledOpenCodeIdleTtlSeconds { get; set; } = 60;
+
+    /// <summary>
+    /// Lets agents message other sessions with the <c>fleet_message</c> tool, and stops them prompting sessions
+    /// through the API. Experimental: a user's <c>SessionMessages</c> preference wins over this. Default: false.
+    /// </summary>
+    public bool SessionMessages { get; set; }
 }
 
 /// <summary>Transactional outbox polling and retention configuration.</summary>
