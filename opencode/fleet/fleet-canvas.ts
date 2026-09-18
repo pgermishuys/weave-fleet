@@ -14,7 +14,8 @@
 const BRIDGE_PATH = "/api/bridge/opencode/canvas/"
 
 type ToolContext = { sessionID: string }
-type ToolResult = { title: string; output: string; metadata: Record<string, unknown> }
+type Attachment = { type: "file"; mime: string; url: string; filename: string }
+type ToolResult = { title: string; output: string; metadata: Record<string, unknown>; attachments?: Attachment[] }
 
 async function callFleet(tool: string, context: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
   const url = process.env.FLEET_URL
@@ -35,7 +36,15 @@ async function callFleet(tool: string, context: ToolContext, args: Record<string
   }
 
   const text = await response.text()
-  let body: { title?: string; output?: string; metadata?: Record<string, unknown>; error?: string } | undefined
+  let body:
+    | {
+        title?: string
+        output?: string
+        metadata?: Record<string, unknown>
+        attachments?: { mime: string; fileName: string; base64: string }[]
+        error?: string
+      }
+    | undefined
   try {
     body = JSON.parse(text)
   } catch {
@@ -46,7 +55,21 @@ async function callFleet(tool: string, context: ToolContext, args: Record<string
     throw new Error(body?.error ?? "Fleet answered " + response.status + ": " + text)
   }
 
-  return { title: body.title ?? "", output: body.output ?? "", metadata: body.metadata ?? {} }
+  // Images come back base64 and go to the model as data URLs: that is how OpenCode carries a file on a tool
+  // result. Providers that take media inside a tool result get it there; the rest get it as a following message.
+  const attachments = (body.attachments ?? []).map((file) => ({
+    type: "file" as const,
+    mime: file.mime,
+    url: "data:" + file.mime + ";base64," + file.base64,
+    filename: file.fileName,
+  }))
+
+  return {
+    title: body.title ?? "",
+    output: body.output ?? "",
+    metadata: body.metadata ?? {},
+    ...(attachments.length ? { attachments } : {}),
+  }
 }
 
 const canvasId = {
@@ -181,6 +204,31 @@ export const FleetCanvasPlugin = async () => ({
       },
       execute: (args: { url: string; title: string }, context: ToolContext) =>
         callFleet("browser-open", context, { url: args.url, title: args.title }),
+    },
+
+    fleet_browser_screenshot: {
+      description: [
+        "Look at a page in a browser canvas: Fleet takes a screenshot and attaches it to this tool's result, as an image you can see.",
+        "Use it to check UI work you just did — layout, spacing, colours, whether the thing you changed is even on the screen — instead of assuming the code is enough.",
+        "Take one after a change, and again after the fix.",
+        "Fleet shoots the page in its own headless browser, so the user's tab doesn't move and nothing is clicked.",
+        "A shot costs roughly width × height / 750 tokens of context (about 1,400 for desktop, 500 for phone), so take the ones you'll actually read.",
+      ].join(" "),
+      args: {
+        canvasId,
+        path: {
+          type: "string",
+          description:
+            "Empty string for the page the canvas is showing, or a path on the same app to shoot instead, e.g. \"/settings\".",
+        },
+        viewport: {
+          type: "string",
+          enum: ["desktop", "phone"],
+          description: "desktop: 1280×800. phone: 390×844, for checking a narrow layout.",
+        },
+      },
+      execute: (args: { canvasId: string; path: string; viewport: string }, context: ToolContext) =>
+        callFleet("screenshot", context, { canvasId: args.canvasId, path: args.path, viewport: args.viewport }),
     },
   },
 })

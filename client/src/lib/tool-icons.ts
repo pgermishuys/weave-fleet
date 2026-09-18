@@ -1,6 +1,7 @@
 import type { Component } from 'vue'
 import {
   AppWindow,
+  Camera,
   FileText,
   Pencil,
   Search,
@@ -25,6 +26,7 @@ const iconMap: Record<string, Component> = {
   question: MessageCircleQuestion,
   fleet_app_start: AppWindow,
   fleet_browser_open: Globe,
+  fleet_browser_screenshot: Camera,
 }
 
 const labelMap: Record<string, string> = {
@@ -40,6 +42,7 @@ const labelMap: Record<string, string> = {
   question: 'Question',
   fleet_app_start: 'Run app',
   fleet_browser_open: 'Open page',
+  fleet_browser_screenshot: 'Screenshot',
 }
 
 export function getToolIcon(kind: string): Component {
