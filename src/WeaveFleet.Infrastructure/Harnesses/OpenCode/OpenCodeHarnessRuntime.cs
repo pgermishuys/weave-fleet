@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
@@ -35,10 +34,6 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
     private static readonly Action<ILogger, string, Exception?> LogSpawnFailed =
         LoggerMessage.Define<string>(LogLevel.Error, new EventId(2, "SpawnFailed"),
             "Failed to spawn OpenCode harness instance: {Reason}");
-
-    private static readonly Action<ILogger, Exception?> LogAvailabilityCheckFailed =
-        LoggerMessage.Define(LogLevel.Warning, new EventId(3, "AvailabilityCheckFailed"),
-            "opencode binary availability check failed.");
 
     private static readonly Action<ILogger, string, Exception?> LogExpireQuestionsFailed =
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(4, "ExpireQuestionsFailed"),
@@ -441,50 +436,9 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         string UserFacingMessage);
 
     /// <inheritdoc />
-    public async Task<HarnessAvailability> CheckAvailabilityAsync(CancellationToken ct)
-    {
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = ExecutableResolver.Resolve("opencode"),
-                Arguments = "--version",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-            };
-
-            using var process = Process.Start(psi);
-            if (process is null)
-            {
-                return new HarnessAvailability(false, "opencode binary not found on PATH.");
-            }
-
-            // Drain redirected streams before WaitForExitAsync to prevent deadlock
-            // when the OS pipe buffer fills up and the child process blocks on write.
-            var stdoutTask = process.StandardOutput.ReadToEndAsync(ct);
-            var stderrTask = process.StandardError.ReadToEndAsync(ct);
-
-            await process.WaitForExitAsync(ct).ConfigureAwait(false);
-
-            await stdoutTask.ConfigureAwait(false);
-            await stderrTask.ConfigureAwait(false);
-
-            return process.ExitCode == 0
-                ? new HarnessAvailability(true, null)
-                : new HarnessAvailability(false, $"opencode --version exited with code {process.ExitCode}.");
-        }
-        catch (OperationCanceledException)
-        {
-            return new HarnessAvailability(false, "Availability check was cancelled.");
-        }
-        catch (Exception ex)
-        {
-            LogAvailabilityCheckFailed(_logger, ex);
-            return new HarnessAvailability(false, "opencode binary not found on PATH.");
-        }
-    }
+    public Task<HarnessAvailability> CheckAvailabilityAsync(CancellationToken ct) =>
+        HarnessProbe.CheckInstalledAsync(
+            "OpenCode", OpenCodeExecutable.Command, OpenCodeExecutable.InstallDirectories(), _logger, ct);
 
     /// <inheritdoc />
     public async Task<IHarnessSession> SpawnAsync(HarnessSpawnOptions options, CancellationToken ct)

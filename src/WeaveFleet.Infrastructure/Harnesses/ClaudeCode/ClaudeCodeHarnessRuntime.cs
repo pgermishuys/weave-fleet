@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
@@ -57,92 +56,32 @@ public sealed class ClaudeCodeHarnessRuntime : IHarnessRuntime
     /// <inheritdoc />
     public async Task<HarnessAvailability> CheckAvailabilityAsync(CancellationToken ct)
     {
-        // Resolve the binary via PATHEXT on Windows so npm-installed CLIs (e.g. "claude.cmd")
-        // work without explicit configuration.
-        var binaryPath = ExecutableResolver.Resolve(_options.ClaudeCode.BinaryPath);
+        // Claude Code's installer uses ~/.local/bin, which ExecutableResolver searches for every harness.
+        var installed = await HarnessProbe.CheckInstalledAsync(
+            "Claude Code", _options.ClaudeCode.BinaryPath, [], _logger, ct).ConfigureAwait(false);
+        if (!installed.Available || installed.ExecutablePath is null)
+        {
+            return installed;
+        }
 
-        // 1. Check the binary exists and is runnable
         try
         {
-            var versionPsi = new ProcessStartInfo
+            var auth = await HarnessProbe.RunAsync(installed.ExecutablePath, ["auth", "status"], ct).ConfigureAwait(false);
+            if (auth.TimedOut || auth.ExitCode != 0)
             {
-                FileName = binaryPath,
-                Arguments = "--version",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-            };
-
-            using var versionProcess = Process.Start(versionPsi);
-            if (versionProcess is null)
-            {
-                return new HarnessAvailability(false, "claude binary not found on PATH.");
-            }
-
-            // Drain redirected streams before WaitForExitAsync to prevent deadlock
-            // when the OS pipe buffer fills up and the child process blocks on write.
-            var stdoutTask = versionProcess.StandardOutput.ReadToEndAsync(ct);
-            var stderrTask = versionProcess.StandardError.ReadToEndAsync(ct);
-
-            await versionProcess.WaitForExitAsync(ct).ConfigureAwait(false);
-
-            await stdoutTask.ConfigureAwait(false);
-            await stderrTask.ConfigureAwait(false);
-
-            if (versionProcess.ExitCode != 0)
-            {
-                return new HarnessAvailability(false,
-                    $"claude --version exited with code {versionProcess.ExitCode}.");
+                return HarnessAvailability.SignInRequired(
+                    "Claude Code isn't signed in. Run claude auth login.",
+                    installed.Version,
+                    installed.ExecutablePath);
             }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
         {
             LogAvailabilityCheckFailed(_logger, ex);
-            return new HarnessAvailability(false, "claude binary not found on PATH.");
+            return HarnessAvailability.NotWorking("claude auth status couldn't run.", installed.Version, installed.ExecutablePath);
         }
 
-        // 2. Check auth status
-        try
-        {
-            var authPsi = new ProcessStartInfo
-            {
-                FileName = binaryPath,
-                Arguments = "auth status",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-            };
-
-            using var authProcess = Process.Start(authPsi);
-            if (authProcess is null)
-            {
-                return new HarnessAvailability(false, "claude auth check failed: could not start process.");
-            }
-
-            // Drain redirected streams before WaitForExitAsync to prevent deadlock
-            // when the OS pipe buffer fills up and the child process blocks on write.
-            var authStdoutTask = authProcess.StandardOutput.ReadToEndAsync(ct);
-            var authStderrTask = authProcess.StandardError.ReadToEndAsync(ct);
-
-            await authProcess.WaitForExitAsync(ct).ConfigureAwait(false);
-
-            await authStdoutTask.ConfigureAwait(false);
-            await authStderrTask.ConfigureAwait(false);
-
-            if (authProcess.ExitCode != 0)
-            {
-                return new HarnessAvailability(false, "claude auth not configured.");
-            }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            LogAvailabilityCheckFailed(_logger, ex);
-            return new HarnessAvailability(false, "claude auth check failed.");
-        }
-
-        return new HarnessAvailability(true, null);
+        return installed;
     }
 
     /// <inheritdoc />

@@ -19,6 +19,9 @@ public sealed class FakeHarnessRuntime : IHarnessRuntime
     public bool Available { get; set; }
     public string? AvailabilityReason { get; set; }
 
+    /// <summary>When set, returned by <see cref="CheckAvailabilityAsync"/> instead of one built from <see cref="Available"/>.</summary>
+    public HarnessAvailability? Availability { get; set; }
+
     /// <summary>
     /// Configurable preparation result. Defaults to <see cref="RuntimePreparation.Ready"/> with a no-op artifact.
     /// </summary>
@@ -48,7 +51,7 @@ public sealed class FakeHarnessRuntime : IHarnessRuntime
     // ── IHarnessRuntime ──────────────────────────────────────────────────────
 
     public Task<HarnessAvailability> CheckAvailabilityAsync(CancellationToken ct)
-        => Task.FromResult(new HarnessAvailability(Available, AvailabilityReason));
+        => Task.FromResult(Availability ?? new HarnessAvailability(Available, AvailabilityReason));
 
     public Task<RuntimePreparation> PrepareRuntimeAsync(RuntimePreparationContext context, CancellationToken ct)
     {

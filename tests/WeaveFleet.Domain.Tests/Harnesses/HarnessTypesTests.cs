@@ -36,6 +36,27 @@ public sealed class HarnessTypesTests
     }
 
     [Fact]
+    public void HarnessAvailability_DefaultsItsStateFromAvailable()
+    {
+        new HarnessAvailability(true, null).State.ShouldBe(HarnessStates.Ready);
+        new HarnessAvailability(false, "broken").State.ShouldBe(HarnessStates.NotWorking);
+    }
+
+    [Fact]
+    public void HarnessAvailability_FactoriesSayWhatTheHarnessNeeds()
+    {
+        var ready = HarnessAvailability.Ready("1.18.30", "/home/you/.opencode/bin/opencode");
+        (ready.Available, ready.State, ready.Version, ready.ExecutablePath)
+            .ShouldBe((true, HarnessStates.Ready, "1.18.30", "/home/you/.opencode/bin/opencode"));
+
+        var missing = HarnessAvailability.NotInstalled("OpenCode isn't installed.");
+        (missing.Available, missing.State, missing.Reason).ShouldBe((false, HarnessStates.NotInstalled, "OpenCode isn't installed."));
+
+        var signIn = HarnessAvailability.SignInRequired("Sign in.", "2.1.276", "/home/you/.local/bin/claude");
+        (signIn.Available, signIn.State, signIn.Version).ShouldBe((false, HarnessStates.SignInRequired, "2.1.276"));
+    }
+
+    [Fact]
     public void HarnessSessionStatus_HasExpectedValues()
     {
         var values = Enum.GetValues<HarnessSessionStatus>();
