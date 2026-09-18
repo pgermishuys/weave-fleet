@@ -7,10 +7,11 @@ namespace WeaveFleet.Api.Endpoints;
 #pragma warning disable IL2026 // RDG intercepts MapX calls in Web SDK projects making them trim-safe
 
 /// <summary>
-/// The agent's canvas tools for pooled OpenCode. The <c>fleet-canvas.ts</c> plugin inside each pooled process
-/// posts here with <c>Authorization: Bearer {FLEET_BRIDGE_TOKEN}</c> and its OpenCode session id. These routes
-/// sit outside Fleet's user auth and CSRF checks: a call is accepted only from a loopback address with a live
-/// process token, for a session bound to that process. Every miss is the same 404.
+/// The agent's canvas tools, for any harness process Fleet runs. The harness's side posts here with
+/// <c>Authorization: Bearer {FLEET_BRIDGE_TOKEN}</c> and the harness's own session id, which
+/// <see cref="IHarnessCanvasCallerResolver"/> turns into a Fleet session. These routes sit outside Fleet's user
+/// auth and CSRF checks: a call is accepted only from a loopback address with a live process token, for a session
+/// bound to that process. Every miss is the same 404.
 /// </summary>
 public static class CanvasBridgeEndpoints
 {
@@ -19,7 +20,7 @@ public static class CanvasBridgeEndpoints
 
     public static IEndpointRouteBuilder MapCanvasBridgeEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup($"{PathPrefix}/opencode/canvas")
+        var group = app.MapGroup($"{PathPrefix}/canvas")
             .AllowAnonymous()
             .WithTags("CanvasBridge")
             .AddEndpointFilter(async (context, next) =>
@@ -28,35 +29,35 @@ public static class CanvasBridgeEndpoints
                     : UnknownCaller());
 
         group.MapPost("/list", async (CanvasBridgeRequest request, HttpContext http, CanvasBridge bridge, CancellationToken ct)
-            => ToResult(await bridge.ListAsync(BridgeToken(http), request.OpenCodeSessionId, ct)))
+            => ToResult(await bridge.ListAsync(BridgeToken(http), request.HarnessSessionId, ct)))
             .WithName("CanvasBridgeList");
 
         group.MapPost("/open", async (CanvasBridgeRequest request, HttpContext http, CanvasBridge bridge, CancellationToken ct)
-            => ToResult(await bridge.OpenAsync(BridgeToken(http), request.OpenCodeSessionId, request.Kind, request.Title, request.State, ct)))
+            => ToResult(await bridge.OpenAsync(BridgeToken(http), request.HarnessSessionId, request.Kind, request.Title, request.State, ct)))
             .WithName("CanvasBridgeOpen");
 
         group.MapPost("/read", async (CanvasBridgeRequest request, HttpContext http, CanvasBridge bridge, CancellationToken ct)
-            => ToResult(await bridge.ReadAsync(BridgeToken(http), request.OpenCodeSessionId, request.CanvasId, ct)))
+            => ToResult(await bridge.ReadAsync(BridgeToken(http), request.HarnessSessionId, request.CanvasId, ct)))
             .WithName("CanvasBridgeRead");
 
         group.MapPost("/patch", async (CanvasBridgeRequest request, HttpContext http, CanvasBridge bridge, CancellationToken ct)
-            => ToResult(await bridge.PatchAsync(BridgeToken(http), request.OpenCodeSessionId, request.CanvasId, request.Ops, ct)))
+            => ToResult(await bridge.PatchAsync(BridgeToken(http), request.HarnessSessionId, request.CanvasId, request.Ops, ct)))
             .WithName("CanvasBridgePatch");
 
         group.MapPost("/focus", async (CanvasBridgeRequest request, HttpContext http, CanvasBridge bridge, CancellationToken ct)
-            => ToResult(await bridge.FocusAsync(BridgeToken(http), request.OpenCodeSessionId, request.CanvasId, ct)))
+            => ToResult(await bridge.FocusAsync(BridgeToken(http), request.HarnessSessionId, request.CanvasId, ct)))
             .WithName("CanvasBridgeFocus");
 
         group.MapPost("/app-start", async (CanvasBridgeRequest request, HttpContext http, BrowserBridge bridge, CancellationToken ct)
-            => ToResult(await bridge.AppStartAsync(BridgeToken(http), request.OpenCodeSessionId, request.Command, request.Title, ct)))
+            => ToResult(await bridge.AppStartAsync(BridgeToken(http), request.HarnessSessionId, request.Command, request.Title, ct)))
             .WithName("CanvasBridgeAppStart");
 
         group.MapPost("/browser-open", async (CanvasBridgeRequest request, HttpContext http, BrowserBridge bridge, CancellationToken ct)
-            => ToResult(await bridge.BrowserOpenAsync(BridgeToken(http), request.OpenCodeSessionId, request.Url, request.Title, ct)))
+            => ToResult(await bridge.BrowserOpenAsync(BridgeToken(http), request.HarnessSessionId, request.Url, request.Title, ct)))
             .WithName("CanvasBridgeBrowserOpen");
 
         group.MapPost("/screenshot", async (CanvasBridgeRequest request, HttpContext http, BrowserBridge bridge, CancellationToken ct)
-            => ToResult(await bridge.ScreenshotAsync(BridgeToken(http), request.OpenCodeSessionId, request.CanvasId, request.Path, request.Viewport, ct)))
+            => ToResult(await bridge.ScreenshotAsync(BridgeToken(http), request.HarnessSessionId, request.CanvasId, request.Path, request.Viewport, ct)))
             .WithName("CanvasBridgeScreenshot");
 
         return app;

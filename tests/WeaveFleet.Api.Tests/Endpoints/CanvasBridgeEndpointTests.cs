@@ -13,7 +13,7 @@ using WeaveFleet.Application.Services;
 namespace WeaveFleet.Api.Tests.Endpoints;
 
 /// <summary>
-/// The agent bridge for pooled OpenCode. Fleet auth is on, but these calls carry no user and no CSRF token:
+/// The agent bridge for harness processes. Fleet auth is on, but these calls carry no user and no CSRF token:
 /// a loopback address plus a process token is all they have. The caller resolver is faked; its own rules are
 /// covered in the Infrastructure tests.
 /// </summary>
@@ -22,10 +22,10 @@ public sealed class CanvasBridgeEndpointTests : IAsyncLifetime
 #pragma warning restore CA1001
 {
     private const string Token = "token-1";
-    private const string OpenCodeSessionId = "oc-1";
+    private const string HarnessSessionId = "oc-1";
     private const string SessionId = "sess-owner";
     private const string Owner = "owner-user";
-    private const string BridgeUrl = "/api/bridge/opencode/canvas";
+    private const string BridgeUrl = "/api/bridge/canvas";
 
     private static readonly object Flow = new
     {
@@ -53,7 +53,7 @@ public sealed class CanvasBridgeEndpointTests : IAsyncLifetime
     [Fact]
     public async Task Open_stores_the_canvas_for_the_session_owner_and_returns_the_tool_result()
     {
-        var response = await PostAsync("open", Token, new { openCodeSessionId = OpenCodeSessionId, kind = "diagram", title = "Flow", state = Flow });
+        var response = await PostAsync("open", Token, new { harnessSessionId = HarnessSessionId, kind = "diagram", title = "Flow", state = Flow });
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -72,10 +72,10 @@ public sealed class CanvasBridgeEndpointTests : IAsyncLifetime
     [Fact]
     public async Task A_screenshot_comes_back_on_the_tool_result_as_a_base64_image()
     {
-        var opened = await PostAsync("browser-open", Token, new { openCodeSessionId = OpenCodeSessionId, url = "http://localhost:5173/", title = "Shop" });
+        var opened = await PostAsync("browser-open", Token, new { harnessSessionId = HarnessSessionId, url = "http://localhost:5173/", title = "Shop" });
         var canvasId = (await opened.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("metadata").GetProperty("canvasId").GetString();
 
-        var response = await PostAsync("screenshot", Token, new { openCodeSessionId = OpenCodeSessionId, canvasId, path = "", viewport = "desktop" });
+        var response = await PostAsync("screenshot", Token, new { harnessSessionId = HarnessSessionId, canvasId, path = "", viewport = "desktop" });
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -93,13 +93,13 @@ public sealed class CanvasBridgeEndpointTests : IAsyncLifetime
 
         var patched = await ReadToolAsync(await PostAsync("patch", Token, new
         {
-            openCodeSessionId = OpenCodeSessionId,
+            harnessSessionId = HarnessSessionId,
             canvasId,
             ops = new object[] { new { op = "addNode", id = "n3", label = "Client" } },
         }));
-        var read = await ReadToolAsync(await PostAsync("read", Token, new { openCodeSessionId = OpenCodeSessionId, canvasId }));
-        var listed = await ReadToolAsync(await PostAsync("list", Token, new { openCodeSessionId = OpenCodeSessionId }));
-        var focused = await ReadToolAsync(await PostAsync("focus", Token, new { openCodeSessionId = OpenCodeSessionId, canvasId }));
+        var read = await ReadToolAsync(await PostAsync("read", Token, new { harnessSessionId = HarnessSessionId, canvasId }));
+        var listed = await ReadToolAsync(await PostAsync("list", Token, new { harnessSessionId = HarnessSessionId }));
+        var focused = await ReadToolAsync(await PostAsync("focus", Token, new { harnessSessionId = HarnessSessionId, canvasId }));
 
         patched.ShouldBe("Updated to v2 (+1 box).");
         read.ShouldBe($"diagram {canvasId} \"Flow\" v2 TB\nn1 NuCode session\nn2 SessionEventsHub\nn3 Client\ne1 n1 -> n2 publishes");
@@ -108,12 +108,12 @@ public sealed class CanvasBridgeEndpointTests : IAsyncLifetime
     }
 
     [Theory]
-    [InlineData(null, OpenCodeSessionId)]
-    [InlineData("token-2", OpenCodeSessionId)]
+    [InlineData(null, HarnessSessionId)]
+    [InlineData("token-2", HarnessSessionId)]
     [InlineData(Token, "oc-2")]
-    public async Task A_call_Fleet_cannot_place_returns_not_found(string? token, string openCodeSessionId)
+    public async Task A_call_Fleet_cannot_place_returns_not_found(string? token, string harnessSessionId)
     {
-        var response = await PostAsync("list", token, new { openCodeSessionId });
+        var response = await PostAsync("list", token, new { harnessSessionId });
 
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
         (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString().ShouldBe(CanvasBridge.UnknownCallerMessage);
@@ -128,7 +128,7 @@ public sealed class CanvasBridgeEndpointTests : IAsyncLifetime
 
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{BridgeUrl}/list")
         {
-            Content = JsonContent.Create(new { openCodeSessionId = OpenCodeSessionId }),
+            Content = JsonContent.Create(new { harnessSessionId = HarnessSessionId }),
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Token);
         var response = await client.SendAsync(request);
@@ -144,9 +144,9 @@ public sealed class CanvasBridgeEndpointTests : IAsyncLifetime
         using (scope.ServiceProvider.GetRequiredService<IBackgroundUserScope>().Begin(Owner))
             (await scope.ServiceProvider.GetRequiredService<ICanvasService>().CloseAsync(SessionId, canvasId)).IsSuccess.ShouldBeTrue();
 
-        var badKind = await PostAsync("open", Token, new { openCodeSessionId = OpenCodeSessionId, kind = "chart", title = "Other", state = Flow });
-        var missing = await PostAsync("read", Token, new { openCodeSessionId = OpenCodeSessionId, canvasId = "cv_missing" });
-        var closed = await PostAsync("patch", Token, new { openCodeSessionId = OpenCodeSessionId, canvasId, ops = Array.Empty<object>() });
+        var badKind = await PostAsync("open", Token, new { harnessSessionId = HarnessSessionId, kind = "chart", title = "Other", state = Flow });
+        var missing = await PostAsync("read", Token, new { harnessSessionId = HarnessSessionId, canvasId = "cv_missing" });
+        var closed = await PostAsync("patch", Token, new { harnessSessionId = HarnessSessionId, canvasId, ops = Array.Empty<object>() });
 
         badKind.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
         missing.StatusCode.ShouldBe(HttpStatusCode.NotFound);
@@ -193,7 +193,7 @@ public sealed class CanvasBridgeEndpointTests : IAsyncLifetime
 
     private async Task<string> OpenFlowAsync()
     {
-        var response = await PostAsync("open", Token, new { openCodeSessionId = OpenCodeSessionId, kind = "diagram", title = "Flow", state = Flow });
+        var response = await PostAsync("open", Token, new { harnessSessionId = HarnessSessionId, kind = "diagram", title = "Flow", state = Flow });
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         return (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("metadata").GetProperty("canvasId").GetString()!;
     }
@@ -218,7 +218,7 @@ public sealed class CanvasBridgeEndpointTests : IAsyncLifetime
     private sealed class FakeCallers : IHarnessCanvasCallerResolver
     {
         public Task<HarnessCanvasCaller?> ResolveAsync(string bridgeToken, string harnessSessionId, CancellationToken ct = default)
-            => Task.FromResult(bridgeToken == Token && harnessSessionId == OpenCodeSessionId
+            => Task.FromResult(bridgeToken == Token && harnessSessionId == HarnessSessionId
                 ? new HarnessCanvasCaller(SessionId, Owner)
                 : null);
     }

@@ -11,7 +11,7 @@
  * Every export is treated as a plugin, so export only the plugin function.
  */
 
-const BRIDGE_PATH = "/api/bridge/opencode/canvas/"
+const BRIDGE_PATH = "/api/bridge/canvas/"
 
 type PermissionRequest = { permission: string; patterns: string[]; always: string[]; metadata: Record<string, unknown> }
 type ToolContext = { sessionID: string; ask?: (request: PermissionRequest) => Promise<void> }
@@ -30,7 +30,7 @@ async function callFleet(tool: string, context: ToolContext, args: Record<string
     response = await fetch(url + BRIDGE_PATH + tool, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: "Bearer " + token },
-      body: JSON.stringify({ ...args, openCodeSessionId: context.sessionID }),
+      body: JSON.stringify({ ...args, harnessSessionId: context.sessionID }),
     })
   } catch (error) {
     throw new Error("Couldn't reach Fleet at " + url + ": " + (error instanceof Error ? error.message : String(error)))

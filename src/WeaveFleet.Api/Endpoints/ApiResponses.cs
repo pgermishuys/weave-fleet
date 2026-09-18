@@ -278,11 +278,12 @@ public sealed record CanvasResponse(
     JsonElement State);
 
 /// <summary>
-/// Body of a canvas tool call from a harness process. <c>openCodeSessionId</c> is always needed; the rest
-/// depends on the tool. <c>state</c> and <c>ops</c> stay raw JSON because models sometimes send them as strings.
+/// Body of a canvas tool call from a harness process. <c>harnessSessionId</c>, the harness's own id for the session,
+/// is always needed; the rest depends on the tool. <c>state</c> and <c>ops</c> stay raw JSON because models
+/// sometimes send them as strings.
 /// </summary>
 public sealed record CanvasBridgeRequest(
-    string? OpenCodeSessionId,
+    string? HarnessSessionId,
     string? CanvasId = null,
     string? Kind = null,
     string? Title = null,

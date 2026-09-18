@@ -134,7 +134,7 @@ const MOCK_SEQUENCE_SOURCE = [
   "  participant Fleet",
   "  participant Browser",
   "  Agent->>Plugin: fleet_canvas_open",
-  "  Plugin->>Fleet: POST /api/bridge/opencode/canvas/open",
+  "  Plugin->>Fleet: POST /api/bridge/canvas/open",
   "  Fleet-->>Browser: canvas.updated",
   "  Fleet-->>Browser: canvas.focused",
   "  Fleet-->>Plugin: Opened at v1",
