@@ -1232,7 +1232,10 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
     {
         HarnessHelpers.ValidateWorkingDirectory(options.WorkingDirectory);
 
-        var environmentVariables = GetEnvironmentVariables(options.LaunchArtifacts);
+        // A delegated child's OpenCode session lives in its parent's process, and only that process sends its
+        // events. The child's own launch can differ (a skill turned on or a profile edited since the parent
+        // started), and a different launch picks a different process, which doesn't know the session.
+        var environmentVariables = GetParentEnvironment(options) ?? GetEnvironmentVariables(options.LaunchArtifacts);
         var currentCredentialHash = CredentialHasher.HashEnvironment(environmentVariables);
 
         var mapping = ResolvePooledSessionMapping(options, currentCredentialHash);
@@ -1248,6 +1251,19 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
             environmentVariables,
             allowCrashRetry: true,
             ct).ConfigureAwait(false);
+    }
+
+    /// <summary>The environment of the process the parent is running on, if it's a child and that process is up.</summary>
+    private IReadOnlyDictionary<string, string>? GetParentEnvironment(HarnessResumeOptions options)
+    {
+        if (options.ParentSessionId is null
+            || !_pooledSessionMappings.TryGetValue(options.ParentSessionId, out var parent)
+            || !string.Equals(parent.OwnerUserId, options.OwnerUserId, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return _pooledInstanceRegistry.GetRunningEnvironment(options.OwnerUserId, parent.CredentialHash);
     }
 
     private PooledSessionMapping ResolvePooledSessionMapping(HarnessResumeOptions options, string currentCredentialHash)

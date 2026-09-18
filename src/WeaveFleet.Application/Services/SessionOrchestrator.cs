@@ -595,27 +595,26 @@ public sealed partial class SessionOrchestrator(
         var childSessionId = Guid.NewGuid().ToString();
         var canonicalParentDirectory = WorkspaceRootService.CanonicalizePath(parent.Directory);
 
-        // The child runs inside the parent's harness process, so it has to attach to the one the parent's
-        // profile started. Without the profile it would bind to a process that doesn't know its model.
-        RuntimeLaunchArtifacts? childLaunchArtifacts = null;
-        if (parent.HarnessProfileId is not null)
-        {
-            var parentProfile = await ResolveSessionProfileAsync(parent.HarnessProfileId).ConfigureAwait(false);
-            if (parentProfile.IsFailure)
-                return parentProfile.Error;
+        // The child runs inside the parent's harness process, so it has to attach to the one the parent
+        // woke on. It's prepared exactly as a parent wake is: anything the harness puts in the launch
+        // (profile, credentials, the owner's built-in skills) picks the process, and a child prepared
+        // differently binds to another one that doesn't know its session.
+        var parentProfile = await ResolveSessionProfileAsync(parent.HarnessProfileId).ConfigureAwait(false);
+        if (parentProfile.IsFailure)
+            return parentProfile.Error;
 
-            var parentCredentials = await credentialStore.GetDecryptedCredentialsAsync(parent.UserId).ConfigureAwait(false);
-            var preparation = await delegationRuntime.PrepareRuntimeAsync(new RuntimePreparationContext
-            {
-                UserId = parent.UserId,
-                UserCredentials = parentCredentials,
-                WorkingDirectory = canonicalParentDirectory,
-                Profile = parentProfile.Value
-            }, ct).ConfigureAwait(false);
-            if (preparation is RuntimePreparation.NotReady notReady)
-                return FleetError.ValidationError("Session.NotReady", string.Join(" ", notReady.Errors.Select(e => e.Message)));
-            childLaunchArtifacts = ((RuntimePreparation.Ready)preparation).Artifacts;
-        }
+        var parentCredentials = await credentialStore.GetDecryptedCredentialsAsync(parent.UserId).ConfigureAwait(false);
+        var preparation = await delegationRuntime.PrepareRuntimeAsync(new RuntimePreparationContext
+        {
+            UserId = parent.UserId,
+            UserCredentials = parentCredentials,
+            ModelId = null,
+            WorkingDirectory = canonicalParentDirectory,
+            Profile = parentProfile.Value
+        }, ct).ConfigureAwait(false);
+        if (preparation is RuntimePreparation.NotReady notReady)
+            return FleetError.ValidationError("Session.NotReady", string.Join(" ", notReady.Errors.Select(e => e.Message)));
+        var childLaunchArtifacts = ((RuntimePreparation.Ready)preparation).Artifacts;
 
         IHarnessSession harnessInstance;
         try
@@ -628,7 +627,8 @@ public sealed partial class SessionOrchestrator(
                 ResumeToken = childHarnessSessionId,
                 ProjectId = parent.ProjectId,
                 ProjectName = await ResolveProjectNameAsync(parent.ProjectId),
-                LaunchArtifacts = childLaunchArtifacts
+                LaunchArtifacts = childLaunchArtifacts,
+                ParentSessionId = parent.Id
             }, ct);
         }
         catch (Exception ex)

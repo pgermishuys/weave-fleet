@@ -128,9 +128,9 @@ public sealed class SessionProgressLiveTests
                     {"description":"Write the migration","prompt":"Write the migration that drops the dead tables.","subagent_type":"general"}
                     """));
 
-                // The subagent's turn. OpenCode 1.18 offers subagents todowrite, but it doesn't write todos here: this
-                // test's parent runs with its own scratch environment, so Fleet resumes the child on a second pooled
-                // process that never sees its events, and no counts would reach the parent.
+                // The subagent's turn. OpenCode 1.18 offers subagents todowrite, but it doesn't write todos here: the
+                // pooled process only sends a child's events once the child's own pump has bound it, and this scripted
+                // subagent is done well before then, so its counts would never reach the parent.
                 queue.Enqueue(new ScriptedLlmResponse { Text = "The migration is written." });
             },
             _ => true,

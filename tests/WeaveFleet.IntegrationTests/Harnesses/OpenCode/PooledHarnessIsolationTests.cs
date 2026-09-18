@@ -320,6 +320,87 @@ public sealed class PooledHarnessIsolationTests
 
     [Fact]
     [Trait("Category", "Integration")]
+    public async Task a_delegated_child_resumes_on_its_parents_process_even_when_its_own_launch_differs()
+    {
+        // The child's OpenCode session lives in the parent's process. Its own launch can differ (a built-in
+        // skill turned on since the parent started), and on its own that would pick a second process.
+        var handler = new IsolationHttpMessageHandler();
+        var factory = new IsolationInstanceFactory(handler);
+        await using var runtime = CreateRuntime(factory);
+        var directory = CreateDirectory();
+        var parent = await SpawnAsync(runtime, "fleet-parent", "user-1", directory, "parent-key");
+
+        try
+        {
+            var child = await runtime.ResumeAsync(new HarnessResumeOptions
+            {
+                SessionId = "fleet-child",
+                WorkingDirectory = directory,
+                OwnerUserId = "user-1",
+                ResumeToken = "oc-child",
+                LaunchArtifacts = CreateArtifacts("child-key"),
+                ParentSessionId = "fleet-parent",
+            }, CancellationToken.None);
+
+            try
+            {
+                child.ProcessId.ShouldBe(parent.ProcessId);
+                child.ResumeToken.ShouldBe("oc-child");
+                factory.SpawnCount.ShouldBe(1);
+            }
+            finally
+            {
+                await child.DisposeAsync();
+            }
+        }
+        finally
+        {
+            await parent.DisposeAsync();
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task a_delegated_child_whose_parent_isnt_running_here_resumes_with_its_own_launch()
+    {
+        var handler = new IsolationHttpMessageHandler();
+        var factory = new IsolationInstanceFactory(handler);
+        await using var runtime = CreateRuntime(factory);
+        var directory = CreateDirectory();
+        var other = await SpawnAsync(runtime, "fleet-other", "user-1", directory, "parent-key");
+
+        try
+        {
+            var child = await runtime.ResumeAsync(new HarnessResumeOptions
+            {
+                SessionId = "fleet-child",
+                WorkingDirectory = directory,
+                OwnerUserId = "user-1",
+                ResumeToken = "oc-child",
+                LaunchArtifacts = CreateArtifacts("child-key"),
+                ParentSessionId = "fleet-unknown-parent",
+            }, CancellationToken.None);
+
+            try
+            {
+                child.ProcessId.ShouldNotBe(other.ProcessId);
+                factory.SpawnCount.ShouldBe(2);
+            }
+            finally
+            {
+                await child.DisposeAsync();
+            }
+        }
+        finally
+        {
+            await other.DisposeAsync();
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
     public async Task stopped_session_can_resume_on_shared_process()
     {
         var handler = new IsolationHttpMessageHandler();

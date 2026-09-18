@@ -300,6 +300,18 @@ internal sealed class PooledOpenCodeInstanceRegistry : IAsyncDisposable
             ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// The environment the owner's process for <paramref name="credentialHashKey"/> was started with, while that
+    /// process is running. Null when there's no such process.
+    /// </summary>
+    public IReadOnlyDictionary<string, string>? GetRunningEnvironment(string ownerIdentity, string credentialHashKey)
+    {
+        return _entries.TryGetValue(BuildCompositeKey(ownerIdentity, credentialHashKey), out var entry)
+            && entry.Instance?.IsAvailable == true
+                ? entry.RestartEnvironment
+                : null;
+    }
+
     // -------------------------------------------------------------------------
     // Core implementation
     // -------------------------------------------------------------------------
