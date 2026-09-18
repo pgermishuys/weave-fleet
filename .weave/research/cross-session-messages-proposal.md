@@ -1,6 +1,6 @@
 # Messages between sessions
 
-*2026-09-18 — proposal. Stage 1 is agreed in outline; Stage 2 is for later.*
+*2026-09-18 — proposal. Stage 1 is agreed and built (branch `feat/session-messages`); Stage 2 is for later.*
 
 Agents in Fleet already talk to each other. One session tells another what to do with the Fleet API
 skill: `curl -X POST "$FLEET_URL/api/sessions/{id}/prompt" -d '{"text": "…"}'`. That works, and it
@@ -74,24 +74,28 @@ The worst outcome is agents using both: sometimes the tool, sometimes `curl …/
 messages carry a sender and some pose as the user, and the chip means nothing. So the API path closes
 for agents, enforced by the server, not only by the skill's wording.
 
-- **The skill stops teaching it.** `fleet-api` loses the `/prompt` row and gains one line: *to message
-  another session, use the `fleet_message` tool; the API refuses prompts from agents.*
+- **The skill points at the tool.** The `/prompt` row and the `initialPrompt` example in `fleet-api` say:
+  *if you have the `fleet_message` tool, use it instead; Fleet refuses this from agents then.* The tool
+  exists only with the switch on, so one skill text covers both settings.
 - **The server knows a request came from an agent.** Fleet sets `FLEET_URL` for OpenCode processes to
-  `http://fleet:<bridge token>@127.0.0.1:<port>`. `curl`, `wget` and Python's `requests` turn the
-  userinfo into a Basic `Authorization` header on their own, so every call the agent makes through the
-  skill says which process it came from, without the agent doing anything. `fleet-canvas.ts` and
-  `fleet_message` strip the userinfo before `fetch` (Node refuses URLs with credentials) and keep
-  sending the Bearer token as today.
-- **Agent requests can't prompt.** A request carrying a known bridge token gets `409` with
+  `http://127.0.0.1:<port>/agent/<bridge token>`. A middleware in front of routing checks the token,
+  marks the request as an agent's and strips the prefix, so the call reaches the same endpoint. Every
+  client works with it, and the agent does nothing different.
+
+  *Changed while building:* the first idea was the token as URL userinfo
+  (`http://fleet:<token>@…`). `curl` turns that into an `Authorization: Basic` header, and
+  `BearerTokenHandler` only trusts a localhost call that carries no `Authorization` header. With token
+  auth on, which is the default, every skill call would have failed. A path prefix adds no header.
+- **Agent requests can't prompt.** A request under a known `/agent/<token>` prefix gets `409` with
   `{"error": "Use the fleet_message tool to message a session."}` from:
   - `POST /api/sessions/{id}/prompt`
   - `POST /api/sessions` with an `initialPrompt` (start it empty, then message it)
 
   The error names the tool, so an agent that tries the old way corrects itself in one step.
-- **Everyone else is unchanged.** The UI, automations and your own scripts send no bridge token and
+- **Everyone else is unchanged.** The UI, automations and your own scripts don't use the prefix and
   prompt as before, and their prompts carry no sender chip: they're yours.
 
-This isn't a security boundary. An agent that hard-codes `127.0.0.1:6262` without the userinfo gets
+This isn't a security boundary. An agent that hard-codes `127.0.0.1:6262` without the prefix gets
 through, as it does today. It's there so the normal path, and the path an agent tries after reading
 the skill, both lead to the tool.
 
@@ -113,16 +117,16 @@ already exist and this reuses both:
 ![The switch in Settings → Features](../../mockups/session-messages/settings-on-dark.png)
 
 The flag switches **the tool and the guard together**. Off is exactly today: no `fleet_message`, no
-userinfo in `FLEET_URL`, `/prompt` open to agents. On is the whole of Stage 1. There's no setting
+prefix on `FLEET_URL`, `/prompt` open to agents. On is the whole of Stage 1. There's no setting
 where both paths are open, which is the outcome this proposal exists to prevent.
 
 Where it's read:
 
 | Place | Off | On |
 |---|---|---|
-| Starting an OpenCode process | `FLEET_URL` as today; `FLEET_SESSION_MESSAGES` unset | userinfo in `FLEET_URL`; `FLEET_SESSION_MESSAGES=1` |
+| Starting an OpenCode process | `FLEET_URL` as today; `FLEET_SESSION_MESSAGES` unset | `FLEET_URL` ends in `/agent/<token>`; `FLEET_SESSION_MESSAGES=1` |
 | Plugin | doesn't register `fleet_message` | registers it |
-| `fleet-api` skill text | as today | the `/prompt` row swapped for the tool line (the plugin picks the variant from the same variable) |
+| `fleet-api` skill text | one text: *if you have the `fleet_message` tool, use it instead* | same |
 | Bridge endpoint | 404 | delivers |
 | `/prompt`, `initialPrompt` with a bridge token | allowed | 409 naming the tool |
 | UI chip | still shown for a wrapped message | shown |
