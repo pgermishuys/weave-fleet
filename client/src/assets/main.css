@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "./transitions.css";
 @import "./markdown.css";
+@import "./mermaid.css";
 
 :root {
   --visual-vh: 100dvh;

@@ -1,0 +1,70 @@
+/*
+ * Mermaid diagrams, on the Mermaid canvas and in ```mermaid blocks in Markdown.
+ * sanitizeHtml drops the <style> block Mermaid embeds in its SVG, so the
+ * diagram is themed here from Fleet's tokens and follows theme changes.
+ */
+.mermaid-diagram svg {
+  font-family: var(--font-sans-stack);
+}
+
+.mermaid-diagram text {
+  fill: var(--text);
+}
+
+.mermaid-diagram .actor,
+.mermaid-diagram .node rect,
+.mermaid-diagram .node polygon,
+.mermaid-diagram .node circle,
+.mermaid-diagram .node ellipse,
+.mermaid-diagram .node path {
+  fill: var(--card-bg);
+  stroke: color-mix(in srgb, var(--text) 30%, transparent);
+}
+
+.mermaid-diagram text.actor,
+.mermaid-diagram .actor tspan,
+.mermaid-diagram .messageText,
+.mermaid-diagram .noteText,
+.mermaid-diagram .nodeLabel {
+  fill: var(--text);
+  stroke: none;
+}
+
+.mermaid-diagram .actor-line {
+  stroke: color-mix(in srgb, var(--text) 22%, transparent);
+}
+
+.mermaid-diagram .messageLine0,
+.mermaid-diagram .messageLine1,
+.mermaid-diagram .edgePath .path,
+.mermaid-diagram .flowchart-link {
+  stroke: color-mix(in srgb, var(--text) 50%, transparent);
+}
+
+.mermaid-diagram marker path,
+.mermaid-diagram .arrowheadPath {
+  fill: color-mix(in srgb, var(--text) 50%, transparent);
+  stroke: none;
+}
+
+.mermaid-diagram .note {
+  fill: var(--accent-dim);
+  stroke: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.mermaid-diagram .activation0,
+.mermaid-diagram .activation1,
+.mermaid-diagram .activation2 {
+  fill: color-mix(in srgb, var(--text) 8%, var(--card-bg));
+  stroke: color-mix(in srgb, var(--text) 30%, transparent);
+}
+
+.mermaid-diagram .edgeLabel rect,
+.mermaid-diagram .labelBkg {
+  fill: var(--panel-bg);
+}
+
+.mermaid-diagram .cluster rect {
+  fill: color-mix(in srgb, var(--text) 3%, transparent);
+  stroke: var(--border);
+}

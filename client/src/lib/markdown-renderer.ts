@@ -58,6 +58,11 @@ export function createMarkdownRenderer(): MarkdownIt {
     linkify: true,
     breaks: true,
     highlight(code, language) {
+      // Left as source; a renderer that draws diagrams swaps these for SVG after mounting.
+      if (language.toLowerCase() === "mermaid") {
+        return `<pre class="hljs mermaid-source"><code>${escapeHtml(code)}</code></pre>`;
+      }
+
       if (language && hljs.getLanguage(language)) {
         return `<pre class="hljs"><code>${hljs.highlight(code, {
           language,

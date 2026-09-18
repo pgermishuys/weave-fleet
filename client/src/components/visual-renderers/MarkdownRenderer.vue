@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { createMarkdownRenderer } from '@/lib/markdown-renderer'
+import { renderMermaidSvg } from '@/lib/mermaid'
 import { sanitizeHtml } from '@/lib/sanitize-html'
 import type { ElementAnchor, TextRangeAnchor, AnnotationAnchor } from '@/lib/annotation-types'
 
@@ -24,6 +25,32 @@ const renderedHtml = computed(() => {
   const rawHtml = md.render(props.content)
   return sanitizeHtml(rawHtml)
 })
+
+// ```mermaid blocks render as source first, then get swapped for their diagram.
+// A block that doesn't parse stays as source.
+let drawGeneration = 0
+
+async function drawDiagrams() {
+  const container = containerRef.value
+  if (!container) return
+  const generation = ++drawGeneration
+  for (const block of Array.from(container.querySelectorAll<HTMLElement>('pre.mermaid-source'))) {
+    let svg: string
+    try {
+      svg = await renderMermaidSvg(block.textContent ?? '')
+    } catch {
+      continue
+    }
+    // The content changed while this was drawing; the newer pass owns the DOM.
+    if (generation !== drawGeneration || !container.contains(block)) return
+    const diagram = document.createElement('div')
+    diagram.className = 'md-mermaid mermaid-diagram'
+    diagram.innerHTML = svg
+    block.replaceWith(diagram)
+  }
+}
+
+watch(renderedHtml, drawDiagrams, { flush: 'post' })
 
 // Block elements that can be annotated
 const BLOCK_SELECTOR = 'h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,table'
@@ -133,6 +160,8 @@ function handleClick(event: MouseEvent) {
 }
 
 onMounted(() => {
+  void drawDiagrams()
+
   if (!props.annotatable || !containerRef.value) return
 
   const container = containerRef.value
@@ -164,6 +193,18 @@ onUnmounted(() => {
 .markdown-renderer {
   line-height: 1.6;
   word-wrap: break-word;
+}
+
+.markdown-renderer :deep(.md-mermaid) {
+  display: flex;
+  justify-content: center;
+  margin: 1em 0;
+  overflow-x: auto;
+}
+
+.markdown-renderer :deep(.md-mermaid svg) {
+  max-width: 100%;
+  height: auto;
 }
 
 /* Annotation highlight for hoverable block elements */
