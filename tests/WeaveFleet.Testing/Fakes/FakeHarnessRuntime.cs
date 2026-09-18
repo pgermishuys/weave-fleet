@@ -53,6 +53,11 @@ public sealed class FakeHarnessRuntime : IHarnessRuntime
     public Task<HarnessAvailability> CheckAvailabilityAsync(CancellationToken ct)
         => Task.FromResult(Availability ?? new HarnessAvailability(Available, AvailabilityReason));
 
+    /// <summary>Returned by <see cref="GetSetup"/>.</summary>
+    public HarnessSetup? Setup { get; set; }
+
+    public HarnessSetup? GetSetup(HarnessAvailability availability) => Setup;
+
     public Task<RuntimePreparation> PrepareRuntimeAsync(RuntimePreparationContext context, CancellationToken ct)
     {
         PrepareCalls.Add(context);

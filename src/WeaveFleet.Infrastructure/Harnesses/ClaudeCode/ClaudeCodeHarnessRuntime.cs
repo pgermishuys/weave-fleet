@@ -85,6 +85,19 @@ public sealed class ClaudeCodeHarnessRuntime : IHarnessRuntime
     }
 
     /// <inheritdoc />
+    /// <remarks>The native installers from https://code.claude.com/docs/en/setup; both update themselves.</remarks>
+    public HarnessSetup GetSetup(HarnessAvailability availability)
+    {
+        var windows = OperatingSystem.IsWindows();
+        // Sign in with the executable Fleet found: the terminal's PATH may not have the installer's folder yet.
+        var claude = ShellCommand.Executable(availability.ExecutablePath ?? _options.ClaudeCode.BinaryPath, windows);
+        return new HarnessSetup(
+            InstallCommand: windows ? "irm https://claude.ai/install.ps1 | iex" : "curl -fsSL https://claude.ai/install.sh | bash",
+            SignInCommand: $"{claude} auth login",
+            DocsUrl: "https://code.claude.com/docs/en/setup");
+    }
+
+    /// <inheritdoc />
     public async Task<IHarnessSession> SpawnAsync(HarnessSpawnOptions options, CancellationToken ct)
     {
         string instanceId = $"claude-code-{Guid.NewGuid():N}";

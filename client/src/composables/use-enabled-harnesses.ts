@@ -6,6 +6,8 @@ import { usePreferencesStore } from "@/stores/preferences";
 const DEFAULT_HARNESS_TYPE = "opencode";
 
 export interface UseEnabledHarnessesResult {
+  /** Every harness Fleet knows, on or off, ready or not. */
+  harnesses: ComputedRef<readonly HarnessInfo[]>;
   enabledHarnesses: ComputedRef<HarnessInfo[]>;
   defaultHarnessType: ComputedRef<string>;
   /**
@@ -31,7 +33,9 @@ export function useEnabledHarnesses(): UseEnabledHarnessesResult {
 
   const noHarnessReason = computed<string | null>(() => {
     // A list that failed to load says nothing about the harnesses; let the session start and report its own error.
-    if (isLoading.value || error.value !== undefined || enabledHarnesses.value.length > 0) return null;
+    // Only the first load counts as loading: checking again keeps showing the last answer.
+    const firstLoad = isLoading.value && harnesses.value.length === 0;
+    if (firstLoad || error.value !== undefined || enabledHarnesses.value.length > 0) return null;
 
     const turnedOn = harnesses.value.filter((harness) => harness.userEnabled);
     const wanted = turnedOn.find((harness) => harness.type === defaultHarnessType.value) ?? turnedOn[0];
@@ -41,6 +45,7 @@ export function useEnabledHarnesses(): UseEnabledHarnessesResult {
   });
 
   return {
+    harnesses: computed(() => harnesses.value),
     enabledHarnesses,
     defaultHarnessType,
     noHarnessReason,

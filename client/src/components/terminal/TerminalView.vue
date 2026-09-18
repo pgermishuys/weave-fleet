@@ -27,6 +27,10 @@ const props = defineProps<{
   terminalId: string;
   /** Showing on screen: its tab is active and the drawer is open. */
   shown: boolean;
+  /** Where the terminal lives when it isn't a session's, e.g. the setup terminal. */
+  basePath?: string;
+  /** Typed into the shell once it's ready, without pressing Enter: the user reads it and runs it. */
+  initialInput?: string;
 }>();
 
 const emit = defineEmits<{
@@ -198,15 +202,22 @@ onMounted(async () => {
   host.value.addEventListener("keydown", onHostKeydown);
   fitNow();
 
+  let typedInitialInput = false;
   connection = openTerminalConnection({
     sessionId: props.sessionId,
     terminalId: props.terminalId,
+    basePath: props.basePath,
     cols: term.cols,
     rows: term.rows,
     handlers: {
       onReset: () => term?.reset(),
       onOutput: (data) => term?.write(data),
-      onReady: () => {},
+      onReady: () => {
+        // Once only: a reconnect is ready again, and the command may already have run.
+        if (!props.initialInput || typedInitialInput) return;
+        typedInitialInput = true;
+        connection?.write(props.initialInput);
+      },
       onCleared: () => term?.clear(),
       onExit: () => {},
       onStatus: (next) => {

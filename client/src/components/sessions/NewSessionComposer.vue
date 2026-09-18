@@ -38,6 +38,7 @@ import {
 import { NO_PROFILE } from "@/api/client";
 import { useAppShellStore } from "@/stores/app-shell";
 import { useHarnessProfilesStore } from "@/stores/harness-profiles";
+import { useHarnessSetupStore } from "@/stores/harness-setup";
 import { useSessionsStore } from "@/stores/sessions";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 
@@ -50,6 +51,7 @@ const workspaceUiStore = useWorkspaceUiStore();
 const { newSessionInitialSource } = storeToRefs(workspaceUiStore);
 const { enabledHarnesses, defaultHarnessType, noHarnessReason } = useEnabledHarnesses();
 const { setActiveSection } = useSettingsNav();
+const harnessSetup = useHarnessSetupStore();
 const defaults = useNewSessionDefaults();
 const isMobile = useIsMobile();
 
@@ -325,7 +327,12 @@ function removeGitHubPreset(): void {
   focusMessage();
 }
 
-function openHarnessSettings(): void {
+/** Local Fleet sets a harness up in the wizard; in cloud mode it can only be looked at in Settings. */
+function fixNoHarness(): void {
+  if (!config.value.cloudMode) {
+    harnessSetup.open("harnesses");
+    return;
+  }
   setActiveSection("harnesses");
   void navigate({ to: "/settings" });
 }
@@ -578,9 +585,9 @@ onUnmounted(() => {
         <button
           type="button"
           class="new-session__no-harness-link"
-          @click="openHarnessSettings"
+          @click="fixNoHarness"
         >
-          Open Settings → Harnesses
+          {{ config.cloudMode ? "Open Settings → Harnesses" : "Set up a harness" }}
         </button>
       </div>
 

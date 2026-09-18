@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
 import { storeToRefs } from "pinia";
+import HarnessSetupWizard from "@/components/harness-setup/HarnessSetupWizard.vue";
 import OnboardingWizard from "@/components/onboarding/OnboardingWizard.vue";
 import { useAppShellStore } from "@/stores/app-shell";
 
@@ -45,6 +46,7 @@ function handleComplete(): void {
     :credentials-optional="credentialsOptional"
     @complete="handleComplete"
   />
+  <HarnessSetupWizard v-else />
 
   <slot />
 </template>

@@ -40,7 +40,7 @@ public sealed class HarnessRegistry : IHarnessRegistry
             var availability = runtime is not null
                 ? await runtime.CheckAvailabilityAsync(ct).ConfigureAwait(false)
                 : HarnessAvailability.NotWorking("No runtime registered.");
-            return HarnessInfo.From(harness.Type, harness.DisplayName, harness.Capabilities, availability);
+            return HarnessInfo.From(harness.Type, harness.DisplayName, harness.Capabilities, availability, runtime?.GetSetup(availability));
         });
 
         var results = await Task.WhenAll(tasks).ConfigureAwait(false);

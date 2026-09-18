@@ -8,6 +8,7 @@ using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Terminals;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
+using WeaveFleet.Testing.Fakes;
 using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Application.Tests.Terminals;
@@ -544,6 +545,23 @@ public sealed class TerminalServiceTests
         created.Error.Message.ShouldContain("archived");
     }
 
+    [Fact]
+    public async Task TheSetupTerminal_IsRefusedInCloudMode_WhereItWouldRunOnTheServer()
+    {
+        var created = await NewService(new FleetOptions { Cloud = { Enabled = true } }).CreateSetupAsync(80, 24);
+
+        created.Error!.Kind.ShouldBe(TerminalErrorKind.NotFound);
+        created.Error.Message.ShouldBe("Harnesses can only be set up from Fleet when it runs on your own computer.");
+    }
+
+    [Theory]
+    [InlineData("local-user", "setup-local-user")]
+    [InlineData("auth0|5f2c", "setup-auth0_5f2c")]
+    public void TheSetupTerminal_IsKeptUnderAnIdThatIsSafeAsAFolderName(string userId, string expected)
+    {
+        TerminalService.SetupSessionId(userId).ShouldBe(expected);
+    }
+
     private TerminalService NewService(FleetOptions options)
     {
         var manager = new TerminalManager(
@@ -552,7 +570,7 @@ public sealed class TerminalServiceTests
             new FakeEventBroadcaster(),
             options,
             NullLogger<TerminalManager>.Instance);
-        return new TerminalService(_sessions, manager, options);
+        return new TerminalService(_sessions, manager, options, new TestUserContext("u1"));
     }
 
     private sealed class ThrowingPtyFactory : IPtyFactory

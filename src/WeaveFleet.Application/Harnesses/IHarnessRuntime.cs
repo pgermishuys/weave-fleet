@@ -17,6 +17,12 @@ public interface IHarnessRuntime
     Task<HarnessAvailability> CheckAvailabilityAsync(CancellationToken ct);
 
     /// <summary>
+    /// How to install this harness or sign in to it on this machine, given what <see cref="CheckAvailabilityAsync"/>
+    /// found. <see langword="null"/> when Fleet can't help set it up.
+    /// </summary>
+    HarnessSetup? GetSetup(HarnessAvailability availability) => null;
+
+    /// <summary>
     /// Prepare the runtime for this session.
     /// The harness internally resolves credential requirements, validates availability,
     /// and materialises runtime artifacts (env vars, config files, etc.).

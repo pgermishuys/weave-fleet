@@ -9,6 +9,10 @@ namespace WeaveFleet.Api.Endpoints;
 /// Terminals in a session's drawer. REST lists, opens and closes them; each open tab attaches over
 /// <c>GET …/terminals/{terminalId}/socket</c> (see <see cref="TerminalSocket"/>). Tabs appearing and going away
 /// are pushed on <c>session:{id}</c> as <c>terminal.opened</c> and <c>terminal.closed</c>.
+/// <para>
+/// <c>/api/setup/terminals</c> is the setup terminal: a shell in the user's home folder, outside any session,
+/// where Fleet types a harness's installer for the user to run.
+/// </para>
 /// </summary>
 public static class TerminalEndpoints
 {
@@ -77,23 +81,81 @@ public static class TerminalEndpoints
             FleetOptions options,
             IHostEnvironment environment) =>
         {
-            if (!http.WebSockets.IsWebSocketRequest)
-                return Results.BadRequest(new ErrorResponse("Connect to this address with a WebSocket."));
-            if (!TerminalSocket.IsOriginAllowed(http, options, environment.IsDevelopment()))
-                return Results.Json(new ErrorResponse("This page isn't allowed to open terminals."), ApiJsonContext.Default.ErrorResponse, statusCode: 403);
+            return await AttachAsync(http, options, environment,
+                () => terminals.AttachAsync(id, terminalId, cols ?? DefaultCols, rows ?? DefaultRows, http.RequestAborted));
+        })
+        .ExcludeFromDescription();
 
-            var attached = await terminals.AttachAsync(id, terminalId, cols ?? DefaultCols, rows ?? DefaultRows, http.RequestAborted);
-            if (!attached.IsSuccess)
-                return ErrorResult(attached.Error);
+        var setup = app.MapGroup("/api/setup/terminals").WithTags("Terminals");
 
-            using var attachment = attached.Value;
-            using var socket = await http.WebSockets.AcceptWebSocketAsync();
-            await TerminalSocket.RunAsync(socket, attachment, http.RequestAborted);
-            return Results.Empty;
+        // POST /api/setup/terminals — start a shell in the user's home folder, ending the previous setup shell
+        setup.MapPost("/", async (
+            CreateTerminalRequest? request,
+            TerminalService terminals,
+            CancellationToken ct) =>
+        {
+            var created = await terminals.CreateSetupAsync(request?.Cols ?? DefaultCols, request?.Rows ?? DefaultRows, ct);
+            return created.IsSuccess
+                ? Results.Created($"/api/setup/terminals/{created.Value.Id}", ToResponse(created.Value))
+                : ErrorResult(created.Error);
+        })
+        .Produces<TerminalResponse>(201)
+        .Produces<ErrorResponse>(404)
+        .Produces<ErrorResponse>(409)
+        .Produces<ErrorResponse>(500)
+        .WithName("CreateSetupTerminal");
+
+        // DELETE /api/setup/terminals/{terminalId} — end the setup shell
+        setup.MapDelete("/{terminalId}", async (
+            string terminalId,
+            TerminalService terminals,
+            CancellationToken ct) =>
+        {
+            var error = await terminals.CloseSetupAsync(terminalId, ct);
+            return error is null ? Results.NoContent() : ErrorResult(error);
+        })
+        .Produces(204)
+        .Produces<ErrorResponse>(404)
+        .WithName("CloseSetupTerminal");
+
+        // GET /api/setup/terminals/{terminalId}/socket — attach, as for a session's terminal
+        setup.MapGet("/{terminalId}/socket", async (
+            HttpContext http,
+            string terminalId,
+            int? cols,
+            int? rows,
+            TerminalService terminals,
+            FleetOptions options,
+            IHostEnvironment environment) =>
+        {
+            return await AttachAsync(http, options, environment,
+                () => terminals.AttachSetupAsync(terminalId, cols ?? DefaultCols, rows ?? DefaultRows, http.RequestAborted));
         })
         .ExcludeFromDescription();
 
         return app;
+    }
+
+    /// <summary>Checks the request is a WebSocket from an allowed page, attaches, then relays until either side ends.</summary>
+    private static async Task<IResult> AttachAsync(
+        HttpContext http,
+        FleetOptions options,
+        IHostEnvironment environment,
+        Func<Task<TerminalResult<TerminalAttachment>>> attach)
+    {
+        if (!http.WebSockets.IsWebSocketRequest)
+            return Results.BadRequest(new ErrorResponse("Connect to this address with a WebSocket."));
+        if (!TerminalSocket.IsOriginAllowed(http, options, environment.IsDevelopment()))
+            return Results.Json(new ErrorResponse("This page isn't allowed to open terminals."), ApiJsonContext.Default.ErrorResponse, statusCode: 403);
+
+        var attached = await attach();
+        if (!attached.IsSuccess)
+            return ErrorResult(attached.Error);
+
+        using var attachment = attached.Value;
+        using var socket = await http.WebSockets.AcceptWebSocketAsync();
+        await TerminalSocket.RunAsync(socket, attachment, http.RequestAborted);
+        return Results.Empty;
     }
 
     private static TerminalResponse ToResponse(TerminalInfo terminal) => new(

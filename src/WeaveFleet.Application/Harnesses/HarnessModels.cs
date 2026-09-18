@@ -71,13 +71,22 @@ public sealed record HarnessInfo(
     /// <summary>Where Fleet found the harness executable.</summary>
     public string? ExecutablePath { get; init; }
 
+    /// <summary>How to install it or sign in to it here; <see langword="null"/> when Fleet can't help.</summary>
+    public HarnessSetup? Setup { get; init; }
+
     /// <summary>The harness as its runtime found it; <see cref="UserEnabled"/> is filled in later.</summary>
-    public static HarnessInfo From(string type, string displayName, HarnessCapabilities capabilities, HarnessAvailability availability) =>
+    public static HarnessInfo From(
+        string type,
+        string displayName,
+        HarnessCapabilities capabilities,
+        HarnessAvailability availability,
+        HarnessSetup? setup = null) =>
         new(type, displayName, availability.Available, UserEnabled: false, availability.Reason, capabilities)
         {
             State = availability.State,
             Version = availability.Version,
             ExecutablePath = availability.ExecutablePath,
+            Setup = setup,
         };
 }
 

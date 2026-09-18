@@ -13,6 +13,8 @@ import { useHarnessProfilesStore } from "@/stores/harness-profiles";
 import { useSessionsStore } from "@/stores/sessions";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 import { useSettingsNav } from "@/composables/use-settings-nav";
+import { useAppShellStore } from "@/stores/app-shell";
+import { useHarnessSetupStore } from "@/stores/harness-setup";
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -746,6 +748,23 @@ describe("NewSessionComposer", () => {
       expect(mocks.createSession).not.toHaveBeenCalled();
 
       await view.get("[data-testid='new-session-no-harness'] button").trigger("click");
+      expect(useHarnessSetupStore().isOpen).toBe(true);
+      expect(useHarnessSetupStore().step).toBe("harnesses");
+      expect(mocks.navigate).not.toHaveBeenCalled();
+    });
+
+    it("in cloud mode, where a harness can't be set up from Fleet, points to Settings instead", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path });
+      harnesses.value = [];
+      noHarnessReason.value = "OpenCode isn't installed.";
+      useAppShellStore().config = { ...useAppShellStore().config, cloudMode: true };
+      const view = await mountComposer();
+
+      const link = view.get("[data-testid='new-session-no-harness'] button");
+      expect(link.text()).toBe("Open Settings → Harnesses");
+      await link.trigger("click");
+
+      expect(useHarnessSetupStore().isOpen).toBe(false);
       expect(useSettingsNav().activeSection.value).toBe("harnesses");
       expect(mocks.navigate).toHaveBeenCalledWith({ to: "/settings" });
     });
