@@ -343,6 +343,59 @@ describe("useCanvasesStore file tabs", () => {
     expect(files()).toEqual([{ path: "a.md", preview: false, view: "edit" }]);
   });
 
+  describe("unpinFile", () => {
+    it("turns a kept tab into the preview, so the next click replaces it", () => {
+      const store = useCanvasesStore();
+      store.openFile("s1", "a.ts", { keep: true });
+
+      store.unpinFile("s1", "a.ts");
+      expect(files()).toEqual([{ path: "a.ts", preview: true, view: "edit" }]);
+
+      store.openFile("s1", "b.ts");
+      expect(files()).toEqual([{ path: "b.ts", preview: true, view: "edit" }]);
+    });
+
+    it("closes the previous clean preview, since there's one preview", () => {
+      const store = useCanvasesStore();
+      store.openFile("s1", "a.ts", { keep: true });
+      store.openFile("s1", "b.ts");
+      useFileBuffersStore().ensure("s1", "b.ts");
+
+      store.unpinFile("s1", "a.ts");
+
+      expect(files()).toEqual([{ path: "a.ts", preview: true, view: "edit" }]);
+      expect(store.sessionCanvases("s1").activeId).toBe(fileCanvasId("a.ts"));
+      expect(useFileBuffersStore().record("s1", "b.ts")).toBeUndefined();
+    });
+
+    it("keeps the previous preview when it has unsaved changes", () => {
+      const store = useCanvasesStore();
+      const buffers = useFileBuffersStore();
+      store.openFile("s1", "a.ts", { keep: true });
+      store.openFile("s1", "b.ts");
+      buffers.ensure("s1", "b.ts");
+      buffers.patch("s1", "b.ts", { dirty: true });
+
+      store.unpinFile("s1", "a.ts");
+
+      expect(files()).toEqual([
+        { path: "a.ts", preview: true, view: "edit" },
+        { path: "b.ts", preview: false, view: "edit" },
+      ]);
+      expect(store.sessionCanvases("s1").activeId).toBe(fileCanvasId("b.ts"));
+    });
+
+    it("leaves a preview alone", () => {
+      const store = useCanvasesStore();
+      store.openFile("s1", "a.ts");
+      const before = store.sessionCanvases("s1");
+
+      store.unpinFile("s1", "a.ts");
+
+      expect(store.sessionCanvases("s1")).toBe(before);
+    });
+  });
+
   it("closing a file tab drops its buffer", () => {
     const store = useCanvasesStore();
     store.openFile("s1", "a.ts", { keep: true });
