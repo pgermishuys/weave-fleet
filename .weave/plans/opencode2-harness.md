@@ -42,23 +42,52 @@ Size: ½ day.
 
 ## Stage 1 — a session that talks (text only)
 
-- [ ] `OpenCode2Harness` descriptor. Capabilities start minimal (streaming, resume) and grow per stage.
-- [ ] `OpenCode2HarnessRuntime.CheckAvailabilityAsync`: find the executable (see Stage 5 for where),
+- [x] `OpenCode2Harness` descriptor. Capabilities start minimal (streaming, resume) and grow per stage.
+- [x] `OpenCode2HarnessRuntime.CheckAvailabilityAsync`: find the executable (see Stage 5 for where),
       `--version` must be 2.x.
-- [ ] Server process: Fleet starts `opencode serve --port <free> --hostname 127.0.0.1` with
+- [x] Server process: Fleet starts `opencode serve --port <free> --hostname 127.0.0.1` with
       `OPENCODE_SERVER_PASSWORD` (random per process), `FLEET_URL`, bridge token. **One server per owner (and
       later per profile), for every directory**: V2 handles directories itself through `location`. No pool
       keyed by directory.
-- [ ] One SSE subscription per server (`/api/event`), routed to sessions by `data.sessionID`.
-- [ ] Session: create with `location.directory`; prompt; interrupt; events
+- [x] One SSE subscription per server (`/api/event`), routed to sessions by `data.sessionID`.
+- [x] Session: create with `location.directory`; prompt; interrupt; events
       `session.execution.started/succeeded/interrupted/failed` → busy/idle/turn failed,
       `session.text.started/delta/ended` and `session.reasoning.*` → message parts,
       `session.step.ended` / `session.usage.updated` → tokens and cost, model from `session.step.started`.
-- [ ] Resume token = V2 session id; resume re-attaches to the owner's server.
-- [ ] Registered in DI, off by default (`opencode2.enabled`), client entry in `harness-display.ts`.
+- [x] Resume token = V2 session id; resume re-attaches to the owner's server.
+- [x] Registered in DI, off by default (`opencode2.enabled`), client entry in `harness-display.ts`.
 
 Live check: new session → prompt → streamed reply → idle; stop Fleet, restart, same session answers again.
 Size: 4–5 days.
+
+Built (branch `feat/opencode2-harness`), checked live on a scratch Fleet with 2.0.8 + the scripted model: streamed
+reply → idle, interrupt mid-reply, Fleet restart → the same session answers, an OpenCode 1 session beside it.
+
+What Stage 1 learned:
+
+- `opencode2 serve --port 0 --hostname 127.0.0.1` picks its own port and prints
+  `server listening on http://127.0.0.1:PORT` on stdout; Fleet reads that line instead of choosing a port.
+- Fleet runs `opencode2` from PATH or `~/.opencode/bin` and checks `--version` is 2.x both in the availability
+  check and again before starting a server (it runs on the user's OpenCode data).
+- `POST /api/session/{id}/prompt` takes `id`: Fleet passes its own `msg_…` id for the user message, same form as V2's.
+- Mapping: `session.step.started` → assistant `message.updated` (agent, model, provider) + `step-start` part;
+  text/reasoning part ids are `{assistantMessageID}-text-{ordinal}` / `-reasoning-{ordinal}` (Stage 2's history must
+  derive the same ids); `session.step.ended`/`step.failed` → completed `message.updated` + `step-finish` part and one
+  token analytics event per step. `session.usage.updated` is the session's running total, so it's not counted.
+  `session.execution.failed` → `session.error` (V2's `{type, message}` → Fleet's `{name, message}`) + `session.idle`;
+  `session.retry.scheduled` → retry status (`at` is epoch ms, turned into a delay). Everything else maps to nothing.
+- Fleet's part payloads are read polymorphically: `"type"` must be the first property, or the part silently drops
+  out of the domain events (caught by the translator test, the same trap the Claude Code harness hit).
+- A session whose server stopped re-attaches on its next request to the owner's new server (after
+  `GET /api/session/{id}`), so a dead server needs no orchestrator change. A turn running when the server stops ends
+  with a "server stopped" failure + idle. Stopping a Fleet session interrupts its V2 turn if one is running.
+- Shared change: `FLEET_URL` is `{fleet}/agent/{bridge token}` for V2, and `AgentRequests` now asks every registered
+  `IHarnessBridgeTokens` (one per harness), not just OpenCode's.
+- The Stage 0 message now points 2.x users at the OpenCode 2 harness.
+- **Gap until Stage 2:** reopening an OpenCode 2 session (page reload, Fleet restart) shows only prompts Fleet saved
+  itself, not the replies, because the message proxy reads live history only for `opencode`. The next prompt works.
+- **Gap until Stage 2:** the SSE stream reconnects after a drop, but nothing re-reads `/api/session/active` then, so a
+  turn that ended during the gap stays busy until the next turn.
 
 ## Stage 2 — tools, questions, permissions, history
 
