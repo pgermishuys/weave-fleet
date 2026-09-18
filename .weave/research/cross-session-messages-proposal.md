@@ -98,6 +98,39 @@ the skill, both lead to the tool.
 Claude Code sessions get no `FLEET_URL` today, so nothing changes for them. They get `fleet_message`
 when that harness gets a way to identify its callers.
 
+### Behind an experimental flag
+
+Stage 1 ships off, behind a switch. Fleet has no general "experimental" mechanism yet; two patterns
+already exist and this reuses both:
+
+- **Config default, user preference wins.** Like `PooledOpenCodeHarness` (`OpenCodeFeatureFlagProvider`):
+  `Fleet:Harness:SessionMessages` in config (default `false`), overridden by a `SessionMessages` user
+  preference when set.
+- **A switch in Settings.** Like the built-in skills tab: a new **Experimental** section with one
+  toggle, *Messages between sessions*, and a line saying it applies to sessions started afterwards.
+  It's the first entry in that section; later experiments go there too.
+
+The flag switches **the tool and the guard together**. Off is exactly today: no `fleet_message`, no
+userinfo in `FLEET_URL`, `/prompt` open to agents. On is the whole of Stage 1. There's no setting
+where both paths are open, which is the outcome this proposal exists to prevent.
+
+Where it's read:
+
+| Place | Off | On |
+|---|---|---|
+| Starting an OpenCode process | `FLEET_URL` as today; `FLEET_SESSION_MESSAGES` unset | userinfo in `FLEET_URL`; `FLEET_SESSION_MESSAGES=1` |
+| Plugin | doesn't register `fleet_message` | registers it |
+| `fleet-api` skill text | as today | the `/prompt` row swapped for the tool line (the plugin picks the variant from the same variable) |
+| Bridge endpoint | 404 | delivers |
+| `/prompt`, `initialPrompt` with a bridge token | allowed | 409 naming the tool |
+| UI chip | still shown for a wrapped message | shown |
+
+The variable goes into the environment the pool key is hashed from, so flipping the switch gives new
+sessions a fresh process instead of sharing one started under the other setting. Sessions already
+running keep what they started with until their process is recycled. The server checks the flag per
+request as well, so a stale process can't use a tool that has since been turned off. The chip renders
+regardless, so a conversation from while it was on still reads correctly after it's turned off.
+
 ### What it adds
 
 - **You can see where a message came from.** A session that wakes up because another one asked says
