@@ -13,7 +13,8 @@
 
 const BRIDGE_PATH = "/api/bridge/opencode/canvas/"
 
-type ToolContext = { sessionID: string }
+type PermissionRequest = { permission: string; patterns: string[]; always: string[]; metadata: Record<string, unknown> }
+type ToolContext = { sessionID: string; ask?: (request: PermissionRequest) => Promise<void> }
 type Attachment = { type: "file"; mime: string; url: string; filename: string }
 type ToolResult = { title: string; output: string; metadata: Record<string, unknown>; attachments?: Attachment[] }
 
@@ -100,7 +101,9 @@ export const FleetCanvasPlugin = async () => ({
 
     fleet_canvas_open: {
       description: [
-        "Show the user a diagram in a canvas beside the chat. Use this instead of drawing diagrams in chat.",
+        "Show the user a diagram (architecture, a flow, dependencies, a sequence) in a canvas beside the chat.",
+        "Use it only when the user asks for a diagram, or when a diagram is clearly the best way to answer them; then draw it here rather than as text or Mermaid in chat.",
+        "Don't open one for your own notes or progress, or when you're working on a task delegated by another agent: your result goes to that agent, not to the user.",
         "Read a canvas before you describe it or change it.",
         "Opening a title that already exists updates that canvas to the new state, and reopens it if it was closed. To change part of a canvas, use fleet_canvas_patch.",
       ].join(" "),
@@ -163,9 +166,10 @@ export const FleetCanvasPlugin = async () => ({
 
     fleet_app_start: {
       description: [
-        "Run the project's web app and show it to the user in a browser canvas beside the chat.",
-        "Use this when the user asks to run, host, serve, preview or see the app, whatever it's built with (npm, bun, dotnet, python, cargo...).",
-        "Use it too to check that a change you made works in the running app, not only in its tests.",
+        "Start the project's web app as a long-running server and show its page to the user in a browser canvas beside the chat.",
+        "Use it only when the user asks to run, host, serve, preview or see the app, whatever it's built with (npm, bun, dotnet, python, cargo...), or to try a change to the app's pages or HTTP behavior in the running app.",
+        "It is not a shell. Commands that finish on their own (git, gh, builds, tests, formatters, scripts, echo) fail here: run them with your shell tool.",
+        "If you can't run shell commands, don't use this tool either.",
         "Don't start dev servers with bash: they never exit, and the user can't see them.",
         "Fleet runs the command in the session's folder, keeps it running, finds the page it serves and waits until it answers (up to 3 minutes).",
         "Fleet sets PORT to a free port; servers that ignore PORT keep their own port, and Fleet finds it.",
@@ -176,15 +180,20 @@ export const FleetCanvasPlugin = async () => ({
       args: {
         command: {
           type: "string",
-          description: "The shell command that serves the app, e.g. \"npm run dev\" or \"dotnet watch --project src/Web\". Read package.json, the README or the project files first.",
+          description: "The command that starts the app and keeps serving it, e.g. \"npm run dev\" or \"dotnet watch --project src/Web\". Never a command that exits, such as git or a build. Read package.json, the README or the project files first.",
         },
         title: {
           type: "string",
           description: "Short title for the canvas tab, e.g. \"Storefront\".",
         },
       },
-      execute: (args: { command: string; title: string }, context: ToolContext) =>
-        callFleet("app-start", context, { command: args.command, title: args.title }),
+      execute: async (args: { command: string; title: string }, context: ToolContext) => {
+        // The command runs in a shell, so it needs the calling agent's shell permission, as OpenCode's own bash
+        // tool does: an agent that may not run shell commands mustn't run them through Fleet. OpenCode throws
+        // when the permission is denied, and the model reads OpenCode's own refusal.
+        await context.ask?.({ permission: "bash", patterns: [args.command], always: [args.command], metadata: {} })
+        return callFleet("app-start", context, { command: args.command, title: args.title })
+      },
     },
 
     fleet_browser_open: {
