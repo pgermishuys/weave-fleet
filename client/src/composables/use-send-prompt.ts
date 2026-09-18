@@ -475,12 +475,17 @@ export function useSendPrompt(sessionId: string) {
     }
   }
 
-  function sendPrompt(attachments?: ImageAttachment[]): boolean {
+  /**
+   * Sends the composer draft, or `overrideText` when re-sending a prompt whose turn failed. An
+   * override leaves the draft alone: the user may well have started typing something else.
+   */
+  function sendPrompt(attachments?: ImageAttachment[], overrideText?: string): boolean {
     if (!canSend.value) {
       return false;
     }
 
-    const body = draft.text.trim();
+    const isRetry = typeof overrideText === "string";
+    const body = (isRetry ? overrideText : draft.text).trim();
     if (!body && (!attachments || attachments.length === 0)) {
       return false;
     }
@@ -524,7 +529,10 @@ export function useSendPrompt(sessionId: string) {
       selectedSession.value.sessionStatus = "active";
     }
 
-    resetText();
+    if (!isRetry) {
+      resetText();
+    }
+
     const request: BackendSendPromptRequest = {
       text: body,
       userMessageId: promptId,
@@ -560,10 +568,16 @@ export function useSendPrompt(sessionId: string) {
     return true;
   }
 
+  /** Re-sends a prompt whose turn failed, leaving whatever is in the composer untouched. */
+  function retryPrompt(text: string): boolean {
+    return sendPrompt(undefined, text);
+  }
+
   return {
     canSend,
     error: readonly(sendError),
     sendPrompt,
+    retryPrompt,
     sentPrompts,
   };
 }

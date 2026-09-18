@@ -1,4 +1,5 @@
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Testing.Fakes;
 
@@ -37,12 +38,12 @@ public sealed class FakeHarnessRegistry : IHarnessRegistry
             var runtime = GetRuntimeByType(harness.Type);
             if (runtime is null)
             {
-                results.Add(new HarnessInfo(harness.Type, harness.DisplayName, false, false, "No runtime registered.", harness.Capabilities));
+                results.Add(HarnessInfo.From(harness.Type, harness.DisplayName, harness.Capabilities, HarnessAvailability.NotWorking("No runtime registered.")));
                 continue;
             }
 
             var availability = await runtime.CheckAvailabilityAsync(ct);
-            results.Add(new HarnessInfo(harness.Type, harness.DisplayName, availability.Available, false, availability.Reason, harness.Capabilities));
+            results.Add(HarnessInfo.From(harness.Type, harness.DisplayName, harness.Capabilities, availability, runtime.GetSetup(availability)));
         }
         return results;
     }

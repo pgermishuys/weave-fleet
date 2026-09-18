@@ -1,7 +1,7 @@
 import type { AccumulatedMessage, DelegationDto } from "@/lib/client-types"
 import { confirmSentPrompt } from "@/composables/use-send-prompt"
 import { applyDelegationCreated, applyDelegationUpdated } from "@/lib/delegation-state"
-import type { DelegationCompleted, DelegationCreated, DelegationUpdated, DomainEvent, MessageLifecyclePayload } from "@/lib/domain-events"
+import type { DelegationCompleted, DelegationCreated, DelegationUpdated, DomainEvent, MessageLifecyclePayload, TurnFailedPayload } from "@/lib/domain-events"
 import { applyPartUpdate, applyTextDelta, ensureMessage, mergeMessageUpdate } from "@/lib/event-state"
 import type { SessionSnapshot, SessionSnapshotDelegation } from "@/lib/session-snapshot"
 
@@ -107,6 +107,14 @@ export function applyDomainEvent(state: SessionStreamState, event: DomainEvent):
     case "turn.ended":
       return withExplicitStatus(state, "idle")
 
+    case "turn.failed":
+      // The turn is over and the harness has already used up its own retries, so the session stops
+      // looking busy here rather than waiting for the idle that follows.
+      return {
+        ...withExplicitStatus(state, "idle"),
+        messages: applyTurnFailure(state.messages, event.payload),
+      }
+
     case "delegation.created":
       return withDelegations(state, applyDelegationCreated(state.delegations, mapDelegationEvent(event)))
 
@@ -131,12 +139,46 @@ function applyMessageLifecycle(messages: AccumulatedMessage[], payload: MessageL
     },
     cost: payload.info.cost ?? undefined,
     tokens: payload.info.tokens ?? undefined,
+    turnError: payload.info.turnError ?? undefined,
+    finish: payload.info.finish ?? undefined,
     // Live message.updated events can carry the harness's payload, which has no parts; the parts
     // the message already has are kept.
     parts: Array.isArray(payload.parts)
       ? payload.parts.map((part) => ({ ...part } as Record<string, unknown>))
       : undefined,
   })
+}
+
+/**
+ * Puts the failure on the message it belongs to. When the turn died before producing one — a provider
+ * that refuses the request outright never streams anything — the failure gets a message of its own, so
+ * it is never the case that a turn failed and the conversation shows nothing.
+ */
+function applyTurnFailure(messages: AccumulatedMessage[], payload: TurnFailedPayload): AccumulatedMessage[] {
+  const named = payload.messageID
+    ? messages.findIndex((m) => m.messageId === payload.messageID)
+    : -1
+  const target = named !== -1
+    ? named
+    : messages.findLastIndex((m) => m.role === "assistant")
+
+  if (target === -1) {
+    return [
+      ...messages,
+      {
+        messageId: `turn-failed-${payload.sessionID}-${messages.length}`,
+        sessionId: payload.sessionID,
+        role: "assistant",
+        parts: [],
+        createdAt: Date.now(),
+        turnError: payload.error,
+      },
+    ]
+  }
+
+  const updated = messages.slice()
+  updated[target] = { ...updated[target], turnError: payload.error }
+  return updated
 }
 
 function toExplicitStatus(activityStatus: string): SessionStreamExplicitStatus {

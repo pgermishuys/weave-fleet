@@ -280,6 +280,34 @@ describe("CanvasHost", () => {
       wrapper.unmount();
     });
 
+    it("pins a preview tab from its pin button, and unpins it again", async () => {
+      const { wrapper, tab } = await openedFile("src/app.ts");
+      const pin = () => tab().get('[data-testid="file-tab-pin-src/app.ts"]');
+      expect(pin().attributes("aria-label")).toBe("Pin app.ts");
+      expect(pin().attributes("aria-pressed")).toBe("false");
+
+      await pin().trigger("click");
+
+      expect(tab().classes()).not.toContain("canvas-tab--preview");
+      expect(pin().attributes("aria-label")).toBe("Unpin app.ts");
+      expect(pin().attributes("aria-pressed")).toBe("true");
+      expect(pin().classes()).toContain("canvas-tab__pin--pinned");
+      expect(useCanvasesStore().sessionCanvases("s1").activeId).toBe("file:src/app.ts");
+
+      // The next file opens beside it instead of replacing it.
+      useCanvasesStore().openFile("s1", "src/next.ts");
+      await flushPromises();
+      expect(wrapper.find('[data-testid="file-tab-src/app.ts"]').exists()).toBe(true);
+      expect(wrapper.get('[data-testid="file-tab-src/next.ts"]').classes()).toContain("canvas-tab--preview");
+
+      // Unpinned, it becomes the preview again, in place of next.ts.
+      await pin().trigger("click");
+      expect(tab().classes()).toContain("canvas-tab--preview");
+      expect(pin().attributes("aria-label")).toBe("Pin app.ts");
+      expect(wrapper.find('[data-testid="file-tab-src/next.ts"]').exists()).toBe(false);
+      wrapper.unmount();
+    });
+
     it("shows a dot instead of the close button while the file has unsaved changes", async () => {
       const { wrapper, tab } = await openedFile("src/app.ts", true);
       expect(tab().find(".canvas-tab__unsaved-dot").exists()).toBe(false);

@@ -55,6 +55,10 @@ public static class CanvasBridgeEndpoints
             => ToResult(await bridge.BrowserOpenAsync(BridgeToken(http), request.OpenCodeSessionId, request.Url, request.Title, ct)))
             .WithName("CanvasBridgeBrowserOpen");
 
+        group.MapPost("/screenshot", async (CanvasBridgeRequest request, HttpContext http, BrowserBridge bridge, CancellationToken ct)
+            => ToResult(await bridge.ScreenshotAsync(BridgeToken(http), request.OpenCodeSessionId, request.CanvasId, request.Path, request.Viewport, ct)))
+            .WithName("CanvasBridgeScreenshot");
+
         return app;
     }
 
@@ -63,7 +67,10 @@ public static class CanvasBridgeEndpoints
         if (result.IsSuccess)
         {
             var output = result.Value;
-            return Results.Ok(new CanvasToolResponse(output.Title, output.Output, new CanvasToolMetadata(output.CanvasId, output.Version)));
+            var attachments = output.Attachments?
+                .Select(file => new CanvasToolAttachmentResponse(file.Mime, file.FileName, Convert.ToBase64String(file.Content)))
+                .ToList();
+            return Results.Ok(new CanvasToolResponse(output.Title, output.Output, new CanvasToolMetadata(output.CanvasId, output.Version), attachments));
         }
 
         var error = new ErrorResponse(result.Error.Message);

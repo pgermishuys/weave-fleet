@@ -6,13 +6,20 @@ import { usePreferencesStore } from "@/stores/preferences";
 const DEFAULT_HARNESS_TYPE = "opencode";
 
 export interface UseEnabledHarnessesResult {
+  /** Every harness Fleet knows, on or off, ready or not. */
+  harnesses: ComputedRef<readonly HarnessInfo[]>;
   enabledHarnesses: ComputedRef<HarnessInfo[]>;
   defaultHarnessType: ComputedRef<string>;
+  /**
+   * Why no harness can start a session: the default harness's reason (e.g. "OpenCode isn't installed: …"),
+   * or that every harness is turned off. `null` while the list loads, when it failed to load, or when one is ready.
+   */
+  noHarnessReason: ComputedRef<string | null>;
 }
 
 export function useEnabledHarnesses(): UseEnabledHarnessesResult {
   const preferencesStore = usePreferencesStore();
-  const { harnesses } = useHarnesses();
+  const { harnesses, isLoading, error } = useHarnesses();
 
   preferencesStore.ensureLoaded();
 
@@ -24,8 +31,23 @@ export function useEnabledHarnesses(): UseEnabledHarnessesResult {
     return preferencesStore.get("defaultHarnessType", DEFAULT_HARNESS_TYPE);
   });
 
+  const noHarnessReason = computed<string | null>(() => {
+    // A list that failed to load says nothing about the harnesses; let the session start and report its own error.
+    // Only the first load counts as loading: checking again keeps showing the last answer.
+    const firstLoad = isLoading.value && harnesses.value.length === 0;
+    if (firstLoad || error.value !== undefined || enabledHarnesses.value.length > 0) return null;
+
+    const turnedOn = harnesses.value.filter((harness) => harness.userEnabled);
+    const wanted = turnedOn.find((harness) => harness.type === defaultHarnessType.value) ?? turnedOn[0];
+    if (!wanted) return "Every harness is turned off.";
+
+    return wanted.reason ?? `${wanted.displayName} isn't ready.`;
+  });
+
   return {
+    harnesses: computed(() => harnesses.value),
     enabledHarnesses,
     defaultHarnessType,
+    noHarnessReason,
   };
 }

@@ -361,6 +361,9 @@ public sealed class OpenCodeSessionMessageProxy(
                 {
                     Created = message.Timestamp.ToUnixTimeMilliseconds(),
                 },
+                // Carried into the snapshot so a failed turn still says why it failed after a reload.
+                Error = message.Error,
+                Finish = message.Finish,
             },
             Parts = parts,
         };

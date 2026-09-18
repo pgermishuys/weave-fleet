@@ -6,10 +6,21 @@ using WeaveFleet.Domain.Entities;
 namespace WeaveFleet.Application.Canvases;
 
 /// <summary>
-/// What a canvas tool hands back to the agent: a title for the tool card, the text the model reads, and the
-/// canvas it was about, if any.
+/// A file a tool hands back with its text, for harnesses that can show the model more than words. Fleet's
+/// screenshots come back this way; the harness adapter decides how to carry it (OpenCode takes a data URL).
 /// </summary>
-public sealed record CanvasToolOutput(string Title, string Output, string? CanvasId = null, int? Version = null);
+public sealed record CanvasToolAttachment(string Mime, string FileName, byte[] Content);
+
+/// <summary>
+/// What a canvas tool hands back to the agent: a title for the tool card, the text the model reads, the
+/// canvas it was about, if any, and any file that goes with it.
+/// </summary>
+public sealed record CanvasToolOutput(
+    string Title,
+    string Output,
+    string? CanvasId = null,
+    int? Version = null,
+    IReadOnlyList<CanvasToolAttachment>? Attachments = null);
 
 /// <summary>
 /// The agent's canvas tools (<c>fleet_canvas_*</c>) for calls that arrive from a harness process. Each call

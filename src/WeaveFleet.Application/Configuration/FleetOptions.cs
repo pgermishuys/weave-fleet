@@ -275,6 +275,12 @@ public sealed class BrowserOptions
     /// Empty: any free port. Previews listen on the address Fleet listens on (<see cref="FleetOptions.Host"/>).
     /// </summary>
     public string PortRange { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The Chrome, Edge or Chromium binary screenshots are taken with. Empty: Fleet looks for one in the usual
+    /// places for this machine, and says so when it finds nothing.
+    /// </summary>
+    public string ChromePath { get; set; } = string.Empty;
 }
 
 /// <summary>Cloud-mode configuration.</summary>

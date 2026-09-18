@@ -125,7 +125,7 @@ internal sealed class OpenCodeProcessManager : IAsyncDisposable
     {
         var psi = new ProcessStartInfo
         {
-            FileName = ExecutableResolver.Resolve("opencode"),
+            FileName = OpenCodeExecutable.Resolve(),
             WorkingDirectory = options.WorkingDirectory,
             UseShellExecute = false,
             RedirectStandardOutput = true,

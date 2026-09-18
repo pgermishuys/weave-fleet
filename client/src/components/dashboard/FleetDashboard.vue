@@ -2,11 +2,14 @@
 import { computed, shallowRef } from "vue";
 import { storeToRefs } from "pinia";
 import { useRouter } from "@tanstack/vue-router";
-import { LoaderCircle, Plus } from "lucide-vue-next";
+import { Download, LoaderCircle, Plus } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
+import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { useRelativeTime } from "@/composables/use-relative-time";
 import { useSessions } from "@/composables/use-sessions";
 import type { SessionListItem } from "@/api/client";
+import { useAppShellStore } from "@/stores/app-shell";
+import { useHarnessSetupStore } from "@/stores/harness-setup";
 import { useSessionsStore } from "@/stores/sessions";
 import DashboardSessionRow from "./DashboardSessionRow.vue";
 import RetentionFilter from "./RetentionFilter.vue";
@@ -19,6 +22,11 @@ const router = useRouter();
 const sessionsStore = useSessionsStore();
 const { retentionStatus, sessions: storeSessions } = storeToRefs(sessionsStore);
 const now = useRelativeTime();
+const { config } = storeToRefs(useAppShellStore());
+const harnessSetup = useHarnessSetupStore();
+const { noHarnessReason } = useEnabledHarnesses();
+/** Until a harness is ready, say so here and offer setup (not in cloud mode, where it can't be set up from Fleet). */
+const showHarnessBanner = computed(() => noHarnessReason.value !== null && !config.value.cloudMode);
 
 const {
   isLoading,
@@ -129,6 +137,30 @@ function handleNewSession(): void {
         New session
       </Button>
     </header>
+
+    <div
+      v-if="showHarnessBanner"
+      class="dashboard__harness-banner"
+      data-testid="harness-setup-banner"
+    >
+      <div class="dashboard__harness-banner-icon">
+        <Download
+          :size="17"
+          aria-hidden="true"
+        />
+      </div>
+      <p class="dashboard__harness-banner-text">
+        <strong>No harness is ready yet</strong>
+        Fleet runs sessions through a harness such as OpenCode or Claude Code. Install one to start.
+      </p>
+      <Button
+        size="sm"
+        data-testid="harness-setup-banner-open"
+        @click="harnessSetup.open('harnesses')"
+      >
+        Set up a harness
+      </Button>
+    </div>
 
     <SummaryBar />
 
@@ -304,6 +336,44 @@ function handleNewSession(): void {
   margin: 0;
   color: var(--muted);
   font-size: 13px;
+}
+
+.dashboard__harness-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: var(--radius-card);
+  background: var(--accent-dim);
+}
+
+.dashboard__harness-banner-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  background: var(--card-bg);
+  color: var(--text);
+}
+
+.dashboard__harness-banner-text {
+  flex: 1 1 280px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.dashboard__harness-banner-text strong {
+  display: block;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .dashboard__error {

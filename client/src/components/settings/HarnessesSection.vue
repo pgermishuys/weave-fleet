@@ -1,29 +1,23 @@
 <script setup lang="ts">
 import type { Component } from "vue";
 import { computed, onMounted, shallowRef } from "vue";
-import {
-  AlertTriangle,
-  Cable,
-  CheckCircle2,
-  CircleDashed,
-  Hexagon,
-  Infinity,
-  LoaderCircle,
-  Star,
-  TerminalSquare,
-} from "lucide-vue-next";
+import { storeToRefs } from "pinia";
+import { Cable, Download, LoaderCircle, RefreshCw, Star } from "lucide-vue-next";
 import HarnessProfilesPanel from "@/components/settings/HarnessProfilesPanel.vue";
 import { useHarnesses } from "@/composables/use-harnesses";
+import { useAppShellStore } from "@/stores/app-shell";
+import { useHarnessSetupStore } from "@/stores/harness-setup";
 import { usePreferencesStore } from "@/stores/preferences";
 import type { HarnessInfo } from "@/api/client";
-
-type HarnessStatus = "ready" | "missing-credentials" | "not-configured" | "disabled";
-
-interface HarnessDisplayMetadata {
-  eyebrow: string;
-  description: string;
-  icon: Component;
-}
+import {
+  harnessDisplay,
+  harnessLocation,
+  harnessState,
+  harnessStatusClasses as statusClasses,
+  harnessStatusIcon as statusIcon,
+  harnessStatusLabel as statusLabel,
+  type HarnessStatus,
+} from "@/lib/harness-display";
 
 interface HarnessCard {
   id: string;
@@ -31,6 +25,8 @@ interface HarnessCard {
   eyebrow: string;
   description: string;
   summary: string;
+  /** Version and path of the executable Fleet found, when it found one. */
+  location: string | null;
   icon: Component;
   status: HarnessStatus;
   enabled: boolean;
@@ -42,32 +38,10 @@ interface HarnessCard {
 const DEFAULT_HARNESS_TYPE = "opencode";
 const POOLED_OPEN_CODE_MODE_PREFERENCE_KEY = "PooledOpenCodeHarness";
 
-const harnessDisplayMetadata: Record<string, HarnessDisplayMetadata> = {
-  opencode: {
-    eyebrow: "CLI harness",
-    description: "Harness for sessions backed by the OpenCode command-line runtime.",
-    icon: TerminalSquare,
-  },
-  "claude-code": {
-    eyebrow: "CLI harness",
-    description: "Harness for Anthropic Claude Code sessions and project-aware coding workflows.",
-    icon: Hexagon,
-  },
-  pi: {
-    eyebrow: "CLI harness",
-    description: "Harness for sessions backed by the Pi command-line runtime from pi.dev.",
-    icon: Infinity,
-  },
-};
-
-const fallbackHarnessMetadata: HarnessDisplayMetadata = {
-  eyebrow: "Harness",
-  description: "Harness runtime registered by the backend.",
-  icon: Cable,
-};
-
 const prefsStore = usePreferencesStore();
-const { harnesses: registeredHarnesses } = useHarnesses();
+const harnessSetup = useHarnessSetupStore();
+const { config } = storeToRefs(useAppShellStore());
+const { harnesses: registeredHarnesses, isLoading: isCheckingHarnesses, refresh: checkHarnessesAgain } = useHarnesses();
 
 const isSavingPooledOpenCodeMode = shallowRef(false);
 const pooledOpenCodeModeError = shallowRef<string | null>(null);
@@ -118,7 +92,7 @@ async function togglePooledOpenCodeMode(): Promise<void> {
 }
 
 function toHarnessCard(harness: HarnessInfo): HarnessCard {
-  const metadata = harnessDisplayMetadata[harness.type] ?? fallbackHarnessMetadata;
+  const metadata = harnessDisplay(harness.type);
   const enabled = prefsStore.get(`${harness.type}.enabled`, harness.type === DEFAULT_HARNESS_TYPE ? "true" : "false") === "true";
 
   return {
@@ -127,6 +101,7 @@ function toHarnessCard(harness: HarnessInfo): HarnessCard {
     eyebrow: metadata.eyebrow,
     description: metadata.description,
     summary: summaryForHarness(harness, enabled),
+    location: harnessLocation(harness),
     icon: metadata.icon,
     status: statusForHarness(harness, enabled),
     enabled,
@@ -143,50 +118,11 @@ function summaryForHarness(harness: HarnessInfo, enabled: boolean): string {
   return `Available now. Uses the ${harness.displayName} runtime registered by the backend.`;
 }
 
+
 function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus {
-  if (!enabled) return "disabled";
-  if (!harness.available) return "not-configured";
-
-  return "ready";
+  return enabled ? harnessState(harness) : "disabled";
 }
 
-function statusLabel(status: HarnessStatus): string {
-  switch (status) {
-    case "ready":
-      return "Ready";
-    case "missing-credentials":
-      return "Missing credentials";
-    case "not-configured":
-      return "Not configured";
-    case "disabled":
-      return "Disabled";
-  }
-}
-
-function statusClasses(status: HarnessStatus): string {
-  switch (status) {
-    case "ready":
-      return "border-green-500/30 bg-green-500/10 text-green-300";
-    case "missing-credentials":
-      return "border-yellow-500/30 bg-yellow-500/10 text-yellow-300";
-    case "not-configured":
-      return "border-border bg-main-bg text-muted";
-    case "disabled":
-      return "border-border bg-main-bg text-muted";
-  }
-}
-
-function statusIcon(status: HarnessStatus): Component {
-  switch (status) {
-    case "ready":
-      return CheckCircle2;
-    case "missing-credentials":
-      return AlertTriangle;
-    case "not-configured":
-    case "disabled":
-      return CircleDashed;
-  }
-}
 </script>
 
 <template>
@@ -220,6 +156,37 @@ function statusIcon(status: HarnessStatus): Component {
               </span>
             </div>
           </div>
+        </div>
+
+        <div class="flex shrink-0 flex-wrap items-start gap-2">
+          <button
+            v-if="!config.cloudMode"
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-xs font-medium text-text transition-colors hover:border-accent/50"
+            data-testid="harnesses-set-up"
+            @click="harnessSetup.open('harnesses')"
+          >
+            <Download
+              :size="12"
+              aria-hidden="true"
+            />
+            Set up a harness
+          </button>
+          <!-- Fleet looks for each harness on every check, so one installed a moment ago shows up here. -->
+          <button
+            type="button"
+            class="inline-flex shrink-0 items-center gap-1.5 self-start rounded-btn border border-border bg-main-bg px-3 py-1.5 text-xs font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60"
+            :disabled="isCheckingHarnesses"
+            data-testid="harnesses-check-again"
+            @click="void checkHarnessesAgain()"
+          >
+            <RefreshCw
+              :size="12"
+              :class="isCheckingHarnesses ? 'animate-spin' : ''"
+              aria-hidden="true"
+            />
+            Check again
+          </button>
         </div>
       </div>
     </section>
@@ -283,6 +250,13 @@ function statusIcon(status: HarnessStatus): Component {
 
               <p class="text-xs text-muted">
                 {{ harness.summary }}
+              </p>
+              <p
+                v-if="harness.location"
+                class="break-all font-mono text-[11px] text-muted"
+                data-testid="harness-location"
+              >
+                {{ harness.location }}
               </p>
             </div>
           </div>

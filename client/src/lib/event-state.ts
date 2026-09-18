@@ -10,6 +10,17 @@ import type {
   AccumulatedToolPart,
   AccumulatedFilePart,
 } from "@/lib/client-types";
+import type { TurnError } from "@/lib/domain-events";
+
+/** The failure carried on a message info, which reaches here as loosely typed harness data. */
+function isTurnError(value: unknown): value is TurnError {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as TurnError).message === "string" &&
+    (value as TurnError).message.length > 0
+  );
+}
 
 
 /**
@@ -138,7 +149,14 @@ export function mergeMessageUpdate(
   const hasSnapshotParts = mergedSnapshotParts != null;
   const hasNewModelID = Boolean(modelID && modelID !== existing.modelID);
 
-  if (!hasNewCompletedAt && !hasNewCreatedAt && !hasNewTokens && !hasUpdatedTokens && !hasNewCost && !hasSnapshotParts && !hasNewModelID) {
+  // A failed turn usually arrives as a message.updated that changes nothing else, so the failure has
+  // to be part of what counts as new — otherwise the early return below drops it.
+  const turnError = isTurnError(info.turnError) ? info.turnError : undefined;
+  const hasNewTurnError = Boolean(turnError && turnError.message !== existing.turnError?.message);
+  const finish = typeof info.finish === "string" ? info.finish : undefined;
+  const hasNewFinish = Boolean(finish && finish !== existing.finish);
+
+  if (!hasNewCompletedAt && !hasNewCreatedAt && !hasNewTokens && !hasUpdatedTokens && !hasNewCost && !hasSnapshotParts && !hasNewModelID && !hasNewTurnError && !hasNewFinish) {
     return prev; // nothing new to merge
   }
 
@@ -149,6 +167,8 @@ export function mergeMessageUpdate(
     ...(hasNewCreatedAt ? { createdAt } : {}),
     ...(hasNewCompletedAt ? { completedAt } : {}),
     ...(hasNewModelID ? { modelID } : {}),
+    ...(hasNewTurnError ? { turnError } : {}),
+    ...(hasNewFinish ? { finish } : {}),
     tokens: mergedTokens,
     cost: mergedCost,
   };

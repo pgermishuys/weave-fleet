@@ -5,6 +5,7 @@ using System.Text.Json;
 using Dapper;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Api.Tests.Infrastructure;
+using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
@@ -66,6 +67,23 @@ public sealed class CanvasBridgeEndpointTests : IAsyncLifetime
         using var scope = _factory!.Services.CreateScope();
         using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
         (await connection.ExecuteScalarAsync<string>("SELECT user_id FROM canvases WHERE id = @canvasId", new { canvasId })).ShouldBe(Owner);
+    }
+
+    [Fact]
+    public async Task A_screenshot_comes_back_on_the_tool_result_as_a_base64_image()
+    {
+        var opened = await PostAsync("browser-open", Token, new { openCodeSessionId = OpenCodeSessionId, url = "http://localhost:5173/", title = "Shop" });
+        var canvasId = (await opened.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("metadata").GetProperty("canvasId").GetString();
+
+        var response = await PostAsync("screenshot", Token, new { openCodeSessionId = OpenCodeSessionId, canvasId, path = "", viewport = "desktop" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var attachment = body.GetProperty("attachments").EnumerateArray().ShouldHaveSingleItem();
+        attachment.GetProperty("mime").GetString().ShouldBe("image/png");
+        attachment.GetProperty("fileName").GetString().ShouldBe("screenshot.png");
+        Convert.FromBase64String(attachment.GetProperty("base64").GetString()!).ShouldBe(FakeScreenshotter.Png);
+        body.GetProperty("title").GetString().ShouldBe("Shop · 1280×800");
     }
 
     [Fact]
@@ -141,7 +159,20 @@ public sealed class CanvasBridgeEndpointTests : IAsyncLifetime
         => new(
             authEnabled: true,
             simulateLocalhostRequest: simulateLocalhostRequest,
-            configureTestServices: services => services.AddSingleton<IHarnessCanvasCallerResolver>(new FakeCallers()));
+            configureTestServices: services =>
+            {
+                services.AddSingleton<IHarnessCanvasCallerResolver>(new FakeCallers());
+                services.AddSingleton<IScreenshotter>(new FakeScreenshotter());
+            });
+
+    /// <summary>Drives no browser: every capture is the same little PNG.</summary>
+    private sealed class FakeScreenshotter : IScreenshotter
+    {
+        public static readonly byte[] Png = [137, 80, 78, 71, 13, 10, 26, 10];
+
+        public Task<ScreenshotOutcome> CaptureAsync(ScreenshotRequest request, CancellationToken ct = default)
+            => Task.FromResult(ScreenshotOutcome.Ok(Png, request.Width, request.Height));
+    }
 
     private static async Task SeedSessionAsync(ApiWebApplicationFactory factory)
     {

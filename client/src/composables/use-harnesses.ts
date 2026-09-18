@@ -1,4 +1,4 @@
-import { readonly, ref, shallowRef, type Ref, type ShallowRef } from "vue";
+import { readonly, ref, shallowRef, watch, type Ref, type ShallowRef } from "vue";
 import { api } from "@/api/client";
 import type { HarnessInfo } from "@/api/client";
 
@@ -7,6 +7,14 @@ export interface UseHarnessesResult {
   isLoading: Readonly<ShallowRef<boolean>>;
   error: Readonly<ShallowRef<string | undefined>>;
   refresh: () => Promise<void>;
+}
+
+/** Bumped when a harness may have changed (installed, signed in), so every list on screen checks again. */
+const harnessesChanged = shallowRef(0);
+
+/** Tells every `useHarnesses` on screen to fetch the list again, e.g. after installing a harness. */
+export function refreshAllHarnesses(): void {
+  harnessesChanged.value++;
 }
 
 export function useHarnesses(): UseHarnessesResult {
@@ -34,6 +42,7 @@ export function useHarnesses(): UseHarnessesResult {
   }
 
   void fetchHarnesses();
+  watch(harnessesChanged, () => void fetchHarnesses());
 
   return {
     harnesses: readonly(harnesses),

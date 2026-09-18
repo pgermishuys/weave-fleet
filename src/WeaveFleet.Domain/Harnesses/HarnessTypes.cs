@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using WeaveFleet.Domain.Events;
 
 namespace WeaveFleet.Domain.Harnesses;
 
@@ -40,8 +41,57 @@ public sealed record HarnessCapabilities
     public bool SupportsProfiles { get; init; }
 }
 
+/// <summary>What a harness needs before sessions can use it. Sent to the client as <c>state</c>.</summary>
+public static class HarnessStates
+{
+    /// <summary>Installed and working; sessions can use it.</summary>
+    public const string Ready = "ready";
+
+    /// <summary>Fleet can't find its executable.</summary>
+    public const string NotInstalled = "not-installed";
+
+    /// <summary>Installed, but the user has to sign in first.</summary>
+    public const string SignInRequired = "sign-in-required";
+
+    /// <summary>Found, but it fails when Fleet runs it.</summary>
+    public const string NotWorking = "not-working";
+}
+
 /// <summary>Whether a harness binary/service is available on this machine.</summary>
-public sealed record HarnessAvailability(bool Available, string? Reason);
+/// <param name="Available">Sessions can use the harness.</param>
+/// <param name="Reason">Why not, in a sentence the user can act on; <see langword="null"/> when available.</param>
+public sealed record HarnessAvailability(bool Available, string? Reason)
+{
+    /// <summary>One of <see cref="HarnessStates"/>.</summary>
+    public string State { get; init; } = Available ? HarnessStates.Ready : HarnessStates.NotWorking;
+
+    /// <summary>The version the executable reports, when Fleet could run it.</summary>
+    public string? Version { get; init; }
+
+    /// <summary>Where Fleet found the executable.</summary>
+    public string? ExecutablePath { get; init; }
+
+    public static HarnessAvailability Ready(string? version, string? executablePath) =>
+        new(true, null) { Version = version, ExecutablePath = executablePath };
+
+    public static HarnessAvailability NotInstalled(string reason) =>
+        new(false, reason) { State = HarnessStates.NotInstalled };
+
+    public static HarnessAvailability SignInRequired(string reason, string? version, string? executablePath) =>
+        new(false, reason) { State = HarnessStates.SignInRequired, Version = version, ExecutablePath = executablePath };
+
+    public static HarnessAvailability NotWorking(string reason, string? version = null, string? executablePath = null) =>
+        new(false, reason) { State = HarnessStates.NotWorking, Version = version, ExecutablePath = executablePath };
+}
+
+/// <summary>
+/// How to install a harness or sign in to it on the machine Fleet runs on. Fleet types a command into a
+/// terminal and the user presses Enter to run it; Fleet never runs these on its own.
+/// </summary>
+/// <param name="InstallCommand">The vendor's installer for this platform, or <see langword="null"/> when there isn't one to offer.</param>
+/// <param name="SignInCommand">Signs in to the harness, when it needs a sign-in.</param>
+/// <param name="DocsUrl">The harness's install instructions, for anything the commands don't cover.</param>
+public sealed record HarnessSetup(string? InstallCommand, string? SignInCommand, string? DocsUrl);
 
 /// <summary>A real-time event emitted by a harness instance.</summary>
 public sealed record HarnessEvent
@@ -168,6 +218,12 @@ public sealed record HarnessMessage
 
     /// <summary>The model that produced this message (e.g. "claude-sonnet-4").</summary>
     public string? ModelId { get; init; }
+
+    /// <summary>The failure that ended this message, when the turn it belongs to failed.</summary>
+    public TurnError? Error { get; init; }
+
+    /// <summary>Why the model stopped producing this message (e.g. "stop", "length"), when reported.</summary>
+    public string? Finish { get; init; }
 
     /// <summary>Convenience: concatenated text parts.</summary>
     public string TextContent =>

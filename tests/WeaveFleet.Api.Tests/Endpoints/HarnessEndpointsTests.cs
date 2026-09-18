@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
@@ -57,6 +58,50 @@ public sealed class HarnessEndpointsTests
 
         GetUserEnabled(harnesses, "opencode").ShouldBeTrue();
         GetUserEnabled(harnesses, "pi").ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task get_harnesses_says_what_a_harness_needs_and_where_it_was_found()
+    {
+        var registry = new FakeHarnessRegistry();
+        registry.Register(new FakeHarness("claude-code", "Claude Code"));
+        registry.Register(new FakeHarnessRuntime("claude-code")
+        {
+            Availability = HarnessAvailability.SignInRequired(
+                "Claude Code isn't signed in. Run claude auth login.", "2.1.276", "/home/you/.local/bin/claude"),
+            Setup = new HarnessSetup(
+                "curl -fsSL https://claude.ai/install.sh | bash",
+                "/home/you/.local/bin/claude auth login",
+                "https://code.claude.com/docs/en/setup"),
+        });
+        await using var factory = new ApiWebApplicationFactory(
+            authEnabled: false,
+            configureTestServices: services =>
+            {
+                var existing = services.FirstOrDefault(d => d.ServiceType == typeof(IHarnessRegistry));
+                if (existing is not null) services.Remove(existing);
+                services.AddSingleton<IHarnessRegistry>(registry);
+            });
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+        });
+
+        var response = await client.GetAsync("/api/harnesses");
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        using var document = JsonDocument.Parse(body);
+        var harness = document.RootElement.EnumerateArray().Single(h => h.GetProperty("type").GetString() == "claude-code");
+        harness.GetProperty("available").GetBoolean().ShouldBeFalse();
+        harness.GetProperty("state").GetString().ShouldBe("sign-in-required");
+        harness.GetProperty("version").GetString().ShouldBe("2.1.276");
+        harness.GetProperty("executablePath").GetString().ShouldBe("/home/you/.local/bin/claude");
+        harness.GetProperty("reason").GetString().ShouldBe("Claude Code isn't signed in. Run claude auth login.");
+        var setup = harness.GetProperty("setup");
+        setup.GetProperty("installCommand").GetString().ShouldBe("curl -fsSL https://claude.ai/install.sh | bash");
+        setup.GetProperty("signInCommand").GetString().ShouldBe("/home/you/.local/bin/claude auth login");
+        setup.GetProperty("docsUrl").GetString().ShouldBe("https://code.claude.com/docs/en/setup");
     }
 
     // ── Warmup endpoint — API contract: no caller-controlled parameters ────────────

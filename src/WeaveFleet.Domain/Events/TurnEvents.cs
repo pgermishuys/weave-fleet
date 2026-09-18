@@ -25,6 +25,66 @@ public sealed record TurnEnded : DomainEvent
 }
 
 /// <summary>
+/// Raised when an agent turn stopped because the harness or the model provider failed, rather than
+/// because the agent finished. Without it a failed turn is indistinguishable from a finished one:
+/// the session simply goes idle with whatever text had already streamed.
+/// </summary>
+public sealed record TurnFailed : DomainEvent
+{
+    /// <summary>
+    /// Gets the strongly typed payload for the turn-failed event.
+    /// </summary>
+    public required TurnFailedPayload Payload { get; init; }
+}
+
+/// <summary>
+/// Payload describing a turn that failed.
+/// </summary>
+public sealed record TurnFailedPayload
+{
+    /// <summary>
+    /// Gets the Fleet session identifier.
+    /// </summary>
+    [JsonPropertyName("sessionID")]
+    public required string SessionId { get; init; }
+
+    /// <summary>
+    /// Gets the Fleet message identifier of the assistant message the failure belongs to, when the
+    /// turn had already produced one.
+    /// </summary>
+    [JsonPropertyName("messageID")]
+    public string? MessageId { get; init; }
+
+    /// <summary>
+    /// Gets the failure the harness reported.
+    /// </summary>
+    public required TurnError Error { get; init; }
+}
+
+/// <summary>
+/// A failure reported by a harness, normalised across harnesses so clients never parse
+/// harness-specific error shapes.
+/// </summary>
+public sealed record TurnError
+{
+    /// <summary>
+    /// Gets the harness's name for the failure (e.g. <c>APIError</c>), used to group failures.
+    /// </summary>
+    public required string Name { get; init; }
+
+    /// <summary>
+    /// Gets the human-readable failure text to show the user.
+    /// </summary>
+    public required string Message { get; init; }
+
+    /// <summary>
+    /// Gets a value indicating whether the harness considered the failure worth retrying. A turn that
+    /// fails this way has already exhausted the harness's own retries.
+    /// </summary>
+    public bool IsRetryable { get; init; }
+}
+
+/// <summary>
 /// Payload describing a turn that has started.
 /// </summary>
 public sealed record TurnStartedPayload

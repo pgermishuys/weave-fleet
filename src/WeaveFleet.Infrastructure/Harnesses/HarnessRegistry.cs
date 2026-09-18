@@ -1,4 +1,5 @@
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Harnesses;
 
@@ -36,29 +37,10 @@ public sealed class HarnessRegistry : IHarnessRegistry
         var tasks = _harnesses.Select(async harness =>
         {
             var runtime = GetRuntimeByType(harness.Type);
-            HarnessInfo info;
-            if (runtime is not null)
-            {
-                var availability = await runtime.CheckAvailabilityAsync(ct).ConfigureAwait(false);
-                info = new HarnessInfo(
-                    harness.Type,
-                    harness.DisplayName,
-                    availability.Available,
-                    UserEnabled: false,
-                    availability.Reason,
-                    harness.Capabilities);
-            }
-            else
-            {
-                info = new HarnessInfo(
-                    harness.Type,
-                    harness.DisplayName,
-                    Available: false,
-                    UserEnabled: false,
-                    Reason: "No runtime registered.",
-                    harness.Capabilities);
-            }
-            return info;
+            var availability = runtime is not null
+                ? await runtime.CheckAvailabilityAsync(ct).ConfigureAwait(false)
+                : HarnessAvailability.NotWorking("No runtime registered.");
+            return HarnessInfo.From(harness.Type, harness.DisplayName, harness.Capabilities, availability, runtime?.GetSetup(availability));
         });
 
         var results = await Task.WhenAll(tasks).ConfigureAwait(false);

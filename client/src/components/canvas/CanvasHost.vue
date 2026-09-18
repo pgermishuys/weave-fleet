@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { Globe, Maximize2, Minimize2, Plus, X } from "lucide-vue-next";
+import { Globe, Maximize2, Minimize2, Pin, Plus, X } from "lucide-vue-next";
 import { useResizeObserver } from "@vueuse/core";
 import {
   DropdownMenu,
@@ -185,6 +185,12 @@ function keepPreview(canvas: CanvasInstance): void {
   if (canvas.file?.preview) store.keepFile(props.sessionId, canvas.file.path);
 }
 
+function togglePin(canvas: CanvasInstance): void {
+  if (!canvas.file) return;
+  if (canvas.file.preview) store.keepFile(props.sessionId, canvas.file.path);
+  else store.unpinFile(props.sessionId, canvas.file.path);
+}
+
 function onTabKeydown(event: KeyboardEvent): void {
   const list = canvases.value;
   const index = list.findIndex((canvas) => canvas.id === activeCanvas.value.id);
@@ -331,6 +337,24 @@ const activeProps = computed(() => {
             class="canvas-tab__count"
             :aria-label="props.tabBadges[canvas.id]?.label"
           >{{ props.tabBadges[canvas.id]?.count }}</span>
+          <span
+            v-if="canvas.file"
+            class="canvas-tab__pin"
+            :class="{ 'canvas-tab__pin--pinned': !canvas.file.preview }"
+            role="button"
+            :aria-label="`${canvas.file.preview ? 'Pin' : 'Unpin'} ${canvasTitle(canvas)}`"
+            :aria-pressed="!canvas.file.preview"
+            :title="canvas.file.preview
+              ? 'Pin: keep this tab open when you open another file'
+              : 'Unpin: the next file you open replaces this tab'"
+            :data-testid="`file-tab-pin-${canvas.file.path}`"
+            @click.stop="togglePin(canvas)"
+          >
+            <Pin
+              :size="12"
+              aria-hidden="true"
+            />
+          </span>
           <span
             v-if="isCanvasClosable(canvas)"
             class="canvas-tab__close"
@@ -588,6 +612,7 @@ const activeProps = computed(() => {
   background: var(--error);
 }
 
+.canvas-tab__pin,
 .canvas-tab__close {
   display: grid;
   place-items: center;
@@ -600,15 +625,24 @@ const activeProps = computed(() => {
   transition: opacity 120ms ease-out, background-color var(--transition), color var(--transition);
 }
 
+.canvas-tab:hover .canvas-tab__pin,
+.canvas-tab--active .canvas-tab__pin,
+.canvas-tab:focus-visible .canvas-tab__pin,
 .canvas-tab:hover .canvas-tab__close,
 .canvas-tab--active .canvas-tab__close,
 .canvas-tab:focus-visible .canvas-tab__close {
   opacity: 1;
 }
 
+.canvas-tab__pin:hover,
 .canvas-tab__close:hover {
   background-color: color-mix(in srgb, var(--text) 10%, transparent);
   color: var(--text);
+}
+
+/* A pinned tab's pin is filled in. */
+.canvas-tab__pin--pinned svg {
+  fill: currentColor;
 }
 
 /* A preview tab: the next file you single-click takes its place. */
@@ -715,6 +749,7 @@ const activeProps = computed(() => {
 
 @media (prefers-reduced-motion: reduce) {
   .canvas-tab,
+  .canvas-tab__pin,
   .canvas-tab__close,
   .canvas-host__icon-btn {
     transition: none;

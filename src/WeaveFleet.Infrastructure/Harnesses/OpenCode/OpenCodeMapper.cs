@@ -3,6 +3,7 @@ using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Infrastructure.Events;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode;
 
@@ -46,6 +47,10 @@ internal static class OpenCodeMapper
             Timestamp = DateTimeOffsetFromUnixMs(msg.Info.Time.Created),
             Agent = ExtractAgent(msg.Info),
             ModelId = ExtractModelId(msg.Info),
+            Error = msg.Info is OpenCodeAssistantMessage { Error: { } error }
+                ? HarnessErrorReader.TryRead(error)
+                : null,
+            Finish = (msg.Info as OpenCodeAssistantMessage)?.Finish,
         };
     }
 
