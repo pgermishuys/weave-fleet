@@ -106,9 +106,11 @@ already exist and this reuses both:
 - **Config default, user preference wins.** Like `PooledOpenCodeHarness` (`OpenCodeFeatureFlagProvider`):
   `Fleet:Harness:SessionMessages` in config (default `false`), overridden by a `SessionMessages` user
   preference when set.
-- **A switch in Settings.** Like the built-in skills tab: a new **Experimental** section with one
-  toggle, *Messages between sessions*, and a line saying it applies to sessions started afterwards.
-  It's the first entry in that section; later experiments go there too.
+- **A switch in Settings.** Settings → **Features** already holds the opt-in switches (Board, Session
+  recap, Desktop notifications), so it goes there: *Messages between sessions*, with an
+  **Experimental** label and a line saying it applies to sessions started afterwards.
+
+![The switch in Settings → Features](../../mockups/session-messages/settings-on-dark.png)
 
 The flag switches **the tool and the guard together**. Off is exactly today: no `fleet_message`, no
 userinfo in `FLEET_URL`, `/prompt` open to agents. On is the whole of Stage 1. There's no setting
@@ -130,6 +132,24 @@ sessions a fresh process instead of sharing one started under the other setting.
 running keep what they started with until their process is recycled. The server checks the flag per
 request as well, so a stale process can't use a tool that has since been turned off. The chip renders
 regardless, so a conversation from while it was on still reads correctly after it's turned off.
+
+### What it looks like
+
+A prototype of the UI (not the server side), rendered in the real client in mock mode. The patch is
+`mockups/session-messages/prototype.patch`.
+
+The receiving session: the message sits where a prompt from you would, with a **From *Fix
+authentication flow* ↗** link above it that opens the sender. The tag itself is hidden.
+
+![Receiving session](../../mockups/session-messages/receiver-dark.png)
+
+The sending session: the `fleet_message` call is a tool card, *Message session*, titled with who it
+went to.
+
+![Sending session](../../mockups/session-messages/sender-dark.png)
+
+Light theme and phone: `receiver-light.png`, `sender-light.png`, `settings-on-light.png`,
+`receiver-phone-dark.png` in the same folder.
 
 ### What it adds
 
