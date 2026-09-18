@@ -26,7 +26,7 @@ jobs:
   test:
     name: .NET Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -44,6 +44,16 @@ jobs:
         with:
           node-version: '22'
 
+      # The [OpenCodeFact] live tests run a real opencode against a scripted model. Pinned, so a new
+      # OpenCode release can't break CI unannounced: bump the version here and check the live tests pass.
+      - name: Install OpenCode
+        env:
+          OPENCODE_VERSION: '1.18.31'
+        run: |
+          curl -fsSL https://opencode.ai/install | bash -s -- --version "$OPENCODE_VERSION" --no-modify-path
+          echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
+          "$HOME/.opencode/bin/opencode" --version
+
       - name: Build solution
         run: dotnet build WeaveFleet.slnx --configuration Release -p:SkipFrontendBuild=true
 
@@ -56,6 +66,9 @@ jobs:
           --results-directory test-results/
           --no-build
           -p:SkipFrontendBuild=true
+        env:
+          # A missing opencode fails the live tests instead of skipping them.
+          FLEET_REQUIRE_OPENCODE: '1'
 
       - name: Upload test results
         if: always()

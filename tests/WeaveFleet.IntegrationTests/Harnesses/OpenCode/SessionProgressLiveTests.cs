@@ -128,7 +128,9 @@ public sealed class SessionProgressLiveTests
                     {"description":"Write the migration","prompt":"Write the migration that drops the dead tables.","subagent_type":"general"}
                     """));
 
-                // The subagent's turn. OpenCode 1.18 doesn't offer todowrite to subagents, so it has no counts of its own.
+                // The subagent's turn. OpenCode 1.18 offers subagents todowrite, but it doesn't write todos here: this
+                // test's parent runs with its own scratch environment, so Fleet resumes the child on a second pooled
+                // process that never sees its events, and no counts would reach the parent.
                 queue.Enqueue(new ScriptedLlmResponse { Text = "The migration is written." });
             },
             _ => true,
@@ -149,7 +151,8 @@ public sealed class SessionProgressLiveTests
                 {
                     throw new TimeoutException(
                         $"The subagent never showed as finished. Parent progress: {JsonSerializer.Serialize(StoredOrNull(services))}\n" +
-                        $"Sessions: {JsonSerializer.Serialize(AllSessions(services))}");
+                        $"Sessions: {JsonSerializer.Serialize(AllSessions(services))}\n" +
+                        $"Delegations: {JsonSerializer.Serialize(AllDelegations(services))}");
                 }
 
                 (stored!.Kind, stored.Done, stored.Total).ShouldBe((SessionProgressKinds.Plan, 0, 3));
@@ -295,6 +298,19 @@ public sealed class SessionProgressLiveTests
         using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
         using var command = connection.CreateCommand();
         command.CommandText = "SELECT id || ' parent=' || IFNULL(parent_session_id, '-') || ' title=' || IFNULL(title, '-') || ' user=' || user_id FROM sessions";
+        using var reader = command.ExecuteReader();
+        var rows = new List<string>();
+        while (reader.Read())
+            rows.Add(reader.GetString(0));
+        return rows;
+    }
+
+    private static List<string> AllDelegations(IServiceProvider services)
+    {
+        using var scope = services.CreateScope();
+        using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT id || ' status=' || status || ' child=' || IFNULL(child_session_id, '-') || ' updated=' || updated_at FROM delegations";
         using var reader = command.ExecuteReader();
         var rows = new List<string>();
         while (reader.Read())

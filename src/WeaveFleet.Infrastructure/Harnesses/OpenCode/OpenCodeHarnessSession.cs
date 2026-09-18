@@ -96,6 +96,10 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     private const int MaxRememberedFileWrites = 10_000;
     private readonly ConcurrentDictionary<string, byte> _reportedFileWrites = new(StringComparer.Ordinal);
 
+    // Delegation handling runs off the event loop, one event at a time in the order OpenCode sent them.
+    private readonly object _delegationSync = new();
+    private Task _delegationTail = Task.CompletedTask;
+
     private sealed record OpenCodeAgentModelInfo(string? ProviderId, string? ModelId);
 
     /// <summary>Initialises the instance with all required dependencies.</summary>
@@ -498,11 +502,11 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
                 _analyticsCollector!.AcceptTokenEvent(tokenEvent);
             }
 
-            // Fire-and-forget delegation detection for message.part.updated events.
+            // Delegation detection for message.part.updated events, off the event loop.
             // This must remain in the session because it needs access to the raw SSE event
             // and the fleet session context for child session orchestration.
             if (harnessEvent.Type == EventTypes.MessagePartUpdated)
-                _ = TryEmitDelegationAsync(sseEvt);
+                QueueDelegation(sseEvt);
 
             // Track tool-call-ID → question-ID so AnswerQuestionAsync / RejectQuestionAsync
             // can translate the UI-provided tool call ID into the OpenCode question ID.
@@ -1117,6 +1121,21 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         catch (Exception ex)
         {
             LogPersistFailed(_logger, _fleetSessionId, ex);
+        }
+    }
+
+    /// <summary>
+    /// Queues delegation handling behind the previous event's. One task call sends its updates milliseconds apart
+    /// (pending, running, running, completed), and linking the child session can take seconds. Handled
+    /// concurrently, a "running" update that finished last put a completed subagent back to running for good.
+    /// </summary>
+    private void QueueDelegation(OpenCodeSseEvent sseEvt)
+    {
+        lock (_delegationSync)
+        {
+            _delegationTail = _delegationTail
+                .ContinueWith(_ => TryEmitDelegationAsync(sseEvt), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default)
+                .Unwrap();
         }
     }
 

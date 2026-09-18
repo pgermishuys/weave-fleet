@@ -234,6 +234,56 @@ public sealed class OpenCodeDelegationReplayTests
         await instance.DisposeAsync();
     }
 
+    [Fact]
+    public async Task A_task_calls_updates_are_handled_in_the_order_OpenCode_sent_them()
+    {
+        // One task call sends "running" then "completed" milliseconds apart. Handled concurrently, a slow
+        // "running" finished after "completed" and left a subagent that never finished.
+        static string TaskPart(string status) => "data: " + JsonSerializer.Serialize(new
+        {
+            type = "message.part.updated",
+            properties = new
+            {
+                sessionID = "ses_parent",
+                part = new
+                {
+                    id = "prt_task",
+                    messageID = "msg_parent",
+                    sessionID = "ses_parent",
+                    type = "tool",
+                    tool = "task",
+                    callID = "call_task",
+                    state = new
+                    {
+                        status,
+                        title = "Write the migration",
+                        input = new { description = "Write the migration", prompt = "Write it.", subagent_type = "general" },
+                    },
+                },
+            },
+        });
+
+        var (instance, delegationRepo, _) = BuildInstance("fleet-ordered-1", [TaskPart("running"), TaskPart("completed")]);
+        var lookups = 0;
+        delegationRepo.GetByParentToolCallIdBehavior = async (parentSessionId, toolCallId) =>
+        {
+            var found = delegationRepo.All.FirstOrDefault(d => d.ParentSessionId == parentSessionId && d.ParentToolCallId == toolCallId);
+            if (Interlocked.Increment(ref lookups) == 1)
+                await Task.Delay(300);
+            return found;
+        };
+
+        await ConsumeWithCancelAsync(instance);
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (!delegationRepo.All.Any(d => d.Status == "completed") && DateTime.UtcNow < deadline)
+            await Task.Delay(50);
+        await Task.Delay(500);
+
+        delegationRepo.All.ShouldHaveSingleItem().Status.ShouldBe("completed");
+
+        await instance.DisposeAsync();
+    }
+
     // -----------------------------------------------------------------------
     // Task 5 — Parent remains busy while child works
     // -----------------------------------------------------------------------

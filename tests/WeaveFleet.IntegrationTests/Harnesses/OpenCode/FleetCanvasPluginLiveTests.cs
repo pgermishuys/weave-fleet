@@ -457,12 +457,15 @@ public sealed partial class FleetCanvasPluginLiveTests
     private static partial Regex CanvasId();
 }
 
-/// <summary>A fact that's skipped when the <c>opencode</c> binary isn't on PATH.</summary>
+/// <summary>
+/// A fact that's skipped when the <c>opencode</c> binary isn't on PATH, unless <c>FLEET_REQUIRE_OPENCODE=1</c>
+/// (as in CI), where a missing binary fails the test instead of hiding it.
+/// </summary>
 internal sealed class OpenCodeFactAttribute : FactAttribute
 {
     public OpenCodeFactAttribute()
     {
-        if (!IsOpenCodeOnPath())
+        if (!IsOpenCodeOnPath() && Environment.GetEnvironmentVariable("FLEET_REQUIRE_OPENCODE") != "1")
             Skip = "opencode isn't on PATH.";
     }
 
