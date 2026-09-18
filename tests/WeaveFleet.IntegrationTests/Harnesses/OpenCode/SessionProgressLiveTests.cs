@@ -128,9 +128,11 @@ public sealed class SessionProgressLiveTests
                     {"description":"Write the migration","prompt":"Write the migration that drops the dead tables.","subagent_type":"general"}
                     """));
 
-                // The subagent's turn. OpenCode 1.18 offers subagents todowrite, but it doesn't write todos here: the
-                // pooled process only sends a child's events once the child's own pump has bound it, and this scripted
-                // subagent is done well before then, so its counts would never reach the parent.
+                // The subagent's turn: a todo list of its own, then its answer. This scripted subagent is done well
+                // before its own Fleet session pumps, so its counts reach the parent only through the parent's stream.
+                queue.Enqueue(ToolCall("call_sub_todo", "todowrite", """
+                    {"todos":[{"content":"Write the up migration","status":"completed","priority":"high"},{"content":"Write the down migration","status":"in_progress","priority":"medium"}]}
+                    """));
                 queue.Enqueue(new ScriptedLlmResponse { Text = "The migration is written." });
             },
             _ => true,
@@ -144,13 +146,13 @@ public sealed class SessionProgressLiveTests
                 {
                     stored = await WaitForAsync(
                         () => StoredOrNull(services),
-                        progress => progress?.Subagents is [{ Status: "completed" }],
+                        progress => progress?.Subagents is [{ Status: "completed", Total: 2 }],
                         wait.Token);
                 }
                 catch (TimeoutException)
                 {
                     throw new TimeoutException(
-                        $"The subagent never showed as finished. Parent progress: {JsonSerializer.Serialize(StoredOrNull(services))}\n" +
+                        $"The subagent never showed as finished with its todo counts. Parent progress: {JsonSerializer.Serialize(StoredOrNull(services))}\n" +
                         $"Sessions: {JsonSerializer.Serialize(AllSessions(services))}\n" +
                         $"Delegations: {JsonSerializer.Serialize(AllDelegations(services))}");
                 }
@@ -159,6 +161,7 @@ public sealed class SessionProgressLiveTests
                 var subagent = stored.Subagents.ShouldHaveSingleItem();
                 (subagent.Agent, subagent.Title, subagent.StepKey, subagent.Status)
                     .ShouldBe(("general", "Write the migration", "1", "completed"));
+                (subagent.Done, subagent.Total, subagent.Current).ShouldBe((1, 2, "Write the down migration"));
                 subagent.ChildSessionId.ShouldNotBeNullOrWhiteSpace();
                 AllSessions(services).ShouldContain(row => row.StartsWith(subagent.ChildSessionId + " parent=progress-live", StringComparison.Ordinal));
             });
