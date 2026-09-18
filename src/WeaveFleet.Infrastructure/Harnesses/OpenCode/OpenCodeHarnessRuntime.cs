@@ -436,9 +436,9 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         string UserFacingMessage);
 
     /// <inheritdoc />
-    public Task<HarnessAvailability> CheckAvailabilityAsync(CancellationToken ct) =>
-        HarnessProbe.CheckInstalledAsync(
-            "OpenCode", OpenCodeExecutable.Command, OpenCodeExecutable.InstallDirectories(), _logger, ct);
+    public async Task<HarnessAvailability> CheckAvailabilityAsync(CancellationToken ct) =>
+        OpenCodeExecutable.RejectOpenCode2(await HarnessProbe.CheckInstalledAsync(
+            "OpenCode", OpenCodeExecutable.Command, OpenCodeExecutable.InstallDirectories(), _logger, ct).ConfigureAwait(false));
 
     /// <inheritdoc />
     /// <remarks>
