@@ -40,8 +40,48 @@ public sealed record HarnessCapabilities
     public bool SupportsProfiles { get; init; }
 }
 
+/// <summary>What a harness needs before sessions can use it. Sent to the client as <c>state</c>.</summary>
+public static class HarnessStates
+{
+    /// <summary>Installed and working; sessions can use it.</summary>
+    public const string Ready = "ready";
+
+    /// <summary>Fleet can't find its executable.</summary>
+    public const string NotInstalled = "not-installed";
+
+    /// <summary>Installed, but the user has to sign in first.</summary>
+    public const string SignInRequired = "sign-in-required";
+
+    /// <summary>Found, but it fails when Fleet runs it.</summary>
+    public const string NotWorking = "not-working";
+}
+
 /// <summary>Whether a harness binary/service is available on this machine.</summary>
-public sealed record HarnessAvailability(bool Available, string? Reason);
+/// <param name="Available">Sessions can use the harness.</param>
+/// <param name="Reason">Why not, in a sentence the user can act on; <see langword="null"/> when available.</param>
+public sealed record HarnessAvailability(bool Available, string? Reason)
+{
+    /// <summary>One of <see cref="HarnessStates"/>.</summary>
+    public string State { get; init; } = Available ? HarnessStates.Ready : HarnessStates.NotWorking;
+
+    /// <summary>The version the executable reports, when Fleet could run it.</summary>
+    public string? Version { get; init; }
+
+    /// <summary>Where Fleet found the executable.</summary>
+    public string? ExecutablePath { get; init; }
+
+    public static HarnessAvailability Ready(string? version, string? executablePath) =>
+        new(true, null) { Version = version, ExecutablePath = executablePath };
+
+    public static HarnessAvailability NotInstalled(string reason) =>
+        new(false, reason) { State = HarnessStates.NotInstalled };
+
+    public static HarnessAvailability SignInRequired(string reason, string? version, string? executablePath) =>
+        new(false, reason) { State = HarnessStates.SignInRequired, Version = version, ExecutablePath = executablePath };
+
+    public static HarnessAvailability NotWorking(string reason, string? version = null, string? executablePath = null) =>
+        new(false, reason) { State = HarnessStates.NotWorking, Version = version, ExecutablePath = executablePath };
+}
 
 /// <summary>A real-time event emitted by a harness instance.</summary>
 public sealed record HarnessEvent

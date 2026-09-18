@@ -12,6 +12,7 @@ import { createGitHubSessionSourcePreset } from "@/lib/github-session-source";
 import { useHarnessProfilesStore } from "@/stores/harness-profiles";
 import { useSessionsStore } from "@/stores/sessions";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
+import { useSettingsNav } from "@/composables/use-settings-nav";
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -25,6 +26,7 @@ const mocks = vi.hoisted(() => ({
 const repositories = ref<ScannedRepository[]>([]);
 const worktrees = ref<WorktreeInfo[]>([]);
 const harnesses = ref<HarnessInfo[]>([]);
+const noHarnessReason = shallowRef<string | null>(null);
 const createError = shallowRef<string | undefined>(undefined);
 const isCreating = shallowRef(false);
 
@@ -94,6 +96,7 @@ vi.mock("@/composables/use-enabled-harnesses", () => ({
   useEnabledHarnesses: () => ({
     enabledHarnesses: computed(() => harnesses.value),
     defaultHarnessType: computed(() => "opencode"),
+    noHarnessReason: computed(() => noHarnessReason.value),
   }),
 }));
 
@@ -211,6 +214,7 @@ beforeEach(() => {
   repositories.value = [rocket, comet];
   worktrees.value = [];
   harnesses.value = [opencode];
+  noHarnessReason.value = null;
   createError.value = undefined;
   isCreating.value = false;
   catalog.value = null;
@@ -726,6 +730,24 @@ describe("NewSessionComposer", () => {
 
       expect(mocks.createSession).not.toHaveBeenCalled();
       expect(view.get("[data-testid='create-session-submit']").attributes("disabled")).toBeDefined();
+    });
+
+    it("says why no harness is ready and won't send until one is", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path });
+      harnesses.value = [];
+      noHarnessReason.value = "OpenCode isn't installed: Fleet couldn't find opencode on PATH or in the folders its installer uses.";
+      const view = await mountComposer();
+      await type(view, "Fix the flaky test");
+
+      await pressEnter(view);
+
+      expect(view.get("[data-testid='new-session-no-harness']").text()).toContain("OpenCode isn't installed");
+      expect(view.get("[data-testid='create-session-submit']").attributes("disabled")).toBeDefined();
+      expect(mocks.createSession).not.toHaveBeenCalled();
+
+      await view.get("[data-testid='new-session-no-harness'] button").trigger("click");
+      expect(useSettingsNav().activeSection.value).toBe("harnesses");
+      expect(mocks.navigate).toHaveBeenCalledWith({ to: "/settings" });
     });
 
     it("Esc never leaves the page", async () => {

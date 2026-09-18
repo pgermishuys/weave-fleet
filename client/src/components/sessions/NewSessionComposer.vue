@@ -17,6 +17,7 @@ import ProfilePicker from "@/components/sessions/new-session/ProfilePicker.vue";
 import WorkspacePicker from "@/components/sessions/new-session/WorkspacePicker.vue";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { useHarnessCatalog } from "@/composables/use-harness-catalog";
+import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useIsMobile } from "@/composables/use-media-query";
 import { useNewSessionDefaults } from "@/composables/use-new-session-defaults";
 import { useProjects } from "@/composables/use-projects";
@@ -47,7 +48,8 @@ const search = useSearch({ from: "/sessions/new" });
 const { config } = storeToRefs(useAppShellStore());
 const workspaceUiStore = useWorkspaceUiStore();
 const { newSessionInitialSource } = storeToRefs(workspaceUiStore);
-const { enabledHarnesses, defaultHarnessType } = useEnabledHarnesses();
+const { enabledHarnesses, defaultHarnessType, noHarnessReason } = useEnabledHarnesses();
+const { setActiveSection } = useSettingsNav();
 const defaults = useNewSessionDefaults();
 const isMobile = useIsMobile();
 
@@ -126,7 +128,8 @@ const areRepositoriesReady = computed(() => scannedAt.value !== null || reposito
 const showHarnessPicker = computed(() => enabledHarnesses.value.length > 1);
 const hasMessage = computed(() => message.value.trim().length > 0);
 const isStarting = computed(() => isCreating.value || draft.isStarting);
-const canSend = computed(() => !isStarting.value && (hasMessage.value || gitHubPreset.value !== null));
+const canSend = computed(() =>
+  !isStarting.value && noHarnessReason.value === null && (hasMessage.value || gitHubPreset.value !== null));
 const currentBranch = computed(() => repositoryDetail.value?.branch ?? null);
 const defaultBase = computed(() => repositoryDetail.value?.defaultBase ?? null);
 
@@ -322,6 +325,11 @@ function removeGitHubPreset(): void {
   focusMessage();
 }
 
+function openHarnessSettings(): void {
+  setActiveSection("harnesses");
+  void navigate({ to: "/settings" });
+}
+
 /** Where the new session's row goes in the sidebar: the chosen project, or Scratch. */
 function projectForRow(): { id: string; name: string } | null {
   const chosen = projectId.value
@@ -331,7 +339,7 @@ function projectForRow(): { id: string; name: string } | null {
 }
 
 async function submit(withoutMessage: boolean): Promise<void> {
-  if (isStarting.value) {
+  if (isStarting.value || noHarnessReason.value !== null) {
     return;
   }
 
@@ -557,6 +565,23 @@ onUnmounted(() => {
         role="alert"
       >
         {{ errorMessage }}
+      </div>
+
+      <!-- Without a ready harness the first message would fail; say why before it's typed. -->
+      <div
+        v-else-if="noHarnessReason"
+        class="new-session__no-harness"
+        data-testid="new-session-no-harness"
+        role="status"
+      >
+        <span>{{ noHarnessReason }}</span>
+        <button
+          type="button"
+          class="new-session__no-harness-link"
+          @click="openHarnessSettings"
+        >
+          Open Settings → Harnesses
+        </button>
       </div>
 
       <ComposerFrame>
@@ -857,6 +882,33 @@ onUnmounted(() => {
   color: var(--error);
   font-size: 12px;
   line-height: 1.5;
+}
+
+.new-session__no-harness {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin-bottom: 10px;
+  border: 1px solid color-mix(in srgb, var(--idle) 35%, transparent);
+  border-radius: var(--radius-card);
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--idle) 10%, transparent);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.new-session__no-harness-link {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
 }
 
 .new-session__attachments {

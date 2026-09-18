@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Configuration;
@@ -18,10 +17,6 @@ public sealed class PiHarnessRuntime : IHarnessRuntime
     private static readonly Action<ILogger, string, Exception?> LogSpawnFailed =
         LoggerMessage.Define<string>(LogLevel.Error, new EventId(2, "SpawnFailed"),
             "Failed to spawn Pi harness instance: {Reason}");
-
-    private static readonly Action<ILogger, Exception?> LogAvailabilityCheckFailed =
-        LoggerMessage.Define(LogLevel.Warning, new EventId(3, "AvailabilityCheckFailed"),
-            "pi binary availability check failed.");
 
     private readonly FleetOptions _options;
     private readonly ILogger<PiHarnessRuntime> _logger;
@@ -56,47 +51,8 @@ public sealed class PiHarnessRuntime : IHarnessRuntime
     }
 
     /// <inheritdoc />
-    public async Task<HarnessAvailability> CheckAvailabilityAsync(CancellationToken ct)
-    {
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = ExecutableResolver.Resolve(PiProcessOptions.DefaultBinaryPath),
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-            };
-            psi.ArgumentList.Add("--version");
-
-            using var process = Process.Start(psi);
-            if (process is null)
-            {
-                return new HarnessAvailability(false, "pi binary not found on PATH.");
-            }
-
-            var stdoutTask = process.StandardOutput.ReadToEndAsync(ct);
-            var stderrTask = process.StandardError.ReadToEndAsync(ct);
-
-            await process.WaitForExitAsync(ct).ConfigureAwait(false);
-            await stdoutTask.ConfigureAwait(false);
-            await stderrTask.ConfigureAwait(false);
-
-            return process.ExitCode == 0
-                ? new HarnessAvailability(true, null)
-                : new HarnessAvailability(false, $"pi --version exited with code {process.ExitCode}.");
-        }
-        catch (OperationCanceledException)
-        {
-            return new HarnessAvailability(false, "Availability check was cancelled.");
-        }
-        catch (Exception ex)
-        {
-            LogAvailabilityCheckFailed(_logger, ex);
-            return new HarnessAvailability(false, "pi binary not found on PATH.");
-        }
-    }
+    public Task<HarnessAvailability> CheckAvailabilityAsync(CancellationToken ct) =>
+        HarnessProbe.CheckInstalledAsync("Pi", PiProcessOptions.DefaultBinaryPath, [], _logger, ct);
 
     /// <inheritdoc />
     public async Task<IHarnessSession> SpawnAsync(HarnessSpawnOptions options, CancellationToken ct)
