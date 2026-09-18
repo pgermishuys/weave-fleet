@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import mermaid from 'mermaid'
 import svgPanZoom from 'svg-pan-zoom'
 import type SvgPanZoom from 'svg-pan-zoom'
-import { sanitizeHtml } from '@/lib/sanitize-html'
+import { renderMermaidSvg } from '@/lib/mermaid'
 
 const props = defineProps<{
   content: string
@@ -15,21 +14,7 @@ const errorMessage = ref<string>('')
 const showFallback = ref(false)
 const containerRef = ref<HTMLElement | null>(null)
 
-let mermaidInitialized = false
-let renderCounter = 0
 let panZoomInstance: SvgPanZoom.Instance | null = null
-
-function initializeMermaid() {
-  if (!mermaidInitialized) {
-    mermaid.initialize({
-      startOnLoad: false,
-      securityLevel: 'strict',
-      htmlLabels: false,
-      theme: 'default'
-    })
-    mermaidInitialized = true
-  }
-}
 
 function cleanupPanZoom() {
   if (panZoomInstance) {
@@ -103,18 +88,7 @@ async function renderMermaid(content: string) {
   }
 
   try {
-    initializeMermaid()
-    
-    // Generate unique ID for this render
-    const id = `mermaid-${Date.now()}-${++renderCounter}`
-    
-    // Render the diagram
-    const { svg } = await mermaid.render(id, content)
-    
-    // Sanitize the SVG output
-    const sanitized = sanitizeHtml(svg)
-    
-    renderedSvg.value = sanitized
+    renderedSvg.value = await renderMermaidSvg(content)
     
     // Initialize pan-zoom after DOM update
     await nextTick()
@@ -142,7 +116,7 @@ watch(() => props.content, (newContent) => {
 <template>
   <div class="mermaid-renderer">
     <div v-if="renderedSvg" class="mermaid-container">
-      <div ref="containerRef" class="mermaid-output" v-html="renderedSvg"></div>
+      <div ref="containerRef" class="mermaid-output mermaid-diagram" v-html="renderedSvg"></div>
       <div class="zoom-controls">
         <button @click="handleZoomIn" class="zoom-btn" title="Zoom in">+</button>
         <button @click="handleZoomOut" class="zoom-btn" title="Zoom out">−</button>
@@ -193,73 +167,6 @@ watch(() => props.content, (newContent) => {
 .mermaid-output :deep(svg) {
   width: 100%;
   height: 100%;
-  font-family: var(--font-sans-stack);
-}
-
-/*
- * sanitizeHtml drops the <style> block Mermaid embeds in its SVG, so the
- * diagram is themed here from Fleet's tokens and follows theme changes.
- */
-.mermaid-output :deep(text) {
-  fill: var(--text);
-}
-
-.mermaid-output :deep(.actor),
-.mermaid-output :deep(.node rect),
-.mermaid-output :deep(.node polygon),
-.mermaid-output :deep(.node circle),
-.mermaid-output :deep(.node ellipse),
-.mermaid-output :deep(.node path) {
-  fill: var(--card-bg);
-  stroke: color-mix(in srgb, var(--text) 30%, transparent);
-}
-
-.mermaid-output :deep(text.actor),
-.mermaid-output :deep(.actor tspan),
-.mermaid-output :deep(.messageText),
-.mermaid-output :deep(.noteText),
-.mermaid-output :deep(.nodeLabel) {
-  fill: var(--text);
-  stroke: none;
-}
-
-.mermaid-output :deep(.actor-line) {
-  stroke: color-mix(in srgb, var(--text) 22%, transparent);
-}
-
-.mermaid-output :deep(.messageLine0),
-.mermaid-output :deep(.messageLine1),
-.mermaid-output :deep(.edgePath .path),
-.mermaid-output :deep(.flowchart-link) {
-  stroke: color-mix(in srgb, var(--text) 50%, transparent);
-}
-
-.mermaid-output :deep(marker path),
-.mermaid-output :deep(.arrowheadPath) {
-  fill: color-mix(in srgb, var(--text) 50%, transparent);
-  stroke: none;
-}
-
-.mermaid-output :deep(.note) {
-  fill: var(--accent-dim);
-  stroke: color-mix(in srgb, var(--accent) 40%, transparent);
-}
-
-.mermaid-output :deep(.activation0),
-.mermaid-output :deep(.activation1),
-.mermaid-output :deep(.activation2) {
-  fill: color-mix(in srgb, var(--text) 8%, var(--card-bg));
-  stroke: color-mix(in srgb, var(--text) 30%, transparent);
-}
-
-.mermaid-output :deep(.edgeLabel rect),
-.mermaid-output :deep(.labelBkg) {
-  fill: var(--panel-bg);
-}
-
-.mermaid-output :deep(.cluster rect) {
-  fill: color-mix(in srgb, var(--text) 3%, transparent);
-  stroke: var(--border);
 }
 
 .zoom-controls {
