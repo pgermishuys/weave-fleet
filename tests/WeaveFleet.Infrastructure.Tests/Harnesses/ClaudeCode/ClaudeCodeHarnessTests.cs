@@ -127,6 +127,19 @@ public sealed class ClaudeCodeHarnessTests
         runtime.GetSetup(HarnessAvailability.NotInstalled("Missing.")).SignInCommand.ShouldBe("claude auth login");
     }
 
+    [Fact]
+    public void GetUpdateCommand_RunsClaudeUpdate_OrWingetForAWingetInstall()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var runtime = CreateRuntimeWithBinary("claude");
+
+        runtime.GetUpdateCommand(HarnessAvailability.Ready("2.1.270", "/home/you/.local/bin/claude"), "2.1.276")!
+            .Display.ShouldBe("/home/you/.local/bin/claude update");
+        runtime.GetUpdateCommand(HarnessAvailability.Ready("2.1.270", @"C:\Users\jo\AppData\Local\Microsoft\WinGet\Links\claude.exe"), null)!
+            .Display.ShouldBe("winget upgrade --id Anthropic.ClaudeCode --exact");
+        runtime.LatestVersionPackage.ShouldBe("@anthropic-ai/claude-code");
+    }
+
     private static ClaudeCodeHarnessRuntime CreateRuntimeWithBinary(string binaryPath)
     {
         var options = new FleetOptions();

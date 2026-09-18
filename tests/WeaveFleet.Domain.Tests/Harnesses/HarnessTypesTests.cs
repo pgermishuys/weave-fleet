@@ -56,6 +56,18 @@ public sealed class HarnessTypesTests
         (signIn.Available, signIn.State, signIn.Version).ShouldBe((false, HarnessStates.SignInRequired, "2.1.276"));
     }
 
+    [Theory]
+    [InlineData("1.18.30", "1.18.31", -1)]
+    [InlineData("1.18.31", "1.18.31", 0)]
+    [InlineData("1.9.0", "1.15.10", -1)]
+    [InlineData("2.1.276", "2.1.99", 1)]
+    [InlineData("v1.15", "1.15.0", 0)]
+    [InlineData("1.16.0-beta.2", "1.15.10", 1)]
+    public void HarnessVersion_ComparesNumbersNotText(string a, string b, int expected)
+    {
+        Math.Sign(HarnessVersion.Compare(a, b)).ShouldBe(expected);
+    }
+
     [Fact]
     public void HarnessSessionStatus_HasExpectedValues()
     {

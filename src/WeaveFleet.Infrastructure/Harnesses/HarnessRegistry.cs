@@ -38,12 +38,25 @@ public sealed class HarnessRegistry : IHarnessRegistry
         {
             var runtime = GetRuntimeByType(harness.Type);
             var availability = runtime is not null
-                ? await runtime.CheckAvailabilityAsync(ct).ConfigureAwait(false)
+                ? RequireMinimumVersion(harness, runtime, await runtime.CheckAvailabilityAsync(ct).ConfigureAwait(false))
                 : HarnessAvailability.NotWorking("No runtime registered.");
             return HarnessInfo.From(harness.Type, harness.DisplayName, harness.Capabilities, availability, runtime?.GetSetup(availability));
         });
 
         var results = await Task.WhenAll(tasks).ConfigureAwait(false);
         return results;
+    }
+
+    /// <summary>A ready harness older than the runtime's minimum version can't start sessions until it's updated.</summary>
+    internal static HarnessAvailability RequireMinimumVersion(IHarness harness, IHarnessRuntime runtime, HarnessAvailability availability)
+    {
+        if (!availability.Available || runtime.MinimumVersion is not { } minimum || availability.Version is not { } version)
+            return availability;
+        return HarnessVersion.IsOlder(version, minimum)
+            ? HarnessAvailability.UpdateNeeded(
+                $"Fleet needs {harness.DisplayName} {minimum} or newer. You have {version}.",
+                version,
+                availability.ExecutablePath)
+            : availability;
     }
 }

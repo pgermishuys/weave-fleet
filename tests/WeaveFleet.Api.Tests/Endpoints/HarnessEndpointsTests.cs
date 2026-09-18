@@ -104,6 +104,65 @@ public sealed class HarnessEndpointsTests
         setup.GetProperty("docsUrl").GetString().ShouldBe("https://code.claude.com/docs/en/setup");
     }
 
+    [Fact]
+    public async Task get_harnesses_includes_updates_and_skips_the_latest_version_lookup_when_checks_are_off()
+    {
+        var updates = new FakeHarnessUpdateService();
+        updates.Updates["opencode"] = new HarnessUpdateInfo
+        {
+            LatestVersion = "1.18.31",
+            UpdateAvailable = true,
+            MinimumVersion = "1.15.10",
+            Command = "/home/you/.opencode/bin/opencode upgrade 1.18.31",
+            Job = new HarnessUpdateJob(HarnessUpdatePhases.Waiting, null, null, 2, "1.18.20", null),
+        };
+        await using var factory = new ApiWebApplicationFactory(
+            authEnabled: false,
+            configureTestServices: services => services.AddSingleton<IHarnessUpdateService>(updates));
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        using (var document = JsonDocument.Parse(await client.GetStringAsync("/api/harnesses")))
+        {
+            var update = document.RootElement.EnumerateArray()
+                .Single(h => h.GetProperty("type").GetString() == "opencode")
+                .GetProperty("update");
+            update.GetProperty("latestVersion").GetString().ShouldBe("1.18.31");
+            update.GetProperty("updateAvailable").GetBoolean().ShouldBeTrue();
+            update.GetProperty("minimumVersion").GetString().ShouldBe("1.15.10");
+            update.GetProperty("command").GetString().ShouldBe("/home/you/.opencode/bin/opencode upgrade 1.18.31");
+            var job = update.GetProperty("job");
+            (job.GetProperty("phase").GetString(), job.GetProperty("workingSessions").GetInt32()).ShouldBe(("waiting", 2));
+        }
+
+        using (var scope = factory.Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>().SetAsync("harnessUpdates.check", "false");
+        await client.GetStringAsync("/api/harnesses");
+
+        updates.Described.ShouldBe([true, false]);
+    }
+
+    [Fact]
+    public async Task update_endpoints_start_and_dismiss_an_update()
+    {
+        var updates = new FakeHarnessUpdateService();
+        await using var factory = new ApiWebApplicationFactory(
+            authEnabled: false,
+            configureTestServices: services => services.AddSingleton<IHarnessUpdateService>(updates));
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var started = await client.PostAsync("/api/harnesses/opencode/update", content: null);
+        started.StatusCode.ShouldBe(HttpStatusCode.Accepted);
+        using (var job = JsonDocument.Parse(await started.Content.ReadAsStringAsync()))
+            job.RootElement.GetProperty("phase").GetString().ShouldBe("waiting");
+
+        updates.StartResult = new WeaveFleet.Domain.Common.FleetError("Harness.Conflict", "OpenCode is already being updated.");
+        (await client.PostAsync("/api/harnesses/opencode/update", content: null)).StatusCode.ShouldBe(HttpStatusCode.Conflict);
+
+        (await client.DeleteAsync("/api/harnesses/opencode/update")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        updates.Started.ShouldBe(["opencode", "opencode"]);
+        updates.Dismissed.ShouldBe(["opencode"]);
+    }
+
     // ── Warmup endpoint — API contract: no caller-controlled parameters ────────────
 
     [Fact]

@@ -10,6 +10,8 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Testing.Fakes;
 
 namespace WeaveFleet.Api.Tests.Infrastructure;
 
@@ -69,6 +71,9 @@ public sealed class ApiWebApplicationFactory(
             builder.UseSetting("Authentication:DefaultAuthenticateScheme", "Unauthorized");
             builder.UseSetting("Authentication:DefaultChallengeScheme", "Unauthorized");
         }
+
+        // Harness updates look versions up on npm; tests don't reach the network. A test can register its own.
+        builder.ConfigureTestServices(services => services.AddSingleton<IHarnessUpdateService>(new FakeHarnessUpdateService()));
 
         if (configureTestServices is not null)
         {

@@ -453,6 +453,34 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         DocsUrl: "https://opencode.ai/docs");
 
     /// <inheritdoc />
+    public string LatestVersionPackage => "opencode-ai";
+
+    /// <inheritdoc />
+    /// <remarks>The oldest version the pooled OpenCode live tests pass on (see <c>.weave/plans/harness-setup.md</c>).</remarks>
+    public string MinimumVersion => MinimumOpenCodeVersion;
+
+    internal const string MinimumOpenCodeVersion = "1.15.10";
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <c>opencode upgrade</c> works out how OpenCode was installed (install script, npm, pnpm, bun, Homebrew,
+    /// Scoop, Chocolatey) and updates it that way. It doesn't know winget (anomalyco/opencode#30026), so a winget
+    /// install is updated with winget.
+    /// </remarks>
+    public HarnessCommand? GetUpdateCommand(HarnessAvailability availability, string? version)
+    {
+        if (availability.ExecutablePath is not { } path)
+            return null;
+        if (UpdateCommands.IsWingetInstall(path))
+            return UpdateCommands.Winget("SST.opencode");
+        return UpdateCommands.Native(path, version is null ? ["upgrade"] : ["upgrade", version]);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Idle pooled servers restart on the new binary now; busy ones when their idle time runs out.</remarks>
+    public Task AfterUpdateAsync(CancellationToken ct) => RecycleIdlePooledInstancesAsync(ct);
+
+    /// <inheritdoc />
     public async Task<IHarnessSession> SpawnAsync(HarnessSpawnOptions options, CancellationToken ct)
     {
         var pooledModeEnabled = await IsPooledModeEnabledAsync(options.OwnerUserId, ct).ConfigureAwait(false);

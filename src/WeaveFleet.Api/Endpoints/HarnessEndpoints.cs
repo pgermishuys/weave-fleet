@@ -16,12 +16,18 @@ public static class HarnessEndpoints
 
         group.MapGet("/harnesses", async (
             IHarnessRegistry registry,
+            IHarnessUpdateService updates,
             IUserPreferenceRepository preferences,
             FleetOptions fleetOptions,
             CancellationToken ct) =>
         {
             var harnesses = await registry.GetAvailabilityAsync(ct);
             var preferenceValues = await preferences.GetAllAsync();
+
+            // Harnesses are updated on the machine Fleet runs on; in cloud mode that's the server, not the user's.
+            var updateInfo = fleetOptions.Cloud.Enabled
+                ? null
+                : await updates.DescribeAsync(harnesses, checkLatest: AreUpdateChecksOn(preferenceValues), ct);
 
             var response = harnesses.Select(harness => harness with
             {
@@ -31,11 +37,43 @@ public static class HarnessEndpoints
                 {
                     SupportsProfiles = harness.Capabilities.SupportsProfiles && !fleetOptions.Auth.Enabled,
                 },
+                Update = updateInfo?.GetValueOrDefault(harness.Type),
             }).ToList();
 
             return Results.Ok(response);
         })
         .WithName("GetHarnesses");
+
+        // POST /api/harnesses/{type}/update — update the harness once no session is working; poll GET /api/harnesses
+        group.MapPost("/harnesses/{type}/update", async (
+            string type,
+            IHarnessUpdateService updates,
+            FleetOptions fleetOptions,
+            CancellationToken ct) =>
+        {
+            if (fleetOptions.Cloud.Enabled)
+                return Results.NotFound(new ApiErrorResponse("Harnesses can only be updated from Fleet when it runs on your own computer."));
+
+            var started = await updates.StartAsync(type, ct);
+            return started.IsSuccess ? Results.Accepted(value: started.Value) : UpdateError(started.Error);
+        })
+        .Produces<HarnessUpdateJob>(202)
+        .Produces<ApiErrorResponse>(400)
+        .Produces<ApiErrorResponse>(404)
+        .Produces<ApiErrorResponse>(409)
+        .WithName("UpdateHarness");
+
+        // DELETE /api/harnesses/{type}/update — cancel an update still waiting for sessions, or dismiss a finished one
+        group.MapDelete("/harnesses/{type}/update", (
+            string type,
+            IHarnessUpdateService updates) =>
+        {
+            var dismissed = updates.Dismiss(type);
+            return dismissed.IsSuccess ? Results.NoContent() : UpdateError(dismissed.Error);
+        })
+        .Produces(204)
+        .Produces<ApiErrorResponse>(409)
+        .WithName("DismissHarnessUpdate");
 
         // POST /api/harnesses/opencode/warmup
         // Server-trust warmup: owner identity is derived exclusively from the server-authenticated
@@ -103,6 +141,21 @@ public static class HarnessEndpoints
 
         return new HarnessCatalogResponse(true, agents, providers, catalog.DefaultAgent, defaultModel);
     }
+
+    /// <summary>Set to "false" to stop Fleet looking up harnesses' latest versions.</summary>
+    internal const string UpdateChecksPreference = "harnessUpdates.check";
+
+    private static bool AreUpdateChecksOn(IReadOnlyDictionary<string, string> preferenceValues) =>
+        !preferenceValues.TryGetValue(UpdateChecksPreference, out var value)
+        || !string.Equals(value, "false", StringComparison.OrdinalIgnoreCase);
+
+    private static IResult UpdateError(WeaveFleet.Domain.Common.FleetError error) => error.Code switch
+    {
+        var code when code.EndsWith(".NotFound", StringComparison.Ordinal) => Results.NotFound(new ApiErrorResponse(error.Description)),
+        var code when code.EndsWith(".Conflict", StringComparison.Ordinal) => Results.Conflict(new ApiErrorResponse(error.Description)),
+        var code when code.StartsWith("Validation.", StringComparison.Ordinal) => Results.BadRequest(new ApiErrorResponse(error.Description)),
+        _ => Results.Problem(error.Description),
+    };
 
     private static bool IsHarnessUserEnabled(
         string harnessType,

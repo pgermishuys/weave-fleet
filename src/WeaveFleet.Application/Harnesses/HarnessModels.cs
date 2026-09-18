@@ -74,6 +74,9 @@ public sealed record HarnessInfo(
     /// <summary>How to install it or sign in to it here; <see langword="null"/> when Fleet can't help.</summary>
     public HarnessSetup? Setup { get; init; }
 
+    /// <summary>Its latest version and any update Fleet is running; <see langword="null"/> when Fleet doesn't update harnesses (cloud mode).</summary>
+    public HarnessUpdateInfo? Update { get; init; }
+
     /// <summary>The harness as its runtime found it; <see cref="UserEnabled"/> is filled in later.</summary>
     public static HarnessInfo From(
         string type,
