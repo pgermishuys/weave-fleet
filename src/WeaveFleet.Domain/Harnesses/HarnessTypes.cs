@@ -55,6 +55,9 @@ public static class HarnessStates
 
     /// <summary>Found, but it fails when Fleet runs it.</summary>
     public const string NotWorking = "not-working";
+
+    /// <summary>Installed, but older than the version Fleet needs.</summary>
+    public const string UpdateNeeded = "update-needed";
 }
 
 /// <summary>Whether a harness binary/service is available on this machine.</summary>
@@ -82,6 +85,40 @@ public sealed record HarnessAvailability(bool Available, string? Reason)
 
     public static HarnessAvailability NotWorking(string reason, string? version = null, string? executablePath = null) =>
         new(false, reason) { State = HarnessStates.NotWorking, Version = version, ExecutablePath = executablePath };
+
+    public static HarnessAvailability UpdateNeeded(string reason, string? version, string? executablePath) =>
+        new(false, reason) { State = HarnessStates.UpdateNeeded, Version = version, ExecutablePath = executablePath };
+}
+
+/// <summary>A command Fleet runs itself, such as a harness's updater.</summary>
+/// <param name="Executable">The program to start.</param>
+/// <param name="Arguments">Its arguments, passed without a shell.</param>
+/// <param name="Display">The same command as the user would type it, to show or copy.</param>
+public sealed record HarnessCommand(string Executable, IReadOnlyList<string> Arguments, string Display);
+
+/// <summary>Compares harness versions such as "1.18.30" or "2.1.276"; a pre-release suffix is ignored.</summary>
+public static class HarnessVersion
+{
+    /// <summary>Negative when <paramref name="a"/> is older than <paramref name="b"/>, zero when equal, positive when newer.</summary>
+    public static int Compare(string a, string b)
+    {
+        var left = Parts(a);
+        var right = Parts(b);
+        for (var i = 0; i < Math.Max(left.Length, right.Length); i++)
+        {
+            var difference = (i < left.Length ? left[i] : 0).CompareTo(i < right.Length ? right[i] : 0);
+            if (difference != 0) return difference;
+        }
+        return 0;
+    }
+
+    /// <summary>True when <paramref name="version"/> is older than <paramref name="other"/>.</summary>
+    public static bool IsOlder(string version, string other) => Compare(version, other) < 0;
+
+    private static int[] Parts(string version) =>
+        [.. version.TrimStart('v', 'V').Split('-', '+')[0]
+            .Split('.')
+            .Select(part => int.TryParse(part, out var number) ? number : 0)];
 }
 
 /// <summary>

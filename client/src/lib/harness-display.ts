@@ -58,6 +58,8 @@ export function harnessStatusLabel(status: HarnessStatus): string {
       return "Sign-in needed";
     case "not-working":
       return "Not working";
+    case "update-needed":
+      return "Update needed";
     case "disabled":
       return "Disabled";
   }
@@ -68,6 +70,7 @@ export function harnessStatusClasses(status: HarnessStatus): string {
     case "ready":
       return "border-green-500/30 bg-green-500/10 text-green-300";
     case "sign-in-required":
+    case "update-needed":
       return "border-yellow-500/30 bg-yellow-500/10 text-yellow-300";
     case "not-working":
       return "border-red-500/30 bg-red-500/10 text-red-300";
@@ -83,6 +86,7 @@ export function harnessStatusIcon(status: HarnessStatus): Component {
       return CheckCircle2;
     case "sign-in-required":
     case "not-working":
+    case "update-needed":
       return AlertTriangle;
     case "not-installed":
     case "disabled":

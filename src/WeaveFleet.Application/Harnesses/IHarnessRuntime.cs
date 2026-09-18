@@ -22,6 +22,21 @@ public interface IHarnessRuntime
     /// </summary>
     HarnessSetup? GetSetup(HarnessAvailability availability) => null;
 
+    /// <summary>The npm package whose latest version is this harness's latest release; <see langword="null"/> when Fleet can't tell.</summary>
+    string? LatestVersionPackage => null;
+
+    /// <summary>The oldest version Fleet works with. An older install is <see cref="HarnessStates.UpdateNeeded"/>.</summary>
+    string? MinimumVersion => null;
+
+    /// <summary>
+    /// The command that updates this install to <paramref name="version"/> (the latest when <see langword="null"/>),
+    /// run by Fleet without a terminal. <see langword="null"/> when Fleet can't update it.
+    /// </summary>
+    HarnessCommand? GetUpdateCommand(HarnessAvailability availability, string? version) => null;
+
+    /// <summary>Called after an update succeeded, e.g. to restart idle processes on the new version.</summary>
+    Task AfterUpdateAsync(CancellationToken ct) => Task.CompletedTask;
+
     /// <summary>
     /// Prepare the runtime for this session.
     /// The harness internally resolves credential requirements, validates availability,

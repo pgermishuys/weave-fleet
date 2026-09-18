@@ -346,6 +346,7 @@ internal sealed record ErrorResponse(string Error);
 // Harnesses
 [JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Application.Harnesses.HarnessInfo>))]
 [JsonSerializable(typeof(List<WeaveFleet.Application.Harnesses.HarnessInfo>))]
+[JsonSerializable(typeof(WeaveFleet.Application.Harnesses.HarnessUpdateJob))]
 // Harness profiles
 [JsonSerializable(typeof(WeaveFleet.Application.Services.HarnessProfileView))]
 [JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Application.Services.HarnessProfileView>))]

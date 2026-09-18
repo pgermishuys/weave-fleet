@@ -952,6 +952,30 @@ public sealed class OpenCodeHarnessTests
         setup.DocsUrl.ShouldBe("https://opencode.ai/docs");
     }
 
+    [Fact]
+    public void GetUpdateCommand_RunsOpenCodesOwnUpgrade_ToTheLatestVersion()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var runtime = CreateRuntime();
+
+        var command = runtime.GetUpdateCommand(HarnessAvailability.Ready("1.18.20", "/home/you/.opencode/bin/opencode"), "1.18.31");
+
+        command.ShouldNotBeNull();
+        (command.Executable, command.Display).ShouldBe(("/home/you/.opencode/bin/opencode", "/home/you/.opencode/bin/opencode upgrade 1.18.31"));
+        command.Arguments.ShouldBe(["upgrade", "1.18.31"]);
+        runtime.GetUpdateCommand(HarnessAvailability.NotInstalled("Missing."), "1.18.31").ShouldBeNull();
+        runtime.LatestVersionPackage.ShouldBe("opencode-ai");
+    }
+
+    [Fact]
+    public void GetUpdateCommand_UsesWinget_ForAWingetInstall_BecauseOpenCodeUpgradeDoesntKnowIt()
+    {
+        var command = CreateRuntime().GetUpdateCommand(
+            HarnessAvailability.Ready("1.18.20", @"C:\Users\jo\AppData\Local\Microsoft\WinGet\Links\opencode.exe"), "1.18.31");
+
+        command!.Display.ShouldBe("winget upgrade --id SST.opencode --exact");
+    }
+
     // ── WarmupPooledInstanceAsync tests ──────────────────────────────────────
 
     [Fact]

@@ -65,6 +65,8 @@ function actionFor(harness: HarnessInfo): SetupAction | null {
   switch (harnessState(harness)) {
     case "not-installed":
     case "not-working":
+    // The install script installs the latest version over the old one.
+    case "update-needed":
       return "install";
     case "sign-in-required":
       return harness.setup?.signInCommand ? "sign-in" : null;
@@ -81,6 +83,8 @@ function subtitle(harness: HarnessInfo): string {
       return "Installed. Sign in once so sessions can use your account.";
     case "not-working":
       return harness.reason ?? `${harness.displayName} isn't working.`;
+    case "update-needed":
+      return harness.reason ?? `${harness.displayName} is too old for Fleet.`;
     case "not-installed":
       return harnessDisplay(harness.type).pitch ?? harness.reason ?? `${harness.displayName} isn't installed.`;
   }
@@ -132,6 +136,11 @@ async function start(harness: HarnessInfo, action: SetupAction): Promise<void> {
       command,
     };
   }
+}
+
+function actionLabel(harness: HarnessInfo): string {
+  if (actionFor(harness) === "sign-in") return `Sign in to ${harness.displayName}`;
+  return harnessState(harness) === "update-needed" ? `Update ${harness.displayName}` : `Install ${harness.displayName}`;
 }
 
 /** Starts whatever the harness needs next: installing it, or signing in. */
@@ -246,7 +255,7 @@ defineExpose({ closeTerminal });
               :size="14"
               aria-hidden="true"
             />
-            {{ actionFor(harness) === "sign-in" ? `Sign in to ${harness.displayName}` : `Install ${harness.displayName}` }}
+            {{ actionLabel(harness) }}
           </button>
         </div>
       </div>

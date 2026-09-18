@@ -51,13 +51,21 @@ button. Proposal and mockups: https://claude.ai/artifact/K5CXP4kJH9xaZd8zpV7hiC 
 
 ## Stage 3 — updates
 
-- [ ] Hourly latest-version check (npm registry: `opencode-ai`, `@anthropic-ai/claude-code`), with a
-      setting to turn it off.
-- [ ] Update button in Settings; runs `opencode upgrade <version>`, `claude update`, or
-      `winget upgrade --id SST.opencode --exact` for winget installs, once no session is working, with a
-      5-minute timeout. Checks the version afterwards; shows the command to copy when it fails.
-- [ ] Restart idle pooled OpenCode servers after an update (`OpenCodeHarnessPoolRecycler`).
-- [ ] Minimum OpenCode version: below it the harness is "Update needed" and new sessions can't use it.
+- [x] Latest version from npm (`opencode-ai`, `@anthropic-ai/claude-code`), cached for an hour and looked up
+      when `/api/harnesses` is asked (4 s at most); the `harnessUpdates.check` preference turns it off.
+      Local mode only.
+- [x] Each runtime declares `LatestVersionPackage`, `MinimumVersion`, `GetUpdateCommand` and
+      `AfterUpdateAsync`. OpenCode: `opencode upgrade <version>`, or `winget upgrade --id SST.opencode`
+      for a winget install. Claude Code: `claude update`, or `winget upgrade --id Anthropic.ClaudeCode`.
+- [x] `HarnessUpdateService`: `POST /api/harnesses/{type}/update` waits until no session is working, runs
+      the updater with stdin closed and a 5-minute limit, then checks the version. Unchanged, failed or
+      timed-out updates say so with the command to run by hand. `DELETE` cancels a waiting update or
+      dismisses a finished one.
+- [x] After an update OpenCode restarts idle pooled servers (`RecycleIdlePooledInstancesAsync`); busy ones
+      pick up the new binary when their idle time runs out.
+- [x] Minimum OpenCode version **1.15.10**: all 8 live OpenCode tests pass on it with #242's subagent fix
+      (7 of 8 without it; the eighth is that race). Older versions weren't tested. Below it the harness is
+      `update-needed`, sessions can't start, and the wizard offers "Update OpenCode" (the install script).
 
 ## Found along the way
 

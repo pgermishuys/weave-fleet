@@ -320,7 +320,30 @@ export interface HarnessProfileCheck {
 export const NO_PROFILE = "none";
 
 /** What a harness needs before sessions can use it (`HarnessStates` on the server). */
-export type HarnessState = "ready" | "not-installed" | "sign-in-required" | "not-working";
+export type HarnessState = "ready" | "not-installed" | "sign-in-required" | "not-working" | "update-needed";
+
+/** An update Fleet started for a harness (`HarnessUpdateJob` on the server). */
+export interface HarnessUpdateJob {
+  phase: "waiting" | "running" | "succeeded" | "failed";
+  /** What happened, in a sentence; missing while running. */
+  message?: string | null;
+  /** The last lines the updater printed. */
+  output?: string | null;
+  /** While waiting: sessions still working. */
+  workingSessions: number;
+  fromVersion?: string | null;
+  toVersion?: string | null;
+}
+
+/** A harness's latest version and any update Fleet is running. Missing in cloud mode. */
+export interface HarnessUpdateInfo {
+  latestVersion?: string | null;
+  updateAvailable: boolean;
+  minimumVersion?: string | null;
+  /** The update command as you'd type it. */
+  command?: string | null;
+  job?: HarnessUpdateJob | null;
+}
 
 /** How to install a harness or sign in to it on the machine Fleet runs on. Fleet types these; the user runs them. */
 export interface HarnessSetup {
@@ -344,6 +367,7 @@ export interface HarnessInfo {
   executablePath?: string | null;
   /** How to install it or sign in to it here; missing when Fleet can't help. */
   setup?: HarnessSetup | null;
+  update?: HarnessUpdateInfo | null;
 }
 
 export interface WorkspaceRootItem {

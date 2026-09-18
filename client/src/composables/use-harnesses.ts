@@ -22,12 +22,17 @@ export function useHarnesses(): UseHarnessesResult {
   const isLoading = shallowRef(true);
   const error = shallowRef<string | undefined>(undefined);
 
+  /** Numbers each fetch, so a slow older answer can't overwrite a newer one (checks overlap while an update runs). */
+  let latestRequest = 0;
+
   async function fetchHarnesses(): Promise<void> {
+    const request = ++latestRequest;
     isLoading.value = true;
     error.value = undefined;
 
     try {
       const { data, error, response } = await api.GET("/api/harnesses");
+      if (request !== latestRequest) return;
       if (error || !response.ok) {
         const payload = error as { error?: string } | undefined;
         throw new Error(payload?.error ?? `HTTP ${response.status}`);
@@ -35,9 +40,11 @@ export function useHarnesses(): UseHarnessesResult {
 
       harnesses.value = data as unknown as HarnessInfo[];
     } catch (fetchError) {
-      error.value = fetchError instanceof Error ? fetchError.message : "Failed to fetch harnesses";
+      if (request === latestRequest) {
+        error.value = fetchError instanceof Error ? fetchError.message : "Failed to fetch harnesses";
+      }
     } finally {
-      isLoading.value = false;
+      if (request === latestRequest) isLoading.value = false;
     }
   }
 

@@ -58,6 +58,23 @@ public sealed class FakeHarnessRuntime : IHarnessRuntime
 
     public HarnessSetup? GetSetup(HarnessAvailability availability) => Setup;
 
+    public string? LatestVersionPackage { get; set; }
+
+    public string? MinimumVersion { get; set; }
+
+    /// <summary>What <see cref="GetUpdateCommand"/> returns; it's given the availability and the target version.</summary>
+    public Func<HarnessAvailability, string?, HarnessCommand?> UpdateCommand { get; set; } = (_, _) => null;
+
+    public HarnessCommand? GetUpdateCommand(HarnessAvailability availability, string? version) => UpdateCommand(availability, version);
+
+    public int AfterUpdateCalls { get; private set; }
+
+    public Task AfterUpdateAsync(CancellationToken ct)
+    {
+        AfterUpdateCalls++;
+        return Task.CompletedTask;
+    }
+
     public Task<RuntimePreparation> PrepareRuntimeAsync(RuntimePreparationContext context, CancellationToken ct)
     {
         PrepareCalls.Add(context);

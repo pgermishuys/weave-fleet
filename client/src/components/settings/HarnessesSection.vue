@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import type { Component } from "vue";
-import { computed, onMounted, shallowRef } from "vue";
+import { computed, onBeforeUnmount, onMounted, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { Cable, Download, LoaderCircle, RefreshCw, Star } from "lucide-vue-next";
 import HarnessProfilesPanel from "@/components/settings/HarnessProfilesPanel.vue";
-import { useHarnesses } from "@/composables/use-harnesses";
+import HarnessUpdateStrip from "@/components/settings/HarnessUpdateStrip.vue";
+import { refreshAllHarnesses, useHarnesses } from "@/composables/use-harnesses";
 import { useAppShellStore } from "@/stores/app-shell";
 import { useHarnessSetupStore } from "@/stores/harness-setup";
 import { usePreferencesStore } from "@/stores/preferences";
@@ -33,6 +34,8 @@ interface HarnessCard {
   canToggle: boolean;
   canDefault: boolean;
   supportsProfiles: boolean;
+  /** The harness as the server described it, for its update. */
+  info: HarnessInfo;
 }
 
 const DEFAULT_HARNESS_TYPE = "opencode";
@@ -60,6 +63,34 @@ const harnesses = computed<readonly HarnessCard[]>(() => {
 });
 
 const defaultHarness = computed(() => harnesses.value.find((harness) => harness.id === defaultHarnessId.value));
+
+/** Off stops Fleet looking up harnesses' latest versions on npm (`HarnessEndpoints.UpdateChecksPreference`). */
+const UPDATE_CHECKS_PREFERENCE_KEY = "harnessUpdates.check";
+const areUpdateChecksOn = computed(() => prefsStore.get(UPDATE_CHECKS_PREFERENCE_KEY, "true") !== "false");
+
+async function toggleUpdateChecks(): Promise<void> {
+  await prefsStore.set(UPDATE_CHECKS_PREFERENCE_KEY, areUpdateChecksOn.value ? "false" : "true");
+  refreshAllHarnesses();
+}
+
+/** While an update waits or runs, check on it every 2 seconds. */
+const UPDATE_POLL_MS = 2000;
+let updatePoll: ReturnType<typeof setInterval> | undefined;
+const isUpdating = computed(() =>
+  registeredHarnesses.value.some((harness) => harness.update?.job?.phase === "waiting" || harness.update?.job?.phase === "running"));
+
+watch(isUpdating, (updating) => {
+  if (updating && updatePoll === undefined) {
+    updatePoll = setInterval(refreshAllHarnesses, UPDATE_POLL_MS);
+  } else if (!updating && updatePoll !== undefined) {
+    clearInterval(updatePoll);
+    updatePoll = undefined;
+  }
+}, { immediate: true });
+
+onBeforeUnmount(() => {
+  if (updatePoll !== undefined) clearInterval(updatePoll);
+});
 
 async function toggleHarness(harness: HarnessCard): Promise<void> {
   if (!harness.canToggle) return;
@@ -108,6 +139,7 @@ function toHarnessCard(harness: HarnessInfo): HarnessCard {
     canToggle: true,
     canDefault: true,
     supportsProfiles: harness.capabilities?.supportsProfiles === true,
+    info: harness,
   };
 }
 
@@ -159,6 +191,26 @@ function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus
         </div>
 
         <div class="flex shrink-0 flex-wrap items-start gap-2">
+          <button
+            v-if="!config.cloudMode"
+            type="button"
+            role="switch"
+            :aria-checked="areUpdateChecksOn"
+            class="inline-flex items-center gap-2 rounded-btn px-1 py-1.5 text-xs font-medium text-muted"
+            data-testid="harnesses-update-checks"
+            @click="void toggleUpdateChecks()"
+          >
+            <span>Check for updates</span>
+            <span
+              class="relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors"
+              :class="areUpdateChecksOn ? 'bg-accent' : 'bg-border'"
+            >
+              <span
+                class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transition-transform"
+                :class="areUpdateChecksOn ? 'translate-x-4' : 'translate-x-0'"
+              />
+            </span>
+          </button>
           <button
             v-if="!config.cloudMode"
             type="button"
@@ -305,6 +357,12 @@ function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus
             </div>
           </div>
         </div>
+
+        <HarnessUpdateStrip
+          v-if="harness.enabled && !config.cloudMode"
+          class="mt-4"
+          :harness="harness.info"
+        />
 
         <div
           v-if="harness.id === 'opencode'"

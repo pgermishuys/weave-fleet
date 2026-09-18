@@ -98,6 +98,23 @@ public sealed class ClaudeCodeHarnessRuntime : IHarnessRuntime
     }
 
     /// <inheritdoc />
+    public string LatestVersionPackage => "@anthropic-ai/claude-code";
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <c>claude update</c> updates native and npm installs. It leaves winget installs alone ("Claude is up to
+    /// date!"), so those are updated with winget.
+    /// </remarks>
+    public HarnessCommand? GetUpdateCommand(HarnessAvailability availability, string? version)
+    {
+        if (availability.ExecutablePath is not { } path)
+            return null;
+        return UpdateCommands.IsWingetInstall(path)
+            ? UpdateCommands.Winget("Anthropic.ClaudeCode")
+            : UpdateCommands.Native(path, ["update"]);
+    }
+
+    /// <inheritdoc />
     public async Task<IHarnessSession> SpawnAsync(HarnessSpawnOptions options, CancellationToken ct)
     {
         string instanceId = $"claude-code-{Guid.NewGuid():N}";

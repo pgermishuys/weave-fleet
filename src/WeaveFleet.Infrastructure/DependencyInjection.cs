@@ -349,6 +349,11 @@ public static class DependencyInjection
         // HarnessRegistry is Singleton — any IHarness registrations MUST also be
         // Singleton to avoid a captive-dependency runtime failure.
         services.AddSingleton<IHarnessRegistry, HarnessRegistry>();
+        services.AddSingleton<IHarnessUpdateService>(sp => new HarnessUpdateService(
+            sp.GetRequiredService<IHarnessRegistry>(),
+            sp.GetRequiredService<SessionActivityTracker>(),
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<ILogger<HarnessUpdateService>>()));
 
         // OpenCode harness — singleton to match HarnessRegistry lifetime.
         // PortAllocator is a standalone singleton seeded from FleetOptions.

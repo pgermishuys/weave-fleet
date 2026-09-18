@@ -167,6 +167,22 @@ describe("HarnessSetupRows", () => {
     expect(view.get("[data-testid='terminal-view']").text()).toContain("/home/you/.local/bin/claude auth login");
   });
 
+  it("offers to update a harness that's too old, with its installer", async () => {
+    const view = await mountRows([openCode({
+      state: "update-needed",
+      version: "1.12.0",
+      reason: "Fleet needs OpenCode 1.15.10 or newer. You have 1.12.0.",
+    })]);
+
+    expect(view.text()).toContain("Fleet needs OpenCode 1.15.10 or newer. You have 1.12.0.");
+    const update = view.get("[data-testid='harness-setup-install-opencode']");
+    expect(update.text()).toBe("Update OpenCode");
+    await update.trigger("click");
+    await flushPromises();
+
+    expect(view.get("[data-testid='terminal-view']").text()).toContain("curl -fsSL https://opencode.ai/install | bash");
+  });
+
   it("shows the command to run elsewhere when terminals are off", async () => {
     useAppShellStore().config = { ...useAppShellStore().config, terminalEnabled: false };
     const view = await mountRows([openCode()]);
