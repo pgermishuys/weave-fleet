@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Diagnostics;
@@ -40,6 +41,9 @@ internal sealed class SseEventDemultiplexer : IAsyncDisposable
 
     // Bounds each stream's memory of which drops it has already warned about.
     private const int MaxWarnedDropsPerStream = 1024;
+
+    // Bounds each stream's memory of which session is a subagent of which.
+    private const int MaxTrackedParentsPerStream = 1024;
 
     private static readonly Counter<long> DroppedUnattributableEvents = FleetInstrumentation.Meter.CreateCounter<long>(
         "weave_fleet.opencode.sse.unattributable_events.dropped",
@@ -308,12 +312,23 @@ internal sealed class SseEventDemultiplexer : IAsyncDisposable
             return;
         }
 
+        // A subagent's session is bound only once its own Fleet session exists and pumps, seconds after
+        // OpenCode starts it. Until then its events go to its parent's consumer, which creates the child's
+        // Fleet session from session.created and hands it the rest.
+        var parentOpenCodeSessionId = entry.TrackParent(openCodeSessionId, evt);
         if (!_bindingResolver.TryResolveConsumer(
                 entry.Key.Instance,
                 entry.Key.Directory,
                 openCodeSessionId,
                 out var consumerId,
-                out var leaseGeneration))
+                out var leaseGeneration)
+            && (parentOpenCodeSessionId is null
+                || !_bindingResolver.TryResolveConsumer(
+                    entry.Key.Instance,
+                    entry.Key.Directory,
+                    parentOpenCodeSessionId,
+                    out consumerId,
+                    out leaseGeneration)))
         {
             RecordDroppedUnattributableEvent(entry, evt, openCodeSessionId, UnboundSessionIdReason);
             return;
@@ -431,6 +446,49 @@ internal sealed class SseEventDemultiplexer : IAsyncDisposable
         private TaskCompletionSource ActiveStreamReady { get; set; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         private HashSet<DroppedEventKey> WarnedDrops { get; } = new();
+
+        private Dictionary<string, string> ParentSessionIds { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>
+        /// Remembers the parent a session event names (OpenCode's <c>info.parentID</c>, sent with session.created and
+        /// session.updated) and returns the session's parent, or null for a top-level session or one never announced.
+        /// </summary>
+        public string? TrackParent(string openCodeSessionId, OpenCodeSseEvent evt)
+        {
+            lock (Sync)
+            {
+                if (TryReadParentId(evt, openCodeSessionId) is { } parentId)
+                {
+                    if (ParentSessionIds.Count >= MaxTrackedParentsPerStream && !ParentSessionIds.ContainsKey(openCodeSessionId))
+                    {
+                        ParentSessionIds.Clear();
+                    }
+
+                    ParentSessionIds[openCodeSessionId] = parentId;
+                    return parentId;
+                }
+
+                return ParentSessionIds.GetValueOrDefault(openCodeSessionId);
+            }
+        }
+
+        private static string? TryReadParentId(OpenCodeSseEvent evt, string openCodeSessionId)
+        {
+            if (evt.Properties.ValueKind != JsonValueKind.Object
+                || !evt.Properties.TryGetProperty("info", out var info)
+                || info.ValueKind != JsonValueKind.Object
+                || !info.TryGetProperty("id", out var id)
+                || id.ValueKind != JsonValueKind.String
+                || !string.Equals(id.GetString(), openCodeSessionId, StringComparison.Ordinal)
+                || !info.TryGetProperty("parentID", out var parent)
+                || parent.ValueKind != JsonValueKind.String)
+            {
+                return null;
+            }
+
+            var parentId = parent.GetString();
+            return string.IsNullOrWhiteSpace(parentId) ? null : parentId;
+        }
 
         public bool TryMarkDropWarned(DroppedEventKey key)
         {

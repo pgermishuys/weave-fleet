@@ -136,6 +136,72 @@ public sealed class SseEventDemultiplexerTests
     }
 
     [Fact]
+    public async Task a_subagents_events_go_to_its_parent_until_the_subagent_is_bound()
+    {
+        // OpenCode starts a subagent at once, but its Fleet session binds seconds later. The parent
+        // creates that Fleet session from session.created, so its events can't wait for the binding.
+        var instance = CreateInstance();
+        var parentConsumerId = Guid.NewGuid();
+        var childConsumerId = Guid.NewGuid();
+        var resolver = new FakeBindingResolver();
+        var streamFactory = new FakeStreamFactory();
+        await using var demultiplexer = new SseEventDemultiplexer(
+            resolver,
+            streamFactory,
+            NullLogger<SseEventDemultiplexer>.Instance,
+            TimeSpan.Zero,
+            TimeSpan.Zero);
+
+        var parent = Channel.CreateUnbounded<OpenCodeSseEvent>();
+        var child = Channel.CreateUnbounded<OpenCodeSseEvent>();
+        resolver.Bind(instance, "/repo/one", "oc-parent", parentConsumerId);
+        await using var parentRegistration = await demultiplexer.RegisterConsumerAsync(instance, "/repo/one", parentConsumerId, parent, CancellationToken.None);
+        await using var childRegistration = await demultiplexer.RegisterConsumerAsync(instance, "/repo/one", childConsumerId, child, CancellationToken.None);
+        var stream = await streamFactory.WaitForSubscriptionAsync(instance, "/repo/one", 1);
+
+        await stream.WriteAsync(CreateSessionCreatedEvent("oc-child", parentId: "oc-parent"));
+        await stream.WriteAsync(CreateEvent("todo.updated", "oc-child"));
+
+        (await ReadNextAsync(parent)).Type.ShouldBe("session.created");
+        (await ReadNextAsync(parent)).Type.ShouldBe("todo.updated");
+
+        // Once bound, the subagent gets its own events.
+        resolver.Bind(instance, "/repo/one", "oc-child", childConsumerId);
+        await stream.WriteAsync(CreateEvent("message.updated", "oc-child"));
+
+        (await ReadNextAsync(child)).Type.ShouldBe("message.updated");
+        await AssertNoEventAsync(parent);
+    }
+
+    [Fact]
+    public async Task an_unbound_session_nobody_announced_as_a_subagent_is_still_dropped()
+    {
+        var instance = CreateInstance();
+        var parentConsumerId = Guid.NewGuid();
+        var resolver = new FakeBindingResolver();
+        var streamFactory = new FakeStreamFactory();
+        await using var demultiplexer = new SseEventDemultiplexer(
+            resolver,
+            streamFactory,
+            NullLogger<SseEventDemultiplexer>.Instance,
+            TimeSpan.Zero,
+            TimeSpan.Zero);
+
+        var parent = Channel.CreateUnbounded<OpenCodeSseEvent>();
+        resolver.Bind(instance, "/repo/one", "oc-parent", parentConsumerId);
+        await using var registration = await demultiplexer.RegisterConsumerAsync(instance, "/repo/one", parentConsumerId, parent, CancellationToken.None);
+        var stream = await streamFactory.WaitForSubscriptionAsync(instance, "/repo/one", 1);
+
+        // A top-level session, and a subagent of a session no one here is bound to.
+        await stream.WriteAsync(CreateSessionCreatedEvent("oc-other", parentId: null));
+        await stream.WriteAsync(CreateEvent("todo.updated", "oc-other"));
+        await stream.WriteAsync(CreateSessionCreatedEvent("oc-stray", parentId: "oc-unbound"));
+
+        await WaitForDroppedCountAsync(demultiplexer, 3);
+        await AssertNoEventAsync(parent);
+    }
+
+    [Fact]
     public async Task register_waits_until_directory_stream_is_active()
     {
         var instance = CreateInstance();
@@ -475,6 +541,17 @@ public sealed class SseEventDemultiplexerTests
     {
         var properties = JsonSerializer.SerializeToElement(new { sessionID = sessionId });
         return new OpenCodeSseEvent { Type = type, Properties = properties };
+    }
+
+    private static OpenCodeSseEvent CreateSessionCreatedEvent(string sessionId, string? parentId)
+    {
+        // OpenCode 1.18's shape: the session id at the top, and the session itself under info.
+        var properties = JsonSerializer.SerializeToElement(new
+        {
+            sessionID = sessionId,
+            info = new { id = sessionId, parentID = parentId, title = "general" },
+        });
+        return new OpenCodeSseEvent { Type = "session.created", Properties = properties };
     }
 
     private static OpenCodeSseEvent CreateFileWatcherEvent(string type)
