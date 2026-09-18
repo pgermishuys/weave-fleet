@@ -170,10 +170,13 @@ internal sealed class OpenCodeProcessManager : IAsyncDisposable
             throw new InvalidOperationException("Process manager has already started a process.");
         }
 
+        var startInfo = BuildStartInfo(options);
+        await OpenCodeExecutable.RejectOpenCode2Async(startInfo.FileName, ct).ConfigureAwait(false);
+
         var tcs = new TaskCompletionSource<OpenCodeProcessInfo>(TaskCreationOptions.RunContinuationsAsynchronously);
         var stderrLines = new StringBuilder();
 
-        _process = new Process { StartInfo = BuildStartInfo(options), EnableRaisingEvents = true };
+        _process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
 
         _process.OutputDataReceived += (_, e) =>
         {
