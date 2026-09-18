@@ -1,0 +1,210 @@
+diff --git a/client/src/components/session/ActivityStream.vue b/client/src/components/session/ActivityStream.vue
+index 0fb6efe8..da78ca5c 100644
+--- a/client/src/components/session/ActivityStream.vue
++++ b/client/src/components/session/ActivityStream.vue
+@@ -48,6 +48,20 @@ interface ActivityMessage {
+   showIdentity: boolean;
+   /** Set when the turn that produced this message failed. */
+   turnError?: TurnError;
++  /** Set when another Fleet session sent this message with fleet_message. */
++  peer?: PeerSender;
++}
++
++interface PeerSender {
++  sessionId: string;
++  title: string;
++}
++
++const PEER_MESSAGE = /^<fleet-session-message from="([^"]+)" title="([^"]*)">\n?([\s\S]*?)\n?<\/fleet-session-message>\s*$/;
++
++function parsePeerMessage(body: string): { peer: PeerSender; text: string } | null {
++  const match = PEER_MESSAGE.exec(body);
++  return match ? { peer: { sessionId: match[1], title: match[2] }, text: match[3] } : null;
+ }
+ 
+ interface DelegationLink {
+@@ -186,6 +200,8 @@ const deliveredMessages = computed<ActivityMessage[]>(() => {
+   return sessionMessages.value
+     .map((message) => {
+       const author = getDisplayAuthor(message);
++      const rawBody = renderMessageBody(message.parts);
++      const fromPeer = message.role === "user" ? parsePeerMessage(rawBody) : null;
+ 
+       return {
+         id: message.messageId,
+@@ -194,7 +210,8 @@ const deliveredMessages = computed<ActivityMessage[]>(() => {
+         senderKey: getSenderKey(message.role, message.agent),
+         role: message.role,
+         createdAt: message.createdAt,
+-        body: renderMessageBody(message.parts),
++        body: fromPeer ? fromPeer.text : rawBody,
++        peer: fromPeer?.peer,
+         images: message.parts
+           .filter((part): part is AccumulatedFilePart => part.type === "file" && part.mime.startsWith("image/"))
+           .map((part) => ({ url: part.url, filename: part.filename?.trim() || "image" })),
+@@ -834,6 +851,23 @@ function handleShowCanvas(canvasId: string): void {
+           :summary="reasoning.summary"
+           :created-at="message.createdAt"
+         />
++        <a
++          v-if="message.peer"
++          class="peer-from"
++          :href="`/sessions/${message.peer.sessionId}`"
++          data-testid="peer-from"
++        >
++          <Bot
++            class="peer-from__icon"
++            aria-hidden="true"
++          />
++          <span class="peer-from__label">From</span>
++          <span class="peer-from__title">{{ message.peer.title }}</span>
++          <ArrowUpRight
++            class="peer-from__icon"
++            aria-hidden="true"
++          />
++        </a>
+         <MessageBubble
+           :author="message.author"
+           :model-name="message.modelName"
+@@ -1260,6 +1294,42 @@ function handleShowCanvas(canvasId: string): void {
+   }
+ }
+ 
++.peer-from {
++  display: inline-flex;
++  align-items: center;
++  gap: 5px;
++  max-width: min(100%, 380px);
++  margin: 0 0 6px;
++  padding: 4px 10px;
++  border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
++  border-radius: 999px;
++  background: color-mix(in srgb, var(--card-bg, var(--panel-bg)) 96%, var(--accent-dim) 4%);
++  color: var(--muted);
++  font-size: 0.75rem;
++  text-decoration: none;
++  transition: border-color var(--transition) ease, background-color var(--transition) ease;
++}
++
++.peer-from:hover {
++  border-color: color-mix(in srgb, var(--primary, #6366f1) 24%, var(--border));
++  background: color-mix(in srgb, var(--card-bg, var(--panel-bg)) 88%, var(--accent-dim) 12%);
++}
++
++.peer-from__icon {
++  flex-shrink: 0;
++  width: 0.85rem;
++  height: 0.85rem;
++}
++
++.peer-from__title {
++  min-width: 0;
++  overflow: hidden;
++  color: var(--text);
++  font-weight: 600;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
++
+ .delegation-links {
+   display: flex;
+   flex-direction: column;
+diff --git a/client/src/components/session/activity-stream-tool-card.ts b/client/src/components/session/activity-stream-tool-card.ts
+index d6e96dcc..a0c58cb3 100644
+--- a/client/src/components/session/activity-stream-tool-card.ts
++++ b/client/src/components/session/activity-stream-tool-card.ts
+@@ -24,7 +24,7 @@ export interface ToolCardItem {
+ }
+ 
+ /** Fleet's browser tools; their card reads "title · address" once the page answered, or "title · size" for a shot. */
+-const BROWSER_TOOLS = new Set(["fleet_app_start", "fleet_browser_open", "fleet_browser_screenshot"]);
++const BROWSER_TOOLS = new Set(["fleet_app_start", "fleet_browser_open", "fleet_browser_screenshot", "fleet_message"]);
+ 
+ const tool_output_keys = ["output", "result", "content", "error", "message", "stdout", "stderr"] as const;
+ const fallback_excluded_keys = new Set(["input", "status", "summary", "title", "diff", "diffLines", "patch"]);
+diff --git a/client/src/components/settings/FeaturesSection.vue b/client/src/components/settings/FeaturesSection.vue
+index 87b87b04..686dbe1d 100644
+--- a/client/src/components/settings/FeaturesSection.vue
++++ b/client/src/components/settings/FeaturesSection.vue
+@@ -62,6 +62,13 @@ async function toggleNotifications(): Promise<void> {
+   }
+ }
+ 
++// Prototype only: the real switch saves the SessionMessages preference.
++const isSessionMessagesEnabled = shallowRef(false);
++
++function toggleSessionMessages(): void {
++  isSessionMessagesEnabled.value = !isSessionMessagesEnabled.value;
++}
++
+ async function toggleBoardFeature(): Promise<void> {
+   const enabled = !isBoardFeatureEnabled.value;
+ 
+@@ -218,5 +225,39 @@ async function toggleBoardFeature(): Promise<void> {
+         </button>
+       </div>
+     </div>
++
++    <div class="mt-3 flex items-start justify-between gap-4 rounded-card border border-border bg-main-bg p-4">
++      <div>
++        <p class="flex items-center gap-2 text-sm font-medium text-text">
++          Messages between sessions
++          <span class="rounded-full border border-border px-2 py-px text-[0.7rem] font-medium uppercase tracking-wide text-muted">
++            Experimental
++          </span>
++        </p>
++        <p class="mt-1 text-xs text-muted">
++          Let an agent send a message to another session with the <code>fleet_message</code> tool. The message
++          says which session sent it, and the agent treats it as a teammate's request, not yours. Agents can't
++          send prompts through Fleet's API while this is on. Applies to sessions started afterwards.
++        </p>
++      </div>
++
++      <div class="flex items-center gap-2">
++        <button
++          type="button"
++          role="switch"
++          :aria-checked="isSessionMessagesEnabled"
++          aria-label="Enable messages between sessions"
++          data-testid="session-messages-switch"
++          class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-main-bg disabled:cursor-not-allowed disabled:opacity-60"
++          :class="isSessionMessagesEnabled ? 'bg-accent' : 'bg-border'"
++          @click="toggleSessionMessages"
++        >
++          <span
++            class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
++            :class="isSessionMessagesEnabled ? 'translate-x-5' : 'translate-x-0'"
++          />
++        </button>
++      </div>
++    </div>
+   </section>
+ </template>
+diff --git a/client/src/lib/tool-icons.ts b/client/src/lib/tool-icons.ts
+index 17b38519..9aad0349 100644
+--- a/client/src/lib/tool-icons.ts
++++ b/client/src/lib/tool-icons.ts
+@@ -10,6 +10,7 @@ import {
+   GitBranch,
+   Globe,
+   MessageCircleQuestion,
++  Send,
+   Wrench,
+ } from 'lucide-vue-next'
+ 
+@@ -27,6 +28,7 @@ const iconMap: Record<string, Component> = {
+   fleet_app_start: AppWindow,
+   fleet_browser_open: Globe,
+   fleet_browser_screenshot: Camera,
++  fleet_message: Send,
+ }
+ 
+ const labelMap: Record<string, string> = {
+@@ -43,6 +45,7 @@ const labelMap: Record<string, string> = {
+   fleet_app_start: 'Run app',
+   fleet_browser_open: 'Open page',
+   fleet_browser_screenshot: 'Screenshot',
++  fleet_message: 'Message session',
+ }
+ 
+ export function getToolIcon(kind: string): Component {
