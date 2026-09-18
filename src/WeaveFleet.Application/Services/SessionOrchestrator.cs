@@ -882,7 +882,7 @@ public sealed partial class SessionOrchestrator(
                 await sessionRepository.UpdateSelectedAgentAsync(id, agent);
             }
 
-            return new PromptSessionResult(EventId: null, effectiveCorrelationId);
+            return new PromptSessionResult(EventId: null, effectiveCorrelationId, generatedMessageId);
         }
         catch (InvalidOperationException ex)
         {

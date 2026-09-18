@@ -416,6 +416,7 @@ public class SessionEventsHub : Hub
         SessionArchived         => "session.archived",
         SessionRecapUpdated     => "session.recap",
         SessionMessaged         => "session.messaged",
+        SessionReported         => "session.reported",
         TurnStarted             => "turn.started",
         TurnEnded               => "turn.ended",
         TurnFailed              => "turn.failed",

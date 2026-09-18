@@ -69,6 +69,18 @@ public sealed record SessionMessaged : DomainEvent
 }
 
 /// <summary>
+/// Raised when Fleet tells a session that another session it messaged, and asked to hear back from, is done.
+/// Published on the topic of the session that asked.
+/// </summary>
+public sealed record SessionReported : DomainEvent
+{
+    /// <summary>
+    /// Gets the strongly typed payload for the session-reported event.
+    /// </summary>
+    public required SessionReportedPayload Payload { get; init; }
+}
+
+/// <summary>
 /// Why Fleet is telling you about a session you weren't looking at.
 /// </summary>
 public static class SessionNotificationReasons
@@ -151,6 +163,33 @@ public sealed record SessionMessagedPayload
 
     /// <summary>
     /// Gets the correlation id of the prompt that carried it.
+    /// </summary>
+    public required string CorrelationId { get; init; }
+}
+
+/// <summary>
+/// A session that was messaged with <c>notifyWhenDone</c> finished the turn that handled the message, and Fleet
+/// told the session that sent it.
+/// </summary>
+public sealed record SessionReportedPayload
+{
+    /// <summary>
+    /// Gets the session that did the work.
+    /// </summary>
+    public required string FromSessionId { get; init; }
+
+    /// <summary>
+    /// Gets the session that asked to be told, and was.
+    /// </summary>
+    public required string ToSessionId { get; init; }
+
+    /// <summary>
+    /// Gets how the turn ended: <c>finished</c> or <c>failed</c>.
+    /// </summary>
+    public required string Outcome { get; init; }
+
+    /// <summary>
+    /// Gets the correlation id of the prompt that carried the update to the asking session.
     /// </summary>
     public required string CorrelationId { get; init; }
 }

@@ -83,6 +83,7 @@ public sealed class HarnessEventRelay : BackgroundService
     private readonly SessionProgressObserver? _progressObserver;
     private readonly SessionRecapService? _recaps;
     private readonly SessionNotifier? _notifier;
+    private readonly SessionUpdates? _updates;
     private CancellationToken _stoppingToken;
 
     /// <summary>
@@ -101,7 +102,8 @@ public sealed class HarnessEventRelay : BackgroundService
         SmartLinkDetector? smartLinkDetector = null,
         SessionProgressObserver? progressObserver = null,
         SessionRecapService? recaps = null,
-        SessionNotifier? notifier = null)
+        SessionNotifier? notifier = null,
+        SessionUpdates? updates = null)
     {
         _tracker = tracker;
         _broadcaster = broadcaster;
@@ -113,6 +115,7 @@ public sealed class HarnessEventRelay : BackgroundService
         _progressObserver = progressObserver;
         _recaps = recaps;
         _notifier = notifier;
+        _updates = updates;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -319,6 +322,7 @@ public sealed class HarnessEventRelay : BackgroundService
                 var eventToTranslate = eventToPublish with { FleetSessionId = targetFleetSessionId };
                 var domainEvent = translator.Translate(eventToTranslate);
                 _progressObserver?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
+                _updates?.Observe(targetFleetSessionId, domainEvent);
                 _logger.LogDebug("[Relay:Pump] Translated type={Type} domainEvent={DomainEvent} targetSession={TargetSession}",
                     evt.Type, domainEvent?.GetType().Name ?? "null", targetFleetSessionId);
 

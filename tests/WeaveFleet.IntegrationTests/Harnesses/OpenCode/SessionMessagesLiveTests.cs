@@ -27,6 +27,10 @@ public sealed class SessionMessagesLiveTests
     private const string Receiver = "msg-receiver";
     private const string SenderPrompt = "Tell the docs session that the login redirect changed.";
     private const string Note = "The login redirect changed. Please update the authentication docs.";
+    private const string Reply = "Docs updated: the redirect section now points at /auth/callback.";
+    private const string SlowPrompt = "Run the slow link check.";
+    private const string SlowReply = "The link check passed.";
+    private const string FollowUp = "Thanks. Now update the changelog too.";
     private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(3);
 
     [OpenCodeFact]
@@ -86,18 +90,148 @@ public sealed class SessionMessagesLiveTests
             });
     }
 
+    [OpenCodeFact]
+    public async Task A_session_that_asks_is_woken_with_the_other_sessions_reply()
+    {
+        await RunAsync(
+            new Scenario
+            {
+                SenderCall = MessageCall(notifyWhenDone: true),
+                Route = request => LastUserText(request) is { } text && text.StartsWith("<fleet-session-update", StringComparison.Ordinal)
+                    ? new ScriptedLlmResponse { Text = "Thanks." }
+                    : null,
+                Done = requests => requests.Any(r => IsUpdate(LastUserText(r))),
+                Assert = (requests, events) =>
+                {
+                    LastToolResult(requests, SenderPrompt).ShouldContain("Fleet will send you its reply when it's done");
+
+                    // One update, after the sender's own turn ended, carrying the receiver's reply.
+                    requests.Where(r => IsUpdate(LastUserText(r))).ShouldHaveSingleItem();
+                    LastUserText(requests.Single(r => IsUpdate(LastUserText(r)))).ShouldBe(
+                        $"<fleet-session-update session=\"{Receiver}\" title=\"Update documentation\" outcome=\"finished\">\n{Reply}\n</fleet-session-update>");
+
+                    var reported = events.Where(e => e.Type == "session.reported").ShouldHaveSingleItem();
+                    reported.Topic.ShouldBe($"session:{Sender}");
+                    reported.Payload.GetProperty("fromSessionId").GetString().ShouldBe(Receiver);
+                    reported.Payload.GetProperty("toSessionId").GetString().ShouldBe(Sender);
+                    reported.Payload.GetProperty("outcome").GetString().ShouldBe("finished");
+                },
+            });
+    }
+
+    [OpenCodeFact]
+    public async Task A_turn_the_other_session_was_already_running_does_not_count()
+    {
+        await RunAsync(
+            new Scenario
+            {
+                SenderCall = MessageCall(notifyWhenDone: true),
+                ReceiverBusyFirst = true,
+                Route = request => LastUserText(request) is { } text && text.StartsWith("<fleet-session-update", StringComparison.Ordinal)
+                    ? new ScriptedLlmResponse { Text = "Thanks." }
+                    : null,
+                Done = requests => requests.Any(r => IsUpdate(LastUserText(r))),
+                Assert = (requests, _) =>
+                {
+                    // The receiver was on its slow check when the message arrived. OpenCode hands a message that
+                    // arrives mid-turn to the model at the turn's next step, after the check's result, and the turn
+                    // goes on from there. So the receiver's turn ends once, having handled both.
+                    var list = requests.ToList();
+                    var noteRead = list.FindIndex(r => LastUserText(r) is { } text && text.Contains(Note));
+                    FirstUserText(list[noteRead]).ShouldBe(SlowPrompt);
+                    list[noteRead].ShouldContain("call_slow");
+
+                    // Told once, after the receiver answered the message.
+                    var told = list.FindIndex(r => IsUpdate(LastUserText(r)));
+                    told.ShouldBeGreaterThan(noteRead);
+                    list.Where(r => IsUpdate(LastUserText(r))).ShouldHaveSingleItem();
+
+                    // The update is about the turn that handled the message, not the check.
+                    var update = LastUserText(requests.Single(r => IsUpdate(LastUserText(r))))!;
+                    update.ShouldContain(Reply);
+                    update.ShouldNotContain(SlowReply);
+                },
+            });
+    }
+
+    [OpenCodeFact]
+    public async Task A_turn_an_update_started_cannot_ask_to_be_told_again()
+    {
+        await RunAsync(
+            new Scenario
+            {
+                SenderCall = MessageCall(notifyWhenDone: true),
+                // Woken by the update, the sender tries to keep the loop going.
+                Route = request => LastUserText(request) is { } text && text.StartsWith("<fleet-session-update", StringComparison.Ordinal)
+                    ? new ScriptedLlmResponse
+                    {
+                        StopReason = "tool_calls",
+                        ToolCalls = [new ScriptedToolCall("call_again", "fleet_message", JsonSerializer.Serialize(new { sessionId = Receiver, text = FollowUp, notifyWhenDone = true }))],
+                    }
+                    : null,
+                Done = requests => requests.Any(r => LastToolText(r) is { } text && text.Contains("can't ask to be told again")),
+                Assert = (requests, events) =>
+                {
+                    requests.Single(r => LastToolText(r) is { } text && text.Contains("can't ask to be told again"))
+                        .ShouldContain("Send it with notifyWhenDone false.");
+
+                    // Refused outright: the receiver never got the follow-up, and nothing more was sent either way.
+                    requests.ShouldNotContain(r => LastUserText(r) != null && LastUserText(r)!.Contains(FollowUp));
+                    events.Where(e => e.Type == "session.messaged").ShouldHaveSingleItem();
+                    events.Where(e => e.Type == "session.reported").ShouldHaveSingleItem();
+                },
+            });
+    }
+
+    private static bool IsUpdate(string? text) => text is not null && text.StartsWith("<fleet-session-update", StringComparison.Ordinal);
+
+    private static ScriptedToolCall MessageCall(bool notifyWhenDone)
+        => new("call_message", "fleet_message", JsonSerializer.Serialize(new { sessionId = Receiver, text = Note, notifyWhenDone }));
+
+    // Long enough for the sender's message to arrive while it runs.
+    private static ScriptedToolCall SlowCheck()
+        => new("call_slow", "bash", JsonSerializer.Serialize(new { command = "sleep 6", description = "Check the links" }));
+
     private static ScriptedToolCall CurlPrompt()
     {
         var curl = $$"""curl -s -w '\nHTTP %{http_code}' -X POST "$FLEET_URL/api/sessions/{{Receiver}}/prompt" -H 'content-type: application/json' -d '{"text":"{{Note}}"}'""";
         return new ScriptedToolCall("call_curl", "bash", JsonSerializer.Serialize(new { command = curl, description = "Message the docs session" }));
     }
 
-    private static async Task RunAsync(
+    private static Task RunAsync(
         bool messagesOn,
         ScriptedToolCall senderCall,
         bool expectDelivery,
         Action<IReadOnlyList<string>, IReadOnlyList<BroadcastEvent>> assert)
+        => RunAsync(new Scenario
+        {
+            MessagesOn = messagesOn,
+            SenderCall = senderCall,
+            Done = requests => requests.Any(r => LastRole(r) == "tool" && FirstUserText(r) == SenderPrompt)
+                && (!expectDelivery || requests.Any(r => LastUserText(r) is { } text && text.Contains(Note))),
+            Assert = assert,
+        });
+
+    private sealed record Scenario
     {
+        public bool MessagesOn { get; init; } = true;
+        public required ScriptedToolCall SenderCall { get; init; }
+
+        /// <summary>Answers checked before the usual ones; null falls through to them.</summary>
+        public Func<string, ScriptedLlmResponse?>? Route { get; init; }
+
+        /// <summary>The receiver starts a slow turn of its own before the sender messages it.</summary>
+        public bool ReceiverBusyFirst { get; init; }
+
+        /// <summary>Done when the model has seen these requests (only turns: they offer tools).</summary>
+        public required Func<IReadOnlyList<string>, bool> Done { get; init; }
+
+        public required Action<IReadOnlyList<string>, IReadOnlyList<BroadcastEvent>> Assert { get; init; }
+    }
+
+    private static async Task RunAsync(Scenario scenario)
+    {
+        var messagesOn = scenario.MessagesOn;
         using var cts = new CancellationTokenSource(Timeout);
         var ct = cts.Token;
         var root = Path.Combine(Path.GetTempPath(), $"fleet-messages-live-{Guid.NewGuid():N}");
@@ -113,14 +247,20 @@ public sealed class SessionMessagesLiveTests
 
         // Two sessions share one model, so it answers by what it's asked, not by arrival order.
         llm.Queue.ToolLessResponse = new ScriptedLlmResponse { Text = "Messages" };
-        for (var i = 0; i < 20; i++)
+        for (var i = 0; i < 30; i++)
         {
             llm.Queue.Enqueue(request =>
             {
+                if (scenario.Route?.Invoke(request) is { } routed)
+                    return routed;
                 if (LastRole(request) == "tool")
-                    return new ScriptedLlmResponse { Text = "Done." };
+                    return new ScriptedLlmResponse { Text = FirstUserText(request) == SlowPrompt ? SlowReply : "Done." };
                 if (LastUserText(request) == SenderPrompt)
-                    return new ScriptedLlmResponse { StopReason = "tool_calls", ToolCalls = [senderCall] };
+                    return new ScriptedLlmResponse { StopReason = "tool_calls", ToolCalls = [scenario.SenderCall] };
+                if (LastUserText(request) == SlowPrompt)
+                    return new ScriptedLlmResponse { StopReason = "tool_calls", ToolCalls = [SlowCheck()] };
+                if (LastUserText(request) is { } text && text.Contains(Note))
+                    return new ScriptedLlmResponse { Text = Reply };
                 return new ScriptedLlmResponse { Text = "On it." };
             });
         }
@@ -160,19 +300,30 @@ public sealed class SessionMessagesLiveTests
             await sender.WaitForEventSubscriptionAsync(ct);
             await receiver.WaitForEventSubscriptionAsync(ct);
 
-            await sender.SendPromptAsync(SenderPrompt, null, ct);
-
-            // Done when the sender has read its tool result and the receiver has answered, if it was reached.
             try
             {
                 using var wait = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 wait.CancelAfter(TimeSpan.FromSeconds(90));
-                await WaitForAsync(
-                    () => llm.Queue.Requests.Where(OffersTools).ToList(),
-                    requests => requests.Any(r => LastRole(r) == "tool" && FirstUserText(r) == SenderPrompt)
-                        && (!expectDelivery || requests.Any(r => LastUserText(r) is { } text && text.Contains(Note))),
-                    wait.Token);
-                await Task.Delay(1000, ct);
+
+                // Through the orchestrator, as the user would, so Fleet sees the receiver's turn start.
+                if (scenario.ReceiverBusyFirst)
+                {
+                    using (BackgroundUserContext.BeginScope(Owner))
+                    using (var scope = services.CreateScope())
+                        (await scope.ServiceProvider.GetRequiredService<SessionOrchestrator>().PromptSessionAsync(Receiver, SlowPrompt, ct: ct)).IsSuccess.ShouldBeTrue();
+                    await WaitForAsync(
+                        () => llm.Queue.Requests.Where(OffersTools).ToList(),
+                        requests => requests.Any(r => LastUserText(r) == SlowPrompt),
+                        wait.Token);
+                    await Task.Delay(500, ct);
+                }
+
+                await sender.SendPromptAsync(SenderPrompt, null, ct);
+
+                await WaitForAsync(() => llm.Queue.Requests.Where(OffersTools).ToList(), scenario.Done, wait.Token);
+
+                // Long enough for anything that shouldn't happen to show up.
+                await Task.Delay(2000, ct);
             }
             catch (TimeoutException)
             {
@@ -181,7 +332,7 @@ public sealed class SessionMessagesLiveTests
             }
 
             // Only turns count: OpenCode's title requests carry the same text but offer no tools.
-            assert([.. llm.Queue.Requests.Where(OffersTools)], [.. events]);
+            scenario.Assert([.. llm.Queue.Requests.Where(OffersTools)], [.. events]);
 
             await cts.CancelAsync();
             await collecting;

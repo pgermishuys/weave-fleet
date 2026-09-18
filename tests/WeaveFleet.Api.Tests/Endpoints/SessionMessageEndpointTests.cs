@@ -9,6 +9,7 @@ using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
@@ -41,6 +42,7 @@ public sealed class SessionMessageEndpointTests : IAsyncLifetime
             {
                 services.AddSingleton<IHarnessCanvasCallerResolver>(new FakeCallers());
                 services.AddSingleton<IHarnessBridgeTokens>(new FakeTokens());
+                services.AddScoped<ISessionUpdateSender, DeliveredUpdates>();
             });
         _client = _factory.CreateClient();
         await SeedSessionsAsync();
@@ -130,6 +132,32 @@ public sealed class SessionMessageEndpointTests : IAsyncLifetime
         (await ErrorAsync(stranger)).ShouldBe(CanvasBridge.UnknownCallerMessage);
     }
 
+    [Fact]
+    public async Task A_turn_an_update_started_cannot_ask_to_be_told_again()
+    {
+        await TurnOnAsync();
+
+        // The sender asked the receiver earlier; the receiver's turn ended, and the update started the sender's turn.
+        var updates = _factory!.Services.GetRequiredService<SessionUpdates>();
+        updates.Watch(new SessionUpdateWatch(Sender, Receiver, Owner, "msg-1"));
+        updates.Observe(Receiver, new MessageUpdated
+        {
+            Payload = new MessageLifecyclePayload
+            {
+                Info = new MessageEventInfo { Id = "msg-2", Role = "assistant", SessionId = Receiver, ParentId = "msg-1", Time = new MessageEventTime { Created = 0 } },
+            },
+        });
+        updates.Observe(Receiver, new SessionIdled { Payload = new SessionIdledPayload { SessionId = Receiver } });
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!updates.IsStartedByUpdate(Sender) && DateTime.UtcNow < deadline)
+            await Task.Delay(20);
+
+        var response = await MessageAsync(Receiver, "Thanks. Now the changelog.", notifyWhenDone: true);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        (await ErrorAsync(response)).ShouldBe(SessionMessageBridge.NoNotifyFromUpdateMessage);
+    }
+
     private async Task TurnOnAsync()
     {
         using var scope = _factory!.Services.CreateScope();
@@ -137,11 +165,11 @@ public sealed class SessionMessageEndpointTests : IAsyncLifetime
             await scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>().SetAsync(SessionMessages.PreferenceKey, "true");
     }
 
-    private async Task<HttpResponseMessage> MessageAsync(string sessionId, string text, string token = Token)
+    private async Task<HttpResponseMessage> MessageAsync(string sessionId, string text, string token = Token, bool notifyWhenDone = false)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/bridge/session/message")
         {
-            Content = JsonContent.Create(new { harnessSessionId = HarnessSessionId, sessionId, text }),
+            Content = JsonContent.Create(new { harnessSessionId = HarnessSessionId, sessionId, text, notifyWhenDone }),
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         return await _client!.SendAsync(request);
@@ -167,6 +195,15 @@ public sealed class SessionMessageEndpointTests : IAsyncLifetime
                    ('{Receiver}', 'ws-1', 'inst-1', 'oc-2', 'Update documentation', 'active', '/ws',
                     'running', 'active', '2026-09-18T10:00:00+00:00', '{Owner}');
             """);
+    }
+
+    /// <summary>Delivers every update without prompting anything: the point is what Fleet remembers afterwards.</summary>
+    private sealed class DeliveredUpdates : ISessionUpdateSender
+    {
+        public Task<SessionUpdate?> ReadAsync(SessionUpdateWatch watch, TurnError? failure, CancellationToken ct)
+            => Task.FromResult<SessionUpdate?>(new SessionUpdate(watch.AskerId, watch.TargetId, watch.UserId, "Done.", SessionUpdates.Finished));
+
+        public Task<bool> SendAsync(SessionUpdate update, CancellationToken ct) => Task.FromResult(true);
     }
 
     private sealed class FakeTokens : IHarnessBridgeTokens

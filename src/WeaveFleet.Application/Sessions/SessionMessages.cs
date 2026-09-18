@@ -31,6 +31,7 @@ public static class SessionMessages
     public const string UseTheToolMessage = "Use the fleet_message tool to message a session. Fleet doesn't take prompts from agents through its API.";
 
     private const string Tag = "fleet-session-message";
+    private const string UpdateTag = "fleet-session-update";
 
     /// <summary>
     /// The prompt text a message arrives as: the sender's id and title in the opening tag, then the text. The tag
@@ -38,6 +39,14 @@ public static class SessionMessages
     /// </summary>
     public static string Wrap(string fromSessionId, string fromTitle, string text)
         => $"<{Tag} from=\"{WebUtility.HtmlEncode(fromSessionId)}\" title=\"{WebUtility.HtmlEncode(fromTitle)}\">\n{text}\n</{Tag}>";
+
+    /// <summary>
+    /// The prompt text an update arrives as, when a session this one messaged is done: which session, how its turn
+    /// ended (<c>finished</c> or <c>failed</c>), then its last reply or the failure. A different tag from a message,
+    /// so the update can't be mistaken for something the other session's agent wrote.
+    /// </summary>
+    public static string WrapUpdate(string sessionId, string title, string outcome, string text)
+        => $"<{UpdateTag} session=\"{WebUtility.HtmlEncode(sessionId)}\" title=\"{WebUtility.HtmlEncode(title)}\" outcome=\"{outcome}\">\n{text}\n</{UpdateTag}>";
 }
 
 /// <summary>Whether messages between sessions are on for the current user.</summary>
@@ -68,15 +77,21 @@ public sealed class SessionMessageBridge(
     SessionMessagesFeature feature,
     SessionService sessions,
     SessionOrchestrator orchestrator,
-    IEventBroadcaster broadcaster)
+    IEventBroadcaster broadcaster,
+    SessionUpdates updates)
 {
     public const string TurnedOffMessage = "Messages between sessions are turned off in Fleet's Settings.";
+
+    public const string NoNotifyFromUpdateMessage =
+        "This turn started from a Fleet update about another session, so it can't ask to be told again: two sessions "
+        + "could keep waking each other with nobody watching. Send it with notifyWhenDone false.";
 
     public async Task<CanvasResult<CanvasToolOutput>> SendAsync(
         string? bridgeToken,
         string? harnessSessionId,
         string? toSessionId,
         string? text,
+        bool notifyWhenDone = false,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(bridgeToken) || string.IsNullOrWhiteSpace(harnessSessionId))
@@ -98,6 +113,8 @@ public sealed class SessionMessageBridge(
                 return Invalid("\"text\" is required.");
             if (string.Equals(toSessionId, caller.FleetSessionId, StringComparison.Ordinal))
                 return Invalid("That's this session. Give the id of another one.");
+            if (notifyWhenDone && updates.IsStartedByUpdate(caller.FleetSessionId))
+                return CanvasResult.Fail<CanvasToolOutput>(CanvasErrorKind.Refused, NoNotifyFromUpdateMessage);
 
             var from = await sessions.GetSessionAsync(caller.FleetSessionId).ConfigureAwait(false);
             var to = await sessions.GetSessionAsync(toSessionId).ConfigureAwait(false);
@@ -119,6 +136,9 @@ public sealed class SessionMessageBridge(
             if (sent.IsFailure)
                 return CanvasResult.Fail<CanvasToolOutput>(CanvasErrorKind.Refused, $"Fleet couldn't deliver it: {sent.Error.Description}");
 
+            if (notifyWhenDone && sent.Value.MessageId is { } messageId)
+                updates.Watch(new SessionUpdateWatch(caller.FleetSessionId, toSessionId, caller.UserId, messageId));
+
             var payload = new SessionMessagedPayload
             {
                 FromSessionId = caller.FleetSessionId,
@@ -138,7 +158,9 @@ public sealed class SessionMessageBridge(
             var title = to.Value.Title;
             return CanvasResult.Ok(new CanvasToolOutput(
                 $"Messaged {title}",
-                $"Delivered to {title} ({toSessionId}). It starts on it now, or when the turn it's on ends. Its reply stays in that session."));
+                notifyWhenDone
+                    ? $"Delivered to {title} ({toSessionId}). It starts on it now, or when the turn it's on ends. Fleet will send you its reply when it's done, as a new message; you don't need to check on it."
+                    : $"Delivered to {title} ({toSessionId}). It starts on it now, or when the turn it's on ends. Its reply stays in that session."));
         }
     }
 
