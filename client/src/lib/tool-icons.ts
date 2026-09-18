@@ -10,6 +10,7 @@ import {
   GitBranch,
   Globe,
   MessageCircleQuestion,
+  Send,
   Wrench,
 } from 'lucide-vue-next'
 
@@ -27,6 +28,7 @@ const iconMap: Record<string, Component> = {
   fleet_app_start: AppWindow,
   fleet_browser_open: Globe,
   fleet_browser_screenshot: Camera,
+  fleet_message: Send,
 }
 
 const labelMap: Record<string, string> = {
@@ -43,6 +45,7 @@ const labelMap: Record<string, string> = {
   fleet_app_start: 'Run app',
   fleet_browser_open: 'Open page',
   fleet_browser_screenshot: 'Screenshot',
+  fleet_message: 'Message session',
 }
 
 export function getToolIcon(kind: string): Component {

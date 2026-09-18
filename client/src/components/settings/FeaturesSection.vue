@@ -3,6 +3,7 @@ import { computed, shallowRef } from "vue";
 import { LoaderCircle } from "lucide-vue-next";
 import { useBoardFeature } from "@/composables/use-board-feature";
 import { SESSION_RECAP_PREFERENCE_KEY } from "@/composables/use-session-recap";
+import { SESSION_MESSAGES_PREFERENCE_KEY } from "@/lib/session-messages";
 import {
   DESKTOP_NOTIFICATIONS_PREFERENCE_KEY,
   notificationPermission,
@@ -59,6 +60,20 @@ async function toggleNotifications(): Promise<void> {
     await preferencesStore.set(DESKTOP_NOTIFICATIONS_PREFERENCE_KEY, turningOn ? "true" : "false");
   } finally {
     isSavingNotifications.value = false;
+  }
+}
+
+const isSessionMessagesEnabled = computed(
+  () => preferencesStore.get(SESSION_MESSAGES_PREFERENCE_KEY, "false") === "true",
+);
+const isSavingSessionMessages = shallowRef(false);
+
+async function toggleSessionMessages(): Promise<void> {
+  isSavingSessionMessages.value = true;
+  try {
+    await preferencesStore.set(SESSION_MESSAGES_PREFERENCE_KEY, isSessionMessagesEnabled.value ? "false" : "true");
+  } finally {
+    isSavingSessionMessages.value = false;
   }
 }
 
@@ -214,6 +229,47 @@ async function toggleBoardFeature(): Promise<void> {
           <span
             class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
             :class="isNotificationsEnabled ? 'translate-x-5' : 'translate-x-0'"
+          />
+        </button>
+      </div>
+    </div>
+
+    <div class="mt-3 flex items-start justify-between gap-4 rounded-card border border-border bg-main-bg p-4">
+      <div>
+        <p class="flex items-center gap-2 text-sm font-medium text-text">
+          Messages between sessions
+          <span class="rounded-full border border-border px-2 py-px text-[0.7rem] font-medium uppercase tracking-wide text-muted">
+            Experimental
+          </span>
+        </p>
+        <p class="mt-1 text-xs text-muted">
+          Let an agent send a message to another session with the <code>fleet_message</code> tool. The message
+          says which session sent it, and the agent treats it as a teammate's request, not yours. Agents can't
+          send prompts through Fleet's API while this is on. Applies to sessions started afterwards.
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <LoaderCircle
+          v-if="isSavingSessionMessages"
+          :size="16"
+          class="animate-spin text-muted"
+          aria-hidden="true"
+        />
+        <button
+          type="button"
+          role="switch"
+          :aria-checked="isSessionMessagesEnabled"
+          :disabled="preferencesStore.isLoading || isSavingSessionMessages"
+          aria-label="Enable messages between sessions"
+          data-testid="session-messages-switch"
+          class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-main-bg disabled:cursor-not-allowed disabled:opacity-60"
+          :class="isSessionMessagesEnabled ? 'bg-accent' : 'bg-border'"
+          @click="toggleSessionMessages"
+        >
+          <span
+            class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+            :class="isSessionMessagesEnabled ? 'translate-x-5' : 'translate-x-0'"
           />
         </button>
       </div>

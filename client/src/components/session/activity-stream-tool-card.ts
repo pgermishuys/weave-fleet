@@ -26,6 +26,9 @@ export interface ToolCardItem {
 /** Fleet's browser tools; their card reads "title · address" once the page answered, or "title · size" for a shot. */
 const BROWSER_TOOLS = new Set(["fleet_app_start", "fleet_browser_open", "fleet_browser_screenshot"]);
 
+/** Tools whose card title comes from Fleet's answer: "Messaged Update documentation" for fleet_message. */
+const TITLED_TOOLS = new Set([...BROWSER_TOOLS, "fleet_message"]);
+
 const tool_output_keys = ["output", "result", "content", "error", "message", "stdout", "stderr"] as const;
 const fallback_excluded_keys = new Set(["input", "status", "summary", "title", "diff", "diffLines", "patch"]);
 
@@ -93,7 +96,7 @@ export function toToolCardItem(part: AccumulatedToolPart): ToolCardItem {
   const input = asRecord(state?.input);
   const output = getToolOutput(state);
   const summary = getStringValue(state?.summary);
-  const shownTitle = BROWSER_TOOLS.has(part.tool) ? getStringValue(state?.title) : undefined;
+  const shownTitle = TITLED_TOOLS.has(part.tool) ? getStringValue(state?.title) : undefined;
   const title = shownTitle ?? (getToolLabel(part.tool, input) || part.tool);
   const canvasId = getStringValue(asRecord(state?.metadata)?.canvasId);
 

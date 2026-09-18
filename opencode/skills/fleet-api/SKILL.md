@@ -32,7 +32,7 @@ JSON with an `error` or `detail` field that says what was wrong.
 | GET | `/api/sessions/{id}/status` | Whether it's working or idle |
 | GET | `/api/sessions/{id}/messages` | Its conversation. Query: `limit`, `before` |
 | GET | `/api/sessions/{id}/diffs` | The changes in its folder |
-| POST | `/api/sessions/{id}/prompt` | Send it a message: `{"text": "…"}`. An idle session wakes up |
+| POST | `/api/sessions/{id}/prompt` | Send it a message: `{"text": "…"}`. An idle session wakes up. If you have the `fleet_message` tool, use it instead: Fleet refuses this from agents then |
 | POST | `/api/sessions/{id}/abort` | Stop the turn it's working on |
 | POST | `/api/sessions/{id}/fork` | Copy it into a new session: `{"title": "…"}` |
 | POST | `/api/sessions/{id}/sources` | Add a GitHub issue or pull request to it as context |
@@ -53,7 +53,8 @@ curl -s -X POST "$FLEET_URL/api/sessions" -H 'content-type: application/json' -d
 ```
 
 `isolationStrategy` is `existing` (work in the folder as it is), `worktree` (a new git worktree) or `clone`.
-`branch`, `projectId` and `tags` are optional.
+`branch`, `projectId` and `tags` are optional. If you have the `fleet_message` tool, leave out `initialPrompt`
+(Fleet refuses it from agents then) and give the new session its task with the tool.
 
 ### Start a session from a GitHub issue or pull request
 

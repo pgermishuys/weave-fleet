@@ -57,6 +57,18 @@ public sealed record SessionRecapUpdated : DomainEvent
 }
 
 /// <summary>
+/// Raised when one session's agent sends another session a message with <c>fleet_message</c>. Published on
+/// the receiving session's topic.
+/// </summary>
+public sealed record SessionMessaged : DomainEvent
+{
+    /// <summary>
+    /// Gets the strongly typed payload for the session-messaged event.
+    /// </summary>
+    public required SessionMessagedPayload Payload { get; init; }
+}
+
+/// <summary>
 /// Why Fleet is telling you about a session you weren't looking at.
 /// </summary>
 public static class SessionNotificationReasons
@@ -114,6 +126,33 @@ public sealed record SessionRecapPayload
     /// Gets when Fleet wrote the recap (ISO 8601), or null when it was cleared.
     /// </summary>
     public string? WrittenAt { get; init; }
+}
+
+/// <summary>
+/// One session messaged another. The sender is the session whose agent called the tool, as Fleet resolved it,
+/// not something the agent wrote.
+/// </summary>
+public sealed record SessionMessagedPayload
+{
+    /// <summary>
+    /// Gets the session that sent the message.
+    /// </summary>
+    public required string FromSessionId { get; init; }
+
+    /// <summary>
+    /// Gets the session that received it.
+    /// </summary>
+    public required string ToSessionId { get; init; }
+
+    /// <summary>
+    /// Gets the receipt's event id for the prompt that carried it, when there is one.
+    /// </summary>
+    public long? EventId { get; init; }
+
+    /// <summary>
+    /// Gets the correlation id of the prompt that carried it.
+    /// </summary>
+    public required string CorrelationId { get; init; }
 }
 
 /// <summary>

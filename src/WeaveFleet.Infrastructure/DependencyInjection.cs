@@ -173,6 +173,8 @@ public static class DependencyInjection
         services.AddScoped<SmartLinkService>();
         services.AddScoped<ICanvasService, CanvasService>();
         services.AddScoped<CanvasBridge>();
+        services.AddScoped<SessionMessagesFeature>();
+        services.AddScoped<SessionMessageBridge>();
         services.AddSingleton<IPtyFactory, PortaPtyFactory>();
         services.AddSingleton<ITerminalHistoryStore>(sp => new TerminalHistoryStore(sp.GetRequiredService<FleetOptions>().ResolvedTerminalHistoryDirectory));
         services.AddSingleton<TerminalManager>();
@@ -381,6 +383,7 @@ public static class DependencyInjection
         services.AddSingleton<IHarnessCanvasCallerResolver>(sp => new OpenCodeCanvasCallerResolver(
             sp.GetRequiredService<OpenCodeHarnessRuntime>(),
             sp.GetRequiredService<ILogger<OpenCodeCanvasCallerResolver>>()));
+        services.AddSingleton<IHarnessBridgeTokens>(sp => new OpenCodeBridgeTokens(sp.GetRequiredService<OpenCodeHarnessRuntime>()));
 
         // Register ClaudeCodeHarness (descriptor) and ClaudeCodeHarnessRuntime (provisioning) as separate singletons.
         services.AddSingleton<ClaudeCodeHarness>();

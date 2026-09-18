@@ -11,6 +11,7 @@ namespace WeaveFleet.Domain.Events;
 [JsonDerivedType(typeof(SessionDeleted), "session.deleted")]
 [JsonDerivedType(typeof(SessionArchived), "session.archived")]
 [JsonDerivedType(typeof(SessionRecapUpdated), "session.recap")]
+[JsonDerivedType(typeof(SessionMessaged), "session.messaged")]
 [JsonDerivedType(typeof(TurnStarted), "turn.started")]
 [JsonDerivedType(typeof(TurnEnded), "turn.ended")]
 [JsonDerivedType(typeof(TurnFailed), "turn.failed")]
