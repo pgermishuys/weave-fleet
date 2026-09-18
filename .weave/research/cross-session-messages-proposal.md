@@ -1,6 +1,6 @@
 # Messages between sessions
 
-*2026-09-18 — proposal. Stage 1 is agreed and built (branch `feat/session-messages`); Stage 2 is for later.*
+*2026-09-18 — proposal. Both stages are built and merged, behind the Experimental switch in Settings → Features: Stage 1 in #251, Stage 2 in #252.*
 
 Agents in Fleet already talk to each other. One session tells another what to do with the Fleet API
 skill: `curl -X POST "$FLEET_URL/api/sessions/{id}/prompt" -d '{"text": "…"}'`. That works, and it
@@ -175,14 +175,20 @@ Light theme and phone: `receiver-light.png`, `sender-light.png`, `settings-on-li
   B's conversation shows the chip, B's reply treats it as a peer request, `session.messaged` reaches
   the browser. Then A tries `curl "$FLEET_URL/api/sessions/B/prompt"` and gets the 409.
 
-## Stage 2 — Tell me when you're done (later)
+## Stage 2 — Tell me when you're done
 
-The other half of what Claude Code sends. `fleet_message` gains `notifyWhenDone: true` (or a separate
-`fleet_session_watch`). When the target's turn ends, Fleet sends the asker one short message built from
-events it already has: `turn.ended` or `turn.failed`, and the recap line if one exists. One event per
-turn, only to sessions that asked; no polling, no background model.
+The other half of what Claude Code sends. Built in #252; its description has the reasoning.
 
-Open for then: whether the note wakes an idle asker (it costs a turn) or waits for its next prompt.
+- `fleet_message` gains `notifyWhenDone`. With it true, when B's turn that handled the message ends, Fleet
+  sends A one short prompt: `<fleet-session-update session=… title=… outcome="finished|failed">` with B's
+  last reply cut to 600 characters, or the failure. No model call, and no polling.
+- A is woken, which costs one turn (the user's choice). If A is mid-turn, the update waits for that turn
+  to end.
+- The turn that counts is the one whose replies name A's message as their parent, so a turn B was
+  already running doesn't count.
+- A turn that an update started can't ask to be told again, so two sessions can't keep waking each other.
+- `session.reported` is published on A's topic. Pending updates are kept in memory: a Fleet restart
+  already stops every turn.
 
 ## Not in this proposal
 
