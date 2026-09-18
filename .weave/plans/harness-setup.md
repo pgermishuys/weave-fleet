@@ -38,15 +38,16 @@ button. Proposal and mockups: https://claude.ai/artifact/K5CXP4kJH9xaZd8zpV7hiC 
 
 ## Stage 2 — first-run wizard, home banner, install terminal
 
-- [ ] A terminal that isn't tied to a session (terminals today live under `/api/sessions/{id}/terminals`),
-      in the user's home folder, local mode only.
-- [ ] Each runtime declares its install and sign-in commands per platform (the harness capability model:
-      the client shows what the harness says, no per-harness cases).
-- [ ] `HarnessSetupWizard.vue` (welcome, harnesses, ready) shown on first launch when no harness is ready;
-      a preference records that it was finished or skipped.
-- [ ] Dashboard banner while no harness is ready; it reopens the wizard at the harness step. The composer
-      notice links to the wizard instead of Settings.
-- [ ] After the typed command exits, Fleet checks the harnesses again.
+- [x] The setup terminal: `/api/setup/terminals` starts a shell in the user's home folder, outside any
+      session, local mode only; opening one ends the last one (`TerminalService.CreateSetupAsync`).
+- [x] Each runtime declares its install and sign-in commands per platform (`IHarnessRuntime.GetSetup`,
+      `HarnessSetup` on `/api/harnesses`); the client shows what the harness says.
+- [x] `HarnessSetupWizard.vue` (welcome, harnesses, ready) opens on first launch when no harness is ready;
+      `harnessSetup.done` records that it was finished or skipped. `HarnessSetupRows.vue` types the command
+      into the terminal (`TerminalView` `initialInput`) and checks the harnesses every 3 s while it's open.
+- [x] Dashboard banner while no harness is ready; it, the composer notice and Settings open the wizard at
+      the harness step (cloud mode: the composer still points to Settings).
+- [x] Continue turns on a ready harness that's off (Claude Code starts off).
 
 ## Stage 3 — updates
 
