@@ -2465,7 +2465,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/bridge/opencode/canvas/list": {
+    "/api/bridge/canvas/list": {
         parameters: {
             query?: never;
             header?: never;
@@ -2481,7 +2481,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/bridge/opencode/canvas/open": {
+    "/api/bridge/canvas/open": {
         parameters: {
             query?: never;
             header?: never;
@@ -2497,7 +2497,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/bridge/opencode/canvas/read": {
+    "/api/bridge/canvas/read": {
         parameters: {
             query?: never;
             header?: never;
@@ -2513,7 +2513,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/bridge/opencode/canvas/patch": {
+    "/api/bridge/canvas/patch": {
         parameters: {
             query?: never;
             header?: never;
@@ -2529,7 +2529,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/bridge/opencode/canvas/focus": {
+    "/api/bridge/canvas/focus": {
         parameters: {
             query?: never;
             header?: never;
@@ -2545,7 +2545,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/bridge/opencode/canvas/app-start": {
+    "/api/bridge/canvas/app-start": {
         parameters: {
             query?: never;
             header?: never;
@@ -2561,7 +2561,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/bridge/opencode/canvas/browser-open": {
+    "/api/bridge/canvas/browser-open": {
         parameters: {
             query?: never;
             header?: never;
@@ -2717,7 +2717,7 @@ export interface components {
             currentPath: string;
         };
         CanvasBridgeRequest: {
-            openCodeSessionId: null | string;
+            harnessSessionId: null | string;
             canvasId?: null | string;
             kind?: null | string;
             title?: null | string;
