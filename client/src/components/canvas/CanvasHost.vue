@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { Globe, Maximize2, Minimize2, Plus, X } from "lucide-vue-next";
+import { Globe, Maximize2, Minimize2, Pin, Plus, X } from "lucide-vue-next";
 import { useResizeObserver } from "@vueuse/core";
 import {
   DropdownMenu,
@@ -332,6 +332,20 @@ const activeProps = computed(() => {
             :aria-label="props.tabBadges[canvas.id]?.label"
           >{{ props.tabBadges[canvas.id]?.count }}</span>
           <span
+            v-if="canvas.file?.preview"
+            class="canvas-tab__pin"
+            role="button"
+            :aria-label="`Pin ${canvasTitle(canvas)}`"
+            title="Pin: keep this tab open when you open another file"
+            :data-testid="`file-tab-pin-${canvas.file.path}`"
+            @click.stop="keepPreview(canvas)"
+          >
+            <Pin
+              :size="12"
+              aria-hidden="true"
+            />
+          </span>
+          <span
             v-if="isCanvasClosable(canvas)"
             class="canvas-tab__close"
             :class="{ 'canvas-tab__close--unsaved': isUnsaved(canvas) }"
@@ -588,6 +602,7 @@ const activeProps = computed(() => {
   background: var(--error);
 }
 
+.canvas-tab__pin,
 .canvas-tab__close {
   display: grid;
   place-items: center;
@@ -600,12 +615,16 @@ const activeProps = computed(() => {
   transition: opacity 120ms ease-out, background-color var(--transition), color var(--transition);
 }
 
+.canvas-tab:hover .canvas-tab__pin,
+.canvas-tab--active .canvas-tab__pin,
+.canvas-tab:focus-visible .canvas-tab__pin,
 .canvas-tab:hover .canvas-tab__close,
 .canvas-tab--active .canvas-tab__close,
 .canvas-tab:focus-visible .canvas-tab__close {
   opacity: 1;
 }
 
+.canvas-tab__pin:hover,
 .canvas-tab__close:hover {
   background-color: color-mix(in srgb, var(--text) 10%, transparent);
   color: var(--text);
@@ -715,6 +734,7 @@ const activeProps = computed(() => {
 
 @media (prefers-reduced-motion: reduce) {
   .canvas-tab,
+  .canvas-tab__pin,
   .canvas-tab__close,
   .canvas-host__icon-btn {
     transition: none;

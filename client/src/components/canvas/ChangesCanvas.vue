@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject } from "vue";
+import { computed, inject, onBeforeUnmount } from "vue";
 import { FileText } from "lucide-vue-next";
 import type { UseDiffsResult } from "@/composables/use-diffs";
 import { fileCanvasId, useCanvasesStore } from "@/stores/canvases";
@@ -27,10 +27,27 @@ const changedFiles = computed(() =>
     }),
 );
 
-// A changed file opens in its own tab, in Diff; a file has one place.
-function openChange(path: string): void {
-  canvases.openFile(props.sessionId, path, { keep: true, view: "diff" });
+// A changed file opens in Diff. One click opens a preview tab, which the next file you click
+// replaces; a double-click (or the pin on the tab) keeps it. The preview takes the canvas away
+// from this list, so wait one double-click interval before opening it.
+const DOUBLE_CLICK_MS = 250;
+let pendingClick: ReturnType<typeof setTimeout> | undefined;
+
+function openChange(event: MouseEvent, path: string): void {
+  clearTimeout(pendingClick);
+  if (event.detail >= 2) {
+    canvases.openFile(props.sessionId, path, { keep: true, view: "diff" });
+    return;
+  }
+  // A keyboard press (detail 0) can't become a double-click.
+  if (event.detail === 0) {
+    canvases.openFile(props.sessionId, path, { view: "diff" });
+    return;
+  }
+  pendingClick = setTimeout(() => canvases.openFile(props.sessionId, path, { view: "diff" }), DOUBLE_CLICK_MS);
 }
+
+onBeforeUnmount(() => clearTimeout(pendingClick));
 
 const openIds = computed(() => new Set(canvases.sessionCanvases(props.sessionId).canvases.map((canvas) => canvas.id)));
 
@@ -59,7 +76,7 @@ function isOpen(path: string): boolean {
         :class="{ 'changes-canvas__change--open': isOpen(change.file) }"
         :title="change.file"
         :data-status="change.status"
-        @click="openChange(change.file)"
+        @click="openChange($event, change.file)"
       >
         <FileText
           :size="14"
