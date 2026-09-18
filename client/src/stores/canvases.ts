@@ -268,7 +268,7 @@ export const useCanvasesStore = defineStore("canvases", () => {
   /**
    * Open a file in its own tab, or focus it if it's open already. A single click opens a preview
    * tab, which takes the place of the previous preview unless that one has unsaved changes (then
-   * it's kept). Opening with `keep` (a double click, Changes, Go to file) makes a kept tab.
+   * it's kept). Opening with `keep` (a double click, Go to file) makes a kept tab.
    */
   function openFile(sessionId: string, path: string, options: OpenFileOptions = {}): string {
     const id = fileCanvasId(path);
@@ -319,7 +319,7 @@ export const useCanvasesStore = defineStore("canvases", () => {
     return id;
   }
 
-  /** Keep a preview tab: typing in it or double-clicking it. */
+  /** Keep (pin) a preview tab: its pin button, typing in it, or double-clicking it. */
   function keepFile(sessionId: string, path: string): void {
     const id = fileCanvasId(path);
     update(sessionId, (current) => {

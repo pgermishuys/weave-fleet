@@ -1,7 +1,7 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { computed, ref } from "vue";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ChangesCanvas from "@/components/canvas/ChangesCanvas.vue";
 import type { FileDiffItem } from "@/api/client";
 import { useCanvasesStore } from "@/stores/canvases";
@@ -19,6 +19,11 @@ const sharedDiffs = {
   diffs: ref<FileDiffItem[]>([]),
   byFile: computed((): ReadonlyMap<string, FileDiffItem> => new Map(sharedDiffs.diffs.value.map((diff) => [diff.file, diff]))),
 };
+
+// trigger() can't set `detail` (a getter); dispatch a real MouseEvent with it instead.
+function click(element: Element, detail: number) {
+  element.dispatchEvent(new MouseEvent("click", { bubbles: true, detail }));
+}
 
 function mountCanvas() {
   return mount(ChangesCanvas, {
@@ -61,23 +66,63 @@ describe("ChangesCanvas", () => {
     expect(rows[1]?.get(".changes-canvas__change-stats").text()).toBe("+3−1");
   });
 
-  it("opens a clicked file in its own kept tab, in Diff", async () => {
-    sharedDiffs.diffs.value = [
-      { file: "src/a.ts", status: "modified", additions: 1, deletions: 1, before: "const a = 1;\n", after: "const a = 2;\n" },
-    ] as FileDiffItem[];
-
-    const wrapper = mountCanvas();
-    await flushPromises();
-    await wrapper.get(".changes-canvas__change").trigger("click");
-
-    const state = useCanvasesStore().sessionCanvases("s1");
-    expect(state.activeId).toBe("file:src/a.ts");
-    expect(state.canvases.find((canvas) => canvas.id === "file:src/a.ts")?.file).toEqual({
-      path: "src/a.ts",
-      preview: false,
-      view: "diff",
+  describe("opening a change", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      sharedDiffs.diffs.value = [
+        { file: "src/a.ts", status: "modified", additions: 1, deletions: 1 },
+        { file: "src/b.ts", status: "modified", additions: 2, deletions: 0 },
+      ] as FileDiffItem[];
     });
-    expect(readSessionFileMock).not.toHaveBeenCalled();
-    expect(wrapper.get(".changes-canvas__change").classes()).toContain("changes-canvas__change--open");
+
+    afterEach(() => vi.useRealTimers());
+
+    const fileTabs = () =>
+      useCanvasesStore().sessionCanvases("s1").canvases.flatMap((canvas) => (canvas.file ? [canvas.file] : []));
+
+    it("opens a preview tab in Diff once a double-click can't follow, and the next file replaces it", async () => {
+      const wrapper = mountCanvas();
+      await flushPromises();
+      const rows = wrapper.findAll(".changes-canvas__change");
+
+      click(rows[0]!.element, 1);
+      expect(useCanvasesStore().sessionCanvases("s1").activeId).toBe("changes");
+
+      vi.advanceTimersByTime(250);
+      expect(useCanvasesStore().sessionCanvases("s1").activeId).toBe("file:src/a.ts");
+      expect(fileTabs()).toEqual([{ path: "src/a.ts", preview: true, view: "diff" }]);
+      expect(readSessionFileMock).not.toHaveBeenCalled();
+      await flushPromises();
+      expect(rows[0]!.classes()).toContain("changes-canvas__change--open");
+
+      click(rows[1]!.element, 1);
+      vi.advanceTimersByTime(250);
+      expect(fileTabs()).toEqual([{ path: "src/b.ts", preview: true, view: "diff" }]);
+    });
+
+    it("a double-click opens a kept tab, which the next file opens beside", async () => {
+      const wrapper = mountCanvas();
+      await flushPromises();
+      const rows = wrapper.findAll(".changes-canvas__change");
+
+      click(rows[0]!.element, 1);
+      click(rows[0]!.element, 2);
+      click(rows[1]!.element, 1);
+      vi.advanceTimersByTime(500);
+
+      expect(fileTabs()).toEqual([
+        { path: "src/a.ts", preview: false, view: "diff" },
+        { path: "src/b.ts", preview: true, view: "diff" },
+      ]);
+    });
+
+    it("opens straight away from the keyboard", async () => {
+      const wrapper = mountCanvas();
+      await flushPromises();
+
+      await wrapper.get(".changes-canvas__change").trigger("click");
+
+      expect(fileTabs()).toEqual([{ path: "src/a.ts", preview: true, view: "diff" }]);
+    });
   });
 });
