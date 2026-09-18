@@ -441,6 +441,18 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
             "OpenCode", OpenCodeExecutable.Command, OpenCodeExecutable.InstallDirectories(), _logger, ct);
 
     /// <inheritdoc />
+    /// <remarks>
+    /// OpenCode's install script is bash only, so Windows gets winget (it comes with Windows 10 1809+ and 11).
+    /// OpenCode includes free models, so there's no sign-in to offer.
+    /// </remarks>
+    public HarnessSetup GetSetup(HarnessAvailability availability) => new(
+        InstallCommand: OperatingSystem.IsWindows()
+            ? "winget install --id SST.opencode --exact"
+            : "curl -fsSL https://opencode.ai/install | bash",
+        SignInCommand: null,
+        DocsUrl: "https://opencode.ai/docs");
+
+    /// <inheritdoc />
     public async Task<IHarnessSession> SpawnAsync(HarnessSpawnOptions options, CancellationToken ct)
     {
         var pooledModeEnabled = await IsPooledModeEnabledAsync(options.OwnerUserId, ct).ConfigureAwait(false);

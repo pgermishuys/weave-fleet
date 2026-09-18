@@ -940,6 +940,18 @@ public sealed class OpenCodeHarnessTests
         }
     }
 
+    [Fact]
+    public void GetSetup_OffersTheInstallScript_OrWingetOnWindows_AndNoSignIn()
+    {
+        var setup = CreateRuntime().GetSetup(HarnessAvailability.NotInstalled("Missing."));
+
+        setup.InstallCommand.ShouldBe(OperatingSystem.IsWindows()
+            ? "winget install --id SST.opencode --exact"
+            : "curl -fsSL https://opencode.ai/install | bash");
+        setup.SignInCommand.ShouldBeNull();
+        setup.DocsUrl.ShouldBe("https://opencode.ai/docs");
+    }
+
     // ── WarmupPooledInstanceAsync tests ──────────────────────────────────────
 
     [Fact]

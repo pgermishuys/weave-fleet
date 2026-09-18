@@ -69,6 +69,10 @@ public sealed class HarnessEndpointsTests
         {
             Availability = HarnessAvailability.SignInRequired(
                 "Claude Code isn't signed in. Run claude auth login.", "2.1.276", "/home/you/.local/bin/claude"),
+            Setup = new HarnessSetup(
+                "curl -fsSL https://claude.ai/install.sh | bash",
+                "/home/you/.local/bin/claude auth login",
+                "https://code.claude.com/docs/en/setup"),
         });
         await using var factory = new ApiWebApplicationFactory(
             authEnabled: false,
@@ -94,6 +98,10 @@ public sealed class HarnessEndpointsTests
         harness.GetProperty("version").GetString().ShouldBe("2.1.276");
         harness.GetProperty("executablePath").GetString().ShouldBe("/home/you/.local/bin/claude");
         harness.GetProperty("reason").GetString().ShouldBe("Claude Code isn't signed in. Run claude auth login.");
+        var setup = harness.GetProperty("setup");
+        setup.GetProperty("installCommand").GetString().ShouldBe("curl -fsSL https://claude.ai/install.sh | bash");
+        setup.GetProperty("signInCommand").GetString().ShouldBe("/home/you/.local/bin/claude auth login");
+        setup.GetProperty("docsUrl").GetString().ShouldBe("https://code.claude.com/docs/en/setup");
     }
 
     // ── Warmup endpoint — API contract: no caller-controlled parameters ────────────

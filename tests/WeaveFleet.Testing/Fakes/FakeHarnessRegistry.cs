@@ -43,7 +43,7 @@ public sealed class FakeHarnessRegistry : IHarnessRegistry
             }
 
             var availability = await runtime.CheckAvailabilityAsync(ct);
-            results.Add(HarnessInfo.From(harness.Type, harness.DisplayName, harness.Capabilities, availability));
+            results.Add(HarnessInfo.From(harness.Type, harness.DisplayName, harness.Capabilities, availability, runtime.GetSetup(availability)));
         }
         return results;
     }

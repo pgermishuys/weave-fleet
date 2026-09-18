@@ -1,8 +1,10 @@
 import { flushPromises, mount } from "@vue/test-utils";
-import { createPinia, setActivePinia } from "pinia";
+import { createPinia, getActivePinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import HarnessesSection from "@/components/settings/HarnessesSection.vue";
 import type { HarnessInfo } from "@/api/client";
+import { useAppShellStore } from "@/stores/app-shell";
+import { useHarnessSetupStore } from "@/stores/harness-setup";
 
 const { apiFetchMock } = vi.hoisted(() => ({
   apiFetchMock: vi.fn(),
@@ -79,7 +81,7 @@ function mockApiResponses(
 async function mountHarnessesSection() {
   const wrapper = mount(HarnessesSection, {
     global: {
-      plugins: [createPinia()],
+      plugins: [getActivePinia()!],
     },
   });
 
@@ -144,5 +146,19 @@ describe("HarnessesSection", () => {
 
     expect(wrapper.text()).toContain("Ready");
     expect(wrapper.get("[data-testid='harness-location']").text()).toBe("1.18.30 · /home/you/.opencode/bin/opencode");
+  });
+
+  it("opens harness setup at the harness step, except in cloud mode", async () => {
+    mockApiResponses({});
+    const wrapper = await mountHarnessesSection();
+
+    await wrapper.get("[data-testid='harnesses-set-up']").trigger("click");
+
+    expect(useHarnessSetupStore().isOpen).toBe(true);
+    expect(useHarnessSetupStore().step).toBe("harnesses");
+
+    useAppShellStore().config = { ...useAppShellStore().config, cloudMode: true };
+    await flushPromises();
+    expect(wrapper.find("[data-testid='harnesses-set-up']").exists()).toBe(false);
   });
 });

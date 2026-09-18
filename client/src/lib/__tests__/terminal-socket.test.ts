@@ -3,6 +3,7 @@ import {
   connectTerminal,
   MAX_FAILED_ATTEMPTS,
   RECONNECT_DELAYS_MS,
+  type ConnectTerminalOptions,
   type TerminalConnectionHandlers,
   type TerminalConnectionStatus,
 } from "@/lib/terminal-socket";
@@ -51,7 +52,7 @@ class FakeSocket {
   }
 }
 
-function setup() {
+function setup(extra: Partial<ConnectTerminalOptions> = {}) {
   const sockets: FakeSocket[] = [];
   const scheduled: Array<{ callback: () => void; ms: number }> = [];
   const events: string[] = [];
@@ -77,6 +78,7 @@ function setup() {
       return socket as unknown as WebSocket;
     },
     schedule: (callback, ms) => scheduled.push({ callback, ms }),
+    ...extra,
   });
   const latest = () => sockets[sockets.length - 1];
   const sentText = (socket: FakeSocket) => socket.sent.map((item) => (typeof item === "string" ? item : decoder.decode(item)));
@@ -100,6 +102,12 @@ describe("connectTerminal", () => {
 
     expect(events).toEqual(["reset", "out:old output\r\n", "ready", "out:live"]);
     expect(statuses).toEqual(["connecting", "open"]);
+  });
+
+  it("connects to a terminal that isn't a session's under its base path", () => {
+    const { sockets } = setup({ basePath: "/api/setup/terminals" });
+
+    expect(sockets[0].url).toBe("ws://fleet.test/api/setup/terminals/t1/socket?cols=100&rows=30");
   });
 
   it("sends input as binary and resize and clear as text", () => {

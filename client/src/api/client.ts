@@ -322,6 +322,13 @@ export const NO_PROFILE = "none";
 /** What a harness needs before sessions can use it (`HarnessStates` on the server). */
 export type HarnessState = "ready" | "not-installed" | "sign-in-required" | "not-working";
 
+/** How to install a harness or sign in to it on the machine Fleet runs on. Fleet types these; the user runs them. */
+export interface HarnessSetup {
+  installCommand?: string | null;
+  signInCommand?: string | null;
+  docsUrl?: string | null;
+}
+
 export interface HarnessInfo {
   type: string;
   displayName: string;
@@ -335,6 +342,8 @@ export interface HarnessInfo {
   version?: string | null;
   /** Where Fleet found the harness executable. */
   executablePath?: string | null;
+  /** How to install it or sign in to it here; missing when Fleet can't help. */
+  setup?: HarnessSetup | null;
 }
 
 export interface WorkspaceRootItem {

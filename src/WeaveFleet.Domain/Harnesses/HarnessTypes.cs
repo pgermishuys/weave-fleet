@@ -83,6 +83,15 @@ public sealed record HarnessAvailability(bool Available, string? Reason)
         new(false, reason) { State = HarnessStates.NotWorking, Version = version, ExecutablePath = executablePath };
 }
 
+/// <summary>
+/// How to install a harness or sign in to it on the machine Fleet runs on. Fleet types a command into a
+/// terminal and the user presses Enter to run it; Fleet never runs these on its own.
+/// </summary>
+/// <param name="InstallCommand">The vendor's installer for this platform, or <see langword="null"/> when there isn't one to offer.</param>
+/// <param name="SignInCommand">Signs in to the harness, when it needs a sign-in.</param>
+/// <param name="DocsUrl">The harness's install instructions, for anything the commands don't cover.</param>
+public sealed record HarnessSetup(string? InstallCommand, string? SignInCommand, string? DocsUrl);
+
 /// <summary>A real-time event emitted by a harness instance.</summary>
 public sealed record HarnessEvent
 {

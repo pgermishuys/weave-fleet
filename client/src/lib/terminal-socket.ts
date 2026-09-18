@@ -27,6 +27,8 @@ export interface TerminalConnection {
 export interface ConnectTerminalOptions {
   sessionId: string;
   terminalId: string;
+  /** Where the terminal lives when it isn't a session's, e.g. the setup terminal. */
+  basePath?: string;
   cols: number;
   rows: number;
   handlers: TerminalConnectionHandlers;
@@ -76,7 +78,7 @@ export function connectTerminal(options: ConnectTerminalOptions): TerminalConnec
     handlers.onStatus(attempt === 0 ? "connecting" : "reconnecting");
     attempt += 1;
 
-    const current = createSocket(terminalSocketUrl(sessionId, terminalId, cols, rows));
+    const current = createSocket(terminalSocketUrl(sessionId, terminalId, cols, rows, options.basePath));
     current.binaryType = "arraybuffer";
     socket = current;
     let reachedReady = false;

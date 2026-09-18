@@ -161,6 +161,33 @@ public sealed class TerminalEndpointTests : IAsyncLifetime, IDisposable
         events[1].GetProperty("properties").GetProperty("terminalId").GetString().ShouldBe(terminalId);
     }
 
+    [Fact]
+    public async Task TheSetupTerminal_StartsInTheHomeFolder_AndANewOneEndsTheLast()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var first = await CreateSetupTerminalAsync();
+        var second = await CreateSetupTerminalAsync();
+
+        (await _http.DeleteAsync($"/api/setup/terminals/{first}")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+
+        using var socket = new ClientWebSocket();
+        socket.Options.SetRequestHeader("Origin", _server.ServerUrl);
+        await socket.ConnectAsync(new Uri($"{_server.ServerUrl.Replace("http://", "ws://", StringComparison.Ordinal)}/api/setup/terminals/{second}/socket?cols=100&rows=30"), default);
+        await ReadUntilTextAsync(socket, """{"type":"ready"}""");
+        await SendAsync(socket, "echo \"cwd=$(pwd)\"\r");
+        await ReadUntilOutputAsync(socket, $"cwd={Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)}");
+
+        (await _http.DeleteAsync($"/api/setup/terminals/{second}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        await ReadUntilTextAsync(socket, """{"type":"exit","exitCode":null}""");
+    }
+
+    private async Task<string> CreateSetupTerminalAsync()
+    {
+        var created = await _http.PostAsJsonAsync("/api/setup/terminals", new { cols = 100, rows = 30 });
+        created.StatusCode.ShouldBe(HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
+        return (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString()!;
+    }
+
     private async Task<string> CreateSessionAsync()
     {
         var tempDir = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar);
