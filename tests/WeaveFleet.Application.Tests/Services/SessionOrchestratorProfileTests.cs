@@ -184,15 +184,22 @@ public sealed class SessionOrchestratorProfileTests : IDisposable
     }
 
     [Fact]
-    public async Task a_delegated_child_of_a_session_without_a_profile_resumes_as_before()
+    public async Task a_delegated_child_of_a_session_without_a_profile_is_prepared_like_its_parent()
     {
+        // Preparation carries more than the profile (credentials, built-in skills), and the launch
+        // picks the pooled process. Unprepared, the child landed on a process without its session.
         SeedSession("parent-1", profileId: null);
 
         var result = await _sut.EnsureDelegatedChildSessionAsync("parent-1", "oc-child-1", "general");
 
         result.Value.HarnessProfileId.ShouldBeNull();
-        _runtime.PrepareCalls.ShouldBeEmpty();
-        _runtime.ResumeCalls.Single().LaunchArtifacts.ShouldBeNull();
+        var prepare = _runtime.PrepareCalls.Single();
+        prepare.Profile.ShouldBeNull();
+        prepare.UserId.ShouldBe("user-1");
+        prepare.ModelId.ShouldBeNull();
+        var resume = _runtime.ResumeCalls.Single();
+        resume.LaunchArtifacts.ShouldNotBeNull();
+        resume.ParentSessionId.ShouldBe("parent-1");
     }
 
     private void SeedSession(string id, string? profileId)

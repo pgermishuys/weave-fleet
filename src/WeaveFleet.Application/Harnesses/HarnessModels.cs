@@ -20,6 +20,12 @@ public sealed record HarnessResumeOptions
     /// Null in local mode (no cloud credentials required).
     /// </summary>
     public RuntimeLaunchArtifacts? LaunchArtifacts { get; init; }
+
+    /// <summary>
+    /// The Fleet session that delegated this one, when it's a delegated child. A harness that runs children
+    /// inside their parent's process resumes the child there, whatever <see cref="LaunchArtifacts"/> say.
+    /// </summary>
+    public string? ParentSessionId { get; init; }
 }
 
 /// <summary>Options for spawning a new harness instance.</summary>
