@@ -18,6 +18,11 @@ const harnessDisplayMetadata: Record<string, HarnessDisplayMetadata> = {
     icon: TerminalSquare,
     pitch: "Open source. Includes free models, or sign in to your own provider.",
   },
+  opencode2: {
+    eyebrow: "CLI harness",
+    description: "Harness for sessions backed by OpenCode 2's server. Text replies only for now.",
+    icon: TerminalSquare,
+  },
   "claude-code": {
     eyebrow: "CLI harness",
     description: "Harness for Anthropic Claude Code sessions and project-aware coding workflows.",

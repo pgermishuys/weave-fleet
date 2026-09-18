@@ -42,7 +42,7 @@ internal static class OpenCodeExecutable
 
     /// <summary>Why this harness won't use <paramref name="version"/>, and how to get OpenCode 1 back.</summary>
     public static string OpenCode2Reason(string version) =>
-        $"This is OpenCode 2 ({version}). The OpenCode harness needs OpenCode 1.x, and Fleet doesn't support OpenCode 2 yet. " +
+        $"This is OpenCode 2 ({version}). The OpenCode harness needs OpenCode 1.x; Fleet runs OpenCode 2 with the OpenCode 2 harness, which you can turn on in Settings. " +
         "OpenCode 1's installer (curl -fsSL https://opencode.ai/install | bash) puts it back, in place of OpenCode 2.";
 
     /// <summary>A ready OpenCode 2 install is not working for this harness; anything else is returned as it is.</summary>

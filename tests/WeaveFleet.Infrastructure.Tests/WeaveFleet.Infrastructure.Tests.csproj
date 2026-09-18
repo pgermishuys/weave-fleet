@@ -29,6 +29,7 @@
     <Content Include="..\contracts\**" CopyToOutputDirectory="PreserveNewest" Link="contracts\%(RecursiveDir)%(Filename)%(Extension)" />
     <Content Include="Fixtures\Pi\**" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Fixtures\ClaudeCode\**" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Fixtures\OpenCode2\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -28,10 +28,11 @@ public static class AgentRequests
         var value = rest.Value ?? string.Empty;
         var end = value.IndexOf('/', 1);
         var token = end < 0 ? value.TrimStart('/') : value[1..end];
-        var tokens = context.RequestServices.GetRequiredService<IHarnessBridgeTokens>();
+        // Each harness knows its own processes' tokens.
+        var tokens = context.RequestServices.GetServices<IHarnessBridgeTokens>();
 
         // Only a live process on this machine; anything else looks like a path that doesn't exist.
-        if (!IsLoopback(context.Connection.RemoteIpAddress) || !tokens.IsKnown(token))
+        if (!IsLoopback(context.Connection.RemoteIpAddress) || !tokens.Any(t => t.IsKnown(token)))
         {
             context.Response.StatusCode = StatusCodes.Status404NotFound;
             return;
