@@ -221,7 +221,7 @@ public sealed class OpenCode2InstallTests : IDisposable
         var executable = Path.Combine(SeparateBin, "opencode2");
 
         Install().SignInCommand(OpenCode2InstallMode.Separate, executable).ShouldBe(
-            $"OPENCODE_CONFIG_DIR={Root}/config OPENCODE_DB={Root}/data/opencode.db {executable} auth login");
+            $"OPENCODE_CONFIG_DIR={Root}/config OPENCODE_DB={Root}/data/opencode.db {executable} auth login --standalone");
         Install().SignInCommand(OpenCode2InstallMode.Default, "/usr/local/bin/opencode2").ShouldBe("/usr/local/bin/opencode2 auth login");
     }
 

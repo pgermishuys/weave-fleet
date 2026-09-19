@@ -266,7 +266,9 @@ internal sealed partial class OpenCode2Install
     }
 
     /// <summary>
-    /// V2's provider sign-in. A separate install reads its own config folder and database, so the command names them.
+    /// V2's provider sign-in. A separate install reads its own config folder and database, so the command names them,
+    /// and runs with <c>--standalone</c>: V2's CLI otherwise goes through one background service per machine (a fixed
+    /// port), which may be running on the other database and would keep the sign-in.
     /// </summary>
     public string SignInCommand(OpenCode2InstallMode mode, string executablePath)
     {
@@ -275,8 +277,8 @@ internal sealed partial class OpenCode2Install
             return $"{executable} auth login";
 
         return _windows
-            ? $"$env:OPENCODE_CONFIG_DIR='{SeparateConfigDirectory}'; $env:OPENCODE_DB='{SeparateDatabase}'; {executable} auth login"
-            : $"OPENCODE_CONFIG_DIR={Word(SeparateConfigDirectory)} OPENCODE_DB={Word(SeparateDatabase)} {executable} auth login";
+            ? $"$env:OPENCODE_CONFIG_DIR='{SeparateConfigDirectory}'; $env:OPENCODE_DB='{SeparateDatabase}'; {executable} auth login --standalone"
+            : $"OPENCODE_CONFIG_DIR={Word(SeparateConfigDirectory)} OPENCODE_DB={Word(SeparateDatabase)} {executable} auth login --standalone";
     }
 
     private IReadOnlyList<HarnessFolder> Folders(OpenCode2InstallMode mode, string program)
@@ -288,7 +290,7 @@ internal sealed partial class OpenCode2Install
                 new("Program", program),
                 new("Settings", SeparateConfigDirectory),
                 new("Sessions", SeparateDatabase),
-                new("Logs (shared with OpenCode 1)", logs),
+                new("Logs, shell output, snapshots (shared with OpenCode 1)", Path.Combine(DataHome, "opencode")),
             ]
             :
             [
