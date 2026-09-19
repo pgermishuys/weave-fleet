@@ -91,27 +91,59 @@ What Stage 1 learned:
 
 ## Stage 2 — tools, questions, permissions, history
 
-- [ ] Tool events `session.tool.input.started/ended`, `session.tool.called`, `session.tool.progress`,
-      `session.tool.success`/`error` → tool parts (content blocks → output, file content → attachments).
-- [ ] Client: labels and cards for V2's tool names in the client's own switch (`shell`, `subagent`, `edit`,
-      `read`, `glob`, `grep`, `webfetch`, `websearch`, `question`, `execute`), added next to the V1 cases.
-      No translating V2 names back into V1 names on the server.
-- [ ] Questions: `form.created` → Fleet question (fields → questions, options, `custom` → free text);
-      answer → `POST /form/{id}/reply {"answer":{key:value}}`; dismiss → cancel form; `form.replied`.
-      Waiting-for-you status from pending forms.
-- [ ] Permissions: sessions are created with an allow-all `permissions` ruleset, the way Fleet runs V1
-      headless. Any `permission.asked` that still arrives is answered `once` and logged.
-- [ ] History for reopening a session, the way OpenCode (v1) does it: `OpenCode2HarnessSession.GetMessagesAsync`
-      reads `GET /api/session/{id}/message` (newest first, cursor paging) and returns domain `HarnessMessage`s.
-      `OpenCodeSessionMessageProxy` already builds snapshots from any `IHarnessSession.GetMessagesAsync`; only
-      its three `HarnessType == "opencode"` gates (live read, live messages, partial fallback) need to let V2
-      through, as a capability flag on `HarnessCapabilities` (e.g. `HistoryLivesInHarness`), not a name list.
-      No V2 code goes into the proxy. Fallback to Fleet's stored messages when the server is down, marked partial.
-- [ ] Reconnect: V2 streams are live-only. On reconnect, re-read `/api/session/active` and each open
-      session's messages; durable events carry `aggregateID` + `seq`, so gaps can be detected.
+- [x] Tool events `session.tool.input.started`, `session.tool.called`, `session.tool.success`/`failed` → tool parts
+      (text content blocks → output, file content → file parts). `session.tool.input.ended`/`progress` map to nothing.
+- [x] Client: labels, icons and cards for V2's tool names in the client's own switches (`shell`, `subagent`, `edit`,
+      `read`, `glob`, `grep`, `webfetch`, `websearch`, `question`, `execute`; also `write`, `skill`), next to the V1
+      cases. No translating V2 names back into V1 names on the server.
+- [x] Questions: `form.created` → waiting for you; answer → `POST /form/{id}/reply {"answer":{key:value}}`;
+      dismiss → `DELETE /form/{id}`; `form.replied`/`form.cancelled` → busy again.
+- [x] Permissions: sessions are created with an allow-all `permissions` ruleset. Any `permission.asked` that still
+      arrives is answered `once` and logged, for Fleet's sessions and for sessions no Fleet session listens to.
+- [x] History for reopening a session: `OpenCode2HarnessSession.GetMessagesAsync` reads `GET /api/session/{id}/message`
+      and returns domain `HarnessMessage`s. `OpenCodeSessionMessageProxy`'s three `"opencode"` gates are now
+      `HarnessCapabilities.HistoryLivesInHarness` (OpenCode, OpenCode 2, and the E2E TestHarness that stands in for
+      OpenCode). No V2 code in the proxy.
+- [x] Reconnect: when the event stream comes back, the server reads `/api/session/active` once and each attached
+      session catches up (messages of a turn that ran, open questions, busy/idle) before newer events are delivered.
 
-Live check: shell tool with approval, a question answered from the UI, interrupt mid-tool, reopen.
-Size: 4–5 days.
+Built (branch `feat/opencode2-stage2`, stacked on Stage 1), checked live on a scratch Fleet with 2.0.8 + the scripted
+model: shell/read/failed-read cards, a question answered from the card (the session shows "Needs input" meanwhile),
+one dismissed, interrupt mid-tool, a subagent, forced permission asks (a Fleet session and an unattached one), page
+reload and Fleet restart (the conversation text is identical), the event stream dropped mid-reply for 20 s, the V2
+server killed mid-reply, and an OpenCode 1 session running a tool beside it.
+
+What Stage 2 learned:
+
+- Part ids: V2 numbers text and reasoning separately within a step (`ordinal` is a per-kind counter in V2's
+  source), and history lists an assistant message's content in stream order, so history derives
+  `{msg}-text-{n}` / `-reasoning-{n}` by counting per kind. Tool parts are `{msg}-tool-{callID}` (history has the call
+  id); a prompt's text is `{msg}-text-0`, the id Fleet shows its own prompt with. Step-finish parts can't match:
+  live they're indexed by the session-wide step counter the translator uses as the turn index, and history can't know
+  it. The client only sums their cost, so this doesn't show.
+- A V2 assistant message is one step; history gives each finished one a step-finish (tokens, cost, reason). An
+  interrupted step carries `error: {type: "aborted"}`, which history does not show as a failure (live doesn't either).
+- `GET /message` sends a `cursor.next` on the last page too; a page shorter than the limit is the last. It takes
+  `order` or `cursor`, not both.
+- `form.created` carries the session id in `data.form.sessionID`, not `data.sessionID`; the server's routing reads both.
+- The question tool's input (`questions[{question, header, options[{label, description}]}]`) and its completed
+  metadata (`answers: [["B"]]`) have OpenCode's (1.x) shapes, so the existing question card works unchanged. The form
+  reply sends an option's `value` (same as its label for the question tool) or the typed text.
+- Dismissing a question makes V2 fail the question tool ("The user dismissed this question") and interrupt the turn
+  (`reason: "shutdown"`). It doesn't continue like OpenCode (1.x) does after a rejected question.
+- The allow-all session ruleset beats the user's config, even a specific `{"bash": {"echo *": "ask"}}`. A subagent's
+  child session inherits it. So in practice no ask arrives; the answer-once path was checked live by removing a
+  session's rules (`PATCH /api/session/{id} {"permissions":[]}`) and with a V2 session Fleet doesn't know.
+- Waiting-for-you: the session's activity check reads open question forms too, so a session reopened while V2 waits on
+  a question shows "Needs input" (V2 keeps the form; Fleet hadn't seen it). Statuses go through the relay's raw
+  `session.status` handling, not the translator.
+- Fleet's scratch kit puts a TCP relay in front of V2 (`relay-shim.py`, `fleet.sh dropstream`) to drop the event
+  stream without stopping V2; `fleet.sh killv2` kills the server.
+- **Left for later stages:** a subagent's child session isn't shown (its tool card only; Stage 4), and a question or
+  form a child session asks isn't routed to Fleet, so it would wait until the turn is interrupted (Stage 4). Forms that
+  aren't questions (`metadata.kind` other than `question`) are ignored. Gaps aren't detected from `durable.seq`; Fleet
+  catches up on every reconnect instead, which is simpler and covers the same case. Tool `progress` metadata (a
+  subagent's child session id, a shell's id) isn't used yet.
 
 ## Stage 3 — Fleet's own tools in V2
 
