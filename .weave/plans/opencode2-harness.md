@@ -166,18 +166,66 @@ Size: 3–4 days.
 
 ## Stage 4 — catalog, agents/models, profiles, subagents, recap
 
-- [ ] Catalog (agents, models, commands, providers) from `/api/agent`, `/api/model`, `/api/command`,
+- [x] Catalog (agents, models, commands, providers) from `/api/agent`, `/api/model`, `/api/command`,
       `/api/provider`. V2 loads a directory lazily and returns `[]` until then: create a throwaway
       location load (e.g. `GET /api/location?location[directory]=…`) before listing. Verify this in the spike first.
-- [ ] Agent/model choice per session (`agent`, `model` on create; `/agent`, `/model` switch).
+- [x] Agent/model choice per session (`agent`, `model` on create; `/agent`, `/model` switch).
 - [ ] Profiles: one server per (owner, profile), profile content through `OPENCODE_CONFIG_CONTENT`.
-      Profile check starts a throwaway server with the content.
-- [ ] Subagents: `subagent` tool + child session (`parentID`) → Fleet delegation events; child events
+      Profile check starts a throwaway server with the content. **Not in Track B:** after Tracks A and B merge.
+- [x] Subagents: `subagent` tool + child session (`parentID`) → Fleet delegation events; child events
       routed to the parent's view.
-- [ ] Off the record (recap): `POST /api/session/{id}/generate`.
-- [ ] Commands: `POST /api/session/{id}/command`. Fork: `POST /fork` if the UI offers it.
+- [x] Off the record (recap): `POST /api/session/{id}/generate`.
+- [x] Commands: `POST /api/session/{id}/command`. Fork: not built (see below).
 
 Size: 4–5 days.
+
+Built as Track B (branch `feat/opencode2-agents`, everything but profiles), checked live on a scratch Fleet with 2.0.8 +
+the scripted model: the new-session composer lists V2's agents (the user's and the folder's own) and models, a session
+started on a non-default agent and model answers with them, switching both mid-session, a slash command, the
+welcome-back recap, a subagent (delegation, child activity, parent finishes), a subagent that asks a question
+(answered in the child, child and parent finish), reload and Fleet restart with subagents in the history, and an
+OpenCode 1 session beside it.
+
+What Stage 4 learned:
+
+- **Loading a folder is asynchronous.** `GET /api/location` returns before V2 has read the folder's config; lists read
+  in the next ~2 s leave out the user's and the folder's agents, models and commands (the spike's first "before/after"
+  looked fine only because the "before" reads had started the load). Neither `/api/debug/location` nor
+  `POST /api/location/reload` says when it's done. V2 does: it sends `provider.updated`, `model.updated`,
+  `agent.updated` and `command.updated` with `location.directory` once the folder is loaded. The server remembers
+  folders it has seen loaded (also by a session there); a catalog read of a new folder waits for those events, 15 s at
+  most, then lists what V2 has.
+- Catalog shapes: an agent's `id` is what a session switches to (`name` is a label; there's no description). Models
+  come from `/api/model` (`id` is the selectable one, `variants[].id` are Fleet's effort levels), grouped under
+  `/api/provider` entries that aren't `activation: disabled`. The default model is `/api/model/default`; the default
+  agent is the last `default_agent` in `/api/config`'s documents (global first, the folder's own last), else `build`,
+  else the first visible primary agent — V2's own rule. `/api/command` has names and descriptions.
+- **Agent and model live on the session, not the prompt**, and `prompt` takes neither. Fleet switches the session with
+  `POST /agent` / `/model` before a prompt or command when the choice differs from what the session has (read from the
+  session on resume, and from `session.agent.selected` / `session.model.selected`). V2 accepts an unknown agent or
+  variant with 204 and fails the next turn ("Agent not found"), so the choice has to come from the catalog. A model
+  selected without a variant reads back as variant `default`.
+- A folder's agents only exist where its config is: a session the composer puts in a **new worktree** gets the
+  worktree's config, so an agent defined in an uncommitted `opencode.json` is missing there and the turn fails (the
+  catalog reads the repository's folder, as for OpenCode). Same behaviour as OpenCode; noted, not changed.
+- Subagents: the parent's `subagent` tool call (`tool.called` input: `agent`, `description`; `tool.progress` and the
+  result's metadata: the child's `sessionID`) is Fleet's delegation, through the same `DelegationService` and
+  `SessionOrchestrator.EnsureDelegatedChildSessionAsync` OpenCode uses. The child is resumed on the owner's server like
+  any session. Updates are handled one at a time in arrival order (the #242 race). The child's `session.created`
+  (`parentID` = an attached or held session) makes the server **hold the child's events until Fleet attaches it**, then
+  deliver them in order (the #246 race); a held child's permission asks are still answered at once. So a child's
+  question reaches its Fleet session, which shows it and answers the form on the child.
+- `generate` answers from the session's conversation with its agent and model, adds nothing to the history and emits no
+  execution events. It answers an empty session too.
+- `command` expands the template into a user message (Fleet shows `/hello the world` live; the reloaded history shows
+  V2's expanded text, as OpenCode's does). An unknown command is 404 `CommandNotFoundError`.
+- **Fork:** Fleet's Fork starts a new session in the same folder for every harness and never calls the harness's fork,
+  so there's nothing to build; `SupportsForking` stays off.
+- **Left for later:** a parent whose child waits on a question still reads "Working", not "Needs you": the shared
+  `SessionActivityTracker.GetEffectiveActivityStatus` lets the parent's own busy win over a waiting child (the child
+  itself shows "Needs you"). That's shared code, not the harness. A folder V2 evicts after it was loaded isn't noticed,
+  so the next catalog read of it doesn't wait. A child created while the event stream was down isn't linked until its
+  parent's next subagent update. Profiles.
 
 ## Stage 5 — setup, install modes, updates
 

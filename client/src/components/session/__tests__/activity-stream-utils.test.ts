@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AccumulatedToolPart } from "@/lib/client-types";
-import { toToolCardItem } from "@/components/session/activity-stream-tool-card";
+import { isSubagentTool, toToolCardItem } from "@/components/session/activity-stream-tool-card";
 
 function create_tool_part(state: unknown, tool = "bash"): AccumulatedToolPart {
   return {
@@ -125,5 +125,13 @@ describe("toToolCardItem", () => {
       initiallyCollapsed: true,
     });
     expect(item.diffLines).toEqual([]);
+  });
+});
+
+describe("isSubagentTool", () => {
+  it("links OpenCode's task and OpenCode 2's subagent calls to their child session", () => {
+    expect(isSubagentTool("task")).toBe(true);
+    expect(isSubagentTool("subagent")).toBe(true);
+    expect(isSubagentTool("shell")).toBe(false);
   });
 });

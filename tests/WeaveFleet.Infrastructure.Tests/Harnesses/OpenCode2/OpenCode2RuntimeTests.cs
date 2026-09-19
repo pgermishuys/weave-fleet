@@ -268,11 +268,12 @@ public sealed class OpenCode2RuntimeTests
     private static OpenCode2HarnessSession NewSession(OpenCode2Server server, Func<CancellationToken, Task<OpenCode2Server>> servers)
         => new(
             "opencode2-test",
-            Session,
+            new OpenCode2SessionInfo { Id = Session },
             new OpenCode2SessionContext("fleet-session-1", "local-user", "/work", null, null),
             server,
             servers,
             analytics: null,
+            delegations: null,
             NullLogger.Instance);
 
     private static HttpResponseMessage Json(string json) => new(HttpStatusCode.OK)

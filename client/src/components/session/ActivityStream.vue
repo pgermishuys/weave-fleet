@@ -12,7 +12,7 @@ import { modelDisplayName } from "@/lib/agent-model-choice";
 import { isStreamWorking } from "@/lib/domain-event-reducer";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { clearSentPrompts, reconcileSentPrompts, useSendPrompt, useSentPrompts } from "@/composables/use-send-prompt";
-import { toToolCardItem } from "@/components/session/activity-stream-tool-card";
+import { isSubagentTool, toToolCardItem } from "@/components/session/activity-stream-tool-card";
 import type { ToolCardItem } from "@/components/session/activity-stream-tool-card";
 import type { CommandEventName } from "@/lib/command-events";
 import type { AccumulatedMessage, AccumulatedPart, AccumulatedToolPart, AccumulatedFilePart, AccumulatedReasoningPart } from "@/lib/client-types";
@@ -607,7 +607,7 @@ watch(
 
 function getDelegationLinks(message: AccumulatedMessage): DelegationLink[] {
   const taskToolParts = message.parts.filter(
-    (part): part is AccumulatedToolPart => part.type === "tool" && part.tool === "task",
+    (part): part is AccumulatedToolPart => part.type === "tool" && isSubagentTool(part.tool),
   );
 
   return taskToolParts.flatMap((part) => {

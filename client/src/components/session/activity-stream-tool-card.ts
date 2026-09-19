@@ -23,6 +23,14 @@ export interface ToolCardItem {
   canvasId?: string;
 }
 
+/** The tools that run an agent in a child session: OpenCode's `task`, OpenCode 2's `subagent`. */
+const SUBAGENT_TOOLS = new Set(["task", "subagent"]);
+
+/** Whether a tool call ran a subagent, so its card links to the child session. */
+export function isSubagentTool(toolName: string): boolean {
+  return SUBAGENT_TOOLS.has(toolName);
+}
+
 /** Fleet's browser tools; their card reads "title · address" once the page answered, or "title · size" for a shot. */
 const BROWSER_TOOLS = new Set(["fleet_app_start", "fleet_browser_open", "fleet_browser_screenshot"]);
 

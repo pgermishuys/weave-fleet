@@ -32,6 +32,7 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
     private readonly Func<CancellationToken, Task<OpenCode2Server>> _servers;
     private readonly OpenCode2Mapper _mapper;
     private readonly IAnalyticsCollector? _analytics;
+    private readonly OpenCode2Delegations? _delegations;
     private readonly ILogger _logger;
     private readonly SemaphoreSlim _attachLock = new(1, 1);
     private readonly Channel<HarnessEvent> _events = Channel.CreateBounded<HarnessEvent>(new BoundedChannelOptions(1000)
@@ -46,24 +47,34 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
 
     private OpenCode2Server? _server;
     private volatile HarnessSessionStatus _status = HarnessSessionStatus.Idle;
+
+    // The agent and model the V2 session runs with now, so a prompt switches only what it changes.
+    private volatile string? _agent;
+    private volatile OpenCode2ModelRef? _model;
     private bool _disposed;
 
+    /// <param name="info">The V2 session as the server last described it (its agent and model).</param>
     /// <param name="servers">The owner's running server, started when there's none.</param>
+    /// <param name="delegations">Records the session's subagent calls; none in tests that don't need them.</param>
     internal OpenCode2HarnessSession(
         string instanceId,
-        string harnessSessionId,
+        OpenCode2SessionInfo info,
         OpenCode2SessionContext context,
         OpenCode2Server server,
         Func<CancellationToken, Task<OpenCode2Server>> servers,
         IAnalyticsCollector? analytics,
+        OpenCode2Delegations? delegations,
         ILogger logger)
     {
         InstanceId = instanceId;
-        ResumeToken = harnessSessionId;
+        ResumeToken = info.Id ?? throw new ArgumentException("The V2 session has no id.", nameof(info));
         _context = context;
         _servers = servers;
         _analytics = analytics;
+        _delegations = delegations;
         _logger = logger;
+        _agent = info.Agent;
+        _model = info.Model;
         _mapper = new OpenCode2Mapper(context.FleetSessionId);
         Attach(server);
     }
@@ -87,6 +98,9 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
 
         var server = await AttachedServerAsync(ct).ConfigureAwait(false);
         LogPrompt(_logger, InstanceId);
+
+        // V2 keeps the agent and model on the session, not the prompt.
+        await ApplyChoicesAsync(server, options?.Agent, options?.ProviderId, options?.ModelId, options?.Effort, ct).ConfigureAwait(false);
 
         // The user message keeps the id Fleet showed it with (V2 takes ids of the same msg_ form).
         // The status follows V2's execution events: a short turn can be over before this request returns.
@@ -206,11 +220,24 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
             hasMore ? page.Cursor!.Next : null);
     }
 
-    public Task<string?> AskOffTheRecordAsync(string prompt, CancellationToken ct)
-        => Task.FromResult<string?>(null);
+    /// <summary>V2's <c>generate</c>: an answer from the session's conversation, by its agent and model, left out of its history.</summary>
+    public async Task<string?> AskOffTheRecordAsync(string prompt, CancellationToken ct)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var server = await AttachedServerAsync(ct).ConfigureAwait(false);
+        return await server.Client.GenerateAsync(ResumeToken, prompt, ct).ConfigureAwait(false);
+    }
 
-    public Task SendCommandAsync(CommandOptions options, CancellationToken ct)
-        => throw new NotSupportedException("OpenCode 2 sessions in Fleet don't run commands yet.");
+    /// <summary>Runs one of V2's commands as the next turn; V2 expands its template into the user's message.</summary>
+    public async Task SendCommandAsync(CommandOptions options, CancellationToken ct)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var server = await AttachedServerAsync(ct).ConfigureAwait(false);
+        LogCommand(_logger, InstanceId, options.Command);
+
+        await ApplyChoicesAsync(server, options.Agent, options.ProviderId, options.ModelId, effort: null, ct).ConfigureAwait(false);
+        await server.Client.RunCommandAsync(ResumeToken, options.Command, options.Arguments ?? string.Empty, ct).ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Answers the form a question tool call asked with. <paramref name="requestId"/> is the tool call's id (what
@@ -240,14 +267,14 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         Forget(form.Id!);
     }
 
-    public Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct)
-        => Task.FromResult<IReadOnlyList<AgentInfo>>([]);
+    public async Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct)
+        => await OpenCode2Catalog.ReadAgentsAsync(await AttachedServerAsync(ct).ConfigureAwait(false), _context.WorkingDirectory, ct).ConfigureAwait(false);
 
-    public Task<IReadOnlyList<CommandInfo>> GetCommandsAsync(CancellationToken ct)
-        => Task.FromResult<IReadOnlyList<CommandInfo>>([]);
+    public async Task<IReadOnlyList<CommandInfo>> GetCommandsAsync(CancellationToken ct)
+        => await OpenCode2Catalog.ReadCommandsAsync(await AttachedServerAsync(ct).ConfigureAwait(false), _context.WorkingDirectory, ct).ConfigureAwait(false);
 
-    public Task<IReadOnlyList<ProviderInfo>> GetProvidersAsync(CancellationToken ct)
-        => Task.FromResult<IReadOnlyList<ProviderInfo>>([]);
+    public async Task<IReadOnlyList<ProviderInfo>> GetProvidersAsync(CancellationToken ct)
+        => await OpenCode2Catalog.ReadProvidersAsync(await AttachedServerAsync(ct).ConfigureAwait(false), _context.WorkingDirectory, ct).ConfigureAwait(false);
 
     /// <inheritdoc />
     /// <remarks>Called on the server's event pump, one event at a time.</remarks>
@@ -259,6 +286,10 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         {
             _analytics.AcceptTokenEvent(usage);
         }
+
+        // Read before mapping too: the mapper forgets a tool call once it ends.
+        if (_delegations is not null && _mapper.TryReadDelegation(evt) is { } delegation)
+            _delegations.Queue(delegation);
 
         switch (evt.Type)
         {
@@ -277,6 +308,13 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
                 break;
             case "permission.asked":
                 AnswerPermission(evt.Data);
+                break;
+            // Switched by Fleet, or by anyone else using the session: the next prompt compares with this.
+            case "session.agent.selected" when evt.Data.TryGetProperty("agent", out var agent) && agent.ValueKind == JsonValueKind.String:
+                _agent = agent.GetString();
+                break;
+            case "session.model.selected" when evt.Data.TryGetProperty("model", out var model) && model.ValueKind == JsonValueKind.Object:
+                _model = model.Deserialize(OpenCode2JsonContext.Default.OpenCode2ModelRef);
                 break;
         }
 
@@ -396,6 +434,52 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         _server = server;
     }
 
+    /// <summary>
+    /// Switches the V2 session to the agent and model a prompt names, where they differ from what it has. Fleet's effort
+    /// is the model's variant; a prompt that names an effort but no model changes the variant of the model it has.
+    /// </summary>
+    private async Task ApplyChoicesAsync(
+        OpenCode2Server server,
+        string? agent,
+        string? providerId,
+        string? modelId,
+        string? effort,
+        CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(agent) && agent != _agent)
+        {
+            await server.Client.SwitchAgentAsync(ResumeToken, agent, ct).ConfigureAwait(false);
+            _agent = agent;
+        }
+
+        if (ChosenModel(_model, providerId, modelId, effort) is { } model && !SameModel(model, _model))
+        {
+            await server.Client.SwitchModelAsync(ResumeToken, model, ct).ConfigureAwait(false);
+            _model = model;
+        }
+    }
+
+    /// <summary>The model a prompt asks for, or <see langword="null"/> when it leaves the session's as it is.</summary>
+    internal static OpenCode2ModelRef? ChosenModel(OpenCode2ModelRef? current, string? providerId, string? modelId, string? effort)
+    {
+        var variant = string.IsNullOrWhiteSpace(effort) ? null : effort;
+        if (!string.IsNullOrWhiteSpace(providerId) && !string.IsNullOrWhiteSpace(modelId))
+            return new OpenCode2ModelRef { ProviderId = providerId, Id = modelId, Variant = variant };
+
+        return variant is not null && current is { Id: not null, ProviderId: not null }
+            ? current with { Variant = variant }
+            : null;
+    }
+
+    /// <summary>Same model and variant; V2 reports a model selected without one as variant <c>default</c>.</summary>
+    internal static bool SameModel(OpenCode2ModelRef model, OpenCode2ModelRef? current)
+        => current is not null
+            && model.ProviderId == current.ProviderId
+            && model.Id == current.Id
+            && (model.Variant ?? DefaultVariant) == (current.Variant ?? DefaultVariant);
+
+    private const string DefaultVariant = "default";
+
     private void RememberQuestion(OpenCode2Form form)
     {
         if (form is { IsQuestion: true, Id: not null, ToolCallId: { } callId })
@@ -496,6 +580,9 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Sending a prompt to OpenCode 2 session {InstanceId}")]
     private static partial void LogPrompt(ILogger logger, string instanceId);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Running command {Command} in OpenCode 2 session {InstanceId}")]
+    private static partial void LogCommand(ILogger logger, string instanceId, string command);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Interrupting OpenCode 2 session {InstanceId}")]
     private static partial void LogAbort(ILogger logger, string instanceId);
