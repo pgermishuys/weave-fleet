@@ -16,9 +16,9 @@ internal static class SessionPropagation
     /// After a child session's activity status changes, propagates the derived effective
     /// activity status to its registered parent session (if any). Broadcasts on both the
     /// global <c>sessions</c> topic (for list updates) and the per-session topic (for the
-    /// detail view).
+    /// detail view). Returns the parent's id, or <see langword="null"/> when nothing was propagated.
     /// </summary>
-    internal static async Task PropagateToParentAsync(
+    internal static async Task<string?> PropagateToParentAsync(
         string childSessionId,
         string? userId,
         SessionActivityTracker tracker,
@@ -28,11 +28,11 @@ internal static class SessionPropagation
     {
         var parentSessionId = tracker.GetParentSessionId(childSessionId);
         if (parentSessionId is null)
-            return;
+            return null;
 
         var parentActivityStatus = tracker.GetEffectiveActivityStatus(parentSessionId);
         if (parentActivityStatus is null)
-            return;
+            return null;
 
         var payload = await BuildActivityStatusPayloadAsync(
             parentSessionId,
@@ -53,6 +53,8 @@ internal static class SessionPropagation
             payload,
             userId,
             ct).ConfigureAwait(false);
+
+        return parentSessionId;
     }
 
     private static async Task<JsonElement> BuildActivityStatusPayloadAsync(

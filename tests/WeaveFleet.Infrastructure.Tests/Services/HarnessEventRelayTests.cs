@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
@@ -338,6 +339,88 @@ public sealed class HarnessEventRelayTests
 
         await cts.CancelAsync();
         await relay.StopAsync(CancellationToken.None);
+    }
+
+    // A parent whose subagent asks the user something is still busy on its own side (it waits on the subagent's tool
+    // call). The list shows it waiting on you, and you're told once, about the parent, not the subagent.
+    [Fact]
+    public async Task A_busy_parent_shows_its_subagents_question_and_is_notified_once()
+    {
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker) = BuildDependencies();
+        var tracker = new InstanceTracker();
+        var publisher = new FakeEventPublisher();
+        var notifier = new SessionNotifier(
+            new SessionFocusTracker(),
+            broadcaster,
+            new NotificationsOn(),
+            scopeFactory,
+            NullLogger<SessionNotifier>.Instance);
+        var relay = new HarnessEventRelay(
+            tracker, broadcaster, publisher, activityTracker, scopeFactory, NullLogger<HarnessEventRelay>.Instance, notifier: notifier);
+
+        sessionRepo.Seed(
+            new Session { Id = "parent", InstanceId = "parent-instance", UserId = "u", Title = "Parent" },
+            new Session { Id = "child", InstanceId = "child-instance", UserId = "u", ParentSessionId = "parent" });
+        activityTracker.RegisterChild("child", "parent");
+
+        using var cts = new CancellationTokenSource();
+        await relay.StartAsync(cts.Token);
+        await Task.Delay(50);
+        var parent = new FakeHarnessSession("parent-instance");
+        var child = new FakeHarnessSession("child-instance");
+        tracker.Register("parent-instance", parent);
+        tracker.Register("child-instance", child);
+
+        await StatusAsync(parent, "parent", ActivityStatuses.Busy);
+        await StatusAsync(child, "child", ActivityStatuses.Busy);
+        await StatusAsync(child, "child", ActivityStatuses.WaitingInput);
+        ShownOnList("parent").ShouldBe(ActivityStatuses.WaitingInput);
+
+        // The parent's own busy doesn't hide the question.
+        await StatusAsync(parent, "parent", ActivityStatuses.Busy);
+        ShownOnList("parent").ShouldBe(ActivityStatuses.WaitingInput);
+
+        await StatusAsync(child, "child", ActivityStatuses.Busy);
+        ShownOnList("parent").ShouldBe(ActivityStatuses.Busy);
+        await StatusAsync(child, "child", ActivityStatuses.Idle);
+        await StatusAsync(parent, "parent", ActivityStatuses.Idle);
+
+        for (int i = 0; i < 50 && Notifications().Count < 2; i++) await Task.Delay(20);
+        await Task.Delay(100);
+        Notifications().ShouldBe([("parent", SessionNotificationReasons.NeedsYou), ("parent", SessionNotificationReasons.Finished)]);
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+
+        async Task StatusAsync(FakeHarnessSession instance, string sessionId, string status)
+        {
+            var seen = ListUpdates(sessionId).Count;
+            instance.Emit(new HarnessEvent
+            {
+                Type = EventTypes.SessionStatus,
+                SessionId = "oc-" + sessionId,
+                Timestamp = DateTimeOffset.UtcNow,
+                Payload = JsonSerializer.SerializeToElement(new { status = new { type = status } }),
+            });
+            for (int i = 0; i < 100 && ListUpdates(sessionId).Count == seen; i++) await Task.Delay(10);
+        }
+
+        List<string> ListUpdates(string sessionId) => broadcaster.Broadcasts
+            .Where(b => b.Topic == "sessions" && b.Type == "activity_status" && b.Payload.GetProperty("sessionId").GetString() == sessionId)
+            .Select(b => b.Payload.GetProperty("activityStatus").GetString()!)
+            .ToList();
+
+        string ShownOnList(string sessionId) => ListUpdates(sessionId)[^1];
+
+        List<(string, string)> Notifications() => broadcaster.Broadcasts
+            .Where(b => b.Type == SessionNotifier.EventType)
+            .Select(b => (b.Payload.GetProperty("sessionId").GetString()!, b.Payload.GetProperty("reason").GetString()!))
+            .ToList();
+    }
+
+    private sealed class NotificationsOn : INotificationPreference
+    {
+        public Task<bool> IsEnabledAsync(string userId, CancellationToken ct) => Task.FromResult(true);
     }
 
     // A pump that throws used to leave its session deaf until the session was woken again: no live

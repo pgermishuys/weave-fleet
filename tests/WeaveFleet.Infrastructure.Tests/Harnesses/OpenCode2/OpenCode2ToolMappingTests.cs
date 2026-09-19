@@ -140,6 +140,60 @@ public sealed class OpenCode2ToolMappingTests
         file.Filename.ShouldBe("shot.png");
     }
 
+    [Theory]
+    // Recorded from 2.0.8: V2's edit and write both name their file in input.path, and send no file event of their own.
+    [InlineData("edit", """{"path":"/work/proj/note.txt","oldString":"hello","newString":"edited"}""", "/work/proj/note.txt")]
+    [InlineData("write", """{"path":"/work/proj/note.txt","content":"written\n"}""", "/work/proj/note.txt")]
+    [InlineData("write", """{"path":"src/new.ts","content":"x"}""", "/work/proj/src/new.ts")]
+    public void A_file_the_agent_wrote_is_reported_as_written_and_changed(string tool, string input, string expected)
+    {
+        var mapper = new OpenCode2Mapper(FleetSession, "/elsewhere");
+        mapper.Map(Event("session.tool.input.started", $$"""{"sessionID":"ses_1","assistantMessageID":"msg_1","id":"call_1","name":"{{tool}}"}"""));
+        mapper.Map(Event("session.tool.called", $$"""{"sessionID":"ses_1","assistantMessageID":"msg_1","id":"call_1","input":{{input}}}"""));
+
+        var events = mapper.Map(Event("session.tool.success", """
+            {"sessionID":"ses_1","assistantMessageID":"msg_1","id":"call_1","content":[{"type":"text","text":"Done"}],"metadata":{"truncated":false}}
+            """, directory: "/work/proj"));
+
+        var written = events.Select(Translate).OfType<FilesWritten>().ShouldHaveSingleItem();
+        written.Payload.SessionId.ShouldBe(FleetSession);
+        written.Payload.MessageId.ShouldBe("msg_1");
+        written.Payload.Paths.ShouldBe([Path.GetFullPath(expected)]);
+
+        // What open files and the file list reload on.
+        var changed = events.Select(Translate).OfType<FilesChanged>().ShouldHaveSingleItem();
+        changed.Payload.SessionId.ShouldBe(FleetSession);
+        var file = changed.Payload.Files.ShouldHaveSingleItem();
+        file.Path.ShouldBe(Path.GetFullPath(expected));
+        file.ChangeType.ShouldBe("change");
+    }
+
+    [Fact]
+    public void A_relative_path_is_taken_from_the_session_folder_when_the_event_names_none()
+    {
+        var mapper = new OpenCode2Mapper(FleetSession, "/work/proj");
+        mapper.Map(Event("session.tool.input.started", """{"sessionID":"ses_1","assistantMessageID":"msg_1","id":"call_1","name":"edit"}"""));
+        mapper.Map(Event("session.tool.called", """{"sessionID":"ses_1","assistantMessageID":"msg_1","id":"call_1","input":{"path":"note.txt","oldString":"a","newString":"b"}}"""));
+
+        var events = mapper.Map(Event("session.tool.success", """{"sessionID":"ses_1","assistantMessageID":"msg_1","id":"call_1","content":[]}"""));
+
+        events.Select(Translate).OfType<FilesWritten>().ShouldHaveSingleItem().Payload.Paths.ShouldBe([Path.GetFullPath("/work/proj/note.txt")]);
+    }
+
+    [Theory]
+    [InlineData("edit", "session.tool.failed")]
+    [InlineData("read", "session.tool.success")]
+    public void Only_a_file_tool_that_finished_reports_a_file(string tool, string ended)
+    {
+        var mapper = new OpenCode2Mapper(FleetSession, "/work/proj");
+        mapper.Map(Event("session.tool.input.started", $$"""{"sessionID":"ses_1","assistantMessageID":"msg_1","id":"call_1","name":"{{tool}}"}"""));
+        mapper.Map(Event("session.tool.called", """{"sessionID":"ses_1","assistantMessageID":"msg_1","id":"call_1","input":{"path":"note.txt","oldString":"a","newString":"b"}}"""));
+
+        var events = mapper.Map(Event(ended, """{"sessionID":"ses_1","assistantMessageID":"msg_1","id":"call_1","content":[],"error":{"type":"x","message":"no"}}"""));
+
+        events.ShouldNotContain(e => e.Type == EventTypes.FilesWritten || e.Type == EventTypes.FileWatcherUpdated);
+    }
+
     [Fact]
     public void A_permission_ask_maps_to_nothing_the_session_answers_it()
     {
@@ -177,11 +231,12 @@ public sealed class OpenCode2ToolMappingTests
     private static bool IsStatus(HarnessEvent evt, string status)
         => evt.Type == EventTypes.SessionStatus && evt.Payload!.Value.GetProperty("status").GetProperty("type").GetString() == status;
 
-    private static OpenCode2Event Event(string type, string data) => new()
+    private static OpenCode2Event Event(string type, string data, string? directory = null) => new()
     {
         Id = "evt_1",
         Created = 1_789_763_753_000,
         Type = type,
         Data = JsonDocument.Parse(data).RootElement.Clone(),
+        Location = directory is null ? null : new OpenCode2EventLocation { Directory = directory },
     };
 }

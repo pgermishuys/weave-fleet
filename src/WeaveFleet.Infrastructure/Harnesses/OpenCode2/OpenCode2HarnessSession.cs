@@ -75,7 +75,7 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         _logger = logger;
         _agent = info.Agent;
         _model = info.Model;
-        _mapper = new OpenCode2Mapper(context.FleetSessionId);
+        _mapper = new OpenCode2Mapper(context.FleetSessionId, context.WorkingDirectory);
         Attach(server);
     }
 
@@ -95,9 +95,6 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
     public async Task SendPromptAsync(string text, PromptOptions? options, CancellationToken ct)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (options?.Attachments is { Count: > 0 })
-            throw new NotSupportedException("OpenCode 2 sessions in Fleet don't take attachments yet.");
-
         var server = await AttachedServerAsync(ct).ConfigureAwait(false);
         LogPrompt(_logger, InstanceId);
 
@@ -106,8 +103,14 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
 
         // The user message keeps the id Fleet showed it with (V2 takes ids of the same msg_ form).
         // The status follows V2's execution events: a short turn can be over before this request returns.
-        await server.Client.PromptAsync(ResumeToken, text, options?.MessageId, ct).ConfigureAwait(false);
+        await server.Client.PromptAsync(ResumeToken, text, options?.MessageId, PromptFiles(options?.Attachments), ct).ConfigureAwait(false);
     }
+
+    /// <summary>A prompt's attachments (pasted images) as V2's prompt files: inline, as <c>data:</c> URIs.</summary>
+    internal static IReadOnlyList<OpenCode2PromptFile>? PromptFiles(IReadOnlyList<HarnessAttachment>? attachments)
+        => attachments is { Count: > 0 }
+            ? attachments.Select(a => new OpenCode2PromptFile { Uri = $"data:{a.Mime};base64,{a.Data}", Name = a.Filename }).ToList()
+            : null;
 
     public async Task AbortAsync(CancellationToken ct)
     {

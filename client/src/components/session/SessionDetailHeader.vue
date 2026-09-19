@@ -128,6 +128,10 @@ const sessionStatusIndicator = computed(() => {
       if (effectiveActivityStatus.value === "retry") {
         return "retry";
       }
+      // Stopped on a question, its own or a sub-agent's.
+      if (effectiveActivityStatus.value === "waiting_input") {
+        return "waiting";
+      }
       return effectiveActivityStatus.value === "busy" || effectiveActivityStatus.value === "delegating"
         ? "working"
         : "idle";
@@ -141,6 +145,8 @@ const sessionStatusLabel = computed(() => {
       return "Disconnected";
     case "retry":
       return props.retryAttempt ? `Retrying (attempt ${props.retryAttempt})…` : "Retrying…";
+    case "waiting":
+      return "Needs input";
     default:
       return "Idle";
   }
@@ -151,6 +157,9 @@ const sessionStatusLabel = computed(() => {
 const glyphStatus = computed(() => {
   if (sessionStatusIndicator.value === "working" || sessionStatusIndicator.value === "retry") {
     return "active";
+  }
+  if (sessionStatusIndicator.value === "waiting") {
+    return "waiting_input";
   }
   switch (effectiveLifecycleStatus.value) {
     case "disconnected":
