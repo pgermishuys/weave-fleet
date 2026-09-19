@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+using System.Text.Json;
 using FakeLlmServer;
 
 namespace WeaveFleet.ConformanceTests.Abstractions;
@@ -37,12 +39,39 @@ public abstract class HarnessConformanceBase : IAsyncLifetime
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    /// <summary>Enqueues a simple text response and sends a prompt, waiting for idle.</summary>
+    /// <summary>
+    /// Why this harness can't meet one of the shared tests, by test method name. A listed test is skipped with the
+    /// reason for this harness only; every other harness still runs it.
+    /// </summary>
+    protected virtual IReadOnlyDictionary<string, string> NotApplicable { get; } = new Dictionary<string, string>();
+
+    /// <summary>Skips the calling test when <see cref="NotApplicable"/> lists it.</summary>
+    protected void SkipWhenNotApplicable([CallerMemberName] string test = "")
+    {
+        if (NotApplicable.TryGetValue(test, out var reason))
+            throw new InvalidOperationException(Xunit.v3.DynamicSkipToken.Value + reason);
+    }
+
+    /// <summary>Enqueues a simple text response, sends a prompt and waits until the turn is over.</summary>
     protected async Task SendPromptAndWaitAsync(string prompt, string responseText = "Hello!", CancellationToken ct = default)
     {
         _fixture.EnqueueResponse(new ScriptedLlmResponse { Text = responseText });
+
+        // Subscribed before the prompt: a harness may answer before SendPromptAsync returns.
+        var idle = CollectEventsAsync(_session, evts => evts.Any(e => e.Type == EventTypes.SessionIdle), TimeSpan.FromSeconds(30));
         await _session.SendPromptAsync(prompt, null, ct);
+        (await idle).ShouldContain(e => e.Type == EventTypes.SessionIdle, "The turn didn't end within 30 seconds.");
     }
+
+    /// <summary>A harness says a turn started with <c>session.status</c> <c>busy</c>.</summary>
+    protected static bool IsBusy(HarnessEvent evt)
+        => evt.Type == EventTypes.SessionStatus
+            && evt.Payload is { ValueKind: JsonValueKind.Object } payload
+            && payload.TryGetProperty("status", out var status)
+            && status.ValueKind == JsonValueKind.Object
+            && status.TryGetProperty("type", out var type)
+            && type.ValueKind == JsonValueKind.String
+            && type.GetString() == ActivityStatuses.Busy;
 
     /// <summary>Collects events from SubscribeAsync until the predicate is satisfied or timeout.</summary>
     protected static Task<List<HarnessEvent>> CollectEventsAsync(
@@ -91,14 +120,14 @@ public abstract class HarnessConformanceBase : IAsyncLifetime
         {
             await foreach (var evt in _session.SubscribeAsync(cts.Token))
             {
-                if (evt.Type is "session.busy" or "session.idle")
+                if (IsBusy(evt) || evt.Type == EventTypes.SessionIdle)
                 {
-                    statusHistory.Add(evt.Type == "session.busy"
+                    statusHistory.Add(IsBusy(evt)
                         ? HarnessSessionStatus.Running
                         : HarnessSessionStatus.Idle);
                 }
 
-                if (evt.Type == "session.idle" && statusHistory.Count >= 2)
+                if (evt.Type == EventTypes.SessionIdle && statusHistory.Count >= 2)
                     break;
             }
         }, cts.Token);
@@ -106,8 +135,9 @@ public abstract class HarnessConformanceBase : IAsyncLifetime
         // Allow the background subscription to start iterating before sending the prompt.
         await Task.Delay(200);
 
-        await SendPromptAndWaitAsync("Hello");
-        cts.Cancel();
+        // The subscription above waits for the turn to end: a second one would compete with it for the events.
+        _fixture.EnqueueResponse(new ScriptedLlmResponse { Text = "Hello!" });
+        await _session.SendPromptAsync("Hello", null, CancellationToken.None);
 
         try { await subscribeTask; } catch (OperationCanceledException) { }
 
@@ -128,6 +158,7 @@ public abstract class HarnessConformanceBase : IAsyncLifetime
     [Fact]
     public async Task ResumeToken_IsPopulated_AfterFirstPrompt()
     {
+        SkipWhenNotApplicable();
         _session.ResumeToken.ShouldBeNull();
 
         await SendPromptAndWaitAsync("Hello");
@@ -212,13 +243,13 @@ public abstract class HarnessConformanceBase : IAsyncLifetime
 
         var eventsTask = CollectEventsAsync(
             _session,
-            evts => evts.Any(e => e.Type == "session.busy"),
+            evts => evts.Any(IsBusy),
             TimeSpan.FromSeconds(10));
 
         await _session.SendPromptAsync("Hello", null, CancellationToken.None);
         var events = await eventsTask;
 
-        events.ShouldContain(e => e.Type == "session.busy");
+        events.ShouldContain(e => IsBusy(e));
     }
 
     [Fact]
@@ -240,6 +271,7 @@ public abstract class HarnessConformanceBase : IAsyncLifetime
     [Fact]
     public async Task SubscribeAsync_EmitsMessageCreated_ForUserMessage()
     {
+        SkipWhenNotApplicable();
         _fixture.EnqueueResponse(new ScriptedLlmResponse { Text = "Hi!" });
 
         var eventsTask = CollectEventsAsync(
@@ -306,6 +338,7 @@ public abstract class HarnessConformanceBase : IAsyncLifetime
     [Fact]
     public async Task SubscribeAsync_EmitsSessionCreated_OnFirstPrompt()
     {
+        SkipWhenNotApplicable();
         _fixture.EnqueueResponse(new ScriptedLlmResponse { Text = "Hi!" });
 
         var eventsTask = CollectEventsAsync(
@@ -322,6 +355,7 @@ public abstract class HarnessConformanceBase : IAsyncLifetime
     [Fact]
     public async Task SubscribeAsync_EmitsSessionCreatedAndBusy_OnFirstPrompt()
     {
+        SkipWhenNotApplicable();
         _fixture.EnqueueResponse(new ScriptedLlmResponse { Text = "Hi!" });
 
         var eventsTask = CollectEventsAsync(
@@ -335,6 +369,6 @@ public abstract class HarnessConformanceBase : IAsyncLifetime
         // session.updated is intentionally NOT emitted on first prompt to avoid
         // overwriting the user-chosen Fleet session title via the persistence projection.
         events.ShouldContain(e => e.Type == "session.created");
-        events.ShouldContain(e => e.Type == "session.busy");
+        events.ShouldContain(e => IsBusy(e));
     }
 }

@@ -90,6 +90,12 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     /// <inheritdoc />
     public string HarnessType => OpenCode2HarnessSession.Type;
 
+    /// <summary>
+    /// Variables every server starts with, over the install's (config folder, database) and under Fleet's own. Empty in
+    /// Fleet; the live tests give V2 a scratch HOME, config and database this way, so it never touches the user's data.
+    /// </summary>
+    internal IReadOnlyDictionary<string, string> ServerEnvironment { get; set; } = new Dictionary<string, string>();
+
     /// <inheritdoc />
     /// <remarks>Also decides the install mode the first time a working V2 turns up, and remembers it.</remarks>
     public async Task<HarnessAvailability> CheckAvailabilityAsync(CancellationToken ct)
@@ -390,6 +396,8 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         {
             ["FLEET_BRIDGE_TOKEN"] = bridgeToken,
         };
+        foreach (var (name, value) in ServerEnvironment)
+            environment[name] = value;
         if (setup.FleetUrl is { } fleetUrl)
             environment["FLEET_URL"] = $"{fleetUrl.TrimEnd('/')}{SessionMessages.AgentPathPrefix}/{bridgeToken}";
         if (setup.ConfigContent is { } configContent)

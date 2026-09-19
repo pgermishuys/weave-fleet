@@ -25,7 +25,7 @@ internal static class OpenAiEndpoints
 
             var response = queue.ToolLessResponse is { } toolLess && !OffersTools(body)
                 ? toolLess
-                : queue.TryDequeue(body, out var scripted) ? scripted : null;
+                : queue.TryDequeue(body, out var scripted) ? scripted : queue.Fallback?.Invoke(body);
             if (response is null)
             {
                 ctx.Response.StatusCode = 500;

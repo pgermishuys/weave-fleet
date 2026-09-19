@@ -27,6 +27,10 @@ jobs:
     name: .NET Tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      # The live tests' pinned harness versions (see the install steps). Bump here and check the live tests pass.
+      OPENCODE_VERSION: '1.18.31'
+      OPENCODE2_VERSION: '2.0.9'
 
     steps:
       - name: Checkout
@@ -47,12 +51,30 @@ jobs:
       # The [OpenCodeFact] live tests run a real opencode against a scripted model. Pinned, so a new
       # OpenCode release can't break CI unannounced: bump the version here and check the live tests pass.
       - name: Install OpenCode
-        env:
-          OPENCODE_VERSION: '1.18.31'
         run: |
           curl -fsSL https://opencode.ai/install | bash -s -- --version "$OPENCODE_VERSION" --no-modify-path
           echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
           "$HOME/.opencode/bin/opencode" --version
+
+      # The [OpenCode2Fact] live tests and the OpenCode 2 conformance tests run a real OpenCode 2. Pinned the same
+      # way: bump the version here and check both pass. With OpenCode 1 installed, Fleet sets V2 up in separate mode
+      # (its installer with HOME=~/.weave/harnesses/opencode2), since V2's installer would overwrite
+      # ~/.opencode/bin/opencode; CI installs it the same way, and the harness finds it there. The installer adds its
+      # folder to GITHUB_PATH when GITHUB_ACTIONS is set, which would put V2's `opencode` ahead of OpenCode 1's in
+      # later steps, so it runs without that variable.
+      - name: Install OpenCode 2
+        run: |
+          # Downloaded first: piped, a failed download runs an empty script and the step passes.
+          curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/opencode2-install.sh" https://opencode.ai/v2/install
+          env -u GITHUB_ACTIONS HOME="$HOME/.weave/harnesses/opencode2" bash "$RUNNER_TEMP/opencode2-install.sh" --version "$OPENCODE2_VERSION" --no-modify-path
+
+      - name: Check OpenCode versions
+        run: |
+          opencode2="$HOME/.weave/harnesses/opencode2/.opencode/bin/opencode2"
+          echo "opencode:  $(command -v opencode) -> $(opencode --version)"
+          echo "opencode2: $opencode2 -> $("$opencode2" --version)"
+          opencode --version | grep -qF "$OPENCODE_VERSION" || { echo "::error::opencode on PATH isn't OpenCode $OPENCODE_VERSION."; exit 1; }
+          "$opencode2" --version | grep -qF "$OPENCODE2_VERSION" || { echo "::error::The separate OpenCode 2 isn't $OPENCODE2_VERSION."; exit 1; }
 
       - name: Build solution
         run: dotnet build WeaveFleet.slnx --configuration Release -p:SkipFrontendBuild=true
@@ -67,8 +89,19 @@ jobs:
           --no-build
           -p:SkipFrontendBuild=true
         env:
-          # A missing opencode fails the live tests instead of skipping them.
+          # A missing opencode or opencode2 fails the live tests instead of skipping them.
           FLEET_REQUIRE_OPENCODE: '1'
+          FLEET_REQUIRE_OPENCODE2: '1'
+
+      # The conformance project runs its own xUnit runner (dotnet test skips it). Only OpenCode 2's fixture runs here:
+      # OpenCode 1's starts opencode with the runner's own HOME and was never wired into CI.
+      - name: Run OpenCode 2 conformance tests
+        run: >
+          dotnet exec tests/WeaveFleet.ConformanceTests/bin/Release/net10.0/WeaveFleet.ConformanceTests.dll
+          -trait "Harness=opencode2"
+          -trx test-results/conformance-opencode2.trx
+        env:
+          FLEET_REQUIRE_OPENCODE2: '1'
 
       - name: Upload test results
         if: always()

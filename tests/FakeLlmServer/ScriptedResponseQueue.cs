@@ -50,6 +50,12 @@ public sealed class ScriptedResponseStore
     /// </summary>
     public ScriptedLlmResponse? ToolLessResponse { get; set; }
 
+    /// <summary>
+    /// When set, answers a request the queue has nothing for, from its body; <see langword="null"/> means no answer.
+    /// For tests where several sessions share the model and each is answered by what it asks.
+    /// </summary>
+    public Func<string, ScriptedLlmResponse?>? Fallback { get; set; }
+
     /// <summary>Every request body received, in order.</summary>
     public IReadOnlyList<string> Requests => [.. _requests];
 
