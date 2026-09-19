@@ -32,7 +32,7 @@ public sealed class BrowserBridgeTests : IDisposable
         _callers.Add(Token, OpenCodeSessionId, new HarnessCanvasCaller(SessionId, Owner));
         var canvases = new CanvasService(_canvasRepository, new FakeEventBroadcaster(), _user);
         var apps = new AppRunService(_apps, _runs, _sessions, _user);
-        _bridge = new BrowserBridge(_callers, _user, new BrowserPreviews(canvases, apps), apps, canvases, _shots);
+        _bridge = new BrowserBridge([_callers], _user, new BrowserPreviews(canvases, apps), apps, canvases, _shots);
     }
 
     public void Dispose() => _folder.Delete(recursive: true);

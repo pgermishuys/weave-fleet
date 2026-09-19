@@ -70,6 +70,8 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
 
     public string InstanceId { get; }
 
+    public OpenCode2SessionContext Context => _context;
+
     public int? ProcessId => _server?.ProcessId;
 
     /// <summary>The V2 session id (<c>ses_…</c>).</summary>

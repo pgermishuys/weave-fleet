@@ -414,6 +414,9 @@ public static class DependencyInjection
             sp.GetService<IAnalyticsCollector>()));
         services.AddSingleton<IHarnessRuntime>(sp => sp.GetRequiredService<OpenCode2HarnessRuntime>());
         services.AddSingleton<IHarnessBridgeTokens>(sp => new OpenCode2BridgeTokens(sp.GetRequiredService<OpenCode2HarnessRuntime>()));
+        services.AddSingleton<IHarnessCanvasCallerResolver>(sp => new OpenCode2CanvasCallerResolver(
+            sp.GetRequiredService<OpenCode2HarnessRuntime>(),
+            sp.GetRequiredService<ILogger<OpenCode2CanvasCallerResolver>>()));
 
         return services;
     }
