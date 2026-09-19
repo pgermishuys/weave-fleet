@@ -116,7 +116,7 @@ public sealed class OpenCode2RuntimeTests
             Content = new StringContent("""{"error":"bad text"}"""),
         }));
 
-        var ex = await Should.ThrowAsync<HttpRequestException>(() => client.PromptAsync("ses_1", "hi", null, CancellationToken.None));
+        var ex = await Should.ThrowAsync<HttpRequestException>(() => client.PromptAsync("ses_1", "hi", null, null, CancellationToken.None));
 
         ex.Message.ShouldBe("""OpenCode 2 couldn't send the prompt: 400 Bad Request. {"error":"bad text"}""");
     }
@@ -256,15 +256,34 @@ public sealed class OpenCode2RuntimeTests
     }
 
     [Fact]
-    public async Task Attachments_are_refused_rather_than_dropped()
+    public async Task A_pasted_image_goes_with_the_prompt_as_an_inline_file()
     {
-        await using var server = Server(OpenCode2Fixtures.ClientServing(""));
+        var api = new StubHandler(_ => Json("""{"data":{"id":"msg_1"}}"""));
+        await using var server = Server(OpenCode2Fixtures.ClientServing("", api));
         await using var session = NewSession(server, _ => Task.FromResult(server));
 
-        await Should.ThrowAsync<NotSupportedException>(() => session.SendPromptAsync("look", new PromptOptions
+        await session.SendPromptAsync("look", new PromptOptions
         {
             Attachments = [new HarnessAttachment("image/png", "a.png", "AAAA")],
-        }, CancellationToken.None));
+        }, CancellationToken.None);
+
+        var body = JsonDocument.Parse(api.Requests.ShouldHaveSingleItem().Body!).RootElement;
+        body.GetProperty("text").GetString().ShouldBe("look");
+        var file = body.GetProperty("files").EnumerateArray().ShouldHaveSingleItem();
+        file.GetProperty("uri").GetString().ShouldBe("data:image/png;base64,AAAA");
+        file.GetProperty("name").GetString().ShouldBe("a.png");
+    }
+
+    [Fact]
+    public async Task A_prompt_without_attachments_sends_no_files()
+    {
+        var api = new StubHandler(_ => Json("""{"data":{"id":"msg_1"}}"""));
+        await using var server = Server(OpenCode2Fixtures.ClientServing("", api));
+        await using var session = NewSession(server, _ => Task.FromResult(server));
+
+        await session.SendPromptAsync("hi", new PromptOptions { Attachments = [] }, CancellationToken.None);
+
+        JsonDocument.Parse(api.Requests.ShouldHaveSingleItem().Body!).RootElement.TryGetProperty("files", out _).ShouldBeFalse();
     }
 
     [Fact]

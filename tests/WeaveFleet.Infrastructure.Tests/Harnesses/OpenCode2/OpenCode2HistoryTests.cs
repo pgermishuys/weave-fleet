@@ -62,6 +62,29 @@ public sealed class OpenCode2HistoryTests
     }
 
     [Fact]
+    public async Task A_reopened_prompt_shows_its_pasted_image_after_its_text()
+    {
+        // V2 keeps an attachment inline on the user message, whatever it was sent as (recorded from 2.0.8).
+        const string page = """
+            {"data":[{"id":"msg_fleetprompt0009aaaaaaaaaa","time":{"created":1789811420347},"text":"what is in this image",
+              "files":[{"data":"iVBORw0KGgo=","mime":"image/png","source":{"type":"inline"},"name":"dot.png"}],"type":"user"}]}
+            """;
+        var messages = OpenCode2History.ToHarnessMessages(
+            JsonSerializer.Deserialize(page, OpenCode2JsonContext.Default.OpenCode2MessagePage)!.Data!);
+
+        var snapshot = await ReopenAsync(messages);
+
+        var prompt = snapshot.Messages.ShouldHaveSingleItem();
+        prompt.Parts.Count.ShouldBe(2);
+        prompt.Parts[0].ShouldBeOfType<TextMessageEventPart>().Text.ShouldBe("what is in this image");
+        var image = prompt.Parts[1].ShouldBeOfType<FileMessageEventPart>();
+        image.Id.ShouldBe("msg_fleetprompt0009aaaaaaaaaa-file-0");
+        image.Mime.ShouldBe("image/png");
+        image.Url.ShouldBe("data:image/png;base64,iVBORw0KGgo=");
+        image.Filename.ShouldBe("dot.png");
+    }
+
+    [Fact]
     public void History_is_oldest_first_and_leaves_out_what_the_conversation_does_not_show()
     {
         var messages = History();

@@ -79,6 +79,15 @@ describe("SessionDetailHeader status", () => {
     expect(wrapper.get("[data-testid='session-retry-note']").text()).toBe("Retrying · attempt 3");
     expect(wrapper.get("[data-testid='session-status-indicator']").attributes("data-status")).toBe("retry");
   });
+
+  it("says a session stopped on a question needs input, with the row's diamond", () => {
+    const wrapper = mountHeader({ activityStatus: "waiting_input" });
+    const status = wrapper.get("[data-testid='session-status-indicator']");
+
+    expect(status.attributes("data-status")).toBe("waiting");
+    expect(status.text()).toBe("Needs input");
+    expect(wrapper.get("[data-testid='session-header-glyph']").attributes("aria-label")).toBe("Needs input");
+  });
 });
 
 describe("SessionDetailHeader rename and restore", () => {

@@ -291,6 +291,42 @@ public sealed class SessionActivityTrackerTests
         sut.GetEffectiveActivityStatus("parent-1").ShouldBe(ActivityStatuses.WaitingInput);
     }
 
+    [Fact]
+    public void GetEffectiveActivityStatus_WhenABusyParentsSubagentAsks_TheParentNeedsTheUser()
+    {
+        // The parent is busy on its own side (it waits on the subagent's tool call), but nothing moves until you answer.
+        var sut = new SessionActivityTracker();
+        sut.RegisterChild("child-1", "parent-1");
+        sut.RegisterChild("child-2", "parent-1");
+        sut.Update("parent-1", ActivityStatuses.Busy, "user-1");
+        sut.Update("child-1", ActivityStatuses.Busy, "user-1");
+        sut.Update("child-2", ActivityStatuses.WaitingInput, "user-1");
+
+        sut.GetEffectiveActivityStatus("parent-1").ShouldBe(ActivityStatuses.WaitingInput);
+
+        sut.Update("child-2", ActivityStatuses.Busy, "user-1");
+        sut.GetEffectiveActivityStatus("parent-1").ShouldBe(ActivityStatuses.Busy);
+    }
+
+    [Fact]
+    public void ShownActivityStatus_IsWhatTheSessionReportedUnlessAChildWaitsOnTheUser()
+    {
+        var sut = new SessionActivityTracker();
+        sut.RegisterChild("child-1", "parent-1");
+        sut.Update("parent-1", ActivityStatuses.Idle, "user-1");
+        sut.Update("child-1", ActivityStatuses.Busy, "user-1");
+
+        // A working child doesn't make an idle parent's own report busy.
+        sut.ShownActivityStatus("parent-1", ActivityStatuses.Idle).ShouldBe(ActivityStatuses.Idle);
+        sut.ShownActivityStatus("parent-1", ActivityStatuses.Busy).ShouldBe(ActivityStatuses.Busy);
+
+        sut.Update("child-1", ActivityStatuses.WaitingInput, "user-1");
+        sut.ShownActivityStatus("parent-1", ActivityStatuses.Busy).ShouldBe(ActivityStatuses.WaitingInput);
+
+        sut.UnregisterChild("child-1");
+        sut.ShownActivityStatus("parent-1", ActivityStatuses.Busy).ShouldBe(ActivityStatuses.Busy);
+    }
+
     [Theory]
     [InlineData(ActivityStatuses.Busy, true, true)]
     [InlineData(ActivityStatuses.Retry, true, true)]

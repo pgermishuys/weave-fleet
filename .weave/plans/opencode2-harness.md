@@ -370,6 +370,47 @@ Size: 3 days (spread across the stages; tests land with each stage's PR).
 - **Todos:** left out of the first version; V2 sessions have no Progress list.
 - **History on reopen:** OpenCode's approach, through the capability flag (Stage 2).
 
+## Gaps closed (Track E)
+
+- [x] **Image attachments.** A prompt's pasted images go to V2 as prompt `files` with inline `data:` URIs
+      (`PromptInput.FileAttachment`); `SupportsImageAttachments` is on. An `@` reference stays plain text in the
+      prompt, as for every harness (the agent reads the path).
+- [x] **File writes.** A finished `edit` or `write` call reports its file as Fleet's `files.written` and
+      `file.watcher.updated` (which Fleet turns into `files.changed`), so open editor tabs and the Files canvas reload
+      during the turn. `ReportsFileWrites` is on.
+- [x] **A parent shows "Needs you" while its subagent waits on a question**, for every harness (shared code).
+
+Built (branch `feat/opencode2-gaps`), checked live on a scratch Fleet with 2.0.8 + the scripted model: a pasted image
+and an `@note.txt` reference in one V2 prompt (the model got the text and an `image_url`; the image is on the prompt
+after a reload), an edit to a file open in an editor tab and a new file shown in the Files canvas (both while the turn
+was still running, `files.changed` on the wire), and a subagent's question on a V2 parent and on an OpenCode 1 parent
+(`task`): the list and header read "Needs input", the list went `busy → waiting_input → busy → idle`, and one
+"needs you" notification was sent, for the parent.
+
+What Track E learned:
+
+- **Attachments:** `prompt` takes `files: [{uri, name}]`; a `data:` URI works (HTTP URLs don't). V2 reads the bytes
+  before admitting the prompt and sends a PNG/JPEG/GIF/WebP to an OpenAI-compatible model as `image_url`. The user
+  message keeps every attachment inline (`files[].data` + `mime`, `source: inline`), so history shows it with no extra
+  request. V2 detects the type from the bytes, not the given mime. Fleet's `@` references were never attachments (the
+  composer sends them as text for every harness), so nothing changes for them.
+- **File events:** V2 has a file watcher (`filesystem.changed {file, event}`) and a `file.edited` event, but neither is
+  sent on `/api/event` (not seen with edit, write, or a file changed on disk). The `edit` and `write` tools both name
+  their file in `input.path` (absolute from the scripted model; a relative one resolves against the event's
+  `location.directory`); V2 has no `apply_patch`. `ReportsFileWrites` gates nothing today (only OpenCode sets it); it
+  documents that the harness sends `files.written`.
+- **Parent status (shared):** `GetEffectiveActivityStatus` now lets a waiting child win over the parent's own busy.
+  The relay broadcasts and notifies what a session *shows* (`ShownActivityStatus`: its own report, unless a child
+  waits), so the parent's own busy events don't hide the question, and the notifier hears the parent's shown status
+  when a child changes. A Fleet delegation parent that idles before its children is unchanged (no second "finished").
+- **Found live:** both snapshot builders (`SessionSnapshotBuilder`, `OpenCodeSessionMessageProxy`) turned
+  `waiting_input` into `idle`, so opening any session stopped on a question (its own or a subagent's) made its row and
+  header read idle until the next event. Fixed in both. The header now says "Needs input" with the row's diamond.
+- **Left for later:** inside the parent's conversation, the subagent's task row and the Working line still say
+  "Working" while the child waits (the list and header say "Needs input"). A V2 subagent's own edits refresh the child
+  session's views, not the parent's open editor tabs, until the parent's turn ends. Edits by shell (`sed`) aren't
+  seen mid-turn (as for OpenCode, the client reloads open files at turn end).
+
 ## Later
 
 - **Todos / Progress:** V2 has no todo tool. Add `fleet_todo` to the V2 plugin, reported as todo events, and

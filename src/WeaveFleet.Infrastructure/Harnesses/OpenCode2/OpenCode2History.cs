@@ -23,12 +23,12 @@ internal static class OpenCode2History
         var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(message.Time?.Created ?? 0);
         return message.Type switch
         {
-            // Fleet shows a prompt's text as part 0, under the id it sent the prompt with.
+            // Fleet shows a prompt's text as part 0, under the id it sent the prompt with, then its attachments.
             "user" => new HarnessMessage
             {
                 Id = id,
                 Role = "user",
-                Parts = [new TextPart(message.Text ?? string.Empty) { PartId = OpenCode2Mapper.PartId(id, "text", 0) }],
+                Parts = UserParts(id, message),
                 Timestamp = timestamp,
             },
             "assistant" => new HarnessMessage
@@ -45,6 +45,23 @@ internal static class OpenCode2History
             _ => null,
         };
     }
+
+    /// <summary>A prompt's text, then each attachment as a file part, the way Fleet showed the prompt when it was sent.</summary>
+    private static List<MessagePart> UserParts(string messageId, OpenCode2Message message)
+    {
+        var parts = new List<MessagePart> { new TextPart(message.Text ?? string.Empty) { PartId = OpenCode2Mapper.PartId(messageId, "text", 0) } };
+        parts.AddRange((message.Files ?? [])
+            .Where(f => !string.IsNullOrEmpty(f.Data))
+            .Select((file, index) =>
+            {
+                var mime = file.Mime ?? "application/octet-stream";
+                return new FilePart(PromptFilePartId(messageId, index), mime, $"data:{mime};base64,{file.Data}", file.Name);
+            }));
+        return parts;
+    }
+
+    /// <summary>The id Fleet gives attachment <paramref name="index"/> of a prompt.</summary>
+    internal static string PromptFilePartId(string messageId, int index) => $"{messageId}-file-{index}";
 
     private static List<MessagePart> AssistantParts(string messageId, OpenCode2Message message)
     {

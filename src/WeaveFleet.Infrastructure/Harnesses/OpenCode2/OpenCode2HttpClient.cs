@@ -57,11 +57,16 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
         return body?.Data;
     }
 
-    public async Task PromptAsync(string sessionId, string text, string? messageId, CancellationToken ct)
+    public async Task PromptAsync(
+        string sessionId,
+        string text,
+        string? messageId,
+        IReadOnlyList<OpenCode2PromptFile>? files,
+        CancellationToken ct)
     {
         using var response = await http.PostAsJsonAsync(
             $"api/session/{Uri.EscapeDataString(sessionId)}/prompt",
-            new OpenCode2PromptRequest { Id = messageId, Text = text },
+            new OpenCode2PromptRequest { Id = messageId, Text = text, Files = files is { Count: > 0 } ? files : null },
             OpenCode2JsonContext.Default.OpenCode2PromptRequest,
             ct).ConfigureAwait(false);
         await EnsureSuccessAsync(response, "send the prompt", ct).ConfigureAwait(false);

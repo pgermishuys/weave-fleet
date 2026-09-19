@@ -112,6 +112,8 @@ public sealed class OpenCodeSessionMessageProxyTests
     [InlineData("retry", "retry")]
     [InlineData("busy", "busy")]
     [InlineData("idle", "idle")]
+    // Stopped on a question: reopening it used to say idle until the next event.
+    [InlineData("waiting_input", "waiting_input")]
     public async Task GetSnapshotAsync_reports_retry_busy_and_idle_as_tracked(string tracked, string expected)
     {
         var sessionRepository = new InMemorySessionRepository();

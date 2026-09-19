@@ -1,5 +1,6 @@
 using System.Text.Json;
 using WeaveFleet.Application.Analytics;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
@@ -12,9 +13,12 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 /// stops the turn on the user. Events Fleet has no use for (permissions are answered by the session, shells,
 /// inbox, catalog changes, agent and model switches) map to nothing, as does anything unknown. A subagent call is
 /// also read as a delegation (<see cref="TryReadDelegation"/>), since its child session is a Fleet session too.
+/// V2 sends no file events on its event stream, so a finished <c>edit</c> or <c>write</c> call also reports the file
+/// it wrote.
 /// </summary>
+/// <param name="workingDirectory">What a relative path in a tool call is relative to, when the event doesn't say.</param>
 /// <remarks>One mapper per session, fed from one event stream: not thread-safe.</remarks>
-internal sealed class OpenCode2Mapper(string fleetSessionId)
+internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDirectory = null)
 {
     /// <summary>V2's tool that runs an agent in a child session (OpenCode's is <c>task</c>).</summary>
     internal const string SubagentTool = "subagent";
@@ -51,8 +55,8 @@ internal sealed class OpenCode2Mapper(string fleetSessionId)
             "session.tool.input.started" => ToolStarted(data),
             "session.tool.called" => ToolCalled(data),
             "session.tool.progress" => ToolProgress(data),
-            "session.tool.success" => ToolEnded(data, failed: false),
-            "session.tool.failed" => ToolEnded(data, failed: true),
+            "session.tool.success" => ToolEnded(evt, data, failed: false),
+            "session.tool.failed" => ToolEnded(evt, data, failed: true),
             "form.created" => QuestionAsked(data),
             "form.replied" or "form.cancelled" => QuestionSettled(data),
             _ => [],
@@ -400,8 +404,11 @@ internal sealed class OpenCode2Mapper(string fleetSessionId)
         })];
     }
 
-    /// <summary><c>session.tool.success</c> and <c>session.tool.failed</c>: the call's result, and any files it returned.</summary>
-    private List<HarnessEvent> ToolEnded(JsonElement data, bool failed)
+    /// <summary>
+    /// <c>session.tool.success</c> and <c>session.tool.failed</c>: the call's result, any files it returned, and for a
+    /// file it wrote, the file.
+    /// </summary>
+    private List<HarnessEvent> ToolEnded(OpenCode2Event evt, JsonElement data, bool failed)
     {
         if (ReadToolRef(data) is not { } call || !_tools.Remove(call.CallId, out var tool))
             return [];
@@ -422,7 +429,45 @@ internal sealed class OpenCode2Mapper(string fleetSessionId)
             }),
         };
         events.AddRange(ToolFiles(call.MessageId, call.CallId, content));
+        if (!failed)
+            events.AddRange(FileWritten(call.MessageId, tool, evt.Location?.Directory));
         return events;
+    }
+
+    /// <summary>V2's tools that write a file, both naming it in <c>input.path</c>.</summary>
+    private static readonly HashSet<string> FileWritingTools = new(StringComparer.Ordinal) { "edit", "write" };
+
+    /// <summary>
+    /// A finished <c>edit</c> or <c>write</c> call as Fleet's two file events: <c>files.written</c> (the files a tool
+    /// call wrote, which progress tracking reads) and <c>file.watcher.updated</c> (which Fleet turns into
+    /// <c>files.changed</c>, so open files and the file list reload). OpenCode (1.x) gets the second from its file
+    /// watcher; V2 has one too but doesn't send it on the event stream. The path is made absolute, as the watcher's
+    /// are, against the event's folder. Edits by other means (a shell's <c>sed</c>) aren't seen; the client reloads open
+    /// files when the turn ends for those.
+    /// </summary>
+    private List<HarnessEvent> FileWritten(string messageId, ToolCall tool, string? directory)
+    {
+        if (!FileWritingTools.Contains(tool.Name)
+            || tool.Input is not { ValueKind: JsonValueKind.Object } input
+            || ReadString(input, "path") is not { Length: > 0 } path)
+        {
+            return [];
+        }
+
+        var baseDirectory = directory ?? workingDirectory;
+        if (!Path.IsPathRooted(path) && string.IsNullOrWhiteSpace(baseDirectory))
+            return [];
+
+        var fullPath = Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(baseDirectory!, path));
+        return
+        [
+            Event(EventTypes.FilesWritten, JsonSerializer.SerializeToElement(
+                new FilesWrittenPayload { SessionId = fleetSessionId, MessageId = messageId, Paths = [fullPath] },
+                OpenCode2JsonContext.Default.FilesWrittenPayload)),
+            Event(EventTypes.FileWatcherUpdated, JsonSerializer.SerializeToElement(
+                new OpenCode2FileChangedPayload { File = fullPath, Event = "change" },
+                OpenCode2JsonContext.Default.OpenCode2FileChangedPayload)),
+        ];
     }
 
     private IEnumerable<HarnessEvent> ToolFiles(string messageId, string callId, IEnumerable<OpenCode2ToolContent>? content)

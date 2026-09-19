@@ -26,7 +26,7 @@ public sealed record SessionActivitySnapshot(
 /// In addition to per-session status, the tracker maintains a parent-child relationship
 /// index so that a parent session's effective activity status can be derived from its
 /// delegated child sessions. A parent is considered "busy" if it is itself busy
-/// <em>or</em> any of its registered child sessions are busy.
+/// <em>or</em> any of its registered child sessions are busy, and waiting on the user if a child is.
 /// </remarks>
 public sealed class SessionActivityTracker
 {
@@ -77,9 +77,9 @@ public sealed class SessionActivityTracker
     /// can be derived from child activity.
     /// </summary>
     /// <remarks>
-    /// This propagation handles Fleet DelegationService delegations (separate opencode sessions).
-    /// For opencode task-tool delegations, the parent stays busy server-side and no client-side
-    /// propagation is needed.
+    /// Every delegation <c>DelegationService</c> records registers here. A harness's own subagent (OpenCode's
+    /// <c>task</c>) keeps its parent busy server-side, so for those only a child's question changes what the
+    /// parent shows.
     /// </remarks>
     public void RegisterChild(string childSessionId, string parentSessionId)
     {
@@ -111,42 +111,49 @@ public sealed class SessionActivityTracker
 
     /// <summary>
     /// Returns the effective activity status for <paramref name="sessionId"/>.
-    /// Returns <c>"busy"</c> if the session itself is busy <em>or</em> any registered child session is busy,
-    /// and <c>"waiting_input"</c> if it, or a child, is stopped on a question.
+    /// Returns <c>"waiting_input"</c> if it, or a child, is stopped on a question, otherwise <c>"busy"</c> if the
+    /// session itself is busy <em>or</em> any registered child session is working.
     /// Returns <c>null</c> if the session is not tracked.
     /// </summary>
     /// <remarks>
-    /// This parent-child propagation applies to Fleet DelegationService delegations (separate
-    /// opencode sessions where the parent doesn't stay busy server-side). For opencode task-tool
-    /// delegations, the parent remains busy server-side while the child runs, so no propagation
-    /// is needed.
+    /// A question outranks work, the parent's own included: a parent whose subagent asks is still busy on its side
+    /// (it waits on the subagent's tool call), but nothing moves until the user answers, and only the parent is on
+    /// the dashboard. This parent-child index holds every delegation Fleet records (OpenCode's <c>task</c>, OpenCode
+    /// 2's <c>subagent</c>, Fleet's own).
     /// </remarks>
     public string? GetEffectiveActivityStatus(string sessionId)
     {
-        var own = Get(sessionId);
-        if (own?.ActivityStatus == ActivityStatuses.Busy)
-            return ActivityStatuses.Busy;
-
-        // A pending question outranks a busy child: the work can't finish until the user answers.
-        if (own?.ActivityStatus == ActivityStatuses.WaitingInput)
+        var own = Get(sessionId)?.ActivityStatus;
+        if (own == ActivityStatuses.WaitingInput)
             return ActivityStatuses.WaitingInput;
 
-        var childNeedsUser = false;
+        var childWorking = false;
         if (_parentToChildren.TryGetValue(sessionId, out var children))
         {
             foreach (var childId in children.Keys)
             {
                 var child = Get(childId)?.ActivityStatus;
-                if (IsWorking(child))
-                    return ActivityStatuses.Busy;
+                if (child == ActivityStatuses.WaitingInput)
+                    return ActivityStatuses.WaitingInput;
 
-                // A child stopped on a question stops its parent too, and only the parent is on the dashboard.
-                childNeedsUser |= child == ActivityStatuses.WaitingInput;
+                childWorking |= IsWorking(child);
             }
         }
 
-        return childNeedsUser ? ActivityStatuses.WaitingInput : own?.ActivityStatus;
+        if (own == ActivityStatuses.Busy || childWorking)
+            return ActivityStatuses.Busy;
+
+        return own;
     }
+
+    /// <summary>
+    /// The status to show for <paramref name="sessionId"/> when it reports <paramref name="reported"/> itself: what it
+    /// reported, unless one of its children waits on the user, which the parent shows instead. Unlike
+    /// <see cref="GetEffectiveActivityStatus"/> it doesn't turn an idle parent busy for a working child, which the
+    /// parent's own events have never done.
+    /// </summary>
+    public string ShownActivityStatus(string sessionId, string reported)
+        => GetEffectiveActivityStatus(sessionId) == ActivityStatuses.WaitingInput ? ActivityStatuses.WaitingInput : reported;
 
     /// <summary>
     /// True while a session is in a turn: busy, or waiting to retry after a model error (e.g. a rate

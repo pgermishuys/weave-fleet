@@ -374,23 +374,35 @@ public sealed class HarnessEventRelay : BackgroundService
                             parsedStatus.RetryMessage,
                             parsedStatus.RetryNext);
                         _recaps?.OnActivityChanged(targetFleetSessionId, parsedStatus.Status);
-                        _notifier?.OnActivityChanged(targetFleetSessionId, parsedStatus.Status);
+
+                        // A parent whose subagent waits on a question shows that, not its own busy; the notifier
+                        // hears the same, so it tells you about the question once.
+                        var shownStatus = _activityTracker.ShownActivityStatus(targetFleetSessionId, parsedStatus.Status);
+                        _notifier?.OnActivityChanged(targetFleetSessionId, shownStatus);
 
                         await _broadcaster.BroadcastAsync(
                             "sessions",
                             "activity_status",
-                            await BuildActivityStatusPayloadAsync(
-                                targetFleetSessionId,
-                                parsedStatus.Status,
-                                parsedStatus.RetryAttempt,
-                                parsedStatus.RetryMessage,
-                                parsedStatus.RetryNext).ConfigureAwait(false),
+                            shownStatus == parsedStatus.Status
+                                ? await BuildActivityStatusPayloadAsync(
+                                    targetFleetSessionId,
+                                    parsedStatus.Status,
+                                    parsedStatus.RetryAttempt,
+                                    parsedStatus.RetryMessage,
+                                    parsedStatus.RetryNext).ConfigureAwait(false)
+                                : await BuildActivityStatusPayloadAsync(targetFleetSessionId, shownStatus).ConfigureAwait(false),
                             sessionUserId,
                             ct).ConfigureAwait(false);
 
-                        await SessionPropagation.PropagateToParentAsync(
-                            targetFleetSessionId, sessionUserId, _activityTracker, _broadcaster, _scopeFactory, ct)
-                            .ConfigureAwait(false);
+                        // A subagent's own turns aren't notified (its parent carries the work), but its question is:
+                        // the notifier hears what the parent shows now, as it does for the parent's own events.
+                        if (await SessionPropagation.PropagateToParentAsync(
+                                targetFleetSessionId, sessionUserId, _activityTracker, _broadcaster, _scopeFactory, ct)
+                                .ConfigureAwait(false) is { } parentSessionId
+                            && _activityTracker.Get(parentSessionId)?.ActivityStatus is { } parentReported)
+                        {
+                            _notifier?.OnActivityChanged(parentSessionId, _activityTracker.ShownActivityStatus(parentSessionId, parentReported));
+                        }
                     }
                 }
                 catch (Exception pubEx)
@@ -581,11 +593,12 @@ public sealed class HarnessEventRelay : BackgroundService
 
                 // The notifier forgot this session when its last pump ended: this is how it learns the turn
                 // is still running, so the end of that turn is still worth telling you about.
-                _notifier?.OnActivityChanged(fleetSessionId, currentActivityStatus);
+                var shownStatus = _activityTracker.ShownActivityStatus(fleetSessionId, currentActivityStatus);
+                _notifier?.OnActivityChanged(fleetSessionId, shownStatus);
                 await _broadcaster.BroadcastAsync(
                     "sessions",
                     "activity_status",
-                    await BuildActivityStatusPayloadAsync(fleetSessionId, currentActivityStatus).ConfigureAwait(false),
+                    await BuildActivityStatusPayloadAsync(fleetSessionId, shownStatus).ConfigureAwait(false),
                     sessionUserId,
                     ct).ConfigureAwait(false);
 

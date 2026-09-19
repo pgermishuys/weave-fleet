@@ -33,5 +33,9 @@ public sealed class OpenCode2Harness : IHarness
         SupportsDelegation = true,
         // Recaps come from V2's generate, which leaves the session's history alone.
         SupportsOffTheRecordPrompt = true,
+        // Pasted images go to V2 as prompt files, which it passes to the model as image input.
+        SupportsImageAttachments = true,
+        // Its edit and write tool calls are reported as the files they wrote.
+        ReportsFileWrites = true,
     };
 }

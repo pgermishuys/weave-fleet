@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using WeaveFleet.Domain.Events;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 
@@ -140,6 +141,9 @@ internal sealed record OpenCode2Message
     public string? Type { get; init; }
     public OpenCode2MessageTimes? Time { get; init; }
     public string? Text { get; init; }
+
+    /// <summary>A user message's attachments, with their content.</summary>
+    public IReadOnlyList<OpenCode2MessageFile>? Files { get; init; }
     public string? Agent { get; init; }
     public OpenCode2ModelRef? Model { get; init; }
     public IReadOnlyList<OpenCode2Content>? Content { get; init; }
@@ -147,6 +151,14 @@ internal sealed record OpenCode2Message
     public double? Cost { get; init; }
     public OpenCode2TokenUsage? Tokens { get; init; }
     public OpenCode2StructuredError? Error { get; init; }
+}
+
+/// <summary>An attachment as a user message keeps it (<c>Prompt.FileAttachment</c>): base64 <c>data</c> whatever the source.</summary>
+internal sealed record OpenCode2MessageFile
+{
+    public string? Data { get; init; }
+    public string? Mime { get; init; }
+    public string? Name { get; init; }
 }
 
 internal sealed record OpenCode2MessageTimes
@@ -305,6 +317,17 @@ internal sealed record OpenCode2PromptRequest
 {
     public string? Id { get; init; }
     public required string Text { get; init; }
+    public IReadOnlyList<OpenCode2PromptFile>? Files { get; init; }
+}
+
+/// <summary>
+/// A prompt's attachment (<c>PromptInput.FileAttachment</c>): Fleet sends its content inline as a <c>data:</c> URI.
+/// V2 reads it before admitting the prompt and passes an image to the model as image input.
+/// </summary>
+internal sealed record OpenCode2PromptFile
+{
+    public required string Uri { get; init; }
+    public string? Name { get; init; }
 }
 
 /// <summary><c>POST /api/session/{id}/interrupt</c>.</summary>
@@ -475,6 +498,16 @@ internal sealed record OpenCode2PartDeltaPayload
     public required string Delta { get; init; }
 }
 
+/// <summary>
+/// Fleet's <c>file.watcher.updated</c> payload, which it turns into <c>files.changed</c> for open files and the
+/// file list: <c>{ file, event }</c> with an absolute path and <c>add</c>, <c>change</c> or <c>unlink</c>.
+/// </summary>
+internal sealed record OpenCode2FileChangedPayload
+{
+    public required string File { get; init; }
+    public required string Event { get; init; }
+}
+
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
@@ -511,6 +544,8 @@ internal sealed record OpenCode2PartDeltaPayload
 [JsonSerializable(typeof(OpenCode2MessageUpdatedPayload))]
 [JsonSerializable(typeof(OpenCode2PartUpdatedPayload))]
 [JsonSerializable(typeof(OpenCode2PartDeltaPayload))]
+[JsonSerializable(typeof(OpenCode2FileChangedPayload))]
+[JsonSerializable(typeof(FilesWrittenPayload))]
 internal sealed partial class OpenCode2JsonContext : JsonSerializerContext
 {
 }
