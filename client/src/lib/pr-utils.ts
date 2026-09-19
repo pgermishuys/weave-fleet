@@ -16,9 +16,10 @@ export interface PrReference {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
-/** Case-insensitive match for the bash tool name. */
+/** Case-insensitive match for the shell tool: `bash` in OpenCode, `shell` in OpenCode 2. */
 export function isBashTool(toolName: string): boolean {
-  return toolName.toLowerCase() === "bash";
+  const name = toolName.toLowerCase();
+  return name === "bash" || name === "shell";
 }
 
 /** Regex that matches GitHub PR URLs. */

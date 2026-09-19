@@ -32,5 +32,6 @@ public sealed class OpenCodeHarness : IHarness
         ReportsFileWrites = true,
         SupportsOffTheRecordPrompt = true,
         SupportsProfiles = true,
+        HistoryLivesInHarness = true,
     };
 }

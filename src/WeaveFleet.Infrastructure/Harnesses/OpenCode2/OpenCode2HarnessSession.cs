@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
@@ -23,6 +25,9 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
 {
     public const string Type = "opencode2";
 
+    /// <summary>How many of the newest messages a catch-up reads: enough for the turn that ran while the stream was down.</summary>
+    private const int ResyncMessages = 20;
+
     private readonly OpenCode2SessionContext _context;
     private readonly Func<CancellationToken, Task<OpenCode2Server>> _servers;
     private readonly OpenCode2Mapper _mapper;
@@ -35,6 +40,9 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         SingleReader = false,
         SingleWriter = false,
     });
+
+    // The questions waiting on the user, by the tool call that asked: the client answers by call id.
+    private readonly ConcurrentDictionary<string, OpenCode2Form> _questions = new(StringComparer.Ordinal);
 
     private OpenCode2Server? _server;
     private volatile HarnessSessionStatus _status = HarnessSessionStatus.Idle;
@@ -106,7 +114,13 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         try
         {
             var active = await server.Client.GetActiveSessionIdsAsync(ct).ConfigureAwait(false);
-            return active.Contains(ResumeToken) ? ActivityStatuses.Busy : ActivityStatuses.Idle;
+            if (!active.Contains(ResumeToken))
+                return ActivityStatuses.Idle;
+
+            // A turn stopped on a question needs the user. Read the forms too: after a restart Fleet hasn't seen them.
+            foreach (var form in await server.Client.GetFormsAsync(ResumeToken, ct).ConfigureAwait(false))
+                RememberQuestion(form);
+            return _questions.IsEmpty ? ActivityStatuses.Busy : ActivityStatuses.WaitingInput;
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
         {
@@ -172,9 +186,25 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
             yield return evt;
     }
 
-    /// <summary>History is read from Fleet's own store until V2's message list is mapped.</summary>
-    public Task<MessagePage> GetMessagesAsync(MessageQuery? query, CancellationToken ct)
-        => Task.FromResult(new MessagePage([], HasMore: false));
+    /// <summary>
+    /// The session's history from V2, oldest first. <see cref="MessageQuery.Before"/> is the cursor a previous page
+    /// returned, for the page of older messages.
+    /// </summary>
+    public async Task<MessagePage> GetMessagesAsync(MessageQuery? query, CancellationToken ct)
+    {
+        var server = await AttachedServerAsync(ct).ConfigureAwait(false);
+        var page = await server.Client.GetMessagesAsync(ResumeToken, query?.Limit, query?.Before, ct).ConfigureAwait(false);
+        var messages = page.Data ?? [];
+
+        // V2 sends a next cursor with every page, the last one too; a page that isn't full is the last.
+        var hasMore = page.Cursor?.Next is not null
+            && messages.Count > 0
+            && (query?.Limit is not { } limit || messages.Count >= limit);
+        return new MessagePage(
+            OpenCode2History.ToHarnessMessages(messages.Reverse()),
+            hasMore,
+            hasMore ? page.Cursor!.Next : null);
+    }
 
     public Task<string?> AskOffTheRecordAsync(string prompt, CancellationToken ct)
         => Task.FromResult<string?>(null);
@@ -182,11 +212,33 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
     public Task SendCommandAsync(CommandOptions options, CancellationToken ct)
         => throw new NotSupportedException("OpenCode 2 sessions in Fleet don't run commands yet.");
 
-    public Task AnswerQuestionAsync(string requestId, IReadOnlyList<IReadOnlyList<string>> answers, CancellationToken ct)
-        => throw new NotSupportedException("OpenCode 2 sessions in Fleet don't answer questions yet.");
+    /// <summary>
+    /// Answers the form a question tool call asked with. <paramref name="requestId"/> is the tool call's id (what
+    /// the question card knows) or the form's; <paramref name="answers"/> has the chosen labels, one list per question.
+    /// </summary>
+    public async Task AnswerQuestionAsync(string requestId, IReadOnlyList<IReadOnlyList<string>> answers, CancellationToken ct)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var server = await AttachedServerAsync(ct).ConfigureAwait(false);
+        var form = await FindQuestionAsync(server, requestId, ct).ConfigureAwait(false);
 
-    public Task RejectQuestionAsync(string requestId, CancellationToken ct)
-        => throw new NotSupportedException("OpenCode 2 sessions in Fleet don't answer questions yet.");
+        await server.Client.ReplyToFormAsync(ResumeToken, form.Id!, FormAnswer(form, answers), ct).ConfigureAwait(false);
+        Forget(form.Id!);
+
+        // The turn goes on; V2 doesn't say so itself, since it never stopped.
+        _events.Writer.TryWrite(_mapper.Status(ActivityStatuses.Busy));
+    }
+
+    /// <summary>Dismisses the question. V2 then fails the tool call and interrupts the turn.</summary>
+    public async Task RejectQuestionAsync(string requestId, CancellationToken ct)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var server = await AttachedServerAsync(ct).ConfigureAwait(false);
+        var form = await FindQuestionAsync(server, requestId, ct).ConfigureAwait(false);
+
+        await server.Client.CancelFormAsync(ResumeToken, form.Id!, ct).ConfigureAwait(false);
+        Forget(form.Id!);
+    }
 
     public Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct)
         => Task.FromResult<IReadOnlyList<AgentInfo>>([]);
@@ -216,10 +268,65 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
             case "session.execution.succeeded" or "session.execution.failed" or "session.execution.interrupted":
                 SetStatus(HarnessSessionStatus.Idle);
                 break;
+            case "form.created" when evt.Data.TryGetProperty("form", out var form) && form.ValueKind == JsonValueKind.Object:
+                if (form.Deserialize(OpenCode2JsonContext.Default.OpenCode2Form) is { } created)
+                    RememberQuestion(created);
+                break;
+            case "form.replied" or "form.cancelled" when evt.Data.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String:
+                Forget(id.GetString()!);
+                break;
+            case "permission.asked":
+                AnswerPermission(evt.Data);
+                break;
         }
 
         foreach (var harnessEvent in _mapper.Map(evt))
             _events.Writer.TryWrite(harnessEvent);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// V2 doesn't replay what was sent while the stream was down, so this reads what changed: the messages of a
+    /// turn that ran (their parts update in place), the questions waiting, and whether a turn is still running. A
+    /// turn that ended in the gap ends here.
+    /// </remarks>
+    public async Task ResyncAsync(IReadOnlySet<string> activeSessions, CancellationToken ct)
+    {
+        if (_server is not { } server || _status is HarnessSessionStatus.Stopping or HarnessSessionStatus.Stopped)
+            return;
+
+        var wasRunning = _status is HarnessSessionStatus.Running;
+        var running = activeSessions.Contains(ResumeToken);
+        if (!wasRunning && !running)
+            return;
+
+        LogResync(_logger, InstanceId, wasRunning, running);
+        var page = await server.Client.GetMessagesAsync(ResumeToken, ResyncMessages, cursor: null, ct).ConfigureAwait(false);
+        foreach (var message in (page.Data ?? []).Reverse())
+        {
+            foreach (var harnessEvent in _mapper.MapMessage(message))
+                _events.Writer.TryWrite(harnessEvent);
+        }
+
+        if (running)
+        {
+            var forms = await server.Client.GetFormsAsync(ResumeToken, ct).ConfigureAwait(false);
+            _questions.Clear();
+            foreach (var form in forms)
+                RememberQuestion(form);
+
+            if (!wasRunning)
+                _events.Writer.TryWrite(_mapper.Status(ActivityStatuses.Busy));
+            foreach (var harnessEvent in _mapper.MapPendingQuestions(forms))
+                _events.Writer.TryWrite(harnessEvent);
+            SetStatus(HarnessSessionStatus.Running);
+        }
+        else
+        {
+            _questions.Clear();
+            _events.Writer.TryWrite(_mapper.Idle());
+            SetStatus(HarnessSessionStatus.Idle);
+        }
     }
 
     /// <inheritdoc />
@@ -289,11 +396,103 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         _server = server;
     }
 
+    private void RememberQuestion(OpenCode2Form form)
+    {
+        if (form is { IsQuestion: true, Id: not null, ToolCallId: { } callId })
+            _questions[callId] = form;
+    }
+
+    private void Forget(string formId)
+    {
+        foreach (var (callId, form) in _questions)
+        {
+            if (form.Id == formId)
+                _questions.TryRemove(callId, out _);
+        }
+    }
+
+    /// <summary>The question form for <paramref name="requestId"/> (a tool call or form id), from V2 when Fleet hasn't seen it.</summary>
+    private async Task<OpenCode2Form> FindQuestionAsync(OpenCode2Server server, string requestId, CancellationToken ct)
+    {
+        if (Lookup() is { } known)
+            return known;
+
+        foreach (var form in await server.Client.GetFormsAsync(ResumeToken, ct).ConfigureAwait(false))
+            RememberQuestion(form);
+        return Lookup() ?? throw new InvalidOperationException("OpenCode 2 has no open question for this answer any more.");
+
+        OpenCode2Form? Lookup()
+            => _questions.TryGetValue(requestId, out var byCall) ? byCall
+                : _questions.Values.FirstOrDefault(f => f.Id == requestId);
+    }
+
+    /// <summary>
+    /// The form reply: field <c>i</c> answers question <c>i</c>. A chosen label is sent as its option's value, and
+    /// anything else as typed (the field allows free text). A multiselect field takes the list, any other field one value.
+    /// </summary>
+    internal static Dictionary<string, JsonElement> FormAnswer(OpenCode2Form form, IReadOnlyList<IReadOnlyList<string>> answers)
+    {
+        var reply = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        var fields = form.Fields ?? [];
+        for (var i = 0; i < fields.Count && i < answers.Count; i++)
+        {
+            var field = fields[i];
+            var values = answers[i]
+                .Where(v => !string.IsNullOrWhiteSpace(v))
+                .Select(v => field.Options?.FirstOrDefault(o => o.Label == v)?.Value ?? v)
+                .ToList();
+            if (values.Count == 0)
+                continue;
+
+            reply[field.Key] = field.Type == "multiselect"
+                ? JsonSerializer.SerializeToElement(values, OpenCode2JsonContext.Default.ListString)
+                : JsonSerializer.SerializeToElement(string.Join(", ", values), OpenCode2JsonContext.Default.String);
+        }
+
+        return reply;
+    }
+
+    /// <summary>
+    /// Sessions are created allowing everything, so V2 asks only when something overrides that (a subagent's own
+    /// rules, a plugin). Nobody is there to answer, so it's allowed once and logged, as Fleet does for OpenCode (1.x).
+    /// </summary>
+    private void AnswerPermission(JsonElement data)
+    {
+        if (data.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String && _server is { } server)
+        {
+            var requestId = id.GetString()!;
+            var action = data.TryGetProperty("action", out var a) && a.ValueKind == JsonValueKind.String ? a.GetString() : null;
+            LogPermissionAllowed(_logger, InstanceId, action ?? "(unknown)", requestId);
+            _ = ReplyAsync();
+
+            async Task ReplyAsync()
+            {
+                try
+                {
+                    await server.Client.ReplyToPermissionAsync(ResumeToken, requestId, "once", CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+                {
+                    LogPermissionReplyFailed(_logger, InstanceId, requestId, ex);
+                }
+            }
+        }
+    }
+
     private void SetStatus(HarnessSessionStatus status)
     {
         if (_status is not (HarnessSessionStatus.Stopping or HarnessSessionStatus.Stopped))
             _status = status;
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "OpenCode 2 session {InstanceId} asked permission for {Action} ({RequestId}); allowed once, since nobody can answer it")]
+    private static partial void LogPermissionAllowed(ILogger logger, string instanceId, string action, string requestId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't answer OpenCode 2 permission request {RequestId} for session {InstanceId}")]
+    private static partial void LogPermissionReplyFailed(ILogger logger, string instanceId, string requestId, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 session {InstanceId} catching up after the event stream reconnected (was running: {WasRunning}, running: {Running})")]
+    private static partial void LogResync(ILogger logger, string instanceId, bool wasRunning, bool running);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Sending a prompt to OpenCode 2 session {InstanceId}")]
     private static partial void LogPrompt(ILogger logger, string instanceId);

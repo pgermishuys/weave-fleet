@@ -39,6 +39,167 @@ internal sealed record OpenCode2Location
 internal sealed record OpenCode2CreateSessionRequest
 {
     public required OpenCode2Location Location { get; init; }
+
+    /// <summary>The session's own permission rules, which win over the user's config.</summary>
+    public IReadOnlyList<OpenCode2PermissionRule>? Permissions { get; init; }
+}
+
+/// <summary>One rule of a V2 <c>Permission.Ruleset</c>: <c>effect</c> is <c>allow</c>, <c>deny</c> or <c>ask</c>.</summary>
+internal sealed record OpenCode2PermissionRule
+{
+    public required string Action { get; init; }
+    public required string Resource { get; init; }
+    public required string Effect { get; init; }
+}
+
+/// <summary><c>POST /api/session/{id}/permission/{requestID}/reply</c>: <c>once</c>, <c>always</c> or <c>reject</c>.</summary>
+internal sealed record OpenCode2PermissionReply
+{
+    public required string Decision { get; init; }
+}
+
+/// <summary>
+/// A V2 form (<c>Form.Info</c>), which is how the question tool asks: <c>metadata.kind</c> is <c>question</c> and
+/// <c>metadata.tool</c> names the tool call. Each question is a field (<c>q0</c>, <c>q1</c>, …).
+/// </summary>
+internal sealed record OpenCode2Form
+{
+    public string? Id { get; init; }
+    [JsonPropertyName("sessionID")] public string? SessionId { get; init; }
+    public string? Title { get; init; }
+    public JsonElement Metadata { get; init; }
+    public IReadOnlyList<OpenCode2FormField>? Fields { get; init; }
+
+    /// <summary>The tool call that asked, when the form is a question.</summary>
+    [JsonIgnore]
+    public string? ToolCallId =>
+        Metadata.ValueKind == JsonValueKind.Object
+        && Metadata.TryGetProperty("tool", out var tool)
+        && tool.ValueKind == JsonValueKind.Object
+        && tool.TryGetProperty("id", out var id)
+        && id.ValueKind == JsonValueKind.String
+            ? id.GetString()
+            : null;
+
+    [JsonIgnore]
+    public bool IsQuestion =>
+        Metadata.ValueKind == JsonValueKind.Object
+        && Metadata.TryGetProperty("kind", out var kind)
+        && kind.ValueKind == JsonValueKind.String
+        && kind.GetString() == "question";
+}
+
+/// <summary>One form field: <c>string</c> (one answer, <c>custom</c> allows free text) or <c>multiselect</c> (several).</summary>
+internal sealed record OpenCode2FormField
+{
+    public required string Key { get; init; }
+    public string? Type { get; init; }
+    public IReadOnlyList<OpenCode2FormOption>? Options { get; init; }
+}
+
+/// <summary>A choice in a form field: the question tool's options, with <see cref="Value"/> what the reply sends.</summary>
+internal sealed record OpenCode2FormOption
+{
+    public string? Value { get; init; }
+    public string? Label { get; init; }
+}
+
+/// <summary><c>POST /api/session/{id}/form/{formID}/reply</c>: one value per field key.</summary>
+internal sealed record OpenCode2FormReply
+{
+    public required Dictionary<string, JsonElement> Answer { get; init; }
+}
+
+/// <summary><c>GET /api/session/{id}/message</c>: a page of messages, newest first, with cursors for the next page.</summary>
+internal sealed record OpenCode2MessagePage
+{
+    public IReadOnlyList<OpenCode2Message>? Data { get; init; }
+    public OpenCode2Cursor? Cursor { get; init; }
+}
+
+internal sealed record OpenCode2Cursor
+{
+    public string? Previous { get; init; }
+    public string? Next { get; init; }
+}
+
+/// <summary>
+/// A V2 message (<c>Session.Message.Info</c>). Fleet reads <c>user</c> (<see cref="Text"/>) and <c>assistant</c>
+/// (one step: <see cref="Content"/> is its text, reasoning and tool calls in order); the other types (<c>idle</c>,
+/// <c>shell</c>, <c>compaction</c>, <c>synthetic</c>, …) aren't shown.
+/// </summary>
+internal sealed record OpenCode2Message
+{
+    public string? Id { get; init; }
+    public string? Type { get; init; }
+    public OpenCode2MessageTimes? Time { get; init; }
+    public string? Text { get; init; }
+    public string? Agent { get; init; }
+    public OpenCode2ModelRef? Model { get; init; }
+    public IReadOnlyList<OpenCode2Content>? Content { get; init; }
+    public string? Finish { get; init; }
+    public double? Cost { get; init; }
+    public OpenCode2TokenUsage? Tokens { get; init; }
+    public OpenCode2StructuredError? Error { get; init; }
+}
+
+internal sealed record OpenCode2MessageTimes
+{
+    public long? Created { get; init; }
+    public long? Completed { get; init; }
+}
+
+internal sealed record OpenCode2ModelRef
+{
+    public string? Id { get; init; }
+    [JsonPropertyName("providerID")] public string? ProviderId { get; init; }
+}
+
+internal sealed record OpenCode2TokenUsage
+{
+    public double? Input { get; init; }
+    public double? Output { get; init; }
+    public double? Reasoning { get; init; }
+}
+
+/// <summary>V2's <c>Session.StructuredError</c>.</summary>
+internal sealed record OpenCode2StructuredError
+{
+    public string? Type { get; init; }
+    public string? Message { get; init; }
+}
+
+/// <summary>One item of an assistant message: <c>text</c>, <c>reasoning</c> or <c>tool</c>.</summary>
+internal sealed record OpenCode2Content
+{
+    public string? Type { get; init; }
+    public string? Text { get; init; }
+    public string? Id { get; init; }
+    public string? Name { get; init; }
+    public OpenCode2ToolState? State { get; init; }
+}
+
+/// <summary>
+/// A tool call's state in history: <c>streaming</c> (input still arriving, as text), <c>running</c>,
+/// <c>completed</c> or <c>error</c>.
+/// </summary>
+internal sealed record OpenCode2ToolState
+{
+    public string? Status { get; init; }
+    public JsonElement Input { get; init; }
+    public IReadOnlyList<OpenCode2ToolContent>? Content { get; init; }
+    public JsonElement Metadata { get; init; }
+    public OpenCode2StructuredError? Error { get; init; }
+}
+
+/// <summary>What a tool returned: <c>text</c>, or a <c>file</c> (<see cref="Uri"/>, <see cref="Mime"/>).</summary>
+internal sealed record OpenCode2ToolContent
+{
+    public string? Type { get; init; }
+    public string? Text { get; init; }
+    public string? Uri { get; init; }
+    public string? Mime { get; init; }
+    public string? Name { get; init; }
 }
 
 /// <summary><c>POST /api/session/{id}/prompt</c>. <see cref="Id"/> names the user message, so it matches Fleet's own.</summary>
@@ -62,14 +223,23 @@ internal sealed record OpenCode2Event
     public required string Type { get; init; }
     public JsonElement Data { get; init; }
 
-    /// <summary>The V2 session the event is about, when it's about one.</summary>
+    /// <summary>
+    /// The V2 session the event is about, when it's about one. Most events say so in <c>data.sessionID</c>;
+    /// <c>form.created</c> says it in <c>data.form.sessionID</c>.
+    /// </summary>
     [JsonIgnore]
-    public string? SessionId =>
-        Data.ValueKind == JsonValueKind.Object
-        && Data.TryGetProperty("sessionID", out var id)
-        && id.ValueKind == JsonValueKind.String
-            ? id.GetString()
-            : null;
+    public string? SessionId
+    {
+        get
+        {
+            if (Data.ValueKind != JsonValueKind.Object)
+                return null;
+            var owner = Data.TryGetProperty("form", out var form) && form.ValueKind == JsonValueKind.Object ? form : Data;
+            return owner.TryGetProperty("sessionID", out var id) && id.ValueKind == JsonValueKind.String
+                ? id.GetString()
+                : null;
+        }
+    }
 }
 
 // ── Fleet event payloads ────────────────────────────────────────────────────
@@ -150,7 +320,11 @@ internal sealed record OpenCode2PartUpdatedPayload
     public required OpenCode2Part Part { get; init; }
 }
 
-/// <summary>A message part: <c>text</c> and <c>reasoning</c> carry <see cref="Text"/>; <c>step-start</c> and <c>step-finish</c> the rest.</summary>
+/// <summary>
+/// A message part: <c>text</c> and <c>reasoning</c> carry <see cref="Text"/>; <c>tool</c> carries
+/// <see cref="Tool"/>, <see cref="CallId"/> and <see cref="State"/>; <c>file</c> a <see cref="Mime"/> and
+/// <see cref="Url"/>; <c>step-start</c> and <c>step-finish</c> the rest.
+/// </summary>
 /// <remarks><see cref="Type"/> comes first: Fleet reads parts polymorphically, and the discriminator must lead.</remarks>
 internal sealed record OpenCode2Part
 {
@@ -159,11 +333,31 @@ internal sealed record OpenCode2Part
     [JsonPropertyName("sessionID")] public required string SessionId { get; init; }
     [JsonPropertyName("messageID")] public required string MessageId { get; init; }
     public string? Text { get; init; }
+    public string? Tool { get; init; }
+    [JsonPropertyName("callID")] public string? CallId { get; init; }
+    public OpenCode2ToolPartState? State { get; init; }
+    public string? Mime { get; init; }
+    public string? Url { get; init; }
+    public string? Filename { get; init; }
     public int? Index { get; init; }
     public string? Reason { get; init; }
     public double? Cost { get; init; }
     public OpenCode2Tokens? Tokens { get; init; }
     public long? CompletedAt { get; init; }
+}
+
+/// <summary>
+/// A tool part's state as Fleet reads it: <c>pending</c>, <c>running</c>, <c>completed</c> (with
+/// <see cref="Output"/>) or <c>error</c> (with <see cref="Error"/>).
+/// </summary>
+/// <remarks><see cref="Status"/> comes first, for the same reason as a part's type.</remarks>
+internal sealed record OpenCode2ToolPartState
+{
+    public required string Status { get; init; }
+    public JsonElement? Input { get; init; }
+    public JsonElement? Output { get; init; }
+    public string? Error { get; init; }
+    public JsonElement? Metadata { get; init; }
 }
 
 internal sealed record OpenCode2PartDeltaPayload
@@ -181,6 +375,14 @@ internal sealed record OpenCode2PartDeltaPayload
 [JsonSerializable(typeof(OpenCode2Envelope<OpenCode2ServerInfo>))]
 [JsonSerializable(typeof(OpenCode2Envelope<OpenCode2SessionInfo>))]
 [JsonSerializable(typeof(OpenCode2Envelope<Dictionary<string, JsonElement>>))]
+[JsonSerializable(typeof(OpenCode2Envelope<List<OpenCode2Form>>))]
+[JsonSerializable(typeof(OpenCode2MessagePage))]
+[JsonSerializable(typeof(OpenCode2Form))]
+[JsonSerializable(typeof(List<OpenCode2ToolContent>))]
+[JsonSerializable(typeof(string))]
+[JsonSerializable(typeof(List<string>))]
+[JsonSerializable(typeof(OpenCode2FormReply))]
+[JsonSerializable(typeof(OpenCode2PermissionReply))]
 [JsonSerializable(typeof(OpenCode2ServerInfo))]
 [JsonSerializable(typeof(OpenCode2CreateSessionRequest))]
 [JsonSerializable(typeof(OpenCode2PromptRequest))]

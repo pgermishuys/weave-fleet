@@ -8,6 +8,12 @@ internal interface IOpenCode2EventSink
 {
     void OnEvent(OpenCode2Event evt);
 
+    /// <summary>
+    /// The event stream reconnected after a drop: catch up on what was missed. <paramref name="activeSessions"/> are
+    /// the sessions with a turn running now. Runs on the event pump before any newer event is delivered.
+    /// </summary>
+    Task ResyncAsync(IReadOnlySet<string> activeSessions, CancellationToken ct);
+
     /// <summary>The server stopped; nothing more will arrive from it.</summary>
     void OnServerStopped();
 }
@@ -16,6 +22,7 @@ internal interface IOpenCode2EventSink
 /// One <c>opencode2 serve</c> process that Fleet runs for one owner, serving every directory: V2 takes the directory
 /// per session (<c>location</c>), so there's no process per folder. Its single event stream carries every session's
 /// events and is routed to the attached sessions by <c>sessionID</c>. Events for sessions nobody attached are dropped.
+/// The stream is live only, so when it reconnects the attached sessions read what they missed.
 /// </summary>
 internal sealed partial class OpenCode2Server : IAsyncDisposable
 {
@@ -71,14 +78,25 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     private async Task PumpAsync()
     {
         var ct = _stopping.Token;
+        var reconnecting = false;
         while (!ct.IsCancellationRequested && IsRunning)
         {
             try
             {
+                var resync = reconnecting;
                 await foreach (var evt in Client.ReadEventsAsync(OnConnected, ct).ConfigureAwait(false))
                 {
+                    // V2 opens every stream with server.connected, so this runs as soon as the stream is back.
+                    if (resync)
+                    {
+                        resync = false;
+                        await ResyncAsync(ct).ConfigureAwait(false);
+                    }
+
                     if (evt.SessionId is { } sessionId && _sinks.TryGetValue(sessionId, out var sink))
                         Deliver(sink, evt);
+                    else if (evt.Type == "permission.asked" && evt.SessionId is { } other)
+                        AllowOnce(other, evt);
                 }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -91,9 +109,12 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
             }
 
             // The stream ended with the process still up: open it again, and make new waiters wait for that.
-            // Anything sent in between is lost (V2 doesn't replay).
+            // Anything sent in between is lost (V2 doesn't replay), so the sessions catch up once it's back.
             if (Volatile.Read(ref _connected).Task.IsCompleted)
+            {
                 Volatile.Write(ref _connected, NewConnectedSource());
+                reconnecting = true;
+            }
 
             try
             {
@@ -103,6 +124,59 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
             {
                 return;
             }
+        }
+    }
+
+    /// <summary>
+    /// A permission ask from a session no Fleet session listens to (a subagent's child session, which doesn't get
+    /// Fleet's allow-all rules) would wait forever, and so would the turn that started it. Every session on this
+    /// server is Fleet's, so it's allowed once, like an attached session's.
+    /// </summary>
+    private void AllowOnce(string sessionId, OpenCode2Event evt)
+    {
+        if (!evt.Data.TryGetProperty("id", out var id) || id.ValueKind != System.Text.Json.JsonValueKind.String)
+            return;
+
+        var requestId = id.GetString()!;
+        LogPermissionAllowed(_logger, sessionId, requestId);
+        _ = ReplyAsync();
+
+        async Task ReplyAsync()
+        {
+            try
+            {
+                await Client.ReplyToPermissionAsync(sessionId, requestId, "once", _stopping.Token).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
+            {
+                LogPermissionReplyFailed(_logger, sessionId, requestId, ex);
+            }
+        }
+    }
+
+    private async Task ResyncAsync(CancellationToken ct)
+    {
+        if (_sinks.IsEmpty)
+            return;
+
+        try
+        {
+            var active = await Client.GetActiveSessionIdsAsync(ct).ConfigureAwait(false);
+            foreach (var sink in _sinks.Values)
+            {
+                try
+                {
+                    await sink.ResyncAsync(active, ct).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+                {
+                    LogSinkFailed(_logger, "resync", ex);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            LogResyncFailed(_logger, ProcessId ?? 0, ex);
         }
     }
 
@@ -172,6 +246,15 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "OpenCode 2 server {ProcessId}: event stream failed; reconnecting")]
     private static partial void LogStreamFailed(ILogger logger, int processId, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "OpenCode 2 session {HarnessSessionId} (not a Fleet session's own, e.g. a subagent's) asked permission ({RequestId}); allowed once, since nobody can answer it")]
+    private static partial void LogPermissionAllowed(ILogger logger, string harnessSessionId, string requestId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't answer OpenCode 2 permission request {RequestId} for session {HarnessSessionId}")]
+    private static partial void LogPermissionReplyFailed(ILogger logger, string harnessSessionId, string requestId, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "OpenCode 2 server {ProcessId}: couldn't read the running sessions after the event stream reconnected")]
+    private static partial void LogResyncFailed(ILogger logger, int processId, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "An OpenCode 2 session failed to handle {EventType}")]
     private static partial void LogSinkFailed(ILogger logger, string eventType, Exception exception);

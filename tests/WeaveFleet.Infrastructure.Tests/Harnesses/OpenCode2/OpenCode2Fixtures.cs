@@ -11,6 +11,11 @@ namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode2;
 ///   <item><c>text-and-tool-turn.sse</c>: one session, a text turn ("say hello") then a shell tool turn.</item>
 ///   <item><c>permission-form-subagent-interrupt.sse</c>: five sessions (a plugin tool, a permission ask, a form,
 ///   a subagent, and a turn interrupted mid-tool).</item>
+///   <item><c>tools-questions.sse</c> (2.0.8): one session created allowing everything, four turns: a shell call, a
+///   read of a missing file (the tool fails), a question answered "B", and a question dismissed (V2 then interrupts
+///   the turn). <c>tools-questions.messages.json</c> is the same session's history afterwards
+///   (<c>GET /api/session/{id}/message</c>), and <c>.messages-page1/2.json</c> the same read three at a time.
+///   <c>tools-questions.forms.json</c> is <c>GET /api/session/{id}/form</c> while the first question waited.</item>
 /// </list>
 /// </summary>
 internal static class OpenCode2Fixtures
@@ -22,6 +27,16 @@ internal static class OpenCode2Fixtures
     public const string FormSession = "ses_f49becf54ffeEaine7WWKSPOgM";
     public const string SubagentSession = "ses_f49bebf2bffe2EwiUcF3yeqrZO";
     public const string InterruptedSession = "ses_f49be8651ffeWEBnoQ195zcSsj";
+
+    public const string ToolsSession = "ses_f48064e63ffe2g85VM7MArlHhg";
+    public const string ShellMessage = "msg_0b7f9b532001IWxxG4F1WnlueS";
+    public const string ShellCall = "call_1789792990530";
+    public const string FailedReadMessage = "msg_0b7f9c4d9001GVrNU6kImg9WlD";
+    public const string FailedReadCall = "call_1789792994543";
+    public const string AnsweredQuestionMessage = "msg_0b7f9d4a5001x2NlXtf50JvuU9";
+    public const string AnsweredQuestionCall = "call_1789792998586";
+    public const string AnsweredQuestionForm = "frm_0b7f9d4cb001hPPwPu8NuxQJaV";
+    public const string DismissedQuestionCall = "call_1789793005718";
 
     public static string Read(string fileName)
         => File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "OpenCode2", fileName));

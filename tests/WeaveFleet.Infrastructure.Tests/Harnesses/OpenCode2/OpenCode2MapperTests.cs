@@ -71,15 +71,15 @@ public sealed class OpenCode2MapperTests
     }
 
     [Fact]
-    public async Task A_tool_turn_maps_its_text_and_leaves_the_tool_events_out()
+    public async Task A_tool_turn_shows_the_call_then_the_reply()
     {
         var events = await MapSessionAsync("text-and-tool-turn.sse", OpenCode2Fixtures.TextSession, turns: 2);
         var secondTurn = events.SkipWhile(e => e.Type != EventTypes.SessionIdle).Skip(1).ToList();
 
         secondTurn[0].Type.ShouldBe(EventTypes.SessionStatus);
         secondTurn[^1].Type.ShouldBe(EventTypes.SessionIdle);
-        secondTurn.Where(e => e.Type == EventTypes.MessagePartUpdated).Select(PartType)
-            .ShouldBe(["step-start", "step-finish", "step-start", "text", "text", "step-finish"]);
+        secondTurn.Where(e => e.Type == EventTypes.MessagePartUpdated).Select(e => PartType(e) == "tool" ? "tool " + ToolStatus(e) : PartType(e))
+            .ShouldBe(["step-start", "tool pending", "tool running", "tool completed", "step-finish", "step-start", "text", "text", "step-finish"]);
         secondTurn.Where(IsStepFinish).Select(Reason).ShouldBe(["tool-calls", "stop"]);
     }
 
@@ -248,6 +248,9 @@ public sealed class OpenCode2MapperTests
         => evt.Type == EventTypes.MessagePartUpdated ? evt.Payload!.Value.GetProperty("part").GetProperty("type").GetString() : null;
 
     private static bool IsStepFinish(HarnessEvent evt) => PartType(evt) == "step-finish";
+
+    private static string? ToolStatus(HarnessEvent evt)
+        => evt.Payload!.Value.GetProperty("part").GetProperty("state").GetProperty("status").GetString();
 
     private static string? Reason(HarnessEvent evt)
         => evt.Payload!.Value.GetProperty("part").TryGetProperty("reason", out var reason) ? reason.GetString() : null;
