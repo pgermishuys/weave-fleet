@@ -2,6 +2,8 @@
 import { computed, ref } from "vue";
 import { X, User, Bot, Copy } from "lucide-vue-next";
 import ToolCard from "@/components/session/ToolCard.vue";
+import AgentTaskRow from "@/components/session/AgentTaskRow.vue";
+import type { ToolCardDelegation } from "@/components/session/activity-stream-tool-card";
 import QuestionCard from "@/components/session/QuestionCard.vue";
 import type { AccumulatedToolPart } from "@/lib/client-types";
 import type { VisualPayload } from "@/lib/visual-payload";
@@ -30,6 +32,7 @@ interface ToolCardItem {
   preview?: string;
   isPatternTool?: boolean;
   canvasId?: string;
+  delegation?: ToolCardDelegation;
 }
 
 interface ImageAttachmentDisplay {
@@ -200,23 +203,31 @@ function handleExpandVisual(payload: VisualPayload): void {
             v-if="tools && tools.length > 0"
             class="msg-tools"
           >
-            <ToolCard
+            <template
               v-for="tool in tools"
-              :id="tool.id"
               :key="tool.id"
-              :title="tool.title"
-              :kind="tool.kind"
-              :status="tool.status"
-              :summary="tool.summary"
-              :output="tool.output"
-              :diff-lines="tool.diffLines"
-              :initially-collapsed="tool.initiallyCollapsed"
-              :preview="tool.preview"
-              :is-pattern-tool="tool.isPatternTool"
-              :canvas-id="tool.canvasId"
-              @expand-visual="handleExpandVisual"
-              @show-canvas="emit('show-canvas', $event)"
-            />
+            >
+              <AgentTaskRow
+                v-if="tool.delegation"
+                :delegation="tool.delegation"
+              />
+              <ToolCard
+                v-else
+                :id="tool.id"
+                :title="tool.title"
+                :kind="tool.kind"
+                :status="tool.status"
+                :summary="tool.summary"
+                :output="tool.output"
+                :diff-lines="tool.diffLines"
+                :initially-collapsed="tool.initiallyCollapsed"
+                :preview="tool.preview"
+                :is-pattern-tool="tool.isPatternTool"
+                :canvas-id="tool.canvasId"
+                @expand-visual="handleExpandVisual"
+                @show-canvas="emit('show-canvas', $event)"
+              />
+            </template>
           </div>
 
           <QuestionCard

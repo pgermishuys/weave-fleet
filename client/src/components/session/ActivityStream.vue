@@ -6,13 +6,14 @@ import { useRouter } from "@tanstack/vue-router";
 import { storeToRefs } from "pinia";
 import MessageBubble from "@/components/session/MessageBubble.vue";
 import ReasoningBlock from "@/components/session/ReasoningBlock.vue";
+import WorkingIndicator from "@/components/session/WorkingIndicator.vue";
 import { useSessionStream } from "@/composables/use-session-stream";
 import { useModels } from "@/composables/use-models";
 import { modelDisplayName } from "@/lib/agent-model-choice";
 import { isStreamWorking } from "@/lib/domain-event-reducer";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { clearSentPrompts, reconcileSentPrompts, useSendPrompt, useSentPrompts } from "@/composables/use-send-prompt";
-import { isSubagentTool, toToolCardItem } from "@/components/session/activity-stream-tool-card";
+import { isSubagentTool, subagentKind, subagentTask, toToolCardItem } from "@/components/session/activity-stream-tool-card";
 import type { ToolCardItem } from "@/components/session/activity-stream-tool-card";
 import type { CommandEventName } from "@/lib/command-events";
 import type { AccumulatedMessage, AccumulatedPart, AccumulatedToolPart, AccumulatedFilePart, AccumulatedReasoningPart } from "@/lib/client-types";
@@ -43,7 +44,6 @@ interface ActivityMessage {
   tools?: ToolCardItem[];
   questionParts?: AccumulatedToolPart[];
   reasoningParts?: AccumulatedReasoningPart[];
-  delegationLinks: DelegationLink[];
   optimisticStatus?: "pending" | "confirmed" | "needs_retry";
   clusterPosition: "single" | "first" | "middle" | "last";
   showIdentity: boolean;
@@ -53,14 +53,6 @@ interface ActivityMessage {
   peer?: PeerSender;
   /** Set when this is Fleet's update that a session this one messaged is done. */
   peerOutcome?: PeerOutcome;
-}
-
-interface DelegationLink {
-  id: string;
-  href: string;
-  title: string;
-  status: string;
-  statusKey: string;
 }
 
 const props = defineProps<{
@@ -211,12 +203,11 @@ const deliveredMessages = computed<ActivityMessage[]>(() => {
           .map((part) => ({ url: part.url, filename: part.filename?.trim() || "image" })),
         tools: message.parts
           .filter((part): part is AccumulatedToolPart => part.type === "tool" && !isQuestionPart(part as AccumulatedToolPart))
-          .map(toToolCardItem),
+          .map((part) => withDelegation(toToolCardItem(part), part)),
         questionParts: message.parts
           .filter((part): part is AccumulatedToolPart => part.type === "tool" && isQuestionPart(part as AccumulatedToolPart)),
         reasoningParts: message.parts
           .filter((part): part is AccumulatedReasoningPart => part.type === "reasoning"),
-        delegationLinks: getDelegationLinks(message),
         clusterPosition: "single" as const,
         showIdentity: true,
         turnError: message.turnError,
@@ -260,7 +251,6 @@ const optimisticMessages = computed<ActivityMessage[]>(() => {
     tools: [],
     questionParts: [],
     reasoningParts: [],
-    delegationLinks: [],
     optimisticStatus: prompt.status,
     clusterPosition: "single",
     showIdentity: true,
@@ -332,6 +322,16 @@ watch(
 );
 
 const isStreaming = computed(() => isStreamWorking(sessionStatus.value));
+// The turn's clock starts at your last prompt.
+const turnStartedAt = computed(() => {
+  for (let index = messages.value.length - 1; index >= 0; index -= 1) {
+    const message = messages.value[index];
+    if (message.role === "user") {
+      return message.createdAt ?? null;
+    }
+  }
+  return null;
+});
 
 function isNearBottom(element: HTMLElement): boolean {
   return element.scrollHeight - element.scrollTop - element.clientHeight <= SCROLL_BOTTOM_THRESHOLD;
@@ -365,20 +365,6 @@ function scrollToBottom(): void {
 
 function handleJumpToLatest(): void {
   scrollToBottom();
-}
-
-function handleDelegationLinkClick(event: MouseEvent, delegationLink: DelegationLink): void {
-  event.preventDefault();
-  const url = new URL(delegationLink.href, window.location.origin);
-  const sessionId = decodeURIComponent(url.pathname.replace("/sessions/", ""));
-  const instanceId = url.searchParams.get("instanceId") ?? undefined;
-  const parentSessionId = url.searchParams.get("parentSessionId") ?? undefined;
-
-  void router.navigate({
-    to: "/sessions/$id",
-    params: { id: sessionId },
-    search: { instanceId, parentSessionId },
-  });
 }
 
 function handlePeerLinkClick(event: MouseEvent, peer: PeerSender): void {
@@ -605,36 +591,33 @@ watch(
   },
 );
 
-function getDelegationLinks(message: AccumulatedMessage): DelegationLink[] {
-  const taskToolParts = message.parts.filter(
-    (part): part is AccumulatedToolPart => part.type === "tool" && isSubagentTool(part.tool),
-  );
+/** Points a sub-agent call's row at the session it started, once that session exists. */
+function withDelegation(item: ToolCardItem, part: AccumulatedToolPart): ToolCardItem {
+  if (!isSubagentTool(part.tool)) {
+    return item;
+  }
 
-  return taskToolParts.flatMap((part) => {
-    return delegations.value.flatMap((delegation) => {
-      if ((delegation.parentToolCallId !== part.callId && delegation.parentToolCallId !== part.partId) || !delegation.childSessionId) {
-        return [];
-      }
+  const delegation = delegations.value.find((candidate) =>
+    (candidate.parentToolCallId === part.callId || candidate.parentToolCallId === part.partId)
+    && candidate.childSessionId);
+  if (!delegation?.childSessionId) {
+    return item;
+  }
 
-      const childSession = sessions.value.find(
-        (session) => session.session.id === delegation.childSessionId,
-      );
-
-      const childInstanceId = childSession?.instanceId ?? delegation.childSessionId;
-
-      if (!childInstanceId) {
-        return [];
-      }
-
-      return [{
-        id: delegation.delegationId,
-        href: `/sessions/${delegation.childSessionId}?instanceId=${childInstanceId}&parentSessionId=${props.sessionId}`,
-        title: delegation.title,
-        status: formatToolStatus(delegation.status),
-        statusKey: delegation.status,
-      } satisfies DelegationLink];
-    });
-  });
+  const childSession = sessions.value.find((session) => session.session.id === delegation.childSessionId);
+  const childInstanceId = childSession?.instanceId ?? delegation.childSessionId;
+  return {
+    ...item,
+    delegation: {
+      href: `/sessions/${delegation.childSessionId}?instanceId=${childInstanceId}&parentSessionId=${props.sessionId}`,
+      childSessionId: delegation.childSessionId,
+      childInstanceId,
+      parentSessionId: props.sessionId,
+      agent: subagentKind(part),
+      task: subagentTask(part) || delegation.title,
+      status: delegation.status,
+    },
+  };
 }
 
 function getDisplayAuthor(message: AccumulatedMessage): string {
@@ -705,7 +688,6 @@ function hasVisibleMessageContent(message: ActivityMessage): boolean {
     || message.images.length > 0
     || (message.tools?.length ?? 0) > 0
     || (message.questionParts?.length ?? 0) > 0
-    || message.delegationLinks.length > 0
     // A turn can fail before it produces anything; the failure is the content.
     || message.turnError != null;
 }
@@ -763,19 +745,6 @@ function renderMessagePart(part: AccumulatedPart): string | null {
   }
 
   return null;
-}
-
-function formatToolStatus(value: unknown): string {
-  const status = getStringValue(value);
-  if (!status) {
-    return "Pending";
-  }
-
-  return status.charAt(0).toUpperCase() + status.slice(1);
-}
-
-function getStringValue(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value : undefined;
 }
 
 function handleExpandVisual(payload: VisualPayload): void {
@@ -931,46 +900,6 @@ function handleShowCanvas(canvasId: string): void {
         >
           Not confirmed yet. Retry from the composer if this did not send.
         </div>
-        <div
-          v-if="message.delegationLinks.length > 0"
-          class="delegation-links"
-          :class="`delegation-links--${message.role}`"
-        >
-          <a
-            v-for="delegationLink in message.delegationLinks"
-            :key="delegationLink.id"
-            class="delegation-link"
-            :class="`delegation-link--${delegationLink.statusKey}`"
-            :href="delegationLink.href"
-            data-testid="delegation-link"
-            @click="handleDelegationLinkClick($event, delegationLink)"
-          >
-            <div class="delegation-link__header">
-              <span class="delegation-link__eyebrow">
-                <Bot
-                  class="delegation-link__eyebrow-icon"
-                  aria-hidden="true"
-                />
-                <span data-testid="delegation-link-title">{{ delegationLink.title }}</span>
-              </span>
-              <span class="delegation-link__meta">
-                <ArrowUpRight
-                  class="delegation-link__status-icon"
-                  aria-hidden="true"
-                />
-                <span
-                  class="delegation-link-status"
-                  data-testid="delegation-link-status"
-                >
-                  {{ delegationLink.status }}
-                </span>
-              </span>
-            </div>
-            <div class="delegation-link__body">
-              <span class="delegation-link__title">Subagent task</span>
-            </div>
-          </a>
-        </div>
       </div>
 
       <!-- Streaming indicator -->
@@ -978,14 +907,7 @@ function handleShowCanvas(canvasId: string): void {
         v-if="isStreaming"
         class="streaming-indicator"
       >
-        <div class="streaming-indicator__layout">
-          <div class="streaming-indicator__icon">
-            <Bot class="streaming-indicator__icon-svg" aria-hidden="true" />
-          </div>
-          <div class="streaming-indicator__dots">
-            <span class="streaming-dots-loader" aria-hidden="true" />
-          </div>
-        </div>
+        <WorkingIndicator :since="turnStartedAt" />
       </div>
     </section>
   </div>
@@ -1227,81 +1149,11 @@ function handleShowCanvas(canvasId: string): void {
 }
 
 .streaming-indicator {
-  display: flex;
-  flex-direction: column;
   width: 100%;
   max-width: 760px;
-  padding: 4px 0;
   margin: 0 auto 12px;
+  padding: 4px 0;
   box-sizing: border-box;
-}
-
-.streaming-indicator__layout {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-}
-
-.streaming-indicator__icon {
-  display: none;
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-top: 2px;
-}
-
-.streaming-indicator__icon-svg {
-  width: 16px;
-  height: 16px;
-  color: var(--muted);
-}
-
-.streaming-indicator__dots {
-  display: flex;
-  align-items: center;
-  height: 20px;
-  padding-left: calc(32 * 0.45px);
-}
-
-.streaming-dots-loader {
-  --color-1: var(--muted);
-  --color-2: color-mix(in srgb, var(--muted) 20%, transparent);
-  --size: 0.45px;
-
-  display: inline-block;
-  width: calc(16 * var(--size));
-  height: calc(16 * var(--size));
-  border-radius: 50%;
-  background-color: var(--color-1);
-  box-shadow:
-    calc(32 * var(--size)) 0 var(--color-1),
-    calc(-32 * var(--size)) 0 var(--color-1);
-  position: relative;
-  animation: streaming-dots-flash 0.5s ease-out infinite alternate;
-}
-
-@keyframes streaming-dots-flash {
-  0% {
-    background-color: var(--color-2);
-    box-shadow:
-      calc(32 * var(--size)) 0 var(--color-2),
-      calc(-32 * var(--size)) 0 var(--color-1);
-  }
-  50% {
-    background-color: var(--color-1);
-    box-shadow:
-      calc(32 * var(--size)) 0 var(--color-2),
-      calc(-32 * var(--size)) 0 var(--color-2);
-  }
-  100% {
-    background-color: var(--color-2);
-    box-shadow:
-      calc(32 * var(--size)) 0 var(--color-1),
-      calc(-32 * var(--size)) 0 var(--color-2);
-  }
 }
 
 .peer-from {
@@ -1342,140 +1194,5 @@ function handleShowCanvas(canvasId: string): void {
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.delegation-links {
-  display: flex;
-  flex-direction: column;
-  width: var(--activity-bubble-width);
-  box-sizing: border-box;
-  gap: 6px;
-  margin-top: 1px;
-  padding: 0;
-}
-
-.delegation-links--user {
-  align-items: flex-end;
-  margin-left: 0;
-}
-
-.delegation-link {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: min(100%, 280px);
-  max-width: min(100%, 380px);
-  padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
-  border-radius: calc(var(--radius-card) + 2px);
-  background: color-mix(in srgb, var(--card-bg, var(--panel-bg)) 96%, var(--accent-dim) 4%);
-  color: inherit;
-  text-decoration: none;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03);
-  transition: border-color var(--transition) ease, background-color var(--transition) ease, box-shadow var(--transition) ease,
-    transform var(--transition) ease;
-}
-
-.delegation-link:hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--primary, #6366f1) 24%, var(--border));
-  background: color-mix(in srgb, var(--card-bg, var(--panel-bg)) 88%, var(--accent-dim) 12%);
-  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.1);
-}
-
-.delegation-link:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--primary, #6366f1) 65%, white 35%);
-  outline-offset: 2px;
-}
-
-.delegation-link__header,
-.delegation-link__body {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
-  flex-wrap: nowrap;
-}
-
-.delegation-link__eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--text, #f4f4f5);
-  font-size: 0.9rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
-}
-
-.delegation-link__eyebrow-icon,
-.delegation-link__status-icon {
-  width: 0.9rem;
-  height: 0.9rem;
-}
-
-.delegation-link__meta {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.delegation-link__title {
-  min-width: 0;
-  font-size: 0.75rem;
-  font-weight: 600;
-  line-height: 1.2;
-  color: var(--muted, #6b7280);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.delegation-link-status {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  padding: 3px 7px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  background: color-mix(in srgb, var(--panel-bg) 86%, var(--muted) 14%);
-  color: var(--muted, #6b7280);
-  font-size: 0.68rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.delegation-link--running .delegation-link-status {
-  border-color: color-mix(in srgb, var(--primary, #6366f1) 20%, var(--border));
-  background: color-mix(in srgb, var(--primary, #6366f1) 10%, var(--panel-bg));
-  color: color-mix(in srgb, var(--primary, #6366f1) 72%, white 28%);
-}
-
-.delegation-link--completed .delegation-link-status {
-  border-color: color-mix(in srgb, #22c55e 20%, var(--border));
-  background: color-mix(in srgb, #22c55e 10%, var(--panel-bg));
-  color: #22c55e;
-}
-
-.delegation-link--error .delegation-link-status,
-.delegation-link--cancelled .delegation-link-status {
-  border-color: color-mix(in srgb, #ef4444 20%, var(--border));
-  background: color-mix(in srgb, #ef4444 10%, var(--panel-bg));
-  color: #ef4444;
-}
-
-.delegation-links--user .delegation-link {
-  align-items: flex-end;
-}
-
-.delegation-links--user .delegation-link__title {
-  text-align: right;
-}
-
-.delegation-links--user .delegation-link__meta {
-  flex-direction: row-reverse;
 }
 </style>
