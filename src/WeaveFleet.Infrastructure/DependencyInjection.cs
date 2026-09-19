@@ -28,6 +28,7 @@ using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
+using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 using WeaveFleet.Infrastructure.Harnesses.Pi;
 using WeaveFleet.Infrastructure.Plugins;
 using WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
@@ -399,6 +400,20 @@ public static class DependencyInjection
         services.AddSingleton<IHarness>(sp => sp.GetRequiredService<PiHarness>());
         services.AddSingleton<PiHarnessRuntime>();
         services.AddSingleton<IHarnessRuntime>(sp => sp.GetRequiredService<PiHarnessRuntime>());
+
+        // OpenCode 2: a harness of its own next to OpenCode, off until the user turns it on (opencode2.enabled).
+        services.AddHttpClient(OpenCode2HarnessRuntime.HttpClientName);
+        services.AddSingleton<OpenCode2Harness>();
+        services.AddSingleton<IHarness>(sp => sp.GetRequiredService<OpenCode2Harness>());
+        services.AddSingleton<OpenCode2HarnessRuntime>(sp => new OpenCode2HarnessRuntime(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<FleetOptions>(),
+            sp.GetRequiredService<IServiceScopeFactory>(),
+            sp.GetRequiredService<ILogger<OpenCode2HarnessRuntime>>(),
+            sp.GetRequiredService<ILoggerFactory>(),
+            sp.GetService<IAnalyticsCollector>()));
+        services.AddSingleton<IHarnessRuntime>(sp => sp.GetRequiredService<OpenCode2HarnessRuntime>());
+        services.AddSingleton<IHarnessBridgeTokens>(sp => new OpenCode2BridgeTokens(sp.GetRequiredService<OpenCode2HarnessRuntime>()));
 
         return services;
     }

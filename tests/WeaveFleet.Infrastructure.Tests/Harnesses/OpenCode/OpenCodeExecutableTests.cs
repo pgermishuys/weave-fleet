@@ -19,7 +19,7 @@ public sealed class OpenCodeExecutableTests : IDisposable
         result.Version.ShouldBe("2.0.8");
         result.ExecutablePath.ShouldBe("/home/me/.opencode/bin/opencode");
         result.Reason.ShouldBe(
-            "This is OpenCode 2 (2.0.8). The OpenCode harness needs OpenCode 1.x, and Fleet doesn't support OpenCode 2 yet. " +
+            "This is OpenCode 2 (2.0.8). The OpenCode harness needs OpenCode 1.x; Fleet runs OpenCode 2 with the OpenCode 2 harness, which you can turn on in Settings. " +
             "OpenCode 1's installer (curl -fsSL https://opencode.ai/install | bash) puts it back, in place of OpenCode 2.");
     }
 

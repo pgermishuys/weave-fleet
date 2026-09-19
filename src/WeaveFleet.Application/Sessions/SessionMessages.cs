@@ -61,7 +61,10 @@ public sealed class SessionMessagesFeature(FleetOptions options, IUserPreference
     }
 }
 
-/// <summary>The bridge tokens of the harness processes Fleet is running, for telling their API calls apart.</summary>
+/// <summary>
+/// The bridge tokens of the harness processes Fleet is running, for telling their API calls apart. Each harness that
+/// sets <c>FLEET_URL</c> registers one; a token is known when any of them knows it.
+/// </summary>
 public interface IHarnessBridgeTokens
 {
     bool IsKnown(string bridgeToken);
