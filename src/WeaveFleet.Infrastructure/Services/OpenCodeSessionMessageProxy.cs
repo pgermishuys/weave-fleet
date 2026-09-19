@@ -487,5 +487,8 @@ public sealed class OpenCodeSessionMessageProxy(
                 ? BusyStatus
                 : string.Equals(activityStatus, RetryStatus, StringComparison.OrdinalIgnoreCase)
                     ? RetryStatus
-                    : IdleStatus;
+                    // Stopped on a question (its own or a subagent's): opening the session mustn't make it read idle.
+                    : string.Equals(activityStatus, ActivityStatuses.WaitingInput, StringComparison.OrdinalIgnoreCase)
+                        ? ActivityStatuses.WaitingInput
+                        : IdleStatus;
 }
