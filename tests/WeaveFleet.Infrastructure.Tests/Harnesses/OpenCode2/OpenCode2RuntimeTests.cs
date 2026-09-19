@@ -168,12 +168,13 @@ public sealed class OpenCode2RuntimeTests
         await using var server = Server(OpenCode2Fixtures.ClientServing(OpenCode2Fixtures.Read("text-and-tool-turn.sse")));
         await using var session = NewSession(server, _ => Task.FromResult(server));
 
+        // The recording holds two turns. Stopping at the first idle races the pump into the second turn's start.
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var received = new List<HarnessEvent>();
         await foreach (var evt in session.SubscribeAsync(timeout.Token))
         {
             received.Add(evt);
-            if (evt.Type == EventTypes.SessionIdle)
+            if (received.Count(e => e.Type == EventTypes.SessionIdle) == 2)
                 break;
         }
 
