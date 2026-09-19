@@ -12,6 +12,7 @@ import {
   MessageCircleQuestion,
   Send,
   Wrench,
+  Code,
 } from 'lucide-vue-next'
 
 const iconMap: Record<string, Component> = {
@@ -29,6 +30,11 @@ const iconMap: Record<string, Component> = {
   fleet_browser_open: Globe,
   fleet_browser_screenshot: Camera,
   fleet_message: Send,
+  // OpenCode 2's names for its tools.
+  shell: Terminal,
+  subagent: GitBranch,
+  websearch: Search,
+  execute: Code,
 }
 
 const labelMap: Record<string, string> = {
@@ -46,6 +52,11 @@ const labelMap: Record<string, string> = {
   fleet_browser_open: 'Open page',
   fleet_browser_screenshot: 'Screenshot',
   fleet_message: 'Message session',
+  // OpenCode 2's names for its tools.
+  shell: 'Shell',
+  subagent: 'Subagent',
+  websearch: 'Web Search',
+  execute: 'Code',
 }
 
 export function getToolIcon(kind: string): Component {

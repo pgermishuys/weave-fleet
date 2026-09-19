@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getToolLabel } from "@/lib/tool-labels";
 import { isBashTool } from "@/lib/pr-utils";
+import { getToolDisplayLabel, getToolIcon } from "@/lib/tool-icons";
 import { toToolCardItem } from "@/components/session/activity-stream-tool-card";
 import type { AccumulatedToolPart } from "@/lib/client-types";
 
@@ -45,6 +46,18 @@ describe("getToolLabel", () => {
     for (const tool of ["websearch", "subagent", "question", "execute"]) {
       expect(getToolLabel(tool, null)).toBe(tool);
     }
+  });
+});
+
+describe("tool card icons and labels", () => {
+  it("names OpenCode 2's tools and gives them the icon of the OpenCode tool they replace", () => {
+    expect(getToolDisplayLabel("shell")).toBe("Shell");
+    expect(getToolDisplayLabel("subagent")).toBe("Subagent");
+    expect(getToolDisplayLabel("websearch")).toBe("Web Search");
+    expect(getToolDisplayLabel("execute")).toBe("Code");
+    expect(getToolIcon("shell")).toBe(getToolIcon("bash"));
+    expect(getToolIcon("subagent")).toBe(getToolIcon("task"));
+    expect(getToolIcon("execute")).not.toBe(getToolIcon("unknown-tool"));
   });
 });
 

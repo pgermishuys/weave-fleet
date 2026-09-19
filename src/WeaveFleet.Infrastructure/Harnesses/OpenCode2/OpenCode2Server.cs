@@ -95,6 +95,8 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
 
                     if (evt.SessionId is { } sessionId && _sinks.TryGetValue(sessionId, out var sink))
                         Deliver(sink, evt);
+                    else if (evt.Type == "permission.asked" && evt.SessionId is { } other)
+                        AllowOnce(other, evt);
                 }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -121,6 +123,33 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
             catch (OperationCanceledException)
             {
                 return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// A permission ask from a session no Fleet session listens to (a subagent's child session, which doesn't get
+    /// Fleet's allow-all rules) would wait forever, and so would the turn that started it. Every session on this
+    /// server is Fleet's, so it's allowed once, like an attached session's.
+    /// </summary>
+    private void AllowOnce(string sessionId, OpenCode2Event evt)
+    {
+        if (!evt.Data.TryGetProperty("id", out var id) || id.ValueKind != System.Text.Json.JsonValueKind.String)
+            return;
+
+        var requestId = id.GetString()!;
+        LogPermissionAllowed(_logger, sessionId, requestId);
+        _ = ReplyAsync();
+
+        async Task ReplyAsync()
+        {
+            try
+            {
+                await Client.ReplyToPermissionAsync(sessionId, requestId, "once", _stopping.Token).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
+            {
+                LogPermissionReplyFailed(_logger, sessionId, requestId, ex);
             }
         }
     }
@@ -217,6 +246,12 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "OpenCode 2 server {ProcessId}: event stream failed; reconnecting")]
     private static partial void LogStreamFailed(ILogger logger, int processId, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "OpenCode 2 session {HarnessSessionId} (not a Fleet session's own, e.g. a subagent's) asked permission ({RequestId}); allowed once, since nobody can answer it")]
+    private static partial void LogPermissionAllowed(ILogger logger, string harnessSessionId, string requestId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't answer OpenCode 2 permission request {RequestId} for session {HarnessSessionId}")]
+    private static partial void LogPermissionReplyFailed(ILogger logger, string harnessSessionId, string requestId, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "OpenCode 2 server {ProcessId}: couldn't read the running sessions after the event stream reconnected")]
     private static partial void LogResyncFailed(ILogger logger, int processId, Exception exception);

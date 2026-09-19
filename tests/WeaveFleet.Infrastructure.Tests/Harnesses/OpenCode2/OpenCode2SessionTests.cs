@@ -51,6 +51,23 @@ public sealed class OpenCode2SessionTests
     }
 
     [Fact]
+    public async Task A_permission_ask_from_a_session_fleet_does_not_listen_to_is_allowed_once_too()
+    {
+        // A subagent's child session doesn't get Fleet's allow-all rules; unanswered, the parent's turn would hang.
+        const string sse = """data: {"id":"evt_1","type":"permission.asked","data":{"id":"per_child","sessionID":"ses_child","action":"shell","resources":["ls"]}}""" + "\n\n";
+        var replied = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var api = new StubHandler(request =>
+        {
+            replied.TrySetResult(request.RequestUri!.AbsolutePath);
+            return new HttpResponseMessage(HttpStatusCode.NoContent);
+        });
+        await using var server = new OpenCode2Server("local-user", OpenCode2Fixtures.ClientServing(sse, api), "token", process: null, NullLogger.Instance);
+
+        (await replied.Task.WaitAsync(TimeSpan.FromSeconds(5))).ShouldBe("/api/session/ses_child/permission/per_child/reply");
+        JsonDocument.Parse(api.Requests[0].Body!).RootElement.GetProperty("decision").GetString().ShouldBe("once");
+    }
+
+    [Fact]
     public async Task An_answer_from_the_question_card_replies_to_the_form_the_tool_call_asked_with()
     {
         var api = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.NoContent));
