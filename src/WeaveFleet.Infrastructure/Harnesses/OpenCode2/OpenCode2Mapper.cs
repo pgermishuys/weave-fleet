@@ -10,11 +10,15 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 /// <c>session.text.*</c> / <c>session.reasoning.*</c> (a part of that message, by ordinal) and
 /// <c>session.tool.*</c> (a tool call in that message, by call id). A question is a form (<c>form.*</c>) that
 /// stops the turn on the user. Events Fleet has no use for (permissions are answered by the session, shells,
-/// inbox, catalog changes) map to nothing, as does anything unknown.
+/// inbox, catalog changes, agent and model switches) map to nothing, as does anything unknown. A subagent call is
+/// also read as a delegation (<see cref="TryReadDelegation"/>), since its child session is a Fleet session too.
 /// </summary>
 /// <remarks>One mapper per session, fed from one event stream: not thread-safe.</remarks>
 internal sealed class OpenCode2Mapper(string fleetSessionId)
 {
+    /// <summary>V2's tool that runs an agent in a child session (OpenCode's is <c>task</c>).</summary>
+    internal const string SubagentTool = "subagent";
+
     private readonly Dictionary<string, AssistantMessage> _messages = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ToolCall> _tools = new(StringComparer.Ordinal);
     private readonly HashSet<string> _questions = new(StringComparer.Ordinal);
@@ -46,6 +50,7 @@ internal sealed class OpenCode2Mapper(string fleetSessionId)
             "session.reasoning.ended" => PartEnded(data, "reasoning"),
             "session.tool.input.started" => ToolStarted(data),
             "session.tool.called" => ToolCalled(data),
+            "session.tool.progress" => ToolProgress(data),
             "session.tool.success" => ToolEnded(data, failed: false),
             "session.tool.failed" => ToolEnded(data, failed: true),
             "form.created" => QuestionAsked(data),
@@ -107,6 +112,43 @@ internal sealed class OpenCode2Mapper(string fleetSessionId)
             EstimatedCost: ModelPricing.EstimateCost(model.ModelId, input, output, reasoning, cacheRead),
             CreatedAt: evt.Created is { } created ? DateTimeOffset.FromUnixTimeMilliseconds(created) : DateTimeOffset.UtcNow,
             UserId: userId);
+    }
+
+    /// <summary>
+    /// What a <c>subagent</c> tool call says about the delegation it is: the agent and task once the call is made, its
+    /// child session once V2 created it (the call's progress, then its result), and how it ended. Read before
+    /// <see cref="Map"/>, which forgets a call once it ends.
+    /// </summary>
+    public OpenCode2Delegation? TryReadDelegation(OpenCode2Event evt)
+    {
+        if (evt.Type is not ("session.tool.called" or "session.tool.progress" or "session.tool.success" or "session.tool.failed")
+            || evt.Data.ValueKind != JsonValueKind.Object
+            || ReadToolRef(evt.Data) is not { } call
+            || !_tools.TryGetValue(call.CallId, out var tool)
+            || tool.Name != SubagentTool)
+        {
+            return null;
+        }
+
+        var input = evt.Type == "session.tool.called" && evt.Data.TryGetProperty("input", out var i) && i.ValueKind == JsonValueKind.Object
+            ? i
+            : tool.Input ?? default;
+        var agent = input.ValueKind == JsonValueKind.Object ? ReadString(input, "agent") ?? ReadString(input, "subagent_type") : null;
+        var description = input.ValueKind == JsonValueKind.Object ? ReadString(input, "description") : null;
+        var metadata = evt.Data.TryGetProperty("metadata", out var m) && m.ValueKind == JsonValueKind.Object ? m : default;
+        var childSessionId = metadata.ValueKind == JsonValueKind.Object ? ReadString(metadata, "sessionID") : null;
+
+        return new OpenCode2Delegation(
+            call.CallId,
+            string.IsNullOrWhiteSpace(agent) ? SubagentTool : agent,
+            string.IsNullOrWhiteSpace(description) ? null : description,
+            childSessionId,
+            evt.Type switch
+            {
+                "session.tool.success" => "completed",
+                "session.tool.failed" => "error",
+                _ => "running",
+            });
     }
 
     /// <summary>
@@ -335,6 +377,29 @@ internal sealed class OpenCode2Mapper(string fleetSessionId)
         return [ToolPart(call.MessageId, call.CallId, tool.Name, new OpenCode2ToolPartState { Status = "running", Input = input })];
     }
 
+    /// <summary>
+    /// A running subagent call reports its child session, which the card keeps as the call's metadata while it runs
+    /// (the result repeats it). Other calls' progress (a shell's id) isn't shown.
+    /// </summary>
+    private List<HarnessEvent> ToolProgress(JsonElement data)
+    {
+        if (ReadToolRef(data) is not { } call
+            || !_tools.TryGetValue(call.CallId, out var tool)
+            || tool.Name != SubagentTool
+            || !data.TryGetProperty("metadata", out var metadata)
+            || metadata.ValueKind != JsonValueKind.Object)
+        {
+            return [];
+        }
+
+        return [ToolPart(call.MessageId, call.CallId, tool.Name, new OpenCode2ToolPartState
+        {
+            Status = "running",
+            Input = tool.Input,
+            Metadata = metadata.Clone(),
+        })];
+    }
+
     /// <summary><c>session.tool.success</c> and <c>session.tool.failed</c>: the call's result, and any files it returned.</summary>
     private List<HarnessEvent> ToolEnded(JsonElement data, bool failed)
     {
@@ -537,3 +602,14 @@ internal sealed class OpenCode2Mapper(string fleetSessionId)
     /// <summary>A tool call from its first event to its result: later events name it only by call id.</summary>
     private sealed record ToolCall(string MessageId, string Name, JsonElement? Input);
 }
+
+/// <summary>
+/// A subagent call as Fleet's delegation: <paramref name="Agent"/> is its title, <paramref name="ChildSessionId"/> the
+/// V2 session it runs in (once V2 said), and <paramref name="Status"/> <c>running</c>, <c>completed</c> or <c>error</c>.
+/// </summary>
+internal sealed record OpenCode2Delegation(
+    string ToolCallId,
+    string Agent,
+    string? Description,
+    string? ChildSessionId,
+    string Status);

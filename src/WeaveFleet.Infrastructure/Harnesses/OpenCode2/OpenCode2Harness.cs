@@ -25,5 +25,13 @@ public sealed class OpenCode2Harness : IHarness
         SupportsResume = true,
         // A reopened session reads V2's own history.
         HistoryLivesInHarness = true,
+        // The session keeps the agent and model a prompt picks; the catalog is read per folder.
+        SupportsAgents = true,
+        SupportsModelSelection = true,
+        SupportsCommands = true,
+        // A subagent's child session is a Fleet session under the parent.
+        SupportsDelegation = true,
+        // Recaps come from V2's generate, which leaves the session's history alone.
+        SupportsOffTheRecordPrompt = true,
     };
 }

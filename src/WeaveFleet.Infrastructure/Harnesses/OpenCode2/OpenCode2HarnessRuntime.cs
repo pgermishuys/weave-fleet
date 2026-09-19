@@ -10,6 +10,7 @@ using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Skills;
+using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Services;
@@ -81,7 +82,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         var created = await server.Client.CreateSessionAsync(options.WorkingDirectory, ct).ConfigureAwait(false);
 
         var session = NewSession(
-            created.Id!,
+            created,
             new OpenCode2SessionContext(options.SessionId, options.OwnerUserId, options.WorkingDirectory, options.ProjectId, options.ProjectName),
             server);
         try
@@ -105,15 +106,25 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         HarnessHelpers.ValidateWorkingDirectory(options.WorkingDirectory);
 
         var server = await GetServerAsync(options.OwnerUserId, ct).ConfigureAwait(false);
-        if (await server.Client.GetSessionAsync(options.ResumeToken, ct).ConfigureAwait(false) is null)
-            throw new InvalidOperationException($"OpenCode 2 has no session {options.ResumeToken}.");
+        var info = await server.Client.GetSessionAsync(options.ResumeToken, ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"OpenCode 2 has no session {options.ResumeToken}.");
 
+        // A subagent's child session attaches here too, and gets the events held for it since it started.
         var session = NewSession(
-            options.ResumeToken,
+            info with { Id = options.ResumeToken },
             new OpenCode2SessionContext(options.SessionId, options.OwnerUserId, options.WorkingDirectory, options.ProjectId, options.ProjectName),
             server);
         LogResumed(_logger, session.InstanceId, options.ResumeToken);
         return session;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Read from the owner's server, which serves every folder: the one a new session there would use.</remarks>
+    public async Task<HarnessCatalog?> GetCatalogAsync(string ownerUserId, string directory, HarnessProfile? profile, CancellationToken ct)
+    {
+        HarnessHelpers.ValidateWorkingDirectory(directory);
+        var server = await GetServerAsync(ownerUserId, ct).ConfigureAwait(false);
+        return await OpenCode2Catalog.ReadAsync(server, directory, ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -152,14 +163,15 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     /// <summary>For containers disposed synchronously; stops the servers the same way.</summary>
     public void Dispose() => DisposeAsync().AsTask().GetAwaiter().GetResult();
 
-    private OpenCode2HarnessSession NewSession(string harnessSessionId, OpenCode2SessionContext context, OpenCode2Server server)
+    private OpenCode2HarnessSession NewSession(OpenCode2SessionInfo info, OpenCode2SessionContext context, OpenCode2Server server)
         => new(
             $"opencode2-{Guid.NewGuid():N}",
-            harnessSessionId,
+            info,
             context,
             server,
             ct => GetServerAsync(context.OwnerUserId, ct),
             _analytics,
+            new OpenCode2Delegations(_scopeFactory, context.OwnerUserId, context.FleetSessionId, _loggerFactory.CreateLogger<OpenCode2Delegations>()),
             _loggerFactory.CreateLogger<OpenCode2HarnessSession>());
 
     /// <summary>

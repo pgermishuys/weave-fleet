@@ -27,6 +27,12 @@ internal sealed record OpenCode2SessionInfo
     public string? ParentID { get; init; }
     public string? Title { get; init; }
     public OpenCode2Location? Location { get; init; }
+
+    /// <summary>The agent the session's turns run as; unset until a prompt or a switch picks one.</summary>
+    public string? Agent { get; init; }
+
+    /// <summary>The model the session's turns use; unset until a prompt or a switch picks one.</summary>
+    public OpenCode2ModelRef? Model { get; init; }
 }
 
 /// <summary>Where a V2 session runs: V2 serves every directory from one server.</summary>
@@ -149,10 +155,102 @@ internal sealed record OpenCode2MessageTimes
     public long? Completed { get; init; }
 }
 
+/// <summary>V2's <c>Model.Ref</c>: a catalog model and, optionally, one of its variants (Fleet's effort).</summary>
 internal sealed record OpenCode2ModelRef
 {
     public string? Id { get; init; }
     [JsonPropertyName("providerID")] public string? ProviderId { get; init; }
+    public string? Variant { get; init; }
+}
+
+// ── Catalog ─────────────────────────────────────────────────────────────────
+// V2 answers these for a location (directory), and only once the location is loaded: before that, agents come back
+// empty and models, commands and providers without the folder's and the user's own.
+
+/// <summary>An agent (<c>Agent.Info</c>). <see cref="Id"/> is what a session is switched to; <see cref="Name"/> is its label.</summary>
+internal sealed record OpenCode2AgentInfo
+{
+    public string? Id { get; init; }
+    public string? Name { get; init; }
+
+    /// <summary><c>primary</c>, <c>subagent</c> or <c>all</c>.</summary>
+    public string? Mode { get; init; }
+    public bool Hidden { get; init; }
+    public OpenCode2ModelRef? Model { get; init; }
+}
+
+/// <summary>
+/// A model (<c>Model.Info</c>). <see cref="Id"/> is the id a session selects; the provider may know it by another
+/// (<c>modelID</c>), which Fleet doesn't need.
+/// </summary>
+internal sealed record OpenCode2ModelInfo
+{
+    public string? Id { get; init; }
+    [JsonPropertyName("providerID")] public string? ProviderId { get; init; }
+    public string? Name { get; init; }
+
+    /// <summary>False when the user turned the model off; unset counts as on.</summary>
+    public bool? Enabled { get; init; }
+    public IReadOnlyList<OpenCode2ModelVariant>? Variants { get; init; }
+}
+
+internal sealed record OpenCode2ModelVariant
+{
+    public string? Id { get; init; }
+}
+
+/// <summary>A provider (<c>Provider.Info</c>): <c>activation</c> is <c>auto</c>, <c>enabled</c> or <c>disabled</c>.</summary>
+internal sealed record OpenCode2ProviderInfo
+{
+    public string? Id { get; init; }
+    public string? Name { get; init; }
+    public string? Activation { get; init; }
+}
+
+internal sealed record OpenCode2CommandInfo
+{
+    public string? Name { get; init; }
+    public string? Description { get; init; }
+}
+
+/// <summary>
+/// One entry of <c>GET /api/config</c>: the config documents and folders V2 read for a location, global first and the
+/// folder's own last. A document's <see cref="Info"/> is its content in V2's shape (<c>default_agent</c>, <c>agents</c>, …).
+/// </summary>
+internal sealed record OpenCode2ConfigSource
+{
+    public string? Type { get; init; }
+    public JsonElement Info { get; init; }
+}
+
+/// <summary><c>POST /api/session/{id}/agent</c>.</summary>
+internal sealed record OpenCode2SwitchAgentRequest
+{
+    public required string Agent { get; init; }
+}
+
+/// <summary><c>POST /api/session/{id}/model</c>.</summary>
+internal sealed record OpenCode2SwitchModelRequest
+{
+    public required OpenCode2ModelRef Model { get; init; }
+}
+
+/// <summary><c>POST /api/session/{id}/command</c>: <see cref="Text"/> is the command's arguments.</summary>
+internal sealed record OpenCode2CommandRequest
+{
+    public required string Name { get; init; }
+    public required string Text { get; init; }
+}
+
+/// <summary><c>POST /api/session/{id}/generate</c>: a one-off answer from the session's conversation, kept out of its history.</summary>
+internal sealed record OpenCode2GenerateRequest
+{
+    public required string Prompt { get; init; }
+}
+
+internal sealed record OpenCode2GenerateResult
+{
+    public string? Text { get; init; }
 }
 
 internal sealed record OpenCode2TokenUsage
@@ -223,6 +321,9 @@ internal sealed record OpenCode2Event
     public required string Type { get; init; }
     public JsonElement Data { get; init; }
 
+    /// <summary>The folder a catalog event (<c>agent.updated</c>, …) is about.</summary>
+    public OpenCode2EventLocation? Location { get; init; }
+
     /// <summary>
     /// The V2 session the event is about, when it's about one. Most events say so in <c>data.sessionID</c>;
     /// <c>form.created</c> says it in <c>data.form.sessionID</c>.
@@ -240,6 +341,11 @@ internal sealed record OpenCode2Event
                 : null;
         }
     }
+}
+
+internal sealed record OpenCode2EventLocation
+{
+    public string? Directory { get; init; }
 }
 
 // ── Fleet event payloads ────────────────────────────────────────────────────
@@ -376,6 +482,17 @@ internal sealed record OpenCode2PartDeltaPayload
 [JsonSerializable(typeof(OpenCode2Envelope<OpenCode2SessionInfo>))]
 [JsonSerializable(typeof(OpenCode2Envelope<Dictionary<string, JsonElement>>))]
 [JsonSerializable(typeof(OpenCode2Envelope<List<OpenCode2Form>>))]
+[JsonSerializable(typeof(OpenCode2Envelope<List<OpenCode2AgentInfo>>))]
+[JsonSerializable(typeof(OpenCode2Envelope<List<OpenCode2ModelInfo>>))]
+[JsonSerializable(typeof(OpenCode2Envelope<OpenCode2ModelInfo>))]
+[JsonSerializable(typeof(OpenCode2Envelope<List<OpenCode2ProviderInfo>>))]
+[JsonSerializable(typeof(OpenCode2Envelope<List<OpenCode2CommandInfo>>))]
+[JsonSerializable(typeof(OpenCode2Envelope<OpenCode2GenerateResult>))]
+[JsonSerializable(typeof(List<OpenCode2ConfigSource>))]
+[JsonSerializable(typeof(OpenCode2SwitchAgentRequest))]
+[JsonSerializable(typeof(OpenCode2SwitchModelRequest))]
+[JsonSerializable(typeof(OpenCode2CommandRequest))]
+[JsonSerializable(typeof(OpenCode2GenerateRequest))]
 [JsonSerializable(typeof(OpenCode2MessagePage))]
 [JsonSerializable(typeof(OpenCode2Form))]
 [JsonSerializable(typeof(List<OpenCode2ToolContent>))]

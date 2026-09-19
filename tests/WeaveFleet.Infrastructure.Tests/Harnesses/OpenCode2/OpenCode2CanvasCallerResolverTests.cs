@@ -116,10 +116,11 @@ public sealed class OpenCode2CanvasCallerResolverTests
     private static OpenCode2HarnessSession Attach(OpenCode2Server server, string harnessSessionId, string fleetSessionId, string owner)
         => new(
             "opencode2-test",
-            harnessSessionId,
+            new OpenCode2SessionInfo { Id = harnessSessionId },
             new OpenCode2SessionContext(fleetSessionId, owner, "/work", null, null),
             server,
             _ => Task.FromResult(server),
             analytics: null,
+            delegations: null,
             NullLogger<OpenCode2HarnessSession>.Instance);
 }

@@ -140,6 +140,106 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
         await EnsureSuccessAsync(response, "answer the permission request", ct).ConfigureAwait(false);
     }
 
+    /// <summary>Selects the agent the session's next turns run as. V2 takes any name here and fails the turn if it's unknown.</summary>
+    public async Task SwitchAgentAsync(string sessionId, string agent, CancellationToken ct)
+    {
+        using var response = await http.PostAsJsonAsync(
+            $"api/session/{Uri.EscapeDataString(sessionId)}/agent",
+            new OpenCode2SwitchAgentRequest { Agent = agent },
+            OpenCode2JsonContext.Default.OpenCode2SwitchAgentRequest,
+            ct).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, "switch the agent", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Selects the model (and variant) the session's next turns use.</summary>
+    public async Task SwitchModelAsync(string sessionId, OpenCode2ModelRef model, CancellationToken ct)
+    {
+        using var response = await http.PostAsJsonAsync(
+            $"api/session/{Uri.EscapeDataString(sessionId)}/model",
+            new OpenCode2SwitchModelRequest { Model = model },
+            OpenCode2JsonContext.Default.OpenCode2SwitchModelRequest,
+            ct).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, "switch the model", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Runs a command as the session's next turn; V2 sends its expanded template as the user's message.</summary>
+    public async Task RunCommandAsync(string sessionId, string name, string arguments, CancellationToken ct)
+    {
+        using var response = await http.PostAsJsonAsync(
+            $"api/session/{Uri.EscapeDataString(sessionId)}/command",
+            new OpenCode2CommandRequest { Name = name, Text = arguments },
+            OpenCode2JsonContext.Default.OpenCode2CommandRequest,
+            ct).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, "run the command", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Answers <paramref name="prompt"/> from the session's conversation without adding to it. It waits for the whole
+    /// answer, so it has no request timeout of its own; <paramref name="ct"/> bounds it.
+    /// </summary>
+    public async Task<string?> GenerateAsync(string sessionId, string prompt, CancellationToken ct)
+    {
+        using var response = await events.PostAsJsonAsync(
+            $"api/session/{Uri.EscapeDataString(sessionId)}/generate",
+            new OpenCode2GenerateRequest { Prompt = prompt },
+            OpenCode2JsonContext.Default.OpenCode2GenerateRequest,
+            ct).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, "answer off the record", ct).ConfigureAwait(false);
+        var body = await response.Content.ReadFromJsonAsync(
+            OpenCode2JsonContext.Default.OpenCode2EnvelopeOpenCode2GenerateResult, ct).ConfigureAwait(false);
+        return body?.Data?.Text;
+    }
+
+    /// <summary>
+    /// Loads <paramref name="directory"/> on the server. V2 reads a folder's config lazily: until something loads it,
+    /// its catalog comes back without the folder's (and the user's) agents, models and commands.
+    /// </summary>
+    public async Task LoadLocationAsync(string directory, CancellationToken ct)
+    {
+        using var response = await http.GetAsync($"api/location?{LocationQuery(directory)}", ct).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, "load the folder", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>The agents in <paramref name="directory"/>; load the location first.</summary>
+    public async Task<IReadOnlyList<OpenCode2AgentInfo>> GetAgentsAsync(string directory, CancellationToken ct)
+        => (await http.GetFromJsonAsync(
+            $"api/agent?{LocationQuery(directory)}",
+            OpenCode2JsonContext.Default.OpenCode2EnvelopeListOpenCode2AgentInfo,
+            ct).ConfigureAwait(false))?.Data ?? [];
+
+    /// <summary>The models in <paramref name="directory"/>, of every provider; load the location first.</summary>
+    public async Task<IReadOnlyList<OpenCode2ModelInfo>> GetModelsAsync(string directory, CancellationToken ct)
+        => (await http.GetFromJsonAsync(
+            $"api/model?{LocationQuery(directory)}",
+            OpenCode2JsonContext.Default.OpenCode2EnvelopeListOpenCode2ModelInfo,
+            ct).ConfigureAwait(false))?.Data ?? [];
+
+    /// <summary>The model a session gets when nothing picks one (the config's <c>model</c>, else V2's choice), if any.</summary>
+    public async Task<OpenCode2ModelInfo?> GetDefaultModelAsync(string directory, CancellationToken ct)
+        => (await http.GetFromJsonAsync(
+            $"api/model/default?{LocationQuery(directory)}",
+            OpenCode2JsonContext.Default.OpenCode2EnvelopeOpenCode2ModelInfo,
+            ct).ConfigureAwait(false))?.Data;
+
+    public async Task<IReadOnlyList<OpenCode2ProviderInfo>> GetProvidersAsync(string directory, CancellationToken ct)
+        => (await http.GetFromJsonAsync(
+            $"api/provider?{LocationQuery(directory)}",
+            OpenCode2JsonContext.Default.OpenCode2EnvelopeListOpenCode2ProviderInfo,
+            ct).ConfigureAwait(false))?.Data ?? [];
+
+    public async Task<IReadOnlyList<OpenCode2CommandInfo>> GetCommandsAsync(string directory, CancellationToken ct)
+        => (await http.GetFromJsonAsync(
+            $"api/command?{LocationQuery(directory)}",
+            OpenCode2JsonContext.Default.OpenCode2EnvelopeListOpenCode2CommandInfo,
+            ct).ConfigureAwait(false))?.Data ?? [];
+
+    /// <summary>The config V2 read for <paramref name="directory"/>, global first and the folder's own last.</summary>
+    public async Task<IReadOnlyList<OpenCode2ConfigSource>> GetConfigAsync(string directory, CancellationToken ct)
+        => await http.GetFromJsonAsync(
+            $"api/config?{LocationQuery(directory)}",
+            OpenCode2JsonContext.Default.ListOpenCode2ConfigSource,
+            ct).ConfigureAwait(false) ?? [];
+
     /// <summary>The ids of the sessions with a turn running on this server.</summary>
     public async Task<IReadOnlySet<string>> GetActiveSessionIdsAsync(CancellationToken ct)
     {
@@ -200,6 +300,9 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
             return null;
         }
     }
+
+    /// <summary>V2 takes a location as a deep-object query parameter: <c>location[directory]=…</c>.</summary>
+    internal static string LocationQuery(string directory) => $"location%5Bdirectory%5D={Uri.EscapeDataString(directory)}";
 
     private static async Task EnsureSuccessAsync(HttpResponseMessage response, string action, CancellationToken ct)
     {
