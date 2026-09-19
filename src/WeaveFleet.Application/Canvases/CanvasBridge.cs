@@ -24,12 +24,12 @@ public sealed record CanvasToolOutput(
 
 /// <summary>
 /// The agent's canvas tools (<c>fleet_canvas_*</c>) for calls that arrive from a harness process. Each call
-/// finds its Fleet session through <see cref="IHarnessCanvasCallerResolver"/>, runs as the session's owner,
+/// finds its Fleet session through the harnesses' <see cref="IHarnessCanvasCallerResolver"/>s, runs as the session's owner,
 /// and returns short text for the model. Canvases are read-only for the user in this step (plan Decision 7),
 /// so reads are always full and nothing mentions user edits.
 /// </summary>
 public sealed class CanvasBridge(
-    IHarnessCanvasCallerResolver callers,
+    IEnumerable<IHarnessCanvasCallerResolver> callers,
     IBackgroundUserScope userScope,
     ICanvasService canvases,
     AppRunService apps)

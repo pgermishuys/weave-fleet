@@ -16,6 +16,7 @@
     <EmbeddedResource Include="..\..\opencode\fleet\fleet-canvas.ts" LogicalName="opencode/fleet-canvas.ts" />
     <EmbeddedResource Include="..\..\opencode\skills\**\*" LogicalName="opencode/skills/%(RecursiveDir)%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\..\opencode\built-in-skills\**\*" LogicalName="opencode/built-in-skills/%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\opencode2\fleet\index.js" LogicalName="opencode2/fleet/index.js" />
   </ItemGroup>
 
   <ItemGroup>

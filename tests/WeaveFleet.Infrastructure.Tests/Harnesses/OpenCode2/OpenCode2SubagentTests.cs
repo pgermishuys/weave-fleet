@@ -236,6 +236,8 @@ public sealed class OpenCode2SubagentTests
 
     private sealed class Sink : IOpenCode2EventSink
     {
+        public OpenCode2SessionContext Context { get; } = new("fleet-session-1", "local-user", "/work", null, null);
+
         public List<OpenCode2Event> Events { get; } = [];
 
         public void OnEvent(OpenCode2Event evt)

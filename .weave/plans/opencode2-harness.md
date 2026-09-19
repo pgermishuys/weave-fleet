@@ -147,22 +147,61 @@ What Stage 2 learned:
 
 ## Stage 3 — Fleet's own tools in V2
 
-- [ ] New plugin `opencode2/fleet/index.js` (a directory; V2 won't load a plugin file path), written against
+- [x] New plugin `opencode2/fleet/index.js` (a directory; V2 won't load a plugin file path), written against
       the V2 plugin API: `export default { id: "fleet", setup(ctx) { ctx.tool.transform(...) } }`, no imports.
       Tools: canvas list/open/read/patch/focus, app start, browser open, browser screenshot. Each tool sets
       `options: { codemode: false }` or V2 only exposes it inside Code Mode. Session id comes from the
       executor's second argument (`tool.sessionID`).
       Copying the tool descriptions and the bridge `fetch` from `opencode/fleet/fleet-canvas.ts` is fine;
       the file itself stays separate.
-- [ ] Loaded via `OPENCODE_CONFIG_CONTENT` `plugins`, the same variable mechanism, V2's own content.
-- [ ] `OpenCode2CanvasCallerResolver` (token → server, V2 session id → Fleet session).
+- [x] Loaded via `OPENCODE_CONFIG_CONTENT` `plugins`, the same variable mechanism, V2's own content.
+- [x] `OpenCode2CanvasCallerResolver` (token → server, V2 session id → Fleet session).
       `CanvasBridge` and `BrowserBridge` currently take a single `IHarnessCanvasCallerResolver`; change them
       to ask every registered resolver (tokens are unique per process). This is the one shared change.
-- [ ] Skills: Fleet's skill folders via `skills` in the injected config.
+- [x] Skills: Fleet's skill folders via `skills` in the injected config.
 - Todos: not in the first version (`ReportsTodos = false`); see Later.
 
 Live check: agent opens a canvas, takes a browser screenshot (image comes back), app start.
 Size: 3–4 days.
+
+Built (branch `feat/opencode2-tools`), checked live on a scratch Fleet with 2.0.8 + the scripted model: a canvas opened
+and patched (shown in the right panel), an app started in a browser canvas, a browser screenshot whose image reached the
+model, `fleet-code-review` offered when switched on and gone when switched off, the same session's tools after a Fleet
+restart and after the V2 server was killed, a user's own V2 plugin and skill loading beside Fleet's, `fleet_message`
+offered with messages between sessions on, and an OpenCode 1 session drawing its canvas beside it.
+
+What Stage 3 learned:
+
+- V2 adds `plugins` and `skills` from `OPENCODE_CONFIG_CONTENT` to the user's own (config file and `.opencode/plugins/`,
+  `.opencode/skills/`): unlike OpenCode (1.x), arrays aren't replaced, so Fleet can put its skill folders straight into
+  the config instead of adding them from the plugin.
+- A plugin tool returns `{ title, content: [{type: "text", text}, {type: "file", uri: "data:…", mime, name}], metadata }`.
+  V2 sends the file to an OpenAI-compatible model as a user message with `image_url` after the tool result, as
+  OpenCode (1.x) does, and to Fleet as a file part (Stage 2's mapping), so a V2 screenshot shows as an image in the
+  conversation; OpenCode (1.x) sessions don't show it. A thrown `Error` fails the tool with its message.
+- The executor's second argument has `sessionID, agent, messageID, id, progress`, and no permission ask. Built-in tools
+  declare `options.permission` (V2's shell tool is `shell`), and V2 leaves a tool out when the agent's rules deny that
+  permission; `fleet_app_start` declares `permission: "shell"` in place of OpenCode (1.x)'s `ask`. Fleet's allow-all
+  session ruleset still allows it everywhere else, as before.
+- The tools reach Fleet under `FLEET_URL` = `/agent/{token}` (Stage 1), so they work with messages between sessions
+  off too.
+- One server per owner means per-owner settings (built-in skills, messages between sessions) are server settings. The
+  runtime works out what the owner's server should start with on every spawn/resume and replaces a server started with
+  other settings once `/api/session/active` is empty; until then the owner keeps the old one. A prompt sent to an idle
+  session in the moment of the replacement would fail as "server stopped"; not seen live.
+- Fleet writes its own copy of the skill files under `{data}/opencode2/` from the same embedded `opencode/skills` and
+  `opencode/built-in-skills` resources (the ~30 lines that write embedded files are copied from the OpenCode adapter,
+  per the no-shared-code rule).
+- The skill manifest's targets (`BundledSkillsHostedService`, `SkillManifestMigrator`: `["opencode", "claude-code"]`)
+  aren't how built-in skills reach sessions: those go through the per-owner switch and the injected `skills`. The
+  manifest syncs the user's skills into `~/.config/opencode/skills`, which V2 reads too while it shares OpenCode's
+  config folder, so no `opencode2` target is needed yet. Stage 5's separate mode (own config folder) needs one.
+- V2 looks for `.claude/skills` in the session's folder and every parent, including the real HOME's when the folder is
+  under it (read only).
+- Scratch kit: Chrome refuses a TMPDIR whose socket path is over ~108 characters, so the scratch Fleet's TMPDIR is short.
+- **Left for later:** sending a message with `fleet_message` from V2 wasn't exercised live (the tool is offered; the
+  bridge is the shared one). A subagent's call follows `parentID` to the Fleet session (unit-tested; live with Stage 4's
+  subagents). No capability flag was needed: nothing gates Fleet's tools by harness name.
 
 ## Stage 4 — catalog, agents/models, profiles, subagents, recap
 

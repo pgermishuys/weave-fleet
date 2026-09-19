@@ -40,7 +40,7 @@ public sealed class CanvasBridgeTests
         _runs.AddSession(SessionId);
         _callers.Add(Token, OpenCodeSessionId, new HarnessCanvasCaller(SessionId, Owner));
         _canvases = new CanvasService(_repository, _broadcaster, _user);
-        _bridge = new CanvasBridge(_callers, _user, _canvases, new AppRunService(_apps, _runs, new InMemorySessionRepository(), _user));
+        _bridge = new CanvasBridge([_callers], _user, _canvases, new AppRunService(_apps, _runs, new InMemorySessionRepository(), _user));
     }
 
     private async Task<CanvasToolOutput> OpenFlowAsync()
@@ -69,6 +69,23 @@ public sealed class CanvasBridgeTests
 
         results.ShouldAllBe(result => result.Error == new CanvasError(CanvasErrorKind.NotFound, CanvasBridge.UnknownCallerMessage));
         (await _repository.ListBySessionIdAsync(SessionId, includeClosed: true)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_call_goes_to_whichever_harness_knows_its_token()
+    {
+        var otherHarness = new FakeCallers();
+        otherHarness.Add("token-2", "v2-1", new HarnessCanvasCaller("ses-2", "other-owner"));
+        _repository.AddSession("ses-2");
+        var bridge = new CanvasBridge([_callers, otherHarness], _user, _canvases, new AppRunService(_apps, _runs, new InMemorySessionRepository(), _user));
+
+        (await bridge.OpenAsync("token-2", "v2-1", "diagram", "Flow", JsonNode.Parse(Flow))).IsSuccess.ShouldBeTrue();
+        (await bridge.OpenAsync(Token, OpenCodeSessionId, "diagram", "Flow", JsonNode.Parse(Flow))).IsSuccess.ShouldBeTrue();
+
+        (await _repository.ListBySessionIdAsync("ses-2")).ShouldHaveSingleItem().UserId.ShouldBe("other-owner");
+        (await _repository.ListBySessionIdAsync(SessionId)).ShouldHaveSingleItem().UserId.ShouldBe(Owner);
+        (await bridge.ListAsync("token-2", OpenCodeSessionId)).Error
+            .ShouldBe(new CanvasError(CanvasErrorKind.NotFound, CanvasBridge.UnknownCallerMessage));
     }
 
     [Fact]
