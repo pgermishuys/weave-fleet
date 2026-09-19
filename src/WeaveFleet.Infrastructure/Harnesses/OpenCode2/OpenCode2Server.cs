@@ -23,10 +23,15 @@ internal interface IOpenCode2EventSink
 
 /// <summary>
 /// What Fleet starts an owner's server with: where Fleet is, the config it adds (<see cref="OpenCode2FleetFiles"/>),
-/// and whether the server gets the tool for messages between sessions. When the owner changes a setting behind it, the
-/// server is replaced once none of its sessions is running a turn.
+/// whether the server gets the tool for messages between sessions, and the install it runs (<see cref="OpenCode2Install"/>).
+/// When the owner changes a setting behind it, the server is replaced once none of its sessions is running a turn.
 /// </summary>
-internal sealed record OpenCode2ServerSetup(string? FleetUrl, string? ConfigContent, bool SessionMessages)
+internal sealed record OpenCode2ServerSetup(
+    string? FleetUrl,
+    string? ConfigContent,
+    bool SessionMessages,
+    string? ExecutablePath = null,
+    OpenCode2InstallMode Mode = OpenCode2InstallMode.Default)
 {
     public static readonly OpenCode2ServerSetup None = new(null, null, false);
 }
@@ -69,6 +74,7 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     private readonly Task _pump;
     private TaskCompletionSource _connected = NewConnectedSource();
     private int _stopped;
+    private int _outdated;
 
     internal OpenCode2Server(
         string ownerUserId,
@@ -146,6 +152,11 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
 
         _locations.GetOrAdd(directory, static _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).TrySetResult();
     }
+
+    /// <summary>Set after V2 was updated: the server still runs the old binary, and is replaced once it's idle.</summary>
+    public bool IsOutdated => Volatile.Read(ref _outdated) == 1;
+
+    public void MarkOutdated() => Volatile.Write(ref _outdated, 1);
 
     /// <summary>False once the process exited or Fleet stopped it; a stopped server is replaced, not restarted.</summary>
     public bool IsRunning => Volatile.Read(ref _stopped) == 0 && _process?.IsRunning != false;

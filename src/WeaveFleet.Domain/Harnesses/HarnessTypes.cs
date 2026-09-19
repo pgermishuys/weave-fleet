@@ -135,7 +135,28 @@ public static class HarnessVersion
 /// <param name="InstallCommand">The vendor's installer for this platform, or <see langword="null"/> when there isn't one to offer.</param>
 /// <param name="SignInCommand">Signs in to the harness, when it needs a sign-in.</param>
 /// <param name="DocsUrl">The harness's install instructions, for anything the commands don't cover.</param>
-public sealed record HarnessSetup(string? InstallCommand, string? SignInCommand, string? DocsUrl);
+public sealed record HarnessSetup(string? InstallCommand, string? SignInCommand, string? DocsUrl)
+{
+    /// <summary>
+    /// Where to download the harness by hand, when there's no installer to type for this platform
+    /// (<see cref="InstallCommand"/> is <see langword="null"/>).
+    /// </summary>
+    public string? DownloadUrl { get; init; }
+
+    /// <summary>How the harness is (or will be) installed here, in a few words, when it has more than one way.</summary>
+    public string? Mode { get; init; }
+
+    /// <summary>The folders this install uses: the program, its settings, its data.</summary>
+    public IReadOnlyList<HarnessFolder>? Folders { get; init; }
+
+    /// <summary>What the user should know about this install, one sentence each; shown with the install command and in Settings.</summary>
+    public IReadOnlyList<string>? Notes { get; init; }
+}
+
+/// <summary>A folder a harness install uses.</summary>
+/// <param name="Label">What it holds, e.g. "Program" or "Sessions".</param>
+/// <param name="Path">Where it is.</param>
+public sealed record HarnessFolder(string Label, string Path);
 
 /// <summary>A real-time event emitted by a harness instance.</summary>
 public sealed record HarnessEvent

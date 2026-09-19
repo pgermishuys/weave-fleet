@@ -22,6 +22,7 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 /// own password, for every directory; each Fleet session is a V2 session on it, and its resume token is the V2
 /// session id. The server stays up while Fleet runs, and a stopped one is replaced on the next request.
 /// Fleet's plugin (canvas, app and browser tools) and skills load into it through <c>OPENCODE_CONFIG_CONTENT</c>.
+/// The install it runs, and in separate mode its own config folder and database, come from <see cref="OpenCode2Install"/>.
 /// </summary>
 public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDisposable, IDisposable
 {
@@ -30,12 +31,16 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
 
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(30);
 
+    // Skills are local mode only, and belong to its one user.
+    private const string LocalOwnerUserId = "local-user";
+
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly FleetOptions _options;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<OpenCode2HarnessRuntime> _logger;
     private readonly ILoggerFactory _loggerFactory;
     private readonly IAnalyticsCollector? _analytics;
+    private readonly OpenCode2Install _install;
     private readonly ConcurrentDictionary<string, OpenCode2Server> _servers = new(StringComparer.Ordinal);
 
     // Held while a server starts, so an owner never gets two; reads (bridge tokens) don't take it.
@@ -43,6 +48,8 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     private string? _pluginFolder;
     private string? _skillsFolder;
     private string? _builtInSkillsFolder;
+    private OpenCode2InstallCheck? _lastCheck;
+    private int _separateSkillsSynced;
     private bool _disposed;
 
     public OpenCode2HarnessRuntime(
@@ -52,6 +59,19 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         ILogger<OpenCode2HarnessRuntime> logger,
         ILoggerFactory loggerFactory,
         IAnalyticsCollector? analytics = null)
+        : this(httpClientFactory, options, scopeFactory, logger, loggerFactory, analytics, install: null)
+    {
+    }
+
+    /// <summary>Test seam: <paramref name="install"/> in place of the one in the user's home folder.</summary>
+    internal OpenCode2HarnessRuntime(
+        IHttpClientFactory httpClientFactory,
+        FleetOptions options,
+        IServiceScopeFactory scopeFactory,
+        ILogger<OpenCode2HarnessRuntime> logger,
+        ILoggerFactory loggerFactory,
+        IAnalyticsCollector? analytics,
+        OpenCode2Install? install)
     {
         _httpClientFactory = httpClientFactory;
         _options = options;
@@ -59,15 +79,80 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         _logger = logger;
         _loggerFactory = loggerFactory;
         _analytics = analytics;
+        _install = install ?? new OpenCode2Install(
+            ExecutableResolver.HomeDirectory() ?? Environment.CurrentDirectory,
+            Environment.GetEnvironmentVariable,
+            ExecutableResolver.UserBinDirectories(),
+            (path, ct) => HarnessProbe.CheckInstalledAsync("OpenCode 2", OpenCode2Executable.Command, path, logger, ct),
+            OperatingSystem.IsWindows());
     }
 
     /// <inheritdoc />
     public string HarnessType => OpenCode2HarnessSession.Type;
 
     /// <inheritdoc />
+    /// <remarks>Also decides the install mode the first time a working V2 turns up, and remembers it.</remarks>
     public async Task<HarnessAvailability> CheckAvailabilityAsync(CancellationToken ct)
-        => OpenCode2Executable.RequireOpenCode2(await HarnessProbe.CheckInstalledAsync(
-            "OpenCode 2", OpenCode2Executable.Command, OpenCode2Executable.InstallDirectories(), _logger, ct).ConfigureAwait(false));
+    {
+        var check = await _install.CheckAsync(ct).ConfigureAwait(false);
+        Volatile.Write(ref _lastCheck, check);
+        return check.Availability;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// V2's own installer in the install's mode (separate next to OpenCode 1), its sign-in, and the folders it uses.
+    /// On Windows, where the installer doesn't run, the manual download.
+    /// </remarks>
+    public HarnessSetup GetSetup(HarnessAvailability availability)
+    {
+        var check = Volatile.Read(ref _lastCheck)
+            ?? new OpenCode2InstallCheck(_install.Locate()?.Mode ?? OpenCode2InstallMode.Default, Remembered: false, availability);
+        return _install.Setup(check with { Availability = availability });
+    }
+
+    /// <inheritdoc />
+    public string LatestVersionPackage => "@opencode/cli";
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The oldest version that passes a check of every endpoint and event the adapter uses (Stage 5 in
+    /// <c>.weave/plans/opencode2-harness.md</c>): 2.0.0–2.0.5 have no <c>/api/info</c>, which a server start calls.
+    /// </remarks>
+    public string MinimumVersion => MinimumOpenCode2Version;
+
+    internal const string MinimumOpenCode2Version = "2.0.6";
+
+    /// <inheritdoc />
+    /// <remarks>V2's installer again, in the install's mode and with its HOME; V2 installed another way isn't Fleet's to update.</remarks>
+    public HarnessCommand? GetUpdateCommand(HarnessAvailability availability, string? version)
+        => availability.ExecutablePath is { } path ? _install.UpdateCommand(path, version) : null;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Idle servers stop now and the next request starts one on the new binary; a busy one is replaced once it's idle.
+    /// </remarks>
+    public async Task AfterUpdateAsync(CancellationToken ct)
+    {
+        await _serversLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            foreach (var (owner, server) in _servers)
+            {
+                if (server.IsRunning && !await server.IsIdleAsync(ct).ConfigureAwait(false))
+                {
+                    server.MarkOutdated();
+                    continue;
+                }
+                _servers.TryRemove(owner, out _);
+                await server.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _serversLock.Release();
+        }
+    }
 
     /// <inheritdoc />
     public Task<RuntimePreparation> PrepareRuntimeAsync(RuntimePreparationContext context, CancellationToken ct)
@@ -189,7 +274,8 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         {
             if (_servers.TryGetValue(ownerUserId, out var existing))
             {
-                if (existing.IsRunning && (existing.Setup == setup || !await existing.IsIdleAsync(ct).ConfigureAwait(false)))
+                if (existing.IsRunning
+                    && ((existing.Setup == setup && !existing.IsOutdated) || !await existing.IsIdleAsync(ct).ConfigureAwait(false)))
                     return existing;
 
                 if (existing.IsRunning)
@@ -210,7 +296,8 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
 
     /// <summary>
     /// What the owner's server should start with. The tools and the Fleet API skill call back into Fleet, so they load
-    /// only when the server can be told where Fleet is. The built-in skills the owner turned on load either way.
+    /// only when the server can be told where Fleet is. The built-in skills the owner turned on load either way. The
+    /// install is looked up on every request (files only), so a V2 installed while Fleet runs is found.
     /// </summary>
     private async Task<OpenCode2ServerSetup> GetSetupAsync(string ownerUserId)
     {
@@ -231,10 +318,13 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         if (builtInSkills.Count > 0 && InstallOnce(ref _builtInSkillsFolder, OpenCode2FleetFiles.InstallBuiltInSkills) is { } builtIn)
             skills.AddRange(builtInSkills.Select(name => Path.Combine(builtIn, name)));
 
+        var install = _install.Locate();
         return new OpenCode2ServerSetup(
             fleetUrl,
             OpenCode2FleetFiles.BuildConfigContent(plugin, skills),
-            SessionMessages: sessionMessages && plugin is not null);
+            SessionMessages: sessionMessages && plugin is not null,
+            install?.ExecutablePath,
+            install?.Mode ?? OpenCode2InstallMode.Default);
     }
 
     /// <summary>The built-in skills the owner turned on that this Fleet ships, in name order, and whether messages between sessions are on.</summary>
@@ -279,9 +369,8 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
 
     private async Task<OpenCode2Server> StartServerAsync(string ownerUserId, OpenCode2ServerSetup setup, CancellationToken ct)
     {
-        var executable = OpenCode2Executable.TryResolve()
-            ?? throw new InvalidOperationException(
-                $"OpenCode 2 isn't installed: Fleet couldn't find {OpenCode2Executable.Command} on PATH or in ~/.opencode/bin.");
+        var executable = setup.ExecutablePath
+            ?? throw new InvalidOperationException("OpenCode 2 isn't installed. Set it up in Settings → Harnesses.");
 
         // The server would run on the user's own OpenCode data, so make sure it's the API this harness speaks.
         var probe = await HarnessProbe.RunAsync(executable, ["--version"], ct).ConfigureAwait(false);
@@ -289,11 +378,15 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         if (version is null || !OpenCode2Executable.IsOpenCode2(version))
             throw new InvalidOperationException($"{executable} is OpenCode {version ?? "(unknown version)"}, not OpenCode 2.");
 
+        // Its sessions now live in this mode's database, so the mode stays even if an OpenCode 1 turns up later.
+        if (_install.RememberedMode() is null)
+            _install.Remember(setup.Mode);
+
         var password = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
         var bridgeToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
 
         // The agent reaches Fleet under a path that names this process, so Fleet can tell its calls from the user's.
-        var environment = new Dictionary<string, string>(StringComparer.Ordinal)
+        var environment = new Dictionary<string, string>(_install.PrepareEnvironment(setup.Mode), StringComparer.Ordinal)
         {
             ["FLEET_BRIDGE_TOKEN"] = bridgeToken,
         };
@@ -303,6 +396,10 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             environment["OPENCODE_CONFIG_CONTENT"] = configContent;
         if (setup.SessionMessages)
             environment[SessionMessages.EnvironmentVariable] = "1";
+
+        // Once its config folder exists, the skills copy there (see HarnessInstallPaths.SkillTargets).
+        if (setup.Mode == OpenCode2InstallMode.Separate)
+            await SyncSkillsToSeparateInstallAsync(ct).ConfigureAwait(false);
 
         var process = new OpenCode2ProcessManager(_loggerFactory.CreateLogger<OpenCode2ProcessManager>());
         OpenCode2HttpClient? client = null;
@@ -335,6 +432,29 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         }
     }
 
+    /// <summary>
+    /// A separate install reads its own config folder, not <c>~/.config/opencode</c>, so the first server Fleet starts
+    /// copies the user's skills there: the install may be newer than the skills. Later installs copy as they happen.
+    /// </summary>
+    private async Task SyncSkillsToSeparateInstallAsync(CancellationToken ct)
+    {
+        if (_options.Auth.Enabled || Interlocked.Exchange(ref _separateSkillsSynced, 1) == 1)
+            return;
+
+        try
+        {
+            using var userScope = BackgroundUserContext.BeginScope(LocalOwnerUserId);
+            using var scope = _scopeFactory.CreateScope();
+            if (scope.ServiceProvider.GetService<ISkillSyncEngine>() is { } skills)
+                await skills.SyncHarnessAsync(HarnessInstallPaths.OpenCode2, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            Volatile.Write(ref _separateSkillsSynced, 0);
+            LogSkillSyncFailed(_logger, ex);
+        }
+    }
+
     private HttpClient CreateHttpClient(Uri baseUrl, string password, TimeSpan timeout)
     {
         var client = _httpClientFactory.CreateClient(HttpClientName);
@@ -360,6 +480,9 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't write Fleet's plugin or skills for OpenCode 2; its servers start without them")]
     private static partial void LogFleetFilesInstallFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't copy the skills to OpenCode 2's own config folder; its servers start without them")]
+    private static partial void LogSkillSyncFailed(ILogger logger, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 session {InstanceId} created as {HarnessSessionId}")]
     private static partial void LogSpawned(ILogger logger, string instanceId, string harnessSessionId);
