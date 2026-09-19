@@ -8,6 +8,19 @@ export interface DiffLine {
   newLineNumber?: number;
 }
 
+/** The session a sub-agent tool call started, which its row opens. */
+export interface ToolCardDelegation {
+  href: string;
+  childSessionId: string;
+  childInstanceId: string;
+  parentSessionId: string;
+  /** The kind of sub-agent, such as "explore"; empty when the call doesn't say. */
+  agent: string;
+  task: string;
+  /** "pending" | "running" | "completed" | "error" | "cancelled". */
+  status: string;
+}
+
 export interface ToolCardItem {
   id: string;
   title: string;
@@ -21,6 +34,27 @@ export interface ToolCardItem {
   isPatternTool?: boolean;
   /** The canvas a Fleet canvas tool opened or changed, which the card can bring forward. */
   canvasId?: string;
+  /** Set on a sub-agent call once its session exists; the row then opens that session. */
+  delegation?: ToolCardDelegation;
+}
+
+/** Tools that start a sub-agent in its own session: OpenCode's `task`, OpenCode 2's `subagent`. */
+export const SUBAGENT_TOOLS = new Set(["task", "subagent"]);
+
+/** The kind of sub-agent a call asked for: OpenCode names it `subagent_type`, OpenCode 2 `agent`. */
+export function subagentKind(part: AccumulatedToolPart): string {
+  const input = toolInput(part);
+  for (const key of ["subagent_type", "agent"]) {
+    const value = input?.[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+/** What the call asked the sub-agent to do, in its own words. */
+export function subagentTask(part: AccumulatedToolPart): string {
+  const description = toolInput(part)?.description;
+  return typeof description === "string" ? description.trim() : "";
 }
 
 /** Fleet's browser tools; their card reads "title · address" once the page answered, or "title · size" for a shot. */
