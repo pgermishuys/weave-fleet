@@ -270,6 +270,33 @@ public sealed class OpenCode2SessionTests
         api.Requests.ShouldContain(r => r.Path == "/api/session/active");
     }
 
+    [Fact]
+    public async Task A_turn_running_when_the_server_stops_fails_saying_why_and_ends()
+    {
+        await using var server = Server(new StubHandler(_ => Json("{}")));
+        await using var session = NewSession(server);
+        session.OnEvent(Event("session.execution.started", $$"""{"sessionID":"{{Session}}"}"""));
+
+        session.OnServerStopped();
+
+        var events = await ReadAvailableAsync(session);
+        events.Select(StatusOf).ShouldBe([ActivityStatuses.Busy, EventTypes.SessionError, EventTypes.SessionIdle]);
+        events[1].Payload!.Value.GetProperty("error").GetProperty("message").GetString().ShouldBe("The OpenCode 2 server stopped during the turn.");
+        session.Status.ShouldBe(HarnessSessionStatus.Idle);
+    }
+
+    [Fact]
+    public async Task An_idle_session_says_nothing_when_the_server_stops()
+    {
+        await using var server = Server(new StubHandler(_ => Json("{}")));
+        await using var session = NewSession(server);
+
+        session.OnServerStopped();
+
+        (await ReadAvailableAsync(session)).ShouldBeEmpty();
+        session.Status.ShouldBe(HarnessSessionStatus.Idle);
+    }
+
     private static string RunningJson => "{\"data\":{\"" + Session + "\":{\"type\":\"running\"}}}";
 
     private static OpenCode2Event FormCreated()

@@ -359,11 +359,55 @@ What Stage 5 learned:
 
 ## Stage 6 — tests
 
-- [ ] Unit: event mapping from recorded V2 SSE (`events*.sse` from the spike), forms, message snapshots.
-- [ ] Conformance fixture `OpenCode2Fixture` in `WeaveFleet.ConformanceTests`.
-- [ ] Live tests with the real binary + `FakeLlmServer`, scratch HOME, pinned 2.0.x in CI (like PR #242).
+- [x] Unit: event mapping from recorded V2 SSE (`events*.sse` from the spike), forms, message snapshots. They landed
+      with Stages 1–4. The one gap was a session whose server stops: now tested with a turn running and with none.
+- [x] Conformance fixture `OpenCode2Fixture` in `WeaveFleet.ConformanceTests`.
+- [x] Live tests with the real binary + `FakeLlmServer`, scratch HOME, pinned 2.0.x in CI (like PR #242).
 
 Size: 3 days (spread across the stages; tests land with each stage's PR).
+
+Built as Track D (branch `test/opencode2-live-tests`, rebased on Stage 5). CI installs OpenCode 2.0.9 next to OpenCode
+1.18.31 in Stage 5's separate mode, checks each reports its pinned version, and runs the conformance tests and the
+`[OpenCode2Fact]` live tests with `FLEET_REQUIRE_OPENCODE2=1`. Checked locally on 2.0.0, 2.0.4, 2.0.5, 2.0.6, 2.0.8 and 2.0.9 through a scratch-HOME script,
+plus OpenCode 1's live tests beside them.
+
+What Stage 6 learned:
+
+- **`MinimumVersion` 2.0.6** (Stage 5 set it; the live tests agree). They pass on 2.0.6, 2.0.8 and 2.0.9. On 2.0.0–2.0.5
+  Fleet can't start a server: `GET /api/info`, the check that the password works, is 404 there. The conformance tests
+  don't call it and pass on all of them.
+- **Installing V2 next to V1 in CI:** V2's installer writes `~/.opencode/bin/opencode` (V1's binary) and, when
+  `GITHUB_ACTIONS` is set, adds its folder to `$GITHUB_PATH` even with `--no-modify-path`, which would put V2's `opencode`
+  ahead of V1's in later steps. CI runs it as separate mode's setup does (`HOME=~/.weave/harnesses/opencode2`) and without
+  `GITHUB_ACTIONS`, so the harness finds it through its own discovery; the test fixtures use the same
+  `OpenCode2Install.Locate()`. The live tests put the separate install's config folder and database
+  (`OPENCODE_CONFIG_DIR`, `OPENCODE_DB`) on scratch folders too.
+- The live tests (`tests/WeaveFleet.IntegrationTests/Harnesses/OpenCode2/`) share one Fleet on Kestrel and one V2 server
+  per class, as Fleet runs one server per owner, and each test has sessions and folders of its own. They drive Fleet
+  through the orchestrator, as the client does: a text turn, a tool card (running, then its output), a question answered
+  from its card, a reopened session equal to the live stream (text and tool parts, compared as JSON), `fleet_canvas_open`,
+  a subagent whose child asks a question, the agent/model switch kept by the session, a turn that ends with a failure
+  when the server is killed (and the next prompt answered by a new server), and Fleet stopping its server when it stops.
+  About 30 s locally.
+- The model answers by what it's asked (`ScriptedResponseStore.Fallback`), since sessions share it. V2 gives a subagent
+  its prompt after instructions of its own ("You are a subagent spawned by another session…"), in the child's last user
+  message. Title requests offer no tools and get `ToolLessResponse`.
+- Test seam: `OpenCode2HarnessRuntime.ServerEnvironment` (internal) sets variables every server starts with, over the
+  install's and under Fleet's own. The live tests give V2 a scratch HOME this way. Empty in Fleet.
+- Fleet broadcasts V2 sessions' raw harness types (`session.status` busy, `session.idle`, `session.error`), not
+  `turn.*`. The shared conformance suite listened for `session.busy`, which no harness sends, and its
+  `SendPromptAndWaitAsync` didn't wait. It never ran anywhere: the project isn't a `dotnet test` project and CI didn't run
+  it. Fixed for every harness: busy is `session.status` `busy`, and the helper waits for `session.idle`. A harness can
+  skip a shared test with its reason (`NotApplicable`). V2 skips four: its session and resume token exist before the
+  first prompt, so there's no `session.created` on a prompt, and it streams assistant messages only, so there's no
+  `message.created` for the user's. CI runs only V2's conformance tests. OpenCode 1's fixture starts `opencode` with the
+  real HOME, so it wasn't run here (locally that's the user's data) and stays out of CI; wiring it in is for later.
+- **Harness fix:** stopping a V2 server always waited 5 s. `setpgid` fails once the server has exec'd (errno 13), so the
+  group kill misses (errno 3), and the tree was killed only after the wait. A Fleet that exited in those 5 s left
+  `opencode2 serve` running on the user's database. The tree is now killed straight away. The shared
+  `ProcessGroupHelper` has the same `setpgid` race for every harness. Not changed here.
+- **Left for later:** an OpenCode 1 session and a V2 session in one Fleet aren't in one test. CI runs both harnesses'
+  live tests in the same run instead. Todos, profiles and images stay out of the live tests until they exist.
 
 ## Follow-up decisions (2026-09-18)
 

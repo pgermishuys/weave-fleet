@@ -108,21 +108,25 @@ internal sealed partial class OpenCode2ProcessManager(ILogger<OpenCode2ProcessMa
         if (_process is not { HasExited: false } process)
             return;
 
+        // The group kill misses when the server didn't become its own group (setpgid fails once it has exec'd), so
+        // the tree is killed too, straight away: waiting first left servers running when Fleet exited during the wait.
+        ProcessGroupHelper.KillProcessGroup(process.Id, logger);
         try
         {
-            ProcessGroupHelper.KillProcessGroup(process.Id, logger);
+            process.Kill(entireProcessTree: true);
+        }
+        catch (InvalidOperationException)
+        {
+            // Already exited.
+        }
+
+        try
+        {
             await process.WaitForExitAsync().WaitAsync(timeout).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is TimeoutException or InvalidOperationException)
+        catch (TimeoutException)
         {
-            try
-            {
-                process.Kill(entireProcessTree: true);
-            }
-            catch (InvalidOperationException)
-            {
-                // Already exited.
-            }
+            LogStopTimedOut(logger, process.Id, timeout.TotalSeconds);
         }
     }
 
@@ -172,6 +176,9 @@ internal sealed partial class OpenCode2ProcessManager(ILogger<OpenCode2ProcessMa
 
     [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 server {ProcessId} exited with code {ExitCode}")]
     private static partial void LogExited(ILogger logger, int processId, int exitCode);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "OpenCode 2 server {ProcessId} was killed but didn't exit within {Seconds} s")]
+    private static partial void LogStopTimedOut(ILogger logger, int processId, double seconds);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "opencode2: {Line}")]
     private static partial void LogOutput(ILogger logger, string line);
