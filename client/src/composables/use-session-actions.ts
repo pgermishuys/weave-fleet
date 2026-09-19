@@ -80,6 +80,12 @@ export interface UseArchiveSessionResult {
   error: Readonly<ShallowRef<string | undefined>>;
 }
 
+export interface UseUnarchiveSessionResult {
+  unarchiveSession: (sessionId: string) => Promise<void>;
+  isUnarchiving: Readonly<ShallowRef<boolean>>;
+  error: Readonly<ShallowRef<string | undefined>>;
+}
+
 export interface UseForkSessionResult {
   forkSession: (sessionId: string, opts?: ForkSessionRequest) => Promise<ForkSessionResponse>;
   clearError: () => void;
@@ -457,6 +463,16 @@ export function useArchiveSession(): UseArchiveSessionResult {
   return {
     archiveSession: mutation.updateRetention,
     isArchiving: mutation.isPending,
+    error: mutation.error,
+  };
+}
+
+export function useUnarchiveSession(): UseUnarchiveSessionResult {
+  const mutation = createRetentionMutation("active", "session.unarchive", "Failed to restore session");
+
+  return {
+    unarchiveSession: mutation.updateRetention,
+    isUnarchiving: mutation.isPending,
     error: mutation.error,
   };
 }

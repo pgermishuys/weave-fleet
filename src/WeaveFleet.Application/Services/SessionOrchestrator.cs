@@ -1360,13 +1360,45 @@ public sealed partial class SessionOrchestrator(
         }
     }
 
-#pragma warning disable CA1822 // Interface method cannot be static
-    public Task<Result<Unit>> UnarchiveSessionAsync(string id, CancellationToken ct = default)
+    /// <summary>Brings an archived session back to the active list. Its conversation is intact; the terminals archiving ended stay gone.</summary>
+    public async Task<Result<Unit>> UnarchiveSessionAsync(string id, CancellationToken ct = default)
     {
-        return Task.FromResult<Result<Unit>>(
-            FleetError.ValidationError("Session.RetentionStatus", "Archived sessions cannot be unarchived."));
+        using var _ = BeginSessionScope(id);
+        var session = await sessionRepository.GetByIdAsync(id);
+        if (session is null)
+            return FleetError.NotFoundFor(nameof(Session), id);
+
+        if (!string.Equals(session.RetentionStatus, "archived", StringComparison.Ordinal))
+            return Unit.Value;
+
+        var changedAt = DateTime.UtcNow.ToString("O");
+        if (sessionActivityWriteService is null)
+        {
+            await sessionRepository.UnarchiveAsync(id);
+            await eventBroadcaster.BroadcastAsync("sessions", "session_unarchived",
+                JsonSerializer.SerializeToElement(new SessionUnarchivedOutboxPayload(id), ApplicationJsonContext.Default.SessionUnarchivedOutboxPayload),
+                session.UserId, ct);
+        }
+        else
+        {
+            await sessionActivityWriteService.WriteAsync(
+                new SessionActivityWriteRequest
+                {
+                    SessionUnarchives = [id],
+                    OutboxMessages =
+                    [
+                        CreateSessionLifecycleOutboxMessage(
+                            "session_unarchived",
+                            JsonSerializer.Serialize(new SessionUnarchivedOutboxPayload(id), ApplicationJsonContext.Default.SessionUnarchivedOutboxPayload),
+                            changedAt,
+                            session.UserId)
+                    ]
+                },
+                ct);
+        }
+
+        return Unit.Value;
     }
-#pragma warning restore CA1822
 
     public async Task<Result<Unit>> DeleteSessionAsync(string id, CancellationToken ct = default)
     {
