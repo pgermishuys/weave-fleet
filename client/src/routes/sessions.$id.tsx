@@ -17,7 +17,6 @@ import RightPanelSheetButton from "@/components/layout/RightPanelSheetButton.vue
 import { useDiffs } from "@/composables/use-diffs";
 import {
   useAbortSession,
-  useArchiveSession,
   useDeleteSession,
   useRenameSession,
 } from "@/composables/use-session-actions";
@@ -30,6 +29,7 @@ import type { SessionActionCapabilities, SessionListItem, SessionOrigin } from "
 import type { SessionActivityStatus } from "@/lib/types";
 import { dispatchSessionUpsert } from "@/lib/session-sync";
 import { useSessionsStore } from "@/stores/sessions";
+import { useArchiveQueueStore } from "@/stores/archive-queue";
 
 function normalizeRetentionStatus(value: string | null | undefined): "active" | "archived" {
   return value === "archived" ? "archived" : "active";
@@ -219,7 +219,9 @@ const SessionDetailPage = defineComponent({
     } | null>(null);
 
     const { abortSession, isAborting, error: abortError } = useAbortSession();
-    const { archiveSession, isArchiving, error: archiveError } = useArchiveSession();
+    const archiveQueue = useArchiveQueueStore();
+    const isEditingTitle = shallowRef(false);
+    const isRestoring = shallowRef(false);
     const { deleteSession, isDeleting, error: deleteError } = useDeleteSession();
     const { renameSession, isLoading: isRenaming, error: renameError } = useRenameSession();
 
@@ -236,6 +238,7 @@ const SessionDetailPage = defineComponent({
       async (sessionId, _previousSessionId, onCleanup) => {
         sessionsStore.setActiveSessionId(sessionId ?? null);
         remoteSession.value = null;
+        isEditingTitle.value = false;
 
         if (!sessionId) {
           return;
@@ -476,18 +479,20 @@ const SessionDetailPage = defineComponent({
     });
 
     const fallbackCanAbort = computed(() => effectiveLifecycleStatus.value === "running" && isActiveActivityStatus(effectiveActivityStatus.value));
-    const fallbackCanArchive = computed(() => !isArchived.value && effectiveLifecycleStatus.value !== "running");
+    // Matches SessionCapabilitiesResolver: any session that isn't archived yet can be.
+    const fallbackCanArchive = computed(() => !isArchived.value);
     const canAbort = computed(() => effectiveActionCapabilities.value?.canAbort ?? fallbackCanAbort.value);
-    const canArchive = computed(() => effectiveActionCapabilities.value?.canArchive ?? fallbackCanArchive.value);
+    // Capabilities are resolved when the list loads, so the retention state wins once it changes here.
+    const canArchive = computed(() => !isArchived.value && (effectiveActionCapabilities.value?.canArchive ?? fallbackCanArchive.value));
+    const canRestore = computed(() => isArchived.value);
     const canFork = computed(() => effectiveActionCapabilities.value?.canFork ?? true);
     const canDelete = computed(() => effectiveActionCapabilities.value?.canDelete ?? true);
     const isAnyActionPending = computed(() => isAborting.value
-      || isArchiving.value
+      || isRestoring.value
       || isDeleting.value
       || isRenaming.value);
     const actionErrors = computed(() => [
       abortError.value,
-      archiveError.value,
       deleteError.value,
       renameError.value,
     ].filter((message): message is string => Boolean(message)));
@@ -633,14 +638,8 @@ const SessionDetailPage = defineComponent({
       }
     }
 
-    async function handleRename(): Promise<void> {
+    async function handleRename(proposedTitle: string): Promise<void> {
       if (!params.value.id) {
-        return;
-      }
-
-      const currentTitle = selectedSession.value?.session.title ?? remoteSession.value?.title ?? "Untitled session";
-      const proposedTitle = window.prompt("Rename session", currentTitle)?.trim();
-      if (!proposedTitle || proposedTitle === currentTitle) {
         return;
       }
 
@@ -658,19 +657,30 @@ const SessionDetailPage = defineComponent({
       }
     }
 
-    async function handleArchive(): Promise<void> {
+    function handleArchive(): void {
       if (!params.value.id || !canArchive.value) {
         return;
       }
 
+      // Sent after the undo window; the banner shows once it is.
+      archiveQueue.archive([params.value.id]);
+    }
+
+    async function handleRestore(): Promise<void> {
+      if (!params.value.id || !canRestore.value) {
+        return;
+      }
+
+      isRestoring.value = true;
       try {
-        await archiveSession(params.value.id);
-        handleSessionStateChanged({ retentionStatus: "archived" });
-        sessionsStore.patchSession(params.value.id, {
-          retentionStatus: "archived",
-        });
+        await archiveQueue.restore(params.value.id);
+        if (optimisticSessionState.value?.retentionStatus) {
+          handleSessionStateChanged({ retentionStatus: "active" });
+        }
       } catch {
-        // Error is exposed inline by the action toolbar.
+        // The archive queue shows the error.
+      } finally {
+        isRestoring.value = false;
       }
     }
 
@@ -717,6 +727,13 @@ const SessionDetailPage = defineComponent({
             totalTokens={selectedSession.value?.totalTokens ?? remoteSession.value?.totalTokens ?? null}
             totalCost={selectedSession.value?.totalCost ?? remoteSession.value?.totalCost ?? null}
             tags={selectedSession.value?.tags ?? []}
+            editingTitle={isEditingTitle.value}
+            renameDisabled={isArchived.value}
+            canRestore={canRestore.value}
+            isRestoring={isRestoring.value}
+            onUpdate:editingTitle={(editing: boolean) => { isEditingTitle.value = editing; }}
+            onRename={(title: string) => void handleRename(title)}
+            onRestore={() => void handleRestore()}
             sessionStateChanged={handleSessionStateChanged}
           >
             {{
@@ -727,21 +744,23 @@ const SessionDetailPage = defineComponent({
                 <SessionActionToolbar
                   canAbort={canAbort.value}
                   canArchive={canArchive.value}
+                  canRestore={canRestore.value}
+                  canRename={!isArchived.value}
                   canFork={canFork.value}
                   canDelete={canDelete.value}
                   isPending={isAnyActionPending.value}
                   isAborting={isAborting.value}
                   isRenaming={isRenaming.value}
                   isDeleting={isDeleting.value}
-                  isArchiving={isArchiving.value}
                   hasSession={Boolean(params.value.id)}
                   hasInstance={Boolean(instanceId.value)}
                   errors={actionErrors.value}
                   onAbort={() => void handleAbort()}
                   onFork={handleFork}
-                  onRename={() => void handleRename()}
+                  onRename={() => { isEditingTitle.value = true; }}
                   onDelete={handleDelete}
-                  onArchive={() => void handleArchive()}
+                  onArchive={handleArchive}
+                  onRestore={() => void handleRestore()}
                 />
                 </>
               ),

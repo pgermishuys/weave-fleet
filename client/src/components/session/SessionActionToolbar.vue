@@ -1,12 +1,22 @@
 <script setup lang="ts">
-import { Archive, GitFork, Loader2, OctagonX, Pencil, Trash2 } from "lucide-vue-next";
+import { Archive, ArchiveRestore, Ellipsis, GitFork, Loader2, OctagonX, Pencil, Trash2 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const props = withDefaults(defineProps<{
   canAbort?: boolean;
   canArchive?: boolean;
+  canRestore?: boolean;
   canFork?: boolean;
   canDelete?: boolean;
+  canRename?: boolean;
   isPending?: boolean;
   isAborting?: boolean;
   isRenaming?: boolean;
@@ -18,6 +28,7 @@ const props = withDefaults(defineProps<{
 }>(), {
   canFork: true,
   canDelete: true,
+  canRename: true,
 });
 
 const emit = defineEmits<{
@@ -26,6 +37,7 @@ const emit = defineEmits<{
   rename: [];
   delete: [];
   archive: [];
+  restore: [];
 }>();
 </script>
 
@@ -68,64 +80,76 @@ const emit = defineEmits<{
       <GitFork aria-hidden="true" />
     </Button>
 
-    <Button
-      v-if="props.canDelete"
-      variant="toolbar-icon"
-      size="toolbar"
-      :disabled="props.isPending || !props.hasSession"
-      title="Rename"
-      @click="emit('rename')"
-    >
-      <Loader2
-        v-if="props.isRenaming"
-        class="session-action-toolbar__spinner"
-        aria-hidden="true"
-      />
-      <Pencil
-        v-else
-        aria-hidden="true"
-      />
-    </Button>
-
-    <Button
-      v-if="props.canDelete"
-      variant="toolbar-icon-danger"
-      size="toolbar"
-      data-testid="session-delete-button"
-      :disabled="props.isPending || !props.hasSession || !props.hasInstance"
-      title="Delete"
-      @click="emit('delete')"
-    >
-      <Loader2
-        v-if="props.isDeleting"
-        class="session-action-toolbar__spinner"
-        aria-hidden="true"
-      />
-      <Trash2
-        v-else
-        aria-hidden="true"
-      />
-    </Button>
-
-    <Button
-      v-if="props.canArchive"
-      variant="toolbar-icon"
-      size="toolbar"
-      data-testid="session-archive-banner-button"
-      :disabled="props.isPending || !props.hasSession"
-      title="Archive"
-      @click="emit('archive')"
-    >
-      <Loader2
-        v-if="props.isArchiving"
-        class="session-action-toolbar__spinner"
-        aria-hidden="true"
-      />
-      <Archive
-        v-else
-        aria-hidden="true"
-      />
-    </Button>
+    <!-- Actions that are costly to hit by mistake live one click further away. -->
+    <DropdownMenu :modal="false">
+      <DropdownMenuTrigger as-child>
+        <Button
+          variant="toolbar-icon"
+          size="toolbar"
+          data-testid="session-more-actions"
+          :disabled="!props.hasSession"
+          aria-label="More actions"
+          title="More actions"
+        >
+          <Loader2
+            v-if="props.isRenaming || props.isArchiving || props.isDeleting"
+            class="session-action-toolbar__spinner"
+            aria-hidden="true"
+          />
+          <Ellipsis
+            v-else
+            aria-hidden="true"
+          />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        class="w-56"
+      >
+        <DropdownMenuItem
+          v-if="props.canRename"
+          data-testid="session-rename-action"
+          :disabled="props.isPending"
+          @select="emit('rename')"
+        >
+          <Pencil class="size-3.5" />
+          Rename
+          <DropdownMenuShortcut class="tracking-normal">
+            Double-click title
+          </DropdownMenuShortcut>
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          v-if="props.canArchive"
+          data-testid="session-archive-banner-button"
+          :disabled="props.isPending"
+          @select="emit('archive')"
+        >
+          <Archive class="size-3.5" />
+          Archive
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          v-if="props.canRestore"
+          data-testid="session-restore-action"
+          :disabled="props.isPending"
+          @select="emit('restore')"
+        >
+          <ArchiveRestore class="size-3.5" />
+          Restore
+        </DropdownMenuItem>
+        <template v-if="props.canDelete">
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            variant="destructive"
+            data-testid="session-delete-button"
+            :disabled="props.isPending || !props.hasInstance"
+            @select="emit('delete')"
+          >
+            <Trash2 class="size-3.5" />
+            Delete…
+          </DropdownMenuItem>
+        </template>
+      </DropdownMenuContent>
+    </DropdownMenu>
 
     <p
       v-for="message in props.errors ?? []"

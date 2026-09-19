@@ -1,18 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, shallowRef, watch } from "vue";
 import { useLocation, useRouter } from "@tanstack/vue-router";
-import { Check, FolderPlus, LoaderCircle, Plus, Search } from "lucide-vue-next";
+import { Archive, ArchiveRestore, ArrowLeft, FolderPlus, LoaderCircle, Plus, Search, X } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import type { SessionListItem } from "@/api/client";
 import { useProjects } from "@/composables/use-projects";
 import { useSessions } from "@/composables/use-sessions";
-import { useArchiveSession, useMoveSession } from "@/composables/use-session-actions";
+import { useMoveSession } from "@/composables/use-session-actions";
+import { useArchiveQueueStore } from "@/stores/archive-queue";
+import { useSessionSelectionStore } from "@/stores/session-selection";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSidebarStore } from "@/stores/sidebar";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 
 import { Button } from "@/components/ui/button";
-import ConfirmCompleteSessionDialog from "./ConfirmCompleteSessionDialog.vue";
 import NewProjectDialog from "./NewProjectDialog.vue";
 
 import ProjectGroup from "./ProjectGroup.vue";
@@ -42,6 +43,8 @@ interface ActiveSessionDrag {
 
 
 const sessionsStore = useSessionsStore();
+const archiveQueue = useArchiveQueueStore();
+const selection = useSessionSelectionStore();
 const sidebarStore = useSidebarStore();
 const { newSessionDraftRow, sessionRowKeys } = storeToRefs(useWorkspaceUiStore());
 const router = useRouter();
@@ -52,13 +55,24 @@ onMounted(() => {
 });
 onUnmounted(() => {
   releaseSessionList?.();
+  selection.clear();
+  window.removeEventListener("keydown", handleSelectionKeydown);
+});
+
+function handleSelectionKeydown(event: KeyboardEvent): void {
+  if (event.key === "Escape" && selection.isSelecting) {
+    selection.clear();
+  }
+}
+
+onMounted(() => {
+  window.addEventListener("keydown", handleSelectionKeydown);
 });
 const pathname = useLocation({
   select: (location) => location.pathname,
 });
 
 const { moveSession } = useMoveSession();
-const { archiveSession, isArchiving } = useArchiveSession();
 
 const { activeSessionId, retentionStatus } = storeToRefs(sessionsStore);
 const {
@@ -79,6 +93,11 @@ const sessions = computed(() => {
       return false;
     }
 
+    // Waiting on Undo: gone from the list, not yet archived on the server.
+    if (archiveQueue.pendingIds.has(session.session.id)) {
+      return false;
+    }
+
     if (retentionStatus.value === "all") {
       return true;
     }
@@ -86,6 +105,8 @@ const sessions = computed(() => {
     return session.retentionStatus === retentionStatus.value;
   });
 });
+
+const isArchivedView = computed(() => retentionStatus.value === "archived");
 
 const searchQuery = shallowRef("");
 const expandedProjects = reactive<Record<string, boolean>>({});
@@ -282,7 +303,10 @@ const projectGroups = computed<ProjectTreeGroup[]>(() => {
 
 const filteredProjectGroups = computed<ProjectTreeGroup[]>(() => {
   if (!normalizedQuery.value) {
-    return projectGroups.value;
+    // Archived sessions are the only reason to show a project there.
+    return isArchivedView.value
+      ? projectGroups.value.filter((project) => project.sessions.length > 0)
+      : projectGroups.value;
   }
 
   return projectGroups.value
@@ -310,6 +334,37 @@ const filteredProjectGroups = computed<ProjectTreeGroup[]>(() => {
     })
     .filter((project) => project.sessions.length > 0 || project.name.toLowerCase().includes(normalizedQuery.value));
 });
+
+function showArchived(show: boolean): void {
+  selection.clear();
+  sessionsStore.setRetentionStatus(show ? "archived" : "active");
+}
+
+// Shift-click ranges follow the rows as the list shows them.
+watch(
+  () => filteredProjectGroups.value
+    .filter((group) => expandedProjects[group.id] ?? true)
+    .flatMap((group) => group.sessions.map((session) => session.session.id)),
+  (order) => selection.setVisibleOrder(order),
+  { immediate: true },
+);
+
+function archiveSelected(): void {
+  archiveQueue.archive([...selection.selectedIds]);
+  selection.clear();
+}
+
+async function restoreSelected(): Promise<void> {
+  const ids = [...selection.selectedIds];
+  selection.clear();
+  for (const sessionId of ids) {
+    try {
+      await archiveQueue.restore(sessionId);
+    } catch {
+      // The archive queue shows the error; the rest still get restored.
+    }
+  }
+}
 
 /** The id of the group the draft row shows in (groups are keyed by project id, or "ungrouped"). */
 const draftGroupId = computed<string | null>(() => {
@@ -395,8 +450,6 @@ const dragAnnouncement = shallowRef("");
 const isDragMovePending = shallowRef(false);
 const activeSessionDrag = shallowRef<ActiveSessionDrag | null>(null);
 const isCompleteDropZoneHovered = shallowRef(false);
-const pendingCompleteSessionId = shallowRef<string | null>(null);
-const isCompleteDialogOpen = shallowRef(false);
 
 function handleSessionDragStart(sessionId: string, projectId: string | null): void {
   const sessionExists = sessionsStore.sessions.some((session) => session.session.id === sessionId);
@@ -515,65 +568,11 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
     return;
   }
 
-  // Open the confirmation dialog
-  pendingCompleteSessionId.value = sessionId;
-  isCompleteDialogOpen.value = true;
+  archiveQueue.archive([sessionId]);
+  dragAnnouncement.value = `Archived ${session.session.title ?? "session"}`;
 
   // Clear drag state
   activeSessionDrag.value = null;
-}
-
-async function handleCompleteConfirm(deleteWorktree: boolean): Promise<void> {
-  const sessionId = pendingCompleteSessionId.value;
-  if (!sessionId) {
-    return;
-  }
-
-  const session = sessionsStore.sessions.find((s) => s.session.id === sessionId);
-  if (!session) {
-    isCompleteDialogOpen.value = false;
-    pendingCompleteSessionId.value = null;
-    return;
-  }
-
-  try {
-    await archiveSession(sessionId);
-    sessionsStore.patchSession(sessionId, { retentionStatus: "archived" });
-
-    const sessionTitle = session.session.title ?? "Session";
-    dragAnnouncement.value = `Completed ${sessionTitle}`;
-
-    // Navigate away if the completed session was active
-    if (activeSessionId.value === sessionId) {
-      const remainingSessions = sessions.value.filter((s) => s.session.id !== sessionId);
-      if (remainingSessions.length > 0) {
-        void router.navigate({
-          to: "/sessions/$id",
-          params: { id: remainingSessions[0].session.id },
-          search: {
-            instanceId: remainingSessions[0].instanceId,
-            parentSessionId: undefined,
-          },
-        });
-      } else {
-        void router.navigate({ to: "/" });
-      }
-    }
-
-    // TODO: if deleteWorktree, call backend to remove the worktree
-    void deleteWorktree;
-
-    isCompleteDialogOpen.value = false;
-    pendingCompleteSessionId.value = null;
-  } catch {
-    // Errors are handled by the mutation composable state
-    dragAnnouncement.value = "Failed to complete session";
-  }
-}
-
-function handleCompleteCancel(): void {
-  isCompleteDialogOpen.value = false;
-  pendingCompleteSessionId.value = null;
 }
 
 </script>
@@ -583,21 +582,29 @@ function handleCompleteCancel(): void {
     v-model:open="isNewProjectDialogOpen"
     @created="handleProjectCreated"
   />
-  <ConfirmCompleteSessionDialog
-    v-model:open="isCompleteDialogOpen"
-    :session-id="pendingCompleteSessionId ?? ''"
-    :session-title="sessionsStore.sessions.find((s) => s.session.id === pendingCompleteSessionId)?.session.title ?? 'Session'"
-    :has-worktree="sessionsStore.sessions.find((s) => s.session.id === pendingCompleteSessionId)?.isolationStrategy === 'worktree'"
-    :is-archiving="isArchiving"
-    @confirm="handleCompleteConfirm"
-    @cancel="handleCompleteCancel"
-  />
 
   <section
     class="sessions-panel"
     aria-label="Sessions context panel"
   >
-    <div class="panel-header-row">
+    <div
+      v-if="isArchivedView"
+      class="panel-archived-header"
+    >
+      <button
+        type="button"
+        class="panel-archived-header__back"
+        data-testid="sessions-archived-back"
+        @click="showArchived(false)"
+      >
+        <ArrowLeft aria-hidden="true" />
+        <span>Archived sessions</span>
+      </button>
+    </div>
+    <div
+      v-else
+      class="panel-header-row"
+    >
       <div class="panel-actions">
         <Button
           variant="ghost"
@@ -724,9 +731,12 @@ function handleCompleteCancel(): void {
         class="sessions-empty-state"
       >
         <p class="sessions-empty-state__title">
-          No sessions found
+          {{ isArchivedView && !normalizedQuery ? "No archived sessions" : "No sessions found" }}
         </p>
-        <p class="sessions-empty-state__copy">
+        <p
+          v-if="!isArchivedView || normalizedQuery"
+          class="sessions-empty-state__copy"
+        >
           Try a different search term or clear the filter.
         </p>
       </div>
@@ -738,20 +748,74 @@ function handleCompleteCancel(): void {
           class="complete-drop-zone"
           :class="{ 'complete-drop-zone--hovered': isCompleteDropZoneHovered }"
           role="button"
-          aria-label="Drop session here to complete and archive it"
+          aria-label="Drop session here to archive it"
           :aria-dropeffect="isCompleteDropZoneHovered ? 'move' : 'none'"
           @dragover="handleCompleteDropZoneDragOver"
           @dragenter="handleCompleteDropZoneDragEnter"
           @dragleave="handleCompleteDropZoneDragLeave"
           @drop="handleCompleteDropZoneDrop"
         >
-          <Check
+          <Archive
             class="complete-drop-zone__icon"
             aria-hidden="true"
           />
-          <span class="complete-drop-zone__label">Complete</span>
+          <span class="complete-drop-zone__label">Archive</span>
         </div>
       </Transition>
+    </div>
+
+    <div
+      v-if="selection.isSelecting"
+      class="selection-bar"
+      role="toolbar"
+      aria-label="Selected sessions"
+      data-testid="session-selection-bar"
+    >
+      <span class="selection-bar__count">{{ selection.count }} selected</span>
+      <Button
+        v-if="isArchivedView"
+        size="sm"
+        class="selection-bar__action"
+        data-testid="session-selection-restore"
+        @click="restoreSelected"
+      >
+        <ArchiveRestore aria-hidden="true" />
+        Restore
+      </Button>
+      <Button
+        v-else
+        size="sm"
+        class="selection-bar__action"
+        data-testid="session-selection-archive"
+        @click="archiveSelected"
+      >
+        <Archive aria-hidden="true" />
+        Archive
+      </Button>
+      <button
+        type="button"
+        class="selection-bar__clear"
+        aria-label="Clear selection"
+        title="Clear selection (Esc)"
+        @click="selection.clear()"
+      >
+        <X aria-hidden="true" />
+      </button>
+    </div>
+
+    <div
+      v-else-if="!isArchivedView"
+      class="panel-footer"
+    >
+      <button
+        type="button"
+        class="panel-footer__link"
+        data-testid="sessions-show-archived"
+        @click="showArchived(true)"
+      >
+        <Archive aria-hidden="true" />
+        Archived
+      </button>
     </div>
 
     <!-- Screen reader live region for drag-and-drop announcements -->
@@ -776,6 +840,121 @@ function handleCompleteCancel(): void {
 
 .panel-header-row {
   padding-top: 8px;
+}
+
+.panel-archived-header {
+  padding: 8px 8px 4px;
+}
+
+.panel-archived-header__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-btn);
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.panel-archived-header__back:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+.panel-archived-header__back svg {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+}
+
+.panel-footer {
+  flex-shrink: 0;
+  padding: 6px 8px 8px;
+  border-top: 1px solid var(--border);
+}
+
+.panel-footer__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-btn);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+
+.panel-footer__link:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text);
+}
+
+.panel-footer__link svg {
+  width: 13px;
+  height: 13px;
+}
+
+.selection-bar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 8px 8px;
+  padding: 5px 5px 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--card-bg);
+  box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.35);
+  font-size: 12px;
+}
+
+.selection-bar__count {
+  flex: 1;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.selection-bar__action {
+  gap: 6px;
+  height: 28px;
+  border-radius: 999px;
+}
+
+.selection-bar__action svg {
+  width: 13px;
+  height: 13px;
+}
+
+.selection-bar__clear {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.selection-bar__clear:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
+}
+
+.selection-bar__clear svg {
+  width: 14px;
+  height: 14px;
 }
 
 .panel-header {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onUnmounted, ref, shallowRef, useTemplateRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import SessionContextChips from "@/components/session-context/SessionContextChips.vue";
 import SessionAnalyticsPopover from "@/components/session/SessionAnalyticsPopover.vue";
@@ -11,7 +11,7 @@ import { useModels } from "@/composables/use-models";
 import { modelDisplayName } from "@/lib/agent-model-choice";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSidebarStore } from "@/stores/sidebar";
-import { GitBranch, Layers, X, Plus } from "lucide-vue-next";
+import { ArchiveRestore, GitBranch, Layers, Loader2, X, Plus } from "lucide-vue-next";
 
 interface Props {
   id: string;
@@ -33,6 +33,11 @@ interface Props {
   directory?: string | null;
   branch?: string | null;
   tags?: readonly string[];
+  /** Whether the title is an input; the ⋯ menu's Rename sets it, as does double-clicking the title. */
+  editingTitle?: boolean;
+  renameDisabled?: boolean;
+  canRestore?: boolean;
+  isRestoring?: boolean;
   sessionStateChanged?: (patch: {
     activityStatus?: string | null;
     lifecycleStatus?: string | null;
@@ -42,6 +47,11 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+const emit = defineEmits<{
+  "update:editingTitle": [editing: boolean];
+  rename: [title: string];
+  restore: [];
+}>();
 const { harnesses } = useHarnesses();
 const { models } = useModels(() => props.id);
 const sessionsStore = useSessionsStore();
@@ -53,6 +63,60 @@ const isAddingTag = ref(false);
 const newTagInput = ref("");
 
 const sessionTitle = computed(() => props.title?.trim() || "Untitled session");
+
+const titleDraft = shallowRef("");
+const titleInput = useTemplateRef<HTMLInputElement>("titleInput");
+let titleEditHandled = false;
+
+watch(() => props.editingTitle, async (editing) => {
+  if (!editing) {
+    return;
+  }
+
+  titleDraft.value = props.title?.trim() ?? "";
+  titleEditHandled = false;
+  await nextTick();
+  titleInput.value?.focus();
+  titleInput.value?.select();
+}, { immediate: true });
+
+function startTitleEdit(): void {
+  if (props.renameDisabled || isArchived.value) {
+    return;
+  }
+
+  emit("update:editingTitle", true);
+}
+
+function finishTitleEdit(save: boolean): void {
+  if (titleEditHandled) {
+    return;
+  }
+
+  titleEditHandled = true;
+  const nextTitle = titleDraft.value.trim();
+  emit("update:editingTitle", false);
+  if (save && nextTitle && nextTitle !== (props.title?.trim() ?? "")) {
+    emit("rename", nextTitle);
+  }
+}
+
+function handleTitleInputKeydown(event: KeyboardEvent): void {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    finishTitleEdit(true);
+  } else if (event.key === "Escape") {
+    event.preventDefault();
+    finishTitleEdit(false);
+  }
+}
+
+function handleTitleKeydown(event: KeyboardEvent): void {
+  if (event.key === "F2") {
+    event.preventDefault();
+    startTitleEdit();
+  }
+}
 const projectLabel = computed(() => props.projectName?.trim() || "Ungrouped");
 const effectiveActivityStatus = computed(() => props.activityStatus);
 const effectiveLifecycleStatus = computed(() => props.lifecycleStatus);
@@ -263,7 +327,29 @@ onUnmounted(() => {
             :activity="effectiveActivityStatus"
             :label="sessionStatusLabel"
           />
-          <h2 class="session-detail-header__title">
+          <input
+            v-if="props.editingTitle"
+            ref="titleInput"
+            v-model="titleDraft"
+            type="text"
+            spellcheck="false"
+            aria-label="Session name"
+            placeholder="Session name"
+            data-testid="session-title-input"
+            class="session-detail-header__title-input"
+            @blur="finishTitleEdit(true)"
+            @keydown="handleTitleInputKeydown"
+          >
+          <h2
+            v-else
+            class="session-detail-header__title"
+            :class="{ 'session-detail-header__title--editable': !props.renameDisabled && !isArchived }"
+            :title="!props.renameDisabled && !isArchived ? 'Double-click to rename' : undefined"
+            :tabindex="!props.renameDisabled && !isArchived ? 0 : undefined"
+            data-testid="session-title"
+            @dblclick="startTitleEdit"
+            @keydown="handleTitleKeydown"
+          >
             {{ sessionTitle }}
           </h2>
           <span
@@ -439,17 +525,128 @@ onUnmounted(() => {
       <div
         v-if="isArchived"
         data-testid="session-archived-banner"
-        class="border border-amber-500/30 bg-amber-500/10 px-4 py-3"
+        class="session-archived-banner"
       >
-        <p class="text-sm text-foreground">
+        <p class="session-archived-banner__copy">
           This session is archived and read-only.
         </p>
+        <button
+          v-if="props.canRestore"
+          type="button"
+          class="session-archived-banner__restore"
+          data-testid="session-restore-button"
+          :disabled="props.isRestoring"
+          @click="emit('restore')"
+        >
+          <Loader2
+            v-if="props.isRestoring"
+            class="session-archived-banner__spinner"
+            aria-hidden="true"
+          />
+          <ArchiveRestore
+            v-else
+            aria-hidden="true"
+          />
+          Restore
+        </button>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
+.session-archived-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--status-waiting) 30%, transparent);
+  background: color-mix(in srgb, var(--status-waiting) 10%, transparent);
+}
+
+.session-archived-banner__copy {
+  flex: 1;
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.session-archived-banner__restore {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-bg);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.session-archived-banner__restore:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 5%, var(--panel-bg));
+}
+
+.session-archived-banner__restore:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.session-archived-banner__restore svg {
+  width: 13px;
+  height: 13px;
+}
+
+.session-archived-banner__spinner {
+  animation: session-archived-spin 0.8s linear infinite;
+}
+
+@keyframes session-archived-spin {
+  to { transform: rotate(360deg); }
+}
+
+.session-detail-header__title--editable {
+  margin-inline: -6px;
+  padding-inline: 6px;
+  border-radius: 6px;
+  cursor: text;
+  transition: background var(--transition);
+}
+
+.session-detail-header__title--editable:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+.session-detail-header__title--editable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+
+/* The input takes the title's place at the title's size, so nothing shifts. */
+.session-detail-header__title-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 480px;
+  margin-inline: -7px;
+  padding: 0 6px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--card-bg);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  line-height: 1.3;
+  outline: none;
+}
+
 .session-detail-chrome {
   container: session-detail-header / inline-size;
   display: flex;
@@ -474,6 +671,9 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 3px;
   overflow: hidden;
+  /* Room for the rename field's ring, which would otherwise be clipped; the margins cancel it out. */
+  margin: -4px -8px;
+  padding: 4px 8px;
 }
 
 .session-detail-header__actions {
