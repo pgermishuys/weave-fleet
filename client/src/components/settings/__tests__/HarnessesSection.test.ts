@@ -132,6 +132,48 @@ describe("HarnessesSection", () => {
     expect(wrapper.get("[data-testid='harness-location']").text()).toBe("2.1.276 · /home/you/.local/bin/claude");
   });
 
+  it("shows how OpenCode 2 is installed in place of 'No settings yet'", async () => {
+    mockApiResponses({ "opencode2.enabled": "true" }, () => [createHarness("opencode2", "OpenCode 2", {
+      version: "2.0.9",
+      executablePath: "/home/you/.weave/harnesses/opencode2/.opencode/bin/opencode2",
+      setup: {
+        installCommand: "curl -fsSL https://opencode.ai/v2/install | HOME=/home/you/.weave/harnesses/opencode2 bash -s -- --no-modify-path",
+        signInCommand: "OPENCODE_CONFIG_DIR=/c OPENCODE_DB=/d /home/you/.weave/harnesses/opencode2/.opencode/bin/opencode2 auth login",
+        mode: "Separate from OpenCode 1",
+        folders: [
+          { label: "Settings", path: "/home/you/.weave/harnesses/opencode2/config" },
+          { label: "Sessions", path: "/home/you/.weave/harnesses/opencode2/data/opencode.db" },
+        ],
+        notes: ["OpenCode 2 keeps its own provider sign-ins here."],
+      },
+    }), createHarness("pi", "Pi")]);
+
+    const wrapper = await mountHarnessesSection();
+
+    const install = wrapper.get("[data-testid='harness-install']");
+    expect(install.get("[data-testid='harness-install-mode']").text()).toBe("Separate from OpenCode 1");
+    expect(install.text()).toContain("2.0.9");
+    expect(install.text()).toContain("Sessions/home/you/.weave/harnesses/opencode2/data/opencode.db");
+    expect(install.text()).toContain("OpenCode 2 keeps its own provider sign-ins here.");
+    expect(install.get("[data-testid='harness-install-sign-in']").text()).toContain("OPENCODE_CONFIG_DIR=/c OPENCODE_DB=/d");
+    // Pi says nothing about its install, so it keeps the placeholder.
+    expect(wrapper.findAll("article").map((card) => card.text().includes("No settings yet"))).toEqual([false, true]);
+    expect(wrapper.find("[data-testid='pooled-opencode-mode-setting']").exists()).toBe(false);
+  });
+
+  it("offers no sign-in before OpenCode 2 is installed", async () => {
+    mockApiResponses({}, () => [createHarness("opencode2", "OpenCode 2", {
+      available: false,
+      state: "not-installed",
+      setup: { installCommand: "curl -fsSL https://opencode.ai/v2/install | bash", signInCommand: "opencode2 auth login", mode: "Default install" },
+    })]);
+
+    const wrapper = await mountHarnessesSection();
+
+    expect(wrapper.get("[data-testid='harness-install']").text()).toContain("Not installed yet");
+    expect(wrapper.find("[data-testid='harness-install-sign-in']").exists()).toBe(false);
+  });
+
   it("checks again, so a harness installed a moment ago shows up", async () => {
     let installed = false;
     mockApiResponses({}, () => [installed

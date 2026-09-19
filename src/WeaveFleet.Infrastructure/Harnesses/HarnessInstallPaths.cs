@@ -1,4 +1,5 @@
 using WeaveFleet.Domain.Skills;
+using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 
 namespace WeaveFleet.Infrastructure.Harnesses;
 
@@ -14,6 +15,7 @@ public sealed class HarnessInstallPaths
 {
     public const string OpenCode = "opencode";
     public const string ClaudeCode = "claude-code";
+    public const string OpenCode2 = "opencode2";
 
     public HarnessInstallPaths(string homeDirectory, string? xdgConfigHome = null)
     {
@@ -26,6 +28,7 @@ public sealed class HarnessInstallPaths
 
         OpenCodeGlobalDirectory = Path.Combine(configHome, "opencode");
         ClaudeCodeGlobalDirectory = Path.Combine(homeDirectory, ".claude");
+        OpenCode2GlobalDirectory = OpenCode2Install.ConfigDirectoryFor(homeDirectory);
         SkillCacheDirectory = Path.Combine(homeDirectory, ".weave", "skills");
     }
 
@@ -34,7 +37,8 @@ public sealed class HarnessInstallPaths
         Environment.GetEnvironmentVariable("XDG_CONFIG_HOME"));
 
     /// <summary>Harnesses a skill can be installed for.</summary>
-    public static IReadOnlyList<string> SkillHarnesses { get; } = [OpenCode, ClaudeCode];
+    public static IReadOnlyList<string> SkillHarnesses { get; } = [OpenCode, ClaudeCode, OpenCode2];
+
 
     public string HomeDirectory { get; }
 
@@ -42,12 +46,19 @@ public sealed class HarnessInstallPaths
 
     public string ClaudeCodeGlobalDirectory { get; }
 
+    /// <summary>
+    /// A separately installed OpenCode 2's config folder, <c>~/.weave/harnesses/opencode2/config</c>. An OpenCode 2 in
+    /// the default place reads <see cref="OpenCodeGlobalDirectory"/>, which gets the same skills.
+    /// </summary>
+    public string OpenCode2GlobalDirectory { get; }
+
     /// <summary>Fleet's own copy of each skill's source (GitHub clones), under ~/.weave/skills.</summary>
     public string SkillCacheDirectory { get; }
 
     /// <summary>
     /// The harness's folder for a target: <c>~/.config/opencode</c> or <c>&lt;repo&gt;/.opencode</c>,
-    /// <c>~/.claude</c> or <c>&lt;repo&gt;/.claude</c>. Null for a harness that has no skills folder.
+    /// <c>~/.claude</c> or <c>&lt;repo&gt;/.claude</c>, <c>~/.weave/harnesses/opencode2/config</c> or
+    /// <c>&lt;repo&gt;/.opencode</c> (both OpenCodes read it). Null for a harness that has no skills folder.
     /// </summary>
     public string? HarnessDirectory(string harness, InstallTarget target)
     {
@@ -55,6 +66,7 @@ public sealed class HarnessInstallPaths
         {
             OpenCode => (OpenCodeGlobalDirectory, ".opencode"),
             ClaudeCode => (ClaudeCodeGlobalDirectory, ".claude"),
+            OpenCode2 => (OpenCode2GlobalDirectory, ".opencode"),
             _ => (null, null)
         };
 
@@ -65,6 +77,18 @@ public sealed class HarnessInstallPaths
             ? global
             : Path.Combine(target.ProjectPath!, projectFolder!);
     }
+
+    /// <summary>
+    /// The harnesses a skill for <paramref name="targets"/> is copied to. OpenCode 2 reads OpenCode's skills, and one
+    /// in the default place reads OpenCode's folder. One installed separately from OpenCode 1 reads a config folder of
+    /// its own, so once that folder exists a skill for OpenCode goes there too, whatever the manifest entry names.
+    /// </summary>
+    public IReadOnlyList<string> SkillTargets(IReadOnlyList<string> targets) =>
+        targets.Contains(OpenCode, StringComparer.OrdinalIgnoreCase)
+        && !targets.Contains(OpenCode2, StringComparer.OrdinalIgnoreCase)
+        && Directory.Exists(OpenCode2GlobalDirectory)
+            ? [.. targets, OpenCode2]
+            : targets;
 
     /// <summary>The folder a skill is copied to, e.g. <c>~/.config/opencode/skills/&lt;name&gt;</c>.</summary>
     public string? SkillDirectory(string harness, InstallTarget target, string skillName) =>

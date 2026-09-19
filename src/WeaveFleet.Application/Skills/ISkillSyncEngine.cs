@@ -40,6 +40,15 @@ public interface ISkillSyncEngine
     Task<IReadOnlyList<SkillSyncResult>> SyncAllAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Re-copies every skill in the local user's manifest for one harness, e.g. when it's installed after the skills
+    /// were, and records where each one landed. Other harnesses' folders are left alone.
+    /// </summary>
+    /// <param name="harness">The harness identifier, e.g. "opencode2".</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<IReadOnlyList<SkillSyncResult>> SyncHarnessAsync(string harness, CancellationToken cancellationToken = default)
+        => Task.FromResult<IReadOnlyList<SkillSyncResult>>([]);
+
+    /// <summary>
     /// Copies one skill into the skill folder of each of its harnesses, at the entry's install target.
     /// Doesn't touch the manifest; use <see cref="SkillManifestEntryExtensions.WithSyncedPaths"/> to record the result.
     /// </summary>

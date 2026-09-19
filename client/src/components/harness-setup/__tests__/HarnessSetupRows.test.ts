@@ -84,6 +84,27 @@ function claudeCode(overrides: Partial<HarnessInfo> = {}): HarnessInfo {
   };
 }
 
+function openCode2(overrides: Partial<HarnessInfo> = {}): HarnessInfo {
+  return {
+    type: "opencode2",
+    displayName: "OpenCode 2",
+    available: false,
+    userEnabled: false,
+    state: "not-installed",
+    reason: "OpenCode 2 isn't installed.",
+    capabilities,
+    setup: {
+      installCommand: "curl -fsSL https://opencode.ai/v2/install | HOME=/home/you/.weave/harnesses/opencode2 bash -s -- --no-modify-path",
+      mode: "Separate from OpenCode 1",
+      notes: [
+        "OpenCode 1 is installed here, so OpenCode 2 goes into a folder of its own.",
+        "OpenCode 2 keeps its own provider sign-ins here.",
+      ],
+    },
+    ...overrides,
+  };
+}
+
 const pi: HarnessInfo = { type: "pi", displayName: "Pi", available: false, userEnabled: false, state: "not-installed", capabilities };
 
 let wrapper: VueWrapper | null = null;
@@ -116,6 +137,35 @@ describe("HarnessSetupRows", () => {
     expect(rows).toEqual(["harness-setup-row-opencode", "harness-setup-row-claude-code"]);
     expect(view.get("[data-testid='harness-setup-install-opencode']").text()).toBe("Install OpenCode");
     expect(view.text()).toContain("Open source. Includes free models");
+  });
+
+  it("says where OpenCode 2 goes and what to know before installing it", async () => {
+    const view = await mountRows([openCode2()]);
+
+    expect(view.get("[data-testid='harness-setup-install-opencode2']").text()).toBe("Install OpenCode 2");
+    const notes = view.get("[data-testid='harness-setup-notes-opencode2']").findAll("li").map((note) => note.text());
+    expect(notes).toEqual([
+      "OpenCode 1 is installed here, so OpenCode 2 goes into a folder of its own.",
+      "OpenCode 2 keeps its own provider sign-ins here.",
+    ]);
+  });
+
+  it("links to the download when there's no installer to type", async () => {
+    const view = await mountRows([openCode2({
+      setup: { installCommand: null, downloadUrl: "https://opencode.ai/v2/docs", notes: ["Save opencode.exe as opencode2.exe."] },
+    })]);
+
+    const link = view.get("[data-testid='harness-setup-download-opencode2']");
+    expect(link.attributes("href")).toBe("https://opencode.ai/v2/docs");
+    expect(link.text()).toBe("Download OpenCode 2");
+    expect(view.find("[data-testid='harness-setup-install-opencode2']").exists()).toBe(false);
+    expect(view.text()).toContain("Save opencode.exe as opencode2.exe.");
+  });
+
+  it("leaves the notes out once the harness is ready", async () => {
+    const view = await mountRows([openCode2({ available: true, state: "ready", version: "2.0.9", executablePath: "/x/opencode2" })]);
+
+    expect(view.find("[data-testid='harness-setup-notes-opencode2']").exists()).toBe(false);
   });
 
   it("types the installer into a setup terminal, and turns on a harness that was off", async () => {

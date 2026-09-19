@@ -176,6 +176,57 @@ public sealed class SkillSyncEngineTests : IDisposable
     }
 
     [Fact]
+    public async Task SyncSkillAsync_CopiesASkillForOpenCodeToASeparateOpenCode2sConfigFolderToo()
+    {
+        CreateSource("both-skill");
+        var openCode2Skills = Path.Combine(_testDir, ".weave", "harnesses", "opencode2", "config", "skills");
+        Directory.CreateDirectory(Path.GetDirectoryName(openCode2Skills)!);
+
+        var results = await _syncEngine.SyncSkillAsync(Entry("both-skill", harnesses: ["opencode"]));
+
+        results.Select(r => (r.Harness, r.Success, r.TargetPath)).ShouldBe(
+        [
+            ("opencode", true, Path.Combine(_openCodeSkillsDir, "both-skill")),
+            ("opencode2", true, Path.Combine(openCode2Skills, "both-skill")),
+        ]);
+        File.Exists(Path.Combine(openCode2Skills, "both-skill", "SKILL.md")).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task SyncSkillAsync_ForProject_CopiesOnceIntoTheOpenCodeFolderBothOpenCodesRead()
+    {
+        CreateSource("repo-both");
+        Directory.CreateDirectory(Path.Combine(_testDir, ".weave", "harnesses", "opencode2", "config"));
+
+        var results = await _syncEngine.SyncSkillAsync(
+            Entry("repo-both", harnesses: ["opencode"]) with { Scope = InstallScope.Project, ProjectPath = _repoDir });
+
+        var result = results.ShouldHaveSingleItem();
+        result.Harness.ShouldBe("opencode");
+        result.TargetPath.ShouldBe(Path.Combine(_repoDir, ".opencode", "skills", "repo-both"));
+    }
+
+    [Fact]
+    public async Task SyncHarnessAsync_CopiesEverySkillForThatHarness_AndRecordsWhereTheyLanded()
+    {
+        CreateSource("older-skill");
+        CreateSource("claude-only");
+        await _manifestStore.AddEntryAsync("local-user", null, Entry("older-skill", harnesses: ["opencode"]));
+        await _manifestStore.AddEntryAsync("local-user", null, Entry("claude-only", harnesses: ["claude-code"]));
+        var openCode2Skills = Path.Combine(_testDir, ".weave", "harnesses", "opencode2", "config", "skills");
+        Directory.CreateDirectory(Path.GetDirectoryName(openCode2Skills)!);
+
+        var result = (await _syncEngine.SyncHarnessAsync("opencode2")).ShouldHaveSingleItem();
+
+        result.SkillName.ShouldBe("older-skill");
+        result.TargetPath.ShouldBe(Path.Combine(openCode2Skills, "older-skill"));
+        Directory.Exists(Path.Combine(_openCodeSkillsDir, "older-skill")).ShouldBeFalse();
+        var manifest = await _manifestStore.LoadAsync("local-user");
+        manifest.Skills.First(s => s.Name == "older-skill").InstalledPaths.ShouldBe([Path.Combine(openCode2Skills, "older-skill")]);
+        _poolRecycler.RecycleCount.ShouldBe(0);
+    }
+
+    [Fact]
     public async Task SyncSkillAsync_SyncsToMultipleHarnesses()
     {
         CreateSource("multi-harness-skill");

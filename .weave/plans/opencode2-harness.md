@@ -268,11 +268,11 @@ What Stage 4 learned:
 
 ## Stage 5 — setup, install modes, updates
 
-- [ ] **Default mode** (no V1 `opencode` found): setup types OpenCode's installer into the terminal,
+- [x] **Default mode** (no V1 `opencode` found): setup types OpenCode's installer into the terminal,
       `curl -fsSL https://opencode.ai/v2/install | bash`, per the harness-setup rule that Fleet never
       downloads harnesses itself. V2 then lives at `~/.opencode/bin/opencode` (+ `opencode2`), with default
       config and database. A V2 the user installed themselves is used as-is.
-- [ ] **Separate mode** (a V1 `opencode` is installed): the same installer, with a different HOME and without
+- [x] **Separate mode** (a V1 `opencode` is installed): the same installer, with a different HOME and without
       shell-file edits:
       `curl -fsSL https://opencode.ai/v2/install | HOME=~/.weave/harnesses/opencode2 bash -s -- --no-modify-path`.
       Verified: binary lands in `~/.weave/harnesses/opencode2/.opencode/bin/`, V1 untouched, no rc edits.
@@ -280,14 +280,82 @@ What Stage 4 learned:
       `OPENCODE_DB=~/.weave/harnesses/opencode2/data/opencode.db` (verified: V1's DB unchanged, V1's global
       config not read). Separate mode needs its own provider sign-in. The setup screen says so, and that
       repo-level `opencode.json` / `.opencode/` are still read by both.
-- [ ] Which mode: decided at setup and remembered (a V1 installed later must not flip an existing V2 into
+- [x] Which mode: decided at setup and remembered (a V1 installed later must not flip an existing V2 into
       default mode, or its sessions move databases).
-- [ ] Windows: V2's installer is bash-only and package managers aren't supported. Setup shows the manual
+- [x] Skills: a skill for OpenCode also goes to a separate install's config folder (`opencode2` skill target).
+- [x] Windows: V2's installer is bash-only and package managers aren't supported. Setup shows the manual
       download for now.
-- [ ] Updates: `LatestVersionPackage = "@opencode/cli"`, `MinimumVersion` from the oldest version the live
+- [x] Updates: `LatestVersionPackage = "@opencode/cli"`, `MinimumVersion` from the oldest version the live
       tests pass on; update = re-run the installer (same mode, same HOME) when no session is working.
+- [x] Settings → Harnesses: OpenCode 2's card shows the install (mode, version, folders, what to know, sign-in)
+      instead of "No settings yet".
 
-Size: 3–4 days.
+Built as Track C (branch `feat/opencode2-setup`), checked live on a scratch Fleet with the real installer (network) and
+the scripted model, every install inside the scratch HOME: with no OpenCode 1, setup typed the default command, V2
+2.0.8 installed from the setup terminal, the harness turned ready without a restart and a session answered; the update
+strip took it to 2.0.9 in default mode (servers restarted on 2.0.9, a new session answered); OpenCode 1 installed
+afterwards (npm-style in `~/.local/bin`, then OpenCode 1's own installer) left the remembered mode at default, and after
+the installer replaced V2 Fleet said so. With OpenCode 1 installed, setup typed the separate command, V2 landed under
+the scratch `~/.weave/harnesses/opencode2`, a V2 session answered from the separate database (with the scripted model
+set up in its own config folder), a user skill installed for OpenCode reached its config folder and V2 listed it, and
+OpenCode 1's database, config and tables were byte-identical afterwards. 2.0.5 read as too old; 2.0.6 answered after a
+Fleet restart; the update strip took it to 2.0.9 in separate mode with the same HOME; a session from before the restart
+answered again; an OpenCode 1 session answered beside it. Not checked live: Windows (the manual download), a real
+provider sign-in (the command's environment was checked with `debug paths` and `auth list --standalone`).
+
+What Stage 5 learned:
+
+- **The mode is remembered in `~/.weave/harnesses/opencode2/install-mode`** (`default` or `separate`), written the first
+  time Fleet finds a working 2.x (availability check or server start). Until then a machine with an `opencode` that
+  isn't OpenCode 2 gets separate mode; one that won't say its version counts as OpenCode 1 too, so V2's installer never
+  overwrites it. With a remembered mode only that mode's executable counts: separate looks only in its own
+  `.opencode/bin`, default on PATH, `~/.opencode/bin` and the usual user folders. Without one, a separate install wins
+  over a default one, and an `opencode2` that runs OpenCode 1 decides nothing (`OpenCode2Install`).
+- **OpenCode 1's installer replaces a default-mode V2.** Both install as `~/.opencode/bin/opencode`, and V2's `opencode2`
+  is only a shim (`exec "$(dirname "$0")/opencode"`), so after `curl -fsSL https://opencode.ai/install | bash` the
+  shim runs 1.x. The remembered mode stays default, Fleet says why ("OpenCode 1's installer replaced OpenCode 2 in
+  ~/.opencode/bin, where both install"), and setup notes that installing V2 again replaces OpenCode 1 there. An
+  OpenCode 1 installed elsewhere (npm) leaves V2 alone and the mode doesn't change. Moving a default install to
+  separate mode is not built (its sessions would move databases).
+- **Minimum version 2.0.6.** `.poc-runtime/v2smoke.py` installs a release with V2's installer into a scratch HOME and
+  checks every endpoint and event the adapter uses (43 checks: info, event stream, folder load events, catalog, session
+  create with location + permissions, prompt with id, text/step/tool events, history order, question form, subagent
+  child `parentID`, generate, agent/model switch + selected events, command, active sessions, interrupt). 2.0.6–2.0.9
+  pass all 43. 2.0.0–2.0.5 have no `/api/info` (a server start calls it, so Fleet couldn't use them at all);
+  2.0.0–2.0.3 also want `command` where Fleet sends `name`.
+- `@opencode/cli` on npm (2.0.9 on 2026-09-19) runs ahead of the installer's own latest
+  (`opencode.ai/update/api/latest/cli/npm`, 2.0.8 then), so an update passes `--version` from npm. The installer takes
+  `--version`, and its `--no-modify-path` keeps an update from editing shell files. Fleet runs it with `bash -c`
+  (stdin closed, like #248's updaters), only for an executable in the mode's own `.opencode/bin`; a V2 from npm or
+  Homebrew isn't Fleet's to update. After an update idle servers stop and the next request starts one on the new
+  binary; a busy one is replaced once it's idle.
+- **Sign-ins don't carry over.** A new separate database doesn't pick up OpenCode 1's `auth.json` (2.0.9, checked with
+  `opencode2 auth list`), so the setup and settings notes say to sign in again; the settings panel shows
+  `OPENCODE_CONFIG_DIR=… OPENCODE_DB=… opencode2 auth login --standalone`. Keys in environment variables work in both.
+- **V2's CLI runs through one background service per machine.** `auth`, like other CLI commands, starts or reuses a
+  `serve --service` process on a fixed port (49374) and leaves it running. One started with another database (a
+  default install, or another HOME) would take a separate install's sign-in, or the command times out when the port is
+  held. `--standalone` (in 2.0.6+) runs a private server for the command instead, so the separate sign-in uses it.
+- The separate server's environment (`OPENCODE_CONFIG_DIR`, `OPENCODE_DB`) reaches the agent's shell tool, so an agent
+  that runs `opencode` inside a separate-mode V2 session would point it at V2's database. Not handled.
+- Skills: `HarnessInstallPaths` has an `opencode2` target (`~/.weave/harnesses/opencode2/config` globally, `.opencode`
+  in a repository). A skill for OpenCode goes there too once that folder exists (`SkillTargets`), so older manifest
+  entries and user-installed skills (which name only `opencode`) reach it, and a default install, which reads
+  `~/.config/opencode`, doesn't get a useless copy. A repository's `.opencode/skills` is written once for both. The
+  first separate-mode server Fleet starts copies the existing skills there (`ISkillSyncEngine.SyncHarnessAsync`), since
+  the install can be newer than the skills. The bundled/migrator target lists stay as they were: the rule applies at
+  sync time instead.
+- Seams: `HarnessSetup` gained `DownloadUrl`, `Mode`, `Folders` and `Notes` for every harness; setup lists a harness
+  with only a download and shows its notes until it's ready, and Settings shows the install panel for any harness that
+  describes its mode. OpenCode 2's card doesn't copy OpenCode's pooled mode or warmup.
+- Logs, shell output and **snapshots** of a separate install still go to `~/.local/share/opencode`: V2 runs its
+  `write-tree` in the same `snapshot/<project>/<hash>` git folder OpenCode 1 uses for the folder (content-addressed, so
+  harmless so far). Settings lists that folder as shared with OpenCode 1.
+- In default mode, OpenCode 1's setup row still offers OpenCode 1's installer (Stage 0's message says it puts OpenCode 1
+  back in place of OpenCode 2); unchanged here.
+- **Left for later:** a way to move a default install to separate mode; a Windows install path beyond the manual
+  download (and Windows updates); new skills reaching a running separate server needs a server restart (as in default
+  mode).
 
 ## Stage 6 — tests
 

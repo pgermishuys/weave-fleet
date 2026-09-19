@@ -47,26 +47,18 @@ public sealed class SkillSyncEngine : ISkillSyncEngine
 
     public async Task<IReadOnlyList<SkillSyncResult>> SyncAllAsync(CancellationToken cancellationToken = default)
     {
-        var manifest = await _manifestStore.LoadAsync(LocalOwnerUserId, workspaceId: null, cancellationToken).ConfigureAwait(false);
-
-        var results = new List<SkillSyncResult>();
-        var entries = new List<SkillManifestEntry>();
-
-        foreach (var skill in manifest.Skills)
-        {
-            var skillResults = Sync(skill, cancellationToken);
-            results.AddRange(skillResults);
-            entries.Add(skill.WithSyncedPaths(skillResults));
-        }
+        var results = await SyncManifestAsync(harness: null, cancellationToken).ConfigureAwait(false);
 
         if (results.Any(r => r.Success))
-        {
-            await _manifestStore.SaveAsync(manifest with { Skills = entries, UpdatedAt = DateTimeOffset.UtcNow }, cancellationToken)
-                .ConfigureAwait(false);
             await RecyclePooledInstancesAsync(cancellationToken).ConfigureAwait(false);
-        }
 
         return results;
+    }
+
+    public Task<IReadOnlyList<SkillSyncResult>> SyncHarnessAsync(string harness, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(harness);
+        return SyncManifestAsync(harness, cancellationToken);
     }
 
     public async Task<IReadOnlyList<SkillSyncResult>> SyncSkillAsync(SkillManifestEntry skill, CancellationToken cancellationToken = default)
@@ -116,20 +108,65 @@ public sealed class SkillSyncEngine : ISkillSyncEngine
 
     // ── Private helpers ────────────────────────────────────────────────────────
 
-    private List<SkillSyncResult> Sync(SkillManifestEntry skill, CancellationToken cancellationToken)
+    /// <summary>Copies every skill in the manifest (for one harness, or all of them) and records where each landed.</summary>
+    private async Task<IReadOnlyList<SkillSyncResult>> SyncManifestAsync(string? harness, CancellationToken cancellationToken)
     {
+        var manifest = await _manifestStore.LoadAsync(LocalOwnerUserId, workspaceId: null, cancellationToken).ConfigureAwait(false);
+
+        var results = new List<SkillSyncResult>();
+        var entries = new List<SkillManifestEntry>();
+
+        foreach (var skill in manifest.Skills)
+        {
+            var skillResults = Sync(skill, harness, cancellationToken);
+            results.AddRange(skillResults);
+            entries.Add(skill.WithSyncedPaths(skillResults));
+        }
+
+        if (results.Any(r => r.Success))
+        {
+            await _manifestStore.SaveAsync(manifest with { Skills = entries, UpdatedAt = DateTimeOffset.UtcNow }, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return results;
+    }
+
+    private List<SkillSyncResult> Sync(SkillManifestEntry skill, CancellationToken cancellationToken)
+        => Sync(skill, onlyHarness: null, cancellationToken);
+
+    /// <summary>
+    /// Copies the skill to each of its harnesses (<see cref="HarnessInstallPaths.SkillTargets"/>), or only to
+    /// <paramref name="onlyHarness"/>. Two harnesses that share a folder (both OpenCodes in a repository) get one copy.
+    /// </summary>
+    private List<SkillSyncResult> Sync(SkillManifestEntry skill, string? onlyHarness, CancellationToken cancellationToken)
+    {
+        var harnesses = _paths.SkillTargets(skill.TargetHarnesses)
+            .Where(harness => onlyHarness is null || string.Equals(harness, onlyHarness, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
         var sourcePath = ResolveSource(skill);
         if (!Directory.Exists(sourcePath))
         {
-            return skill.TargetHarnesses
+            return harnesses
                 .Select(harness => Failed(skill.Name, harness, $"Source directory not found: {sourcePath}"))
                 .ToList();
         }
 
         var target = InstallTarget.From(skill.Scope, skill.ProjectPath);
-        return skill.TargetHarnesses
-            .Select(harness => SyncToHarness(skill, sourcePath, harness, target, cancellationToken))
-            .ToList();
+        var copied = new List<string>();
+        var results = new List<SkillSyncResult>();
+        foreach (var harness in harnesses)
+        {
+            if (_paths.SkillDirectory(harness, target, skill.Name) is { } folder && copied.Any(path => InstalledFiles.SamePath(path, folder)))
+                continue;
+
+            var result = SyncToHarness(skill, sourcePath, harness, target, cancellationToken);
+            if (result.Success && result.TargetPath is not null)
+                copied.Add(result.TargetPath);
+            results.Add(result);
+        }
+        return results;
     }
 
     private SkillSyncResult SyncToHarness(

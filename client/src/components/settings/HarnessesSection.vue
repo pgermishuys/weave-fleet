@@ -3,6 +3,7 @@ import type { Component } from "vue";
 import { computed, onBeforeUnmount, onMounted, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { Cable, Download, LoaderCircle, RefreshCw, Star } from "lucide-vue-next";
+import HarnessInstallPanel from "@/components/settings/HarnessInstallPanel.vue";
 import HarnessProfilesPanel from "@/components/settings/HarnessProfilesPanel.vue";
 import HarnessUpdateStrip from "@/components/settings/HarnessUpdateStrip.vue";
 import { refreshAllHarnesses, useHarnesses } from "@/composables/use-harnesses";
@@ -34,6 +35,8 @@ interface HarnessCard {
   canToggle: boolean;
   canDefault: boolean;
   supportsProfiles: boolean;
+  /** The harness describes how it's installed here (OpenCode 2's install mode), shown under its card. */
+  describesInstall: boolean;
   /** The harness as the server described it, for its update. */
   info: HarnessInfo;
 }
@@ -139,6 +142,7 @@ function toHarnessCard(harness: HarnessInfo): HarnessCard {
     canToggle: true,
     canDefault: true,
     supportsProfiles: harness.capabilities?.supportsProfiles === true,
+    describesInstall: Boolean(harness.setup?.mode),
     info: harness,
   };
 }
@@ -349,7 +353,7 @@ function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus
               </button>
 
               <span
-                v-if="harness.id !== 'opencode'"
+                v-if="harness.id !== 'opencode' && !harness.describesInstall"
                 class="inline-flex items-center rounded-btn px-2.5 py-1.5 text-xs font-medium text-muted"
               >
                 No settings yet
@@ -360,6 +364,12 @@ function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus
 
         <HarnessUpdateStrip
           v-if="harness.enabled && !config.cloudMode"
+          class="mt-4"
+          :harness="harness.info"
+        />
+
+        <HarnessInstallPanel
+          v-if="harness.describesInstall && !config.cloudMode"
           class="mt-4"
           :harness="harness.info"
         />

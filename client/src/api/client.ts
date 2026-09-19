@@ -350,6 +350,19 @@ export interface HarnessSetup {
   installCommand?: string | null;
   signInCommand?: string | null;
   docsUrl?: string | null;
+  /** Where to download it by hand, when there's no installer to type on this platform. */
+  downloadUrl?: string | null;
+  /** How it's (or will be) installed here, in a few words, for a harness with more than one way. */
+  mode?: string | null;
+  /** The folders the install uses: program, settings, data. */
+  folders?: readonly HarnessFolder[] | null;
+  /** What to know about this install, one sentence each. */
+  notes?: readonly string[] | null;
+}
+
+export interface HarnessFolder {
+  label: string;
+  path: string;
 }
 
 export interface HarnessInfo {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
-import { Check, CheckCircle2, Copy, Download, KeyRound, LoaderCircle, X } from "lucide-vue-next";
+import { Check, CheckCircle2, Copy, Download, ExternalLink, KeyRound, LoaderCircle, X } from "lucide-vue-next";
 import TerminalView from "@/components/terminal/TerminalView.vue";
 import type { HarnessInfo } from "@/api/client";
 import { refreshAllHarnesses } from "@/composables/use-harnesses";
@@ -20,7 +20,8 @@ import { usePreferencesStore } from "@/stores/preferences";
 /**
  * The harnesses Fleet can help set up, each with Install or Sign in. Either opens the setup terminal under
  * the row with the harness's command typed in; the user presses Enter. While it's open Fleet checks the
- * harnesses again every few seconds, so a finished install shows up without a restart.
+ * harnesses again every few seconds, so a finished install shows up without a restart. A harness with no installer
+ * to type on this platform (OpenCode 2 on Windows) links to its download instead.
  */
 
 const props = defineProps<{
@@ -50,10 +51,10 @@ const failure = shallowRef<{ harnessType: string; message: string; command: stri
 const copied = shallowRef(false);
 let checkTimer: ReturnType<typeof setInterval> | undefined;
 
-/** Harnesses Fleet has an installer for, the default one first. */
+/** Harnesses Fleet has an installer or a download for, the default one first. */
 const rows = computed(() =>
   props.harnesses
-    .filter((harness) => Boolean(harness.setup?.installCommand))
+    .filter((harness) => Boolean(harness.setup?.installCommand || harness.setup?.downloadUrl))
     .sort((a, b) => Number(b.type === props.defaultHarnessType) - Number(a.type === props.defaultHarnessType)),
 );
 
@@ -136,6 +137,17 @@ async function start(harness: HarnessInfo, action: SetupAction): Promise<void> {
       command,
     };
   }
+}
+
+/** The download to open by hand, when the harness needs installing and there's no installer to type. */
+function downloadFor(harness: HarnessInfo): string | null {
+  if (actionFor(harness) !== "install" || harness.setup?.installCommand) return null;
+  return harness.setup?.downloadUrl ?? null;
+}
+
+/** What to know before installing (where it goes, its sign-in); shown until it's ready. */
+function notesFor(harness: HarnessInfo): readonly string[] {
+  return harnessState(harness) === "ready" ? [] : harness.setup?.notes ?? [];
 }
 
 function actionLabel(harness: HarnessInfo): string {
@@ -236,8 +248,23 @@ defineExpose({ closeTerminal });
             />
             {{ harnessStatusLabel(harnessState(harness)) }}
           </span>
+          <a
+            v-if="downloadFor(harness)"
+            :href="downloadFor(harness) ?? undefined"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="harness-setup-rows__btn"
+            :class="{ 'harness-setup-rows__btn--primary': harness.type === props.defaultHarnessType }"
+            :data-testid="`harness-setup-download-${harness.type}`"
+          >
+            <ExternalLink
+              :size="14"
+              aria-hidden="true"
+            />
+            Download {{ harness.displayName }}
+          </a>
           <button
-            v-if="actionFor(harness)"
+            v-else-if="actionFor(harness)"
             type="button"
             class="harness-setup-rows__btn"
             :class="{ 'harness-setup-rows__btn--primary': harness.type === props.defaultHarnessType || actionFor(harness) === 'sign-in' }"
@@ -259,6 +286,19 @@ defineExpose({ closeTerminal });
           </button>
         </div>
       </div>
+
+      <ul
+        v-if="notesFor(harness).length > 0"
+        class="harness-setup-rows__notes"
+        :data-testid="`harness-setup-notes-${harness.type}`"
+      >
+        <li
+          v-for="note in notesFor(harness)"
+          :key="note"
+        >
+          {{ note }}
+        </li>
+      </ul>
 
       <div
         v-if="active?.harnessType === harness.type"
@@ -461,6 +501,16 @@ defineExpose({ closeTerminal });
 .harness-setup-rows__btn:disabled {
   cursor: not-allowed;
   opacity: 0.5;
+}
+
+.harness-setup-rows__notes {
+  display: grid;
+  gap: 3px;
+  margin: 0 0 0 46px;
+  padding-left: 16px;
+  color: var(--muted);
+  font-size: 12px;
+  list-style: disc;
 }
 
 .harness-setup-rows__terminal-wrap {
