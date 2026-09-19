@@ -9,7 +9,11 @@ using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
+using WeaveFleet.Application.Skills;
+using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Infrastructure.Services;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 
@@ -17,6 +21,7 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 /// <see cref="IHarnessRuntime"/> for OpenCode 2. Fleet runs one private <c>opencode2 serve</c> per owner, with its
 /// own password, for every directory; each Fleet session is a V2 session on it, and its resume token is the V2
 /// session id. The server stays up while Fleet runs, and a stopped one is replaced on the next request.
+/// Fleet's plugin (canvas, app and browser tools) and skills load into it through <c>OPENCODE_CONFIG_CONTENT</c>.
 /// </summary>
 public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDisposable, IDisposable
 {
@@ -35,6 +40,9 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
 
     // Held while a server starts, so an owner never gets two; reads (bridge tokens) don't take it.
     private readonly SemaphoreSlim _serversLock = new(1, 1);
+    private string? _pluginFolder;
+    private string? _skillsFolder;
+    private string? _builtInSkillsFolder;
     private bool _disposed;
 
     public OpenCode2HarnessRuntime(
@@ -74,7 +82,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         var created = await server.Client.CreateSessionAsync(options.WorkingDirectory, ct).ConfigureAwait(false);
 
         var session = NewSession(
-            created.Id!,
+            created,
             new OpenCode2SessionContext(options.SessionId, options.OwnerUserId, options.WorkingDirectory, options.ProjectId, options.ProjectName),
             server);
         try
@@ -98,11 +106,12 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         HarnessHelpers.ValidateWorkingDirectory(options.WorkingDirectory);
 
         var server = await GetServerAsync(options.OwnerUserId, ct).ConfigureAwait(false);
-        if (await server.Client.GetSessionAsync(options.ResumeToken, ct).ConfigureAwait(false) is null)
-            throw new InvalidOperationException($"OpenCode 2 has no session {options.ResumeToken}.");
+        var info = await server.Client.GetSessionAsync(options.ResumeToken, ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"OpenCode 2 has no session {options.ResumeToken}.");
 
+        // A subagent's child session attaches here too, and gets the events held for it since it started.
         var session = NewSession(
-            options.ResumeToken,
+            info with { Id = options.ResumeToken },
             new OpenCode2SessionContext(options.SessionId, options.OwnerUserId, options.WorkingDirectory, options.ProjectId, options.ProjectName),
             server);
         LogResumed(_logger, session.InstanceId, options.ResumeToken);
@@ -110,13 +119,25 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     }
 
     /// <inheritdoc />
+    /// <remarks>Read from the owner's server, which serves every folder: the one a new session there would use.</remarks>
+    public async Task<HarnessCatalog?> GetCatalogAsync(string ownerUserId, string directory, HarnessProfile? profile, CancellationToken ct)
+    {
+        HarnessHelpers.ValidateWorkingDirectory(directory);
+        var server = await GetServerAsync(ownerUserId, ct).ConfigureAwait(false);
+        return await OpenCode2Catalog.ReadAsync(server, directory, ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public Task<bool> WarmupPooledInstanceAsync(string ownerUserId, CancellationToken ct) => Task.FromResult(false);
 
     /// <summary>Whether <paramref name="bridgeToken"/> belongs to a server Fleet is running.</summary>
-    internal bool IsBridgeToken(string bridgeToken)
+    internal bool IsBridgeToken(string bridgeToken) => FindServer(bridgeToken) is not null;
+
+    /// <summary>The running server whose bridge token is <paramref name="bridgeToken"/>, if any.</summary>
+    internal OpenCode2Server? FindServer(string bridgeToken)
     {
         var token = Encoding.UTF8.GetBytes(bridgeToken);
-        return _servers.Values.Any(server => server.IsRunning
+        return _servers.Values.FirstOrDefault(server => server.IsRunning
             && CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(server.BridgeToken), token));
     }
 
@@ -142,34 +163,42 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     /// <summary>For containers disposed synchronously; stops the servers the same way.</summary>
     public void Dispose() => DisposeAsync().AsTask().GetAwaiter().GetResult();
 
-    private OpenCode2HarnessSession NewSession(string harnessSessionId, OpenCode2SessionContext context, OpenCode2Server server)
+    private OpenCode2HarnessSession NewSession(OpenCode2SessionInfo info, OpenCode2SessionContext context, OpenCode2Server server)
         => new(
             $"opencode2-{Guid.NewGuid():N}",
-            harnessSessionId,
+            info,
             context,
             server,
             ct => GetServerAsync(context.OwnerUserId, ct),
             _analytics,
+            new OpenCode2Delegations(_scopeFactory, context.OwnerUserId, context.FleetSessionId, _loggerFactory.CreateLogger<OpenCode2Delegations>()),
             _loggerFactory.CreateLogger<OpenCode2HarnessSession>());
 
-    /// <summary>The owner's running server, started when there's none or the last one stopped.</summary>
+    /// <summary>
+    /// The owner's running server, started when there's none or the last one stopped. A server started with other
+    /// settings (a built-in skill switched, messages between sessions turned on or off) is replaced when none of its
+    /// sessions is running a turn; until then the owner keeps using it.
+    /// </summary>
     private async Task<OpenCode2Server> GetServerAsync(string ownerUserId, CancellationToken ct)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        var setup = await GetSetupAsync(ownerUserId).ConfigureAwait(false);
 
         await _serversLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             if (_servers.TryGetValue(ownerUserId, out var existing))
             {
-                if (existing.IsRunning)
+                if (existing.IsRunning && (existing.Setup == setup || !await existing.IsIdleAsync(ct).ConfigureAwait(false)))
                     return existing;
 
+                if (existing.IsRunning)
+                    LogReplacingServer(_logger, existing.ProcessId ?? 0);
                 _servers.TryRemove(ownerUserId, out _);
                 await existing.DisposeAsync().ConfigureAwait(false);
             }
 
-            var server = await StartServerAsync(ownerUserId, ct).ConfigureAwait(false);
+            var server = await StartServerAsync(ownerUserId, setup, ct).ConfigureAwait(false);
             _servers[ownerUserId] = server;
             return server;
         }
@@ -179,7 +208,76 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         }
     }
 
-    private async Task<OpenCode2Server> StartServerAsync(string ownerUserId, CancellationToken ct)
+    /// <summary>
+    /// What the owner's server should start with. The tools and the Fleet API skill call back into Fleet, so they load
+    /// only when the server can be told where Fleet is. The built-in skills the owner turned on load either way.
+    /// </summary>
+    private async Task<OpenCode2ServerSetup> GetSetupAsync(string ownerUserId)
+    {
+        var fleetUrl = ResolveLocalFleetUrl();
+        var (builtInSkills, sessionMessages) = await ReadOwnerSettingsAsync(ownerUserId).ConfigureAwait(false);
+
+        string? plugin = null;
+        List<string> skills = [];
+        if (fleetUrl is not null)
+        {
+            plugin = InstallOnce(ref _pluginFolder, OpenCode2FleetFiles.InstallPlugin);
+
+            // With auth on, Fleet doesn't trust requests from this machine, so the Fleet API skill couldn't reach it.
+            if (!_options.Auth.Enabled && InstallOnce(ref _skillsFolder, OpenCode2FleetFiles.InstallSkills) is { } fleetSkills)
+                skills.Add(fleetSkills);
+        }
+
+        if (builtInSkills.Count > 0 && InstallOnce(ref _builtInSkillsFolder, OpenCode2FleetFiles.InstallBuiltInSkills) is { } builtIn)
+            skills.AddRange(builtInSkills.Select(name => Path.Combine(builtIn, name)));
+
+        return new OpenCode2ServerSetup(
+            fleetUrl,
+            OpenCode2FleetFiles.BuildConfigContent(plugin, skills),
+            SessionMessages: sessionMessages && plugin is not null);
+    }
+
+    /// <summary>The built-in skills the owner turned on that this Fleet ships, in name order, and whether messages between sessions are on.</summary>
+    private async Task<(IReadOnlyList<string> BuiltInSkills, bool SessionMessages)> ReadOwnerSettingsAsync(string ownerUserId)
+    {
+        using var userScope = BackgroundUserContext.BeginScope(ownerUserId);
+        using var scope = _scopeFactory.CreateScope();
+
+        IReadOnlyList<string> builtInSkills = [];
+        if (scope.ServiceProvider.GetService<IUserPreferenceRepository>() is { } preferences)
+        {
+            var enabled = await BuiltInSkillService.GetEnabledAsync(preferences).ConfigureAwait(false);
+            builtInSkills = enabled.Where(OpenCode2FleetFiles.BuiltInSkillNames.Contains).Order(StringComparer.Ordinal).ToList();
+        }
+
+        var sessionMessages = scope.ServiceProvider.GetService<SessionMessagesFeature>() is { } feature
+            && await feature.IsEnabledAsync().ConfigureAwait(false);
+        return (builtInSkills, sessionMessages);
+    }
+
+    /// <summary>
+    /// Writes Fleet's files for V2 on first use and returns their folder, or <see langword="null"/> when they couldn't be
+    /// written; servers then start without them, and the next start tries again.
+    /// </summary>
+    private string? InstallOnce(ref string? installed, Func<string, string> install)
+    {
+        if (Volatile.Read(ref installed) is { } folder)
+            return folder;
+
+        try
+        {
+            folder = install(Path.GetDirectoryName(Path.GetFullPath(_options.DatabasePath)) ?? Environment.CurrentDirectory);
+            Volatile.Write(ref installed, folder);
+            return folder;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            LogFleetFilesInstallFailed(_logger, ex);
+            return null;
+        }
+    }
+
+    private async Task<OpenCode2Server> StartServerAsync(string ownerUserId, OpenCode2ServerSetup setup, CancellationToken ct)
     {
         var executable = OpenCode2Executable.TryResolve()
             ?? throw new InvalidOperationException(
@@ -199,8 +297,12 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         {
             ["FLEET_BRIDGE_TOKEN"] = bridgeToken,
         };
-        if (ResolveLocalFleetUrl() is { } fleetUrl)
+        if (setup.FleetUrl is { } fleetUrl)
             environment["FLEET_URL"] = $"{fleetUrl.TrimEnd('/')}{SessionMessages.AgentPathPrefix}/{bridgeToken}";
+        if (setup.ConfigContent is { } configContent)
+            environment["OPENCODE_CONFIG_CONTENT"] = configContent;
+        if (setup.SessionMessages)
+            environment[SessionMessages.EnvironmentVariable] = "1";
 
         var process = new OpenCode2ProcessManager(_loggerFactory.CreateLogger<OpenCode2ProcessManager>());
         OpenCode2HttpClient? client = null;
@@ -223,7 +325,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             // Listening isn't the same as answering: check the password works before sessions use it.
             var info = await client.GetInfoAsync(ct).ConfigureAwait(false);
             LogServerStarted(_logger, process.ProcessId ?? 0, info?.Version ?? version, baseUrl);
-            return new OpenCode2Server(ownerUserId, client, bridgeToken, process, _loggerFactory.CreateLogger<OpenCode2Server>());
+            return new OpenCode2Server(ownerUserId, client, bridgeToken, process, _loggerFactory.CreateLogger<OpenCode2Server>(), setup);
         }
         catch
         {
@@ -252,6 +354,12 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
 
     [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 server {ProcessId} ({Version}) listening on {BaseUrl}")]
     private static partial void LogServerStarted(ILogger logger, int processId, string version, Uri baseUrl);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 server {ProcessId} started with other settings (built-in skills, messages between sessions) and is idle; replacing it")]
+    private static partial void LogReplacingServer(ILogger logger, int processId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't write Fleet's plugin or skills for OpenCode 2; its servers start without them")]
+    private static partial void LogFleetFilesInstallFailed(ILogger logger, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 session {InstanceId} created as {HarnessSessionId}")]
     private static partial void LogSpawned(ILogger logger, string instanceId, string harnessSessionId);

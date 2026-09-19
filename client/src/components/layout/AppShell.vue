@@ -18,6 +18,7 @@ import ContextPanel from "@/components/layout/ContextPanel.vue";
 import IconRail from "@/components/layout/IconRail.vue";
 import StatusBar from "@/components/layout/StatusBar.vue";
 import SessionsV2RightPanel from "@/components/sessions/SessionsV2RightPanel.vue";
+import ArchiveUndoToast from "@/components/sessions/ArchiveUndoToast.vue";
 import { Menu } from "lucide-vue-next";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -345,6 +346,7 @@ function onGutterPointerDown(e: PointerEvent): void {
 
     <CommandPalette />
     <GoToFileDialog />
+    <ArchiveUndoToast />
   </div>
 </template>
 

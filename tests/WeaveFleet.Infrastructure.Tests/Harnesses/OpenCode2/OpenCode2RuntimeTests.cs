@@ -129,6 +129,21 @@ public sealed class OpenCode2RuntimeTests
         (await client.GetActiveSessionIdsAsync(CancellationToken.None)).ShouldBe(["ses_a"]);
     }
 
+    [Theory]
+    [InlineData(HttpStatusCode.OK, """{"data":{}}""", true)]
+    [InlineData(HttpStatusCode.OK, """{"data":{"ses_a":{"type":"running"}}}""", false)]
+    [InlineData(HttpStatusCode.InternalServerError, "", false)]
+    public async Task A_server_is_idle_only_when_V2_says_no_session_is_running(HttpStatusCode status, string body, bool idle)
+    {
+        // A server started with other settings is replaced only when idle, so "can't tell" must not read as idle.
+        await using var server = Server(OpenCode2Fixtures.ClientServing("", new StubHandler(_ => new HttpResponseMessage(status)
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json"),
+        })));
+
+        (await server.IsIdleAsync(CancellationToken.None)).ShouldBe(idle);
+    }
+
     [Fact]
     public async Task The_server_routes_each_event_to_the_session_it_is_about()
     {
@@ -268,11 +283,12 @@ public sealed class OpenCode2RuntimeTests
     private static OpenCode2HarnessSession NewSession(OpenCode2Server server, Func<CancellationToken, Task<OpenCode2Server>> servers)
         => new(
             "opencode2-test",
-            Session,
+            new OpenCode2SessionInfo { Id = Session },
             new OpenCode2SessionContext("fleet-session-1", "local-user", "/work", null, null),
             server,
             servers,
             analytics: null,
+            delegations: null,
             NullLogger.Instance);
 
     private static HttpResponseMessage Json(string json) => new(HttpStatusCode.OK)
@@ -285,6 +301,8 @@ public sealed class OpenCode2RuntimeTests
         private readonly TaskCompletionSource _stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public List<OpenCode2Event> Events { get; } = [];
+
+        public OpenCode2SessionContext Context { get; } = new("fleet-session-1", "local-user", "/work", null, null);
 
         public Task Stopped => _stopped.Task;
 

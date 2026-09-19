@@ -15,3 +15,26 @@ public interface IHarnessCanvasCallerResolver
     /// </summary>
     Task<HarnessCanvasCaller?> ResolveAsync(string bridgeToken, string harnessSessionId, CancellationToken ct = default);
 }
+
+/// <summary>Asks every harness's resolver: each harness knows only the bridge tokens of the processes it started.</summary>
+public static class HarnessCanvasCallerResolvers
+{
+    /// <summary>
+    /// The first resolver's caller, or <c>null</c> when none of them places the call. Bridge tokens are unique per
+    /// process, so at most one harness knows the token.
+    /// </summary>
+    public static async Task<HarnessCanvasCaller?> ResolveAsync(
+        this IEnumerable<IHarnessCanvasCallerResolver> resolvers,
+        string bridgeToken,
+        string harnessSessionId,
+        CancellationToken ct = default)
+    {
+        foreach (var resolver in resolvers)
+        {
+            if (await resolver.ResolveAsync(bridgeToken, harnessSessionId, ct).ConfigureAwait(false) is { } caller)
+                return caller;
+        }
+
+        return null;
+    }
+}

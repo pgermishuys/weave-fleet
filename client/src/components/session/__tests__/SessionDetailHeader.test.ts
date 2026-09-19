@@ -10,6 +10,9 @@ interface HeaderProps {
   activityStatus?: string | null;
   lifecycleStatus?: string | null;
   retryAttempt?: number | null;
+  retentionStatus?: string | null;
+  editingTitle?: boolean;
+  canRestore?: boolean;
 }
 
 // The named "actions" slot trips the mount() typings in @vue/test-utils 2.2.7.
@@ -75,5 +78,53 @@ describe("SessionDetailHeader status", () => {
 
     expect(wrapper.get("[data-testid='session-retry-note']").text()).toBe("Retrying · attempt 3");
     expect(wrapper.get("[data-testid='session-status-indicator']").attributes("data-status")).toBe("retry");
+  });
+});
+
+describe("SessionDetailHeader rename and restore", () => {
+  it("asks to edit the title on double-click", async () => {
+    const wrapper = mountHeader();
+
+    await wrapper.get("[data-testid='session-title']").trigger("dblclick");
+
+    expect(wrapper.emitted("update:editingTitle")).toEqual([[true]]);
+  });
+
+  it("does not offer rename for an archived session", async () => {
+    const wrapper = mountHeader({ retentionStatus: "archived" });
+
+    await wrapper.get("[data-testid='session-title']").trigger("dblclick");
+
+    expect(wrapper.emitted("update:editingTitle")).toBeUndefined();
+  });
+
+  it("saves a changed title on Enter", async () => {
+    const wrapper = mountHeader({ editingTitle: true });
+    const input = wrapper.get<HTMLInputElement>("[data-testid='session-title-input']");
+
+    await input.setValue("Unify status");
+    await input.trigger("keydown", { key: "Enter" });
+
+    expect(wrapper.emitted("rename")).toEqual([["Unify status"]]);
+    expect(wrapper.emitted("update:editingTitle")).toEqual([[false]]);
+  });
+
+  it("keeps the old title on Escape", async () => {
+    const wrapper = mountHeader({ editingTitle: true });
+    const input = wrapper.get<HTMLInputElement>("[data-testid='session-title-input']");
+
+    await input.setValue("Something else");
+    await input.trigger("keydown", { key: "Escape" });
+
+    expect(wrapper.emitted("rename")).toBeUndefined();
+    expect(wrapper.emitted("update:editingTitle")).toEqual([[false]]);
+  });
+
+  it("offers Restore on the archived banner", async () => {
+    const wrapper = mountHeader({ retentionStatus: "archived", canRestore: true });
+
+    await wrapper.get("[data-testid='session-restore-button']").trigger("click");
+
+    expect(wrapper.emitted("restore")).toHaveLength(1);
   });
 });

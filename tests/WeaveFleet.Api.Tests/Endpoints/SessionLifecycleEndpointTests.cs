@@ -24,11 +24,21 @@ public sealed class SessionLifecycleEndpointTests
     }
 
     [Fact]
-    public async Task UpdateRetention_WhenUnarchiving_ReturnsBadRequest()
+    public async Task UpdateRetention_WhenRestoring_ReturnsNoContent()
     {
         var service = BuildSessionService(MakeSession("session-1", "stopped", "archived"));
 
         var result = await InvokeUpdateRetention("session-1", new UpdateSessionRetentionRequest("active"), service);
+
+        result.ShouldBeOfType<NoContent>();
+    }
+
+    [Fact]
+    public async Task UpdateRetention_WhenStatusUnknown_ReturnsBadRequest()
+    {
+        var service = BuildSessionService(MakeSession("session-1", "stopped", "archived"));
+
+        var result = await InvokeUpdateRetention("session-1", new UpdateSessionRetentionRequest("deleted"), service);
 
         result.GetType().GetGenericTypeDefinition().ShouldBe(typeof(BadRequest<>));
     }

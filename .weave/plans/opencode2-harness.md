@@ -147,37 +147,124 @@ What Stage 2 learned:
 
 ## Stage 3 — Fleet's own tools in V2
 
-- [ ] New plugin `opencode2/fleet/index.js` (a directory; V2 won't load a plugin file path), written against
+- [x] New plugin `opencode2/fleet/index.js` (a directory; V2 won't load a plugin file path), written against
       the V2 plugin API: `export default { id: "fleet", setup(ctx) { ctx.tool.transform(...) } }`, no imports.
       Tools: canvas list/open/read/patch/focus, app start, browser open, browser screenshot. Each tool sets
       `options: { codemode: false }` or V2 only exposes it inside Code Mode. Session id comes from the
       executor's second argument (`tool.sessionID`).
       Copying the tool descriptions and the bridge `fetch` from `opencode/fleet/fleet-canvas.ts` is fine;
       the file itself stays separate.
-- [ ] Loaded via `OPENCODE_CONFIG_CONTENT` `plugins`, the same variable mechanism, V2's own content.
-- [ ] `OpenCode2CanvasCallerResolver` (token → server, V2 session id → Fleet session).
+- [x] Loaded via `OPENCODE_CONFIG_CONTENT` `plugins`, the same variable mechanism, V2's own content.
+- [x] `OpenCode2CanvasCallerResolver` (token → server, V2 session id → Fleet session).
       `CanvasBridge` and `BrowserBridge` currently take a single `IHarnessCanvasCallerResolver`; change them
       to ask every registered resolver (tokens are unique per process). This is the one shared change.
-- [ ] Skills: Fleet's skill folders via `skills` in the injected config.
+- [x] Skills: Fleet's skill folders via `skills` in the injected config.
 - Todos: not in the first version (`ReportsTodos = false`); see Later.
 
 Live check: agent opens a canvas, takes a browser screenshot (image comes back), app start.
 Size: 3–4 days.
 
+Built (branch `feat/opencode2-tools`), checked live on a scratch Fleet with 2.0.8 + the scripted model: a canvas opened
+and patched (shown in the right panel), an app started in a browser canvas, a browser screenshot whose image reached the
+model, `fleet-code-review` offered when switched on and gone when switched off, the same session's tools after a Fleet
+restart and after the V2 server was killed, a user's own V2 plugin and skill loading beside Fleet's, `fleet_message`
+offered with messages between sessions on, and an OpenCode 1 session drawing its canvas beside it.
+
+What Stage 3 learned:
+
+- V2 adds `plugins` and `skills` from `OPENCODE_CONFIG_CONTENT` to the user's own (config file and `.opencode/plugins/`,
+  `.opencode/skills/`): unlike OpenCode (1.x), arrays aren't replaced, so Fleet can put its skill folders straight into
+  the config instead of adding them from the plugin.
+- A plugin tool returns `{ title, content: [{type: "text", text}, {type: "file", uri: "data:…", mime, name}], metadata }`.
+  V2 sends the file to an OpenAI-compatible model as a user message with `image_url` after the tool result, as
+  OpenCode (1.x) does, and to Fleet as a file part (Stage 2's mapping), so a V2 screenshot shows as an image in the
+  conversation; OpenCode (1.x) sessions don't show it. A thrown `Error` fails the tool with its message.
+- The executor's second argument has `sessionID, agent, messageID, id, progress`, and no permission ask. Built-in tools
+  declare `options.permission` (V2's shell tool is `shell`), and V2 leaves a tool out when the agent's rules deny that
+  permission; `fleet_app_start` declares `permission: "shell"` in place of OpenCode (1.x)'s `ask`. Fleet's allow-all
+  session ruleset still allows it everywhere else, as before.
+- The tools reach Fleet under `FLEET_URL` = `/agent/{token}` (Stage 1), so they work with messages between sessions
+  off too.
+- One server per owner means per-owner settings (built-in skills, messages between sessions) are server settings. The
+  runtime works out what the owner's server should start with on every spawn/resume and replaces a server started with
+  other settings once `/api/session/active` is empty; until then the owner keeps the old one. A prompt sent to an idle
+  session in the moment of the replacement would fail as "server stopped"; not seen live.
+- Fleet writes its own copy of the skill files under `{data}/opencode2/` from the same embedded `opencode/skills` and
+  `opencode/built-in-skills` resources (the ~30 lines that write embedded files are copied from the OpenCode adapter,
+  per the no-shared-code rule).
+- The skill manifest's targets (`BundledSkillsHostedService`, `SkillManifestMigrator`: `["opencode", "claude-code"]`)
+  aren't how built-in skills reach sessions: those go through the per-owner switch and the injected `skills`. The
+  manifest syncs the user's skills into `~/.config/opencode/skills`, which V2 reads too while it shares OpenCode's
+  config folder, so no `opencode2` target is needed yet. Stage 5's separate mode (own config folder) needs one.
+- V2 looks for `.claude/skills` in the session's folder and every parent, including the real HOME's when the folder is
+  under it (read only).
+- Scratch kit: Chrome refuses a TMPDIR whose socket path is over ~108 characters, so the scratch Fleet's TMPDIR is short.
+- **Left for later:** sending a message with `fleet_message` from V2 wasn't exercised live (the tool is offered; the
+  bridge is the shared one). A subagent's call follows `parentID` to the Fleet session (unit-tested; live with Stage 4's
+  subagents). No capability flag was needed: nothing gates Fleet's tools by harness name.
+
 ## Stage 4 — catalog, agents/models, profiles, subagents, recap
 
-- [ ] Catalog (agents, models, commands, providers) from `/api/agent`, `/api/model`, `/api/command`,
+- [x] Catalog (agents, models, commands, providers) from `/api/agent`, `/api/model`, `/api/command`,
       `/api/provider`. V2 loads a directory lazily and returns `[]` until then: create a throwaway
       location load (e.g. `GET /api/location?location[directory]=…`) before listing. Verify this in the spike first.
-- [ ] Agent/model choice per session (`agent`, `model` on create; `/agent`, `/model` switch).
+- [x] Agent/model choice per session (`agent`, `model` on create; `/agent`, `/model` switch).
 - [ ] Profiles: one server per (owner, profile), profile content through `OPENCODE_CONFIG_CONTENT`.
-      Profile check starts a throwaway server with the content.
-- [ ] Subagents: `subagent` tool + child session (`parentID`) → Fleet delegation events; child events
+      Profile check starts a throwaway server with the content. **Not in Track B:** after Tracks A and B merge.
+- [x] Subagents: `subagent` tool + child session (`parentID`) → Fleet delegation events; child events
       routed to the parent's view.
-- [ ] Off the record (recap): `POST /api/session/{id}/generate`.
-- [ ] Commands: `POST /api/session/{id}/command`. Fork: `POST /fork` if the UI offers it.
+- [x] Off the record (recap): `POST /api/session/{id}/generate`.
+- [x] Commands: `POST /api/session/{id}/command`. Fork: not built (see below).
 
 Size: 4–5 days.
+
+Built as Track B (branch `feat/opencode2-agents`, everything but profiles), checked live on a scratch Fleet with 2.0.8 +
+the scripted model: the new-session composer lists V2's agents (the user's and the folder's own) and models, a session
+started on a non-default agent and model answers with them, switching both mid-session, a slash command, the
+welcome-back recap, a subagent (delegation, child activity, parent finishes), a subagent that asks a question
+(answered in the child, child and parent finish), reload and Fleet restart with subagents in the history, and an
+OpenCode 1 session beside it.
+
+What Stage 4 learned:
+
+- **Loading a folder is asynchronous.** `GET /api/location` returns before V2 has read the folder's config; lists read
+  in the next ~2 s leave out the user's and the folder's agents, models and commands (the spike's first "before/after"
+  looked fine only because the "before" reads had started the load). Neither `/api/debug/location` nor
+  `POST /api/location/reload` says when it's done. V2 does: it sends `provider.updated`, `model.updated`,
+  `agent.updated` and `command.updated` with `location.directory` once the folder is loaded. The server remembers
+  folders it has seen loaded (also by a session there); a catalog read of a new folder waits for those events, 15 s at
+  most, then lists what V2 has.
+- Catalog shapes: an agent's `id` is what a session switches to (`name` is a label; there's no description). Models
+  come from `/api/model` (`id` is the selectable one, `variants[].id` are Fleet's effort levels), grouped under
+  `/api/provider` entries that aren't `activation: disabled`. The default model is `/api/model/default`; the default
+  agent is the last `default_agent` in `/api/config`'s documents (global first, the folder's own last), else `build`,
+  else the first visible primary agent — V2's own rule. `/api/command` has names and descriptions.
+- **Agent and model live on the session, not the prompt**, and `prompt` takes neither. Fleet switches the session with
+  `POST /agent` / `/model` before a prompt or command when the choice differs from what the session has (read from the
+  session on resume, and from `session.agent.selected` / `session.model.selected`). V2 accepts an unknown agent or
+  variant with 204 and fails the next turn ("Agent not found"), so the choice has to come from the catalog. A model
+  selected without a variant reads back as variant `default`.
+- A folder's agents only exist where its config is: a session the composer puts in a **new worktree** gets the
+  worktree's config, so an agent defined in an uncommitted `opencode.json` is missing there and the turn fails (the
+  catalog reads the repository's folder, as for OpenCode). Same behaviour as OpenCode; noted, not changed.
+- Subagents: the parent's `subagent` tool call (`tool.called` input: `agent`, `description`; `tool.progress` and the
+  result's metadata: the child's `sessionID`) is Fleet's delegation, through the same `DelegationService` and
+  `SessionOrchestrator.EnsureDelegatedChildSessionAsync` OpenCode uses. The child is resumed on the owner's server like
+  any session. Updates are handled one at a time in arrival order (the #242 race). The child's `session.created`
+  (`parentID` = an attached or held session) makes the server **hold the child's events until Fleet attaches it**, then
+  deliver them in order (the #246 race); a held child's permission asks are still answered at once. So a child's
+  question reaches its Fleet session, which shows it and answers the form on the child.
+- `generate` answers from the session's conversation with its agent and model, adds nothing to the history and emits no
+  execution events. It answers an empty session too.
+- `command` expands the template into a user message (Fleet shows `/hello the world` live; the reloaded history shows
+  V2's expanded text, as OpenCode's does). An unknown command is 404 `CommandNotFoundError`.
+- **Fork:** Fleet's Fork starts a new session in the same folder for every harness and never calls the harness's fork,
+  so there's nothing to build; `SupportsForking` stays off.
+- **Left for later:** a parent whose child waits on a question still reads "Working", not "Needs you": the shared
+  `SessionActivityTracker.GetEffectiveActivityStatus` lets the parent's own busy win over a waiting child (the child
+  itself shows "Needs you"). That's shared code, not the harness. A folder V2 evicts after it was loaded isn't noticed,
+  so the next catalog read of it doesn't wait. A child created while the event stream was down isn't linked until its
+  parent's next subagent update. Profiles.
 
 ## Stage 5 — setup, install modes, updates
 

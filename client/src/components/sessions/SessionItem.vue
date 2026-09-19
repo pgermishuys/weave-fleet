@@ -4,11 +4,13 @@ import StatusGlyph from "./StatusGlyph.vue";
 import ProgressRing from "./ProgressRing.vue";
 import { useRouter } from "@tanstack/vue-router";
 import {
+  Archive,
+  ArchiveRestore,
+  Check,
   Copy,
   FolderOpen,
   GitFork,
   Pencil,
-  Check,
   Repeat,
   Trash2,
 } from "lucide-vue-next";
@@ -23,7 +25,6 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
-  useArchiveSession,
   useDeleteSession,
   useForkSession,
   useMoveSession,
@@ -37,8 +38,9 @@ import { dispatchSessionRemoved } from "@/lib/session-sync";
 import { isSessionLive, sessionRowDim, sessionRowStatus } from "@/lib/session-row-status";
 import { useRelativeTime } from "@/composables/use-relative-time";
 import { useSessionsStore } from "@/stores/sessions";
+import { useArchiveQueueStore } from "@/stores/archive-queue";
+import { useSessionSelectionStore } from "@/stores/session-selection";
 import OpenToolContextSubmenu from "@/components/sessions/OpenToolContextSubmenu.vue";
-import ConfirmCompleteSessionDialog from "./ConfirmCompleteSessionDialog.vue";
 import ConfirmDeleteSessionDialog from "./ConfirmDeleteSessionDialog.vue";
 
 interface Props {
@@ -55,13 +57,15 @@ interface Emits {
 const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
 const sessionsStore = useSessionsStore();
+const archiveQueue = useArchiveQueueStore();
+const selection = useSessionSelectionStore();
 const router = useRouter();
 const { startCreateFromSession } = useAutomationsNav();
 
 const isInlineEditing = shallowRef(false);
 const isContextMenuOpen = shallowRef(false);
 const isDeleteDialogOpen = shallowRef(false);
-const isCompleteDialogOpen = shallowRef(false);
+const isRestoring = shallowRef(false);
 const renameDraft = shallowRef("");
 const initialRenameTitle = shallowRef("");
 const hasHandledInlineRename = shallowRef(false);
@@ -71,10 +75,6 @@ const {
   renameSession,
   isLoading: isRenaming,
 } = useRenameSession();
-const {
-  archiveSession,
-  isArchiving,
-} = useArchiveSession();
 const {
   forkSession,
   isForking,
@@ -119,13 +119,15 @@ const progressDescription = computed(() => {
 });
 const isArchivedSession = computed(() => props.session.retentionStatus === "archived");
 const fallbackCanArchive = computed(() => !isArchivedSession.value);
-const canArchive = computed(() => props.session.capabilities?.canArchive ?? fallbackCanArchive.value);
+// The retention state wins over capabilities, which only refresh with the list.
+const canArchive = computed(() => !isArchivedSession.value && (props.session.capabilities?.canArchive ?? fallbackCanArchive.value));
+const canRestore = computed(() => isArchivedSession.value);
+const isSelected = computed(() => selection.isSelected(sessionId.value));
 const canFork = computed(() => props.session.capabilities?.canFork ?? true);
 const canDelete = computed(() => props.session.capabilities?.canDelete ?? true);
-const hasWorktree = computed(() => props.session.isolationStrategy === "worktree");
 const isForkingCurrentSession = computed(() => isForking.value && forkingSessionId.value === sessionId.value);
 const isAnyActionPending = computed(() =>
-  isArchiving.value
+  isRestoring.value
   || isDeleting.value
   || isForkingCurrentSession.value
   || isMoving.value
@@ -172,12 +174,47 @@ const projectTargets = computed(() => {
 });
 
 
-function handleSelect(): void {
+function handleSelect(event: MouseEvent): void {
   if (isInlineEditing.value) {
     return;
   }
 
+  // ⌘/Ctrl-click and Shift-click pick rows; while any are picked, a plain click adds or removes one.
+  if (event.shiftKey) {
+    selection.extendTo(sessionId.value, sessionsStore.activeSessionId);
+    return;
+  }
+
+  if (event.metaKey || event.ctrlKey || selection.isSelecting) {
+    selection.toggle(sessionId.value);
+    return;
+  }
+
   emit("select", props.session);
+}
+
+function handleRowKeydown(event: KeyboardEvent): void {
+  if (event.key === "F2") {
+    event.preventDefault();
+    startRename();
+  }
+}
+
+function handleArchive(): void {
+  isContextMenuOpen.value = false;
+  archiveQueue.archive([sessionId.value]);
+}
+
+async function handleRestore(): Promise<void> {
+  isContextMenuOpen.value = false;
+  isRestoring.value = true;
+  try {
+    await archiveQueue.restore(sessionId.value);
+  } catch {
+    // The archive queue shows the error.
+  } finally {
+    isRestoring.value = false;
+  }
 }
 
 function handleContextMenuOpenChange(value: boolean): void {
@@ -264,23 +301,6 @@ async function handleRename(nextTitle: string): Promise<void> {
   }
 }
 
-function openCompleteDialog(): void {
-  isContextMenuOpen.value = false;
-  isCompleteDialogOpen.value = true;
-}
-
-async function handleArchive(deleteWorktree: boolean): Promise<void> {
-  try {
-    await archiveSession(sessionId.value);
-    syncSessionStore({ retentionStatus: "archived" });
-    isCompleteDialogOpen.value = false;
-    // TODO: if deleteWorktree, call backend to remove the worktree
-    void deleteWorktree;
-  } catch {
-    // Errors are handled by the mutation composable state.
-  }
-}
-
 async function handleFork(): Promise<void> {
   if (!canFork.value) {
     return;
@@ -346,14 +366,6 @@ async function handleDelete(): Promise<void> {
   }
 }
 
-function syncSessionStore(
-  patch: Partial<{
-    retentionStatus: "active" | "archived";
-  }>,
-): void {
-  sessionsStore.patchSession(sessionId.value, patch);
-}
-
 function removeSessionFromStore(): void {
   sessionCache.delete(sessionId.value, instanceId.value);
   dispatchSessionRemoved(sessionId.value);
@@ -381,12 +393,30 @@ function removeSessionFromStore(): void {
           <button
             type="button"
             class="session-item"
-            :class="{ active, [`session-item--dim-${rowDim}`]: rowDim > 0 }"
+            :class="{
+              active,
+              'session-item--selected': isSelected,
+              'session-item--has-action': (canArchive || canRestore) && !selection.isSelecting,
+              [`session-item--dim-${rowDim}`]: rowDim > 0,
+            }"
             :aria-current="active ? 'true' : undefined"
+            :aria-pressed="selection.isSelecting ? isSelected : undefined"
+            title="Double-click to rename"
+            data-testid="session-row"
             @click="handleSelect"
+            @dblclick="startRename"
+            @keydown="handleRowKeydown"
           >
+            <span
+              v-if="selection.isSelecting"
+              class="session-check"
+              :class="{ 'session-check--on': isSelected }"
+              aria-hidden="true"
+            >
+              <Check v-if="isSelected" />
+            </span>
             <StatusGlyph
-              v-if="isLive"
+              v-else-if="isLive"
               :status="session.sessionStatus"
               :activity="session.activityStatus"
               :label="rowStatus.description"
@@ -423,6 +453,30 @@ function removeSessionFromStore(): void {
               class="session-meta"
               :class="`session-meta--${rowStatus.tone}`"
             >{{ rowStatus.label }}</span>
+          </button>
+          <button
+            v-if="canRestore && !selection.isSelecting"
+            type="button"
+            class="session-row-action"
+            :aria-label="`Restore ${displayTitle}`"
+            title="Restore"
+            data-testid="session-row-restore"
+            :disabled="isAnyActionPending"
+            @click.stop="handleRestore"
+          >
+            <ArchiveRestore aria-hidden="true" />
+          </button>
+          <button
+            v-else-if="canArchive && !selection.isSelecting"
+            type="button"
+            class="session-row-action"
+            :aria-label="`Archive ${displayTitle}`"
+            title="Archive"
+            data-testid="session-row-archive"
+            :disabled="isAnyActionPending"
+            @click.stop="handleArchive"
+          >
+            <Archive aria-hidden="true" />
           </button>
         </template>
 
@@ -472,10 +526,21 @@ function removeSessionFromStore(): void {
       <ContextMenuItem
         v-if="canArchive"
         :disabled="isAnyActionPending"
-        @select="openCompleteDialog"
+        data-testid="session-context-archive"
+        @select="handleArchive"
       >
-        <Check class="size-3.5" />
-        Complete
+        <Archive class="size-3.5" />
+        Archive
+      </ContextMenuItem>
+
+      <ContextMenuItem
+        v-if="canRestore"
+        :disabled="isAnyActionPending"
+        data-testid="session-context-restore"
+        @select="handleRestore"
+      >
+        <ArchiveRestore class="size-3.5" />
+        Restore
       </ContextMenuItem>
 
       <ContextMenuItem
@@ -551,18 +616,11 @@ function removeSessionFromStore(): void {
     :session-title="displayTitle"
     @confirm="handleDelete"
   />
-
-  <ConfirmCompleteSessionDialog
-    v-model:open="isCompleteDialogOpen"
-    :is-archiving="isArchiving"
-    :session-title="displayTitle"
-    :has-worktree="hasWorktree"
-    @confirm="handleArchive"
-  />
 </template>
 
 <style scoped>
 .session-item-shell {
+  position: relative;
   width: 100%;
   display: flex;
   align-items: center;
@@ -594,6 +652,83 @@ function removeSessionFromStore(): void {
 
 .session-item--editing {
   cursor: default;
+}
+
+.session-item--selected,
+.session-item--selected:hover,
+.session-item--selected.active {
+  background: var(--accent-dim);
+  color: var(--text);
+}
+
+/* Picking rows swaps the status glyph for a checkbox in the same slot. */
+.session-check {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  margin-inline: -3px;
+  flex-shrink: 0;
+  border: 1.5px solid color-mix(in srgb, var(--muted) 70%, transparent);
+  border-radius: 4px;
+}
+
+.session-check--on {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--primary-foreground);
+}
+
+.session-check svg {
+  width: 10px;
+  height: 10px;
+  stroke-width: 3;
+}
+
+/* Archive (or Restore) takes the time's place while the row is hovered. */
+.session-row-action {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  display: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition: background var(--transition), color var(--transition);
+}
+
+.session-row-action svg {
+  width: 14px;
+  height: 14px;
+}
+
+.session-row-action:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+
+.session-item-shell:hover .session-row-action,
+.session-row-action:focus-visible {
+  display: grid;
+}
+
+.session-row-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.session-item-shell:hover .session-item--has-action .session-meta,
+.session-item-shell:hover .session-item--has-action .session-progress,
+.session-item-shell:has(.session-row-action:focus-visible) .session-meta,
+.session-item-shell:has(.session-row-action:focus-visible) .session-progress {
+  visibility: hidden;
 }
 
 .session-item:hover {

@@ -41,7 +41,7 @@ public sealed class SessionService(
         return retentionStatus switch
         {
             "archived" => await sessionOrchestrator.ArchiveSessionAsync(id),
-            "active" => FleetError.ValidationError("Session.RetentionStatus", "Archived sessions cannot be unarchived."),
+            "active" => await sessionOrchestrator.UnarchiveSessionAsync(id),
             _ => FleetError.ValidationError("Session.RetentionStatus", $"Unsupported retention status '{retentionStatus}'.")
         };
     }

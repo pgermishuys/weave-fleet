@@ -93,6 +93,28 @@ public sealed class SessionServiceTests
     }
 
     [Fact]
+    public async Task UpdateRetentionAsync_WhenActive_RestoresArchivedSession()
+    {
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "s1",
+            WorkspaceId = "w1",
+            InstanceId = "i1",
+            OpencodeSessionId = "oc-s1",
+            Title = "Test",
+            Status = "stopped",
+            RetentionStatus = "archived",
+            Directory = "/tmp",
+            CreatedAt = "2026-01-01T00:00:00.0000000Z"
+        });
+
+        var result = await _sut.UpdateRetentionAsync("s1", "active");
+
+        result.IsSuccess.ShouldBeTrue();
+        _builder.SessionRepository.UnarchiveCalls.ShouldBe(["s1"]);
+    }
+
+    [Fact]
     public async Task UpdateRetentionAsync_WhenUnsupportedStatus_ReturnsValidationFailure()
     {
         var result = await _sut.UpdateRetentionAsync("s1", "deleted");

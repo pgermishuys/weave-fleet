@@ -1588,7 +1588,7 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task UnarchiveSessionAsync_WhenArchived_ReturnsError()
+    public async Task UnarchiveSessionAsync_WhenArchived_RestoresAndBroadcasts()
     {
         _builder.SessionRepository.Seed(new Session
         {
@@ -1603,8 +1603,37 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
 
         var result = await _sut.UnarchiveSessionAsync("s-unarchive");
 
+        result.IsSuccess.ShouldBeTrue();
+        _builder.SessionRepository.UnarchiveCalls.ShouldBe(["s-unarchive"]);
+        _builder.EventBroadcaster.Broadcasts.ShouldContain(b => b.Topic == "sessions" && b.Type == "session_unarchived");
+    }
+
+    [Fact]
+    public async Task UnarchiveSessionAsync_WhenActive_DoesNothing()
+    {
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "s-active",
+            InstanceId = "inst-1",
+            Title = "Active",
+            Status = "stopped",
+            RetentionStatus = "active",
+            Directory = "/tmp",
+            CreatedAt = "2026-01-01"
+        });
+
+        var result = await _sut.UnarchiveSessionAsync("s-active");
+
+        result.IsSuccess.ShouldBeTrue();
+        _builder.SessionRepository.UnarchiveCalls.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task UnarchiveSessionAsync_WhenMissing_ReturnsNotFound()
+    {
+        var result = await _sut.UnarchiveSessionAsync("nope");
+
         result.IsFailure.ShouldBeTrue();
-        result.Error.Code.ShouldBe("Validation.Session.RetentionStatus");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

@@ -304,11 +304,12 @@ public sealed class OpenCode2SessionTests
     private static OpenCode2HarnessSession NewSession(OpenCode2Server server)
         => new(
             "opencode2-test",
-            Session,
+            new OpenCode2SessionInfo { Id = Session },
             new OpenCode2SessionContext("fleet-session-1", "local-user", "/work", null, null),
             server,
             _ => Task.FromResult(server),
             analytics: null,
+            delegations: null,
             NullLogger.Instance);
 
     private static OpenCode2Event Event(string type, string data) => new()
@@ -327,6 +328,8 @@ public sealed class OpenCode2SessionTests
     private sealed class ResyncSink : IOpenCode2EventSink
     {
         public TaskCompletionSource<IReadOnlySet<string>> Resynced { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public OpenCode2SessionContext Context { get; } = new("fleet-session-1", "local-user", "/work", null, null);
 
         public void OnEvent(OpenCode2Event evt)
         {

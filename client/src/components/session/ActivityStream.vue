@@ -13,7 +13,7 @@ import { modelDisplayName } from "@/lib/agent-model-choice";
 import { isStreamWorking } from "@/lib/domain-event-reducer";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { clearSentPrompts, reconcileSentPrompts, useSendPrompt, useSentPrompts } from "@/composables/use-send-prompt";
-import { SUBAGENT_TOOLS, subagentKind, subagentTask, toToolCardItem } from "@/components/session/activity-stream-tool-card";
+import { isSubagentTool, subagentKind, subagentTask, toToolCardItem } from "@/components/session/activity-stream-tool-card";
 import type { ToolCardItem } from "@/components/session/activity-stream-tool-card";
 import type { CommandEventName } from "@/lib/command-events";
 import type { AccumulatedMessage, AccumulatedPart, AccumulatedToolPart, AccumulatedFilePart, AccumulatedReasoningPart } from "@/lib/client-types";
@@ -593,7 +593,7 @@ watch(
 
 /** Points a sub-agent call's row at the session it started, once that session exists. */
 function withDelegation(item: ToolCardItem, part: AccumulatedToolPart): ToolCardItem {
-  if (!SUBAGENT_TOOLS.has(part.tool)) {
+  if (!isSubagentTool(part.tool)) {
     return item;
   }
 

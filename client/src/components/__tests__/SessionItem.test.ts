@@ -1,5 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
+import { useArchiveQueueStore } from "@/stores/archive-queue";
+import { useSessionSelectionStore } from "@/stores/session-selection";
 import SessionItem from "@/components/sessions/SessionItem.vue";
 import type { SessionListItem } from "@/api/client";
 
@@ -87,9 +89,6 @@ const contextMenuStubs = {
   },
   ContextMenuTrigger: {
     template: "<div><slot /></div>",
-  },
-  ConfirmCompleteSessionDialog: {
-    template: "<div data-testid=\"confirm-complete-dialog\" />",
   },
   ConfirmDeleteSessionDialog: {
     template: "<div data-testid=\"confirm-delete-dialog\" />",
@@ -287,7 +286,8 @@ describe("SessionItem", () => {
     }));
 
     const text = wrapper.get("[data-testid='context-menu-content']").text();
-    expect(text).toContain("Complete");
+    expect(text).toContain("Archive");
+    expect(text).not.toContain("Restore");
     expect(text).toContain("Fork");
     expect(text).toContain("Permanently Delete");
   });
@@ -302,7 +302,7 @@ describe("SessionItem", () => {
     }));
 
     const text = wrapper.get("[data-testid='context-menu-content']").text();
-    expect(text).not.toContain("Complete");
+    expect(text).not.toContain("Archive");
     expect(text).not.toContain("Fork");
     expect(text).not.toContain("Permanently Delete");
   });
@@ -316,5 +316,53 @@ describe("SessionItem", () => {
     const text = wrapper.get("[data-testid='context-menu-content']").text();
     expect(text).not.toContain("Pause");
     expect(text).not.toContain("Resume");
+  });
+
+  it("archives_from_the_hover_button_through_the_undo_queue", async () => {
+    const wrapper = mountSessionItem(createSession());
+    const queue = useArchiveQueueStore();
+
+    await wrapper.get("[data-testid='session-row-archive']").trigger("click");
+
+    expect(queue.pending?.ids).toEqual(["session-1"]);
+    expect(wrapper.emitted("select")).toBeUndefined();
+    queue.undo();
+  });
+
+  it("offers_restore_instead_of_archive_for_an_archived_session", () => {
+    const wrapper = mountSessionItem(createSession({
+      retentionStatus: "archived",
+      capabilities: createCapabilities({ canArchive: false, canUnarchive: true }),
+    }));
+
+    expect(wrapper.find("[data-testid='session-row-archive']").exists()).toBe(false);
+    expect(wrapper.find("[data-testid='session-row-restore']").exists()).toBe(true);
+    expect(wrapper.get("[data-testid='context-menu-content']").text()).toContain("Restore");
+  });
+
+  it("picks_the_row_on_ctrl_click_instead_of_opening_it", async () => {
+    const wrapper = mountSessionItem(createSession());
+    const selection = useSessionSelectionStore();
+
+    await wrapper.get("[data-testid='session-row']").trigger("click", { ctrlKey: true });
+
+    expect(selection.isSelected("session-1")).toBe(true);
+    expect(wrapper.emitted("select")).toBeUndefined();
+  });
+
+  it("opens_the_session_on_a_plain_click", async () => {
+    const wrapper = mountSessionItem(createSession());
+
+    await wrapper.get("[data-testid='session-row']").trigger("click");
+
+    expect(wrapper.emitted("select")).toHaveLength(1);
+  });
+
+  it("renames_in_place_on_double_click", async () => {
+    const wrapper = mountSessionItem(createSession());
+
+    await wrapper.get("[data-testid='session-row']").trigger("dblclick");
+
+    expect(wrapper.find("input[aria-label='Session name']").exists()).toBe(true);
   });
 });

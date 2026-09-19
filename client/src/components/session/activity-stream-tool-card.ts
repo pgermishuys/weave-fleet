@@ -38,9 +38,6 @@ export interface ToolCardItem {
   delegation?: ToolCardDelegation;
 }
 
-/** Tools that start a sub-agent in its own session: OpenCode's `task`, OpenCode 2's `subagent`. */
-export const SUBAGENT_TOOLS = new Set(["task", "subagent"]);
-
 /** The kind of sub-agent a call asked for: OpenCode names it `subagent_type`, OpenCode 2 `agent`. */
 export function subagentKind(part: AccumulatedToolPart): string {
   const input = toolInput(part);
@@ -55,6 +52,14 @@ export function subagentKind(part: AccumulatedToolPart): string {
 export function subagentTask(part: AccumulatedToolPart): string {
   const description = toolInput(part)?.description;
   return typeof description === "string" ? description.trim() : "";
+}
+
+/** The tools that run an agent in a child session: OpenCode's `task`, OpenCode 2's `subagent`. */
+const SUBAGENT_TOOLS = new Set(["task", "subagent"]);
+
+/** Whether a tool call ran a subagent, so its card links to the child session. */
+export function isSubagentTool(toolName: string): boolean {
+  return SUBAGENT_TOOLS.has(toolName);
 }
 
 /** Fleet's browser tools; their card reads "title · address" once the page answered, or "title · size" for a shot. */
