@@ -6,14 +6,18 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 
 /// <summary>
 /// Turns one V2 session's events into Fleet's harness events. V2 streams a turn as
-/// <c>session.execution.*</c> (the turn), <c>session.step.*</c> (one model call, one assistant message) and
-/// <c>session.text.*</c> / <c>session.reasoning.*</c> (a part of that message, by ordinal). Events Fleet has no
-/// use for yet (tools, forms, permissions, inbox, catalog changes) map to nothing, as does anything unknown.
+/// <c>session.execution.*</c> (the turn), <c>session.step.*</c> (one model call, one assistant message),
+/// <c>session.text.*</c> / <c>session.reasoning.*</c> (a part of that message, by ordinal) and
+/// <c>session.tool.*</c> (a tool call in that message, by call id). A question is a form (<c>form.*</c>) that
+/// stops the turn on the user. Events Fleet has no use for (permissions are answered by the session, shells,
+/// inbox, catalog changes) map to nothing, as does anything unknown.
 /// </summary>
 /// <remarks>One mapper per session, fed from one event stream: not thread-safe.</remarks>
 internal sealed class OpenCode2Mapper(string fleetSessionId)
 {
     private readonly Dictionary<string, AssistantMessage> _messages = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ToolCall> _tools = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _questions = new(StringComparer.Ordinal);
     private int _nextStepIndex;
 
     /// <summary>The model of the latest step, for analytics.</summary>
@@ -40,6 +44,12 @@ internal sealed class OpenCode2Mapper(string fleetSessionId)
             "session.reasoning.started" => PartStarted(data, "reasoning"),
             "session.reasoning.delta" => PartDelta(data, "reasoning"),
             "session.reasoning.ended" => PartEnded(data, "reasoning"),
+            "session.tool.input.started" => ToolStarted(data),
+            "session.tool.called" => ToolCalled(data),
+            "session.tool.success" => ToolEnded(data, failed: false),
+            "session.tool.failed" => ToolEnded(data, failed: true),
+            "form.created" => QuestionAsked(data),
+            "form.replied" or "form.cancelled" => QuestionSettled(data),
             _ => [],
         };
     }
@@ -99,8 +109,107 @@ internal sealed class OpenCode2Mapper(string fleetSessionId)
             UserId: userId);
     }
 
-    /// <summary>The id Fleet gives part <paramref name="ordinal"/> of kind <paramref name="kind"/> in a V2 message.</summary>
+    /// <summary>
+    /// The id Fleet gives part <paramref name="ordinal"/> of kind <paramref name="kind"/> in a V2 message. V2 counts
+    /// text and reasoning separately within a step, and a message's history lists them in that order, so history
+    /// derives the same ids.
+    /// </summary>
     internal static string PartId(string messageId, string kind, int ordinal) => $"{messageId}-{kind}-{ordinal}";
+
+    /// <summary>The id Fleet gives the part for tool call <paramref name="callId"/> in a V2 message.</summary>
+    internal static string ToolPartId(string messageId, string callId) => $"{messageId}-tool-{callId}";
+
+    /// <summary>The id Fleet gives file <paramref name="index"/> a tool call returned.</summary>
+    internal static string ToolFilePartId(string messageId, string callId, int index) => $"{messageId}-tool-{callId}-file-{index}";
+
+    /// <summary>
+    /// What a tool returned, as the text Fleet shows: V2 returns content blocks (a shell's output, then
+    /// "Command exited with code 0."), one per line. Files are returned as parts of their own.
+    /// </summary>
+    internal static string? ToolOutput(IEnumerable<OpenCode2ToolContent>? content)
+    {
+        var texts = (content ?? []).Where(c => c.Type == "text" && c.Text is not null).Select(c => c.Text!.TrimEnd('\n')).ToList();
+        return texts.Count == 0 ? null : string.Join('\n', texts);
+    }
+
+    /// <summary>The events that show a V2 message as it is now, for catching up after the event stream was down.</summary>
+    /// <remarks>
+    /// Parts carry the same ids as live ones, so they replace what the client has. A message that is still
+    /// streaming carries on from here with live events.
+    /// </remarks>
+    public IReadOnlyList<HarnessEvent> MapMessage(OpenCode2Message message)
+    {
+        if (message is not { Type: "assistant", Id: { } messageId })
+            return [];
+
+        var created = message.Time?.Created ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var info = _messages.GetValueOrDefault(messageId)
+            ?? new AssistantMessage(created, message.Agent, message.Model?.ProviderId, message.Model?.Id, StepIndex: 0);
+        var completed = message.Time?.Completed;
+        var tokens = completed is null || message.Tokens is not { } t
+            ? null
+            : new OpenCode2Tokens { Input = t.Input ?? 0, Output = t.Output ?? 0, Reasoning = t.Reasoning ?? 0 };
+
+        var events = new List<HarnessEvent> { MessageUpdated(messageId, info, completed, completed is null ? null : message.Cost, tokens, message.Finish) };
+        int text = 0, reasoning = 0;
+        foreach (var content in message.Content ?? [])
+        {
+            switch (content.Type)
+            {
+                case "text":
+                    events.Add(PartUpdated(TextPart((messageId, PartId(messageId, "text", text++)), "text", content.Text ?? string.Empty)));
+                    break;
+                case "reasoning":
+                    events.Add(PartUpdated(TextPart((messageId, PartId(messageId, "reasoning", reasoning++)), "reasoning", content.Text ?? string.Empty)));
+                    break;
+                case "tool" when content is { Id: { } callId, Name: { } name, State: { } state }:
+                    var status = HistoryToolStatus(state.Status);
+                    var input = state.Input.ValueKind == JsonValueKind.Object ? state.Input.Clone() : (JsonElement?)null;
+                    events.Add(ToolPart(messageId, callId, name, new OpenCode2ToolPartState
+                    {
+                        Status = status,
+                        Input = input,
+                        Output = status is "completed" or "error" && ToolOutput(state.Content) is { } output ? JsonSerializer.SerializeToElement(output, OpenCode2JsonContext.Default.String) : null,
+                        Error = status == "error" ? state.Error?.Message ?? state.Error?.Type : null,
+                        Metadata = state.Metadata.ValueKind == JsonValueKind.Object ? state.Metadata.Clone() : null,
+                    }));
+                    events.AddRange(ToolFiles(messageId, callId, state.Content));
+                    // A call still running finishes with live events, which name it only by call id.
+                    if (status is "pending" or "running")
+                        _tools[callId] = new ToolCall(messageId, name, input);
+                    break;
+            }
+        }
+
+        return events;
+    }
+
+    /// <summary>
+    /// The questions waiting on the user now, for catching up after the event stream was down: the session waits
+    /// on the user while any is open.
+    /// </summary>
+    public IReadOnlyList<HarnessEvent> MapPendingQuestions(IEnumerable<OpenCode2Form> forms)
+    {
+        var asked = forms.Where(f => f is { IsQuestion: true, Id: not null }).Select(f => f.Id!).ToList();
+        var wasWaiting = _questions.Count > 0;
+        _questions.Clear();
+        _questions.UnionWith(asked);
+        return asked.Count > 0 ? [Status(ActivityStatuses.WaitingInput)]
+            : wasWaiting ? [Status(ActivityStatuses.Busy)]
+            : [];
+    }
+
+    /// <summary>True while a question waits on the user.</summary>
+    public bool IsWaitingOnQuestion => _questions.Count > 0;
+
+    /// <summary>A tool state's status in history, as Fleet names it (V2's <c>streaming</c> is Fleet's <c>pending</c>).</summary>
+    internal static string HistoryToolStatus(string? status) => status switch
+    {
+        "running" => "running",
+        "completed" => "completed",
+        "error" => "error",
+        _ => "pending",
+    };
 
     private List<HarnessEvent> StepStarted(OpenCode2Event evt, JsonElement data)
     {
@@ -205,6 +314,105 @@ internal sealed class OpenCode2Mapper(string fleetSessionId)
         => ReadPartRef(data, kind) is { } part
             ? [PartUpdated(TextPart(part, kind, ReadString(data, "text") ?? string.Empty))]
             : [];
+
+    /// <summary>The model started writing a tool call: the card shows up with the tool's name, input still to come.</summary>
+    private List<HarnessEvent> ToolStarted(JsonElement data)
+    {
+        if (ReadToolRef(data) is not { } call || ReadString(data, "name") is not { } name)
+            return [];
+
+        _tools[call.CallId] = new ToolCall(call.MessageId, name, Input: null);
+        return [ToolPart(call.MessageId, call.CallId, name, new OpenCode2ToolPartState { Status = "pending" })];
+    }
+
+    private List<HarnessEvent> ToolCalled(JsonElement data)
+    {
+        if (ReadToolRef(data) is not { } call || !_tools.TryGetValue(call.CallId, out var tool))
+            return [];
+
+        var input = data.TryGetProperty("input", out var i) && i.ValueKind == JsonValueKind.Object ? i.Clone() : (JsonElement?)null;
+        _tools[call.CallId] = tool with { Input = input };
+        return [ToolPart(call.MessageId, call.CallId, tool.Name, new OpenCode2ToolPartState { Status = "running", Input = input })];
+    }
+
+    /// <summary><c>session.tool.success</c> and <c>session.tool.failed</c>: the call's result, and any files it returned.</summary>
+    private List<HarnessEvent> ToolEnded(JsonElement data, bool failed)
+    {
+        if (ReadToolRef(data) is not { } call || !_tools.Remove(call.CallId, out var tool))
+            return [];
+
+        var content = data.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.Array
+            ? c.Deserialize(OpenCode2JsonContext.Default.ListOpenCode2ToolContent)
+            : null;
+        var output = ToolOutput(content);
+        var events = new List<HarnessEvent>
+        {
+            ToolPart(call.MessageId, call.CallId, tool.Name, new OpenCode2ToolPartState
+            {
+                Status = failed ? "error" : "completed",
+                Input = tool.Input,
+                Output = output is null ? null : JsonSerializer.SerializeToElement(output, OpenCode2JsonContext.Default.String),
+                Error = failed ? ReadError(data).Message : null,
+                Metadata = data.TryGetProperty("metadata", out var m) && m.ValueKind == JsonValueKind.Object ? m.Clone() : null,
+            }),
+        };
+        events.AddRange(ToolFiles(call.MessageId, call.CallId, content));
+        return events;
+    }
+
+    private IEnumerable<HarnessEvent> ToolFiles(string messageId, string callId, IEnumerable<OpenCode2ToolContent>? content)
+        => (content ?? [])
+            .Where(c => c.Type == "file" && c.Uri is not null)
+            .Select((file, index) => PartUpdated(new OpenCode2Part
+            {
+                Type = "file",
+                Id = ToolFilePartId(messageId, callId, index),
+                SessionId = fleetSessionId,
+                MessageId = messageId,
+                Mime = file.Mime ?? "application/octet-stream",
+                Url = file.Uri,
+                Filename = file.Name,
+            }));
+
+    private HarnessEvent ToolPart(string messageId, string callId, string name, OpenCode2ToolPartState state)
+        => PartUpdated(new OpenCode2Part
+        {
+            Type = "tool",
+            Id = ToolPartId(messageId, callId),
+            SessionId = fleetSessionId,
+            MessageId = messageId,
+            Tool = name,
+            CallId = callId,
+            State = state,
+        });
+
+    /// <summary>
+    /// The question tool asks with a form, and the turn waits on the user until it's answered or dismissed. The
+    /// question itself shows from the tool call's input, like OpenCode's (1.x) question tool.
+    /// </summary>
+    private List<HarnessEvent> QuestionAsked(JsonElement data)
+    {
+        if (!data.TryGetProperty("form", out var f) || f.ValueKind != JsonValueKind.Object)
+            return [];
+
+        var form = f.Deserialize(OpenCode2JsonContext.Default.OpenCode2Form);
+        if (form is not { IsQuestion: true, Id: { } formId })
+            return [];
+
+        _questions.Add(formId);
+        return [Status(ActivityStatuses.WaitingInput)];
+    }
+
+    /// <summary>An answered question lets the turn go on; a dismissed one ends it (V2 interrupts the turn next).</summary>
+    private List<HarnessEvent> QuestionSettled(JsonElement data)
+        => ReadString(data, "id") is { } formId && _questions.Remove(formId)
+            ? [Status(ActivityStatuses.Busy)]
+            : [];
+
+    private static (string MessageId, string CallId)? ReadToolRef(JsonElement data)
+        => ReadString(data, "assistantMessageID") is { } messageId && ReadString(data, "id") is { } callId
+            ? (messageId, callId)
+            : null;
 
     private OpenCode2Part TextPart((string MessageId, string PartId) part, string kind, string text) => new()
     {
@@ -325,4 +533,7 @@ internal sealed class OpenCode2Mapper(string fleetSessionId)
 
     /// <summary>What a step's <c>session.step.started</c> said, kept until the step ends.</summary>
     private sealed record AssistantMessage(long Created, string? Agent, string? ProviderId, string? ModelId, int StepIndex);
+
+    /// <summary>A tool call from its first event to its result: later events name it only by call id.</summary>
+    private sealed record ToolCall(string MessageId, string Name, JsonElement? Input);
 }

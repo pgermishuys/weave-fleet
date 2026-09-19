@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application;
 using WeaveFleet.Application.Events;
+using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
@@ -13,8 +14,8 @@ using WeaveFleet.Domain.Repositories;
 namespace WeaveFleet.Infrastructure.Services;
 
 /// <summary>
-/// Proxy for retrieving session messages from either the live opencode harness (if available)
-/// or the persisted message store (fallback).
+/// Proxy for retrieving session messages from either the live harness (if available and it keeps the
+/// history, see <see cref="HarnessCapabilities.HistoryLivesInHarness"/>) or the persisted message store (fallback).
 /// </summary>
 public sealed class OpenCodeSessionMessageProxy(
     ISessionRepository sessionRepository,
@@ -23,6 +24,7 @@ public sealed class OpenCodeSessionMessageProxy(
     IDelegationRepository delegationRepository,
     ISessionSnapshotBuilder fallbackSnapshotBuilder,
     IServiceProvider serviceProvider,
+    IHarnessRegistry harnessRegistry,
     ILogger<OpenCodeSessionMessageProxy> logger,
     IMessageRepository? messageRepository = null) : ISessionMessageProxy
 {
@@ -32,7 +34,7 @@ public sealed class OpenCodeSessionMessageProxy(
 
     private static readonly Action<ILogger, string, Exception?> LogFetchingFromHarness =
         LoggerMessage.Define<string>(LogLevel.Debug, new EventId(1, "FetchingFromHarness"),
-            "Fetching messages for session {SessionId} from live opencode harness.");
+            "Fetching messages for session {SessionId} from the live harness.");
 
     private static readonly Action<ILogger, string, Exception?> LogFallingBackToPersisted =
         LoggerMessage.Define<string>(LogLevel.Debug, new EventId(2, "FallingBackToPersisted"),
@@ -40,7 +42,7 @@ public sealed class OpenCodeSessionMessageProxy(
 
     private static readonly Action<ILogger, string, Exception?> LogHarnessUnavailable =
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(3, "HarnessUnavailable"),
-            "Opencode harness unavailable for session {SessionId}, using persisted messages.");
+            "Harness unavailable for session {SessionId}, using persisted messages.");
 
     private static readonly Action<ILogger, string, Exception?> LogAttemptingResume =
         LoggerMessage.Define<string>(LogLevel.Information, new EventId(4, "AttemptingResume"),
@@ -64,8 +66,8 @@ public sealed class OpenCodeSessionMessageProxy(
         if (session is null)
             throw new InvalidOperationException($"Session '{fleetSessionId}' was not found.");
 
-        // Check if this is an opencode session with a live harness
-        if (session.HarnessType == "opencode" && !string.IsNullOrWhiteSpace(session.InstanceId))
+        // Read the harness's own history when it keeps one and the session is running
+        if (HistoryLivesInHarness(session) && !string.IsNullOrWhiteSpace(session.InstanceId))
         {
             var harnessSession = instanceTracker.Get(session.InstanceId);
             if (harnessSession is not null)
@@ -118,9 +120,9 @@ public sealed class OpenCodeSessionMessageProxy(
         var fallbackSnapshot = await fallbackSnapshotBuilder.BuildAsync(fleetSessionId, pageSize, cursor)
             .ConfigureAwait(false);
 
-        // Mark an OpenCode snapshot as partial since we couldn't fetch from the live harness. Other
+        // Mark the snapshot partial when the history lives in the harness and we couldn't read it. Other
         // harnesses (Claude Code) keep their history in Fleet's database, so theirs is complete.
-        return session.HarnessType == "opencode"
+        return HistoryLivesInHarness(session)
             ? fallbackSnapshot with { IsPartial = true }
             : fallbackSnapshot;
     }
@@ -138,8 +140,8 @@ public sealed class OpenCodeSessionMessageProxy(
         if (session is null)
             throw new InvalidOperationException($"Session '{fleetSessionId}' was not found.");
 
-        // Check if this is an opencode session with a live harness
-        if (session.HarnessType == "opencode" && !string.IsNullOrWhiteSpace(session.InstanceId))
+        // Read the harness's own history when it keeps one and the session is running
+        if (HistoryLivesInHarness(session) && !string.IsNullOrWhiteSpace(session.InstanceId))
         {
             var harnessSession = instanceTracker.Get(session.InstanceId);
             if (harnessSession is not null)
@@ -190,6 +192,9 @@ public sealed class OpenCodeSessionMessageProxy(
         var messages = snapshot.Messages.Select(ToHarnessMessage).ToList();
         return new MessagePage(messages, snapshot.HasMore, snapshot.Cursor);
     }
+
+    private bool HistoryLivesInHarness(Session session)
+        => harnessRegistry.GetByType(session.HarnessType)?.Capabilities.HistoryLivesInHarness == true;
 
     private async Task<SessionSnapshot> BuildSnapshotFromHarnessAsync(
         Session session,

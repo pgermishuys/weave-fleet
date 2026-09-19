@@ -296,6 +296,8 @@ public sealed class OpenCode2RuntimeTests
                 _stopped.TrySetResult();
         }
 
+        public Task ResyncAsync(IReadOnlySet<string> activeSessions, CancellationToken ct) => Task.CompletedTask;
+
         public void OnServerStopped() => _stopped.TrySetResult();
     }
 }

@@ -39,6 +39,13 @@ public sealed record HarnessCapabilities
 
     /// <summary>A session can start with a profile: harness config the user keeps in Fleet and picks per session.</summary>
     public bool SupportsProfiles { get; init; }
+
+    /// <summary>
+    /// The harness keeps the conversation itself, and <see cref="IHarnessSession.GetMessagesAsync"/> reads it. A
+    /// reopened session shows the harness's history, and Fleet's own copy (the prompts it saved) is only a partial
+    /// fallback while the harness can't be reached. Otherwise Fleet's stored messages are the history.
+    /// </summary>
+    public bool HistoryLivesInHarness { get; init; }
 }
 
 /// <summary>What a harness needs before sessions can use it. Sent to the client as <c>state</c>.</summary>

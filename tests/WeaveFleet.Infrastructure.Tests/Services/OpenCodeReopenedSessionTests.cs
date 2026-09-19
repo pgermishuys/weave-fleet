@@ -7,6 +7,7 @@ using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure;
 using WeaveFleet.Infrastructure.Events;
+using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Testing.Fakes;
@@ -185,6 +186,7 @@ public sealed class OpenCodeReopenedSessionTests
             delegations,
             new FakeSessionSnapshotBuilder(),
             new ServiceCollection().BuildServiceProvider(),
+            new HarnessRegistry([new OpenCodeHarness()], []),
             NullLogger<OpenCodeSessionMessageProxy>.Instance);
 
         return await proxy.GetSnapshotAsync(FleetSessionId);

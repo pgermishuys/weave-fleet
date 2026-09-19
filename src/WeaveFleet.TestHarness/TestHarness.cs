@@ -31,6 +31,8 @@ public sealed class TestHarness : IHarness
         SupportsResume = true,
         SupportsImageAttachments = true,
         SupportsStreaming = true,
-        SupportsOffTheRecordPrompt = true
+        SupportsOffTheRecordPrompt = true,
+        // Stands in for OpenCode, whose history Fleet reads from the harness.
+        HistoryLivesInHarness = true,
     };
 }

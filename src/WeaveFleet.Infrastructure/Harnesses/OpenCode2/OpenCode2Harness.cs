@@ -16,12 +16,14 @@ public sealed class OpenCode2Harness : IHarness
     public string DisplayName => "OpenCode 2";
 
     /// <inheritdoc />
-    /// <remarks>Text turns only for now; each capability is turned on as Fleet maps the V2 events behind it.</remarks>
+    /// <remarks>Text, tools and questions; each capability is turned on as Fleet maps the V2 events behind it.</remarks>
     public HarnessCapabilities Capabilities { get; } = new()
     {
         // The session exists in V2 before any prompt, so the first message is delivered like any other.
         RequiresInitialPrompt = false,
         SupportsStreaming = true,
         SupportsResume = true,
+        // A reopened session reads V2's own history.
+        HistoryLivesInHarness = true,
     };
 }
