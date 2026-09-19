@@ -110,7 +110,7 @@ internal sealed partial class OpenCode2ProcessManager(ILogger<OpenCode2ProcessMa
 
         // The group kill misses when the server didn't become its own group (setpgid fails once it has exec'd), so
         // the tree is killed too, straight away: waiting first left servers running when Fleet exited during the wait.
-        ProcessGroupHelper.KillProcessGroup(process.Id, logger);
+        ProcessGroupHelper.KillProcessGroup(process, logger);
         try
         {
             process.Kill(entireProcessTree: true);

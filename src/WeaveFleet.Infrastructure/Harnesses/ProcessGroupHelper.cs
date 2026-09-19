@@ -89,18 +89,24 @@ internal static class ProcessGroupHelper
     }
 
     /// <summary>
-    /// Kills the process group associated with <paramref name="pid"/> on Unix,
-    /// or kills the process tree on Windows.
+    /// Kills the process group of <paramref name="process"/> on Unix (or its process tree when it has no group of its
+    /// own), or kills the process tree on Windows.
     /// </summary>
-    internal static void KillProcessGroup(int pid, ILogger? logger = null)
+    internal static void KillProcessGroup(Process process, ILogger? logger = null)
     {
+        ArgumentNullException.ThrowIfNull(process);
+
+        // An exited harness's pid (and group id) may already belong to another process.
+        if (HasExited(process))
+            return;
+
         if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
         {
-            KillUnixProcessGroup(pid, logger);
+            KillUnixProcessGroup(process, logger);
         }
         else if (OperatingSystem.IsWindows())
         {
-            KillWindowsProcess(pid, logger);
+            KillProcessTree(process, logger);
         }
     }
 
@@ -132,8 +138,9 @@ internal static class ProcessGroupHelper
 
     [SupportedOSPlatform("linux")]
     [SupportedOSPlatform("macos")]
-    private static void KillUnixProcessGroup(int pid, ILogger? logger)
+    private static void KillUnixProcessGroup(Process process, ILogger? logger)
     {
+        var pid = process.Id;
         try
         {
             // SIGKILL = 9 — unconditional kill; SIGTERM (15) may be ignored by some processes
@@ -143,6 +150,11 @@ internal static class ProcessGroupHelper
                 int errno = Marshal.GetLastPInvokeError();
                 if (logger is not null)
                     LogKillpgFailed(logger, pid, errno, null);
+
+                // setpgid fails once the child has exec'd (Process.Start returns after exec), so there's usually
+                // no group to kill. Kill the tree now: callers that wait before killing it themselves leave the
+                // harness running if Fleet exits during the wait.
+                KillProcessTree(process, logger);
             }
             else
             {
@@ -217,24 +229,36 @@ internal static class ProcessGroupHelper
         return jobHandle;
     }
 
-    [SupportedOSPlatform("windows")]
-    private static void KillWindowsProcess(int pid, ILogger? logger)
+    private static bool HasExited(Process process)
     {
         try
         {
-            var process = Process.GetProcessById(pid);
+            return process.HasExited;
+        }
+        catch (InvalidOperationException)
+        {
+            // No OS process was ever associated with it.
+            return true;
+        }
+    }
+
+    // Through the Process object, not the pid: a harness that just exited may have had its pid reused.
+    private static void KillProcessTree(Process process, ILogger? logger)
+    {
+        try
+        {
             process.Kill(entireProcessTree: true);
             if (logger is not null)
-                LogKillTreeDone(logger, pid, null);
+                LogKillTreeDone(logger, process.Id, null);
         }
-        catch (ArgumentException)
+        catch (InvalidOperationException)
         {
             // Process already exited — not an error
         }
         catch (Exception ex)
         {
             if (logger is not null)
-                LogKillTreeFailed(logger, pid, ex);
+                LogKillTreeFailed(logger, process.Id, ex);
         }
     }
 

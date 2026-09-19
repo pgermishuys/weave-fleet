@@ -221,7 +221,7 @@ internal sealed class PiProcessManager : IPiProcessManager
 
         try
         {
-            ProcessGroupHelper.KillProcessGroup(_process.Id, _logger);
+            ProcessGroupHelper.KillProcessGroup(_process, _logger);
             await _process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(1)).ConfigureAwait(false);
         }
         catch (TimeoutException)
