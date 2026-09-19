@@ -6,6 +6,9 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 /// <summary>Where a server sends the events of one V2 session.</summary>
 internal interface IOpenCode2EventSink
 {
+    /// <summary>The Fleet session the events are for.</summary>
+    OpenCode2SessionContext Context { get; }
+
     void OnEvent(OpenCode2Event evt);
 
     /// <summary>
@@ -16,6 +19,16 @@ internal interface IOpenCode2EventSink
 
     /// <summary>The server stopped; nothing more will arrive from it.</summary>
     void OnServerStopped();
+}
+
+/// <summary>
+/// What Fleet starts an owner's server with: where Fleet is, the config it adds (<see cref="OpenCode2FleetFiles"/>),
+/// and whether the server gets the tool for messages between sessions. When the owner changes a setting behind it, the
+/// server is replaced once none of its sessions is running a turn.
+/// </summary>
+internal sealed record OpenCode2ServerSetup(string? FleetUrl, string? ConfigContent, bool SessionMessages)
+{
+    public static readonly OpenCode2ServerSetup None = new(null, null, false);
 }
 
 /// <summary>
@@ -41,11 +54,13 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
         OpenCode2HttpClient client,
         string bridgeToken,
         OpenCode2ProcessManager? process,
-        ILogger logger)
+        ILogger logger,
+        OpenCode2ServerSetup? setup = null)
     {
         OwnerUserId = ownerUserId;
         Client = client;
         BridgeToken = bridgeToken;
+        Setup = setup ?? OpenCode2ServerSetup.None;
         _process = process;
         _logger = logger;
 
@@ -62,6 +77,8 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     /// <summary>Set as <c>FLEET_BRIDGE_TOKEN</c> in the process, and in <c>FLEET_URL</c>, so Fleet knows its calls.</summary>
     public string BridgeToken { get; }
 
+    public OpenCode2ServerSetup Setup { get; }
+
     public int? ProcessId => _process?.ProcessId;
 
     /// <summary>False once the process exited or Fleet stopped it; a stopped server is replaced, not restarted.</summary>
@@ -74,6 +91,24 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
 
     public void Detach(string harnessSessionId, IOpenCode2EventSink sink)
         => _sinks.TryRemove(new KeyValuePair<string, IOpenCode2EventSink>(harnessSessionId, sink));
+
+    /// <summary>The Fleet session attached to V2 session <paramref name="harnessSessionId"/> on this server, if any.</summary>
+    public OpenCode2SessionContext? FindSession(string harnessSessionId)
+        => _sinks.TryGetValue(harnessSessionId, out var sink) ? sink.Context : null;
+
+    /// <summary>Whether no session on this server is running a turn; <see langword="false"/> when V2 can't say.</summary>
+    public async Task<bool> IsIdleAsync(CancellationToken ct)
+    {
+        try
+        {
+            return (await Client.GetActiveSessionIdsAsync(ct).ConfigureAwait(false)).Count == 0;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException
+                                   || (ex is TaskCanceledException && !ct.IsCancellationRequested))
+        {
+            return false;
+        }
+    }
 
     private async Task PumpAsync()
     {

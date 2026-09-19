@@ -75,7 +75,7 @@ public interface IHarnessBridgeTokens
 /// through <see cref="IHarnessCanvasCallerResolver"/>, the same way the canvas tools find theirs.
 /// </summary>
 public sealed class SessionMessageBridge(
-    IHarnessCanvasCallerResolver callers,
+    IEnumerable<IHarnessCanvasCallerResolver> callers,
     IBackgroundUserScope userScope,
     SessionMessagesFeature feature,
     SessionService sessions,

@@ -9,7 +9,7 @@ namespace WeaveFleet.Application.Browser;
 /// process. Resolves the caller the same way as <see cref="CanvasBridge"/>, and shows pages as browser canvases.
 /// </summary>
 public sealed class BrowserBridge(
-    IHarnessCanvasCallerResolver callers,
+    IEnumerable<IHarnessCanvasCallerResolver> callers,
     IBackgroundUserScope userScope,
     BrowserPreviews previews,
     AppRunService apps,

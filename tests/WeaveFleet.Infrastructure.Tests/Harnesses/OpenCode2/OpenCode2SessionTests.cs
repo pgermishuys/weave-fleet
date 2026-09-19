@@ -328,6 +328,8 @@ public sealed class OpenCode2SessionTests
     {
         public TaskCompletionSource<IReadOnlySet<string>> Resynced { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        public OpenCode2SessionContext Context { get; } = new("fleet-session-1", "local-user", "/work", null, null);
+
         public void OnEvent(OpenCode2Event evt)
         {
         }
