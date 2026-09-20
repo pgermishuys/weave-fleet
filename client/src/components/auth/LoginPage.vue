@@ -165,7 +165,7 @@ function isSafeReturnUrl(value: string): boolean {
   <main class="flex min-h-screen items-center justify-center bg-main-bg px-4 py-12">
     <section class="w-full max-w-sm text-center">
       <div class="flex flex-col items-center gap-6 rounded-card border border-border bg-card-bg px-8 py-10 shadow-sm">
-        <div class="flex h-18 w-18 items-center justify-center rounded-card bg-accent p-3 shadow-sm">
+        <div class="flex h-18 w-18 items-center justify-center rounded-card border border-border bg-card-bg p-3 shadow-sm">
           <img
             :src="weaveLogo"
             alt="Weave logo"
