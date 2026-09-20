@@ -248,7 +248,8 @@ function onOpenChange(open: boolean): void {
   height: 64px;
   border-radius: var(--radius-card);
   padding: 10px;
-  background: var(--accent);
+  border: 1px solid var(--border);
+  background: var(--card-bg);
 }
 
 .harness-setup__logo img {

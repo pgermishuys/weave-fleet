@@ -8,7 +8,7 @@ const commitSha = import.meta.env.VITE_COMMIT_SHA;
 <template>
   <section class="flex h-full items-center justify-center p-6">
     <div class="flex max-w-md flex-col items-center gap-4 text-center">
-      <div class="flex h-18 w-18 items-center justify-center rounded-card bg-accent p-3 shadow-sm">
+      <div class="flex h-18 w-18 items-center justify-center rounded-card border border-border bg-card-bg p-3 shadow-sm">
         <img
           :src="weaveLogo"
           alt="Weave logo"
