@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createGitHubSessionSourcePreset } from "@/lib/github-session-source";
 import {
-  branchForMessage,
   buildCreateSessionRequest,
   buildCreatedSessionRow,
   slugForBranch,
@@ -79,16 +78,6 @@ describe("slugForBranch", () => {
   });
 });
 
-describe("branchForMessage", () => {
-  it("prefixes the slug with fleet/", () => {
-    expect(branchForMessage("Fix login redirect")).toBe("fleet/fix-login-redirect");
-  });
-
-  it("is undefined when the message gives no slug", () => {
-    expect(branchForMessage("🎉")).toBeUndefined();
-  });
-});
-
 describe("titleFromMessage", () => {
   it("is the first non-empty line, spaces tidied", () => {
     expect(titleFromMessage("\n  Fix the   login redirect \nMore detail")).toBe("Fix the login redirect");
@@ -112,23 +101,22 @@ describe("titleFromMessage", () => {
 
 describe("buildCreateSessionRequest", () => {
   describe("repository", () => {
-    it("new worktree: branch from the message, sent as the first message", () => {
+    it("new worktree: no branch, so the naming templates name it on the server", () => {
       const request = build({ message: "Fix the login redirect" });
 
       expect(request.directory).toBe(REPO);
       expect(request.options).toEqual({
         source: {
           key: { providerId: "builtin.repository", sourceType: "repository", actionId: "start-session", contractVersion: 1 },
-          input: { repositoryPath: REPO, isolationStrategy: "worktree", branch: "fleet/fix-login-redirect" },
+          input: { repositoryPath: REPO, isolationStrategy: "worktree" },
         },
         isolationStrategy: "worktree",
-        branch: "fleet/fix-login-redirect",
         title: "Fix the login redirect",
         initialPrompt: "Fix the login redirect",
       });
     });
 
-    it("new worktree without a message: no branch, so the server names one", () => {
+    it("new worktree without a message: still no branch", () => {
       const request = build({ message: "" });
 
       expect(request.options.branch).toBeUndefined();
@@ -136,7 +124,7 @@ describe("buildCreateSessionRequest", () => {
       expect(request.options.initialPrompt).toBeUndefined();
     });
 
-    it("new worktree: a typed branch wins over the message", () => {
+    it("new worktree: a typed branch is sent, and wins over the templates", () => {
       const request = build({ message: "Fix the login redirect", branch: " feature/login " });
 
       expect(request.options.branch).toBe("feature/login");
@@ -149,12 +137,11 @@ describe("buildCreateSessionRequest", () => {
       expect(request.options.source?.input).toEqual({
         repositoryPath: REPO,
         isolationStrategy: "worktree",
-        branch: "fleet/fix-login-redirect",
         baseBranch: "origin/release/2.0",
         fetchOrigin: false,
       });
       expect(build({ message: "x", baseBranch: null, fetchOrigin: true }).options.source?.input)
-        .toEqual({ repositoryPath: REPO, isolationStrategy: "worktree", branch: "fleet/x" });
+        .toEqual({ repositoryPath: REPO, isolationStrategy: "worktree" });
     });
 
     it("sends no base for the current checkout or an existing worktree", () => {
@@ -250,10 +237,10 @@ describe("buildCreateSessionRequest", () => {
       });
     });
 
-    it("without a suggested branch, names the branch after the message", () => {
+    it("without a suggested branch, leaves the naming to the server", () => {
       const request = build({ gitHubPreset: { ...issue, suggestedBranch: null }, message: "Start with the tests" });
 
-      expect(request.options.branch).toBe("fleet/start-tests");
+      expect(request.options.branch).toBeUndefined();
     });
 
     it("existing worktree: sends its path instead of a branch", () => {
@@ -346,6 +333,8 @@ describe("buildCreatedSessionRow", () => {
     instanceId: "instance-1",
     workspaceId: "workspace-1",
     session: { id: "session-1", title: "Fix the login redirect", time: { created: 5, updated: 5 }, tags: ["review"] },
+    // The server names the worktree, so the branch comes back in the response.
+    branch: "fleet/fix-login-redirect",
   };
 
   it("is a running, working session in the given project", () => {

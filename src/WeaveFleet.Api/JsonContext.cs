@@ -380,6 +380,10 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(List<WeaveFleet.Application.DTOs.SmartLinkDto>))]
 [JsonSerializable(typeof(WeaveFleet.Application.DTOs.AddSmartLinkRequest))]
 [JsonSerializable(typeof(Hubs.ClientEvent))]
+[JsonSerializable(typeof(WorktreeNamingResponse))]
+[JsonSerializable(typeof(WorktreeNamingRequest))]
+[JsonSerializable(typeof(WorktreeNamingPreviewRequest))]
+[JsonSerializable(typeof(WorktreeNamingPreviewResponse))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 internal sealed partial class ApiJsonContext : JsonSerializerContext
 {

@@ -385,14 +385,15 @@ describe("NewSessionComposer", () => {
       expect(view.get("[data-testid='new-session-more-chip']").text()).toContain("Fleet Core");
     });
 
-    it("names the new worktree's branch from the message", async () => {
+    it("previews the name the worktree naming templates will give it", async () => {
       rememberFolder({ kind: "repository", path: rocket.path });
       const view = await mountComposer();
 
       await type(view, "Fix the login redirect");
 
+      // A preview: the request carries no branch, and the server does the naming.
       expect(view.get("[data-testid='new-session-plan']").text())
-        .toContain("New worktree rocket-worktrees/fleet-fix-login-redirect on fleet/fix-login-redirect");
+        .toContain("New worktree ~/src/rocket-worktrees/fleet-fix-login-redirect on fleet/fix-login-redirect");
     });
   });
 
@@ -704,9 +705,10 @@ describe("NewSessionComposer", () => {
       expect(options).toMatchObject({
         initialPrompt: "Fix the login redirect",
         isolationStrategy: "worktree",
-        branch: "fleet/fix-login-redirect",
         harnessType: "opencode",
       });
+      // Nobody typed a branch, so the naming templates name it on the server.
+      expect(options.branch).toBeUndefined();
       expect(mocks.navigate).toHaveBeenCalledWith({
         to: "/sessions/$id",
         params: { id: "session-1" },

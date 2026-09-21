@@ -1941,6 +1941,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/worktrees/naming": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetWorktreeNaming"];
+        put: operations["UpdateWorktreeNaming"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/worktrees/naming/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["PreviewWorktreeNaming"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/config/client": {
         parameters: {
             query?: never;
@@ -2589,6 +2621,43 @@ export interface components {
             url: string;
         };
         AddWorkspaceRootRequest: {
+            path: string;
+        };
+        WorktreeNamingTemplates: {
+            branch?: string | null;
+            root?: string | null;
+            folder?: string | null;
+            capture?: {
+                [key: string]: string;
+            } | null;
+            initials?: string | null;
+        };
+        WorktreeNamingResponse: {
+            effective: components["schemas"]["WorktreeNamingTemplates"];
+            user: components["schemas"]["WorktreeNamingTemplates"];
+            defaults: components["schemas"]["WorktreeNamingTemplates"];
+            layers: {
+                [key: string]: string;
+            };
+        };
+        WorktreeNamingRequest: {
+            branch?: string | null;
+            root?: string | null;
+            folder?: string | null;
+            capture?: {
+                [key: string]: string;
+            } | null;
+            initials?: string | null;
+        };
+        WorktreeNamingPreviewRequest: {
+            directory: string;
+            message?: string | null;
+            branch?: string | null;
+        };
+        WorktreeNamingPreviewResponse: {
+            branch?: string | null;
+            root: string;
+            folder: string;
             path: string;
         };
         AnalyticsSummary: {
@@ -7253,6 +7322,90 @@ export interface operations {
         responses: {
             /** @description No Content */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetWorktreeNaming: {
+        parameters: {
+            query?: {
+                directory?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorktreeNamingResponse"];
+                };
+            };
+        };
+    };
+    UpdateWorktreeNaming: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorktreeNamingRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorktreeNamingResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PreviewWorktreeNaming: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorktreeNamingPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorktreeNamingPreviewResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };

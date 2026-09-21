@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Worktree Naming</title>
+<style>
+:root {
+  --rail-bg: #0d0d10;
+  --panel-bg: #141418;
+  --card-bg: #1b1b20;
+  --main-bg: #0d0d10;
+  --border: rgba(255, 255, 255, 0.075);
+  --text: #e8e8ec;
+  --muted: #8e8e9a;
+  --accent: #6366f1;
+  --accent-dim: rgba(99, 102, 241, 0.15);
+  --running: #22c55e;
+  --idle: #f59e0b;
+  --error: #ef4444;
+  --radius-card: 10px;
+  --radius-btn: 8px;
+  --transition: 150ms ease-out;
+  --status-waiting: var(--idle);
+  --font-sans-stack: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono-stack: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+/*
+ * Fleet is dark-first, so the bare :root above carries the whole palette and light
+ * is the swap — under a light OS preference unless the reader chose dark, and under
+ * an explicit light choice either way.
+ */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --rail-bg: #FFFFFF;
+    --panel-bg: #FFFFFF;
+    --card-bg: #ffffff;
+    --main-bg: #F3F2EF;
+    --border: rgba(26, 25, 24, 0.09);
+    --text: #1A1918;
+    --muted: #6E6A65;
+    --accent: #5B6EC7;
+    --accent-dim: rgba(91, 110, 199, 0.12);
+    --running: #16a34a;
+    --idle: #d97706;
+    --error: #dc2626;
+  }
+}
+:root[data-theme="light"] {
+  --rail-bg: #FFFFFF;
+  --panel-bg: #FFFFFF;
+  --card-bg: #ffffff;
+  --main-bg: #F3F2EF;
+  --border: rgba(26, 25, 24, 0.09);
+  --text: #1A1918;
+  --muted: #6E6A65;
+  --accent: #5B6EC7;
+  --accent-dim: rgba(91, 110, 199, 0.12);
+  --running: #16a34a;
+  --idle: #d97706;
+  --error: #dc2626;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--main-bg);
+  color: var(--text);
+  font-family: var(--font-sans-stack);
+  font-size: 13.5px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+code, kbd, .mono { font-family: var(--font-mono-stack); }
+
+.page { max-width: 1120px; margin: 0 auto; padding: 28px 16px 72px; }
+
+.topbar {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 16px;
+  padding-bottom: 18px; margin-bottom: 22px; border-bottom: 1px solid var(--border);
+}
+.topbar h1 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+.topbar p { margin: 0; color: var(--muted); font-size: 12.5px; flex: 1 1 320px; }
+.ghost {
+  border: 1px solid var(--border); border-radius: var(--radius-btn); padding: 5px 11px;
+  background: transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px;
+  transition: color var(--transition), background var(--transition);
+}
+.ghost:hover { color: var(--text); background: color-mix(in srgb, var(--text) 6%, transparent); }
+
+.card {
+  border: 1px solid var(--border); border-radius: var(--radius-card);
+  background: var(--card-bg); padding: 22px; margin-bottom: 18px;
+}
+.card > h2 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -0.005em; }
+.card > h2 + p { margin: 4px 0 0; color: var(--muted); font-size: 12.5px; }
+.card h3 {
+  margin: 22px 0 10px; font-size: 12px; font-weight: 600; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--muted);
+}
+
+/* Scenario strip */
+.scenarios { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.scenario {
+  flex: 1 1 190px; text-align: left; border: 1px solid var(--border);
+  border-radius: var(--radius-btn); background: color-mix(in srgb, var(--text) 3%, transparent);
+  color: var(--text); padding: 9px 11px; cursor: pointer; font: inherit;
+  transition: border-color var(--transition), background var(--transition);
+}
+.scenario:hover { background: color-mix(in srgb, var(--text) 7%, transparent); }
+.scenario[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: var(--accent-dim);
+}
+.scenario strong { display: block; font-size: 12.5px; font-weight: 600; }
+.scenario span { display: block; margin-top: 2px; color: var(--muted); font-size: 11.5px; }
+
+/* Settings form */
+.fields { display: grid; gap: 14px; margin-top: 18px; }
+.field { display: grid; gap: 5px; }
+.field__label { font-size: 11.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.field__hint { color: var(--muted); font-size: 11.5px; }
+.field input[type="text"] {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+  border-radius: var(--radius-btn); background: color-mix(in srgb, var(--text) 3%, transparent);
+  color: var(--text); font-family: var(--font-mono-stack); font-size: 12.5px; outline: none;
+}
+.field input[type="text"]:focus { border-color: var(--accent); }
+.field input[disabled] { opacity: 0.65; cursor: not-allowed; }
+.field--bad input[type="text"] { border-color: color-mix(in srgb, var(--error) 55%, var(--border)); }
+.field__error { color: var(--error); font-size: 11.5px; }
+
+.tokens { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }
+.token {
+  border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; background: transparent;
+  color: var(--muted); cursor: pointer; font-family: var(--font-mono-stack); font-size: 11px;
+  transition: color var(--transition), border-color var(--transition);
+}
+.token:hover { color: var(--text); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.token em { font-style: normal; opacity: 0.6; }
+
+.switchrow {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+  border: 1px solid var(--border); border-radius: var(--radius-card);
+  background: var(--main-bg); padding: 13px 14px; margin-top: 16px;
+}
+.switchrow p { margin: 0; font-size: 12.5px; font-weight: 500; }
+.switchrow p + p { margin-top: 3px; color: var(--muted); font-size: 11.5px; font-weight: 400; }
+.switchrow input { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--accent); }
+
+.banner {
+  display: flex; gap: 9px; align-items: flex-start; margin-top: 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: var(--radius-card); background: var(--accent-dim);
+  padding: 11px 13px; font-size: 12.5px;
+}
+.banner--warn {
+  border-color: color-mix(in srgb, var(--idle) 40%, transparent);
+  background: color-mix(in srgb, var(--idle) 10%, transparent);
+}
+.banner__dot { width: 7px; height: 7px; border-radius: 999px; background: var(--accent); margin-top: 6px; flex: none; }
+.banner--warn .banner__dot { background: var(--idle); }
+.banner p { margin: 0; }
+.banner p + p { margin-top: 3px; color: var(--muted); font-size: 11.5px; }
+
+/* Layer resolution table */
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th {
+  text-align: left; padding: 6px 10px 6px 0; border-bottom: 1px solid var(--border);
+  color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+}
+td { padding: 7px 10px 7px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+td.mono { font-size: 11.5px; }
+tr:last-child td { border-bottom: 0; }
+.dim { color: var(--muted); }
+.strike { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 1px; }
+.pill {
+  display: inline-block; border-radius: 999px; padding: 0 7px; font-size: 10.5px; font-weight: 600;
+  letter-spacing: 0.02em; text-transform: uppercase;
+}
+.pill--project { background: var(--accent-dim); color: var(--accent); }
+.pill--user { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--muted); }
+.pill--default { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+
+/* Result / composer preview */
+.result { display: grid; gap: 14px; margin-top: 18px; }
+.resultrow {
+  display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 12px; align-items: baseline;
+}
+.resultrow > span:first-child { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.05em; }
+.out { font-family: var(--font-mono-stack); font-size: 13px; overflow-wrap: anywhere; }
+.out--now { color: var(--muted); font-size: 12px; }
+
+.composer {
+  margin-top: 20px; border: 1px solid var(--border); border-radius: var(--radius-card);
+  background: var(--panel-bg); padding: 12px 12px 8px; max-width: 620px;
+}
+.composer__msg {
+  width: 100%; min-height: 54px; resize: vertical; border: 0; background: transparent;
+  color: var(--text); font: inherit; font-size: 13.5px; outline: none; padding: 2px 0 0;
+}
+.composer__chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.chip {
+  display: inline-flex; height: 26px; align-items: center; gap: 5px; padding: 0 7px;
+  border: 1px solid transparent; border-radius: var(--radius-btn); background: transparent;
+  color: var(--muted); font-size: 12.5px; white-space: nowrap;
+}
+.chip strong { color: var(--text); font-weight: 500; }
+.plan {
+  min-height: 22px; padding: 6px 2px 0; color: var(--muted); font-size: 12px;
+  line-height: 1.5; overflow-wrap: anywhere;
+}
+.plan code { color: var(--text); font-size: 11.5px; }
+.plan .warn { color: var(--status-waiting); }
+
+pre {
+  margin: 12px 0 0; padding: 12px 13px; border: 1px solid var(--border);
+  border-radius: var(--radius-card); background: var(--main-bg);
+  color: var(--text); font-family: var(--font-mono-stack); font-size: 11.5px;
+  line-height: 1.6; overflow-x: auto;
+}
+pre .c { color: var(--muted); }
+pre .k { color: var(--accent); }
+
+.edges { margin-top: 10px; }
+.edges td:first-child { width: 34%; }
+.ok { color: var(--running); }
+.bad { color: var(--error); }
+
+.foot { color: var(--muted); font-size: 12.5px; }
+.foot ol { margin: 10px 0 0; padding-left: 20px; }
+.foot li { margin-bottom: 7px; }
+.foot code { color: var(--text); font-size: 11.5px; }
+
+@media (max-width: 640px) {
+  .resultrow { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .card { padding: 16px; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="topbar">
+    <h1>Worktree naming</h1>
+    <p>One template, resolved server-side, layered user&nbsp;&rarr;&nbsp;project. Every value below is computed by the rules the proposal would ship &mdash; including git's own branch-name validation.</p>
+    <button class="ghost" id="theme">Light</button>
+  </div>
+
+  <section class="card">
+    <h2>Pick an organization</h2>
+    <p>Real patterns, each one just a different template. Nothing else about Fleet changes.</p>
+    <div class="scenarios" id="scenarios"></div>
+  </section>
+
+  <section class="card">
+    <h2>Settings &rarr; Workspace &rarr; Worktrees</h2>
+    <p>Where a person sets this for themselves. Tokens insert at the cursor.</p>
+
+    <div class="switchrow">
+      <div>
+        <p>This repository ships a convention</p>
+        <p>Simulates a committed <code>weave.jsonc</code> in the repo &mdash; the fields it sets win and lock.</p>
+      </div>
+      <input type="checkbox" id="override">
+    </div>
+
+    <div id="override-banner"></div>
+
+    <div class="fields">
+      <div class="field" id="field-branch">
+        <span class="field__label">Branch name</span>
+        <input type="text" id="tpl-branch" spellcheck="false">
+        <div class="tokens" data-for="tpl-branch"></div>
+        <span class="field__error" id="err-branch" hidden></span>
+      </div>
+
+      <div class="field" id="field-root">
+        <span class="field__label">Worktree root</span>
+        <input type="text" id="tpl-root" spellcheck="false">
+        <div class="tokens" data-for="tpl-root"></div>
+        <span class="field__hint">Where the folders go. <code>{repoParent}/{repo}-worktrees</code> is today's behaviour.</span>
+      </div>
+
+      <div class="field" id="field-folder">
+        <span class="field__label">Folder name</span>
+        <input type="text" id="tpl-folder" spellcheck="false">
+        <div class="tokens" data-for="tpl-folder"></div>
+        <span class="field__hint">Slashes are flattened to hyphens. A taken folder still gets <code>-2</code>.</span>
+      </div>
+
+      <div class="field" id="field-ticket">
+        <span class="field__label">Capture: ticket</span>
+        <input type="text" id="tpl-ticket" spellcheck="false" placeholder="[A-Z]{2,}-\d+">
+        <span class="field__hint">A regex read from your message, so <code>{ticket}</code> has something to be. Empty when it doesn't match &mdash; the token and its separator collapse away.</span>
+      </div>
+
+      <div class="field" id="field-initials">
+        <span class="field__label">Initials</span>
+        <input type="text" id="tpl-initials" spellcheck="false" style="max-width: 140px">
+        <span class="field__hint">Explicit, because <code>pg</code> can't be guessed from <code>pgermishuys</code>.</span>
+      </div>
+    </div>
+
+    <h3>How the layers resolved</h3>
+    <table id="layers"></table>
+  </section>
+
+  <section class="card">
+    <h2>What you'd get</h2>
+    <p>Type a task the way you actually would. This is the composer, with the real plan line.</p>
+
+    <div class="composer">
+      <textarea class="composer__msg" id="message" spellcheck="false"></textarea>
+      <div class="composer__chips">
+        <span class="chip">&#128193; <strong>weave-fleet</strong></span>
+        <span class="chip">&#8623; <strong>New worktree</strong></span>
+        <span class="chip">&#8997; <strong>from origin/main</strong></span>
+      </div>
+      <p class="plan" id="plan"></p>
+    </div>
+
+    <div class="result">
+      <div class="resultrow">
+        <span>Branch</span>
+        <span><span class="out" id="out-branch"></span></span>
+      </div>
+      <div class="resultrow">
+        <span>Worktree</span>
+        <span><span class="out" id="out-path"></span></span>
+      </div>
+      <div class="resultrow">
+        <span>Fleet today</span>
+        <span><span class="out out--now" id="out-today"></span></span>
+      </div>
+    </div>
+
+    <div id="root-warning"></div>
+
+    <h3>The commands Fleet would run</h3>
+    <pre id="commands"></pre>
+
+    <h3>Committed convention, for the whole team</h3>
+    <pre id="jsonc"></pre>
+  </section>
+
+  <section class="card">
+    <h2>The awkward cases</h2>
+    <p>Live, against your template above. These are the reason the resolver needs collapse rules and a validation pass rather than string interpolation.</p>
+    <table class="edges" id="edges"></table>
+  </section>
+
+  <section class="card foot">
+    <h2>What building it touches</h2>
+    <ol>
+      <li><strong>Move naming to the server.</strong> The branch is decided in the browser today &mdash; <code>resolveNewWorktreeBranch</code> (<code>new-session-request.ts:122</code>) &mdash; so automations and the GitHub source already name differently. The template resolves in <code>CreateWorktreeAsync</code> (<code>WorkspaceService.cs:264</code>) and the composer asks for a preview.</li>
+      <li><strong>Branch template first</strong>, user + project layered, validated at save against <code>IsValidBranchName</code> (<code>WorkspaceService.cs:409</code>).</li>
+      <li><strong>Then root and folder</strong> &mdash; which also means fixing empty-folder cleanup (<code>WorkspaceService.cs:189</code>, it only tidies a parent whose name ends in <code>-worktrees</code>), the allowlist (<code>WorkspaceRootService.cs:95</code> derives permitted paths from <code>GitPaths.WorktreesFolderFor</code>), and the composer's hard-coded label (<code>new-session-plan.ts:39</code>).</li>
+      <li><strong>A post-create hook last</strong>, if the templates don't already cover what your orgs do.</li>
+    </ol>
+  </section>
+
+</div>
+
+<script>
+// Ported from the real code so the preview can't disagree with the product.
+//   slugForBranch     -> client/src/lib/new-session-request.ts:78
+//   isValidBranchName -> WorkspaceService.cs:409
+const STOP_WORDS = new Set([
+  "a","an","the","and","or","but","so","to","of","in","on","at","for","with","from","by",
+  "into","about","as","is","are","be","it","its","this","that","these","those",
+  "i","me","my","we","us","our","you","your","please","can","could","would","should","will",
+  "lets","let","just","some","do","does",
+]);
+const MAX_SLUG_LENGTH = 40;
+
+function slugWords(text) {
+  return text.normalize("NFKD").replace(/\p{Diacritic}/gu, "").toLowerCase()
+    .replace(/['’]/g, "").split(/[^a-z0-9]+/).filter((w) => w.length > 0);
+}
+
+function slugForBranch(text) {
+  const firstLine = text.split(/\r?\n/).find((l) => l.trim().length > 0) ?? "";
+  const words = slugWords(firstLine);
+  const meaningful = words.filter((w) => !STOP_WORDS.has(w));
+  const chosen = meaningful.length > 0 ? meaningful : words;
+  let slug = "";
+  for (const word of chosen) {
+    const next = slug ? slug + "-" + word : word;
+    if (next.length > MAX_SLUG_LENGTH) return slug || word.slice(0, MAX_SLUG_LENGTH);
+    slug = next;
+  }
+  return slug;
+}
+
+function isValidBranchName(name) {
+  if (name.length === 0 || name.length > 255) return false;
+  if ("-/.+".includes(name[0])) return false;
+  if ("/.".includes(name[name.length - 1])) return false;
+  if (name.endsWith(".lock") || name.includes("..") || name.includes("//")
+      || name.includes("/.") || name.includes("@{") || name === "@") return false;
+  for (const c of name) {
+    const code = c.codePointAt(0);
+    if (code < 0x20 || code === 0x7f) return false;
+    if (" ~^:?*[\\".includes(c)) return false;
+  }
+  return true;
+}
+
+// The proposed resolver.
+const TOKENS = {
+  branch: ["slug", "user", "initials", "ticket", "date", "repo", "shortid"],
+  root:   ["repoParent", "repo", "user", "home"],
+  folder: ["branch", "slug", "ticket", "repo", "date", "shortid"],
+};
+const TOKEN_HINT = {
+  slug: "from your message", user: "pgermishuys", initials: "pg", ticket: "captured",
+  date: "2026-09-21", repo: "weave-fleet", shortid: "a1b2c3d4",
+  repoParent: "~/source", home: "~", branch: "resolved branch",
+};
+
+/** Resolve tokens, then collapse what an empty token left behind. */
+function resolveTemplate(template, values) {
+  const unknown = [];
+  let out = template.replace(/\{(\w+)\}/g, (_, name) => {
+    if (!(name in values)) { unknown.push(name); return "{" + name + "}"; }
+    return values[name] ?? "";
+  });
+  // An empty token must not leave a doubled or dangling separator behind.
+  out = out.replace(/[-_]{2,}/g, "-").replace(/\/{2,}/g, "/")
+           .replace(/[-_]\//g, "/").replace(/\/[-_]/g, "/")
+           .replace(/^[-_/.]+/, "").replace(/[-_/.]+$/, "");
+  return { value: out, unknown };
+}
+
+const SCENARIOS = [
+  {
+    key: "today", name: "Fleet today", note: "The current default",
+    branch: "fleet/{slug}", root: "{repoParent}/{repo}-worktrees", folder: "{branch}",
+    ticket: "", initials: "pg",
+    message: "Add rate limiting to the session create endpoint",
+  },
+  {
+    key: "initials", name: "Initials prefix", note: "pg/add-rate-limiting",
+    branch: "{initials}/{slug}", root: "{repoParent}/{repo}-worktrees", folder: "{branch}",
+    ticket: "", initials: "pg",
+    message: "Add rate limiting to the session create endpoint",
+  },
+  {
+    key: "ticket", name: "Ticket-first", note: "Jira key from the sentence",
+    branch: "feature/{ticket}-{slug}", root: "{repoParent}/{repo}-worktrees", folder: "{ticket}-{slug}",
+    ticket: "[A-Z]{2,}-\\d+", initials: "pg",
+    message: "PLAT-1841 add rate limiting to the session create endpoint",
+  },
+  {
+    key: "flat", name: "One worktree root", note: "Short paths, Windows-friendly",
+    branch: "{user}/{slug}", root: "{home}/worktrees/{repo}", folder: "{slug}",
+    ticket: "", initials: "pg",
+    message: "Add rate limiting to the session create endpoint",
+  },
+  {
+    key: "inside", name: "Inside the repo", note: "Gitignored .worktrees/",
+    branch: "{initials}/{date}-{slug}", root: "{repoParent}/{repo}/.worktrees", folder: "{slug}",
+    ticket: "", initials: "pg",
+    message: "Add rate limiting to the session create endpoint",
+  },
+];
+
+/** What a committed repo convention sets. Locks those fields. */
+const PROJECT = {
+  branch: "feature/{ticket}-{slug}",
+  ticket: "[A-Z]{2,}-\\d+",
+};
+
+const DEFAULTS = { branch: "fleet/{slug}", root: "{repoParent}/{repo}-worktrees", folder: "{branch}", ticket: "" };
+
+const REPO = { path: "~/source/weave-fleet", name: "weave-fleet", parent: "~/source" };
+const ALLOWED_ROOTS = ["~/source"];
+
+const state = {
+  scenario: "initials",
+  override: false,
+  user: { branch: "", root: "", folder: "", ticket: "", initials: "pg" },
+  message: "",
+  // Branches git already knows about, to show the -2 suffix rule.
+  taken: new Set(["fleet/add-rate-limiting", "pg/add-rate-limiting"]),
+};
+
+function applyScenario(key) {
+  const s = SCENARIOS.find((x) => x.key === key);
+  state.scenario = key;
+  state.user = { branch: s.branch, root: s.root, folder: s.folder, ticket: s.ticket, initials: s.initials };
+  state.message = s.message;
+}
+
+/** The user's value, unless the repo's committed config overrides it. */
+function effective(field) {
+  if (state.override && field in PROJECT) return { value: PROJECT[field], layer: "project" };
+  const user = state.user[field];
+  if (user === DEFAULTS[field]) return { value: user, layer: "default" };
+  if (user === "" ) return { value: DEFAULTS[field], layer: "default" };
+  return { value: user, layer: "user" };
+}
+
+function captureTicket(message, pattern) {
+  if (!pattern) return "";
+  try {
+    const match = new RegExp(pattern).exec(message);
+    return match ? match[0] : "";
+  } catch { return ""; }
+}
+
+function resolveAll(message) {
+  const branchTpl = effective("branch").value;
+  const rootTpl = effective("root").value;
+  const folderTpl = effective("folder").value;
+  const ticketPattern = effective("ticket").value;
+
+  const ticket = captureTicket(message, ticketPattern);
+  // What a capture took is no longer part of the slug, or {ticket}-{slug} says it twice
+  // ("feature/PLAT-1841-plat-1841-add-rate-limiting").
+  const slug = slugForBranch(ticket ? message.replace(ticket, " ") : message);
+  const shared = {
+    slug, ticket, repo: REPO.name, repoParent: REPO.parent, home: "~",
+    user: "pgermishuys", initials: state.user.initials, date: "2026-09-21", shortid: "a1b2c3d4",
+  };
+
+  // A template built around {slug} with nothing to slug would collapse to its
+  // prefix alone ("pg"), which is valid git and useless — and collides with the
+  // next one. An empty slug hands naming back to the server.
+  const slugless = branchTpl.includes("{slug}") && slug === "";
+
+  const branch = slugless
+    ? { value: "", unknown: [] }
+    : resolveTemplate(branchTpl, shared);
+  let branchName = branch.value;
+  let suffixed = false;
+  if (branchName && state.taken.has(branchName)) {
+    for (let n = 2; state.taken.has(branchName); n++) { branchName = branch.value + "-" + n; suffixed = true; }
+  }
+
+  const root = resolveTemplate(rootTpl, { repoParent: REPO.parent, repo: REPO.name, user: shared.user, home: "~" });
+  const serverName = "weave-session-a1b2c3d4";
+  const folder = resolveTemplate(folderTpl, { ...shared, branch: branchName || serverName });
+  const folderName = folder.value.replace(/[/\\]/g, "-") || serverName;
+
+  const valid = branchName.length > 0 && isValidBranchName(branchName);
+  const insideAllowed = ALLOWED_ROOTS.some((r) => root.value === r || root.value.startsWith(r + "/"));
+
+  return {
+    slug, ticket, branch: branchName, branchTpl, suffixed, valid, slugless,
+    unknown: [...branch.unknown, ...root.unknown, ...folder.unknown],
+    root: root.value, folder: folderName, path: root.value + "/" + folderName,
+    insideAllowed,
+    today: "fleet/" + slug + "  →  " + REPO.parent + "/" + REPO.name + "-worktrees/" + ("fleet/" + slug).replace(/\//g, "-"),
+  };
+}
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+function renderScenarios() {
+  $("scenarios").innerHTML = SCENARIOS.map((s) => `
+    <button class="scenario" data-key="${s.key}" aria-pressed="${s.key === state.scenario}">
+      <strong>${esc(s.name)}</strong><span>${esc(s.note)}</span>
+    </button>`).join("");
+  for (const button of $("scenarios").querySelectorAll(".scenario")) {
+    button.onclick = () => { applyScenario(button.dataset.key); render(); };
+  }
+}
+
+function renderTokenRows() {
+  for (const holder of document.querySelectorAll(".tokens")) {
+    const target = holder.dataset.for;
+    const kind = target.replace("tpl-", "");
+    holder.innerHTML = (TOKENS[kind] ?? []).map((t) =>
+      `<button class="token" data-token="{${t}}" data-target="${target}">{${t}} <em>${esc(TOKEN_HINT[t] ?? "")}</em></button>`).join("");
+    for (const button of holder.querySelectorAll(".token")) {
+      button.onclick = () => {
+        const input = $(button.dataset.target);
+        if (input.disabled) return;
+        const at = input.selectionStart ?? input.value.length;
+        input.value = input.value.slice(0, at) + button.dataset.token + input.value.slice(input.selectionEnd ?? at);
+        input.dispatchEvent(new Event("input"));
+        input.focus();
+        input.selectionStart = input.selectionEnd = at + button.dataset.token.length;
+      };
+    }
+  }
+}
+
+function renderLayers() {
+  const rows = [
+    ["Branch name", "branch"],
+    ["Worktree root", "root"],
+    ["Folder name", "folder"],
+    ["Capture: ticket", "ticket"],
+  ];
+  $("layers").innerHTML = `
+    <tr><th>Field</th><th>Default</th><th>You</th><th>This repo</th><th>Wins</th></tr>
+    ${rows.map(([label, field]) => {
+      const eff = effective(field);
+      const project = state.override && field in PROJECT ? PROJECT[field] : null;
+      const user = state.user[field];
+      const showUser = user && user !== DEFAULTS[field];
+      const cls = (layer) => eff.layer === layer ? "mono" : "mono strike";
+      return `<tr>
+        <td>${label}</td>
+        <td class="${DEFAULTS[field] ? cls("default") : "dim"}">${esc(DEFAULTS[field] || "—")}</td>
+        <td class="${showUser ? cls("user") : "dim"}">${esc(showUser ? user : "—")}</td>
+        <td class="${project ? cls("project") : "dim"}">${esc(project || "—")}</td>
+        <td><span class="pill pill--${eff.layer}">${eff.layer}</span></td>
+      </tr>`;
+    }).join("")}`;
+}
+
+function renderPlan(r) {
+  // describeNewSession, its new-worktree branch (new-session-plan.ts:89)
+  if (!r.branch) {
+    $("plan").innerHTML = `New worktree from <code>origin/main</code>. The branch is named from your message.`;
+    return;
+  }
+  $("plan").innerHTML = r.valid
+    ? `New worktree <code>${esc(r.path)}</code> on <code>${esc(r.branch)}</code>, from <code>origin/main</code>.`
+    : `<span class="warn">That template makes a name git won't take.</span> Fix it in Settings &rarr; Workspace.`;
+}
+
+function renderCommands(r) {
+  if (!r.valid) {
+    $("commands").innerHTML = `<span class="c"># nothing runs — the template is rejected before git is called</span>`;
+    return;
+  }
+  $("commands").innerHTML =
+`<span class="c"># resolved from ${esc(r.branchTpl)}</span>
+git -C ${esc(REPO.path)} <span class="k">worktree prune</span>
+git -C ${esc(REPO.path)} <span class="k">worktree add</span> --no-track \\
+    -b ${esc(r.branch)} \\
+    ${esc(r.path)} \\
+    origin/main`;
+}
+
+function renderJsonc() {
+  const eff = (f) => effective(f).value;
+  const lines = [
+    `<span class="c">// weave.jsonc — committed at the repo root</span>`,
+    `{`,
+    `  <span class="k">"worktrees"</span>: {`,
+    `    <span class="k">"branch"</span>: "${esc(eff("branch"))}",`,
+    `    <span class="k">"root"</span>:   "${esc(eff("root"))}",`,
+    `    <span class="k">"folder"</span>: "${esc(eff("folder"))}"${eff("ticket") ? "," : ""}`,
+    ...(eff("ticket") ? [`    <span class="k">"capture"</span>: { <span class="k">"ticket"</span>: "${esc(eff("ticket"))}" }`] : []),
+    `  }`,
+    `}`,
+  ];
+  $("jsonc").innerHTML = lines.join("\n");
+}
+
+function renderEdges() {
+  const cases = [
+    ["No ticket in the message", "add rate limiting to the endpoint"],
+    ["Ticket present", "PLAT-1841 add rate limiting"],
+    ["Punctuation and accents", "Fix Ünicode: the café?? crash!!"],
+    ["A very long sentence", "Refactor the session orchestrator so that pooled harness processes are reused across delegated child sessions"],
+    ["Emoji only", "🚀🚀🚀"],
+    ["Name already taken", "add rate limiting"],
+  ];
+  $("edges").innerHTML = `
+    <tr><th>Message</th><th>Branch</th><th>Folder</th><th></th></tr>
+    ${cases.map(([label, message]) => {
+      const r = resolveAll(message);
+      const verdict = !r.branch
+        ? `<span class="dim">server names it</span>`
+        : r.suffixed ? `<span class="ok">-${esc(r.branch.split("-").pop())} suffix</span>`
+        : r.valid ? `<span class="ok">ok</span>` : `<span class="bad">rejected</span>`;
+      return `<tr>
+        <td>${esc(label)}<br><span class="dim mono" style="font-size:11px">${esc(message.length > 46 ? message.slice(0, 46) + "…" : message)}</span></td>
+        <td class="mono">${esc(r.branch || "weave-session-a1b2c3d4")}</td>
+        <td class="mono">${esc(r.folder || "weave-session-a1b2c3d4")}</td>
+        <td>${verdict}</td>
+      </tr>`;
+    }).join("")}`;
+}
+
+function render() {
+  renderScenarios();
+
+  const locked = state.override;
+  $("override").checked = state.override;
+  $("override-banner").innerHTML = locked
+    ? `<div class="banner"><span class="banner__dot"></span><div>
+         <p><strong>weave-fleet</strong> sets the branch name and ticket pattern.</p>
+         <p>Committed by your team, so every clone names branches the same way. Your own values still apply to repos that don't.</p>
+       </div></div>`
+    : "";
+
+  for (const field of ["branch", "root", "folder", "ticket"]) {
+    const input = $("tpl-" + field);
+    const eff = effective(field);
+    input.value = eff.value;
+    input.disabled = locked && field in PROJECT;
+  }
+  $("tpl-initials").value = state.user.initials;
+  $("message").value = state.message;
+
+  renderLayers();
+
+  const r = resolveAll(state.message);
+
+  $("field-branch").classList.toggle("field--bad", r.branch.length > 0 && !r.valid);
+  let error = "";
+  if (r.unknown.length > 0) error = "Unknown token: {" + r.unknown[0] + "}";
+  else if (r.branch && !r.valid) error = "Resolves to “" + r.branch + "”, which git won't take as a branch name.";
+  $("err-branch").hidden = error === "";
+  $("err-branch").textContent = error;
+
+  $("out-branch").textContent = r.branch || "weave-session-a1b2c3d4 (server picks)";
+  $("out-path").textContent = r.path;
+  $("out-today").textContent = r.today;
+
+  $("root-warning").innerHTML = r.insideAllowed ? "" :
+    `<div class="banner banner--warn"><span class="banner__dot"></span><div>
+       <p><code>${esc(r.root)}</code> is outside your workspace roots.</p>
+       <p>Fleet validates worktree paths against the allowed roots (<code>WorkspaceRootService.cs:95</code>), which today are derived from the repository's parent. A custom root has to be added there too — this is the Stage 2 work, and why root templating isn't free.</p>
+     </div></div>`;
+
+  renderPlan(r);
+  renderCommands(r);
+  renderJsonc();
+  renderEdges();
+}
+
+for (const field of ["branch", "root", "folder", "ticket"]) {
+  $("tpl-" + field).addEventListener("input", (event) => {
+    state.user[field] = event.target.value;
+    state.scenario = "";
+    render();
+  });
+}
+$("tpl-initials").addEventListener("input", (event) => { state.user.initials = event.target.value; render(); });
+$("message").addEventListener("input", (event) => { state.message = event.target.value; render(); });
+$("override").addEventListener("change", (event) => { state.override = event.target.checked; render(); });
+/** The theme in force: the reader's choice if they made one, else the system's. */
+function effectiveTheme() {
+  const chosen = document.documentElement.dataset.theme;
+  if (chosen === "light" || chosen === "dark") return chosen;
+  return matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+}
+
+function labelTheme() {
+  $("theme").textContent = effectiveTheme() === "light" ? "Dark" : "Light";
+}
+
+$("theme").addEventListener("click", () => {
+  document.documentElement.dataset.theme = effectiveTheme() === "light" ? "dark" : "light";
+  labelTheme();
+});
+matchMedia("(prefers-color-scheme: light)").addEventListener("change", labelTheme);
+
+renderTokenRows();
+
+// ?scenario=ticket&override=1 opens a specific state, for sharing and screenshots.
+const params = new URLSearchParams(location.search);
+const wanted = params.get("scenario");
+applyScenario(SCENARIOS.some((s) => s.key === wanted) ? wanted : "initials");
+state.override = params.get("override") === "1";
+const theme = params.get("theme");
+if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+labelTheme();
+render();
+</script>
+</body>
+</html>

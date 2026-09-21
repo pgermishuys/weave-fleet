@@ -115,6 +115,8 @@ export interface CreateSessionResponse {
   instanceId: string;
   workspaceId: string;
   session: FleetSession;
+  /** The branch the server gave a new worktree, which the naming templates decided. */
+  branch?: string | null;
 }
 
 export type ClientConfigResponse = components["schemas"]["ClientConfigResponse"];

@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <None Include="Progress\Fixtures\*.md" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\contracts\worktree-naming-cases.json" CopyToOutputDirectory="PreserveNewest" Link="contracts\worktree-naming-cases.json" />
   </ItemGroup>
 
   <ItemGroup>

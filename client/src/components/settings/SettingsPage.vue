@@ -11,6 +11,7 @@ import SkillsSection from "@/components/settings/SkillsSection.vue";
 import ToolsSection from "@/components/settings/ToolsSection.vue";
 import HarnessesSection from "@/components/settings/HarnessesSection.vue";
 import WorkspaceSection from "@/components/settings/WorkspaceSection.vue";
+import WorktreeNamingSection from "@/components/settings/WorktreeNamingSection.vue";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { usePluginRuntime } from "@/plugins/composable";
 import { getSettingsSections } from "@/plugins/slots";
@@ -45,7 +46,10 @@ const pluginSections = computed<readonly DecoratedSettingsSection[]>(() => {
       </p>
     </div>
 
-    <WorkspaceSection v-if="activeSection === 'workspace'" />
+    <template v-if="activeSection === 'workspace'">
+      <WorkspaceSection />
+      <WorktreeNamingSection />
+    </template>
 
     <CredentialsSection v-else-if="activeSection === 'credentials'" />
 

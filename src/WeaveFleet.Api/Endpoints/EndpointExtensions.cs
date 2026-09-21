@@ -65,6 +65,7 @@ public static class EndpointExtensions
         apiScope.MapHarnessProfileEndpoints();
         apiScope.MapWorkspaceRootEndpoints();
         apiScope.MapWorkspaceEndpoints();
+        apiScope.MapWorktreeNamingEndpoints();
         apiScope.MapSessionEventEndpoints();
         apiScope.MapAnalyticsEndpoints();
         apiScope.MapUserEndpoints();
