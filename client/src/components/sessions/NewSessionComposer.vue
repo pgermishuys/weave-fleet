@@ -26,6 +26,8 @@ import { useRepositoryDetail } from "@/composables/use-repository-detail";
 import { seedSentPrompt } from "@/composables/use-send-prompt";
 import { useCreateSession } from "@/composables/use-session-actions";
 import { useWorktrees } from "@/composables/use-worktrees";
+import { useWorktreeNamingStore } from "@/stores/worktree-naming";
+import { resolveWorktreeName } from "@/lib/worktree-naming";
 import { describeDefaults, keepOffered, modelFromKey } from "@/lib/agent-model-choice";
 import { findRepositoryForGitHubPreset } from "@/lib/github-session-source";
 import { describeNewSession } from "@/lib/new-session-plan";
@@ -144,15 +146,54 @@ const newWorktreeBase = computed(() => {
 
 const recentFolders = computed(() => defaults.recentFolders(repositories.value));
 
-const newBranch = computed(() => {
+const worktreeNaming = useWorktreeNamingStore();
+
+// The templates are read per repository, because a repository can ship its own convention.
+watch(
+  () => (folder.value?.kind === "repository" ? folder.value.path : null),
+  (repositoryPath) => {
+    if (repositoryPath && worktreeNaming.loadedFor !== repositoryPath) {
+      void worktreeNaming.load(repositoryPath);
+    }
+  },
+  { immediate: true },
+);
+
+/**
+ * What the templates would call this worktree. A preview only: the request carries a branch just
+ * when someone chose one, and the server does the naming so every way in names it the same.
+ */
+const previewedName = computed(() => {
   if (folder.value?.kind !== "repository" || workspace.value.kind !== "new") {
-    return undefined;
+    return null;
   }
-  return resolveNewWorktreeBranch({ branch: branchName.value, message: message.value, gitHubPreset: gitHubPreset.value });
+
+  return resolveWorktreeName(
+    worktreeNaming.effective,
+    {
+      repositoryPath: folder.value.path,
+      // {user} and {shortid} are the server's to fill in; a preview that guessed at them would
+      // show a name the worktree doesn't get.
+      user: "",
+      date: new Date().toISOString().slice(0, 10),
+      shortId: "",
+      home: "",
+    },
+    message.value,
+    resolveNewWorktreeBranch({ branch: branchName.value, gitHubPreset: gitHubPreset.value }),
+  );
+});
+
+const newBranch = computed(() => previewedName.value?.branch ?? undefined);
+
+/** Where the worktree will land, for the plan line. */
+const newWorktreePath = computed(() => {
+  const name = previewedName.value;
+  return name?.branch && name.folder ? `${name.root}/${name.folder}` : null;
 });
 
 /** The name the message (or the GitHub issue) gives the new branch, for the name field's placeholder. */
-const generatedBranch = computed(() => resolveNewWorktreeBranch({ message: message.value, gitHubPreset: gitHubPreset.value }));
+const generatedBranch = computed(() => previewedName.value?.branch ?? undefined);
 
 const planParts = computed(() => {
   const selected = workspace.value;
@@ -167,6 +208,7 @@ const planParts = computed(() => {
     defaultBranch: repositoryDetail.value?.defaultBranch ?? null,
     base: newWorktreeBase.value,
     fetchOrigin: fetchOrigin.value,
+    worktreePath: newWorktreePath.value,
   });
 });
 

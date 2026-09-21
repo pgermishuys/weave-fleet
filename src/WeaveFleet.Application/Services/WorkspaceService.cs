@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Services.Worktrees;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
@@ -12,11 +13,16 @@ namespace WeaveFleet.Application.Services;
 /// Manages workspace lifecycle — creation with isolation strategies, cleanup, and metadata updates.
 /// Mirrors the TypeScript workspace-manager.ts logic.
 /// </summary>
+/// <param name="naming">
+/// The worktree naming templates. Null names worktrees the way Fleet always has
+/// (<see cref="WorktreeNaming.Defaults"/>), which is what the tests that don't care about naming get.
+/// </param>
 public sealed partial class WorkspaceService(
     IWorkspaceRepository workspaceRepository,
     IUserContext userContext,
     FleetOptions options,
-    ILogger<WorkspaceService> logger)
+    ILogger<WorkspaceService> logger,
+    WorktreeNamingService? naming = null)
 {
     /// <summary>
     /// Creates a new workspace, applying the specified isolation strategy.
@@ -34,13 +40,19 @@ public sealed partial class WorkspaceService(
     /// repository's default (<see cref="ResolveDefaultBaseAsync"/>).
     /// </param>
     /// <param name="fetchOrigin">Fetch an <c>origin/…</c> base before starting from it.</param>
+    /// <param name="message">
+    /// The session's first message, which a new worktree's name is derived from when no
+    /// <paramref name="branch"/> was chosen. Naming happens here rather than in the composer so
+    /// automations, the GitHub source and API callers all name worktrees the same way.
+    /// </param>
     public async Task<Result<Workspace>> CreateWorkspaceAsync(
         string sourceDirectory,
         string strategy,
         string? branch,
         ProvenanceRecord? provenance,
         string? baseBranch = null,
-        bool fetchOrigin = true)
+        bool fetchOrigin = true,
+        string? message = null)
     {
         if (baseBranch is not null && !IsValidBranchName(baseBranch))
             return FleetError.ValidationError("Workspace.BaseBranch", $"'{baseBranch}' is not a valid branch name.");
@@ -74,7 +86,7 @@ public sealed partial class WorkspaceService(
                 switch (strategy)
                 {
                     case "worktree":
-                        (workingDirectory, branch) = await CreateWorktreeAsync(sourceDirectory, branch, baseBranch, fetchOrigin);
+                        (workingDirectory, branch) = await CreateWorktreeAsync(sourceDirectory, branch, baseBranch, fetchOrigin, message);
                         break;
                     case "clone":
                         workingDirectory = await CreateCloneAsync(sourceDirectory, branch);
@@ -186,16 +198,7 @@ public sealed partial class WorkspaceService(
                 catch { /* best effort */ }
             }
 
-            // Remove the -worktrees parent folder if it is now empty
-            var worktreesRoot = Path.GetDirectoryName(workspace.Directory);
-            if (worktreesRoot is not null
-                && worktreesRoot.EndsWith("-worktrees", StringComparison.Ordinal)
-                && System.IO.Directory.Exists(worktreesRoot)
-                && System.IO.Directory.GetFileSystemEntries(worktreesRoot).Length == 0)
-            {
-                try { System.IO.Directory.Delete(worktreesRoot); }
-                catch { /* best effort */ }
-            }
+            await RemoveEmptyWorktreeRootAsync(workspace).ConfigureAwait(false);
         }
         else if (workspace.IsolationStrategy is "clone" or "managed" && workspace.Directory is not null)
         {
@@ -245,6 +248,53 @@ public sealed partial class WorkspaceService(
         return Unit.Value;
     }
 
+    /// <summary>
+    /// Removes the worktree's parent folder once the last worktree in it is gone. The folder is
+    /// only Fleet's to remove when it's the one the templates put worktrees in — which is why this
+    /// asks the templates rather than matching a <c>-worktrees</c> suffix, as it did when that
+    /// name was the only possibility.
+    /// </summary>
+    private async Task RemoveEmptyWorktreeRootAsync(Workspace workspace)
+    {
+        var parent = Path.GetDirectoryName(workspace.Directory);
+        if (parent is null
+            || !System.IO.Directory.Exists(parent)
+            || System.IO.Directory.GetFileSystemEntries(parent).Length > 0)
+        {
+            return;
+        }
+
+        var isWorktreeRoot = parent.EndsWith("-worktrees", StringComparison.Ordinal);
+        if (!isWorktreeRoot && workspace.SourceDirectory is { } sourceDirectory && naming is not null)
+        {
+            var templates = (await naming.GetAsync(sourceDirectory).ConfigureAwait(false)).Effective;
+            var root = WorktreeNameResolver.ResolveRoot(
+                templates, WorktreeNamingService.BuildContext(sourceDirectory, "00000000"));
+
+            // Never the repository's own folder, whatever the template says.
+            isWorktreeRoot = PathsEqual(parent, root)
+                && !PathsEqual(parent, sourceDirectory)
+                && !PathsEqual(parent, Path.GetDirectoryName(sourceDirectory));
+        }
+
+        if (!isWorktreeRoot)
+            return;
+
+        try { System.IO.Directory.Delete(parent); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* best effort */ }
+    }
+
+    private static bool PathsEqual(string? left, string? right)
+    {
+        if (left is null || right is null)
+            return false;
+
+        return string.Equals(
+            WorkspaceRootService.CanonicalizePath(left),
+            WorkspaceRootService.CanonicalizePath(right),
+            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+    }
+
     private static readonly TimeSpan _baseFetchTimeout = TimeSpan.FromSeconds(20);
 
     /// <summary>
@@ -259,19 +309,27 @@ public sealed partial class WorkspaceService(
         string sourceDir,
         string? branch,
         string? baseBranch,
-        bool fetchOrigin)
+        bool fetchOrigin,
+        string? message)
     {
-        var requestedBranch = branch ?? $"weave-session-{Guid.NewGuid().ToString("N")[..8]}";
+        var shortId = Guid.NewGuid().ToString("N")[..8];
+        var templates = naming is null
+            ? WorktreeNaming.Defaults
+            : (await naming.GetAsync(sourceDir).ConfigureAwait(false)).Effective;
+        var context = WorktreeNamingService.BuildContext(sourceDir, shortId);
 
-        // Place worktree under a dedicated sibling folder to avoid polluting the parent.
-        // Naming: {repo-name}-worktrees/{hyphenated-branch-name}
-        // e.g. source "C:\repos\my-project" + branch "feature/auth"
-        //   → "C:\repos\my-project-worktrees\feature-auth"
-        var repoName = Path.GetFileName(sourceDir);
-        var parentDir = Path.GetFullPath(Path.GetDirectoryName(sourceDir) ?? sourceDir);
-        var worktreesRoot = Path.GetFullPath(Path.Combine(parentDir, $"{repoName}-worktrees"));
-        if (!worktreesRoot.StartsWith(parentDir + Path.DirectorySeparatorChar, StringComparison.Ordinal))
-            throw new InvalidOperationException($"Worktree root escapes parent directory: {worktreesRoot}");
+        // A branch chosen by the caller (typed in the composer, suggested by a source) wins; the
+        // templates name the rest. A template that wanted a slug the message couldn't give leaves
+        // the branch unnamed, which is what the session-id fallback is for.
+        var names = WorktreeNameResolver.Resolve(templates, context, message, branch);
+        var requestedBranch = names.Branch ?? $"weave-session-{shortId}";
+        if (names.NeedsServerName)
+            names = WorktreeNameResolver.Resolve(templates, context, message, requestedBranch);
+
+        var worktreesRoot = ExpandHome(names.Root);
+        worktreesRoot = Path.IsPathRooted(worktreesRoot)
+            ? Path.GetFullPath(worktreesRoot)
+            : Path.GetFullPath(Path.Combine(Path.GetDirectoryName(sourceDir) ?? sourceDir, worktreesRoot));
 
         // A worktree folder deleted without `git worktree remove` keeps its branch "checked out"
         // until pruned, which would make `git worktree add` refuse it.
@@ -292,7 +350,11 @@ public sealed partial class WorkspaceService(
         // Resolved (and fetched) before anything is created, so an unknown base leaves nothing behind.
         var baseRef = reuseExistingBranch ? null : await ResolveBaseRefAsync(sourceDir, baseBranch, fetchOrigin);
 
-        var worktreeDir = ResolveFreeWorktreeDirectory(worktreesRoot, branchName);
+        // The folder follows the branch the worktree actually gets, suffix and all.
+        var folderName = branchName == requestedBranch
+            ? names.Folder
+            : WorktreeNameResolver.Resolve(templates, context, message, branchName).Folder;
+        var worktreeDir = ResolveFreeWorktreeDirectory(worktreesRoot, folderName);
         Directory.CreateDirectory(worktreesRoot);
 
         if (reuseExistingBranch)
@@ -311,12 +373,23 @@ public sealed partial class WorkspaceService(
         return (worktreeDir, branchName);
     }
 
-    private static string ResolveFreeWorktreeDirectory(string worktreesRoot, string branchName)
+    /// <summary>A leading <c>~</c> in a typed root, which the <c>{home}</c> token resolves for itself.</summary>
+    private static string ExpandHome(string path)
     {
-        var hyphenatedBranch = branchName.Replace('/', '-').Replace('\\', '-');
-        var candidate = Path.GetFullPath(Path.Combine(worktreesRoot, hyphenatedBranch));
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return path switch
+        {
+            "~" => home,
+            ['~', '/' or '\\', ..] => Path.Combine(home, path[2..]),
+            _ => path,
+        };
+    }
+
+    private static string ResolveFreeWorktreeDirectory(string worktreesRoot, string folderName)
+    {
+        var candidate = Path.GetFullPath(Path.Combine(worktreesRoot, folderName));
         if (!candidate.StartsWith(worktreesRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal))
-            throw new InvalidOperationException($"Invalid branch name results in path outside worktree root: {branchName}");
+            throw new InvalidOperationException($"That folder name lands outside the worktree root: {folderName}");
 
         var directory = candidate;
         for (var n = 2; Directory.Exists(directory) || File.Exists(directory); n++)

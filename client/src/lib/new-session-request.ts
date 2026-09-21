@@ -50,7 +50,6 @@ export type BuildNewSessionRequestResult =
   | ({ ok: true } & NewSessionRequest)
   | { ok: false; error: string };
 
-export const BRANCH_PREFIX = "fleet/";
 const MAX_SLUG_LENGTH = 40;
 const MAX_TITLE_LENGTH = 60;
 
@@ -112,17 +111,14 @@ export function titleFromMessage(text: string): string {
   return `${(lastSpace >= MAX_TITLE_LENGTH / 2 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
 }
 
-/** `fleet/<slug>` for a message, or undefined when the message gives no slug (the server picks a name). */
-export function branchForMessage(message: string): string | undefined {
-  const slug = slugForBranch(message);
-  return slug ? `${BRANCH_PREFIX}${slug}` : undefined;
-}
-
-/** The branch a new worktree will get: typed override, then the GitHub suggestion, then the message. */
-export function resolveNewWorktreeBranch(state: Pick<NewSessionState, "branch" | "gitHubPreset" | "message">): string | undefined {
-  return state.branch?.trim()
-    || state.gitHubPreset?.suggestedBranch?.trim()
-    || branchForMessage(state.message);
+/**
+ * A branch someone chose for this worktree: typed here, or suggested by the GitHub source. When
+ * neither did, this is undefined and the request carries no branch — the server names the worktree
+ * from the message and the naming templates, so automations and API callers name it the same way.
+ * The composer only previews that name (`resolveWorktreeName`).
+ */
+export function resolveNewWorktreeBranch(state: Pick<NewSessionState, "branch" | "gitHubPreset">): string | undefined {
+  return state.branch?.trim() || state.gitHubPreset?.suggestedBranch?.trim() || undefined;
 }
 
 const QUICK_CHAT_SOURCE: SessionSourceSelection = {
@@ -274,7 +270,8 @@ export function buildCreatedSessionRow(
     instanceStatus: "running",
     parentSessionId: null,
     sourceDirectory: request.directory ?? null,
-    branch: options.branch ?? null,
+    // The server names a new worktree, so its answer is the branch — not the request.
+    branch: response.branch ?? options.branch ?? null,
     activityStatus: isWorking ? "busy" : "idle",
     lifecycleStatus: "running",
     retentionStatus: "active",

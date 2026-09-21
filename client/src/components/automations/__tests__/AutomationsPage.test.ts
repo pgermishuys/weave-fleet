@@ -68,12 +68,23 @@ vi.mock("@/composables/use-repository-detail", () => ({
 import AutomationDetailPanel from "../AutomationDetailPanel.vue";
 import AutomationsNavPanel from "../AutomationsNavPanel.vue";
 import { useAutomationsNav } from "@/composables/use-automations-nav";
+import { nextShort } from "@/lib/automation-schedule";
 import { NEW_SESSION_DEFAULTS_KEY } from "@/composables/use-new-session-defaults";
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
 const fleet: ScannedRepository = { name: "weave-fleet", path: "/home/me/source/weave-fleet", parentRoot: "/home/me/source" };
+
+const threeDaysOut = (() => {
+  const date = new Date(Date.now() + 3 * 864e5);
+  date.setHours(9, 0, 0, 0);
+  return date;
+})();
+
+// Read on the real clock, as the sidebar reads it — inside a test the fake clock would date it
+// from somewhere else and disagree with the row.
+const threeDaysOutLabel = nextShort(threeDaysOut);
 
 const weekly: Automation = {
   id: "a1",
@@ -94,8 +105,10 @@ const weekly: Automation = {
   timeZone: "Africa/Johannesburg",
   isolation: "worktree",
   baseBranch: null,
-  // The page shows times on the browser's clock, which is the test runner's: UTC.
-  nextRunAt: "2026-09-21T09:00:00.0000000Z",
+  // The sidebar's clock is captured when use-relative-time is first imported, so it's the real
+  // one and this test's fake time can't reach it. A fixed date here reads as "today" on the day
+  // it names, and the row drops the weekday — so the next run is always three days out.
+  nextRunAt: threeDaysOut.toISOString(),
   lastRun: null,
 };
 
@@ -329,7 +342,7 @@ describe("Automations screen", () => {
     await useAutomationsNavRefresh();
 
     expect(sidebarRows(wrapper)).toEqual([
-      { name: "Weekly PR digest", status: "Mon 09:00" },
+      { name: "Weekly PR digest", status: threeDaysOutLabel },
       { name: "Nightly dependency check", status: "Running" },
       { name: "Tidy stale worktrees", status: "Failed" },
       { name: "Old digest", status: "Off" },

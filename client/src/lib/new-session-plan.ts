@@ -23,6 +23,11 @@ export interface NewSessionPlanInput {
   base?: string | null;
   /** Whether an `origin/…` base is fetched first (default true). */
   fetchOrigin?: boolean;
+  /**
+   * Where the new worktree will be, as the naming templates resolve it. Absent until they've been
+   * read, when the label falls back to Fleet's default layout.
+   */
+  worktreePath?: string | null;
 }
 
 /** `/home/me/src/x` → `~/src/x` (also macOS and Windows home folders). */
@@ -35,7 +40,11 @@ function baseName(path: string): string {
   return path.split(/[/\\]/).filter(Boolean).pop() ?? path;
 }
 
-/** Where the server will put a new worktree (before any `-2` for a taken folder). */
+/**
+ * Where the server will put a new worktree (before any `-2` for a taken folder), when the naming
+ * templates haven't been read yet. Once they have, the composer passes the resolved path as
+ * <see cref="NewSessionPlanInput.worktreePath"/> instead of guessing at the folder's name.
+ */
 export function worktreeFolderLabel(repositoryPath: string, branch: string): string {
   return `${baseName(repositoryPath)}-worktrees/${branch.replace(/[/\\]/g, "-")}`;
 }
@@ -91,7 +100,12 @@ export function describeNewSession(input: NewSessionPlanInput): PlanPart[] {
 
   return [
     { text: "New worktree " },
-    { text: worktreeFolderLabel(folder.path, input.newBranch), code: true },
+    {
+      text: input.worktreePath
+        ? tildePath(input.worktreePath)
+        : worktreeFolderLabel(folder.path, input.newBranch),
+      code: true,
+    },
     { text: " on " },
     { text: input.newBranch, code: true },
     { text: ", from " },

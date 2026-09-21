@@ -1,0 +1,298 @@
+{
+  "$comment": "Shared cases for worktree naming. The server resolves the real thing and the composer previews it, so both resolvers are asserted against this file: WorktreeNameResolverConformanceTests.cs and client/src/lib/__tests__/worktree-naming.conformance.test.ts. A branch of null means the template wanted a slug the message couldn't give, and the server names the worktree instead.",
+  "context": {
+    "repositoryPath": "/home/you/source/weave-fleet",
+    "user": "pgermishuys",
+    "prefix": "pg",
+    "date": "2026-09-21",
+    "shortId": "a1b2c3d4",
+    "home": "/home/you"
+  },
+  "cases": [
+    {
+      "name": "the default template names worktrees the way Fleet always has",
+      "naming": {
+        "prefix": "fleet"
+      },
+      "message": "Add rate limiting to the session create endpoint",
+      "expect": {
+        "branch": "fleet/add-rate-limiting-session-create",
+        "root": "/home/you/source/weave-fleet-worktrees",
+        "folder": "fleet-add-rate-limiting-session-create"
+      }
+    },
+    {
+      "name": "a prefix of your own",
+      "naming": {
+        "branch": "{prefix}/{slug}"
+      },
+      "message": "Add rate limiting to the session create endpoint",
+      "expect": {
+        "branch": "pg/add-rate-limiting-session-create",
+        "root": "/home/you/source/weave-fleet-worktrees",
+        "folder": "pg-add-rate-limiting-session-create"
+      }
+    },
+    {
+      "name": "a captured ticket is not repeated by the slug",
+      "naming": {
+        "branch": "feature/{ticket}-{slug}",
+        "folder": "{ticket}-{slug}",
+        "capture": {
+          "ticket": "[A-Z]{2,}-\\d+"
+        }
+      },
+      "message": "PLAT-1841 add rate limiting to the session create endpoint",
+      "expect": {
+        "branch": "feature/PLAT-1841-add-rate-limiting-session-create",
+        "root": "/home/you/source/weave-fleet-worktrees",
+        "folder": "PLAT-1841-add-rate-limiting-session-create"
+      }
+    },
+    {
+      "name": "a capture that does not match collapses away with its separator",
+      "naming": {
+        "branch": "feature/{ticket}-{slug}",
+        "folder": "{ticket}-{slug}",
+        "capture": {
+          "ticket": "[A-Z]{2,}-\\d+"
+        }
+      },
+      "message": "add rate limiting to the session create endpoint",
+      "expect": {
+        "branch": "feature/add-rate-limiting-session-create",
+        "root": "/home/you/source/weave-fleet-worktrees",
+        "folder": "add-rate-limiting-session-create"
+      }
+    },
+    {
+      "name": "a message with no slug in it hands naming back to the server",
+      "naming": {
+        "branch": "{prefix}/{slug}"
+      },
+      "message": "🚀🚀🚀",
+      "expect": {
+        "branch": null,
+        "root": "/home/you/source/weave-fleet-worktrees",
+        "folder": ""
+      }
+    },
+    {
+      "name": "an empty message hands naming back to the server",
+      "naming": {
+        "prefix": "fleet"
+      },
+      "message": "",
+      "expect": {
+        "branch": null,
+        "root": "/home/you/source/weave-fleet-worktrees",
+        "folder": ""
+      }
+    },
+    {
+      "name": "a template that needs no slug still names an empty message",
+      "naming": {
+        "branch": "{prefix}/{date}-{shortid}",
+        "folder": "{shortid}"
+      },
+      "message": "",
+      "expect": {
+        "branch": "pg/2026-09-21-a1b2c3d4",
+        "root": "/home/you/source/weave-fleet-worktrees",
+        "folder": "a1b2c3d4"
+      }
+    },
+    {
+      "name": "accents fold, punctuation and filler words go",
+      "naming": {
+        "prefix": "fleet"
+      },
+      "message": "Fix the Ünicode café?? crash!!",
+      "expect": {
+        "branch": "fleet/fix-unicode-cafe-crash",
+        "root": "/home/you/source/weave-fleet-worktrees",
+        "folder": "fleet-fix-unicode-cafe-crash"
+      }
+    },
+    {
+      "name": "a long sentence is cut at a word boundary",
+      "naming": {
+        "prefix": "fleet"
+      },
+      "message": "Refactor the session orchestrator so that pooled harness processes are reused",
+      "expect": {
+        "branch": "fleet/refactor-session-orchestrator-pooled",
+        "root": "/home/you/source/weave-fleet-worktrees",
+        "folder": "fleet-refactor-session-orchestrator-pooled"
+      }
+    },
+    {
+      "name": "only the first non-empty line names the branch",
+      "naming": {
+        "prefix": "fleet"
+      },
+      "message": "\n   \nFix the login redirect\nand then look at the session list",
+      "expect": {
+        "branch": "fleet/fix-login-redirect",
+        "root": "/home/you/source/weave-fleet-worktrees",
+        "folder": "fleet-fix-login-redirect"
+      }
+    },
+    {
+      "name": "a message of nothing but filler words still names something",
+      "naming": {
+        "prefix": "fleet"
+      },
+      "message": "can you please do this for me",
+      "expect": {
+        "branch": "fleet/can-you-please-do-this-for-me",
+        "root": "/home/you/source/weave-fleet-worktrees",
+        "folder": "fleet-can-you-please-do-this-for-me"
+      }
+    },
+    {
+      "name": "one worktree root outside the repository's parent",
+      "naming": {
+        "branch": "{user}/{slug}",
+        "root": "{home}/worktrees/{repo}",
+        "folder": "{slug}"
+      },
+      "message": "Add rate limiting",
+      "expect": {
+        "branch": "pgermishuys/add-rate-limiting",
+        "root": "/home/you/worktrees/weave-fleet",
+        "folder": "add-rate-limiting"
+      }
+    },
+    {
+      "name": "worktrees inside the repository",
+      "naming": {
+        "branch": "{prefix}/{date}-{slug}",
+        "root": "{repoParent}/{repo}/.worktrees",
+        "folder": "{slug}"
+      },
+      "message": "Add rate limiting",
+      "expect": {
+        "branch": "pg/2026-09-21-add-rate-limiting",
+        "root": "/home/you/source/weave-fleet/.worktrees",
+        "folder": "add-rate-limiting"
+      }
+    },
+    {
+      "name": "a branch chosen by the caller wins, and the folder follows it",
+      "naming": {
+        "branch": "{prefix}/{slug}"
+      },
+      "message": "Add rate limiting",
+      "branchOverride": "hotfix/urgent",
+      "expect": {
+        "branch": "hotfix/urgent",
+        "root": "/home/you/source/weave-fleet-worktrees",
+        "folder": "hotfix-urgent"
+      }
+    },
+    {
+      "name": "the repository name is available as a token",
+      "naming": {
+        "branch": "{repo}/{slug}",
+        "folder": "{repo}-{slug}"
+      },
+      "message": "Add rate limiting",
+      "expect": {
+        "branch": "weave-fleet/add-rate-limiting",
+        "root": "/home/you/source/weave-fleet-worktrees",
+        "folder": "weave-fleet-add-rate-limiting"
+      }
+    }
+  ],
+  "rootPrefixes": [
+    {
+      "root": "{repoParent}/{repo}-worktrees",
+      "expect": null
+    },
+    {
+      "root": "{home}/worktrees/{repo}",
+      "expect": "/home/you/worktrees"
+    },
+    {
+      "root": "{repoParent}/{repo}/.worktrees",
+      "expect": null
+    },
+    {
+      "root": "/srv/worktrees/{repo}",
+      "expect": "/srv/worktrees"
+    }
+  ],
+  "invalidTemplates": [
+    {
+      "field": "prefix",
+      "naming": {
+        "branch": "{prefix}/{slug}",
+        "prefix": ""
+      },
+      "because": "an empty prefix would name every worktree the same way an empty slug would"
+    },
+    {
+      "field": "branch",
+      "naming": {
+        "branch": "{nope}/{slug}"
+      },
+      "because": "there is no {nope} token"
+    },
+    {
+      "field": "branch",
+      "naming": {
+        "branch": "feature {slug}"
+      },
+      "because": "git refuses a space in a branch name, and no collapse rule can save it"
+    },
+    {
+      "field": "branch",
+      "naming": {
+        "branch": "{slug}..{repo}"
+      },
+      "because": "git refuses a double dot"
+    },
+    {
+      "field": "branch",
+      "naming": {
+        "branch": "{slug}.lock"
+      },
+      "because": "git refuses a branch ending in .lock"
+    },
+    {
+      "field": "branch",
+      "naming": {
+        "branch": "feature/{slug}:{repo}"
+      },
+      "because": "a colon is not allowed in a branch name"
+    },
+    {
+      "field": "root",
+      "naming": {
+        "root": "{repoParent}/{ticket}"
+      },
+      "capture": {
+        "ticket": "X-\\d+"
+      },
+      "because": "a capture needs a message, which the root resolves without"
+    },
+    {
+      "field": "branch",
+      "naming": {
+        "branch": ""
+      },
+      "because": "a template cannot be empty"
+    },
+    {
+      "field": "Capture.ticket",
+      "naming": {
+        "branch": "{ticket}-{slug}"
+      },
+      "capture": {
+        "ticket": "[A-Z"
+      },
+      "because": "that is not a valid regex"
+    }
+  ]
+}

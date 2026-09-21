@@ -60,6 +60,53 @@ const MOCK_DIFFS = [
   }
 ];
 
+interface MockWorktreeNamingTemplates {
+  branch?: string | null;
+  root?: string | null;
+  folder?: string | null;
+  capture?: Record<string, string> | null;
+  prefix?: string | null;
+}
+
+const MOCK_NAMING_DEFAULTS: MockWorktreeNamingTemplates = {
+  branch: "{prefix}/{slug}",
+  root: "{repoParent}/{repo}-worktrees",
+  folder: "{branch}",
+  prefix: "fleet",
+};
+
+/** What a repository's committed weave.jsonc sets, for `?convention=1`. */
+const MOCK_NAMING_PROJECT: MockWorktreeNamingTemplates = {
+  branch: "feature/{ticket}-{slug}",
+  capture: { ticket: "[A-Z]{2,}-\\d+" },
+};
+
+/** The user's own layer, which a PUT replaces so Settings can be saved in mock mode. */
+let mockUserNaming: MockWorktreeNamingTemplates = { prefix: "pg" };
+
+function mockNamingResponse(withProjectConvention: boolean): unknown {
+  const project = withProjectConvention ? MOCK_NAMING_PROJECT : {};
+  const layerOf = (field: keyof MockWorktreeNamingTemplates) =>
+    (project[field] ? "project" : mockUserNaming[field] ? "user" : "default");
+
+  return {
+    effective: {
+      ...MOCK_NAMING_DEFAULTS,
+      ...Object.fromEntries(Object.entries(mockUserNaming).filter(([, value]) => value)),
+      ...project,
+    },
+    user: mockUserNaming,
+    defaults: MOCK_NAMING_DEFAULTS,
+    layers: {
+      branch: layerOf("branch"),
+      root: layerOf("root"),
+      folder: layerOf("folder"),
+      capture: layerOf("capture"),
+      prefix: layerOf("prefix"),
+    },
+  };
+}
+
 const MOCK_FILES: Record<string, string> = {
   "src/middleware/auth.ts": "import jwt from 'jsonwebtoken';\nimport type { Request, Response, NextFunction } from 'express';\n\nexport function authenticate(req: Request, res: Response, next: NextFunction) {\n  const header = req.headers.authorization;\n  if (!header?.startsWith('Bearer ')) {\n    return res.status(401).json({ error: 'Missing token' });\n  }\n\n  try {\n    const token = header.slice('Bearer '.length);\n    req.user = jwt.verify(token, process.env.JWT_SECRET!, { algorithms: ['HS256'] });\n    next();\n  } catch {\n    res.status(401).json({ error: 'Invalid token' });\n  }\n}\n",
   "src/middleware/index.ts": "export { authenticate } from './auth';\nexport { errorHandler } from './error-handler';\nexport { requestLogger } from './logger';\nexport { rateLimiter } from './rate-limiter';\n",
@@ -948,6 +995,41 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
         return new Response(JSON.stringify({}), {
           status: 200,
           headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    {
+      // Worktree naming. `?convention=1` answers as a repository that ships its own, so the
+      // locked fields and their banner can be seen without a repository on disk.
+      pattern: /^\/api\/worktrees\/naming$/,
+      handler: async (url, req) => {
+        if (req.method === "PUT") {
+          const body = await req.json() as MockWorktreeNamingTemplates;
+          console.log(`[mock-api] PUT worktrees/naming ${JSON.stringify(body)}`);
+          mockUserNaming = body;
+          return json(mockNamingResponse(false));
+        }
+
+        // A repository in the mock set ships a convention, the way a real one commits weave.jsonc;
+        // asking without a directory (Settings) gets your own layer, as the server answers.
+        const directory = url.searchParams.get("directory") ?? "";
+        const withConvention = url.searchParams.get("convention") === "1"
+          || directory.endsWith("weave-fleet");
+        console.log(`[mock-api] GET /api/worktrees/naming ${directory}`);
+        return json(mockNamingResponse(withConvention));
+      },
+    },
+    {
+      pattern: /^\/api\/worktrees\/naming\/preview$/,
+      handler: async (url, req) => {
+        const body = await req.json() as { message?: string; branch?: string };
+        console.log(`[mock-api] POST worktrees/naming/preview ${body.message ?? ""}`);
+        const branch = body.branch ?? "fleet/mock-preview";
+        return json({
+          branch,
+          root: "/home/you/source/weave-fleet-worktrees",
+          folder: branch.replace(/\//g, "-"),
+          path: `/home/you/source/weave-fleet-worktrees/${branch.replace(/\//g, "-")}`,
         });
       },
     },

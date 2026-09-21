@@ -196,7 +196,7 @@ public sealed record GetSessionResponse(
     string? HarnessProfileId = null,
     string? HarnessProfileName = null);
 
-public sealed record CreateSessionApiResponse(string InstanceId, string WorkspaceId, Session Session);
+public sealed record CreateSessionApiResponse(string InstanceId, string WorkspaceId, Session Session, string? Branch);
 
 public sealed record PreviewSessionResponse(SessionPreviewEnvelope Preview);
 

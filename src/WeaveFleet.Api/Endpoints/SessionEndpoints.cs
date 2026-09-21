@@ -214,7 +214,8 @@ public static class SessionEndpoints
                 r => Results.Ok(new CreateSessionApiResponse(
                     r.InstanceId,
                     r.WorkspaceId,
-                    r.Session)),
+                    r.Session,
+                    r.Branch)),
                 err => err.ToSessionApiResult());
         })
         .WithName("CreateSession");

@@ -1,3 +1,4 @@
+using WeaveFleet.Application.Services.Worktrees;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
@@ -8,9 +9,14 @@ namespace WeaveFleet.Application.Services;
 /// Manages user-configurable workspace roots for local browsing and repository discovery.
 /// Combines DB-persisted roots with those supplied via the FLEET_WORKSPACE_ROOTS env var.
 /// </summary>
+/// <param name="naming">
+/// The worktree naming templates, so a worktree root kept outside the repository's parent is
+/// still a path Fleet will open. Null keeps the built-in <c>{repo}-worktrees</c> assumption.
+/// </param>
 public sealed class WorkspaceRootService(
     IWorkspaceRootRepository workspaceRootRepository,
-    IUserContext userContext)
+    IUserContext userContext,
+    WorktreeNamingService? naming = null)
 {
     private const string EnvVar = "FLEET_WORKSPACE_ROOTS";
 
@@ -98,9 +104,26 @@ public sealed class WorkspaceRootService(
             .Select(root => CanonicalizePath(root.Path))
             .ToList();
 
-        var worktreeFolders = roots
-            .Where(GitPaths.IsRepository)
-            .Select(root => CanonicalizePath(GitPaths.WorktreesFolderFor(root)));
+        var worktreeFolders = new List<string>();
+        var templates = naming is null ? null : (await naming.GetAsync(null).ConfigureAwait(false)).Effective;
+
+        foreach (var root in roots.Where(GitPaths.IsRepository))
+        {
+            worktreeFolders.Add(templates is null
+                ? CanonicalizePath(GitPaths.WorktreesFolderFor(root))
+                : CanonicalizePath(WorktreeNameResolver.ResolveRoot(
+                    templates, WorktreeNamingService.BuildContext(root, "00000000"))));
+        }
+
+        // A root template that keeps worktrees somewhere of its own (~/worktrees/{repo}) puts them
+        // outside every workspace root, so the fixed part of that template is allowed too —
+        // that part only, not wherever else the template might have pointed.
+        if (templates is not null
+            && WorktreeNameResolver.ResolveRootPrefix(
+                templates, WorktreeNamingService.BuildContext(roots.FirstOrDefault() ?? ".", "00000000")) is { } prefix)
+        {
+            worktreeFolders.Add(CanonicalizePath(prefix));
+        }
 
         return roots
             .Concat(worktreeFolders)

@@ -271,7 +271,10 @@ public sealed partial class SessionOrchestrator(
             workspaceIntent.Branch,
             sourceResolutionResult.Value.Input.Provenance,
             workspaceIntent.BaseBranch,
-            workspaceIntent.FetchOrigin);
+            workspaceIntent.FetchOrigin,
+            // The user's own words, not the assembled prompt: a GitHub issue's body would bury
+            // the sentence a branch name is worth taking.
+            request.InitialPrompt);
         if (workspaceResult.IsFailure)
             return workspaceResult.Error;
 
@@ -517,7 +520,7 @@ public sealed partial class SessionOrchestrator(
             await sessionCallbackRepository.InsertAsync(callback);
         }
 
-        return new CreateSessionResult(session, harnessInstance.InstanceId, workspace.Id);
+        return new CreateSessionResult(session, harnessInstance.InstanceId, workspace.Id, workspace.Branch);
     }
 
     // ── Fork ───────────────────────────────────────────────────────────────────
@@ -2256,7 +2259,11 @@ public sealed record CreateSessionRequest
 }
 
 /// <summary>Result of a successful <see cref="SessionOrchestrator.CreateSessionAsync"/> call.</summary>
-public sealed record CreateSessionResult(Session Session, string InstanceId, string WorkspaceId);
+/// <param name="Branch">
+/// The branch the new workspace got, which for a worktree the naming templates chose here rather
+/// than in the caller — so the caller can show the session's branch without guessing at it.
+/// </param>
+public sealed record CreateSessionResult(Session Session, string InstanceId, string WorkspaceId, string? Branch = null);
 
 /// <summary>Result of browsing a session directory.</summary>
 public sealed record BrowseDirectoryResult(IReadOnlyList<BrowseEntry> Entries, string CurrentPath);
