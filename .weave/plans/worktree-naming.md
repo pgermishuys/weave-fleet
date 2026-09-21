@@ -29,7 +29,8 @@ One `worktrees` block of templates, resolved server-side at worktree creation:
 ```jsonc
 {
   "worktrees": {
-    "branch":  "{initials}/{slug}",             // default: "fleet/{slug}"
+    "prefix":  "pg",                            // default: "fleet"
+    "branch":  "{prefix}/{slug}",
     "root":    "{repoParent}/{repo}-worktrees",
     "folder":  "{branch}",
     "capture": { "ticket": "[A-Z]{2,}-\\d+" }
@@ -42,7 +43,12 @@ One `worktrees` block of templates, resolved server-side at worktree creation:
 `root` alone. The committed layer is the point of the feature: one file in the repo and the whole
 team names branches the org's way.
 
-**Tokens.** `{slug}` `{repo}` `{user}` `{initials}` `{date}` `{shortid}` `{ticket}`, plus
+**The prefix is the primary control.** The default branch template is `{prefix}/{slug}` with the
+prefix defaulting to `fleet`, so "put my initials in front" is one field and no template editing,
+and today's names are unchanged. A prefix rather than literal text in the template is what lets a
+repository commit a convention with a per-person slot in it.
+
+**Tokens.** `{slug}` `{repo}` `{user}` `{prefix}` `{date}` `{shortid}` `{ticket}`, plus
 `{repoParent}` and `{home}` in `root`, and `{branch}` in `folder`. Deliberately small.
 
 **Capture.** One regex per named capture, read from the message, so `{ticket}` has a value.
@@ -51,10 +57,10 @@ team names branches the org's way.
 
 Both of the first two came out of running the mockup, not reading it.
 
-1. **Empty slug hands naming back.** `{initials}/{slug}` with an unsluggable message ("🚀🚀🚀")
+1. **Empty slug hands naming back.** `{prefix}/{slug}` with an unsluggable message ("🚀🚀🚀")
    collapsed to a branch literally named `pg` — valid git, useless, and it collides with the next
    one. When a template references `{slug}` and the slug is empty, the server names the worktree
-   `weave-session-<hex>` as it does today.
+   `weave-session-<hex>` as it does today. An empty prefix is refused for the same reason.
 2. **A capture is removed from the slug.** `feature/{ticket}-{slug}` produced
    `feature/PLAT-1841-plat-1841-add-rate-limiting`, because the slug is taken from the whole first
    line. What a capture consumed leaves the text before slugging.
@@ -104,6 +110,8 @@ Stages 1 and 2 are in use.
 
 - **`weave.jsonc`, not `weave-opencode.jsonc`.** The existing file already has the user+project
   merge, but it is the OpenCode config and this is not an OpenCode concern.
-- **`{initials}` is explicit**, a setting of its own — `pg` can't be derived from `pgermishuys`.
+- **A generic `prefix`, not an `initials` field.** Initials are too specific a thing for config;
+  a prefix covers initials, a team, a handle. It stays a value rather than literal template text
+  so a committed convention can leave a per-person slot.
 - **User settings live in the preference store**, not localStorage like the rest of
   Settings → Workspace, because the server resolves the template.

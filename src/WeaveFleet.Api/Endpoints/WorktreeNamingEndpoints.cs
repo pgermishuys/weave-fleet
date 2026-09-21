@@ -36,7 +36,7 @@ public static class WorktreeNamingEndpoints
                 Branch = Trimmed(body.Branch),
                 Root = Trimmed(body.Root),
                 Folder = Trimmed(body.Folder),
-                Initials = Trimmed(body.Initials),
+                Prefix = Trimmed(body.Prefix),
                 Capture = body.Capture is { Count: > 0 } capture
                     ? capture.Where(entry => !string.IsNullOrWhiteSpace(entry.Value))
                         .ToDictionary(entry => entry.Key, entry => entry.Value.Trim(), StringComparer.Ordinal)
@@ -90,19 +90,19 @@ public static class WorktreeNamingEndpoints
             resolved.Effective.Root,
             resolved.Effective.Folder,
             resolved.Effective.Capture.ToDictionary(entry => entry.Key, entry => entry.Value, StringComparer.Ordinal),
-            resolved.Effective.Initials),
+            resolved.Effective.Prefix),
         new WorktreeNamingTemplates(
             user.Branch,
             user.Root,
             user.Folder,
             user.Capture?.ToDictionary(entry => entry.Key, entry => entry.Value, StringComparer.Ordinal),
-            user.Initials),
+            user.Prefix),
         new WorktreeNamingTemplates(
             WorktreeNaming.DefaultBranch,
             WorktreeNaming.DefaultRoot,
             WorktreeNaming.DefaultFolder,
             null,
-            null),
+            WorktreeNaming.DefaultPrefix),
         resolved.Layers.ToDictionary(
             entry => entry.Key,
             entry => entry.Value.ToString().ToLowerInvariant(),
@@ -115,7 +115,7 @@ public sealed record WorktreeNamingTemplates(
     string? Root,
     string? Folder,
     IReadOnlyDictionary<string, string>? Capture,
-    string? Initials);
+    string? Prefix);
 
 /// <summary>
 /// The templates in force, the user's own layer for Settings to edit, Fleet's defaults, and which
@@ -132,7 +132,7 @@ public sealed record WorktreeNamingRequest(
     string? Root,
     string? Folder,
     IReadOnlyDictionary<string, string>? Capture,
-    string? Initials);
+    string? Prefix);
 
 public sealed record WorktreeNamingPreviewRequest(string Directory, string? Message, string? Branch);
 

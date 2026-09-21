@@ -9,7 +9,7 @@ namespace WeaveFleet.Application.Services.Worktrees;
 public static partial class WorktreeNameResolver
 {
     /// <summary>Tokens every field can use.</summary>
-    private static readonly string[] _commonTokens = ["repo", "user", "initials", "date", "shortid"];
+    private static readonly string[] _commonTokens = ["repo", "user", "prefix", "date", "shortid"];
 
     /// <summary>Tokens each field can use on top of <see cref="_commonTokens"/> and the captures.</summary>
     private static readonly string[] _branchOnlyTokens = ["slug"];
@@ -31,7 +31,7 @@ public static partial class WorktreeNameResolver
     /// <summary>
     /// Names a worktree for <paramref name="message"/>. A branch of null means the template wanted
     /// a slug the message couldn't give, and the caller should fall back to its own name — without
-    /// it, "{initials}/{slug}" would collapse to "pg" and collide with the next one.
+    /// it, "{prefix}/{slug}" would collapse to the prefix alone and collide with the next one.
     /// </summary>
     /// <param name="branchOverride">
     /// A branch the caller has already settled — a typed override, a source's suggestion, or the
@@ -159,6 +159,11 @@ public static partial class WorktreeNameResolver
             }
         }
 
+        // An empty prefix with a template built around it would name every worktree the same way
+        // the empty-slug case would, so it's refused where it's set rather than at git.
+        if (naming.Branch.Contains("{prefix}", StringComparison.Ordinal) && naming.Prefix.Length == 0)
+            problems.Add(new WorktreeNamingProblem("prefix", "This can't be empty while the branch name uses {prefix}."));
+
         problems.AddRange(ValidateField("branch", naming.Branch, _branchOnlyTokens, captureNames));
         problems.AddRange(ValidateField("root", naming.Root, _rootOnlyTokens, captureNames));
         problems.AddRange(ValidateField("folder", naming.Folder, _folderOnlyTokens, captureNames));
@@ -194,7 +199,6 @@ public static partial class WorktreeNameResolver
     private static readonly WorktreeNamingContext SampleContext = new(
         RepositoryPath: Path.Combine("home", "you", "source", "repo"),
         UserName: "you",
-        Initials: "yo",
         Date: new DateOnly(2026, 1, 1),
         ShortId: "0a1b2c3d",
         HomeDirectory: Path.Combine("home", "you"));
@@ -239,7 +243,7 @@ public static partial class WorktreeNameResolver
             ["slug"] = slug,
             ["repo"] = RepositoryName(context.RepositoryPath),
             ["user"] = context.UserName,
-            ["initials"] = naming.Initials ?? context.Initials ?? string.Empty,
+            ["prefix"] = naming.Prefix,
             ["date"] = context.Date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
             ["shortid"] = context.ShortId,
         };
@@ -259,7 +263,7 @@ public static partial class WorktreeNameResolver
             ["repoParent"] = Path.GetDirectoryName(trimmed) ?? trimmed,
             ["home"] = context.HomeDirectory,
             ["user"] = context.UserName,
-            ["initials"] = naming.Initials ?? context.Initials ?? string.Empty,
+            ["prefix"] = naming.Prefix,
             ["date"] = context.Date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
             ["shortid"] = context.ShortId,
         };

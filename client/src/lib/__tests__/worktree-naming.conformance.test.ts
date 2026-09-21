@@ -27,7 +27,7 @@ interface Fixture {
   context: {
     repositoryPath: string;
     user: string;
-    initials: string;
+    prefix: string;
     date: string;
     shortId: string;
     home: string;
@@ -44,7 +44,6 @@ const fixture = JSON.parse(readFileSync(fixturePath, "utf8")) as Fixture;
 const context: WorktreeNamingContext = {
   repositoryPath: fixture.context.repositoryPath,
   user: fixture.context.user,
-  initials: fixture.context.initials,
   date: fixture.context.date,
   shortId: fixture.context.shortId,
   home: fixture.context.home,
@@ -59,8 +58,9 @@ describe("worktree naming conformance", () => {
     it(namingCase.name, () => {
       const naming: WorktreeNamingTemplates = {
         ...defaultWorktreeNaming,
+        // The fixture's own prefix, unless the case sets one — including to empty.
+        prefix: fixture.context.prefix,
         ...namingCase.naming,
-        initials: fixture.context.initials,
       };
 
       const result = resolveWorktreeName(

@@ -22,7 +22,7 @@ public sealed partial class WorktreeNamingService(
     private const string BranchKey = KeyPrefix + "branch";
     private const string RootKey = KeyPrefix + "root";
     private const string FolderKey = KeyPrefix + "folder";
-    private const string InitialsKey = KeyPrefix + "initials";
+    private const string PrefixKey = KeyPrefix + "prefix";
     private const string CaptureKey = KeyPrefix + "capture";
 
     private static readonly JsonDocumentOptions _jsoncOptions = new()
@@ -50,7 +50,7 @@ public sealed partial class WorktreeNamingService(
             ["root"] = LayerOf(user.Root, project.Root),
             ["folder"] = LayerOf(user.Folder, project.Folder),
             ["capture"] = LayerOf(user.Capture, project.Capture),
-            ["initials"] = LayerOf(user.Initials, project.Initials),
+            ["prefix"] = LayerOf(user.Prefix, project.Prefix),
         };
 
         return new ResolvedWorktreeNaming(effective, layers);
@@ -78,7 +78,7 @@ public sealed partial class WorktreeNamingService(
         await preferences.SetAsync(BranchKey, layer.Branch ?? string.Empty).ConfigureAwait(false);
         await preferences.SetAsync(RootKey, layer.Root ?? string.Empty).ConfigureAwait(false);
         await preferences.SetAsync(FolderKey, layer.Folder ?? string.Empty).ConfigureAwait(false);
-        await preferences.SetAsync(InitialsKey, layer.Initials ?? string.Empty).ConfigureAwait(false);
+        await preferences.SetAsync(PrefixKey, layer.Prefix ?? string.Empty).ConfigureAwait(false);
         await preferences.SetAsync(CaptureKey, SerializeCapture(layer.Capture)).ConfigureAwait(false);
 
         return Unit.Value;
@@ -91,7 +91,6 @@ public sealed partial class WorktreeNamingService(
     public static WorktreeNamingContext BuildContext(string repositoryPath, string shortId) => new(
         RepositoryPath: repositoryPath,
         UserName: Environment.UserName,
-        Initials: null,
         Date: DateOnly.FromDateTime(DateTime.Now),
         ShortId: shortId,
         HomeDirectory: Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
@@ -109,7 +108,7 @@ public sealed partial class WorktreeNamingService(
             Branch = Value(stored, BranchKey),
             Root = Value(stored, RootKey),
             Folder = Value(stored, FolderKey),
-            Initials = Value(stored, InitialsKey),
+            Prefix = Value(stored, PrefixKey),
             Capture = ParseCapture(Value(stored, CaptureKey)),
         };
 
@@ -147,7 +146,7 @@ public sealed partial class WorktreeNamingService(
             Branch = Text(block, "branch"),
             Root = Text(block, "root"),
             Folder = Text(block, "folder"),
-            Initials = Text(block, "initials"),
+            Prefix = Text(block, "prefix"),
             Capture = CaptureFrom(block),
         };
 

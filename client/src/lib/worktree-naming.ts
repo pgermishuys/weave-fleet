@@ -12,7 +12,8 @@ export interface WorktreeNamingTemplates {
   root: string;
   folder: string;
   capture?: Record<string, string> | null;
-  initials?: string | null;
+  /** What `{prefix}` resolves to: initials, a team, a handle. */
+  prefix?: string | null;
 }
 
 /** Which layer set a field: Fleet's default, the user's settings, or the repository's own. */
@@ -21,7 +22,6 @@ export type WorktreeNamingLayer = "default" | "user" | "project";
 export interface WorktreeNamingContext {
   repositoryPath: string;
   user: string;
-  initials?: string | null;
   /** ISO date, `2026-09-21`. */
   date: string;
   shortId: string;
@@ -36,9 +36,10 @@ export interface WorktreeName {
 }
 
 export const defaultWorktreeNaming: WorktreeNamingTemplates = {
-  branch: "fleet/{slug}",
+  branch: "{prefix}/{slug}",
   root: "{repoParent}/{repo}-worktrees",
   folder: "{branch}",
+  prefix: "fleet",
 };
 
 const TOKEN = /\{(\w+)\}/g;
@@ -107,7 +108,7 @@ function tokenValues(
     slug,
     repo: baseName(context.repositoryPath),
     user: context.user,
-    initials: naming.initials ?? context.initials ?? "",
+    prefix: naming.prefix ?? "",
     date: context.date,
     shortid: context.shortId,
     ...captures,
@@ -123,7 +124,7 @@ function rootTokenValues(
     repoParent: parentPath(context.repositoryPath),
     home: context.home,
     user: context.user,
-    initials: naming.initials ?? context.initials ?? "",
+    prefix: naming.prefix ?? "",
     date: context.date,
     shortid: context.shortId,
   };

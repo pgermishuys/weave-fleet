@@ -267,6 +267,12 @@ pre .k { color: var(--accent); }
     <div id="override-banner"></div>
 
     <div class="fields">
+      <div class="field" id="field-prefix">
+        <span class="field__label">Branch prefix</span>
+        <input type="text" id="tpl-prefix" spellcheck="false" style="max-width: 220px">
+        <span class="field__hint">What every branch starts with &mdash; initials, a team, a handle. The one field most people change; the templates below are for anything more.</span>
+      </div>
+
       <div class="field" id="field-branch">
         <span class="field__label">Branch name</span>
         <input type="text" id="tpl-branch" spellcheck="false">
@@ -294,11 +300,7 @@ pre .k { color: var(--accent); }
         <span class="field__hint">A regex read from your message, so <code>{ticket}</code> has something to be. Empty when it doesn't match &mdash; the token and its separator collapse away.</span>
       </div>
 
-      <div class="field" id="field-initials">
-        <span class="field__label">Initials</span>
-        <input type="text" id="tpl-initials" spellcheck="false" style="max-width: 140px">
-        <span class="field__hint">Explicit, because <code>pg</code> can't be guessed from <code>pgermishuys</code>.</span>
-      </div>
+
     </div>
 
     <h3>How the layers resolved</h3>
@@ -408,12 +410,12 @@ function isValidBranchName(name) {
 
 // The proposed resolver.
 const TOKENS = {
-  branch: ["slug", "user", "initials", "ticket", "date", "repo", "shortid"],
+  branch: ["slug", "user", "prefix", "ticket", "date", "repo", "shortid"],
   root:   ["repoParent", "repo", "user", "home"],
   folder: ["branch", "slug", "ticket", "repo", "date", "shortid"],
 };
 const TOKEN_HINT = {
-  slug: "from your message", user: "pgermishuys", initials: "pg", ticket: "captured",
+  slug: "from your message", user: "pgermishuys", prefix: "set above", ticket: "captured",
   date: "2026-09-21", repo: "weave-fleet", shortid: "a1b2c3d4",
   repoParent: "~/source", home: "~", branch: "resolved branch",
 };
@@ -435,32 +437,32 @@ function resolveTemplate(template, values) {
 const SCENARIOS = [
   {
     key: "today", name: "Fleet today", note: "The current default",
-    branch: "fleet/{slug}", root: "{repoParent}/{repo}-worktrees", folder: "{branch}",
-    ticket: "", initials: "pg",
+    branch: "{prefix}/{slug}", root: "{repoParent}/{repo}-worktrees", folder: "{branch}",
+    ticket: "", prefix: "fleet",
     message: "Add rate limiting to the session create endpoint",
   },
   {
-    key: "initials", name: "Initials prefix", note: "pg/add-rate-limiting",
-    branch: "{initials}/{slug}", root: "{repoParent}/{repo}-worktrees", folder: "{branch}",
-    ticket: "", initials: "pg",
+    key: "prefix", name: "A prefix of your own", note: "pg/add-rate-limiting",
+    branch: "{prefix}/{slug}", root: "{repoParent}/{repo}-worktrees", folder: "{branch}",
+    ticket: "", prefix: "pg",
     message: "Add rate limiting to the session create endpoint",
   },
   {
     key: "ticket", name: "Ticket-first", note: "Jira key from the sentence",
     branch: "feature/{ticket}-{slug}", root: "{repoParent}/{repo}-worktrees", folder: "{ticket}-{slug}",
-    ticket: "[A-Z]{2,}-\\d+", initials: "pg",
+    ticket: "[A-Z]{2,}-\\d+", prefix: "pg",
     message: "PLAT-1841 add rate limiting to the session create endpoint",
   },
   {
     key: "flat", name: "One worktree root", note: "Short paths, Windows-friendly",
     branch: "{user}/{slug}", root: "{home}/worktrees/{repo}", folder: "{slug}",
-    ticket: "", initials: "pg",
+    ticket: "", prefix: "pg",
     message: "Add rate limiting to the session create endpoint",
   },
   {
     key: "inside", name: "Inside the repo", note: "Gitignored .worktrees/",
-    branch: "{initials}/{date}-{slug}", root: "{repoParent}/{repo}/.worktrees", folder: "{slug}",
-    ticket: "", initials: "pg",
+    branch: "{prefix}/{date}-{slug}", root: "{repoParent}/{repo}/.worktrees", folder: "{slug}",
+    ticket: "", prefix: "pg",
     message: "Add rate limiting to the session create endpoint",
   },
 ];
@@ -471,15 +473,15 @@ const PROJECT = {
   ticket: "[A-Z]{2,}-\\d+",
 };
 
-const DEFAULTS = { branch: "fleet/{slug}", root: "{repoParent}/{repo}-worktrees", folder: "{branch}", ticket: "" };
+const DEFAULTS = { prefix: "fleet", branch: "{prefix}/{slug}", root: "{repoParent}/{repo}-worktrees", folder: "{branch}", ticket: "" };
 
 const REPO = { path: "~/source/weave-fleet", name: "weave-fleet", parent: "~/source" };
 const ALLOWED_ROOTS = ["~/source"];
 
 const state = {
-  scenario: "initials",
+  scenario: "prefix",
   override: false,
-  user: { branch: "", root: "", folder: "", ticket: "", initials: "pg" },
+  user: { branch: "", root: "", folder: "", ticket: "", prefix: "pg" },
   message: "",
   // Branches git already knows about, to show the -2 suffix rule.
   taken: new Set(["fleet/add-rate-limiting", "pg/add-rate-limiting"]),
@@ -488,7 +490,7 @@ const state = {
 function applyScenario(key) {
   const s = SCENARIOS.find((x) => x.key === key);
   state.scenario = key;
-  state.user = { branch: s.branch, root: s.root, folder: s.folder, ticket: s.ticket, initials: s.initials };
+  state.user = { branch: s.branch, root: s.root, folder: s.folder, ticket: s.ticket, prefix: s.prefix };
   state.message = s.message;
 }
 
@@ -521,7 +523,7 @@ function resolveAll(message) {
   const slug = slugForBranch(ticket ? message.replace(ticket, " ") : message);
   const shared = {
     slug, ticket, repo: REPO.name, repoParent: REPO.parent, home: "~",
-    user: "pgermishuys", initials: state.user.initials, date: "2026-09-21", shortid: "a1b2c3d4",
+    user: "pgermishuys", prefix: state.user.prefix, date: "2026-09-21", shortid: "a1b2c3d4",
   };
 
   // A template built around {slug} with nothing to slug would collapse to its
@@ -594,6 +596,7 @@ function renderLayers() {
     ["Worktree root", "root"],
     ["Folder name", "folder"],
     ["Capture: ticket", "ticket"],
+    ["Branch prefix", "prefix"],
   ];
   $("layers").innerHTML = `
     <tr><th>Field</th><th>Default</th><th>You</th><th>This repo</th><th>Wins</th></tr>
@@ -698,7 +701,7 @@ function render() {
     input.value = eff.value;
     input.disabled = locked && field in PROJECT;
   }
-  $("tpl-initials").value = state.user.initials;
+  $("tpl-prefix").value = state.user.prefix;
   $("message").value = state.message;
 
   renderLayers();
@@ -735,7 +738,7 @@ for (const field of ["branch", "root", "folder", "ticket"]) {
     render();
   });
 }
-$("tpl-initials").addEventListener("input", (event) => { state.user.initials = event.target.value; render(); });
+$("tpl-prefix").addEventListener("input", (event) => { state.user.prefix = event.target.value; render(); });
 $("message").addEventListener("input", (event) => { state.message = event.target.value; render(); });
 $("override").addEventListener("change", (event) => { state.override = event.target.checked; render(); });
 /** The theme in force: the reader's choice if they made one, else the system's. */
@@ -760,7 +763,7 @@ renderTokenRows();
 // ?scenario=ticket&override=1 opens a specific state, for sharing and screenshots.
 const params = new URLSearchParams(location.search);
 const wanted = params.get("scenario");
-applyScenario(SCENARIOS.some((s) => s.key === wanted) ? wanted : "initials");
+applyScenario(SCENARIOS.some((s) => s.key === wanted) ? wanted : "prefix");
 state.override = params.get("override") === "1";
 const theme = params.get("theme");
 if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;

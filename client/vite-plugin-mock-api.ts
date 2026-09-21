@@ -65,13 +65,14 @@ interface MockWorktreeNamingTemplates {
   root?: string | null;
   folder?: string | null;
   capture?: Record<string, string> | null;
-  initials?: string | null;
+  prefix?: string | null;
 }
 
 const MOCK_NAMING_DEFAULTS: MockWorktreeNamingTemplates = {
-  branch: "fleet/{slug}",
+  branch: "{prefix}/{slug}",
   root: "{repoParent}/{repo}-worktrees",
   folder: "{branch}",
+  prefix: "fleet",
 };
 
 /** What a repository's committed weave.jsonc sets, for `?convention=1`. */
@@ -81,7 +82,7 @@ const MOCK_NAMING_PROJECT: MockWorktreeNamingTemplates = {
 };
 
 /** The user's own layer, which a PUT replaces so Settings can be saved in mock mode. */
-let mockUserNaming: MockWorktreeNamingTemplates = { branch: "{initials}/{slug}", initials: "pg" };
+let mockUserNaming: MockWorktreeNamingTemplates = { prefix: "pg" };
 
 function mockNamingResponse(withProjectConvention: boolean): unknown {
   const project = withProjectConvention ? MOCK_NAMING_PROJECT : {};
@@ -101,7 +102,7 @@ function mockNamingResponse(withProjectConvention: boolean): unknown {
       root: layerOf("root"),
       folder: layerOf("folder"),
       capture: layerOf("capture"),
-      initials: layerOf("initials"),
+      prefix: layerOf("prefix"),
     },
   };
 }

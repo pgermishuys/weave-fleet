@@ -40,13 +40,13 @@ public sealed class WorkspaceServiceWorktreeNamingTests
     }
 
     [Fact]
-    public async Task AUserTemplate_NamesTheBranchAndTheFolder()
+    public async Task APrefixOfYourOwn_NamesTheBranchAndTheFolder()
     {
         using var repository = new RealGitRepository();
         await SaveUserNamingAsync(new WorktreeNamingOverride
         {
-            Branch = "{initials}/{slug}",
-            Initials = "pg",
+            Branch = "{prefix}/{slug}",
+            Prefix = "pg",
         });
 
         var result = await Service().CreateWorkspaceAsync(
@@ -62,7 +62,7 @@ public sealed class WorkspaceServiceWorktreeNamingTests
     public async Task TheRepositorysOwnConvention_BeatsTheUsers()
     {
         using var repository = new RealGitRepository();
-        await SaveUserNamingAsync(new WorktreeNamingOverride { Branch = "{initials}/{slug}", Initials = "pg" });
+        await SaveUserNamingAsync(new WorktreeNamingOverride { Branch = "{prefix}/{slug}", Prefix = "pg" });
         await WriteProjectConfigAsync(repository.Path, """
             {
               // Everyone on this repository names branches the same way.
@@ -101,7 +101,7 @@ public sealed class WorkspaceServiceWorktreeNamingTests
     public async Task AMessageWithNoSlugInIt_FallsBackToASessionName()
     {
         using var repository = new RealGitRepository();
-        await SaveUserNamingAsync(new WorktreeNamingOverride { Branch = "{initials}/{slug}", Initials = "pg" });
+        await SaveUserNamingAsync(new WorktreeNamingOverride { Branch = "{prefix}/{slug}", Prefix = "pg" });
 
         var result = await Service().CreateWorkspaceAsync(
             repository.Path, "worktree", branch: null, provenance: null, message: "🚀🚀🚀");
@@ -116,7 +116,7 @@ public sealed class WorkspaceServiceWorktreeNamingTests
     public async Task ATypedBranch_StillWinsOverTheTemplate()
     {
         using var repository = new RealGitRepository();
-        await SaveUserNamingAsync(new WorktreeNamingOverride { Branch = "{initials}/{slug}", Initials = "pg" });
+        await SaveUserNamingAsync(new WorktreeNamingOverride { Branch = "{prefix}/{slug}", Prefix = "pg" });
 
         var result = await Service().CreateWorkspaceAsync(
             repository.Path, "worktree", branch: "hotfix/urgent", provenance: null,

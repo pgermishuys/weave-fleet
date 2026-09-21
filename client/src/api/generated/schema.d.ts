@@ -2630,7 +2630,7 @@ export interface components {
             capture?: {
                 [key: string]: string;
             } | null;
-            initials?: string | null;
+            prefix?: string | null;
         };
         WorktreeNamingResponse: {
             effective: components["schemas"]["WorktreeNamingTemplates"];
@@ -2647,7 +2647,7 @@ export interface components {
             capture?: {
                 [key: string]: string;
             } | null;
-            initials?: string | null;
+            prefix?: string | null;
         };
         WorktreeNamingPreviewRequest: {
             directory: string;

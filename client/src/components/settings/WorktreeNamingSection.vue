@@ -16,7 +16,7 @@ const draft = reactive({
   root: "",
   folder: "",
   ticket: "",
-  initials: "",
+  prefix: "",
 });
 
 const saved = shallowRef(false);
@@ -28,7 +28,7 @@ const tokensFor: Record<string, readonly { name: string; hint: string }[]> = {
   branch: [
     { name: "slug", hint: "from your message" },
     { name: "user", hint: "your username" },
-    { name: "initials", hint: "set below" },
+    { name: "prefix", hint: "set above" },
     { name: "ticket", hint: "captured" },
     { name: "date", hint: "2026-09-21" },
     { name: "repo", hint: "repository name" },
@@ -61,7 +61,7 @@ function syncDraft(): void {
   draft.root = user.value.root ?? "";
   draft.folder = user.value.folder ?? "";
   draft.ticket = user.value.capture?.ticket ?? "";
-  draft.initials = user.value.initials ?? "";
+  draft.prefix = user.value.prefix ?? "";
 }
 
 function insertToken(field: "branch" | "root" | "folder", token: string): void {
@@ -77,7 +77,7 @@ const previewTemplates = computed<WorktreeNamingTemplates>(() => ({
   root: draft.root || defaults.value.root,
   folder: draft.folder || defaults.value.folder,
   capture: draft.ticket ? { ticket: draft.ticket } : null,
-  initials: draft.initials,
+  prefix: draft.prefix || defaults.value.prefix,
 }));
 
 const preview = computed(() => resolveWorktreeName(
@@ -85,7 +85,6 @@ const preview = computed(() => resolveWorktreeName(
   {
     repositoryPath: "/home/you/source/weave-fleet",
     user: "you",
-    initials: previewTemplates.value.initials ?? "",
     date: new Date().toISOString().slice(0, 10),
     shortId: "a1b2c3d4",
     home: "/home/you",
@@ -100,7 +99,7 @@ async function save(): Promise<void> {
     root: draft.root || null,
     folder: draft.folder || null,
     capture: draft.ticket ? { ticket: draft.ticket } : null,
-    initials: draft.initials || null,
+    prefix: draft.prefix || null,
   });
 
   if (ok) {
@@ -114,6 +113,7 @@ async function resetToDefaults(): Promise<void> {
   draft.root = "";
   draft.folder = "";
   draft.ticket = "";
+  draft.prefix = "";
   await save();
 }
 </script>
@@ -133,6 +133,21 @@ async function resetToDefaults(): Promise<void> {
 
 
     <div class="mt-5 grid gap-4">
+      <label class="grid gap-1.5 text-sm text-text">
+        <span class="text-xs font-medium uppercase tracking-wide text-muted">Branch prefix</span>
+        <input
+          v-model="draft.prefix"
+          type="text"
+          spellcheck="false"
+          :class="`${inputClass} max-w-[220px]`"
+          :placeholder="defaults.prefix ?? 'fleet'"
+        >
+        <span class="text-xs text-muted">
+          What every branch starts with — your initials, your team, whatever your organization uses.
+          The templates below are for anything more than that.
+        </span>
+      </label>
+
       <label
         v-for="field in (['branch', 'root', 'folder'] as const)"
         :key="field"
@@ -177,17 +192,6 @@ async function resetToDefaults(): Promise<void> {
         </span>
       </label>
 
-      <label class="grid gap-1.5 text-sm text-text">
-        <span class="text-xs font-medium uppercase tracking-wide text-muted">Initials</span>
-        <input
-          v-model="draft.initials"
-          type="text"
-          spellcheck="false"
-          :class="`${inputClass} max-w-[160px]`"
-          placeholder="pg"
-        >
-        <span class="text-xs text-muted">What <code>{{ "{initials}" }}</code> resolves to.</span>
-      </label>
     </div>
 
     <div class="mt-6 rounded-card border border-border bg-main-bg p-4">

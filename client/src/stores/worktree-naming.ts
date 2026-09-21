@@ -14,7 +14,7 @@ export interface WorktreeNamingLayerTemplates {
   root?: string | null;
   folder?: string | null;
   capture?: Record<string, string> | null;
-  initials?: string | null;
+  prefix?: string | null;
 }
 
 /**
@@ -47,13 +47,14 @@ export const useWorktreeNamingStore = defineStore("worktree-naming", () => {
       root: data.effective.root ?? defaultWorktreeNaming.root,
       folder: data.effective.folder ?? defaultWorktreeNaming.folder,
       capture: data.effective.capture ?? null,
-      initials: data.effective.initials ?? null,
+      prefix: data.effective.prefix ?? defaultWorktreeNaming.prefix,
     };
     user.value = { ...data.user };
     defaults.value = {
       branch: data.defaults.branch ?? defaultWorktreeNaming.branch,
       root: data.defaults.root ?? defaultWorktreeNaming.root,
       folder: data.defaults.folder ?? defaultWorktreeNaming.folder,
+      prefix: data.defaults.prefix ?? defaultWorktreeNaming.prefix,
     };
     layers.value = data.layers as Record<string, WorktreeNamingLayer>;
   }
@@ -96,7 +97,7 @@ export const useWorktreeNamingStore = defineStore("worktree-naming", () => {
           root: layer.root ?? null,
           folder: layer.folder ?? null,
           capture: layer.capture ?? null,
-          initials: layer.initials ?? null,
+          prefix: layer.prefix ?? null,
         },
       });
 

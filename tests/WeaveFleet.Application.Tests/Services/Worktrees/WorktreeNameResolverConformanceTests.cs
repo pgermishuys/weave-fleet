@@ -28,7 +28,7 @@ public sealed class WorktreeNameResolverConformanceTests
         var testCase = _cases.Cases.Single(c => c.Name == name);
 
         var result = WorktreeNameResolver.Resolve(
-            testCase.Naming.ToNaming(_cases.Context.Initials),
+            testCase.Naming.ToNaming(_cases.Context.Prefix),
             _cases.Context.ToContext(),
             testCase.Message,
             testCase.BranchOverride);
@@ -60,7 +60,8 @@ public sealed class WorktreeNameResolverConformanceTests
                 Branch = invalid.Naming.Branch,
                 Root = invalid.Naming.Root,
                 Folder = invalid.Naming.Folder,
-                Capture = invalid.Capture,
+                Capture = invalid.Capture ?? invalid.Naming.Capture,
+                Prefix = invalid.Naming.Prefix,
             });
 
             var problems = WorktreeNameResolver.Validate(naming);
@@ -83,7 +84,7 @@ public sealed class WorktreeNameResolverConformanceTests
             new WorktreeNamingCaseContext(
                 Text(context, "repositoryPath")!,
                 Text(context, "user")!,
-                Text(context, "initials")!,
+                Text(context, "prefix")!,
                 Text(context, "date")!,
                 Text(context, "shortId")!,
                 Text(context, "home")!),
@@ -112,12 +113,13 @@ public sealed class WorktreeNameResolverConformanceTests
         {
             var naming = node?.AsObject();
             return naming is null
-                ? new WorktreeNamingCaseTemplates(null, null, null, null)
+                ? new WorktreeNamingCaseTemplates(null, null, null, null, null)
                 : new WorktreeNamingCaseTemplates(
                     Text(naming, "branch"),
                     Text(naming, "root"),
                     Text(naming, "folder"),
-                    Captures(naming["capture"]));
+                    Captures(naming["capture"]),
+                    naming.ContainsKey("prefix") ? Text(naming, "prefix") ?? string.Empty : null);
         }
 
         static Dictionary<string, string>? Captures(JsonNode? node)
@@ -145,7 +147,7 @@ public sealed class WorktreeNameResolverConformanceTests
     internal sealed record WorktreeNamingCaseContext(
         string RepositoryPath,
         string User,
-        string Initials,
+        string Prefix,
         string Date,
         string ShortId,
         string Home)
@@ -153,7 +155,6 @@ public sealed class WorktreeNameResolverConformanceTests
         public WorktreeNamingContext ToContext() => new(
             RepositoryPath: RepositoryPath,
             UserName: User,
-            Initials: Initials,
             Date: DateOnly.Parse(Date, System.Globalization.CultureInfo.InvariantCulture),
             ShortId: ShortId,
             HomeDirectory: Home);
@@ -170,15 +171,20 @@ public sealed class WorktreeNameResolverConformanceTests
         string? Branch,
         string? Root,
         string? Folder,
-        Dictionary<string, string>? Capture)
+        Dictionary<string, string>? Capture,
+        string? Prefix)
     {
-        public WorktreeNaming ToNaming(string initials) => WorktreeNaming.Defaults.Overlay(new WorktreeNamingOverride
+        /// <param name="contextPrefix">
+        /// The fixture's own prefix, which a case overrides when it sets one — including to empty,
+        /// which is a case in its own right.
+        /// </param>
+        public WorktreeNaming ToNaming(string contextPrefix) => WorktreeNaming.Defaults.Overlay(new WorktreeNamingOverride
         {
             Branch = Branch,
             Root = Root,
             Folder = Folder,
             Capture = Capture,
-            Initials = initials,
+            Prefix = Prefix ?? contextPrefix,
         });
     }
 

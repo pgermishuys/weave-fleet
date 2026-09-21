@@ -8,7 +8,8 @@ public sealed record WorktreeNaming
     /// <summary>What Fleet named worktrees before the templates existed.</summary>
     public static readonly WorktreeNaming Defaults = new();
 
-    public const string DefaultBranch = "fleet/{slug}";
+    public const string DefaultBranch = "{prefix}/{slug}";
+    public const string DefaultPrefix = "fleet";
     public const string DefaultRoot = "{repoParent}/{repo}-worktrees";
     public const string DefaultFolder = "{branch}";
 
@@ -20,8 +21,12 @@ public sealed record WorktreeNaming
     public IReadOnlyDictionary<string, string> Capture { get; init; } =
         new Dictionary<string, string>(StringComparer.Ordinal);
 
-    /// <summary>What <c>{initials}</c> resolves to. Explicit — it can't be derived from a username.</summary>
-    public string? Initials { get; init; }
+    /// <summary>
+    /// What <c>{prefix}</c> resolves to, and the one field most people change: initials, a team,
+    /// a handle. It's a value rather than literal text in the template so a repository can commit
+    /// a convention with a per-person slot in it.
+    /// </summary>
+    public string Prefix { get; init; } = DefaultPrefix;
 
     /// <summary>
     /// Overlays <paramref name="over"/>'s set fields on this one, field by field, so a repository
@@ -33,7 +38,7 @@ public sealed record WorktreeNaming
         Root = over.Root ?? Root,
         Folder = over.Folder ?? Folder,
         Capture = over.Capture ?? Capture,
-        Initials = over.Initials ?? Initials,
+        Prefix = over.Prefix ?? Prefix,
     };
 }
 
@@ -48,9 +53,9 @@ public sealed record WorktreeNamingOverride
     public string? Root { get; init; }
     public string? Folder { get; init; }
     public IReadOnlyDictionary<string, string>? Capture { get; init; }
-    public string? Initials { get; init; }
+    public string? Prefix { get; init; }
 
-    public bool IsEmpty => Branch is null && Root is null && Folder is null && Capture is null && Initials is null;
+    public bool IsEmpty => Branch is null && Root is null && Folder is null && Capture is null && Prefix is null;
 }
 
 /// <summary>Which layer a field's effective value came from, for Settings to show.</summary>
@@ -73,7 +78,6 @@ public sealed record ResolvedWorktreeNaming(
 public sealed record WorktreeNamingContext(
     string RepositoryPath,
     string UserName,
-    string? Initials,
     DateOnly Date,
     string ShortId,
     string HomeDirectory);
