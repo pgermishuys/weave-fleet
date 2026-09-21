@@ -8,7 +8,7 @@ import { resolveWorktreeName, type WorktreeNamingTemplates } from "@/lib/worktre
 const inputClass = "w-full rounded-btn border border-border bg-main-bg px-3 py-2 font-mono text-[12.5px] text-text outline-none transition-colors placeholder:text-muted focus:border-accent disabled:cursor-not-allowed disabled:opacity-60";
 
 const store = useWorktreeNamingStore();
-const { effective, user, defaults, layers, isSaving, error, hasProjectConvention } = storeToRefs(store);
+const { user, defaults, isSaving, error } = storeToRefs(store);
 
 /** What the fields hold, which is the user's own layer — not the effective templates. */
 const draft = reactive({
@@ -64,29 +64,20 @@ function syncDraft(): void {
   draft.initials = user.value.initials ?? "";
 }
 
-/** The field's value with the layer that set it, so a locked field says who locked it. */
-function layerOf(field: "branch" | "root" | "folder" | "capture" | "initials"): string {
-  return layers.value[field] ?? "default";
-}
-
-function isLocked(field: "branch" | "root" | "folder" | "capture" | "initials"): boolean {
-  return layerOf(field) === "project";
-}
-
 function insertToken(field: "branch" | "root" | "folder", token: string): void {
-  if (isLocked(field)) return;
   draft[field] = `${draft[field]}{${token}}`;
 }
 
-/** The preview resolves the effective templates, which is what a new worktree would get. */
+/**
+ * The preview is of your own templates. A repository that ships its own convention overrides them
+ * for that repository, which the composer's plan line shows as you start a session there.
+ */
 const previewTemplates = computed<WorktreeNamingTemplates>(() => ({
-  branch: isLocked("branch") ? effective.value.branch : draft.branch || defaults.value.branch,
-  root: isLocked("root") ? effective.value.root : draft.root || defaults.value.root,
-  folder: isLocked("folder") ? effective.value.folder : draft.folder || defaults.value.folder,
-  capture: isLocked("capture")
-    ? effective.value.capture
-    : draft.ticket ? { ticket: draft.ticket } : null,
-  initials: isLocked("initials") ? effective.value.initials : draft.initials,
+  branch: draft.branch || defaults.value.branch,
+  root: draft.root || defaults.value.root,
+  folder: draft.folder || defaults.value.folder,
+  capture: draft.ticket ? { ticket: draft.ticket } : null,
+  initials: draft.initials,
 }));
 
 const preview = computed(() => resolveWorktreeName(
@@ -134,24 +125,12 @@ async function resetToDefaults(): Promise<void> {
         Worktrees
       </h2>
       <p class="text-sm text-muted">
-        How new worktrees are named. Tokens are filled in when a session starts.
+        How new worktrees are named. Tokens are filled in when a session starts. A repository that
+        commits its own <code>weave.jsonc</code> names branches its way instead, for everyone who
+        clones it.
       </p>
     </div>
 
-    <div
-      v-if="hasProjectConvention"
-      class="mt-4 flex items-start gap-2 rounded-card border border-accent/35 bg-accent/10 p-3 text-sm text-text"
-    >
-      <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
-      <div>
-        <p>A repository you work in ships its own convention.</p>
-        <p class="mt-0.5 text-xs text-muted">
-          Committed in <code>weave.jsonc</code>, so everyone who clones it names branches the same
-          way. The fields it sets are locked here; your own values still apply to repositories that
-          don't set them.
-        </p>
-      </div>
-    </div>
 
     <div class="mt-5 grid gap-4">
       <label
@@ -159,21 +138,14 @@ async function resetToDefaults(): Promise<void> {
         :key="field"
         class="grid gap-1.5 text-sm text-text"
       >
-        <span class="flex items-center gap-2">
-          <span class="text-xs font-medium uppercase tracking-wide text-muted">
-            {{ field === "branch" ? "Branch name" : field === "root" ? "Worktree root" : "Folder name" }}
-          </span>
-          <span
-            v-if="isLocked(field)"
-            class="rounded-full bg-accent/15 px-2 text-[10.5px] font-semibold uppercase text-accent"
-          >This repo</span>
+        <span class="text-xs font-medium uppercase tracking-wide text-muted">
+          {{ field === "branch" ? "Branch name" : field === "root" ? "Worktree root" : "Folder name" }}
         </span>
         <input
           v-model="draft[field]"
           type="text"
           spellcheck="false"
           :class="inputClass"
-          :disabled="isLocked(field)"
           :placeholder="defaults[field] ?? ''"
         >
         <span class="flex flex-wrap gap-1">
@@ -181,8 +153,7 @@ async function resetToDefaults(): Promise<void> {
             v-for="token in tokensFor[field]"
             :key="token.name"
             type="button"
-            class="rounded-full border border-border px-2 font-mono text-[11px] text-muted transition-colors hover:border-accent/45 hover:text-text disabled:opacity-50"
-            :disabled="isLocked(field)"
+            class="rounded-full border border-border px-2 font-mono text-[11px] text-muted transition-colors hover:border-accent/45 hover:text-text"
             @click="insertToken(field, token.name)"
           >
             {{ "{" + token.name + "}" }}
@@ -192,19 +163,12 @@ async function resetToDefaults(): Promise<void> {
       </label>
 
       <label class="grid gap-1.5 text-sm text-text">
-        <span class="flex items-center gap-2">
-          <span class="text-xs font-medium uppercase tracking-wide text-muted">Capture: ticket</span>
-          <span
-            v-if="isLocked('capture')"
-            class="rounded-full bg-accent/15 px-2 text-[10.5px] font-semibold uppercase text-accent"
-          >This repo</span>
-        </span>
+        <span class="text-xs font-medium uppercase tracking-wide text-muted">Capture: ticket</span>
         <input
           v-model="draft.ticket"
           type="text"
           spellcheck="false"
           :class="inputClass"
-          :disabled="isLocked('capture')"
           placeholder="[A-Z]{2,}-\d+"
         >
         <span class="text-xs text-muted">
@@ -220,7 +184,6 @@ async function resetToDefaults(): Promise<void> {
           type="text"
           spellcheck="false"
           :class="`${inputClass} max-w-[160px]`"
-          :disabled="isLocked('initials')"
           placeholder="pg"
         >
         <span class="text-xs text-muted">What <code>{{ "{initials}" }}</code> resolves to.</span>
@@ -240,13 +203,17 @@ async function resetToDefaults(): Promise<void> {
       >
       <dl class="mt-3 grid gap-1.5 text-sm">
         <div class="flex flex-wrap items-baseline gap-x-3">
-          <dt class="w-20 text-xs uppercase tracking-wide text-muted">Branch</dt>
+          <dt class="w-20 text-xs uppercase tracking-wide text-muted">
+            Branch
+          </dt>
           <dd class="font-mono text-[13px] text-text">
             {{ preview.branch ?? "weave-session-a1b2c3d4 (named by the server)" }}
           </dd>
         </div>
         <div class="flex flex-wrap items-baseline gap-x-3">
-          <dt class="w-20 text-xs uppercase tracking-wide text-muted">Worktree</dt>
+          <dt class="w-20 text-xs uppercase tracking-wide text-muted">
+            Worktree
+          </dt>
           <dd class="font-mono text-[13px] break-all text-text">
             {{ preview.root }}/{{ preview.folder || "weave-session-a1b2c3d4" }}
           </dd>

@@ -32,7 +32,7 @@ export const useWorktreeNamingStore = defineStore("worktree-naming", () => {
   /** The repository the loaded templates are for, so the composer can tell a stale answer. */
   const loadedFor = shallowRef<string | null>(null);
 
-  /** True when this repository ships its own convention, which locks those fields in Settings. */
+  /** True when the repository these templates were read for ships its own convention. */
   const hasProjectConvention = computed(() =>
     Object.values(layers.value).some((layer) => layer === "project"));
 
