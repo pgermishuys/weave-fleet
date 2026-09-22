@@ -50,6 +50,8 @@ export interface DelegationDto {
   title: string;
   status: "pending" | "running" | "completed" | "error" | "cancelled";
   createdAt?: string | null;
+  /** What the sub-agent's own session shows ("busy", "waiting_input", …); null until Fleet has said. */
+  childActivityStatus?: string | null;
 }
 
 // ─── Accumulated Message (for useSessionEvents) ────────────────────────────

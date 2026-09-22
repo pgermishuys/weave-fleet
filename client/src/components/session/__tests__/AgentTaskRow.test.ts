@@ -43,6 +43,25 @@ describe("AgentTaskRow", () => {
     expect(wrapper.find(".status-glyph--working").exists()).toBe(working);
   });
 
+  it("says a child stopped on a question needs input, and opens it to answer", async () => {
+    navigateMock.mockClear();
+    const wrapper = mount(AgentTaskRow, { props: { delegation: delegation({ needsInput: true }) } });
+
+    expect(wrapper.get("[data-testid='delegation-link-status']").text()).toBe("Needs input");
+    expect(wrapper.find(".status-glyph--working").exists()).toBe(false);
+    expect(wrapper.find("[aria-label='Needs input']").exists()).toBe(true);
+    expect(wrapper.get("a").attributes("title")).toBe("Open Map every archive entry point to answer its question");
+
+    await wrapper.get("a").trigger("click", { button: 0 });
+    expect(navigateMock).toHaveBeenCalledWith(expect.objectContaining({ params: { id: "child-1" } }));
+  });
+
+  it("ignores a stale question once the child has finished", () => {
+    const wrapper = mount(AgentTaskRow, { props: { delegation: delegation({ status: "completed", needsInput: true }) } });
+
+    expect(wrapper.get("[data-testid='delegation-link-status']").text()).toBe("Done");
+  });
+
   it("opens the child session in place", async () => {
     navigateMock.mockClear();
     const wrapper = mount(AgentTaskRow, { props: { delegation: delegation() } });
