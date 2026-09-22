@@ -498,6 +498,28 @@ About 4–5 weeks for parity with the OpenCode harness. Stages 0–2 (≈ 2 week
 harness behind the off-by-default switch. V2 is days old and its API spec calls itself experimental: pin a
 version and expect changes.
 
+## "Needs input" inside the parent's conversation (2026-09-22)
+
+Track I. Shared code, every harness (OpenCode's `task`, OpenCode 2's `subagent`, Fleet's own delegations).
+
+- **Gap:** #262 made the list and header read "Needs input" when a subagent stops on a question, but the parent's
+  conversation still said "Working" on the subagent's row and on the Working line. The stream reducer only knew each
+  delegation's own status (`running`), never what its child session showed.
+- **Seam, no new event:** the snapshot's delegations carry `childActivityStatus` (the tracker's status for the child),
+  for a parent opened while the child waits. Live, the parent's stream listens to `activity_status` on the `sessions`
+  topic, which every harness's child sessions already broadcast, and records it on the matching delegation. A waiting
+  child makes the stream `waiting_input`, outranking the parent's own busy, as `GetEffectiveActivityStatus` does.
+- **UI:** the row says "Needs input" with the diamond and opens the child, where the question card is. The Working
+  line says "Needs input" (no clock) while a question holds the turn: the child's, or the session's own (read from
+  the session's shown status, which the header uses too).
+- **Checked live** on a scratch Fleet (2.0.9 and OpenCode 1, fake model `delegate a question`): row and line say
+  Needs input while the child waits and after a reload; the row opens the question; after answering, Working, then
+  Done with no line. 13/13 per harness.
+- **Left alone:** the background subagent's Working line (#270). It comes from the same `delegating` status, but a
+  background call is only known from the tool part's metadata (the card layer), not the delegation, and the server
+  side disagrees too (the list is idle live, but the list endpoint counts a working child as busy on refetch). Needs a
+  decision on what an idle parent with background work should show; not changed here.
+
 ## Track F — busy while background work runs, the agent's shell environment (2026-09-22)
 
 - [x] **A background shell keeps its server busy.** On 2.0.9 a shell call moved to the background (`background: true`

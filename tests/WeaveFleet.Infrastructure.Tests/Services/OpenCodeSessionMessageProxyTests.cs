@@ -151,6 +151,55 @@ public sealed class OpenCodeSessionMessageProxyTests
         snapshot.ActivityStatus.ShouldBe(expected);
     }
 
+    // A parent opened while its subagent waits on a question: the subagent's row says so from the snapshot.
+    [Fact]
+    public async Task GetSnapshotAsync_gives_each_delegation_what_its_child_shows()
+    {
+        var sessionRepository = new InMemorySessionRepository();
+        sessionRepository.Seed(new Session
+        {
+            Id = "parent",
+            InstanceId = "instance-parent",
+            HarnessType = "opencode2",
+            Title = "Parent",
+            Status = "active",
+            UserId = "user-1",
+        });
+
+        var instanceTracker = new InstanceTracker();
+        instanceTracker.Register("instance-parent", new FakeHarnessSession("instance-parent")
+        {
+            GetMessagesBehavior = (_, _) => Task.FromResult(new MessagePage([], false)),
+        });
+
+        var delegationRepository = new InMemoryDelegationRepository();
+        delegationRepository.Seed(
+            new Delegation { Id = "asks", ParentSessionId = "parent", ChildSessionId = "child-asks", Title = "asks", Status = "running", CreatedAt = "2026-09-22T00:00:00Z" },
+            new Delegation { Id = "works", ParentSessionId = "parent", ChildSessionId = "child-works", Title = "works", Status = "running", CreatedAt = "2026-09-22T00:00:00Z" },
+            new Delegation { Id = "unlinked", ParentSessionId = "parent", Title = "unlinked", Status = "pending", CreatedAt = "2026-09-22T00:00:00Z" });
+
+        var activityTracker = new SessionActivityTracker();
+        activityTracker.Update("parent", "busy", "user-1");
+        activityTracker.Update("child-asks", "waiting_input", "user-1");
+        activityTracker.Update("child-works", "busy", "user-1");
+
+        var proxy = new OpenCodeSessionMessageProxy(
+            sessionRepository,
+            instanceTracker,
+            activityTracker,
+            delegationRepository,
+            new FakeSessionSnapshotBuilder(),
+            CreateServiceProvider(new FakeSessionActivator()),
+            Harnesses(),
+            NullLogger<OpenCodeSessionMessageProxy>.Instance);
+
+        var snapshot = await proxy.GetSnapshotAsync("parent");
+
+        snapshot.Delegations.Single(d => d.DelegationId == "asks").ChildActivityStatus.ShouldBe("waiting_input");
+        snapshot.Delegations.Single(d => d.DelegationId == "works").ChildActivityStatus.ShouldBe("busy");
+        snapshot.Delegations.Single(d => d.DelegationId == "unlinked").ChildActivityStatus.ShouldBeNull();
+    }
+
     [Fact]
     public async Task GetSnapshotAsync_falls_back_to_persisted_when_harness_unavailable()
     {

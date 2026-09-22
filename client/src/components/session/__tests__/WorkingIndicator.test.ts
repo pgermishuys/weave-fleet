@@ -26,6 +26,16 @@ describe("WorkingIndicator", () => {
     wrapper.unmount();
   });
 
+  // A question (a sub-agent's or the session's own) holds the turn: the words and diamond of the session row.
+  it("says it needs input while a question waits", () => {
+    const wrapper = mount(WorkingIndicator, { props: { since: Date.now() - 5000, waiting: true } });
+
+    expect(wrapper.text()).toBe("Needs input");
+    expect(wrapper.find(".status-glyph--working").exists()).toBe(false);
+    expect(wrapper.find("[aria-label='Needs input']").exists()).toBe(true);
+    expect(wrapper.find(".working__elapsed").exists()).toBe(false);
+  });
+
   it("never shows a negative time when clocks disagree", () => {
     const wrapper = mount(WorkingIndicator, { props: { since: Date.now() + 5000 } });
 

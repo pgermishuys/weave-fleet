@@ -5,6 +5,8 @@ import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 const props = defineProps<{
   /** When the turn began (your last prompt), in epoch milliseconds; the time is left out without it. */
   since?: number | null;
+  /** The turn is stopped on a question (a sub-agent's or its own) and waits for you, not for the agent. */
+  waiting?: boolean;
 }>();
 
 const now = shallowRef(Date.now());
@@ -24,8 +26,22 @@ const elapsed = computed(() => {
 </script>
 
 <template>
+  <!-- A question holds the turn: the words and diamond the session row and header use for it. -->
+  <div
+    v-if="waiting"
+    class="working working--waiting"
+    role="status"
+    data-testid="working-indicator"
+  >
+    <StatusGlyph
+      status="waiting_input"
+      label="Needs input"
+    />
+    <span class="working__waiting">Needs input</span>
+  </div>
   <!-- The session row's Quad, so the conversation and the list say "working" the same way. -->
   <div
+    v-else
     class="working"
     role="status"
     data-testid="working-indicator"
@@ -67,6 +83,11 @@ const elapsed = computed(() => {
   -webkit-background-clip: text;
   color: transparent;
   animation: working-shimmer 2.2s linear infinite;
+}
+
+.working__waiting {
+  color: var(--status-waiting);
+  font-weight: 500;
 }
 
 .working__elapsed {
