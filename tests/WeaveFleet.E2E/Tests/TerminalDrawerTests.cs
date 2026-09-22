@@ -55,10 +55,7 @@ public sealed class TerminalDrawerTests : E2ETestBase,
             // Closing the tab ends the shell: the drawer hides and the session has no terminals left.
             await Page.Locator(".terminal-tab__close").ClickAsync();
             await Assertions.Expect(Page.Locator(".terminal-tab")).ToHaveCountAsync(0);
-            var listed = await Page.EvaluateAsync<JsonElement>(
-                "async (id) => (await fetch(`/api/sessions/${id}/terminals`, { credentials: 'include' })).json()",
-                sessionId);
-            listed.GetArrayLength().ShouldBe(0);
+            await WaitForNoTerminalsAsync(sessionId, TimeSpan.FromSeconds(10));
         });
     }
 
@@ -93,5 +90,29 @@ public sealed class TerminalDrawerTests : E2ETestBase,
             await Page.Keyboard.PressAsync("Control+j");
             await Assertions.Expect(Page.Locator(".terminal-drawer")).ToBeHiddenAsync();
         });
+    }
+
+    /// <summary>
+    /// Waits until the session has no terminals left on the server. The tab goes the moment it is clicked —
+    /// the client drops it before it sends the DELETE — and the server only removes the terminal once the
+    /// shell is dead, which waits for the read loop to drain. So asking once races the teardown.
+    /// </summary>
+    private async Task WaitForNoTerminalsAsync(string sessionId, TimeSpan timeout)
+    {
+        var deadline = DateTimeOffset.UtcNow + timeout;
+        var listed = -1;
+
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            var response = await Page.EvaluateAsync<JsonElement>(
+                "async (id) => (await fetch(`/api/sessions/${id}/terminals`, { credentials: 'include' })).json()",
+                sessionId);
+            listed = response.GetArrayLength();
+            if (listed == 0) return;
+
+            await Task.Delay(TimeSpan.FromMilliseconds(100));
+        }
+
+        listed.ShouldBe(0, $"The session still listed {listed} terminal(s) {timeout.TotalSeconds}s after the tab was closed.");
     }
 }
