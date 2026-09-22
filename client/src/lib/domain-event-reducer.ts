@@ -7,7 +7,11 @@ import type { SessionSnapshot, SessionSnapshotDelegation } from "@/lib/session-s
 
 export type SessionStreamExplicitStatus = "idle" | "busy" | "retry"
 
-export type SessionStreamStatus = SessionStreamExplicitStatus | "delegating"
+/**
+ * "waiting_input" is a sub-agent stopped on a question: nothing moves until you answer it, so it outranks
+ * the parent's own work, as it does in the session list and header.
+ */
+export type SessionStreamStatus = SessionStreamExplicitStatus | "delegating" | "waiting_input"
 
 export interface SessionStreamState {
   messages: AccumulatedMessage[]
@@ -29,7 +33,8 @@ const ACTIVE_DELEGATION_STATUSES = new Set<DelegationDto["status"]>(["pending", 
 
 /**
  * Whether the conversation shows the agent at work. Anything but idle is work: a turn,
- * a sub-agent, or a retry after a model error (e.g. a rate limit) that hasn't given up.
+ * a sub-agent, or a retry after a model error (e.g. a rate limit) that hasn't given up. A
+ * sub-agent waiting on a question counts too: the turn hasn't ended, it waits on you.
  */
 export function isStreamWorking(status: SessionStreamStatus): boolean {
   return status !== "idle"
@@ -125,6 +130,10 @@ export function applyDomainEvent(state: SessionStreamState, event: DomainEvent):
     case "session.idled":
       return withExplicitStatus(state, "idle")
 
+    // Only a sub-agent's status is read here; the session's own comes from its turn events.
+    case "activity_status":
+      return withChildActivity(state, event.payload.sessionId, event.payload.activityStatus)
+
     default:
       return state
   }
@@ -201,6 +210,10 @@ function deriveSessionStatus(
   explicitStatus: SessionStreamExplicitStatus,
   delegations: DelegationDto[],
 ): SessionStreamStatus {
+  if (hasWaitingDelegation(delegations)) {
+    return "waiting_input"
+  }
+
   if (explicitStatus === "busy") {
     return "busy"
   }
@@ -222,7 +235,7 @@ function deriveSnapshotSessionStatus(
 ): SessionStreamStatus {
   // Snapshot hydration/reconnect can land while the parent activity status still
   // reflects turn work, but active delegations must surface immediately.
-  if (hasActiveDelegations(delegations)) {
+  if (hasActiveDelegations(delegations) && !hasWaitingDelegation(delegations)) {
     return "delegating"
   }
 
@@ -231,6 +244,34 @@ function deriveSnapshotSessionStatus(
 
 function hasActiveDelegations(delegations: DelegationDto[]): boolean {
   return delegations.some((delegation) => ACTIVE_DELEGATION_STATUSES.has(delegation.status))
+}
+
+/** Whether a sub-agent that is still at work has stopped on a question. */
+export function isDelegationWaiting(delegation: DelegationDto): boolean {
+  return ACTIVE_DELEGATION_STATUSES.has(delegation.status) && delegation.childActivityStatus === "waiting_input"
+}
+
+function hasWaitingDelegation(delegations: DelegationDto[]): boolean {
+  return delegations.some(isDelegationWaiting)
+}
+
+/** Records what a sub-agent's session shows now; an event for any other session leaves the state as it was. */
+function withChildActivity(state: SessionStreamState, sessionId: string | undefined, activityStatus: string | undefined): SessionStreamState {
+  if (!sessionId || !activityStatus) {
+    return state
+  }
+
+  let changed = false
+  const delegations = state.delegations.map((delegation) => {
+    if (delegation.childSessionId !== sessionId || delegation.childActivityStatus === activityStatus) {
+      return delegation
+    }
+
+    changed = true
+    return { ...delegation, childActivityStatus: activityStatus }
+  })
+
+  return changed ? withDelegations(state, delegations) : state
 }
 
 function withExplicitStatus(state: SessionStreamState, explicitStatus: SessionStreamExplicitStatus): SessionStreamState {
@@ -257,6 +298,7 @@ function mapSnapshotDelegation(delegation: SessionSnapshotDelegation): Delegatio
     title: delegation.title,
     status: toDelegationStatus(delegation.status),
     createdAt: delegation.createdAt,
+    childActivityStatus: delegation.childActivityStatus ?? null,
   }
 }
 
