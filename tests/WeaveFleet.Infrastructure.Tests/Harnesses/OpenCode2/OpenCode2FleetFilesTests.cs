@@ -50,9 +50,54 @@ public sealed partial class OpenCode2FleetFilesTests : IDisposable
         OpenCode2FleetFiles.InstallSkills(_dataDirectory);
 
         File.Exists(Path.Combine(skills, "fleet-api", "old.md")).ShouldBeFalse();
-        var builtIn = OpenCode2FleetFiles.InstallBuiltInSkills(_dataDirectory);
-        foreach (var name in OpenCode2FleetFiles.BuiltInSkillNames)
-            File.Exists(Path.Combine(builtIn, name, "SKILL.md")).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void An_owners_built_in_skills_folder_holds_exactly_the_skills_they_turned_on()
+    {
+        var names = OpenCode2FleetFiles.BuiltInSkillNames.Order(StringComparer.Ordinal).ToList();
+        var (on, off) = (names[0], names[1]);
+
+        var folder = OpenCode2FleetFiles.SyncBuiltInSkills(_dataDirectory, "local-user", [on]);
+
+        folder.ShouldBe(Path.Combine(_dataDirectory, "opencode2", "built-in-skills", OpenCode2FleetFiles.OwnerFolder("local-user")));
+        Directory.GetDirectories(folder).Select(Path.GetFileName).ShouldBe([on]);
+        File.Exists(Path.Combine(folder, on, "SKILL.md")).ShouldBeTrue();
+
+        // Switched: the folder is the same, its contents follow.
+        OpenCode2FleetFiles.SyncBuiltInSkills(_dataDirectory, "local-user", [off]).ShouldBe(folder);
+        Directory.GetDirectories(folder).Select(Path.GetFileName).ShouldBe([off]);
+
+        // Nothing on: the folder stays, empty, so the servers that name it still watch it.
+        OpenCode2FleetFiles.SyncBuiltInSkills(_dataDirectory, "local-user", []).ShouldBe(folder);
+        Directory.Exists(folder).ShouldBeTrue();
+        Directory.EnumerateFileSystemEntries(folder).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Each_owner_has_a_built_in_skills_folder_of_their_own()
+    {
+        var name = OpenCode2FleetFiles.BuiltInSkillNames.Order(StringComparer.Ordinal).First();
+
+        var mine = OpenCode2FleetFiles.SyncBuiltInSkills(_dataDirectory, "owner-1", [name]);
+        var theirs = OpenCode2FleetFiles.SyncBuiltInSkills(_dataDirectory, "owner-2", []);
+
+        mine.ShouldNotBe(theirs);
+        File.Exists(Path.Combine(mine, name, "SKILL.md")).ShouldBeTrue();
+        Directory.EnumerateFileSystemEntries(theirs).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Built_in_skills_left_from_before_owner_folders_are_removed()
+    {
+        var name = OpenCode2FleetFiles.BuiltInSkillNames.Order(StringComparer.Ordinal).First();
+        var old = Path.Combine(_dataDirectory, "opencode2", "built-in-skills", name);
+        Directory.CreateDirectory(old);
+        File.WriteAllText(Path.Combine(old, "SKILL.md"), "old");
+
+        OpenCode2FleetFiles.SyncBuiltInSkills(_dataDirectory, "local-user", [name]);
+
+        Directory.Exists(old).ShouldBeFalse();
     }
 
     [Fact]

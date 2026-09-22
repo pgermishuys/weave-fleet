@@ -138,5 +138,14 @@ public sealed class FakeHarnessRuntime : IHarnessRuntime
         return CatalogBehavior?.Invoke(ownerUserId, directory, ct) ?? Task.FromResult<HarnessCatalog?>(null);
     }
 
+    /// <summary>The owners <see cref="BuiltInSkillsChangedAsync"/> was told about, in order.</summary>
+    public List<string> BuiltInSkillChanges { get; } = [];
+
+    public Task BuiltInSkillsChangedAsync(string ownerUserId, CancellationToken ct)
+    {
+        BuiltInSkillChanges.Add(ownerUserId);
+        return Task.CompletedTask;
+    }
+
     private sealed record FakeRuntimeLaunchArtifacts : RuntimeLaunchArtifacts;
 }

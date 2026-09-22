@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
@@ -11,8 +12,9 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 /// <item>The Fleet plugin (<c>opencode2/fleet/index.js</c> in the repo): the canvas, app and browser tools. V2 loads a
 /// plugin from a folder, so it's written as <c>fleet/index.js</c> and the folder is what the config names.</item>
 /// <item>Fleet's skills: <c>opencode/skills</c> (such as <c>fleet-api</c>) for every session, and
-/// <c>opencode/built-in-skills</c>, one folder per skill, for the ones the owner turned on. They're the same skill
-/// files the OpenCode harness installs, with a copy of their own here, so neither harness depends on the other.</item>
+/// <c>opencode/built-in-skills</c>, one folder per skill, for the ones the owner turned on, in a folder per owner
+/// (<see cref="SyncBuiltInSkills"/>). They're the same skill files the OpenCode harness installs, with a copy of their
+/// own here, so neither harness depends on the other.</item>
 /// </list>
 /// The server loads them through <c>OPENCODE_CONFIG_CONTENT</c> (<see cref="BuildConfigContent"/>). V2 adds its
 /// <c>plugins</c> and <c>skills</c> to the user's own, so the user's plugins and skill folders still load.
@@ -36,11 +38,54 @@ internal static class OpenCode2FleetFiles
         InstallFolder(SkillsPrefix, Path.Combine(dataDirectory, "opencode2", "skills"));
 
     /// <summary>
-    /// Writes the built-in skills to <c>{dataDirectory}/opencode2/built-in-skills</c>, one folder per skill, and returns
-    /// the folder.
+    /// Makes <c>{dataDirectory}/opencode2/built-in-skills/{owner}</c> hold exactly the built-in skills in
+    /// <paramref name="enabled"/>, one folder per skill, and returns it. The owner's servers name that folder in their
+    /// <c>skills</c> array once, whatever is in it, and V2 watches it: a skill written there reaches the sessions started
+    /// afterwards, and one removed leaves them, with no new server. (A new entry in the array is the one thing V2 can't
+    /// pick up while it runs: the array is the server's environment.)
     /// </summary>
-    public static string InstallBuiltInSkills(string dataDirectory) =>
-        InstallFolder(BuiltInSkillsPrefix, Path.Combine(dataDirectory, "opencode2", "built-in-skills"));
+    public static string SyncBuiltInSkills(string dataDirectory, string ownerUserId, IReadOnlyCollection<string> enabled)
+    {
+        var parent = Path.Combine(dataDirectory, "opencode2", "built-in-skills");
+        var root = Path.Combine(parent, OwnerFolder(ownerUserId));
+        Directory.CreateDirectory(root);
+
+        var shipped = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (relativePath, resourceName) in Resources(BuiltInSkillsPrefix))
+        {
+            if (!enabled.Contains(relativePath.Split(Path.DirectorySeparatorChar)[0]))
+                continue;
+
+            var path = Path.GetFullPath(Path.Combine(root, relativePath));
+            WriteIfChanged(path, Read(resourceName));
+            shipped.Add(path);
+        }
+
+        foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+        {
+            if (!shipped.Contains(Path.GetFullPath(file)))
+                File.Delete(file);
+        }
+
+        foreach (var folder in Directory.EnumerateDirectories(root, "*", SearchOption.AllDirectories).OrderByDescending(f => f.Length))
+        {
+            if (!Directory.EnumerateFileSystemEntries(folder).Any())
+                Directory.Delete(folder);
+        }
+
+        // Before owners had folders of their own, every shipped skill sat directly in the parent folder.
+        foreach (var name in BuiltInSkillNames)
+        {
+            if (Directory.Exists(Path.Combine(parent, name)))
+                Directory.Delete(Path.Combine(parent, name), recursive: true);
+        }
+
+        return root;
+    }
+
+    /// <summary>The owner's folder name: a short hash, since an owner id can be anything.</summary>
+    internal static string OwnerFolder(string ownerUserId)
+        => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(ownerUserId)))[..16];
 
     /// <summary>The names of the built-in skills this Fleet ships: the folders under <c>opencode/built-in-skills</c>.</summary>
     public static IReadOnlySet<string> BuiltInSkillNames { get; } = Resources(BuiltInSkillsPrefix)
