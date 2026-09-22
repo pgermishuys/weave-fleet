@@ -162,6 +162,12 @@ public sealed class HarnessOptions
     public int PooledOpenCodeIdleTtlSeconds { get; set; } = 60;
 
     /// <summary>
+    /// Seconds an OpenCode 2 server for a profile stays up with no session using it and no turn running. The next
+    /// session on the profile starts it again. The server for sessions without a profile doesn't stop. Default: 300.
+    /// </summary>
+    public int OpenCode2ProfileServerIdleSeconds { get; set; } = 300;
+
+    /// <summary>
     /// Lets agents message other sessions with the <c>fleet_message</c> tool, and stops them prompting sessions
     /// through the API. Experimental: a user's <c>SessionMessages</c> preference wins over this. Default: false.
     /// </summary>

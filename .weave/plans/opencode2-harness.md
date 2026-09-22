@@ -209,8 +209,8 @@ What Stage 3 learned:
       `/api/provider`. V2 loads a directory lazily and returns `[]` until then: create a throwaway
       location load (e.g. `GET /api/location?location[directory]=…`) before listing. Verify this in the spike first.
 - [x] Agent/model choice per session (`agent`, `model` on create; `/agent`, `/model` switch).
-- [ ] Profiles: one server per (owner, profile), profile content through `OPENCODE_CONFIG_CONTENT`.
-      Profile check starts a throwaway server with the content. **Not in Track B:** after Tracks A and B merge.
+- [x] Profiles: one server per (owner, profile version). The profile reaches V2 as `OPENCODE_CONFIG` (a file), not
+      through `OPENCODE_CONFIG_CONTENT`; see "Profiles" below. The check starts a throwaway server with the content.
 - [x] Subagents: `subagent` tool + child session (`parentID`) → Fleet delegation events; child events
       routed to the parent's view.
 - [x] Off the record (recap): `POST /api/session/{id}/generate`.
@@ -454,6 +454,34 @@ What Track E learned:
   "Working" while the child waits (the list and header say "Needs input"). A V2 subagent's own edits refresh the child
   session's views, not the parent's open editor tabs, until the parent's turn ends. Edits by shell (`sed`) aren't
   seen mid-turn (as for OpenCode, the client reloads open files at turn end).
+
+## Profiles
+
+- [x] `SupportsProfiles` on. A session's profile picks its server: one per owner and profile version (content hash),
+      and the owner's server without a profile as before (`OpenCode2Servers`). Every server shares the one database,
+      so a session can move between them.
+- [x] **Layering, checked live on 2.0.6 and 2.0.9** (`~/.cache/opencode2-profiles/p1-layering.sh`): V2 honours
+      `OPENCODE_CONFIG` (a file path) as V1 does, with JSONC and V1 syntax. `GET /api/config` lists, low to high: the
+      config folder (`OPENCODE_CONFIG_DIR` in separate mode), the profile, the folder's own `opencode.json`, then
+      `OPENCODE_CONFIG_CONTENT`. Arrays (`skills`, `plugins`) add up across layers. So the profile is a hash-named
+      file under `{data}/opencode2/profiles` passed as `OPENCODE_CONFIG`, and Fleet's plugin and skills stay in
+      `OPENCODE_CONFIG_CONTENT` untouched: no merging, a folder's own config still wins over the profile (as on V1),
+      and the separate install keeps its own config folder and database.
+- [x] The catalog asks the profile's server, so the composer's agents and models follow the profile chip.
+- [x] Children: a delegated child resumes on the server its parent listens on (`FindServing`), even when the profile
+      was edited since that server started; V2's own subagent runs inside the parent's server anyway.
+- [x] **The check.** V2 never refuses a config and no request errors (`p2-broken.sh`, `p3-diagnostics.sh`): a broken
+      profile starts, answers every request and creates sessions. What it drops it writes to its log as
+      `configuration normalization diagnostic` (`path=$.model kind=invalid|unsupported`), only when a folder loads.
+      Unknown settings leave no trace at all, a plugin that doesn't load logs `failed to load plugin`, and a `model`
+      with no provider silently falls back to another model. So the check parses the profile (JSONC), starts a
+      throwaway server with `--print-logs`, loads an empty folder, and reads the log, the profile as V2 stored it
+      (`GET /api/config`) and `GET /api/model/default`. The server is killed on every path.
+- [x] Idle: a profile's server stops after `Harness:OpenCode2ProfileServerIdleSeconds` (300) without use and with no
+      turn running; the session's next request starts it again (~0.35 s to listen). Measured on 2.0.9 in separate
+      mode: an idle profile server holds ~260 MB RSS and 122 inotify watches (the owner's server ~265 MB, 126).
+- **Left out:** the owner's server without a profile still never stops. A session keeps the profile version it
+  started on until Fleet restarts (the server it goes back to after an idle stop is the same version).
 
 ## Later
 

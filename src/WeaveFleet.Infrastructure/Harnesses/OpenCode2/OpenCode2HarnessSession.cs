@@ -19,7 +19,8 @@ internal sealed record OpenCode2SessionContext(
 /// <summary>
 /// One Fleet session on an OpenCode 2 server. The session lives in the server's database under
 /// <see cref="ResumeToken"/>; this object only attaches to the server's event stream and sends requests. When the
-/// server stops, the next request attaches the session to the owner's new server.
+/// server stops (an idle profile server does), the next request attaches the session to a new server for the owner and
+/// the same profile.
 /// </summary>
 internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCode2EventSink
 {
@@ -54,7 +55,7 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
     private bool _disposed;
 
     /// <param name="info">The V2 session as the server last described it (its agent and model).</param>
-    /// <param name="servers">The owner's running server, started when there's none.</param>
+    /// <param name="servers">The running server for the owner and the session's profile, started when there's none.</param>
     /// <param name="delegations">Records the session's subagent calls; none in tests that don't need them.</param>
     internal OpenCode2HarnessSession(
         string instanceId,
@@ -411,7 +412,10 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
     private async Task<OpenCode2Server> AttachedServerAsync(CancellationToken ct)
     {
         if (_server is { IsRunning: true } current)
+        {
+            current.Touch();
             return current;
+        }
 
         await _attachLock.WaitAsync(ct).ConfigureAwait(false);
         try
@@ -424,6 +428,7 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
                 throw new InvalidOperationException($"OpenCode 2 has no session {ResumeToken} any more.");
 
             Attach(server);
+            LogReattached(_logger, InstanceId, ResumeToken, server.ProcessId ?? 0);
             return server;
         }
         finally
@@ -594,6 +599,9 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't interrupt OpenCode 2 session {InstanceId} while stopping it")]
     private static partial void LogStopInterruptFailed(ILogger logger, string instanceId, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 session {InstanceId} ({HarnessSessionId}) attached again, on server {ProcessId}")]
+    private static partial void LogReattached(ILogger logger, string instanceId, string harnessSessionId, int processId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't delete OpenCode 2 session {InstanceId} from its server")]
     private static partial void LogDeleteFailed(ILogger logger, string instanceId, Exception exception);

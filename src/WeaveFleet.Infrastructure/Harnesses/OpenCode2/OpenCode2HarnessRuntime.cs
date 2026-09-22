@@ -21,7 +21,10 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 /// <see cref="IHarnessRuntime"/> for OpenCode 2. Fleet runs one private <c>opencode2 serve</c> per owner, with its
 /// own password, for every directory; each Fleet session is a V2 session on it, and its resume token is the V2
 /// session id. The server stays up while Fleet runs, and a stopped one is replaced on the next request.
-/// Fleet's plugin (canvas, app and browser tools) and skills load into it through <c>OPENCODE_CONFIG_CONTENT</c>.
+/// Sessions on a profile run on a server of their own per profile version, which stops when it's idle
+/// (<see cref="OpenCode2Servers"/>); every server shares the one database, so a session can move between them.
+/// Fleet's plugin (canvas, app and browser tools) and skills load into it through <c>OPENCODE_CONFIG_CONTENT</c>, and a
+/// profile through <c>OPENCODE_CONFIG</c> (<see cref="OpenCode2Profiles"/>).
 /// The install it runs, and in separate mode its own config folder and database, come from <see cref="OpenCode2Install"/>.
 /// </summary>
 public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDisposable, IDisposable
@@ -41,10 +44,8 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     private readonly ILoggerFactory _loggerFactory;
     private readonly IAnalyticsCollector? _analytics;
     private readonly OpenCode2Install _install;
-    private readonly ConcurrentDictionary<string, OpenCode2Server> _servers = new(StringComparer.Ordinal);
-
-    // Held while a server starts, so an owner never gets two; reads (bridge tokens) don't take it.
-    private readonly SemaphoreSlim _serversLock = new(1, 1);
+    private readonly OpenCode2Servers _servers;
+    private Timer? _idleTimer;
     private string? _pluginFolder;
     private string? _skillsFolder;
     private string? _builtInSkillsFolder;
@@ -85,6 +86,10 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             ExecutableResolver.UserBinDirectories(),
             (path, ct) => HarnessProbe.CheckInstalledAsync("OpenCode 2", OpenCode2Executable.Command, path, logger, ct),
             OperatingSystem.IsWindows());
+        _servers = new OpenCode2Servers(
+            (key, setup, ct) => StartServerAsync(key.OwnerUserId, setup, logLine: null, ct),
+            TimeSpan.FromSeconds(Math.Max(1, options.Harness.OpenCode2ProfileServerIdleSeconds)),
+            logger);
     }
 
     /// <inheritdoc />
@@ -138,38 +143,38 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     /// <remarks>
     /// Idle servers stop now and the next request starts one on the new binary; a busy one is replaced once it's idle.
     /// </remarks>
-    public async Task AfterUpdateAsync(CancellationToken ct)
-    {
-        await _serversLock.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            foreach (var (owner, server) in _servers)
-            {
-                if (server.IsRunning && !await server.IsIdleAsync(ct).ConfigureAwait(false))
-                {
-                    server.MarkOutdated();
-                    continue;
-                }
-                _servers.TryRemove(owner, out _);
-                await server.DisposeAsync().ConfigureAwait(false);
-            }
-        }
-        finally
-        {
-            _serversLock.Release();
-        }
-    }
+    public Task AfterUpdateAsync(CancellationToken ct) => _servers.AfterUpdateAsync(ct);
 
     /// <inheritdoc />
+    /// <remarks>Writes the session's profile, if any, where its server will read it; that picks the server too.</remarks>
     public Task<RuntimePreparation> PrepareRuntimeAsync(RuntimePreparationContext context, CancellationToken ct)
-        => Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new OpenCode2LaunchArtifacts()));
+    {
+        if (context.Profile is not { } profile)
+            return Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new OpenCode2LaunchArtifacts()));
+
+        try
+        {
+            return Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(
+                new OpenCode2LaunchArtifacts { Profile = WriteProfile(profile.Content) }));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return Task.FromResult<RuntimePreparation>(new RuntimePreparation.NotReady(
+            [
+                new RuntimePreparationError(
+                    Code: "ProfileNotWritten",
+                    Message: $"Fleet couldn't write the {profile.Name} profile for OpenCode 2: {ex.Message}",
+                    Guidance: "Check that Fleet can write to its data folder."),
+            ]));
+        }
+    }
 
     /// <inheritdoc />
     public async Task<IHarnessSession> SpawnAsync(HarnessSpawnOptions options, CancellationToken ct)
     {
         HarnessHelpers.ValidateWorkingDirectory(options.WorkingDirectory);
 
-        var server = await GetServerAsync(options.OwnerUserId, ct).ConfigureAwait(false);
+        var server = await GetServerAsync(options.OwnerUserId, ProfileOf(options.LaunchArtifacts), ct).ConfigureAwait(false);
         var created = await server.Client.CreateSessionAsync(options.WorkingDirectory, ct).ConfigureAwait(false);
 
         var session = NewSession(
@@ -187,7 +192,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             throw;
         }
 
-        LogSpawned(_logger, session.InstanceId, created.Id!);
+        LogSpawned(_logger, session.InstanceId, created.Id!, server.ProcessId ?? 0);
         return session;
     }
 
@@ -196,7 +201,11 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     {
         HarnessHelpers.ValidateWorkingDirectory(options.WorkingDirectory);
 
-        var server = await GetServerAsync(options.OwnerUserId, ct).ConfigureAwait(false);
+        // A delegated child's V2 session lives on its parent's server, which is the only one that sends its events. The
+        // child is prepared with the parent's profile as it is now, which is another server when the profile was edited
+        // since the parent's server started.
+        var server = (options.ParentSessionId is { } parentSessionId ? _servers.FindServing(options.OwnerUserId, parentSessionId) : null)
+            ?? await GetServerAsync(options.OwnerUserId, ProfileOf(options.LaunchArtifacts), ct).ConfigureAwait(false);
         var info = await server.Client.GetSessionAsync(options.ResumeToken, ct).ConfigureAwait(false)
             ?? throw new InvalidOperationException($"OpenCode 2 has no session {options.ResumeToken}.");
 
@@ -205,18 +214,88 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             info with { Id = options.ResumeToken },
             new OpenCode2SessionContext(options.SessionId, options.OwnerUserId, options.WorkingDirectory, options.ProjectId, options.ProjectName),
             server);
-        LogResumed(_logger, session.InstanceId, options.ResumeToken);
+        LogResumed(_logger, session.InstanceId, options.ResumeToken, server.ProcessId ?? 0);
         return session;
     }
 
     /// <inheritdoc />
-    /// <remarks>Read from the owner's server, which serves every folder: the one a new session there would use.</remarks>
+    /// <remarks>
+    /// Read from the server a new session there on <paramref name="profile"/> would use, which serves every folder: a
+    /// profile's providers, models and agents are its server's.
+    /// </remarks>
     public async Task<HarnessCatalog?> GetCatalogAsync(string ownerUserId, string directory, HarnessProfile? profile, CancellationToken ct)
     {
         HarnessHelpers.ValidateWorkingDirectory(directory);
-        var server = await GetServerAsync(ownerUserId, ct).ConfigureAwait(false);
+        var server = await GetServerAsync(ownerUserId, profile is null ? null : WriteProfile(profile.Content), ct).ConfigureAwait(false);
         return await OpenCode2Catalog.ReadAsync(server, directory, ct).ConfigureAwait(false);
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// V2 never refuses a config: a broken profile starts, answers, and loads folders without the parts it couldn't
+    /// use, and says so only in its log when a folder loads (<see cref="OpenCode2Profiles"/>). So the check starts a
+    /// server of its own on the profile, the way a session's would start, with its log on; loads an empty folder; and
+    /// reads the log, the profile as V2 stored it and the model a session would get. The server stops either way.
+    /// </remarks>
+    public async Task<HarnessProfileCheck> CheckProfileAsync(string ownerUserId, string content, CancellationToken ct)
+    {
+        if (OpenCode2Profiles.ReadSettings(content, out var settings) is { } unreadable)
+            return unreadable;
+
+        using (settings)
+        {
+            OpenCode2Profile profile;
+            string folder;
+            try
+            {
+                profile = WriteProfile(content);
+                folder = Path.Combine(FleetDataDirectory(), "opencode2", "profile-check");
+                Directory.CreateDirectory(folder);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return new HarnessProfileCheck(false, $"Fleet couldn't write this profile for OpenCode 2: {ex.Message}");
+            }
+
+            var log = new ConcurrentQueue<OpenCode2Profiles.LogDiagnostic>();
+            OpenCode2Server server;
+            try
+            {
+                var setup = await GetSetupAsync(ownerUserId, profile).ConfigureAwait(false);
+                server = await StartServerAsync(ownerUserId, setup, line =>
+                {
+                    if (OpenCode2Profiles.ParseLogLine(line) is { } diagnostic)
+                        log.Enqueue(diagnostic);
+                }, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or TimeoutException or HttpRequestException)
+            {
+                return new HarnessProfileCheck(false, $"OpenCode 2 didn't start with this profile: {ex.Message}");
+            }
+
+            await using (server.ConfigureAwait(false))
+            {
+                try
+                {
+                    await server.LoadLocationAsync(folder, ct).ConfigureAwait(false);
+                    var config = await server.Client.GetConfigAsync(folder, ct).ConfigureAwait(false);
+                    var model = await server.Client.GetDefaultModelAsync(folder, ct).ConfigureAwait(false);
+
+                    // V2 logs while it loads the folder; its last lines can still be on their way.
+                    await Task.Delay(ProfileCheckLogGrace, ct).ConfigureAwait(false);
+                    return OpenCode2Profiles.Judge(profile.ConfigPath, settings!.RootElement, [.. config], model, [.. log]);
+                }
+                catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException
+                                           || (ex is TaskCanceledException && !ct.IsCancellationRequested))
+                {
+                    return new HarnessProfileCheck(false, $"OpenCode 2 started with this profile but didn't answer: {ex.Message}");
+                }
+            }
+        }
+    }
+
+    /// <summary>How long a profile check waits after the folder loaded for the rest of V2's log.</summary>
+    internal TimeSpan ProfileCheckLogGrace { get; set; } = TimeSpan.FromMilliseconds(500);
 
     /// <inheritdoc />
     public Task<bool> WarmupPooledInstanceAsync(string ownerUserId, CancellationToken ct) => Task.FromResult(false);
@@ -228,7 +307,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     internal OpenCode2Server? FindServer(string bridgeToken)
     {
         var token = Encoding.UTF8.GetBytes(bridgeToken);
-        return _servers.Values.FirstOrDefault(server => server.IsRunning
+        return _servers.All.FirstOrDefault(server => server.IsRunning
             && CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(server.BridgeToken), token));
     }
 
@@ -238,17 +317,9 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             return;
         _disposed = true;
 
-        await _serversLock.WaitAsync().ConfigureAwait(false);
-        try
-        {
-            foreach (var server in _servers.Values)
-                await server.DisposeAsync().ConfigureAwait(false);
-            _servers.Clear();
-        }
-        finally
-        {
-            _serversLock.Release();
-        }
+        if (_idleTimer is not null)
+            await _idleTimer.DisposeAsync().ConfigureAwait(false);
+        await _servers.DisposeAsync().ConfigureAwait(false);
     }
 
     /// <summary>For containers disposed synchronously; stops the servers the same way.</summary>
@@ -260,43 +331,62 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             info,
             context,
             server,
-            ct => GetServerAsync(context.OwnerUserId, ct),
+            // Back to a server like the one it's on (the same profile version) when that one stops.
+            ct => GetServerAsync(context.OwnerUserId, server.Profile, ct),
             _analytics,
             new OpenCode2Delegations(_scopeFactory, context.OwnerUserId, context.FleetSessionId, _loggerFactory.CreateLogger<OpenCode2Delegations>()),
             _loggerFactory.CreateLogger<OpenCode2HarnessSession>());
 
     /// <summary>
-    /// The owner's running server, started when there's none or the last one stopped. A server started with other
-    /// settings (a built-in skill switched, messages between sessions turned on or off) is replaced when none of its
-    /// sessions is running a turn; until then the owner keeps using it.
+    /// The owner's running server for <paramref name="profile"/> (none: the owner's own), started when there's none or
+    /// the last one stopped. A server started with other settings (a built-in skill switched, messages between sessions
+    /// turned on or off) is replaced when none of its sessions is running a turn; until then its sessions keep using it.
     /// </summary>
-    private async Task<OpenCode2Server> GetServerAsync(string ownerUserId, CancellationToken ct)
+    private async Task<OpenCode2Server> GetServerAsync(string ownerUserId, OpenCode2Profile? profile, CancellationToken ct)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        var setup = await GetSetupAsync(ownerUserId).ConfigureAwait(false);
+        var setup = await GetSetupAsync(ownerUserId, profile).ConfigureAwait(false);
+        var server = await _servers.GetAsync(OpenCode2ServerKey.For(ownerUserId, profile), setup, ct).ConfigureAwait(false);
+        if (profile is not null)
+            EnsureIdleTimer();
+        return server;
+    }
 
-        await _serversLock.WaitAsync(ct).ConfigureAwait(false);
+    private static OpenCode2Profile? ProfileOf(RuntimeLaunchArtifacts? artifacts)
+        => (artifacts as OpenCode2LaunchArtifacts)?.Profile;
+
+    private OpenCode2Profile WriteProfile(string content) => OpenCode2Profiles.Write(FleetDataDirectory(), content);
+
+    private string FleetDataDirectory()
+        => Path.GetDirectoryName(Path.GetFullPath(_options.DatabasePath)) ?? Environment.CurrentDirectory;
+
+    /// <summary>Looks for idle profile servers to stop, from the first time one starts.</summary>
+    private void EnsureIdleTimer()
+    {
+        if (Volatile.Read(ref _idleTimer) is not null)
+            return;
+
+        var interval = TimeSpan.FromTicks(Math.Clamp(_servers.ProfileIdleTimeout.Ticks / 4, TimeSpan.FromSeconds(1).Ticks, TimeSpan.FromMinutes(1).Ticks));
+        var timer = new Timer(_ => _ = StopIdleServersAsync(DateTimeOffset.UtcNow), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        if (Interlocked.CompareExchange(ref _idleTimer, timer, null) is not null)
+        {
+            timer.Dispose();
+            return;
+        }
+        timer.Change(interval, interval);
+    }
+
+    /// <summary>Stops the profile servers idle at <paramref name="now"/>, and returns how many stopped.</summary>
+    internal async Task<int> StopIdleServersAsync(DateTimeOffset now)
+    {
         try
         {
-            if (_servers.TryGetValue(ownerUserId, out var existing))
-            {
-                if (existing.IsRunning
-                    && ((existing.Setup == setup && !existing.IsOutdated) || !await existing.IsIdleAsync(ct).ConfigureAwait(false)))
-                    return existing;
-
-                if (existing.IsRunning)
-                    LogReplacingServer(_logger, existing.ProcessId ?? 0);
-                _servers.TryRemove(ownerUserId, out _);
-                await existing.DisposeAsync().ConfigureAwait(false);
-            }
-
-            var server = await StartServerAsync(ownerUserId, setup, ct).ConfigureAwait(false);
-            _servers[ownerUserId] = server;
-            return server;
+            return await _servers.StopIdleAsync(now, CancellationToken.None).ConfigureAwait(false);
         }
-        finally
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            _serversLock.Release();
+            LogIdleStopFailed(_logger, ex);
+            return 0;
         }
     }
 
@@ -305,7 +395,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     /// only when the server can be told where Fleet is. The built-in skills the owner turned on load either way. The
     /// install is looked up on every request (files only), so a V2 installed while Fleet runs is found.
     /// </summary>
-    private async Task<OpenCode2ServerSetup> GetSetupAsync(string ownerUserId)
+    private async Task<OpenCode2ServerSetup> GetSetupAsync(string ownerUserId, OpenCode2Profile? profile)
     {
         var fleetUrl = ResolveLocalFleetUrl();
         var (builtInSkills, sessionMessages) = await ReadOwnerSettingsAsync(ownerUserId).ConfigureAwait(false);
@@ -330,7 +420,8 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             OpenCode2FleetFiles.BuildConfigContent(plugin, skills),
             SessionMessages: sessionMessages && plugin is not null,
             install?.ExecutablePath,
-            install?.Mode ?? OpenCode2InstallMode.Default);
+            install?.Mode ?? OpenCode2InstallMode.Default,
+            profile);
     }
 
     /// <summary>The built-in skills the owner turned on that this Fleet ships, in name order, and whether messages between sessions are on.</summary>
@@ -362,7 +453,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
 
         try
         {
-            folder = install(Path.GetDirectoryName(Path.GetFullPath(_options.DatabasePath)) ?? Environment.CurrentDirectory);
+            folder = install(FleetDataDirectory());
             Volatile.Write(ref installed, folder);
             return folder;
         }
@@ -373,7 +464,8 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         }
     }
 
-    private async Task<OpenCode2Server> StartServerAsync(string ownerUserId, OpenCode2ServerSetup setup, CancellationToken ct)
+    /// <param name="logLine">Each line of V2's log, for a profile check; <see langword="null"/> leaves the log in V2's own file.</param>
+    private async Task<OpenCode2Server> StartServerAsync(string ownerUserId, OpenCode2ServerSetup setup, Action<string>? logLine, CancellationToken ct)
     {
         var executable = setup.ExecutablePath
             ?? throw new InvalidOperationException("OpenCode 2 isn't installed. Set it up in Settings → Harnesses.");
@@ -402,6 +494,10 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             environment["FLEET_URL"] = $"{fleetUrl.TrimEnd('/')}{SessionMessages.AgentPathPrefix}/{bridgeToken}";
         if (setup.ConfigContent is { } configContent)
             environment["OPENCODE_CONFIG_CONTENT"] = configContent;
+
+        // Under the folder's own config and Fleet's, over the user's (see OpenCode2Profiles).
+        if (setup.Profile is { } profile)
+            environment[OpenCode2Profiles.EnvironmentVariable] = profile.ConfigPath;
         if (setup.SessionMessages)
             environment[SessionMessages.EnvironmentVariable] = "1";
 
@@ -420,6 +516,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
                 Password = password,
                 EnvironmentVariables = environment,
                 StartupTimeout = TimeSpan.FromSeconds(_options.HarnessStartupTimeoutSeconds),
+                LogLine = logLine,
             }, ct).ConfigureAwait(false);
 
             client = new OpenCode2HttpClient(
@@ -429,7 +526,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
 
             // Listening isn't the same as answering: check the password works before sessions use it.
             var info = await client.GetInfoAsync(ct).ConfigureAwait(false);
-            LogServerStarted(_logger, process.ProcessId ?? 0, info?.Version ?? version, baseUrl);
+            LogServerStarted(_logger, process.ProcessId ?? 0, info?.Version ?? version, baseUrl, setup.Profile?.Hash ?? "none");
             return new OpenCode2Server(ownerUserId, client, bridgeToken, process, _loggerFactory.CreateLogger<OpenCode2Server>(), setup);
         }
         catch
@@ -480,11 +577,11 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         return scope.ServiceProvider.GetService<ILocalFleetUrl>()?.TryGet();
     }
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 server {ProcessId} ({Version}) listening on {BaseUrl}")]
-    private static partial void LogServerStarted(ILogger logger, int processId, string version, Uri baseUrl);
+    [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 server {ProcessId} ({Version}) listening on {BaseUrl}, profile {Profile}")]
+    private static partial void LogServerStarted(ILogger logger, int processId, string version, Uri baseUrl, string profile);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 server {ProcessId} started with other settings (built-in skills, messages between sessions) and is idle; replacing it")]
-    private static partial void LogReplacingServer(ILogger logger, int processId);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't stop idle OpenCode 2 profile servers")]
+    private static partial void LogIdleStopFailed(ILogger logger, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't write Fleet's plugin or skills for OpenCode 2; its servers start without them")]
     private static partial void LogFleetFilesInstallFailed(ILogger logger, Exception exception);
@@ -492,9 +589,9 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't copy the skills to OpenCode 2's own config folder; its servers start without them")]
     private static partial void LogSkillSyncFailed(ILogger logger, Exception exception);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 session {InstanceId} created as {HarnessSessionId}")]
-    private static partial void LogSpawned(ILogger logger, string instanceId, string harnessSessionId);
+    [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 session {InstanceId} created as {HarnessSessionId} on server {ProcessId}")]
+    private static partial void LogSpawned(ILogger logger, string instanceId, string harnessSessionId, int processId);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 session {InstanceId} resumed {HarnessSessionId}")]
-    private static partial void LogResumed(ILogger logger, string instanceId, string harnessSessionId);
+    [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 session {InstanceId} resumed {HarnessSessionId} on server {ProcessId}")]
+    private static partial void LogResumed(ILogger logger, string instanceId, string harnessSessionId, int processId);
 }

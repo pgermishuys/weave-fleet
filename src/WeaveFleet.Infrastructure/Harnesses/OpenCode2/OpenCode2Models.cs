@@ -235,6 +235,10 @@ internal sealed record OpenCode2CommandInfo
 internal sealed record OpenCode2ConfigSource
 {
     public string? Type { get; init; }
+
+    /// <summary>The file a document came from; none for <c>OPENCODE_CONFIG_CONTENT</c>.</summary>
+    public string? Path { get; init; }
+
     public JsonElement Info { get; init; }
 }
 

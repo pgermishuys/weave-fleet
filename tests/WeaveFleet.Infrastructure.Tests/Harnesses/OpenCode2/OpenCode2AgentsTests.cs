@@ -309,7 +309,7 @@ public sealed class OpenCode2AgentsTests
     }
 
     [Fact]
-    public void OpenCode_2_offers_agents_models_commands_subagents_and_recaps()
+    public void OpenCode_2_offers_agents_models_commands_subagents_recaps_and_profiles()
     {
         var capabilities = new OpenCode2Harness().Capabilities;
 
@@ -320,7 +320,7 @@ public sealed class OpenCode2AgentsTests
         capabilities.SupportsOffTheRecordPrompt.ShouldBeTrue();
         // Fleet's fork starts a new session in the same folder for every harness; it doesn't use V2's.
         capabilities.SupportsForking.ShouldBeFalse();
-        capabilities.SupportsProfiles.ShouldBeFalse();
+        capabilities.SupportsProfiles.ShouldBeTrue();
     }
 
     private const string AgentsJson = """
