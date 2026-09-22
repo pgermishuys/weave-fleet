@@ -11,7 +11,6 @@
 //   → Frontend: http://localhost:3001 (hot reload)
 //   → Backend:  http://localhost:5001 (API only)
 
-using System.Net;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
@@ -90,6 +89,11 @@ var fleetOptions = builder.Configuration
 // Configure services
 builder.Services.Configure<FleetOptions>(
     builder.Configuration.GetSection(FleetOptions.SectionName));
+
+// Whether a loopback request may skip authentication is decided by the address Fleet BINDS to, never
+// by the address a request arrives from — a reverse proxy makes every remote caller look like loopback.
+var loopbackAuthPolicy = new LoopbackAuthPolicy(fleetOptions.Host);
+builder.Services.AddSingleton(loopbackAuthPolicy);
 // WebApplicationFactory-based E2E tests call ConfigureWebHost(...).UseEnvironment("Testing") to
 // isolate startup services (legacy import, warmup, etc.) from the host. For minimal-hosting apps,
 // that setting lands in configuration (builder.Configuration) but NOT in the already-materialized
@@ -315,8 +319,8 @@ else
                     return;
                 }
 
-                // Auto-sign-in for localhost requests — no token challenge needed
-                if (IsLocalhostRequest(context.HttpContext))
+                // Auto-sign-in for loopback requests when Fleet binds to loopback only — no token challenge needed
+                if (loopbackAuthPolicy.GrantsAutoAuth(context.HttpContext))
                 {
                     var claims = new[]
                     {
@@ -457,6 +461,13 @@ if (!fleetOptions.Auth.Enabled)
     Console.WriteLine();
     var displayHost = fleetOptions.Host is "0.0.0.0" or "::" ? Environment.MachineName : "localhost";
     Console.WriteLine($"  Access Weave Fleet at http://{displayHost}:{fleetOptions.Port}/login?token={localTokenAuthService.Token}");
+    if (loopbackAuthPolicy.IsRemoteReachable)
+    {
+        Console.WriteLine();
+        Console.WriteLine($"  Bound to {fleetOptions.Host}, which other machines can reach, so every request needs");
+        Console.WriteLine("  this token — including ones from this machine. Open the link above once; the sign-in");
+        Console.WriteLine("  cookie is remembered afterwards.");
+    }
     Console.WriteLine();
 }
 
@@ -645,7 +656,7 @@ app.MapGet("/version", () => Results.Ok(new VersionResponse(
     FleetInstrumentation.ServiceVersion,
     FleetInstrumentation.ServiceCommit)));
 #pragma warning restore IL2026
-app.MapAuthEndpoints(fleetOptions);
+app.MapAuthEndpoints(fleetOptions, loopbackAuthPolicy);
 
 // API endpoints (registered before SPA fallback)
 app.MapFleetEndpoints();
@@ -679,12 +690,6 @@ await app.RunAsync();
 
 static bool IsApiOrWebSocketRequest(PathString path)
     => path.StartsWithSegments("/api") || path.StartsWithSegments("/hubs");
-
-static bool IsLocalhostRequest(HttpContext context)
-{
-    var remoteIp = context.Connection.RemoteIpAddress;
-    return remoteIp is not null && IPAddress.IsLoopback(remoteIp);
-}
 
 static bool HasBearerAuthorizationHeader(HttpRequest request)
 {

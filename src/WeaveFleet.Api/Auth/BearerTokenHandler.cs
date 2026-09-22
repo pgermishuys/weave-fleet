@@ -1,4 +1,3 @@
-using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
@@ -16,7 +15,8 @@ public sealed class BearerTokenHandler(
     IOptionsMonitor<AuthenticationSchemeOptions> options,
     ILoggerFactory logger,
     UrlEncoder encoder,
-    ILocalTokenAuthService localTokenAuthService)
+    ILocalTokenAuthService localTokenAuthService,
+    LoopbackAuthPolicy loopbackAuthPolicy)
     : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
     public const string SchemeName = "LocalBearer";
@@ -25,11 +25,11 @@ public sealed class BearerTokenHandler(
     {
         // Check if request has Authorization header
         var hasAuthorizationHeader = Request.Headers.TryGetValue(HeaderNames.Authorization, out var authorizationHeaderValues);
-        
-        // If no Authorization header and request is from loopback, auto-authenticate
+
+        // If no Authorization header and the bind address makes loopback trustworthy, auto-authenticate
         if (!hasAuthorizationHeader)
         {
-            if (IsLocalhostRequest())
+            if (GrantsAutoAuth())
             {
                 return Task.FromResult(CreateSuccessResult());
             }
@@ -40,7 +40,7 @@ public sealed class BearerTokenHandler(
         var authorizationHeader = authorizationHeaderValues.ToString();
         if (string.IsNullOrWhiteSpace(authorizationHeader))
         {
-            if (IsLocalhostRequest())
+            if (GrantsAutoAuth())
             {
                 return Task.FromResult(CreateSuccessResult());
             }
@@ -72,11 +72,7 @@ public sealed class BearerTokenHandler(
         return Task.FromResult(CreateSuccessResult());
     }
 
-    private bool IsLocalhostRequest()
-    {
-        var remoteIp = Context.Connection.RemoteIpAddress;
-        return remoteIp is not null && IPAddress.IsLoopback(remoteIp);
-    }
+    private bool GrantsAutoAuth() => loopbackAuthPolicy.GrantsAutoAuth(Context);
 
     private AuthenticateResult CreateSuccessResult()
     {

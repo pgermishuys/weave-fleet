@@ -16,6 +16,10 @@ const DROPPED_NAMES = ["URLS", "ASPNETCORE_URLS", "DOTNET_URLS", "ASPNETCORE_ENV
 /**
  * The environment the bundled Fleet runs with: the launcher's settings, under the shared data directory. No login
  * token: Fleet signs in loopback requests on its own, the window's and the app's alike.
+ *
+ * `Fleet__Host: "127.0.0.1"` is load-bearing for that. Fleet only grants the loopback bypass when it binds to a
+ * loopback address, since anything wider can be fronted by a proxy that makes every outside caller look local.
+ * Bind the bundled Fleet anywhere else and the window would be asked for a login token it is never given.
  */
 export function buildServerEnv(base: NodeJS.ProcessEnv, paths: FleetPaths, port: number): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};

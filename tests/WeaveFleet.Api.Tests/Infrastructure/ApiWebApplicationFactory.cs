@@ -21,6 +21,7 @@ public sealed class ApiWebApplicationFactory(
     bool useTestAuthentication = false,
     bool testUserIsAdmin = false,
     bool simulateLocalhostRequest = false,
+    string? host = null,
     Action<IServiceCollection>? configureTestServices = null) : WebApplicationFactory<Program>
 {
     private readonly string _dbPath = Path.Combine(Path.GetTempPath(), $"fleet-api-tests-{Guid.NewGuid():N}.db");
@@ -36,6 +37,8 @@ public sealed class ApiWebApplicationFactory(
         builder.UseSetting("Fleet:AnalyticsDatabasePath", _analyticsDbPath);
         builder.UseSetting("Fleet:AnalyticsEnabled", "false");
         builder.UseSetting("Fleet:Port", "0");
+        if (host is not null)
+            builder.UseSetting("Fleet:Host", host);
         builder.UseSetting(WebHostDefaults.WebRootKey, _webRootPath);
         builder.UseSetting("Fleet:Auth:Enabled", authEnabled ? "true" : "false");
         builder.UseSetting("Fleet:Auth:TokenAuthEnabled", tokenAuthEnabled ? "true" : "false");

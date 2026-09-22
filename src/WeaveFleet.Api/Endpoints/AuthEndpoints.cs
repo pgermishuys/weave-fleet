@@ -1,9 +1,9 @@
-using System.Net;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Http;
+using WeaveFleet.Api.Auth;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Services;
 
@@ -13,13 +13,18 @@ namespace WeaveFleet.Api.Endpoints;
 
 public static class AuthEndpoints
 {
-    public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder app, FleetOptions fleetOptions)
+    public static IEndpointRouteBuilder MapAuthEndpoints(
+        this IEndpointRouteBuilder app,
+        FleetOptions fleetOptions,
+        LoopbackAuthPolicy loopbackAuthPolicy)
     {
         app.MapGet("/api/auth/status", (HttpContext httpContext) =>
         {
             var authenticated = httpContext.User.Identity?.IsAuthenticated ?? false;
 
-            var isLocalhost = IsLocalhostRequest(httpContext);
+            // Reports the effective policy, not the raw remote IP: the login page uses this to skip the
+            // token form and bounce through /auth/login, which only signs in when the policy allows it.
+            var isLocalhost = loopbackAuthPolicy.GrantsAutoAuth(httpContext);
 
             return Results.Ok(new AuthStatusResponse(
                 fleetOptions.Auth.Enabled,
@@ -36,8 +41,8 @@ public static class AuthEndpoints
 
             if (!fleetOptions.Auth.Enabled)
             {
-                // Auto-sign-in for localhost requests — no token challenge needed
-                if (IsLocalhostRequest(httpContext) && httpContext.User.Identity?.IsAuthenticated != true)
+                // Auto-sign-in for loopback requests when Fleet binds to loopback only — no token challenge needed
+                if (loopbackAuthPolicy.GrantsAutoAuth(httpContext) && httpContext.User.Identity?.IsAuthenticated != true)
                 {
                     var claims = new[]
                     {
@@ -137,12 +142,6 @@ public static class AuthEndpoints
             return true;
 
         return false;
-    }
-
-    private static bool IsLocalhostRequest(HttpContext context)
-    {
-        var remoteIp = context.Connection.RemoteIpAddress;
-        return remoteIp is not null && IPAddress.IsLoopback(remoteIp);
     }
 
 }
