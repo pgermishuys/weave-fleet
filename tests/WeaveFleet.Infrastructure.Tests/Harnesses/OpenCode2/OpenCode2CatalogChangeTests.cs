@@ -14,7 +14,7 @@ namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode2;
 public sealed class OpenCode2CatalogChangeTests
 {
     private const string Folder = "/work/rocket";
-    private static readonly TimeSpan Quiet = TimeSpan.FromMilliseconds(100);
+    private static readonly TimeSpan Quiet = TimeSpan.FromMilliseconds(250);
 
     // The rounds V2 sends for one agent file written in a loaded folder (2.0.9 sends two or three).
     private static readonly string[] AgentFileWritten =
@@ -42,7 +42,7 @@ public sealed class OpenCode2CatalogChangeTests
         for (var i = 0; i < 5; i++)
         {
             server.Route(Updated("agent.updated", Folder));
-            await Task.Delay(Quiet / 2);
+            await Task.Delay(Quiet / 5);
         }
         changes.ShouldBeEmpty();
 
@@ -74,6 +74,21 @@ public sealed class OpenCode2CatalogChangeTests
         foreach (var type in LoadEvents.Concat(AgentFileWritten))
             server.Route(Updated(type, Folder));
         await loading.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(Quiet * 4);
+
+        changes.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task The_event_that_finishes_loading_a_folder_is_not_a_change()
+    {
+        // A session already runs there, so the folder counts from its first event.
+        var changes = new ConcurrentQueue<string>();
+        await using var server = Server(changes);
+        server.Attach("ses_1", new Sink("fleet-1", Folder));
+
+        foreach (var type in LoadEvents)
+            server.Route(Updated(type, Folder));
         await Task.Delay(Quiet * 4);
 
         changes.ShouldBeEmpty();

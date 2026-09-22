@@ -176,23 +176,29 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
         }
     }
 
-    /// <summary>Notes a folder's catalog events; once V2 has sent them all, the folder counts as loaded.</summary>
-    private void ObserveLocation(OpenCode2Event evt)
+    /// <summary>
+    /// Notes a folder's catalog events; once V2 has sent them all, the folder counts as loaded. Returns whether this
+    /// event finished loading it.
+    /// </summary>
+    private bool ObserveLocation(OpenCode2Event evt)
     {
         if (evt.Location?.Directory is not { Length: > 0 } directory || Array.IndexOf(LocationLoadedEvents, evt.Type) < 0)
-            return;
+            return false;
 
         var seen = _locationEvents.GetOrAdd(directory, static _ => new HashSet<string>(StringComparer.Ordinal));
         lock (seen)
         {
             seen.Add(evt.Type);
             if (seen.Count < LocationLoadedEvents.Length)
-                return;
+                return false;
             seen.Clear();
         }
 
-        if (_locations.GetOrAdd(directory, static _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).TrySetResult())
-            _loadedAt.TryAdd(directory, Environment.TickCount64);
+        if (!_locations.GetOrAdd(directory, static _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).TrySetResult())
+            return false;
+
+        _loadedAt.TryAdd(directory, Environment.TickCount64);
+        return true;
     }
 
     /// <summary>
@@ -325,8 +331,8 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     /// </summary>
     internal void Route(OpenCode2Event evt)
     {
-        ObserveLocation(evt);
-        ObserveCatalogChange(evt);
+        if (!ObserveLocation(evt))
+            ObserveCatalogChange(evt);
         if (evt.SessionId is not { } sessionId)
             return;
 
