@@ -21,6 +21,7 @@ import {
 import { prependHistoryPage } from "@/lib/history-merge"
 import type { SessionHistoryPage } from "@/lib/session-snapshot"
 import { loadSessionHistory, useWeaveSocket, type Unsubscribe } from "@/composables/use-weave-socket"
+import { onGlobalEvent } from "@/composables/use-signalr-socket"
 import { useSessionsStore } from "@/stores/sessions"
 
 export interface UseSessionStreamResult {
@@ -91,7 +92,10 @@ export function useSessionStream(
   const isPartial = shallowRef(false)
   const isMounted = shallowRef(false)
   const pendingEvents: DomainEvent[] = []
+  // Sessions-topic events carry no cursor of this session's, so they're kept apart from its own.
+  const pendingActivity: DomainEvent[] = []
   let unsubscribe: Unsubscribe | null = null
+  let unsubscribeActivity: Unsubscribe | null = null
 
   const messages = computed<readonly AccumulatedMessage[]>(() => streamState.value.messages)
   const delegations = computed<readonly DelegationDto[]>(() => streamState.value.delegations)
@@ -108,8 +112,11 @@ export function useSessionStream(
 
   function cleanupSubscription(): void {
     pendingEvents.length = 0
+    pendingActivity.length = 0
     unsubscribe?.()
     unsubscribe = null
+    unsubscribeActivity?.()
+    unsubscribeActivity = null
     isLoadingOlder.value = false
   }
 
@@ -182,6 +189,9 @@ export function useSessionStream(
           for (const event of pendingEvents.splice(0, pendingEvents.length)) {
             nextState = applyLiveDomainEvent(nextState, event)
           }
+          for (const event of pendingActivity.splice(0, pendingActivity.length)) {
+            nextState = applyDomainEvent(nextState, event)
+          }
 
           streamState.value = nextState
           hasMore.value = snapshot.hasMore
@@ -215,6 +225,24 @@ export function useSessionStream(
           applyHistoryPage(page)
         },
       )
+
+      // A sub-agent's status comes on the sessions topic like every session's. The reducer keeps its
+      // delegations' own and leaves every other session's alone.
+      unsubscribeActivity = onGlobalEvent("sessions", (event) => {
+        if (event.type !== "activity_status") {
+          return
+        }
+
+        if (isLoading.value) {
+          pendingActivity.push(event)
+          return
+        }
+
+        const nextState = applyDomainEvent(streamState.value, event)
+        if (nextState !== streamState.value) {
+          streamState.value = nextState
+        }
+      })
 
       onCleanup(() => {
         cleanupSubscription()

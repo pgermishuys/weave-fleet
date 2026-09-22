@@ -11,7 +11,7 @@ import WorkingIndicator from "@/components/session/WorkingIndicator.vue";
 import { useSessionStream } from "@/composables/use-session-stream";
 import { useModels } from "@/composables/use-models";
 import { modelDisplayName } from "@/lib/agent-model-choice";
-import { isStreamWorking } from "@/lib/domain-event-reducer";
+import { isDelegationWaiting, isStreamWorking } from "@/lib/domain-event-reducer";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { clearSentPrompts, reconcileSentPrompts, useSendPrompt, useSentPrompts } from "@/composables/use-send-prompt";
 import { isSubagentTool, subagentKind, subagentTask, toToolCardItem } from "@/components/session/activity-stream-tool-card";
@@ -338,6 +338,10 @@ watch(
 );
 
 const isStreaming = computed(() => isStreamWorking(sessionStatus.value));
+// The turn is stopped on a question, a sub-agent's or its own: the header and the session row say so, and so
+// does the line that otherwise says Working.
+const isWaitingForInput = computed(() =>
+  sessionStatus.value === "waiting_input" || selectedSession.value?.activityStatus === "waiting_input");
 // The turn's clock starts at your last prompt.
 const turnStartedAt = computed(() => {
   for (let index = messages.value.length - 1; index >= 0; index -= 1) {
@@ -632,6 +636,7 @@ function withDelegation(item: ToolCardItem, part: AccumulatedToolPart): ToolCard
       agent: subagentKind(part),
       task: subagentTask(part) || delegation.title,
       status: delegation.status,
+      needsInput: isDelegationWaiting(delegation),
     },
   };
 }
@@ -938,7 +943,10 @@ function handleShowCanvas(canvasId: string): void {
         v-if="isStreaming"
         class="streaming-indicator"
       >
-        <WorkingIndicator :since="turnStartedAt" />
+        <WorkingIndicator
+          :since="turnStartedAt"
+          :waiting="isWaitingForInput"
+        />
       </div>
     </section>
   </div>

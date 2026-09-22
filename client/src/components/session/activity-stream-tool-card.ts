@@ -20,6 +20,8 @@ export interface ToolCardDelegation {
   task: string;
   /** "pending" | "running" | "completed" | "error" | "cancelled". */
   status: string;
+  /** The sub-agent has stopped on a question of its own and waits for you in its session. */
+  needsInput?: boolean;
 }
 
 export interface ToolCardItem {

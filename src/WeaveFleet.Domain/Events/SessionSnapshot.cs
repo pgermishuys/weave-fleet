@@ -126,4 +126,11 @@ public sealed record SessionSnapshotDelegation
     /// Gets the ISO-8601 timestamp when the delegation was created.
     /// </summary>
     public required string CreatedAt { get; init; }
+
+    /// <summary>
+    /// Gets what the child session shows now (<c>"busy"</c>, <c>"waiting_input"</c>, …), or <c>null</c> when Fleet
+    /// isn't tracking it. A parent opened while its subagent waits on a question shows that on the subagent's row;
+    /// live changes arrive on the <c>sessions</c> topic's <c>activity_status</c>.
+    /// </summary>
+    public string? ChildActivityStatus { get; init; }
 }
