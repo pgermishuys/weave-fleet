@@ -138,5 +138,8 @@ public sealed class FakeHarnessRuntime : IHarnessRuntime
         return CatalogBehavior?.Invoke(ownerUserId, directory, ct) ?? Task.FromResult<HarnessCatalog?>(null);
     }
 
+    /// <summary>The harness's provider sign-in; null (the default) for a harness without one.</summary>
+    public IHarnessProviderSignIn? ProviderSignIn { get; set; }
+
     private sealed record FakeRuntimeLaunchArtifacts : RuntimeLaunchArtifacts;
 }

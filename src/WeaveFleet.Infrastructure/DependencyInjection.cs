@@ -202,6 +202,7 @@ public static class DependencyInjection
         services.AddScoped<AutomationRunService>();
         services.AddScoped<AutomationDraftService>();
         services.AddScoped<HarnessCatalogService>();
+        services.AddScoped<HarnessSignInService>();
         services.AddScoped<EventTriggerMatcher>();
         services.AddScoped<SessionActivityWriteService>();
         services.AddScoped<ILegacySessionImporter, LegacySessionImporter>();
@@ -404,6 +405,9 @@ public static class DependencyInjection
 
         // OpenCode 2: a harness of its own next to OpenCode, off until the user turns it on (opencode2.enabled).
         services.AddHttpClient(OpenCode2HarnessRuntime.HttpClientName);
+        services.AddHttpClient(OpenCode2HarnessRuntime.SignInCallbackHttpClientName, client => client.Timeout = TimeSpan.FromSeconds(15))
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false })
+            .RemoveAllLoggers();
         services.AddSingleton<OpenCode2Harness>();
         services.AddSingleton<IHarness>(sp => sp.GetRequiredService<OpenCode2Harness>());
         services.AddSingleton<OpenCode2HarnessRuntime>(sp => new OpenCode2HarnessRuntime(

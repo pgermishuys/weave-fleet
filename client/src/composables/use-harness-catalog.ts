@@ -22,6 +22,16 @@ export function clearHarnessCatalogCache(): void {
   cache.clear();
 }
 
+/**
+ * Forgets `harnessType`'s catalogs in every folder, so the next composer asks again: signing in to a provider or out
+ * of one changes the models the harness offers everywhere.
+ */
+export function forgetHarnessCatalogs(harnessType: string): void {
+  for (const key of [...cache.keys()]) {
+    if (key.startsWith(`${harnessType}\n`)) cache.delete(key);
+  }
+}
+
 async function fetchCatalog(
   harnessType: string,
   directory: string | null,

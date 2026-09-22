@@ -77,4 +77,10 @@ public interface IHarnessRuntime
     /// </summary>
     Task<HarnessCatalog?> GetCatalogAsync(string ownerUserId, string directory, HarnessProfile? profile, CancellationToken ct)
         => Task.FromResult<HarnessCatalog?>(null);
+
+    /// <summary>
+    /// The harness's own provider sign-ins, for harnesses that declare
+    /// <see cref="HarnessCapabilities.SupportsProviderSignIn"/>; <see langword="null"/> for the rest.
+    /// </summary>
+    IHarnessProviderSignIn? ProviderSignIn => null;
 }
