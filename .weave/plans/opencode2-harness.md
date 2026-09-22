@@ -497,3 +497,21 @@ What Track E learned:
 About 4–5 weeks for parity with the OpenCode harness. Stages 0–2 (≈ 2 weeks) give a usable text-and-tools
 harness behind the off-by-default switch. V2 is days old and its API spec calls itself experimental: pin a
 version and expect changes.
+
+## Track F — busy while background work runs, the agent's shell environment (2026-09-22)
+
+- [x] **A background shell keeps its server busy.** On 2.0.9 a shell call moved to the background (`background: true`
+      or `POST /api/session/{id}/background`) keeps running after its turn ended, and `GET /api/session/active` is
+      `{}` the whole time. `OpenCode2Server.IsIdleAsync` now also asks `GET /api/shell` for each folder the server
+      has loaded (`GET /api/debug/location`, present since 2.0.6); a shell with `status: running` makes it busy.
+      Findings (`.poc-runtime/probe-shells.sh` in the Track F worktree):
+      - `GET /api/shell` without a location lists only the server's own folder (its working directory), so each
+        folder is asked. Asking about a folder the server hasn't loaded loads it, so only loaded ones are asked. A
+        session's folder loads on its first prompt, not when it's created.
+      - A running item: `{"id":"sh_…","status":"running","command":…,"pid":…,"metadata":{"sessionID":"ses_…"}}`.
+        Once it exits it's gone from the list; `GET /api/shell/{id}?location…` still has it with
+        `status: exited` and its exit code.
+      - A background subagent was already covered: its child session is in `/api/session/active` while it works.
+      - When V2 can't be asked, the server still counts as busy.
+      This covers the profile-server idle stop, the replacement after a settings change, and the stop after an
+      update.
