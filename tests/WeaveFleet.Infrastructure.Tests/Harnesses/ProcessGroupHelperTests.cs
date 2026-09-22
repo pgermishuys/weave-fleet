@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using WeaveFleet.Infrastructure.Harnesses;
 
@@ -19,10 +20,31 @@ public sealed class ProcessGroupHelperTests
     }
 
     [Fact]
-    public void KillProcessGroup_NonExistentPid_DoesNotThrow()
+    public void KillProcessGroup_NullProcess_ThrowsArgumentNullException()
     {
-        // Use a very large PID that is extremely unlikely to exist
-        var ex = Record.Exception(() => ProcessGroupHelper.KillProcessGroup(int.MaxValue));
+        var ex = Assert.Throws<ArgumentNullException>(() =>
+            ProcessGroupHelper.KillProcessGroup(null!));
+        ex.ParamName.ShouldBe("process");
+    }
+
+    [Fact]
+    public void KillProcessGroup_ProcessThatWasNeverStarted_DoesNotThrow()
+    {
+        using var process = new Process();
+        var ex = Record.Exception(() => ProcessGroupHelper.KillProcessGroup(process));
+        ex.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task KillProcessGroup_ExitedProcess_DoesNotThrow()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+            return; // Skip on non-Unix
+
+        using var process = Process.Start(new ProcessStartInfo("true") { UseShellExecute = false })!;
+        await process.WaitForExitAsync();
+
+        var ex = Record.Exception(() => ProcessGroupHelper.KillProcessGroup(process));
         ex.ShouldBeNull();
     }
 
@@ -57,12 +79,49 @@ public sealed class ProcessGroupHelperTests
 
             // KillProcessGroup is best-effort; it should not throw even if the
             // process group kill fails (e.g. due to setpgid race on exec).
-            var ex = Record.Exception(() => ProcessGroupHelper.KillProcessGroup(process.Id));
+            var ex = Record.Exception(() => ProcessGroupHelper.KillProcessGroup(process));
             ex.ShouldBeNull();
         }
         finally
         {
             SafeKill(process);
+        }
+    }
+
+    [Fact]
+    public async Task KillProcessGroup_UnixProcess_KillsItAndItsChildrenStraightAway()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+            return; // Skip on non-Unix
+
+        // A harness is a process with children (a CLI and the tools it runs). setpgid fails once the child has
+        // exec'd, so there's often no group to kill: the kill must still reach the process and its children.
+        var psi = new ProcessStartInfo
+        {
+            FileName = "sh",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            CreateNoWindow = true,
+        };
+        psi.ArgumentList.Add("-c");
+        psi.ArgumentList.Add("sleep 30 & echo $!; wait");
+
+        using var process = new Process { StartInfo = psi };
+        process.Start();
+        var childPid = int.Parse((await process.StandardOutput.ReadLineAsync())!, CultureInfo.InvariantCulture);
+        try
+        {
+            ProcessGroupHelper.AssignToProcessGroup(process);
+
+            ProcessGroupHelper.KillProcessGroup(process);
+
+            await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(2));
+            await WaitUntilGoneAsync(childPid, TimeSpan.FromSeconds(2));
+        }
+        finally
+        {
+            SafeKill(process);
+            SafeKill(childPid);
         }
     }
 
@@ -120,6 +179,43 @@ public sealed class ProcessGroupHelperTests
         var process = new Process { StartInfo = psi };
         process.Start();
         return process;
+    }
+
+    private static async Task WaitUntilGoneAsync(int pid, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (IsRunning(pid))
+        {
+            if (DateTime.UtcNow > deadline)
+                throw new TimeoutException($"Process {pid} is still running.");
+            await Task.Delay(50);
+        }
+    }
+
+    private static bool IsRunning(int pid)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            return !process.HasExited;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    private static void SafeKill(int pid)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            SafeKill(process);
+        }
+        catch (ArgumentException)
+        {
+            // Already gone
+        }
     }
 
     private static void SafeKill(Process process)
