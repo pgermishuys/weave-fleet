@@ -14,6 +14,8 @@ export interface SessionSnapshotDelegation {
   title: string;
   status: DelegationDto["status"];
   createdAt: string;
+  /** What the sub-agent's own session shows, when Fleet is tracking it. */
+  childActivityStatus?: string | null;
 }
 
 export interface SessionSnapshot {

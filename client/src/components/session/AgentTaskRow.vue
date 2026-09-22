@@ -11,7 +11,11 @@ const props = defineProps<{
 
 const router = useRouter();
 
+const isWorking = computed(() => props.delegation.status === "running" || props.delegation.status === "pending");
+// The sub-agent's question holds it up, and its session is where you answer.
+const needsInput = computed(() => isWorking.value && props.delegation.needsInput === true);
 const statusWord = computed(() => {
+  if (needsInput.value) return "Needs input";
   switch (props.delegation.status) {
     case "completed": return "Done";
     case "error": return "Failed";
@@ -20,7 +24,6 @@ const statusWord = computed(() => {
     default: return "Working";
   }
 });
-const isWorking = computed(() => props.delegation.status === "running" || props.delegation.status === "pending");
 
 function handleClick(event: MouseEvent): void {
   // A modified click opens the child elsewhere, as a link would.
@@ -39,9 +42,9 @@ function handleClick(event: MouseEvent): void {
   <!-- A sub-agent's task is one row: who, what, how it's going, and a way into its session. -->
   <a
     class="agent-task"
-    :class="`agent-task--${delegation.status}`"
+    :class="[`agent-task--${delegation.status}`, { 'agent-task--needs-input': needsInput }]"
     :href="delegation.href"
-    :title="`Open ${delegation.task}`"
+    :title="needsInput ? `Open ${delegation.task} to answer its question` : `Open ${delegation.task}`"
     data-testid="delegation-link"
     @click="handleClick"
   >
@@ -70,7 +73,12 @@ function handleClick(event: MouseEvent): void {
         data-testid="delegation-link-status"
       >{{ statusWord }}</span>
       <StatusGlyph
-        v-if="isWorking"
+        v-if="needsInput"
+        status="waiting_input"
+        :label="statusWord"
+      />
+      <StatusGlyph
+        v-else-if="isWorking"
         status="active"
         :label="statusWord"
       />
@@ -165,6 +173,11 @@ function handleClick(event: MouseEvent): void {
 .agent-task__status {
   color: var(--muted);
   font-size: 12px;
+}
+
+.agent-task--needs-input .agent-task__status {
+  color: var(--status-waiting);
+  font-weight: 500;
 }
 
 .agent-task--error .agent-task__status {
