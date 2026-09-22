@@ -258,6 +258,27 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
     }
 
     /// <summary>
+    /// The folders the server has loaded (<c>GET /api/debug/location</c>). V2 loads a folder on first use (a turn, a
+    /// catalog read), and only a loaded folder can have a shell running.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> GetLoadedLocationsAsync(CancellationToken ct)
+        => (await http.GetFromJsonAsync(
+            "api/debug/location",
+            OpenCode2JsonContext.Default.ListOpenCode2Location,
+            ct).ConfigureAwait(false))?.Select(l => l.Directory).ToList() ?? [];
+
+    /// <summary>
+    /// The shell commands running in <paramref name="directory"/>, including backgrounded shell calls whose turn has
+    /// ended. V2 lists one folder at a time (without one, only the folder it was started in), and asking about a
+    /// folder loads it.
+    /// </summary>
+    public async Task<IReadOnlyList<OpenCode2ShellInfo>> GetRunningShellsAsync(string directory, CancellationToken ct)
+        => (await http.GetFromJsonAsync(
+            $"api/shell?{LocationQuery(directory)}",
+            OpenCode2JsonContext.Default.OpenCode2EnvelopeListOpenCode2ShellInfo,
+            ct).ConfigureAwait(false))?.Data ?? [];
+
+    /// <summary>
     /// Reads <c>GET /api/event</c> until it ends. <paramref name="connected"/> runs once the server has accepted the
     /// subscription, before any event is read. The stream is live only: V2 doesn't replay what was missed.
     /// </summary>

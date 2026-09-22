@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 
@@ -60,6 +61,38 @@ internal static class OpenCode2Fixtures
                 Content = new StringContent(sse, Encoding.UTF8, "text/event-stream"),
             })) { BaseAddress = new Uri("http://127.0.0.1:1/") },
             NullLogger<OpenCode2HttpClient>.Instance);
+
+    /// <summary>
+    /// A server's answers to what runs on it: <paramref name="active"/> for <c>GET /api/session/active</c>, the folders
+    /// of <paramref name="shells"/> for <c>GET /api/debug/location</c>, and each folder's shells (<see cref="Shell"/>)
+    /// for <c>GET /api/shell?location[directory]=…</c>. Anything else is a 404.
+    /// </summary>
+    public static StubHandler Running(string active = """{"data":{}}""", IReadOnlyDictionary<string, string[]>? shells = null)
+    {
+        var folders = shells ?? new Dictionary<string, string[]>();
+        return new StubHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/api/session/active" => Json(active),
+            "/api/debug/location" => Json(JsonSerializer.Serialize(folders.Keys.Select(directory => new { directory }))),
+            "/api/shell" when System.Web.HttpUtility.ParseQueryString(request.RequestUri.Query)["location[directory]"] is { } directory
+                && folders.TryGetValue(directory, out var listed)
+                => Json($$"""{"location":{"directory":{{JsonSerializer.Serialize(directory)}}},"data":[{{string.Join(',', listed)}}]}"""),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+        });
+    }
+
+    /// <summary>One <c>Shell.Info</c> as V2 (2.0.9) lists it: a shell call moved to the background by session <paramref name="sessionId"/>.</summary>
+    public static string Shell(string status, string sessionId = "ses_a", string id = "sh_0cb185fae0014nGWz6OlKu46xL")
+        => $$$"""
+            {"id":"{{{id}}}","status":"{{{status}}}","command":"sleep 25; echo bg-done","cwd":"/work","shell":"/usr/bin/bash",
+             "file":"/home/you/.local/share/opencode/shell/8c95/{{{id}}}.out","pid":157202,"metadata":{"sessionID":"{{{sessionId}}}"},
+             "time":{"started":1790113760000}}
+            """;
+
+    private static HttpResponseMessage Json(string json) => new(HttpStatusCode.OK)
+    {
+        Content = new StringContent(json, Encoding.UTF8, "application/json"),
+    };
 }
 
 /// <summary>Answers every request with <paramref name="respond"/> and keeps what was sent.</summary>

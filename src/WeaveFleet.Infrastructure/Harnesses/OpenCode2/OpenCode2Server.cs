@@ -25,7 +25,8 @@ internal interface IOpenCode2EventSink
 /// What Fleet starts an owner's server with: where Fleet is, the config it adds (<see cref="OpenCode2FleetFiles"/>),
 /// whether the server gets the tool for messages between sessions, the install it runs (<see cref="OpenCode2Install"/>),
 /// and the profile its sessions use, if any (<see cref="OpenCode2Profiles"/>).
-/// When the owner changes a setting behind it, the server is replaced once none of its sessions is running a turn.
+/// When the owner changes a setting behind it, the server is replaced once nothing runs on it (no turn, no background
+/// shell).
 /// </summary>
 internal sealed record OpenCode2ServerSetup(
     string? FleetUrl,
@@ -271,12 +272,33 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     public OpenCode2SessionContext? FindSession(string harnessSessionId)
         => _sinks.TryGetValue(harnessSessionId, out var sink) ? sink.Context : null;
 
-    /// <summary>Whether no session on this server is running a turn; <see langword="false"/> when V2 can't say.</summary>
+    /// <summary>
+    /// Whether nothing runs on this server: no session is running a turn and no shell command is running in any folder
+    /// it has loaded; <see langword="false"/> when V2 can't say. A shell call moved to the background keeps running
+    /// after its turn ended, and V2 no longer counts its session as active, so stopping the server then would kill the
+    /// command and lose the notice V2 posts when it finishes. A background subagent's child session counts as active
+    /// while it works.
+    /// </summary>
     public async Task<bool> IsIdleAsync(CancellationToken ct)
     {
         try
         {
-            return (await Client.GetActiveSessionIdsAsync(ct).ConfigureAwait(false)).Count == 0;
+            if ((await Client.GetActiveSessionIdsAsync(ct).ConfigureAwait(false)).Count > 0)
+                return false;
+
+            // V2 lists one folder's shells at a time, and asking about a folder it hasn't loaded would load it.
+            foreach (var directory in await Client.GetLoadedLocationsAsync(ct).ConfigureAwait(false))
+            {
+                var running = (await Client.GetRunningShellsAsync(directory, ct).ConfigureAwait(false))
+                    .Count(shell => string.Equals(shell.Status, "running", StringComparison.Ordinal));
+                if (running > 0)
+                {
+                    LogShellsRunning(_logger, ProcessId ?? 0, running, directory);
+                    return false;
+                }
+            }
+
+            return true;
         }
         catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException
                                    || (ex is TaskCanceledException && !ct.IsCancellationRequested))
@@ -468,6 +490,9 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "OpenCode 2 child session {HarnessSessionId} was never attached; dropped {Count} held event(s)")]
     private static partial void LogChildDropped(ILogger logger, string harnessSessionId, int count);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "OpenCode 2 server {ProcessId}: no turn running, but {Count} shell command(s) still running in {Directory}; not idle")]
+    private static partial void LogShellsRunning(ILogger logger, int processId, int count, string directory);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "OpenCode 2 server {ProcessId}: event stream open")]
     private static partial void LogConnected(ILogger logger, int processId);

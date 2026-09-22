@@ -130,18 +130,69 @@ public sealed class OpenCode2RuntimeTests
     }
 
     [Theory]
-    [InlineData(HttpStatusCode.OK, """{"data":{}}""", true)]
-    [InlineData(HttpStatusCode.OK, """{"data":{"ses_a":{"type":"running"}}}""", false)]
-    [InlineData(HttpStatusCode.InternalServerError, "", false)]
-    public async Task A_server_is_idle_only_when_V2_says_no_session_is_running(HttpStatusCode status, string body, bool idle)
+    [InlineData("""{"data":{}}""", true)]
+    [InlineData("""{"data":{"ses_a":{"type":"running"}}}""", false)]
+    public async Task A_server_is_idle_only_when_V2_says_no_session_is_running(string active, bool idle)
     {
-        // A server started with other settings is replaced only when idle, so "can't tell" must not read as idle.
-        await using var server = Server(OpenCode2Fixtures.ClientServing("", new StubHandler(_ => new HttpResponseMessage(status)
-        {
-            Content = new StringContent(body, Encoding.UTF8, "application/json"),
-        })));
+        await using var server = Server(OpenCode2Fixtures.ClientServing("", OpenCode2Fixtures.Running(active)));
 
         (await server.IsIdleAsync(CancellationToken.None)).ShouldBe(idle);
+    }
+
+    [Fact]
+    public async Task A_server_V2_cannot_answer_for_is_not_idle()
+    {
+        // A server started with other settings is replaced only when idle, so "can't tell" must not read as idle.
+        await using var server = Server(OpenCode2Fixtures.ClientServing("", new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError))));
+
+        (await server.IsIdleAsync(CancellationToken.None)).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task A_background_shell_still_running_after_its_turn_keeps_the_server_busy()
+    {
+        // V2 2.0.9: the turn that backgrounded the shell has ended, so no session is active, but the shell runs on.
+        var api = OpenCode2Fixtures.Running(shells: new Dictionary<string, string[]>
+        {
+            ["/work/quiet"] = [],
+            ["/work/repo"] = [OpenCode2Fixtures.Shell("running")],
+        });
+        var asked = new List<string?>();
+        api.OnRequest = request => asked.Add(System.Web.HttpUtility.ParseQueryString(request.RequestUri!.Query)["location[directory]"]);
+        await using var server = Server(OpenCode2Fixtures.ClientServing("", api));
+
+        (await server.IsIdleAsync(CancellationToken.None)).ShouldBeFalse();
+
+        // Each folder V2 has loaded is asked for its own: without a folder, V2 lists only the one it was started in.
+        api.Requests.Select(r => r.Path).ShouldBe(["/api/session/active", "/api/debug/location", "/api/shell", "/api/shell"]);
+        asked.Skip(2).ShouldBe(["/work/quiet", "/work/repo"]);
+    }
+
+    [Fact]
+    public async Task A_shell_that_has_ended_does_not_keep_the_server_busy()
+    {
+        var api = OpenCode2Fixtures.Running(shells: new Dictionary<string, string[]>
+        {
+            ["/work/repo"] = [OpenCode2Fixtures.Shell("exited"), OpenCode2Fixtures.Shell("killed", id: "sh_2")],
+        });
+        await using var server = Server(OpenCode2Fixtures.ClientServing("", api));
+
+        (await server.IsIdleAsync(CancellationToken.None)).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task A_server_whose_shells_V2_cannot_list_is_not_idle()
+    {
+        // No turn running and one folder loaded, but its shells can't be read.
+        var api = new StubHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/api/session/active" => Json("""{"data":{}}"""),
+            "/api/debug/location" => Json("""[{"directory":"/work/repo"}]"""),
+            _ => new HttpResponseMessage(HttpStatusCode.InternalServerError),
+        });
+        await using var server = Server(OpenCode2Fixtures.ClientServing("", api));
+
+        (await server.IsIdleAsync(CancellationToken.None)).ShouldBeFalse();
     }
 
     [Fact]
