@@ -60,6 +60,13 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     /// </summary>
     private static readonly string[] LocationLoadedEvents = ["provider.updated", "model.updated", "agent.updated", "command.updated"];
 
+    /// <summary>
+    /// The events that mean a loaded folder's agents, models or commands may have changed. V2 rebuilds a registry
+    /// whenever a file it watches changes (an agent file, the config, a sign-in) and says which kind and where, never
+    /// what; a change in the shared config folder comes once per loaded folder.
+    /// </summary>
+    private static readonly string[] CatalogChangeEvents = ["agent.updated", "model.updated", "provider.updated", "command.updated", "config.updated"];
+
     private readonly OpenCode2ProcessManager? _process;
     private readonly ILogger _logger;
     private readonly ConcurrentDictionary<string, IOpenCode2EventSink> _sinks = new(StringComparer.Ordinal);
@@ -72,6 +79,12 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     // Folders V2 has finished loading, and the catalog events seen so far for folders still loading.
     private readonly ConcurrentDictionary<string, TaskCompletionSource> _locations = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, HashSet<string>> _locationEvents = new(StringComparer.Ordinal);
+
+    // When each folder finished loading (Environment.TickCount64), the folders Fleet asked V2 about, and the folders
+    // whose catalog changed and is waiting for V2 to go quiet, with the time of the last event.
+    private readonly ConcurrentDictionary<string, long> _loadedAt = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, byte> _asked = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, long> _catalogChanges = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _stopping = new();
     private readonly Task _pump;
     private TaskCompletionSource _connected = NewConnectedSource();
@@ -128,6 +141,17 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     internal TimeSpan LocationLoadTimeout { get; init; } = TimeSpan.FromSeconds(15);
 
     /// <summary>
+    /// Told when what V2 offers in a folder Fleet uses changed (<see cref="CatalogChangeEvents"/>), once V2 has been
+    /// quiet about it for <see cref="CatalogChangeQuietTime"/>: one file written sends two or three rounds of events.
+    /// Events from a folder's first <see cref="LocationSettleTime"/> after it loaded are its loading, not a change.
+    /// </summary>
+    internal Action<OpenCode2Server, string>? CatalogChanged { get; init; }
+
+    internal TimeSpan CatalogChangeQuietTime { get; init; } = TimeSpan.FromMilliseconds(500);
+
+    internal TimeSpan LocationSettleTime { get; init; } = TimeSpan.FromSeconds(3);
+
+    /// <summary>
     /// Loads <paramref name="directory"/> on the server and waits until V2 has read its config. V2 loads a folder in
     /// the background: <c>GET /api/location</c> returns first, and the folder's catalog is complete once V2 has sent
     /// its catalog events for it (about 2 s for a new folder). A folder loaded before (by a session there, or an
@@ -136,6 +160,7 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     public async Task LoadLocationAsync(string directory, CancellationToken ct)
     {
         await WaitForEventsAsync(ct).ConfigureAwait(false);
+        _asked.TryAdd(Path.TrimEndingDirectorySeparator(directory), 0);
         var loaded = _locations.GetOrAdd(directory, static _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
         if (loaded.Task.IsCompleted)
             return;
@@ -166,8 +191,94 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
             seen.Clear();
         }
 
-        _locations.GetOrAdd(directory, static _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).TrySetResult();
+        if (_locations.GetOrAdd(directory, static _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).TrySetResult())
+            _loadedAt.TryAdd(directory, Environment.TickCount64);
     }
+
+    /// <summary>
+    /// Notes a change to a loaded folder's catalog, and tells <see cref="CatalogChanged"/> once V2 is quiet about it.
+    /// Only folders Fleet uses count: V2 also loads its own working folder, which no session runs in.
+    /// </summary>
+    private void ObserveCatalogChange(OpenCode2Event evt)
+    {
+        if (CatalogChanged is null
+            || evt.Location?.Directory is not { Length: > 0 } directory
+            || Array.IndexOf(CatalogChangeEvents, evt.Type) < 0
+            || !_loadedAt.TryGetValue(directory, out var loadedAt))
+        {
+            return;
+        }
+
+        var now = Environment.TickCount64;
+        if (now - loadedAt < (long)LocationSettleTime.TotalMilliseconds || !Uses(directory))
+            return;
+
+        lock (_catalogChanges)
+        {
+            var waiting = _catalogChanges.ContainsKey(directory);
+            _catalogChanges[directory] = now;
+            if (waiting)
+                return;
+        }
+
+        _ = ReportCatalogChangeAsync(directory);
+    }
+
+    /// <summary>Whether Fleet asked V2 about <paramref name="directory"/> or runs a session there.</summary>
+    private bool Uses(string directory)
+    {
+        var folder = Path.TrimEndingDirectorySeparator(directory);
+        return _asked.ContainsKey(folder) || _sinks.Values.Any(sink => SameFolder(sink.Context.WorkingDirectory, folder));
+    }
+
+    private async Task ReportCatalogChangeAsync(string directory)
+    {
+        try
+        {
+            var quiet = (long)CatalogChangeQuietTime.TotalMilliseconds;
+            while (true)
+            {
+                long wait;
+                lock (_catalogChanges)
+                {
+                    wait = _catalogChanges[directory] + quiet - Environment.TickCount64;
+                    if (wait <= 0)
+                    {
+                        _catalogChanges.Remove(directory);
+                        break;
+                    }
+                }
+
+                await Task.Delay(TimeSpan.FromMilliseconds(wait), _stopping.Token).ConfigureAwait(false);
+            }
+
+            LogCatalogChanged(_logger, ProcessId ?? 0, directory);
+            CatalogChanged?.Invoke(this, directory);
+        }
+        catch (OperationCanceledException)
+        {
+            // The server stopped; its sessions will ask a new one.
+        }
+        catch (Exception ex)
+        {
+            LogSinkFailed(_logger, "catalog change", ex);
+        }
+    }
+
+    /// <summary>The Fleet sessions on this server that run in <paramref name="directory"/>.</summary>
+    public IReadOnlyList<string> SessionsIn(string directory)
+    {
+        var folder = Path.TrimEndingDirectorySeparator(directory);
+        return _sinks.Values
+            .Where(sink => SameFolder(sink.Context.WorkingDirectory, folder))
+            .Select(sink => sink.Context.FleetSessionId)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static bool SameFolder(string directory, string folder)
+        => string.Equals(Path.TrimEndingDirectorySeparator(directory), folder, StringComparison.Ordinal);
 
     /// <summary>Set after V2 was updated: the server still runs the old binary, and is replaced once it's idle.</summary>
     public bool IsOutdated => Volatile.Read(ref _outdated) == 1;
@@ -215,6 +326,7 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     internal void Route(OpenCode2Event evt)
     {
         ObserveLocation(evt);
+        ObserveCatalogChange(evt);
         if (evt.SessionId is not { } sessionId)
             return;
 
@@ -459,6 +571,9 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "OpenCode 2 didn't finish loading {Directory} within {Seconds} s; listing what it has")]
     private static partial void LogLocationLoadTimedOut(ILogger logger, string directory, double seconds);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 server {ProcessId}: the agents, models or commands in {Directory} changed")]
+    private static partial void LogCatalogChanged(ILogger logger, int processId, string directory);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "OpenCode 2 session {HarnessSessionId} is a child of {ParentSessionId}; holding its events until Fleet attaches it")]
     private static partial void LogChildHeld(ILogger logger, string harnessSessionId, string parentSessionId);
