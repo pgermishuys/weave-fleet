@@ -383,7 +383,14 @@ public sealed class OpenCodeSessionMessageProxy(
         return toolPart.State switch
         {
             ToolUseState.Pending => new ToolPendingState { Input = input },
-            ToolUseState.Running => new ToolRunningState { Input = input },
+            // A call moved into the background has returned: it carries what it answered with while its work runs.
+            ToolUseState.Running => new ToolRunningState
+            {
+                Input = input,
+                Output = toolPart.Output?.Clone(),
+                Metadata = toolPart.Metadata?.Clone(),
+                Background = toolPart.Background,
+            },
             ToolUseState.Completed => new ToolCompletedState
             {
                 Input = input,
@@ -430,6 +437,7 @@ public sealed class OpenCodeSessionMessageProxy(
                     {
                         ToolCompletedState completed => completed.Output,
                         ToolErrorState error => error.Output,
+                        ToolRunningState running => running.Output,
                         _ => null,
                     },
                     Error = (toolPart.State as ToolErrorState)?.Error,
@@ -438,8 +446,10 @@ public sealed class OpenCodeSessionMessageProxy(
                     {
                         ToolCompletedState completed => completed.Metadata,
                         ToolErrorState error => error.Metadata,
+                        ToolRunningState running => running.Metadata,
                         _ => null,
                     },
+                    Background = toolPart.State is ToolRunningState { Background: true },
                 },
                 FileMessageEventPart filePart => new FilePart(eventPart.Id, filePart.Mime, filePart.Url, filePart.Filename),
                 StepFinishedMessageEventPart stepPart => new StepFinishPart(

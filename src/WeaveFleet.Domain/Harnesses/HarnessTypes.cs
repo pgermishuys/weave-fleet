@@ -243,6 +243,12 @@ public sealed record ToolUsePart(
 
     /// <summary>Extra facts the tool reported, such as the child session a sub-agent ran in.</summary>
     public JsonElement? Metadata { get; init; }
+
+    /// <summary>
+    /// Whether the call has returned and only its work carries on, out of the turn (a <see cref="ToolUseState.Running"/>
+    /// call OpenCode 2 moved into the background).
+    /// </summary>
+    public bool Background { get; init; }
 }
 
 /// <summary>Output returned by a tool invocation.</summary>

@@ -83,7 +83,10 @@ watch(shouldShowDiff, (nextValue) => {
 const TOOL_STATUS_TO_GLYPH: Record<string, string> = {
   Pending: "idle",
   Running: "running",
+  // A call whose work OpenCode 2 moved into the background: the call is done, its work isn't.
+  Background: "running",
   Completed: "completed",
+  Cancelled: "idle",
   Error: "error",
 };
 
@@ -92,7 +95,9 @@ const glyphStatus = computed(() => TOOL_STATUS_TO_GLYPH[props.status] ?? "idle")
 const STATUS_COLOR: Record<string, string> = {
   Pending: "var(--muted)",
   Running: "var(--running)",
+  Background: "var(--running)",
   Completed: "var(--complete)",
+  Cancelled: "var(--muted)",
   Error: "var(--error)",
 };
 
@@ -152,10 +157,15 @@ function handleExpandVisual(): void {
         Show
       </button>
       <span
-        v-if="status === 'Running' || status === 'Error'"
+        v-if="status === 'Running' || status === 'Background' || status === 'Error'"
         class="tool-header__status"
         :style="{ color: statusColor }"
       >
+        <span
+          v-if="status === 'Background'"
+          class="tool-header__background"
+          data-testid="tool-card-background"
+        >Background</span>
         <StatusGlyph :status="glyphStatus" />
       </span>
       <span
@@ -329,6 +339,13 @@ function handleExpandVisual(): void {
   gap: 6px;
   margin-left: auto;
   flex-shrink: 0;
+}
+
+.tool-header__background {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 .tool-header__result {

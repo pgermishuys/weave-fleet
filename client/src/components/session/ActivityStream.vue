@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import { ArrowUpRight, Bot, RotateCw, TriangleAlert } from "lucide-vue-next";
+import { ArrowUpRight, Bot, RotateCw, TerminalSquare, TriangleAlert } from "lucide-vue-next";
 import { parsePeerMessage, parsePeerUpdate, type PeerOutcome, type PeerSender } from "@/lib/session-messages";
+import { finishedBackgroundWork, parseBackgroundNotice, type BackgroundNotice } from "@/lib/background-work";
 import { useRouter } from "@tanstack/vue-router";
 import { storeToRefs } from "pinia";
 import MessageBubble from "@/components/session/MessageBubble.vue";
@@ -53,6 +54,8 @@ interface ActivityMessage {
   peer?: PeerSender;
   /** Set when this is Fleet's update that a session this one messaged is done. */
   peerOutcome?: PeerOutcome;
+  /** Set when this is the notice that work the agent moved into the background finished. */
+  background?: BackgroundNotice;
 }
 
 const props = defineProps<{
@@ -178,14 +181,26 @@ watch(
   { immediate: true, deep: true },
 );
 
+/**
+ * How work an agent moved into the background ended, by handle. A backgrounded call's own card can't say: OpenCode 2
+ * leaves the call finished and running, and only the notice later in the conversation says the work is done.
+ */
+const finishedBackground = computed(() =>
+  finishedBackgroundWork(sessionMessages.value.map((message) => renderMessageBody(message.parts))),
+);
+
 const deliveredMessages = computed<ActivityMessage[]>(() => {
+  const finished = finishedBackground.value;
   // Preserve upstream order from sessionMessages (snapshot + live events)
   return sessionMessages.value
     .map((message) => {
       const author = getDisplayAuthor(message);
       const rawBody = renderMessageBody(message.parts);
-      const peerMessage = message.role === "user" ? parsePeerMessage(rawBody) : null;
-      const peerUpdate = message.role === "user" && !peerMessage ? parsePeerUpdate(rawBody) : null;
+      // A notice comes from the harness, not the user or the agent: Fleet gives it its own role, which the client
+      // reads as an assistant-side message.
+      const background = parseBackgroundNotice(rawBody);
+      const peerMessage = message.role === "user" && !background ? parsePeerMessage(rawBody) : null;
+      const peerUpdate = message.role === "user" && !peerMessage && !background ? parsePeerUpdate(rawBody) : null;
       const fromPeer = peerMessage ?? peerUpdate;
 
       return {
@@ -195,15 +210,16 @@ const deliveredMessages = computed<ActivityMessage[]>(() => {
         senderKey: getSenderKey(message.role, message.agent),
         role: message.role,
         createdAt: message.createdAt,
-        body: fromPeer ? fromPeer.text : rawBody,
+        body: background ? background.text : fromPeer ? fromPeer.text : rawBody,
         peer: fromPeer?.peer,
         peerOutcome: peerUpdate?.outcome,
+        background: background ?? undefined,
         images: message.parts
           .filter((part): part is AccumulatedFilePart => part.type === "file" && part.mime.startsWith("image/"))
           .map((part) => ({ url: part.url, filename: part.filename?.trim() || "image" })),
         tools: message.parts
           .filter((part): part is AccumulatedToolPart => part.type === "tool" && !isQuestionPart(part as AccumulatedToolPart))
-          .map((part) => withDelegation(toToolCardItem(part), part)),
+          .map((part) => withDelegation(toToolCardItem(part, finished), part)),
         questionParts: message.parts
           .filter((part): part is AccumulatedToolPart => part.type === "tool" && isQuestionPart(part as AccumulatedToolPart)),
         reasoningParts: message.parts
@@ -821,6 +837,21 @@ function handleShowCanvas(canvasId: string): void {
           :summary="reasoning.summary"
           :created-at="message.createdAt"
         />
+        <div
+          v-if="message.background"
+          class="background-note"
+          :class="`background-note--${message.background.state}`"
+          data-testid="background-note"
+        >
+          <component
+            :is="message.background.kind === 'subagent' ? Bot : TerminalSquare"
+            class="background-note__icon"
+            aria-hidden="true"
+          />
+          <span class="background-note__label">{{ message.background.kind === "subagent" ? "Background helper" : "Background command" }}</span>
+          <span class="background-note__task">{{ message.background.label }}</span>
+          <span class="background-note__state">{{ message.background.state }}</span>
+        </div>
         <a
           v-if="message.peer"
           class="peer-from"
@@ -1154,6 +1185,49 @@ function handleShowCanvas(canvasId: string): void {
   margin: 0 auto 12px;
   padding: 4px 0;
   box-sizing: border-box;
+}
+
+.background-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  max-width: 100%;
+  margin-bottom: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.background-note__icon {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
+.background-note__label {
+  font-weight: 500;
+  color: var(--text);
+}
+
+.background-note__task {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono-stack);
+}
+
+.background-note__state {
+  flex-shrink: 0;
+  color: var(--complete);
+}
+
+.background-note--error .background-note__state,
+.background-note--cancelled .background-note__state {
+  color: var(--error);
 }
 
 .peer-from {

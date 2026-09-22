@@ -100,7 +100,7 @@ describe("Reopened session", () => {
   })
 
   it("keeps the visual card and the canvas card", () => {
-    const tools = toolParts(createSessionStreamState(snapshot)).map(toToolCardItem)
+    const tools = toolParts(createSessionStreamState(snapshot)).map((part) => toToolCardItem(part))
 
     expect(tools.find((t) => t.kind === "visualize")?.output).toContain("visual/flow")
     expect(tools.find((t) => t.kind === "fleet_canvas_open")?.canvasId).toBe("cv_1")
