@@ -299,6 +299,19 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : IClas
 
         // And the session picks up by itself, with the notice in front of the model.
         await WaitForAsync(events, () => LatestParts<TextMessageEventPart>(events, id).Any(p => p.Text == "The background command finished."), cts.Token);
+
+        // Read back from V2's history, the session shows the same: V2 never updates the call it backgrounded, so the
+        // card is still running there, and the notice is still the message that says the work is done.
+        SessionSnapshot snapshot;
+        using (var scope = fleet.Services.CreateScope())
+        using (scope.ServiceProvider.GetRequiredService<IBackgroundUserScope>().Begin(OpenCode2LiveFleet.Owner))
+            snapshot = await scope.ServiceProvider.GetRequiredService<ISessionMessageProxy>().GetSnapshotAsync(id, ct: cts.Token);
+
+        var reopened = snapshot.Messages.SelectMany(m => m.Parts).OfType<ToolMessageEventPart>().Single(p => p.CallId == "call_bg");
+        reopened.State.ShouldBeOfType<ToolRunningState>().Background.ShouldBeTrue();
+        var reopenedNotice = snapshot.Messages.Single(m => m.Info.Id == notice.MessageId);
+        reopenedNotice.Info.Role.ShouldBe("notice");
+        reopenedNotice.Parts.OfType<TextMessageEventPart>().ShouldHaveSingleItem().Text.ShouldBe(notice.Text);
     }
 
     [OpenCode2Fact]
