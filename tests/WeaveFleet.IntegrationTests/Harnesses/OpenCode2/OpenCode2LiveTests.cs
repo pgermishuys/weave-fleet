@@ -261,6 +261,89 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : IClas
     }
 
     [OpenCode2Fact]
+    public async Task A_backgrounded_shell_keeps_its_card_running_until_the_notice_that_it_finished()
+    {
+        const string prompt = "Start the long one and carry on. (background shell)";
+        fleet.Answer(request =>
+        {
+            if (LlmRequest.Starts(request, prompt))
+                return ToolCall("call_bg", "shell", new { command = "sleep 3; echo late-output", description = "A slow job", background = true });
+            if (LlmRequest.Continues(request, prompt))
+                return new ScriptedLlmResponse { Text = "It's running in the background." };
+            // V2 wakes the session with a notice of its own; the model is called again with it.
+            if (LlmRequest.Starts(request, "<shell"))
+                return new ScriptedLlmResponse { Text = "The background command finished." };
+            return null;
+        });
+
+        using var cts = new CancellationTokenSource(Timeout);
+        var id = await fleet.CreateSessionAsync(fleet.NewFolder("background-shell"), "Background shell", cts.Token);
+        var events = fleet.Watch(cts.Token, id);
+
+        await PromptAsync(id, prompt, options: null, cts.Token);
+        await WaitForAsync(events, () => events.For(id).Any(e => e.Type == "session.idle"), cts.Token);
+
+        // The turn ended, but the call's card is still running: it says where the work went.
+        var card = LatestParts<ToolMessageEventPart>(events, id).Single(p => p.CallId == "call_bg");
+        var running = card.State.ShouldBeOfType<ToolRunningState>();
+        running.Output.ShouldNotBeNull().GetString().ShouldNotBeNull().ShouldContain("moved to the background");
+        running.Metadata.ShouldNotBeNull().GetProperty("shellID").GetString().ShouldNotBeNullOrEmpty();
+
+        // The notice V2 posts when the command really finishes shows in the conversation, with its output.
+        var notice = await WaitForAsync(events, () => Task.FromResult(LatestParts<TextMessageEventPart>(events, id)
+            .FirstOrDefault(p => p.Text.StartsWith("<shell", StringComparison.Ordinal))), cts.Token);
+        notice.Text.ShouldContain("late-output");
+        notice.Text.ShouldContain("state=\"completed\"");
+        // The notice is the harness's own word, so it's neither the user's message nor a turn of the agent's.
+        Messages(events, id).Last(m => m.Info.Id == notice.MessageId).Info.Role.ShouldBe("notice");
+
+        // And the session picks up by itself, with the notice in front of the model.
+        await WaitForAsync(events, () => LatestParts<TextMessageEventPart>(events, id).Any(p => p.Text == "The background command finished."), cts.Token);
+    }
+
+    [OpenCode2Fact]
+    public async Task A_background_subagents_delegation_stays_open_while_its_child_works()
+    {
+        const string prompt = "Hand it over and carry on. (background subagent)";
+        const string childPrompt = "child-takes-a-while";
+        fleet.Answer(request =>
+        {
+            if (LlmRequest.Starts(request, childPrompt))
+                return ToolCall("call_child_work", "shell", new { command = "sleep 4; echo child-worked", description = "The child's work" });
+            if (LlmRequest.Continues(request, childPrompt))
+                return new ScriptedLlmResponse { Text = "The child is done." };
+            if (LlmRequest.Starts(request, prompt))
+                return ToolCall("call_bg_sub", "subagent", new { description = "A slow helper", prompt = childPrompt, agent = "general", subagent_type = "general", background = true });
+            if (LlmRequest.Continues(request, prompt))
+                return new ScriptedLlmResponse { Text = "The helper is on it." };
+            if (LlmRequest.Starts(request, "<subagent"))
+                return new ScriptedLlmResponse { Text = "The helper came back." };
+            return null;
+        });
+
+        using var cts = new CancellationTokenSource(Timeout);
+        var id = await fleet.CreateSessionAsync(fleet.NewFolder("background-subagent"), "Background subagent", cts.Token);
+        var events = fleet.Watch(cts.Token, id);
+
+        await PromptAsync(id, prompt, options: null, cts.Token);
+        await WaitForAsync(events, () => events.For(id).Any(e => e.Type == "session.idle"), cts.Token);
+
+        // The parent's turn is over while the child is still working: the delegation is still open, and its card too.
+        var delegation = (await Delegations(id)).Single(d => d.ParentToolCallId == "call_bg_sub");
+        delegation.Status.ShouldBe("running");
+        delegation.ChildSessionId.ShouldNotBeNull();
+        var child = await fleet.HarnessSessionAsync(delegation.ChildSessionId!, cts.Token);
+        LatestParts<ToolMessageEventPart>(events, id).Single(p => p.CallId == "call_bg_sub").State.ShouldBeOfType<ToolRunningState>();
+
+        // The child finishes, the notice says so, and only then is the delegation done.
+        await WaitForAsync(events, async () => (await Delegations(id)).Single(d => d.ParentToolCallId == "call_bg_sub").Status == "completed", cts.Token);
+        (await child.GetActivityStatusAsync(cts.Token)).ShouldBe(ActivityStatuses.Idle);
+        LatestParts<TextMessageEventPart>(events, id)
+            .ShouldContain(p => p.Text.StartsWith("<subagent", StringComparison.Ordinal) && p.Text.Contains("The child is done.", StringComparison.Ordinal));
+        await WaitForAsync(events, () => LatestParts<TextMessageEventPart>(events, id).Any(p => p.Text == "The helper came back."), cts.Token);
+    }
+
+    [OpenCode2Fact]
     public async Task A_prompt_switches_the_agent_and_model_and_the_session_keeps_them()
     {
         const string first = "Review this. (switch 1)";

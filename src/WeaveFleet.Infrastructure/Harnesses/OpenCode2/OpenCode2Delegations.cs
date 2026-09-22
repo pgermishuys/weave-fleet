@@ -71,7 +71,7 @@ internal sealed partial class OpenCode2Delegations(
                 }
             }
 
-            if (update.Status is "completed" or "error" && delegation.Status is "pending" or "running")
+            if (update.Status is "completed" or "error" or "cancelled" && delegation.Status is "pending" or "running")
                 await delegations.HandleDelegationFinishedAsync(delegation.DelegationId, update.Status).ConfigureAwait(false);
         }
         catch (Exception ex)

@@ -142,6 +142,9 @@ internal sealed record OpenCode2Message
     public OpenCode2MessageTimes? Time { get; init; }
     public string? Text { get; init; }
 
+    /// <summary>What a <c>synthetic</c> message is about: a background completion says its <c>source</c> and the work.</summary>
+    public JsonElement Metadata { get; init; }
+
     /// <summary>A user message's attachments, with their content.</summary>
     public IReadOnlyList<OpenCode2MessageFile>? Files { get; init; }
     public string? Agent { get; init; }
@@ -476,13 +479,17 @@ internal sealed record OpenCode2Part
 }
 
 /// <summary>
-/// A tool part's state as Fleet reads it: <c>pending</c>, <c>running</c>, <c>completed</c> (with
-/// <see cref="Output"/>) or <c>error</c> (with <see cref="Error"/>).
+/// A tool part's state as Fleet reads it: <c>pending</c>, <c>running</c> (with <see cref="Background"/> when the
+/// call itself has returned), <c>completed</c> (with <see cref="Output"/>) or <c>error</c> (with
+/// <see cref="Error"/>).
 /// </summary>
 /// <remarks><see cref="Status"/> comes first, for the same reason as a part's type.</remarks>
 internal sealed record OpenCode2ToolPartState
 {
     public required string Status { get; init; }
+
+    /// <summary>Set on a <c>running</c> call that has returned and left its work in the background.</summary>
+    public bool? Background { get; init; }
     public JsonElement? Input { get; init; }
     public JsonElement? Output { get; init; }
     public string? Error { get; init; }

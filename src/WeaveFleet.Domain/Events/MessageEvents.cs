@@ -125,7 +125,10 @@ public sealed record MessageEventInfo
     public required string Id { get; init; }
 
     /// <summary>
-    /// Gets the message role.
+    /// Gets the message role: <c>user</c> (the prompt, which Fleet shows from its own send), <c>assistant</c> (a
+    /// turn), or <c>notice</c> — something the harness put in the conversation itself, such as OpenCode 2's word
+    /// that work it moved into the background has finished. A notice is nobody's turn: it isn't the session's last
+    /// reply, and it carries no model.
     /// </summary>
     public required string Role { get; init; }
 
@@ -398,6 +401,25 @@ public sealed record ToolRunningState : ToolInvocationState
     /// Gets the typed input payload for the tool invocation.
     /// </summary>
     public JsonElement? Input { get; init; }
+
+    /// <summary>
+    /// Gets whether the call itself has returned and only its work carries on, out of the turn: OpenCode 2 can move a
+    /// shell command or a subagent into the background, and it then says so when the work finishes rather than by
+    /// ending the call.
+    /// </summary>
+    public bool Background { get; init; }
+
+    /// <summary>
+    /// Gets what the call returned while its work goes on, when it returned anything: a call moved into the background
+    /// answers at once with the handle its work carries on under.
+    /// </summary>
+    public JsonElement? Output { get; init; }
+
+    /// <summary>
+    /// Gets the optional tool metadata payload, which a harness can report while the call runs (a subagent's child
+    /// session, a backgrounded call's shell).
+    /// </summary>
+    public JsonElement? Metadata { get; init; }
 }
 
 /// <summary>

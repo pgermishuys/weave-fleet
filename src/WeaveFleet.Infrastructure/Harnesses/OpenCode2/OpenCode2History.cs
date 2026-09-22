@@ -12,6 +12,10 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 internal static class OpenCode2History
 {
     /// <summary>The messages Fleet shows, in the order given; V2's other message types (idle, shell, compaction, …) are left out.</summary>
+    /// <remarks>
+    /// A <c>synthetic</c> message is V2 talking to the model: only a background completion is news for the user, and
+    /// it shows as a message of the session's own, the way it does live.
+    /// </remarks>
     public static IReadOnlyList<HarnessMessage> ToHarnessMessages(IEnumerable<OpenCode2Message> messages)
         => messages.Select(ToHarnessMessage).OfType<HarnessMessage>().ToList();
 
@@ -42,9 +46,23 @@ internal static class OpenCode2History
                 Finish = message.Finish,
                 Error = TurnFailure(message.Error),
             },
+            "synthetic" when IsBackgroundNotice(message.Metadata) => new HarnessMessage
+            {
+                Id = id,
+                Role = OpenCode2Mapper.NoticeRole,
+                Parts = [new TextPart(message.Text ?? string.Empty) { PartId = OpenCode2Mapper.PartId(id, "text", 0) }],
+                Timestamp = timestamp,
+            },
             _ => null,
         };
     }
+
+    /// <summary>Whether a synthetic message says background work finished, rather than instructing the model.</summary>
+    private static bool IsBackgroundNotice(JsonElement metadata)
+        => metadata.ValueKind == JsonValueKind.Object
+            && metadata.TryGetProperty("source", out var source)
+            && source.ValueKind == JsonValueKind.String
+            && source.GetString() is "shell" or OpenCode2Mapper.SubagentTool;
 
     /// <summary>A prompt's text, then each attachment as a file part, the way Fleet showed the prompt when it was sent.</summary>
     private static List<MessagePart> UserParts(string messageId, OpenCode2Message message)
@@ -108,8 +126,10 @@ internal static class OpenCode2History
 
     private static ToolUsePart ToolPart(string messageId, string callId, string name, OpenCode2ToolState state)
     {
-        var status = OpenCode2Mapper.HistoryToolStatus(state.Status);
-        var output = status is "completed" or "error" ? OpenCode2Mapper.ToolOutput(state.Content) : null;
+        var stored = OpenCode2Mapper.HistoryToolStatus(state.Status);
+        // A call V2 moved into the background is done as a call, but its work isn't: it keeps its card running.
+        var status = OpenCode2Mapper.ToolStatus(state.Status, state.Metadata);
+        var output = stored is "completed" or "error" ? OpenCode2Mapper.ToolOutput(state.Content) : null;
         return new ToolUsePart(
             callId,
             name,
@@ -124,8 +144,9 @@ internal static class OpenCode2History
             })
         {
             PartId = OpenCode2Mapper.ToolPartId(messageId, callId),
+            Background = status == "running" && stored == "completed",
             Output = output is null ? null : JsonSerializer.SerializeToElement(output, OpenCode2JsonContext.Default.String),
-            Error = status == "error" ? state.Error?.Message ?? state.Error?.Type : null,
+            Error = stored == "error" ? state.Error?.Message ?? state.Error?.Type : null,
             Metadata = state.Metadata.ValueKind == JsonValueKind.Object ? state.Metadata.Clone() : null,
         };
     }

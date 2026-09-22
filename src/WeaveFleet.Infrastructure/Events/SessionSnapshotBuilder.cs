@@ -305,7 +305,8 @@ public sealed class SessionSnapshotBuilder(
         return toolPart.State switch
         {
             ToolUseState.Pending => new ToolPendingState { Input = input },
-            ToolUseState.Running => new ToolRunningState { Input = input },
+            // A call moved into the background has returned: it carries what it answered with while its work runs.
+            ToolUseState.Running => new ToolRunningState { Input = input, Output = output, Metadata = metadata, Background = toolPart.Background },
             ToolUseState.Completed => new ToolCompletedState { Input = input, Output = output, Title = toolPart.Title, Metadata = metadata },
             ToolUseState.Error => new ToolErrorState { Input = input, Output = output, Error = toolPart.Error, Metadata = metadata },
             _ => new ToolPendingState { Input = input },

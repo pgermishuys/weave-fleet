@@ -1,4 +1,5 @@
 import type { AccumulatedToolPart } from "@/lib/client-types";
+import { backgroundWorkId, type BackgroundState } from "@/lib/background-work";
 import { getToolLabel } from "@/lib/tool-labels";
 
 export interface DiffLine {
@@ -130,7 +131,14 @@ export function toolDiffText(part: AccumulatedToolPart): string | undefined {
   return undefined;
 }
 
-export function toToolCardItem(part: AccumulatedToolPart): ToolCardItem {
+/**
+ * A tool call as its card. `finishedBackgroundWork` says how work the call moved into the background ended, by handle:
+ * a backgrounded call is still running as far as the call itself goes, and only its notice says it's done.
+ */
+export function toToolCardItem(
+  part: AccumulatedToolPart,
+  finishedBackgroundWork?: ReadonlyMap<string, BackgroundState>,
+): ToolCardItem {
   const state = asRecord(part.state);
   const input = asRecord(state?.input);
   const output = getToolOutput(state);
@@ -138,12 +146,13 @@ export function toToolCardItem(part: AccumulatedToolPart): ToolCardItem {
   const shownTitle = TITLED_TOOLS.has(part.tool) ? getStringValue(state?.title) : undefined;
   const title = shownTitle ?? (getToolLabel(part.tool, input) || part.tool);
   const canvasId = getStringValue(asRecord(state?.metadata)?.canvasId);
+  const status = backgroundStatus(part, finishedBackgroundWork) ?? formatToolStatus(state?.status);
 
   return {
     id: part.partId,
     title,
     kind: part.tool,
-    status: formatToolStatus(state?.status),
+    status,
     summary,
     output,
     diffLines: getDiffLines(state),
@@ -152,6 +161,23 @@ export function toToolCardItem(part: AccumulatedToolPart): ToolCardItem {
     isPatternTool: part.tool === "glob" || part.tool === "grep",
     canvasId,
   };
+}
+
+const BACKGROUND_STATE_TO_STATUS: Record<BackgroundState, string> = {
+  completed: "Completed",
+  error: "Error",
+  cancelled: "Cancelled",
+};
+
+/** What a call that went to the background shows: "Background" while its work runs, then how the work ended. */
+function backgroundStatus(
+  part: AccumulatedToolPart,
+  finished?: ReadonlyMap<string, BackgroundState>,
+): string | undefined {
+  const id = backgroundWorkId(part.state);
+  if (!id) return undefined;
+  const ended = finished?.get(id);
+  return ended ? BACKGROUND_STATE_TO_STATUS[ended] : "Background";
 }
 
 function getToolOutput(state: Record<string, unknown> | null): string | undefined {
