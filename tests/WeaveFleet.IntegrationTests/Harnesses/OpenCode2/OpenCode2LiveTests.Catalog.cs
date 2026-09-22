@@ -18,7 +18,7 @@ public sealed partial class OpenCode2LiveTests
     public async Task An_agent_file_added_to_a_folder_is_told_once_and_the_catalog_lists_it()
     {
         using var cts = new CancellationTokenSource(Timeout);
-        var folder = fleet.NewFolder("catalog-agent-file");
+        var folder = FolderWithAgents("catalog-agent-file");
         var changes = fleet.WatchTopics(["sessions"], cts.Token);
 
         (await CatalogAsync(folder, HarnessProfileService.NoProfile, cts.Token)).Agents.ShouldNotContain(a => a.Name == "hot");
@@ -48,7 +48,7 @@ public sealed partial class OpenCode2LiveTests
     {
         using var cts = new CancellationTokenSource(Timeout);
         var profile = await CreateProfileAsync("Live catalog", ProfileContent("catalog-model"), cts.Token);
-        var folder = fleet.NewFolder("catalog-profiles");
+        var folder = FolderWithAgents("catalog-profiles");
         var changes = fleet.WatchTopics(["sessions"], cts.Token);
 
         await CatalogAsync(folder, HarnessProfileService.NoProfile, cts.Token);
@@ -63,6 +63,17 @@ public sealed partial class OpenCode2LiveTests
         CatalogChanges(changes, folder).Select(c => string.Join(",", Strings(c, "profileIds"))).Order()
             .ShouldBe(new[] { HarnessProfileService.NoProfile, profile.Id }.Order());
         (await CatalogAsync(folder, profile.Id, cts.Token)).Agents.ShouldContain(a => a.Name == "shared");
+    }
+
+    /// <summary>
+    /// A new folder whose <c>.opencode/agents</c> exists before V2 loads it: V2 reads a new <c>.opencode</c> folder as
+    /// a config change of its own, a round of events apart from the file written into it.
+    /// </summary>
+    private string FolderWithAgents(string name)
+    {
+        var folder = fleet.NewFolder(name);
+        Directory.CreateDirectory(Path.Combine(folder, ".opencode", "agents"));
+        return folder;
     }
 
     private static void WriteAgent(string folder, string name)

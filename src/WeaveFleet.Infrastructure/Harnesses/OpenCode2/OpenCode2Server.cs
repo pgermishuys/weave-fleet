@@ -147,7 +147,7 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     /// </summary>
     internal Action<OpenCode2Server, string>? CatalogChanged { get; init; }
 
-    internal TimeSpan CatalogChangeQuietTime { get; init; } = TimeSpan.FromMilliseconds(500);
+    internal TimeSpan CatalogChangeQuietTime { get; init; } = TimeSpan.FromSeconds(1);
 
     internal TimeSpan LocationSettleTime { get; init; } = TimeSpan.FromSeconds(3);
 
