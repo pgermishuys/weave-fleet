@@ -1,7 +1,8 @@
 /**
  * A one-line description of what an OpenCode profile changes, for pickers and lists: its default model, default
- * agent, and how many providers, MCP servers and agents it adds. Unreadable JSON falls back to a plain note;
- * OpenCode is what checks a profile for real, when it's saved.
+ * agent, and how many providers, MCP servers and agents it adds. OpenCode 2 reads the same file with its own names
+ * for some settings (`providers`, `agents`, `mcp.servers`), so both count. Unreadable JSON falls back to a plain
+ * note; the harness is what checks a profile for real, when it's saved.
  */
 export function profileSummary(content: string): string {
   const config = parseJsonc(content);
@@ -12,11 +13,15 @@ export function profileSummary(content: string): string {
     value && typeof value === "object" && !Array.isArray(value) ? Object.keys(value).length : 0;
   const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? "" : "s"}`;
 
+  const mcp = config.mcp && typeof config.mcp === "object" && "servers" in config.mcp ? (config.mcp as { servers: unknown }).servers : config.mcp;
+  const providers = count(config.provider) + count(config.providers);
+  const agents = count(config.agent) + count(config.agents);
+
   if (typeof config.model === "string") parts.push(config.model);
   if (typeof config.default_agent === "string") parts.push(`default agent ${config.default_agent}`);
-  if (count(config.provider)) parts.push(plural(count(config.provider), "provider"));
-  if (count(config.mcp)) parts.push(plural(count(config.mcp), "MCP server"));
-  if (count(config.agent)) parts.push(plural(count(config.agent), "agent"));
+  if (providers) parts.push(plural(providers, "provider"));
+  if (count(mcp)) parts.push(plural(count(mcp), "MCP server"));
+  if (agents) parts.push(plural(agents, "agent"));
   if (Array.isArray(config.enabled_providers)) parts.push(`only ${config.enabled_providers.join(", ")}`);
   if (Array.isArray(config.disabled_providers)) parts.push(`turns off ${config.disabled_providers.join(", ")}`);
   if (parts.length === 0) {
@@ -70,6 +75,6 @@ function stripJsonc(text: string): string {
 /** What a new profile starts with. */
 export const NEW_PROFILE_CONTENT = `{
   "$schema": "https://opencode.ai/config.json"
-  // Anything here layers over your own ~/.config/opencode/opencode.json
+  // Anything here layers over your own opencode.json
 }
 `;

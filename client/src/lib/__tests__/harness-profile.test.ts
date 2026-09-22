@@ -13,6 +13,16 @@ describe("profileSummary", () => {
     expect(profileSummary(content)).toBe("amazon-bedrock/anthropic.claude-sonnet-5 · 1 provider · 1 MCP server");
   });
 
+  it("counts OpenCode 2's own names for providers, agents and MCP servers too", () => {
+    const content = `{
+      "providers": { "work": {}, "local": {} },
+      "agents": { "review": {} },
+      "mcp": { "servers": { "linear": { "type": "remote", "url": "https://mcp.linear.app/mcp" } } },
+    }`;
+
+    expect(profileSummary(content)).toBe("2 providers · 1 MCP server · 1 agent");
+  });
+
   it("says when a profile limits the providers", () => {
     expect(profileSummary(`{ "enabled_providers": ["ollama"] }`)).toBe("only ollama");
     expect(profileSummary(`{ "disabled_providers": ["openai", "groq"] }`)).toBe("turns off openai, groq");

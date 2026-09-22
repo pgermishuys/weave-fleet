@@ -23,7 +23,8 @@ internal interface IOpenCode2EventSink
 
 /// <summary>
 /// What Fleet starts an owner's server with: where Fleet is, the config it adds (<see cref="OpenCode2FleetFiles"/>),
-/// whether the server gets the tool for messages between sessions, and the install it runs (<see cref="OpenCode2Install"/>).
+/// whether the server gets the tool for messages between sessions, the install it runs (<see cref="OpenCode2Install"/>),
+/// and the profile its sessions use, if any (<see cref="OpenCode2Profiles"/>).
 /// When the owner changes a setting behind it, the server is replaced once none of its sessions is running a turn.
 /// </summary>
 internal sealed record OpenCode2ServerSetup(
@@ -31,7 +32,8 @@ internal sealed record OpenCode2ServerSetup(
     string? ConfigContent,
     bool SessionMessages,
     string? ExecutablePath = null,
-    OpenCode2InstallMode Mode = OpenCode2InstallMode.Default)
+    OpenCode2InstallMode Mode = OpenCode2InstallMode.Default,
+    OpenCode2Profile? Profile = null)
 {
     public static readonly OpenCode2ServerSetup None = new(null, null, false);
 }
@@ -75,6 +77,7 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     private TaskCompletionSource _connected = NewConnectedSource();
     private int _stopped;
     private int _outdated;
+    private long _lastUsedTicks = DateTimeOffset.UtcNow.UtcTicks;
 
     internal OpenCode2Server(
         string ownerUserId,
@@ -106,7 +109,20 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
 
     public OpenCode2ServerSetup Setup { get; }
 
+    /// <summary>The profile this server's sessions use; <see langword="null"/> for the owner's server without one.</summary>
+    public OpenCode2Profile? Profile => Setup.Profile;
+
     public int? ProcessId => _process?.ProcessId;
+
+    /// <summary>When a session last asked something of this server, or it last sent an event.</summary>
+    public DateTimeOffset LastUsed => new(Interlocked.Read(ref _lastUsedTicks), TimeSpan.Zero);
+
+    /// <summary>Notes that the server is in use now, so it isn't stopped as idle.</summary>
+    public void Touch() => Interlocked.Exchange(ref _lastUsedTicks, DateTimeOffset.UtcNow.UtcTicks);
+
+    /// <summary>Whether Fleet session <paramref name="fleetSessionId"/> listens on this server.</summary>
+    public bool Serves(string fleetSessionId)
+        => _sinks.Values.Any(sink => string.Equals(sink.Context.FleetSessionId, fleetSessionId, StringComparison.Ordinal));
 
     /// <summary>How long a catalog read waits for V2 to load a folder before it lists what V2 has so far.</summary>
     internal TimeSpan LocationLoadTimeout { get; init; } = TimeSpan.FromSeconds(15);
@@ -201,6 +217,9 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
         ObserveLocation(evt);
         if (evt.SessionId is not { } sessionId)
             return;
+
+        // Only a session's own events count as use: V2 also sends catalog events whenever files it watches change.
+        Touch();
 
         IOpenCode2EventSink? sink;
         lock (_routing)

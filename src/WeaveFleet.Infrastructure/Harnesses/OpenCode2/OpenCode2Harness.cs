@@ -37,5 +37,7 @@ public sealed class OpenCode2Harness : IHarness
         SupportsImageAttachments = true,
         // Its edit and write tool calls are reported as the files they wrote.
         ReportsFileWrites = true,
+        // A profile's sessions run on a server of their own, which reads the profile as OPENCODE_CONFIG.
+        SupportsProfiles = true,
     };
 }

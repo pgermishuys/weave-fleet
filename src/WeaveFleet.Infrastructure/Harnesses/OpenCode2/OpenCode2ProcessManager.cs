@@ -13,6 +13,12 @@ internal sealed record OpenCode2ProcessOptions
     public required string Password { get; init; }
     public IReadOnlyDictionary<string, string> EnvironmentVariables { get; init; } = new Dictionary<string, string>();
     public TimeSpan StartupTimeout { get; init; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Each line V2 logs, as it logs it (<c>--print-logs</c>, to standard error). Only a profile check reads the log;
+    /// servers for sessions log to V2's own file as usual.
+    /// </summary>
+    public Action<string>? LogLine { get; init; }
 }
 
 /// <summary>
@@ -65,6 +71,8 @@ internal sealed partial class OpenCode2ProcessManager(ILogger<OpenCode2ProcessMa
         };
         foreach (var argument in (string[])["serve", "--port", "0", "--hostname", "127.0.0.1"])
             psi.ArgumentList.Add(argument);
+        if (options.LogLine is not null)
+            psi.ArgumentList.Add("--print-logs");
 
         // Fleet's variables stay with Fleet: the agent's shell tool would pass them on to every command it runs.
         TerminalEnvironment.RemoveFleetOwned(psi.Environment);
@@ -75,7 +83,12 @@ internal sealed partial class OpenCode2ProcessManager(ILogger<OpenCode2ProcessMa
         var listening = new TaskCompletionSource<Uri>(TaskCreationOptions.RunContinuationsAsynchronously);
         var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
         process.OutputDataReceived += (_, e) => OnOutput(e.Data, listening);
-        process.ErrorDataReceived += (_, e) => OnOutput(e.Data, listening: null);
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if (e.Data is not null)
+                options.LogLine?.Invoke(e.Data);
+            OnOutput(e.Data, listening: null);
+        };
         process.Exited += (_, _) =>
         {
             var exitCode = process.ExitCode;

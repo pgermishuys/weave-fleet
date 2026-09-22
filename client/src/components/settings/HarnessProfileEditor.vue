@@ -112,8 +112,15 @@ async function remove(): Promise<void> {
 
     <p class="text-xs text-muted">
       Fleet hands this to {{ harnessName }} as <code class="font-mono text-text">OPENCODE_CONFIG</code>, on top of your
-      own opencode.json. Fleet's own settings (every tool allowed, the Fleet plugin) still apply after it. Keep API keys
-      in Credentials and refer to them with <code class="font-mono text-text">{env:NAME}</code>.
+      own opencode.json. Fleet's own settings (every tool allowed, the Fleet plugin) still apply after it.
+      <template v-if="harnessType === 'opencode2'">
+        Keep API keys out of it: sign in to providers in {{ harnessName }} itself, or refer to a variable Fleet runs with
+        as <code class="font-mono text-text">{env:NAME}</code>. Sessions on a profile run on an {{ harnessName }} server
+        of their own, which stops after a few minutes unused.
+      </template>
+      <template v-else>
+        Keep API keys in Credentials and refer to them with <code class="font-mono text-text">{env:NAME}</code>.
+      </template>
     </p>
     <p
       v-if="syntaxProblem"
