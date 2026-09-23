@@ -309,6 +309,84 @@ public sealed class SessionActivityTrackerTests
     }
 
     [Fact]
+    public void GetEffectiveActivityStatus_WhenOnlyABackgroundChildWorks_TheParentIsAsItReportsItself()
+    {
+        // The call that started the child returned: the parent is free for the next prompt while the child works.
+        var sut = new SessionActivityTracker();
+        sut.RegisterChild("child-1", "parent-1");
+        sut.Update("parent-1", ActivityStatuses.Idle, "user-1");
+        sut.Update("child-1", ActivityStatuses.Busy, "user-1");
+        sut.GetEffectiveActivityStatus("parent-1").ShouldBe(ActivityStatuses.Busy);
+
+        sut.MoveChildToBackground("child-1").ShouldBeTrue();
+
+        sut.IsChildInBackground("child-1").ShouldBeTrue();
+        sut.GetEffectiveActivityStatus("parent-1").ShouldBe(ActivityStatuses.Idle);
+
+        // The parent's own turn still counts, and so does a foreground child next to the background one.
+        sut.Update("parent-1", ActivityStatuses.Busy, "user-1");
+        sut.GetEffectiveActivityStatus("parent-1").ShouldBe(ActivityStatuses.Busy);
+        sut.Update("parent-1", ActivityStatuses.Idle, "user-1");
+        sut.RegisterChild("child-2", "parent-1");
+        sut.Update("child-2", ActivityStatuses.Busy, "user-1");
+        sut.GetEffectiveActivityStatus("parent-1").ShouldBe(ActivityStatuses.Busy);
+    }
+
+    [Fact]
+    public void GetEffectiveActivityStatus_WhenABackgroundChildAsks_TheParentNeedsTheUser()
+    {
+        var sut = new SessionActivityTracker();
+        sut.RegisterChild("child-1", "parent-1");
+        sut.MoveChildToBackground("child-1");
+        sut.Update("parent-1", ActivityStatuses.Idle, "user-1");
+        sut.Update("child-1", ActivityStatuses.WaitingInput, "user-1");
+
+        sut.GetEffectiveActivityStatus("parent-1").ShouldBe(ActivityStatuses.WaitingInput);
+        sut.ShownActivityStatus("parent-1", ActivityStatuses.Idle).ShouldBe(ActivityStatuses.WaitingInput);
+    }
+
+    [Fact]
+    public void MoveChildToBackground_OnlyForARegisteredChild_AndOnlyOnce()
+    {
+        var sut = new SessionActivityTracker();
+        sut.MoveChildToBackground("child-1").ShouldBeFalse();
+        sut.IsChildInBackground("child-1").ShouldBeFalse();
+
+        sut.RegisterChild("child-1", "parent-1");
+        sut.MoveChildToBackground("child-1").ShouldBeTrue();
+        sut.MoveChildToBackground("child-1").ShouldBeFalse();
+    }
+
+    [Fact]
+    public void UnregisterChild_ForgetsThatItWasInTheBackground()
+    {
+        var sut = new SessionActivityTracker();
+        sut.RegisterChild("child-1", "parent-1");
+        sut.MoveChildToBackground("child-1");
+
+        sut.UnregisterChild("child-1");
+        sut.IsChildInBackground("child-1").ShouldBeFalse();
+
+        // Delegated again in the foreground, it's the parent's work once more.
+        sut.RegisterChild("child-1", "parent-1");
+        sut.Update("parent-1", ActivityStatuses.Idle, "user-1");
+        sut.Update("child-1", ActivityStatuses.Busy, "user-1");
+        sut.GetEffectiveActivityStatus("parent-1").ShouldBe(ActivityStatuses.Busy);
+    }
+
+    [Fact]
+    public void Remove_WhenParentRemoved_ForgetsItsBackgroundChildren()
+    {
+        var sut = new SessionActivityTracker();
+        sut.RegisterChild("child-1", "parent-1");
+        sut.MoveChildToBackground("child-1");
+
+        sut.Remove("parent-1");
+
+        sut.IsChildInBackground("child-1").ShouldBeFalse();
+    }
+
+    [Fact]
     public void ShownActivityStatus_IsWhatTheSessionReportedUnlessAChildWaitsOnTheUser()
     {
         var sut = new SessionActivityTracker();

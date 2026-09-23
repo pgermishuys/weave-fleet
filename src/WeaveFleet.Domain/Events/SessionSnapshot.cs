@@ -133,4 +133,11 @@ public sealed record SessionSnapshotDelegation
     /// live changes arrive on the <c>sessions</c> topic's <c>activity_status</c>.
     /// </summary>
     public string? ChildActivityStatus { get; init; }
+
+    /// <summary>
+    /// Gets whether the call that started the delegation returned while its child carries on working (<c>true</c>),
+    /// or <c>null</c>. Such a child's work isn't its parent's: the parent reads idle, and the subagent's row says it's
+    /// running in the background.
+    /// </summary>
+    public bool? Background { get; init; }
 }

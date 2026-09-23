@@ -242,8 +242,13 @@ function deriveSnapshotSessionStatus(
   return deriveSessionStatus(explicitStatus, delegations)
 }
 
+/**
+ * Whether a sub-agent is doing the session's work. One in the background isn't: its call returned, the session is free
+ * for the next prompt, and it wakes by itself when the sub-agent finishes. Its question still counts (see
+ * {@link isDelegationWaiting}).
+ */
 function hasActiveDelegations(delegations: DelegationDto[]): boolean {
-  return delegations.some((delegation) => ACTIVE_DELEGATION_STATUSES.has(delegation.status))
+  return delegations.some((delegation) => ACTIVE_DELEGATION_STATUSES.has(delegation.status) && delegation.background !== true)
 }
 
 /** Whether a sub-agent that is still at work has stopped on a question. */
@@ -304,6 +309,7 @@ function mapSnapshotDelegation(delegation: SessionSnapshotDelegation): Delegatio
     status: toDelegationStatus(delegation.status),
     createdAt: delegation.createdAt,
     childActivityStatus: delegation.childActivityStatus ?? null,
+    ...(delegation.background ? { background: true } : {}),
   }
 }
 
@@ -315,6 +321,7 @@ function mapDelegationEvent(event: DelegationCreated | DelegationUpdated | Deleg
     title: event.payload.title,
     status: toDelegationStatus(event.payload.status),
     createdAt: event.payload.createdAt,
+    ...(event.payload.background ? { background: true } : {}),
   }
 }
 

@@ -220,6 +220,8 @@ export interface DelegationCreatedPayload {
   title: string;
   status: string;
   createdAt: string;
+  /** Set when the sub-agent works on in the background, its call having returned. */
+  background?: boolean;
 }
 
 export interface DelegationUpdatedPayload {
@@ -230,6 +232,8 @@ export interface DelegationUpdatedPayload {
   title: string;
   status: string;
   createdAt: string;
+  /** Set when the sub-agent works on in the background, its call having returned. */
+  background?: boolean;
 }
 
 export interface DelegationCompletedPayload {
@@ -241,6 +245,8 @@ export interface DelegationCompletedPayload {
   status: string;
   createdAt: string;
   completedAt: string;
+  /** Set when the sub-agent works on in the background, its call having returned. */
+  background?: boolean;
 }
 
 export interface SessionActionCapabilities {

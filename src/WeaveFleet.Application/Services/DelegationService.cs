@@ -176,6 +176,40 @@ public sealed class DelegationService(
         return ToDto(delegation);
     }
 
+    /// <summary>
+    /// Records that the call which started a delegation returned while its child carries on working: the work went
+    /// into the background (OpenCode 2's <c>subagent</c> with <c>background: true</c>, or a call moved there later).
+    /// The parent is free for the user's next prompt from then on, so the child's work no longer makes it read as
+    /// busy anywhere, while a question from the child still makes it wait on the user. The delegation stays running
+    /// until the harness says the child finished.
+    /// </summary>
+    /// <returns>The delegation, or <c>null</c> when there's none for that call.</returns>
+    public async Task<DelegationDto?> HandleDelegationMovedToBackgroundAsync(string parentSessionId, string parentToolCallId)
+    {
+        ValidateRequired(parentSessionId, nameof(parentSessionId));
+        ValidateRequired(parentToolCallId, nameof(parentToolCallId));
+
+        var delegation = await delegationRepository.GetByParentToolCallIdAsync(parentSessionId, parentToolCallId);
+        if (delegation is null)
+            return null;
+
+        // Only a delegation still under way whose child Fleet knows can be in the background; one moved there already
+        // needs nothing more.
+        if (delegation.Status is not ("pending" or "running")
+            || delegation.ChildSessionId is not { } childSessionId
+            || activityTracker is null
+            || !activityTracker.MoveChildToBackground(childSessionId))
+        {
+            return ToDto(delegation);
+        }
+
+        await BroadcastAsync(parentSessionId, "delegation.updated", delegation);
+
+        // The parent may already have reported itself idle while its child counted as its work.
+        await BroadcastParentActivityAsync(parentSessionId).ConfigureAwait(false);
+        return ToDto(delegation);
+    }
+
     public async Task<DelegationDto?> HandleDelegationFinishedAsync(string delegationId, string status)
     {
         ValidateRequired(delegationId, nameof(delegationId));
@@ -228,28 +262,36 @@ public sealed class DelegationService(
         if (delegation.ChildSessionId is not null && activityTracker is not null)
         {
             activityTracker.UnregisterChild(delegation.ChildSessionId);
-
-            var parentActivityStatus = activityTracker.GetEffectiveActivityStatus(delegation.ParentSessionId) ?? "idle";
-            var activityPayload = await BuildActivityStatusPayloadAsync(
-                delegation.ParentSessionId,
-                parentActivityStatus).ConfigureAwait(false);
-
-            await eventBroadcaster.BroadcastAsync(
-                $"session:{delegation.ParentSessionId}",
-                "activity_status",
-                activityPayload,
-                userContext.UserId,
-                CancellationToken.None).ConfigureAwait(false);
-
-            await eventBroadcaster.BroadcastAsync(
-                "sessions",
-                "activity_status",
-                activityPayload,
-                userContext.UserId,
-                CancellationToken.None).ConfigureAwait(false);
+            await BroadcastParentActivityAsync(delegation.ParentSessionId).ConfigureAwait(false);
         }
 
         return ToDto(delegation);
+    }
+
+    /// <summary>Tells the parent's conversation and the session list what the parent shows now that its children changed.</summary>
+    private async Task BroadcastParentActivityAsync(string parentSessionId)
+    {
+        if (activityTracker is null)
+            return;
+
+        var parentActivityStatus = activityTracker.GetEffectiveActivityStatus(parentSessionId) ?? "idle";
+        var activityPayload = await BuildActivityStatusPayloadAsync(
+            parentSessionId,
+            parentActivityStatus).ConfigureAwait(false);
+
+        await eventBroadcaster.BroadcastAsync(
+            $"session:{parentSessionId}",
+            "activity_status",
+            activityPayload,
+            userContext.UserId,
+            CancellationToken.None).ConfigureAwait(false);
+
+        await eventBroadcaster.BroadcastAsync(
+            "sessions",
+            "activity_status",
+            activityPayload,
+            userContext.UserId,
+            CancellationToken.None).ConfigureAwait(false);
     }
 
     /// <summary>Hands the delegation to progress tracking, which shows subagents under the plan step they work on.</summary>
@@ -343,7 +385,8 @@ public sealed class DelegationService(
                 delegation.ChildSessionId,
                 delegation.Title,
                 delegation.Status,
-                delegation.CreatedAt),
+                delegation.CreatedAt,
+                IsInBackground(delegation)),
                 ApplicationJsonContext.Default.DelegationEventDto),
             UserId = userContext.UserId,
             CreatedAt = createdAt,
@@ -360,7 +403,8 @@ public sealed class DelegationService(
             delegation.ChildSessionId,
             delegation.Title,
             delegation.Status,
-            delegation.CreatedAt);
+            delegation.CreatedAt,
+            IsInBackground(delegation));
         await eventBroadcaster.BroadcastAsync(
             $"session:{parentSessionId}",
             eventType,
@@ -368,6 +412,9 @@ public sealed class DelegationService(
             userContext.UserId,
             CancellationToken.None);
     }
+
+    private bool? IsInBackground(Delegation delegation)
+        => delegation.ChildSessionId is { } childSessionId && activityTracker?.IsChildInBackground(childSessionId) == true ? true : null;
 
     private static DelegationDto ToDto(Delegation delegation) => new(
         delegation.Id,

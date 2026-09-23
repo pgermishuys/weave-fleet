@@ -149,7 +149,8 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
     /// </summary>
     /// <remarks>
     /// A backgrounded call returns while its child carries on working (<see cref="IsBackgrounded"/>), so it reports the
-    /// delegation still running and remembers the child; the notice V2 posts when the child really finishes ends it.
+    /// delegation still running, in the background, and remembers the child; the notice V2 posts when the child really
+    /// finishes ends it.
     /// </remarks>
     public OpenCode2Delegation? TryReadDelegation(OpenCode2Event evt)
     {
@@ -174,6 +175,7 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
         var description = input.ValueKind == JsonValueKind.Object ? ReadString(input, "description") : null;
         var metadata = evt.Data.TryGetProperty("metadata", out var m) && m.ValueKind == JsonValueKind.Object ? m : default;
         var childSessionId = metadata.ValueKind == JsonValueKind.Object ? ReadString(metadata, "sessionID") : null;
+        var background = evt.Type == "session.tool.success" && IsBackgrounded(metadata);
         var delegation = new OpenCode2Delegation(
             call.CallId,
             string.IsNullOrWhiteSpace(agent) ? SubagentTool : agent,
@@ -181,12 +183,13 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
             childSessionId,
             evt.Type switch
             {
-                "session.tool.success" => IsBackgrounded(metadata) ? "running" : "completed",
+                "session.tool.success" => background ? "running" : "completed",
                 "session.tool.failed" => "error",
                 _ => "running",
-            });
+            },
+            background);
 
-        if (evt.Type == "session.tool.success" && delegation.Status == "running" && childSessionId is not null)
+        if (background && childSessionId is not null)
             _backgroundSubagents[childSessionId] = delegation;
 
         return delegation;
@@ -830,11 +833,12 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
 /// <summary>
 /// A subagent call as Fleet's delegation: <paramref name="Agent"/> is its title, <paramref name="ChildSessionId"/> the
 /// V2 session it runs in (once V2 said), and <paramref name="Status"/> <c>running</c>, <c>completed</c>, <c>error</c>
-/// or <c>cancelled</c>.
+/// or <c>cancelled</c>. <paramref name="Background"/> says the call returned while its child carries on working.
 /// </summary>
 internal sealed record OpenCode2Delegation(
     string ToolCallId,
     string Agent,
     string? Description,
     string? ChildSessionId,
-    string Status);
+    string Status,
+    bool Background = false);

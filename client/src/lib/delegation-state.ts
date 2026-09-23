@@ -7,6 +7,7 @@ type DelegationEvent = {
   title?: string;
   status?: DelegationDto["status"];
   createdAt?: string | null;
+  background?: boolean;
 };
 
 export function applyDelegationCreated(
@@ -21,6 +22,7 @@ export function applyDelegationCreated(
     title: event.title ?? "",
     status: event.status ?? "pending",
     createdAt: event.createdAt ?? null,
+    ...(event.background ? { background: true } : {}),
   };
 
   if (existingIndex === -1) {
@@ -49,6 +51,8 @@ export function applyDelegationUpdated(
     title: event.title ?? existing.title,
     status: event.status ?? existing.status,
     createdAt: event.createdAt ?? existing.createdAt ?? null,
+    // Once in the background, a sub-agent stays there: an update that doesn't say so doesn't bring it back.
+    ...(event.background || existing.background ? { background: true } : {}),
   };
 
   if (JSON.stringify(existing) === JSON.stringify(nextItem)) {

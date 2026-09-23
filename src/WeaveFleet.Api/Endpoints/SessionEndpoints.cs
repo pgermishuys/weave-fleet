@@ -56,10 +56,14 @@ public static class SessionEndpoints
                     // Get child-to-parent mapping for all active children
                     var childToParent = await sessionRepository.GetActiveChildToParentMappingAsync();
 
-                    // Filter to only include parents whose children are actually busy according to the activity tracker
+                    // Filter to only include parents whose children are actually busy according to the activity tracker.
+                    // A child working in the background isn't its parent's work: the parent is free until it's told.
                     var parentIdsWithBusyChildren = new HashSet<string>(StringComparer.Ordinal);
                     foreach (var (childId, parentId) in childToParent)
                     {
+                        if (activityTracker.IsChildInBackground(childId))
+                            continue;
+
                         var childActivityStatus = activityTracker.GetEffectiveActivityStatus(childId);
                         if (SessionActivityTracker.IsWorking(childActivityStatus))
                         {

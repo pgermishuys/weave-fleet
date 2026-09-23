@@ -838,6 +838,7 @@ function withDelegation(item: ToolCardItem, part: AccumulatedToolPart): ToolCard
       task: subagentTask(part) || delegation.title,
       status: delegation.status,
       needsInput: isDelegationWaiting(delegation),
+      background: delegation.background === true,
     },
   };
 }

@@ -114,13 +114,14 @@ public sealed class OpenCode2BackgroundTests
             mapper.Map(evt);
         }
 
-        // The call returns while the child works ("running"), and the notice that the child finished ends it.
+        // The call returns while the child works ("running", in the background), and the notice that the child finished
+        // ends it.
         delegations.ShouldBe(
         [
             new OpenCode2Delegation(SubagentCall, "general", "Slow helper", ChildSessionId: null, "running"),
             new OpenCode2Delegation(SubagentCall, "general", "Slow helper", Child, "running"),
-            new OpenCode2Delegation(SubagentCall, "general", "Slow helper", Child, "running"),
-            new OpenCode2Delegation(SubagentCall, "general", "Slow helper", Child, "completed"),
+            new OpenCode2Delegation(SubagentCall, "general", "Slow helper", Child, "running", Background: true),
+            new OpenCode2Delegation(SubagentCall, "general", "Slow helper", Child, "completed", Background: true),
         ]);
     }
 
@@ -136,7 +137,7 @@ public sealed class OpenCode2BackgroundTests
         var success = Event("session.tool.success", $$"""
             {"sessionID":"{{Session}}","assistantMessageID":"msg_1","id":"call_1","content":[],"metadata":{"sessionID":"{{Child}}","status":"running"} }
             """);
-        mapper.TryReadDelegation(success)!.Status.ShouldBe("running");
+        mapper.TryReadDelegation(success).ShouldBe(new OpenCode2Delegation("call_1", "general", "Slow helper", Child, "running", Background: true));
         mapper.Map(success);
 
         var notice = Event("session.inbox.enqueued", $$"""
@@ -146,7 +147,7 @@ public sealed class OpenCode2BackgroundTests
               "metadata":{"source":"subagent","childID":"{{Child}}","agent":"General","state":"{{state}}"} } } }
             """);
 
-        mapper.TryReadDelegation(notice).ShouldBe(new OpenCode2Delegation("call_1", "general", "Slow helper", Child, expected));
+        mapper.TryReadDelegation(notice).ShouldBe(new OpenCode2Delegation("call_1", "general", "Slow helper", Child, expected, Background: true));
         // Only once: a second notice for the same child ends nothing.
         mapper.TryReadDelegation(notice).ShouldBeNull();
     }

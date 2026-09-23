@@ -1156,3 +1156,100 @@ describe("a sub-agent waiting on a question", () => {
     expect(state.sessionStatus).toBe("delegating")
   })
 })
+
+// A sub-agent moved into the background: its call returned, so the parent is free for the next prompt while it works,
+// and wakes by itself when it's done. The conversation reads idle, as the session list and header do.
+describe("a sub-agent in the background", () => {
+  function childActivity(sessionId: string, activityStatus: string): DomainEvent {
+    return {
+      type: "activity_status",
+      payload: { sessionId, activityStatus, capabilities: {} as never },
+    }
+  }
+
+  function delegationUpdated(payload: { status?: string; background?: boolean } = {}): DomainEvent {
+    return {
+      type: "delegation.updated",
+      payload: {
+        delegationId: "delegation-1",
+        parentSessionId: "session-1",
+        parentToolCallId: "tool-1",
+        childSessionId: "child-1",
+        title: "Delegate work",
+        status: payload.status ?? "running",
+        createdAt: "2026-01-01T00:00:00Z",
+        ...(payload.background === undefined ? {} : { background: payload.background }),
+      },
+    } as DomainEvent
+  }
+
+  const idled: DomainEvent = { type: "session.idled", payload: { sessionId: "session-1" } }
+
+  it("reads idle once its turn is over, while the sub-agent works", () => {
+    const delegating = applyDomainEvent(createState({ delegations: [createDelegation()] }), idled)
+    expect(delegating.sessionStatus).toBe("delegating")
+
+    const background = applyDomainEvent(delegating, delegationUpdated({ background: true }))
+
+    expect(background.delegations[0].background).toBe(true)
+    expect(background.sessionStatus).toBe("idle")
+    expect(isStreamWorking(background.sessionStatus)).toBe(false)
+  })
+
+  it("stays in the background when a later update doesn't say so", () => {
+    const background = applyDomainEvent(createState({ delegations: [createDelegation({ background: true })] }), delegationUpdated())
+
+    expect(background.delegations[0].background).toBe(true)
+    expect(background.sessionStatus).toBe("idle")
+  })
+
+  it("still works through its own turn", () => {
+    const state = createState({ delegations: [createDelegation({ background: true })] })
+    const busy = applyDomainEvent(state, {
+      type: "turn.started",
+      payload: { sessionID: "session-1", messageID: "message-1", index: 0, agent: null, modelID: null, parentID: null },
+    })
+
+    expect(busy.sessionStatus).toBe("busy")
+  })
+
+  it("waits on input when the sub-agent asks", () => {
+    const state = createState({ delegations: [createDelegation({ background: true })] })
+
+    const waiting = applyDomainEvent(state, childActivity("child-1", "waiting_input"))
+
+    expect(waiting.sessionStatus).toBe("waiting_input")
+    expect(isDelegationWaiting(waiting.delegations[0])).toBe(true)
+    expect(applyDomainEvent(waiting, childActivity("child-1", "busy")).sessionStatus).toBe("idle")
+  })
+
+  it("counts a foreground sub-agent beside it as work", () => {
+    const state = createState({
+      delegations: [
+        createDelegation({ background: true }),
+        createDelegation({ delegationId: "delegation-2", parentToolCallId: "tool-2", childSessionId: "child-2" }),
+      ],
+    })
+
+    expect(applyDomainEvent(state, idled).sessionStatus).toBe("delegating")
+  })
+
+  it("hydrates as idle from a snapshot taken while the sub-agent works", () => {
+    const state = createSessionStreamState(createSnapshot({
+      activityStatus: "idle",
+      delegations: [createSnapshotDelegation({ childActivityStatus: "busy", background: true })],
+    }))
+
+    expect(state.sessionStatus).toBe("idle")
+    expect(state.delegations[0].background).toBe(true)
+  })
+
+  it("hydrates as waiting on input from a snapshot taken while the sub-agent asks", () => {
+    const state = createSessionStreamState(createSnapshot({
+      activityStatus: "waiting_input",
+      delegations: [createSnapshotDelegation({ childActivityStatus: "waiting_input", background: true })],
+    }))
+
+    expect(state.sessionStatus).toBe("waiting_input")
+  })
+})
