@@ -493,14 +493,14 @@ runner fix found while designing. Mockup: `~/.cache/fleet-workflows/designer.htm
   is written with the writer first, so the File view shows exactly what Save writes; `step` is the index of the step
   whose lines hold the error (from the YAML node tree), so errors land on the step in the designer. The client calls
   it debounced (300 ms) as the user edits.
-- `POST /open` `{ directory, workflowId }` → the file's text, its hash (SHA-256 of the bytes as read), the check.
-- `PUT /file` `{ directory, workflowId, text | draft, hash, force }` → saves, or 409 with "changed on disk" when the
+- `POST /files/open` `{ directory, workflowId }` → the file's text, its hash (SHA-256 of the bytes as read), the check.
+- `PUT /files` `{ directory, workflowId, text | draft, hash, force }` → saves, or 409 with "changed on disk" when the
   file's hash isn't the one it was opened with (Keep mine sends `force: true`). Validation first (400 with the first
   error; the client never sends while it has errors). Refuses built-ins ("Built-in workflows can't be edited…").
   Paths: `workflowId` is `repo:<stem>`, the stem must match `^[a-z0-9][a-z0-9-]*$`, the file must already be
   `<repo>/.weave/workflows/<stem>.yaml|yml`, and its full path (symlinks resolved) must stay under that folder.
   Written through a temp file and a move. No git.
-- `POST /new` `{ directory, name }` and `POST /duplicate` `{ directory, workflowId, name }` → create
+- `POST /files` `{ directory, name }` (New) or `{ directory, name, workflowId }` (Duplicate) → create
   `.weave/workflows/<slug>.yaml` in the repo's current checkout, uncommitted. New writes the smallest valid workflow
   (one agent step "Do the work", `id: work`, `agent: build`, `model: standard`, `prompt: The request: {{request}}`,
   `outcomes: [done]`); Duplicate parses the built-in, sets the name and writes it (so no comments come with it).
@@ -550,6 +550,13 @@ runner fix found while designing. Mockup: `~/.cache/fleet-workflows/designer.htm
   confirmation, conflict dialog, New and Duplicate dialogs, skill-off card.
 - Live (scratch Fleet 5351, fake model 4998, Playwright): the four scenarios in the brief. Screenshots of the five
   mockup screens, the conflict dialog and the skill-off card under `mockups/workflow-designer/`.
+
+### Also fixed (from the confirming real-model run of #289)
+
+- A refused commit of a step's declared files unstages the paths Fleet staged (`git reset -q -- <them>`); what the
+  agent staged stays staged.
+- Build a feature's Push and open the PR has `outcomes: [opened, failed]`, `on: { failed: end }`; a run ending on a
+  `failed` outcome says why ("Push and open the PR failed: <first line of the summary>").
 
 ### Not in this change
 
