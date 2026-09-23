@@ -1,0 +1,92 @@
+# Fleet workflow, built into Fleet. The format is described in docs/workflows.md.
+name: Build a feature
+description: >-
+  Turns a sentence into a reviewed pull request. It stops once, for you to approve the plan, before any code is
+  written. Switch on Design for UI and new features.
+placeholder: "What should it build? e.g. Press ? to see every keyboard shortcut"
+starts-from: sentence
+runs-in: new-worktree
+steps:
+  - id: design
+    title: Design
+    agent: build
+    model: strong
+    skill: fleet-mockups
+    optional: For UI and new features
+    prompt: |
+      Design {{request}}.
+      Write it to docs/design/{{slug}}.md with a mockup next to it.
+      Don't change any code.
+    outcomes: [ready]
+
+  - id: plan
+    title: Plan
+    agent: plan
+    model: strong
+    prompt: |
+      Plan {{request}}.
+      Write .weave/plans/{{slug}}.md: a short design section, then the files to change and the tests to add, in order.
+      Reuse what the code already has.
+      Follow docs/design/{{slug}}.md if it exists.
+    outcomes: [ready]
+
+  - id: ok-plan
+    title: Approve the plan
+    you: Build it this way?
+    choices:
+      Approve: implement
+      Send back with a note: { to: plan, note: true }
+
+  - id: implement
+    title: Implement
+    agent: build
+    model: standard
+    prompt: |
+      Build .weave/plans/{{slug}}.md, including the tests it names.
+      Commit after each step and run those tests.
+
+      {{previous.summary}}
+    outcomes: [done]
+
+  - id: review
+    title: Review
+    agent: build
+    model: strong
+    skill: fleet-code-review
+    prompt: |
+      Review this branch against {{run.base}} and .weave/plans/{{slug}}.md.
+      Use changes only for bugs, or for tests the plan named that are missing.
+      Put style nits in the summary and use pass.
+    outcomes: [pass, changes]
+    on: { changes: implement, max: 2 }
+
+  - id: verify
+    title: Check it runs
+    agent: build
+    model: standard
+    skill: fleet-run
+    optional: For changes you can see
+    prompt: |
+      Start the app, try the change the way a person would, and attach screenshots.
+    outcomes: [works, broken]
+    on: { broken: implement, max: 2 }
+
+  - id: ok-pr
+    title: Open the pull request
+    you: Push the branch and open a PR?
+    choices:
+      Open PR: open-pr
+      Keep the branch only: end
+
+  - id: open-pr
+    title: Push and open the PR
+    agent: build
+    model: fast
+    prompt: |
+      Push this branch and open a pull request against {{run.base}} with gh pr create.
+      Take the title and description from .weave/plans/{{slug}}.md, and add what Review found:
+
+      {{steps.review.summary}}
+
+      Put the pull request's URL in summary.
+    outcomes: [opened]

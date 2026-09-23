@@ -297,6 +297,8 @@ export interface HarnessCapabilities {
   supportsProfiles?: boolean;
   /** Fleet can sign in to the harness's providers (`/api/harnesses/{type}/sign-in`). Off when Fleet runs with sign-in. */
   supportsProviderSignIn?: boolean;
+  /** Sessions can be workflow steps: the harness hides the step tool from every other session. */
+  supportsWorkflowSteps?: boolean;
 }
 
 /** A field a sign-in method asks for besides the key or browser (`HarnessSignInField` on the server). */
@@ -746,6 +748,8 @@ export interface SessionListItem {
   projectName?: string | null;
   harnessType?: string | null;
   capabilities?: SessionActionCapabilities;
+  /** The workflow run this session is a step of; the list nests it under the run. */
+  workflowRunId?: string | null;
   origin?: SessionOrigin | null;
   tags: readonly string[];
   /** How far along the session is, when the server has seen a todo list for it. */

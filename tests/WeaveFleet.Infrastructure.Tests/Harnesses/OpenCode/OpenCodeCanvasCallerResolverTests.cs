@@ -122,7 +122,7 @@ public sealed class OpenCodeCanvasCallerResolverTests : IAsyncLifetime
         Bind(InstanceA, "oc-1", "fleet-1", "user-1");
         _sessions.Add(RepoA, "oc-child", parentId: "oc-1");
 
-        (await _resolver.ResolveAsync("token-1", "oc-child")).ShouldBe(new HarnessCanvasCaller("fleet-1", "user-1"));
+        (await _resolver.ResolveAsync("token-1", "oc-child")).ShouldBe(new HarnessCanvasCaller("fleet-1", "user-1", ViaParent: true));
     }
 
     [Fact]
@@ -164,7 +164,7 @@ public sealed class OpenCodeCanvasCallerResolverTests : IAsyncLifetime
         Bind(InstanceA, "oc-2", "fleet-2", "user-1", RepoB);
         _sessions.Add(RepoB, "oc-child", parentId: "oc-2");
 
-        (await _resolver.ResolveAsync("token-1", "oc-child")).ShouldBe(new HarnessCanvasCaller("fleet-2", "user-1"));
+        (await _resolver.ResolveAsync("token-1", "oc-child")).ShouldBe(new HarnessCanvasCaller("fleet-2", "user-1", ViaParent: true));
     }
 
     [Fact]

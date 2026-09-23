@@ -8,6 +8,7 @@ import BoardControlsPanel from "@/components/board/BoardControlsPanel.vue";
 import SessionsPanel from "@/components/sessions/SessionsPanel.vue";
 import SettingsNavPanel from "@/components/settings/SettingsNavPanel.vue";
 import AutomationsNavPanel from "@/components/automations/AutomationsNavPanel.vue";
+import WorkflowsNavPanel from "@/components/workflows/WorkflowsNavPanel.vue";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useAutomationsNav } from "@/composables/use-automations-nav";
 import { getSidebarPanels } from "@/plugins/slots";
@@ -105,6 +106,7 @@ const panelComponents = computed<Record<ContextPanelKey, Component>>(() => ({
   board: BoardControlsPanel,
   analytics: SessionsPanel,
   automations: AutomationsContextPanel,
+  workflows: WorkflowsNavPanel,
   ...registeredPluginPanels.value,
 }));
 

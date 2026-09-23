@@ -1,7 +1,11 @@
 namespace WeaveFleet.Application.Canvases;
 
 /// <summary>The Fleet session a harness's canvas tool call belongs to, and the user who owns it.</summary>
-public sealed record HarnessCanvasCaller(string FleetSessionId, string UserId);
+/// <param name="ViaParent">
+/// The call came from a subagent's session, which Fleet found by following its parents: the canvas tools draw in
+/// the session the user is looking at, but a workflow step can only be finished by its own session.
+/// </param>
+public sealed record HarnessCanvasCaller(string FleetSessionId, string UserId, bool ViaParent = false);
 
 /// <summary>
 /// Works out which Fleet session a canvas tool call from a harness process is for. The process proves who it

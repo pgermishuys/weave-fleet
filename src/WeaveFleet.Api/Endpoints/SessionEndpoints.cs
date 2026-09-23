@@ -675,6 +675,7 @@ public static class SessionEndpoints
         {
             Origin = origin,
             SelectedAgent = s.SelectedAgent,
+            WorkflowRunId = s.WorkflowRunId,
             SelectedModel = SessionModelChoiceDto.Of(s.SelectedProviderId, s.SelectedModelId),
         };
     }
@@ -880,6 +881,7 @@ public static class SessionEndpoints
             Tags: s.Tags ?? [])
         {
             SelectedAgent = s.SelectedAgent,
+            WorkflowRunId = s.WorkflowRunId,
             SelectedModel = SessionModelChoiceDto.Of(s.SelectedProviderId, s.SelectedModelId),
         };
     }

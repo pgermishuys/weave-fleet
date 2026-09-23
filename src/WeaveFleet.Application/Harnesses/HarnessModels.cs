@@ -26,6 +26,15 @@ public sealed record HarnessResumeOptions
     /// inside their parent's process resumes the child there, whatever <see cref="LaunchArtifacts"/> say.
     /// </summary>
     public string? ParentSessionId { get; init; }
+
+    /// <inheritdoc cref="HarnessSpawnOptions.WorkflowStep" />
+    public bool WorkflowStep { get; init; }
+
+    /// <summary>
+    /// The session is a subagent's child session. The harness leaves its permission rules alone: its agent gave it
+    /// them, and it inherits whatever hides the step tool from the session that started it.
+    /// </summary>
+    public bool DelegatedChild { get; init; }
 }
 
 /// <summary>Options for spawning a new harness instance.</summary>
@@ -54,6 +63,12 @@ public sealed record HarnessSpawnOptions
     /// Null in local mode (no cloud credentials required).
     /// </summary>
     public RuntimeLaunchArtifacts? LaunchArtifacts { get; init; }
+
+    /// <summary>
+    /// The session is a step of a workflow run, so it keeps the step tool (<c>fleet_step_done</c>). A harness that
+    /// <see cref="HarnessCapabilities.SupportsWorkflowSteps"/> hides the tool from every other session.
+    /// </summary>
+    public bool WorkflowStep { get; init; }
 }
 
 /// <summary>

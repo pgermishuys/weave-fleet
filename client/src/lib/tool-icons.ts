@@ -2,6 +2,7 @@ import type { Component } from 'vue'
 import {
   AppWindow,
   Camera,
+  CircleCheck,
   FileText,
   Pencil,
   Search,
@@ -30,6 +31,7 @@ const iconMap: Record<string, Component> = {
   fleet_browser_open: Globe,
   fleet_browser_screenshot: Camera,
   fleet_message: Send,
+  fleet_step_done: CircleCheck,
   // OpenCode 2's names for its tools.
   shell: Terminal,
   subagent: GitBranch,
@@ -52,6 +54,7 @@ const labelMap: Record<string, string> = {
   fleet_browser_open: 'Open page',
   fleet_browser_screenshot: 'Screenshot',
   fleet_message: 'Message session',
+  fleet_step_done: 'Step done',
   // OpenCode 2's names for its tools.
   shell: 'Shell',
   subagent: 'Subagent',

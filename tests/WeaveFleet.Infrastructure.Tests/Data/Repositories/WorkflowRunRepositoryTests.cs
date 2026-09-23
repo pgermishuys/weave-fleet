@@ -1,0 +1,81 @@
+using Microsoft.Data.Sqlite;
+using WeaveFleet.Application.Data;
+using WeaveFleet.Domain.Entities;
+using WeaveFleet.Infrastructure.Data.Repositories;
+
+namespace WeaveFleet.Infrastructure.Tests.Data.Repositories;
+
+public sealed class WorkflowRunRepositoryTests
+{
+    private const string OwnerId = TestUserContext.DefaultUserId;
+
+    private static async Task<(SqliteConnection Keeper, WorkflowRunRepository Repo, WorkflowRunRepository Someone)> CreateAsync()
+    {
+        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
+        return (keeper, new WorkflowRunRepository(factory, new TestUserContext(OwnerId)), new WorkflowRunRepository(factory, new TestUserContext("someone-else")));
+    }
+
+    private static WorkflowRun Run(string id, string createdAt, string status = WorkflowRunStatus.Running) => new()
+    {
+        Id = id,
+        UserId = OwnerId,
+        WorkflowId = "builtin:build-a-feature",
+        WorkflowName = "Build a feature",
+        Definition = "name: Build a feature",
+        Request = "Press ? to see every keyboard shortcut",
+        Slug = "press-see-every-keyboard-shortcut",
+        Title = "Press ? to see every keyboard shortcut",
+        RepositoryPath = "/repo",
+        BaseBranch = "main",
+        HarnessType = "opencode",
+        Options = """{"optionalSteps":["design"]}""",
+        Status = status,
+        CreatedAt = createdAt,
+        UpdatedAt = createdAt,
+    };
+
+    [Fact]
+    public async Task A_run_and_its_steps_round_trip_and_update()
+    {
+        var (keeper, repo, _) = await CreateAsync();
+        using var _ = keeper;
+        var run = Run("run-1", "2026-09-23T10:00:00.0000000Z");
+        await repo.InsertAsync(run);
+
+        run.Status = WorkflowRunStatus.Waiting;
+        run.CurrentStepId = "ok-plan";
+        run.WaitingReason = "Build it this way?";
+        run.WorktreePath = "/repo-worktrees/shortcut";
+        run.Branch = "fleet/shortcut";
+        await repo.UpdateAsync(run);
+
+        var step = new WorkflowRunStep { Id = "v1", RunId = "run-1", StepId = "plan", Visit = 1, SessionId = "s1", Status = "running", StartedAt = "2026-09-23T10:00:01.0000000Z" };
+        await repo.InsertStepAsync(step);
+        step.Status = WorkflowRunStepStatus.Done;
+        step.Outcome = "ready";
+        step.Summary = "The plan has four steps.";
+        step.FinishedAt = "2026-09-23T10:04:00.0000000Z";
+        await repo.UpdateStepAsync(step);
+
+        var saved = (await repo.GetAsync("run-1")).ShouldNotBeNull();
+        (saved.Status, saved.CurrentStepId, saved.WaitingReason, saved.WorktreePath, saved.Branch, saved.Options)
+            .ShouldBe((WorkflowRunStatus.Waiting, "ok-plan", "Build it this way?", "/repo-worktrees/shortcut", "fleet/shortcut", """{"optionalSteps":["design"]}"""));
+        var visit = (await repo.ListStepsAsync("run-1")).ShouldHaveSingleItem();
+        (visit.Status, visit.Outcome, visit.Summary, visit.SessionId).ShouldBe((WorkflowRunStepStatus.Done, "ready", "The plan has four steps.", "s1"));
+        (await repo.GetStepBySessionAsync("s1")).ShouldNotBeNull().Id.ShouldBe("v1");
+    }
+
+    [Fact]
+    public async Task Lists_are_the_owners_and_unfinished_runs_span_everyone()
+    {
+        var (keeper, repo, someone) = await CreateAsync();
+        using var _ = keeper;
+        await repo.InsertAsync(Run("run-1", "2026-09-23T10:00:00.0000000Z", WorkflowRunStatus.Done));
+        await repo.InsertAsync(Run("run-2", "2026-09-23T11:00:00.0000000Z", WorkflowRunStatus.Waiting));
+
+        (await repo.ListAsync(10)).Select(r => r.Id).ShouldBe(["run-2", "run-1"]);
+        (await someone.ListAsync(10)).ShouldBeEmpty();
+        (await someone.GetAsync("run-1")).ShouldBeNull();
+        (await someone.ListUnfinishedAsync()).Select(r => r.Id).ShouldBe(["run-2"]);
+    }
+}

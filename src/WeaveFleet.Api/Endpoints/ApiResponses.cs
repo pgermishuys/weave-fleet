@@ -298,6 +298,9 @@ public sealed record CanvasBridgeRequest(
 /// Body of a <c>fleet_message</c> call from a harness process: the harness's own id for the calling session, and the
 /// Fleet session to message with the text.
 /// </summary>
+/// <summary>What <c>fleet_step_done</c> posts: the outcome it picked and what the next step needs.</summary>
+public sealed record WorkflowStepBridgeRequest(string? HarnessSessionId, string? Outcome = null, string? Summary = null);
+
 public sealed record SessionMessageBridgeRequest(string? HarnessSessionId, string? SessionId = null, string? Text = null, bool NotifyWhenDone = false);
 
 /// <summary>

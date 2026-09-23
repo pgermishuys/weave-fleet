@@ -52,6 +52,18 @@ public sealed partial class SessionNotifier(
         _ = NotifyAsync(sessionId, reason);
     }
 
+    /// <summary>
+    /// A workflow run stopped on the user, with its card in this session: a You step, or a step that stopped without
+    /// an outcome. Waiting on the user is the run's state, not the session's, so it doesn't come as an activity change.
+    /// </summary>
+    public void OnWorkflowNeedsYou(string sessionId, string body)
+    {
+        if (focusTracker.IsWatched(sessionId))
+            return;
+
+        _ = NotifyAsync(sessionId, SessionNotificationReasons.NeedsYou, body);
+    }
+
     /// <summary>Drops what's held for a deleted session.</summary>
     public void Forget(string sessionId) => _last.TryRemove(sessionId, out _);
 
@@ -77,7 +89,7 @@ public sealed partial class SessionNotifier(
         return null;
     }
 
-    private async Task NotifyAsync(string sessionId, string reason)
+    private async Task NotifyAsync(string sessionId, string reason, string? body = null)
     {
         try
         {
@@ -108,9 +120,9 @@ public sealed partial class SessionNotifier(
                 SessionId = sessionId,
                 Reason = reason,
                 Title = string.IsNullOrWhiteSpace(session.Title) ? "Untitled session" : session.Title,
-                Body = reason == SessionNotificationReasons.NeedsYou
+                Body = body ?? (reason == SessionNotificationReasons.NeedsYou
                     ? "Waiting on your answer."
-                    : "Finished its turn.",
+                    : "Finished its turn."),
             };
 
             await eventBroadcaster.BroadcastAsync(

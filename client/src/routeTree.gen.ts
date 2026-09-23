@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WorkflowsRouteImport } from './routes/workflows'
 import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as SettingsRouteImport } from './routes/settings'
@@ -29,6 +30,11 @@ import { Route as GithubOwnerRepoIndexRouteImport } from './routes/github.$owner
 import { Route as GithubOwnerRepoPullsNumberRouteImport } from './routes/github.$owner.$repo.pulls.$number'
 import { Route as GithubOwnerRepoIssuesNumberRouteImport } from './routes/github.$owner.$repo.issues.$number'
 
+const WorkflowsRoute = WorkflowsRouteImport.update({
+  id: '/workflows',
+  path: '/workflows',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const WelcomeRoute = WelcomeRouteImport.update({
   id: '/welcome',
   path: '/welcome',
@@ -139,6 +145,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/templates': typeof TemplatesRoute
   '/welcome': typeof WelcomeRoute
+  '/workflows': typeof WorkflowsRoute
   '/sessions/$id': typeof SessionsIdRoute
   '/sessions/new': typeof SessionsNewRoute
   '/github/': typeof GithubIndexRoute
@@ -159,6 +166,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/templates': typeof TemplatesRoute
   '/welcome': typeof WelcomeRoute
+  '/workflows': typeof WorkflowsRoute
   '/sessions/$id': typeof SessionsIdRoute
   '/sessions/new': typeof SessionsNewRoute
   '/github': typeof GithubIndexRoute
@@ -180,6 +188,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/templates': typeof TemplatesRoute
   '/welcome': typeof WelcomeRoute
+  '/workflows': typeof WorkflowsRoute
   '/sessions/$id': typeof SessionsIdRoute
   '/sessions/new': typeof SessionsNewRoute
   '/github/': typeof GithubIndexRoute
@@ -203,6 +212,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/templates'
     | '/welcome'
+    | '/workflows'
     | '/sessions/$id'
     | '/sessions/new'
     | '/github/'
@@ -223,6 +233,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/templates'
     | '/welcome'
+    | '/workflows'
     | '/sessions/$id'
     | '/sessions/new'
     | '/github'
@@ -243,6 +254,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/templates'
     | '/welcome'
+    | '/workflows'
     | '/sessions/$id'
     | '/sessions/new'
     | '/github/'
@@ -265,6 +277,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   TemplatesRoute: typeof TemplatesRoute
   WelcomeRoute: typeof WelcomeRoute
+  WorkflowsRoute: typeof WorkflowsRoute
   SessionsIdRoute: typeof SessionsIdRoute
   SessionsNewRoute: typeof SessionsNewRoute
   SettingsPluginsPluginIdRoute: typeof SettingsPluginsPluginIdRoute
@@ -272,6 +285,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/vue-router' {
   interface FileRoutesByPath {
+    '/workflows': {
+      id: '/workflows'
+      path: '/workflows'
+      fullPath: '/workflows'
+      preLoaderRoute: typeof WorkflowsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/welcome': {
       id: '/welcome'
       path: '/welcome'
@@ -449,6 +469,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   TemplatesRoute: TemplatesRoute,
   WelcomeRoute: WelcomeRoute,
+  WorkflowsRoute: WorkflowsRoute,
   SessionsIdRoute: SessionsIdRoute,
   SessionsNewRoute: SessionsNewRoute,
   SettingsPluginsPluginIdRoute: SettingsPluginsPluginIdRoute,

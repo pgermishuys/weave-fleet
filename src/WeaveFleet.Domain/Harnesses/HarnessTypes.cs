@@ -52,6 +52,12 @@ public sealed record HarnessCapabilities
     /// fallback while the harness can't be reached. Otherwise Fleet's stored messages are the history.
     /// </summary>
     public bool HistoryLivesInHarness { get; init; }
+
+    /// <summary>
+    /// Sessions can be workflow steps: the harness gives the step tool (<c>fleet_step_done</c>) to the sessions a
+    /// workflow starts and hides it from every other session. Without it, workflows can't run on the harness.
+    /// </summary>
+    public bool SupportsWorkflowSteps { get; init; }
 }
 
 /// <summary>What a harness needs before sessions can use it. Sent to the client as <c>state</c>.</summary>

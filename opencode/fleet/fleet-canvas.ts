@@ -13,6 +13,7 @@
 
 const BRIDGE_PATH = "/api/bridge/canvas/"
 const MESSAGE_PATH = "/api/bridge/session/message"
+const STEP_DONE_PATH = "/api/bridge/workflow/step-done"
 
 type PermissionRequest = { permission: string; patterns: string[]; always: string[]; metadata: Record<string, unknown> }
 type ToolContext = { sessionID: string; ask?: (request: PermissionRequest) => Promise<void> }
@@ -282,6 +283,29 @@ export const FleetCanvasPlugin = async () => ({
                 { sessionId: args.sessionId, text: args.text, notifyWhenDone: args.notifyWhenDone === true || args.notifyWhenDone === "true" },
                 MESSAGE_PATH,
               ),
+          },
+        }
+      : {}),
+
+    // Only in processes started with workflows on. Every session on such a process that isn't a workflow step is
+    // created with a rule that denies this tool (and gets `tools: {fleet_step_done: false}` on each prompt), so only
+    // the sessions a workflow starts see it. Fleet refuses a call from any other session, including a step's subagents.
+    ...(process.env.FLEET_WORKFLOWS === "1"
+      ? {
+          fleet_step_done: {
+            description: [
+              "Finish this workflow step. Call it once, as your last action, when the step's work is complete.",
+              "Fleet reads the outcome to choose the next step, and passes your summary on to it.",
+            ].join(" "),
+            args: {
+              outcome: { type: "string", description: "One of the outcomes the step's instructions list." },
+              summary: {
+                type: "string",
+                description: "What you did and what the next step needs to know, in a few sentences.",
+              },
+            },
+            execute: (args: { outcome: string; summary: string }, context: ToolContext) =>
+              callFleet("step-done", context, { outcome: args.outcome, summary: args.summary }, STEP_DONE_PATH),
           },
         }
       : {}),

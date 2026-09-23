@@ -34,6 +34,9 @@ internal sealed record OpenCode2SessionInfo
 
     /// <summary>The model the session's turns use; unset until a prompt or a switch picks one.</summary>
     public OpenCode2ModelRef? Model { get; init; }
+
+    /// <summary>The session's own permission rules.</summary>
+    public IReadOnlyList<OpenCode2PermissionRule>? Permissions { get; init; }
 }
 
 /// <summary>Where a V2 session runs: V2 serves every directory from one server.</summary>
@@ -58,6 +61,12 @@ internal sealed record OpenCode2CreateSessionRequest
     public required OpenCode2Location Location { get; init; }
 
     /// <summary>The session's own permission rules, which win over the user's config.</summary>
+    public IReadOnlyList<OpenCode2PermissionRule>? Permissions { get; init; }
+}
+
+/// <summary><c>PATCH /api/session/{id}</c>: only what's set changes; permissions replace the session's rules.</summary>
+internal sealed record OpenCode2SessionUpdateRequest
+{
     public IReadOnlyList<OpenCode2PermissionRule>? Permissions { get; init; }
 }
 
@@ -677,6 +686,7 @@ internal sealed record OpenCode2ErrorBody
 [JsonSerializable(typeof(List<string>))]
 [JsonSerializable(typeof(OpenCode2FormReply))]
 [JsonSerializable(typeof(OpenCode2PermissionReply))]
+[JsonSerializable(typeof(OpenCode2SessionUpdateRequest))]
 [JsonSerializable(typeof(OpenCode2ServerInfo))]
 [JsonSerializable(typeof(OpenCode2CreateSessionRequest))]
 [JsonSerializable(typeof(OpenCode2PromptRequest))]

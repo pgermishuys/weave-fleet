@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Events;
+using WeaveFleet.Application.Workflows;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
@@ -181,6 +182,22 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     /// <inheritdoc />
     public HarnessSessionStatus Status => _status;
 
+    /// <summary>
+    /// The process has the workflow step tool and this session isn't a step, so the tool is denied: at creation, on
+    /// every prompt (which also covers sessions made before workflows were on), and on the recap's fork.
+    /// </summary>
+    internal bool HideStepTool { get; init; }
+
+    /// <summary>The rule that hides the step tool. OpenCode applies the last rule that matches.</summary>
+    internal static readonly OpenCodePermissionRule DenyStepTool =
+        new() { Permission = FleetWorkflows.StepTool, Pattern = "*", Action = "deny" };
+
+    /// <summary>What a new OpenCode session is created with: nothing, or the deny rule for the step tool.</summary>
+    internal static OpenCodeCreateSessionRequest? CreateRequest(bool hideStepTool)
+        => hideStepTool ? new OpenCodeCreateSessionRequest { Permission = [DenyStepTool] } : null;
+
+    private static readonly IReadOnlyDictionary<string, bool> StepToolOff = new Dictionary<string, bool> { [FleetWorkflows.StepTool] = false };
+
     // -----------------------------------------------------------------------
     // IHarnessSession
     // -----------------------------------------------------------------------
@@ -230,6 +247,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             Model = modelRef,
             MessageId = options?.MessageId,
             Variant = options?.Effort,
+            Tools = HideStepTool ? StepToolOff : null,
         };
 
         LogSendPrompt(_logger, InstanceId, null);
@@ -277,7 +295,11 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             await http.UpdateSessionAsync(fork.Id, new OpenCodeSessionUpdateRequest
             {
                 Title = OffTheRecordSessionTitle,
-                Permission = [new OpenCodePermissionRule { Permission = "*", Pattern = "*", Action = "ask" }],
+                // The parent's deny rule too, when it has one: without it the fork would offer the step tool, and a
+                // different tool list misses the provider's cache.
+                Permission = HideStepTool
+                    ? [new OpenCodePermissionRule { Permission = "*", Pattern = "*", Action = "ask" }, DenyStepTool]
+                    : [new OpenCodePermissionRule { Permission = "*", Pattern = "*", Action = "ask" }],
             }, _workingDirectory, timeout.Token).ConfigureAwait(false);
 
             var model = lastPrompt.Model is { ProviderId: { Length: > 0 } providerId, ModelId: { Length: > 0 } modelId }
@@ -995,7 +1017,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         {
             if (_openCodeSessionId is null)
             {
-                var session = await _instanceHandle.HttpClient.CreateSessionAsync(null, _workingDirectory, ct)
+                var session = await _instanceHandle.HttpClient.CreateSessionAsync(CreateRequest(HideStepTool), _workingDirectory, ct)
                     .ConfigureAwait(false);
                 SetOpenCodeSessionId(session.Id);
                 if (_instanceHandle is LeasedInstanceHandle leasedInstanceHandle)

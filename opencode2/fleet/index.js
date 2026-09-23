@@ -14,6 +14,7 @@
 
 const BRIDGE_PATH = "/api/bridge/canvas/"
 const MESSAGE_PATH = "/api/bridge/session/message"
+const STEP_DONE_PATH = "/api/bridge/workflow/step-done"
 
 /**
  * Calls Fleet's bridge for one tool call. FLEET_URL names this server (…/agent/{token}), and the bridge token says
@@ -283,6 +284,26 @@ function shellEnvironment() {
   } catch {
     return null
   }
+}
+
+// Only in servers started with workflows on. Every session on such a server that isn't a workflow step is created
+// with a rule that denies this tool, so only the sessions a workflow starts see it. Fleet refuses a call from any
+// other session, including a step's subagents.
+if (process.env.FLEET_WORKFLOWS === "1") {
+  tools.push(
+    fleetTool(
+      "fleet_step_done",
+      [
+        "Finish this workflow step. Call it once, as your last action, when the step's work is complete.",
+        "Fleet reads the outcome to choose the next step, and passes your summary on to it.",
+      ].join(" "),
+      {
+        outcome: { type: "string", description: "One of the outcomes the step's instructions list." },
+        summary: { type: "string", description: "What you did and what the next step needs to know, in a few sentences." },
+      },
+      (input, tool) => callFleet("step-done", tool.sessionID, { outcome: input.outcome, summary: input.summary }, STEP_DONE_PATH),
+    ),
+  )
 }
 
 export default {

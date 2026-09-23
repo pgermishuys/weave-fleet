@@ -174,6 +174,12 @@ public sealed class HarnessOptions
     public bool SessionMessages { get; set; }
 
     /// <summary>
+    /// Lets Fleet run workflows: a short list of steps, one session per agent step, with the <c>fleet_step_done</c>
+    /// tool in step sessions only. Experimental: a user's <c>Workflows</c> preference wins over this. Default: false.
+    /// </summary>
+    public bool Workflows { get; set; }
+
+    /// <summary>
     /// Where Fleet records the harness processes it starts on Linux and macOS, so one left running by a Fleet that
     /// died without stopping it is stopped when a Fleet starts again. Default: "" (<c>harness-processes</c> in the
     /// user's <see cref="FleetPaths.DefaultAppDataDirectory"/>, shared by every Fleet the user runs: each stops only

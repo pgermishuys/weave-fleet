@@ -11,10 +11,12 @@
   <ItemGroup>
     <PackageReference Include="Cronos" />
     <PackageReference Include="Ulid" />
+    <PackageReference Include="YamlDotNet" />
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="Resources\key-file-types.json" />
+    <EmbeddedResource Include="Workflows\BuiltIn\*.yaml" LogicalName="workflows/%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

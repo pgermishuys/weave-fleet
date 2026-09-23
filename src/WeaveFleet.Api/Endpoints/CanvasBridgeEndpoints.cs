@@ -2,6 +2,7 @@ using System.Net;
 using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Sessions;
+using WeaveFleet.Application.Workflows;
 
 namespace WeaveFleet.Api.Endpoints;
 
@@ -72,6 +73,18 @@ public static class CanvasBridgeEndpoints
             .MapPost("/message", async (SessionMessageBridgeRequest request, HttpContext http, SessionMessageBridge bridge, CancellationToken ct)
                 => ToResult(await bridge.SendAsync(BridgeToken(http), request.HarnessSessionId, request.SessionId, request.Text, request.NotifyWhenDone, ct)))
             .WithName("SessionMessageBridgeSend");
+
+        // fleet_step_done: a workflow step's session finishes the step. Only the step's own session can.
+        app.MapGroup($"{PathPrefix}/workflow")
+            .AllowAnonymous()
+            .WithTags("WorkflowStepBridge")
+            .AddEndpointFilter(async (context, next) =>
+                IsLoopback(context.HttpContext.Connection.RemoteIpAddress)
+                    ? await next(context)
+                    : UnknownCaller())
+            .MapPost("/step-done", async (WorkflowStepBridgeRequest request, HttpContext http, WorkflowStepBridge bridge, CancellationToken ct)
+                => ToResult(await bridge.DoneAsync(BridgeToken(http), request.HarnessSessionId, request.Outcome, request.Summary, ct)))
+            .WithName("WorkflowStepBridgeDone");
 
         return app;
     }

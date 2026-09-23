@@ -4,7 +4,7 @@ import type { SidebarRail } from "@/stores/sidebar";
 import type { PluginConnectionStatus, FleetPluginStatus } from "@/plugins/types";
 import { computed, onMounted, onUnmounted, watch } from "vue";
 import { useLocation, useRouter } from "@tanstack/vue-router";
-import { BarChart3, LayoutGrid, MessageSquare, Puzzle, Settings, Zap } from "lucide-vue-next";
+import { BarChart3, LayoutGrid, MessageSquare, Puzzle, Settings, Workflow, Zap } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import weaveLogo from "@/assets/weave_logo.png";
 import { api } from "@/api/client";
@@ -12,6 +12,8 @@ import type { PluginCatalogResponse } from "@/api/client";
 import { usePluginRuntime } from "@/plugins/composable";
 import { getSidebarViews } from "@/plugins/slots";
 import { useBoardFeature } from "@/composables/use-board-feature";
+import { useWorkflowsFeature } from "@/composables/use-workflows-feature";
+import { useWorkflowsStore } from "@/stores/workflows";
 import { useSidebarStore } from "@/stores/sidebar";
 
 type RailItemId = SidebarRail | string;
@@ -30,8 +32,9 @@ const ALL_TOP_ITEMS: readonly RailItem[] = [
   { id: "sessions", label: "Sessions", icon: MessageSquare, to: "/" },
 ];
 
-const bottomItems: readonly RailItem[] = [
+const ALL_BOTTOM_ITEMS: readonly RailItem[] = [
   { id: "marketplace", label: "Plugins", icon: Puzzle },
+  { id: "workflows", label: "Workflows", icon: Workflow, to: "/workflows" },
   { id: "automations", label: "Automations", icon: Zap, to: "/automations" },
   { id: "analytics", label: "Analytics", icon: BarChart3, to: "/analytics" },
   { id: "settings", label: "Settings", icon: Settings, to: "/settings" },
@@ -42,6 +45,8 @@ const { activeRail } = storeToRefs(sidebarStore);
 const router = useRouter();
 const pluginRuntime = usePluginRuntime();
 const { isBoardFeatureEnabled } = useBoardFeature();
+const { isWorkflowsEnabled } = useWorkflowsFeature();
+const workflowsStore = useWorkflowsStore();
 const pathname = useLocation({
   select: (location) => location.pathname,
 });
@@ -68,6 +73,14 @@ const pluginItems = computed<readonly RailItem[]>(() => {
   });
 });
 
+// Workflows exist only while they're switched on in Settings.
+const bottomItems = computed<readonly RailItem[]>(() =>
+  ALL_BOTTOM_ITEMS.filter((item) => item.id !== "workflows" || isWorkflowsEnabled.value));
+
+watch(isWorkflowsEnabled, (enabled) => {
+  if (enabled) void workflowsStore.ensureLoaded();
+}, { immediate: true });
+
 const topItems = computed<readonly RailItem[]>(() => {
   return ALL_TOP_ITEMS.filter((item) => item.id !== "board" || isBoardFeatureEnabled.value);
 });
@@ -83,6 +96,10 @@ const currentRouteRail = computed<RailItemId | null>(() => {
 
   if (pathname.value === "/automations" || pathname.value.startsWith("/automations/")) {
     return "automations";
+  }
+
+  if (pathname.value === "/workflows") {
+    return "workflows";
   }
 
   if (pathname.value === "/settings") {
@@ -146,7 +163,7 @@ function getStatusBadgeCount(count: number): number | undefined {
 }
 
 function isSidebarRail(value: RailItemId): value is SidebarRail {
-  return ["board", "sessions", "analytics", "automations", "github", "marketplace", "settings"].includes(value);
+  return ["board", "sessions", "analytics", "automations", "workflows", "github", "marketplace", "settings"].includes(value);
 }
 
 async function loadPluginStatuses(): Promise<void> {

@@ -274,7 +274,7 @@ public sealed partial class SessionOrchestrator(
             workspaceIntent.FetchOrigin,
             // The user's own words, not the assembled prompt: a GitHub issue's body would bury
             // the sentence a branch name is worth taking.
-            request.InitialPrompt);
+            request.BranchNamingText ?? request.InitialPrompt);
         if (workspaceResult.IsFailure)
             return workspaceResult.Error;
 
@@ -302,7 +302,8 @@ public sealed partial class SessionOrchestrator(
                 ProjectId = projectId,
                 ProjectName = projectName,
                 ScenarioId = request.ScenarioId,
-                LaunchArtifacts = launchArtifacts
+                LaunchArtifacts = launchArtifacts,
+                WorkflowStep = request.WorkflowRunId is not null,
             }, ct);
         }
         catch (Exception ex)
@@ -359,6 +360,7 @@ public sealed partial class SessionOrchestrator(
             SelectedAgent = string.IsNullOrWhiteSpace(request.Agent) ? null : request.Agent.Trim(),
             SelectedProviderId = HasModel(request.ProviderId, request.ModelId) ? request.ProviderId!.Trim() : null,
             SelectedModelId = HasModel(request.ProviderId, request.ModelId) ? request.ModelId!.Trim() : null,
+            WorkflowRunId = request.WorkflowRunId,
         };
 
         var createdAt = DateTime.UtcNow.ToString("O");
@@ -631,7 +633,8 @@ public sealed partial class SessionOrchestrator(
                 ProjectId = parent.ProjectId,
                 ProjectName = await ResolveProjectNameAsync(parent.ProjectId),
                 LaunchArtifacts = childLaunchArtifacts,
-                ParentSessionId = parent.Id
+                ParentSessionId = parent.Id,
+                DelegatedChild = true,
             }, ct);
         }
         catch (Exception ex)
@@ -1908,7 +1911,8 @@ public sealed partial class SessionOrchestrator(
                     OwnerUserId = session.UserId,
                     ProjectId = session.ProjectId,
                     ProjectName = projectName,
-                    LaunchArtifacts = launchArtifacts
+                    LaunchArtifacts = launchArtifacts,
+                    WorkflowStep = session.WorkflowRunId is not null,
                 }, ct).ConfigureAwait(false)
                 : await harnessRuntime.ResumeAsync(new HarnessResumeOptions
                 {
@@ -1918,7 +1922,9 @@ public sealed partial class SessionOrchestrator(
                     ResumeToken = session.HarnessResumeToken,
                     ProjectId = session.ProjectId,
                     ProjectName = projectName,
-                    LaunchArtifacts = launchArtifacts
+                    LaunchArtifacts = launchArtifacts,
+                    WorkflowStep = session.WorkflowRunId is not null,
+                    DelegatedChild = session.ParentSessionId is not null,
                 }, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
@@ -2256,6 +2262,13 @@ public sealed record CreateSessionRequest
     public string? ProviderId { get; init; }
     /// <inheritdoc cref="ProviderId" />
     public string? ModelId { get; init; }
+    /// <summary>
+    /// The workflow run the session is a step of. Set only by the workflow runner: the session keeps the step tool,
+    /// which every other session has hidden.
+    /// </summary>
+    internal string? WorkflowRunId { get; init; }
+    /// <summary>What a new worktree's branch is named from, when it isn't <see cref="InitialPrompt"/>.</summary>
+    internal string? BranchNamingText { get; init; }
 }
 
 /// <summary>Result of a successful <see cref="SessionOrchestrator.CreateSessionAsync"/> call.</summary>
