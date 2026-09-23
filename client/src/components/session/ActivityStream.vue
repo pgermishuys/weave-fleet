@@ -453,7 +453,72 @@ function updatePinnedState(): void {
   showJumpToLatest.value = !keepPinnedToBottom;
 
   // Trigger loading older messages when scrolled near the top
-  if (!isRestoringScroll && element.scrollTop <= SCROLL_TOP_THRESHOLD && hasMore.value && !isLoadingOlder.value) {
+  if (!isRestoringScroll && element.scrollTop <= SCROLL_TOP_THRESHOLD) {
+    handleLoadOlder();
+  }
+}
+
+// --- Newest first ---
+// Mounting a whole conversation at once held the main thread for about a quarter of a second on every switch into a
+// long session. The newest messages, the ones on screen, mount first; the older ones follow a batch a frame, above
+// the fold. Reaching the top, or asking for a message not mounted yet, mounts the rest at once.
+const FIRST_MOUNTED = 20;
+const MOUNT_BATCH = 20;
+const unmountedOlder = ref(0);
+let mountFrame: number | null = null;
+
+const mountedMessages = computed(() =>
+  unmountedOlder.value > 0 ? messages.value.slice(unmountedOlder.value) : messages.value);
+
+function stopMountingOlder(): void {
+  if (mountFrame !== null) {
+    cancelAnimationFrame(mountFrame);
+    mountFrame = null;
+  }
+}
+
+function mountOlderBatch(): void {
+  mountFrame = null;
+  unmountedOlder.value = Math.max(0, unmountedOlder.value - MOUNT_BATCH);
+  if (unmountedOlder.value > 0) {
+    mountFrame = requestAnimationFrame(mountOlderBatch);
+  }
+}
+
+function mountAllMessages(): void {
+  stopMountingOlder();
+  unmountedOlder.value = 0;
+}
+
+watch(
+  [() => props.sessionId, () => messages.value.length],
+  ([sessionId, length], [previousSessionId, previousLength]) => {
+    // Only a conversation arriving whole: a session opening, from its snapshot or the state kept from the last
+    // visit. One message at a time mounts as it comes.
+    const arrivesWhole = sessionId !== previousSessionId || previousLength === 0;
+    if (!arrivesWhole || length <= FIRST_MOUNTED) {
+      if (sessionId !== previousSessionId) {
+        mountAllMessages();
+      }
+      return;
+    }
+
+    stopMountingOlder();
+    unmountedOlder.value = length - FIRST_MOUNTED;
+    // Two frames: the first paints the newest messages, the batches start after it.
+    mountFrame = requestAnimationFrame(() => {
+      mountFrame = requestAnimationFrame(mountOlderBatch);
+    });
+  },
+);
+
+function handleLoadOlder(): void {
+  if (unmountedOlder.value > 0) {
+    mountAllMessages();
+    return;
+  }
+
+  if (hasMore.value && !isLoadingOlder.value) {
     loadOlder();
   }
 }
@@ -487,6 +552,10 @@ let highlightTimer: ReturnType<typeof setTimeout> | undefined;
 function showMessage(messageId: string): void {
   const target = streamRef.value?.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(messageId)}"]`);
   if (!target) {
+    if (unmountedOlder.value > 0) {
+      mountAllMessages();
+      void nextTick(() => showMessage(messageId));
+    }
     return;
   }
 
@@ -663,6 +732,7 @@ onMounted(() => {
 onUnmounted(() => {
   mutationObserver?.disconnect();
   mutationObserver = null;
+  stopMountingOlder();
   resizeObserver?.disconnect();
   resizeObserver = null;
   clearTimeout(highlightTimer);
@@ -953,13 +1023,13 @@ function handleShowCanvas(canvasId: string): void {
         v-else-if="hasMore"
         type="button"
         class="load-older-button"
-        @click="loadOlder"
+        @click="handleLoadOlder"
       >
         Load older messages
       </button>
 
       <div
-        v-for="message in messages"
+        v-for="message in mountedMessages"
         :key="message.id"
         class="activity-message"
         :data-message-id="message.id"
