@@ -24,9 +24,10 @@ steps:
     agent: plan
     model: strong
     prompt: |
-      Plan {{request}}. Write .weave/plans/{{slug}}.md: a short design
-      section, then the files to change and the tests to add, in order.
-      Reuse what the code already has. Follow docs/design/{{slug}}.md if it exists.
+      Plan {{request}}.
+      Write .weave/plans/{{slug}}.md: a short design section, then the files to change and the tests to add, in order.
+      Reuse what the code already has.
+      Follow docs/design/{{slug}}.md if it exists.
     outcomes: [ready]
 
   - id: ok-plan
@@ -66,8 +67,7 @@ steps:
     skill: fleet-run
     optional: For changes you can see
     prompt: |
-      Start the app, try the change the way a person would,
-      and attach screenshots.
+      Start the app, try the change the way a person would, and attach screenshots.
     outcomes: [works, broken]
     on: { broken: implement, max: 2 }
 

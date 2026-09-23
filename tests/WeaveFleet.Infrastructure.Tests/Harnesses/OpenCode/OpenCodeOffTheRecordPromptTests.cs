@@ -235,13 +235,28 @@ public sealed class OpenCodeOffTheRecordPromptTests
     }
 
     [Fact]
-    public void only_a_process_with_workflows_on_hides_the_step_tool_and_never_from_a_step()
+    public void only_a_process_with_workflows_on_hides_the_step_tool_and_never_from_a_step_or_a_delegated_child()
     {
         var on = new Dictionary<string, string> { ["FLEET_WORKFLOWS"] = "1" };
 
-        OpenCodeHarnessRuntime.HidesStepTool(on, workflowStep: false).ShouldBeTrue();
-        OpenCodeHarnessRuntime.HidesStepTool(on, workflowStep: true).ShouldBeFalse();
-        OpenCodeHarnessRuntime.HidesStepTool(new Dictionary<string, string>(), workflowStep: false).ShouldBeFalse();
+        OpenCodeHarnessRuntime.HidesStepTool(on, keepsRules: false).ShouldBeTrue();
+        // A step keeps the tool; a subagent's child keeps the rules its agent gave it (a tools map would replace them).
+        OpenCodeHarnessRuntime.HidesStepTool(on, keepsRules: true).ShouldBeFalse();
+        OpenCodeHarnessRuntime.HidesStepTool(new Dictionary<string, string>(), keepsRules: false).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task a_delegated_childs_prompt_carries_no_tools_map()
+    {
+        // What the runtime builds for a child resumed with DelegatedChild: HideStepTool stays off.
+        var http = new ScriptedHandler().On("POST /session/oc-1/prompt_async", "");
+        await using var session = CreateSession(http, hideStepTool: OpenCodeHarnessRuntime.HidesStepTool(
+            new Dictionary<string, string> { ["FLEET_WORKFLOWS"] = "1" }, keepsRules: true));
+
+        await session.SendPromptAsync("look again", null, CancellationToken.None);
+
+        using var prompt = JsonDocument.Parse(http.Body("POST /session/oc-1/prompt_async"));
+        prompt.RootElement.TryGetProperty("tools", out _).ShouldBeFalse();
     }
 
     private static OpenCodeHarnessSession CreateSession(ScriptedHandler handler, string? openCodeSessionId = "oc-1", bool hideStepTool = false)

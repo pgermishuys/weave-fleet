@@ -29,6 +29,12 @@ public sealed record HarnessResumeOptions
 
     /// <inheritdoc cref="HarnessSpawnOptions.WorkflowStep" />
     public bool WorkflowStep { get; init; }
+
+    /// <summary>
+    /// The session is a subagent's child session. The harness leaves its permission rules alone: its agent gave it
+    /// them, and it inherits whatever hides the step tool from the session that started it.
+    /// </summary>
+    public bool DelegatedChild { get; init; }
 }
 
 /// <summary>Options for spawning a new harness instance.</summary>

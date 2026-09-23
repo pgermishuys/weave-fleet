@@ -36,7 +36,7 @@ public sealed class WorkflowRunnerTests
         // Design is optional and off, so the run starts at Plan.
         var plan = _sessions.Started.ShouldHaveSingleItem();
         plan.StepId.ShouldBe("plan");
-        plan.Prompt.ShouldStartWith("Plan Press ? to see every keyboard shortcut. Write .weave/plans/press-see-every-keyboard-shortcut.md");
+        plan.Prompt.ShouldStartWith("Plan Press ? to see every keyboard shortcut.\nWrite .weave/plans/press-see-every-keyboard-shortcut.md: a short design section, then the files to change and the tests to add, in order.");
         plan.Prompt.ShouldEndWith(FleetWorkflows.Footer(["ready"]));
         Visit("design").Status.ShouldBe(WorkflowRunStepStatus.Skipped);
 

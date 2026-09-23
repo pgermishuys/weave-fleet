@@ -235,6 +235,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         // own sessions, which it made allowing everything; a subagent's child keeps the rules its agent gave it.
         if (server.Setup.Workflows
             && !options.WorkflowStep
+            && !options.DelegatedChild
             && options.ParentSessionId is null
             && string.IsNullOrEmpty(info.ParentID)
             && !(info.Permissions ?? []).Contains(OpenCode2HttpClient.DenyStepTool))

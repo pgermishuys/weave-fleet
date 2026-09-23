@@ -407,14 +407,18 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
             && await feature.IsEnabledAsync().ConfigureAwait(false);
     }
 
-    /// <summary>Whether a session on a process with these variables must have the step tool hidden.</summary>
-    internal static bool HidesStepTool(IReadOnlyDictionary<string, string> environmentVariables, bool workflowStep)
-        => !workflowStep
+    /// <summary>
+    /// Whether a session on a process with these variables must have the step tool hidden. Never a step, and never a
+    /// subagent's child: a prompt's tools map replaces the session's rules, which would throw away the ones its agent
+    /// gave it, and a child inherits its parent's deny rule anyway. <paramref name="keepsRules"/> is either.
+    /// </summary>
+    internal static bool HidesStepTool(IReadOnlyDictionary<string, string> environmentVariables, bool keepsRules)
+        => !keepsRules
            && environmentVariables.TryGetValue(FleetWorkflows.EnvironmentVariable, out var value)
            && value == "1";
 
-    private static bool HidesStepTool(RuntimeLaunchArtifacts? artifacts, bool workflowStep)
-        => artifacts is OpenCodeLaunchArtifacts launch && HidesStepTool(launch.EnvironmentVariables, workflowStep);
+    private static bool HidesStepTool(RuntimeLaunchArtifacts? artifacts, bool keepsRules)
+        => artifacts is OpenCodeLaunchArtifacts launch && HidesStepTool(launch.EnvironmentVariables, keepsRules);
 
     private async Task<bool> IsSessionMessagesEnabledAsync(string userId)
     {
@@ -1319,7 +1323,7 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
                 projectName: options.ProjectName,
                 openCodeSessionId: options.ResumeToken)
             {
-                HideStepTool = HidesStepTool(options.LaunchArtifacts, options.WorkflowStep),
+                HideStepTool = HidesStepTool(options.LaunchArtifacts, options.WorkflowStep || options.DelegatedChild),
             };
 
             // Expire any pending question tool parts from the previous harness lifetime.
@@ -1465,7 +1469,7 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
                 projectName: options.ProjectName,
                 openCodeSessionId: resolvedOpenCodeSessionId)
             {
-                HideStepTool = HidesStepTool(environmentVariables, options.WorkflowStep),
+                HideStepTool = HidesStepTool(environmentVariables, options.WorkflowStep || options.DelegatedChild),
             };
 
             leaseToRelease = null;

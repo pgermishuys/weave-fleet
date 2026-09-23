@@ -633,7 +633,8 @@ public sealed partial class SessionOrchestrator(
                 ProjectId = parent.ProjectId,
                 ProjectName = await ResolveProjectNameAsync(parent.ProjectId),
                 LaunchArtifacts = childLaunchArtifacts,
-                ParentSessionId = parent.Id
+                ParentSessionId = parent.Id,
+                DelegatedChild = true,
             }, ct);
         }
         catch (Exception ex)
@@ -1923,6 +1924,7 @@ public sealed partial class SessionOrchestrator(
                     ProjectName = projectName,
                     LaunchArtifacts = launchArtifacts,
                     WorkflowStep = session.WorkflowRunId is not null,
+                    DelegatedChild = session.ParentSessionId is not null,
                 }, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException)

@@ -33,6 +33,9 @@ public sealed class WorkflowStepToolLiveTests
     private const string DelegatingStepPrompt = "STEP: ask a subagent to finish the step.";
     private const string ChildPrompt = "CHILD: finish the step for your parent.";
     private const string RecapPrompt = "RECAP: one line on where this is.";
+    private const string DelegatingNormalPrompt = "NORMAL-DELEGATE: ask a subagent to look around.";
+    private const string LookPrompt = "CHILD-LOOK: look around the folder.";
+    private const string ChildAgainPrompt = "CHILD-AGAIN: and once more.";
     private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(3);
 
     private const string Workflow = """
@@ -87,6 +90,55 @@ public sealed class WorkflowStepToolLiveTests
     }
 
     [OpenCodeFact]
+    public async Task A_delegated_child_keeps_the_rules_its_agent_gave_it_when_Fleet_prompts_it()
+    {
+        await RunAsync(workflowsOn: true, stepPrompt: StepPrompt, async (services, llm, normal, _, environment, workspace, ct) =>
+        {
+            await normal.SendPromptAsync(DelegatingNormalPrompt, null, ct);
+            await WaitForAsync(() => Turns(llm), r => r.Any(t => LastRole(t) == "tool" && FirstUserText(t) == DelegatingNormalPrompt), ct);
+            var firstChildTurn = Turns(llm).First(t => FirstUserText(t) == LookPrompt);
+
+            // The task tool's result names the child's OpenCode session.
+            var childId = System.Text.RegularExpressions.Regex.Match(LastToolResult(Turns(llm), DelegatingNormalPrompt), @"ses_[A-Za-z0-9]+").Value;
+            childId.ShouldNotBeNullOrEmpty();
+
+            // Fleet wakes a child the way it does after a restart, and prompts it: its own rules must stay.
+            using (var scope = services.CreateScope())
+            using (var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection())
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = $"""
+                    INSERT INTO sessions (id, workspace_id, instance_id, opencode_session_id, title, status, directory,
+                        lifecycle_status, retention_status, created_at, user_id, parent_session_id)
+                    VALUES ('wf-child', 'ws-live', 'inst-live', 'pending', 'Look around', 'active', '{workspace}',
+                            'running', 'active', '2026-09-23T00:00:00+00:00', '{Owner}', '{Normal}');
+                    """;
+                command.ExecuteNonQuery();
+            }
+
+            var runtime = services.GetRequiredService<OpenCodeHarnessRuntime>();
+            await using var child = await runtime.ResumeAsync(new HarnessResumeOptions
+            {
+                SessionId = "wf-child",
+                WorkingDirectory = workspace,
+                OwnerUserId = Owner,
+                ResumeToken = childId,
+                LaunchArtifacts = new OpenCodeLaunchArtifacts(environment),
+                ParentSessionId = Normal,
+                DelegatedChild = true,
+            }, ct);
+            await child.SendPromptAsync(ChildAgainPrompt, null, ct);
+            await WaitForAsync(() => Turns(llm), r => r.Any(t => LastUserText(t) == ChildAgainPrompt), ct);
+
+            var again = Turns(llm).Last(t => LastUserText(t) == ChildAgainPrompt);
+            // A tools map would replace the rules the task tool gave the child, and what it was offered would change.
+            OfferedToolNames([again]).ShouldBe(OfferedToolNames([firstChildTurn]), ignoreOrder: true);
+            // It inherits its parent's deny, so it never had the step tool either.
+            OfferedToolNames([firstChildTurn, again]).ShouldNotContain(FleetWorkflows.StepTool);
+        });
+    }
+
+    [OpenCodeFact]
     public async Task With_workflows_off_no_session_has_the_step_tool()
     {
         await RunAsync(workflowsOn: false, stepPrompt: StepPrompt, async (_, llm, normal, step, ct) =>
@@ -102,7 +154,13 @@ public sealed class WorkflowStepToolLiveTests
 
     private delegate Task Scenario(IServiceProvider services, FakeLlmServerFixture llm, IHarnessSession normal, IHarnessSession step, CancellationToken ct);
 
-    private static async Task RunAsync(bool workflowsOn, string stepPrompt, Scenario scenario)
+    private delegate Task ScenarioWithEnvironment(
+        IServiceProvider services, FakeLlmServerFixture llm, IHarnessSession normal, IHarnessSession step, Dictionary<string, string> environment, string workspace, CancellationToken ct);
+
+    private static Task RunAsync(bool workflowsOn, string stepPrompt, Scenario scenario)
+        => RunAsync(workflowsOn, stepPrompt, (services, llm, normal, step, _, _, ct) => scenario(services, llm, normal, step, ct));
+
+    private static async Task RunAsync(bool workflowsOn, string stepPrompt, ScenarioWithEnvironment scenario)
     {
         using var cts = new CancellationTokenSource(Timeout);
         var ct = cts.Token;
@@ -131,6 +189,10 @@ public sealed class WorkflowStepToolLiveTests
                     return ToolCall("call_done", FleetWorkflows.StepTool, new { outcome = "pass", summary = "Checked: the change is right." });
                 if (LastUserText(request) is { } delegating && delegating.StartsWith(DelegatingStepPrompt, StringComparison.Ordinal))
                     return ToolCall("call_task", "task", new { description = "Finish the step", prompt = ChildPrompt, subagent_type = "general" });
+                if (LastUserText(request) is { } delegatingNormal && delegatingNormal.StartsWith(DelegatingNormalPrompt, StringComparison.Ordinal))
+                    return ToolCall("call_look", "task", new { description = "Look around", prompt = LookPrompt, subagent_type = "general" });
+                if (LastUserText(request) is { } look && (look.StartsWith(LookPrompt, StringComparison.Ordinal) || look.StartsWith(ChildAgainPrompt, StringComparison.Ordinal)))
+                    return new ScriptedLlmResponse { Text = "Looked." };
                 if (LastUserText(request) is { } child && child.StartsWith(ChildPrompt, StringComparison.Ordinal))
                     return ToolCall("call_child_done", FleetWorkflows.StepTool, new { outcome = "pass", summary = "From the child." });
                 return new ScriptedLlmResponse { Text = "It holds the workspace." };
@@ -171,7 +233,7 @@ public sealed class WorkflowStepToolLiveTests
 
             try
             {
-                await scenario(services, llm, normal, step, ct);
+                await scenario(services, llm, normal, step, processEnvironment, workspace, ct);
             }
             catch (TimeoutException)
             {
