@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, nextTick, onBeforeUnmount, watch } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import { AlertTriangle, Bot, Check, Repeat, UserRound, Workflow as WorkflowIcon } from "lucide-vue-next";
+import { AlertTriangle, Bot, Check, Copy, Pencil, Repeat, UserRound, Workflow as WorkflowIcon } from "lucide-vue-next";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
+import { Button } from "@/components/ui/button";
+import WorkflowCreateDialog from "@/components/workflows/WorkflowCreateDialog.vue";
+import WorkflowEditor from "@/components/workflows/WorkflowEditor.vue";
 import WorkflowRunBox from "@/components/workflows/WorkflowRunBox.vue";
+import { useWorkflowEditor } from "@/composables/use-workflow-editor";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { useModelRoles } from "@/composables/use-model-roles";
 import { useWorkflowsNav } from "@/composables/use-workflows-nav";
@@ -15,6 +19,7 @@ import {
   runStatusLabel,
   type WorkflowRun,
 } from "@/lib/workflows";
+import type { WorkflowFile } from "@/lib/workflow-draft";
 import { useWorkflowsStore } from "@/stores/workflows";
 
 const router = useRouter();
@@ -24,6 +29,55 @@ const { choiceFor } = useModelRoles();
 const { defaultHarnessType } = useEnabledHarnesses();
 
 const workflow = computed(() => nav.activeWorkflow.value);
+
+// ── The designer, for a workflow in the repository's .weave/workflows ──
+
+const editor = useWorkflowEditor();
+const isRepoWorkflow = computed(() => nav.activeWorkflowId.value.startsWith("repo:"));
+const showEditor = computed(() => isRepoWorkflow.value && !nav.showingRuns.value);
+
+watch([() => nav.activeWorkflowId.value, () => nav.repositoryPath.value], ([id, repository]) => {
+  if (!id.startsWith("repo:") || !repository) return;
+  if (editor.file.value?.workflowId === id && editor.directory.value === repository) return;
+  void editor.open(repository, id);
+}, { immediate: true });
+
+watch(() => [editor.isDirty.value, editor.file.value?.workflowId] as const, ([dirty, id]) => {
+  nav.unsavedWorkflowId.value = dirty && id ? id : null;
+});
+
+nav.setLeaveGuard(() => !editor.isDirty.value
+  || window.confirm(`Discard your unsaved changes to ${editor.draft.value?.name || editor.file.value?.file || "this workflow"}?`));
+
+onBeforeUnmount(() => {
+  nav.setLeaveGuard(null);
+  nav.unsavedWorkflowId.value = null;
+  editor.dispose();
+});
+
+function onCreated(created: WorkflowFile): void {
+  if (!nav.repositoryPath.value) return;
+  editor.adopt(nav.repositoryPath.value, created);
+  nav.activeWorkflowId.value = created.workflowId;
+  nav.showRuns(false);
+  void nav.reload();
+}
+
+function onCreateOpen(open: boolean): void {
+  if (!open) nav.endCreate();
+}
+
+/** Try it: the Run box for the file as saved. */
+async function tryIt(): Promise<void> {
+  await nav.reload();
+  nav.showRuns(true);
+  await nextTick();
+  document.querySelector<HTMLTextAreaElement>("[data-testid='workflow-request']")?.focus();
+}
+
+function duplicate(): void {
+  if (workflow.value) nav.startCreate({ id: workflow.value.id, name: workflow.value.name });
+}
 const loops = computed(() => (workflow.value ? loopNotes(workflow.value) : []));
 
 /** "Strong · Opus 5.5, Standard · Sonnet 5", then pinned models as they are. */
@@ -72,10 +126,24 @@ function openRun(run: WorkflowRun): void {
 <template>
   <section
     class="wf-detail"
+    :class="{ 'wf-detail--editor': showEditor }"
     aria-label="Workflow"
   >
+    <WorkflowEditor
+      v-if="showEditor && editor.file.value"
+      :editor="editor"
+      @saved="nav.reload()"
+      @try-it="tryIt"
+    />
+    <p
+      v-else-if="showEditor && editor.loadError.value"
+      class="wf-detail__none wf-detail__none--center"
+      role="alert"
+    >
+      {{ editor.loadError.value }}
+    </p>
     <div
-      v-if="workflow"
+      v-else-if="workflow && !showEditor"
       class="wf-detail__inner"
     >
       <header class="wf-detail__head">
@@ -85,7 +153,35 @@ function openRun(run: WorkflowRun): void {
           class="wf-pill"
           :class="{ 'wf-pill--accent': !workflow.builtIn }"
         >{{ workflow.builtIn ? "Built into Fleet" : workflow.file }}</span>
+        <Button
+          v-if="workflow.builtIn"
+          size="sm"
+          class="wf-detail__action"
+          :disabled="!nav.repositoryPath.value"
+          :title="nav.repositoryPath.value ? undefined : 'Pick a repository in the Run box first'"
+          data-testid="workflow-duplicate"
+          @click="duplicate"
+        >
+          <Copy class="size-3.5" />Duplicate to this repo
+        </Button>
+        <Button
+          v-else
+          size="sm"
+          variant="outline"
+          class="wf-detail__action"
+          data-testid="workflow-edit"
+          @click="nav.showRuns(false)"
+        >
+          <Pencil class="size-3.5" />Edit
+        </Button>
       </header>
+
+      <p
+        v-if="workflow.builtIn"
+        class="wf-detail__hint"
+      >
+        Built-ins can't be edited: duplicate this one into your repo to change it, and the copy is yours to share.
+      </p>
 
       <p
         v-if="workflow.description"
@@ -239,6 +335,15 @@ function openRun(run: WorkflowRun): void {
     >
       {{ nav.libraryError.value }}
     </p>
+
+    <WorkflowCreateDialog
+      :open="nav.creating.value !== null"
+      :repository="nav.repositoryPath.value"
+      :repository-name="nav.library.value?.repositoryName ?? null"
+      :source="nav.creating.value?.source ?? null"
+      @update:open="onCreateOpen"
+      @created="onCreated"
+    />
   </section>
 </template>
 
@@ -249,6 +354,21 @@ function openRun(run: WorkflowRun): void {
   min-height: 0;
   justify-content: center;
   overflow-y: auto;
+}
+
+.wf-detail--editor {
+  justify-content: stretch;
+  overflow: hidden;
+}
+
+.wf-detail__action {
+  margin-left: auto;
+}
+
+.wf-detail__hint {
+  margin: -8px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
 }
 
 .wf-detail__inner {

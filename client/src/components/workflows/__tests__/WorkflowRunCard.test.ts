@@ -254,4 +254,70 @@ describe("WorkflowRunCard", () => {
 
     expect(wrapper.find('[data-testid="workflow-card"]').exists()).toBe(false);
   });
+
+  it("waits on a step whose skill was turned off, with Retry, Start without it and a way to Settings → Skills", async () => {
+    const run = buildRun({
+      id: "run-skill",
+      status: "waiting",
+      currentStepId: "review",
+      withYou: null,
+      steps: [
+        runStep({ id: "implement", title: "Implement", state: "done", visits: 1, sessionId: "s3", outcome: "done", outcomes: ["done"] }),
+        runStep({ id: "review", title: "Review", state: "waiting", visits: 1, skill: "fleet-code-review", outcomes: ["pass", "changes"] }),
+      ],
+      sessions: [runSession({ sessionId: "s3", stepId: "implement", outcome: "done" })],
+      waiting: {
+        kind: "skill-off",
+        stepId: "review",
+        stepTitle: "Review",
+        message: "Review uses fleet-code-review, which is now off.",
+        question: null,
+        sessionId: "s3",
+        choices: [
+          { id: "retry", label: "Retry", note: false, to: "review" },
+          { id: "without-skill", label: "Start without it", note: false, to: "review" },
+        ],
+      },
+    });
+    useWorkflowsStore().upsert(run);
+    apiFetchMock.mockImplementation(() => respond({ ...run, status: "running", waiting: null, updatedAt: "2026-09-23T10:06:00Z" }));
+    const wrapper = mount(WorkflowRunCard, { props: { sessionId: "s3" } });
+
+    expect(wrapper.text()).toContain("Review needs you");
+    expect(wrapper.text()).toContain("Review uses fleet-code-review, which is now off.");
+    expect(wrapper.get('[data-testid="workflow-card-choice-0"]').text()).toBe("Retry");
+    expect(wrapper.get('[data-testid="workflow-card-choice-1"]').text()).toBe("Start without it");
+    expect(wrapper.get('[data-testid="workflow-card-skill-off"]').text()).toContain("Settings → Skills");
+    await wrapper.get('[data-testid="workflow-card-skill-off"] button').trigger("click");
+    expect(navigateMock).toHaveBeenCalledWith({ to: "/settings" });
+
+    await wrapper.get('[data-testid="workflow-card-choice-1"]').trigger("click");
+    await flushPromises();
+    const [path, init] = apiFetchMock.mock.calls[0] as [string, RequestInit];
+    expect(path).toBe("/api/workflows/runs/run-skill/answer");
+    expect(JSON.parse(init.body as string)).toEqual({ choice: "without-skill", note: null });
+  });
+
+  it("says a skill that's still off, from the server, when Retry is pressed too soon", async () => {
+    const run = buildRun({
+      id: "run-skill-2",
+      status: "waiting",
+      currentStepId: "review",
+      withYou: null,
+      steps: [runStep({ id: "review", title: "Review", state: "waiting", visits: 1, skill: "fleet-code-review" })],
+      sessions: [runSession({ sessionId: "s4", stepId: "review" })],
+      waiting: {
+        kind: "skill-off", stepId: "review", stepTitle: "Review", message: "Review uses fleet-code-review, which is now off.", question: null, sessionId: "s4",
+        choices: [{ id: "retry", label: "Retry", note: false, to: "review" }, { id: "without-skill", label: "Start without it", note: false, to: "review" }],
+      },
+    });
+    useWorkflowsStore().upsert(run);
+    apiFetchMock.mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ error: "fleet-code-review is still off. Turn it on in Settings → Skills, then retry." }), { status: 400, headers: { "Content-Type": "application/json" } })));
+    const wrapper = mount(WorkflowRunCard, { props: { sessionId: "s4" } });
+
+    await wrapper.get('[data-testid="workflow-card-choice-0"]').trigger("click");
+    await flushPromises();
+
+    expect(wrapper.get(".wf-card__error").text()).toBe("fleet-code-review is still off. Turn it on in Settings → Skills, then retry.");
+  });
 });

@@ -108,4 +108,6 @@ steps:
       {{steps.review.summary}}
 
       Put the pull request's URL in summary.
-    outcomes: [opened]
+      If you can't push the branch or open the pull request, use failed and put the reason in summary.
+    outcomes: [opened, failed]
+    on: { failed: end }

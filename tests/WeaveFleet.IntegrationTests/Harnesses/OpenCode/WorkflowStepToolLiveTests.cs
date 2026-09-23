@@ -129,6 +129,46 @@ public sealed class WorkflowStepToolLiveTests
         });
     }
 
+    /// <summary>Check, then Review with a built-in skill that's off: Fleet never starts Review's session without it.</summary>
+    private const string SkillWorkflow = """
+        name: Live skills
+        steps:
+          - id: check
+            title: Check
+            model: standard
+            prompt: Check it.
+            outcomes: [pass, changes]
+          - id: review
+            title: Review
+            model: standard
+            skill: fleet-code-review
+            prompt: Review it.
+            outcomes: [pass]
+        """;
+
+    [OpenCodeFact]
+    public async Task A_step_whose_built_in_skill_is_off_waits_before_its_session_starts()
+    {
+        WorkflowYaml.Parse(SkillWorkflow, "live").Errors.ShouldBeEmpty();
+        await RunAsync(workflowsOn: true, stepPrompt: StepPrompt, together: false, definition: SkillWorkflow, scenario: async (services, llm, _, step, _, _, ct) =>
+        {
+            // fleet-code-review is one of Fleet's built-in skills, and off: nothing turned it on.
+            await step.SendPromptAsync(StepPrompt, null, ct);
+            await WaitForAsync(async () => await Repository(services, r => r.GetAsync(RunId)),
+                run => run is { Status: WorkflowRunStatus.Waiting, CurrentStepId: "review" }, ct);
+
+            var run = (await Repository(services, r => r.GetAsync(RunId))).ShouldNotBeNull();
+            (run.WaitingKind, run.WaitingReason).ShouldBe((WorkflowWaitingKinds.SkillOff, "Review uses fleet-code-review, which is now off."));
+            var review = (await Repository(services, r => r.ListStepsAsync(RunId))).Single(v => v.StepId == "review");
+            (review.Status, review.SessionId).ShouldBe((WorkflowRunStepStatus.Waiting, null));
+
+            var retried = await services.GetRequiredService<WorkflowRunner>().AnswerAsync(Owner, RunId, WorkflowRunner.RetryChoice, null, null, ct);
+            retried.IsFailure.ShouldBeTrue();
+            retried.Error.Description.ShouldBe("fleet-code-review is still off. Turn it on in Settings → Skills, then retry.");
+            Turns(llm).ShouldNotContain(t => FirstUserText(t) != null && FirstUserText(t)!.StartsWith("Review it.", StringComparison.Ordinal));
+        });
+    }
+
     [OpenCodeFact]
     public async Task A_step_sessions_subagent_cant_finish_the_step()
     {
@@ -218,7 +258,8 @@ public sealed class WorkflowStepToolLiveTests
         => RunAsync(workflowsOn, stepPrompt, together: false, scenario);
 
     /// <param name="together">The step is one the user finishes (<see cref="TogetherWorkflow"/>), not one its agent does.</param>
-    private static async Task RunAsync(bool workflowsOn, string stepPrompt, bool together, ScenarioWithEnvironment scenario)
+    /// <param name="definition">The run's workflow, when it isn't <see cref="Workflow"/> or <see cref="TogetherWorkflow"/>.</param>
+    private static async Task RunAsync(bool workflowsOn, string stepPrompt, bool together, ScenarioWithEnvironment scenario, string? definition = null)
     {
         using var cts = new CancellationTokenSource(Timeout);
         var ct = cts.Token;
@@ -270,7 +311,7 @@ public sealed class WorkflowStepToolLiveTests
             catch (InvalidCastException) { /* expected: the base class expects a TestServer */ }
 
             var services = factory.LiveServices;
-            Seed(services, workspace, together);
+            Seed(services, workspace, together, definition);
 
             var runtime = services.GetRequiredService<OpenCodeHarnessRuntime>();
             if (workflowsOn)
@@ -343,7 +384,7 @@ public sealed class WorkflowStepToolLiveTests
             ct);
 
     /// <summary>Two sessions, and a run whose first step is running in the second.</summary>
-    private static void Seed(IServiceProvider services, string workspace, bool together)
+    private static void Seed(IServiceProvider services, string workspace, bool together, string? workflow)
     {
         var (firstStep, finish, userFinishes) = together ? ("talk", "you", 1) : ("check", "agent", 0);
         using var scope = services.CreateScope();
@@ -371,7 +412,7 @@ public sealed class WorkflowStepToolLiveTests
             """;
         var definition = command.CreateParameter();
         definition.ParameterName = "@definition";
-        definition.Value = together ? TogetherWorkflow : Workflow;
+        definition.Value = workflow ?? (together ? TogetherWorkflow : Workflow);
         command.Parameters.Add(definition);
         command.ExecuteNonQuery();
     }

@@ -12,6 +12,14 @@ const hasChosenFolder = ref(false);
 const library = shallowRef<WorkflowLibrary | null>(null);
 const libraryError = shallowRef<string | null>(null);
 const isLoadingLibrary = shallowRef(false);
+/** A repository's workflow shows the run view (steps, recent runs, the Run box) instead of the designer: Try it. */
+const showingRuns = shallowRef(false);
+/** New workflow, or Duplicate when a built-in is given. */
+const creating = shallowRef<{ source: { id: string; name: string } | null } | null>(null);
+/** The workflow open in the designer with unsaved edits, so its row says Edited. */
+const unsavedWorkflowId = shallowRef<string | null>(null);
+/** Asked before another workflow opens, so unsaved edits aren't dropped without a word. */
+let leaveGuard: (() => boolean) | null = null;
 let watching = false;
 let generation = 0;
 
@@ -52,7 +60,27 @@ export function useWorkflowsNav() {
     () => library.value?.workflows.find((w) => w.id === activeWorkflowId.value) ?? null);
 
   function setActiveWorkflow(id: string): void {
+    if (id === activeWorkflowId.value) return;
+    if (leaveGuard && !leaveGuard()) return;
     activeWorkflowId.value = id;
+    showingRuns.value = false;
+  }
+
+  /** The editor says whether it's all right to leave it (nothing unsaved, or the user said so). */
+  function setLeaveGuard(guard: (() => boolean) | null): void {
+    leaveGuard = guard;
+  }
+
+  function showRuns(on: boolean): void {
+    showingRuns.value = on;
+  }
+
+  function startCreate(source: { id: string; name: string } | null = null): void {
+    creating.value = { source };
+  }
+
+  function endCreate(): void {
+    creating.value = null;
   }
 
   function setFolder(next: NewSessionFolder, chosen: boolean): void {
@@ -71,8 +99,15 @@ export function useWorkflowsNav() {
     folder,
     hasChosenFolder,
     repositoryPath,
+    showingRuns,
+    creating,
+    unsavedWorkflowId,
     reload,
     setActiveWorkflow,
     setFolder,
+    setLeaveGuard,
+    showRuns,
+    startCreate,
+    endCreate,
   };
 }

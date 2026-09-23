@@ -4,6 +4,7 @@ import { onGlobalEvent } from "@/composables/use-signalr-socket";
 import { apiFetch } from "@/lib/api-client";
 import { extractApiError } from "@/lib/api-error";
 import type { DomainEvent } from "@/lib/domain-events";
+import type { WorkflowCheck, WorkflowDraft, WorkflowFile } from "@/lib/workflow-draft";
 import {
   isWorkflowRun,
   WORKFLOW_RUN_EVENT,
@@ -24,6 +25,27 @@ export interface StartWorkflowRunRequest {
   roleOverrides?: Partial<Record<WorkflowRole, WorkflowModelChoice>>;
   /** "Check with me after each step": every agent step is one the user finishes. */
   checkWithMe?: boolean;
+}
+
+/** A save refused because the file changed on disk since it was opened. */
+export class WorkflowFileChangedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WorkflowFileChangedError";
+  }
+}
+
+export interface SaveWorkflowFileRequest {
+  directory: string;
+  workflowId: string;
+  /** The hash the file had when it was opened or last saved. */
+  hash: string | null;
+  /** The File view's text, saved as it is. */
+  text?: string;
+  /** The designer's draft, written in Fleet's layout. */
+  draft?: WorkflowDraft;
+  /** Keep mine: save over a file that changed on disk. */
+  force?: boolean;
 }
 
 async function errorFrom(response: Response, fallback: string): Promise<string> {
@@ -150,6 +172,39 @@ export const useWorkflowsStore = defineStore("workflows", () => {
     return post(`/api/workflows/runs/${encodeURIComponent(runId)}/end`, {}, "Couldn't end the run.");
   }
 
+  async function send<T>(path: string, method: string, body: unknown, fallback: string, signal?: AbortSignal): Promise<T> {
+    const response = await apiFetch(path, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal,
+    });
+    if (!response.ok) {
+      const message = await errorFrom(response, fallback);
+      throw response.status === 409 && method === "PUT" ? new WorkflowFileChangedError(message) : new Error(message);
+    }
+    return (await response.json()) as T;
+  }
+
+  /** The parser's view of the File view's text or the designer's draft: errors with lines, and what Save writes. */
+  function check(body: { text: string } | { draft: WorkflowDraft }, signal?: AbortSignal): Promise<WorkflowCheck> {
+    return send("/api/workflows/check", "POST", body, "Couldn't check the workflow.", signal);
+  }
+
+  function openFile(directory: string, workflowId: string): Promise<WorkflowFile> {
+    return send("/api/workflows/files/open", "POST", { directory, workflowId }, "Couldn't open the workflow file.");
+  }
+
+  /** Saves over the file; throws {@link WorkflowFileChangedError} when it changed on disk since. */
+  function saveFile(request: SaveWorkflowFileRequest): Promise<WorkflowFile> {
+    return send("/api/workflows/files", "PUT", request, "Couldn't save the workflow file.");
+  }
+
+  /** New workflow, or Duplicate when `workflowId` names a built-in: a new file in the repo's `.weave/workflows`. */
+  function createFile(directory: string, name: string, workflowId?: string): Promise<WorkflowFile> {
+    return send("/api/workflows/files", "POST", { directory, name, workflowId: workflowId ?? null }, "Couldn't create the workflow file.");
+  }
+
   return {
     runs,
     orderedRuns,
@@ -164,5 +219,9 @@ export const useWorkflowsStore = defineStore("workflows", () => {
     moveOn,
     setCheckWithMe,
     end,
+    check,
+    openFile,
+    saveFile,
+    createFile,
   };
 });

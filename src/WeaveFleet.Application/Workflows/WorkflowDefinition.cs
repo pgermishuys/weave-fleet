@@ -46,6 +46,16 @@ public static class WorkflowTargets
     public const string End = "end";
 }
 
+/// <summary>Outcome names Fleet reads something into.</summary>
+public static class WorkflowOutcomes
+{
+    /// <summary>
+    /// The step couldn't do its job. When it ends the run, the run's result is the step's title and the first line of
+    /// its summary, e.g. "Push and open the PR failed: there's no remote called origin."
+    /// </summary>
+    public const string Failed = "failed";
+}
+
 /// <summary>The roles a step's model can name; Settings → Workflows maps each to a model.</summary>
 public static class WorkflowRoles
 {

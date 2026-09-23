@@ -461,3 +461,103 @@ fixed here, agreed with the user; nothing else changes.
 - Wait steps (GitHub checks via the smart-link polling, a timeout), Fix CI until green built-in.
 - Automations that run a workflow (a new automation target).
 - "Continue the previous step's session" as a per-step option, if the fix loops need it.
+
+## The workflow designer
+
+Designer and File views for the files in `.weave/workflows/`, New workflow and Duplicate, saving (option a), and a
+runner fix found while designing. Mockup: `~/.cache/fleet-workflows/designer.html`. Built-ins stay read-only.
+
+### 1. One writer, one parser (Application)
+
+- `WorkflowYamlWriter.Write(WorkflowDefinition)`: a hand-written, AOT-safe writer in Fleet's layout (the built-in's
+  key order: `name`, `description`, `placeholder`, `starts-from`, `runs-in`, `steps`; per agent step `id`, `title`,
+  `agent`, `model`, `effort`, `skill`, `optional`, `finish`, `writes`, `prompt: |`, `outcomes: [..]`,
+  `on: { outcome: step, max: n }`; You steps `id`, `title`, `you`, `choices` with `{ to, note: true }`; a blank line
+  between steps). Scalars are plain when that reads back the same, else double-quoted with escapes; `prompt` is a
+  literal block with the chomping (and an indentation indicator) that keeps it exact; a long one-line `description`
+  folds (`>-`) like the built-in's. Round-trip test: `parse(write(def))` equals `def` (ignoring `Line`) for the
+  built-in and every example in `docs/workflows.md`, plus awkward scalars (colons, `#`, quotes, `true`, leading
+  spaces, unicode).
+- `WorkflowYaml.Parse` also returns the workflow it read even when there are errors (`Draft`), so the designer can
+  show a file with, say, a loop without a max. `WorkflowCheck` decides whether that draft is safe to edit: writing it
+  and parsing again must give the same errors. A step the parser had to drop (no id) or a key it doesn't know
+  would change them, so that file opens in the File view only ("Fix these in the File view to use the designer.").
+- Comments: `WorkflowComments.Find(text)` walks YamlDotNet's `Scanner` (`skipComments: false`) and returns each
+  comment with its line.
+- The one file format has one `max` per step (shared by its loop outcomes); the inspector shows it on each loop's
+  row. No format change.
+
+### 2. The API (`/api/workflows`, behind the switch like the rest)
+
+- `POST /check` `{ text }` or `{ draft }` → `{ text, errors: [{ line, message, step }], draft, comments }`. A draft
+  is written with the writer first, so the File view shows exactly what Save writes; `step` is the index of the step
+  whose lines hold the error (from the YAML node tree), so errors land on the step in the designer. The client calls
+  it debounced (300 ms) as the user edits.
+- `POST /files/open` `{ directory, workflowId }` → the file's text, its hash (SHA-256 of the bytes as read), the check.
+- `PUT /files` `{ directory, workflowId, text | draft, hash, force }` → saves, or 409 with "changed on disk" when the
+  file's hash isn't the one it was opened with (Keep mine sends `force: true`). Validation first (400 with the first
+  error; the client never sends while it has errors). Refuses built-ins ("Built-in workflows can't be edited…").
+  Paths: `workflowId` is `repo:<stem>`, the stem must match `^[a-z0-9][a-z0-9-]*$`, the file must already be
+  `<repo>/.weave/workflows/<stem>.yaml|yml`, and its full path (symlinks resolved) must stay under that folder.
+  Written through a temp file and a move. No git.
+- `POST /files` `{ directory, name }` (New) or `{ directory, name, workflowId }` (Duplicate) → create
+  `.weave/workflows/<slug>.yaml` in the repo's current checkout, uncommitted. New writes the smallest valid workflow
+  (one agent step "Do the work", `id: work`, `agent: build`, `model: standard`, `prompt: The request: {{request}}`,
+  `outcomes: [done]`); Duplicate parses the built-in, sets the name and writes it (so no comments come with it).
+  Refused with 409: a file with that slug (either extension), or a workflow in the library with that name.
+- `WorkflowStepDto` gains `Prompt`; the library carries it, and the draft uses the same step shape.
+
+### 3. Runner fix: a step's skill is checked when the step starts
+
+- `WorkflowSkills.OffAsync(skill)`: a built-in skill that's off (the run-start check moves here too).
+- `StartVisitAsync` checks it first; when it's off the visit waits with kind `skill-off`: "Review uses
+  fleet-code-review, which is now off." Choices: **Retry** (`retry`: checks again; still off → 400 "…is still off.
+  Turn it on in Settings → Skills first.") and **Start without it** (`without-skill`: the step id goes in the run's
+  options `WithoutSkills`, and its prompt drops "Use the … skill." for the rest of the run). The card links to
+  Settings → Skills. Restart: the run stays waiting.
+
+### 4. Client
+
+- `WorkflowDetailPanel`: a repo workflow opens in the editor (`WorkflowEditor.vue`) with **Designer | File**, **Try
+  it** and **Save**; a built-in keeps today's view with **Duplicate to this repo**. Try it with unsaved edits says
+  "Save first: a run uses the file as saved."; otherwise it shows the run view (steps, recent runs, the Run box) for
+  the saved file, with **Edit** to come back.
+- `lib/workflow-draft.ts`: the draft, and its edits as pure functions: add a step after the + (Agent step, You
+  decide), remove, move, rename an id (routes, choices and `{{steps.<id>.…}}` follow), outcomes and their targets.
+- `WorkflowCanvas.vue`: Starts from box, steps top to bottom, + between them (Parallel and Wait greyed: "Arrives with
+  Stage 2" / "Stage 3"), loops as SVG arcs with "changes · at most 2×" or "needs a max", errors on the step.
+- `WorkflowInspector.vue`: workflow settings (name, description, Run box hint, Starts from / Runs in read-only with
+  the Stage 2 options greyed); agent step (title, id, agent, model role or pinned, skill, effort, who finishes it,
+  instructions with variable chips, outcomes with targets and max, writes, optional); You decide (title, id,
+  question, choices with target and note).
+- Problems bar under the canvas and the File view ("line N · …"); Save disabled while there are errors, or while a
+  check is in flight.
+- `WorkflowFileEditor.vue`: CodeMirror 6 (the ProfileConfigEditor setup plus YAML), error lines marked.
+- Comments: a banner when the file opens; the first designer save asks "Save and remove N comments?" listing them,
+  with Edit in File view; the File view saves text as it is.
+- Conflict dialog: "This file changed on disk" with **Reload** and **Keep mine**.
+- New workflow (list header) and Duplicate dialogs with the slug preview; unfinished runs note when saving: "2 runs
+  in progress keep the version they started with."
+- The run card handles `skill-off` (Retry, Start without it, Settings → Skills).
+
+### 5. Tests
+
+- Application: writer round trip; check (errors, lines, step index, draft safety); comments; save (conflict,
+  confinement incl. `..` and a symlinked folder, built-in refused), New/Duplicate (created, name taken, file taken);
+  runner: skill off at step start → waits; Retry still off → error; Retry after on → starts; Start without it → no
+  skill line.
+- Client: draft edits (id rename follows references), inspector, problems bar and Save disabled, comments banner and
+  confirmation, conflict dialog, New and Duplicate dialogs, skill-off card.
+- Live (scratch Fleet 5351, fake model 4998, Playwright): the four scenarios in the brief. Screenshots of the five
+  mockup screens, the conflict dialog and the skill-off card under `mockups/workflow-designer/`.
+
+### Also fixed (from the confirming real-model run of #289)
+
+- A refused commit of a step's declared files unstages the paths Fleet staged (`git reset -q -- <them>`); what the
+  agent staged stays staged.
+- Build a feature's Push and open the PR has `outcomes: [opened, failed]`, `on: { failed: end }`; a run ending on a
+  `failed` outcome says why ("Push and open the PR failed: <first line of the summary>").
+
+### Not in this change
+
+- Editing Parallel or Wait steps, agent-drafted workflows, committing on save, duplicating a repo workflow.

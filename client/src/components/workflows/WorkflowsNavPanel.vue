@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
-import { AlertTriangle, GitPullRequest, Loader2, MessageSquareText } from "lucide-vue-next";
+import { AlertTriangle, GitPullRequest, Loader2, MessageSquareText, Plus } from "lucide-vue-next";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { useWorkflowsNav } from "@/composables/use-workflows-nav";
 import type { Workflow } from "@/lib/workflows";
@@ -21,12 +21,13 @@ function latestRun(workflow: Workflow) {
 }
 
 function rowMeta(workflow: Workflow): { label: string; tone: string } {
+  if (nav.unsavedWorkflowId.value === workflow.id) return { label: "Edited", tone: "wait" };
   if (workflow.errors.length > 0) return { label: "Can't read", tone: "error" };
   const run = latestRun(workflow);
   if (run?.status === "waiting") return { label: "Needs you", tone: "wait" };
   if (run?.status === "running" && run.withYou) return { label: "With you", tone: "with" };
   if (run?.status === "running") return { label: "Running", tone: "working" };
-  return { label: `${workflow.steps.length} steps`, tone: "" };
+  return { label: `${workflow.steps.length} step${workflow.steps.length === 1 ? "" : "s"}`, tone: "" };
 }
 </script>
 
@@ -40,6 +41,16 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
         Workflows
       </p>
     </div>
+    <button
+      type="button"
+      class="new-workflow"
+      data-testid="workflow-new"
+      :disabled="!nav.library.value?.repository"
+      :title="nav.library.value?.repository ? undefined : 'Pick a repository in the Run box first'"
+      @click="nav.startCreate()"
+    >
+      <Plus aria-hidden="true" />New workflow
+    </button>
 
     <nav
       v-if="nav.library.value"
@@ -142,6 +153,37 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
   flex-direction: column;
   min-height: 0;
   background: transparent;
+}
+
+.new-workflow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 8px 8px;
+  padding: 6px 10px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-btn);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.new-workflow:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  color: var(--text);
+}
+
+.new-workflow:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.new-workflow svg {
+  width: 14px;
+  height: 14px;
 }
 
 .panel-header-row {
