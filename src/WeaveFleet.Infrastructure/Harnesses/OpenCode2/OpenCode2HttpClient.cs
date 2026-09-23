@@ -258,10 +258,13 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
             : new HashSet<string>(StringComparer.Ordinal);
     }
 
-    /// <summary>Every provider V2 can sign in to, with its sign-in methods and the sign-ins it has.</summary>
-    public async Task<IReadOnlyList<OpenCode2Integration>> GetIntegrationsAsync(CancellationToken ct)
+    /// <summary>
+    /// Every provider V2 can sign in to in <paramref name="directory"/>, with its sign-in methods and the sign-ins it
+    /// has. Integrations, and the browser sign-ins under way, belong to a location; load it first.
+    /// </summary>
+    public async Task<IReadOnlyList<OpenCode2Integration>> GetIntegrationsAsync(string directory, CancellationToken ct)
     {
-        using var response = await http.GetAsync("api/integration", ct).ConfigureAwait(false);
+        using var response = await http.GetAsync($"api/integration?{LocationQuery(directory)}", ct).ConfigureAwait(false);
         await EnsureSignInSuccessAsync(response, "list its providers", ct).ConfigureAwait(false);
         var body = await response.Content.ReadFromJsonAsync(
             OpenCode2JsonContext.Default.OpenCode2EnvelopeListOpenCode2Integration, ct).ConfigureAwait(false);
@@ -269,10 +272,10 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
     }
 
     /// <summary>Stores a key for <paramref name="integrationId"/> and makes it the one in use. The key is only ever in the request body.</summary>
-    public async Task ConnectKeyAsync(string integrationId, string key, IReadOnlyDictionary<string, JsonElement> answer, CancellationToken ct)
+    public async Task ConnectKeyAsync(string directory, string integrationId, string key, IReadOnlyDictionary<string, JsonElement> answer, CancellationToken ct)
     {
         using var response = await http.PostAsJsonAsync(
-            $"api/integration/{Uri.EscapeDataString(integrationId)}/connect/key",
+            $"api/integration/{Uri.EscapeDataString(integrationId)}/connect/key?{LocationQuery(directory)}",
             new OpenCode2ConnectKeyRequest { Key = key, Answer = answer.Count > 0 ? answer : null },
             OpenCode2JsonContext.Default.OpenCode2ConnectKeyRequest,
             ct).ConfigureAwait(false);
@@ -281,13 +284,14 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
 
     /// <summary>Starts a browser sign-in; V2 keeps the attempt in this server's memory for ten minutes.</summary>
     public async Task<OpenCode2OAuthAttempt> StartOAuthAsync(
+        string directory,
         string integrationId,
         string methodId,
         IReadOnlyDictionary<string, JsonElement> answer,
         CancellationToken ct)
     {
         using var response = await http.PostAsJsonAsync(
-            $"api/integration/{Uri.EscapeDataString(integrationId)}/connect/oauth",
+            $"api/integration/{Uri.EscapeDataString(integrationId)}/connect/oauth?{LocationQuery(directory)}",
             new OpenCode2StartOAuthRequest { MethodId = methodId, Answer = answer.Count > 0 ? answer : null },
             OpenCode2JsonContext.Default.OpenCode2StartOAuthRequest,
             ct).ConfigureAwait(false);
@@ -303,9 +307,9 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
     /// Where a browser sign-in is; <see langword="null"/> when V2 no longer knows it (cancelled, or finished more than
     /// a minute ago).
     /// </summary>
-    public async Task<OpenCode2OAuthStatus?> GetOAuthStatusAsync(string integrationId, string attemptId, CancellationToken ct)
+    public async Task<OpenCode2OAuthStatus?> GetOAuthStatusAsync(string directory, string integrationId, string attemptId, CancellationToken ct)
     {
-        using var response = await http.GetAsync(OAuthAttemptPath(integrationId, attemptId), ct).ConfigureAwait(false);
+        using var response = await http.GetAsync($"{OAuthAttemptPath(integrationId, attemptId)}?{LocationQuery(directory)}", ct).ConfigureAwait(false);
         if (response.StatusCode == HttpStatusCode.NotFound)
             return null;
         await EnsureSignInSuccessAsync(response, "check the sign-in", ct).ConfigureAwait(false);
@@ -315,10 +319,10 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
     }
 
     /// <summary>Finishes a browser sign-in in <c>code</c> mode with the code the provider showed.</summary>
-    public async Task CompleteOAuthAsync(string integrationId, string attemptId, string code, CancellationToken ct)
+    public async Task CompleteOAuthAsync(string directory, string integrationId, string attemptId, string code, CancellationToken ct)
     {
         using var response = await http.PostAsJsonAsync(
-            $"{OAuthAttemptPath(integrationId, attemptId)}/complete",
+            $"{OAuthAttemptPath(integrationId, attemptId)}/complete?{LocationQuery(directory)}",
             new OpenCode2CompleteOAuthRequest { Code = code },
             OpenCode2JsonContext.Default.OpenCode2CompleteOAuthRequest,
             ct).ConfigureAwait(false);
@@ -326,9 +330,9 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
     }
 
     /// <summary>Stops a browser sign-in, which closes its callback listener. One V2 no longer knows is left alone.</summary>
-    public async Task CancelOAuthAsync(string integrationId, string attemptId, CancellationToken ct)
+    public async Task CancelOAuthAsync(string directory, string integrationId, string attemptId, CancellationToken ct)
     {
-        using var response = await http.DeleteAsync(OAuthAttemptPath(integrationId, attemptId), ct).ConfigureAwait(false);
+        using var response = await http.DeleteAsync($"{OAuthAttemptPath(integrationId, attemptId)}?{LocationQuery(directory)}", ct).ConfigureAwait(false);
         if (response.StatusCode != HttpStatusCode.NotFound)
             await EnsureSignInSuccessAsync(response, "cancel the sign-in", ct).ConfigureAwait(false);
     }

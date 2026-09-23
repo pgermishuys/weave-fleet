@@ -153,7 +153,7 @@ public sealed class OpenCode2SignInTests
 
         await signIn.SignInWithKeyAsync("local-user", "azure", Key, answers, CancellationToken.None);
 
-        var request = api.Requests.ShouldHaveSingleItem();
+        var request = Sent(api).ShouldHaveSingleItem();
         (request.Method, request.Path).ShouldBe((HttpMethod.Post, "/api/integration/azure/connect/key"));
         var body = JsonDocument.Parse(request.Body!).RootElement;
         body.GetProperty("key").GetString().ShouldBe(Key);
@@ -169,7 +169,7 @@ public sealed class OpenCode2SignInTests
 
         await signIn.SignInWithKeyAsync("local-user", "anthropic", Key, new Dictionary<string, JsonElement>(), CancellationToken.None);
 
-        JsonDocument.Parse(api.Requests[0].Body!).RootElement.TryGetProperty("answer", out _).ShouldBeFalse();
+        JsonDocument.Parse(Sent(api)[0].Body!).RootElement.TryGetProperty("answer", out _).ShouldBeFalse();
     }
 
     [Fact]
@@ -234,7 +234,7 @@ public sealed class OpenCode2SignInTests
         attempt.NeedsCode.ShouldBeFalse();
         attempt.CallbackAddress.ShouldBe("http://localhost:1455/auth/callback");
         attempt.ExpiresAt.ShouldBe(DateTimeOffset.FromUnixTimeMilliseconds(1790114505285));
-        JsonDocument.Parse(api.Requests[0].Body!).RootElement.GetProperty("methodID").GetString().ShouldBe("chatgpt-browser");
+        JsonDocument.Parse(Sent(api)[0].Body!).RootElement.GetProperty("methodID").GetString().ShouldBe("chatgpt-browser");
     }
 
     [Fact]
@@ -271,7 +271,7 @@ public sealed class OpenCode2SignInTests
         var attempt = await signIn.GetAttemptAsync("local-user", "openai", "con_1", CancellationToken.None);
 
         attempt.ShouldBe(new HarnessSignInAttemptStatus(state, message));
-        api.Requests.ShouldHaveSingleItem().Path.ShouldBe("/api/integration/openai/connect/oauth/con_1");
+        Sent(api).ShouldHaveSingleItem().Path.ShouldBe("/api/integration/openai/connect/oauth/con_1");
     }
 
     [Fact]
@@ -356,7 +356,7 @@ public sealed class OpenCode2SignInTests
     [Fact]
     public async Task A_cancelled_sign_in_stops_in_V2_and_takes_no_callback()
     {
-        var api = new StubHandler(request => request.Method == HttpMethod.Delete
+        var api = Serving(request => request.Method == HttpMethod.Delete
             ? new HttpResponseMessage(HttpStatusCode.NoContent)
             : Json(BrowserAttempt));
         var (signIn, callbacks) = SignIn(api);
@@ -364,7 +364,7 @@ public sealed class OpenCode2SignInTests
 
         await signIn.CancelAsync("local-user", "openai", "con_browser", CancellationToken.None);
 
-        api.Requests[^1].ShouldBe((HttpMethod.Delete, "/api/integration/openai/connect/oauth/con_browser", null));
+        Sent(api)[^1].ShouldBe((HttpMethod.Delete, "/api/integration/openai/connect/oauth/con_browser", null));
         await Should.ThrowAsync<HarnessSignInException>(() => signIn.ForwardCallbackAsync(
             "local-user", "openai", "con_browser", new Uri("http://localhost:1455/auth/callback?code=abc"), CancellationToken.None));
         callbacks.Uris.ShouldBeEmpty();
@@ -386,7 +386,7 @@ public sealed class OpenCode2SignInTests
 
         await signIn.SubmitCodeAsync("local-user", "openai", "con_1", "abc#def", CancellationToken.None);
 
-        api.Requests.ShouldHaveSingleItem().ShouldBe((HttpMethod.Post, "/api/integration/openai/connect/oauth/con_1/complete", """{"code":"abc#def"}"""));
+        Sent(api).ShouldHaveSingleItem().ShouldBe((HttpMethod.Post, "/api/integration/openai/connect/oauth/con_1/complete", """{"code":"abc#def"}"""));
     }
 
     [Fact]
@@ -398,7 +398,7 @@ public sealed class OpenCode2SignInTests
         await signIn.UseAsync("local-user", "cred_home", CancellationToken.None);
         await signIn.SignOutAsync("local-user", "cred_work", CancellationToken.None);
 
-        api.Requests.Select(r => (r.Method, r.Path)).ShouldBe(
+        Sent(api).Select(r => (r.Method, r.Path)).ShouldBe(
         [
             (HttpMethod.Post, "/api/credential/cred_home/activate"),
             (HttpMethod.Delete, "/api/credential/cred_work"),
@@ -414,12 +414,45 @@ public sealed class OpenCode2SignInTests
     public void Knows_a_callback_on_this_machine(string url, string? callback)
         => OpenCode2SignIn.LoopbackCallback(url)?.ToString().ShouldBe(callback);
 
+    [Fact]
+    public async Task Every_integration_request_names_sign_ins_folder_once_it_has_loaded()
+    {
+        // V2 registers a location's integrations only once it has loaded, and keeps browser sign-ins per location.
+        var api = Answer(BrowserAttempt);
+        var (signIn, _) = SignIn(api);
+
+        await signIn.StartAsync("local-user", "openai", "chatgpt-browser", new Dictionary<string, JsonElement>(), CancellationToken.None);
+        await signIn.GetAttemptAsync("local-user", "openai", "con_browser", CancellationToken.None);
+
+        api.Requests[0].Path.ShouldBe("/api/location");
+        api.Uris.Where(uri => uri.Contains("/api/integration/")).ShouldAllBe(uri => uri.EndsWith("?location%5Bdirectory%5D=%2Fdata%2Fopencode2%2Fsign-in"));
+    }
+
+    private const string Folder = "/data/opencode2/sign-in";
+
+    /// <summary>The catalog events V2 sends for a folder once it has loaded it.</summary>
+    private static readonly string[] LoadedEvents = ["provider.updated", "model.updated", "agent.updated", "command.updated"];
+
+    /// <summary>What was asked of V2 besides loading sign-in's folder.</summary>
+    private static List<(HttpMethod Method, string Path, string? Body)> Sent(StubHandler api)
+        => api.Requests.Where(r => r.Path != "/api/location").ToList();
+
+    /// <summary>V2 answering <paramref name="respond"/>, and loading a folder when asked to.</summary>
+    private static StubHandler Serving(Func<HttpRequestMessage, HttpResponseMessage> respond)
+        => new(request => request.RequestUri!.AbsolutePath == "/api/location" ? new HttpResponseMessage(HttpStatusCode.OK) : respond(request));
+
     private static (OpenCode2SignIn SignIn, StubHandler Callbacks) SignIn(StubHandler api, OpenCode2InstallMode mode = OpenCode2InstallMode.Separate)
     {
         var server = new OpenCode2Server("local-user", OpenCode2Fixtures.ClientServing("", api), "token", process: null, NullLogger.Instance);
+        api.OnRequest = request =>
+        {
+            if (request.RequestUri!.AbsolutePath == "/api/location")
+                _ = Task.Run(() => { foreach (var evt in Loaded(Folder)) server.Route(evt); });
+        };
         var callbacks = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
         var signIn = new OpenCode2SignIn(
             (_, _) => Task.FromResult(server),
+            () => Folder,
             () => mode,
             () => new HttpClient(callbacks, disposeHandler: false),
             new FixedTime(DateTimeOffset.FromUnixTimeMilliseconds(1790113905285) + TimeSpan.FromMinutes(1)));
@@ -433,7 +466,16 @@ public sealed class OpenCode2SignInTests
     }
 
     private static StubHandler Answer(string body, HttpStatusCode status = HttpStatusCode.OK)
-        => new(_ => new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
+        => Serving(_ => new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
+
+    private static IEnumerable<OpenCode2Event> Loaded(string directory)
+        => LoadedEvents.Select(type => new OpenCode2Event
+        {
+            Id = $"evt_{type}",
+            Type = type,
+            Location = new OpenCode2EventLocation { Directory = directory },
+            Data = JsonDocument.Parse("{}").RootElement.Clone(),
+        });
 
     private static HttpResponseMessage Json(string body)
         => new(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };

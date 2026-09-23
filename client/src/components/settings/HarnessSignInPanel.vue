@@ -64,10 +64,15 @@ function toggle(provider: HarnessSignInProvider): void {
   notice.value = null;
 }
 
-function done(message: string): void {
+async function done(message: string): Promise<void> {
   openProvider.value = null;
   query.value = "";
   notice.value = `${message} New sessions can use its models.`;
+  try {
+    await store.changed(props.harnessType);
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : `Couldn't list ${props.harnessName}'s providers again.`;
+  }
 }
 
 async function use(provider: HarnessSignInProvider, connection: HarnessSignInConnection): Promise<void> {
@@ -261,7 +266,7 @@ async function signOut(provider: HarnessSignInProvider, connection: HarnessSignI
             :harness-name="harnessName"
             :provider="provider"
             :sign-in-command="signInCommand"
-            @done="done"
+            @done="void done($event)"
             @close="openProvider = null"
           />
         </article>
@@ -313,7 +318,7 @@ async function signOut(provider: HarnessSignInProvider, connection: HarnessSignI
               :harness-name="harnessName"
               :provider="provider"
               :sign-in-command="signInCommand"
-              @done="done"
+              @done="void done($event)"
               @close="openProvider = null"
             />
           </article>

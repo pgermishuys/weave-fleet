@@ -16,6 +16,11 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 /// one that stays up; a browser sign-in is held in that server's memory, so its later requests must go there too.
 /// </para>
 /// <para>
+/// V2 keeps integrations, and the browser sign-ins under way, per location, and a location's integrations are
+/// registered only once it has loaded (a sign-in started on a server that just started fails). So every request names
+/// one folder of Fleet's own, with nothing in it but the user's and Fleet's config, and waits for it to load.
+/// </para>
+/// <para>
 /// A browser sign-in either finishes on its own (V2 polls the provider, or a provider sends the browser back to a
 /// listener V2 opened on <c>localhost</c>) or asks for a code. A listener on <c>localhost</c> is on the machine Fleet
 /// runs on, which a browser on another device can't reach: the attempt says so (<see cref="HarnessSignInAttempt.CallbackAddress"/>),
@@ -25,6 +30,7 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 /// </remarks>
 internal sealed class OpenCode2SignIn(
     Func<string, CancellationToken, Task<OpenCode2Server>> ownerServer,
+    Func<string> folder,
     Func<OpenCode2InstallMode> installMode,
     Func<HttpClient> callbackClient,
     TimeProvider timeProvider) : IHarnessProviderSignIn
@@ -38,8 +44,8 @@ internal sealed class OpenCode2SignIn(
 
     public async Task<HarnessSignIns> ListAsync(string ownerUserId, CancellationToken ct)
     {
-        var server = await ownerServer(ownerUserId, ct).ConfigureAwait(false);
-        var integrations = await server.Client.GetIntegrationsAsync(ct).ConfigureAwait(false);
+        var (server, location) = await ServerAsync(ownerUserId, ct).ConfigureAwait(false);
+        var integrations = await server.Client.GetIntegrationsAsync(location, ct).ConfigureAwait(false);
         var providers = integrations
             .Where(integration => !string.IsNullOrWhiteSpace(integration.Id))
             .Select(ToProvider)
@@ -55,10 +61,10 @@ internal sealed class OpenCode2SignIn(
         IReadOnlyDictionary<string, JsonElement> answers,
         CancellationToken ct)
     {
-        var server = await ownerServer(ownerUserId, ct).ConfigureAwait(false);
+        var (server, location) = await ServerAsync(ownerUserId, ct).ConfigureAwait(false);
         try
         {
-            await server.Client.ConnectKeyAsync(providerId, key, answers, ct).ConfigureAwait(false);
+            await server.Client.ConnectKeyAsync(location, providerId, key, answers, ct).ConfigureAwait(false);
         }
         catch (HarnessSignInException ex) when (ex.Message.Contains(key, StringComparison.Ordinal))
         {
@@ -75,8 +81,8 @@ internal sealed class OpenCode2SignIn(
         CancellationToken ct)
     {
         ForgetExpired();
-        var server = await ownerServer(ownerUserId, ct).ConfigureAwait(false);
-        var started = await server.Client.StartOAuthAsync(providerId, methodId, answers, ct).ConfigureAwait(false);
+        var (server, location) = await ServerAsync(ownerUserId, ct).ConfigureAwait(false);
+        var started = await server.Client.StartOAuthAsync(location, providerId, methodId, answers, ct).ConfigureAwait(false);
 
         var expires = ReadTime(started.Time?.Expires) ?? timeProvider.GetUtcNow() + AttemptLifetime;
         var callback = LoopbackCallback(started.Url!);
@@ -96,8 +102,8 @@ internal sealed class OpenCode2SignIn(
 
     public async Task<HarnessSignInAttemptStatus> GetAttemptAsync(string ownerUserId, string providerId, string attemptId, CancellationToken ct)
     {
-        var server = await ownerServer(ownerUserId, ct).ConfigureAwait(false);
-        var status = await server.Client.GetOAuthStatusAsync(providerId, attemptId, ct).ConfigureAwait(false);
+        var (server, location) = await ServerAsync(ownerUserId, ct).ConfigureAwait(false);
+        var status = await server.Client.GetOAuthStatusAsync(location, providerId, attemptId, ct).ConfigureAwait(false);
         var state = status?.Status ?? HarnessSignInAttemptStates.Gone;
         if (state != HarnessSignInAttemptStates.Pending)
             _callbacks.TryRemove((ownerUserId, attemptId), out _);
@@ -106,8 +112,8 @@ internal sealed class OpenCode2SignIn(
 
     public async Task SubmitCodeAsync(string ownerUserId, string providerId, string attemptId, string code, CancellationToken ct)
     {
-        var server = await ownerServer(ownerUserId, ct).ConfigureAwait(false);
-        await server.Client.CompleteOAuthAsync(providerId, attemptId, code, ct).ConfigureAwait(false);
+        var (server, location) = await ServerAsync(ownerUserId, ct).ConfigureAwait(false);
+        await server.Client.CompleteOAuthAsync(location, providerId, attemptId, code, ct).ConfigureAwait(false);
     }
 
     /// <remarks>
@@ -148,8 +154,8 @@ internal sealed class OpenCode2SignIn(
     public async Task CancelAsync(string ownerUserId, string providerId, string attemptId, CancellationToken ct)
     {
         _callbacks.TryRemove((ownerUserId, attemptId), out _);
-        var server = await ownerServer(ownerUserId, ct).ConfigureAwait(false);
-        await server.Client.CancelOAuthAsync(providerId, attemptId, ct).ConfigureAwait(false);
+        var (server, location) = await ServerAsync(ownerUserId, ct).ConfigureAwait(false);
+        await server.Client.CancelOAuthAsync(location, providerId, attemptId, ct).ConfigureAwait(false);
     }
 
     public async Task UseAsync(string ownerUserId, string connectionId, CancellationToken ct)
@@ -162,6 +168,15 @@ internal sealed class OpenCode2SignIn(
     {
         var server = await ownerServer(ownerUserId, ct).ConfigureAwait(false);
         await server.Client.RemoveCredentialAsync(connectionId, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>The owner's server, with sign-in's folder loaded on it.</summary>
+    private async Task<(OpenCode2Server Server, string Location)> ServerAsync(string ownerUserId, CancellationToken ct)
+    {
+        var server = await ownerServer(ownerUserId, ct).ConfigureAwait(false);
+        var location = folder();
+        await server.LoadLocationAsync(location, ct).ConfigureAwait(false);
+        return (server, location);
     }
 
     /// <summary>Where the install's sign-ins are kept, and what signing in here changes.</summary>

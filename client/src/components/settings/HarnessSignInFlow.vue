@@ -18,7 +18,8 @@ import { useHarnessSignInStore } from "@/stores/harness-sign-in";
 /**
  * Signs in to one provider: a key, a sign-in in the browser, or what the harness says about its command and
  * environment methods. A key lives in this component only until it's sent. A browser sign-in is followed until it
- * finishes, fails or runs out, and is cancelled when this closes.
+ * finishes, fails or runs out, and is cancelled when this closes. It says `done` once signed in; the list is then
+ * reloaded by its owner, since that can move the provider, and this with it, elsewhere.
  */
 
 const props = defineProps<{
@@ -138,7 +139,6 @@ async function checkAttempt(): Promise<void> {
 
     attempt.value = null;
     if (status.status === "complete") {
-      await store.changed(props.harnessType);
       emit("done", `Signed in to ${props.provider.name}.`);
     } else if (status.status === "failed") {
       error.value = `The sign-in didn't work: ${status.message ?? "the provider refused it"}.`;

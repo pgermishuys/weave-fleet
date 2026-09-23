@@ -13,7 +13,8 @@ export type SignInAnswer = string | number | boolean | string[];
 
 /**
  * A harness's provider sign-ins, by harness, and what changes them. A key or code goes into one request body and
- * isn't kept here. Every change makes the composers ask the harness for its models again.
+ * isn't kept here. After a sign-in, `changed` lists them again and makes the composers ask for their models again
+ * (switching and signing out do that themselves).
  */
 export const useHarnessSignInStore = defineStore("harness-sign-in", () => {
   const byHarness = shallowRef<Readonly<Record<string, HarnessSignIns>>>({});
@@ -47,7 +48,6 @@ export const useHarnessSignInStore = defineStore("harness-sign-in", () => {
       body: { key, answers: answers as never },
     });
     if (!response.ok) throw new Error(errorMessage(error, response));
-    await changed(harnessType);
   }
 
   async function start(

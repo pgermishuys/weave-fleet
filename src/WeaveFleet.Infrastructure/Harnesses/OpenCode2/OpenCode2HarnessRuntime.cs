@@ -100,6 +100,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         // Sign-ins are in the database every server shares, so they go through the owner's server without a profile.
         _signIn = new OpenCode2SignIn(
             (owner, ct) => GetServerAsync(owner, profile: null, ct),
+            () => Directory.CreateDirectory(Path.Combine(FleetDataDirectory(), "opencode2", "sign-in")).FullName,
             () => _install.Locate()?.Mode ?? _install.RememberedMode() ?? OpenCode2InstallMode.Default,
             () => httpClientFactory.CreateClient(SignInCallbackHttpClientName),
             TimeProvider.System);

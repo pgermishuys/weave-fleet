@@ -119,6 +119,17 @@ describe("HarnessSignInPanel", () => {
 
   it("signs in with a key and the provider's own fields", async () => {
     const signIn = vi.spyOn(store, "signInWithKey").mockResolvedValue();
+    // Listed again, Azure has moved to the signed-in providers, taking its sign-in form away.
+    const changed = vi.spyOn(store, "changed").mockImplementation(async () => {
+      store.byHarness = {
+        opencode2: {
+          ...signIns,
+          providers: signIns.providers.map((p) => (p.id === "azure"
+            ? { ...p, connections: [{ kind: "credential" as const, id: "cred_azure", label: "Azure", active: true }] }
+            : p)),
+        },
+      };
+    });
     const view = mountPanel();
     await flushPromises();
 
@@ -132,7 +143,9 @@ describe("HarnessSignInPanel", () => {
     await flushPromises();
 
     expect(signIn).toHaveBeenCalledWith("opencode2", "azure", "sk-dummy-0000", { resourceName: "my-models" });
+    expect(changed).toHaveBeenCalledWith("opencode2");
     expect(view.get("[data-testid='harness-sign-in-notice']").text()).toBe("Signed in to Azure. New sessions can use its models.");
+    expect(view.get("[data-testid='harness-sign-in-connection-cred_azure']").text()).toContain("In use");
     expect(view.find("[data-testid='sign-in-key']").exists()).toBe(false);
   });
 
@@ -233,7 +246,7 @@ describe("HarnessSignInPanel", () => {
 
     expect(view.get("[data-testid='sign-in-remote-note']").text()).toContain("http://localhost:1455/auth/callback");
     await view.get("[data-testid='sign-in-landed-on']").setValue("http://localhost:1455/auth/callback?code=abc&state=xyz");
-    await view.get("[data-testid='sign-in-landed-on']").element.form!.dispatchEvent(new Event("submit"));
+    await view.get("form:has([data-testid='sign-in-landed-on'])").trigger("submit");
     await flushPromises();
 
     expect(forward).toHaveBeenCalledWith("opencode2", "openai", "con_1", "http://localhost:1455/auth/callback?code=abc&state=xyz");
