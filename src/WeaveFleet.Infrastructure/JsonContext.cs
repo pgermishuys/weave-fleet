@@ -163,6 +163,7 @@ internal sealed partial class HarnessEventJsonContext : JsonSerializerContext
 [JsonSerializable(typeof(List<OpenCodeCommandInfo>))]
 [JsonSerializable(typeof(OpenCodeProvidersResponse))]
 [JsonSerializable(typeof(OpenCodeConfigDefaults))]
+[JsonSerializable(typeof(OpenCodeConfigPlugins))]
 [JsonSerializable(typeof(Dictionary<string, OpenCodeModelVariant>))]
 [JsonSerializable(typeof(Dictionary<string, OpenCodeSessionStatus>))]
 [JsonSerializable(typeof(OpenCodeSseEvent))]

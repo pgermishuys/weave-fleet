@@ -342,8 +342,6 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(string[]))]
 // Open directory/file
 [JsonSerializable(typeof(OkBoolResponse))]
-// Config paths
-[JsonSerializable(typeof(ConfigPathsResponse))]
 // Harnesses
 [JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Application.Harnesses.HarnessInfo>))]
 [JsonSerializable(typeof(List<WeaveFleet.Application.Harnesses.HarnessInfo>))]
@@ -356,6 +354,13 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(WeaveFleet.Api.Endpoints.SaveHarnessProfileRequest))]
 [JsonSerializable(typeof(WeaveFleet.Api.Endpoints.SetDefaultHarnessProfileRequest))]
 [JsonSerializable(typeof(WeaveFleet.Api.Endpoints.CheckHarnessProfileRequest))]
+// Weave config
+[JsonSerializable(typeof(WeaveFleet.Application.Weave.WeaveConfigView))]
+[JsonSerializable(typeof(WeaveFleet.Application.Weave.WeaveSaveResult))]
+[JsonSerializable(typeof(WeaveFleet.Application.Weave.WeaveOwnConfig))]
+[JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Application.Weave.WeaveHarnessCheck>))]
+[JsonSerializable(typeof(WeaveFleet.Api.Endpoints.SaveWeaveConfigRequest))]
+[JsonSerializable(typeof(WeaveFleet.Api.Endpoints.CheckWeaveConfigRequest))]
 // Harness sign-in
 [JsonSerializable(typeof(WeaveFleet.Application.Harnesses.HarnessSignIns))]
 [JsonSerializable(typeof(WeaveFleet.Application.Harnesses.HarnessSignInAttempt))]

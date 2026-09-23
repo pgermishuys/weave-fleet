@@ -1,3 +1,4 @@
+using WeaveFleet.Application.Weave;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 
@@ -89,4 +90,31 @@ public interface IHarnessRuntime
     /// a harness that reads the choice when it starts a session or a process needs to do nothing.
     /// </summary>
     Task BuiltInSkillsChangedAsync(string ownerUserId, CancellationToken ct) => Task.CompletedTask;
+
+    /// <summary>
+    /// The Weave plugins this harness loads for the owner, and whether each reads the folder Fleet points it at.
+    /// Null when Fleet can't hand this harness a Weave config.
+    /// </summary>
+    Task<IReadOnlyList<WeaveInstall>?> DetectWeaveAsync(string ownerUserId, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<WeaveInstall>?>(null);
+
+    /// <summary>
+    /// Tries a draft Weave config (files by their path in Fleet's folder) the way a session would load it, and says
+    /// which <paramref name="flavor"/> agents it got. Null when this harness can't try one.
+    /// </summary>
+    Task<WeaveCheck?> CheckWeaveConfigAsync(
+        string ownerUserId,
+        WeaveFlavor flavor,
+        IReadOnlyDictionary<string, string> files,
+        CancellationToken ct) =>
+        Task.FromResult<WeaveCheck?>(null);
+
+    /// <summary>
+    /// The owner saved their Weave config. New processes get it when they start; a harness that keeps processes
+    /// running hands it to them too, without interrupting a running turn.
+    /// </summary>
+    Task WeaveConfigChangedAsync(string ownerUserId, CancellationToken ct) => Task.CompletedTask;
+
+    /// <summary>How far the owner's last save has got in running processes; null when there's nothing to report.</summary>
+    WeaveApplyStatus? GetWeaveApplyStatus(string ownerUserId) => null;
 }

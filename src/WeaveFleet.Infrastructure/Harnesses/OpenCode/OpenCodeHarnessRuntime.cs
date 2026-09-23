@@ -13,6 +13,7 @@ using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Skills;
+using WeaveFleet.Application.Weave;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
@@ -88,6 +89,7 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
     private string? _fleetPluginUri;
     private string? _fleetSkillsPath;
     private string? _builtInSkillsPath;
+    private OpenCodeWeave? _weave;
 
     /// <summary>Initialises the runtime with required dependencies.</summary>
     public OpenCodeHarnessRuntime(
@@ -357,6 +359,21 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
                     Message: $"Fleet couldn't write the {profile.Name} profile for OpenCode: {ex.Message}",
                     Guidance: "Check that Fleet can write to its data folder."));
             }
+        }
+
+        // A Weave config kept in Fleet goes in as the folder Weave reads. Its path never changes, so a save keeps
+        // the process; turning it on or off gives new sessions a process with or without it.
+        try
+        {
+            foreach (var (name, value) in await Weave.GetEnvironmentAsync(context.UserId).ConfigureAwait(false))
+                envVars[name] = value;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            errors.Add(new RuntimePreparationError(
+                Code: "WeaveConfigNotWritten",
+                Message: $"Fleet couldn't write your Weave config for OpenCode: {ex.Message}",
+                Guidance: "Check that Fleet can write to its data folder, or switch Settings → Weave to your own file."));
         }
 
         if (errors.Count > 0)
@@ -1058,6 +1075,28 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
             return null;
         }
     }
+
+    private OpenCodeWeave Weave =>
+        _weave ??= new OpenCodeWeave(_pooledInstanceRegistry, FleetDataDirectory, _scopeFactory, _logger);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<WeaveInstall>?> DetectWeaveAsync(string ownerUserId, CancellationToken ct) =>
+        await Weave.DetectAsync(ownerUserId, ct).ConfigureAwait(false);
+
+    /// <inheritdoc />
+    public async Task<WeaveCheck?> CheckWeaveConfigAsync(
+        string ownerUserId,
+        WeaveFlavor flavor,
+        IReadOnlyDictionary<string, string> files,
+        CancellationToken ct) =>
+        await Weave.CheckAsync(ownerUserId, flavor, files, ct).ConfigureAwait(false);
+
+    /// <inheritdoc />
+    public Task WeaveConfigChangedAsync(string ownerUserId, CancellationToken ct) =>
+        Weave.ConfigChangedAsync(ownerUserId, ct);
+
+    /// <inheritdoc />
+    public WeaveApplyStatus? GetWeaveApplyStatus(string ownerUserId) => Weave.GetApplyStatus(ownerUserId);
 
     private string FleetDataDirectory() =>
         Path.GetDirectoryName(Path.GetFullPath(_options.DatabasePath)) ?? Environment.CurrentDirectory;
