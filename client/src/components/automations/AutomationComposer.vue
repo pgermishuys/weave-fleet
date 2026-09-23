@@ -240,8 +240,10 @@ const request = computed<CreateAutomationRequest | null>(() => {
       workspaceId,
       model: null,
       agent: null,
-      // Null follows the default harness when it fires, unless that one can't run workflows.
-      harnessType: state.value.harnessType ?? (defaultRunsWorkflows.value ? null : workflowHarness.value),
+      // Null follows the default harness when it fires, unless that one can't run workflows. Until the harnesses have
+      // loaded there's nothing to go on, so nothing is pinned.
+      harnessType: state.value.harnessType
+        ?? (workflowHarnesses.value.length > 0 && !defaultRunsWorkflows.value ? workflowHarness.value : null),
       targetType: "workflow",
       targetTags: [],
       timeZone,

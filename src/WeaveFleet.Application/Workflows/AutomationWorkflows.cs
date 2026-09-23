@@ -21,6 +21,9 @@ public interface IAutomationWorkflows
     /// </summary>
     Task<AutomationWorkflowStart> StartAsync(Automation automation, string request, CancellationToken ct);
 
+    /// <summary>Whether Workflows are on for <paramref name="userId"/>.</summary>
+    Task<bool> IsEnabledAsync(string userId);
+
     /// <summary>The run's status (<see cref="WorkflowRunStatus"/>); null when it's gone.</summary>
     Task<string?> StatusAsync(string userId, string workflowRunId);
 
@@ -69,6 +72,12 @@ public sealed class AutomationWorkflows(
         return started.IsSuccess
             ? new AutomationWorkflowStart(started.Value.Id, started.Value.Sessions.Count > 0 ? started.Value.Sessions[0].SessionId : null, null)
             : AutomationWorkflowStart.Skipped(started.Error.Description);
+    }
+
+    public async Task<bool> IsEnabledAsync(string userId)
+    {
+        using var owner = userScope.Begin(userId);
+        return await feature.IsEnabledAsync().ConfigureAwait(false);
     }
 
     public async Task<string?> StatusAsync(string userId, string workflowRunId)

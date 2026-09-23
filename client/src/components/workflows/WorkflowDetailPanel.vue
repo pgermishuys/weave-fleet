@@ -246,15 +246,13 @@ function openRun(run: WorkflowRun): void {
                 aria-hidden="true"
               />
             </span>
-            <span class="wf-runs__title">
-              {{ run.title }}
-              <WorkflowStartedBy
-                v-if="run.startedBy"
-                class="wf-runs__by"
-                :started-by="run.startedBy"
-                plain
-              />
-            </span>
+            <span class="wf-runs__title">{{ run.title }}</span>
+            <WorkflowStartedBy
+              v-if="run.startedBy"
+              class="wf-runs__by"
+              :started-by="run.startedBy"
+              plain
+            />
             <span class="wf-runs__when">{{ when(run.createdAt) }}</span>
             <span
               class="wf-runs__status"
@@ -537,8 +535,8 @@ function openRun(run: WorkflowRun): void {
 }
 
 .wf-runs__by {
-  margin-left: 8px;
-  vertical-align: middle;
+  max-width: 34%;
+  flex-shrink: 1;
 }
 
 .wf-runs__when,

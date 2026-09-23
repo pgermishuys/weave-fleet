@@ -144,6 +144,14 @@ function serve(url: string, init?: RequestInit): Response {
     list = [...list, automation];
     return json(automation, 201);
   }
+  if (method === "POST" && /\/api\/automations\/[^/]+\/run$/.test(url)) {
+    const skipped: AutomationRun = {
+      id: "r-now", automationId: "a-wf", trigger: "manual", scheduledFor: null, startedAt: "2026-09-15T08:00:00.0000000Z",
+      state: "skipped", sessionId: null, instanceId: null, error: "Skipped: Workflows are turned off in Settings.",
+    };
+    runs = [skipped, ...runs];
+    return json(skipped, 202);
+  }
   const item = url.match(/^\/api\/automations\/([^/]+)$/);
   if (method === "PUT" && item) {
     list = list.map((a) => (a.id === item[1] ? { ...a, ...body } as Automation : a));
@@ -309,6 +317,36 @@ describe("An automation that runs a workflow", () => {
     expect(row.text()).toContain("Skipped: Workflows are turned off in Settings.");
     // Its workflow still shows by name on the chip, though the Library can't load.
     expect(wrapper.find("[data-testid='automation-workflow-chip']").text()).toContain("build-a-feature");
+  });
+
+  it("opens a saved workflow automation with its choices, and offers Save only once one changes", async () => {
+    list = [bump];
+    await mountScreen();
+    useAutomationsNav().setActiveAutomation("a-wf");
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='automation-workflow-chip']").text()).toContain("Build a feature");
+    expect(wrapper.find("[data-testid='automation-workflow-step-design']").attributes("aria-checked")).toBe("true");
+    expect(wrapper.find("[data-testid='automation-submit']").exists()).toBe(false);
+
+    await wrapper.find("[data-testid='automation-workflow-step-verify']").trigger("click");
+    await wrapper.find("[data-testid='automation-submit']").trigger("click");
+    await flushPromises();
+
+    expect(sent[0]).toMatchObject({ method: "PUT", url: "/api/automations/a-wf", body: { targetType: "workflow", workflowSteps: ["design", "verify"], harnessType: null } });
+  });
+
+  it("says why Run now was skipped, rather than that it started", async () => {
+    workflowsOn.value = false;
+    list = [bump];
+    await mountScreen();
+    useAutomationsNav().setActiveAutomation("a-wf");
+    await flushPromises();
+
+    await wrapper.find("[data-testid='automation-run-now']").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='automation-action-message']").text()).toBe("Skipped: Workflows are turned off in Settings.");
   });
 
   it("shows a run that waits on you as Needs you, and opens it", async () => {

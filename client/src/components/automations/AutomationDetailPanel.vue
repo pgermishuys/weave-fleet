@@ -228,7 +228,8 @@ async function handleRunNow(): Promise<void> {
   try {
     const run = await runAutomation(automation.id);
     runs.value = [run, ...runs.value.filter((existing) => existing.id !== run.id)];
-    showNotice("info", "Started a run. It shows below and in Sessions.");
+    if (run.state === "skipped") showNotice("error", run.error ?? "The run was skipped.");
+    else showNotice("info", "Started a run. It shows below and in Sessions.");
     void loadRuns();
   } catch (error) {
     showNotice("error", messageOf(error, "Couldn't start a run."));

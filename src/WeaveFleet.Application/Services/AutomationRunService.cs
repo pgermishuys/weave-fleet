@@ -66,7 +66,14 @@ public sealed partial class AutomationRunService(
             Status = AutomationRunStatus.Starting,
         };
 
-        if (trigger.IsManual)
+        if (automation.TargetType == AutomationTargets.Workflow && workflows is not null
+            && !await workflows.IsEnabledAsync(automation.UserId))
+        {
+            // Nothing can start, so the run says so at once, Run now included.
+            run.Status = AutomationRunStatus.Skipped;
+            run.Error = $"Skipped: {AutomationWorkflows.TurnedOffReason}";
+        }
+        else if (trigger.IsManual)
         {
             // Run now is never skipped for a run that's still going.
         }
