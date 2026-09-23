@@ -141,5 +141,14 @@ public sealed class FakeHarnessRuntime : IHarnessRuntime
     /// <summary>The harness's provider sign-in; null (the default) for a harness without one.</summary>
     public IHarnessProviderSignIn? ProviderSignIn { get; set; }
 
+    /// <summary>The owners <see cref="BuiltInSkillsChangedAsync"/> was told about, in order.</summary>
+    public List<string> BuiltInSkillChanges { get; } = [];
+
+    public Task BuiltInSkillsChangedAsync(string ownerUserId, CancellationToken ct)
+    {
+        BuiltInSkillChanges.Add(ownerUserId);
+        return Task.CompletedTask;
+    }
+
     private sealed record FakeRuntimeLaunchArtifacts : RuntimeLaunchArtifacts;
 }
