@@ -108,4 +108,50 @@ public sealed partial class WorkflowRunnerTests
         done.Status.ShouldBe(WorkflowRunStatus.Done);
         done.Result.ShouldBe("Push and open the PR failed: There's no remote called origin, so nothing was pushed.");
     }
+
+    [Fact]
+    public async Task a_run_whose_workflow_this_fleet_cant_read_fails_instead_of_erroring()
+    {
+        // A snapshot a later, stricter parser can't read: here, a plain scalar with ": " in it.
+        var run = new WorkflowRun
+        {
+            Id = "run-unreadable",
+            UserId = UserId,
+            WorkflowId = "repo:old",
+            WorkflowName = "Old",
+            Definition = "name: Old\nsteps:\n  - id: check\n    title: Check\n    model: standard\n    prompt: Check it. (note: this)\n    outcomes: [pass]\n",
+            Request = "Check it",
+            Slug = "check-it",
+            Title = "Check it",
+            RepositoryPath = "/repo",
+            HarnessType = "opencode",
+            Status = WorkflowRunStatus.Running,
+            CurrentStepId = "check",
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UpdatedAt = DateTime.UtcNow.ToString("O"),
+        };
+        await _runs.InsertAsync(run);
+        await _runs.InsertStepAsync(new WorkflowRunStep
+        {
+            Id = "visit-unreadable", RunId = run.Id, StepId = "check", Visit = 1, SessionId = "s-old",
+            Status = WorkflowRunStepStatus.Running, Finish = WorkflowFinishers.Agent, StartedAt = DateTime.UtcNow.ToString("O"),
+        });
+
+        var answer = await _runner.StepDoneAsync(UserId, "s-old", "pass", "Checked.");
+
+        answer.ShouldBe(new WorkflowStepDoneResult(false, WorkflowRunner.RunEndedMessage));
+        var failed = _runs.Run(run.Id);
+        failed.Status.ShouldBe(WorkflowRunStatus.Failed);
+        failed.Result.ShouldNotBeNull().ShouldStartWith(WorkflowRunner.UnreadableResult + " repo:old, line 6: This isn't valid YAML");
+        failed.EndedAt.ShouldNotBeNull();
+        _events.Last.Status.ShouldBe(WorkflowRunStatus.Failed);
+        _events.Last.Steps.ShouldBeEmpty();
+        _events.Last.Sessions.ShouldHaveSingleItem().SessionId.ShouldBe("s-old");
+
+        // Again: still a refusal, and the run isn't touched twice.
+        var ended = failed.EndedAt;
+        (await _runner.StepDoneAsync(UserId, "s-old", "pass", "Checked.")).Message.ShouldBe(WorkflowRunner.RunEndedMessage);
+        _runs.Run(run.Id).EndedAt.ShouldBe(ended);
+        (await _runner.AnswerAsync(UserId, run.Id, "outcome:pass", null)).IsSuccess.ShouldBeTrue();
+    }
 }
