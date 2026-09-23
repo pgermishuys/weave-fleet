@@ -1719,6 +1719,89 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         }
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// A throwaway OpenCode session on the pooled process for the folder, prepared the way <see cref="GetCatalogAsync"/>
+    /// prepares one, titled like the recap's forks so a crash's leftovers are swept the same way. Tools are off: there's
+    /// no cached conversation to keep, so nothing is lost by leaving them out. The session is deleted and the process
+    /// released when the conversation is disposed. Pooled mode only.
+    /// </remarks>
+    public async Task<IOffTheRecordConversation?> StartOffTheRecordAsync(OffTheRecordOptions options, CancellationToken ct)
+    {
+        if (!await IsPooledModeEnabledAsync(options.OwnerUserId, ct).ConfigureAwait(false))
+            return null;
+
+        HarnessHelpers.ValidateWorkingDirectory(options.Directory);
+
+        IReadOnlyList<UserCredential> credentials = [];
+        using (BackgroundUserContext.BeginScope(options.OwnerUserId))
+        using (var scope = _scopeFactory.CreateScope())
+        {
+            var credentialStore = scope.ServiceProvider.GetService<ICredentialStore>();
+            if (credentialStore is not null)
+                credentials = await credentialStore.GetDecryptedCredentialsAsync(options.OwnerUserId).ConfigureAwait(false);
+        }
+
+        var preparation = await PrepareRuntimeAsync(new RuntimePreparationContext
+        {
+            UserId = options.OwnerUserId,
+            UserCredentials = credentials,
+            ModelId = null,
+            WorkingDirectory = options.Directory,
+            Profile = options.Profile,
+        }, ct).ConfigureAwait(false);
+        if (preparation is not RuntimePreparation.Ready ready)
+            return null;
+
+        var environmentVariables = GetEnvironmentVariables(ready.Artifacts);
+        var credentialHash = CredentialHasher.HashEnvironment(environmentVariables);
+        var lease = await _pooledInstanceRegistry
+            .AcquireAsync(options.OwnerUserId, credentialHash, environmentVariables, options.Directory, ct)
+            .ConfigureAwait(false);
+
+        try
+        {
+            var client = lease.Instance.HttpClient
+                ?? throw new InvalidOperationException("Pooled OpenCode instance does not expose an HTTP client.");
+
+            await OpenCodeHarnessSession.DeleteLeftoversAsync(client, options.Directory, _logger, ct).ConfigureAwait(false);
+            var session = await client.CreateSessionAsync(new OpenCodeCreateSessionRequest
+            {
+                Title = OpenCodeHarnessSession.OffTheRecordSessionTitle,
+                Permission = [new OpenCodePermissionRule { Permission = "*", Pattern = "*", Action = "deny" }],
+            }, options.Directory, ct).ConfigureAwait(false);
+
+            var model = options is { ProviderId: { Length: > 0 } providerId, ModelId: { Length: > 0 } modelId }
+                ? new OpenCodeModelRefRequest { ProviderId = providerId, ModelId = modelId }
+                : null;
+
+            return new OpenCodeOffTheRecordConversation(
+                client,
+                session.Id,
+                options.Directory,
+                new OpenCodePromptRequest { Parts = [], Model = model, Variant = options.Variant, Tools = AllToolsOff },
+                OpenCodeHarnessSession.ConversationQuestionTimeout,
+                async id =>
+                {
+                    try
+                    {
+                        await OpenCodeHarnessSession.DeleteThrowawayAsync(client, id, options.Directory, _logger).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        await lease.DisposeAsync().ConfigureAwait(false);
+                    }
+                });
+        }
+        catch
+        {
+            await lease.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    private static readonly IReadOnlyDictionary<string, bool> AllToolsOff = new Dictionary<string, bool> { ["*"] = false };
+
     /// <summary>
     /// Expires any pending/running question tool parts for the given session.
     /// Called during resume to ensure stale questions are marked as errors

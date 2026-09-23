@@ -271,6 +271,28 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     /// </remarks>
     public async Task<string?> AskOffTheRecordAsync(string prompt, CancellationToken ct)
     {
+        var conversation = await StartForkAsync(OffTheRecordTimeout, ct).ConfigureAwait(false);
+        if (conversation is null)
+        {
+            return null;
+        }
+
+        await using (conversation.ConfigureAwait(false))
+        {
+            return (await conversation.AskAsync(prompt, ct).ConfigureAwait(false))?.Text;
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The recap's fork, asked the recap's way (see <see cref="AskOffTheRecordAsync"/>), kept for more than one question
+    /// and with longer for each: a workflow draft is a whole file.
+    /// </remarks>
+    public async Task<IOffTheRecordConversation?> StartOffTheRecordAsync(CancellationToken ct)
+        => await StartForkAsync(ConversationQuestionTimeout, ct).ConfigureAwait(false);
+
+    private async Task<OpenCodeOffTheRecordConversation?> StartForkAsync(TimeSpan askTimeout, CancellationToken ct)
+    {
         var parentId = _openCodeSessionId;
         if (parentId is null)
         {
@@ -290,7 +312,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         try
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(OffTheRecordTimeout);
+            timeout.CancelAfter(askTimeout);
 
             await http.UpdateSessionAsync(fork.Id, new OpenCodeSessionUpdateRequest
             {
@@ -301,38 +323,43 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
                     ? [new OpenCodePermissionRule { Permission = "*", Pattern = "*", Action = "ask" }, DenyStepTool]
                     : [new OpenCodePermissionRule { Permission = "*", Pattern = "*", Action = "ask" }],
             }, _workingDirectory, timeout.Token).ConfigureAwait(false);
-
-            var model = lastPrompt.Model is { ProviderId: { Length: > 0 } providerId, ModelId: { Length: > 0 } modelId }
-                ? new OpenCodeModelRefRequest { ProviderId = providerId, ModelId = modelId }
-                : null;
-
-            var answer = await http.SendMessageAsync(fork.Id, new OpenCodePromptRequest
-            {
-                Parts = [new OpenCodePromptTextPart { Text = prompt }],
-                Agent = lastPrompt.Agent,
-                Model = model,
-                Variant = lastPrompt.Variant,
-            }, _workingDirectory, timeout.Token).ConfigureAwait(false);
-
-            var text = string.Concat((answer?.Parts ?? [])
-                .OfType<OpenCodeTextPart>()
-                .Where(p => p.Synthetic != true && p.Ignored != true)
-                .Select(p => p.Text)).Trim();
-            return text.Length > 0 ? text : null;
         }
-        finally
+        catch
         {
             await DeleteOffTheRecordForkAsync(fork.Id).ConfigureAwait(false);
+            throw;
         }
+
+        var model = lastPrompt.Model is { ProviderId: { Length: > 0 } providerId, ModelId: { Length: > 0 } modelId }
+            ? new OpenCodeModelRefRequest { ProviderId = providerId, ModelId = modelId }
+            : null;
+
+        return new OpenCodeOffTheRecordConversation(
+            http,
+            fork.Id,
+            _workingDirectory,
+            new OpenCodePromptRequest { Parts = [], Agent = lastPrompt.Agent, Model = model, Variant = lastPrompt.Variant },
+            askTimeout,
+            DeleteOffTheRecordForkAsync);
     }
 
     /// <summary>
-    /// Title given to the throwaway forks <see cref="AskOffTheRecordAsync"/> makes, so the next ask in the
-    /// same directory can find any a crash left behind.
+    /// Title given to the throwaway sessions asked off the record (forks, and the session-less ones), so the next ask
+    /// in the same directory can find any a crash left behind.
     /// </summary>
     internal const string OffTheRecordSessionTitle = "fleet-recap";
 
     private static readonly TimeSpan OffTheRecordTimeout = TimeSpan.FromSeconds(45);
+
+    /// <summary>How long each question in a longer conversation may take: a draft is a whole workflow file.</summary>
+    internal static readonly TimeSpan ConversationQuestionTimeout = TimeSpan.FromSeconds(120);
+
+    /// <summary>
+    /// A throwaway session younger than this may still be in use: a conversation asks at most twice. Older ones a crash
+    /// left behind.
+    /// </summary>
+    internal static readonly TimeSpan LongestOffTheRecordConversation = ConversationQuestionTimeout * 2 + TimeSpan.FromSeconds(30);
+
     private const int LastPromptPageSize = 50;
     private const int LastPromptMaxPages = 10;
 
@@ -365,39 +392,45 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         return null;
     }
 
+    private Task DeleteLeftoverForksAsync(CancellationToken ct)
+        => DeleteLeftoversAsync(_instanceHandle.HttpClient, _workingDirectory, _logger, ct);
+
+    private Task DeleteOffTheRecordForkAsync(string forkId)
+        => DeleteThrowawayAsync(_instanceHandle.HttpClient, forkId, _workingDirectory, _logger);
+
     /// <summary>
-    /// Deletes forks a crash left behind in this directory. OpenCode lists sessions per directory, so this
-    /// runs before each ask rather than at startup. Forks younger than an ask can take may still be in use
-    /// by another session's ask, so they're left alone.
+    /// Deletes throwaway sessions a crash left behind in this directory. OpenCode lists sessions per directory, so this
+    /// runs before each ask rather than at startup. Ones younger than a conversation can take may still be in use by
+    /// another ask, so they're left alone.
     /// </summary>
-    private async Task DeleteLeftoverForksAsync(CancellationToken ct)
+    internal static async Task DeleteLeftoversAsync(OpenCodeHttpClient http, string directory, ILogger logger, CancellationToken ct)
     {
-        var sessions = await _instanceHandle.HttpClient.ListSessionsAsync(_workingDirectory, ct).ConfigureAwait(false);
-        var cutoff = DateTimeOffset.UtcNow - OffTheRecordTimeout - TimeSpan.FromSeconds(30);
+        var sessions = await http.ListSessionsAsync(directory, ct).ConfigureAwait(false);
+        var cutoff = DateTimeOffset.UtcNow - LongestOffTheRecordConversation;
         foreach (var session in sessions)
         {
             if (session.Title == OffTheRecordSessionTitle
                 && session.Time is { } time
                 && DateTimeOffset.FromUnixTimeMilliseconds(time.Created) < cutoff)
             {
-                await DeleteOffTheRecordForkAsync(session.Id).ConfigureAwait(false);
+                await DeleteThrowawayAsync(http, session.Id, directory, logger).ConfigureAwait(false);
             }
         }
     }
 
-    private async Task DeleteOffTheRecordForkAsync(string forkId)
+    internal static async Task DeleteThrowawayAsync(OpenCodeHttpClient http, string sessionId, string directory, ILogger logger)
     {
-        // Not the caller's token: the fork must go even when the caller gave up. Aborting first
+        // Not the caller's token: the session must go even when the caller gave up. Aborting first
         // stops a tool call that is waiting for approval.
         using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         try
         {
-            await _instanceHandle.HttpClient.AbortAsync(forkId, _workingDirectory, cleanup.Token).ConfigureAwait(false);
-            await _instanceHandle.HttpClient.DeleteSessionAsync(forkId, _workingDirectory, cleanup.Token).ConfigureAwait(false);
+            await http.AbortAsync(sessionId, directory, cleanup.Token).ConfigureAwait(false);
+            await http.DeleteSessionAsync(sessionId, directory, cleanup.Token).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
         {
-            LogOffTheRecordForkLeft(_logger, forkId, ex);
+            LogOffTheRecordForkLeft(logger, sessionId, ex);
         }
     }
 

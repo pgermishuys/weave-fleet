@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, shallowRef, watch } from "vue";
-import { AlertCircle, AlertTriangle, CheckCircle2, Code2, LoaderCircle, Play, Save, Workflow as WorkflowIcon } from "lucide-vue-next";
+import { AlertCircle, AlertTriangle, CheckCircle2, Code2, LoaderCircle, Play, Save, Sparkles, Workflow as WorkflowIcon } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -18,7 +18,7 @@ import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { useModelRoles } from "@/composables/use-model-roles";
 import type { WorkflowEditor } from "@/composables/use-workflow-editor";
 import { fileName, isRole, modelShortName, ROLE_NAMES } from "@/lib/workflows";
-import { insertStep, newAgentStep, newYouStep, removeStep, type WorkflowDraft } from "@/lib/workflow-draft";
+import { draftCost, draftedFrom, insertStep, newAgentStep, newYouStep, removeStep, type WorkflowDraft } from "@/lib/workflow-draft";
 import { useWorkflowsStore } from "@/stores/workflows";
 
 /**
@@ -48,7 +48,7 @@ let noticeTimer: ReturnType<typeof setTimeout> | null = null;
 
 const draft = computed(() => editor.draft.value);
 const errors = computed(() => editor.errors.value);
-const shortName = computed(() => (editor.file.value ? fileName(editor.file.value.file) : ""));
+const shortName = computed(() => (editor.fileName.value ? fileName(editor.fileName.value) : ""));
 const title = computed(() => draft.value?.name || shortName.value);
 const errorLines = computed(() => errors.value.map((error) => error.line).filter((line) => line > 0));
 const skillNames = computed(() => builtInSkills.value.map((skill) => skill.name));
@@ -150,7 +150,10 @@ onBeforeUnmount(() => {
     <header class="wf-editor__head">
       <span class="wf-editor__icon"><WorkflowIcon aria-hidden="true" /></span>
       <h2>{{ title }}</h2>
-      <span class="wf-editor__file">{{ editor.file.value?.file }}</span>
+      <span
+        class="wf-editor__file"
+        data-testid="workflow-file-name"
+      >{{ editor.fileName.value }}</span>
       <span
         v-if="editor.isDirty.value"
         class="wf-editor__dirty"
@@ -205,6 +208,26 @@ onBeforeUnmount(() => {
       </div>
     </header>
 
+    <div
+      v-if="editor.drafted.value"
+      class="wf-editor__banner wf-editor__banner--drafted"
+      role="note"
+      data-testid="workflow-drafted-banner"
+    >
+      <Sparkles aria-hidden="true" />
+      <span>
+        <b>{{ draftedFrom(editor.drafted.value) }}</b>
+        Nothing is saved until you press Save.
+        <span
+          class="wf-editor__cost"
+          data-testid="workflow-drafted-cost"
+        >{{ draftCost(editor.drafted.value) }}</span>
+        <span
+          v-if="editor.errors.value.length > 0"
+          data-testid="workflow-drafted-errors"
+        > It still has errors: fix them in the File view, then save.</span>
+      </span>
+    </div>
     <div
       v-if="editor.comments.value.length > 0 && editor.view.value === 'designer'"
       class="wf-editor__banner"
@@ -525,6 +548,18 @@ onBeforeUnmount(() => {
 
 .wf-editor__banner > span {
   flex: 1;
+}
+
+.wf-editor__banner--drafted {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.wf-editor__banner--drafted > svg {
+  color: var(--accent);
+}
+
+.wf-editor__cost {
+  color: var(--muted);
 }
 
 .wf-editor__banner--error {

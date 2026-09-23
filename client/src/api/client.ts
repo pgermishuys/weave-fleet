@@ -299,6 +299,8 @@ export interface HarnessCapabilities {
   supportsProviderSignIn?: boolean;
   /** Sessions can be workflow steps: the harness hides the step tool from every other session. */
   supportsWorkflowSteps?: boolean;
+  /** The harness can ask about a session off the record, leaving its history alone: recaps and Save as workflow…. */
+  supportsOffTheRecordPrompt?: boolean;
 }
 
 /** A field a sign-in method asks for besides the key or browser (`HarnessSignInField` on the server). */

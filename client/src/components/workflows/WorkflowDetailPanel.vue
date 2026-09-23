@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, watch } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import { AlertTriangle, Bot, Check, Copy, Pencil, Repeat, UserRound, Workflow as WorkflowIcon } from "lucide-vue-next";
+import { AlertTriangle, Bot, Check, Copy, LoaderCircle, Pencil, Repeat, Sparkles, UserRound, Workflow as WorkflowIcon } from "lucide-vue-next";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { Button } from "@/components/ui/button";
 import WorkflowCreateDialog from "@/components/workflows/WorkflowCreateDialog.vue";
@@ -10,7 +10,7 @@ import WorkflowRunBox from "@/components/workflows/WorkflowRunBox.vue";
 import { useWorkflowEditor } from "@/composables/use-workflow-editor";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { useModelRoles } from "@/composables/use-model-roles";
-import { useWorkflowsNav } from "@/composables/use-workflows-nav";
+import { DRAFT_ID, useWorkflowsNav } from "@/composables/use-workflows-nav";
 import {
   isRole,
   loopNotes,
@@ -34,7 +34,13 @@ const workflow = computed(() => nav.activeWorkflow.value);
 
 const editor = useWorkflowEditor();
 const isRepoWorkflow = computed(() => nav.activeWorkflowId.value.startsWith("repo:"));
-const showEditor = computed(() => isRepoWorkflow.value && !nav.showingRuns.value);
+const isDraft = computed(() => nav.activeWorkflowId.value === DRAFT_ID);
+const showEditor = computed(() => (isRepoWorkflow.value && !nav.showingRuns.value) || (isDraft.value && editor.drafted.value !== null));
+
+// The model's draft opens in the editor, unsaved, as soon as it comes.
+watch(() => nav.drafted.value, (drafted) => {
+  if (drafted) editor.adoptDraft(drafted);
+}, { immediate: true });
 
 watch([() => nav.activeWorkflowId.value, () => nav.repositoryPath.value], ([id, repository]) => {
   if (!id.startsWith("repo:") || !repository) return;
@@ -47,7 +53,20 @@ watch(() => [editor.isDirty.value, editor.file.value?.workflowId] as const, ([di
 });
 
 nav.setLeaveGuard(() => !editor.isDirty.value
-  || window.confirm(`Discard your unsaved changes to ${editor.draft.value?.name || editor.file.value?.file || "this workflow"}?`));
+  || window.confirm(editor.drafted.value
+    ? `Discard the drafted workflow${editor.draft.value?.name ? ` ${editor.draft.value.name}` : ""}? It hasn't been saved.`
+    : `Discard your unsaved changes to ${editor.draft.value?.name || editor.file.value?.file || "this workflow"}?`));
+
+/** Saved: a drafted workflow is the repository's own now, and the library lists it. */
+function onSaved(): void {
+  const id = editor.file.value?.workflowId;
+  if (isDraft.value && id) nav.draftSaved(id);
+  void nav.reload();
+}
+
+function onDescribe(request: { description: string; harnessType: string | null }): void {
+  if (nav.repositoryPath.value) void nav.draftFromDescription(nav.repositoryPath.value, request.description, request.harnessType);
+}
 
 onBeforeUnmount(() => {
   nav.setLeaveGuard(null);
@@ -129,10 +148,68 @@ function openRun(run: WorkflowRun): void {
     :class="{ 'wf-detail--editor': showEditor }"
     aria-label="Workflow"
   >
+    <div
+      v-if="isDraft && nav.drafting.value"
+      class="wf-drafting"
+      role="status"
+      data-testid="workflow-drafting"
+    >
+      <template v-if="!nav.drafting.value.error">
+        <LoaderCircle
+          class="wf-drafting__icon animate-spin"
+          aria-hidden="true"
+        />
+        <p class="wf-drafting__title">
+          {{ nav.drafting.value.sessionTitle ? `Drafting a workflow from ${nav.drafting.value.sessionTitle}…` : "Drafting a workflow from your description…" }}
+        </p>
+        <p class="wf-drafting__note">
+          {{ nav.drafting.value.sessionTitle
+            ? "The model is reading the conversation from the cache and writing the steps. It takes up to a minute or two."
+            : "The model is writing the steps. It takes up to a minute or two." }}
+        </p>
+        <Button
+          size="sm"
+          variant="outline"
+          data-testid="workflow-drafting-cancel"
+          @click="nav.cancelDraft()"
+        >
+          Cancel
+        </Button>
+      </template>
+      <template v-else>
+        <Sparkles
+          class="wf-drafting__icon wf-drafting__icon--error"
+          aria-hidden="true"
+        />
+        <p
+          class="wf-drafting__title"
+          role="alert"
+          data-testid="workflow-drafting-error"
+        >
+          {{ nav.drafting.value.error }}
+        </p>
+        <div class="wf-drafting__actions">
+          <Button
+            size="sm"
+            variant="outline"
+            @click="nav.cancelDraft()"
+          >
+            Close
+          </Button>
+          <Button
+            size="sm"
+            data-testid="workflow-drafting-retry"
+            @click="nav.drafting.value.retry()"
+          >
+            Try again
+          </Button>
+        </div>
+      </template>
+    </div>
     <WorkflowEditor
-      v-if="showEditor && editor.file.value"
+      v-else-if="showEditor && editor.file.value"
       :editor="editor"
-      @saved="nav.reload()"
+      @saved="onSaved"
       @try-it="tryIt"
     />
     <p
@@ -343,6 +420,7 @@ function openRun(run: WorkflowRun): void {
       :source="nav.creating.value?.source ?? null"
       @update:open="onCreateOpen"
       @created="onCreated"
+      @describe="onDescribe"
     />
   </section>
 </template>
@@ -641,6 +719,44 @@ function openRun(run: WorkflowRun): void {
   margin: 0;
   color: var(--muted);
   font-size: 12.5px;
+}
+
+.wf-drafting {
+  display: flex;
+  max-width: 420px;
+  flex-direction: column;
+  align-items: center;
+  align-self: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+}
+
+.wf-drafting__icon {
+  width: 20px;
+  height: 20px;
+  color: var(--muted);
+}
+
+.wf-drafting__icon--error {
+  color: var(--error);
+}
+
+.wf-drafting__title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.wf-drafting__note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.wf-drafting__actions {
+  display: flex;
+  gap: 8px;
 }
 
 .wf-detail__none--center {

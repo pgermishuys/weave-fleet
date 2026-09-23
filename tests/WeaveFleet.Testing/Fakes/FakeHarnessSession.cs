@@ -146,6 +146,12 @@ public sealed class FakeHarnessSession : IHarnessSession
         return Task.FromResult(OffTheRecordAnswer);
     }
 
+    /// <summary>What <see cref="StartOffTheRecordAsync"/> returns; null (the default) means "can't".</summary>
+    public IOffTheRecordConversation? OffTheRecordConversation { get; set; }
+
+    public Task<IOffTheRecordConversation?> StartOffTheRecordAsync(CancellationToken ct)
+        => Task.FromResult(OffTheRecordConversation);
+
     public Task<string?> GetActivityStatusAsync(CancellationToken ct)
         => GetActivityStatusBehavior?.Invoke(ct) ?? Task.FromResult<string?>("idle");
 

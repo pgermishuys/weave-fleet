@@ -24,7 +24,7 @@ vi.mock("@/components/ui/alert-dialog", () => {
 
 import WorkflowEditor from "@/components/workflows/WorkflowEditor.vue";
 import { CHECK_DELAY_MS, useWorkflowEditor } from "@/composables/use-workflow-editor";
-import type { WorkflowDraft } from "@/lib/workflow-draft";
+import type { DraftedWorkflow, WorkflowDraft } from "@/lib/workflow-draft";
 import { useWorkflowsStore } from "@/stores/workflows";
 import { buildRun } from "./workflow-fixtures";
 import { checkOf, fileOf, respond, reviewDraft } from "./workflow-draft-fixtures";
@@ -52,6 +52,9 @@ function route(path: string, init?: RequestInit): Promise<Response> {
     return respond(fileOf(checkOf(body.draft as WorkflowDraft ?? reviewDraft(), { text: (body.text as string) ?? "written" }), { hash: "h2" }));
   }
   if (path === "/api/workflows/files/open") return respond(fileOf(checkOf(reviewDraft()), { hash: "h3" }));
+  if (path === "/api/workflows/files" && init?.method === "POST") {
+    return respond(fileOf(checkOf((body.draft as WorkflowDraft) ?? reviewDraft(), { text: (body.text as string) ?? "written" }), { hash: "h4" }));
+  }
   return respond({});
 }
 
@@ -60,6 +63,26 @@ async function mountEditor(options: { comments?: boolean } = {}) {
   editor.adopt(REPO, fileOf(checkOf(reviewDraft(), options.comments
     ? { text: "# Kept by the platform team.\nname: Build it our way\n", comments: [{ line: 1, text: "Kept by the platform team." }, { line: 9, text: "Minor versions only." }] }
     : {})));
+  const wrapper = mount(WorkflowEditor, {
+    props: { editor },
+    attachTo: document.body,
+    global: { stubs: { WorkflowFileEditor: true } },
+  });
+  await flushPromises();
+  return { editor, wrapper };
+}
+
+async function mountDraft(drafted: Partial<DraftedWorkflow> = {}) {
+  const editor = useWorkflowEditor();
+  editor.adoptDraft({
+    repository: REPO,
+    repositoryName: "repo",
+    sessionTitle: "Fix the login bug",
+    check: checkOf(reviewDraft(), { text: "name: Build it our way\nsteps: []\n" }),
+    asks: 1,
+    tokens: { total: 3412, fromCache: 3100 },
+    ...drafted,
+  });
   const wrapper = mount(WorkflowEditor, {
     props: { editor },
     attachTo: document.body,
@@ -281,5 +304,112 @@ describe("WorkflowEditor", () => {
     expect(editor.draft.value?.steps.map((step) => step.id)).toEqual(["plan", "ok-plan", "implement", "review", "ask", "step"]);
     expect(editor.draft.value?.steps[4].choices[0].to).toBe("step");
     expect(wrapper.get("[data-testid='workflow-inspector']").text()).toContain("You decide");
+  });
+
+  describe("a drafted workflow", () => {
+    it("opens unsaved in the designer with a banner saying where it came from and what it cost", async () => {
+      const { editor, wrapper } = await mountDraft();
+
+      const banner = wrapper.get("[data-testid='workflow-drafted-banner']");
+      expect(banner.text()).toContain("Drafted from Fix the login bug. Review it before saving.");
+      expect(banner.text()).toContain("Nothing is saved until you press Save.");
+      expect(wrapper.get("[data-testid='workflow-drafted-cost']").text()).toBe("Asked the model once · 3,412 tokens, 3,100 from the cache.");
+      expect(editor.view.value).toBe("designer");
+      expect(wrapper.find("[data-testid='workflow-node-review']").exists()).toBe(true);
+      expect(wrapper.get("[data-testid='workflow-unsaved']").text()).toBe("Unsaved");
+      expect(wrapper.get("[data-testid='workflow-file-name']").text()).toBe(".weave/workflows/build-it-our-way.yaml");
+      expect(saveButton(wrapper).attributes("disabled")).toBeUndefined();
+      // Nothing is written until Save.
+      expect(calls.filter((call) => call.path.startsWith("/api/workflows/files"))).toEqual([]);
+    });
+
+    it("says it was drafted from a description, and shows no count when the harness gives none", async () => {
+      const { wrapper } = await mountDraft({ sessionTitle: null, tokens: null });
+
+      expect(wrapper.get("[data-testid='workflow-drafted-banner']").text()).toContain("Drafted from your description. Review it before saving.");
+      expect(wrapper.get("[data-testid='workflow-drafted-cost']").text()).toBe("Asked the model once.");
+    });
+
+    it("the file it would make follows the name as it's edited", async () => {
+      const { editor, wrapper } = await mountDraft();
+
+      editor.editDraft({ ...editor.draft.value!, name: "Fix a login bug" });
+      await flushPromises();
+
+      expect(wrapper.get("[data-testid='workflow-file-name']").text()).toBe(".weave/workflows/fix-a-login-bug.yaml");
+    });
+
+    it("Save creates the file, the text as the model wrote it, and it's an ordinary workflow after that", async () => {
+      const { editor, wrapper } = await mountDraft();
+
+      await saveButton(wrapper).trigger("click");
+      await flushPromises();
+
+      const created = calls.filter((call) => call.path === "/api/workflows/files");
+      expect(created).toEqual([{ path: "/api/workflows/files", method: "POST", body: { directory: REPO, text: "name: Build it our way\nsteps: []\n" } }]);
+      expect(wrapper.find("[data-testid='workflow-drafted-banner']").exists()).toBe(false);
+      expect(editor.drafted.value).toBeNull();
+      expect(editor.file.value?.workflowId).toBe("repo:build-it-our-way");
+      expect(editor.isDirty.value).toBe(false);
+      expect(wrapper.emitted("saved")).toHaveLength(1);
+    });
+
+    it("Save after designer edits sends the draft", async () => {
+      const { editor, wrapper } = await mountDraft();
+
+      editor.editDraft({ ...editor.draft.value!, description: "Ours." });
+      await settle();
+      await saveButton(wrapper).trigger("click");
+      await flushPromises();
+
+      const created = calls.find((call) => call.path === "/api/workflows/files")!;
+      expect((created.body.draft as WorkflowDraft).description).toBe("Ours.");
+      expect(created.body.text).toBeUndefined();
+    });
+
+    it("a name that's taken is refused with the server's message and the draft stays unsaved", async () => {
+      apiFetchMock.mockImplementation((path: string, init?: RequestInit) => (path === "/api/workflows/files"
+        ? respond({ error: "There's already a workflow called Build it our way. Pick another name." }, 409)
+        : route(path, init)));
+      const { editor, wrapper } = await mountDraft();
+
+      await saveButton(wrapper).trigger("click");
+      await flushPromises();
+
+      expect(wrapper.get("[data-testid='workflow-problems']").text()).toContain("There's already a workflow called Build it our way. Pick another name.");
+      expect(editor.drafted.value).not.toBeNull();
+      expect(wrapper.find("[data-testid='workflow-conflict']").exists()).toBe(false);
+    });
+
+    it("a draft that still has errors opens in the File view with them, and Save waits", async () => {
+      const { editor, wrapper } = await mountDraft({
+        asks: 2,
+        tokens: { total: 7300, fromCache: 6800 },
+        check: checkOf(reviewDraft(), { errors: [MISSING_MAX] }),
+      });
+
+      expect(editor.view.value).toBe("file");
+      expect(wrapper.find("workflow-file-editor-stub").exists()).toBe(true);
+      expect(wrapper.get("[data-testid='workflow-problems']").text()).toContain(`line 38 · ${MISSING_MAX.message}`);
+      expect(wrapper.get("[data-testid='workflow-drafted-errors']").text()).toContain("It still has errors: fix them in the File view, then save.");
+      expect(wrapper.get("[data-testid='workflow-drafted-cost']").text()).toBe("Asked the model twice: its first answer had errors · 7,300 tokens, 6,800 from the cache.");
+      expect(saveButton(wrapper).attributes("disabled")).toBeDefined();
+    });
+
+    it("a draft the parser couldn't read at all opens in the File view", async () => {
+      const { editor } = await mountDraft({ check: checkOf(null, { text: "I can't do that.\n", errors: [{ line: 1, message: "The file isn't a mapping.", step: null }] }) });
+
+      expect(editor.view.value).toBe("file");
+      expect(editor.text.value).toBe("I can't do that.\n");
+    });
+
+    it("Try it asks to save first", async () => {
+      const { wrapper } = await mountDraft();
+
+      await wrapper.get("[data-testid='workflow-try']").trigger("click");
+
+      expect(wrapper.get("[data-testid='workflow-notice']").text()).toBe("Save first: a run uses the file as saved.");
+      expect(wrapper.emitted("tryIt")).toBeUndefined();
+    });
   });
 });

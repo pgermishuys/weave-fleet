@@ -287,6 +287,15 @@ internal sealed record OpenCode2GenerateRequest
     public required string Prompt { get; init; }
 }
 
+/// <summary><c>POST /api/experimental/generate</c>: one answer with no session, on the server's base config.</summary>
+internal sealed record OpenCode2GenerateTextRequest
+{
+    public required string Prompt { get; init; }
+
+    /// <summary>Null for the base config's default model.</summary>
+    public OpenCode2ModelRef? Model { get; init; }
+}
+
 internal sealed record OpenCode2GenerateResult
 {
     public string? Text { get; init; }
@@ -681,6 +690,7 @@ internal sealed record OpenCode2ErrorBody
 [JsonSerializable(typeof(OpenCode2SwitchModelRequest))]
 [JsonSerializable(typeof(OpenCode2CommandRequest))]
 [JsonSerializable(typeof(OpenCode2GenerateRequest))]
+[JsonSerializable(typeof(OpenCode2GenerateTextRequest))]
 [JsonSerializable(typeof(OpenCode2MessagePage))]
 [JsonSerializable(typeof(OpenCode2Form))]
 [JsonSerializable(typeof(List<OpenCode2ToolContent>))]

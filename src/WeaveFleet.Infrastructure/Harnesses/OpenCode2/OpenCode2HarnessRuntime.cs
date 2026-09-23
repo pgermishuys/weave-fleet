@@ -275,6 +275,26 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
 
     /// <inheritdoc />
     /// <remarks>
+    /// V2's stateless <c>experimental/generate</c> on the profile's server, which answers from the server's base config
+    /// and keeps nothing. The folder isn't loaded: nothing in it is read.
+    /// </remarks>
+    public async Task<IOffTheRecordConversation?> StartOffTheRecordAsync(OffTheRecordOptions options, CancellationToken ct)
+    {
+        HarnessHelpers.ValidateWorkingDirectory(options.Directory);
+        var server = await GetServerAsync(options.OwnerUserId, options.Profile is null ? null : WriteProfile(options.Profile), ct).ConfigureAwait(false);
+        var model = options is { ProviderId: { Length: > 0 } providerId, ModelId: { Length: > 0 } modelId }
+            ? new OpenCode2ModelRef { Id = modelId, ProviderId = providerId, Variant = options.Variant }
+            : null;
+        return new OpenCode2OffTheRecordConversation(
+            (prompt, token) => server.Client.GenerateTextAsync(prompt, model, token),
+            ConversationQuestionTimeout);
+    }
+
+    /// <summary>How long each question off the record may take: a workflow draft is a whole file.</summary>
+    internal static readonly TimeSpan ConversationQuestionTimeout = TimeSpan.FromSeconds(120);
+
+    /// <inheritdoc />
+    /// <remarks>
     /// V2 never refuses a config: a broken profile starts, answers, and loads folders without the parts it couldn't
     /// use, and says so only in its log when a folder loads (<see cref="OpenCode2Profiles"/>). So the check starts a
     /// server of its own on the profile, the way a session's would start, with its log on; loads an empty folder; and

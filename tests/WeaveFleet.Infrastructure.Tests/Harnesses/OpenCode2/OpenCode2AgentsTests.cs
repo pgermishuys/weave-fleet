@@ -309,6 +309,46 @@ public sealed class OpenCode2AgentsTests
     }
 
     [Fact]
+    public async Task A_follow_up_off_the_record_carries_the_question_and_answer_before_it()
+    {
+        var answers = new Queue<string>(["name: first", "name: second"]);
+        var api = new StubHandler(request => request.RequestUri!.AbsolutePath.EndsWith("/generate", StringComparison.Ordinal)
+            ? Json("{\"data\":{\"text\":\"" + answers.Dequeue() + "\"}}")
+            : Json("{}"));
+        await using var server = OpenCode2EventlessServer(api);
+        await using var session = NewSession(server);
+
+        var conversation = (await session.StartOffTheRecordAsync(CancellationToken.None)).ShouldNotBeNull();
+        var first = await conversation.AskAsync("Draft it", CancellationToken.None);
+        var second = await conversation.AskAsync("That file has errors.", CancellationToken.None);
+        await conversation.DisposeAsync();
+
+        // V2 reports no tokens for generate, and keeps nothing: there's no fork to delete.
+        (first, second).ShouldBe((new OffTheRecordAnswer("name: first", null), new OffTheRecordAnswer("name: second", null)));
+        var requests = api.Requests.Where(r => r.Path != "/api/event").ToList();
+        requests.Select(r => r.Path).ShouldBe([$"/api/session/{Session}/generate", $"/api/session/{Session}/generate"]);
+        JsonDocument.Parse(requests[0].Body!).RootElement.GetProperty("prompt").GetString().ShouldBe("Draft it");
+        JsonDocument.Parse(requests[1].Body!).RootElement.GetProperty("prompt").GetString()
+            .ShouldBe("Draft it\n\nYour answer was:\n\nname: first\n\nThat file has errors.");
+    }
+
+    [Fact]
+    public async Task A_question_with_no_session_is_V2s_stateless_generate_on_the_chosen_model()
+    {
+        var api = new StubHandler(_ => Json("""{"data":{"text":"name: drafted"}}"""));
+        await using var server = OpenCode2EventlessServer(api);
+
+        var answer = await server.Client.GenerateTextAsync(
+            "Write a workflow", new OpenCode2ModelRef { Id = "claude-sonnet-5", ProviderId = "github-copilot", Variant = "high" }, CancellationToken.None);
+
+        answer.ShouldBe("name: drafted");
+        var request = api.Requests.Where(r => r.Path != "/api/event").ShouldHaveSingleItem();
+        request.Path.ShouldBe("/api/experimental/generate");
+        JsonDocument.Parse(request.Body!).RootElement.GetRawText()
+            .ShouldBe("""{"prompt":"Write a workflow","model":{"id":"claude-sonnet-5","providerID":"github-copilot","variant":"high"}}""");
+    }
+
+    [Fact]
     public void OpenCode_2_offers_agents_models_commands_subagents_recaps_and_profiles()
     {
         var capabilities = new OpenCode2Harness().Capabilities;
