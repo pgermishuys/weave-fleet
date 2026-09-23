@@ -123,6 +123,12 @@ public sealed record WorkflowRunOptions
     /// </summary>
     public bool CheckWithMe { get; set; }
 
+    /// <summary>
+    /// Steps whose skill was off when they came to start, and the user chose Start without it: they run without it for
+    /// the rest of the run.
+    /// </summary>
+    public List<string> WithoutSkills { get; init; } = [];
+
     public static WorkflowRunOptions Read(string json)
     {
         try
@@ -135,6 +141,7 @@ public sealed record WorkflowRunOptions
                 OptionalSteps = options.OptionalSteps ?? [],
                 RoleOverrides = options.RoleOverrides ?? [],
                 StepModels = options.StepModels ?? [],
+                WithoutSkills = options.WithoutSkills ?? [],
             };
         }
         catch (JsonException)

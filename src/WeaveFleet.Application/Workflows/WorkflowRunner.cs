@@ -71,6 +71,12 @@ public sealed partial class WorkflowRunner(
     /// <summary>The choice that goes on past a missing file or a wrap-up that didn't finish.</summary>
     public const string MoveOnAnywayChoice = "move-on-anyway";
 
+    /// <summary>Tries again to start a step Fleet couldn't start, or whose skill was off.</summary>
+    public const string RetryChoice = "retry";
+
+    /// <summary>Starts a step whose skill is off without it, for the rest of the run.</summary>
+    public const string WithoutSkillChoice = "without-skill";
+
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, StepWatch> _watches = new(StringComparer.Ordinal);
     private readonly Lock _gate = new();
@@ -249,6 +255,28 @@ public sealed partial class WorkflowRunner(
             return null;
         }
 
+        if (run.WaitingKind == WorkflowWaitingKinds.SkillOff && step is WorkflowAgentStep skilled)
+        {
+            switch (choiceId)
+            {
+                case RetryChoice when await scope.Skills.IsOffAsync(skilled.Skill).ConfigureAwait(false):
+                    return FleetError.ValidationError("Choice", $"{skilled.Skill} is still off. Turn it on in Settings → Skills, then retry.");
+                case RetryChoice:
+                    break;
+                case WithoutSkillChoice:
+                    if (!state.Options.WithoutSkills.Contains(skilled.Id))
+                        state.Options.WithoutSkills.Add(skilled.Id);
+                    run.Options = state.Options.Write();
+                    LogWithoutSkill(run.Id, skilled.Id, skilled.Skill ?? string.Empty);
+                    break;
+                default:
+                    return FleetError.ValidationError("Choice", "That isn't one of the choices this run is waiting on.");
+            }
+
+            await StartVisitAsync(scope, state, skilled, visit, ct).ConfigureAwait(false);
+            return null;
+        }
+
         switch (step)
         {
             case WorkflowYouStep you when choiceId.StartsWith("choice:", StringComparison.Ordinal)
@@ -279,7 +307,7 @@ public sealed partial class WorkflowRunner(
                 return null;
             }
 
-            case WorkflowAgentStep agent when visit.SessionId is null && choiceId == "retry":
+            case WorkflowAgentStep agent when visit.SessionId is null && choiceId == RetryChoice:
                 await StartVisitAsync(scope, state, agent, visit, ct).ConfigureAwait(false);
                 return null;
 
@@ -592,6 +620,16 @@ public sealed partial class WorkflowRunner(
     private async Task StartVisitAsync(Scope scope, RunState state, WorkflowAgentStep step, WorkflowRunStep visit, CancellationToken ct)
     {
         var run = state.Run;
+
+        // The skill was on when the run started, but a run can wait for days; a step never starts without it unasked.
+        if (!state.Options.WithoutSkills.Contains(step.Id) && await scope.Skills.IsOffAsync(step.Skill).ConfigureAwait(false))
+        {
+            visit.Status = WorkflowRunStepStatus.Waiting;
+            await scope.Runs.UpdateStepAsync(visit).ConfigureAwait(false);
+            await WaitAsync(scope, state, step.Id, WorkflowSkills.NowOffMessage(step), WorkflowWaitingKinds.SkillOff).ConfigureAwait(false);
+            return;
+        }
+
         run.Status = WorkflowRunStatus.Running;
         run.CurrentStepId = step.Id;
         run.WaitingReason = null;
@@ -685,7 +723,7 @@ public sealed partial class WorkflowRunner(
         // The note the user wrote for the next step when they moved on; not for the same step when it comes round again.
         if (previous is { HandOffNote: { } handOff } && previous.StepId != step.Id)
             parts.Add($"Note from the user:\n{handOff}");
-        if (step.Skill is { } skill)
+        if (step.Skill is { } skill && !state.Options.WithoutSkills.Contains(step.Id))
             parts.Add($"Use the {skill} skill.");
         if (visit.Finish != WorkflowFinishers.You)
             parts.Add(FleetWorkflows.Footer(step.Outcomes));
@@ -1264,6 +1302,7 @@ public sealed partial class WorkflowRunner(
         public IWorkflowRunEvents Events => scope.ServiceProvider.GetRequiredService<IWorkflowRunEvents>();
         public WorkflowsFeature Feature => scope.ServiceProvider.GetRequiredService<WorkflowsFeature>();
         public IWorkflowFiles Files => scope.ServiceProvider.GetRequiredService<IWorkflowFiles>();
+        public WorkflowSkills Skills => scope.ServiceProvider.GetRequiredService<WorkflowSkills>();
 
         public void Dispose()
         {
@@ -1280,6 +1319,9 @@ public sealed partial class WorkflowRunner(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Workflow run {RunId}: {StepId} finished with {Outcome}")]
     private partial void LogStepDone(string runId, string stepId, string outcome);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Workflow run {RunId}: {StepId} starts without {Skill}, which is off")]
+    private partial void LogWithoutSkill(string runId, string stepId, string skill);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Workflow run {RunId}: {StepId} decided {Choice}")]
     private partial void LogDecided(string runId, string stepId, string choice);

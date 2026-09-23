@@ -66,6 +66,30 @@ public static class WorkflowEndpoints
             .WithName("EndWorkflowRun")
             .Produces<WorkflowRunDto>();
 
+        // ── Editing .weave/workflows ───────────────────────────────────────────
+
+        // POST /api/workflows/check { "text": "…" } | { "draft": {…} } — the parser runs use, as the user edits.
+        group.MapPost("/check", (CheckWorkflowRequest request) => WorkflowService.Check(request).ToApiResult())
+            .WithName("CheckWorkflow")
+            .Produces<WorkflowCheckDto>();
+
+        group.MapPost("/files/open", async (OpenWorkflowFileRequest request, WorkflowService workflows, CancellationToken ct)
+                => (await workflows.OpenFileAsync(request, ct)).ToApiResult())
+            .WithName("OpenWorkflowFile")
+            .Produces<WorkflowFileDto>();
+
+        // 409 when the file changed on disk since it was opened; "force": true saves over it (Keep mine).
+        group.MapPut("/files", async (SaveWorkflowFileRequest request, WorkflowService workflows, CancellationToken ct)
+                => (await workflows.SaveFileAsync(request, ct)).ToApiResult())
+            .WithName("SaveWorkflowFile")
+            .Produces<WorkflowFileDto>();
+
+        // New workflow, or Duplicate with "workflowId" naming a built-in. 409 when the name is taken.
+        group.MapPost("/files", async (CreateWorkflowRequest request, WorkflowService workflows, CancellationToken ct)
+                => (await workflows.CreateFileAsync(request, ct)).ToApiResult())
+            .WithName("CreateWorkflowFile")
+            .Produces<WorkflowFileDto>();
+
         return app;
     }
 }
