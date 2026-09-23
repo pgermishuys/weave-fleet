@@ -115,7 +115,11 @@ public sealed partial class WorkflowStepToolLiveTests
 
             var stepTurn = Turns(llm).First(t => FirstUserText(t)?.StartsWith($"Check: {AutomationMessage}", StringComparison.Ordinal) == true);
             OfferedToolNames([stepTurn]).ShouldContain(FleetWorkflows.StepTool);
-            LastToolResult(Turns(llm), FirstUserText(stepTurn)!).ShouldContain("Recorded outcome pass.");
+
+            // The run moves on as soon as the tool is answered; the model hears the answer a moment later.
+            var stepPrompt = FirstUserText(stepTurn)!;
+            await WaitForAsync(() => Turns(llm), r => r.Any(t => LastRole(t) == "tool" && FirstUserText(t) == stepPrompt), ct);
+            LastToolResult(Turns(llm), stepPrompt).ShouldContain("Recorded outcome pass.");
 
             // A second firing while it waits at Approve is skipped, with where it waits.
             var second = await AsOwnerAsync(services, scope => scope.GetRequiredService<AutomationRunService>()
