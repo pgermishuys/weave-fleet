@@ -108,11 +108,15 @@ Tables (migration `038_add_workflow_runs.sql`):
 - **Start** (`POST /api/workflows/runs`): checks the switch, the harness's capability (below), the workflow's
   errors, the request, and every enabled step's model and skill. A step whose model isn't in the harness's catalog
   stops the start: "Review's model, Opus 5.5 (Anthropic), isn't available on OpenCode. Sign in to Anthropic, or
-  pick another model for Strong." A step whose built-in skill is off stops it too, naming Settings → Skills.
+  pick another model for Strong." A step whose built-in skill is off stops it too, naming Settings → Skills. The
+  Run box shows the same thing inline before Run ("Review uses fleet-code-review, which is off. Turn it on in
+  Settings → Skills", with a link) and disables Run; it follows the optional-step chips, so Check it runs needs
+  fleet-run only while it's on. The server check is the backstop.
 - Each agent step starts a **new session** through `SessionOrchestrator.CreateSessionAsync` with
   `WorkflowRunId` set, the step's agent, model and effort, and title `<run title> · <step title>`. The first
-  agent step's session makes the run's worktree (repository source, `worktree`, branch `wf/<slug>`, base branch);
-  later steps use the same worktree (`existingWorktreePath`).
+  agent step's session makes the run's worktree (repository source, `worktree`, base branch), named by Settings →
+  Worktree naming from the run's title like any new worktree; later steps use the same worktree
+  (`existingWorktreePath`).
 - The prompt is the step's instructions with variables filled in, then the note if the step was sent back
   (`Sent back with a note:\n<note>`), then the footer that worked in the tests: *"This is one step of a Fleet
   workflow. When the step is finished, call fleet_step_done once, as your last action, with outcome set to one
@@ -177,13 +181,14 @@ Tables (migration `038_add_workflow_runs.sql`):
 Design (optional, off, strong, `fleet-mockups`) → Plan (strong, agent `plan`) → **You: Approve the plan** (Approve →
 Implement; Send back with a note → Plan) → Implement (standard) → Review (strong, `fleet-code-review`; `changes` →
 Implement, max 2) → Check it runs (optional, off, standard, `fleet-run`; `broken` → Implement, max 2) → **You:
-Open the pull request**. Prompts from the mockup (`WF.dpi`), with Review's bar: `changes` only for bugs or tests
-the plan named that are missing; nits in the summary with `pass`.
+Open the pull request** (Open PR → Push and open the PR; Keep the branch only → end) → Push and open the PR (fast;
+pushes the branch and runs `gh pr create`, body from the plan file and Review's summary; its summary is the PR's
+URL, so the run reads "PR #n opened"). Prompts from the mockup (`WF.dpi`), with Review's bar: `changes` only for
+bugs or tests the plan named that are missing; nits in the summary with `pass`.
 
-Open question for the coordinator: the mockup's last step has "Open PR → end" and "Keep the branch only → end", but
-Fleet has no service that opens a PR, so "Open PR" would open nothing. Proposal: "Open PR" leads to a short agent
-step (fast) that pushes the branch and runs `gh pr create`, its summary the PR's URL; the run's result then reads
-"PR #n opened".
+Fleet has no service that opens a PR, so "Open PR → end" as mocked would open nothing (decided with the
+coordinator, 2026-09-23). A failed push or a signed-out `gh` is an ordinary step failure under Needs you. No
+Fleet-side push or GitHub API call in Stage 1.
 
 ### 7. Client
 
@@ -210,6 +215,8 @@ step (fast) that pushes the branch and runs `gh pr create`, its summary the PR's
   resolution, prompt building.
 - Infrastructure: migration + repository round trip; OpenCode request shapes (deny at create, tools map on prompt,
   fork rules); OpenCode 2 create/patch rules.
+- The recap's fork: its model request carries the same tool list as its parent's (no `fleet_step_done`), asserted
+  on the request the model receives, not inferred from rule order.
 - Integration (CI, live): OpenCode 1.18.31 and OpenCode 2 2.0.9 — a normal session's model request has no
   `fleet_step_done`; a step session's has it and can call it; the bridge records the outcome.
 - Client: workflows store, run grouping, stepper, gate card, settings cards.
@@ -217,17 +224,18 @@ step (fast) that pushes the branch and runs `gh pr create`, its summary the PR's
   Review `pass` → Open PR; Send back with a note; a step idle without the tool lands under Needs you; a restart
   mid-run.
 
-## Stage 2 — Bug triage, library and designer (outline)
+## Stage 2 — Bug triage and Review a pull request (outline)
 
-- Starting from a GitHub issue (`starts-from: issue`, `{{issue}}`), parallel steps (`parallel:` with at most one
-  writer; others read-only or own worktree; continue on all/any), Bug triage built-in (`exit` outcomes that end
-  the run early).
-- Library: Duplicate a built-in into `.weave/workflows/`, the Designer (flow view, inspector) and File view,
-  saving YAML Fleet writes. "Pinned models in this repo" card if not in Stage 1.
-- Review a pull request built-in (`starts-from: pr`, `runs-in: pr-branch`).
+- Starting from a GitHub issue (`starts-from: issue`, `{{issue}}`) or a PR (`starts-from: pr`, `runs-in:
+  pr-branch`).
+- Parallel steps (`parallel:` with at most one writer; others read-only or own worktree; continue on all/any).
+- Bug triage built-in (`exit` outcomes that end the run early) and Review a pull request built-in.
+- "Pinned models in this repo" card if not in Stage 1.
 
-## Stage 3 — Wait and triggers (outline)
+## Stage 3 — designer, Wait and triggers (outline)
 
+- The Designer (flow view, inspector) and File view, and Duplicate a built-in into `.weave/workflows/`. May be
+  dropped once the user has lived with hand-written YAML.
 - Wait steps (GitHub checks via the smart-link polling, a timeout), Fix CI until green built-in.
 - Automations that run a workflow (a new automation target).
 - "Continue the previous step's session" as a per-step option, if the fix loops need it.
