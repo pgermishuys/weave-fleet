@@ -22,6 +22,8 @@ export interface StartWorkflowRunRequest {
   harnessProfileId?: string | null;
   optionalSteps?: string[];
   roleOverrides?: Partial<Record<WorkflowRole, WorkflowModelChoice>>;
+  /** "Check with me after each step": every agent step is one the user finishes. */
+  checkWithMe?: boolean;
 }
 
 async function errorFrom(response: Response, fallback: string): Promise<string> {
@@ -111,9 +113,9 @@ export const useWorkflowsStore = defineStore("workflows", () => {
     return (await response.json()) as WorkflowLibrary;
   }
 
-  async function post(path: string, body: unknown, fallback: string): Promise<WorkflowRun> {
+  async function post(path: string, body: unknown, fallback: string, method = "POST"): Promise<WorkflowRun> {
     const response = await apiFetch(path, {
-      method: "POST",
+      method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
@@ -128,8 +130,20 @@ export const useWorkflowsStore = defineStore("workflows", () => {
     return post("/api/workflows/runs", request, "Couldn't start the run.");
   }
 
-  function answer(runId: string, choice: string, note?: string | null): Promise<WorkflowRun> {
-    return post(`/api/workflows/runs/${encodeURIComponent(runId)}/answer`, { choice, note: note ?? null }, "Couldn't answer the run.");
+  /** `checkWithMe` goes with a You step's choice: how involved the user wants to be from here. */
+  function answer(runId: string, choice: string, note?: string | null, checkWithMe?: boolean): Promise<WorkflowRun> {
+    const body = checkWithMe === undefined ? { choice, note: note ?? null } : { choice, note: note ?? null, checkWithMe };
+    return post(`/api/workflows/runs/${encodeURIComponent(runId)}/answer`, body, "Couldn't answer the run.");
+  }
+
+  /** Moves on from a step the user finishes: Fleet asks its agent to wrap up, then starts the next step. */
+  function moveOn(runId: string, outcome: string | null, note: string | null): Promise<WorkflowRun> {
+    return post(`/api/workflows/runs/${encodeURIComponent(runId)}/move-on`, { outcome, note }, "Couldn't move the run on.");
+  }
+
+  /** "Check with me after each step", from the run's header. It applies from the next step. */
+  function setCheckWithMe(runId: string, on: boolean): Promise<WorkflowRun> {
+    return post(`/api/workflows/runs/${encodeURIComponent(runId)}/check-with-me`, { on }, "Couldn't change Check with me.", "PUT");
   }
 
   function end(runId: string): Promise<WorkflowRun> {
@@ -147,6 +161,8 @@ export const useWorkflowsStore = defineStore("workflows", () => {
     loadLibrary,
     start,
     answer,
+    moveOn,
+    setCheckWithMe,
     end,
   };
 });

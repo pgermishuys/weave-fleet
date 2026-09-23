@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  checkWithMeNote,
   groupRunSessions,
+  moveBlockedReason,
+  moveLabel,
+  workflowMessageLabel,
   isStepPrompt,
   loopNotes,
   runStatusLabel,
@@ -30,15 +34,15 @@ function run(overrides: Partial<WorkflowRun> = {}): WorkflowRun {
     updatedAt: "2026-09-23T10:10:00Z",
     endedAt: null,
     steps: [
-      { id: "design", title: "Design", kind: "agent", state: "skipped", visits: 0, optional: true, enabled: false, outcome: null, sessionId: null, model: null, role: "strong", skill: "fleet-mockups", maxLoops: null },
-      { id: "plan", title: "Plan", kind: "agent", state: "done", visits: 2, optional: false, enabled: true, outcome: "ready", sessionId: "s2", model: null, role: "strong", skill: null, maxLoops: null },
-      { id: "ok-plan", title: "Approve the plan", kind: "you", state: "done", visits: 1, optional: false, enabled: true, outcome: "Approve", sessionId: null, model: null, role: null, skill: null, maxLoops: null },
-      { id: "implement", title: "Implement", kind: "agent", state: "running", visits: 1, optional: false, enabled: true, outcome: null, sessionId: "s3", model: null, role: "standard", skill: null, maxLoops: null },
+      { id: "design", title: "Design", kind: "agent", state: "skipped", visits: 0, optional: true, enabled: false, outcome: null, sessionId: null, model: null, role: "strong", skill: "fleet-mockups", maxLoops: null, finishYou: false, withYou: false, outcomes: [] },
+      { id: "plan", title: "Plan", kind: "agent", state: "done", visits: 2, optional: false, enabled: true, outcome: "ready", sessionId: "s2", model: null, role: "strong", skill: null, maxLoops: null, finishYou: false, withYou: false, outcomes: [] },
+      { id: "ok-plan", title: "Approve the plan", kind: "you", state: "done", visits: 1, optional: false, enabled: true, outcome: "Approve", sessionId: null, model: null, role: null, skill: null, maxLoops: null, finishYou: false, withYou: false, outcomes: [] },
+      { id: "implement", title: "Implement", kind: "agent", state: "running", visits: 1, optional: false, enabled: true, outcome: null, sessionId: "s3", model: null, role: "standard", skill: null, maxLoops: null, finishYou: false, withYou: false, outcomes: [] },
     ],
     sessions: [
-      { sessionId: "s1", stepId: "plan", visit: 1, outcome: "ready", summary: "v1", note: null },
-      { sessionId: "s2", stepId: "plan", visit: 2, outcome: "ready", summary: "v2", note: "Leave the status bar alone." },
-      { sessionId: "s3", stepId: "implement", visit: 1, outcome: null, summary: null, note: null },
+      { sessionId: "s1", stepId: "plan", visit: 1, outcome: "ready", summary: "v1", note: null, withYou: false, files: [], filesChecked: false, promptMessageId: null, wrapUpMessageId: null, handOffNote: null },
+      { sessionId: "s2", stepId: "plan", visit: 2, outcome: "ready", summary: "v2", note: "Leave the status bar alone.", withYou: false, files: [], filesChecked: false, promptMessageId: null, wrapUpMessageId: null, handOffNote: null },
+      { sessionId: "s3", stepId: "implement", visit: 1, outcome: null, summary: null, note: null, withYou: false, files: [], filesChecked: false, promptMessageId: null, wrapUpMessageId: null, handOffNote: null },
     ],
     waiting: null,
     ...overrides,
@@ -85,9 +89,9 @@ describe("workflows", () => {
   it("lists loops and the skills the enabled steps use", () => {
     const workflow = {
       steps: [
-        { id: "design", title: "Design", kind: "agent", optional: true, skill: "fleet-mockups", routes: {}, maxLoops: null },
-        { id: "implement", title: "Implement", kind: "agent", optional: false, skill: null, routes: {}, maxLoops: null },
-        { id: "review", title: "Review", kind: "agent", optional: false, skill: "fleet-code-review", routes: { changes: "implement" }, maxLoops: 2 },
+        { id: "design", title: "Design", kind: "agent", optional: true, skill: "fleet-mockups", routes: {}, maxLoops: null, finishYou: false, withYou: false, outcomes: [] },
+        { id: "implement", title: "Implement", kind: "agent", optional: false, skill: null, routes: {}, maxLoops: null, finishYou: false, withYou: false, outcomes: [] },
+        { id: "review", title: "Review", kind: "agent", optional: false, skill: "fleet-code-review", routes: { changes: "implement" }, maxLoops: 2, finishYou: false, withYou: false, outcomes: [] },
       ],
     } as unknown as Workflow;
 
@@ -99,5 +103,43 @@ describe("workflows", () => {
   it("knows the prompt a step started with by Fleet's footer", () => {
     expect(isStepPrompt("Plan it.\n\nThis is one step of a Fleet workflow. When the step is finished, call fleet_step_done once…")).toBe(true);
     expect(isStepPrompt("Plan it.")).toBe(false);
+  });
+
+  it("says a run with a step the user finishes open is With you, not Needs you", () => {
+    const move = { outcome: "ready", to: "plan", toTitle: "Plan", back: false, loopsUsed: null, maxLoops: null, allowed: true };
+    const withYou = { stepId: "implement", stepTitle: "Implement", sessionId: "s3", files: [], wrappingUp: false, outcome: null, moves: [move] };
+    expect(runStatusLabel(run({ withYou }))).toEqual({ label: "With you", tone: "with" });
+    expect(runStatusLabel(run({ withYou: null }))).toEqual({ label: "Working", tone: "run" });
+  });
+
+  it("names the ways to move on the way the bar shows them", () => {
+    const on = { outcome: "pass", to: "ok-pr", toTitle: "Open the pull request", back: false, loopsUsed: null, maxLoops: null, allowed: true };
+    const back = { outcome: "changes", to: "implement", toTitle: "Implement", back: true, loopsUsed: 0, maxLoops: 2, allowed: true };
+    expect(moveLabel({ ...on, outcome: "ready", toTitle: "Plan" }, true)).toBe("Move on to Plan");
+    expect(moveLabel(on, false)).toBe("Pass: on to Open the pull request");
+    expect(moveLabel(back, false)).toBe("Changes: back to Implement (1 of 2)");
+    expect(moveLabel({ ...back, loopsUsed: 1 }, false)).toBe("Changes: back to Implement (2 of 2)");
+    expect(moveLabel({ ...back, loopsUsed: 2, allowed: false }, false)).toBe("Changes: back to Implement (2 of 2 used)");
+    expect(moveBlockedReason("Review", { ...back, loopsUsed: 2, allowed: false })).toBe("Review has sent the work back twice, the most this run allows.");
+    expect(moveBlockedReason("Review", back)).toBeNull();
+  });
+
+  it("marks what Fleet sent into a step session: the first prompt by its id, and the wrap-up", () => {
+    const current = run({
+      sessions: [{
+        sessionId: "s3", stepId: "implement", visit: 1, outcome: null, summary: null, note: null, withYou: true,
+        files: [], filesChecked: false, promptMessageId: "msg_first", wrapUpMessageId: "msg_wrap", handOffNote: null,
+      }],
+    });
+    expect(workflowMessageLabel(current, "s3", "msg_first", "Build the plan.")).toBe("Workflow · step 3 of 3 · you finish this step");
+    expect(workflowMessageLabel(current, "s3", "msg_wrap", "The user is moving on to Review.")).toBe("Fleet · you pressed Move on");
+    expect(workflowMessageLabel(current, "s3", "msg_user", "Make the status bar read from the same list.")).toBeNull();
+    expect(workflowMessageLabel(null, "s3", "msg_first", "")).toBeNull();
+  });
+
+  it("says Check with me changes only the steps after the running one", () => {
+    const running = run({ checkWithMe: true });
+    expect(checkWithMeNote(running)).toBe("Check with me is on from the next step. This step started on its own, so it still moves on when the agent reports it's done.");
+    expect(checkWithMeNote(run({ checkWithMe: false }))).toBeNull();
   });
 });

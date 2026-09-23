@@ -27,7 +27,7 @@ import { dispatchSessionUpsert } from "@/lib/session-sync";
 import { useCanvasesStore } from "@/stores/canvases";
 import { focusServerCanvas } from "@/composables/use-server-canvases";
 import { mergeMessagesByTimestamp } from "@/lib/merge-messages";
-import { isStepPrompt, stepPosition } from "@/lib/workflows";
+import { workflowMessageKey, workflowMessageLabel } from "@/lib/workflows";
 import { useWorkflowsStore } from "@/stores/workflows";
 
 interface ImageAttachmentDisplay {
@@ -58,7 +58,10 @@ interface ActivityMessage {
   peerOutcome?: PeerOutcome;
   /** Set when this is the notice that work the agent moved into the background finished. */
   background?: BackgroundNotice;
-  /** Set on the prompt Fleet started a workflow step with: "Workflow · step 2 of 6". */
+  /**
+   * Set on what Fleet sent into a workflow step's session: "Workflow · step 2 of 6" (and "· you finish this step") on
+   * the prompt the step started with, "Fleet · you pressed Move on" on the wrap-up.
+   */
   workflowStep?: string;
 }
 
@@ -70,12 +73,8 @@ const router = useRouter();
 const sessionsStore = useSessionsStore();
 const workflowsStore = useWorkflowsStore();
 
-/** "Workflow · step 2 of 6" for a workflow step's session, shown on the prompt Fleet started it with. */
-const workflowStepLabel = computed(() => {
-  const run = workflowsStore.runForSession(props.sessionId);
-  const position = run ? stepPosition(run, props.sessionId) : null;
-  return position ? `Workflow · step ${position.index} of ${position.total}` : null;
-});
+/** The run this session is a step of, which says which of its messages Fleet sent. */
+const workflowRun = computed(() => workflowsStore.runForSession(props.sessionId));
 const { sessions } = storeToRefs(sessionsStore);
 const canvasesStore = useCanvasesStore();
 const { showRightPanel } = useSidebarMobile();
@@ -231,7 +230,7 @@ const derivedMessages = new WeakMap<AccumulatedMessage, DerivedMessage>();
 function derivationInputs(message: AccumulatedMessage, finished: ReadonlyMap<string, BackgroundState>): unknown[] {
   const inputs: unknown[] = [];
   if (message.role === "user") {
-    inputs.push(workflowStepLabel.value);
+    inputs.push(workflowMessageKey(workflowRun.value, props.sessionId));
   }
   if (message.modelID) {
     inputs.push(models.value);
@@ -270,7 +269,7 @@ function toActivityMessage(message: AccumulatedMessage, finished: ReadonlyMap<st
     peer: fromPeer?.peer,
     peerOutcome: peerUpdate?.outcome,
     background: background ?? undefined,
-    workflowStep: message.role === "user" && isStepPrompt(rawBody) ? workflowStepLabel.value ?? undefined : undefined,
+    workflowStep: message.role === "user" ? workflowMessageLabel(workflowRun.value, props.sessionId, message.messageId, rawBody) ?? undefined : undefined,
     images: message.parts
       .filter((part): part is AccumulatedFilePart => part.type === "file" && part.mime.startsWith("image/"))
       .map((part) => ({ url: part.url, filename: part.filename?.trim() || "image" })),

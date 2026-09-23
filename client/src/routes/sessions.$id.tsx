@@ -12,6 +12,7 @@ import ForkSessionDialog from "@/components/session/ForkSessionDialog.vue";
 import SessionActionToolbar from "@/components/session/SessionActionToolbar.vue";
 import SessionDetailHeader from "@/components/session/SessionDetailHeader.vue";
 import TerminalDrawer from "@/components/terminal/TerminalDrawer.vue";
+import WorkflowFinishBar from "@/components/workflows/WorkflowFinishBar.vue";
 import WorkflowRunCard from "@/components/workflows/WorkflowRunCard.vue";
 import WorkflowStepper from "@/components/workflows/WorkflowStepper.vue";
 import TerminalToggleButton from "@/components/terminal/TerminalToggleButton.vue";
@@ -876,6 +877,7 @@ const SessionDetailPage = defineComponent({
           <>
             <ActivityStream key={`${params.value.id}-${instanceId.value}`} sessionId={params.value.id} />
             <WorkflowRunCard sessionId={params.value.id} />
+            <WorkflowFinishBar sessionId={params.value.id} />
             <RecapLine recap={recap.value} />
             <Composer
               ref={composerRef}
