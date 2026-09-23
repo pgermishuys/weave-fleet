@@ -26,6 +26,7 @@ The application shell is a composable layout built from named panels:
 | Sessions     | `[session-list][conversation][content]`     |
 | Settings     | `[settings-menu][settings-detail]`          |
 | Automations  | `[automations-list][automations-detail]`    |
+| Workflows    | `[workflows-list][workflows-detail]`        |
 
 ### Panel Definitions
 
@@ -39,6 +40,8 @@ The application shell is a composable layout built from named panels:
 | `settings-detail` | Detail pane for the selected settings category                              |
 | `automations-list`| List of automations in the left nav panel                                   |
 | `automations-detail`| Detail pane for the selected automation                                   |
+| `workflows-list`  | The workflow library: built into Fleet, then the repo's `.weave/workflows`   |
+| `workflows-detail`| The selected workflow's steps, recent runs and Run box                     |
 
 ### Resize Gutters
 

@@ -358,7 +358,8 @@ jobs:
           port="5010"
           log_path="/tmp/fleet-smoke.log"
 
-          Fleet__Host="127.0.0.1" Fleet__Port="$port" "$binary" >"$log_path" 2>&1 &
+          # Workflows on, so the smoke test can read the built-in workflow through the AOT build's YAML parser.
+          Fleet__Host="127.0.0.1" Fleet__Port="$port" Fleet__Harness__Workflows="true" "$binary" >"$log_path" 2>&1 &
           app_pid=$!
 
           cleanup() { kill "$app_pid" 2>/dev/null || true; }
@@ -366,7 +367,15 @@ jobs:
 
           for _ in $(seq 1 30); do
             if curl -fsS "http://127.0.0.1:${port}/healthz" >/dev/null; then
-              echo "AOT smoke test passed — healthz responded OK."
+              echo "AOT smoke test: healthz responded OK."
+              # The built-in workflow is YAML read at run time; a trimmed-away parser shows up here, not in healthz.
+              workflows=$(curl -fsS "http://127.0.0.1:${port}/api/workflows" || true)
+              if ! echo "$workflows" | grep -q '"name":"Build a feature"' || ! echo "$workflows" | grep -q '"id":"open-pr"' || echo "$workflows" | grep -q '"errors":\["'; then
+                echo "::error::The AOT build didn't read the built-in workflow: $workflows"
+                cat "$log_path"
+                exit 1
+              fi
+              echo "AOT smoke test passed — healthz responded OK and the built-in workflow reads."
               kill "$app_pid" 2>/dev/null || true
               wait "$app_pid" 2>/dev/null || true
               trap - EXIT

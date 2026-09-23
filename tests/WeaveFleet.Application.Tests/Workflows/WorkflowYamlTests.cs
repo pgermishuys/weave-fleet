@@ -226,6 +226,59 @@ public sealed class WorkflowYamlTests
         result.Errors.Single().Message.ShouldBe("pr's prompt uses {{steps.review.summary}}, but there's no step \"review\".");
     }
 
+    [Fact]
+    public void the_example_in_docs_workflows_reads()
+    {
+        // Keep in step with docs/workflows.md.
+        var result = WorkflowYaml.Parse(
+            """
+            name: Weekly dependency bump
+            description: Bumps the dependencies and checks nothing broke.
+            placeholder: "Which packages? e.g. everything in client/"
+            starts-from: sentence
+            runs-in: new-worktree
+            steps:
+              - id: bump
+                title: Bump
+                agent: build
+                model: standard
+                prompt: |
+                  Bump the dependencies in {{request}}. Commit the lock file.
+                outcomes: [done]
+
+              - id: tests
+                title: Run the tests
+                agent: build
+                model: github-copilot/gpt-5.4-mini
+                effort: low
+                prompt: |
+                  Run the test suites and fix what the bump broke.
+
+                  {{previous.summary}}
+                outcomes: [green, red]
+                on: { red: bump, max: 2 }
+
+              - id: ok
+                title: Keep it?
+                you: Open a pull request for the bump?
+                choices:
+                  Open PR: pr
+                  Try again with a note: { to: bump, note: true }
+                  Drop it: end
+
+              - id: pr
+                title: Open the PR
+                model: fast
+                prompt: Push this branch and open a pull request with gh pr create. Put its URL in summary.
+                outcomes: [opened]
+            """,
+            File);
+
+        result.Errors.ShouldBeEmpty();
+        result.Definition!.Steps.Select(s => s.Id).ShouldBe(["bump", "tests", "ok", "pr"]);
+        result.Definition.Find("ok").ShouldBeOfType<WorkflowYouStep>().Choices[1].ShouldBe(new WorkflowChoice("Try again with a note", "bump", true));
+    }
+
     private static WorkflowParseResult Parse(string steps)
         => WorkflowYaml.Parse($"name: Test\nstarts-from: sentence\nruns-in: new-worktree\nsteps:\n{steps}", File);
 }
