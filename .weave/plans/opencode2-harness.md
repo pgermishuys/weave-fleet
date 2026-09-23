@@ -544,3 +544,25 @@ Track I. Shared code, every harness (OpenCode's `task`, OpenCode 2's `subagent`,
   background call is only known from the tool part's metadata (the card layer), not the delegation, and the server
   side disagrees too (the list is idle live, but the list endpoint counts a working child as busy on refetch). Needs a
   decision on what an idle parent with background work should show; not changed here.
+
+## Built-in skills under one folder (Track H) (2026-09-22)
+
+- [x] Each owner has one folder, `{data}/opencode2/built-in-skills/<hash of owner id>`, named in the `skills` array
+      of `OPENCODE_CONFIG_CONTENT` once, whatever is in it (`OpenCode2FleetFiles.SyncBuiltInSkills`). It holds exactly
+      the built-in skills the owner turned on. Fleet rewrites it when the setting changes (a new
+      `IHarnessRuntime.BuiltInSkillsChangedAsync`, called by `BuiltInSkillService` for every harness; a no-op for the
+      others) and before every server request. The old layout (one array entry per skill, all skills in
+      `built-in-skills/`) is cleaned up on the first sync.
+- [x] Built-in skills are out of the "settings changed → replace the server" comparison: the config content no longer
+      changes with them. Messages between sessions still replaces the server when idle.
+- Checked live (2.0.9, separate mode, scratch Fleet; the fake model answers with the `fleet-*` skills in the request's
+  system prompt): switched `fleet-simplify` on in Settings with a server running and a profile's server running. A
+  new session on each listed it; a session that was already running didn't; both server pids stayed the same and no
+  server was replaced. Switched off: new sessions on both servers didn't list it, while the session started while it
+  was on kept it. An OpenCode 1 session answered beside it.
+- **Correction to Stage 5 and #265's "Setup and install" list:** "new skills reach a running separate-mode server
+  only after the server restarts" is wrong. A *new session* picks up a synced skill live, with no restart (watched
+  folders: the config folder's `skills/`, a repo's `.opencode/skills/`, and any folder already in the array). An
+  existing session's skill list is fixed when it's created, and nothing changes it (not a reload, not a restart). The
+  one thing that needed a new server was a new array entry, which is what this change removes for built-in skills.
+- **Left alone:** V2 also reads `~/.claude/skills` from the real home whatever `HOME` is set to (out of scope).

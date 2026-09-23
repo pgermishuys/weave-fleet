@@ -167,7 +167,7 @@ internal sealed partial class OpenCode2Servers(
         }
     }
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 server {ProcessId} ({Key}) started with other settings (built-in skills, messages between sessions) and is idle; replacing it")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 server {ProcessId} ({Key}) started with other settings (messages between sessions) and is idle; replacing it")]
     private static partial void LogReplacingServer(ILogger logger, int processId, OpenCode2ServerKey key);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 server {ProcessId} ({Key}) unused for {Minutes:0.#} min with no turn running; stopping it until a session needs it")]

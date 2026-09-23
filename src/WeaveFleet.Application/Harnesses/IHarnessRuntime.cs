@@ -77,4 +77,10 @@ public interface IHarnessRuntime
     /// </summary>
     Task<HarnessCatalog?> GetCatalogAsync(string ownerUserId, string directory, HarnessProfile? profile, CancellationToken ct)
         => Task.FromResult<HarnessCatalog?>(null);
+
+    /// <summary>
+    /// The owner turned one of Fleet's built-in skills on or off. Sessions they start afterwards should get the change;
+    /// a harness that reads the choice when it starts a session or a process needs to do nothing.
+    /// </summary>
+    Task BuiltInSkillsChangedAsync(string ownerUserId, CancellationToken ct) => Task.CompletedTask;
 }

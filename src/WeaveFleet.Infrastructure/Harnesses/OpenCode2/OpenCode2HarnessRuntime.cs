@@ -52,7 +52,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     private Timer? _idleTimer;
     private string? _pluginFolder;
     private string? _skillsFolder;
-    private string? _builtInSkillsFolder;
+    private readonly Lock _builtInSkillsSync = new();
     private OpenCode2InstallCheck? _lastCheck;
     private int _separateSkillsSynced;
     private bool _disposed;
@@ -343,8 +343,9 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
 
     /// <summary>
     /// The owner's running server for <paramref name="profile"/> (none: the owner's own), started when there's none or
-    /// the last one stopped. A server started with other settings (a built-in skill switched, messages between sessions
-    /// turned on or off) is replaced when none of its sessions is running a turn; until then its sessions keep using it.
+    /// the last one stopped. A server started with other settings (messages between sessions turned on or off) is
+    /// replaced when none of its sessions is running a turn; until then its sessions keep using it. Built-in skills
+    /// aren't a setting of the server: they're files in a folder it watches.
     /// </summary>
     private async Task<OpenCode2Server> GetServerAsync(string ownerUserId, OpenCode2Profile? profile, CancellationToken ct)
     {
@@ -424,7 +425,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
 
     /// <summary>
     /// What the owner's server should start with. The tools and the Fleet API skill call back into Fleet, so they load
-    /// only when the server can be told where Fleet is. The built-in skills the owner turned on load either way. The
+    /// only when the server can be told where Fleet is. The owner's built-in skills folder loads either way. The
     /// install is looked up on every request (files only), so a V2 installed while Fleet runs is found.
     /// </summary>
     private async Task<OpenCode2ServerSetup> GetSetupAsync(string ownerUserId, OpenCode2Profile? profile)
@@ -443,8 +444,9 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
                 skills.Add(fleetSkills);
         }
 
-        if (builtInSkills.Count > 0 && InstallOnce(ref _builtInSkillsFolder, OpenCode2FleetFiles.InstallBuiltInSkills) is { } builtIn)
-            skills.AddRange(builtInSkills.Select(name => Path.Combine(builtIn, name)));
+        // Named whatever is in it, so switching a built-in skill changes a folder V2 watches, not the server's setup.
+        if (SyncBuiltInSkills(ownerUserId, builtInSkills) is { } builtIn)
+            skills.Add(builtIn);
 
         var install = _install.Locate();
         return new OpenCode2ServerSetup(
@@ -454,6 +456,36 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             install?.ExecutablePath,
             install?.Mode ?? OpenCode2InstallMode.Default,
             profile);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Writes the owner's built-in skills folder again. Their servers watch it, so the sessions started afterwards get
+    /// the change without a new server; sessions already running keep the skills they started with (V2 fixes a
+    /// session's skill list when it's created).
+    /// </remarks>
+    public async Task BuiltInSkillsChangedAsync(string ownerUserId, CancellationToken ct)
+    {
+        var (builtInSkills, _) = await ReadOwnerSettingsAsync(ownerUserId).ConfigureAwait(false);
+        SyncBuiltInSkills(ownerUserId, builtInSkills);
+    }
+
+    /// <summary>
+    /// Makes the owner's built-in skills folder hold what they turned on and returns it, or <see langword="null"/> when
+    /// it couldn't be written; servers then start without it, and the next request tries again.
+    /// </summary>
+    private string? SyncBuiltInSkills(string ownerUserId, IReadOnlyList<string> builtInSkills)
+    {
+        try
+        {
+            lock (_builtInSkillsSync)
+                return OpenCode2FleetFiles.SyncBuiltInSkills(FleetDataDirectory(), ownerUserId, builtInSkills);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            LogFleetFilesInstallFailed(_logger, ex);
+            return null;
+        }
     }
 
     /// <summary>The built-in skills the owner turned on that this Fleet ships, in name order, and whether messages between sessions are on.</summary>
