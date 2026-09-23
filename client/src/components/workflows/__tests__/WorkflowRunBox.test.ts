@@ -46,7 +46,7 @@ const workflow: Workflow = {
   runsIn: "new-worktree",
   steps: [{
     id: "plan", title: "Plan", kind: "agent", agent: "plan", model: "strong", effort: null, skill: null, optional: false, optionalHint: null,
-    outcomes: ["ready"], routes: {}, maxLoops: null, ask: null, choices: [], finishYou: false, writes: [".weave/plans/{{slug}}.md"],
+    outcomes: ["ready"], routes: {}, maxLoops: null, ask: null, choices: [], finishYou: false, finishAgent: false, writes: [".weave/plans/{{slug}}.md"],
   }],
   errors: [],
 };

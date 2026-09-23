@@ -151,6 +151,8 @@ public sealed class InMemoryWorkflowRunRepository : IWorkflowRunRepository
         WrapUpMessageId = step.WrapUpMessageId,
         HandOffNote = step.HandOffNote,
         FilesChecked = step.FilesChecked,
+        FilesCommit = step.FilesCommit,
+        FilesCommitError = step.FilesCommitError,
         StartedAt = step.StartedAt,
         FinishedAt = step.FinishedAt,
     };

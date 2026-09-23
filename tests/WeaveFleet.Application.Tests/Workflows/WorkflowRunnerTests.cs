@@ -474,14 +474,29 @@ public sealed partial class WorkflowRunnerTests
             => Task.FromResult(Replies.GetValueOrDefault(messageId));
     }
 
-    /// <summary>Every declared file is there unless it's listed in <see cref="Absent"/>.</summary>
+    /// <summary>
+    /// Every declared file is there unless it's listed in <see cref="Absent"/>, and a commit takes them all unless
+    /// <see cref="NextCommit"/> says otherwise.
+    /// </summary>
     private sealed class FakeFiles : IWorkflowFiles
     {
         public HashSet<string> Absent { get; } = new(StringComparer.Ordinal);
+        public List<CommitCall> Commits { get; } = [];
+        public WorkflowFilesCommit? NextCommit { get; set; }
 
         public IReadOnlyList<string> Missing(string? worktree, IReadOnlyList<string> files)
             => files.Where(Absent.Contains).ToList();
+
+        public Task<WorkflowFilesCommit> CommitAsync(string? worktree, IReadOnlyList<string> files, string title, CancellationToken ct)
+        {
+            Commits.Add(new CommitCall(worktree, files, title));
+            var result = NextCommit ?? new WorkflowFilesCommit($"c0ffee{Commits.Count}", files, null);
+            NextCommit = null;
+            return Task.FromResult(result);
+        }
     }
+
+    internal sealed record CommitCall(string? Worktree, IReadOnlyList<string> Files, string Title);
 
     private sealed class FakeRunEvents : IWorkflowRunEvents
     {

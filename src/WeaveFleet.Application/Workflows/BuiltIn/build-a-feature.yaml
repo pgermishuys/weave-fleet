@@ -32,8 +32,12 @@ steps:
     prompt: |
       Plan {{request}}.
       Write .weave/plans/{{slug}}.md: a short design section, then the files to change and the tests to add, in order.
+      Carry every constraint in the request into the plan, such as what not to install, run or change.
       Reuse what the code already has.
       Read {{previous.files}} first.
+      Where the request, the design and the code disagree, choose what changes the least and keep going.
+      List each choice under a "Decisions to confirm" heading near the top of the plan: the user reads the plan before approving it.
+      Ask a question only if you truly can't go on without the answer.
 
       {{previous.summary}}
     outcomes: [ready]
@@ -50,6 +54,7 @@ steps:
     agent: build
     model: standard
     prompt: |
+      The request: {{request}}
       Build {{steps.plan.files}}, including the tests it names.
       Commit after each step and run those tests.
 
@@ -62,6 +67,7 @@ steps:
     model: strong
     skill: fleet-code-review
     prompt: |
+      The request: {{request}}
       Review this branch against {{run.base}} and {{steps.plan.files}}.
       Use changes only for bugs, or for tests the plan named that are missing.
       Put style nits in the summary and use pass.
@@ -77,6 +83,7 @@ steps:
     skill: fleet-run
     optional: For changes you can see
     prompt: |
+      The request: {{request}}
       Start the app, try the change the way a person would, and attach screenshots.
     outcomes: [works, broken]
     on: { broken: implement, max: 2 }
@@ -92,7 +99,9 @@ steps:
     title: Push and open the PR
     agent: build
     model: fast
+    finish: agent
     prompt: |
+      The request: {{request}}
       Push this branch and open a pull request against {{run.base}} with gh pr create.
       Take the title and description from {{steps.plan.files}}, and add what Review found:
 

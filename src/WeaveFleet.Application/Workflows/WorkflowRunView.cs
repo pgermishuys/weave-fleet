@@ -41,9 +41,10 @@ public sealed record WorkflowRunDto
 /// <param name="Role">The role it asked for, when it named one.</param>
 /// <param name="MaxLoops">How many times it may send work back.</param>
 /// <param name="FinishYou">The workflow file says <c>finish: you</c>.</param>
+/// <param name="FinishAgent">The workflow file says <c>finish: agent</c>: Check with me doesn't change it.</param>
 /// <param name="WithYou">
 /// You finish it: for a step that ran, how its last visit started; for one still to come, what it will be as things
-/// stand (<c>finish: you</c>, or Check with me on).
+/// stand (<c>finish: you</c>, or Check with me on for a step whose file doesn't say).
 /// </param>
 public sealed record WorkflowRunStepDto(
     string Id,
@@ -60,6 +61,7 @@ public sealed record WorkflowRunStepDto(
     string? Skill,
     int? MaxLoops,
     bool FinishYou,
+    bool FinishAgent,
     bool WithYou,
     IReadOnlyList<string> Outcomes);
 
@@ -68,6 +70,8 @@ public sealed record WorkflowRunStepDto(
 /// <param name="WithYou">You finish this visit.</param>
 /// <param name="Files">The files the step declares, with the run filled in.</param>
 /// <param name="FilesChecked">They were all there before the next step started.</param>
+/// <param name="FilesCommit">The short SHA of the commit Fleet made of them then; null when there was nothing to commit.</param>
+/// <param name="FilesCommitError">Why Fleet couldn't commit them; the run went on.</param>
 /// <param name="PromptMessageId">The prompt the session started with.</param>
 /// <param name="WrapUpMessageId">The wrap-up prompt Fleet sent when you moved on.</param>
 /// <param name="HandOffNote">Your note for the next step.</param>
@@ -81,6 +85,8 @@ public sealed record WorkflowRunSessionDto(
     bool WithYou,
     IReadOnlyList<string> Files,
     bool FilesChecked,
+    string? FilesCommit,
+    string? FilesCommitError,
     string? PromptMessageId,
     string? WrapUpMessageId,
     string? HandOffNote);
@@ -183,9 +189,10 @@ public static class WorkflowRunView
                 agent?.Skill,
                 agent?.MaxLoops,
                 agent?.FinishYou ?? false,
+                agent?.FinishAgent ?? false,
                 agent is not null && (last?.Finish is { } finish
                     ? finish == WorkflowFinishers.You
-                    : agent.FinishYou || options.CheckWithMe),
+                    : agent.UserFinishes(options.CheckWithMe)),
                 agent?.Outcomes ?? []));
         }
 
@@ -220,6 +227,8 @@ public static class WorkflowRunView
                     v.Finish == WorkflowFinishers.You,
                     state is not null && workflow!.Find(v.StepId) is WorkflowAgentStep step ? WorkflowRunner.FilesOf(state, step) : [],
                     v.FilesChecked,
+                    v.FilesCommit,
+                    v.FilesCommitError,
                     v.PromptMessageId,
                     v.WrapUpMessageId,
                     v.HandOffNote))

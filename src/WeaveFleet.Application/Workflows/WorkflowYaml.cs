@@ -226,16 +226,16 @@ public static partial class WorkflowYaml
             error(badOptional, $"{id}: optional is true, false, or when to switch it on.");
         }
 
-        var finishYou = false;
+        string? finish = null;
         switch (Scalar(map, "finish", error)?.Trim())
         {
-            case null or WorkflowFinishers.Agent:
+            case null:
                 break;
-            case WorkflowFinishers.You:
-                finishYou = true;
+            case (WorkflowFinishers.Agent or WorkflowFinishers.You) and var said:
+                finish = said;
                 break;
             case var other:
-                error(Child(map, "finish"), $"{id}: finish is \"{other}\"; use you (you move the step on) or agent (the default).");
+                error(Child(map, "finish"), $"{id}: finish is \"{other}\"; use you (you move the step on) or agent (the agent does).");
                 break;
         }
 
@@ -331,7 +331,7 @@ public static partial class WorkflowYaml
             outcomes,
             routes,
             max,
-            finishYou,
+            finish,
             writes);
     }
 

@@ -521,10 +521,26 @@ public sealed partial class WorkflowRunner(
             }
 
             visit.FilesChecked = true;
+            await CommitFilesAsync(scope, state, step, visit).ConfigureAwait(false);
             await scope.Runs.UpdateStepAsync(visit).ConfigureAwait(false);
         }
 
         await GoToAsync(scope, state, target, note: null, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Once a step's declared files pass the check, Fleet commits the ones that are new or changed, so they're in the
+    /// pull request; a path git ignores stays out. A failed commit is recorded on the visit and the run goes on.
+    /// </summary>
+    private async Task CommitFilesAsync(Scope scope, RunState state, WorkflowAgentStep step, WorkflowRunStep visit)
+    {
+        var commit = await scope.Files.CommitAsync(state.Run.WorktreePath, FilesOf(state, step), step.Title, CancellationToken.None).ConfigureAwait(false);
+        visit.FilesCommit = commit.Commit;
+        visit.FilesCommitError = commit.Error;
+        if (commit.Error is { } error)
+            LogCommitFailed(state.Run.Id, step.Id, error);
+        else if (commit.Commit is { } sha)
+            LogCommitted(state.Run.Id, step.Id, sha);
     }
 
     private static string MissingFilesMessage(WorkflowAgentStep step, IReadOnlyList<string> missing)
@@ -582,8 +598,9 @@ public sealed partial class WorkflowRunner(
         run.WaitingKind = null;
         visit.Status = WorkflowRunStepStatus.Running;
 
-        // Decided as the step starts and kept for good: switching Check with me later changes the steps after it.
-        var userFinishes = step.FinishYou || state.Options.CheckWithMe;
+        // Decided as the step starts and kept for good: switching Check with me later changes the steps after it. A step
+        // whose file says finish: agent or finish: you is that whatever Check with me says.
+        var userFinishes = step.UserFinishes(state.Options.CheckWithMe);
         visit.Finish = userFinishes ? WorkflowFinishers.You : WorkflowFinishers.Agent;
         await SaveRunAsync(scope, state).ConfigureAwait(false);
         await scope.Runs.UpdateStepAsync(visit).ConfigureAwait(false);
@@ -919,6 +936,7 @@ public sealed partial class WorkflowRunner(
 
                 _watches.TryRemove(sessionId, out _);
                 visit.FilesChecked = true;
+                await CommitFilesAsync(scope, state, step, visit).ConfigureAwait(false);
                 await scope.Runs.UpdateStepAsync(visit).ConfigureAwait(false);
                 await RouteAsync(scope, state, step, visit, checkLoop: false, checkFiles: false, CancellationToken.None).ConfigureAwait(false);
                 return;
@@ -1274,6 +1292,12 @@ public sealed partial class WorkflowRunner(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Workflow run {RunId}: couldn't read the reply to {StepId}'s wrap-up")]
     private partial void LogReplyReadFailed(Exception ex, string runId, string stepId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Workflow run {RunId}: committed {StepId}'s declared files as {Commit}")]
+    private partial void LogCommitted(string runId, string stepId, string commit);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Workflow run {RunId}: couldn't commit {StepId}'s declared files: {Error}")]
+    private partial void LogCommitFailed(string runId, string stepId, string error);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Workflow run {RunId} waits on the user at {StepId}")]
     private partial void LogWaiting(string runId, string stepId);

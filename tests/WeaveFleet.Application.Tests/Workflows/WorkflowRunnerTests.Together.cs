@@ -115,7 +115,8 @@ public sealed partial class WorkflowRunnerTests
         var plan = _sessions.Started.ShouldHaveSingleItem();
         plan.Prompt.Contains("Read ", StringComparison.Ordinal).ShouldBeFalse();
         plan.Prompt.ShouldNotContain("first.");
-        plan.Prompt.ShouldContain("Reuse what the code already has.\n\n" + FleetWorkflows.Footer(["ready"]));
+        plan.Prompt.ShouldContain("Reuse what the code already has.\nWhere the request, the design and the code disagree");
+        plan.Prompt.ShouldContain("can't go on without the answer.\n\n" + FleetWorkflows.Footer(["ready"]));
     }
 
     [Fact]
@@ -337,7 +338,11 @@ public sealed partial class WorkflowRunnerTests
         implement.StepId.ShouldBe("implement");
         implement.UserFinishes.ShouldBeTrue();
         WorkflowRunOptions.Read(_runs.Run(run).Options).CheckWithMe.ShouldBeTrue();
-        _events.Last.Steps.Where(s => s.Kind == "agent" && s.Enabled && s.State == "pending").ShouldAllBe(s => s.WithYou);
+        _events.Last.Steps.Where(s => s.Kind == "agent" && s.Enabled && s.State == "pending" && !s.FinishAgent).ShouldAllBe(s => s.WithYou);
+
+        // Its file says finish: agent, so Check with me doesn't make the push one you finish.
+        var push = _events.Last.Steps.Single(s => s.Id == "open-pr");
+        (push.FinishAgent, push.WithYou).ShouldBe((true, false));
     }
 
     [Fact]

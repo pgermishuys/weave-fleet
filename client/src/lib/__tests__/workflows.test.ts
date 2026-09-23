@@ -34,15 +34,15 @@ function run(overrides: Partial<WorkflowRun> = {}): WorkflowRun {
     updatedAt: "2026-09-23T10:10:00Z",
     endedAt: null,
     steps: [
-      { id: "design", title: "Design", kind: "agent", state: "skipped", visits: 0, optional: true, enabled: false, outcome: null, sessionId: null, model: null, role: "strong", skill: "fleet-mockups", maxLoops: null, finishYou: false, withYou: false, outcomes: [] },
-      { id: "plan", title: "Plan", kind: "agent", state: "done", visits: 2, optional: false, enabled: true, outcome: "ready", sessionId: "s2", model: null, role: "strong", skill: null, maxLoops: null, finishYou: false, withYou: false, outcomes: [] },
-      { id: "ok-plan", title: "Approve the plan", kind: "you", state: "done", visits: 1, optional: false, enabled: true, outcome: "Approve", sessionId: null, model: null, role: null, skill: null, maxLoops: null, finishYou: false, withYou: false, outcomes: [] },
-      { id: "implement", title: "Implement", kind: "agent", state: "running", visits: 1, optional: false, enabled: true, outcome: null, sessionId: "s3", model: null, role: "standard", skill: null, maxLoops: null, finishYou: false, withYou: false, outcomes: [] },
+      { id: "design", title: "Design", kind: "agent", state: "skipped", visits: 0, optional: true, enabled: false, outcome: null, sessionId: null, model: null, role: "strong", skill: "fleet-mockups", maxLoops: null, finishYou: false, finishAgent: false, withYou: false, outcomes: [] },
+      { id: "plan", title: "Plan", kind: "agent", state: "done", visits: 2, optional: false, enabled: true, outcome: "ready", sessionId: "s2", model: null, role: "strong", skill: null, maxLoops: null, finishYou: false, finishAgent: false, withYou: false, outcomes: [] },
+      { id: "ok-plan", title: "Approve the plan", kind: "you", state: "done", visits: 1, optional: false, enabled: true, outcome: "Approve", sessionId: null, model: null, role: null, skill: null, maxLoops: null, finishYou: false, finishAgent: false, withYou: false, outcomes: [] },
+      { id: "implement", title: "Implement", kind: "agent", state: "running", visits: 1, optional: false, enabled: true, outcome: null, sessionId: "s3", model: null, role: "standard", skill: null, maxLoops: null, finishYou: false, finishAgent: false, withYou: false, outcomes: [] },
     ],
     sessions: [
-      { sessionId: "s1", stepId: "plan", visit: 1, outcome: "ready", summary: "v1", note: null, withYou: false, files: [], filesChecked: false, promptMessageId: null, wrapUpMessageId: null, handOffNote: null },
-      { sessionId: "s2", stepId: "plan", visit: 2, outcome: "ready", summary: "v2", note: "Leave the status bar alone.", withYou: false, files: [], filesChecked: false, promptMessageId: null, wrapUpMessageId: null, handOffNote: null },
-      { sessionId: "s3", stepId: "implement", visit: 1, outcome: null, summary: null, note: null, withYou: false, files: [], filesChecked: false, promptMessageId: null, wrapUpMessageId: null, handOffNote: null },
+      { sessionId: "s1", stepId: "plan", visit: 1, outcome: "ready", summary: "v1", note: null, withYou: false, files: [], filesChecked: false, filesCommit: null, filesCommitError: null, promptMessageId: null, wrapUpMessageId: null, handOffNote: null },
+      { sessionId: "s2", stepId: "plan", visit: 2, outcome: "ready", summary: "v2", note: "Leave the status bar alone.", withYou: false, files: [], filesChecked: false, filesCommit: null, filesCommitError: null, promptMessageId: null, wrapUpMessageId: null, handOffNote: null },
+      { sessionId: "s3", stepId: "implement", visit: 1, outcome: null, summary: null, note: null, withYou: false, files: [], filesChecked: false, filesCommit: null, filesCommitError: null, promptMessageId: null, wrapUpMessageId: null, handOffNote: null },
     ],
     waiting: null,
     ...overrides,
@@ -89,9 +89,9 @@ describe("workflows", () => {
   it("lists loops and the skills the enabled steps use", () => {
     const workflow = {
       steps: [
-        { id: "design", title: "Design", kind: "agent", optional: true, skill: "fleet-mockups", routes: {}, maxLoops: null, finishYou: false, withYou: false, outcomes: [] },
-        { id: "implement", title: "Implement", kind: "agent", optional: false, skill: null, routes: {}, maxLoops: null, finishYou: false, withYou: false, outcomes: [] },
-        { id: "review", title: "Review", kind: "agent", optional: false, skill: "fleet-code-review", routes: { changes: "implement" }, maxLoops: 2, finishYou: false, withYou: false, outcomes: [] },
+        { id: "design", title: "Design", kind: "agent", optional: true, skill: "fleet-mockups", routes: {}, maxLoops: null, finishYou: false, finishAgent: false, withYou: false, outcomes: [] },
+        { id: "implement", title: "Implement", kind: "agent", optional: false, skill: null, routes: {}, maxLoops: null, finishYou: false, finishAgent: false, withYou: false, outcomes: [] },
+        { id: "review", title: "Review", kind: "agent", optional: false, skill: "fleet-code-review", routes: { changes: "implement" }, maxLoops: 2, finishYou: false, finishAgent: false, withYou: false, outcomes: [] },
       ],
     } as unknown as Workflow;
 
@@ -128,7 +128,7 @@ describe("workflows", () => {
     const current = run({
       sessions: [{
         sessionId: "s3", stepId: "implement", visit: 1, outcome: null, summary: null, note: null, withYou: true,
-        files: [], filesChecked: false, promptMessageId: "msg_first", wrapUpMessageId: "msg_wrap", handOffNote: null,
+        files: [], filesChecked: false, filesCommit: null, filesCommitError: null, promptMessageId: "msg_first", wrapUpMessageId: "msg_wrap", handOffNote: null,
       }],
     });
     expect(workflowMessageLabel(current, "s3", "msg_first", "Build the plan.")).toBe("Workflow · step 3 of 3 · you finish this step");
@@ -146,5 +146,10 @@ describe("workflows", () => {
     const design = run({ checkWithMe: false });
     design.steps = design.steps.map((s) => (s.id === "implement" ? { ...s, finishYou: true, withYou: true } : s));
     expect(checkWithMeNote(design)).toBeNull();
+
+    // The push says finish: agent, so it runs on its own with Check with me on, and that's not news.
+    const push = run({ checkWithMe: true });
+    push.steps = push.steps.map((s) => (s.id === "implement" ? { ...s, finishAgent: true, withYou: false } : s));
+    expect(checkWithMeNote(push)).toBeNull();
   });
 });

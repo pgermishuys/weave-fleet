@@ -64,11 +64,11 @@ function waitingRun(): WorkflowRun {
     updatedAt: "2026-09-23T10:05:00Z",
     endedAt: null,
     steps: [
-      { id: "plan", title: "Plan", kind: "agent", state: "done", visits: 1, optional: false, enabled: true, outcome: "ready", sessionId: "s1", model: null, role: "strong", skill: null, maxLoops: null, finishYou: false, withYou: false, outcomes: [] },
-      { id: "ok-plan", title: "Approve the plan", kind: "you", state: "waiting", visits: 1, optional: false, enabled: true, outcome: null, sessionId: null, model: null, role: null, skill: null, maxLoops: null, finishYou: false, withYou: false, outcomes: [] },
-      { id: "implement", title: "Implement", kind: "agent", state: "pending", visits: 0, optional: false, enabled: true, outcome: null, sessionId: null, model: null, role: "standard", skill: null, maxLoops: null, finishYou: false, withYou: false, outcomes: [] },
+      { id: "plan", title: "Plan", kind: "agent", state: "done", visits: 1, optional: false, enabled: true, outcome: "ready", sessionId: "s1", model: null, role: "strong", skill: null, maxLoops: null, finishYou: false, finishAgent: false, withYou: false, outcomes: [] },
+      { id: "ok-plan", title: "Approve the plan", kind: "you", state: "waiting", visits: 1, optional: false, enabled: true, outcome: null, sessionId: null, model: null, role: null, skill: null, maxLoops: null, finishYou: false, finishAgent: false, withYou: false, outcomes: [] },
+      { id: "implement", title: "Implement", kind: "agent", state: "pending", visits: 0, optional: false, enabled: true, outcome: null, sessionId: null, model: null, role: "standard", skill: null, maxLoops: null, finishYou: false, finishAgent: false, withYou: false, outcomes: [] },
     ],
-    sessions: [{ sessionId: "s1", stepId: "plan", visit: 1, outcome: "ready", summary: "Plan.", note: null, withYou: false, files: [], filesChecked: false, promptMessageId: null, wrapUpMessageId: null, handOffNote: null }],
+    sessions: [{ sessionId: "s1", stepId: "plan", visit: 1, outcome: "ready", summary: "Plan.", note: null, withYou: false, files: [], filesChecked: false, filesCommit: null, filesCommitError: null, promptMessageId: null, wrapUpMessageId: null, handOffNote: null }],
     waiting: {
       kind: "you",
       stepId: "ok-plan",
@@ -213,6 +213,39 @@ describe("WorkflowRunCard", () => {
 
     expect(wrapper.get('[data-testid="workflow-card-files-checked"]').text()).toBe("Files checked: sheet.md");
     expect(wrapper.text()).toContain("Design finished: ready.");
+  });
+
+  it("says Fleet committed the files it checked", () => {
+    useWorkflowsStore().upsert(buildRun({
+      id: "run-committed",
+      currentStepId: "plan",
+      withYou: null,
+      sessions: [
+        runSession({ sessionId: "s1", stepId: "design", outcome: "ready", files: ["docs/design/sheet.md", "docs/design/sheet.html"], filesChecked: true, filesCommit: "a1b2c3d" }),
+        runSession({ sessionId: "s2", stepId: "plan" }),
+      ],
+    }));
+    const wrapper = mount(WorkflowRunCard, { props: { sessionId: "s1" } });
+
+    expect(wrapper.get('[data-testid="workflow-card-files-checked"]').text()).toBe("Files checked and committed as a1b2c3d: sheet.md and sheet.html");
+    expect(wrapper.find('[data-testid="workflow-card-commit-failed"]').exists()).toBe(false);
+  });
+
+  it("says why Fleet couldn't commit the files, and the run still moved on", () => {
+    useWorkflowsStore().upsert(buildRun({
+      id: "run-not-committed",
+      currentStepId: "plan",
+      withYou: null,
+      sessions: [
+        runSession({ sessionId: "s1", stepId: "design", outcome: "ready", files: ["docs/design/sheet.md"], filesChecked: true, filesCommitError: "no email was given and auto-detection is disabled" }),
+        runSession({ sessionId: "s2", stepId: "plan" }),
+      ],
+    }));
+    const wrapper = mount(WorkflowRunCard, { props: { sessionId: "s1" } });
+
+    expect(wrapper.get('[data-testid="workflow-card-files-checked"]').text()).toBe("Files checked: sheet.md");
+    expect(wrapper.get('[data-testid="workflow-card-commit-failed"]').text()).toBe("Fleet couldn't commit it: no email was given and auto-detection is disabled");
+    expect(wrapper.text()).toContain("Plan");
   });
 
   it("shows nothing in a session the run isn't waiting in", () => {

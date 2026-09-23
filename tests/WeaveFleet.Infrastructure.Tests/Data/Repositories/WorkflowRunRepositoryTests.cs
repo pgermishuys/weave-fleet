@@ -87,17 +87,20 @@ public sealed class WorkflowRunRepositoryTests
         step.WrapUpMessageId = "msg_2";
         step.HandOffNote = "Keep the status-bar shortcuts.";
         step.FilesChecked = true;
+        step.FilesCommit = "a1b2c3d";
+        step.FilesCommitError = "no email was given and auto-detection is disabled";
         await repo.UpdateStepAsync(step);
 
         (await repo.GetAsync("run-1")).ShouldNotBeNull().WaitingKind.ShouldBe("missing-files");
         var visit = (await repo.ListStepsAsync("run-1")).ShouldHaveSingleItem();
         (visit.Status, visit.Finish, visit.PromptMessageId, visit.WrapUpMessageId, visit.HandOffNote, visit.FilesChecked)
             .ShouldBe((WorkflowRunStepStatus.WrappingUp, WorkflowFinishers.You, "msg_1", "msg_2", "Keep the status-bar shortcuts.", true));
+        (visit.FilesCommit, visit.FilesCommitError).ShouldBe(("a1b2c3d", "no email was given and auto-detection is disabled"));
 
         // A visit from before this change reads as one the agent finishes, with its files not checked.
         await repo.InsertStepAsync(new WorkflowRunStep { Id = "v0", RunId = "run-1", StepId = "plan", Status = "done", StartedAt = "2026-09-23T09:00:00.0000000Z" });
         var old = (await repo.ListStepsAsync("run-1"))[0];
-        (old.Finish, old.FilesChecked).ShouldBe(((string?)null, false));
+        (old.Finish, old.FilesChecked, old.FilesCommit, old.FilesCommitError).ShouldBe(((string?)null, false, (string?)null, (string?)null));
     }
 
     [Fact]

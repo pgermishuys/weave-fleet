@@ -47,6 +47,22 @@ describe("WorkflowStepper", () => {
     expect(marked[0].element.closest("button")?.textContent).toContain("Implement");
   });
 
+  it("doesn't mark a step whose file says finish: agent, with Check with me on", () => {
+    useWorkflowsStore().upsert(implementRun({
+      checkWithMe: true,
+      steps: [
+        runStep({ id: "implement", title: "Implement", state: "running", visits: 1, sessionId: "s3", withYou: true }),
+        runStep({ id: "review", title: "Review", withYou: true }),
+        runStep({ id: "open-pr", title: "Push and open the PR", finishAgent: true, withYou: false }),
+      ],
+    }));
+    const wrapper = mount(WorkflowStepper, { props: { sessionId: "s3" } });
+
+    const marked = wrapper.findAll('[data-testid="workflow-step-with-you"]').map((m) => m.element.closest("button")?.textContent ?? "");
+    expect(marked).toHaveLength(2);
+    expect(marked.some((text) => text.includes("Push and open the PR"))).toBe(false);
+  });
+
   it("switches Check with me from the header", async () => {
     useWorkflowsStore().upsert(implementRun());
     apiFetchMock.mockImplementation(() => respond(implementRun({ checkWithMe: true, updatedAt: "2026-09-23T10:06:00Z" })));

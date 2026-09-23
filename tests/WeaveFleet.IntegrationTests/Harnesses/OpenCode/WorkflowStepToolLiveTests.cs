@@ -118,6 +118,11 @@ public sealed class WorkflowStepToolLiveTests
             var visit = (await Repository(services, r => r.ListStepsAsync(RunId))).Single(v => v.StepId == "talk");
             (visit.Status, visit.Outcome, visit.Summary, visit.FilesChecked)
                 .ShouldBe((WorkflowRunStepStatus.Done, "ready", "Summary for Approve: notes.md has the idea.", true));
+
+            // Past the files check, Fleet committed the declared file.
+            (visit.FilesCommit, visit.FilesCommitError).ShouldBe((WorkflowLiveGit.Run(workspace, "rev-parse", "--short", "HEAD").Trim(), null));
+            WorkflowLiveGit.Run(workspace, "log", "-1", "--format=%s").Trim().ShouldBe("docs: talk (notes.md)");
+            WorkflowLiveGit.Run(workspace, "status", "--porcelain", "--", "notes.md").ShouldBeEmpty();
             var wrapUp = Turns(llm).Select(UserTexts).Select(texts => texts.LastOrDefault()).First(t => t?.StartsWith(WrapUpStart, StringComparison.Ordinal) == true);
             wrapUp.ShouldBe("The user is moving on to Approve. Update notes.md with everything agreed in this conversation, then reply with a short summary for Approve.\n\nTheir note: Keep it short.");
             OfferedToolNames(Turns(llm).Where(t => UserTexts(t).LastOrDefault() == wrapUp)).ShouldNotContain(FleetWorkflows.StepTool);
@@ -222,6 +227,10 @@ public sealed class WorkflowStepToolLiveTests
         var dbPath = Path.Combine(root, "fleet", "fleet.db");
         Directory.CreateDirectory(workspace);
         Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
+
+        // A run's worktree is a git repository; the files check commits what a step declares.
+        if (together)
+            WorkflowLiveGit.Init(workspace);
 
         await using var llm = await FakeLlmServerFixture.StartAsync();
         var plugin = Path.Combine(root, "no-op.ts");

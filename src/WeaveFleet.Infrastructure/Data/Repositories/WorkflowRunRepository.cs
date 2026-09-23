@@ -91,10 +91,10 @@ public sealed class WorkflowRunRepository(IDbConnectionFactory connectionFactory
             """
             INSERT INTO workflow_run_steps (
                 id, run_id, step_id, visit, session_id, status, outcome, summary, note, finish, prompt_message_id,
-                wrap_up_message_id, hand_off_note, files_checked, started_at, finished_at
+                wrap_up_message_id, hand_off_note, files_checked, files_commit, files_commit_error, started_at, finished_at
             ) VALUES (
                 @Id, @RunId, @StepId, @Visit, @SessionId, @Status, @Outcome, @Summary, @Note, @Finish, @PromptMessageId,
-                @WrapUpMessageId, @HandOffNote, @FilesChecked, @StartedAt, @FinishedAt
+                @WrapUpMessageId, @HandOffNote, @FilesChecked, @FilesCommit, @FilesCommitError, @StartedAt, @FinishedAt
             )
             """,
             cmd => AddStepParameters(cmd, visit));
@@ -108,7 +108,8 @@ public sealed class WorkflowRunRepository(IDbConnectionFactory connectionFactory
             UPDATE workflow_run_steps SET
                 session_id = @SessionId, status = @Status, outcome = @Outcome, summary = @Summary, note = @Note,
                 finish = @Finish, prompt_message_id = @PromptMessageId, wrap_up_message_id = @WrapUpMessageId,
-                hand_off_note = @HandOffNote, files_checked = @FilesChecked, finished_at = @FinishedAt
+                hand_off_note = @HandOffNote, files_checked = @FilesChecked, files_commit = @FilesCommit,
+                files_commit_error = @FilesCommitError, finished_at = @FinishedAt
             WHERE id = @Id
             """,
             cmd => AddStepParameters(cmd, visit));
@@ -175,6 +176,8 @@ public sealed class WorkflowRunRepository(IDbConnectionFactory connectionFactory
         cmd.AddParameter("WrapUpMessageId", step.WrapUpMessageId);
         cmd.AddParameter("HandOffNote", step.HandOffNote);
         cmd.AddParameter("FilesChecked", step.FilesChecked ? 1 : 0);
+        cmd.AddParameter("FilesCommit", step.FilesCommit);
+        cmd.AddParameter("FilesCommitError", step.FilesCommitError);
         cmd.AddParameter("StartedAt", step.StartedAt);
         cmd.AddParameter("FinishedAt", step.FinishedAt);
     }
@@ -222,6 +225,8 @@ public sealed class WorkflowRunRepository(IDbConnectionFactory connectionFactory
         WrapUpMessageId = r.GetNullableString(r.GetOrdinal("wrap_up_message_id")),
         HandOffNote = r.GetNullableString(r.GetOrdinal("hand_off_note")),
         FilesChecked = r.GetInt64(r.GetOrdinal("files_checked")) != 0,
+        FilesCommit = r.GetNullableString(r.GetOrdinal("files_commit")),
+        FilesCommitError = r.GetNullableString(r.GetOrdinal("files_commit_error")),
         StartedAt = r.GetString(r.GetOrdinal("started_at")),
         FinishedAt = r.GetNullableString(r.GetOrdinal("finished_at")),
     };

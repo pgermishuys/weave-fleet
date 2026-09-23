@@ -6,9 +6,9 @@ const opened = new Set<string>();
 <script setup lang="ts">
 import { computed, nextTick, shallowRef, useTemplateRef, watch } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import { ArrowRight, Check, CornerUpLeft, FileCheck2, LoaderCircle, Play, RotateCcw, Send, UserRound } from "lucide-vue-next";
+import { ArrowRight, Check, CornerUpLeft, FileCheck2, LoaderCircle, Play, RotateCcw, Send, TriangleAlert, UserRound } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
-import { fileName, listFiles, MOVE_ON_ANYWAY, type WorkflowRunChoice } from "@/lib/workflows";
+import { fileName, listFiles, MOVE_ON_ANYWAY, type WorkflowRunChoice, type WorkflowRunSession } from "@/lib/workflows";
 import { useCanvasesStore } from "@/stores/canvases";
 import { useSidebarStore } from "@/stores/sidebar";
 import { useWorkflowsStore } from "@/stores/workflows";
@@ -129,20 +129,21 @@ const movedOn = computed(() => {
   const later = current.sessions.at(-1);
   const title = current.steps.find((s) => s.id === mine.stepId)?.title ?? mine.stepId;
   if (later && later.sessionId !== props.sessionId) {
-    return { text: `${title} finished: ${mine.outcome}.`, next: stepTitle(later.stepId), sessionId: later.sessionId, files: checkedFiles(mine) };
+    return { text: `${title} finished: ${mine.outcome}.`, next: stepTitle(later.stepId), sessionId: later.sessionId, ...checkedFiles(mine) };
   }
   if (current.status === "done" || current.status === "ended") {
-    return { text: `${title} finished: ${mine.outcome}. ${current.result ?? "The run is done."}`, next: null, sessionId: null, files: checkedFiles(mine) };
+    return { text: `${title} finished: ${mine.outcome}. ${current.result ?? "The run is done."}`, next: null, sessionId: null, ...checkedFiles(mine) };
   }
   if (current.status === "waiting" && current.waiting?.sessionId) {
-    return { text: `${title} finished: ${mine.outcome}.`, next: current.waiting.stepTitle, sessionId: current.waiting.sessionId, files: checkedFiles(mine) };
+    return { text: `${title} finished: ${mine.outcome}.`, next: current.waiting.stepTitle, sessionId: current.waiting.sessionId, ...checkedFiles(mine) };
   }
   return null;
 });
 
-/** The files Fleet found before the next step started. */
-function checkedFiles(visit: { files?: string[]; filesChecked?: boolean }): string[] {
-  return visit.filesChecked ? visit.files ?? [] : [];
+/** The files Fleet found before the next step started, and what came of committing them. */
+function checkedFiles(visit: WorkflowRunSession): { files: string[]; commit: string | null; commitError: string | null } {
+  if (!visit.filesChecked) return { files: [], commit: null, commitError: null };
+  return { files: visit.files ?? [], commit: visit.filesCommit ?? null, commitError: visit.filesCommitError ?? null };
 }
 
 function openSession(sessionId: string): void {
@@ -320,7 +321,16 @@ function openSession(sessionId: string): void {
       data-testid="workflow-card-files-checked"
     >
       <FileCheck2 aria-hidden="true" />
-      Files checked: {{ listFiles(movedOn.files.map(fileName)) }}
+      {{ movedOn.commit ? `Files checked and committed as ${movedOn.commit}` : "Files checked" }}: {{ listFiles(movedOn.files.map(fileName)) }}
+    </span>
+    <span
+      v-if="movedOn.files.length && movedOn.commitError"
+      class="wf-card__commit-error"
+      data-testid="workflow-card-commit-failed"
+      :title="movedOn.commitError"
+    >
+      <TriangleAlert aria-hidden="true" />
+      Fleet couldn't commit {{ movedOn.files.length === 1 ? "it" : "them" }}: {{ movedOn.commitError }}
     </span>
     <button
       v-if="movedOn.sessionId"
@@ -464,6 +474,21 @@ function openSession(sessionId: string): void {
   width: 12px;
   height: 12px;
   color: var(--running);
+}
+
+.wf-card__commit-error {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+}
+
+.wf-card__commit-error svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  color: var(--idle);
 }
 
 .wf-card__end {

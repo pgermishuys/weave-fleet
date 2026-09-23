@@ -30,6 +30,7 @@ steps:
     model: github-copilot/gpt-5.4-mini
     effort: low
     prompt: |
+      The request: {{request}}
       Run the test suites and fix what the bump broke.
 
       {{previous.summary}}
@@ -47,7 +48,10 @@ steps:
   - id: pr
     title: Open the PR
     model: fast
-    prompt: Push this branch and open a pull request with gh pr create. Put its URL in summary.
+    finish: agent
+    prompt: |
+      The request: {{request}}
+      Push this branch and open a pull request with gh pr create. Put its URL in summary.
     outcomes: [opened]
 ```
 
@@ -73,8 +77,8 @@ steps:
 | `effort`   | The model's reasoning effort (its variant), e.g. `low` or `high`.                                           |
 | `skill`    | A skill the step should use. Fleet adds "Use the \<skill\> skill." to the prompt. A built-in skill has to be on in Settings → Skills. |
 | `optional` | `true`, or a hint for when to switch it on (`For UI and new features`). Off unless switched on in the Run box. |
-| `finish`   | `agent` (the default): the agent ends the step with `fleet_step_done`. `you`: you work through the step together and only you end it. See [Steps you finish](#steps-you-finish). |
-| `writes`   | The files the step writes, relative to the run's worktree, e.g. `docs/design/{{slug}}.md`. Fleet checks they exist before the next step starts. See [Declared files](#declared-files). |
+| `finish`   | `you`: you work through the step together and only you end it. `agent`: the agent always ends it with `fleet_step_done`, even with Check with me on. Left out, the agent ends it unless Check with me is on. See [Steps you finish](#steps-you-finish). |
+| `writes`   | The files the step writes, relative to the run's worktree, e.g. `docs/design/{{slug}}.md`. Fleet checks they exist before the next step starts, then commits them. See [Declared files](#declared-files). |
 | `prompt`   | Required. What the agent should do. See [Variables](#variables).                                          |
 | `outcomes` | Required. The words the agent can finish with, e.g. `[pass, changes]`.                                      |
 | `on`       | Where an outcome leads: a step's id or `end`, plus `max` for loops. Outcomes not listed go to the next step. |
@@ -107,7 +111,13 @@ notification you already have (Settings → Features) tells you.
 | `{{run.branch}}`           | The run's branch.                                                               |
 | `{{run.base}}`             | The branch the run's worktree started from.                                     |
 
-Anything else is an error. A line whose variables are all empty is left out, with the blank lines that leaves: with
+Anything else is an error.
+
+**Put `{{request}}` in every agent step's prompt.** Each step is a new session, and it knows only what its own prompt
+says. A request such as "don't install packages or run the test suite" reaches a step only if its prompt has the
+request in it, so Build a feature starts every later step with `The request: {{request}}`.
+
+A line whose variables are all empty is left out, with the blank lines that leaves: with
 Design off, `Read {{previous.files}} first.` isn't in Plan's prompt at all. A line with no variables is always kept,
 and a line where only some of its variables are empty keeps the rest.
 
@@ -172,6 +182,10 @@ A run can make every agent step one you finish: switch on **Check with me after 
 applies from the next step: the step that's running finishes the way it started, so its agent is never given or denied
 the step tool in the middle of a turn.
 
+Check with me applies only to steps whose file doesn't say `finish:`. A step with `finish: agent` always ends with
+`fleet_step_done`, so a step that just carries out what you already chose, such as Build a feature's **Push and open
+the PR** after you pick **Open PR**, doesn't ask you twice. A step with `finish: you` is always yours.
+
 ## Declared files
 
 A design or a plan lives in files, not in a summary. A step says which files it writes:
@@ -191,8 +205,16 @@ exists, for every step that declares any, whoever finishes it. If one is missing
 to the agent in its session (when that reply's turn ends, Fleet looks again and goes on if the files are there now), or
 press **Move on anyway**.
 
-What's committed goes in the pull request. A workflow that shouldn't ship its design docs can write them to a path git
-ignores.
+Once the files pass the check, Fleet commits the ones that are new or changed, and only those: `git add` and
+`git commit` with those paths, as `docs: design (x.md, x.html)`, with the repository's own git identity and hooks.
+Anything else the agent changed or staged stays as it was. If the agent already committed them, there's nothing to
+commit and Fleet doesn't. Fleet never force-adds, so a path git ignores stays uncommitted: a workflow that shouldn't
+ship its design docs can write them to an ignored path. Move on anyway skips the check, and so the commit.
+
+If the commit fails (no git identity, a hook that refuses it), the run still goes on. The card in the step's session
+says the files were checked and why Fleet couldn't commit them; when it worked, it says what they were committed as.
+
+What's committed goes in the pull request.
 
 When the run stops at a You decide step, the files the step before it declares open next to the card: Approve the plan
 shows the plan.
