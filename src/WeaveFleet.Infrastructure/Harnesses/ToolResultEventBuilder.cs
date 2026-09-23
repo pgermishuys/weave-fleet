@@ -4,7 +4,9 @@ using System.Text.Json.Serialization;
 namespace WeaveFleet.Infrastructure.Harnesses;
 
 /// <summary>
-/// Builds tool-result event payloads for test harnesses.
+/// Builds Fleet's record of what a tool returned, a <c>message.part.updated</c> the harnesses add beside the tool part
+/// so the session's stored history keeps its tool output. The record is stored but not sent to clients, who get the
+/// result on the tool part.
 /// </summary>
 internal static class ToolResultEventBuilder
 {

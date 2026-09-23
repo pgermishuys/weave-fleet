@@ -320,6 +320,63 @@ public sealed class InProcessFanOutServiceTests
     }
 
     [Fact]
+    public async Task tool_result_records_are_kept_from_clients_and_the_tool_part_still_goes_out()
+    {
+        var channels = new InProcessChannels();
+        var broadcaster = new FakeEventBroadcaster();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await using var serviceProvider = new ServiceCollection().BuildServiceProvider();
+        var service = new InProcessFanOutService(
+            channels,
+            broadcaster,
+            new PipelineLatencyMetrics(),
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<InProcessFanOutService>.Instance);
+
+        InProcessEnvelope PartUpdated(object payload, long key) => new(
+            @event: new HarnessEvent
+            {
+                Type = EventTypes.MessagePartUpdated,
+                SessionId = "oc-tools",
+                Timestamp = DateTimeOffset.UtcNow,
+                Payload = JsonSerializer.SerializeToElement(payload),
+            },
+            messageId: $"sess-tools:{key}",
+            tenant: "tenant.default",
+            projectId: "proj-1",
+            sessionId: "sess-tools",
+            eventType: EventTypes.MessagePartUpdated,
+            userId: "user-1",
+            harnessType: "opencode",
+            internalPumpDedupKey: key,
+            isDurable: true);
+
+        await service.StartAsync(cts.Token);
+        try
+        {
+            // What a harness sends when a bash call finishes: Fleet's record of the result, then the tool part.
+            channels.FanOut.Writer.TryWrite(PartUpdated(
+                new { part = new { type = "tool-result", id = "", messageId = "msg_1", sessionId = "sess-tools", callId = "call_1", content = "done\n", isError = false } },
+                1)).ShouldBeTrue();
+            channels.FanOut.Writer.TryWrite(PartUpdated(
+                new { part = new { type = "tool", id = "prt_1", messageID = "msg_1", sessionID = "oc-tools", callID = "call_1", tool = "bash", state = new { status = "completed", output = "done\n" } } },
+                2)).ShouldBeTrue();
+
+            await WaitForBroadcastsAsync(broadcaster, expectedCount: 1, cts.Token);
+            // Give a wrongly forwarded record the time to arrive after it.
+            await Task.Delay(100, cts.Token);
+
+            var broadcast = broadcaster.Broadcasts.ShouldHaveSingleItem();
+            broadcast.Payload.GetProperty("part").GetProperty("type").GetString().ShouldBe("tool");
+        }
+        finally
+        {
+            await cts.CancelAsync();
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
     public async Task turn_failed_is_broadcast_in_fleet_shape_not_the_harness_error()
     {
         var channels = new InProcessChannels();
