@@ -4,7 +4,7 @@ using WeaveFleet.Application.Services;
 namespace WeaveFleet.Application.Workflows;
 
 /// <summary>
-/// The <see cref="Workflows.StepTool"/> tool, for calls from a harness process. Only the session Fleet started for a
+/// The <see cref="FleetWorkflows.StepTool"/> tool, for calls from a harness process. Only the session Fleet started for a
 /// step can finish it: not a subagent it delegated to (whose calls the resolver finds through its parent), and not any
 /// other session that happens to see the tool.
 /// </summary>
@@ -38,7 +38,7 @@ public sealed class WorkflowStepBridge(
         {
             // Checked on every call: a process started while it was on keeps the tool until it's recycled.
             if (!await feature.IsEnabledAsync().ConfigureAwait(false))
-                return CanvasResult.Fail<CanvasToolOutput>(CanvasErrorKind.Refused, Workflows.TurnedOffMessage);
+                return CanvasResult.Fail<CanvasToolOutput>(CanvasErrorKind.Refused, FleetWorkflows.TurnedOffMessage);
 
             var done = await runner.StepDoneAsync(caller.UserId, caller.FleetSessionId, outcome, summary, ct).ConfigureAwait(false);
             return done.Accepted

@@ -9,7 +9,7 @@ namespace WeaveFleet.Application.Workflows;
 /// Workflows: Fleet runs a short list of steps, one session per agent step, and moves between them when a step's
 /// agent calls <see cref="StepTool"/>. Experimental, and off unless turned on.
 /// </summary>
-public static class Workflows
+public static class FleetWorkflows
 {
     /// <summary>The user preference that turns it on or off; when unset, <see cref="HarnessOptions.Workflows"/> decides.</summary>
     public const string PreferenceKey = "Workflows";
@@ -36,7 +36,7 @@ public sealed class WorkflowsFeature(FleetOptions options, IUserPreferenceReposi
 {
     public async Task<bool> IsEnabledAsync()
     {
-        var value = await preferences.GetAsync(Workflows.PreferenceKey).ConfigureAwait(false);
+        var value = await preferences.GetAsync(FleetWorkflows.PreferenceKey).ConfigureAwait(false);
         return string.IsNullOrWhiteSpace(value)
             ? options.Harness.Workflows
             : string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);

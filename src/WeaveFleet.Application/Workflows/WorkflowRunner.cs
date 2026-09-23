@@ -34,7 +34,7 @@ public interface IWorkflowRunEvents
 public sealed record WorkflowStepDoneResult(bool Accepted, string Message);
 
 /// <summary>
-/// Moves workflow runs from step to step. A step ends when its session calls <see cref="Workflows.StepTool"/>; the
+/// Moves workflow runs from step to step. A step ends when its session calls <see cref="FleetWorkflows.StepTool"/>; the
 /// outcome picks the next step. Fleet never advances on idle alone: a step whose turn ends without the tool waits on
 /// the user, and so does a You step and a loop past its maximum. Fleet never prompts an agent on its own.
 /// </summary>
@@ -129,7 +129,7 @@ public sealed partial class WorkflowRunner(
         if (string.IsNullOrEmpty(outcome) || !step.Outcomes.Contains(outcome))
         {
             return new WorkflowStepDoneResult(false,
-                $"\"{outcome}\" isn't an outcome of this step. Call {Workflows.StepTool} again with outcome set to one of: {string.Join(", ", step.Outcomes)}.");
+                $"\"{outcome}\" isn't an outcome of this step. Call {FleetWorkflows.StepTool} again with outcome set to one of: {string.Join(", ", step.Outcomes)}.");
         }
 
         visit.Status = WorkflowRunStepStatus.Done;
@@ -411,7 +411,7 @@ public sealed partial class WorkflowRunner(
             parts.Add($"Sent back with a note:\n{note}");
         if (step.Skill is { } skill)
             parts.Add($"Use the {skill} skill.");
-        parts.Add(Workflows.Footer(step.Outcomes));
+        parts.Add(FleetWorkflows.Footer(step.Outcomes));
         return string.Join("\n\n", parts);
     }
 

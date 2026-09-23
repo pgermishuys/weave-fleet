@@ -18,7 +18,7 @@ public static class WorkflowEndpoints
             .AddEndpointFilter(async (context, next) =>
                 await context.HttpContext.RequestServices.GetRequiredService<WorkflowsFeature>().IsEnabledAsync()
                     ? await next(context)
-                    : Results.NotFound(new ApiErrorResponse(Workflows.TurnedOffMessage)));
+                    : Results.NotFound(new ApiErrorResponse(FleetWorkflows.TurnedOffMessage)));
 
         // GET /api/workflows?directory=/path/to/repo — the built-ins, then the repo's .weave/workflows/*.yaml.
         group.MapGet("/", async (string? directory, WorkflowService workflows, CancellationToken ct)
