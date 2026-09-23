@@ -224,11 +224,158 @@ Fleet-side push or GitHub API call in Stage 1.
   Review `pass` → Open PR; Send back with a note; a step idle without the tool lands under Needs you; a restart
   mid-run.
 
+## Follow-up: steps you finish together (Stage 1.5)
+
+Mockup and decisions: https://claude.ai/artifact/Kr9fR1UTPW8iTT3XmS9gMw (Design together, Approve the plan, Implement
+with you, Review with you). Decided with the user on 2026-09-23: only the user finishes a together step; the hand-off
+is the step's declared files, brought up to date by one wrap-up turn, plus its summary and the user's note; Check with
+me can be set in the Run box, on the approval card and in the run's header, and a change applies from the next step.
+
+### 1. The file: `finish: you` and `writes:`
+
+- Agent steps take `finish: you` (`agent` is the default; any other value is an error naming the line). Such a step
+  still lists its `outcomes`; the user picks one when they move on, and `on`/`max` work as before.
+- Agent steps take `writes:`, a list of paths relative to the run's worktree, with the prompt variables that are known
+  when a run starts (`{{slug}}`, `{{run.branch}}`, `{{run.base}}`, `{{request}}` is refused: it isn't a path). An
+  absolute path, `..`, or an unknown variable is an error with its line.
+- New variables: `{{previous.files}}` (the previous agent step's declared files, "a.md and b.html") and
+  `{{steps.<id>.files}}`. A step's files count once it has run.
+- A line whose variables are all empty is left out (Stage 1 dropped the variable and the blank lines it left; a line
+  such as "Read {{previous.files}} first." would otherwise stay half-empty). Documented in `docs/workflows.md`.
+- Built-in: Design gets `finish: you`, `writes: [docs/design/{{slug}}.md, docs/design/{{slug}}.html]` and a prompt
+  that names both. Plan gets `writes: [.weave/plans/{{slug}}.md]` and "Read {{previous.files}} first." plus
+  `{{previous.summary}}`. Implement and Review read `{{steps.plan.files}}` rather than a hard-coded path.
+
+### 2. Running a step you finish
+
+- Which steps: when a visit **starts**, it's one the user finishes if the step says `finish: you` or the run's
+  **Check with me** is on at that moment. The mode is saved on the visit (`workflow_run_steps.finish`), so switching
+  Check with me later never changes a step that's running.
+- Its session is made like any non-step session for tool purposes: `sessions.workflow_user_finishes = 1`, and the
+  orchestrator passes `WorkflowStep = WorkflowRunId is not null && !WorkflowUserFinishes` on spawn and resume. So on
+  OpenCode 1 it's created with the deny rule and every prompt carries `tools: {fleet_step_done: false}`; on OpenCode 2
+  it's created AllowAll + deny. The session keeps `workflow_run_id`, so it still groups under its run.
+- Its prompt is the step's prompt, the note, and the skill line, with **no footer**. A `fleet_step_done` from it is
+  refused ("You and the user are working through this step together, and only the user can end it.").
+- No idle watch: a turn ending is just a conversation turn. The run is `running`; the DTO says the current step is
+  **With you** (the run row, the step row and the stepper show that). It is not Needs you and doesn't notify.
+- A restart while a step you finish is open leaves it open (its turn stopped, but it's a conversation; the user
+  replies). Only a cut-off wrap-up waits (below).
+
+### 3. Move on and the wrap-up turn
+
+- `POST /api/workflows/runs/{id}/move-on {outcome?, note?}`. Refused unless the current visit is a running step the
+  user finishes; the outcome must be one of the step's (a single-outcome step needs none); a back outcome past the
+  step's `max` is refused ("Review has sent the work back twice, the most it may in this run.").
+- Fleet sends one prompt into the same session, and nothing else ever:
+  "The user is moving on to Plan. Update docs/design/x.md and docs/design/x.html with everything agreed in this
+  conversation, then reply with a short summary for Plan." With more than one outcome: "The user chose changes and is
+  moving on to Implement. …". No declared files: "… Reply with a short summary for Implement." A note adds a line
+  "Their note: …". The next step's name skips optional steps that are off.
+- The visit goes to `wrapping-up` with the chosen outcome, the note (`hand_off_note`) and the prompt's message id
+  (`wrap_up_message_id`, from `PromptSessionWithReceiptAsync`).
+- The watch ties the turn to that prompt the way `SessionUpdates` does: it arms only on an assistant message whose
+  `parentID` is the wrap-up's message id, so a turn already running when Move on was pressed doesn't count. When that
+  turn's idle comes (after the same grace as Stage 1), the reply after the wrap-up message is read through
+  `ISessionMessageProxy` (`SessionUpdateSender.LastReply`), whole, and becomes the visit's summary. Then the files
+  check, then the next step.
+- The wrap-up fails (`turn.failed` on it) or is cut off by a restart (a `wrapping-up` visit found by
+  `RecoverAsync`): the run waits, kind `wrap-up-failed`: "Design's wrap-up failed: <error>. Reply to the agent in its
+  session, or move on anyway." Replying puts the step back to With you when that reply's turn ends, and the bar's Move
+  on runs a new wrap-up. **Move on anyway** goes on with the chosen outcome, no summary and the note.
+
+### 4. The files check (every step with `writes:`)
+
+- Before the run leaves an agent visit for another step (not for `end`), Fleet checks each declared path exists in
+  the run's worktree (a file, not a folder; paths can't leave the worktree). This covers agent-finished steps too.
+- Missing: the run waits, kind `missing-files`: "Plan declares .weave/plans/x.md, but it isn't in the run's worktree.
+  Reply to the agent in its session, or move on anyway." The visit keeps its outcome and summary. When a turn in that
+  session ends while it waits (the user replied), Fleet checks again and moves on if the files are there now; the
+  watch is put back after a restart. **Move on anyway** skips the check.
+- The visit records `files_checked` so the finished bar can say "Files checked. Plan has started in a new session."
+
+### 5. What the next step gets
+
+- `{{previous.summary}}`: the wrap-up reply for a step you finished, the `fleet_step_done` summary otherwise.
+- `{{previous.files}}`: the declared paths.
+- The user's Move on note, added after the prompt as "Note from the user:\n…" (like "Sent back with a note:"), only for
+  the next agent step and not when that step is the same one again.
+
+### 6. Check with me
+
+- `WorkflowRunOptions.CheckWithMe` (saved in the run's options JSON, defaults false after a round trip).
+- Run box: a switch "Check with me after each step" (off by default) → `StartWorkflowRunRequest.CheckWithMe`.
+- Approval card: a You step's forward choice (a step, no note) gets two buttons when two or more enabled agent steps
+  follow it: **Approve, let it run** ("Implement, Review and Check it runs go ahead on their own. You're asked again at
+  Open the pull request.", built from the run) and **Approve, check with me after each step** ("Each step waits for
+  you to move it on, and you can talk to the agent in between."). Answer carries `checkWithMe: true|false`, saved
+  before the next step starts. Send back with a note and End run stay.
+- Header: a switch in the stepper's run line, `PUT /api/workflows/runs/{id}/check-with-me {on}`, any time the run is
+  unfinished. When it differs from the running step, a short note: "Check with me is on from Review. This step started
+  on its own, so it still moves on when the agent reports it's done." / "Check with me is off from Review. You still
+  finish this step, because it started with you."
+
+### 7. The DTO and the client
+
+- `WorkflowRunDto`: `checkWithMe`; `withYou` (the open step you finish: its step, session, files, whether it's
+  wrapping up, and its moves: outcome, target title, loop `used`/`max`, allowed). Steps gain `finishYou` (declared),
+  `withYou` (for a visited step, how its last visit started; for a pending agent step, `finishYou || checkWithMe`),
+  `outcomes`. Sessions gain `files`, `filesChecked`, `promptMessageId`, `wrapUpMessageId`, `withYou`, `handOffNote`.
+  `waiting` gains `files` (for a You step: the previous agent step's files) and the new kinds `missing-files` and
+  `wrap-up-failed` with a `move-on-anyway` choice.
+- `WorkflowFinishBar.vue` above the composer (in place of the run card while With you): "You finish Design · The agent
+  can't end this step. Keep talking until it's right.", the note field, **Move on to Plan** or one button per outcome
+  ("Pass: on to Open the pull request", "Changes: back to Implement (1 of 2)"), "Hands on: <files>", and the mockup's
+  hand-off line. While wrapping up: "Wrapping up Design: the agent is updating its files and writing a summary for
+  Plan. Then Fleet checks the files and starts Plan." After: "Files checked. Plan has started in a new session. [Open
+  Plan]".
+- The first message: "Workflow · step 1 of 7 · you finish this step", found by the visit's `promptMessageId` (a step
+  you finish has no footer to find it by). The wrap-up prompt renders as "Fleet · you pressed Move on".
+- The stepper marks steps the user finishes with a person icon (not once done). The run row and the step row say
+  **With you** (accent) while one is open.
+- When the run waits on a You step, the previous step's declared files open as kept tabs in the right-hand panel of
+  the session the card is in, once per waiting visit.
+- Needs you stays: You steps, no outcome, loop limit, start failed, missing files, failed or cut-off wrap-ups.
+
+### 8. Storage
+
+Migration `039_add_workflow_finish_you.sql`: `workflow_run_steps.finish` (`agent`/`you`), `prompt_message_id`,
+`wrap_up_message_id`, `hand_off_note`, `files_checked`; `workflow_runs.waiting_kind` (Stage 1 rows derive it as
+before); `sessions.workflow_user_finishes INTEGER NOT NULL DEFAULT 0`.
+
+### 9. Tests
+
+- Application: `finish: you` (no footer, the bridge refuses, no stall on idle, Move on with each outcome, loop max
+  refused past it), the wrap-up (prompt text with outcome, files, note; a reply tied to another message doesn't count;
+  summary from the tied reply; then the files check, then the next step with `{{previous.files}}`, summary and note),
+  a missing file (waits; a later turn with the file moves on; Move on anyway), a failed and a cut-off wrap-up (waits;
+  a reply puts it back With you; Move on anyway), Check with me from the Run box, the card and the header (the running
+  step keeps its mode, the next one follows), restart with a step you finish open, the `writes:`/`finish:` parser with
+  lines, the empty-line rule.
+- Infrastructure: a `finish: you` session is created with the deny rule on OpenCode (create request + prompt tools
+  map) and OpenCode 2 (AllowAll + deny); the orchestrator passes `WorkflowStep = false` for it on spawn and resume;
+  migration + repository round trip of the new columns.
+- Integration (live, CI): OpenCode 1.18.31 and OpenCode 2 2.0.9 — a step-you-finish session's model request has no
+  `fleet_step_done`; the wrap-up's reply names the wrap-up prompt as its parent.
+- Client: the finish bar (one outcome, two outcomes, loop count, wrapping up, moved on), the approval card's two
+  approve choices, the header and Run box switches, the file opening next to a You step, With you labels.
+- Live on a scratch Fleet (port 5321, fake model 4996), both harnesses: Design together → reply → Move on → the
+  wrap-up edits the declared file → check → Plan starts with the files, the summary and the note; a missing file
+  waits; Approve with check with me → Implement → Move on → Review → Changes → Implement → Review → Pass; the header
+  switch mid-step; a restart during a wrap-up.
+
+### Not in this change
+
+- Parallel steps. When they come (Stage 2), only the branch in the run's worktree may declare files; a branch with its
+  own worktree or a read-only one hands on its summary only, and declaring files there is a file error with its line.
+
 ## Stage 2 — Bug triage and Review a pull request (outline)
 
 - Starting from a GitHub issue (`starts-from: issue`, `{{issue}}`) or a PR (`starts-from: pr`, `runs-in:
   pr-branch`).
-- Parallel steps (`parallel:` with at most one writer; others read-only or own worktree; continue on all/any).
+- Parallel steps (`parallel:` with at most one writer; others read-only or own worktree; continue on all/any). Only
+  the branch in the run's worktree may declare `writes:`; the others hand on their summary only, and declaring files
+  on them is a file error naming the line.
 - Bug triage built-in (`exit` outcomes that end the run early) and Review a pull request built-in.
 - "Pinned models in this repo" card if not in Stage 1.
 
