@@ -40,7 +40,7 @@ public sealed class ReopenedSessionLiveTests
         Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
 
         await using var llm = await FakeLlmServerFixture.StartAsync();
-        var processEnvironment = PooledOpenCodeLiveHost.WriteScratchOpenCodeHome(root, llm.BaseUrl, WriteVisualizePlugin(root));
+        var processEnvironment = PooledOpenCodeLiveHost.WriteScratchOpenCodeHome(root, llm.BaseUrl, WriteDiagramPlugin(root));
         ScriptModel(llm.Queue);
 
         var factory = new PooledOpenCodeLiveHost.KestrelFleetFactory(dbPath);
@@ -76,7 +76,7 @@ public sealed class ReopenedSessionLiveTests
                 wait.CancelAfter(TimeSpan.FromSeconds(90));
                 await WaitForAsync(
                     () => events.ToList(),
-                    list => LiveToolParts(list).Any(p => p.ToolName == "visualize" && p.State is ToolCompletedState)
+                    list => LiveToolParts(list).Any(p => p.ToolName == "draw_diagram" && p.State is ToolCompletedState)
                         && list.Any(IsFinishedDelegation)
                         && llm.Queue.Count == 0,
                     wait.Token);
@@ -100,7 +100,7 @@ public sealed class ReopenedSessionLiveTests
 
             snapshot.IsPartial.ShouldBeFalse();
             var reopenedTools = snapshot.Messages.SelectMany(m => m.Parts).OfType<ToolMessageEventPart>().ToList();
-            reopenedTools.Select(t => t.ToolName).ShouldBe(["task", "visualize"], ignoreOrder: true);
+            reopenedTools.Select(t => t.ToolName).ShouldBe(["task", "draw_diagram"], ignoreOrder: true);
 
             // Each tool card comes back as the live stream last showed it.
             var liveById = LiveToolParts(events.ToList()).GroupBy(p => p.Id).ToDictionary(g => g.Key, g => g.Last());
@@ -119,7 +119,7 @@ public sealed class ReopenedSessionLiveTests
             task.State.ShouldBeOfType<ToolCompletedState>().Metadata.ShouldNotBeNull();
 
             // The visual card: the diagram's payload is still there to render.
-            var visual = reopenedTools.Single(t => t.ToolName == "visualize").State.ShouldBeOfType<ToolCompletedState>();
+            var visual = reopenedTools.Single(t => t.ToolName == "draw_diagram").State.ShouldBeOfType<ToolCompletedState>();
             visual.Output.ShouldNotBeNull().GetString().ShouldNotBeNull().ShouldContain("\"$type\":\"visual/flow\"");
 
             await cts.CancelAsync();
@@ -132,14 +132,14 @@ public sealed class ReopenedSessionLiveTests
         }
     }
 
-    /// <summary>The catalog's <c>visualize</c> tool, as a plugin so a scratch HOME needs no package install.</summary>
-    private static string WriteVisualizePlugin(string root)
+    /// <summary>A scratch, generic diagram-drawing tool, as a plugin so a scratch HOME needs no package install.</summary>
+    private static string WriteDiagramPlugin(string root)
     {
-        var path = Path.Combine(root, "visualize-probe.ts");
+        var path = Path.Combine(root, "diagram-probe.ts");
         File.WriteAllText(path, """
-            export const VisualizeProbe = async () => ({
+            export const DiagramProbe = async () => ({
               tool: {
-                visualize: {
+                draw_diagram: {
                   description: "Render a visual diagram inline in the conversation.",
                   args: {},
                   execute: async () => JSON.stringify({
@@ -176,7 +176,7 @@ public sealed class ReopenedSessionLiveTests
         queue.Enqueue(new ScriptedLlmResponse
         {
             StopReason = "tool_calls",
-            ToolCalls = [new ScriptedToolCall("call_vis", "visualize", "{}")],
+            ToolCalls = [new ScriptedToolCall("call_vis", "draw_diagram", "{}")],
         });
 
         queue.Enqueue(new ScriptedLlmResponse { Text = "Done." });
