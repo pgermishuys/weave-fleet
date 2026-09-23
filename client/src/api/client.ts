@@ -399,6 +399,72 @@ export interface HarnessProfileCheck {
   details?: string[] | null;
 }
 
+/** Which Weave a harness loaded: Weave (`config.weave`) or Weave Legacy (`weave-opencode.jsonc`). */
+export type WeaveFlavor = "weave" | "legacy";
+
+/** A Weave plugin a harness loaded. */
+export interface WeaveInstall {
+  flavor: WeaveFlavor;
+  package: string;
+  /** The plugin as the harness listed it: a package with its version, or a `file://` path. */
+  entry: string;
+  /** Whether this version reads the folder Fleet points it at (Weave 0.2.0-next.1+, Legacy 0.9.0+). */
+  acceptsFleetConfig: boolean;
+}
+
+/** What Fleet found in one harness. `checked` is false when Fleet can't hand it a config; `note` says why. */
+export interface WeaveHarnessDetection {
+  harnessType: string;
+  harnessName: string;
+  checked: boolean;
+  installs: WeaveInstall[];
+  note?: string | null;
+}
+
+/** What a harness loaded when it tried a draft. */
+export interface WeaveCheck {
+  ok: boolean;
+  agents: string[];
+  error?: string | null;
+  details?: string[] | null;
+}
+
+export interface WeaveHarnessCheck {
+  harnessType: string;
+  harnessName: string;
+  flavor: WeaveFlavor;
+  check: WeaveCheck;
+}
+
+/** How far a save has got in running processes: each folder reloads once nothing is running in it. */
+export interface WeaveApplyStatus {
+  folders: { directory: string; reloaded: boolean }[];
+  error?: string | null;
+}
+
+/** `GET /api/weave`: which Weave each harness loads, and the config Fleet keeps (files by path in its folder). */
+export interface WeaveConfigView {
+  source: "own" | "fleet";
+  files: Record<string, string>;
+  updatedAt?: string | null;
+  harnesses: WeaveHarnessDetection[];
+  apply?: WeaveApplyStatus | null;
+}
+
+/** `PUT /api/weave`: when a check failed nothing was saved, and `config` is null. */
+export interface WeaveSaveResult {
+  saved: boolean;
+  checks: WeaveHarnessCheck[];
+  config?: WeaveConfigView | null;
+}
+
+/** `GET /api/weave/own`: the user's own Weave files. */
+export interface WeaveOwnConfig {
+  flavor: WeaveFlavor;
+  path: string;
+  files: Record<string, string>;
+}
+
 /** Sent as `harnessProfileId` to start a session without a profile, even when there's a default. */
 export const NO_PROFILE = "none";
 

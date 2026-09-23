@@ -15,6 +15,7 @@ internal sealed class PooledOpenCodeInstance : IAsyncDisposable
     private readonly OpenCodeProcessManager? _processManager;
     private readonly ILogger<PooledOpenCodeInstance>? _logger;
     private readonly ConcurrentDictionary<string, TaskCompletionSource> _eventSubscriptionReady = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, byte> _directories = new(StringComparer.Ordinal);
     private int _disposed;
     private int _faulted;
 
@@ -97,6 +98,14 @@ internal sealed class PooledOpenCodeInstance : IAsyncDisposable
     public bool IsAvailable => !IsFaulted && !IsDisposed;
 
     internal ICollection<InstanceLease> Leases => _leases.Values;
+
+    /// <summary>
+    /// The folders this process has been leased for. OpenCode loads an instance, with that folder's config, the first
+    /// time a request names a folder, so these are the folders that must reload to see a config change.
+    /// </summary>
+    internal IReadOnlyCollection<string> Directories => [.. _directories.Keys];
+
+    internal void NoteDirectory(string directory) => _directories.TryAdd(directory, 0);
 
     internal Task WaitForEventSubscriptionAsync(string openCodeSessionId)
     {

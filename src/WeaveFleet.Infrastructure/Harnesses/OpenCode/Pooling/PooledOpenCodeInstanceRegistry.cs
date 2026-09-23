@@ -312,6 +312,19 @@ internal sealed class PooledOpenCodeInstanceRegistry : IAsyncDisposable
                 : null;
     }
 
+    /// <summary>The owner's running processes, each with the environment it was started with.</summary>
+    internal IReadOnlyList<(PooledOpenCodeInstance Instance, IReadOnlyDictionary<string, string> Environment)> GetRunningInstances(
+        string ownerIdentity)
+    {
+        var prefix = BuildCompositeKey(ownerIdentity, string.Empty);
+        return _entries
+            .Where(pair => pair.Key.StartsWith(prefix, StringComparison.Ordinal))
+            .Select(pair => pair.Value)
+            .Where(entry => entry.Instance?.IsAvailable == true && entry.RestartEnvironment is not null)
+            .Select(entry => (entry.Instance!, entry.RestartEnvironment!))
+            .ToList();
+    }
+
     // -------------------------------------------------------------------------
     // Core implementation
     // -------------------------------------------------------------------------
@@ -392,6 +405,7 @@ internal sealed class PooledOpenCodeInstanceRegistry : IAsyncDisposable
                 entry.RefCount++;
                 LogRefCountChanged(_logger, keyFingerprint, previousRefCount, entry.RefCount, "acquire", null);
                 LogAcquireSucceeded(_logger, keyFingerprint, null);
+                entry.Instance.NoteDirectory(directory);
                 return entry.Instance.CreateLease(ReleaseLeaseAsync);
             }
             catch

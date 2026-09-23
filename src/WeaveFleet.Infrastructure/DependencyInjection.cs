@@ -132,6 +132,7 @@ public static class DependencyInjection
         services.AddScoped<IInstanceRepository, InstanceRepository>();
         services.AddScoped<ISessionRepository, SessionRepository>();
         services.AddScoped<IHarnessProfileRepository, HarnessProfileRepository>();
+        services.AddScoped<IWeaveConfigRepository, WeaveConfigRepository>();
         services.AddScoped<ISessionCallbackRepository, SessionCallbackRepository>();
         services.AddScoped<IDelegationRepository, DelegationRepository>();
         services.AddScoped<IWorkspaceRootRepository, WorkspaceRootRepository>();
@@ -167,6 +168,8 @@ public static class DependencyInjection
         services.AddScoped<GitDiffService>();
         services.AddScoped<SessionOrchestrator>();
         services.AddScoped<HarnessProfileService>();
+        services.AddScoped<WeaveFleet.Application.Weave.WeaveConfigService>();
+        services.AddSingleton<WeaveFleet.Application.Weave.WeaveDetectionCache>();
         services.AddSingleton<IBuiltInSkillCatalog, WeaveFleet.Infrastructure.Harnesses.OpenCode.OpenCodeBuiltInSkillCatalog>();
         services.AddScoped<BuiltInSkillService>();
         services.AddScoped<ISessionActivator>(sp => sp.GetRequiredService<SessionOrchestrator>());
@@ -216,8 +219,6 @@ public static class DependencyInjection
         services.AddSingleton<ISessionSourceProvider, QuickChatSessionSourceProvider>();
         services.AddScoped<SystemUserContext>();
 
-        // ConfigService — singleton, no DB dependency, file-based
-        services.AddSingleton<ConfigService>();
 
         // DirectoryService — scoped (depends on scoped WorkspaceRootService)
         services.AddScoped<DirectoryService>();

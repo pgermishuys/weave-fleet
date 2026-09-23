@@ -3,11 +3,8 @@ using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Logging;
 using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Configuration;
-using WeaveFleet.Application.Services;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
@@ -16,7 +13,7 @@ public sealed class ConfigEndpointTests
     [Fact]
     public async Task get_config_returns_pooled_opencode_harness_enabled_by_default()
     {
-        await using var factory = CreateFactoryWithConfigDirectory(CreateTempConfigDirectory());
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
@@ -35,8 +32,7 @@ public sealed class ConfigEndpointTests
     [Fact]
     public async Task put_config_toggles_pooled_opencode_harness_at_runtime()
     {
-        var configDirectory = CreateTempConfigDirectory();
-        await using var factory = CreateFactoryWithConfigDirectory(configDirectory);
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
@@ -70,7 +66,7 @@ public sealed class ConfigEndpointTests
     [Fact]
     public async Task put_config_rejects_non_boolean_pooled_opencode_harness_value()
     {
-        await using var factory = CreateFactoryWithConfigDirectory(CreateTempConfigDirectory());
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
@@ -85,25 +81,5 @@ public sealed class ConfigEndpointTests
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         var options = factory.Services.GetRequiredService<FleetOptions>();
         options.Harness.PooledOpenCodeHarness.ShouldBeTrue();
-    }
-
-    private static ApiWebApplicationFactory CreateFactoryWithConfigDirectory(string configDirectory)
-    {
-        return new ApiWebApplicationFactory(
-            authEnabled: false,
-            configureTestServices: services =>
-            {
-                services.RemoveAll<ConfigService>();
-                services.AddSingleton(sp => new ConfigService(
-                    sp.GetRequiredService<ILogger<ConfigService>>(),
-                    new ConfigPaths(configDirectory, Path.Combine(configDirectory, "weave-opencode.jsonc"))));
-            });
-    }
-
-    private static string CreateTempConfigDirectory()
-    {
-        var configDirectory = Path.Combine(Path.GetTempPath(), $"fleet-config-tests-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(configDirectory);
-        return configDirectory;
     }
 }

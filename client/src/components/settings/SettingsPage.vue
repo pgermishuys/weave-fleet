@@ -3,13 +3,13 @@ import type { RegisteredSettingsSection } from "@/plugins/slots";
 import { computed } from "vue";
 import { Settings2 } from "lucide-vue-next";
 import AppearanceSection from "@/components/settings/AppearanceSection.vue";
-import ConfigOverviewSection from "@/components/settings/ConfigOverviewSection.vue";
 import FeaturesSection from "@/components/settings/FeaturesSection.vue";
 import SystemSection from "@/components/settings/SystemSection.vue";
 import CredentialsSection from "@/components/settings/CredentialsSection.vue";
 import SkillsSection from "@/components/settings/SkillsSection.vue";
 import ToolsSection from "@/components/settings/ToolsSection.vue";
 import HarnessesSection from "@/components/settings/HarnessesSection.vue";
+import WeaveSection from "@/components/settings/WeaveSection.vue";
 import WorkspaceSection from "@/components/settings/WorkspaceSection.vue";
 import WorktreeNamingSection from "@/components/settings/WorktreeNamingSection.vue";
 import { useSettingsNav } from "@/composables/use-settings-nav";
@@ -42,7 +42,7 @@ const pluginSections = computed<readonly DecoratedSettingsSection[]>(() => {
         Settings
       </h1>
       <p class="mt-1 text-sm text-muted">
-        Manage credentials, workspace preferences, appearance, skills, harnesses, system details, and plugin-provided settings.
+        Manage credentials, workspace preferences, appearance, skills, harnesses, Weave, system details, and plugin-provided settings.
       </p>
     </div>
 
@@ -66,6 +66,8 @@ const pluginSections = computed<readonly DecoratedSettingsSection[]>(() => {
     <FeaturesSection v-else-if="activeSection === 'features'" />
 
     <HarnessesSection v-else-if="activeSection === 'harnesses'" />
+
+    <WeaveSection v-else-if="activeSection === 'weave'" />
 
     <section
       v-else-if="activeSection === 'plugins'"
@@ -133,7 +135,6 @@ const pluginSections = computed<readonly DecoratedSettingsSection[]>(() => {
 
     <template v-else-if="activeSection === 'system'">
       <SystemSection />
-      <ConfigOverviewSection />
     </template>
   </section>
 </template>

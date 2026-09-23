@@ -547,6 +547,29 @@ internal sealed class OpenCodeHttpClient
                ?? new OpenCodeConfigDefaults();
     }
 
+    /// <summary>GET /config?directory={directory}, read only for the plugins OpenCode loads there.</summary>
+    public async Task<IReadOnlyList<string>> GetConfigPluginsAsync(string directory, CancellationToken ct)
+    {
+        var url = BuildUrl("/config", directory);
+        var config = await GetAsync(url, OpenCodeJsonContext.Default.OpenCodeConfigPlugins, ct).ConfigureAwait(false);
+        return config?.Plugin ?? [];
+    }
+
+    /// <summary>
+    /// POST /instance/dispose?directory={directory}. Drops OpenCode's instance for the folder, and with it the
+    /// config and plugins it loaded; the next request that names the folder loads them again. It cancels every
+    /// running turn in the folder, so callers only do it when the folder is idle.
+    /// </summary>
+    public async Task DisposeInstanceAsync(string directory, CancellationToken ct)
+    {
+        var url = BuildUrl("/instance/dispose", directory);
+        ValidateDirectoryScope(url);
+        LogRequest(_logger, $"POST {url}", null);
+        using var response = await _httpClient.PostAsync(url, content: null, ct).ConfigureAwait(false);
+        LogResponse(_logger, (int)response.StatusCode, url, null);
+        response.EnsureSuccessStatusCode();
+    }
+
     /// <summary>GET /session/status?directory={directory}</summary>
     public async Task<Dictionary<string, OpenCodeSessionStatus>> GetSessionStatusAsync(
         string directory,

@@ -1,7 +1,6 @@
 using System.Text.Json.Nodes;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
-using WeaveFleet.Application.Services;
 
 namespace WeaveFleet.Api.Endpoints;
 
@@ -13,47 +12,23 @@ public static class ConfigEndpoints
     {
         var group = app.MapGroup("/api").WithTags("Config");
 
-        // GET /api/config?directory= — returns merged config (user + optional project-level)
-        group.MapGet("/config", async (
-            string? directory,
-            FleetOptions fleetOptions,
-            ConfigService configService,
-            CancellationToken ct) =>
+        // GET /api/config — Fleet's runtime settings.
+        group.MapGet("/config", (FleetOptions fleetOptions) =>
         {
-            var config = await configService.GetMergedConfigAsync(directory, ct);
-            config["authEnabled"] = fleetOptions.Auth.Enabled;
-            config["tokenAuthEnabled"] = fleetOptions.Auth.TokenAuthEnabled;
-            config["pooledOpenCodeHarness"] = fleetOptions.Harness.PooledOpenCodeHarness;
+            var config = new JsonObject
+            {
+                ["authEnabled"] = fleetOptions.Auth.Enabled,
+                ["tokenAuthEnabled"] = fleetOptions.Auth.TokenAuthEnabled,
+                ["pooledOpenCodeHarness"] = fleetOptions.Harness.PooledOpenCodeHarness,
+            };
             return Results.Ok(config);
         })
         .WithName("GetConfig");
 
-        // PUT /api/config — writes user-level config
-        group.MapPut("/config", async (
-            JsonObject? body,
-            FleetOptions fleetOptions,
-            ConfigService configService,
-            CancellationToken ct) =>
-        {
-            var config = body ?? [];
-            var settingsResult = ApplyRuntimeSettings(config, fleetOptions);
-            if (settingsResult is not null)
-            {
-                return settingsResult;
-            }
-
-            await configService.UpdateUserConfigAsync(config, ct);
-            return Results.NoContent();
-        })
+        // PUT /api/config — changes Fleet's runtime settings. The Weave config lives at /api/weave.
+        group.MapPut("/config", (JsonObject? body, FleetOptions fleetOptions) =>
+            ApplyRuntimeSettings(body ?? [], fleetOptions) ?? Results.NoContent())
         .WithName("UpdateConfig");
-
-        // GET /api/config/paths — returns file paths for debugging/display
-        group.MapGet("/config/paths", (ConfigService configService) =>
-        {
-            var paths = configService.GetConfigPaths();
-            return Results.Ok(new ConfigPathsResponse(paths.ConfigDirectory, paths.UserConfigPath));
-        })
-        .WithName("GetConfigPaths");
 
         return app;
     }
@@ -110,5 +85,4 @@ internal sealed record ClientConfigResponse(
     IReadOnlyList<string> AvailableHarnesses,
     bool TerminalEnabled);
 
-internal sealed record ConfigPathsResponse(string ConfigDirectory, string UserConfigPath);
 #pragma warning restore IL2026

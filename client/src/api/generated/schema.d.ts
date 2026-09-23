@@ -517,6 +517,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{id}/diffs/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetSessionFileDiff"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{id}/progress": {
         parameters: {
             query?: never;
@@ -784,6 +800,38 @@ export interface paths {
         put?: never;
         post?: never;
         delete: operations["CloseSessionTerminal"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/setup/terminals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CreateSetupTerminal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/setup/terminals/{terminalId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["CloseSetupTerminal"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1237,22 +1285,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/config/paths": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["GetConfigPaths"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/directories": {
         parameters: {
             query?: never;
@@ -1445,6 +1477,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/skills/built-in": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListBuiltInSkills"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/built-in/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["SetBuiltInSkill"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tools": {
         parameters: {
             query?: never;
@@ -1605,6 +1669,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/harnesses/{type}/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["UpdateHarness"];
+        delete: operations["DismissHarnessUpdate"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/harnesses/opencode/warmup": {
         parameters: {
             query?: never;
@@ -1615,6 +1695,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["WarmupOpenCodeHarness"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/harnesses/{type}/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetHarnessCatalog"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1679,6 +1775,54 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["CheckHarnessProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/weave": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetWeaveConfig"];
+        put: operations["SaveWeaveConfig"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/weave/own": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetOwnWeaveConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/weave/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CheckWeaveConfig"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1813,22 +1957,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/harnesses/{type}/catalog": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["GetHarnessCatalog"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/workspace-roots": {
         parameters: {
             query?: never;
@@ -1891,6 +2019,38 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["RenameWorkspace"];
+        trace?: never;
+    };
+    "/api/worktrees/naming": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetWorktreeNaming"];
+        put: operations["UpdateWorktreeNaming"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/worktrees/naming/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["PreviewWorktreeNaming"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/analytics/summary": {
@@ -2063,38 +2223,6 @@ export interface paths {
         get?: never;
         put: operations["SetPreference"];
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/worktrees/naming": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["GetWorktreeNaming"];
-        put: operations["UpdateWorktreeNaming"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/worktrees/naming/preview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["PreviewWorktreeNaming"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2737,6 +2865,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/bridge/canvas/screenshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CanvasBridgeScreenshot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bridge/session/message": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["SessionMessageBridgeSend"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2749,43 +2909,6 @@ export interface components {
             url: string;
         };
         AddWorkspaceRootRequest: {
-            path: string;
-        };
-        WorktreeNamingTemplates: {
-            branch?: string | null;
-            root?: string | null;
-            folder?: string | null;
-            capture?: {
-                [key: string]: string;
-            } | null;
-            prefix?: string | null;
-        };
-        WorktreeNamingResponse: {
-            effective: components["schemas"]["WorktreeNamingTemplates"];
-            user: components["schemas"]["WorktreeNamingTemplates"];
-            defaults: components["schemas"]["WorktreeNamingTemplates"];
-            layers: {
-                [key: string]: string;
-            };
-        };
-        WorktreeNamingRequest: {
-            branch?: string | null;
-            root?: string | null;
-            folder?: string | null;
-            capture?: {
-                [key: string]: string;
-            } | null;
-            prefix?: string | null;
-        };
-        WorktreeNamingPreviewRequest: {
-            directory: string;
-            message?: string | null;
-            branch?: string | null;
-        };
-        WorktreeNamingPreviewResponse: {
-            branch?: string | null;
-            root: string;
-            folder: string;
             path: string;
         };
         AnalyticsSummary: {
@@ -2808,6 +2931,9 @@ export interface components {
             tokens: number | string;
             /** Format: double */
             cost: number | string;
+        };
+        ApiErrorResponse: {
+            error: string;
         };
         AppOutputResponse: {
             lines: string[];
@@ -2913,6 +3039,11 @@ export interface components {
             entries: components["schemas"]["BrowseEntryDto"][];
             currentPath: string;
         };
+        BuiltInSkillView: {
+            name: string;
+            description: string;
+            enabled: boolean;
+        };
         CanvasBridgeRequest: {
             harnessSessionId: null | string;
             canvasId?: null | string;
@@ -2922,6 +3053,8 @@ export interface components {
             ops?: unknown;
             command?: null | string;
             url?: null | string;
+            path?: null | string;
+            viewport?: null | string;
         };
         CanvasResponse: {
             canvasId: string;
@@ -2951,6 +3084,12 @@ export interface components {
         };
         CheckHarnessProfileRequest: {
             content: null | string;
+        };
+        CheckWeaveConfigRequest: {
+            flavor: components["schemas"]["WeaveFlavor"];
+            files: null | {
+                [key: string]: string;
+            };
         };
         ClientConfigResponse: {
             cloudMode: boolean;
@@ -2987,6 +3126,7 @@ export interface components {
             timeZone?: null | string;
             isolation?: null | string;
             baseBranch?: null | string;
+            harnessType?: null | string;
         };
         CreateBoardCardRequest: {
             laneId: string;
@@ -3023,7 +3163,7 @@ export interface components {
             tags: null | string[];
             harnessProfileId?: null | string;
             agent?: null | string;
-            model?: null | components["schemas"]["ModelRef"];
+            model?: unknown;
         };
         CreateTerminalRequest: {
             /** Format: int32 */
@@ -3082,30 +3222,79 @@ export interface components {
         };
         HarnessCatalogResponse: {
             supported: boolean;
-            agents: {
-                name: string;
-                description: null | string;
-                mode: string;
-                hidden: boolean;
-                model: null | {
-                    providerID: string;
-                    modelID: string;
-                };
-            }[];
-            providers: {
-                id: string;
-                name: string;
-                models: {
-                    id: string;
-                    name: string;
-                    variants: null | string[];
-                }[];
-            }[];
+            agents: components["schemas"]["InstanceAgentItem"][];
+            providers: components["schemas"]["InstanceProviderItem"][];
             defaultAgent: null | string;
-            defaultModel: null | {
-                providerID: string;
-                modelID: string;
-            };
+            defaultModel: null | components["schemas"]["InstanceAgentModelRef"];
+        };
+        HarnessSignInAttempt: {
+            id: string;
+            url: string;
+            instructions: string;
+            needsCode: boolean;
+            /** Format: date-time */
+            expiresAt: string;
+            callbackAddress?: null | string;
+        };
+        HarnessSignInAttemptStatus: {
+            status: string;
+            message?: null | string;
+        };
+        HarnessSignInCondition: {
+            key: string;
+            op: string;
+            value: components["schemas"]["JsonElement"];
+        };
+        HarnessSignInConnection: {
+            kind: string;
+            id: string;
+            label: string;
+            active: boolean;
+        };
+        HarnessSignInField: {
+            key: string;
+            type: string;
+            title?: null | string;
+            description?: null | string;
+            required?: boolean;
+            hidden?: boolean;
+            placeholder?: null | string;
+            default?: null | components["schemas"]["JsonElement"];
+            options?: null | components["schemas"]["HarnessSignInOption"][];
+            when?: null | components["schemas"]["HarnessSignInCondition"][];
+            url?: null | string;
+        };
+        HarnessSignInMethod: {
+            type: string;
+            id: null | string;
+            label: string;
+            fields?: components["schemas"]["HarnessSignInField"][];
+            command?: null | string[];
+            environmentVariables?: null | string[];
+        };
+        HarnessSignInOption: {
+            value: string;
+            label: string;
+            description?: null | string;
+        };
+        HarnessSignInProvider: {
+            id: string;
+            name: string;
+            methods: components["schemas"]["HarnessSignInMethod"][];
+            connections: components["schemas"]["HarnessSignInConnection"][];
+        };
+        HarnessSignIns: {
+            providers: components["schemas"]["HarnessSignInProvider"][];
+            note: null | string;
+        };
+        HarnessUpdateJob: {
+            phase: string;
+            message: null | string;
+            output: null | string;
+            /** Format: int32 */
+            workingSessions: number | string;
+            fromVersion: null | string;
+            toVersion: null | string;
         };
         ImageAttachmentDto: {
             mime: string;
@@ -3150,6 +3339,27 @@ export interface components {
             installedPath: string;
             /** Format: date-time */
             installedAt: string;
+        };
+        InstanceAgentItem: {
+            name: string;
+            description: null | string;
+            mode: string;
+            hidden: boolean;
+            model: null | components["schemas"]["InstanceAgentModelRef"];
+        };
+        InstanceAgentModelRef: {
+            providerID: string;
+            modelID: string;
+        };
+        InstanceModelItem: {
+            id: string;
+            name: string;
+            variants?: null | string[];
+        };
+        InstanceProviderItem: {
+            id: string;
+            name: string;
+            models: components["schemas"]["InstanceModelItem"][];
         };
         JsonElement: unknown;
         JsonObject: Record<string, never>;
@@ -3268,6 +3478,12 @@ export interface components {
             name: null | string;
             content: null | string;
         };
+        SaveWeaveConfigRequest: {
+            source: null | string;
+            files: null | {
+                [key: string]: string;
+            };
+        };
         SendCommandApiRequest: {
             command: string;
             arguments: null | string;
@@ -3354,6 +3570,19 @@ export interface components {
             tags: string[];
             origin?: null | components["schemas"]["SessionOriginDto"];
             progress?: null | components["schemas"]["SessionProgressSummaryDto"];
+            selectedAgent?: null | string;
+            selectedModel?: null | components["schemas"]["SessionModelChoiceDto"];
+        };
+        SessionMessageBridgeRequest: {
+            harnessSessionId: null | string;
+            sessionId?: null | string;
+            text?: null | string;
+            /** @default false */
+            notifyWhenDone: boolean;
+        };
+        SessionModelChoiceDto: {
+            providerID: string;
+            modelID: string;
         };
         SessionOriginDto: {
             sourceType: string;
@@ -3398,11 +3627,24 @@ export interface components {
             /** Format: int64 */
             updated: number | string;
         };
+        SetBuiltInSkillRequest: {
+            enabled: boolean;
+        };
         SetDefaultHarnessProfileRequest: {
             profileId: null | string;
         };
         SetPreferenceRequest: {
             value: string;
+        };
+        SignInCallbackRequest: {
+            address: null | string;
+        };
+        SignInCodeRequest: {
+            code: null | string;
+        };
+        SignInWithKeyRequest: {
+            key: null | string;
+            answers: null | Record<string, never>;
         };
         SkillCatalogResponse: {
             entries: components["schemas"]["CatalogEntryDto"][];
@@ -3482,6 +3724,10 @@ export interface components {
             relationship: string;
             enrichmentStatus: string;
             lastCheckedAt: null | string;
+        };
+        StartSignInRequest: {
+            methodId: null | string;
+            answers: null | Record<string, never>;
         };
         StoreCredentialRequest: {
             label: string;
@@ -3614,6 +3860,7 @@ export interface components {
             timeZone?: null | string;
             isolation?: null | string;
             baseBranch?: null | string;
+            harnessType?: null | string;
         };
         UpdateBoardCardRequest: {
             title: null | string;
@@ -3676,6 +3923,45 @@ export interface components {
             completed: boolean;
             hasStoredCredentials: boolean;
             hasCreatedSession: boolean;
+        };
+        /** @enum {unknown} */
+        WeaveFlavor: "weave" | "legacy";
+        WorktreeNamingPreviewRequest: {
+            directory: string;
+            message: null | string;
+            branch: null | string;
+        };
+        WorktreeNamingPreviewResponse: {
+            branch: null | string;
+            root: string;
+            folder: string;
+            path: string;
+        };
+        WorktreeNamingRequest: {
+            branch: null | string;
+            root: null | string;
+            folder: null | string;
+            capture: null | {
+                [key: string]: string;
+            };
+            prefix: null | string;
+        };
+        WorktreeNamingResponse: {
+            effective: components["schemas"]["WorktreeNamingTemplates"];
+            user: components["schemas"]["WorktreeNamingTemplates"];
+            defaults: components["schemas"]["WorktreeNamingTemplates"];
+            layers: {
+                [key: string]: string;
+            };
+        };
+        WorktreeNamingTemplates: {
+            branch: null | string;
+            root: null | string;
+            folder: null | string;
+            capture: null | {
+                [key: string]: string;
+            };
+            prefix: null | string;
         };
         WriteSessionFileConflictResponse: {
             content: null | string;
@@ -4870,6 +5156,28 @@ export interface operations {
             };
         };
     };
+    GetSessionFileDiff: {
+        parameters: {
+            query?: {
+                path?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     GetSessionProgress: {
         parameters: {
             query?: never;
@@ -5390,6 +5698,86 @@ export interface operations {
             header?: never;
             path: {
                 id: string;
+                terminalId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    CreateSetupTerminal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["CreateTerminalRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminalResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    CloseSetupTerminal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
                 terminalId: string;
             };
             cookie?: never;
@@ -6163,9 +6551,7 @@ export interface operations {
     };
     GetConfig: {
         parameters: {
-            query?: {
-                directory?: string;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
@@ -6193,24 +6579,6 @@ export interface operations {
                 "application/json": null | components["schemas"]["JsonObject"];
             };
         };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    GetConfigPaths: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
         responses: {
             /** @description OK */
             200: {
@@ -6600,6 +6968,52 @@ export interface operations {
             };
         };
     };
+    ListBuiltInSkills: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuiltInSkillView"][];
+                };
+            };
+        };
+    };
+    SetBuiltInSkill: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetBuiltInSkillRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuiltInSkillView"];
+                };
+            };
+        };
+    };
     ListTools: {
         parameters: {
             query?: never;
@@ -6874,6 +7288,84 @@ export interface operations {
             };
         };
     };
+    UpdateHarness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                type: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HarnessUpdateJob"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    DismissHarnessUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                type: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
     WarmupOpenCodeHarness: {
         parameters: {
             query?: never;
@@ -6889,6 +7381,31 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    GetHarnessCatalog: {
+        parameters: {
+            query?: {
+                directory?: string;
+                profile?: string;
+            };
+            header?: never;
+            path: {
+                type: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HarnessCatalogResponse"];
+                };
             };
         };
     };
@@ -7006,220 +7523,6 @@ export interface operations {
             };
         };
     };
-    ListHarnessSignIns: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                harnessType: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    SignInWithKey: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                harnessType: string;
-                providerId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": { key?: string | null; answers?: { [key: string]: unknown } | null };
-            };
-        };
-        responses: {
-            /** @description OK */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    StartHarnessSignIn: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                harnessType: string;
-                providerId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": { methodId?: string | null; answers?: { [key: string]: unknown } | null };
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    GetHarnessSignIn: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                harnessType: string;
-                providerId: string;
-                attemptId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    SubmitHarnessSignInCode: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                harnessType: string;
-                providerId: string;
-                attemptId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": { code?: string | null };
-            };
-        };
-        responses: {
-            /** @description OK */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    ForwardHarnessSignInCallback: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                harnessType: string;
-                providerId: string;
-                attemptId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": { address?: string | null };
-            };
-        };
-        responses: {
-            /** @description OK */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    CancelHarnessSignIn: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                harnessType: string;
-                providerId: string;
-                attemptId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    UseHarnessSignIn: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                harnessType: string;
-                connectionId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    SignOutOfHarnessProvider: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                harnessType: string;
-                connectionId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
     CheckHarnessProfile: {
         parameters: {
             query?: never;
@@ -7244,15 +7547,96 @@ export interface operations {
             };
         };
     };
-    GetHarnessCatalog: {
+    GetWeaveConfig: {
         parameters: {
             query?: {
-                directory?: string;
-                profile?: string;
+                redetect?: boolean;
             };
             header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    SaveWeaveConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveWeaveConfigRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetOwnWeaveConfig: {
+        parameters: {
+            query: {
+                flavor: components["schemas"]["WeaveFlavor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CheckWeaveConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckWeaveConfigRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ListHarnessSignIns: {
+        parameters: {
+            query?: never;
+            header?: never;
             path: {
-                type: string;
+                harnessType: string;
             };
             cookie?: never;
         };
@@ -7264,8 +7648,200 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HarnessCatalogResponse"];
+                    "application/json": components["schemas"]["HarnessSignIns"];
                 };
+            };
+        };
+    };
+    SignInWithKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                harnessType: string;
+                providerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignInWithKeyRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    StartHarnessSignIn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                harnessType: string;
+                providerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartSignInRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HarnessSignInAttempt"];
+                };
+            };
+        };
+    };
+    GetHarnessSignIn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                harnessType: string;
+                providerId: string;
+                attemptId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HarnessSignInAttemptStatus"];
+                };
+            };
+        };
+    };
+    CancelHarnessSignIn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                harnessType: string;
+                providerId: string;
+                attemptId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    SubmitHarnessSignInCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                harnessType: string;
+                providerId: string;
+                attemptId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignInCodeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ForwardHarnessSignInCallback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                harnessType: string;
+                providerId: string;
+                attemptId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignInCallbackRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    UseHarnessSignIn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                harnessType: string;
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    SignOutOfHarnessProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                harnessType: string;
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -7388,6 +7964,76 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    GetWorktreeNaming: {
+        parameters: {
+            query?: {
+                directory?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorktreeNamingResponse"];
+                };
+            };
+        };
+    };
+    UpdateWorktreeNaming: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorktreeNamingRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorktreeNamingResponse"];
+                };
+            };
+        };
+    };
+    PreviewWorktreeNaming: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorktreeNamingPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorktreeNamingPreviewResponse"];
+                };
             };
         };
     };
@@ -7664,90 +8310,6 @@ export interface operations {
         responses: {
             /** @description No Content */
             204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    GetWorktreeNaming: {
-        parameters: {
-            query?: {
-                directory?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorktreeNamingResponse"];
-                };
-            };
-        };
-    };
-    UpdateWorktreeNaming: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorktreeNamingRequest"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorktreeNamingResponse"];
-                };
-            };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    PreviewWorktreeNaming: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorktreeNamingPreviewRequest"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorktreeNamingPreviewResponse"];
-                };
-            };
-            /** @description Bad Request */
-            400: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8186,6 +8748,50 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["CanvasBridgeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CanvasBridgeScreenshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CanvasBridgeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    SessionMessageBridgeSend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionMessageBridgeRequest"];
             };
         };
         responses: {

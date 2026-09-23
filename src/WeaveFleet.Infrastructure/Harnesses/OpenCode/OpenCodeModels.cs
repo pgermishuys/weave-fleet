@@ -588,6 +588,8 @@ internal sealed record OpenCodeAgentInfo
     [JsonPropertyName("mode")] public string? Mode { get; init; }
     [JsonPropertyName("hidden")] public bool? Hidden { get; init; }
     [JsonPropertyName("model")] public OpenCodeModelRef? Model { get; init; }
+    /// <summary>True for OpenCode's own agents; false for ones a config or a plugin added.</summary>
+    [JsonPropertyName("native")] public bool? Native { get; init; }
 }
 
 /// <summary>AI provider returned by GET /provider.</summary>
@@ -620,6 +622,12 @@ internal sealed record OpenCodeConfigDefaults
     /// <summary><c>provider/model</c>, e.g. <c>anthropic/claude-sonnet-4-5</c>.</summary>
     [JsonPropertyName("model")] public string? Model { get; init; }
     [JsonPropertyName("default_agent")] public string? DefaultAgent { get; init; }
+}
+
+/// <summary>The part of GET /config that lists the plugins OpenCode loads: package names, with a version when one is pinned, or <c>file://</c> paths.</summary>
+internal sealed record OpenCodeConfigPlugins
+{
+    [JsonPropertyName("plugin")] public IReadOnlyList<string>? Plugin { get; init; }
 }
 
 /// <summary>Full providers response from GET /provider.</summary>

@@ -1,4 +1,5 @@
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Weave;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 
@@ -149,6 +150,42 @@ public sealed class FakeHarnessRuntime : IHarnessRuntime
         BuiltInSkillChanges.Add(ownerUserId);
         return Task.CompletedTask;
     }
+
+    /// <summary>What <see cref="DetectWeaveAsync"/> answers; null (the default) means the harness takes no Weave config.</summary>
+    public IReadOnlyList<WeaveInstall>? WeaveInstalls { get; set; }
+
+    public Task<IReadOnlyList<WeaveInstall>?> DetectWeaveAsync(string ownerUserId, CancellationToken ct) =>
+        Task.FromResult(WeaveInstalls);
+
+    /// <summary>What <see cref="CheckWeaveConfigAsync"/> answers. Default: it loads one agent.</summary>
+    public WeaveCheck WeaveCheckResult { get; set; } = new(true, ["loom"]);
+
+    /// <summary>Every draft <see cref="CheckWeaveConfigAsync"/> was asked about, with its Weave.</summary>
+    public List<(WeaveFlavor Flavor, IReadOnlyDictionary<string, string> Files)> WeaveChecks { get; } = [];
+
+    public Task<WeaveCheck?> CheckWeaveConfigAsync(
+        string ownerUserId,
+        WeaveFlavor flavor,
+        IReadOnlyDictionary<string, string> files,
+        CancellationToken ct)
+    {
+        WeaveChecks.Add((flavor, files));
+        return Task.FromResult<WeaveCheck?>(WeaveCheckResult);
+    }
+
+    /// <summary>The owners <see cref="WeaveConfigChangedAsync"/> was told about, in order.</summary>
+    public List<string> WeaveChanges { get; } = [];
+
+    public Task WeaveConfigChangedAsync(string ownerUserId, CancellationToken ct)
+    {
+        WeaveChanges.Add(ownerUserId);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>What <see cref="GetWeaveApplyStatus"/> answers. Default: nothing to report.</summary>
+    public WeaveApplyStatus? WeaveApplyStatus { get; set; }
+
+    public WeaveApplyStatus? GetWeaveApplyStatus(string ownerUserId) => WeaveApplyStatus;
 
     private sealed record FakeRuntimeLaunchArtifacts : RuntimeLaunchArtifacts;
 }
