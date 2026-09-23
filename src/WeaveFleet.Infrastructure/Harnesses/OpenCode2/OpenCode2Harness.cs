@@ -39,5 +39,7 @@ public sealed class OpenCode2Harness : IHarness
         ReportsFileWrites = true,
         // A profile's sessions run on a server of their own, which reads the profile as OPENCODE_CONFIG.
         SupportsProfiles = true,
+        // Provider sign-ins live in V2's database and its integration API changes them while it runs.
+        SupportsProviderSignIn = true,
     };
 }

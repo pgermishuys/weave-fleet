@@ -41,6 +41,12 @@ public sealed record HarnessCapabilities
     public bool SupportsProfiles { get; init; }
 
     /// <summary>
+    /// The harness keeps its own provider sign-ins (API keys, OAuth logins), and Fleet can list and change them
+    /// through the runtime's <c>ProviderSignIn</c>.
+    /// </summary>
+    public bool SupportsProviderSignIn { get; init; }
+
+    /// <summary>
     /// The harness keeps the conversation itself, and <see cref="IHarnessSession.GetMessagesAsync"/> reads it. A
     /// reopened session shows the harness's history, and Fleet's own copy (the prompts it saved) is only a partial
     /// fallback while the harness can't be reached. Otherwise Fleet's stored messages are the history.

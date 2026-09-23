@@ -1,3 +1,6 @@
+using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Repositories;
 
@@ -17,9 +20,16 @@ public sealed record BuiltInSkillView(string Name, string Description, bool Enab
 
 /// <summary>
 /// Which of Fleet's built-in skills the user turned on. Each is off until the user turns it on, so a skill of their own
-/// never has company they didn't ask for. The choice is one user preference: the names, comma-separated.
+/// never has company they didn't ask for. The choice is one user preference: the names, comma-separated. Each harness
+/// hears about a change (<see cref="IHarnessRuntime.BuiltInSkillsChangedAsync"/>), so the sessions started afterwards
+/// get it.
 /// </summary>
-public sealed class BuiltInSkillService(IBuiltInSkillCatalog catalog, IUserPreferenceRepository preferences)
+public sealed partial class BuiltInSkillService(
+    IBuiltInSkillCatalog catalog,
+    IUserPreferenceRepository preferences,
+    IHarnessRegistry? harnesses = null,
+    IUserContext? user = null,
+    ILogger<BuiltInSkillService>? logger = null)
 {
     public const string PreferenceKey = "BuiltInSkills";
 
@@ -44,8 +54,35 @@ public sealed class BuiltInSkillService(IBuiltInSkillCatalog catalog, IUserPrefe
             names.Remove(name);
 
         await preferences.SetAsync(PreferenceKey, string.Join(',', names)).ConfigureAwait(false);
+        await TellHarnessesAsync().ConfigureAwait(false);
         return new BuiltInSkillView(skill.Name, skill.Description, enabled);
     }
+
+    private async Task TellHarnessesAsync()
+    {
+        if (harnesses is null || user is null)
+            return;
+
+        foreach (var harness in harnesses.GetAll())
+        {
+            if (harnesses.GetRuntimeByType(harness.Type) is not { } runtime)
+                continue;
+
+            try
+            {
+                await runtime.BuiltInSkillsChangedAsync(user.UserId, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // The choice is saved; the harness reads it again when it next starts a session.
+                if (logger is not null)
+                    LogHarnessFailed(logger, harness.Type, ex);
+            }
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The {HarnessType} harness couldn't take the change to the built-in skills")]
+    private static partial void LogHarnessFailed(ILogger logger, string harnessType, Exception exception);
 
     /// <summary>The names the user turned on. It can include skills this Fleet no longer ships.</summary>
     public static async Task<IReadOnlySet<string>> GetEnabledAsync(IUserPreferenceRepository preferences)

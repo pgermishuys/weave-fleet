@@ -1,0 +1,13 @@
+PASS  the Work profile saved — 200
+PASS  before: a session has no built-in skill
+PASS  before: a Work session has none
+PASS  two V2 servers (none and Work) — {"none":"341437","profile-d550f38bf1b5adf3.json":"341629"}
+PASS  on: a new session lists fleet-simplify
+PASS  on: a new Work session lists it
+PASS  on: the session that was running keeps what it started with
+PASS  on: same servers (pids) — {"none":"341437","profile-d550f38bf1b5adf3.json":"341629"}
+PASS  off: a new session doesn't list it
+PASS  off: a new Work session doesn't list it
+PASS  off: the session started while it was on keeps it
+PASS  off: same servers (pids) — {"none":"341437","profile-d550f38bf1b5adf3.json":"341629"}
+PASS  no server was replaced

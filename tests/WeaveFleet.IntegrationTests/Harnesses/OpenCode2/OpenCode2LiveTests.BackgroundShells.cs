@@ -4,8 +4,9 @@ using System.Diagnostics;
 using FakeLlm::FakeLlmServer;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Services;
-using WeaveFleet.Application.Skills;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Events;
+using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 using WeaveFleet.Infrastructure.Services;
 
@@ -81,11 +82,17 @@ public sealed partial class OpenCode2LiveTests
         var harness = (OpenCode2HarnessSession)await fleet.HarnessSessionAsync(id, cts.Token);
         var server = harness.ProcessId.ShouldNotBeNull();
 
-        var skill = (await WithBuiltInSkillsAsync(s => s.ListAsync())).First(s => !s.Enabled).Name;
+        var before = await WithPreferencesAsync(p => p.GetAsync(SessionMessages.PreferenceKey));
         try
         {
-            // A built-in skill switched on while the shell runs: the server started without it, but it isn't replaced yet.
-            (await WithBuiltInSkillsAsync(s => s.SetEnabledAsync(skill, enabled: true))).IsSuccess.ShouldBeTrue();
+            // Messages between sessions switched while the shell runs: the server started with the other setting, but it
+            // isn't replaced yet.
+            var on = await WithSessionMessagesAsync(f => f.IsEnabledAsync());
+            await WithPreferencesAsync(async p =>
+            {
+                await p.SetAsync(SessionMessages.PreferenceKey, on ? "false" : "true");
+                return true;
+            });
             _ = await CatalogAsync(folder, HarnessProfileService.NoProfile, cts.Token);
             IsRunning(server).ShouldBeTrue($"OpenCode 2 server {server} was replaced while its background shell ran.");
 
@@ -104,7 +111,11 @@ public sealed partial class OpenCode2LiveTests
         }
         finally
         {
-            await WithBuiltInSkillsAsync(s => s.SetEnabledAsync(skill, enabled: false));
+            await WithPreferencesAsync(async p =>
+            {
+                await p.SetAsync(SessionMessages.PreferenceKey, before ?? "");
+                return true;
+            });
         }
     }
 
@@ -121,10 +132,17 @@ public sealed partial class OpenCode2LiveTests
         }
     }
 
-    private async Task<T> WithBuiltInSkillsAsync<T>(Func<BuiltInSkillService, Task<T>> call)
+    private async Task<T> WithPreferencesAsync<T>(Func<IUserPreferenceRepository, Task<T>> call)
     {
         using var user = BackgroundUserContext.BeginScope(OpenCode2LiveFleet.Owner);
         using var scope = fleet.Services.CreateScope();
-        return await call(scope.ServiceProvider.GetRequiredService<BuiltInSkillService>());
+        return await call(scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>());
+    }
+
+    private async Task<T> WithSessionMessagesAsync<T>(Func<SessionMessagesFeature, Task<T>> call)
+    {
+        using var user = BackgroundUserContext.BeginScope(OpenCode2LiveFleet.Owner);
+        using var scope = fleet.Services.CreateScope();
+        return await call(scope.ServiceProvider.GetRequiredService<SessionMessagesFeature>());
     }
 }

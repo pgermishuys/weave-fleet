@@ -498,6 +498,31 @@ About 4–5 weeks for parity with the OpenCode harness. Stages 0–2 (≈ 2 week
 harness behind the off-by-default switch. V2 is days old and its API spec calls itself experimental: pin a
 version and expect changes.
 
+## Live catalog (Track H) (2026-09-22)
+
+- [x] `OpenCode2Server` keeps listening after the load gate. For a folder Fleet asked about (`LoadLocationAsync`) or
+      runs a session in, `agent/model/provider/command/config.updated` count as a change; `skill`, `plugin`,
+      `websearch`, `reference` and `integration.updated` don't (nothing Fleet lists). A change is told once V2 has been
+      quiet about the folder for 1 s, and nothing in a folder's first 3 s after its load gate completed counts (the
+      rest of its loading burst). V2's own working folder is never told.
+- [x] The runtime publishes a harness-neutral `harness.catalog_changed` on the `sessions` topic
+      (`HarnessCatalogChanges`, Application): harness type, folder, `quickChat`, the Fleet profile ids whose catalog it
+      is (`none` for the server without a profile; a profile's server names every profile id that asked for its
+      content hash) and the Fleet sessions in that folder on that server. OpenCode 1 never sends it.
+- [x] Client: `useHarnessCatalog` refetches when harness, folder and profile match (the old list stays up meanwhile)
+      and forgets cached catalogs a change is about; a session's slash-command and `@` agent lists refetch when the
+      change names the session. No polling.
+- Checked live (2.0.9, separate mode, scratch Fleet): two composers on one folder (No profile, a profile). An agent
+  file in the repo's `.opencode/agents/`, then one in V2's config folder, each reached both composers without
+  reopening, with one catalog request per composer per change (both servers had loaded the folder, so two broadcasts,
+  each matched by its own profile). Starting sessions in a new folder and in the open one made no request. A session's
+  open slash list showed a new `.opencode/commands/*.md` with one request. An OpenCode 1 session answered beside it.
+- Learned: creating `.opencode/` and writing a file into it straight away can reach V2 as two bursts (the new config
+  folder, then the file) more than 500 ms apart; 1 s of quiet merged them in every run. V2 lists
+  `.opencode/commands/*.md` as commands and hot-reloads them.
+- **Left for later:** a session's own agent and model pickers in the conversation (`useAgents`, `useModels`) don't
+  listen yet. A catalog that changed while its server was down (replaced, idle-stopped) isn't told.
+
 ## "Needs input" inside the parent's conversation (2026-09-22)
 
 Track I. Shared code, every harness (OpenCode's `task`, OpenCode 2's `subagent`, Fleet's own delegations).
@@ -519,6 +544,68 @@ Track I. Shared code, every harness (OpenCode's `task`, OpenCode 2's `subagent`,
   background call is only known from the tool part's metadata (the card layer), not the delegation, and the server
   side disagrees too (the list is idle live, but the list endpoint counts a working child as busy on refetch). Needs a
   decision on what an idle parent with background work should show; not changed here.
+
+## Built-in skills under one folder (Track H) (2026-09-22)
+
+- [x] Each owner has one folder, `{data}/opencode2/built-in-skills/<hash of owner id>`, named in the `skills` array
+      of `OPENCODE_CONFIG_CONTENT` once, whatever is in it (`OpenCode2FleetFiles.SyncBuiltInSkills`). It holds exactly
+      the built-in skills the owner turned on. Fleet rewrites it when the setting changes (a new
+      `IHarnessRuntime.BuiltInSkillsChangedAsync`, called by `BuiltInSkillService` for every harness; a no-op for the
+      others) and before every server request. The old layout (one array entry per skill, all skills in
+      `built-in-skills/`) is cleaned up on the first sync.
+- [x] Built-in skills are out of the "settings changed → replace the server" comparison: the config content no longer
+      changes with them. Messages between sessions still replaces the server when idle.
+- Checked live (2.0.9, separate mode, scratch Fleet; the fake model answers with the `fleet-*` skills in the request's
+  system prompt): switched `fleet-simplify` on in Settings with a server running and a profile's server running. A
+  new session on each listed it; a session that was already running didn't; both server pids stayed the same and no
+  server was replaced. Switched off: new sessions on both servers didn't list it, while the session started while it
+  was on kept it. An OpenCode 1 session answered beside it.
+- **Correction to Stage 5 and #265's "Setup and install" list:** "new skills reach a running separate-mode server
+  only after the server restarts" is wrong. A *new session* picks up a synced skill live, with no restart (watched
+  folders: the config folder's `skills/`, a repo's `.opencode/skills/`, and any folder already in the array). An
+  existing session's skill list is fixed when it's created, and nothing changes it (not a reload, not a restart). The
+  one thing that needed a new server was a new array entry, which is what this change removes for built-in skills.
+- **Left alone:** V2 also reads `~/.claude/skills` from the real home whatever `HOME` is set to (out of scope).
+
+## Sign in to providers from Fleet (Track G) (2026-09-22)
+
+- [x] Settings → Harnesses → OpenCode 2 lists V2's providers (`GET /api/integration`, 227 on 2.0.9), which are signed
+      in and which sign-in each uses, with Sign in (key, browser) and Sign out; switching between several sign-ins.
+- [x] A harness-neutral seam: `IHarnessRuntime.ProviderSignIn` (`IHarnessProviderSignIn`) and the
+      `SupportsProviderSignIn` capability, served by `/api/harnesses/{type}/sign-in`. OpenCode 2 implements it in
+      `OpenCode2SignIn` over `/api/integration` and `/api/credential`, on the owner's server without a profile.
+- [x] The terminal command stays in the install panel as the fallback ("Or sign in to a provider in a terminal").
+
+What Track G learned (2.0.9, scratch HOME, dummy keys only):
+
+- **Integrations are per location, and only once it has loaded.** On a server that has just started, `POST
+  …/connect/oauth` answers 500 until a location's integrations are registered, and browser sign-ins are kept per
+  location. Every request names one folder of Fleet's own (`{data}/opencode2/sign-in`) and waits for it to load.
+- **Stored sign-ins reach every server of the install at once.** A key added or removed through one server shows in
+  another's `/api/model` straight away (two servers on one database), so profile servers need nothing.
+- **`connections` lists stored sign-ins first, the one in use first**, then environment variables V2 found set. On
+  2.0.9 a connection has no `method` field, although the spec requires one. A new key becomes the one in use;
+  removing the one in use hands over to the newest other one.
+- **V2 accepts an empty key** (204, and a sign-in named "Anthropic 2"), so Fleet refuses one first. Unknown
+  credential ids answer 204; an unknown OAuth method or `complete` on an `auto` attempt answer 500.
+- **Sign-in doesn't emit `integration.updated`** on 2.0.9. A key emits `credential.updated`, `credential.switched`,
+  `provider.updated` and `model.updated` (the last two reach the live catalog). No event carries the key.
+- **`auto` mode is two different flows.** A device flow (GitHub Copilot, ChatGPT headless, xAI, OpenCode Console)
+  shows a URL and a code, and V2 polls the provider: it works from any device. A browser flow (ChatGPT browser,
+  DigitalOcean, Poe, Snowflake) sends the browser back to a listener V2 opened on `localhost` (ChatGPT on 1455, then
+  1457), on the machine Fleet runs on. From another device that page can't load; the attempt's `redirect_uri` tells
+  the two apart, Fleet says so, and it passes the query of the address that browser landed on to the listener
+  (only the query, only to the address V2 gave the provider, only with its path and port). Checked by passing
+  `error=access_denied`: the attempt went `failed: access_denied`. No built-in provider uses `code` mode or the
+  `command` method on 2.0.9.
+- Attempts last 10 minutes; a finished one is kept for a minute, a cancelled one is gone (404), and cancelling closes
+  the listener.
+- **Keys** go browser → Fleet → V2 in request bodies only. Fleet never logs, stores or repeats them; the callback
+  forwarder is a named `HttpClient` with no loggers and no proxy, since its address carries the provider's code.
+- **Off with Fleet's sign-in on** (and in cloud mode): V2's sign-ins are the machine's, so one user's key would pay
+  for every user's sessions. With token auth (one user, e.g. Fleet opened from a phone) it's on.
+- **Left for later:** renaming a sign-in (`PATCH /api/credential`), the `command` method (V2 would run a command on
+  Fleet's machine; Fleet shows it and doesn't run it), `code`-mode attempts seen live (none in 2.0.9's built-ins).
 
 ## Track F — busy while background work runs, the agent's shell environment (2026-09-22)
 

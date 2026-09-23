@@ -1,5 +1,6 @@
 using Shouldly;
 using WeaveFleet.Application.Skills;
+using WeaveFleet.Testing.Fakes;
 using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Application.Tests.Services;
@@ -39,6 +40,25 @@ public sealed class BuiltInSkillServiceTests
 
         (await _preferences.GetAsync(BuiltInSkillService.PreferenceKey)).ShouldBe("fleet-code-review,retired-skill");
         (await _service.ListAsync()).Select(skill => skill.Enabled).ShouldBe([true, false]);
+    }
+
+    [Fact]
+    public async Task SetEnabledAsync_tells_every_harness_whose_choice_changed()
+    {
+        var registry = new FakeHarnessRegistry();
+        var opencode = new FakeHarnessRuntime("opencode");
+        var opencode2 = new FakeHarnessRuntime("opencode2");
+        registry.Register(new FakeHarness("opencode", "OpenCode"));
+        registry.Register(new FakeHarness("opencode2", "OpenCode 2"));
+        registry.Register(opencode);
+        registry.Register(opencode2);
+        var service = new BuiltInSkillService(new Catalog(), _preferences, registry, new TestUserContext("owner-1"));
+
+        await service.SetEnabledAsync("fleet-simplify", enabled: true);
+        await service.SetEnabledAsync("not-shipped", enabled: true);
+
+        opencode.BuiltInSkillChanges.ShouldBe(["owner-1"]);
+        opencode2.BuiltInSkillChanges.ShouldBe(["owner-1"]);
     }
 
     [Fact]
