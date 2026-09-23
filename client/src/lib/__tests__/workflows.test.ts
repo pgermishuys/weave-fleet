@@ -141,5 +141,10 @@ describe("workflows", () => {
     const running = run({ checkWithMe: true });
     expect(checkWithMeNote(running)).toBe("Check with me is on from the next step. This step started on its own, so it still moves on when the agent reports it's done.");
     expect(checkWithMeNote(run({ checkWithMe: false }))).toBeNull();
+
+    // Design says finish: you, so the switch has nothing to say about it.
+    const design = run({ checkWithMe: false });
+    design.steps = design.steps.map((s) => (s.id === "implement" ? { ...s, finishYou: true, withYou: true } : s));
+    expect(checkWithMeNote(design)).toBeNull();
   });
 });

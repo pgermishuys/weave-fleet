@@ -55,6 +55,7 @@ function when(iso: string): string {
 
 function runText(run: WorkflowRun): string {
   if (run.status === "waiting" && run.waiting) return `Needs you · ${run.waiting.stepTitle}`;
+  if (run.status === "running" && run.withYou) return `With you · ${run.withYou.stepTitle}`;
   if (run.status === "running") {
     const step = run.steps.find((s) => s.id === run.currentStepId);
     return step ? `Running · ${step.title}` : "Running";
@@ -499,6 +500,10 @@ function openRun(run: WorkflowRun): void {
 
 .wf-runs__status--run {
   color: var(--running);
+}
+
+.wf-runs__status--with {
+  color: var(--accent);
 }
 
 .wf-runs__status--fail {

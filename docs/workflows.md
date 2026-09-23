@@ -116,7 +116,8 @@ A declared file (`writes:`) can use `{{slug}}` and `{{run.branch}}`: the variabl
 ## How a run moves
 
 Each agent step starts as a new session in the run's worktree. Its prompt is the step's `prompt` with the variables
-filled in, then a note if the step was sent back, then one short footer that Fleet adds to step sessions only:
+filled in, then a note if the step was sent back, then one short footer that Fleet adds to step sessions only (a step you finish
+has none, see [Steps you finish](#steps-you-finish)):
 
 > This is one step of a Fleet workflow. When the step is finished, call fleet_step_done once, as your last action,
 > with outcome set to one of: pass, changes. Put what the next step needs in summary.

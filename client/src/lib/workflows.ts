@@ -435,7 +435,8 @@ export function nextStepTitle(run: WorkflowRun): string | null {
  */
 export function checkWithMeNote(run: WorkflowRun): string | null {
   const step = runningStep(run);
-  if (!step || Boolean(run.checkWithMe) === step.withYou) return null;
+  // A step the file says the user finishes is theirs whatever the switch says.
+  if (!step || step.finishYou || Boolean(run.checkWithMe) === step.withYou) return null;
   const next = nextStepTitle(run) ?? "the next step";
   return run.checkWithMe
     ? `Check with me is on from ${next}. This step started on its own, so it still moves on when the agent reports it's done.`
