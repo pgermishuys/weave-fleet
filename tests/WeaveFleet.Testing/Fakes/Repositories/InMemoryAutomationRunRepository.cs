@@ -24,7 +24,7 @@ public sealed class InMemoryAutomationRunRepository : IAutomationRunRepository
         return Task.CompletedTask;
     }
 
-    public Task CompleteAsync(string id, string status, string? sessionId, string? instanceId, string? reason)
+    public Task CompleteAsync(string id, string status, string? sessionId, string? instanceId, string? reason, string? workflowRunId = null)
     {
         lock (_gate)
         {
@@ -33,6 +33,7 @@ public sealed class InMemoryAutomationRunRepository : IAutomationRunRepository
             run.SessionId = sessionId;
             run.InstanceId = instanceId;
             run.Error = reason;
+            run.WorkflowRunId = workflowRunId;
         }
 
         return Task.CompletedTask;
@@ -101,5 +102,6 @@ public sealed class InMemoryAutomationRunRepository : IAutomationRunRepository
         SessionId = run.SessionId,
         InstanceId = run.InstanceId,
         Error = run.Error,
+        WorkflowRunId = run.WorkflowRunId,
     };
 }

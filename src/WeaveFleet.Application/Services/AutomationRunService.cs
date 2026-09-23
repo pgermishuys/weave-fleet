@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Workflows;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
@@ -25,18 +26,24 @@ public static class AutomationRunState
     public const string Done = "done";
     public const string Failed = "failed";
     public const string Skipped = "skipped";
+    /// <summary>The workflow run it started waits on the user (Needs you).</summary>
+    public const string Waiting = "waiting";
+    /// <summary>The workflow run it started was ended before it finished.</summary>
+    public const string Ended = "ended";
 }
 
 /// <summary>
 /// The one way an automation runs, whatever started it. Each run gets a row in <c>automation_runs</c>: started with
-/// its session, failed with the reason, or skipped because the last run was still going.
+/// its session (or the workflow run it started), failed with the reason, or skipped because the last run was still
+/// going or the workflow couldn't start.
 /// </summary>
 public sealed partial class AutomationRunService(
     IAutomationRunRepository runRepository,
     IAutomationExecutor executionService,
     SessionActivityTracker activityTracker,
     TimeProvider timeProvider,
-    ILogger<AutomationRunService> logger)
+    ILogger<AutomationRunService> logger,
+    IAutomationWorkflows? workflows = null)
 {
     /// <summary>A run still "starting" after this is assumed stuck, so it no longer holds up the next one.</summary>
     private static readonly TimeSpan StartingTimeout = TimeSpan.FromMinutes(15);
@@ -59,7 +66,21 @@ public sealed partial class AutomationRunService(
             Status = AutomationRunStatus.Starting,
         };
 
-        if (!trigger.IsManual && await IsStillGoingAsync(automation, now))
+        if (trigger.IsManual)
+        {
+            // Run now is never skipped for a run that's still going.
+        }
+        else if (automation.TargetType == AutomationTargets.Workflow)
+        {
+            // Workflow runs never stack, whatever the skip switch says: one waiting on you is enough.
+            if (await UnfinishedWorkflowRunAsync(automation, now) is { } reason)
+            {
+                run.Status = AutomationRunStatus.Skipped;
+                run.Error = $"Skipped: {reason}";
+                LogSkippedStillGoing(automation.Id, automation.Name);
+            }
+        }
+        else if (await IsStillGoingAsync(automation, now))
         {
             run.Status = AutomationRunStatus.Skipped;
             run.Error = "Skipped: the last run was still going.";
@@ -88,11 +109,14 @@ public sealed partial class AutomationRunService(
             previousSessionId,
             ct);
 
-        run.Status = outcome.SessionId is not null ? AutomationRunStatus.Started : AutomationRunStatus.Failed;
+        run.Status = outcome.Skipped ? AutomationRunStatus.Skipped
+            : outcome.SessionId is not null || outcome.WorkflowRunId is not null ? AutomationRunStatus.Started
+            : AutomationRunStatus.Failed;
         run.SessionId = outcome.SessionId;
         run.InstanceId = outcome.InstanceId;
         run.Error = outcome.Error;
-        await runRepository.CompleteAsync(run.Id, run.Status, run.SessionId, run.InstanceId, run.Error);
+        run.WorkflowRunId = outcome.WorkflowRunId;
+        await runRepository.CompleteAsync(run.Id, run.Status, run.SessionId, run.InstanceId, run.Error, run.WorkflowRunId);
         return run;
     }
 
@@ -103,7 +127,26 @@ public sealed partial class AutomationRunService(
         return await FinishAsync(automation, run, trigger, ct);
     }
 
-    /// <summary>What the runs list says about a run: a started run is running while its session is busy.</summary>
+    /// <summary>
+    /// What the runs list says about a run: a run that started a workflow run follows that run (Running, Needs you,
+    /// Done, Ended, Failed); any other started run is running while its session is busy.
+    /// </summary>
+    public async Task<string> StateOfAsync(AutomationRun run)
+    {
+        if (run.Status != AutomationRunStatus.Started || run.WorkflowRunId is null || workflows is null)
+            return StateOf(run);
+
+        return await workflows.StatusAsync(run.UserId, run.WorkflowRunId) switch
+        {
+            WorkflowRunStatus.Running => AutomationRunState.Running,
+            WorkflowRunStatus.Waiting => AutomationRunState.Waiting,
+            WorkflowRunStatus.Ended => AutomationRunState.Ended,
+            WorkflowRunStatus.Failed => AutomationRunState.Failed,
+            _ => AutomationRunState.Done,
+        };
+    }
+
+    /// <summary>What the runs list says about a run that started a session: running while its session is busy.</summary>
     public string StateOf(AutomationRun run) => run.Status switch
     {
         AutomationRunStatus.Starting => AutomationRunState.Starting,
@@ -128,6 +171,24 @@ public sealed partial class AutomationRunService(
             _ => false,
         });
         return going >= automation.MaxConcurrentRuns;
+    }
+
+    /// <summary>
+    /// Why the automation's last workflow run holds up this one: it's still starting, or its workflow run is running,
+    /// with you or waiting on you. Null when there's nothing unfinished.
+    /// </summary>
+    private async Task<string?> UnfinishedWorkflowRunAsync(Automation automation, DateTime nowUtc)
+    {
+        var recent = await runRepository.ListByAutomationAsync(automation.Id, limit: 20);
+        if (recent.Any(run => run.Status == AutomationRunStatus.Starting
+                && DateTime.TryParse(run.StartedAt, null, System.Globalization.DateTimeStyles.RoundtripKind, out var at)
+                && nowUtc - at.ToUniversalTime() < StartingTimeout))
+        {
+            return "the last run is still starting.";
+        }
+
+        var last = recent.FirstOrDefault(run => run.Status == AutomationRunStatus.Started && run.WorkflowRunId is not null);
+        return last is null || workflows is null ? null : await workflows.UnfinishedAsync(automation.UserId, last.WorkflowRunId!);
     }
 
     private async Task<string?> PreviousSessionIdAsync(string automationId, string currentRunId)
