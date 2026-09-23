@@ -369,6 +369,81 @@ before); `sessions.workflow_user_finishes INTEGER NOT NULL DEFAULT 0`.
 - Parallel steps. When they come (Stage 2), only the branch in the run's worktree may declare files; a branch with its
   own worktree or a read-only one hands on its summary only, and declaring files there is a file error with its line.
 
+## Fixes from the real-model run
+
+On 2026-09-23 Build a feature ran end to end on real models (GitHub Copilot: Sonnet 5 for strong and standard, Haiku
+4.5 for fast; Design on; the plan approved with Check with me). Everything in Stage 1 and 1.5 held. Four things get
+fixed here, agreed with the user; nothing else changes.
+
+### 1. The request reaches every agent step
+
+- `build-a-feature.yaml`: Implement, Review, Check it runs and Push and open the PR get a line
+  `The request: {{request}}` (Design and Plan already start from it). Implement never saw "don't install packages or
+  run the test suite", so it installed 557 MB and ran the suite.
+- Plan's prompt adds: "Carry every constraint in the request into the plan, e.g. what not to install, run or change."
+- `docs/workflows.md`: under Variables, recommend putting `{{request}}` in every agent step's prompt, because a step
+  only knows what its own prompt says; the example workflow does it.
+
+### 2. An explicit `finish: agent` ignores Check with me
+
+- The parser keeps what the file says: `WorkflowAgentStep.Finish` is `you`, `agent` or null (not written).
+  `FinishYou` stays as a derived property; `FinishAgent` is new. One rule, `UserFinishes(checkWithMe)`: `you` → true,
+  `agent` → false, null → Check with me. The runner decides a visit's mode with it when the visit starts (as today),
+  and the run view uses it for steps still to come.
+- The DTOs (the library's `WorkflowStepDto`, the run's `WorkflowRunStepDto`) get `finishAgent`, so the stepper
+  never puts the person icon on such a step and the header's Check with me note doesn't claim it will be yours.
+- Built-in: Push and open the PR gets `finish: agent`. After **Open PR** at the You decide step, the push runs on its
+  own even with Check with me on.
+- `docs/workflows.md`: the `finish` row and Check with me say that only a step with no `finish:` follows the switch.
+
+### 3. Fleet commits a step's declared files at the files check
+
+- Where: right after the files check passes (`FilesChecked = true`), in both places it can pass: moving on from a
+  step (agent-finished, or the wrap-up of one you finish) and a later reply that brought the missing files. So it
+  covers steps the agent finishes and steps you finish. Move on anyway skips the check and so the commit; a step
+  whose outcome ends the run has no check (as today) and no commit.
+- What: `IWorkflowFiles.CommitAsync(worktree, files, title)`. `git status --porcelain -z --untracked-files=all --
+  <paths>` finds the declared paths that are new or changed; none → nothing happens (the agent already committed
+  them). Otherwise `git add -- <those>` then `git commit -m "<Step title>: <paths>" -- <those>`, so only those paths
+  go in, whatever else is staged. No `-f`: a path git ignores never shows in status, so it stays out of the PR. The
+  repo's own identity and hooks apply; Fleet passes no `-c user.*` and no `--no-verify`.
+- Git: the git runner `WorkspaceService` makes worktrees with moves into a shared internal `GitCommand` helper in
+  `Application/Services` (same process setup, `GIT_TERMINAL_PROMPT=0`, the same one-line error from stderr), with a
+  30-second timeout for the commit so a hook or a signing prompt can't hold the run's lock.
+- Failure never blocks the run: the visit records `files_commit_error` ("Author identity unknown …"); on success it
+  records `files_commit` (the short SHA). Migration `040_add_workflow_files_commit.sql`. The session DTO carries
+  both, and the resolved card's files line says "Files checked and committed (a1b2c3d): x.md, x.html", or "Files
+  checked: x.md. Fleet couldn't commit them: …".
+
+### 4. Plan decides instead of stopping to ask
+
+- Plan's prompt: where the request, the design and the code disagree, choose what changes the least, keep going, and
+  list each choice under a **Decisions to confirm** heading near the top of the plan; ask mid-step only if it truly
+  can't go on. The approval card already opens the plan next to it, so no UI changes.
+
+### Tests
+
+- Application: the built-in's prompts with the request (every agent step, filled in by `PromptFor`); `finish:
+  agent` with Check with me on gets the footer and `userFinishes: false` and ends with the tool, while a step with no
+  `finish:` still becomes one you finish from the next step; the view doesn't mark it; the commit after the files
+  check (both finishers, and after a reply that brought the files), nothing to commit, a failed commit that records
+  its error and still moves on; the parser accepts `finish: agent` and keeps null when it's absent.
+- Infrastructure: `WorkflowFiles.CommitAsync` in a real temporary git repo: new and changed files committed with the
+  message, only declared paths (other staged and unstaged changes untouched), nothing to commit, an ignored path left
+  out, no identity → an error and no commit. Repository round trip of the two new columns.
+- Live harness tests (CI, OpenCode 1.18.31 and OpenCode 2 2.0.9): the together test's workspace becomes a git repo,
+  and the wrap-up's declared file is committed at the files check.
+- Client: stepper without the icon on a `finishAgent` step with Check with me on; `checkWithMeNote`; the card's
+  committed and couldn't-commit lines.
+- Live on a scratch Fleet (port 5341, fake model 4997, OpenCode 1): Build a feature with Design and Check with me
+  on — Design's and Plan's files are commits on the run's branch, the push step isn't marked; with Check with me off —
+  the same commits; the scratch repo with no identity (`user.useConfigOnly`) — the run goes on and the card shows why.
+
+### Not in this change
+
+- The `fleet-mockups` skill leaves its preview server running after the step; a step agent may use `git stash` in the
+  run's worktree (the stash is shared with the repo).
+
 ## Stage 2 — Bug triage and Review a pull request (outline)
 
 - Starting from a GitHub issue (`starts-from: issue`, `{{issue}}`) or a PR (`starts-from: pr`, `runs-in:
