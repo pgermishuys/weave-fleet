@@ -7,6 +7,7 @@ export type SidebarRail =
   | "sessions"
   | "analytics"
   | "automations"
+  | "workflows"
   | "github"
   | "marketplace"
   | "settings";

@@ -297,6 +297,8 @@ export interface HarnessCapabilities {
   supportsProfiles?: boolean;
   /** Fleet can sign in to the harness's providers (`/api/harnesses/{type}/sign-in`). Off when Fleet runs with sign-in. */
   supportsProviderSignIn?: boolean;
+  /** Sessions can be workflow steps: the harness hides the step tool from every other session. */
+  supportsWorkflowSteps?: boolean;
 }
 
 /** A field a sign-in method asks for besides the key or browser (`HarnessSignInField` on the server). */
