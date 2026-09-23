@@ -89,7 +89,7 @@ internal sealed partial class OpenCodeWeave(
     /// </summary>
     public async Task<IReadOnlyList<WeaveInstall>> DetectAsync(string ownerUserId, CancellationToken ct)
     {
-        var (plugins, agents) = await TryAsync(ownerUserId, ProbeFiles, readPlugins: true, ct).ConfigureAwait(false);
+        var (plugins, agents, _) = await TryAsync(ownerUserId, ProbeFiles, readPlugins: true, ct).ConfigureAwait(false);
         var names = agents.Select(agent => agent.Name).OfType<string>().ToHashSet(StringComparer.Ordinal);
 
         var installs = new List<WeaveInstall>();
@@ -119,7 +119,7 @@ internal sealed partial class OpenCodeWeave(
         IReadOnlyDictionary<string, string> files,
         CancellationToken ct)
     {
-        var (_, agents) = await TryAsync(ownerUserId, files, readPlugins: false, ct).ConfigureAwait(false);
+        var (_, agents, logStart) = await TryAsync(ownerUserId, files, readPlugins: false, ct).ConfigureAwait(false);
         var loaded = agents
             .Where(agent => agent.Name is not null && IsFlavorAgent(agent, flavor))
             .Select(agent => agent.Name!)
@@ -130,12 +130,11 @@ internal sealed partial class OpenCodeWeave(
         if (flavor == WeaveFlavor.Legacy)
             return new WeaveCheck(false, [], "OpenCode started, but Weave Legacy added no agents.");
 
-        var project = WeaveConfigFolder.TrialProjectFor(dataDirectory(), ownerUserId);
         return new WeaveCheck(
             false,
             [],
             "OpenCode started, but Weave added no agents. Weave ignores the whole file when it can't read it.",
-            ReadWeaveLogErrors(Path.Combine(project, ".weave", "weave.log")));
+            ReadWeaveLogErrors(TrialLogFor(ownerUserId), logStart));
     }
 
     /// <summary>
@@ -177,9 +176,10 @@ internal sealed partial class OpenCodeWeave(
 
     /// <summary>
     /// Writes <paramref name="files"/> into the user's trial folder, reloads the trial project so Weave reads them, and
-    /// returns OpenCode's plugins (when asked) and agents there. One trial at a time per user: they share the folder.
+    /// returns OpenCode's plugins (when asked) and agents there, and where this trial's lines start in Weave's log. One
+    /// trial at a time per user: they share the folder.
     /// </summary>
-    private async Task<(IReadOnlyList<string> Plugins, IReadOnlyList<OpenCodeAgentInfo> Agents)> TryAsync(
+    private async Task<(IReadOnlyList<string> Plugins, IReadOnlyList<OpenCodeAgentInfo> Agents, long LogStart)> TryAsync(
         string ownerUserId,
         IReadOnlyDictionary<string, string> files,
         bool readPlugins,
@@ -193,9 +193,11 @@ internal sealed partial class OpenCodeWeave(
             var project = WeaveConfigFolder.TrialProjectFor(dataDirectory(), ownerUserId);
             WeaveConfigFolder.Mirror(folder, files);
             Directory.CreateDirectory(project);
-            var log = Path.Combine(project, ".weave", "weave.log");
-            if (File.Exists(log))
-                File.Delete(log);
+
+            // The trial process keeps Weave's log open between tries, and Windows won't delete an open file, so read
+            // only what this try adds.
+            var log = new FileInfo(TrialLogFor(ownerUserId));
+            var logStart = log.Exists ? log.Length : 0;
 
             // Both variables point at the trial folder, so this is one process per user however often they try.
             var environment = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -217,7 +219,7 @@ internal sealed partial class OpenCodeWeave(
                     ? await client.GetConfigPluginsAsync(project, ct).ConfigureAwait(false)
                     : [];
                 var agents = await client.GetAgentsAsync(project, ct).ConfigureAwait(false);
-                return (plugins, agents);
+                return (plugins, agents, logStart);
             }
         }
         finally
@@ -225,6 +227,9 @@ internal sealed partial class OpenCodeWeave(
             gate.Release();
         }
     }
+
+    private string TrialLogFor(string ownerUserId) =>
+        Path.Combine(WeaveConfigFolder.TrialProjectFor(dataDirectory(), ownerUserId), ".weave", "weave.log");
 
     private async Task<WeaveConfig?> LoadConfigAsync(string userId)
     {
@@ -277,15 +282,29 @@ internal sealed partial class OpenCodeWeave(
     }
 
     /// <summary>
-    /// The errors in Weave's last "Failed to load Weave config" line, one per problem: <c>config.weave:3:1 UnclosedBlock</c>.
+    /// The errors in Weave's last "Failed to load Weave config" line after <paramref name="from"/>, one per problem:
+    /// <c>config.weave:3:1 UnclosedBlock</c>.
     /// </summary>
-    internal static IReadOnlyList<string> ReadWeaveLogErrors(string logPath)
+    internal static IReadOnlyList<string> ReadWeaveLogErrors(string logPath, long from = 0)
     {
         if (!File.Exists(logPath))
             return [];
 
-        var line = File.ReadLines(logPath).LastOrDefault(l => l.Contains("\"ParseError\"", StringComparison.Ordinal)
-                                                              || l.Contains("Failed to load Weave config", StringComparison.Ordinal));
+        string? line;
+        try
+        {
+            // Weave still has the file open for writing, which Windows only lets another reader share with ReadWrite.
+            using var stream = new FileStream(logPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            stream.Seek(from <= stream.Length ? from : 0, SeekOrigin.Begin);
+            using var reader = new StreamReader(stream);
+            line = ReadLines(reader).LastOrDefault(l => l.Contains("\"ParseError\"", StringComparison.Ordinal)
+                                                        || l.Contains("Failed to load Weave config", StringComparison.Ordinal));
+        }
+        catch (IOException)
+        {
+            return [];
+        }
+
         if (line is null)
             return [];
 
@@ -325,6 +344,12 @@ internal sealed partial class OpenCodeWeave(
         }
 
         return details;
+    }
+
+    private static IEnumerable<string> ReadLines(StreamReader reader)
+    {
+        while (reader.ReadLine() is { } line)
+            yield return line;
     }
 
     private sealed record ApplyTarget(PooledOpenCodeInstance Instance, string Directory);
