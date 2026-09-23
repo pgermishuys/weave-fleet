@@ -42,9 +42,9 @@ public sealed partial class WorkflowRunnerTests
         var plan = Prompt("plan");
         plan.ShouldContain("Carry every constraint in the request into the plan, such as what not to install, run or change.");
         plan.ShouldContain(
-            "Where the request, the design and the code disagree, choose what changes the least and keep going. List each\n"
-            + "choice under a \"Decisions to confirm\" heading near the top of the plan: the user reads the plan before\n"
-            + "approving it. Ask a question only if you truly can't go on without the answer.");
+            "Where the request, the design and the code disagree, choose what changes the least and keep going.\n"
+            + "List each choice under a \"Decisions to confirm\" heading near the top of the plan: the user reads the plan before approving it.\n"
+            + "Ask a question only if you truly can't go on without the answer.");
     }
 
     // ── finish: agent ──────────────────────────────────────────────────────────

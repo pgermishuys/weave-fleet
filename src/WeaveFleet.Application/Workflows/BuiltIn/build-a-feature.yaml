@@ -35,9 +35,9 @@ steps:
       Carry every constraint in the request into the plan, such as what not to install, run or change.
       Reuse what the code already has.
       Read {{previous.files}} first.
-      Where the request, the design and the code disagree, choose what changes the least and keep going. List each
-      choice under a "Decisions to confirm" heading near the top of the plan: the user reads the plan before
-      approving it. Ask a question only if you truly can't go on without the answer.
+      Where the request, the design and the code disagree, choose what changes the least and keep going.
+      List each choice under a "Decisions to confirm" heading near the top of the plan: the user reads the plan before approving it.
+      Ask a question only if you truly can't go on without the answer.
 
       {{previous.summary}}
     outcomes: [ready]
