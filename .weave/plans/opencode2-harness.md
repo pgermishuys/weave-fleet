@@ -652,3 +652,43 @@ What Track G learned (2.0.9, scratch HOME, dummy keys only):
   - The hook is in Fleet's plugin, which loads only once Fleet knows its own address (as before).
   - OpenCode 1's shell isn't changed.
   - MCP servers, LSPs and formatters V2 starts still inherit the server's environment.
+
+## Harness processes that outlive Fleet (2026-09-23)
+
+Issue #265, "Replacement V2 servers outlive Fleet". Shared by every harness (`ProcessGroupHelper`), so the fix is too.
+
+- **What was measured on `main`** (scratch Fleet on 5301, V2 2.0.9, `.poc-runtime/scenario.sh` in the worktree):
+  - `setpgid` fails with `EACCES` for every harness process, first or replacement. `Process.Start` returns after the
+    child has exec'd, so the child always stays in Fleet's process group, and `killpg` then fails with `ESRCH`. The
+    tree kill added in #264 is what actually stops them.
+  - `SIGTERM` to Fleet (graceful stop): nothing left behind, whether it was the first server, a server replaced after
+    a settings change, a profile server stopped as idle and started again, or an OpenCode 1 session.
+  - The OpenCode 2 live suite (26 tests, then Track G's two tests on their own): nothing left behind. The leftovers
+    Track G saw weren't reproduced.
+  - `SIGKILL` to Fleet: every harness is left running under PID 1 (OpenCode 1 and 2 alike). The next start's
+    cleanup killed the pids in the `instances` table if the process name held `opencode`, `claude` or `node`. That
+    missed every server started after its session was activated (a replacement, or a profile server started again),
+    and it would kill any `node` process that got a recorded pid.
+  - Under systemd (`systemd-run --user`, `KillMode=control-group` as in the installed unit), both `systemctl stop`
+    and killing Fleet's main process take the servers with them: the installed service isn't affected.
+- **`PR_SET_PDEATHSIG` doesn't fit.** Linux sends it when the *thread* that forked the child exits, and .NET starts
+  processes on whatever thread calls `Process.Start`. Measured with `setpriv --pdeathsig KILL`: a child started from a
+  dedicated thread died when that thread ended, and one started from a thread-pool thread died when the pool retired
+  the idle thread (~20–45 s later), with the parent still running. It's also Linux-only (no `setpriv` or pdeathsig on
+  macOS).
+- **What Fleet does now** (`ProcessGroupHelper`, `ProcessIdentity`, `HarnessProcessRecords`):
+  - A harness is killed with its children (tree kill) when Fleet stops it. The `setpgid`/`killpg` calls are gone.
+  - Every harness Fleet starts on Linux and macOS is tracked until it exits. If Fleet's process exits (normally, or on
+    an unhandled exception) with any still running, they're killed then.
+  - Each is also recorded in a file under `Fleet:Harness:ProcessRecordsDirectory` (default:
+    `harness-processes` in the user's app-data folder, so every Fleet the user runs shares it). The file names the
+    Fleet and the harness by pid, start time (`/proc/<pid>/stat` on Linux, the kernel's start time on macOS) and boot
+    id, and it's removed when the harness exits.
+  - When Fleet starts, it stops each recorded process whose Fleet is gone and that is still the same process (same pid,
+    start time and boot). A record whose pid now belongs to another process is dropped without killing anything. So
+    is a record from before a reboot. A record whose Fleet is still running is left for that Fleet.
+  - This replaces the old cleanup by `instances.pid` and process name.
+  - `OpenCode2Servers.GetAsync` checks again, once it holds the lock, that it wasn't disposed while it waited. A server
+    started after that would never be stopped.
+- **Not covered:** after an abrupt exit, the harnesses keep running until a Fleet starts again with the same records
+  folder. Windows is unchanged (the Job Object already kills harnesses when Fleet dies). macOS wasn't run.
