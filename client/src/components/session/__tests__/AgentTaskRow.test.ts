@@ -56,6 +56,25 @@ describe("AgentTaskRow", () => {
     expect(navigateMock).toHaveBeenCalledWith(expect.objectContaining({ params: { id: "child-1" } }));
   });
 
+  it("says a child in the background is running there, not working for the session", () => {
+    const wrapper = mount(AgentTaskRow, { props: { delegation: delegation({ background: true }) } });
+
+    expect(wrapper.get("[data-testid='delegation-link-status']").text()).toBe("Running in the background");
+    expect(wrapper.get("a").classes()).toContain("agent-task--background");
+  });
+
+  it("says a child in the background that asks needs input", () => {
+    const wrapper = mount(AgentTaskRow, { props: { delegation: delegation({ background: true, needsInput: true }) } });
+
+    expect(wrapper.get("[data-testid='delegation-link-status']").text()).toBe("Needs input");
+  });
+
+  it("says a child that came back from the background is done", () => {
+    const wrapper = mount(AgentTaskRow, { props: { delegation: delegation({ background: true, status: "completed" }) } });
+
+    expect(wrapper.get("[data-testid='delegation-link-status']").text()).toBe("Done");
+  });
+
   it("ignores a stale question once the child has finished", () => {
     const wrapper = mount(AgentTaskRow, { props: { delegation: delegation({ status: "completed", needsInput: true }) } });
 

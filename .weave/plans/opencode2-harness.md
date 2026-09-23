@@ -693,6 +693,32 @@ Issue #265, "Replacement V2 servers outlive Fleet". Shared by every harness (`Pr
 - **Not covered:** after an abrupt exit, the harnesses keep running until a Fleet starts again with the same records
   folder. Windows is unchanged (the Job Object already kills harnesses when Fleet dies). macOS wasn't run.
 
+## A parent reads idle while only a background subagent works (2026-09-23)
+
+The user's decision: while a subagent moved to the background works and nothing else runs in the parent, the parent
+reads idle everywhere (list, header, and its conversation, with no Working line), because it is free for the next
+prompt and wakes by itself on the child's notice (#270). The subagent's row says "Running in the background". A
+foreground subagent still shows Working, and a background child's question still shows Needs input (#272).
+
+- **Where the server disagreed with itself.** `SessionActivityTracker.GetEffectiveActivityStatus` made any parent with
+  a working registered child busy, and the list endpoint did the same from `GetActiveChildToParentMappingAsync`. The
+  relay's own events (`ShownActivityStatus`) never did, so live the list said idle and its 15 s refetch said active.
+  The snapshot builders and `SessionPropagation` (a child's status change broadcasts the parent's effective status)
+  used the effective status too.
+- **The seam, for every harness:** `DelegationService.HandleDelegationMovedToBackgroundAsync(parent, toolCall)`. It
+  marks the child in the tracker (`MoveChildToBackground`), sends `delegation.updated` with `background: true`, and
+  sends the parent's activity status. A background child's work doesn't count as its parent's anywhere after that.
+  Its `waiting_input` still does. OpenCode 2's delegations call it when a `subagent` call's `session.tool.success`
+  has `metadata.status: "running"` (`OpenCode2Delegation.Background`). No other harness backgrounds a subagent yet.
+- **The client:** delegation events and snapshot delegations carry `background` (the tracker's, so a reload agrees
+  with live). The stream reducer leaves background delegations out of `delegating`, and once a delegation is in the
+  background it stays there.
+- **Known limit:** the flag lives only in the tracker's memory, like the parent/child index itself. After a Fleet
+  restart a delegation still `running` in the database reads as foreground again.
+- **Checked live** (scratch Fleet, V2 2.0.9, fake model): background, background question, foreground on V2, and
+  foreground on OpenCode 1. The extended `A_background_subagents_delegation_stays_open_while_its_child_works` live
+  test passes, and so does the rest of the OpenCode 2 live suite.
+
 ## A session's own agent and model pickers follow the live catalog (2026-09-23)
 
 Closes the first "left for later" of the live catalog (Track H) above.

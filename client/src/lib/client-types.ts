@@ -52,6 +52,11 @@ export interface DelegationDto {
   createdAt?: string | null;
   /** What the sub-agent's own session shows ("busy", "waiting_input", …); null until Fleet has said. */
   childActivityStatus?: string | null;
+  /**
+   * The call that started the sub-agent returned while it works on: the parent is free, and the sub-agent's
+   * work isn't the parent's. Only its question still holds the parent up.
+   */
+  background?: boolean;
 }
 
 // ─── Accumulated Message (for useSessionEvents) ────────────────────────────

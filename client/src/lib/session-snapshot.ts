@@ -16,6 +16,8 @@ export interface SessionSnapshotDelegation {
   createdAt: string;
   /** What the sub-agent's own session shows, when Fleet is tracking it. */
   childActivityStatus?: string | null;
+  /** Set when the sub-agent works on in the background, its call having returned. */
+  background?: boolean | null;
 }
 
 export interface SessionSnapshot {

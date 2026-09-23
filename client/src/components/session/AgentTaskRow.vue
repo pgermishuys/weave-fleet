@@ -14,8 +14,11 @@ const router = useRouter();
 const isWorking = computed(() => props.delegation.status === "running" || props.delegation.status === "pending");
 // The sub-agent's question holds it up, and its session is where you answer.
 const needsInput = computed(() => isWorking.value && props.delegation.needsInput === true);
+// Its call returned: the session is free while it works, and hears when it's done.
+const inBackground = computed(() => isWorking.value && props.delegation.background === true);
 const statusWord = computed(() => {
   if (needsInput.value) return "Needs input";
+  if (inBackground.value) return "Running in the background";
   switch (props.delegation.status) {
     case "completed": return "Done";
     case "error": return "Failed";
@@ -42,7 +45,7 @@ function handleClick(event: MouseEvent): void {
   <!-- A sub-agent's task is one row: who, what, how it's going, and a way into its session. -->
   <a
     class="agent-task"
-    :class="[`agent-task--${delegation.status}`, { 'agent-task--needs-input': needsInput }]"
+    :class="[`agent-task--${delegation.status}`, { 'agent-task--needs-input': needsInput, 'agent-task--background': inBackground }]"
     :href="delegation.href"
     :title="needsInput ? `Open ${delegation.task} to answer its question` : `Open ${delegation.task}`"
     data-testid="delegation-link"

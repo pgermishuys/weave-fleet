@@ -37,6 +37,40 @@ public sealed class SessionSnapshotBuilderTests
         snapshot.Delegations.Single(d => d.DelegationId == "unlinked").ChildActivityStatus.ShouldBeNull();
     }
 
+    // Reopening a parent while only a background subagent works: it's free, and the row says where the child is.
+    [Fact]
+    public async Task BuildAsync_reads_a_parent_whose_only_work_is_in_the_background_as_idle()
+    {
+        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
+        using var _ = keeper;
+        var userId = TestUserContext.DefaultUserId;
+        var parent = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, userId);
+        var backgroundChild = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, userId);
+        var foregroundChild = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, userId);
+
+        var delegations = new DelegationRepository(factory, new TestUserContext());
+        await delegations.InsertAsync(Delegation("background", parent.Session.Id, backgroundChild.Session.Id));
+        await delegations.InsertAsync(Delegation("foreground", parent.Session.Id, foregroundChild.Session.Id));
+
+        var tracker = new SessionActivityTracker();
+        tracker.Update(parent.Session.Id, "idle", userId);
+        tracker.Update(backgroundChild.Session.Id, "busy", userId);
+        tracker.RegisterChild(backgroundChild.Session.Id, parent.Session.Id);
+        tracker.MoveChildToBackground(backgroundChild.Session.Id);
+
+        var builder = new SessionSnapshotBuilder(factory, new TestUserContext(), tracker);
+        var snapshot = await builder.BuildAsync(parent.Session.Id);
+
+        snapshot.ActivityStatus.ShouldBe("idle");
+        snapshot.Delegations.Single(d => d.DelegationId == "background").Background.ShouldBe(true);
+        snapshot.Delegations.Single(d => d.DelegationId == "foreground").Background.ShouldBeNull();
+
+        // A foreground child at work still makes the parent busy.
+        tracker.Update(foregroundChild.Session.Id, "busy", userId);
+        tracker.RegisterChild(foregroundChild.Session.Id, parent.Session.Id);
+        (await builder.BuildAsync(parent.Session.Id)).ActivityStatus.ShouldBe("busy");
+    }
+
     private static Delegation Delegation(string id, string parentSessionId, string? childSessionId) => new()
     {
         Id = id,
