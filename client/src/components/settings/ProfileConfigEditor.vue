@@ -8,10 +8,12 @@ import { onBeforeUnmount, onMounted, useTemplateRef, watch } from "vue";
 import { loadLanguage } from "@/lib/code-editor/languages";
 import { fleetTheme } from "@/lib/code-editor/theme";
 
-/** A small JSON-with-comments editor for a profile's config. Mod-S saves. */
-const props = defineProps<{
+/** A small config editor: JSON with comments by default, or whatever `filename` says. Mod-S saves. */
+const props = withDefaults(defineProps<{
   label: string;
-}>();
+  /** Picks the highlighting, by extension. */
+  filename?: string;
+}>(), { filename: "opencode.jsonc" });
 
 const emit = defineEmits<{
   save: [];
@@ -53,8 +55,8 @@ onMounted(async () => {
     }),
   });
 
-  const json = await loadLanguage("opencode.jsonc");
-  if (json && view) view.dispatch({ effects: language.reconfigure(json) });
+  const support = await loadLanguage(props.filename);
+  if (support && view) view.dispatch({ effects: language.reconfigure(support) });
 });
 
 // Content set from outside (Duplicate, a reset) replaces the document.
