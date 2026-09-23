@@ -88,4 +88,24 @@ public sealed partial class WorkflowRunnerTests
         again.Prompt.ShouldNotContain("fleet-code-review");
         _runs.Run(run).Status.ShouldBe(WorkflowRunStatus.Running);
     }
+
+    [Fact]
+    public async Task a_push_that_fails_ends_the_run_with_the_reason_not_a_pull_request()
+    {
+        var run = await StartAsync();
+        await RunToReviewPassAsync(run);
+        await _runner.AnswerAsync(UserId, run, "choice:0", null);
+        var push = _sessions.Started[^1];
+
+        push.StepId.ShouldBe("open-pr");
+        push.Prompt.ShouldContain("If you can't push the branch or open the pull request, use failed and put the reason in summary.");
+        push.Prompt.ShouldEndWith(FleetWorkflows.Footer(["opened", "failed"]));
+
+        var answer = await DoneAsync(push.SessionId, "failed", "There's no remote called origin, so nothing was pushed.\nSee https://github.com/o/r/pull/3 for how it's usually done.");
+
+        answer.Message.ShouldContain("last step");
+        var done = _runs.Run(run);
+        done.Status.ShouldBe(WorkflowRunStatus.Done);
+        done.Result.ShouldBe("Push and open the PR failed: There's no remote called origin, so nothing was pushed.");
+    }
 }

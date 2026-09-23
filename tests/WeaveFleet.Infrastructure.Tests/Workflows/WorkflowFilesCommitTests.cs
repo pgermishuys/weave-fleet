@@ -138,6 +138,23 @@ public sealed class WorkflowFilesCommitTests : IDisposable
     }
 
     [Fact]
+    public async Task a_refused_commit_unstages_what_fleet_staged_and_leaves_what_the_agent_staged()
+    {
+        Git("config", "user.name", "");
+        Write(Doc, "# Sheet\n");
+        Write(Mockup, "<html></html>\n");
+        Write("src/app.ts", "export {};\n");
+        Git("add", Mockup, "src/app.ts");
+
+        var commit = await _files.CommitAsync(_repo, [Doc, Mockup], "Design", CancellationToken.None);
+
+        commit.Error.ShouldNotBeNull();
+        // The design doc is untracked again, as it was; the mockup and the code stay staged, as the agent left them.
+        Git("status", "--porcelain", "--untracked-files=all").Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .ShouldBe(["A  docs/design/sheet.html", "A  src/app.ts", "?? docs/design/sheet.md"], ignoreOrder: true);
+    }
+
+    [Fact]
     public async Task a_folder_that_isnt_a_repository_comes_back_as_an_error()
     {
         var plain = Path.Combine(_repo, "..", $"fleet-not-a-repo-{Guid.NewGuid():N}");

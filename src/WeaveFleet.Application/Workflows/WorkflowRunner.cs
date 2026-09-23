@@ -785,6 +785,14 @@ public sealed partial class WorkflowRunner(
     {
         var last = state.Visits.LastOrDefault(v => v.Status == WorkflowRunStepStatus.Done && v.SessionId is not null);
         var summary = last?.Summary?.Trim();
+
+        // A step that ended the run because it couldn't do its job says why, even if its summary has a link in it.
+        if (last is { Outcome: WorkflowOutcomes.Failed } && state.Visits[^1] == last && state.Workflow.Find(last.StepId) is { } failed)
+        {
+            var reason = summary?.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
+            return reason is null ? $"{failed.Title} failed" : $"{failed.Title} failed: {reason}";
+        }
+
         if (summary is not null && PullRequestNumber(summary) is { } number)
             return $"PR #{number} opened";
         return state.Visits.LastOrDefault() is { Status: WorkflowRunStepStatus.Decided, Outcome: { } choice }
