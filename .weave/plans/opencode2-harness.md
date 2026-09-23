@@ -544,3 +544,43 @@ Track I. Shared code, every harness (OpenCode's `task`, OpenCode 2's `subagent`,
   background call is only known from the tool part's metadata (the card layer), not the delegation, and the server
   side disagrees too (the list is idle live, but the list endpoint counts a working child as busy on refetch). Needs a
   decision on what an idle parent with background work should show; not changed here.
+
+## Sign in to providers from Fleet (Track G) (2026-09-22)
+
+- [x] Settings → Harnesses → OpenCode 2 lists V2's providers (`GET /api/integration`, 227 on 2.0.9), which are signed
+      in and which sign-in each uses, with Sign in (key, browser) and Sign out; switching between several sign-ins.
+- [x] A harness-neutral seam: `IHarnessRuntime.ProviderSignIn` (`IHarnessProviderSignIn`) and the
+      `SupportsProviderSignIn` capability, served by `/api/harnesses/{type}/sign-in`. OpenCode 2 implements it in
+      `OpenCode2SignIn` over `/api/integration` and `/api/credential`, on the owner's server without a profile.
+- [x] The terminal command stays in the install panel as the fallback ("Or sign in to a provider in a terminal").
+
+What Track G learned (2.0.9, scratch HOME, dummy keys only):
+
+- **Integrations are per location, and only once it has loaded.** On a server that has just started, `POST
+  …/connect/oauth` answers 500 until a location's integrations are registered, and browser sign-ins are kept per
+  location. Every request names one folder of Fleet's own (`{data}/opencode2/sign-in`) and waits for it to load.
+- **Stored sign-ins reach every server of the install at once.** A key added or removed through one server shows in
+  another's `/api/model` straight away (two servers on one database), so profile servers need nothing.
+- **`connections` lists stored sign-ins first, the one in use first**, then environment variables V2 found set. On
+  2.0.9 a connection has no `method` field, although the spec requires one. A new key becomes the one in use;
+  removing the one in use hands over to the newest other one.
+- **V2 accepts an empty key** (204, and a sign-in named "Anthropic 2"), so Fleet refuses one first. Unknown
+  credential ids answer 204; an unknown OAuth method or `complete` on an `auto` attempt answer 500.
+- **Sign-in doesn't emit `integration.updated`** on 2.0.9. A key emits `credential.updated`, `credential.switched`,
+  `provider.updated` and `model.updated` (the last two reach the live catalog). No event carries the key.
+- **`auto` mode is two different flows.** A device flow (GitHub Copilot, ChatGPT headless, xAI, OpenCode Console)
+  shows a URL and a code, and V2 polls the provider: it works from any device. A browser flow (ChatGPT browser,
+  DigitalOcean, Poe, Snowflake) sends the browser back to a listener V2 opened on `localhost` (ChatGPT on 1455, then
+  1457), on the machine Fleet runs on. From another device that page can't load; the attempt's `redirect_uri` tells
+  the two apart, Fleet says so, and it passes the query of the address that browser landed on to the listener
+  (only the query, only to the address V2 gave the provider, only with its path and port). Checked by passing
+  `error=access_denied`: the attempt went `failed: access_denied`. No built-in provider uses `code` mode or the
+  `command` method on 2.0.9.
+- Attempts last 10 minutes; a finished one is kept for a minute, a cancelled one is gone (404), and cancelling closes
+  the listener.
+- **Keys** go browser → Fleet → V2 in request bodies only. Fleet never logs, stores or repeats them; the callback
+  forwarder is a named `HttpClient` with no loggers and no proxy, since its address carries the provider's code.
+- **Off with Fleet's sign-in on** (and in cloud mode): V2's sign-ins are the machine's, so one user's key would pay
+  for every user's sessions. With token auth (one user, e.g. Fleet opened from a phone) it's on.
+- **Left for later:** renaming a sign-in (`PATCH /api/credential`), the `command` method (V2 would run a command on
+  Fleet's machine; Fleet shows it and doesn't run it), `code`-mode attempts seen live (none in 2.0.9's built-ins).
