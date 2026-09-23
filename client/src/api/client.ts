@@ -748,6 +748,8 @@ export interface SessionListItem {
   projectName?: string | null;
   harnessType?: string | null;
   capabilities?: SessionActionCapabilities;
+  /** The workflow run this session is a step of; the list nests it under the run. */
+  workflowRunId?: string | null;
   origin?: SessionOrigin | null;
   tags: readonly string[];
   /** How far along the session is, when the server has seen a todo list for it. */

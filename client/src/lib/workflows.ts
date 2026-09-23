@@ -242,3 +242,55 @@ export function loopNotes(workflow: Workflow): string[] {
   }
   return notes;
 }
+
+/** A row of a project's session list: a session, or a workflow run with its step sessions under it. */
+export type SessionListEntry<T> =
+  | { kind: "session"; session: T }
+  | { kind: "run"; runId: string; run: WorkflowRun | null; steps: { session: T; label: string }[] };
+
+/**
+ * Groups a run's step sessions under one row, where the run's newest session would have been, with its steps in the
+ * order they ran. Sessions of a run the store doesn't know yet still group, under a plain header.
+ */
+export function groupRunSessions<T extends { session: { id: string; title?: string | null; time?: { created?: unknown } }; workflowRunId?: string | null }>(
+  sessions: readonly T[],
+  runs: (sessionId: string) => WorkflowRun | null,
+): SessionListEntry<T>[] {
+  const entries: SessionListEntry<T>[] = [];
+  const grouped = new Set<string>();
+  for (const session of sessions) {
+    const runId = session.workflowRunId ?? runs(session.session.id)?.id ?? null;
+    if (!runId) {
+      entries.push({ kind: "session", session });
+      continue;
+    }
+    if (grouped.has(runId)) continue;
+    grouped.add(runId);
+
+    const run = runs(session.session.id);
+    const members = sessions.filter((s) => (s.workflowRunId ?? runs(s.session.id)?.id ?? null) === runId);
+    const order = (s: T) => {
+      const index = run?.sessions.findIndex((r) => r.sessionId === s.session.id) ?? -1;
+      return index < 0 ? Number.MAX_SAFE_INTEGER : index;
+    };
+    const steps = [...members]
+      .sort((a, b) => order(a) - order(b))
+      .map((s) => ({ session: s, label: (run && stepLabel(run, s.session.id)) ?? stepTitleFromSessionTitle(s.session.title) }));
+    entries.push({ kind: "run", runId, run, steps });
+  }
+  return entries;
+}
+
+/** "Plan" from a step session's title, "<run title> · Plan", when the run isn't loaded. */
+function stepTitleFromSessionTitle(title: string | null | undefined): string {
+  const text = title ?? "";
+  const at = text.lastIndexOf(" · ");
+  return at >= 0 ? text.slice(at + 3) : text || "Step";
+}
+
+/** How the footer Fleet adds to a step's prompt starts; it marks the prompt a step started with. */
+export const STEP_FOOTER_START = "This is one step of a Fleet workflow.";
+
+export function isStepPrompt(text: string): boolean {
+  return text.includes(STEP_FOOTER_START);
+}

@@ -12,6 +12,8 @@ import ForkSessionDialog from "@/components/session/ForkSessionDialog.vue";
 import SessionActionToolbar from "@/components/session/SessionActionToolbar.vue";
 import SessionDetailHeader from "@/components/session/SessionDetailHeader.vue";
 import TerminalDrawer from "@/components/terminal/TerminalDrawer.vue";
+import WorkflowRunCard from "@/components/workflows/WorkflowRunCard.vue";
+import WorkflowStepper from "@/components/workflows/WorkflowStepper.vue";
 import TerminalToggleButton from "@/components/terminal/TerminalToggleButton.vue";
 import RightPanelSheetButton from "@/components/layout/RightPanelSheetButton.vue";
 import { useDiffs } from "@/composables/use-diffs";
@@ -766,6 +768,7 @@ const SessionDetailPage = defineComponent({
               ),
             }}
           </SessionDetailHeader>
+          <WorkflowStepper sessionId={params.value.id} />
           {isDelegatedSession.value ? (
             <div
               style={{
@@ -872,6 +875,7 @@ const SessionDetailPage = defineComponent({
         {viewMode.value === "chat" ? (
           <>
             <ActivityStream key={`${params.value.id}-${instanceId.value}`} sessionId={params.value.id} />
+            <WorkflowRunCard sessionId={params.value.id} />
             <RecapLine recap={recap.value} />
             <Composer
               ref={composerRef}

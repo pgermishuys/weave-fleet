@@ -21,6 +21,9 @@ import ConfirmDeleteProjectDialog from "./ConfirmDeleteProjectDialog.vue";
 import DraftSessionRow from "./DraftSessionRow.vue";
 import InlineEdit from "./InlineEdit.vue";
 import SessionItem from "./SessionItem.vue";
+import WorkflowRunGroup from "@/components/workflows/WorkflowRunGroup.vue";
+import { groupRunSessions } from "@/lib/workflows";
+import { useWorkflowsStore } from "@/stores/workflows";
 import { heightEnter, heightLeave } from "@/lib/height-transition";
 
 interface ProjectGroupModel {
@@ -63,6 +66,11 @@ interface Emits {
 
 const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
+
+const workflows = useWorkflowsStore();
+
+/** A workflow run's step sessions group under one row; everything else is a row of its own. */
+const entries = computed(() => groupRunSessions(props.project.sessions, workflows.runForSession));
 
 const isContextMenuOpen = shallowRef(false);
 const isInlineEditing = shallowRef(false);
@@ -435,13 +443,23 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
         <!-- SessionItem renders several root nodes (row + dialogs), so each row
              gets a single element wrapper the transition can animate. -->
         <div
-          v-for="session in project.sessions"
-          :key="rowKey(session)"
+          v-for="entry in entries"
+          :key="entry.kind === 'run' ? `run:${entry.runId}` : rowKey(entry.session)"
           class="project-row"
         >
+          <WorkflowRunGroup
+            v-if="entry.kind === 'run'"
+            :run="entry.run"
+            :steps="entry.steps"
+            :active-session-id="activeSessionId"
+            @select-session="handleSessionSelect"
+            @drag-session-start="handleSessionDragStart"
+            @drag-session-end="handleSessionDragEnd"
+          />
           <SessionItem
-            :session="session"
-            :active="session.session.id === activeSessionId"
+            v-else
+            :session="entry.session"
+            :active="entry.session.session.id === activeSessionId"
             @select="handleSessionSelect"
             @drag-session-start="handleSessionDragStart"
             @drag-session-end="handleSessionDragEnd"

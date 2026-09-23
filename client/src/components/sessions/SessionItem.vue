@@ -46,6 +46,8 @@ import ConfirmDeleteSessionDialog from "./ConfirmDeleteSessionDialog.vue";
 interface Props {
   session: SessionListItem;
   active: boolean;
+  /** Shown instead of the title: a workflow step's name under its run. */
+  label?: string;
 }
 
 interface Emits {
@@ -98,7 +100,7 @@ const {
 const sessionId = computed(() => props.session.session.id);
 const instanceId = computed(() => props.session.instanceId);
 const rawTitle = computed(() => props.session.session.title ?? "");
-const displayTitle = computed(() => props.session.session.title?.trim() || "Untitled session");
+const displayTitle = computed(() => props.label || props.session.session.title?.trim() || "Untitled session");
 const now = useRelativeTime();
 const rowStatus = computed(() => sessionRowStatus(props.session, now.value));
 const isLive = computed(() => isSessionLive(props.session));

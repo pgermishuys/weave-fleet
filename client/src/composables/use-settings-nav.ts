@@ -9,6 +9,7 @@ export type SettingsSectionId =
   | "features"
   | "harnesses"
   | "weave"
+  | "workflows"
   | "plugins"
   | "system";
 

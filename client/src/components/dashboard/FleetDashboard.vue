@@ -11,6 +11,7 @@ import type { SessionListItem } from "@/api/client";
 import { useAppShellStore } from "@/stores/app-shell";
 import { useHarnessSetupStore } from "@/stores/harness-setup";
 import { useSessionsStore } from "@/stores/sessions";
+import { useWorkflowsStore } from "@/stores/workflows";
 import DashboardSessionRow from "./DashboardSessionRow.vue";
 import RetentionFilter from "./RetentionFilter.vue";
 import SummaryBar from "./SummaryBar.vue";
@@ -49,14 +50,23 @@ function updatedAt(session: SessionListItem): number {
 
 const byRecent = computed(() => [...sessions.value].sort((a, b) => updatedAt(b) - updatedAt(a)));
 
-/** Waiting on an answer, or stopped with an error: the user has to act. */
-const needsYou = computed(() =>
-  byRecent.value.filter((session) => session.sessionStatus === "waiting_input" || session.sessionStatus === "error"));
+const workflows = useWorkflowsStore();
 
-const working = computed(() => byRecent.value.filter((session) => session.sessionStatus === "active"));
+/**
+ * Waiting on an answer, or stopped with an error: the user has to act. A workflow run waiting on the user counts too,
+ * through the step session its card is in; that's the run's state, not the session's.
+ */
+const needsYou = computed(() =>
+  byRecent.value.filter((session) => session.sessionStatus === "waiting_input"
+    || session.sessionStatus === "error"
+    || workflows.waitingSessionIds.has(session.session.id)));
+
+const working = computed(() => byRecent.value.filter((session) =>
+  session.sessionStatus === "active" && !workflows.waitingSessionIds.has(session.session.id)));
 
 const recent = computed(() =>
-  byRecent.value.filter((session) => !["waiting_input", "error", "active"].includes(session.sessionStatus)));
+  byRecent.value.filter((session) => !["waiting_input", "error", "active"].includes(session.sessionStatus)
+    && !workflows.waitingSessionIds.has(session.session.id)));
 
 const showAllRecent = shallowRef(false);
 const visibleRecent = computed(() => (showAllRecent.value ? recent.value : recent.value.slice(0, RECENT_LIMIT)));

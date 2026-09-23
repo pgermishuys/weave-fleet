@@ -10,6 +10,7 @@ import { sessionCache } from "@/lib/session-cache";
 import { isSessionLive, sessionRowStatus } from "@/lib/session-row-status";
 import { dispatchSessionRemoved } from "@/lib/session-sync";
 import { useSessionsStore } from "@/stores/sessions";
+import { useWorkflowsStore } from "@/stores/workflows";
 
 /** One session on the dashboard: what it is, where, how far along, and what it needs. */
 const props = defineProps<{
@@ -30,7 +31,16 @@ const isDeleteDialogOpen = shallowRef(false);
 const sessionId = computed(() => props.session.session.id);
 const title = computed(() => props.session.session.title?.trim() || "Untitled session");
 const isLive = computed(() => isSessionLive(props.session));
-const status = computed(() => sessionRowStatus(props.session, props.now));
+const workflows = useWorkflowsStore();
+/** A workflow run waiting on the user in this session says what it's waiting for: "Approve the plan". */
+const status = computed(() => {
+  const run = workflows.runForSession(sessionId.value);
+  if (run?.status === "waiting" && run.waiting?.sessionId === sessionId.value) {
+    const step = run.waiting.stepTitle;
+    return { label: step, tone: "attention" as const, description: `${run.workflowName}: ${step}` };
+  }
+  return sessionRowStatus(props.session, props.now);
+});
 const isArchived = computed(() => props.session.retentionStatus === "archived");
 const canArchive = computed(() =>
   props.session.capabilities?.canArchive ?? (!isArchived.value && props.session.lifecycleStatus !== "running"));

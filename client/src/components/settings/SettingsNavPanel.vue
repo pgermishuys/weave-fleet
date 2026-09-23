@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Component } from "vue";
 import { computed } from "vue";
-import { Cable, FolderGit2, Info, Palette, Puzzle, SlidersHorizontal, Waves, Wrench } from "lucide-vue-next";
+import { Cable, FolderGit2, Info, Palette, Puzzle, SlidersHorizontal, Waves, Workflow, Wrench } from "lucide-vue-next";
 import { useUpdateStatus } from "@/composables/use-update-status";
 
 type SettingsSectionId =
@@ -13,6 +13,7 @@ type SettingsSectionId =
   | "features"
   | "harnesses"
   | "weave"
+  | "workflows"
   | "plugins"
   | "system";
 
@@ -45,6 +46,7 @@ const items: readonly SettingsNavItem[] = [
   { id: "tools", label: "Tools", icon: Puzzle },
   { id: "harnesses", label: "Harnesses", icon: Cable },
   { id: "weave", label: "Weave", icon: Waves },
+  { id: "workflows", label: "Workflows", icon: Workflow },
   { id: "system", label: "System", icon: Info },
 ];
 

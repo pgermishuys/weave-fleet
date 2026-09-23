@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import { ArrowUpRight, Bot, RotateCw, TerminalSquare, TriangleAlert } from "lucide-vue-next";
+import { ArrowUpRight, Bot, RotateCw, TerminalSquare, TriangleAlert, Workflow } from "lucide-vue-next";
 import { parsePeerMessage, parsePeerUpdate, type PeerOutcome, type PeerSender } from "@/lib/session-messages";
 import { finishedBackgroundWork, parseBackgroundNotice, type BackgroundNotice, type BackgroundState } from "@/lib/background-work";
 import { useRouter } from "@tanstack/vue-router";
@@ -27,6 +27,8 @@ import { dispatchSessionUpsert } from "@/lib/session-sync";
 import { useCanvasesStore } from "@/stores/canvases";
 import { focusServerCanvas } from "@/composables/use-server-canvases";
 import { mergeMessagesByTimestamp } from "@/lib/merge-messages";
+import { isStepPrompt, stepPosition } from "@/lib/workflows";
+import { useWorkflowsStore } from "@/stores/workflows";
 
 interface ImageAttachmentDisplay {
   url: string;
@@ -56,6 +58,8 @@ interface ActivityMessage {
   peerOutcome?: PeerOutcome;
   /** Set when this is the notice that work the agent moved into the background finished. */
   background?: BackgroundNotice;
+  /** Set on the prompt Fleet started a workflow step with: "Workflow · step 2 of 6". */
+  workflowStep?: string;
 }
 
 const props = defineProps<{
@@ -64,6 +68,14 @@ const props = defineProps<{
 
 const router = useRouter();
 const sessionsStore = useSessionsStore();
+const workflowsStore = useWorkflowsStore();
+
+/** "Workflow · step 2 of 6" for a workflow step's session, shown on the prompt Fleet started it with. */
+const workflowStepLabel = computed(() => {
+  const run = workflowsStore.runForSession(props.sessionId);
+  const position = run ? stepPosition(run, props.sessionId) : null;
+  return position ? `Workflow · step ${position.index} of ${position.total}` : null;
+});
 const { sessions } = storeToRefs(sessionsStore);
 const canvasesStore = useCanvasesStore();
 const { showRightPanel } = useSidebarMobile();
@@ -218,6 +230,9 @@ const derivedMessages = new WeakMap<AccumulatedMessage, DerivedMessage>();
 /** What a message's view reads besides the message: only what its own parts need, so the rest can't invalidate it. */
 function derivationInputs(message: AccumulatedMessage, finished: ReadonlyMap<string, BackgroundState>): unknown[] {
   const inputs: unknown[] = [];
+  if (message.role === "user") {
+    inputs.push(workflowStepLabel.value);
+  }
   if (message.modelID) {
     inputs.push(models.value);
   }
@@ -255,6 +270,7 @@ function toActivityMessage(message: AccumulatedMessage, finished: ReadonlyMap<st
     peer: fromPeer?.peer,
     peerOutcome: peerUpdate?.outcome,
     background: background ?? undefined,
+    workflowStep: message.role === "user" && isStepPrompt(rawBody) ? workflowStepLabel.value ?? undefined : undefined,
     images: message.parts
       .filter((part): part is AccumulatedFilePart => part.type === "file" && part.mime.startsWith("image/"))
       .map((part) => ({ url: part.url, filename: part.filename?.trim() || "image" })),
@@ -1061,6 +1077,17 @@ function handleShowCanvas(canvasId: string): void {
           <span class="background-note__task">{{ message.background.label }}</span>
           <span class="background-note__state">{{ message.background.state }}</span>
         </div>
+        <span
+          v-if="message.workflowStep"
+          class="peer-from"
+          data-testid="workflow-step-prompt"
+        >
+          <Workflow
+            class="peer-from__icon"
+            aria-hidden="true"
+          />
+          <span class="peer-from__title">{{ message.workflowStep }}</span>
+        </span>
         <a
           v-if="message.peer"
           class="peer-from"
