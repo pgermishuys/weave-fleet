@@ -9,9 +9,13 @@ using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
+using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure;
+using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 using WeaveFleet.Infrastructure.Services;
 
@@ -457,6 +461,52 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : IClas
         }
 
         (await HasExitedAsync(serverId, TimeSpan.FromSeconds(10))).ShouldBeTrue($"OpenCode 2 server {serverId} outlived Fleet.");
+    }
+
+    [OpenCode2Fact]
+    public async Task Stopping_Fleet_stops_the_servers_it_started_later_too()
+    {
+        // A Fleet of its own, since this one stops.
+        var own = new OpenCode2LiveFleet();
+        await own.InitializeAsync();
+        List<int> servers;
+        try
+        {
+            using var cts = new CancellationTokenSource(Timeout);
+            var folder = own.NewFolder("fleet-stops-later");
+            var home = own.Runtime.ServerEnvironment["HOME"];
+            var work = new HarnessProfile { Id = "later", HarnessType = OpenCode2HarnessSession.Type, Name = "Later", Content = """{ "model": "fake/fake-model" }""" };
+
+            // The owner's server, then its replacement once a setting behind it changed.
+            await own.Runtime.GetCatalogAsync(OpenCode2LiveFleet.Owner, folder, profile: null, cts.Token);
+            var first = ProcessesWith("HOME", home).ShouldHaveSingleItem();
+            using (BackgroundUserContext.BeginScope(OpenCode2LiveFleet.Owner))
+            using (var scope = own.Services.CreateScope())
+                await scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>().SetAsync(SessionMessages.PreferenceKey, "true");
+            await own.Runtime.GetCatalogAsync(OpenCode2LiveFleet.Owner, folder, profile: null, cts.Token);
+            (await HasExitedAsync(first, TimeSpan.FromSeconds(10))).ShouldBeTrue($"Replaced server {first} is still running.");
+
+            // A profile's server, stopped as idle and started again.
+            await own.Runtime.GetCatalogAsync(OpenCode2LiveFleet.Owner, folder, work, cts.Token);
+            var idled = ProcessesWith("HOME", home);
+            idled.Count.ShouldBe(2);
+            (await own.Runtime.StopIdleServersAsync(DateTimeOffset.UtcNow.AddHours(1))).ShouldBe(1);
+            await own.Runtime.GetCatalogAsync(OpenCode2LiveFleet.Owner, folder, work, cts.Token);
+
+            servers = ProcessesWith("HOME", home);
+            servers.Count.ShouldBe(2);
+            servers.ShouldNotContain(first);
+            servers.Except(idled).ShouldHaveSingleItem();
+            servers.ShouldAllBe(pid => ProcessGroupHelper.RunningProcesses.Any(p => p.Pid == pid));
+        }
+        finally
+        {
+            await own.DisposeAsync();
+        }
+
+        foreach (var server in servers)
+            (await HasExitedAsync(server, TimeSpan.FromSeconds(10))).ShouldBeTrue($"OpenCode 2 server {server} outlived Fleet.");
+        ProcessGroupHelper.RunningProcesses.ShouldNotContain(p => servers.Contains(p.Pid));
     }
 
     private static async Task<bool> HasExitedAsync(int processId, TimeSpan timeout)

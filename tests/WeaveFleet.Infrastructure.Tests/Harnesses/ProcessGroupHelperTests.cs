@@ -77,8 +77,7 @@ public sealed class ProcessGroupHelperTests
         {
             ProcessGroupHelper.AssignToProcessGroup(process);
 
-            // KillProcessGroup is best-effort; it should not throw even if the
-            // process group kill fails (e.g. due to setpgid race on exec).
+            // KillProcessGroup is best-effort; it should not throw.
             var ex = Record.Exception(() => ProcessGroupHelper.KillProcessGroup(process));
             ex.ShouldBeNull();
         }
@@ -94,8 +93,8 @@ public sealed class ProcessGroupHelperTests
         if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
             return; // Skip on non-Unix
 
-        // A harness is a process with children (a CLI and the tools it runs). setpgid fails once the child has
-        // exec'd, so there's often no group to kill: the kill must still reach the process and its children.
+        // A harness is a process with children (a CLI and the tools it runs). It stays in Fleet's process group
+        // (setpgid fails once the child has exec'd), so the kill reaches its children through the process tree.
         var psi = new ProcessStartInfo
         {
             FileName = "sh",
@@ -117,6 +116,66 @@ public sealed class ProcessGroupHelperTests
 
             await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(2));
             await WaitUntilGoneAsync(childPid, TimeSpan.FromSeconds(2));
+        }
+        finally
+        {
+            SafeKill(process);
+            SafeKill(childPid);
+        }
+    }
+
+    [Fact]
+    public async Task A_harness_process_is_tracked_until_it_exits()
+    {
+        if (!ProcessIdentity.IsSupported)
+            return;
+
+        using var process = SpawnSleepProcess();
+        try
+        {
+            ProcessGroupHelper.AssignToProcessGroup(process);
+            ProcessGroupHelper.RunningProcesses.ShouldContain(p => p.Pid == process.Id);
+
+            ProcessGroupHelper.KillProcessGroup(process);
+            await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+
+            await WaitUntilAsync(() => ProcessGroupHelper.RunningProcesses.All(p => p.Pid != process.Id), TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            SafeKill(process);
+        }
+    }
+
+    [Fact]
+    public async Task What_is_still_running_when_Fleet_exits_is_killed_with_its_children()
+    {
+        if (!ProcessIdentity.IsSupported)
+            return;
+
+        // Fleet's shutdown didn't reach this harness (say, a server started while the host was being torn down).
+        var psi = new ProcessStartInfo
+        {
+            FileName = "sh",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            CreateNoWindow = true,
+        };
+        psi.ArgumentList.Add("-c");
+        psi.ArgumentList.Add("sleep 30 & echo $!; wait");
+
+        using var process = new Process { StartInfo = psi };
+        process.Start();
+        var childPid = int.Parse((await process.StandardOutput.ReadLineAsync())!, CultureInfo.InvariantCulture);
+        try
+        {
+            ProcessGroupHelper.AssignToProcessGroup(process);
+
+            ProcessGroupHelper.KillRunning([process.Id]);
+
+            await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+            await WaitUntilGoneAsync(childPid, TimeSpan.FromSeconds(5));
+            ProcessGroupHelper.RunningProcesses.ShouldNotContain(p => p.Pid == process.Id);
         }
         finally
         {
@@ -188,6 +247,17 @@ public sealed class ProcessGroupHelperTests
         {
             if (DateTime.UtcNow > deadline)
                 throw new TimeoutException($"Process {pid} is still running.");
+            await Task.Delay(50);
+        }
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (!condition())
+        {
+            if (DateTime.UtcNow > deadline)
+                throw new TimeoutException("The condition never held.");
             await Task.Delay(50);
         }
     }

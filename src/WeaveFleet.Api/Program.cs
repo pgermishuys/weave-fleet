@@ -513,38 +513,9 @@ using (var scope = app.Services.CreateScope())
 {
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
 
-    // Orphan killing: kill any child processes from the previous run before marking them stopped
-    var instanceRepo = scope.ServiceProvider.GetRequiredService<IInstanceRepository>();
-    var runningInstances = await instanceRepo.GetRunningAsync();
-    foreach (var instance in runningInstances)
-    {
-        if (instance.Pid is not { } pid) continue;
-        try
-        {
-            var proc = System.Diagnostics.Process.GetProcessById(pid);
-            // Guard against PID reuse: only kill if the process name looks like a known agent
-            var procName = proc.ProcessName;
-            if (procName.Contains("opencode", StringComparison.OrdinalIgnoreCase)
-                || procName.Contains("claude", StringComparison.OrdinalIgnoreCase)
-                || procName.Contains("node", StringComparison.OrdinalIgnoreCase))
-            {
-                StartupLog.OrphanKilling(logger, pid, procName);
-                proc.Kill(entireProcessTree: true);
-            }
-            else
-            {
-                StartupLog.OrphanSkipped(logger, pid, procName);
-            }
-        }
-        catch (ArgumentException)
-        {
-            // Process already exited — not an error
-        }
-        catch (Exception ex)
-        {
-            StartupLog.OrphanKillFailed(logger, pid, ex);
-        }
-    }
+    // Harness processes a Fleet that died without stopping them left running: stopped only when its records prove
+    // a Fleet that's gone started them (a pid alone can belong to anything by now). Then this Fleet records its own.
+    WeaveFleet.Infrastructure.Harnesses.HarnessProcessStartup.StopLeftoversAndRecord(fleetOptions.Harness.ResolvedProcessRecordsDirectory, logger);
 
     var instanceService = scope.ServiceProvider.GetRequiredService<InstanceService>();
     var instanceCount = await instanceService.MarkAllStoppedAsync();
@@ -772,18 +743,6 @@ internal static partial class StartupLog
     [LoggerMessage(Level = LogLevel.Information,
         Message = "Recovery: marked {Instances} instance(s) and {Sessions} session(s) as stopped, and cancelled {Delegations} unfinished sub-agent(s).")]
     public static partial void RecoveryComplete(ILogger logger, int instances, int sessions, int delegations);
-
-    [LoggerMessage(Level = LogLevel.Information,
-        Message = "Startup orphan kill: killing pid {Pid} ({ProcessName}).")]
-    public static partial void OrphanKilling(ILogger logger, int pid, string processName);
-
-    [LoggerMessage(Level = LogLevel.Debug,
-        Message = "Startup orphan skip: pid {Pid} ({ProcessName}) does not match known agent names.")]
-    public static partial void OrphanSkipped(ILogger logger, int pid, string processName);
-
-    [LoggerMessage(Level = LogLevel.Warning,
-        Message = "Startup orphan kill failed for pid {Pid}.")]
-    public static partial void OrphanKillFailed(ILogger logger, int pid, Exception ex);
 }
 
 // Expose Program for WebApplicationFactory in E2E tests

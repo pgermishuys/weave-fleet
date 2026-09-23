@@ -273,7 +273,7 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
 
         try
         {
-            // Kill the entire process group (Unix) or process tree (Windows)
+            // Kill the process and its children
             ProcessGroupHelper.KillProcessGroup(_process, _logger);
 
             await _process.WaitForExitAsync().WaitAsync(timeout).ConfigureAwait(false);

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
@@ -7,35 +8,28 @@ using Microsoft.Win32.SafeHandles;
 namespace WeaveFleet.Infrastructure.Harnesses;
 
 /// <summary>
-/// Cross-platform utility for assigning child processes to a process group (Unix)
-/// or a Job Object (Windows) so they are killed when the parent exits.
+/// Makes sure the harness processes Fleet starts don't outlive it.
+/// <para>
+/// On Windows each one goes into a Job Object with <c>JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE</c>: when Fleet exits,
+/// however it exits, the system closes the job and kills the process with it.
+/// </para>
+/// <para>
+/// On Linux and macOS nothing kills a child when its parent dies, and .NET can't run code between fork and exec to set
+/// that up (a process group of its own, or a parent-death signal): by the time <c>Process.Start</c> returns the child
+/// has exec'd, so <c>setpgid</c> fails with <c>EACCES</c> and the child stays in Fleet's process group. So Fleet keeps
+/// track of them instead. <see cref="KillProcessGroup"/> kills a harness and its children when Fleet stops it; any
+/// still running when Fleet's process exits (normally, or on an unhandled exception) are killed then
+/// (<see cref="KillRunning"/>); and each is recorded on disk (<see cref="HarnessProcessRecords"/>), so the ones a
+/// Fleet that was killed outright (<c>SIGKILL</c>, the out-of-memory killer, a crash in native code) left running are
+/// stopped by the next Fleet to start.
+/// </para>
 /// </summary>
 internal static class ProcessGroupHelper
 {
     // LoggerMessage delegates — required by CA1848
-    private static readonly Action<ILogger, int, Exception?> LogAssigned =
-        LoggerMessage.Define<int>(LogLevel.Debug, new EventId(1, "ProcessGroupAssigned"),
-            "Assigned process {Pid} to its own process group");
-
-    private static readonly Action<ILogger, int, int, int, Exception?> LogSetpgidFailed =
-        LoggerMessage.Define<int, int, int>(LogLevel.Warning, new EventId(2, "SetpgidFailed"),
-            "setpgid({Pid}, {Pgid}) failed with errno {Errno}");
-
-    private static readonly Action<ILogger, int, int, Exception?> LogKillpgFailed =
-        LoggerMessage.Define<int, int>(LogLevel.Warning, new EventId(3, "KillpgFailed"),
-            "killpg({Pgid}, SIGKILL) failed with errno {Errno}");
-
-    private static readonly Action<ILogger, int, Exception?> LogKillpgSent =
-        LoggerMessage.Define<int>(LogLevel.Debug, new EventId(4, "KillpgSent"),
-            "Sent SIGKILL to process group {Pgid}");
-
-    private static readonly Action<ILogger, int, Exception?> LogAssignFailed =
-        LoggerMessage.Define<int>(LogLevel.Warning, new EventId(5, "AssignFailed"),
-            "Failed to assign process {Pid} to process group");
-
-    private static readonly Action<ILogger, int, Exception?> LogKillFailed =
-        LoggerMessage.Define<int>(LogLevel.Warning, new EventId(6, "KillFailed"),
-            "Failed to kill process group {Pgid}");
+    private static readonly Action<ILogger, int, string, Exception?> LogTracked =
+        LoggerMessage.Define<int, string>(LogLevel.Debug, new EventId(1, "HarnessProcessTracked"),
+            "Tracking harness process {Pid} ({Name}) until it exits");
 
     private static readonly Action<ILogger, int, Exception?> LogJobObjectAssigned =
         LoggerMessage.Define<int>(LogLevel.Debug, new EventId(7, "JobObjectAssigned"),
@@ -61,11 +55,24 @@ internal static class ProcessGroupHelper
         LoggerMessage.Define<int>(LogLevel.Debug, new EventId(12, "KillTreeDone"),
             "Killed process tree for pid {Pid}");
 
+    // The harness processes this Fleet started on Linux or macOS that haven't exited, by pid.
+    private static readonly ConcurrentDictionary<int, ProcessIdentity> Running = new();
+    private static HarnessProcessRecords? _records;
+    private static int _exitHooked;
+
     /// <summary>
-    /// Assigns <paramref name="process"/> to its own process group immediately after start.
-    /// On Unix: calls <c>setpgid(pid, pid)</c> to make the child its own process group leader.
-    /// On Windows: creates a Job Object with <c>JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE</c> and
-    /// assigns the process to it. Returns the Job Object handle (must be kept alive by the caller).
+    /// Records each harness process started from now on in <paramref name="records"/> (Linux and macOS), so the next
+    /// Fleet can stop it if this one dies without stopping it. <see langword="null"/> stops recording.
+    /// </summary>
+    internal static void UseRecords(HarnessProcessRecords? records) => Volatile.Write(ref _records, records);
+
+    /// <summary>The harness processes started and not yet exited (Linux and macOS).</summary>
+    internal static IReadOnlyCollection<ProcessIdentity> RunningProcesses => [.. Running.Values];
+
+    /// <summary>
+    /// Takes charge of <paramref name="process"/>, just started, so it doesn't outlive Fleet.
+    /// On Windows: creates a Job Object with <c>JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE</c> and assigns the process to it.
+    /// On Linux and macOS: tracks it, and records it on disk, until it exits (see the class summary).
     /// </summary>
     /// <returns>
     /// On Windows: a <see cref="SafeHandle"/> for the Job Object that must be kept alive.
@@ -80,93 +87,100 @@ internal static class ProcessGroupHelper
             return AssignToJobObject(process, logger);
         }
 
-        if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+        if (ProcessIdentity.IsSupported)
         {
-            AssignToUnixProcessGroup(process, logger);
+            Track(process, logger);
         }
 
         return null;
     }
 
-    /// <summary>
-    /// Kills the process group of <paramref name="process"/> on Unix (or its process tree when it has no group of its
-    /// own), or kills the process tree on Windows.
-    /// </summary>
+    /// <summary>Kills <paramref name="process"/> and its children, straight away.</summary>
     internal static void KillProcessGroup(Process process, ILogger? logger = null)
     {
         ArgumentNullException.ThrowIfNull(process);
 
-        // An exited harness's pid (and group id) may already belong to another process.
+        // An exited harness's pid may already belong to another process.
         if (HasExited(process))
             return;
 
-        if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+        KillProcessTree(process, logger);
+    }
+
+    /// <summary>
+    /// Kills every harness process this Fleet started that's still running, with its children, and removes their
+    /// records. Runs when Fleet's process exits: a normal shutdown has stopped them all by then, so it's for any the
+    /// shutdown didn't reach. <paramref name="only"/> limits it to those pids (for tests).
+    /// </summary>
+    internal static void KillRunning(IReadOnlyCollection<int>? only = null)
+    {
+        var records = Volatile.Read(ref _records);
+        foreach (var (pid, identity) in Running)
         {
-            KillUnixProcessGroup(process, logger);
-        }
-        else if (OperatingSystem.IsWindows())
-        {
-            KillProcessTree(process, logger);
+            if (only is not null && !only.Contains(pid))
+                continue;
+
+            try
+            {
+                // Only the process Fleet started: the pid may have gone to another since.
+                if (identity.IsSameProcess(ProcessIdentity.Read(pid)))
+                {
+                    using var process = Process.GetProcessById(pid);
+                    process.Kill(entireProcessTree: true);
+                }
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or System.ComponentModel.Win32Exception
+                                           or AggregateException or NotSupportedException)
+            {
+                // Gone already, or can't be killed: nothing more to do on the way out.
+            }
+
+            Running.TryRemove(new KeyValuePair<int, ProcessIdentity>(pid, identity));
+            records?.Remove(identity);
         }
     }
 
-    [SupportedOSPlatform("linux")]
-    [SupportedOSPlatform("macos")]
-    private static void AssignToUnixProcessGroup(Process process, ILogger? logger)
+    private static void Track(Process process, ILogger? logger)
     {
+        int pid;
         try
         {
-            int result = Unix.setpgid(process.Id, process.Id);
-            if (result != 0)
-            {
-                int errno = Marshal.GetLastPInvokeError();
-                if (logger is not null)
-                    LogSetpgidFailed(logger, process.Id, process.Id, errno, null);
-            }
-            else
-            {
-                if (logger is not null)
-                    LogAssigned(logger, process.Id, null);
-            }
+            pid = process.Id;
         }
-        catch (Exception ex)
+        catch (InvalidOperationException)
         {
-            if (logger is not null)
-                LogAssignFailed(logger, process.Id, ex);
+            return; // Never started.
         }
+
+        if (ProcessIdentity.Read(pid) is not { } identity)
+            return; // Exited already.
+
+        HookProcessExit();
+        var records = Volatile.Read(ref _records);
+        Running[pid] = identity;
+        records?.Add(identity, process.StartInfo.FileName);
+        if (logger is not null)
+            LogTracked(logger, pid, identity.Name, null);
+
+        void Forget()
+        {
+            if (Running.TryRemove(new KeyValuePair<int, ProcessIdentity>(pid, identity)))
+                records?.Remove(identity);
+        }
+
+        process.EnableRaisingEvents = true;
+        process.Exited += (_, _) => Forget();
+        if (HasExited(process))
+            Forget();
     }
 
-    [SupportedOSPlatform("linux")]
-    [SupportedOSPlatform("macos")]
-    private static void KillUnixProcessGroup(Process process, ILogger? logger)
+    private static void HookProcessExit()
     {
-        var pid = process.Id;
-        try
-        {
-            // SIGKILL = 9 — unconditional kill; SIGTERM (15) may be ignored by some processes
-            int result = Unix.killpg(pid, 9);
-            if (result != 0)
-            {
-                int errno = Marshal.GetLastPInvokeError();
-                if (logger is not null)
-                    LogKillpgFailed(logger, pid, errno, null);
+        if (Interlocked.Exchange(ref _exitHooked, 1) == 1)
+            return;
 
-                // setpgid fails once the child has exec'd (Process.Start returns after exec), so there's usually
-                // no group to kill. Kill the tree now: callers that wait before killing it themselves leave the
-                // harness running if Fleet exits during the wait.
-                KillProcessTree(process, logger);
-            }
-            else
-            {
-                if (logger is not null)
-                    LogKillpgSent(logger, pid, null);
-            }
-        }
-        catch (Exception ex)
-        {
-            if (logger is not null)
-                LogKillFailed(logger, pid, ex);
-        }
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => KillRunning();
+        AppDomain.CurrentDomain.UnhandledException += (_, _) => KillRunning();
     }
 
     [SupportedOSPlatform("windows")]
@@ -260,17 +274,6 @@ internal static class ProcessGroupHelper
             if (logger is not null)
                 LogKillTreeFailed(logger, process.Id, ex);
         }
-    }
-
-    [SupportedOSPlatform("linux")]
-    [SupportedOSPlatform("macos")]
-    private static class Unix
-    {
-        [DllImport("libc", SetLastError = true)]
-        internal static extern int setpgid(int pid, int pgid);
-
-        [DllImport("libc", SetLastError = true)]
-        internal static extern int killpg(int pgrp, int sig);
     }
 
     [SupportedOSPlatform("windows")]
