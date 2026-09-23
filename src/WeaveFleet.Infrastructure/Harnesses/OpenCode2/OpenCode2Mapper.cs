@@ -43,8 +43,10 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
     private int _nextStepIndex;
 
     /// <summary>
-    /// The prompt the turn now running answers. V2's assistant messages don't name it; its inbox says when a prompt
-    /// (under the id Fleet gave it) went into the conversation, and every reply until the next one answers it.
+    /// The prompt the next reply answers. V2's assistant messages don't name it; its inbox says when a prompt (under the
+    /// id Fleet gave it) went into the conversation, and every step that starts after it, until the next one, answers it.
+    /// A prompt folded into a running turn doesn't change the step already under way: each step keeps the prompt it
+    /// started under (<see cref="AssistantMessage.ParentId"/>).
     /// </summary>
     private string? _prompt;
 
@@ -339,8 +341,8 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
             ? null
             : new OpenCode2Tokens { Input = t.Input ?? 0, Output = t.Output ?? 0, Reasoning = t.Reasoning ?? 0 };
 
-        // Caught up from history, where which prompt it answers isn't known.
-        var events = new List<HarnessEvent> { MessageUpdated(messageId, info, completed, completed is null ? null : message.Cost, tokens, message.Finish, parentId: null) };
+        // A step caught up from history names the prompt only if it started while this mapper was listening.
+        var events = new List<HarnessEvent> { MessageUpdated(messageId, info, completed, completed is null ? null : message.Cost, tokens, message.Finish) };
         int text = 0, reasoning = 0;
         foreach (var content in message.Content ?? [])
         {
@@ -444,7 +446,8 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
             ReadString(data, "agent"),
             providerId,
             modelId,
-            _nextStepIndex++);
+            _nextStepIndex++,
+            _prompt);
         _messages[messageId] = message;
         CurrentModel = (providerId, modelId);
 
@@ -468,7 +471,7 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
             return [];
 
         var message = _messages.GetValueOrDefault(messageId)
-            ?? new AssistantMessage(evt.Created ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), null, null, null, _nextStepIndex++);
+            ?? new AssistantMessage(evt.Created ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), null, null, null, _nextStepIndex++, _prompt);
         var completed = evt.Created ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var cost = ReadDouble(data, "cost");
         var tokens = data.TryGetProperty("tokens", out var t) && t.ValueKind == JsonValueKind.Object
@@ -723,16 +726,6 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
         double? cost,
         OpenCode2Tokens? tokens,
         string? finish)
-        => MessageUpdated(messageId, message, completed, cost, tokens, finish, _prompt);
-
-    private HarnessEvent MessageUpdated(
-        string messageId,
-        AssistantMessage message,
-        long? completed,
-        double? cost,
-        OpenCode2Tokens? tokens,
-        string? finish,
-        string? parentId)
         => Event(EventTypes.MessageUpdated, JsonSerializer.SerializeToElement(
             new OpenCode2MessageUpdatedPayload
             {
@@ -741,7 +734,7 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
                     Id = messageId,
                     Role = "assistant",
                     SessionId = fleetSessionId,
-                    ParentId = parentId,
+                    ParentId = message.ParentId,
                     Agent = message.Agent,
                     ModelId = message.ModelId,
                     ProviderId = message.ProviderId,
@@ -827,7 +820,8 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
             : null;
 
     /// <summary>What a step's <c>session.step.started</c> said, kept until the step ends.</summary>
-    private sealed record AssistantMessage(long Created, string? Agent, string? ProviderId, string? ModelId, int StepIndex);
+    /// <param name="ParentId">The prompt the step answers: the one delivered last when it started.</param>
+    private sealed record AssistantMessage(long Created, string? Agent, string? ProviderId, string? ModelId, int StepIndex, string? ParentId = null);
 
     /// <summary>A tool call from its first event to its result: later events name it only by call id.</summary>
     private sealed record ToolCall(string MessageId, string Name, JsonElement? Input);

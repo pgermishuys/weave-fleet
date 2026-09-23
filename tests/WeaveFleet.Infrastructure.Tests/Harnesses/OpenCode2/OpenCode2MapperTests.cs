@@ -180,6 +180,50 @@ public sealed class OpenCode2MapperTests
         replies.ShouldAllBe(r => r.Parent == "msg_0b63b9238001OvZJBWxeqMXBt9" || r.Parent == "msg_0b63bab52001kuhR7YFeQSihFV");
     }
 
+    [Fact]
+    public void A_prompt_folded_into_a_running_turn_answers_only_the_steps_after_it()
+    {
+        // Move on pressed while the agent is mid-turn: V2 steers the wrap-up into the running turn. The step already
+        // under way still answers the user's message; only the steps after the wrap-up went in answer the wrap-up.
+        var mapper = new OpenCode2Mapper(FleetSession);
+        const string step = """{"sessionID":"ses_1","agent":"build","model":{"id":"fake-model","providerID":"fakellm"},"assistantMessageID":"MSG"}""";
+        var events = new List<HarnessEvent>();
+        events.AddRange(mapper.Map(Event("session.inbox.delivered", """{"sessionID":"ses_1","inboxID":"msg_user"}""")));
+        events.AddRange(mapper.Map(Event("session.step.started", step.Replace("MSG", "msg_a1"))));
+        events.AddRange(mapper.Map(Event("session.inbox.delivered", """{"sessionID":"ses_1","inboxID":"msg_wrap_up"}""")));
+        events.AddRange(mapper.Map(Event("session.step.ended", """{"sessionID":"ses_1","assistantMessageID":"msg_a1","finish":"tool-calls"}""")));
+        events.AddRange(mapper.Map(Event("session.step.started", step.Replace("MSG", "msg_a2"))));
+        events.AddRange(mapper.Map(Event("session.step.ended", """{"sessionID":"ses_1","assistantMessageID":"msg_a2","finish":"stop"}""")));
+
+        var parents = events
+            .Where(e => e.Type == EventTypes.MessageUpdated)
+            .Select(e => e.Payload!.Value.GetProperty("info"))
+            .Select(info => (Id: info.GetProperty("id").GetString(), Parent: info.GetProperty("parentID").GetString()))
+            .ToList();
+        parents.ShouldBe([
+            ("msg_a1", "msg_user"),
+            ("msg_a1", "msg_user"),
+            ("msg_a2", "msg_wrap_up"),
+            ("msg_a2", "msg_wrap_up"),
+        ]);
+    }
+
+    [Fact]
+    public void A_step_caught_up_from_history_before_any_prompt_went_in_names_none()
+    {
+        var message = new OpenCode2Message
+        {
+            Id = "msg_old",
+            Type = "assistant",
+            Time = new OpenCode2MessageTimes { Created = 1, Completed = 2 },
+        };
+
+        var info = new OpenCode2Mapper(FleetSession).MapMessage(message)
+            .First(e => e.Type == EventTypes.MessageUpdated).Payload!.Value.GetProperty("info");
+
+        (info.TryGetProperty("parentID", out var parent) ? parent.GetString() : null).ShouldBeNull();
+    }
+
     [Theory]
     [InlineData("session.something.new", """{"sessionID":"ses_1"}""")]
     [InlineData("session.text.delta", """{"sessionID":"ses_1"}""")]
