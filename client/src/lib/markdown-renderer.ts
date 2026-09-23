@@ -52,6 +52,17 @@ function escapeHtml(value: string): string {
     .replaceAll("'", "&#039;");
 }
 
+let sharedRenderer: MarkdownIt | null = null;
+
+/**
+ * One renderer for every message in a conversation. Building one compiles its link patterns, which cost more than
+ * rendering most messages; a switch into a long session built one per message and per reasoning block.
+ */
+export function sharedMarkdownRenderer(): MarkdownIt {
+  sharedRenderer ??= createMarkdownRenderer();
+  return sharedRenderer;
+}
+
 export function createMarkdownRenderer(): MarkdownIt {
   return new MarkdownIt({
     html: false,

@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { Brain } from "lucide-vue-next";
 import { useTimeAgo } from "@vueuse/core";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { createMarkdownRenderer } from "@/lib/markdown-renderer";
+import { sharedMarkdownRenderer } from "@/lib/markdown-renderer";
 
 const props = defineProps<{
   text: string;
@@ -11,7 +11,7 @@ const props = defineProps<{
   createdAt?: number;
 }>();
 
-const markdownRenderer = createMarkdownRenderer();
+const markdownRenderer = sharedMarkdownRenderer();
 
 const relativeTime = useTimeAgo(() => props.createdAt ? new Date(props.createdAt) : new Date());
 const absoluteTime = computed(() => {

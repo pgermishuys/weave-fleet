@@ -10,7 +10,7 @@ import type { VisualPayload } from "@/lib/visual-payload";
 import { useQuestionAnswer } from "@/composables/use-question-answer";
 import { useRelativeTime } from "@/composables/use-relative-time";
 import { formatRelativeTime, formatAbsoluteTimestamp } from "@/lib/format-utils";
-import { createMarkdownRenderer } from "@/lib/markdown-renderer";
+import { sharedMarkdownRenderer } from "@/lib/markdown-renderer";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ToolCardDiffLine {
@@ -86,7 +86,7 @@ function makeDismissHandler(callId: string) {
   };
 }
 
-const markdownRenderer = createMarkdownRenderer();
+const markdownRenderer = sharedMarkdownRenderer();
 
 const bodyHtml = computed(() => markdownRenderer.render(props.body));
 
