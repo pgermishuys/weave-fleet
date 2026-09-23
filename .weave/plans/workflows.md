@@ -561,3 +561,115 @@ runner fix found while designing. Mockup: `~/.cache/fleet-workflows/designer.htm
 ### Not in this change
 
 - Editing Parallel or Wait steps, agent-drafted workflows, committing on save, duplicating a repo workflow.
+
+## Drafting a workflow
+
+Two ways to get a first draft without writing YAML: **Save as workflow…** on a session, and **New workflow → Describe
+it**. Either way Fleet asks the model once (twice if the first answer has errors), checks the answer with the parser the
+designer uses, and opens it in the designer as an **unsaved** new workflow. Nothing is written until Save. No mockup
+for this change: the brief is the spec, and the screens reuse the designer's (a banner, a dialog tab, a menu item).
+
+### 1. Asking off the record, with a follow-up (Domain + the two OpenCode adapters)
+
+Today's `IHarnessSession.AskOffTheRecordAsync` is one question, one string, 45 s. Drafts need a second question in the
+same conversation (the retry), the token count, and more time. So:
+
+- **Domain:** `IOffTheRecordConversation : IAsyncDisposable` with `AskAsync(prompt, ct) → OffTheRecordAnswer(Text,
+  Tokens?)`, where `Tokens` is `(Total, FromCache)` when the harness reports it. Disposing it deletes whatever the
+  harness made for it.
+  - `IHarnessSession.StartOffTheRecordAsync(ct)`: the session's conversation, read the way the recap reads it. Default
+    `null` (Claude Code, Pi, the test harness keep compiling and say "not available").
+  - `IHarnessRuntime.StartOffTheRecordAsync(OffTheRecordOptions { OwnerUserId, Directory, Profile, Model, Variant },
+    ct)`: a conversation with no session behind it, for Describe it. Default `null`. The automations rework recorded
+    this idea ("a question that needs no session") but never built it, so this is the first one.
+- **OpenCode:** the recap's fork, kept open for the conversation: same last-prompt lookup, fork, `fleet-recap` title,
+  ask-all permission (plus the step-tool deny when the parent has it), parent's model/agent/variant, tools left in
+  the request so the prefix is read from cache. `AskAsync` is one `POST /session/{fork}/message`; its `info.tokens`
+  give the count (input + output + reasoning + cache read/write; from cache = cache read). Dispose aborts and deletes
+  the fork, as today. `AskOffTheRecordAsync` (the recap) becomes "start, ask once, dispose" with its 45 s limit;
+  drafts get 3 minutes a question. The leftover-fork sweep's age cut-off grows to cover the longest conversation.
+  - Session-less: a throwaway session on the pooled process for the repo (acquired like `GetCatalogAsync`), titled
+    `fleet-recap` so the same sweep finds it after a crash, ask-all permission, the Standard role's model, and tools
+    switched off in the prompt (no cache to keep, so nothing to lose). Deleted on dispose. Non-pooled OpenCode returns
+    null: "Describe it needs pooled OpenCode".
+- **OpenCode 2:** V2's `POST /api/session/{id}/generate` (the recap's call) answers from the session's context and
+  leaves no trace, but it's one-shot. The follow-up is a second `generate` whose prompt carries the first question,
+  the first answer and the errors, so it still reads the session's context from cache. Session-less:
+  `POST /api/experimental/generate { prompt, model: { id, providerID, variant } }`, the same way. V2 reports no
+  tokens for either, so the banner shows none. Nothing to delete.
+
+### 2. The question and the retry (Application, `Workflows/WorkflowDrafter.cs`)
+
+- `WorkflowDraftPrompt.FromSession()` / `FromDescription(text)`: a short format description (an example file with
+  one agent step, a loop and a You decide step, and one line per key), then the rules:
+  - write steps in general terms so the workflow is reusable, not a replay of this session; what changes each time
+    comes from `{{request}}`, which every agent step's prompt starts with;
+  - models are roles (strong / standard / fast), never a pinned `provider/model`;
+  - from a session: a You decide step wherever the user steered or approved; from a description: wherever a person
+    should approve before the work goes on;
+  - answer with the file only, in one ```yaml block.
+- `WorkflowDrafter.FromSessionAsync(sessionId)`: the session must exist, not be archived, and its harness must have
+  `SupportsOffTheRecordPrompt`, else "Save as workflow isn't available on Claude Code." The repository is the
+  session's workspace `SourceDirectory` (a worktree's repo) or its directory, resolved like the Library's; not a
+  git repository → "A workflow lives in a git repository; this session's folder isn't one." The harness is woken
+  with `ISessionActivator` (the user asked, unlike the recap, which never wakes one). A session that's mid-turn is
+  refused: "Wait for this session's turn to end, then try again."
+- `FromDescriptionAsync(directory, description, harnessType, profileId)`: the harness must have
+  `SupportsWorkflowSteps`; the model is the Standard role's for that harness (unset → the harness's default).
+- Both then: ask → take the ```yaml block (or the whole reply) → `WorkflowCheck.Text` → valid: done. Otherwise ask
+  **once more in the same conversation**: "That file has these errors: line N: … Answer with the whole file again,
+  corrected, in one ```yaml block." → check again → done either way. An empty reply → "The model didn't answer with
+  a workflow. Try again." The conversation is disposed in a `finally`, so the fork always goes.
+- Result `DraftedWorkflowDto { directory, repositoryName, from: "session" | "description", sessionTitle, check:
+  WorkflowCheckDto, asks: 1 | 2, tokens: { total, fromCache } | null }`.
+
+### 3. The API
+
+- `POST /api/workflows/drafts/from-session { sessionId }` and `POST /api/workflows/drafts/from-description
+  { directory, description, harnessType, harnessProfileId }` → `DraftedWorkflowDto`. Behind the workflows switch
+  like the rest. Nothing is written.
+- `POST /api/workflows/files` (New) gains `text` or `draft`: Save on an unsaved draft creates the file with that
+  content, under the existing New rules (name taken, file taken, 409). The name is the draft's own. Text is saved as
+  typed, after the parser takes it (400 with the first error otherwise).
+
+### 4. Client
+
+- **Session menu:** "Save as workflow…" under "Repeat on a schedule…", when workflows are on and the session's
+  harness has `supportsOffTheRecordPrompt` (added to `HarnessCapabilities` in `api/client.ts`; the server already
+  sends it). A second line says what it costs: "Asks the model once, from the cache". It opens Workflows with the
+  session's repository and asks.
+- **New workflow dialog:** two ways in, **Start blank** (today's) and **Describe it**: "What should it do?", the harness
+  (the ones workflows run on), the file it would make, and "Asks the model once. From a session it reads the
+  conversation from the cache, so it's cheap." **Draft it** closes the dialog and the detail panel says "Drafting…".
+- **While asking:** the detail panel shows "Drafting a workflow from <title>…" / "from your description…", then
+  the draft, or the error with Try again.
+- **The draft:** `useWorkflowEditor.adoptDraft(repository, drafted)`: a new file that doesn't exist yet
+  (`.weave/workflows/<slug of its name>.yaml`, "Unsaved"), with a banner: "Drafted from <session title>. Review it
+  before saving." / "Drafted from your description. Review it before saving." plus "Asked the model once · 3,412
+  tokens, 3,100 from the cache" (or "Asked twice: the first answer had errors"; no count when the harness has none).
+  Valid → Designer; still invalid → File view with the errors in the problems bar and on their lines. Save creates
+  the file (a taken name shows the server's message); the editor then opens it like any repo workflow. Try it says
+  "Save first". Leaving the unsaved draft asks, like unsaved edits. The Library's "This repo" list shows the draft
+  as a row ("Unsaved draft") while it's open.
+
+### 5. Tests
+
+- Application: the question includes the format and the three rules (both kinds); reply → check → valid, no
+  retry; invalid → one retry whose prompt carries the errors → valid draft; still invalid → the draft with errors,
+  no third ask; no YAML → error; the conversation is disposed in every case (the fork deleted); unsupported harness
+  → the plain message, and no conversation started; the draft is never written (the repo's `.weave/workflows` stays
+  empty) until Create-with-draft; Create-with-text/draft under the name rules.
+- Infrastructure: the OpenCode conversation asks twice on one fork, reports tokens, deletes the fork once; the
+  recap still asks once; the session-less one creates, asks with tools off and the chosen model, deletes; V2: two
+  `generate`s, the second carrying the first answer and the errors; session-less `experimental/generate` with the
+  model.
+- Client: the menu item (shown/hidden by capability and the switch); Describe it in the dialog; the banner and
+  token line; an invalid draft opening in the File view; Save of a draft creating the file.
+- Live harness tests (CI, real OpenCode 1.18.31 and OpenCode 2 2.0.9, scripted model): a session's draft with a bad
+  first answer → retry → valid, and the session's history unchanged and no fork left; Describe it → a draft.
+- Live on a scratch Fleet (5371, fake model 4992, Playwright): the four checks in the brief on both OpenCode
+  harnesses, with fake-model keywords that answer the draft question with YAML, one of them bad first.
+
+### Not in this change
+
+- Agents writing workflow files through a tool; parallel plans; a "Redraft" button (Describe it again instead).
