@@ -43,7 +43,7 @@ internal sealed partial class OpenCode2CanvasCallerResolver : IHarnessCanvasCall
         for (var hop = 0; ; hop++)
         {
             if (server.FindSession(sessionId) is { } session)
-                return new HarnessCanvasCaller(session.FleetSessionId, session.OwnerUserId);
+                return new HarnessCanvasCaller(session.FleetSessionId, session.OwnerUserId, ViaParent: hop > 0);
 
             if (hop == MaxParentHops)
                 return null;

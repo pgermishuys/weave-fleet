@@ -183,6 +183,16 @@ public static class DependencyInjection
         services.AddScoped<ISessionUpdateSender, SessionUpdateSender>();
         // Singleton: holds which messages a session asked to hear back about, until the turn handling them ends.
         services.AddSingleton<SessionUpdates>();
+        services.AddScoped<WeaveFleet.Application.Workflows.WorkflowsFeature>();
+        services.AddScoped<WeaveFleet.Application.Workflows.WorkflowModelRoles>();
+        services.AddScoped<WeaveFleet.Application.Workflows.WorkflowService>();
+        services.AddScoped<WeaveFleet.Application.Workflows.WorkflowStepBridge>();
+        services.AddScoped<WeaveFleet.Application.Workflows.IWorkflowStepSessions, WeaveFleet.Application.Workflows.WorkflowStepSessions>();
+        services.AddScoped<WeaveFleet.Application.Workflows.IWorkflowRunEvents, WeaveFleet.Application.Workflows.WorkflowRunEvents>();
+        services.AddScoped<IWorkflowRunRepository, WorkflowRunRepository>();
+        // Singleton: holds each run's lock and which step sessions it's watching for the end of their turn.
+        services.AddSingleton<WeaveFleet.Application.Workflows.WorkflowRunner>();
+        services.AddHostedService<WeaveFleet.Application.Workflows.WorkflowRunRecovery>();
         services.AddSingleton<IPtyFactory, PortaPtyFactory>();
         services.AddSingleton<ITerminalHistoryStore>(sp => new TerminalHistoryStore(sp.GetRequiredService<FleetOptions>().ResolvedTerminalHistoryDirectory));
         services.AddSingleton<TerminalManager>();

@@ -52,7 +52,7 @@ internal sealed class OpenCodeCanvasCallerResolver : IHarnessCanvasCallerResolve
         for (var hop = 0; ; hop++)
         {
             if (_bindings.TryGetBinding(instance, openCodeSessionId, out var binding))
-                return new HarnessCanvasCaller(binding.FleetSessionId, binding.UserId);
+                return new HarnessCanvasCaller(binding.FleetSessionId, binding.UserId, ViaParent: hop > 0);
 
             if (hop == MaxParentHops)
                 return null;

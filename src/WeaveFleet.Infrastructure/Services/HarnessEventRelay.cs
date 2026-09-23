@@ -9,6 +9,7 @@ using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Recaps;
 using WeaveFleet.Application.Sessions;
+using WeaveFleet.Application.Workflows;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
@@ -84,6 +85,7 @@ public sealed class HarnessEventRelay : BackgroundService
     private readonly SessionRecapService? _recaps;
     private readonly SessionNotifier? _notifier;
     private readonly SessionUpdates? _updates;
+    private readonly WorkflowRunner? _workflows;
     private CancellationToken _stoppingToken;
 
     /// <summary>
@@ -103,7 +105,8 @@ public sealed class HarnessEventRelay : BackgroundService
         SessionProgressObserver? progressObserver = null,
         SessionRecapService? recaps = null,
         SessionNotifier? notifier = null,
-        SessionUpdates? updates = null)
+        SessionUpdates? updates = null,
+        WorkflowRunner? workflows = null)
     {
         _tracker = tracker;
         _broadcaster = broadcaster;
@@ -116,6 +119,7 @@ public sealed class HarnessEventRelay : BackgroundService
         _recaps = recaps;
         _notifier = notifier;
         _updates = updates;
+        _workflows = workflows;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -323,6 +327,7 @@ public sealed class HarnessEventRelay : BackgroundService
                 var domainEvent = translator.Translate(eventToTranslate);
                 _progressObserver?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
                 _updates?.Observe(targetFleetSessionId, domainEvent);
+                _workflows?.Observe(targetFleetSessionId, domainEvent);
                 _logger.LogDebug("[Relay:Pump] Translated type={Type} domainEvent={DomainEvent} targetSession={TargetSession}",
                     evt.Type, domainEvent?.GetType().Name ?? "null", targetFleetSessionId);
 

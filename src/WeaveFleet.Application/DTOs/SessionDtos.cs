@@ -41,6 +41,9 @@ public sealed record SessionListResponse(
 
     /// <summary>The model a prompt that names none gets; null for the agent's or the harness's default.</summary>
     public SessionModelChoiceDto? SelectedModel { get; init; }
+
+    /// <summary>The workflow run this session is a step of; the session list nests it under the run.</summary>
+    public string? WorkflowRunId { get; init; }
 }
 
 /// <summary>A model as the harness names one.</summary>
