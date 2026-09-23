@@ -27,4 +27,36 @@ public sealed class TerminalEnvironmentTests
 
         env.Keys.ShouldBe(["PATH"]);
     }
+
+    [Fact]
+    public void An_agents_shell_loses_what_Fleet_set_for_its_server_but_keeps_Fleets_URL()
+    {
+        // What Fleet starts an OpenCode 2 server with in separate mode, with a profile and messages between sessions.
+        string[] setForServer =
+        [
+            "OPENCODE_CONFIG_DIR", "OPENCODE_DB", "OPENCODE_CONFIG", "OPENCODE_CONFIG_CONTENT", "OPENCODE_SERVER_PASSWORD",
+            "FLEET_BRIDGE_TOKEN", "FLEET_SESSION_MESSAGES", "FLEET_SHELL_ENVIRONMENT", "FLEET_URL", "XDG_DATA_HOME",
+        ];
+
+        var changes = TerminalEnvironment.AgentShellChanges(new Hashtable { ["HOME"] = "/home/me" }, setForServer);
+
+        changes.Keys.Order(StringComparer.Ordinal).ShouldBe(
+        [
+            "FLEET_BRIDGE_TOKEN", "FLEET_SESSION_MESSAGES", "FLEET_SHELL_ENVIRONMENT", "OPENCODE_CONFIG", "OPENCODE_CONFIG_CONTENT",
+            "OPENCODE_CONFIG_DIR", "OPENCODE_DB", "OPENCODE_SERVER_PASSWORD",
+        ]);
+        changes.Values.ShouldAllBe(value => value == null);
+    }
+
+    [Fact]
+    public void A_users_own_OpenCode_settings_come_back_in_the_agents_shell()
+    {
+        // The user points their own OpenCode at another database; Fleet gives its server one of its own.
+        var inherited = new Hashtable { ["OPENCODE_DB"] = "/home/me/mine.db" };
+
+        var changes = TerminalEnvironment.AgentShellChanges(inherited, ["OPENCODE_DB", "OPENCODE_CONFIG_DIR"]);
+
+        changes["OPENCODE_DB"].ShouldBe("/home/me/mine.db");
+        changes["OPENCODE_CONFIG_DIR"].ShouldBeNull();
+    }
 }

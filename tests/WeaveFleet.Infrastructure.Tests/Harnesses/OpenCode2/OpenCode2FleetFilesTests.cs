@@ -125,6 +125,29 @@ public sealed partial class OpenCode2FleetFilesTests : IDisposable
     }
 
     [Fact]
+    public void The_shell_environment_names_what_to_remove_as_null_and_what_to_put_back_as_its_value()
+    {
+        var changes = new Dictionary<string, string?>
+        {
+            ["OPENCODE_SERVER_PASSWORD"] = null,
+            ["OPENCODE_DB"] = "/home/me/mine.db",
+            ["FLEET_BRIDGE_TOKEN"] = null,
+        };
+
+        OpenCode2FleetFiles.BuildShellEnvironment(changes)
+            .ShouldBe("""{"FLEET_BRIDGE_TOKEN":null,"OPENCODE_DB":"/home/me/mine.db","OPENCODE_SERVER_PASSWORD":null}""");
+    }
+
+    [Fact]
+    public void The_plugin_applies_the_shell_environment_to_every_shell_V2_starts()
+    {
+        var plugin = Plugin();
+
+        plugin.ShouldContain($"process.env.{OpenCode2FleetFiles.ShellEnvironmentVariable}");
+        plugin.ShouldContain("ctx.shell.hook(\"create.before\"");
+    }
+
+    [Fact]
     public void The_plugin_has_the_same_tools_as_the_OpenCode_plugin()
     {
         var v1 = Encoding.UTF8.GetString(OpenCode2FleetFiles.Read("opencode/fleet-canvas.ts"));

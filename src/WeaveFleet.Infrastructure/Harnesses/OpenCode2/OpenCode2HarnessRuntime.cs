@@ -10,6 +10,7 @@ using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Skills;
+using WeaveFleet.Application.Terminals;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
@@ -570,6 +571,14 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             environment[OpenCode2Profiles.EnvironmentVariable] = profile.ConfigPath;
         if (setup.SessionMessages)
             environment[SessionMessages.EnvironmentVariable] = "1";
+
+        // The agent's shell commands inherit the server's environment. Fleet's plugin takes out what's for the server
+        // alone, in every shell V2 starts: an `opencode` the agent runs must not open this server's config and database,
+        // nor drive its API with its password.
+        environment[OpenCode2FleetFiles.ShellEnvironmentVariable] = OpenCode2FleetFiles.BuildShellEnvironment(
+            TerminalEnvironment.AgentShellChanges(
+                Environment.GetEnvironmentVariables(),
+                [.. environment.Keys, "OPENCODE_SERVER_PASSWORD", OpenCode2FleetFiles.ShellEnvironmentVariable]));
 
         // Once its config folder exists, the skills copy there (see HarnessInstallPaths.SkillTargets).
         if (setup.Mode == OpenCode2InstallMode.Separate)
