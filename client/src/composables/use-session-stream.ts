@@ -15,10 +15,12 @@ import type { DomainEvent } from "@/lib/domain-events"
 import {
   applyDomainEvent,
   createSessionStreamState,
+  withActivityStatus,
   type SessionStreamState,
   type SessionStreamStatus,
 } from "@/lib/domain-event-reducer"
 import { prependHistoryPage } from "@/lib/history-merge"
+import { reuseUnchangedMessages } from "@/lib/reuse-unchanged-messages"
 import type { SessionHistoryPage } from "@/lib/session-snapshot"
 import { loadSessionHistory, useWeaveSocket, type Unsubscribe } from "@/composables/use-weave-socket"
 import { onGlobalEvent } from "@/composables/use-signalr-socket"
@@ -37,6 +39,36 @@ export interface UseSessionStreamResult {
 
 /** How long live events wait when no frame comes, as in a hidden tab. */
 const FRAME_FALLBACK_MS = 100
+
+/**
+ * The last state of the sessions left most recently. Opening one again shows it at once, while its fresh snapshot is
+ * on the way; the snapshot then replaces it, keeping the messages that haven't changed. Switching back and forth
+ * no longer waits on the server (or on a harness waking up) before showing anything.
+ */
+interface KeptStream {
+  state: SessionStreamState
+  hasMore: boolean
+  cursor: string | null
+  isPartial: boolean
+}
+
+const KEPT_SESSIONS = 8
+const keptStreams = new Map<string, KeptStream>()
+
+function keepStream(sessionId: string, kept: KeptStream): void {
+  keptStreams.delete(sessionId)
+  keptStreams.set(sessionId, kept)
+  for (const oldest of keptStreams.keys()) {
+    if (keptStreams.size <= KEPT_SESSIONS) {
+      break
+    }
+    keptStreams.delete(oldest)
+  }
+}
+
+export function _resetKeptStreamsForTesting(): void {
+  keptStreams.clear()
+}
 
 function createEmptyState(): SessionStreamState {
   return {
@@ -104,10 +136,39 @@ export function useSessionStream(
   const frameEvents: Array<{ event: DomainEvent; live: boolean }> = []
   let frameRequest: number | null = null
   let frameFallback: ReturnType<typeof setTimeout> | null = null
+  // The session the state belongs to, once a snapshot of it has arrived.
+  let snapshotSessionId: string | null = null
 
   const messages = computed<readonly AccumulatedMessage[]>(() => streamState.value.messages)
   const delegations = computed<readonly DelegationDto[]>(() => streamState.value.delegations)
   const sessionStatus = computed<SessionStreamStatus>(() => streamState.value.sessionStatus)
+
+  /** Keeps the state of the session being left, if it came from a snapshot. */
+  function keepCurrentStream(): void {
+    if (snapshotSessionId && !isLoading.value && streamState.value.messages.length > 0) {
+      keepStream(snapshotSessionId, {
+        state: streamState.value,
+        hasMore: hasMore.value,
+        cursor: cursor.value,
+        isPartial: isPartial.value,
+      })
+    }
+    snapshotSessionId = null
+  }
+
+  /** Shows the session's kept state while its snapshot loads, with the status the session list has now. */
+  function showKeptStream(activeSessionId: string): void {
+    const kept = keptStreams.get(activeSessionId)
+    if (!kept) {
+      return
+    }
+
+    const activityStatus = sessionsStore.sessions.find((s) => s.session.id === activeSessionId)?.activityStatus
+    streamState.value = activityStatus ? withActivityStatus(kept.state, activityStatus) : kept.state
+    hasMore.value = kept.hasMore
+    cursor.value = kept.cursor
+    isPartial.value = kept.isPartial
+  }
 
   function resetState(loading: boolean): void {
     streamState.value = createEmptyState()
@@ -130,12 +191,25 @@ export function useSessionStream(
     }
   }
 
+  /**
+   * Applies one event, or skips it when the reducer can't: a malformed event (the server's tool-result parts, for one)
+   * must not take the rest of a frame's events, or a snapshot, down with it.
+   */
+  function applySafely(state: SessionStreamState, event: DomainEvent, live: boolean): SessionStreamState {
+    try {
+      return live ? applyLiveDomainEvent(state, event) : applyDomainEvent(state, event)
+    } catch (error) {
+      console.error(`Skipped a ${event.type} event the conversation couldn't apply:`, error)
+      return state
+    }
+  }
+
   function flushFrame(): void {
     const events = frameEvents.splice(0, frameEvents.length)
     cancelFrame()
     let nextState = streamState.value
     for (const { event, live } of events) {
-      nextState = live ? applyLiveDomainEvent(nextState, event) : applyDomainEvent(nextState, event)
+      nextState = applySafely(nextState, event, live)
     }
     if (nextState !== streamState.value) {
       streamState.value = nextState
@@ -185,7 +259,8 @@ export function useSessionStream(
   function loadOlder(): void {
     const activeSessionId = currentSessionId.value
     const requestedCursor = cursor.value
-    if (!isEnabled.value || !activeSessionId || !hasMore.value || isLoadingOlder.value || requestedCursor === null) {
+    // A kept state's cursor may be stale; older messages wait for the fresh snapshot.
+    if (!isEnabled.value || isLoading.value || !activeSessionId || !hasMore.value || isLoadingOlder.value || requestedCursor === null) {
       return
     }
 
@@ -209,6 +284,7 @@ export function useSessionStream(
   watch(
     () => [currentSessionId.value, isEnabled.value, isMounted.value] as const,
     ([activeSessionId, enabledForSession, mounted], _, onCleanup) => {
+      keepCurrentStream()
       cleanupSubscription()
 
       if (!mounted) {
@@ -222,6 +298,7 @@ export function useSessionStream(
       }
 
       resetState(true)
+      showKeptStream(activeSessionId)
 
       const topic = `session:${activeSessionId}`
       unsubscribe = subscribeV2(
@@ -232,13 +309,17 @@ export function useSessionStream(
           let nextState = createSessionStreamState(snapshot)
 
           for (const event of pendingEvents.splice(0, pendingEvents.length)) {
-            nextState = applyLiveDomainEvent(nextState, event)
+            nextState = applySafely(nextState, event, true)
           }
           for (const event of pendingActivity.splice(0, pendingActivity.length)) {
-            nextState = applyDomainEvent(nextState, event)
+            nextState = applySafely(nextState, event, false)
           }
 
-          streamState.value = nextState
+          streamState.value = {
+            ...nextState,
+            messages: reuseUnchangedMessages(streamState.value.messages, nextState.messages),
+          }
+          snapshotSessionId = activeSessionId
           hasMore.value = snapshot.hasMore
           cursor.value = snapshot.cursor
           isPartial.value = snapshot.isPartial
@@ -298,6 +379,7 @@ export function useSessionStream(
   })
 
   onUnmounted(() => {
+    keepCurrentStream()
     cleanupSubscription()
   })
 

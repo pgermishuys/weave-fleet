@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { defineComponent, h, nextTick, onBeforeUpdate, shallowRef } from "vue";
@@ -103,5 +103,67 @@ describe("ActivityStream re-rendering while a reply streams", () => {
     await nextTick();
 
     expect(rendered).toEqual(["Register the listener first"]);
+  });
+});
+
+describe("ActivityStream opening a long conversation", () => {
+  const conversation = Array.from({ length: 50 }, (_, index) =>
+    message(`m${String(index + 1).padStart(2, "0")}`, index % 2 ? "assistant" : "user", `Message ${index + 1}`));
+
+  async function open() {
+    stream.messages = shallowRef<readonly AccumulatedMessage[]>([]);
+    const { default: ActivityStream } = await import("@/components/session/ActivityStream.vue");
+    const wrapper = mount(ActivityStream, {
+      props: { sessionId: "s1" },
+      global: { stubs: { ReasoningBlock: true, WorkingIndicator: true } },
+      attachTo: document.body,
+    });
+    await nextTick();
+    // The snapshot arrives.
+    stream.messages.value = conversation;
+    await nextTick();
+    const shown = () => wrapper.findAll("[data-message-id]").map((node) => node.attributes("data-message-id"));
+    return { wrapper, shown };
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("mounts the newest messages first and the older ones a batch a frame after", async () => {
+    const { wrapper, shown } = await open();
+
+    expect(shown()).toHaveLength(20);
+    expect(shown()[0]).toBe("m31");
+    expect(shown().at(-1)).toBe("m50");
+
+    for (let frame = 0; frame < 4; frame += 1) {
+      vi.advanceTimersToNextFrame();
+      await nextTick();
+    }
+    expect(shown()).toHaveLength(50);
+    expect(shown()[0]).toBe("m01");
+    wrapper.unmount();
+  });
+
+  it("mounts the rest at once when asked to show a message that isn't mounted yet", async () => {
+    // jsdom has neither.
+    Element.prototype.scrollIntoView = vi.fn();
+    vi.stubGlobal("CSS", { escape: (value: string) => value });
+    const { wrapper, shown } = await open();
+
+    window.dispatchEvent(new CustomEvent("weave:command-show-message", { detail: { sessionId: "s1", messageId: "m02" } }));
+    await nextTick();
+    await nextTick();
+
+    expect(shown()).toHaveLength(50);
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    wrapper.unmount();
   });
 });

@@ -89,6 +89,22 @@ describe("useSessionStream frame batching", () => {
     expect(updates).toHaveBeenCalledTimes(1);
   });
 
+  it("skips an event it can't apply and still applies the rest of the frame", async () => {
+    const { text } = await mountStream();
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    listener!.onEvent(delta(","));
+    // The server's tool-result part: camelCase ids, no messageID.
+    listener!.onEvent({
+      type: "message.part.updated",
+      payload: { part: { type: "tool-result", id: "", messageId: "m1", sessionId: "s1", callId: "c1", content: "done" } },
+    } as unknown as DomainEvent);
+    listener!.onEvent(delta(" world"));
+
+    vi.advanceTimersToNextFrame();
+    expect(text()).toBe("Hello, world");
+  });
+
   it("still applies them when no frame comes, as in a hidden tab", async () => {
     vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 1);
     vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);

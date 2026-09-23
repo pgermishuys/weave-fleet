@@ -274,6 +274,11 @@ function withChildActivity(state: SessionStreamState, sessionId: string | undefi
   return changed ? withDelegations(state, delegations) : state
 }
 
+/** The state with its status taken from the session list's activity status, which the sessions topic keeps current. */
+export function withActivityStatus(state: SessionStreamState, activityStatus: string): SessionStreamState {
+  return withExplicitStatus(state, toExplicitStatus(activityStatus))
+}
+
 function withExplicitStatus(state: SessionStreamState, explicitStatus: SessionStreamExplicitStatus): SessionStreamState {
   return {
     ...state,
