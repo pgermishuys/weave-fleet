@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import SelectorDropdown from "@/components/session/SelectorDropdown.vue";
 import type { ModelOption } from "@/composables/use-models";
+import { modelFromKey } from "@/lib/agent-model-choice";
 
 const props = withDefaults(
   defineProps<{
@@ -37,13 +38,16 @@ const items = computed(() => {
     })),
   ];
 });
+
+/** A model picked that the list no longer has (its provider was signed out) still shows by its id. */
+const placeholder = computed(() => modelFromKey(selectedModelId.value)?.modelID ?? "Select model");
 </script>
 
 <template>
   <SelectorDropdown
     v-model="selectedModelId"
     label="Model selector"
-    placeholder="Select model"
+    :placeholder="placeholder"
     :items="items"
     :disabled="disabled"
     :test-id="testId"

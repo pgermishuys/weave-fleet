@@ -2,6 +2,7 @@ import { storeToRefs } from "pinia";
 import { computed, readonly, ref, shallowRef, watch } from "vue";
 import { api } from "@/api/client";
 import type { AutocompleteAgent, ModelReference } from "@/api/client";
+import { sessionCatalogChanges } from "@/lib/harness-catalog-changes";
 import { shareInFlight } from "@/lib/shared-request";
 import { useSessionsStore } from "@/stores/sessions";
 
@@ -24,7 +25,11 @@ export function toAgentOptions(agents: readonly AutocompleteAgent[]): AgentOptio
     }));
 }
 
-const loadSessionAgents = shareInFlight(async (sessionId: string): Promise<AgentOption[]> => {
+/**
+ * The agents a session's harness offers, as the harness lists them (hidden ones too). The agent picker and the `@`
+ * suggestions share it, so opening a session, or a pushed change to what it offers, asks once.
+ */
+export const loadSessionAgentList = shareInFlight(async (sessionId: string): Promise<AutocompleteAgent[]> => {
   const { data, error, response } = await api.GET("/api/sessions/{id}/agents", {
     params: { path: { id: sessionId } },
   });
@@ -35,7 +40,7 @@ const loadSessionAgents = shareInFlight(async (sessionId: string): Promise<Agent
   }
 
   const body = data as unknown as { agents?: AutocompleteAgent[] } | AutocompleteAgent[];
-  return toAgentOptions(Array.isArray(body) ? body : body.agents ?? []);
+  return Array.isArray(body) ? body : body.agents ?? [];
 });
 
 export function useAgents(sessionId?: string) {
@@ -49,10 +54,12 @@ export function useAgents(sessionId?: string) {
 
   const resolvedSessionId = computed(() => sessionId ?? activeSessionId.value ?? "");
   const defaultAgentId = computed(() => agents.value[0]?.id ?? "");
+  // The harness says what the session's folder offers changed (an agent file added): ask again.
+  const changes = sessionCatalogChanges(resolvedSessionId);
 
   watch(
-    resolvedSessionId,
-    async (nextSessionId, _previous, onCleanup) => {
+    [resolvedSessionId, changes],
+    async ([nextSessionId], previous, onCleanup) => {
       if (!nextSessionId) {
         agents.value = [];
         agentsById.value = {};
@@ -67,11 +74,15 @@ export function useAgents(sessionId?: string) {
         left = true;
       });
 
-      isLoading.value = true;
+      // Asked again because the harness's list changed: the old one stays up meanwhile.
+      const isRefresh = previous?.[0] === nextSessionId;
+      if (!isRefresh) {
+        isLoading.value = true;
+      }
       error.value = undefined;
 
       try {
-        const nextAgents = await loadSessionAgents(nextSessionId);
+        const nextAgents = toAgentOptions(await loadSessionAgentList(nextSessionId));
         if (left) {
           return;
         }
@@ -83,8 +94,11 @@ export function useAgents(sessionId?: string) {
           return;
         }
 
-        agents.value = [];
-        agentsById.value = {};
+        // A refresh that fails keeps the list it had.
+        if (!isRefresh) {
+          agents.value = [];
+          agentsById.value = {};
+        }
         error.value = fetchError instanceof Error ? fetchError.message : "Failed to load agents";
       } finally {
         if (!left) {

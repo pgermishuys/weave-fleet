@@ -1,4 +1,4 @@
-import { getCurrentScope, onScopeDispose } from "vue";
+import { getCurrentScope, onScopeDispose, shallowRef, toValue, type MaybeRefOrGetter, type Ref } from "vue";
 import { onGlobalEvent } from "@/composables/use-signalr-socket";
 import type { DomainEvent } from "@/lib/domain-events";
 
@@ -70,4 +70,20 @@ export function onCatalogChange(handler: (change: HarnessCatalogChange) => void)
   const unsubscribe = listenForCatalogChanges(handler);
   if (getCurrentScope()) onScopeDispose(unsubscribe);
   return unsubscribe;
+}
+
+/**
+ * Counts the pushed changes to what `sessionId`'s harness offers where the session runs, while the calling scope
+ * lives, so a list of the session's agents, models or commands that watches the count asks again. The session's lists
+ * ask through requests they share, so one change is one request for each kind of list, however many show it.
+ */
+export function sessionCatalogChanges(sessionId: MaybeRefOrGetter<string | null | undefined>): Ref<number> {
+  const changes = shallowRef(0);
+  onCatalogChange((change) => {
+    const id = toValue(sessionId);
+    if (id && change.sessionIds.includes(id)) {
+      changes.value += 1;
+    }
+  });
+  return changes;
 }
