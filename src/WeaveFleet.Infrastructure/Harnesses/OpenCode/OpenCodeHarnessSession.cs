@@ -188,6 +188,10 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     /// </summary>
     internal bool HideStepTool { get; init; }
 
+    /// <summary>The OpenCode sessions in this session's folder, forks included: for tests that check a fork was deleted.</summary>
+    internal Task<IReadOnlyList<OpenCodeSessionInfo>> ListFolderSessionsAsync(CancellationToken ct)
+        => _instanceHandle.HttpClient.ListSessionsAsync(_workingDirectory, ct);
+
     /// <summary>The rule that hides the step tool. OpenCode applies the last rule that matches.</summary>
     internal static readonly OpenCodePermissionRule DenyStepTool =
         new() { Permission = FleetWorkflows.StepTool, Pattern = "*", Action = "deny" };

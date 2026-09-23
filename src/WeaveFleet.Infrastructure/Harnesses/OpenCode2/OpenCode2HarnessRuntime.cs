@@ -275,19 +275,48 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
 
     /// <inheritdoc />
     /// <remarks>
-    /// V2's stateless <c>experimental/generate</c> on the profile's server, which answers from the server's base config
-    /// and keeps nothing. The folder isn't loaded: nothing in it is read.
+    /// A throwaway V2 session in the folder, on the chosen model (else the folder's default), asked with <c>generate</c>
+    /// as the recap is, so nothing is ever added to it; it's deleted when the conversation is disposed. V2's stateless
+    /// <c>experimental/generate</c> can't be used: it reads only the server's base config, which doesn't have the
+    /// providers Fleet's config gives sessions ("Model unavailable").
     /// </remarks>
     public async Task<IOffTheRecordConversation?> StartOffTheRecordAsync(OffTheRecordOptions options, CancellationToken ct)
     {
         HarnessHelpers.ValidateWorkingDirectory(options.Directory);
         var server = await GetServerAsync(options.OwnerUserId, options.Profile is null ? null : WriteProfile(options.Profile), ct).ConfigureAwait(false);
-        var model = options is { ProviderId: { Length: > 0 } providerId, ModelId: { Length: > 0 } modelId }
-            ? new OpenCode2ModelRef { Id = modelId, ProviderId = providerId, Variant = options.Variant }
-            : null;
+        var session = await server.Client.CreateSessionAsync(options.Directory, ct).ConfigureAwait(false);
+        try
+        {
+            if (options is { ProviderId: { Length: > 0 } providerId, ModelId: { Length: > 0 } modelId })
+            {
+                await server.Client.SwitchModelAsync(
+                    session.Id!, new OpenCode2ModelRef { Id = modelId, ProviderId = providerId, Variant = options.Variant }, ct).ConfigureAwait(false);
+            }
+        }
+        catch
+        {
+            await DeleteThrowawayAsync(server, session.Id!).ConfigureAwait(false);
+            throw;
+        }
+
         return new OpenCode2OffTheRecordConversation(
-            (prompt, token) => server.Client.GenerateTextAsync(prompt, model, token),
-            ConversationQuestionTimeout);
+            (prompt, token) => server.Client.GenerateAsync(session.Id!, prompt, token),
+            ConversationQuestionTimeout,
+            () => DeleteThrowawayAsync(server, session.Id!));
+    }
+
+    private async Task DeleteThrowawayAsync(OpenCode2Server server, string sessionId)
+    {
+        // Not the caller's token: the session must go even when the caller gave up.
+        using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        try
+        {
+            await server.Client.DeleteSessionAsync(sessionId, cleanup.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
+        {
+            LogThrowawayLeft(_logger, sessionId, ex);
+        }
     }
 
     /// <summary>How long each question off the record may take: a workflow draft is a whole file.</summary>
@@ -731,6 +760,9 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
 
     [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 server {ProcessId} ({Version}) listening on {BaseUrl}, profile {Profile}")]
     private static partial void LogServerStarted(ILogger logger, int processId, string version, Uri baseUrl, string profile);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't delete OpenCode 2 session {SessionId}, made for a question off the record")]
+    private static partial void LogThrowawayLeft(ILogger logger, string sessionId, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't stop idle OpenCode 2 profile servers")]
     private static partial void LogIdleStopFailed(ILogger logger, Exception exception);

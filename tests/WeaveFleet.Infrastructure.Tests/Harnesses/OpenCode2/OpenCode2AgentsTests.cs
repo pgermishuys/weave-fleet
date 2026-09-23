@@ -333,19 +333,19 @@ public sealed class OpenCode2AgentsTests
     }
 
     [Fact]
-    public async Task A_question_with_no_session_is_V2s_stateless_generate_on_the_chosen_model()
+    public async Task A_throwaway_session_made_for_questions_off_the_record_is_deleted_once_when_the_conversation_ends()
     {
-        var api = new StubHandler(_ => Json("""{"data":{"text":"name: drafted"}}"""));
-        await using var server = OpenCode2EventlessServer(api);
+        var deleted = 0;
+        var conversation = new OpenCode2OffTheRecordConversation(
+            (_, ct) => Task.FromCanceled<string?>(new CancellationToken(canceled: true)),
+            TimeSpan.FromSeconds(5),
+            () => { deleted++; return Task.CompletedTask; });
 
-        var answer = await server.Client.GenerateTextAsync(
-            "Write a workflow", new OpenCode2ModelRef { Id = "claude-sonnet-5", ProviderId = "github-copilot", Variant = "high" }, CancellationToken.None);
+        await Should.ThrowAsync<OperationCanceledException>(() => conversation.AskAsync("Draft it", CancellationToken.None));
+        await conversation.DisposeAsync();
+        await conversation.DisposeAsync();
 
-        answer.ShouldBe("name: drafted");
-        var request = api.Requests.Where(r => r.Path != "/api/event").ShouldHaveSingleItem();
-        request.Path.ShouldBe("/api/experimental/generate");
-        JsonDocument.Parse(request.Body!).RootElement.GetRawText()
-            .ShouldBe("""{"prompt":"Write a workflow","model":{"id":"claude-sonnet-5","providerID":"github-copilot","variant":"high"}}""");
+        deleted.ShouldBe(1);
     }
 
     [Fact]

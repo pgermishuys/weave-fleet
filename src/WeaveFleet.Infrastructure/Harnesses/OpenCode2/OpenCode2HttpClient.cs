@@ -221,23 +221,6 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
     }
 
     /// <summary>
-    /// One answer with no session: V2's stateless <c>experimental/generate</c>, on <paramref name="model"/> (null for the
-    /// default). Nothing is kept.
-    /// </summary>
-    public async Task<string?> GenerateTextAsync(string prompt, OpenCode2ModelRef? model, CancellationToken ct)
-    {
-        using var response = await events.PostAsJsonAsync(
-            "api/experimental/generate",
-            new OpenCode2GenerateTextRequest { Prompt = prompt, Model = model },
-            OpenCode2JsonContext.Default.OpenCode2GenerateTextRequest,
-            ct).ConfigureAwait(false);
-        await EnsureSuccessAsync(response, "answer without a session", ct).ConfigureAwait(false);
-        var body = await response.Content.ReadFromJsonAsync(
-            OpenCode2JsonContext.Default.OpenCode2EnvelopeOpenCode2GenerateResult, ct).ConfigureAwait(false);
-        return body?.Data?.Text;
-    }
-
-    /// <summary>
     /// Loads <paramref name="directory"/> on the server. V2 reads a folder's config lazily: until something loads it,
     /// its catalog comes back without the folder's (and the user's) agents, models and commands.
     /// </summary>
