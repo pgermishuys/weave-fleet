@@ -362,8 +362,8 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     /// <summary>
     /// The owner's running server for <paramref name="profile"/> (none: the owner's own), started when there's none or
     /// the last one stopped. A server started with other settings (messages between sessions turned on or off) is
-    /// replaced when none of its sessions is running a turn; until then its sessions keep using it. Built-in skills
-    /// aren't a setting of the server: they're files in a folder it watches.
+    /// replaced once nothing runs on it (no turn, no background shell); until then its sessions keep using it.
+    /// Built-in skills aren't a setting of the server: they're files in a folder it watches.
     /// </summary>
     private async Task<OpenCode2Server> GetServerAsync(string ownerUserId, OpenCode2Profile? profile, CancellationToken ct)
     {

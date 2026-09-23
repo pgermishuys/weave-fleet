@@ -342,7 +342,9 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : IClas
         await WaitForAsync(events, () => events.For(id).Any(e => e.Type == "session.idle"), cts.Token);
 
         // The parent's turn is over while the child is still working: the delegation is still open, and its card too.
-        var delegation = (await Delegations(id)).Single(d => d.ParentToolCallId == "call_bg_sub");
+        // Fleet records the call and links its child in the background, so it reads "pending" for a moment first.
+        var delegation = await WaitForAsync(events, async () => (await Delegations(id))
+            .SingleOrDefault(d => d.ParentToolCallId == "call_bg_sub" && d.Status != "pending"), cts.Token);
         delegation.Status.ShouldBe("running");
         delegation.ChildSessionId.ShouldNotBeNull();
         var child = await fleet.HarnessSessionAsync(delegation.ChildSessionId!, cts.Token);

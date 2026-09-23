@@ -606,3 +606,21 @@ What Track G learned (2.0.9, scratch HOME, dummy keys only):
   for every user's sessions. With token auth (one user, e.g. Fleet opened from a phone) it's on.
 - **Left for later:** renaming a sign-in (`PATCH /api/credential`), the `command` method (V2 would run a command on
   Fleet's machine; Fleet shows it and doesn't run it), `code`-mode attempts seen live (none in 2.0.9's built-ins).
+
+## Track F — busy while background work runs, the agent's shell environment (2026-09-22)
+
+- [x] **A background shell keeps its server busy.** On 2.0.9 a shell call moved to the background (`background: true`
+      or `POST /api/session/{id}/background`) keeps running after its turn ended, and `GET /api/session/active` is
+      `{}` the whole time. `OpenCode2Server.IsIdleAsync` now also asks `GET /api/shell` for each folder the server
+      has loaded (`GET /api/debug/location`, present since 2.0.6); a shell with `status: running` makes it busy.
+      Findings (`.poc-runtime/probe-shells.sh` in the Track F worktree):
+      - `GET /api/shell` without a location lists only the server's own folder (its working directory), so each
+        folder is asked. Asking about a folder the server hasn't loaded loads it, so only loaded ones are asked. A
+        session's folder loads on its first prompt, not when it's created.
+      - A running item: `{"id":"sh_…","status":"running","command":…,"pid":…,"metadata":{"sessionID":"ses_…"}}`.
+        Once it exits it's gone from the list; `GET /api/shell/{id}?location…` still has it with
+        `status: exited` and its exit code.
+      - A background subagent was already covered: its child session is in `/api/session/active` while it works.
+      - When V2 can't be asked, the server still counts as busy.
+      This covers the profile-server idle stop, the replacement after a settings change, and the stop after an
+      update.

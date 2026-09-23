@@ -1,0 +1,14 @@
+PASS  the Work profile saved — 200 {"id":"8b347fab0d604148aa2d903f2444c97c","harnessType":"opencode2","name":"Work","content":"{\n  \"model\": \"fakellm/fake-model\"\n}","isDefault":false,"openSessions":0,"createdAt":"2026-09-22T22:56:
+PASS  an OpenCode 2 session started on Work — 200
+PASS  the turn that backgrounded the shell ended — after 1 s
+      profile server pid=335746; idle timeout 10 s, timer every 2.5 s
+PASS  25 s later (2.5x the idle timeout) the profile server is still running — pid 335746, 26 s in
+PASS  Fleet logged it as busy with a running shell
+PASS  Fleet didn't stop it
+PASS  the shell's completion notice arrived (with its output) — after 41 s
+PASS  …on the same server
+PASS  afterwards the idle profile server stopped — after 53 s
+      OpenCode 2 server 335746 (local-user, profile 20afb15ce4227c57) unused for 0.2 min with nothing running; stopping it until a session needs it
+PASS  the next prompt started a new profile server and was answered — new pid 336598
+PASS  an OpenCode 1 session started — 200
+PASS  the OpenCode 1 session answered

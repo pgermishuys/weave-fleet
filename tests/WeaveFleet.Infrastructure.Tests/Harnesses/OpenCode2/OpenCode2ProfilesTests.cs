@@ -275,15 +275,68 @@ public sealed class OpenCode2ProfilesTests : IDisposable
         servers.FindServing("local-user", "fleet-other").ShouldBeNull();
     }
 
-    private static OpenCode2Servers Servers(List<OpenCode2ServerKey> started, string active = """{"data":{}}""")
+    [Fact]
+    public async Task A_profile_server_with_a_background_shell_running_stops_only_once_the_shell_has_finished()
+    {
+        // The turn that backgrounded the shell ended long ago; V2 lists the shell as running until it exits.
+        var shells = new Dictionary<string, string[]> { ["/work"] = [OpenCode2Fixtures.Shell("running")] };
+        await using var servers = Servers([], shells: shells);
+        var work = new OpenCode2Profile("aaaa", "/p/a.json");
+        var onWork = await servers.GetAsync(OpenCode2ServerKey.For("local-user", work), Setup(work), CancellationToken.None);
+
+        (await servers.StopIdleAsync(DateTimeOffset.UtcNow.AddHours(1), CancellationToken.None)).ShouldBe(0);
+        onWork.IsRunning.ShouldBeTrue();
+
+        shells["/work"] = [];
+        (await servers.StopIdleAsync(DateTimeOffset.UtcNow.AddHours(1), CancellationToken.None)).ShouldBe(1);
+        onWork.IsRunning.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task A_server_started_with_other_settings_is_replaced_only_once_its_background_shell_has_finished()
+    {
+        var shells = new Dictionary<string, string[]> { ["/work"] = [OpenCode2Fixtures.Shell("running")] };
+        await using var servers = Servers([], shells: shells);
+        var key = OpenCode2ServerKey.For("local-user", null);
+        var before = await servers.GetAsync(key, OpenCode2ServerSetup.None, CancellationToken.None);
+        var changed = OpenCode2ServerSetup.None with { SessionMessages = true };
+
+        (await servers.GetAsync(key, changed, CancellationToken.None)).ShouldBeSameAs(before);
+
+        shells["/work"] = [];
+        var after = await servers.GetAsync(key, changed, CancellationToken.None);
+        after.ShouldNotBeSameAs(before);
+        after.Setup.ShouldBe(changed);
+        before.IsRunning.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task After_an_update_a_server_with_a_background_shell_running_is_kept_until_it_has_finished()
+    {
+        var shells = new Dictionary<string, string[]> { ["/work"] = [OpenCode2Fixtures.Shell("running")] };
+        await using var servers = Servers([], shells: shells);
+        var key = OpenCode2ServerKey.For("local-user", null);
+        var before = await servers.GetAsync(key, OpenCode2ServerSetup.None, CancellationToken.None);
+
+        await servers.AfterUpdateAsync(CancellationToken.None);
+
+        before.IsRunning.ShouldBeTrue();
+        before.IsOutdated.ShouldBeTrue();
+        (await servers.GetAsync(key, OpenCode2ServerSetup.None, CancellationToken.None)).ShouldBeSameAs(before);
+
+        shells["/work"] = [];
+        (await servers.GetAsync(key, OpenCode2ServerSetup.None, CancellationToken.None)).ShouldNotBeSameAs(before);
+    }
+
+    private static OpenCode2Servers Servers(
+        List<OpenCode2ServerKey> started,
+        string active = """{"data":{}}""",
+        IReadOnlyDictionary<string, string[]>? shells = null)
         => new(
             (key, setup, _) =>
             {
                 started.Add(key);
-                var api = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
-                {
-                    Content = new StringContent(active, Encoding.UTF8, "application/json"),
-                });
+                var api = OpenCode2Fixtures.Running(active, shells);
                 return Task.FromResult(new OpenCode2Server(key.OwnerUserId, OpenCode2Fixtures.ClientServing("", api), "token", process: null, NullLogger.Instance, setup));
             },
             TimeSpan.FromMinutes(5),
