@@ -383,12 +383,6 @@ const MOCK_SKILL_CATALOG = [
 
 const MOCK_TOOLS = [
   {
-    name: "visualize", toolType: "native", displayName: null, description: null, command: null, args: null, env: null,
-    repoUrl: "https://github.com/pgermishuys/weave-fleet", localPath: null,
-    scope: "global", projectPath: null, installedPath: null,
-    installedAt: "2026-09-13T09:01:25Z", updatedAt: "2026-09-13T09:01:25Z",
-  },
-  {
     name: "filesystem", toolType: "mcp", displayName: null, description: null, command: "npx",
     args: ["-y", "@modelcontextprotocol/server-filesystem", "."], env: null, repoUrl: null, localPath: null,
     scope: "project", projectPath: "/home/you/src/weave-fleet", installedPath: "/home/you/src/weave-fleet/opencode.json",
@@ -396,13 +390,7 @@ const MOCK_TOOLS = [
   },
 ];
 
-const MOCK_TOOL_CATALOG = [
-  {
-    name: "visualize", toolType: "native", source: 1, displayName: "Visualize", description: "Render sequence diagrams and flow graphs inline in the conversation.",
-    command: null, args: null, env: null, repoUrl: "https://github.com/pgermishuys/weave-fleet", ref: "main", subPath: "opencode/tools", localPath: null,
-    author: "pgermishuys", version: "1.0.0", tags: ["diagrams"], createdAt: null, updatedAt: null,
-  },
-];
+const MOCK_TOOL_CATALOG: never[] = [];
 
 /** Fleet's built-in skills, read from the repo the way the server reads them, all off. */
 function readBuiltInSkills(folder: string): { name: string; description: string; enabled: boolean }[] {
@@ -1555,50 +1543,6 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
             ],
             timestamp: new Date(now - 520000).toISOString(),
             textContent: "Delegating the security review to the warp agent.",
-            agent: "shuttle",
-            modelId: "claude-sonnet-4-5",
-          },
-          // Message 9b: Assistant with visualize tool output (renders as canvases)
-          {
-            id: "msg-9b",
-            role: "assistant",
-            parts: [
-              {
-                "type": "text",
-                "kind": 0,
-                "text": "Here is how a request moves through the new middleware, and how token refresh will work."
-              },
-              {
-                "type": "tool",
-                "kind": 0,
-                "toolCallId": "call-9b",
-                "toolName": "visualize",
-                "arguments": {
-                  "type": "flow",
-                  "title": "Auth request flow"
-                },
-                "state": 2,
-                "metadata": {
-                  "output": "{\"$type\": \"visual/flow\", \"title\": \"Auth request flow\", \"content\": {\"direction\": \"TB\", \"nodes\": [{\"id\": \"client\", \"label\": \"HTTP request\", \"type\": \"input\"}, {\"id\": \"auth\", \"label\": \"authenticate()\"}, {\"id\": \"verify\", \"label\": \"jsonwebtoken.verify\"}, {\"id\": \"ctx\", \"label\": \"req.user\"}, {\"id\": \"route\", \"label\": \"Protected route\", \"type\": \"output\"}, {\"id\": \"reject\", \"label\": \"401 Unauthorized\", \"type\": \"output\"}], \"edges\": [{\"id\": \"e1\", \"source\": \"client\", \"target\": \"auth\", \"label\": \"Bearer token\"}, {\"id\": \"e2\", \"source\": \"auth\", \"target\": \"verify\"}, {\"id\": \"e3\", \"source\": \"verify\", \"target\": \"ctx\", \"label\": \"valid\"}, {\"id\": \"e4\", \"source\": \"ctx\", \"target\": \"route\"}, {\"id\": \"e5\", \"source\": \"verify\", \"target\": \"reject\", \"label\": \"invalid\", \"animated\": true}]}}"
-                }
-              },
-              {
-                "type": "tool",
-                "kind": 0,
-                "toolCallId": "call-9c",
-                "toolName": "visualize",
-                "arguments": {
-                  "type": "sequence",
-                  "title": "Token refresh"
-                },
-                "state": 2,
-                "metadata": {
-                  "output": "{\"$type\": \"visual/sequence\", \"title\": \"Token refresh\", \"content\": \"sequenceDiagram\\n  Client->>API: request with expired token\\n  API-->>Client: 401 token expired\\n  Client->>Auth: POST /refresh\\n  Auth-->>Client: new access token\\n  Client->>API: retry request\"}"
-                }
-              }
-            ],
-            timestamp: new Date(now - 515000).toISOString(),
-            textContent: "Here is how a request moves through the new middleware, and how token refresh will work.",
             agent: "shuttle",
             modelId: "claude-sonnet-4-5",
           },

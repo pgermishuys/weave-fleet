@@ -42,14 +42,14 @@ const snapshot: SessionSnapshot = {
         }),
         part({
           type: "tool",
-          id: "prt_vis",
-          tool: "visualize",
-          callID: "toolu_vis",
+          id: "prt_search",
+          tool: "search_code",
+          callID: "toolu_search",
           state: {
             status: "completed",
-            input: {},
-            output: "{\"$type\":\"visual/flow\",\"content\":{\"nodes\":[]}}",
-            title: "Flow",
+            input: { query: "authenticate" },
+            output: "src/middleware/auth.ts:12: export function authenticate",
+            title: "Search code",
             metadata: { truncated: false },
           },
         }),
@@ -99,10 +99,10 @@ describe("Reopened session", () => {
     expect(state.delegations[0].parentToolCallId).toBe(task?.callId)
   })
 
-  it("keeps the visual card and the canvas card", () => {
+  it("keeps a generic tool card and the canvas card", () => {
     const tools = toolParts(createSessionStreamState(snapshot)).map((part) => toToolCardItem(part))
 
-    expect(tools.find((t) => t.kind === "visualize")?.output).toContain("visual/flow")
+    expect(tools.find((t) => t.kind === "search_code")?.output).toContain("authenticate")
     expect(tools.find((t) => t.kind === "fleet_canvas_open")?.canvasId).toBe("cv_1")
   })
 

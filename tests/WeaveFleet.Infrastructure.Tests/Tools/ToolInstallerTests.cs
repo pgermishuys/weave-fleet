@@ -40,11 +40,11 @@ public sealed class ToolInstallerTests : IDisposable
     [Fact]
     public async Task InstallNative_Global_CopiesTheToolFileIntoOpenCodesToolsFolder()
     {
-        var source = CreateSourceDir("visualize.ts", "other.ts");
+        var source = CreateSourceDir("sample-tool.ts", "other.ts");
 
-        var result = await _installer.InstallNativeAsync("visualize", source, InstallTarget.Global);
+        var result = await _installer.InstallNativeAsync("sample-tool", source, InstallTarget.Global);
 
-        var expected = Path.Combine(_openCodeDir, "tools", "visualize.ts");
+        var expected = Path.Combine(_openCodeDir, "tools", "sample-tool.ts");
         result.Value.ShouldBe(expected);
         File.ReadAllText(expected).ShouldBe(ToolSource);
         File.Exists(Path.Combine(_openCodeDir, "tools", "other.ts")).ShouldBeFalse("only the named tool is installed");
@@ -53,11 +53,11 @@ public sealed class ToolInstallerTests : IDisposable
     [Fact]
     public async Task InstallNative_Project_CopiesIntoTheRepositorysOpenCodeFolder()
     {
-        var source = CreateSourceDir("visualize.ts");
+        var source = CreateSourceDir("sample-tool.ts");
 
-        var result = await _installer.InstallNativeAsync("visualize", source, InstallTarget.Project(_repoDir));
+        var result = await _installer.InstallNativeAsync("sample-tool", source, InstallTarget.Project(_repoDir));
 
-        result.Value.ShouldBe(Path.Combine(_repoDir, ".opencode", "tools", "visualize.ts"));
+        result.Value.ShouldBe(Path.Combine(_repoDir, ".opencode", "tools", "sample-tool.ts"));
         File.Exists(result.Value).ShouldBeTrue();
         Directory.Exists(Path.Combine(_openCodeDir, "tools")).ShouldBeFalse();
     }
@@ -87,7 +87,7 @@ public sealed class ToolInstallerTests : IDisposable
     {
         var source = CreateSourceDir("a.ts", "b.ts");
 
-        var result = await _installer.InstallNativeAsync("visualize", source, InstallTarget.Global);
+        var result = await _installer.InstallNativeAsync("sample-tool", source, InstallTarget.Global);
 
         result.IsFailure.ShouldBeTrue();
         result.Error.Code.ShouldStartWith("Validation.");
@@ -96,10 +96,10 @@ public sealed class ToolInstallerTests : IDisposable
     [Fact]
     public async Task InstallNative_WhenADifferentFileIsThere_ConflictsAndLeavesItAlone()
     {
-        var source = CreateSourceDir("visualize.ts");
-        var existing = WriteFile(Path.Combine(_openCodeDir, "tools", "visualize.ts"), "// mine");
+        var source = CreateSourceDir("sample-tool.ts");
+        var existing = WriteFile(Path.Combine(_openCodeDir, "tools", "sample-tool.ts"), "// mine");
 
-        var result = await _installer.InstallNativeAsync("visualize", source, InstallTarget.Global);
+        var result = await _installer.InstallNativeAsync("sample-tool", source, InstallTarget.Global);
 
         result.Error.Code.ShouldBe(FleetError.Conflict.Code);
         File.ReadAllText(existing).ShouldBe("// mine");
@@ -108,10 +108,10 @@ public sealed class ToolInstallerTests : IDisposable
     [Fact]
     public async Task InstallNative_WhenTheJsTwinIsThere_Conflicts()
     {
-        var source = CreateSourceDir("visualize.ts");
-        WriteFile(Path.Combine(_openCodeDir, "tools", "visualize.js"), ToolSource);
+        var source = CreateSourceDir("sample-tool.ts");
+        WriteFile(Path.Combine(_openCodeDir, "tools", "sample-tool.js"), ToolSource);
 
-        var result = await _installer.InstallNativeAsync("visualize", source, InstallTarget.Global);
+        var result = await _installer.InstallNativeAsync("sample-tool", source, InstallTarget.Global);
 
         result.Error.Code.ShouldBe(FleetError.Conflict.Code);
     }
@@ -119,10 +119,10 @@ public sealed class ToolInstallerTests : IDisposable
     [Fact]
     public async Task InstallNative_WhenTheSameFileIsThere_Succeeds()
     {
-        var source = CreateSourceDir("visualize.ts");
-        WriteFile(Path.Combine(_openCodeDir, "tools", "visualize.ts"), ToolSource);
+        var source = CreateSourceDir("sample-tool.ts");
+        WriteFile(Path.Combine(_openCodeDir, "tools", "sample-tool.ts"), ToolSource);
 
-        var result = await _installer.InstallNativeAsync("visualize", source, InstallTarget.Global);
+        var result = await _installer.InstallNativeAsync("sample-tool", source, InstallTarget.Global);
 
         result.IsSuccess.ShouldBeTrue();
     }
@@ -133,17 +133,17 @@ public sealed class ToolInstallerTests : IDisposable
         var xdg = Path.Combine(_home, "xdg");
         var installer = new ToolInstaller(new HarnessInstallPaths(_home, xdg), NullLogger<ToolInstaller>.Instance);
 
-        var result = await installer.InstallNativeAsync("visualize", CreateSourceDir("visualize.ts"), InstallTarget.Global);
+        var result = await installer.InstallNativeAsync("sample-tool", CreateSourceDir("sample-tool.ts"), InstallTarget.Global);
 
-        result.Value.ShouldBe(Path.Combine(xdg, "opencode", "tools", "visualize.ts"));
+        result.Value.ShouldBe(Path.Combine(xdg, "opencode", "tools", "sample-tool.ts"));
     }
 
     [Fact]
     public async Task Uninstall_Native_DeletesTheFile()
     {
-        var installed = (await _installer.InstallNativeAsync("visualize", CreateSourceDir("visualize.ts"), InstallTarget.Global)).Value;
+        var installed = (await _installer.InstallNativeAsync("sample-tool", CreateSourceDir("sample-tool.ts"), InstallTarget.Global)).Value;
 
-        var result = await _installer.UninstallAsync(NativeEntry("visualize", installed));
+        var result = await _installer.UninstallAsync(NativeEntry("sample-tool", installed));
 
         result.IsSuccess.ShouldBeTrue();
         File.Exists(installed).ShouldBeFalse();
@@ -154,7 +154,7 @@ public sealed class ToolInstallerTests : IDisposable
     {
         var elsewhere = WriteFile(Path.Combine(_home, "important.ts"), "keep");
 
-        var result = await _installer.UninstallAsync(NativeEntry("visualize", elsewhere));
+        var result = await _installer.UninstallAsync(NativeEntry("sample-tool", elsewhere));
 
         result.IsFailure.ShouldBeTrue();
         File.Exists(elsewhere).ShouldBeTrue();

@@ -40,14 +40,14 @@ function isGitHubUrl(url: string): boolean {
 
 const TOOL_FILE = /\.(ts|js)$/i;
 
-/** OpenCode names a tool after its file, so a path to visualize.ts installs the tool "visualize". */
+/** OpenCode names a tool after its file, so a path to sample-tool.ts installs the tool "sample-tool". */
 function toolNameFromPath(path: string): string {
   const last = path.split(/[\\/]/).filter(Boolean).pop() ?? "tool";
   return last.replace(TOOL_FILE, "");
 }
 
 /**
- * A GitHub link to a tool: a repository, a folder (/tree/…), or one file (/blob/…/visualize.ts).
+ * A GitHub link to a tool: a repository, a folder (/tree/…), or one file (/blob/…/sample-tool.ts).
  * For a file, fetch its folder and name the tool after the file.
  */
 function parseGitHubToolUrl(url: string): { repoUrl: string; ref: string | null; subPath: string | null; name: string } | null {

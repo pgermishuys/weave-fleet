@@ -61,12 +61,12 @@ public sealed class InstallScopeEndpointTests : IAsyncDisposable
     [Fact]
     public async Task InstallTool_Global_LandsInOpenCodesGlobalToolsFolder()
     {
-        var source = WriteFile(Path.Combine(_home, "downloads", "visualize.ts"), "export default {}");
+        var source = WriteFile(Path.Combine(_home, "downloads", "sample-tool.ts"), "export default {}");
 
-        var response = await _client.PostAsJsonAsync("/api/tools/install", NativeTool("visualize", source));
+        var response = await _client.PostAsJsonAsync("/api/tools/install", NativeTool("sample-tool", source));
 
         response.StatusCode.ShouldBe(HttpStatusCode.Created);
-        var installed = Path.Combine(_home, ".config", "opencode", "tools", "visualize.ts");
+        var installed = Path.Combine(_home, ".config", "opencode", "tools", "sample-tool.ts");
         File.Exists(installed).ShouldBeTrue();
 
         var tool = (await GetJsonAsync("/api/tools")).GetProperty("tools").EnumerateArray().ShouldHaveSingleItem();
@@ -78,16 +78,16 @@ public sealed class InstallScopeEndpointTests : IAsyncDisposable
     public async Task InstallTool_Project_LandsInTheRepository_AndRemoveDeletesIt()
     {
         var repo = await CreateRepositoryAsync("my-repo");
-        var source = WriteFile(Path.Combine(_home, "downloads", "visualize.ts"), "export default {}");
+        var source = WriteFile(Path.Combine(_home, "downloads", "sample-tool.ts"), "export default {}");
 
-        var install = await _client.PostAsJsonAsync("/api/tools/install", NativeTool("visualize", source, "project", repo));
+        var install = await _client.PostAsJsonAsync("/api/tools/install", NativeTool("sample-tool", source, "project", repo));
 
         install.StatusCode.ShouldBe(HttpStatusCode.Created);
-        var installed = Path.Combine(repo, ".opencode", "tools", "visualize.ts");
+        var installed = Path.Combine(repo, ".opencode", "tools", "sample-tool.ts");
         File.Exists(installed).ShouldBeTrue();
-        File.Exists(Path.Combine(_home, ".config", "opencode", "tools", "visualize.ts")).ShouldBeFalse();
+        File.Exists(Path.Combine(_home, ".config", "opencode", "tools", "sample-tool.ts")).ShouldBeFalse();
 
-        var remove = await _client.DeleteAsync($"/api/tools/visualize?scope=project&projectPath={Uri.EscapeDataString(repo)}");
+        var remove = await _client.DeleteAsync($"/api/tools/sample-tool?scope=project&projectPath={Uri.EscapeDataString(repo)}");
 
         remove.StatusCode.ShouldBe(HttpStatusCode.NoContent);
         File.Exists(installed).ShouldBeFalse();
@@ -98,25 +98,25 @@ public sealed class InstallScopeEndpointTests : IAsyncDisposable
     public async Task InstallTool_GlobalAndProject_AreSeparateInstalls()
     {
         var repo = await CreateRepositoryAsync("my-repo");
-        var source = WriteFile(Path.Combine(_home, "downloads", "visualize.ts"), "export default {}");
+        var source = WriteFile(Path.Combine(_home, "downloads", "sample-tool.ts"), "export default {}");
 
-        (await _client.PostAsJsonAsync("/api/tools/install", NativeTool("visualize", source))).StatusCode.ShouldBe(HttpStatusCode.Created);
-        (await _client.PostAsJsonAsync("/api/tools/install", NativeTool("visualize", source, "project", repo))).StatusCode.ShouldBe(HttpStatusCode.Created);
-        (await _client.PostAsJsonAsync("/api/tools/install", NativeTool("visualize", source))).StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        (await _client.PostAsJsonAsync("/api/tools/install", NativeTool("sample-tool", source))).StatusCode.ShouldBe(HttpStatusCode.Created);
+        (await _client.PostAsJsonAsync("/api/tools/install", NativeTool("sample-tool", source, "project", repo))).StatusCode.ShouldBe(HttpStatusCode.Created);
+        (await _client.PostAsJsonAsync("/api/tools/install", NativeTool("sample-tool", source))).StatusCode.ShouldBe(HttpStatusCode.Conflict);
 
-        (await _client.DeleteAsync("/api/tools/visualize")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await _client.DeleteAsync("/api/tools/sample-tool")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
 
-        File.Exists(Path.Combine(_home, ".config", "opencode", "tools", "visualize.ts")).ShouldBeFalse();
-        File.Exists(Path.Combine(repo, ".opencode", "tools", "visualize.ts")).ShouldBeTrue();
+        File.Exists(Path.Combine(_home, ".config", "opencode", "tools", "sample-tool.ts")).ShouldBeFalse();
+        File.Exists(Path.Combine(repo, ".opencode", "tools", "sample-tool.ts")).ShouldBeTrue();
     }
 
     [Fact]
     public async Task InstallTool_WhenAFileFleetDidNotWriteIsThere_Returns409AndRecordsNothing()
     {
-        WriteFile(Path.Combine(_home, ".config", "opencode", "tools", "visualize.ts"), "// mine");
-        var source = WriteFile(Path.Combine(_home, "downloads", "visualize.ts"), "export default {}");
+        WriteFile(Path.Combine(_home, ".config", "opencode", "tools", "sample-tool.ts"), "// mine");
+        var source = WriteFile(Path.Combine(_home, "downloads", "sample-tool.ts"), "export default {}");
 
-        var response = await _client.PostAsJsonAsync("/api/tools/install", NativeTool("visualize", source));
+        var response = await _client.PostAsJsonAsync("/api/tools/install", NativeTool("sample-tool", source));
 
         response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
         (await GetJsonAsync("/api/tools")).GetProperty("tools").GetArrayLength().ShouldBe(0);
@@ -127,9 +127,9 @@ public sealed class InstallScopeEndpointTests : IAsyncDisposable
     {
         var outside = Directory.CreateDirectory(Path.Combine(_home, "outside", "repo")).FullName;
         Directory.CreateDirectory(Path.Combine(outside, ".git"));
-        var source = WriteFile(Path.Combine(_home, "downloads", "visualize.ts"), "export default {}");
+        var source = WriteFile(Path.Combine(_home, "downloads", "sample-tool.ts"), "export default {}");
 
-        var response = await _client.PostAsJsonAsync("/api/tools/install", NativeTool("visualize", source, "project", outside));
+        var response = await _client.PostAsJsonAsync("/api/tools/install", NativeTool("sample-tool", source, "project", outside));
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         Directory.Exists(Path.Combine(outside, ".opencode")).ShouldBeFalse();
@@ -138,9 +138,9 @@ public sealed class InstallScopeEndpointTests : IAsyncDisposable
     [Fact]
     public async Task InstallTool_WithAnUnknownScope_Returns400()
     {
-        var source = WriteFile(Path.Combine(_home, "downloads", "visualize.ts"), "export default {}");
+        var source = WriteFile(Path.Combine(_home, "downloads", "sample-tool.ts"), "export default {}");
 
-        var response = await _client.PostAsJsonAsync("/api/tools/install", NativeTool("visualize", source, "everywhere"));
+        var response = await _client.PostAsJsonAsync("/api/tools/install", NativeTool("sample-tool", source, "everywhere"));
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
