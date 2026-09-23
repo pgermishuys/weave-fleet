@@ -5,6 +5,7 @@ import { storeToRefs } from "pinia";
 import { Cable, Download, LoaderCircle, RefreshCw, Star } from "lucide-vue-next";
 import HarnessInstallPanel from "@/components/settings/HarnessInstallPanel.vue";
 import HarnessProfilesPanel from "@/components/settings/HarnessProfilesPanel.vue";
+import HarnessSignInPanel from "@/components/settings/HarnessSignInPanel.vue";
 import HarnessUpdateStrip from "@/components/settings/HarnessUpdateStrip.vue";
 import { refreshAllHarnesses, useHarnesses } from "@/composables/use-harnesses";
 import { useAppShellStore } from "@/stores/app-shell";
@@ -35,6 +36,8 @@ interface HarnessCard {
   canToggle: boolean;
   canDefault: boolean;
   supportsProfiles: boolean;
+  /** Fleet can sign in to its providers: it supports that, Fleet runs without sign-in, and it's installed and working. */
+  offersSignIn: boolean;
   /** The harness describes how it's installed here (OpenCode 2's install mode), shown under its card. */
   describesInstall: boolean;
   /** The harness as the server described it, for its update. */
@@ -142,6 +145,7 @@ function toHarnessCard(harness: HarnessInfo): HarnessCard {
     canToggle: true,
     canDefault: true,
     supportsProfiles: harness.capabilities?.supportsProfiles === true,
+    offersSignIn: harness.capabilities?.supportsProviderSignIn === true && harness.available,
     describesInstall: Boolean(harness.setup?.mode),
     info: harness,
   };
@@ -372,6 +376,17 @@ function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus
           v-if="harness.describesInstall && !config.cloudMode"
           class="mt-4"
           :harness="harness.info"
+          :signs-in-here="harness.offersSignIn"
+        />
+
+        <!-- Listing providers starts the harness, so one that isn't turned on waits for a click. -->
+        <HarnessSignInPanel
+          v-if="harness.offersSignIn && !config.cloudMode"
+          class="mt-4"
+          :harness-type="harness.id"
+          :harness-name="harness.name"
+          :sign-in-command="harness.info.setup?.signInCommand ?? null"
+          :auto-load="harness.enabled"
         />
 
         <div

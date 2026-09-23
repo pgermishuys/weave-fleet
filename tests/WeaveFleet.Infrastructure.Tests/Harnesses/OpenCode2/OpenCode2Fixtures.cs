@@ -67,6 +67,9 @@ internal sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> 
 {
     public List<(HttpMethod Method, string Path, string? Body)> Requests { get; } = [];
 
+    /// <summary>Every request's whole address, query included.</summary>
+    public List<string> Uris { get; } = [];
+
     /// <summary>Runs for every request after it's recorded, before it's answered: a server's side effects.</summary>
     public Action<HttpRequestMessage>? OnRequest { get; set; }
 
@@ -74,7 +77,10 @@ internal sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> 
     {
         var body = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
         lock (Requests)
+        {
             Requests.Add((request.Method, request.RequestUri!.AbsolutePath, body));
+            Uris.Add(request.RequestUri.ToString());
+        }
         OnRequest?.Invoke(request);
         return respond(request);
     }

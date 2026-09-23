@@ -11,6 +11,8 @@ import type { HarnessInfo } from "@/api/client";
 
 const props = defineProps<{
   harness: HarnessInfo;
+  /** Fleet signs in to the harness's providers itself (the panel below it); the terminal is then the fallback. */
+  signsInHere?: boolean;
 }>();
 
 const setup = computed(() => props.harness.setup ?? null);
@@ -87,7 +89,7 @@ async function copySignIn(): Promise<void> {
       v-if="signIn"
       class="harness-install__sign-in"
     >
-      <p>Sign in to a provider in a terminal:</p>
+      <p>{{ signsInHere ? "Or sign in to a provider in a terminal:" : "Sign in to a provider in a terminal:" }}</p>
       <div class="harness-install__copy">
         <code data-testid="harness-install-sign-in">{{ signIn }}</code>
         <button

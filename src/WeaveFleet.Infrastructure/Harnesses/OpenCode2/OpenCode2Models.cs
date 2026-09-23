@@ -109,6 +109,7 @@ internal sealed record OpenCode2FormOption
 {
     public string? Value { get; init; }
     public string? Label { get; init; }
+    public string? Description { get; init; }
 }
 
 /// <summary><c>POST /api/session/{id}/form/{formID}/reply</c>: one value per field key.</summary>
@@ -519,6 +520,126 @@ internal sealed record OpenCode2FileChangedPayload
     public required string Event { get; init; }
 }
 
+// ── Sign-in (integrations and credentials) ──────────────────────────────────
+
+/// <summary>
+/// A provider V2 can sign in to (<c>Integration.Info</c> from <c>GET /api/integration</c>): how, and the sign-ins it
+/// has. <see cref="Connections"/> lists the stored sign-ins first, the one in use first, then environment variables
+/// V2 found set.
+/// </summary>
+internal sealed record OpenCode2Integration
+{
+    public string? Id { get; init; }
+    public string? Name { get; init; }
+    public IReadOnlyList<OpenCode2IntegrationMethod>? Methods { get; init; }
+    public IReadOnlyList<OpenCode2Connection>? Connections { get; init; }
+}
+
+/// <summary>
+/// One way to sign in (<c>Integration.Method</c>): <c>oauth</c> (<see cref="Id"/>, <see cref="Label"/>, a
+/// <see cref="Form"/>), <c>key</c> (a <see cref="Form"/> of fields besides the key), <c>command</c> (<see cref="Command"/>)
+/// or <c>env</c> (<see cref="Names"/>).
+/// </summary>
+internal sealed record OpenCode2IntegrationMethod
+{
+    public string? Type { get; init; }
+    public string? Id { get; init; }
+    public string? Label { get; init; }
+    public IReadOnlyList<OpenCode2IntegrationField>? Form { get; init; }
+    public IReadOnlyList<string>? Command { get; init; }
+    public IReadOnlyList<string>? Names { get; init; }
+}
+
+/// <summary>A field of a sign-in method's form (<c>Form.Field</c>).</summary>
+internal sealed record OpenCode2IntegrationField
+{
+    public string? Key { get; init; }
+    public string? Type { get; init; }
+    public string? Title { get; init; }
+    public string? Description { get; init; }
+    public bool? Required { get; init; }
+    public bool? Hidden { get; init; }
+    public string? Placeholder { get; init; }
+    public JsonElement? Default { get; init; }
+    public IReadOnlyList<OpenCode2FormOption>? Options { get; init; }
+    public IReadOnlyList<OpenCode2FieldCondition>? When { get; init; }
+    public string? Url { get; init; }
+}
+
+/// <summary>A form field is asked when field <see cref="Key"/>'s answer is (<c>eq</c>) or isn't (<c>neq</c>) <see cref="Value"/>.</summary>
+internal sealed record OpenCode2FieldCondition
+{
+    public string? Key { get; init; }
+    public string? Op { get; init; }
+    public JsonElement Value { get; init; }
+}
+
+/// <summary>
+/// A sign-in an integration has (<c>Connection.Info</c>): <c>credential</c> (<see cref="Id"/>, <see cref="Label"/>)
+/// or <c>env</c> (the variable's <see cref="Name"/>).
+/// </summary>
+internal sealed record OpenCode2Connection
+{
+    public string? Type { get; init; }
+    public string? Id { get; init; }
+    public string? Label { get; init; }
+    public string? Name { get; init; }
+}
+
+/// <summary><c>POST /api/integration/{id}/connect/key</c>.</summary>
+internal sealed record OpenCode2ConnectKeyRequest
+{
+    public required string Key { get; init; }
+    public IReadOnlyDictionary<string, JsonElement>? Answer { get; init; }
+}
+
+/// <summary><c>POST /api/integration/{id}/connect/oauth</c>.</summary>
+internal sealed record OpenCode2StartOAuthRequest
+{
+    [JsonPropertyName("methodID")] public required string MethodId { get; init; }
+    public IReadOnlyDictionary<string, JsonElement>? Answer { get; init; }
+}
+
+/// <summary><c>POST /api/integration/{id}/connect/oauth/{attemptID}/complete</c>, for an attempt in <c>code</c> mode.</summary>
+internal sealed record OpenCode2CompleteOAuthRequest
+{
+    public string? Code { get; init; }
+}
+
+/// <summary>
+/// A browser sign-in V2 started (<c>Integration.AttemptEncoded</c>). <see cref="Mode"/> <c>auto</c>: V2 finishes it
+/// itself (a callback listener or polling); <c>code</c>: the user pastes a code back.
+/// </summary>
+internal sealed record OpenCode2OAuthAttempt
+{
+    [JsonPropertyName("attemptID")] public string? AttemptId { get; init; }
+    public string? Url { get; init; }
+    public string? Instructions { get; init; }
+    public string? Mode { get; init; }
+    public OpenCode2AttemptTime? Time { get; init; }
+}
+
+/// <summary>Where a browser sign-in is (<c>Integration.AttemptStatus</c>): <c>pending</c>, <c>complete</c>, <c>failed</c> or <c>expired</c>.</summary>
+internal sealed record OpenCode2OAuthStatus
+{
+    public string? Status { get; init; }
+    public string? Message { get; init; }
+}
+
+/// <summary>An attempt's times in epoch milliseconds; V2's schema allows "Infinity" too, so they're read as JSON.</summary>
+internal sealed record OpenCode2AttemptTime
+{
+    public JsonElement Created { get; init; }
+    public JsonElement Expires { get; init; }
+}
+
+/// <summary>V2's error body: <c>{ "_tag": "InvalidRequestError", "message": … }</c>.</summary>
+internal sealed record OpenCode2ErrorBody
+{
+    [JsonPropertyName("_tag")] public string? Tag { get; init; }
+    public string? Message { get; init; }
+}
+
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
@@ -557,6 +678,13 @@ internal sealed record OpenCode2FileChangedPayload
 [JsonSerializable(typeof(OpenCode2PartDeltaPayload))]
 [JsonSerializable(typeof(OpenCode2FileChangedPayload))]
 [JsonSerializable(typeof(FilesWrittenPayload))]
+[JsonSerializable(typeof(OpenCode2Envelope<List<OpenCode2Integration>>))]
+[JsonSerializable(typeof(OpenCode2Envelope<OpenCode2OAuthAttempt>))]
+[JsonSerializable(typeof(OpenCode2Envelope<OpenCode2OAuthStatus>))]
+[JsonSerializable(typeof(OpenCode2ConnectKeyRequest))]
+[JsonSerializable(typeof(OpenCode2StartOAuthRequest))]
+[JsonSerializable(typeof(OpenCode2CompleteOAuthRequest))]
+[JsonSerializable(typeof(OpenCode2ErrorBody))]
 internal sealed partial class OpenCode2JsonContext : JsonSerializerContext
 {
 }
