@@ -57,7 +57,7 @@ afterEach(() => {
   mockApi.POST.mockReset()
   vi.restoreAllMocks()
 })
-import { applyDomainEvent, createSessionStreamState, isStreamWorking, type SessionStreamState } from "@/lib/domain-event-reducer"
+import { applyDomainEvent, createSessionStreamState, isDelegationWaiting, isStreamWorking, type SessionStreamState } from "@/lib/domain-event-reducer"
 import type { DomainEvent, MessageLifecyclePayload } from "@/lib/domain-events"
 import type { SessionSnapshot, SessionSnapshotDelegation } from "@/lib/session-snapshot"
 
@@ -1062,5 +1062,97 @@ describe("turn.failed", () => {
     })
 
     expect(again.messages[0].turnError).toEqual(error)
+  })
+})
+
+// A sub-agent stopped on a question holds up its parent: the session list and header say "Needs input", and so
+// must the parent's conversation, for every harness's delegations.
+describe("a sub-agent waiting on a question", () => {
+  function childActivity(sessionId: string, activityStatus: string): DomainEvent {
+    return {
+      type: "activity_status",
+      payload: { sessionId, activityStatus, capabilities: {} as never },
+    }
+  }
+
+  const turnStarted: DomainEvent = {
+    type: "turn.started",
+    payload: { sessionID: "session-1", messageID: "message-1", index: 0, agent: null, modelID: null, parentID: null },
+  }
+
+  it("makes the parent wait on input, over its own busy turn", () => {
+    const busy = applyDomainEvent(createState({ delegations: [createDelegation()] }), turnStarted)
+
+    const waiting = applyDomainEvent(busy, childActivity("child-1", "waiting_input"))
+
+    expect(waiting.sessionStatus).toBe("waiting_input")
+    expect(waiting.delegations[0].childActivityStatus).toBe("waiting_input")
+    expect(isDelegationWaiting(waiting.delegations[0])).toBe(true)
+    expect(isStreamWorking(waiting.sessionStatus)).toBe(true)
+  })
+
+  it("goes back to working once answered, then idle as before", () => {
+    const busy = applyDomainEvent(createState({ delegations: [createDelegation()] }), turnStarted)
+    const waiting = applyDomainEvent(busy, childActivity("child-1", "waiting_input"))
+
+    const answered = applyDomainEvent(waiting, childActivity("child-1", "busy"))
+    expect(answered.sessionStatus).toBe("busy")
+    expect(isDelegationWaiting(answered.delegations[0])).toBe(false)
+
+    const childDone = applyDelegationCompletedEvent(answered)
+    const idled = applyDomainEvent(childDone, { type: "session.idled", payload: { sessionId: "session-1" } })
+    expect(idled.sessionStatus).toBe("idle")
+  })
+
+  it("keeps the child's status when its delegation is updated", () => {
+    const waiting = applyDomainEvent(createState({ delegations: [createDelegation()] }), childActivity("child-1", "waiting_input"))
+
+    const updated = applyDomainEvent(waiting, {
+      type: "delegation.updated",
+      payload: {
+        delegationId: "delegation-1",
+        parentSessionId: "session-1",
+        parentToolCallId: "tool-1",
+        childSessionId: "child-1",
+        title: "Delegate work",
+        status: "running",
+        createdAt: "2026-01-01T00:00:00Z",
+      },
+    } as DomainEvent)
+
+    expect(updated.sessionStatus).toBe("waiting_input")
+  })
+
+  it("leaves the state alone for a session that isn't one of its sub-agents", () => {
+    const state = createState({ delegations: [createDelegation()], sessionStatus: "delegating" })
+
+    expect(applyDomainEvent(state, childActivity("someone-else", "waiting_input"))).toBe(state)
+    expect(applyDomainEvent(state, childActivity("session-1", "waiting_input"))).toBe(state)
+  })
+
+  it("stops counting once the delegation has finished", () => {
+    const finished = createState({ delegations: [createDelegation({ status: "completed", childActivityStatus: "waiting_input" })] })
+
+    expect(isDelegationWaiting(finished.delegations[0])).toBe(false)
+    expect(applyDomainEvent(finished, childActivity("child-1", "waiting_input")).sessionStatus).toBe("idle")
+  })
+
+  it("hydrates from a snapshot taken while the child waits", () => {
+    const state = createSessionStreamState(createSnapshot({
+      activityStatus: "waiting_input",
+      delegations: [createSnapshotDelegation({ childActivityStatus: "waiting_input" })],
+    }))
+
+    expect(state.sessionStatus).toBe("waiting_input")
+    expect(state.delegations[0].childActivityStatus).toBe("waiting_input")
+  })
+
+  it("hydrates as delegating when the child is only working", () => {
+    const state = createSessionStreamState(createSnapshot({
+      activityStatus: "busy",
+      delegations: [createSnapshotDelegation({ childActivityStatus: "busy" })],
+    }))
+
+    expect(state.sessionStatus).toBe("delegating")
   })
 })

@@ -159,6 +159,9 @@ public sealed class SessionSnapshotBuilder(
                 Title = row.Title,
                 Status = row.Status,
                 CreatedAt = row.CreatedAt,
+                ChildActivityStatus = row.ChildSessionId is { } childSessionId
+                    ? activityTracker.GetEffectiveActivityStatus(childSessionId)
+                    : null,
             }).ToArray(),
             ActivityStatus = NormalizeActivityStatus(activityTracker.GetEffectiveActivityStatus(sessionId)),
             LastEventId = lastEventId,

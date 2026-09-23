@@ -497,3 +497,50 @@ What Track E learned:
 About 4–5 weeks for parity with the OpenCode harness. Stages 0–2 (≈ 2 weeks) give a usable text-and-tools
 harness behind the off-by-default switch. V2 is days old and its API spec calls itself experimental: pin a
 version and expect changes.
+
+## Live catalog (Track H) (2026-09-22)
+
+- [x] `OpenCode2Server` keeps listening after the load gate. For a folder Fleet asked about (`LoadLocationAsync`) or
+      runs a session in, `agent/model/provider/command/config.updated` count as a change; `skill`, `plugin`,
+      `websearch`, `reference` and `integration.updated` don't (nothing Fleet lists). A change is told once V2 has been
+      quiet about the folder for 1 s, and nothing in a folder's first 3 s after its load gate completed counts (the
+      rest of its loading burst). V2's own working folder is never told.
+- [x] The runtime publishes a harness-neutral `harness.catalog_changed` on the `sessions` topic
+      (`HarnessCatalogChanges`, Application): harness type, folder, `quickChat`, the Fleet profile ids whose catalog it
+      is (`none` for the server without a profile; a profile's server names every profile id that asked for its
+      content hash) and the Fleet sessions in that folder on that server. OpenCode 1 never sends it.
+- [x] Client: `useHarnessCatalog` refetches when harness, folder and profile match (the old list stays up meanwhile)
+      and forgets cached catalogs a change is about; a session's slash-command and `@` agent lists refetch when the
+      change names the session. No polling.
+- Checked live (2.0.9, separate mode, scratch Fleet): two composers on one folder (No profile, a profile). An agent
+  file in the repo's `.opencode/agents/`, then one in V2's config folder, each reached both composers without
+  reopening, with one catalog request per composer per change (both servers had loaded the folder, so two broadcasts,
+  each matched by its own profile). Starting sessions in a new folder and in the open one made no request. A session's
+  open slash list showed a new `.opencode/commands/*.md` with one request. An OpenCode 1 session answered beside it.
+- Learned: creating `.opencode/` and writing a file into it straight away can reach V2 as two bursts (the new config
+  folder, then the file) more than 500 ms apart; 1 s of quiet merged them in every run. V2 lists
+  `.opencode/commands/*.md` as commands and hot-reloads them.
+- **Left for later:** a session's own agent and model pickers in the conversation (`useAgents`, `useModels`) don't
+  listen yet. A catalog that changed while its server was down (replaced, idle-stopped) isn't told.
+
+## "Needs input" inside the parent's conversation (2026-09-22)
+
+Track I. Shared code, every harness (OpenCode's `task`, OpenCode 2's `subagent`, Fleet's own delegations).
+
+- **Gap:** #262 made the list and header read "Needs input" when a subagent stops on a question, but the parent's
+  conversation still said "Working" on the subagent's row and on the Working line. The stream reducer only knew each
+  delegation's own status (`running`), never what its child session showed.
+- **Seam, no new event:** the snapshot's delegations carry `childActivityStatus` (the tracker's status for the child),
+  for a parent opened while the child waits. Live, the parent's stream listens to `activity_status` on the `sessions`
+  topic, which every harness's child sessions already broadcast, and records it on the matching delegation. A waiting
+  child makes the stream `waiting_input`, outranking the parent's own busy, as `GetEffectiveActivityStatus` does.
+- **UI:** the row says "Needs input" with the diamond and opens the child, where the question card is. The Working
+  line says "Needs input" (no clock) while a question holds the turn: the child's, or the session's own (read from
+  the session's shown status, which the header uses too).
+- **Checked live** on a scratch Fleet (2.0.9 and OpenCode 1, fake model `delegate a question`): row and line say
+  Needs input while the child waits and after a reload; the row opens the question; after answering, Working, then
+  Done with no line. 13/13 per harness.
+- **Left alone:** the background subagent's Working line (#270). It comes from the same `delegating` status, but a
+  background call is only known from the tool part's metadata (the card layer), not the delegation, and the server
+  side disagrees too (the list is idle live, but the list endpoint counts a working child as busy on refetch). Needs a
+  decision on what an idle parent with background work should show; not changed here.

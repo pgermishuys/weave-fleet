@@ -22,6 +22,22 @@ vi.mock("@/lib/api-client", () => ({
   apiFetch: apiFetchMock,
 }));
 
+const { globalHandlers } = vi.hoisted(() => ({ globalHandlers: new Set<(event: unknown) => void>() }));
+vi.mock("@/composables/use-signalr-socket", () => ({
+  onGlobalEvent: (_topic: string, handler: (event: unknown) => void) => {
+    globalHandlers.add(handler);
+    return () => globalHandlers.delete(handler);
+  },
+}));
+
+function pushCatalogChange(sessionIds: string[]): void {
+  const event = {
+    type: "harness.catalog_changed",
+    payload: { harnessType: "opencode2", directory: "/work/rocket", profileIds: ["none"], sessionIds },
+  };
+  for (const handler of [...globalHandlers]) handler(event);
+}
+
 function createJsonResponse<T>(body: T, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -142,6 +158,7 @@ describe("useAutocomplete", () => {
     apiFetchMock.mockReset();
     mockApi.GET.mockReset();
     configureApiFetch();
+    globalHandlers.clear();
   });
 
   it("shows slash commands, filters them, and replaces the input on Enter", async () => {
@@ -168,6 +185,22 @@ describe("useAutocomplete", () => {
     expect(value.value).toBe("/help ");
     expect(inputRef.value?.selectionStart).toBe(6);
     expect(inputRef.value?.selectionEnd).toBe(6);
+  });
+
+  it("asks for the session's commands and agents again when its harness says they changed", async () => {
+    const { result } = await mountAutocomplete("/", 1);
+    const asked = (url: string) => mockApi.GET.mock.calls.filter(([called]) => called === url).length;
+    expect(asked("/api/sessions/{id}/commands")).toBe(1);
+
+    pushCatalogChange(["another-session"]);
+    await flushAll();
+    expect(asked("/api/sessions/{id}/commands")).toBe(1);
+
+    pushCatalogChange(["instance-1"]);
+    await flushAll();
+    expect(asked("/api/sessions/{id}/commands")).toBe(2);
+    expect(asked("/api/sessions/{id}/agents")).toBe(2);
+    expect(result.items.value.map((item) => item.label)).toEqual(["/help", "/hello", "/status"]);
   });
 
   it("shows mention suggestions after whitespace and debounces server-side file search", async () => {

@@ -2,6 +2,12 @@ import { computed, shallowRef, watch, type Ref } from "vue";
 import { api, type HarnessCatalog } from "@/api/client";
 import { toAgentOptions } from "@/composables/use-agents";
 import { toModelOptions } from "@/composables/use-models";
+import {
+  isCatalogChangeFor,
+  listenForCatalogChanges,
+  onCatalogChange,
+  type HarnessCatalogChange,
+} from "@/lib/harness-catalog-changes";
 
 /** How long a folder's catalog is shown without asking again; the harness is asked anyway once it's older. */
 const FRESH_FOR_MS = 5 * 60_000;
@@ -17,9 +23,25 @@ function cacheKey(harnessType: string, directory: string | null, profile: string
   return `${harnessType}\n${directory ?? ""}\n${profile ?? ""}`;
 }
 
+// Listens from the first catalog shown, so a cached catalog that changes while no composer is open is asked for
+// again when one opens.
+let stopForgetting: (() => void) | null = null;
+
 /** For tests: forget every folder's catalog. */
 export function clearHarnessCatalogCache(): void {
   cache.clear();
+  stopForgetting?.();
+  stopForgetting = null;
+}
+
+/** Forgets the cached catalogs `change` is about, so they're asked for again when shown. */
+function forgetChanged(change: HarnessCatalogChange): void {
+  for (const key of [...cache.keys()]) {
+    const [harnessType = "", directory = "", profile = ""] = key.split("\n");
+    if (isCatalogChangeFor(change, harnessType, directory || null, profile || undefined)) {
+      cache.delete(key);
+    }
+  }
 }
 
 /**
@@ -55,7 +77,8 @@ async function fetchCatalog(
 /**
  * The agents and models `harnessType` offers in `directory` (null for a quick chat's) on `profile` (an id, "none",
  * or undefined for the default: a profile can add agents and models), before any session exists.
- * The last catalog for a folder shows at once and is refreshed when it's old. While another folder's loads, the
+ * The last catalog for a folder shows at once and is refreshed when it's old, or at once when the harness says it
+ * changed (a harness that can tell pushes `harness.catalog_changed`; no polling). While another folder's loads, the
  * previous one stays up so the pickers don't blink; `isCurrent` says whether it's this folder's.
  */
 export function useHarnessCatalog(
@@ -71,7 +94,16 @@ export function useHarnessCatalog(
   const key = computed(() => (harnessType.value ? cacheKey(harnessType.value, directory.value, profile.value) : null));
   const isCurrent = computed(() => key.value !== null && loadedKey.value === key.value);
 
-  watch(key, async (nextKey, _previous, onCleanup) => {
+  // The harness says what it offers changed: ask again if it's what's shown. The old list stays up meanwhile.
+  const changes = shallowRef(0);
+  stopForgetting ??= listenForCatalogChanges(forgetChanged);
+  onCatalogChange((change) => {
+    if (harnessType.value && isCatalogChangeFor(change, harnessType.value, directory.value, profile.value)) {
+      changes.value += 1;
+    }
+  });
+
+  watch([key, changes], async ([nextKey], _previous, onCleanup) => {
     error.value = null;
     if (!nextKey) {
       catalog.value = null;
@@ -80,6 +112,7 @@ export function useHarnessCatalog(
       return;
     }
 
+    const shown = loadedKey.value === nextKey ? catalog.value : null;
     const cached = cache.get(nextKey);
     if (cached) {
       catalog.value = cached.catalog;
@@ -103,7 +136,7 @@ export function useHarnessCatalog(
         return;
       }
       error.value = fetchError instanceof Error ? fetchError.message : "Couldn't load agents and models";
-      if (!cached) {
+      if (!cached && !shown) {
         catalog.value = null;
         loadedKey.value = nextKey;
       }
