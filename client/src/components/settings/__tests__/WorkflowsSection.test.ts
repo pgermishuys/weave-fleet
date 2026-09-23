@@ -11,6 +11,7 @@ vi.mock("@/api/client", () => ({
 }));
 vi.mock("@/composables/use-enabled-harnesses", () => ({
   useEnabledHarnesses: () => ({
+    harnesses: computed(() => [{ type: "opencode" }]),
     enabledHarnesses: computed(() => [
       { type: "opencode", displayName: "OpenCode", available: true, userEnabled: true, capabilities: { supportsWorkflowSteps: true } },
       { type: "claude-code", displayName: "Claude Code", available: true, userEnabled: true, capabilities: { supportsWorkflowSteps: false } },

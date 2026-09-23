@@ -9,6 +9,9 @@ namespace WeaveFleet.Application.Workflows;
 public sealed record WorkflowParseResult(WorkflowDefinition? Definition, IReadOnlyList<WorkflowFileError> Errors)
 {
     public bool IsValid => Definition is not null && Errors.Count == 0;
+
+    /// <summary>The name the file gives, even when it has errors, so the library can list it by that.</summary>
+    public string? Name { get; init; }
 }
 
 /// <summary>
@@ -99,7 +102,7 @@ public static partial class WorkflowYaml
             startsFrom,
             runsIn,
             steps);
-        return new WorkflowParseResult(errors.Count == 0 ? definition : null, errors);
+        return new WorkflowParseResult(errors.Count == 0 ? definition : null, errors) { Name = definition.Name.Length > 0 ? definition.Name : null };
     }
 
     private static WorkflowStep? ReadStep(YamlMappingNode map, Action<YamlNode?, string> error)

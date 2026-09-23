@@ -14,7 +14,7 @@ import { usePreferencesStore } from "@/stores/preferences";
 
 const preferencesStore = usePreferencesStore();
 const { isWorkflowsEnabled, setWorkflowsEnabled } = useWorkflowsFeature();
-const { enabledHarnesses, defaultHarnessType } = useEnabledHarnesses();
+const { harnesses: allHarnesses, enabledHarnesses, defaultHarnessType } = useEnabledHarnesses();
 const { choiceFor, setChoice } = useModelRoles();
 const nav = useWorkflowsNav();
 
@@ -167,13 +167,13 @@ onMounted(() => {
       </div>
 
       <p
-        v-if="harnesses.length === 0"
+        v-if="harnesses.length === 0 && allHarnesses.length > 0"
         class="mt-4 text-sm text-muted"
       >
         Workflows run on OpenCode and OpenCode 2. Turn one of them on in Settings → Harnesses.
       </p>
 
-      <template v-else>
+      <template v-else-if="harnesses.length > 0">
         <div
           v-for="role in WORKFLOW_ROLES"
           :key="role"

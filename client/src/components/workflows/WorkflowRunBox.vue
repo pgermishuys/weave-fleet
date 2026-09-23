@@ -37,7 +37,7 @@ const nav = useWorkflowsNav();
 const { config } = storeToRefs(useAppShellStore());
 const { repositories, scannedAt, error: repositoriesError, refresh: refreshRepositories } = useRepositories();
 const defaults = useNewSessionDefaults();
-const { enabledHarnesses, defaultHarnessType } = useEnabledHarnesses();
+const { harnesses: allHarnesses, enabledHarnesses, defaultHarnessType } = useEnabledHarnesses();
 const { skills: builtInSkills } = useBuiltInSkills();
 const { choiceFor } = useModelRoles();
 const { setActiveSection } = useSettingsNav();
@@ -67,7 +67,8 @@ const harnessType = computed({
   set: (value: string) => { harnessChoice.value = value; },
 });
 const harnessName = (type: string) => enabledHarnesses.value.find((h) => h.type === type)?.displayName ?? type;
-const notAvailable = computed(() => workflowHarnesses.value.length === 0
+// Said only once the list has loaded: until then there's nothing to go on.
+const notAvailable = computed(() => allHarnesses.value.length > 0 && workflowHarnesses.value.length === 0
   ? `Workflows aren't available on ${harnessName(defaultHarnessType.value)}. Pick OpenCode or OpenCode 2.`
   : null);
 
@@ -105,7 +106,7 @@ const cannotRun = computed(() => props.workflow.errors.length > 0
   : notAvailable.value);
 
 const canRun = computed(() => !isStarting.value && !cannotRun.value && !skillOff.value
-  && request.value.trim().length > 0 && repositoryPath.value !== null);
+  && workflowHarnesses.value.length > 0 && request.value.trim().length > 0 && repositoryPath.value !== null);
 
 function toggleOptional(stepId: string): void {
   if (optionalOn.has(stepId)) optionalOn.delete(stepId);
@@ -372,11 +373,18 @@ function handleKeydown(event: KeyboardEvent): void {
   gap: 6px;
 }
 
+/* The frame centres itself with auto margins, which in a flex column would also shrink it. */
+.wf-run :deep(.composer-frame) {
+  width: 100%;
+}
+
 .wf-run__textarea {
   min-height: 52px;
 }
 
-.wf-run__go {
+/* A labelled Run button, not the round send arrow the frame sizes for. */
+.wf-run .wf-run__go {
+  width: auto;
   gap: 6px;
   padding-inline: 12px;
 }

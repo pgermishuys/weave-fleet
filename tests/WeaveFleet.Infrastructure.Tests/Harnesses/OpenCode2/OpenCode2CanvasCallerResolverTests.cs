@@ -53,7 +53,7 @@ public sealed class OpenCode2CanvasCallerResolverTests
         await using var server = Server(Token, Parents(("ses_grandchild", "ses_child"), ("ses_child", "ses_parent")));
         await using var session = Attach(server, "ses_parent", "fleet-1", "owner-1");
 
-        (await Resolver(server).ResolveAsync(Token, "ses_grandchild")).ShouldBe(new HarnessCanvasCaller("fleet-1", "owner-1"));
+        (await Resolver(server).ResolveAsync(Token, "ses_grandchild")).ShouldBe(new HarnessCanvasCaller("fleet-1", "owner-1", ViaParent: true));
     }
 
     [Fact]

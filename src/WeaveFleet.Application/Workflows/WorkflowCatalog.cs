@@ -12,6 +12,9 @@ public sealed record WorkflowEntry(
     IReadOnlyList<WorkflowFileError> Errors)
 {
     public bool IsBuiltIn => Id.StartsWith(WorkflowCatalog.BuiltInPrefix, StringComparison.Ordinal);
+
+    /// <summary>The name the file gives, even when it has errors.</summary>
+    public string? Name { get; init; }
 }
 
 /// <summary>
@@ -79,7 +82,7 @@ public static class WorkflowCatalog
 
             var text = await File.ReadAllTextAsync(path, ct).ConfigureAwait(false);
             var parsed = WorkflowYaml.Parse(text, relative);
-            return new WorkflowEntry(id, relative, text, parsed.Definition, parsed.Errors);
+            return new WorkflowEntry(id, relative, text, parsed.Definition, parsed.Errors) { Name = parsed.Name };
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

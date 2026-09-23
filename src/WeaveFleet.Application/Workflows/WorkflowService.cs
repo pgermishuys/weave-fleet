@@ -267,7 +267,7 @@ public sealed record WorkflowDto(
             entry.Id,
             entry.IsBuiltIn,
             entry.File,
-            workflow?.Name ?? Path.GetFileNameWithoutExtension(entry.File ?? entry.Id),
+            workflow?.Name ?? entry.Name ?? Path.GetFileNameWithoutExtension(entry.File ?? entry.Id),
             workflow?.Description,
             workflow?.Placeholder,
             workflow?.StartsFrom,
