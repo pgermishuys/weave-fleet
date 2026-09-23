@@ -83,7 +83,7 @@ public sealed partial class OpenCode2LiveTests
             title: Review
             model: standard
             skill: fleet-code-review
-            prompt: Review it. (workflows: skill-off)
+            prompt: "Review it. (workflows: skill-off)"
             outcomes: [pass]
         """;
 
@@ -91,6 +91,7 @@ public sealed partial class OpenCode2LiveTests
     [OpenCode2Fact]
     public async Task A_step_whose_built_in_skill_is_off_waits_before_its_session_starts()
     {
+        WorkflowYaml.Parse(SkillWorkflow, "live").Errors.ShouldBeEmpty();
         const string checkPrompt = "Check the change, then finish the step. (workflows: skill-off)";
         fleet.Answer(request => LlmRequest.Starts(request, checkPrompt)
             ? ToolCall("call_check_done", FleetWorkflows.StepTool, new { outcome = "pass", summary = "Checked." })

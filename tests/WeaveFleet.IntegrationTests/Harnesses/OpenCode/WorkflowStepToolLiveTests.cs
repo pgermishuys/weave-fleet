@@ -149,6 +149,7 @@ public sealed class WorkflowStepToolLiveTests
     [OpenCodeFact]
     public async Task A_step_whose_built_in_skill_is_off_waits_before_its_session_starts()
     {
+        WorkflowYaml.Parse(SkillWorkflow, "live").Errors.ShouldBeEmpty();
         await RunAsync(workflowsOn: true, stepPrompt: StepPrompt, together: false, definition: SkillWorkflow, scenario: async (services, llm, _, step, _, _, ct) =>
         {
             // fleet-code-review is one of Fleet's built-in skills, and off: nothing turned it on.
