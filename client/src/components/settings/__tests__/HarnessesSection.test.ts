@@ -161,6 +161,42 @@ describe("HarnessesSection", () => {
     expect(wrapper.find("[data-testid='pooled-opencode-mode-setting']").exists()).toBe(false);
   });
 
+  it("lists OpenCode 2's providers when Fleet signs in to them, keeping the terminal as the fallback", async () => {
+    const withSignIn = (enabled: boolean) => createHarness("opencode2", "OpenCode 2", {
+      version: "2.0.9",
+      executablePath: "/home/you/.weave/harnesses/opencode2/.opencode/bin/opencode2",
+      capabilities: { ...createHarness("x", "x").capabilities, supportsProviderSignIn: enabled },
+      setup: { installCommand: "curl", signInCommand: "opencode2 auth login --standalone", mode: "Separate from OpenCode 1" },
+    });
+    mockApiResponses({ "opencode2.enabled": "true" }, () => [withSignIn(true)]);
+    apiFetchMock.mockImplementation((path: string) => {
+      if (path === "/api/harnesses") return reply([withSignIn(true)]);
+      if (path === "/api/preferences") return reply({ "opencode2.enabled": "true" });
+      if (path === "/api/harnesses/{harnessType}/sign-in") return reply({ note: "Kept in its own database.", providers: [] });
+      return reply({ error: "unexpected path" }, 404);
+    });
+
+    const wrapper = await mountHarnessesSection();
+    await flushPromises();
+
+    expect(wrapper.get("[data-testid='harness-sign-in-note']").text()).toBe("Kept in its own database.");
+    expect(wrapper.get("[data-testid='harness-install']").text()).toContain("Or sign in to a provider in a terminal:");
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/harnesses/{harnessType}/sign-in", { params: { path: { harnessType: "opencode2" } } });
+  });
+
+  it("offers no sign-in from Fleet when the server doesn't (Fleet runs with sign-in)", async () => {
+    mockApiResponses({ "opencode2.enabled": "true" }, () => [createHarness("opencode2", "OpenCode 2", {
+      version: "2.0.9",
+      executablePath: "/home/you/.weave/harnesses/opencode2/.opencode/bin/opencode2",
+      setup: { installCommand: "curl", signInCommand: "opencode2 auth login --standalone", mode: "Separate from OpenCode 1" },
+    })]);
+
+    const wrapper = await mountHarnessesSection();
+
+    expect(wrapper.find("[data-testid='harness-sign-in']").exists()).toBe(false);
+    expect(wrapper.get("[data-testid='harness-install']").text()).toContain("Sign in to a provider in a terminal:");
+  });
+
   it("offers no sign-in before OpenCode 2 is installed", async () => {
     mockApiResponses({}, () => [createHarness("opencode2", "OpenCode 2", {
       available: false,

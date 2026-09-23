@@ -295,6 +295,87 @@ export interface HarnessCapabilities {
   supportsDelegation: boolean;
   /** Sessions can start with a profile: harness config kept in Fleet and picked per session. */
   supportsProfiles?: boolean;
+  /** Fleet can sign in to the harness's providers (`/api/harnesses/{type}/sign-in`). Off when Fleet runs with sign-in. */
+  supportsProviderSignIn?: boolean;
+}
+
+/** A field a sign-in method asks for besides the key or browser (`HarnessSignInField` on the server). */
+export interface HarnessSignInField {
+  key: string;
+  /** `string` (a choice when it has options), `boolean`, `number`, `integer`, `multiselect` or `external` (a link). */
+  type: string;
+  title?: string | null;
+  description?: string | null;
+  required: boolean;
+  /** Not asked; its default is sent. */
+  hidden: boolean;
+  placeholder?: string | null;
+  default?: unknown;
+  options?: { value: string; label: string; description?: string | null }[] | null;
+  /** Asked only when every condition holds: field `key`'s answer is (`eq`) or isn't (`neq`) `value`. */
+  when?: { key: string; op: "eq" | "neq"; value: unknown }[] | null;
+  url?: string | null;
+}
+
+/** One way to sign in to a provider. */
+export interface HarnessSignInMethod {
+  type: "key" | "oauth" | "command" | "env";
+  /** Names an `oauth` or `command` method. */
+  id?: string | null;
+  label: string;
+  fields: HarnessSignInField[];
+  /** For `command`: what the harness would run. Fleet doesn't run it. */
+  command?: string[] | null;
+  /** For `env`: the variables the harness reads. */
+  environmentVariables?: string[] | null;
+}
+
+/** A sign-in a provider has: one the harness keeps (`credential`) or a variable in its environment (`env`). */
+export interface HarnessSignInConnection {
+  kind: "credential" | "env";
+  id: string;
+  label: string;
+  /** The one the provider uses. */
+  active: boolean;
+}
+
+export interface HarnessSignInProvider {
+  id: string;
+  name: string;
+  methods: HarnessSignInMethod[];
+  /** The one in use first. */
+  connections: HarnessSignInConnection[];
+}
+
+/** `GET /api/harnesses/{type}/sign-in`. */
+export interface HarnessSignIns {
+  providers: HarnessSignInProvider[];
+  /** Where the harness keeps its sign-ins, and what signing in here changes. */
+  note?: string | null;
+}
+
+/** A browser sign-in the harness started. */
+export interface HarnessSignInAttempt {
+  id: string;
+  /** The provider's sign-in page. */
+  url: string;
+  /** What to do there; may carry a code to enter. */
+  instructions: string;
+  /** The provider shows a code to paste back. */
+  needsCode: boolean;
+  expiresAt: string;
+  /**
+   * The provider sends the browser back to this address on the computer Fleet runs on. A browser on another device
+   * can't open it; the address it landed on can be pasted back instead.
+   */
+  callbackAddress?: string | null;
+}
+
+export type HarnessSignInState = "pending" | "complete" | "failed" | "expired" | "gone";
+
+export interface HarnessSignInAttemptStatus {
+  status: HarnessSignInState;
+  message?: string | null;
 }
 
 /** A harness profile, as `GET /api/harnesses/{type}/profiles` lists it. */

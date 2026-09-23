@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 
@@ -255,6 +256,135 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
         return body?.Data is { } active
             ? active.Keys.ToHashSet(StringComparer.Ordinal)
             : new HashSet<string>(StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// Every provider V2 can sign in to in <paramref name="directory"/>, with its sign-in methods and the sign-ins it
+    /// has. Integrations, and the browser sign-ins under way, belong to a location; load it first.
+    /// </summary>
+    public async Task<IReadOnlyList<OpenCode2Integration>> GetIntegrationsAsync(string directory, CancellationToken ct)
+    {
+        using var response = await http.GetAsync($"api/integration?{LocationQuery(directory)}", ct).ConfigureAwait(false);
+        await EnsureSignInSuccessAsync(response, "list its providers", ct).ConfigureAwait(false);
+        var body = await response.Content.ReadFromJsonAsync(
+            OpenCode2JsonContext.Default.OpenCode2EnvelopeListOpenCode2Integration, ct).ConfigureAwait(false);
+        return body?.Data ?? [];
+    }
+
+    /// <summary>Stores a key for <paramref name="integrationId"/> and makes it the one in use. The key is only ever in the request body.</summary>
+    public async Task ConnectKeyAsync(string directory, string integrationId, string key, IReadOnlyDictionary<string, JsonElement> answer, CancellationToken ct)
+    {
+        using var response = await http.PostAsJsonAsync(
+            $"api/integration/{Uri.EscapeDataString(integrationId)}/connect/key?{LocationQuery(directory)}",
+            new OpenCode2ConnectKeyRequest { Key = key, Answer = answer.Count > 0 ? answer : null },
+            OpenCode2JsonContext.Default.OpenCode2ConnectKeyRequest,
+            ct).ConfigureAwait(false);
+        await EnsureSignInSuccessAsync(response, "sign in", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Starts a browser sign-in; V2 keeps the attempt in this server's memory for ten minutes.</summary>
+    public async Task<OpenCode2OAuthAttempt> StartOAuthAsync(
+        string directory,
+        string integrationId,
+        string methodId,
+        IReadOnlyDictionary<string, JsonElement> answer,
+        CancellationToken ct)
+    {
+        using var response = await http.PostAsJsonAsync(
+            $"api/integration/{Uri.EscapeDataString(integrationId)}/connect/oauth?{LocationQuery(directory)}",
+            new OpenCode2StartOAuthRequest { MethodId = methodId, Answer = answer.Count > 0 ? answer : null },
+            OpenCode2JsonContext.Default.OpenCode2StartOAuthRequest,
+            ct).ConfigureAwait(false);
+        await EnsureSignInSuccessAsync(response, "start the sign-in", ct).ConfigureAwait(false);
+        var body = await response.Content.ReadFromJsonAsync(
+            OpenCode2JsonContext.Default.OpenCode2EnvelopeOpenCode2OAuthAttempt, ct).ConfigureAwait(false);
+        return body?.Data is { AttemptId: { Length: > 0 }, Url: { Length: > 0 } } attempt
+            ? attempt
+            : throw new HarnessSignInException("OpenCode 2 started the sign-in but didn't say where to go.");
+    }
+
+    /// <summary>
+    /// Where a browser sign-in is; <see langword="null"/> when V2 no longer knows it (cancelled, or finished more than
+    /// a minute ago).
+    /// </summary>
+    public async Task<OpenCode2OAuthStatus?> GetOAuthStatusAsync(string directory, string integrationId, string attemptId, CancellationToken ct)
+    {
+        using var response = await http.GetAsync($"{OAuthAttemptPath(integrationId, attemptId)}?{LocationQuery(directory)}", ct).ConfigureAwait(false);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            return null;
+        await EnsureSignInSuccessAsync(response, "check the sign-in", ct).ConfigureAwait(false);
+        var body = await response.Content.ReadFromJsonAsync(
+            OpenCode2JsonContext.Default.OpenCode2EnvelopeOpenCode2OAuthStatus, ct).ConfigureAwait(false);
+        return body?.Data;
+    }
+
+    /// <summary>Finishes a browser sign-in in <c>code</c> mode with the code the provider showed.</summary>
+    public async Task CompleteOAuthAsync(string directory, string integrationId, string attemptId, string code, CancellationToken ct)
+    {
+        using var response = await http.PostAsJsonAsync(
+            $"{OAuthAttemptPath(integrationId, attemptId)}/complete?{LocationQuery(directory)}",
+            new OpenCode2CompleteOAuthRequest { Code = code },
+            OpenCode2JsonContext.Default.OpenCode2CompleteOAuthRequest,
+            ct).ConfigureAwait(false);
+        await EnsureSignInSuccessAsync(response, "finish the sign-in", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Stops a browser sign-in, which closes its callback listener. One V2 no longer knows is left alone.</summary>
+    public async Task CancelOAuthAsync(string directory, string integrationId, string attemptId, CancellationToken ct)
+    {
+        using var response = await http.DeleteAsync($"{OAuthAttemptPath(integrationId, attemptId)}?{LocationQuery(directory)}", ct).ConfigureAwait(false);
+        if (response.StatusCode != HttpStatusCode.NotFound)
+            await EnsureSignInSuccessAsync(response, "cancel the sign-in", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Makes a stored sign-in the one its provider uses.</summary>
+    public async Task ActivateCredentialAsync(string credentialId, CancellationToken ct)
+    {
+        using var content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
+        using var response = await http.PostAsync(
+            $"api/credential/{Uri.EscapeDataString(credentialId)}/activate", content, ct).ConfigureAwait(false);
+        await EnsureSignInSuccessAsync(response, "switch sign-ins", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Removes a stored sign-in; the provider's newest other one takes over.</summary>
+    public async Task RemoveCredentialAsync(string credentialId, CancellationToken ct)
+    {
+        using var response = await http.DeleteAsync($"api/credential/{Uri.EscapeDataString(credentialId)}", ct).ConfigureAwait(false);
+        await EnsureSignInSuccessAsync(response, "sign out", ct).ConfigureAwait(false);
+    }
+
+    private static string OAuthAttemptPath(string integrationId, string attemptId)
+        => $"api/integration/{Uri.EscapeDataString(integrationId)}/connect/oauth/{Uri.EscapeDataString(attemptId)}";
+
+    /// <summary>
+    /// For sign-in requests, which carry keys and codes: V2's refusal (400, 404) becomes a
+    /// <see cref="HarnessSignInException"/> with V2's own message, and anything else an error that says only what failed,
+    /// never the response or the request.
+    /// </summary>
+    private static async Task EnsureSignInSuccessAsync(HttpResponseMessage response, string action, CancellationToken ct)
+    {
+        if (response.IsSuccessStatusCode)
+            return;
+
+        if (response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.NotFound)
+        {
+            OpenCode2ErrorBody? error = null;
+            try
+            {
+                error = await response.Content.ReadFromJsonAsync(OpenCode2JsonContext.Default.OpenCode2ErrorBody, ct).ConfigureAwait(false);
+            }
+            catch (JsonException)
+            {
+            }
+
+            if (error?.Message is { Length: > 0 } message)
+                throw new HarnessSignInException(message.Length > 300 ? message[..300] : message, notFound: response.StatusCode == HttpStatusCode.NotFound);
+        }
+
+        throw new HttpRequestException(
+            $"OpenCode 2 couldn't {action}: {(int)response.StatusCode} {response.ReasonPhrase}.",
+            inner: null,
+            response.StatusCode);
     }
 
     /// <summary>

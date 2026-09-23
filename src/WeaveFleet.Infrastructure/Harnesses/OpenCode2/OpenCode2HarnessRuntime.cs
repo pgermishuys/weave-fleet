@@ -32,6 +32,12 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     /// <summary>The named <see cref="HttpClient"/> for V2 servers.</summary>
     public const string HttpClientName = "OpenCode2";
 
+    /// <summary>
+    /// The named <see cref="HttpClient"/> that passes a browser sign-in's callback on to V2's listener on this machine.
+    /// Its address carries the provider's one-time code, so the client logs nothing and never uses a proxy.
+    /// </summary>
+    public const string SignInCallbackHttpClientName = "OpenCode2SignInCallback";
+
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(30);
 
     // Skills are local mode only, and belong to its one user.
@@ -45,6 +51,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     private readonly IAnalyticsCollector? _analytics;
     private readonly OpenCode2Install _install;
     private readonly OpenCode2Servers _servers;
+    private readonly OpenCode2SignIn _signIn;
 
     // Profile version (content hash) → the Fleet profiles with that content, as sessions and composers asked for them,
     // so a change on a profile's server names the profiles the browser knows.
@@ -94,6 +101,13 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             (key, setup, ct) => StartServerAsync(key.OwnerUserId, setup, logLine: null, OnCatalogChanged, ct),
             TimeSpan.FromSeconds(Math.Max(1, options.Harness.OpenCode2ProfileServerIdleSeconds)),
             logger);
+        // Sign-ins are in the database every server shares, so they go through the owner's server without a profile.
+        _signIn = new OpenCode2SignIn(
+            (owner, ct) => GetServerAsync(owner, profile: null, ct),
+            () => Directory.CreateDirectory(Path.Combine(FleetDataDirectory(), "opencode2", "sign-in")).FullName,
+            () => _install.Locate()?.Mode ?? _install.RememberedMode() ?? OpenCode2InstallMode.Default,
+            () => httpClientFactory.CreateClient(SignInCallbackHttpClientName),
+            TimeProvider.System);
     }
 
     /// <inheritdoc />
@@ -300,6 +314,10 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
 
     /// <summary>How long a profile check waits after the folder loaded for the rest of V2's log.</summary>
     internal TimeSpan ProfileCheckLogGrace { get; set; } = TimeSpan.FromMilliseconds(500);
+
+    /// <inheritdoc />
+    /// <remarks>Over V2's integration API, on the owner's server without a profile (<see cref="OpenCode2SignIn"/>).</remarks>
+    public IHarnessProviderSignIn? ProviderSignIn => _signIn;
 
     /// <inheritdoc />
     public Task<bool> WarmupPooledInstanceAsync(string ownerUserId, CancellationToken ct) => Task.FromResult(false);
