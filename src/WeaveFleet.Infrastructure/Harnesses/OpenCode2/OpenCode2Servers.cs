@@ -17,8 +17,9 @@ internal readonly record struct OpenCode2ServerKey(string OwnerUserId, string? P
 
 /// <summary>
 /// The V2 servers Fleet runs, by <see cref="OpenCode2ServerKey"/>. A server is started on first use and stays up; one
-/// started with other settings is replaced once none of its sessions is running a turn. A profile's server also stops
-/// once it's gone <see cref="ProfileIdleTimeout"/> without use and no turn is running on it (<see cref="StopIdleAsync"/>):
+/// started with other settings is replaced once nothing runs on it: no turn and no background shell
+/// (<see cref="OpenCode2Server.IsIdleAsync"/>). A profile's server also stops once it's gone
+/// <see cref="ProfileIdleTimeout"/> without use and nothing runs on it (<see cref="StopIdleAsync"/>):
 /// each is a process of its own, with inotify watches on the user's home, and a session that needs it again starts it.
 /// The owner's server without a profile stays up, as before profiles.
 /// </summary>
@@ -39,7 +40,7 @@ internal sealed partial class OpenCode2Servers(
 
     /// <summary>
     /// The running server for <paramref name="key"/>, started when there's none or the last one stopped. A server started
-    /// with other settings is replaced when none of its sessions is running a turn; until then the key keeps using it.
+    /// with other settings is replaced once nothing runs on it; until then the key keeps using it.
     /// </summary>
     public async Task<OpenCode2Server> GetAsync(OpenCode2ServerKey key, OpenCode2ServerSetup setup, CancellationToken ct)
     {
@@ -82,7 +83,7 @@ internal sealed partial class OpenCode2Servers(
             && server.Serves(fleetSessionId));
 
     /// <summary>
-    /// Stops each profile's server that nobody has used for <see cref="ProfileIdleTimeout"/> and that has no turn
+    /// Stops each profile's server that nobody has used for <see cref="ProfileIdleTimeout"/> and that has nothing
     /// running. Its sessions stay attached to nothing until their next request, which starts it again. Returns how many
     /// stopped.
     /// </summary>
@@ -170,6 +171,6 @@ internal sealed partial class OpenCode2Servers(
     [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 server {ProcessId} ({Key}) started with other settings (messages between sessions) and is idle; replacing it")]
     private static partial void LogReplacingServer(ILogger logger, int processId, OpenCode2ServerKey key);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 server {ProcessId} ({Key}) unused for {Minutes:0.#} min with no turn running; stopping it until a session needs it")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 server {ProcessId} ({Key}) unused for {Minutes:0.#} min with nothing running; stopping it until a session needs it")]
     private static partial void LogStoppingIdle(ILogger logger, int processId, OpenCode2ServerKey key, double minutes);
 }

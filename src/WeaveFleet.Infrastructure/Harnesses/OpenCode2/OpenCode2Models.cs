@@ -42,6 +42,16 @@ internal sealed record OpenCode2Location
     public required string Directory { get; init; }
 }
 
+/// <summary>
+/// A shell command V2 runs for a location (<c>Shell.Info</c>). A shell call moved to the background keeps running
+/// after its turn ended; <c>status</c> is <c>running</c> until it exits (<c>exited</c>, <c>timeout</c> or <c>killed</c>).
+/// </summary>
+internal sealed record OpenCode2ShellInfo
+{
+    public string? Id { get; init; }
+    public string? Status { get; init; }
+}
+
 /// <summary><c>POST /api/session</c>.</summary>
 internal sealed record OpenCode2CreateSessionRequest
 {
@@ -653,6 +663,8 @@ internal sealed record OpenCode2ErrorBody
 [JsonSerializable(typeof(OpenCode2Envelope<List<OpenCode2ProviderInfo>>))]
 [JsonSerializable(typeof(OpenCode2Envelope<List<OpenCode2CommandInfo>>))]
 [JsonSerializable(typeof(OpenCode2Envelope<OpenCode2GenerateResult>))]
+[JsonSerializable(typeof(OpenCode2Envelope<List<OpenCode2ShellInfo>>))]
+[JsonSerializable(typeof(List<OpenCode2Location>))]
 [JsonSerializable(typeof(List<OpenCode2ConfigSource>))]
 [JsonSerializable(typeof(OpenCode2SwitchAgentRequest))]
 [JsonSerializable(typeof(OpenCode2SwitchModelRequest))]
