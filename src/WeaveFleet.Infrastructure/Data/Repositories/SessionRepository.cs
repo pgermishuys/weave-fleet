@@ -35,12 +35,12 @@ public sealed class SessionRepository(
                 status, directory, created_at, stopped_at, parent_session_id,
                 lifecycle_status, retention_status, archived_at, is_hidden, total_tokens, total_cost,
                 harness_type, runtime_mode, harness_profile_id, harness_resume_token, git_baseline_ref, git_repo_root, user_id,
-                source_reference, tags, selected_agent, selected_provider_id, selected_model_id, workflow_run_id)
+                source_reference, tags, selected_agent, selected_provider_id, selected_model_id, workflow_run_id, workflow_user_finishes)
             SELECT @Id, @WorkspaceId, @InstanceId, @ProjectId, @OpencodeSessionId, @Title,
                 @Status, @Directory, @CreatedAt, @StoppedAt, @ParentSessionId,
                 @LifecycleStatus, @RetentionStatus, @ArchivedAt, @IsHidden, @TotalTokens, @TotalCost,
                 @HarnessType, @RuntimeMode, @HarnessProfileId, @HarnessResumeToken, @GitBaselineRef, @GitRepoRoot, @UserId,
-                @SourceReference, @Tags, @SelectedAgent, @SelectedProviderId, @SelectedModelId, @WorkflowRunId
+                @SourceReference, @Tags, @SelectedAgent, @SelectedProviderId, @SelectedModelId, @WorkflowRunId, @WorkflowUserFinishes
             FROM workspaces workspace_row
             WHERE workspace_row.id = @WorkspaceId
               AND workspace_row.user_id = @UserId
@@ -84,6 +84,7 @@ public sealed class SessionRepository(
                 cmd.AddParameter("SelectedAgent", session.SelectedAgent);
                 cmd.AddParameter("SelectedProviderId", session.SelectedProviderId);
                 cmd.AddParameter("WorkflowRunId", session.WorkflowRunId);
+                cmd.AddParameter("WorkflowUserFinishes", session.WorkflowUserFinishes ? 1 : 0);
                 cmd.AddParameter("SelectedModelId", session.SelectedModelId);
             },
             transaction);
@@ -685,6 +686,7 @@ public sealed class SessionRepository(
             SelectedAgent = r.GetNullableString(r.GetOrdinal("selected_agent")),
             SourceReference = r.GetNullableString(r.GetOrdinal("source_reference")),
             WorkflowRunId = r.GetNullableString(r.GetOrdinal("workflow_run_id")),
+            WorkflowUserFinishes = r.GetInt64(r.GetOrdinal("workflow_user_finishes")) != 0,
             Tags = tags,
         };
     }

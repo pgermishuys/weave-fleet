@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, shallowRef } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import { Check, Workflow as WorkflowIcon } from "lucide-vue-next";
+import { Check, UserRound, Workflow as WorkflowIcon } from "lucide-vue-next";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
-import { ordinal, type WorkflowRunStep } from "@/lib/workflows";
+import { checkWithMeNote, ordinal, type WorkflowRunStep } from "@/lib/workflows";
 import { useWorkflowsStore } from "@/stores/workflows";
 
 /**
  * Every step of the run this session is a step of, with its state, under the session's header. A step that ran opens
- * its session; this session's step is marked.
+ * its session; this session's step is marked, and so is every step the user finishes. The run line has the "Check with
+ * me" switch, which applies from the next step.
  */
 const props = defineProps<{ sessionId: string }>();
 
@@ -23,6 +24,24 @@ function extra(step: WorkflowRunStep): string | null {
   if (step.visits > 1) return `${ordinal(step.visits)}`;
   if (step.maxLoops && step.state === "pending") return `≤${step.maxLoops}×`;
   return null;
+}
+
+const finished = computed(() => !run.value || ["done", "ended", "failed"].includes(run.value.status));
+const note = computed(() => (run.value ? checkWithMeNote(run.value) : null));
+const switching = shallowRef(false);
+const error = shallowRef<string | null>(null);
+
+async function toggleCheckWithMe(): Promise<void> {
+  if (!run.value || finished.value || switching.value) return;
+  switching.value = true;
+  error.value = null;
+  try {
+    await store.setCheckWithMe(run.value.id, !run.value.checkWithMe);
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "Couldn't change Check with me.";
+  } finally {
+    switching.value = false;
+  }
 }
 
 function open(step: WorkflowRunStep): void {
@@ -44,7 +63,39 @@ function open(step: WorkflowRunStep): void {
         v-if="run.branch"
         class="wf-stepper__branch"
       >{{ run.branch }}</span>
+      <button
+        v-if="!finished"
+        type="button"
+        class="wf-check"
+        role="switch"
+        :aria-checked="Boolean(run.checkWithMe)"
+        :disabled="switching"
+        title="Check with me after each step. Applies to the steps that haven't finished."
+        data-testid="workflow-check-with-me"
+        @click="toggleCheckWithMe"
+      >
+        <UserRound aria-hidden="true" />
+        <b>Check with me</b>
+        <span
+          class="wf-check__switch"
+          aria-hidden="true"
+        />
+      </button>
     </div>
+    <p
+      v-if="note && !finished"
+      class="wf-stepper__note"
+      data-testid="workflow-check-with-me-note"
+    >
+      {{ note }}
+    </p>
+    <p
+      v-if="error"
+      class="wf-stepper__error"
+      role="alert"
+    >
+      {{ error }}
+    </p>
     <ol class="wf-stepper__steps">
       <li
         v-for="(step, index) in steps"
@@ -89,6 +140,12 @@ function open(step: WorkflowRunStep): void {
             v-if="extra(step)"
             class="wf-stp__extra"
           >{{ extra(step) }}</span>
+          <UserRound
+            v-if="step.withYou && step.state !== 'done' && step.state !== 'skipped'"
+            class="wf-stp__you"
+            aria-label="You finish this step"
+            data-testid="workflow-step-with-you"
+          />
         </button>
       </li>
     </ol>
@@ -206,6 +263,83 @@ function open(step: WorkflowRunStep): void {
   border: 0;
   background: var(--idle);
   opacity: 1;
+}
+
+.wf-stp__you {
+  width: 12px;
+  height: 12px;
+  color: var(--accent);
+}
+
+.wf-check {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 2px 4px 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.wf-check b {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.wf-check:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.wf-check:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.wf-check__switch {
+  position: relative;
+  width: 26px;
+  height: 15px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 18%, transparent);
+  transition: background var(--transition);
+}
+
+.wf-check__switch::after {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  background: var(--bg);
+  content: "";
+  transition: transform var(--transition);
+}
+
+.wf-check[aria-checked="true"] .wf-check__switch {
+  background: var(--accent);
+}
+
+.wf-check[aria-checked="true"] .wf-check__switch::after {
+  transform: translateX(11px);
+}
+
+.wf-stepper__note,
+.wf-stepper__error {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.wf-stepper__error {
+  color: var(--error);
 }
 
 .wf-stp__extra {

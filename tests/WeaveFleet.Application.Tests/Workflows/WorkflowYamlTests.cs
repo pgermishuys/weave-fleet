@@ -22,6 +22,13 @@ public sealed class WorkflowYamlTests
         design.OptionalHint.ShouldBe("For UI and new features");
         design.Model.ShouldBe(WorkflowRoles.Strong);
         design.Skill.ShouldBe("fleet-mockups");
+        design.FinishYou.ShouldBeTrue();
+        design.Writes.ShouldBe(["docs/design/{{slug}}.md", "docs/design/{{slug}}.html"]);
+
+        var plan = workflow.Find("plan").ShouldBeOfType<WorkflowAgentStep>();
+        plan.FinishYou.ShouldBeFalse();
+        plan.Writes.ShouldBe([".weave/plans/{{slug}}.md"]);
+        plan.Prompt.ShouldContain("Read {{previous.files}} first.");
 
         workflow.Find("plan").ShouldBeOfType<WorkflowAgentStep>().Agent.ShouldBe("plan");
 
@@ -277,6 +284,128 @@ public sealed class WorkflowYamlTests
         result.Errors.ShouldBeEmpty();
         result.Definition!.Steps.Select(s => s.Id).ShouldBe(["bump", "tests", "ok", "pr"]);
         result.Definition.Find("ok").ShouldBeOfType<WorkflowYouStep>().Choices[1].ShouldBe(new WorkflowChoice("Try again with a note", "bump", true));
+    }
+
+    [Fact]
+    public void finish_and_writes_read_with_their_lines()
+    {
+        var result = Parse(
+            """
+              - id: design
+                title: Design
+                model: strong
+                finish: you
+                writes:
+                  - docs/design/{{slug}}.md
+                  - notes/{{run.branch}}/design.html
+                prompt: Design {{request}}.
+                outcomes: [ready]
+              - id: plan
+                title: Plan
+                model: strong
+                prompt: "Read {{previous.files}} and {{steps.design.files}}."
+                outcomes: [ready]
+            """);
+
+        result.Errors.ShouldBeEmpty();
+        var design = result.Definition!.Find("design").ShouldBeOfType<WorkflowAgentStep>();
+        design.FinishYou.ShouldBeTrue();
+        design.Writes.ShouldBe(["docs/design/{{slug}}.md", "notes/{{run.branch}}/design.html"]);
+        result.Definition.Find("plan").ShouldBeOfType<WorkflowAgentStep>().Writes.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void finish_is_you_or_agent()
+    {
+        var result = Parse(
+            """
+              - id: design
+                title: Design
+                model: strong
+                finish: user
+                prompt: Design it.
+                outcomes: [ready]
+            """);
+
+        var error = result.Errors.ShouldHaveSingleItem();
+        error.Line.ShouldBe(8);
+        error.Message.ShouldBe("design: finish is \"user\"; use you (you move the step on) or agent (the default).");
+    }
+
+    [Theory]
+    [InlineData("/etc/design.md", 10, "design: /etc/design.md isn't in the run's worktree. Declare it relative to the worktree, e.g. docs/design/{{slug}}.md.")]
+    [InlineData("~/design.md", 10, "design: ~/design.md isn't in the run's worktree. Declare it relative to the worktree, e.g. docs/design/{{slug}}.md.")]
+    [InlineData("../other/design.md", 10, "design: ../other/design.md has to name a file inside the run's worktree, without . or .. in it.")]
+    [InlineData("docs/", 10, "design: docs/ has to name a file inside the run's worktree, without . or .. in it.")]
+    [InlineData("docs\\\\design.md", 10, "design: write docs\\design.md with forward slashes.")]
+    [InlineData("docs/{{request}}.md", 10, "design declares docs/{{request}}.md, which uses {{request}}. A declared file can use {{slug}} and {{run.branch}}.")]
+    public void a_declared_file_stays_in_the_worktree(string path, int line, string message)
+    {
+        var result = Parse(
+            $"""
+              - id: design
+                title: Design
+                model: strong
+                writes:
+                  - docs/ok.md
+                  - "{path}"
+                prompt: Design it.
+                outcomes: [ready]
+            """);
+
+        var error = result.Errors.ShouldHaveSingleItem();
+        (error.Line, error.Message).ShouldBe((line, message));
+    }
+
+    [Fact]
+    public void writes_is_a_list_of_files()
+    {
+        var result = Parse(
+            """
+              - id: design
+                title: Design
+                model: strong
+                writes: docs/design.md
+                prompt: Design it.
+                outcomes: [ready]
+            """);
+
+        var error = result.Errors.ShouldHaveSingleItem();
+        error.Line.ShouldBe(8);
+        error.Message.ShouldBe("design: writes is a list of files, e.g. writes: [docs/design/{{slug}}.md].");
+    }
+
+    [Fact]
+    public void steps_files_variables_must_name_a_step()
+    {
+        var result = Parse(
+            """
+              - id: pr
+                title: PR
+                model: fast
+                prompt: "Open it from {{steps.plan.files}}."
+                outcomes: [opened]
+            """);
+
+        result.Errors.Single().Message.ShouldBe("pr's prompt uses {{steps.plan.files}}, but there's no step \"plan\".");
+    }
+
+    [Fact]
+    public void fill_leaves_out_a_line_whose_variables_are_all_empty_and_keeps_every_other_line()
+    {
+        var filled = WorkflowYaml.Fill(
+            "Plan it.\nRead {{previous.files}} first.\nCompare {{previous.files}} with {{slug}}.\n{{previous.files}} and {{previous.summary}}\nNo variables here.\n\n{{previous.summary}}",
+            variable => variable == "slug" ? "shortcut-sheet" : null);
+
+        filled.ShouldBe("Plan it.\nCompare  with shortcut-sheet.\nNo variables here.");
+    }
+
+    [Fact]
+    public void files_are_listed_the_way_a_sentence_names_them()
+    {
+        WorkflowYaml.ListFiles(["a.md"]).ShouldBe("a.md");
+        WorkflowYaml.ListFiles(["a.md", "b.html"]).ShouldBe("a.md and b.html");
+        WorkflowYaml.ListFiles(["a.md", "b.html", "c.css"]).ShouldBe("a.md, b.html and c.css");
     }
 
     private static WorkflowParseResult Parse(string steps)

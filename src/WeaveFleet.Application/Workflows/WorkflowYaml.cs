@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using WeaveFleet.Domain.Entities;
 using YamlDotNet.Core;
 using YamlDotNet.RepresentationModel;
 
@@ -23,10 +24,13 @@ public static partial class WorkflowYaml
     private const int MaxLoopLimit = 10;
 
     private static readonly HashSet<string> RootKeys = ["name", "description", "placeholder", "starts-from", "runs-in", "steps"];
-    private static readonly HashSet<string> AgentKeys = ["id", "title", "agent", "model", "effort", "skill", "optional", "prompt", "outcomes", "on"];
+    private static readonly HashSet<string> AgentKeys = ["id", "title", "agent", "model", "effort", "skill", "optional", "finish", "writes", "prompt", "outcomes", "on"];
     private static readonly HashSet<string> YouKeys = ["id", "title", "you", "choices"];
     private static readonly HashSet<string> ChoiceKeys = ["to", "note"];
-    private static readonly HashSet<string> Variables = ["request", "slug", "previous.summary", "run.branch", "run.base"];
+    private static readonly HashSet<string> Variables = ["request", "slug", "previous.summary", "previous.files", "run.branch", "run.base"];
+
+    /// <summary>The variables a declared file's path can use: the ones a run knows before any step starts.</summary>
+    private static readonly HashSet<string> PathVariables = ["slug", "run.branch"];
 
     /// <summary>Reads <paramref name="text"/>; <paramref name="file"/> names the file in errors.</summary>
     public static WorkflowParseResult Parse(string text, string file)
@@ -222,6 +226,41 @@ public static partial class WorkflowYaml
             error(badOptional, $"{id}: optional is true, false, or when to switch it on.");
         }
 
+        var finishYou = false;
+        switch (Scalar(map, "finish", error)?.Trim())
+        {
+            case null or WorkflowFinishers.Agent:
+                break;
+            case WorkflowFinishers.You:
+                finishYou = true;
+                break;
+            case var other:
+                error(Child(map, "finish"), $"{id}: finish is \"{other}\"; use you (you move the step on) or agent (the default).");
+                break;
+        }
+
+        var writes = new List<string>();
+        if (Child(map, "writes") is { } writesNode)
+        {
+            if (writesNode is not YamlSequenceNode writeList || writeList.Children.Count == 0)
+            {
+                error(writesNode, $"{id}: writes is a list of files, e.g. writes: [docs/design/{{{{slug}}}}.md].");
+            }
+            else
+            {
+                foreach (var node in writeList.Children)
+                {
+                    var path = (node as YamlScalarNode)?.Value?.Trim();
+                    if (CheckDeclaredFile(id, path) is { } problem)
+                        error(node, problem);
+                    else if (writes.Contains(path!))
+                        error(node, $"{id} declares {path} twice.");
+                    else
+                        writes.Add(path!);
+                }
+            }
+        }
+
         var outcomes = new List<string>();
         if (Child(map, "outcomes") is not YamlSequenceNode outcomeList || outcomeList.Children.Count == 0)
         {
@@ -291,7 +330,31 @@ public static partial class WorkflowYaml
             prompt ?? string.Empty,
             outcomes,
             routes,
-            max);
+            max,
+            finishYou,
+            writes);
+    }
+
+    /// <summary>What's wrong with a declared file's path, or null: it stays inside the run's worktree.</summary>
+    private static string? CheckDeclaredFile(string id, string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+            return $"{id}: a declared file is a path in the run's worktree, e.g. docs/design/{{{{slug}}}}.md.";
+        if (path.Contains('\\'))
+            return $"{id}: write {path} with forward slashes.";
+        if (path.StartsWith('/') || path.StartsWith('~') || (path.Length > 1 && path[1] == ':'))
+            return $"{id}: {path} isn't in the run's worktree. Declare it relative to the worktree, e.g. docs/design/{{{{slug}}}}.md.";
+        if (path.Split('/').Any(part => part is ".." or "." || part.Length == 0) || path.EndsWith('/'))
+            return $"{id}: {path} has to name a file inside the run's worktree, without . or .. in it.";
+
+        foreach (Match match in VariablePattern().Matches(path))
+        {
+            var variable = match.Groups[1].Value;
+            if (!PathVariables.Contains(variable))
+                return $"{id} declares {path}, which uses {{{{{variable}}}}}. A declared file can use {{{{slug}}}} and {{{{run.branch}}}}.";
+        }
+
+        return null;
     }
 
     /// <summary>Checks what depends on the whole list: ids, where outcomes and choices lead, loops and variables.</summary>
@@ -341,15 +404,15 @@ public static partial class WorkflowYaml
                     foreach (Match match in VariablePattern().Matches(agent.Prompt))
                     {
                         var variable = match.Groups[1].Value;
-                        var stepSummary = StepSummaryPattern().Match(variable);
-                        if (stepSummary.Success)
+                        var stepVariable = StepVariablePattern().Match(variable);
+                        if (stepVariable.Success)
                         {
-                            if (IndexOf(stepSummary.Groups[1].Value) < 0)
-                                error(Child(node, "prompt"), $"{step.Id}'s prompt uses {{{{{variable}}}}}, but there's no step \"{stepSummary.Groups[1].Value}\".");
+                            if (IndexOf(stepVariable.Groups[1].Value) < 0)
+                                error(Child(node, "prompt"), $"{step.Id}'s prompt uses {{{{{variable}}}}}, but there's no step \"{stepVariable.Groups[1].Value}\".");
                         }
                         else if (!Variables.Contains(variable))
                         {
-                            error(Child(node, "prompt"), $"{step.Id}'s prompt uses {{{{{variable}}}}}. Fleet fills in {{{{request}}}}, {{{{slug}}}}, {{{{previous.summary}}}}, {{{{steps.<id>.summary}}}}, {{{{run.branch}}}} and {{{{run.base}}}}.");
+                            error(Child(node, "prompt"), $"{step.Id}'s prompt uses {{{{{variable}}}}}. Fleet fills in {{{{request}}}}, {{{{slug}}}}, {{{{previous.summary}}}}, {{{{previous.files}}}}, {{{{steps.<id>.summary}}}}, {{{{steps.<id>.files}}}}, {{{{run.branch}}}} and {{{{run.base}}}}.");
                         }
                     }
 
@@ -372,18 +435,54 @@ public static partial class WorkflowYaml
     public static IEnumerable<string> VariablesIn(string prompt)
         => VariablePattern().Matches(prompt).Select(match => match.Groups[1].Value);
 
-    /// <summary>Fills in a prompt's variables; <paramref name="lookup"/> gives each one's value, or null for none.</summary>
+    /// <summary>
+    /// Fills in a prompt's variables; <paramref name="lookup"/> gives each one's value, or null for none. A line whose
+    /// variables are all empty is left out, so "Read {{previous.files}} first." goes when there are none; a line with
+    /// no variables always stays.
+    /// </summary>
     public static string Fill(string prompt, Func<string, string?> lookup)
     {
-        var filled = VariablePattern().Replace(prompt, match => lookup(match.Groups[1].Value) ?? string.Empty);
+        var lines = new List<string>();
+        foreach (var line in prompt.Replace("\r\n", "\n").Split('\n'))
+        {
+            var matches = VariablePattern().Matches(line);
+            if (matches.Count == 0)
+            {
+                lines.Add(line);
+                continue;
+            }
 
-        // A variable with nothing in it leaves blank lines behind; keep at most one in a row.
-        return ExtraBlankLines().Replace(filled.Trim(), "\n\n");
+            var values = matches.Select(match => lookup(match.Groups[1].Value)).ToList();
+            if (values.All(string.IsNullOrEmpty))
+                continue;
+
+            var index = 0;
+            lines.Add(VariablePattern().Replace(line, _ => values[index++] ?? string.Empty));
+        }
+
+        // A line left out leaves blank lines behind; keep at most one in a row.
+        return ExtraBlankLines().Replace(string.Join('\n', lines).Trim(), "\n\n");
     }
 
     /// <summary>The <c>id</c> in <c>steps.id.summary</c>, or null for any other variable.</summary>
     public static string? StepOfSummaryVariable(string variable)
-        => StepSummaryPattern().Match(variable) is { Success: true } match ? match.Groups[1].Value : null;
+        => StepVariablePattern().Match(variable) is { Success: true } match && match.Groups[2].Value == "summary" ? match.Groups[1].Value : null;
+
+    /// <summary>The <c>id</c> in <c>steps.id.files</c>, or null for any other variable.</summary>
+    public static string? StepOfFilesVariable(string variable)
+        => StepVariablePattern().Match(variable) is { Success: true } match && match.Groups[2].Value == "files" ? match.Groups[1].Value : null;
+
+    /// <summary>A step's declared files with the run filled in, e.g. docs/design/keyboard-sheet.md.</summary>
+    public static IReadOnlyList<string> FilesOf(WorkflowAgentStep step, Func<string, string?> lookup)
+        => step.Writes.Select(path => VariablePattern().Replace(path, match => lookup(match.Groups[1].Value) ?? string.Empty)).ToList();
+
+    /// <summary>"a.md", "a.md and b.html", "a.md, b.html and c.css".</summary>
+    public static string ListFiles(IReadOnlyList<string> files) => files.Count switch
+    {
+        0 => string.Empty,
+        1 => files[0],
+        _ => $"{string.Join(", ", files.Take(files.Count - 1))} and {files[^1]}",
+    };
 
     internal static bool IsExactModel(string model)
     {
@@ -447,8 +546,8 @@ public static partial class WorkflowYaml
     [GeneratedRegex(@"\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}")]
     private static partial Regex VariablePattern();
 
-    [GeneratedRegex(@"^steps\.([a-z0-9][a-z0-9-]*)\.summary$")]
-    private static partial Regex StepSummaryPattern();
+    [GeneratedRegex(@"^steps\.([a-z0-9][a-z0-9-]*)\.(summary|files)$")]
+    private static partial Regex StepVariablePattern();
 
     [GeneratedRegex(@"\n[ \t]*\n(?:[ \t]*\n)+")]
     private static partial Regex ExtraBlankLines();

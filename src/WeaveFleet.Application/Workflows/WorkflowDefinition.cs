@@ -76,6 +76,14 @@ public abstract record WorkflowStep(string Id, string Title, int Line);
 /// <param name="OptionalHint">When to switch it on, e.g. "For UI and new features".</param>
 /// <param name="Routes">Outcome → the step it leads to, or <see cref="WorkflowTargets.End"/>. Outcomes not here go to the next step.</param>
 /// <param name="MaxLoops">How many times this step may send work back to an earlier step in a run.</param>
+/// <param name="FinishYou">
+/// <c>finish: you</c>: the user and the agent work through the step together and only the user ends it, with Move on.
+/// The step's session has no <c>fleet_step_done</c> and its prompt no footer.
+/// </param>
+/// <param name="Writes">
+/// The files the step declares (<c>writes:</c>), relative to the run's worktree, with variables still in them. Fleet
+/// checks they exist before the next step starts, and the next step gets them as <c>{{previous.files}}</c>.
+/// </param>
 public sealed record WorkflowAgentStep(
     string Id,
     string Title,
@@ -89,7 +97,9 @@ public sealed record WorkflowAgentStep(
     string Prompt,
     IReadOnlyList<string> Outcomes,
     IReadOnlyDictionary<string, string> Routes,
-    int? MaxLoops) : WorkflowStep(Id, Title, Line);
+    int? MaxLoops,
+    bool FinishYou,
+    IReadOnlyList<string> Writes) : WorkflowStep(Id, Title, Line);
 
 /// <summary>The run stops and asks the user; each choice leads to a step or ends the run.</summary>
 /// <param name="Ask">The question, e.g. "Build it this way?".</param>

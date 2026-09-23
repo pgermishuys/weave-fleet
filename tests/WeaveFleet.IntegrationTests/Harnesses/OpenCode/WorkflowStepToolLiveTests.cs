@@ -36,6 +36,8 @@ public sealed class WorkflowStepToolLiveTests
     private const string DelegatingNormalPrompt = "NORMAL-DELEGATE: ask a subagent to look around.";
     private const string LookPrompt = "CHILD-LOOK: look around the folder.";
     private const string ChildAgainPrompt = "CHILD-AGAIN: and once more.";
+    private const string TalkPrompt = "TALK: let's work through it together.";
+    private const string WrapUpStart = "The user is moving on to Approve.";
     private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(3);
 
     private const string Workflow = """
@@ -72,6 +74,53 @@ public sealed class WorkflowStepToolLiveTests
             recap.ShouldBe("Recap.");
             var recapTurn = Turns(llm).Last(t => LastUserText(t) == RecapPrompt);
             OfferedToolNames([recapTurn]).ShouldBe(OfferedToolNames(turns.Where(t => FirstUserText(t) == NormalPrompt).Take(1)), ignoreOrder: true);
+        });
+    }
+
+    /// <summary>A step the user finishes, then a You step: the files check runs before the run stops there.</summary>
+    private const string TogetherWorkflow = """
+        name: Live together
+        steps:
+          - id: talk
+            title: Talk
+            model: standard
+            finish: you
+            writes: [notes.md]
+            prompt: Talk it through.
+            outcomes: [ready]
+          - id: approve
+            title: Approve
+            you: Keep it?
+            choices:
+              Keep: end
+        """;
+
+    [OpenCodeFact]
+    public async Task A_step_you_finish_has_no_step_tool_and_its_summary_is_the_reply_to_the_wrap_up()
+    {
+        await RunAsync(workflowsOn: true, stepPrompt: TalkPrompt, together: true, async (services, llm, _, step, _, workspace, ct) =>
+        {
+            File.WriteAllText(Path.Combine(workspace, "notes.md"), "# Notes");
+            await step.SendPromptAsync(TalkPrompt, null, ct);
+            await WaitForAsync(() => Turns(llm), r => r.Any(t => FirstUserText(t) == TalkPrompt), ct);
+
+            // Made like any session that isn't a step: the rule and the prompt's tools map hide the tool.
+            OfferedToolNames(Turns(llm).Where(t => FirstUserText(t) == TalkPrompt)).ShouldNotContain(FleetWorkflows.StepTool);
+            OfferedToolNames(Turns(llm).Where(t => FirstUserText(t) == TalkPrompt)).ShouldContain("fleet_canvas_list");
+            var activity = services.GetRequiredService<SessionActivityTracker>();
+            await WaitForAsync(() => activity.Get(Step)?.ActivityStatus, status => !SessionActivityTracker.IsInTurn(status), ct);
+
+            var moved = await services.GetRequiredService<WorkflowRunner>().MoveOnAsync(Owner, RunId, null, "Keep it short.", ct);
+            moved.IsSuccess.ShouldBeTrue(moved.IsFailure ? moved.Error.Description : null);
+
+            // The run moves on when the turn answering the wrap-up ends, and its reply is the summary.
+            await WaitForAsync(async () => (await Repository(services, r => r.GetAsync(RunId)))?.CurrentStepId, id => id == "approve", ct);
+            var visit = (await Repository(services, r => r.ListStepsAsync(RunId))).Single(v => v.StepId == "talk");
+            (visit.Status, visit.Outcome, visit.Summary, visit.FilesChecked)
+                .ShouldBe((WorkflowRunStepStatus.Done, "ready", "Summary for Approve: notes.md has the idea.", true));
+            var wrapUp = Turns(llm).Select(UserTexts).Select(texts => texts.LastOrDefault()).First(t => t?.StartsWith(WrapUpStart, StringComparison.Ordinal) == true);
+            wrapUp.ShouldBe("The user is moving on to Approve. Update notes.md with everything agreed in this conversation, then reply with a short summary for Approve.\n\nTheir note: Keep it short.");
+            OfferedToolNames(Turns(llm).Where(t => UserTexts(t).LastOrDefault() == wrapUp)).ShouldNotContain(FleetWorkflows.StepTool);
         });
     }
 
@@ -158,9 +207,13 @@ public sealed class WorkflowStepToolLiveTests
         IServiceProvider services, FakeLlmServerFixture llm, IHarnessSession normal, IHarnessSession step, Dictionary<string, string> environment, string workspace, CancellationToken ct);
 
     private static Task RunAsync(bool workflowsOn, string stepPrompt, Scenario scenario)
-        => RunAsync(workflowsOn, stepPrompt, (services, llm, normal, step, _, _, ct) => scenario(services, llm, normal, step, ct));
+        => RunAsync(workflowsOn, stepPrompt, together: false, (services, llm, normal, step, _, _, ct) => scenario(services, llm, normal, step, ct));
 
-    private static async Task RunAsync(bool workflowsOn, string stepPrompt, ScenarioWithEnvironment scenario)
+    private static Task RunAsync(bool workflowsOn, string stepPrompt, ScenarioWithEnvironment scenario)
+        => RunAsync(workflowsOn, stepPrompt, together: false, scenario);
+
+    /// <param name="together">The step is one the user finishes (<see cref="TogetherWorkflow"/>), not one its agent does.</param>
+    private static async Task RunAsync(bool workflowsOn, string stepPrompt, bool together, ScenarioWithEnvironment scenario)
     {
         using var cts = new CancellationTokenSource(Timeout);
         var ct = cts.Token;
@@ -183,6 +236,8 @@ public sealed class WorkflowStepToolLiveTests
             {
                 if (LastUserText(request) == RecapPrompt)
                     return new ScriptedLlmResponse { Text = "Recap." };
+                if (LastUserText(request) is { } wrapUp && wrapUp.StartsWith(WrapUpStart, StringComparison.Ordinal))
+                    return new ScriptedLlmResponse { Text = "Summary for Approve: notes.md has the idea." };
                 if (LastRole(request) == "tool")
                     return new ScriptedLlmResponse { Text = "Done." };
                 if (LastUserText(request) is { } text && text.StartsWith(StepPrompt, StringComparison.Ordinal))
@@ -206,7 +261,7 @@ public sealed class WorkflowStepToolLiveTests
             catch (InvalidCastException) { /* expected: the base class expects a TestServer */ }
 
             var services = factory.LiveServices;
-            Seed(services, workspace);
+            Seed(services, workspace, together);
 
             var runtime = services.GetRequiredService<OpenCodeHarnessRuntime>();
             if (workflowsOn)
@@ -225,7 +280,7 @@ public sealed class WorkflowStepToolLiveTests
 
             // Both on one pooled process: the step tool is in the process, and only the step keeps it.
             await using var normal = await SpawnAsync(runtime, Normal, workspace, processEnvironment, workflowStep: false, ct);
-            await using var step = await SpawnAsync(runtime, Step, workspace, processEnvironment, workflowStep: true, ct);
+            await using var step = await SpawnAsync(runtime, Step, workspace, processEnvironment, workflowStep: !together, ct);
             RegisterLikeTheOrchestrator(services, Normal, normal);
             RegisterLikeTheOrchestrator(services, Step, step);
             await normal.WaitForEventSubscriptionAsync(ct);
@@ -278,9 +333,10 @@ public sealed class WorkflowStepToolLiveTests
             },
             ct);
 
-    /// <summary>Two sessions, and a one-step run whose step is running in the second.</summary>
-    private static void Seed(IServiceProvider services, string workspace)
+    /// <summary>Two sessions, and a run whose first step is running in the second.</summary>
+    private static void Seed(IServiceProvider services, string workspace, bool together)
     {
+        var (firstStep, finish, userFinishes) = together ? ("talk", "you", 1) : ("check", "agent", 0);
         using var scope = services.CreateScope();
         using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
         using var command = connection.CreateCommand();
@@ -291,22 +347,22 @@ public sealed class WorkflowStepToolLiveTests
             VALUES ('inst-live', 0, NULL, '{workspace}', '', 'running', '2026-09-23T00:00:00+00:00', '{Owner}');
             INSERT INTO sessions (
                 id, workspace_id, instance_id, opencode_session_id, title, status, directory,
-                lifecycle_status, retention_status, created_at, user_id, workflow_run_id)
+                lifecycle_status, retention_status, created_at, user_id, workflow_run_id, workflow_user_finishes)
             VALUES ('{Normal}', 'ws-live', 'inst-live', 'pending', 'Ordinary session', 'active', '{workspace}',
-                    'running', 'active', '2026-09-23T00:00:00+00:00', '{Owner}', NULL),
+                    'running', 'active', '2026-09-23T00:00:00+00:00', '{Owner}', NULL, 0),
                    ('{Step}', 'ws-live', 'inst-live', 'pending', 'Live check · Check', 'active', '{workspace}',
-                    'running', 'active', '2026-09-23T00:00:00+00:00', '{Owner}', '{RunId}');
+                    'running', 'active', '2026-09-23T00:00:00+00:00', '{Owner}', '{RunId}', {userFinishes});
             INSERT INTO workflow_runs (
-                id, user_id, workflow_id, workflow_name, definition, request, slug, title, repository_path,
+                id, user_id, workflow_id, workflow_name, definition, request, slug, title, repository_path, worktree_path,
                 harness_type, options, status, current_step_id, created_at, updated_at)
             VALUES ('{RunId}', '{Owner}', 'repo:live', 'Live check', @definition, 'Check it', 'check-it', 'Check it',
-                    '{workspace}', 'opencode', '{"{}"}', 'running', 'check', '2026-09-23T00:00:00Z', '2026-09-23T00:00:00Z');
-            INSERT INTO workflow_run_steps (id, run_id, step_id, visit, session_id, status, started_at)
-            VALUES ('visit-live', '{RunId}', 'check', 1, '{Step}', 'running', '2026-09-23T00:00:00Z');
+                    '{workspace}', '{workspace}', 'opencode', '{"{}"}', 'running', '{firstStep}', '2026-09-23T00:00:00Z', '2026-09-23T00:00:00Z');
+            INSERT INTO workflow_run_steps (id, run_id, step_id, visit, session_id, status, finish, started_at)
+            VALUES ('visit-live', '{RunId}', '{firstStep}', 1, '{Step}', 'running', '{finish}', '2026-09-23T00:00:00Z');
             """;
         var definition = command.CreateParameter();
         definition.ParameterName = "@definition";
-        definition.Value = Workflow;
+        definition.Value = together ? TogetherWorkflow : Workflow;
         command.Parameters.Add(definition);
         command.ExecuteNonQuery();
     }

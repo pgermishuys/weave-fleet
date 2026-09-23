@@ -48,6 +48,8 @@ interface Props {
   active: boolean;
   /** Shown instead of the title: a workflow step's name under its run. */
   label?: string;
+  /** Shown instead of the row's status: "With you" on a workflow step the user finishes, while it's open. */
+  stepNote?: string;
 }
 
 interface Emits {
@@ -451,7 +453,12 @@ function removeSessionFromStore(): void {
             </span>
 
             <span
-              v-if="rowStatus.label && !showProgressCount"
+              v-if="stepNote"
+              class="session-meta session-meta--with"
+              data-testid="session-step-note"
+            >{{ stepNote }}</span>
+            <span
+              v-else-if="rowStatus.label && !showProgressCount"
               class="session-meta"
               :class="`session-meta--${rowStatus.tone}`"
             >{{ rowStatus.label }}</span>
@@ -837,6 +844,10 @@ function removeSessionFromStore(): void {
 
 .session-meta--error {
   color: var(--error);
+}
+
+.session-meta--with {
+  color: var(--accent);
 }
 
 .session-title--editing {

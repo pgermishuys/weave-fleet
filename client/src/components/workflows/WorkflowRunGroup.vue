@@ -23,6 +23,11 @@ const emit = defineEmits<{
 }>();
 
 const status = computed(() => (props.run ? runStatusLabel(props.run) : null));
+
+/** "With you" on the step row of a step the user finishes, while it's open. */
+function stepNote(sessionId: string): string | undefined {
+  return props.run?.status === "running" && props.run.withYou?.sessionId === sessionId ? "With you" : undefined;
+}
 const title = computed(() => props.run?.title ?? props.steps[0]?.session.session.title?.split(" · ")[0] ?? "Workflow run");
 
 /** The header opens the session that needs you, else the newest step. */
@@ -70,6 +75,7 @@ function openRun(): void {
       <SessionItem
         :session="step.session"
         :label="step.label"
+        :step-note="stepNote(step.session.session.id)"
         :active="step.session.session.id === activeSessionId"
         @select="emit('selectSession', $event)"
         @drag-session-start="(id, project) => emit('dragSessionStart', id, project)"
@@ -138,6 +144,10 @@ function openRun(): void {
 
 .wf-group__meta--run {
   color: var(--running);
+}
+
+.wf-group__meta--with {
+  color: var(--accent);
 }
 
 .wf-group__meta--fail {

@@ -2,7 +2,7 @@
 import "@/components/sessions/new-session/new-session.css";
 import { computed, reactive, shallowRef, watch } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import { Bot, ChevronDown, GitBranch, LoaderCircle, Play } from "lucide-vue-next";
+import { Bot, ChevronDown, GitBranch, LoaderCircle, Play, UserRound } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -44,6 +44,8 @@ const { setActiveSection } = useSettingsNav();
 
 const request = shallowRef("");
 const optionalOn = reactive(new Set<string>());
+/** "Check with me after each step": every agent step is one the user finishes, from the first. */
+const checkWithMe = shallowRef(false);
 const overrides = reactive<Partial<Record<WorkflowRole, string>>>({});
 const baseBranch = shallowRef<string | null>(null);
 const fetchOrigin = shallowRef(true);
@@ -164,6 +166,7 @@ async function run(): Promise<void> {
       harnessType: harnessType.value,
       optionalSteps: [...optionalOn],
       roleOverrides,
+      checkWithMe: checkWithMe.value,
     });
     request.value = "";
     const first = started.sessions[0]?.sessionId;
@@ -267,6 +270,23 @@ function handleKeydown(event: KeyboardEvent): void {
       >
         <span class="ns-chip__hint">{{ step.title }}:</span>
         <span class="ns-chip__label">{{ optionalOn.has(step.id) ? "on" : "off" }}</span>
+      </button>
+      <button
+        type="button"
+        class="ns-chip"
+        role="switch"
+        :aria-checked="checkWithMe"
+        title="Check with me after each step: every step waits for you to move it on, and you can talk to the agent in between. You can change it later from the run's header."
+        data-testid="workflow-check-with-me-start"
+        :disabled="isStarting"
+        @click="checkWithMe = !checkWithMe"
+      >
+        <UserRound
+          class="ns-chip__icon"
+          aria-hidden="true"
+        />
+        <span class="ns-chip__hint">Check with me:</span>
+        <span class="ns-chip__label">{{ checkWithMe ? "on" : "off" }}</span>
       </button>
       <HarnessPicker
         v-if="workflowHarnesses.length > 1"

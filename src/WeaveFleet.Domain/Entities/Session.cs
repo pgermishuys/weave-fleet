@@ -52,5 +52,10 @@ public sealed class Session
     /// <summary>The workflow run this session is a step of; null for every other session.</summary>
     public string? WorkflowRunId { get; set; }
 
+    /// <summary>
+    /// The session is a workflow step the user finishes, so it doesn't get the step tool: only the user ends it.
+    /// </summary>
+    public bool WorkflowUserFinishes { get; set; }
+
     public List<string> Tags { get; set; } = [];
 }

@@ -24,6 +24,7 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
   if (workflow.errors.length > 0) return { label: "Can't read", tone: "error" };
   const run = latestRun(workflow);
   if (run?.status === "waiting") return { label: "Needs you", tone: "wait" };
+  if (run?.status === "running" && run.withYou) return { label: "With you", tone: "with" };
   if (run?.status === "running") return { label: "Running", tone: "working" };
   return { label: `${workflow.steps.length} steps`, tone: "" };
 }
@@ -245,6 +246,10 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
 
 .workflow-row__meta--wait {
   color: var(--idle);
+}
+
+.workflow-row__meta--with {
+  color: var(--accent);
 }
 
 .workflow-row__meta--error {

@@ -11,7 +11,7 @@ using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Application.Tests.Workflows;
 
-public sealed class WorkflowRunnerTests
+public sealed partial class WorkflowRunnerTests
 {
     private const string UserId = "u1";
 
@@ -20,6 +20,7 @@ public sealed class WorkflowRunnerTests
     private readonly FakeRunEvents _events = new();
     private readonly InMemoryUserPreferenceRepository _preferences = new();
     private readonly SessionActivityTracker _activity = new();
+    private readonly FakeFiles _files = new();
     private WorkflowRunner _runner;
 
     public WorkflowRunnerTests()
@@ -331,7 +332,7 @@ public sealed class WorkflowRunnerTests
         saved.Branch.ShouldBe("fleet/press-see-every-keyboard-shortcut");
     }
 
-    private async Task<string> StartAsync(IReadOnlyList<string>? optional = null)
+    private async Task<string> StartAsync(IReadOnlyList<string>? optional = null, bool checkWithMe = false)
     {
         var entry = WorkflowCatalog.BuiltIns.Single(e => e.Id == "builtin:build-a-feature");
         var workflow = entry.Definition!;
@@ -356,7 +357,7 @@ public sealed class WorkflowRunnerTests
             RepositoryPath = "/repo",
             BaseBranch = "main",
             HarnessType = "opencode",
-            Options = new WorkflowRunOptions { OptionalSteps = [.. optional ?? []], StepModels = models }.Write(),
+            Options = new WorkflowRunOptions { OptionalSteps = [.. optional ?? []], StepModels = models, CheckWithMe = checkWithMe }.Write(),
             CreatedAt = DateTime.UtcNow.ToString("O"),
             UpdatedAt = DateTime.UtcNow.ToString("O"),
         };
@@ -408,6 +409,7 @@ public sealed class WorkflowRunnerTests
         {
             services.AddSingleton<IWorkflowRunRepository>(_runs);
             services.AddSingleton<IWorkflowStepSessions>(_sessions);
+            services.AddSingleton<IWorkflowFiles>(_files);
             services.AddSingleton<IWorkflowRunEvents>(_events);
             services.AddSingleton<IBackgroundUserScope>(new NoUserScope());
             services.AddSingleton(new FleetOptions());
@@ -421,16 +423,25 @@ public sealed class WorkflowRunnerTests
         IdleGrace = TimeSpan.Zero,
     };
 
-    internal sealed record StartedStep(string StepId, string SessionId, string Prompt, WorkflowModelChoice Model);
+    internal sealed record StartedStep(string StepId, string SessionId, string Prompt, WorkflowModelChoice Model, bool UserFinishes, string PromptMessageId);
+
+    internal sealed record SentPrompt(string SessionId, string Text, string MessageId);
 
     private sealed class FakeStepSessions : IWorkflowStepSessions
     {
         private int _next;
+        private int _prompts;
 
         public List<StartedStep> Started { get; } = [];
+        public List<SentPrompt> Prompts { get; } = [];
+        public Dictionary<string, string> Replies { get; } = new(StringComparer.Ordinal);
         public string? FailNext { get; set; }
+        public string? FailNextPrompt { get; set; }
 
-        public Task<WorkflowStepSession> StartAsync(WorkflowRun run, WorkflowAgentStep agentStep, string prompt, WorkflowModelChoice model, CancellationToken ct)
+        /// <summary>Runs while the prompt is being sent, before the send returns: a quick model's answer.</summary>
+        public Action<SentPrompt>? WhileSending { get; set; }
+
+        public Task<WorkflowStepSession> StartAsync(WorkflowRun run, WorkflowAgentStep agentStep, string prompt, WorkflowModelChoice model, bool userFinishes, CancellationToken ct)
         {
             if (FailNext is { } error)
             {
@@ -439,11 +450,37 @@ public sealed class WorkflowRunnerTests
             }
 
             var id = $"s{Interlocked.Increment(ref _next)}";
-            Started.Add(new StartedStep(agentStep.Id, id, prompt, model));
+            Started.Add(new StartedStep(agentStep.Id, id, prompt, model, userFinishes, $"msg_{id}"));
             return Task.FromResult(run.WorktreePath is null
-                ? new WorkflowStepSession(id, $"/repo-worktrees/{run.Slug}", $"fleet/{run.Slug}", null)
-                : new WorkflowStepSession(id, run.WorktreePath, run.Branch, null));
+                ? new WorkflowStepSession(id, $"/repo-worktrees/{run.Slug}", $"fleet/{run.Slug}", null, $"msg_{id}")
+                : new WorkflowStepSession(id, run.WorktreePath, run.Branch, null, $"msg_{id}"));
         }
+
+        public Task<WorkflowPromptSent> PromptAsync(string sessionId, string text, CancellationToken ct)
+        {
+            if (FailNextPrompt is { } error)
+            {
+                FailNextPrompt = null;
+                return Task.FromResult(new WorkflowPromptSent(null, error));
+            }
+
+            var sent = new SentPrompt(sessionId, text, $"wrap_{Interlocked.Increment(ref _prompts)}");
+            Prompts.Add(sent);
+            WhileSending?.Invoke(sent);
+            return Task.FromResult(new WorkflowPromptSent(sent.MessageId, null));
+        }
+
+        public Task<string?> ReplyToAsync(string sessionId, string messageId, CancellationToken ct)
+            => Task.FromResult(Replies.GetValueOrDefault(messageId));
+    }
+
+    /// <summary>Every declared file is there unless it's listed in <see cref="Absent"/>.</summary>
+    private sealed class FakeFiles : IWorkflowFiles
+    {
+        public HashSet<string> Absent { get; } = new(StringComparer.Ordinal);
+
+        public IReadOnlyList<string> Missing(string? worktree, IReadOnlyList<string> files)
+            => files.Where(Absent.Contains).ToList();
     }
 
     private sealed class FakeRunEvents : IWorkflowRunEvents

@@ -42,6 +42,12 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
     private readonly HashSet<string> _questions = new(StringComparer.Ordinal);
     private int _nextStepIndex;
 
+    /// <summary>
+    /// The prompt the turn now running answers. V2's assistant messages don't name it; its inbox says when a prompt
+    /// (under the id Fleet gave it) went into the conversation, and every reply until the next one answers it.
+    /// </summary>
+    private string? _prompt;
+
     /// <summary>The model of the latest step, for analytics.</summary>
     public (string? ProviderId, string? ModelId) CurrentModel { get; private set; }
 
@@ -74,6 +80,7 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
             "form.created" => QuestionAsked(data),
             "form.replied" or "form.cancelled" => QuestionSettled(data),
             "session.inbox.enqueued" => BackgroundNotice(evt, data),
+            "session.inbox.delivered" => Delivered(data),
             _ => [],
         };
     }
@@ -332,7 +339,8 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
             ? null
             : new OpenCode2Tokens { Input = t.Input ?? 0, Output = t.Output ?? 0, Reasoning = t.Reasoning ?? 0 };
 
-        var events = new List<HarnessEvent> { MessageUpdated(messageId, info, completed, completed is null ? null : message.Cost, tokens, message.Finish) };
+        // Caught up from history, where which prompt it answers isn't known.
+        var events = new List<HarnessEvent> { MessageUpdated(messageId, info, completed, completed is null ? null : message.Cost, tokens, message.Finish, parentId: null) };
         int text = 0, reasoning = 0;
         foreach (var content in message.Content ?? [])
         {
@@ -410,6 +418,14 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
     /// <summary>Whether a tool result says the call's work carried on in the background.</summary>
     internal static bool IsBackgrounded(JsonElement metadata)
         => metadata.ValueKind == JsonValueKind.Object && ReadString(metadata, "status") == "running";
+
+    /// <summary>A prompt went into the conversation: the replies that follow answer it. Nothing to show.</summary>
+    private List<HarnessEvent> Delivered(JsonElement data)
+    {
+        if (ReadString(data, "inboxID") is { } prompt)
+            _prompt = prompt;
+        return [];
+    }
 
     private List<HarnessEvent> StepStarted(OpenCode2Event evt, JsonElement data)
     {
@@ -707,6 +723,16 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
         double? cost,
         OpenCode2Tokens? tokens,
         string? finish)
+        => MessageUpdated(messageId, message, completed, cost, tokens, finish, _prompt);
+
+    private HarnessEvent MessageUpdated(
+        string messageId,
+        AssistantMessage message,
+        long? completed,
+        double? cost,
+        OpenCode2Tokens? tokens,
+        string? finish,
+        string? parentId)
         => Event(EventTypes.MessageUpdated, JsonSerializer.SerializeToElement(
             new OpenCode2MessageUpdatedPayload
             {
@@ -715,6 +741,7 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
                     Id = messageId,
                     Role = "assistant",
                     SessionId = fleetSessionId,
+                    ParentId = parentId,
                     Agent = message.Agent,
                     ModelId = message.ModelId,
                     ProviderId = message.ProviderId,

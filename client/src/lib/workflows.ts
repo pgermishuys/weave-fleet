@@ -77,6 +77,10 @@ export interface WorkflowStep {
   maxLoops: number | null;
   ask: string | null;
   choices: WorkflowChoice[];
+  /** `finish: you`: the user moves the step on, not the agent. */
+  finishYou: boolean;
+  /** The files the step declares, with their variables, e.g. `docs/design/{{slug}}.md`. */
+  writes: string[];
 }
 
 export interface Workflow {
@@ -117,6 +121,11 @@ export interface WorkflowRunStep {
   role: string | null;
   skill: string | null;
   maxLoops: number | null;
+  /** The workflow file says `finish: you`. */
+  finishYou: boolean;
+  /** The user finishes it: how its last visit started, or, for a step still to come, what it will be now. */
+  withYou: boolean;
+  outcomes: string[];
 }
 
 export interface WorkflowRunSession {
@@ -126,6 +135,18 @@ export interface WorkflowRunSession {
   outcome: string | null;
   summary: string | null;
   note: string | null;
+  /** The user finishes this visit. */
+  withYou: boolean;
+  /** The files the step declares, relative to the run's worktree. */
+  files: string[];
+  /** They were all there before the next step started. */
+  filesChecked: boolean;
+  /** The prompt the session started with. */
+  promptMessageId: string | null;
+  /** The one prompt Fleet sent when the user pressed Move on. */
+  wrapUpMessageId: string | null;
+  /** The user's note for the next step. */
+  handOffNote: string | null;
 }
 
 export interface WorkflowRunChoice {
@@ -133,9 +154,40 @@ export interface WorkflowRunChoice {
   label: string;
   note: boolean;
   to: string | null;
+  /** It goes on to two or more agent steps, so the card offers it two ways: let it run, or check with me. */
+  involvement?: boolean;
 }
 
-export type WaitingKind = "you" | "no-outcome" | "loop-limit" | "start-failed";
+export type WaitingKind = "you" | "no-outcome" | "loop-limit" | "start-failed" | "missing-files" | "wrap-up-failed";
+
+/** The choice that goes on past a missing file or a wrap-up that didn't finish. */
+export const MOVE_ON_ANYWAY = "move-on-anyway";
+
+/** A way to move on from a step the user finishes. */
+export interface WorkflowRunMove {
+  outcome: string;
+  /** Where it leads, past optional steps that are off; null for the end of the run. */
+  to: string | null;
+  toTitle: string | null;
+  /** It sends the work back to an earlier step. */
+  back: boolean;
+  loopsUsed: number | null;
+  maxLoops: number | null;
+  /** False when the loop's maximum is used up. */
+  allowed: boolean;
+}
+
+/** The step the user finishes that's open now. */
+export interface WorkflowRunWithYou {
+  stepId: string;
+  stepTitle: string;
+  sessionId: string;
+  files: string[];
+  /** The user moved on; the agent is bringing the files up to date and writing the summary. */
+  wrappingUp: boolean;
+  outcome: string | null;
+  moves: WorkflowRunMove[];
+}
 
 export interface WorkflowRunWaiting {
   kind: WaitingKind;
@@ -146,6 +198,11 @@ export interface WorkflowRunWaiting {
   /** The session the card shows in. */
   sessionId: string | null;
   choices: WorkflowRunChoice[];
+  /** For a You step, the files the step before it declares (they open next to the card); for missing files, the step's. */
+  files?: string[];
+  /** What "let it run" runs: the agent steps before the next You step. */
+  thenAlone?: string[];
+  nextYouTitle?: string | null;
 }
 
 export interface WorkflowRun {
@@ -168,6 +225,9 @@ export interface WorkflowRun {
   steps: WorkflowRunStep[];
   sessions: WorkflowRunSession[];
   waiting: WorkflowRunWaiting | null;
+  /** "Check with me after each step": agent steps that start from now on are ones the user finishes. */
+  checkWithMe?: boolean;
+  withYou?: WorkflowRunWithYou | null;
 }
 
 export function isWorkflowRun(value: unknown): value is WorkflowRun {
@@ -176,13 +236,13 @@ export function isWorkflowRun(value: unknown): value is WorkflowRun {
   return typeof run.id === "string" && typeof run.status === "string" && Array.isArray(run.steps) && Array.isArray(run.sessions);
 }
 
-/** What the Sessions list says about a run, next to its title. */
-export function runStatusLabel(run: WorkflowRun): { label: string; tone: "wait" | "run" | "done" | "fail" } {
+/** What the Sessions list says about a run, next to its title. A step the user finishes is With you, not Needs you. */
+export function runStatusLabel(run: WorkflowRun): { label: string; tone: "wait" | "run" | "with" | "done" | "fail" } {
   switch (run.status) {
     case "waiting":
       return { label: "Needs you", tone: "wait" };
     case "running":
-      return { label: "Working", tone: "run" };
+      return run.withYou ? { label: "With you", tone: "with" } : { label: "Working", tone: "run" };
     case "failed":
       return { label: run.result ?? "Failed", tone: "fail" };
     case "ended":
@@ -293,4 +353,92 @@ export const STEP_FOOTER_START = "This is one step of a Fleet workflow.";
 
 export function isStepPrompt(text: string): boolean {
   return text.includes(STEP_FOOTER_START);
+}
+
+/**
+ * What a user-side message in a step session is, when Fleet sent it: "Workflow · step 1 of 7 · you finish this step"
+ * on the prompt the step started with, "Fleet · you pressed Move on" on the wrap-up. A step the user finishes has no
+ * footer, so its prompt is found by its id.
+ */
+export function workflowMessageLabel(run: WorkflowRun | null, sessionId: string, messageId: string, text: string): string | null {
+  if (!run) return null;
+  const session = run.sessions.find((s) => s.sessionId === sessionId);
+  if (!session) return null;
+  if (session.wrapUpMessageId && session.wrapUpMessageId === messageId) return "Fleet · you pressed Move on";
+  if (session.promptMessageId === messageId || isStepPrompt(text)) {
+    const position = stepPosition(run, sessionId);
+    if (!position) return null;
+    return `Workflow · step ${position.index} of ${position.total}${session.withYou ? " · you finish this step" : ""}`;
+  }
+  return null;
+}
+
+/** What {@link workflowMessageLabel} reads from a run for one session, as a key that changes only when a label would. */
+export function workflowMessageKey(run: WorkflowRun | null, sessionId: string): string | null {
+  const session = run?.sessions.find((s) => s.sessionId === sessionId);
+  if (!run || !session) return null;
+  const position = stepPosition(run, sessionId);
+  return `${position?.index}/${position?.total}|${session.promptMessageId}|${session.wrapUpMessageId}|${session.withYou}`;
+}
+
+/** The last part of a path: "sheet.md" from "docs/design/sheet.md". */
+export function fileName(path: string): string {
+  const slash = path.lastIndexOf("/");
+  return slash >= 0 ? path.slice(slash + 1) : path;
+}
+
+/** "a.md", "a.md and b.html", "a.md, b.html and c.css". */
+export function listFiles(files: readonly string[]): string {
+  if (files.length <= 1) return files[0] ?? "";
+  return `${files.slice(0, -1).join(", ")} and ${files[files.length - 1]}`;
+}
+
+/** What a way to move on says: "Move on to Plan", "Pass: on to Open the pull request", "Changes: back to Implement (1 of 2)". */
+export function moveLabel(move: WorkflowRunMove, single: boolean): string {
+  const where = move.toTitle ?? "the end of the run";
+  if (single) return move.toTitle ? `Move on to ${move.toTitle}` : "Finish the run";
+  const outcome = move.outcome.charAt(0).toUpperCase() + move.outcome.slice(1);
+  if (!move.back) return `${outcome}: on to ${where}`;
+  const count = move.maxLoops !== null && move.loopsUsed !== null
+    ? move.allowed ? ` (${move.loopsUsed + 1} of ${move.maxLoops})` : ` (${move.maxLoops} of ${move.maxLoops} used)`
+    : "";
+  return `${outcome}: back to ${where}${count}`;
+}
+
+/** Why a way to move on is off: its loop's maximum is used up. */
+export function moveBlockedReason(stepTitle: string, move: WorkflowRunMove): string | null {
+  if (move.allowed || move.maxLoops === null) return null;
+  return `${stepTitle} has sent the work back ${times(move.maxLoops)}, the most this run allows.`;
+}
+
+function times(count: number): string {
+  return count === 1 ? "once" : count === 2 ? "twice" : `${count} times`;
+}
+
+/** The step the run is on, when it's an agent step that's started and not finished. */
+export function runningStep(run: WorkflowRun): WorkflowRunStep | null {
+  if (run.status !== "running" && run.status !== "waiting") return null;
+  const step = run.steps.find((s) => s.id === run.currentStepId);
+  return step && step.kind === "agent" && (step.state === "running" || step.state === "waiting") ? step : null;
+}
+
+/** The title of the first enabled step after the one the run is on, for "Check with me is on from Review". */
+export function nextStepTitle(run: WorkflowRun): string | null {
+  const enabled = run.steps.filter((s) => s.enabled);
+  const index = enabled.findIndex((s) => s.id === run.currentStepId);
+  return index >= 0 ? enabled[index + 1]?.title ?? null : null;
+}
+
+/**
+ * The note under the header's switch when it differs from how the running step started: a change applies from the
+ * next step, so the running one keeps the way it started.
+ */
+export function checkWithMeNote(run: WorkflowRun): string | null {
+  const step = runningStep(run);
+  // A step the file says the user finishes is theirs whatever the switch says.
+  if (!step || step.finishYou || Boolean(run.checkWithMe) === step.withYou) return null;
+  const next = nextStepTitle(run) ?? "the next step";
+  return run.checkWithMe
+    ? `Check with me is on from ${next}. This step started on its own, so it still moves on when the agent reports it's done.`
+    : `Check with me is off from ${next}. You still finish this step, because it started with you.`;
 }

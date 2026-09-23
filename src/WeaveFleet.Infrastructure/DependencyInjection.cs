@@ -189,6 +189,7 @@ public static class DependencyInjection
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowStepBridge>();
         services.AddScoped<WeaveFleet.Application.Workflows.IWorkflowStepSessions, WeaveFleet.Application.Workflows.WorkflowStepSessions>();
         services.AddScoped<WeaveFleet.Application.Workflows.IWorkflowRunEvents, WeaveFleet.Application.Workflows.WorkflowRunEvents>();
+        services.AddSingleton<WeaveFleet.Application.Workflows.IWorkflowFiles, WeaveFleet.Application.Workflows.WorkflowFiles>();
         services.AddScoped<IWorkflowRunRepository, WorkflowRunRepository>();
         // Singleton: holds each run's lock and which step sessions it's watching for the end of their turn.
         services.AddSingleton<WeaveFleet.Application.Workflows.WorkflowRunner>();

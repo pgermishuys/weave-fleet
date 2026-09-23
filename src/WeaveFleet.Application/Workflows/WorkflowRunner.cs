@@ -10,18 +10,29 @@ using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Workflows;
 
-/// <summary>Starts the session for an agent step and sends it the step's prompt.</summary>
+/// <summary>Starts the session for an agent step, and talks to it when the user moves on from a step they finish.</summary>
 public interface IWorkflowStepSessions
 {
-    Task<WorkflowStepSession> StartAsync(WorkflowRun run, WorkflowAgentStep agentStep, string prompt, WorkflowModelChoice model, CancellationToken ct);
+    /// <param name="userFinishes">The user finishes the step, so its session doesn't get the step tool.</param>
+    Task<WorkflowStepSession> StartAsync(WorkflowRun run, WorkflowAgentStep agentStep, string prompt, WorkflowModelChoice model, bool userFinishes, CancellationToken ct);
+
+    /// <summary>Sends Fleet's wrap-up prompt into a step's session.</summary>
+    Task<WorkflowPromptSent> PromptAsync(string sessionId, string text, CancellationToken ct);
+
+    /// <summary>The text of the last reply to <paramref name="messageId"/>, or null when there's none.</summary>
+    Task<string?> ReplyToAsync(string sessionId, string messageId, CancellationToken ct);
 }
 
 /// <summary>The session a step started in, or why it couldn't start.</summary>
 /// <param name="Directory">Where the session works: the run's worktree.</param>
-public sealed record WorkflowStepSession(string? SessionId, string? Directory, string? Branch, string? Error)
+/// <param name="PromptMessageId">The id the harness was given for the step's prompt.</param>
+public sealed record WorkflowStepSession(string? SessionId, string? Directory, string? Branch, string? Error, string? PromptMessageId = null)
 {
     public static WorkflowStepSession Failed(string error, string? sessionId = null) => new(sessionId, null, null, error);
 }
+
+/// <summary>A prompt Fleet sent into a step's session: the id the harness was given for it, or why it didn't go.</summary>
+public sealed record WorkflowPromptSent(string? MessageId, string? Error);
 
 /// <summary>Tells the client a run changed, and the user when it needs them.</summary>
 public interface IWorkflowRunEvents
@@ -34,9 +45,11 @@ public interface IWorkflowRunEvents
 public sealed record WorkflowStepDoneResult(bool Accepted, string Message);
 
 /// <summary>
-/// Moves workflow runs from step to step. A step ends when its session calls <see cref="FleetWorkflows.StepTool"/>; the
-/// outcome picks the next step. Fleet never advances on idle alone: a step whose turn ends without the tool waits on
-/// the user, and so does a You step and a loop past its maximum. Fleet never prompts an agent on its own.
+/// Moves workflow runs from step to step. A step ends when its session calls <see cref="FleetWorkflows.StepTool"/>, or,
+/// for a step the user finishes, when the user moves on and the wrap-up turn Fleet sends for it ends; the outcome picks
+/// the next step, once the step's declared files are there. Fleet never advances on idle alone: a step whose turn ends
+/// without the tool waits on the user, and so does a You step, a loop past its maximum and a missing file. The wrap-up
+/// is the only prompt Fleet sends an agent, and only when the user presses Move on.
 /// </summary>
 /// <remarks>
 /// Every change to a run happens under that run's lock and is written before the next thing starts, so a restart
@@ -50,6 +63,13 @@ public sealed partial class WorkflowRunner(
 {
     /// <summary>How long after a step's session goes idle Fleet looks again before it decides the step stopped.</summary>
     internal TimeSpan IdleGrace { get; set; } = TimeSpan.FromSeconds(2);
+
+    /// <summary>What the agent hears if it calls the step tool in a step the user finishes (it shouldn't have it).</summary>
+    public const string UserFinishesMessage =
+        "You and the user are working through this step together, and only the user can end it. Carry on with what they asked.";
+
+    /// <summary>The choice that goes on past a missing file or a wrap-up that didn't finish.</summary>
+    public const string MoveOnAnywayChoice = "move-on-anyway";
 
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, StepWatch> _watches = new(StringComparer.Ordinal);
@@ -121,6 +141,9 @@ public sealed partial class WorkflowRunner(
         if (state.Workflow.Find(visit.StepId) is not WorkflowAgentStep step)
             return new WorkflowStepDoneResult(false, WorkflowStepBridge.NotAStepMessage);
 
+        if (visit.Finish == WorkflowFinishers.You)
+            return new WorkflowStepDoneResult(false, UserFinishesMessage);
+
         // Running, or waiting on the user after it stopped without the tool: the user may have replied to the agent.
         if (visit.Status is not (WorkflowRunStepStatus.Running or WorkflowRunStepStatus.Waiting) || visit.Outcome is not null)
             return new WorkflowStepDoneResult(false, "This step is already done. Stop here.");
@@ -141,6 +164,7 @@ public sealed partial class WorkflowRunner(
         // Running again until the next step starts, so a restart in between carries on (RecoverAsync).
         state.Run.Status = WorkflowRunStatus.Running;
         state.Run.WaitingReason = null;
+        state.Run.WaitingKind = null;
         await SaveRunAsync(scope, state).ConfigureAwait(false);
         _watches.TryRemove(sessionId, out _);
         LogStepDone(state.Run.Id, step.Id, outcome);
@@ -163,7 +187,7 @@ public sealed partial class WorkflowRunner(
                     && state.Current is { Status: WorkflowRunStepStatus.Done } visit
                     && state.Workflow.Find(visit.StepId) is WorkflowAgentStep step)
                 {
-                    await RouteAsync(scope, state, step, visit, checkLoop: true, ct).ConfigureAwait(false);
+                    await RouteAsync(scope, state, step, visit, checkLoop: true, checkFiles: true, ct).ConfigureAwait(false);
                 }
 
                 return state;
@@ -179,16 +203,20 @@ public sealed partial class WorkflowRunner(
 
     /// <summary>
     /// The user answers a run that waits on them: a You step's choice (<c>choice:n</c>), an outcome for a step that
-    /// stopped without one or went past its loop limit (<c>outcome:name</c>), or <c>retry</c> for a step Fleet couldn't
-    /// start.
+    /// stopped without one or went past its loop limit (<c>outcome:name</c>), <c>retry</c> for a step Fleet couldn't
+    /// start, or <see cref="MoveOnAnywayChoice"/> past a missing file or a wrap-up that didn't finish.
     /// </summary>
-    public async Task<Result<WorkflowRunDto>> AnswerAsync(string userId, string runId, string choiceId, string? note, CancellationToken ct = default)
+    /// <param name="checkWithMe">
+    /// With a You step's choice that goes on to a step: how involved the user wants to be from here ("Approve, check
+    /// with me after each step"). Null leaves Check with me as it is.
+    /// </param>
+    public async Task<Result<WorkflowRunDto>> AnswerAsync(string userId, string runId, string choiceId, string? note, bool? checkWithMe = null, CancellationToken ct = default)
     {
         using var scope = Begin(userId);
         Result<WorkflowRunDto>? failure = null;
         var state = await WithRunAsync(scope, runId, async state =>
         {
-            failure = await AnswerCoreAsync(scope, state, choiceId, note, ct).ConfigureAwait(false);
+            failure = await AnswerCoreAsync(scope, state, choiceId, note, checkWithMe, ct).ConfigureAwait(false);
             return state;
         }).ConfigureAwait(false);
 
@@ -197,7 +225,7 @@ public sealed partial class WorkflowRunner(
         return failure ?? state;
     }
 
-    private async Task<Result<WorkflowRunDto>?> AnswerCoreAsync(Scope scope, RunState state, string choiceId, string? note, CancellationToken ct)
+    private async Task<Result<WorkflowRunDto>?> AnswerCoreAsync(Scope scope, RunState state, string choiceId, string? note, bool? checkWithMe, CancellationToken ct)
     {
         var run = state.Run;
         var visit = state.Current;
@@ -205,6 +233,22 @@ public sealed partial class WorkflowRunner(
             return new FleetError("WorkflowRun.NotWaiting", "This run isn't waiting on you.");
 
         var step = state.Workflow.Find(visit.StepId);
+        if (run.WaitingKind is WorkflowWaitingKinds.MissingFiles or WorkflowWaitingKinds.WrapUpFailed && step is WorkflowAgentStep waited)
+        {
+            if (choiceId != MoveOnAnywayChoice || visit.Outcome is null)
+                return FleetError.ValidationError("Choice", "That isn't one of the choices this run is waiting on.");
+
+            // Past the files check, and for a wrap-up that didn't finish, without a summary.
+            visit.Status = WorkflowRunStepStatus.Done;
+            visit.FinishedAt ??= Now();
+            await scope.Runs.UpdateStepAsync(visit).ConfigureAwait(false);
+            if (visit.SessionId is { } waitedSession)
+                _watches.TryRemove(waitedSession, out _);
+            LogMovedOnAnyway(run.Id, waited.Id);
+            await RouteAsync(scope, state, waited, visit, checkLoop: false, checkFiles: false, ct).ConfigureAwait(false);
+            return null;
+        }
+
         switch (step)
         {
             case WorkflowYouStep you when choiceId.StartsWith("choice:", StringComparison.Ordinal)
@@ -222,6 +266,15 @@ public sealed partial class WorkflowRunner(
                 visit.FinishedAt = Now();
                 await scope.Runs.UpdateStepAsync(visit).ConfigureAwait(false);
                 LogDecided(run.Id, you.Id, choice.Label);
+
+                // Saved before the next step starts, which is the first one it applies to.
+                if (checkWithMe is { } on && !choice.Note && choice.To != WorkflowTargets.End)
+                {
+                    state.Options.CheckWithMe = on;
+                    run.Options = state.Options.Write();
+                    await SaveRunAsync(scope, state).ConfigureAwait(false);
+                }
+
                 await GoToAsync(scope, state, choice.To, choice.Note ? note : null, ct).ConfigureAwait(false);
                 return null;
             }
@@ -241,7 +294,7 @@ public sealed partial class WorkflowRunner(
                 await scope.Runs.UpdateStepAsync(visit).ConfigureAwait(false);
                 _watches.TryRemove(visit.SessionId, out _);
                 LogDecided(run.Id, agent.Id, visit.Outcome);
-                await RouteAsync(scope, state, agent, visit, checkLoop: false, ct).ConfigureAwait(false);
+                await RouteAsync(scope, state, agent, visit, checkLoop: false, checkFiles: true, ct).ConfigureAwait(false);
                 return null;
             }
 
@@ -272,20 +325,179 @@ public sealed partial class WorkflowRunner(
         return state is null ? FleetError.NotFoundFor("WorkflowRun", runId) : state;
     }
 
+    /// <summary>
+    /// Switches "Check with me after each step" on or off, from the run's header. It applies from the next step: the
+    /// step that's running keeps the way it started, so its agent is never given or denied the step tool mid-turn.
+    /// </summary>
+    public async Task<Result<WorkflowRunDto>> SetCheckWithMeAsync(string userId, string runId, bool on, CancellationToken ct = default)
+    {
+        using var scope = Begin(userId);
+        Result<WorkflowRunDto>? failure = null;
+        var state = await WithRunAsync(scope, runId, async state =>
+        {
+            if (WorkflowRunStatus.IsFinished(state.Run.Status))
+            {
+                failure = new FleetError("WorkflowRun.Finished", "This run has finished, so there are no steps left to check with you.");
+                return state;
+            }
+
+            state.Options.CheckWithMe = on;
+            state.Run.Options = state.Options.Write();
+            await SaveRunAsync(scope, state).ConfigureAwait(false);
+            return state;
+        }).ConfigureAwait(false);
+
+        if (state is null)
+            return FleetError.NotFoundFor("WorkflowRun", runId);
+        return failure ?? state;
+    }
+
+    // ── Steps you finish ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// The user moves on from a step they finish. Fleet sends one prompt into the step's session: bring the declared
+    /// files up to date with what was agreed, then reply with a short summary for the next step. The run moves on
+    /// when the turn that answers that prompt ends (<see cref="Observe"/>).
+    /// </summary>
+    /// <param name="outcome">The outcome the user picked; a step with one outcome needs none.</param>
+    /// <param name="note">The user's note for the next step.</param>
+    public async Task<Result<WorkflowRunDto>> MoveOnAsync(string userId, string runId, string? outcome, string? note, CancellationToken ct = default)
+    {
+        using var scope = Begin(userId);
+        Result<WorkflowRunDto>? failure = null;
+        var state = await WithRunAsync(scope, runId, async state =>
+        {
+            failure = await MoveOnCoreAsync(scope, state, outcome, note, ct).ConfigureAwait(false);
+            return state;
+        }).ConfigureAwait(false);
+
+        if (state is null)
+            return FleetError.NotFoundFor("WorkflowRun", runId);
+        return failure ?? state;
+    }
+
+    private async Task<Result<WorkflowRunDto>?> MoveOnCoreAsync(Scope scope, RunState state, string? outcome, string? note, CancellationToken ct)
+    {
+        var visit = state.Current;
+        if (state.Run.Status != WorkflowRunStatus.Running
+            || visit is not { Status: WorkflowRunStepStatus.Running, Finish: WorkflowFinishers.You, SessionId: { } sessionId }
+            || state.Workflow.Find(visit.StepId) is not WorkflowAgentStep step)
+        {
+            return new FleetError("WorkflowRun.NotWithYou", "There's no step open for you to move on from.");
+        }
+
+        outcome = string.IsNullOrWhiteSpace(outcome) ? (step.Outcomes.Count == 1 ? step.Outcomes[0] : null) : outcome.Trim();
+        if (outcome is null || !step.Outcomes.Contains(outcome))
+            return FleetError.ValidationError("Outcome", $"Pick how {step.Title} went: {string.Join(", ", step.Outcomes)}.");
+
+        if (LoopsLeft(state, step, outcome) is { Left: <= 0 } loops)
+        {
+            var target = state.Workflow.Find(Target(state.Workflow, step, outcome))?.Title;
+            return FleetError.ValidationError("Outcome",
+                $"{step.Title} has sent the work back to {target} {Times(loops.Used)}, the most this run allows. Pick another outcome, or end the run.");
+        }
+
+        note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+        var files = FilesOf(state, step);
+        var text = WrapUpPrompt(NextTitle(state, step, outcome), step.Outcomes.Count > 1 ? outcome : null, files, note);
+
+        // Watched before it's sent: a quick model can answer before the send returns.
+        var watch = new StepWatch(state.Run.Id, visit.Id, state.Run.UserId, WatchKind.WrapUp);
+        _watches[sessionId] = watch;
+
+        var sent = await scope.Sessions.PromptAsync(sessionId, text, ct).ConfigureAwait(false);
+        if (sent.MessageId is null)
+        {
+            _watches.TryRemove(sessionId, out _);
+            return new FleetError("WorkflowRun.WrapUpFailed", $"Fleet couldn't ask the agent to wrap up: {sent.Error ?? "the prompt didn't go through."}");
+        }
+
+        visit.Status = WorkflowRunStepStatus.WrappingUp;
+        visit.Outcome = outcome;
+        visit.HandOffNote = note;
+        visit.WrapUpMessageId = sent.MessageId;
+        await scope.Runs.UpdateStepAsync(visit).ConfigureAwait(false);
+        await SaveRunAsync(scope, state).ConfigureAwait(false);
+        LogMovingOn(state.Run.Id, step.Id, outcome);
+
+        if (watch.Sent(sent.MessageId))
+            Track(Task.Run(() => SettleAsync(visit.SessionId!, watch), CancellationToken.None));
+        return null;
+    }
+
+    /// <summary>
+    /// The one prompt Fleet sends into a step the user finishes, when they move on: "The user is moving on to Plan.
+    /// Update docs/design/x.md with everything agreed in this conversation, then reply with a short summary for Plan."
+    /// </summary>
+    /// <param name="next">The next step's title, or null when the run ends here.</param>
+    /// <param name="outcome">The outcome the user picked, for a step with more than one.</param>
+    internal static string WrapUpPrompt(string? next, string? outcome, IReadOnlyList<string> files, string? note)
+    {
+        var moving = next is null
+            ? outcome is null ? "The user is finishing the run here." : $"The user chose {outcome} and is finishing the run here."
+            : outcome is null ? $"The user is moving on to {next}." : $"The user chose {outcome} and is moving on to {next}.";
+        var summary = next is null ? "a short summary of where things stand" : $"a short summary for {next}";
+        var ask = files.Count > 0
+            ? $"Update {WorkflowYaml.ListFiles(files)} with everything agreed in this conversation, then reply with {summary}."
+            : $"Reply with {summary}.";
+        var text = $"{moving} {ask}";
+        return note is null ? text : $"{text}\n\nTheir note: {note}";
+    }
+
+    /// <summary>How many times a step may still send work back on an outcome; null when the outcome doesn't loop.</summary>
+    internal static (int Used, int Max, int Left)? LoopsLeft(RunState state, WorkflowAgentStep step, string outcome)
+    {
+        if (!IsBack(state.Workflow, step.Id, Target(state.Workflow, step, outcome)) || step.MaxLoops is not { } max)
+            return null;
+
+        var used = state.Visits.Count(v =>
+            v.StepId == step.Id
+            && v.Status == WorkflowRunStepStatus.Done
+            && v.Outcome is { } o
+            && IsBack(state.Workflow, step.Id, Target(state.Workflow, step, o)));
+        return (used, max, max - used);
+    }
+
+    /// <summary>The title of the step an outcome leads to, past optional steps that are off; null for the end.</summary>
+    internal static string? NextTitle(RunState state, WorkflowAgentStep step, string outcome)
+    {
+        var target = Target(state.Workflow, step, outcome);
+        while (target != WorkflowTargets.End && state.Workflow.Find(target) is { } next)
+        {
+            if (next is WorkflowAgentStep { Optional: true } skipped && !state.Options.OptionalSteps.Contains(skipped.Id))
+            {
+                target = Next(state.Workflow, skipped.Id);
+                continue;
+            }
+
+            return next.Title;
+        }
+
+        return null;
+    }
+
+    /// <summary>A step's declared files with this run filled in.</summary>
+    internal static IReadOnlyList<string> FilesOf(RunState state, WorkflowAgentStep step)
+        => WorkflowYaml.FilesOf(step, variable => variable switch
+        {
+            "slug" => state.Run.Slug,
+            "run.branch" => state.Run.Branch,
+            _ => null,
+        });
+
     // ── Moving between steps ───────────────────────────────────────────────────
 
-    /// <summary>Goes where a finished agent step's outcome leads, unless it's one loop too many.</summary>
-    private async Task RouteAsync(Scope scope, RunState state, WorkflowAgentStep step, WorkflowRunStep visit, bool checkLoop, CancellationToken ct)
+    /// <summary>
+    /// Goes where a finished agent step's outcome leads, unless it's one loop too many or a file the step declares
+    /// isn't there.
+    /// </summary>
+    private async Task RouteAsync(Scope scope, RunState state, WorkflowAgentStep step, WorkflowRunStep visit, bool checkLoop, bool checkFiles, CancellationToken ct)
     {
-        var target = step.Routes.GetValueOrDefault(visit.Outcome!) ?? Next(state.Workflow, step.Id);
+        var target = Target(state.Workflow, step, visit.Outcome!);
         if (checkLoop && IsBack(state.Workflow, step.Id, target) && step.MaxLoops is { } max)
         {
             // Every earlier visit of this step that sent work back, and this one.
-            var sentBack = state.Visits.Count(v =>
-                v.StepId == step.Id
-                && v.Status == WorkflowRunStepStatus.Done
-                && v.Outcome is { } o
-                && IsBack(state.Workflow, step.Id, step.Routes.GetValueOrDefault(o) ?? Next(state.Workflow, step.Id)));
+            var sentBack = LoopsLeft(state, step, visit.Outcome!)?.Used ?? 0;
             if (sentBack > max)
             {
                 var targetTitle = state.Workflow.Find(target)?.Title ?? target;
@@ -296,8 +508,31 @@ public sealed partial class WorkflowRunner(
             }
         }
 
+        // Before the next step starts, so it never starts from files that aren't there.
+        if (checkFiles && target != WorkflowTargets.End && step.Writes.Count > 0)
+        {
+            var missing = scope.Files.Missing(state.Run.WorktreePath, FilesOf(state, step));
+            if (missing.Count > 0)
+            {
+                await WaitAsync(scope, state, step.Id, MissingFilesMessage(step, missing), WorkflowWaitingKinds.MissingFiles).ConfigureAwait(false);
+                if (visit.SessionId is { } session)
+                    _watches[session] = StepWatch.ForReply(state.Run.Id, visit, state.Run.UserId);
+                return;
+            }
+
+            visit.FilesChecked = true;
+            await scope.Runs.UpdateStepAsync(visit).ConfigureAwait(false);
+        }
+
         await GoToAsync(scope, state, target, note: null, ct).ConfigureAwait(false);
     }
+
+    private static string MissingFilesMessage(WorkflowAgentStep step, IReadOnlyList<string> missing)
+        => $"{step.Title} declares {WorkflowYaml.ListFiles(missing)}, but {(missing.Count == 1 ? "it isn't" : "they aren't")} in the run's worktree. Reply to the agent in its session, or move on anyway.";
+
+    /// <summary>The step an outcome leads to: its route, or the next step in the file.</summary>
+    private static string Target(WorkflowDefinition workflow, WorkflowAgentStep step, string outcome)
+        => step.Routes.GetValueOrDefault(outcome) ?? Next(workflow, step.Id);
 
     /// <summary>Starts <paramref name="target"/>, skipping optional steps that weren't switched on.</summary>
     private async Task GoToAsync(Scope scope, RunState state, string target, string? note, CancellationToken ct)
@@ -344,7 +579,12 @@ public sealed partial class WorkflowRunner(
         run.Status = WorkflowRunStatus.Running;
         run.CurrentStepId = step.Id;
         run.WaitingReason = null;
+        run.WaitingKind = null;
         visit.Status = WorkflowRunStepStatus.Running;
+
+        // Decided as the step starts and kept for good: switching Check with me later changes the steps after it.
+        var userFinishes = step.FinishYou || state.Options.CheckWithMe;
+        visit.Finish = userFinishes ? WorkflowFinishers.You : WorkflowFinishers.Agent;
         await SaveRunAsync(scope, state).ConfigureAwait(false);
         await scope.Runs.UpdateStepAsync(visit).ConfigureAwait(false);
 
@@ -352,7 +592,7 @@ public sealed partial class WorkflowRunner(
         WorkflowStepSession started;
         try
         {
-            started = await scope.Sessions.StartAsync(run, step, PromptFor(state, step, visit), model, ct).ConfigureAwait(false);
+            started = await scope.Sessions.StartAsync(run, step, PromptFor(state, step, visit), model, userFinishes, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -363,6 +603,7 @@ public sealed partial class WorkflowRunner(
         if (started.SessionId is { } sessionId)
         {
             visit.SessionId = sessionId;
+            visit.PromptMessageId = started.PromptMessageId;
             await scope.Runs.UpdateStepAsync(visit).ConfigureAwait(false);
             if (run.WorktreePath is null && started.Directory is not null)
             {
@@ -385,33 +626,52 @@ public sealed partial class WorkflowRunner(
             return;
         }
 
-        _watches[started.SessionId!] = new StepWatch(run.Id, visit.Id, run.UserId);
+        // A step the user finishes is a conversation: a turn ending there is just a turn.
+        if (!userFinishes)
+            _watches[started.SessionId!] = new StepWatch(run.Id, visit.Id, run.UserId, WatchKind.Stall);
         await SaveRunAsync(scope, state).ConfigureAwait(false);
         LogStepStarted(run.Id, step.Id, visit.Visit, started.SessionId!);
     }
 
-    /// <summary>The step's instructions with the run filled in, a note sent back, and the footer.</summary>
+    /// <summary>
+    /// The step's instructions with the run filled in, a note sent back, the user's note from the step before, and the
+    /// footer. A step the user finishes has no footer: it has no step tool to call.
+    /// </summary>
     internal static string PromptFor(RunState state, WorkflowAgentStep step, WorkflowRunStep visit)
     {
         var run = state.Run;
+        var previous = state.Visits.LastOrDefault(v => v.Id != visit.Id && v.Status == WorkflowRunStepStatus.Done && v.SessionId is not null);
         var body = WorkflowYaml.Fill(step.Prompt, variable => variable switch
         {
             "request" => run.Request,
             "slug" => run.Slug,
             "run.branch" => run.Branch,
             "run.base" => run.BaseBranch ?? "the default branch",
-            "previous.summary" => state.Visits.LastOrDefault(v => v.Id != visit.Id && v.Status == WorkflowRunStepStatus.Done && v.SessionId is not null)?.Summary,
+            "previous.summary" => previous?.Summary,
+            "previous.files" => previous is not null && state.Workflow.Find(previous.StepId) is WorkflowAgentStep before
+                ? WorkflowYaml.ListFiles(FilesOf(state, before))
+                : null,
             _ when WorkflowYaml.StepOfSummaryVariable(variable) is { } stepId
                 => state.Visits.LastOrDefault(v => v.StepId == stepId && v.Status == WorkflowRunStepStatus.Done)?.Summary,
+            _ when WorkflowYaml.StepOfFilesVariable(variable) is { } stepId
+                => state.Visits.Any(v => v.StepId == stepId && v.Status == WorkflowRunStepStatus.Done)
+                   && state.Workflow.Find(stepId) is WorkflowAgentStep that
+                    ? WorkflowYaml.ListFiles(FilesOf(state, that))
+                    : null,
             _ => null,
         });
 
         var parts = new List<string> { body };
         if (visit.Note is { } note)
             parts.Add($"Sent back with a note:\n{note}");
+
+        // The note the user wrote for the next step when they moved on; not for the same step when it comes round again.
+        if (previous is { HandOffNote: { } handOff } && previous.StepId != step.Id)
+            parts.Add($"Note from the user:\n{handOff}");
         if (step.Skill is { } skill)
             parts.Add($"Use the {skill} skill.");
-        parts.Add(FleetWorkflows.Footer(step.Outcomes));
+        if (visit.Finish != WorkflowFinishers.You)
+            parts.Add(FleetWorkflows.Footer(step.Outcomes));
         return string.Join("\n\n", parts);
     }
 
@@ -434,11 +694,16 @@ public sealed partial class WorkflowRunner(
         return visit;
     }
 
-    private async Task WaitAsync(Scope scope, RunState state, string stepId, string reason)
+    /// <param name="kind">
+    /// <see cref="WorkflowWaitingKinds.MissingFiles"/> or <see cref="WorkflowWaitingKinds.WrapUpFailed"/>; null when the
+    /// visit says what the wait is.
+    /// </param>
+    private async Task WaitAsync(Scope scope, RunState state, string stepId, string reason, string? kind = null)
     {
         state.Run.Status = WorkflowRunStatus.Waiting;
         state.Run.CurrentStepId = stepId;
         state.Run.WaitingReason = reason;
+        state.Run.WaitingKind = kind;
         await SaveRunAsync(scope, state).ConfigureAwait(false);
         LogWaiting(state.Run.Id, stepId);
         state.NeedsYou = true;
@@ -448,6 +713,7 @@ public sealed partial class WorkflowRunner(
     {
         state.Run.Status = status;
         state.Run.WaitingReason = null;
+        state.Run.WaitingKind = null;
         state.Run.Result = result;
         state.Run.EndedAt = Now();
         await SaveRunAsync(scope, state).ConfigureAwait(false);
@@ -500,8 +766,9 @@ public sealed partial class WorkflowRunner(
     // ── Watching step sessions ─────────────────────────────────────────────────
 
     /// <summary>
-    /// Called for every event the relay translates. A step whose session's turn ends without the tool waits on the
-    /// user; Fleet doesn't prompt the agent again.
+    /// Called for every event the relay translates. It watches a running step's turn, to see whether it ends without
+    /// the tool; the wrap-up turn of a step the user moved on from; and, while a step waits on a missing file or a
+    /// wrap-up that didn't finish, the next turn the user starts in its session. Fleet doesn't prompt the agent again.
     /// </summary>
     public void Observe(string sessionId, DomainEvent? domainEvent)
     {
@@ -510,21 +777,23 @@ public sealed partial class WorkflowRunner(
 
         switch (domainEvent)
         {
-            case MessageCreated { Payload.Info.Role: "assistant" }:
-            case MessageUpdated { Payload.Info.Role: "assistant" }:
-                watch.Armed = true;
+            case MessageCreated { Payload.Info: { Role: "assistant" } info }:
+                watch.Saw(info.Id, info.ParentId);
+                break;
+            case MessageUpdated { Payload.Info: { Role: "assistant" } info }:
+                watch.Saw(info.Id, info.ParentId);
                 break;
             case TurnFailed failed:
-                watch.Armed = true;
-                watch.Failure = failed.Payload.Error?.Message;
+                watch.Failed(failed.Payload.MessageId, failed.Payload.Error?.Message);
                 break;
-            case SessionIdled when watch.Armed:
-                Track(Task.Run(() => StallIfStillRunningAsync(sessionId, watch)));
+            case SessionIdled when watch.Idled():
+                Track(Task.Run(() => SettleAsync(sessionId, watch)));
                 break;
         }
     }
 
-    private async Task StallIfStillRunningAsync(string sessionId, StepWatch watch)
+    /// <summary>A watched turn went idle: once it's really over, see where that leaves its step.</summary>
+    private async Task SettleAsync(string sessionId, StepWatch watch)
     {
         try
         {
@@ -537,27 +806,135 @@ public sealed partial class WorkflowRunner(
             using var scope = Begin(watch.UserId);
             await WithRunAsync(scope, watch.RunId, async state =>
             {
+                // Only the watch the session has now counts; a newer one replaced it.
+                if (!_watches.TryGetValue(sessionId, out var current) || current != watch)
+                    return state;
+
                 var visit = state.Current;
-                if (visit is null || visit.Id != watch.VisitId || visit.Status != WorkflowRunStepStatus.Running
-                    || WorkflowRunStatus.IsFinished(state.Run.Status))
+                if (visit is null || visit.Id != watch.VisitId || WorkflowRunStatus.IsFinished(state.Run.Status)
+                    || state.Workflow.Find(visit.StepId) is not WorkflowAgentStep step)
                 {
+                    _watches.TryRemove(sessionId, out _);
                     return state;
                 }
 
-                var title = state.Workflow.Find(visit.StepId)?.Title ?? visit.StepId;
-                visit.Status = WorkflowRunStepStatus.Waiting;
-                await scope.Runs.UpdateStepAsync(visit).ConfigureAwait(false);
-                _watches.TryRemove(sessionId, out _);
-                await WaitAsync(scope, state, visit.StepId, watch.Failure is { } failure
-                    ? $"{title} failed: {failure} Reply to the agent to carry on, or pick an outcome."
-                    : $"{title} stopped without finishing the step. Reply to the agent to carry on, or pick an outcome.")
-                    .ConfigureAwait(false);
+                switch (watch.Kind)
+                {
+                    case WatchKind.Stall:
+                        await StalledAsync(scope, state, step, visit, sessionId, watch).ConfigureAwait(false);
+                        break;
+                    case WatchKind.WrapUp:
+                        await WrappedUpAsync(scope, state, step, visit, sessionId, watch).ConfigureAwait(false);
+                        break;
+                    case WatchKind.Reply:
+                        await RepliedAsync(scope, state, step, visit, sessionId).ConfigureAwait(false);
+                        break;
+                }
+
                 return state;
             }).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             LogStallCheckFailed(ex, watch.RunId);
+        }
+    }
+
+    /// <summary>A step's turn ended without the tool: it waits on the user.</summary>
+    private async Task StalledAsync(Scope scope, RunState state, WorkflowAgentStep step, WorkflowRunStep visit, string sessionId, StepWatch watch)
+    {
+        if (visit.Status != WorkflowRunStepStatus.Running)
+            return;
+
+        visit.Status = WorkflowRunStepStatus.Waiting;
+        await scope.Runs.UpdateStepAsync(visit).ConfigureAwait(false);
+        _watches.TryRemove(sessionId, out _);
+        await WaitAsync(scope, state, visit.StepId, watch.Failure is { } failure
+            ? $"{step.Title} failed: {failure} Reply to the agent to carry on, or pick an outcome."
+            : $"{step.Title} stopped without finishing the step. Reply to the agent to carry on, or pick an outcome.")
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The turn that answered the wrap-up prompt ended. Its reply is the step's summary, and the run goes where the
+    /// user's outcome leads once the declared files are there. A wrap-up that failed waits on the user.
+    /// </summary>
+    private async Task WrappedUpAsync(Scope scope, RunState state, WorkflowAgentStep step, WorkflowRunStep visit, string sessionId, StepWatch watch)
+    {
+        if (visit.Status != WorkflowRunStepStatus.WrappingUp || visit.WrapUpMessageId != watch.MessageId)
+            return;
+
+        _watches.TryRemove(sessionId, out _);
+        if (watch.Failure is { } failure)
+        {
+            await WaitAsync(scope, state, step.Id,
+                $"{step.Title}'s wrap-up failed: {failure} Reply to the agent in its session, or move on anyway.",
+                WorkflowWaitingKinds.WrapUpFailed).ConfigureAwait(false);
+            _watches[sessionId] = StepWatch.ForReply(state.Run.Id, visit, state.Run.UserId);
+            return;
+        }
+
+        string? reply = null;
+        try
+        {
+            reply = await scope.Sessions.ReplyToAsync(sessionId, visit.WrapUpMessageId!, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogReplyReadFailed(ex, state.Run.Id, step.Id);
+        }
+
+        visit.Summary = string.IsNullOrWhiteSpace(reply) ? null : reply.Trim();
+        visit.Status = WorkflowRunStepStatus.Done;
+        visit.FinishedAt = Now();
+        await scope.Runs.UpdateStepAsync(visit).ConfigureAwait(false);
+        LogStepDone(state.Run.Id, step.Id, visit.Outcome!);
+
+        // The user picked the outcome, and Move on checked it against the loop's maximum.
+        await RouteAsync(scope, state, step, visit, checkLoop: false, checkFiles: true, CancellationToken.None).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The user replied in a step that waits on a missing file or a wrap-up that didn't finish, and that turn ended.
+    /// With the files there now, the run goes on; after a failed wrap-up, the step is the user's again to move on from.
+    /// </summary>
+    private async Task RepliedAsync(Scope scope, RunState state, WorkflowAgentStep step, WorkflowRunStep visit, string sessionId)
+    {
+        if (state.Run.Status != WorkflowRunStatus.Waiting)
+            return;
+
+        switch (state.Run.WaitingKind)
+        {
+            case WorkflowWaitingKinds.MissingFiles:
+            {
+                var missing = scope.Files.Missing(state.Run.WorktreePath, FilesOf(state, step));
+                if (missing.Count > 0)
+                {
+                    // Still waiting, and the user already knows: just say what's missing now.
+                    state.Run.WaitingReason = MissingFilesMessage(step, missing);
+                    await SaveRunAsync(scope, state).ConfigureAwait(false);
+                    _watches[sessionId] = StepWatch.ForReply(state.Run.Id, visit, state.Run.UserId);
+                    return;
+                }
+
+                _watches.TryRemove(sessionId, out _);
+                visit.FilesChecked = true;
+                await scope.Runs.UpdateStepAsync(visit).ConfigureAwait(false);
+                await RouteAsync(scope, state, step, visit, checkLoop: false, checkFiles: false, CancellationToken.None).ConfigureAwait(false);
+                return;
+            }
+
+            case WorkflowWaitingKinds.WrapUpFailed:
+                _watches.TryRemove(sessionId, out _);
+                visit.Status = WorkflowRunStepStatus.Running;
+                visit.Outcome = null;
+                visit.HandOffNote = null;
+                await scope.Runs.UpdateStepAsync(visit).ConfigureAwait(false);
+                state.Run.Status = WorkflowRunStatus.Running;
+                state.Run.WaitingReason = null;
+                state.Run.WaitingKind = null;
+                await SaveRunAsync(scope, state).ConfigureAwait(false);
+                return;
         }
     }
 
@@ -613,7 +990,10 @@ public sealed partial class WorkflowRunner(
         var visit = state.Current;
         if (state.Run.Status == WorkflowRunStatus.Waiting)
         {
-            // A step that stopped without the tool can still finish if the user replies to it.
+            // A step that stopped without the tool can still finish if the user replies to it; one that waits on a
+            // missing file or a wrap-up hears when the user's reply there ends.
+            if (state.Run.WaitingKind is WorkflowWaitingKinds.MissingFiles or WorkflowWaitingKinds.WrapUpFailed && visit?.SessionId is { } waiting)
+                _watches[waiting] = StepWatch.ForReply(state.Run.Id, visit, state.Run.UserId);
             return;
         }
 
@@ -631,6 +1011,18 @@ public sealed partial class WorkflowRunner(
                 await StartVisitAsync(scope, state, agent, visit, ct).ConfigureAwait(false);
                 break;
 
+            case WorkflowRunStepStatus.Running when visit.Finish == WorkflowFinishers.You:
+                // A conversation with the user: the restart stopped its turn, and the user carries on by replying.
+                break;
+
+            case WorkflowRunStepStatus.WrappingUp when step is WorkflowAgentStep agent:
+                await WaitAsync(scope, state, visit.StepId,
+                    $"Fleet restarted during {agent.Title}'s wrap-up, which stopped it. Reply to the agent in its session, or move on anyway.",
+                    WorkflowWaitingKinds.WrapUpFailed).ConfigureAwait(false);
+                if (visit.SessionId is { } wrapping)
+                    _watches[wrapping] = StepWatch.ForReply(state.Run.Id, visit, state.Run.UserId);
+                break;
+
             case WorkflowRunStepStatus.Running when step is not null:
                 visit.Status = WorkflowRunStepStatus.Waiting;
                 await scope.Runs.UpdateStepAsync(visit).ConfigureAwait(false);
@@ -640,7 +1032,7 @@ public sealed partial class WorkflowRunner(
                 break;
 
             case WorkflowRunStepStatus.Done when step is WorkflowAgentStep agent:
-                await RouteAsync(scope, state, agent, visit, checkLoop: true, ct).ConfigureAwait(false);
+                await RouteAsync(scope, state, agent, visit, checkLoop: true, checkFiles: true, ct).ConfigureAwait(false);
                 break;
 
             case WorkflowRunStepStatus.Skipped:
@@ -720,16 +1112,131 @@ public sealed partial class WorkflowRunner(
         public bool NeedsYou { get; set; }
     }
 
-    /// <summary>A running step's session, until its turn ends.</summary>
-    private sealed class StepWatch(string runId, string visitId, string userId)
+    private enum WatchKind
     {
+        /// <summary>A step the agent finishes: its turn ending without the tool stops the run on the user.</summary>
+        Stall,
+
+        /// <summary>The turn that answers the wrap-up prompt of a step the user moved on from.</summary>
+        WrapUp,
+
+        /// <summary>A turn the user starts in a step that waits on a missing file or a wrap-up.</summary>
+        Reply,
+    }
+
+    /// <summary>A step session's turn Fleet is waiting to end.</summary>
+    private sealed class StepWatch(string runId, string visitId, string userId, WatchKind kind, IReadOnlySet<string>? ownPrompts = null)
+    {
+        private readonly Lock _gate = new();
+        private readonly List<(string Id, string? ParentId)> _early = [];
+        private readonly List<(string? MessageId, string? Error)> _earlyFailures = [];
+        private readonly HashSet<string> _replies = new(StringComparer.Ordinal);
+        private bool _idledEarly;
+
         public string RunId { get; } = runId;
         public string VisitId { get; } = visitId;
         public string UserId { get; } = userId;
+        public WatchKind Kind { get; } = kind;
 
-        /// <summary>The step's turn has started: an assistant message, or a failure.</summary>
-        public volatile bool Armed;
-        public string? Failure { get; set; }
+        /// <summary>The wrap-up prompt's id, once it's sent. Its replies name it as their parent.</summary>
+        public string? MessageId { get; private set; }
+
+        /// <summary>The watched turn has started: an assistant message in it, or a failure.</summary>
+        public bool Armed { get; private set; }
+
+        public string? Failure { get; private set; }
+
+        /// <summary>
+        /// Watches for a turn the user starts: its replies name the user's message, not the step's prompt or the
+        /// wrap-up, whose last events can still arrive.
+        /// </summary>
+        public static StepWatch ForReply(string runId, WorkflowRunStep visit, string userId)
+            => new(runId, visit.Id, userId, WatchKind.Reply, new[] { visit.PromptMessageId, visit.WrapUpMessageId }.OfType<string>().ToHashSet(StringComparer.Ordinal));
+
+        public void Saw(string id, string? parentId)
+        {
+            lock (_gate)
+            {
+                switch (Kind)
+                {
+                    case WatchKind.Stall:
+                        Armed = true;
+                        break;
+                    case WatchKind.WrapUp when MessageId is null:
+                        _early.Add((id, parentId));
+                        break;
+                    case WatchKind.WrapUp when parentId == MessageId:
+                        Armed = true;
+                        _replies.Add(id);
+                        break;
+                    case WatchKind.Reply when parentId is null || ownPrompts is null || !ownPrompts.Contains(parentId):
+                        Armed = true;
+                        break;
+                }
+            }
+        }
+
+        public void Failed(string? messageId, string? error)
+        {
+            lock (_gate)
+            {
+                switch (Kind)
+                {
+                    case WatchKind.Stall:
+                        Armed = true;
+                        Failure = error;
+                        break;
+                    case WatchKind.WrapUp when MessageId is null:
+                        _earlyFailures.Add((messageId, error));
+                        break;
+                    case WatchKind.WrapUp when messageId is null ? Armed : _replies.Contains(messageId):
+                        Failure = error;
+                        break;
+                }
+            }
+        }
+
+        /// <summary>Whether this idle can end the watched turn.</summary>
+        public bool Idled()
+        {
+            lock (_gate)
+            {
+                if (Kind == WatchKind.WrapUp && MessageId is null)
+                {
+                    _idledEarly = true;
+                    return false;
+                }
+
+                return Armed;
+            }
+        }
+
+        /// <summary>
+        /// The wrap-up prompt went, with this id. True when what came before the send returned already ended its turn.
+        /// </summary>
+        public bool Sent(string messageId)
+        {
+            lock (_gate)
+            {
+                MessageId = messageId;
+                foreach (var (id, parentId) in _early)
+                {
+                    if (parentId == messageId)
+                    {
+                        Armed = true;
+                        _replies.Add(id);
+                    }
+                }
+
+                foreach (var (failedId, error) in _earlyFailures)
+                {
+                    if (failedId is null ? Armed : _replies.Contains(failedId))
+                        Failure = error;
+                }
+
+                return Armed && _idledEarly;
+            }
+        }
     }
 
     private sealed class Scope(IServiceScope scope, IDisposable user) : IDisposable
@@ -738,6 +1245,7 @@ public sealed partial class WorkflowRunner(
         public IWorkflowStepSessions Sessions => scope.ServiceProvider.GetRequiredService<IWorkflowStepSessions>();
         public IWorkflowRunEvents Events => scope.ServiceProvider.GetRequiredService<IWorkflowRunEvents>();
         public WorkflowsFeature Feature => scope.ServiceProvider.GetRequiredService<WorkflowsFeature>();
+        public IWorkflowFiles Files => scope.ServiceProvider.GetRequiredService<IWorkflowFiles>();
 
         public void Dispose()
         {
@@ -757,6 +1265,15 @@ public sealed partial class WorkflowRunner(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Workflow run {RunId}: {StepId} decided {Choice}")]
     private partial void LogDecided(string runId, string stepId, string choice);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Workflow run {RunId}: the user moved on from {StepId} with {Outcome}; wrapping up")]
+    private partial void LogMovingOn(string runId, string stepId, string outcome);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Workflow run {RunId}: the user moved on from {StepId} anyway")]
+    private partial void LogMovedOnAnyway(string runId, string stepId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Workflow run {RunId}: couldn't read the reply to {StepId}'s wrap-up")]
+    private partial void LogReplyReadFailed(Exception ex, string runId, string stepId);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Workflow run {RunId} waits on the user at {StepId}")]
     private partial void LogWaiting(string runId, string stepId);

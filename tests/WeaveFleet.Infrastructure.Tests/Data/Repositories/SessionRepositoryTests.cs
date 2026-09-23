@@ -164,6 +164,34 @@ public sealed class SessionRepositoryTests
     }
 
     [Fact]
+    public async Task InsertAndGetById_PersistsAWorkflowStepTheUserFinishes()
+    {
+        var (conn, repo, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var (ws, inst) = await InsertDependenciesAsync(factory);
+        var session = new Session
+        {
+            Id = Guid.NewGuid().ToString(),
+            WorkspaceId = ws.Id,
+            InstanceId = inst.Id,
+            OpencodeSessionId = "oc-design-1",
+            Title = "Keyboard sheet · Design",
+            Status = "active",
+            Directory = "/tmp/ws",
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            WorkflowRunId = "run-1",
+            WorkflowUserFinishes = true,
+            UserId = TestUserContext.DefaultUserId
+        };
+
+        await repo.InsertAsync(session);
+        var retrieved = (await repo.GetByIdAsync(session.Id)).ShouldNotBeNull();
+
+        (retrieved.WorkflowRunId, retrieved.WorkflowUserFinishes).ShouldBe(("run-1", true));
+    }
+
+    [Fact]
     public async Task ListAsync_ReturnsAllSessions()
     {
         var (conn, repo, factory) = await CreateAsync();

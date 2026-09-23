@@ -94,7 +94,7 @@ public sealed class WorkflowStepBridgeTests
 public sealed class WorkflowModelRolesTests
 {
     private static readonly WorkflowAgentStep Review = new(
-        "review", "Review", 1, "build", WorkflowRoles.Strong, null, null, false, null, "Review it.", ["pass"], new Dictionary<string, string>(), null);
+        "review", "Review", 1, "build", WorkflowRoles.Strong, null, null, false, null, "Review it.", ["pass"], new Dictionary<string, string>(), null, false, []);
 
     private static readonly Dictionary<string, WorkflowModelChoice> Mapped = new()
     {

@@ -73,6 +73,8 @@ steps:
 | `effort`   | The model's reasoning effort (its variant), e.g. `low` or `high`.                                           |
 | `skill`    | A skill the step should use. Fleet adds "Use the \<skill\> skill." to the prompt. A built-in skill has to be on in Settings → Skills. |
 | `optional` | `true`, or a hint for when to switch it on (`For UI and new features`). Off unless switched on in the Run box. |
+| `finish`   | `agent` (the default): the agent ends the step with `fleet_step_done`. `you`: you work through the step together and only you end it. See [Steps you finish](#steps-you-finish). |
+| `writes`   | The files the step writes, relative to the run's worktree, e.g. `docs/design/{{slug}}.md`. Fleet checks they exist before the next step starts. See [Declared files](#declared-files). |
 | `prompt`   | Required. What the agent should do. See [Variables](#variables).                                          |
 | `outcomes` | Required. The words the agent can finish with, e.g. `[pass, changes]`.                                      |
 | `on`       | Where an outcome leads: a step's id or `end`, plus `max` for loops. Outcomes not listed go to the next step. |
@@ -98,17 +100,24 @@ notification you already have (Settings → Features) tells you.
 |----------------------------|---------------------------------------------------------------------------------|
 | `{{request}}`              | What you typed in the Run box.                                                  |
 | `{{slug}}`                 | The request as a short slug, e.g. `press-see-every-keyboard-shortcut`.          |
-| `{{previous.summary}}`     | The last agent step's `fleet_step_done` summary, whole.                         |
+| `{{previous.summary}}`     | The last agent step's summary, whole: its `fleet_step_done` summary, or for a step you finished, the agent's reply to the wrap-up. |
+| `{{previous.files}}`       | The files the last agent step declares, e.g. `docs/design/x.md and docs/design/x.html`. |
 | `{{steps.<id>.summary}}`   | That step's latest summary.                                                     |
+| `{{steps.<id>.files}}`     | The files that step declares, once it has run.                                  |
 | `{{run.branch}}`           | The run's branch.                                                               |
 | `{{run.base}}`             | The branch the run's worktree started from.                                     |
 
-Anything else is an error. A variable with nothing in it disappears, with the blank lines it leaves.
+Anything else is an error. A line whose variables are all empty is left out, with the blank lines that leaves: with
+Design off, `Read {{previous.files}} first.` isn't in Plan's prompt at all. A line with no variables is always kept,
+and a line where only some of its variables are empty keeps the rest.
+
+A declared file (`writes:`) can use `{{slug}}` and `{{run.branch}}`: the variables a run knows before any step starts.
 
 ## How a run moves
 
 Each agent step starts as a new session in the run's worktree. Its prompt is the step's `prompt` with the variables
-filled in, then a note if the step was sent back, then one short footer that Fleet adds to step sessions only:
+filled in, then a note if the step was sent back, then one short footer that Fleet adds to step sessions only (a step you finish
+has none, see [Steps you finish](#steps-you-finish)):
 
 > This is one step of a Fleet workflow. When the step is finished, call fleet_step_done once, as your last action,
 > with outcome set to one of: pass, changes. Put what the next step needs in summary.
@@ -116,6 +125,9 @@ filled in, then a note if the step was sent back, then one short footer that Fle
 The step ends when its session calls **`fleet_step_done(outcome, summary)`**. The outcome picks the next step, and the
 whole summary is `{{previous.summary}}` for the next one. Anything longer belongs in a file the step writes, like a
 plan, which the next agent reads with its own tools.
+
+A step that declares files (`writes:`) hands them on too: before the next step starts, Fleet checks each one exists
+in the run's worktree. See [Declared files](#declared-files).
 
 Fleet never moves a run on because a session went idle. If a step's turn ends without the tool, the step waits under
 Needs you: pick an outcome on the card, or reply to the agent in that session, and if it then calls the tool the run
@@ -126,6 +138,64 @@ carries on. Fleet never prompts an agent on its own.
 A run is saved as rows in Fleet's database. After a restart, a run carries on from where it was: a step that finished
 but whose next step hadn't started goes on; a step whose turn the restart cut off waits for you; a run waiting on you
 keeps waiting.
+
+## Steps you finish
+
+Some steps are a conversation: a design is worked out with you, not handed over. A step with `finish: you` is one you
+finish yourself:
+
+- Its session doesn't have `fleet_step_done`, and its prompt has no footer, so the agent can't end the step or keep
+  offering to. You talk to it in that session for as long as you like.
+- A **You finish Design** bar above the composer has a note for the next step and **Move on to Plan**. A step with
+  more than one outcome has one button per outcome: **Pass: on to …** and **Changes: back to Implement (1 of 2)**. A
+  loop's `max` still counts; when it's used up, that button says so.
+- The run row and the step row say **With you**. It isn't Needs you: it's an ordinary conversation.
+
+**Move on** sends one prompt into the same session, the only text Fleet ever sends into a step you finish:
+
+> The user is moving on to Plan. Update docs/design/x.md and docs/design/x.html with everything agreed in this
+> conversation, then reply with a short summary for Plan.
+
+With more than one outcome it says which you chose ("The user chose changes and is moving on to Implement."); your
+note is added as "Their note: …"; with no declared files it only asks for the summary. The run moves on when the turn
+that answers that prompt ends. The agent's reply is `{{previous.summary}}` for the next step, and your note is added to
+the next step's prompt as "Note from the user:".
+
+If the wrap-up fails, or a restart cuts it off, the step waits under Needs you. Reply to the agent in its session (the
+step is yours to move on from again once that reply's turn ends), or press **Move on anyway**, which goes on without a
+summary.
+
+### Check with me after each step
+
+A run can make every agent step one you finish: switch on **Check with me after each step** in the Run box, choose
+**Approve, check with me after each step** at the approval, or use the switch in the run's header at any time. A change
+applies from the next step: the step that's running finishes the way it started, so its agent is never given or denied
+the step tool in the middle of a turn.
+
+## Declared files
+
+A design or a plan lives in files, not in a summary. A step says which files it writes:
+
+```yaml
+  - id: design
+    title: Design
+    finish: you
+    writes:
+      - docs/design/{{slug}}.md
+      - docs/design/{{slug}}.html
+```
+
+Paths are relative to the run's worktree: a run has one worktree and branch, and every step works in it, so Plan finds
+Design's files in its own folder, committed or not. Before the next step starts, Fleet checks every declared file
+exists, for every step that declares any, whoever finishes it. If one is missing, the step waits under Needs you: reply
+to the agent in its session (when that reply's turn ends, Fleet looks again and goes on if the files are there now), or
+press **Move on anyway**.
+
+What's committed goes in the pull request. A workflow that shouldn't ship its design docs can write them to a path git
+ignores.
+
+When the run stops at a You decide step, the files the step before it declares open next to the card: Approve the plan
+shows the plan.
 
 ## Models
 
