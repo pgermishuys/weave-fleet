@@ -2,6 +2,7 @@ import { computed, readonly, ref, shallowRef, toValue, watch, type ComputedRef, 
 import { useFindFiles } from "@/composables/use-find-files";
 import { api } from "@/api/client";
 import type { AutocompleteAgent, AutocompleteCommand } from "@/api/client";
+import { onCatalogChange } from "@/lib/harness-catalog-changes";
 
 export interface AutocompleteItem {
   id: string;
@@ -44,15 +45,27 @@ interface UseStaticInstanceDataResult<T> {
   error: Readonly<ShallowRef<string | undefined>>;
 }
 
+/** Counts the pushed changes to what the session's harness offers where it runs, so its lists ask again. */
+function sessionCatalogChanges(sessionId: Ref<string>): Ref<number> {
+  const changes = shallowRef(0);
+  onCatalogChange((change) => {
+    if (sessionId.value && change.sessionIds.includes(sessionId.value)) {
+      changes.value += 1;
+    }
+  });
+  return changes;
+}
+
 function useSessionCommands(sessionId: MaybeRefOrGetter<string | null | undefined>): UseStaticInstanceDataResult<AutocompleteCommand> {
   const data = ref<AutocompleteCommand[]>([]);
   const currentSessionId = computed(() => toValue(sessionId)?.trim() ?? "");
   const isLoading = shallowRef(Boolean(currentSessionId.value));
   const error = shallowRef<string | undefined>(undefined);
+  const changes = sessionCatalogChanges(currentSessionId);
 
   watch(
-    currentSessionId,
-    async (nextSessionId, _previousSessionId, onCleanup) => {
+    [currentSessionId, changes],
+    async ([nextSessionId], previous, onCleanup) => {
       if (!nextSessionId) {
         data.value = [];
         isLoading.value = false;
@@ -64,7 +77,10 @@ function useSessionCommands(sessionId: MaybeRefOrGetter<string | null | undefine
       onCleanup(() => {
         controller.abort();
       });
-      isLoading.value = true;
+      // Asked again because the harness's list changed: the old one stays up meanwhile.
+      if (previous?.[0] !== nextSessionId) {
+        isLoading.value = true;
+      }
       error.value = undefined;
 
       try {
@@ -101,10 +117,11 @@ function useSessionAgents(sessionId: MaybeRefOrGetter<string | null | undefined>
   const currentSessionId = computed(() => toValue(sessionId)?.trim() ?? "");
   const isLoading = shallowRef(Boolean(currentSessionId.value));
   const error = shallowRef<string | undefined>(undefined);
+  const changes = sessionCatalogChanges(currentSessionId);
 
   watch(
-    currentSessionId,
-    async (nextSessionId, _previousSessionId, onCleanup) => {
+    [currentSessionId, changes],
+    async ([nextSessionId], previous, onCleanup) => {
       if (!nextSessionId) {
         data.value = [];
         isLoading.value = false;
@@ -116,7 +133,10 @@ function useSessionAgents(sessionId: MaybeRefOrGetter<string | null | undefined>
       onCleanup(() => {
         controller.abort();
       });
-      isLoading.value = true;
+      // Asked again because the harness's list changed: the old one stays up meanwhile.
+      if (previous?.[0] !== nextSessionId) {
+        isLoading.value = true;
+      }
       error.value = undefined;
 
       try {

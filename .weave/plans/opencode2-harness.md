@@ -498,6 +498,31 @@ About 4–5 weeks for parity with the OpenCode harness. Stages 0–2 (≈ 2 week
 harness behind the off-by-default switch. V2 is days old and its API spec calls itself experimental: pin a
 version and expect changes.
 
+## Live catalog (Track H) (2026-09-22)
+
+- [x] `OpenCode2Server` keeps listening after the load gate. For a folder Fleet asked about (`LoadLocationAsync`) or
+      runs a session in, `agent/model/provider/command/config.updated` count as a change; `skill`, `plugin`,
+      `websearch`, `reference` and `integration.updated` don't (nothing Fleet lists). A change is told once V2 has been
+      quiet about the folder for 1 s, and nothing in a folder's first 3 s after its load gate completed counts (the
+      rest of its loading burst). V2's own working folder is never told.
+- [x] The runtime publishes a harness-neutral `harness.catalog_changed` on the `sessions` topic
+      (`HarnessCatalogChanges`, Application): harness type, folder, `quickChat`, the Fleet profile ids whose catalog it
+      is (`none` for the server without a profile; a profile's server names every profile id that asked for its
+      content hash) and the Fleet sessions in that folder on that server. OpenCode 1 never sends it.
+- [x] Client: `useHarnessCatalog` refetches when harness, folder and profile match (the old list stays up meanwhile)
+      and forgets cached catalogs a change is about; a session's slash-command and `@` agent lists refetch when the
+      change names the session. No polling.
+- Checked live (2.0.9, separate mode, scratch Fleet): two composers on one folder (No profile, a profile). An agent
+  file in the repo's `.opencode/agents/`, then one in V2's config folder, each reached both composers without
+  reopening, with one catalog request per composer per change (both servers had loaded the folder, so two broadcasts,
+  each matched by its own profile). Starting sessions in a new folder and in the open one made no request. A session's
+  open slash list showed a new `.opencode/commands/*.md` with one request. An OpenCode 1 session answered beside it.
+- Learned: creating `.opencode/` and writing a file into it straight away can reach V2 as two bursts (the new config
+  folder, then the file) more than 500 ms apart; 1 s of quiet merged them in every run. V2 lists
+  `.opencode/commands/*.md` as commands and hot-reloads them.
+- **Left for later:** a session's own agent and model pickers in the conversation (`useAgents`, `useModels`) don't
+  listen yet. A catalog that changed while its server was down (replaced, idle-stopped) isn't told.
+
 ## "Needs input" inside the parent's conversation (2026-09-22)
 
 Track I. Shared code, every harness (OpenCode's `task`, OpenCode 2's `subagent`, Fleet's own delegations).

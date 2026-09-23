@@ -159,6 +159,10 @@ public sealed class OpenCode2LiveFleet : IAsyncLifetime
 
     /// <summary>Collects what Fleet broadcasts to the owner about <paramref name="sessionIds"/> until <paramref name="ct"/> ends.</summary>
     public LiveEvents Watch(CancellationToken ct, params string[] sessionIds)
+        => WatchTopics([.. sessionIds.Select(id => $"session:{id}")], ct);
+
+    /// <summary>Collects what Fleet broadcasts to the owner on <paramref name="topics"/> (e.g. <c>sessions</c>) until <paramref name="ct"/> ends.</summary>
+    public LiveEvents WatchTopics(IReadOnlyList<string> topics, CancellationToken ct)
     {
         var events = new LiveEvents();
         var broadcaster = Services.GetRequiredService<IEventBroadcaster>();
@@ -166,7 +170,7 @@ public sealed class OpenCode2LiveFleet : IAsyncLifetime
         {
             try
             {
-                await foreach (var e in broadcaster.SubscribeAsync([.. sessionIds.Select(id => $"session:{id}")], Owner, ct))
+                await foreach (var e in broadcaster.SubscribeAsync(topics, Owner, ct))
                     events.Add(e);
             }
             catch (OperationCanceledException)
