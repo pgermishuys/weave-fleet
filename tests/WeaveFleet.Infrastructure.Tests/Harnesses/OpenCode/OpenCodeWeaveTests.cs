@@ -142,6 +142,38 @@ public sealed class OpenCodeWeaveTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task a_try_reads_weaves_log_while_weave_keeps_it_open_and_reports_only_its_own_errors()
+    {
+        // Weave's log stays open in the trial process between tries, as it does on Windows where it can't be deleted.
+        FileStream? log = null;
+        var tries = 0;
+        _openCode.Agents = directory =>
+        {
+            Directory.CreateDirectory(Path.Combine(directory, ".weave"));
+            log ??= new FileStream(Path.Combine(directory, ".weave", "weave.log"), FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+            var line = ++tries == 1
+                ? """{"level":50,"errors":[{"type":"ParseError","path":"/x/config.weave","errors":[{"type":"UnclosedBlock","line":2,"column":1}]}],"msg":"Failed to load Weave config"}"""
+                : """{"level":30,"msg":"Config loaded successfully"}""";
+            log.Write(System.Text.Encoding.UTF8.GetBytes(line + "\n"));
+            log.Flush();
+            return [Agent("build", native: true)];
+        };
+
+        try
+        {
+            var first = await _weave.CheckAsync(Owner, WeaveFlavor.Weave, new Dictionary<string, string> { ["config.weave"] = "agent a {" }, CancellationToken.None);
+            var second = await _weave.CheckAsync(Owner, WeaveFlavor.Weave, new Dictionary<string, string> { ["config.weave"] = "" }, CancellationToken.None);
+
+            first.Details.ShouldBe(["config.weave:2:1 UnclosedBlock"]);
+            second.Details.ShouldBeEmpty();
+        }
+        finally
+        {
+            log?.Dispose();
+        }
+    }
+
+    [Fact]
     public async Task each_try_reloads_the_trial_folder_so_weave_reads_the_new_draft()
     {
         _openCode.Agents = _ => [Agent("loom", "[weave-managed]")];
