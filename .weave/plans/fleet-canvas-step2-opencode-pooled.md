@@ -47,7 +47,7 @@ Ground truth from the codebase (2026-09-12). Don't re-check these:
   - Terminal, repo and personal canvases, and a JSON Schema engine (steps 3–5).
   - All user edits to a canvas (Decision 7): drag, remove, the Ask-agent chip, and everything beyond them. The server-side support for move and remove stays, unused.
   - Canvas tool-card variant, the live dot on the tab, and the version badge. Tool calls show as generic tool cards for now.
-  - Removing `visualize.ts` from the catalog. The client keeps rendering its output. Retiring it is a follow-up once `fleet_canvas_open` has shipped.
+  - Removing `visualize.ts` from the catalog. The client keeps rendering its output. Retiring it is a follow-up once `fleet_canvas_open` has shipped. **Done**: the global `visualize.ts` and its catalog/fixture references were removed once `fleet_canvas_open` shipped; `LegacyInstallMigrationHostedService` still cleans up any old installs, and `visual/flow`/`visual/sequence` payload rendering stays for history.
   - Markdown and HTML canvas kinds.
 - Constraints:
   - AOT-safe: `System.Text.Json.Nodes` plus source-generated contexts, with hand-written ops and validators.

@@ -43,7 +43,7 @@ public sealed class OpenCodeReopenedSessionTests
                          "time": { "start": 1, "end": 2 } } }
             """,
         ["visual"] = """
-            { "type": "tool", "id": "prt_vis", "sessionID": "ses_1", "messageID": "msg_1", "callID": "toolu_vis", "tool": "visualize",
+            { "type": "tool", "id": "prt_vis", "sessionID": "ses_1", "messageID": "msg_1", "callID": "toolu_vis", "tool": "search_code",
               "state": { "status": "completed", "input": { "type": "flow" }, "title": "Flow",
                          "output": "{\"$type\":\"visual/flow\",\"content\":{\"nodes\":[{\"id\":\"a\",\"label\":\"A\"}]}}",
                          "metadata": { "truncated": false }, "time": { "start": 1, "end": 2 } } }
