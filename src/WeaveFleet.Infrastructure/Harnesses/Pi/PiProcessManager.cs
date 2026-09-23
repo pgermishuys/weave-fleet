@@ -190,7 +190,7 @@ internal sealed class PiProcessManager : IPiProcessManager
     }
 
     /// <summary>
-    /// Gracefully stops the process by closing stdin first, then force-killing the process group after
+    /// Gracefully stops the process by closing stdin first, then force-killing it and its children after
     /// <paramref name="timeout"/> if necessary.
     /// </summary>
     public async Task StopAsync(TimeSpan timeout)

@@ -265,12 +265,8 @@ internal sealed class OpenCodeProcessManager : IAsyncDisposable
 
         try
         {
-            // Kill the entire process group (Unix) or process tree (Windows)
+            // Kill the process and its children
             ProcessGroupHelper.KillProcessGroup(_process, _logger);
-
-            // On Linux setpgid usually fails because the child has already exec'd, so there's no group to
-            // kill and the process would outlive Fleet. Kill the tree directly as well.
-            _process.Kill(entireProcessTree: true);
 
             await _process.WaitForExitAsync().WaitAsync(timeout).ConfigureAwait(false);
         }

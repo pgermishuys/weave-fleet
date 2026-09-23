@@ -172,6 +172,19 @@ public sealed class HarnessOptions
     /// through the API. Experimental: a user's <c>SessionMessages</c> preference wins over this. Default: false.
     /// </summary>
     public bool SessionMessages { get; set; }
+
+    /// <summary>
+    /// Where Fleet records the harness processes it starts on Linux and macOS, so one left running by a Fleet that
+    /// died without stopping it is stopped when a Fleet starts again. Default: "" (<c>harness-processes</c> in the
+    /// user's <see cref="FleetPaths.DefaultAppDataDirectory"/>, shared by every Fleet the user runs: each stops only
+    /// what a Fleet that's gone left running).
+    /// </summary>
+    public string ProcessRecordsDirectory { get; set; } = "";
+
+    /// <summary><see cref="ProcessRecordsDirectory"/>, or its default when it's empty.</summary>
+    public string ResolvedProcessRecordsDirectory => string.IsNullOrWhiteSpace(ProcessRecordsDirectory)
+        ? Path.Combine(FleetPaths.DefaultAppDataDirectory, "harness-processes")
+        : ProcessRecordsDirectory;
 }
 
 /// <summary>Transactional outbox polling and retention configuration.</summary>

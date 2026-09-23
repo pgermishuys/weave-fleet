@@ -48,6 +48,9 @@ internal sealed partial class OpenCode2Servers(
         await _lock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
+            // Disposed while this waited: a server started now would never be stopped.
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
             if (_servers.TryGetValue(key, out var existing))
             {
                 if (existing.IsRunning
