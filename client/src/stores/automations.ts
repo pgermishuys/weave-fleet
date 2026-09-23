@@ -25,14 +25,19 @@ export interface Automation {
   isolation?: string | null;
   /** Where a run's worktree starts; null for the repository's default. */
   baseBranch?: string | null;
-  /** The harness runs use, kept with an agent or model; null for the default harness at run time. */
+  /** The harness runs use, kept with an agent or model (or a workflow); null for the default harness at run time. */
   harnessType?: string | null;
+  /** The workflow a "workflow" target runs (`builtin:…` or `repo:…`); null for other targets. */
+  workflowId?: string | null;
+  /** The workflow's optional steps switched on for its runs. */
+  workflowSteps?: readonly string[] | null;
   /** When it runs next (ISO, UTC); null when it's off or waits for an event. */
   nextRunAt?: string | null;
   lastRun?: AutomationRun | null;
 }
 
-export type AutomationRunState = "starting" | "running" | "done" | "failed" | "skipped";
+/** A run that started a workflow run follows it, so it can also wait on you or be ended. */
+export type AutomationRunState = "starting" | "running" | "waiting" | "done" | "ended" | "failed" | "skipped";
 
 export interface AutomationRun {
   id: string;
@@ -46,6 +51,8 @@ export interface AutomationRun {
   instanceId: string | null;
   /** Why it failed or was skipped. */
   error: string | null;
+  /** The workflow run it started, for a "workflow" target. */
+  workflowRunId?: string | null;
 }
 
 /** A new automation's starting point from a session ("Repeat on a schedule…"). */
@@ -72,8 +79,11 @@ export interface CreateAutomationRequest {
   timeZone?: string | null;
   isolation?: string | null;
   baseBranch?: string | null;
-  /** The harness `model` and `agent` were picked from; ignored without either. */
+  /** The harness `model` and `agent` were picked from, ignored without either; for a workflow, the harness it runs on. */
   harnessType?: string | null;
+  /** For a "workflow" target: the workflow and its optional steps switched on. */
+  workflowId?: string | null;
+  workflowSteps?: string[];
 }
 
 export type UpdateAutomationRequest = CreateAutomationRequest;

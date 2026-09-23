@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseSchedule, promptFrom } from "@/lib/automation-schedule";
-import { automationRowStatus, describeAutomationPlan, describeRunTrigger, type AutomationPlanInput } from "@/lib/automations";
+import { automationRowStatus, describeAutomationPlan, describeRunState, describeRunTrigger, type AutomationPlanInput } from "@/lib/automations";
 import type { Automation } from "@/stores/automations";
 
 // Tuesday 15 September 2026, 10:00.
@@ -77,6 +77,34 @@ describe("automationRowStatus", () => {
     expect(automationRowStatus({ ...base, lastRun: { state: "failed" } } as Automation, NOW)).toEqual({ label: "Failed", tone: "error", glyph: "error" });
     expect(automationRowStatus({ ...base, isEnabled: false, nextRunAt: null }, NOW).label).toBe("Off");
     expect(automationRowStatus({ ...base, triggerType: "event", nextRunAt: null }, NOW).label).toBe("On event");
+  });
+
+  it("says Needs you while the workflow run its latest run started waits on the user, even when it's off", () => {
+    expect(automationRowStatus({ ...base, isEnabled: false, lastRun: { state: "waiting" } } as Automation, NOW))
+      .toEqual({ label: "Needs you", tone: "warn", glyph: null });
+  });
+});
+
+describe("describeRunState", () => {
+  it("follows a workflow run: Needs you while it waits, Ended once it's ended", () => {
+    expect(describeRunState({ state: "waiting" })).toEqual({ label: "Needs you", tone: "warn" });
+    expect(describeRunState({ state: "ended" })).toEqual({ label: "Ended", tone: "quiet" });
+    expect(describeRunState({ state: "skipped" })).toEqual({ label: "Skipped", tone: "warn" });
+  });
+});
+
+describe("describeAutomationPlan for a workflow", () => {
+  it("names the workflow, where it runs, and that Check with me is off", () => {
+    expect(planFor("Every Monday at 9am, bump the dependencies", { workflow: "Build a feature" })).toBe(
+      "Runs every Monday at 09:00 (Europe/London time), next Mon 21 Sep, 09:00. Each run: Build a feature in a new worktree of "
+      + "~/source/weave-fleet from origin/main, with your message as the request. Check with me is off; the run stops only where "
+      + "the workflow asks you.");
+  });
+
+  it("asks for the workflow, and for a repository", () => {
+    expect(planFor("Every Monday at 9am, bump it", { workflow: null })).toContain("Pick the workflow it runs.");
+    expect(planFor("Every Monday at 9am, bump it", { workflow: "Build a feature", folder: null }))
+      .toContain("Each run: Build a feature. Pick the repository it runs in.");
   });
 });
 

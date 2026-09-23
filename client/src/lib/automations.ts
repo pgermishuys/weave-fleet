@@ -70,6 +70,8 @@ export interface AutomationPlanInput {
   /** Where a worktree starts, once known. */
   base: string | null;
   sameSession: boolean;
+  /** The workflow each run starts, by name; null when runs are sessions. */
+  workflow?: string | null;
   /** The zone the schedule will be saved in (the browser's). */
   timeZone: string;
   /** An existing automation's zone, to say when saving moves it; undefined for a new one. */
@@ -123,6 +125,22 @@ export function describeAutomationPlan(input: AutomationPlanInput): AutomationPl
 
   const rest: PlanPart[] = [];
   const session = input.sameSession ? "session" : "new session";
+  if (input.workflow !== undefined) {
+    if (!input.workflow) {
+      rest.push({ text: "Pick the workflow it runs." });
+    } else if (folder?.kind !== "repository") {
+      rest.push({ text: `Each run: ${input.workflow}. Pick the repository it runs in.` });
+    } else {
+      rest.push(
+        { text: `Each run: ${input.workflow} in a new worktree of ` },
+        { text: tildePath(folder.path), code: true },
+        ...(input.base ? [{ text: " from " }, { text: input.base, code: true }] : []),
+        { text: ", with your message as the request. Check with me is off; the run stops only where the workflow asks you." },
+      );
+    }
+    if (input.hit && !input.prompt) rest.push({ text: " Say what it should do.", warn: true });
+    return { schedule, ask, rest };
+  }
   if (!folder) {
     rest.push({ text: "Choose where it runs." });
   } else if (folder.kind === "none") {
@@ -177,6 +195,10 @@ export function describeRunState(run: Pick<AutomationRun, "state">): { label: st
       return { label: "Starting", tone: "working" };
     case "running":
       return { label: "Running", tone: "working" };
+    case "waiting":
+      return { label: "Needs you", tone: "warn" };
+    case "ended":
+      return { label: "Ended", tone: "quiet" };
     case "failed":
       return { label: "Failed", tone: "error" };
     case "skipped":
@@ -194,6 +216,9 @@ export function automationRowStatus(automation: Automation, from: Date = new Dat
   const last = automation.lastRun;
   if (last && (last.state === "running" || last.state === "starting")) {
     return { label: "Running", tone: "working", glyph: "working" };
+  }
+  if (last?.state === "waiting") {
+    return { label: "Needs you", tone: "warn", glyph: null };
   }
   if (!automation.isEnabled) {
     return { label: "Off", tone: "quiet", glyph: null };

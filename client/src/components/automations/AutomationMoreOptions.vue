@@ -8,6 +8,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 defineProps<{
   /** The name it gets when none is typed, from the prompt's first words. */
   namePlaceholder: string;
+  /** A workflow's runs never pile up, whatever the switch says, so it's shown as a fact instead. */
+  alwaysSkips?: boolean;
   disabled?: boolean;
 }>();
 
@@ -63,7 +65,18 @@ const skipId = useId();
           @keydown.enter.prevent="open = false"
         >
       </div>
+      <p
+        v-if="alwaysSkips"
+        class="automation-more__check"
+        data-testid="automation-always-skips"
+      >
+        <span>
+          A firing is skipped while the last run is unfinished
+          <small>So a workflow run waiting on you never has another piled up behind it.</small>
+        </span>
+      </p>
       <label
+        v-else
         :for="skipId"
         class="automation-more__check"
       >
