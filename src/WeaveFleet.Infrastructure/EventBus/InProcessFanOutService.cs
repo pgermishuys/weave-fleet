@@ -84,6 +84,12 @@ internal sealed partial class InProcessFanOutService : BackgroundService
             return;
         }
 
+        if (IsToolResultRecord(evt))
+        {
+            _logger.LogDebug("[FanOut] Kept tool-result record from clients type={Type}", eventType);
+            return;
+        }
+
         var activityStatus = ParseActivityStatus(evt.Type, evt.Payload);
 
         // Fan out to the broadcaster on the per-session WebSocket topic.
@@ -194,6 +200,20 @@ internal sealed partial class InProcessFanOutService : BackgroundService
 
         return false;
     }
+
+    /// <summary>
+    /// Fleet's own record of what a tool returned (<see cref="Harnesses.ToolResultEventBuilder"/>), which the harnesses
+    /// add so a session's history keeps its tool output. It's for Fleet, not clients: they get the result on the tool
+    /// part itself, and the record carries no <c>messageID</c> to place it by, so a client that took it threw.
+    /// </summary>
+    private static bool IsToolResultRecord(HarnessEvent evt)
+        => evt.Type == EventTypes.MessagePartUpdated
+           && evt.Payload is { ValueKind: JsonValueKind.Object } payload
+           && payload.TryGetProperty("part", out var part)
+           && part.ValueKind == JsonValueKind.Object
+           && part.TryGetProperty("type", out var type)
+           && type.ValueKind == JsonValueKind.String
+           && type.GetString() == "tool-result";
 
     private static bool HasUserRole(JsonElement? payload)
     {
