@@ -35,7 +35,8 @@ const workflow = computed(() => nav.activeWorkflow.value);
 const editor = useWorkflowEditor();
 const isRepoWorkflow = computed(() => nav.activeWorkflowId.value.startsWith("repo:"));
 const isDraft = computed(() => nav.activeWorkflowId.value === DRAFT_ID);
-const showEditor = computed(() => (isRepoWorkflow.value && !nav.showingRuns.value) || (isDraft.value && editor.drafted.value !== null));
+// A draft stays in the editor through its first save: the editor tells the page it was saved.
+const showEditor = computed(() => (isRepoWorkflow.value && !nav.showingRuns.value) || isDraft.value);
 
 // The model's draft opens in the editor, unsaved, as soon as it comes.
 watch(() => nav.drafted.value, (drafted) => {

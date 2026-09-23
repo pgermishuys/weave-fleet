@@ -1,4 +1,4 @@
-import { computed, ref, shallowRef, watch } from "vue";
+import { computed, effectScope, ref, shallowRef, watch } from "vue";
 import type { NewSessionFolder } from "@/lib/new-session-request";
 import type { DraftedWorkflow } from "@/lib/workflow-draft";
 import type { Workflow, WorkflowLibrary } from "@/lib/workflows";
@@ -29,6 +29,8 @@ let draftController: AbortController | null = null;
 /** Asked before another workflow opens, so unsaved edits aren't dropped without a word. */
 let leaveGuard: (() => boolean) | null = null;
 let watching = false;
+/** Module-level, like the state it reads: made in a component's setup, it would stop when that component unmounts. */
+const repositoryPath = computed(() => (folder.value?.kind === "repository" ? folder.value.path : null));
 let generation = 0;
 
 /**
@@ -38,7 +40,6 @@ let generation = 0;
 export function useWorkflowsNav() {
   const store = useWorkflowsStore();
 
-  const repositoryPath = computed(() => (folder.value?.kind === "repository" ? folder.value.path : null));
 
   async function reload(): Promise<void> {
     const mine = ++generation;
@@ -59,7 +60,8 @@ export function useWorkflowsNav() {
 
   if (!watching) {
     watching = true;
-    watch(repositoryPath, () => void reload());
+    // In a scope of its own: made in whichever component asks first (a session row can), it has to outlive it.
+    effectScope(true).run(() => watch(repositoryPath, () => void reload()));
   }
 
   const builtIns = computed<Workflow[]>(() => library.value?.workflows.filter((w) => w.builtIn) ?? []);
