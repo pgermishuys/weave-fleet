@@ -99,6 +99,7 @@ public sealed partial class OpenCode2LiveTests
             : null);
         using var cts = new CancellationTokenSource(Timeout);
         var folder = fleet.NewFolder("workflow-together");
+        WorkflowLiveGit.Init(folder);
         File.WriteAllText(Path.Combine(folder, "notes.md"), "# Notes");
 
         await SetWorkflowsAsync(true);
@@ -126,6 +127,11 @@ public sealed partial class OpenCode2LiveTests
             var visit = (await StepsAsync(runId)).Single(v => v.StepId == "talk");
             (visit.Status, visit.Outcome, visit.Summary, visit.FilesChecked)
                 .ShouldBe((WorkflowRunStepStatus.Done, "ready", "Summary for Approve: notes.md has the idea.", true));
+
+            // Past the files check, Fleet committed the declared file.
+            (visit.FilesCommit, visit.FilesCommitError).ShouldBe((WorkflowLiveGit.Run(folder, "rev-parse", "--short", "HEAD").Trim(), null));
+            WorkflowLiveGit.Run(folder, "log", "-1", "--format=%s").Trim().ShouldBe("docs: talk (notes.md)");
+            WorkflowLiveGit.Run(folder, "status", "--porcelain", "--", "notes.md").ShouldBeEmpty();
             var wrapUp = fleet.Llm.Queue.Requests.Select(LlmRequest.LastUserText).First(t => t?.StartsWith(wrapUpStart, StringComparison.Ordinal) == true);
             wrapUp.ShouldBe("The user is moving on to Approve. Update notes.md with everything agreed in this conversation, then reply with a short summary for Approve.\n\nTheir note: Keep it short.");
             fleet.Llm.Queue.Requests.Where(r => LlmRequest.LastUserText(r) == wrapUp).ShouldAllBe(r => !LlmRequest.OfferedToolNames(r).Contains(FleetWorkflows.StepTool));

@@ -79,6 +79,8 @@ export interface WorkflowStep {
   choices: WorkflowChoice[];
   /** `finish: you`: the user moves the step on, not the agent. */
   finishYou: boolean;
+  /** `finish: agent`: the agent moves the step on, even with Check with me on. */
+  finishAgent: boolean;
   /** The files the step declares, with their variables, e.g. `docs/design/{{slug}}.md`. */
   writes: string[];
 }
@@ -123,6 +125,8 @@ export interface WorkflowRunStep {
   maxLoops: number | null;
   /** The workflow file says `finish: you`. */
   finishYou: boolean;
+  /** The workflow file says `finish: agent`: Check with me doesn't make it the user's. */
+  finishAgent: boolean;
   /** The user finishes it: how its last visit started, or, for a step still to come, what it will be now. */
   withYou: boolean;
   outcomes: string[];
@@ -141,6 +145,10 @@ export interface WorkflowRunSession {
   files: string[];
   /** They were all there before the next step started. */
   filesChecked: boolean;
+  /** The short SHA of the commit Fleet made of them then; null when there was nothing to commit. */
+  filesCommit: string | null;
+  /** Why Fleet couldn't commit them. The run went on. */
+  filesCommitError: string | null;
   /** The prompt the session started with. */
   promptMessageId: string | null;
   /** The one prompt Fleet sent when the user pressed Move on. */
@@ -435,8 +443,8 @@ export function nextStepTitle(run: WorkflowRun): string | null {
  */
 export function checkWithMeNote(run: WorkflowRun): string | null {
   const step = runningStep(run);
-  // A step the file says the user finishes is theirs whatever the switch says.
-  if (!step || step.finishYou || Boolean(run.checkWithMe) === step.withYou) return null;
+  // A step whose file says who finishes it is that whatever the switch says.
+  if (!step || step.finishYou || step.finishAgent || Boolean(run.checkWithMe) === step.withYou) return null;
   const next = nextStepTitle(run) ?? "the next step";
   return run.checkWithMe
     ? `Check with me is on from ${next}. This step started on its own, so it still moves on when the agent reports it's done.`
