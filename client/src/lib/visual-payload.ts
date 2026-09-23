@@ -8,6 +8,7 @@ export interface VisualPayload {
 }
 
 const VALID_TYPES = new Set(['visual/sequence', 'visual/flow', 'html', 'markdown'])
+const JSON_OBJECT_START = /^\s*\{/
 
 /**
  * Recursively strips dangerous prototype pollution keys from an object.
@@ -39,6 +40,11 @@ function stripDangerousKeys(obj: unknown): unknown {
  * Strips __proto__ and constructor keys recursively before returning.
  */
 export function parseVisualPayload(raw: string): VisualPayload | null {
+  // Most tool output (file reads, command output) isn't JSON, and a failed JSON.parse throws, which is slow.
+  if (!JSON_OBJECT_START.test(raw)) {
+    return null
+  }
+
   try {
     const parsed = JSON.parse(raw)
 

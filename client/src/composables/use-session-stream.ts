@@ -35,6 +35,9 @@ export interface UseSessionStreamResult {
   loadOlder: () => void
 }
 
+/** How long live events wait when no frame comes, as in a hidden tab. */
+const FRAME_FALLBACK_MS = 100
+
 function createEmptyState(): SessionStreamState {
   return {
     messages: [],
@@ -96,6 +99,11 @@ export function useSessionStream(
   const pendingActivity: DomainEvent[] = []
   let unsubscribe: Unsubscribe | null = null
   let unsubscribeActivity: Unsubscribe | null = null
+  // Live events wait here for the next frame. A streamed reply sends a delta per token, each in its own socket
+  // message; applying them one by one re-rendered the conversation for every token.
+  const frameEvents: Array<{ event: DomainEvent; live: boolean }> = []
+  let frameRequest: number | null = null
+  let frameFallback: ReturnType<typeof setTimeout> | null = null
 
   const messages = computed<readonly AccumulatedMessage[]>(() => streamState.value.messages)
   const delegations = computed<readonly DelegationDto[]>(() => streamState.value.delegations)
@@ -110,7 +118,42 @@ export function useSessionStream(
     isPartial.value = false
   }
 
+  function cancelFrame(): void {
+    frameEvents.length = 0
+    if (frameRequest !== null) {
+      cancelAnimationFrame(frameRequest)
+      frameRequest = null
+    }
+    if (frameFallback !== null) {
+      clearTimeout(frameFallback)
+      frameFallback = null
+    }
+  }
+
+  function flushFrame(): void {
+    const events = frameEvents.splice(0, frameEvents.length)
+    cancelFrame()
+    let nextState = streamState.value
+    for (const { event, live } of events) {
+      nextState = live ? applyLiveDomainEvent(nextState, event) : applyDomainEvent(nextState, event)
+    }
+    if (nextState !== streamState.value) {
+      streamState.value = nextState
+    }
+  }
+
+  function applyNextFrame(event: DomainEvent, live: boolean): void {
+    frameEvents.push({ event, live })
+    if (frameRequest !== null) {
+      return
+    }
+    frameRequest = requestAnimationFrame(flushFrame)
+    // A hidden tab gets no frames; the conversation still has to be current when it comes back.
+    frameFallback = setTimeout(flushFrame, FRAME_FALLBACK_MS)
+  }
+
   function cleanupSubscription(): void {
+    cancelFrame()
     pendingEvents.length = 0
     pendingActivity.length = 0
     unsubscribe?.()
@@ -184,6 +227,8 @@ export function useSessionStream(
       unsubscribe = subscribeV2(
         topic,
         (snapshot) => {
+          // The snapshot replaces the state those events would have changed.
+          cancelFrame()
           let nextState = createSessionStreamState(snapshot)
 
           for (const event of pendingEvents.splice(0, pendingEvents.length)) {
@@ -219,7 +264,7 @@ export function useSessionStream(
             return
           }
 
-          streamState.value = applyLiveDomainEvent(streamState.value, event)
+          applyNextFrame(event, true)
         },
         (page) => {
           applyHistoryPage(page)
@@ -238,10 +283,7 @@ export function useSessionStream(
           return
         }
 
-        const nextState = applyDomainEvent(streamState.value, event)
-        if (nextState !== streamState.value) {
-          streamState.value = nextState
-        }
+        applyNextFrame(event, false)
       })
 
       onCleanup(() => {

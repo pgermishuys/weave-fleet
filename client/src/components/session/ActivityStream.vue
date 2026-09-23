@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { ArrowUpRight, Bot, RotateCw, TerminalSquare, TriangleAlert } from "lucide-vue-next";
 import { parsePeerMessage, parsePeerUpdate, type PeerOutcome, type PeerSender } from "@/lib/session-messages";
-import { finishedBackgroundWork, parseBackgroundNotice, type BackgroundNotice } from "@/lib/background-work";
+import { finishedBackgroundWork, parseBackgroundNotice, type BackgroundNotice, type BackgroundState } from "@/lib/background-work";
 import { useRouter } from "@tanstack/vue-router";
 import { storeToRefs } from "pinia";
 import MessageBubble from "@/components/session/MessageBubble.vue";
@@ -83,7 +83,7 @@ const { canSend, retryPrompt } = useSendPrompt(props.sessionId);
 /** The prompt a failed turn was answering, which Retry sends again. */
 const lastUserPrompt = computed<string | undefined>(() => {
   const lastUser = [...sessionMessages.value].reverse().find((message) => message.role === "user");
-  const body = lastUser ? renderMessageBody(lastUser.parts).trim() : "";
+  const body = lastUser ? messageBody(lastUser).trim() : "";
   return body.length > 0 ? body : undefined;
 });
 
@@ -98,8 +98,11 @@ const showJumpToLatest = ref(false);
 
 const SCROLL_BOTTOM_THRESHOLD = 80;
 const SCROLL_TOP_THRESHOLD = 100;
+/** How long every message stays laid out for a jump to one, where the browser doesn't report the scroll's end. */
+const SHOW_MESSAGE_LAYOUT_MS = 2000;
 
 let mutationObserver: MutationObserver | null = null;
+let resizeObserver: ResizeObserver | null = null;
 let keepPinnedToBottom = true;
 let scrollFrame: number | null = null;
 let isRestoringScroll = false;
@@ -178,56 +181,110 @@ watch(
       }
     }
   },
-  { immediate: true, deep: true },
+  { immediate: true },
 );
+
+// A streamed token replaces only the message it belongs to; every other message keeps its object. What's derived
+// from a message is kept with it, so an unchanged message hands its bubble the same props and the bubble doesn't
+// re-render. Rebuilding every message on every token took most of the frame in a long conversation.
+const bodies = new WeakMap<AccumulatedMessage, string>();
+
+function messageBody(message: AccumulatedMessage): string {
+  let body = bodies.get(message);
+  if (body === undefined) {
+    body = renderMessageBody(message.parts);
+    bodies.set(message, body);
+  }
+  return body;
+}
 
 /**
  * How work an agent moved into the background ended, by handle. A backgrounded call's own card can't say: OpenCode 2
  * leaves the call finished and running, and only the notice later in the conversation says the work is done.
  */
-const finishedBackground = computed(() =>
-  finishedBackgroundWork(sessionMessages.value.map((message) => renderMessageBody(message.parts))),
-);
+const finishedBackground = computed<Map<string, BackgroundState>>((previous) => {
+  const next = finishedBackgroundWork(sessionMessages.value.map(messageBody));
+  return previous && sameEntries(previous, next) ? previous : next;
+});
+
+interface DerivedMessage {
+  /** Everything besides the message itself that the derived message was built from. */
+  inputs: readonly unknown[];
+  message: ActivityMessage;
+}
+
+const derivedMessages = new WeakMap<AccumulatedMessage, DerivedMessage>();
+
+/** What a message's view reads besides the message: only what its own parts need, so the rest can't invalidate it. */
+function derivationInputs(message: AccumulatedMessage, finished: ReadonlyMap<string, BackgroundState>): unknown[] {
+  const inputs: unknown[] = [];
+  if (message.modelID) {
+    inputs.push(models.value);
+  }
+
+  const toolParts = message.parts.filter((part): part is AccumulatedToolPart => part.type === "tool");
+  if (toolParts.length > 0) {
+    inputs.push(finished);
+  }
+
+  if (toolParts.some((part) => isSubagentTool(part.tool))) {
+    inputs.push(delegations.value, sessions.value, props.sessionId);
+  }
+
+  return inputs;
+}
+
+function toActivityMessage(message: AccumulatedMessage, finished: ReadonlyMap<string, BackgroundState>): ActivityMessage {
+  const author = getDisplayAuthor(message);
+  const rawBody = messageBody(message);
+  // A notice comes from the harness, not the user or the agent: Fleet gives it its own role, which the client
+  // reads as an assistant-side message.
+  const background = parseBackgroundNotice(rawBody);
+  const peerMessage = message.role === "user" && !background ? parsePeerMessage(rawBody) : null;
+  const peerUpdate = message.role === "user" && !peerMessage && !background ? parsePeerUpdate(rawBody) : null;
+  const fromPeer = peerMessage ?? peerUpdate;
+
+  return {
+    id: message.messageId,
+    author,
+    modelName: modelDisplayName(message.modelID, models.value),
+    senderKey: getSenderKey(message.role, message.agent),
+    role: message.role,
+    createdAt: message.createdAt,
+    body: background ? background.text : fromPeer ? fromPeer.text : rawBody,
+    peer: fromPeer?.peer,
+    peerOutcome: peerUpdate?.outcome,
+    background: background ?? undefined,
+    images: message.parts
+      .filter((part): part is AccumulatedFilePart => part.type === "file" && part.mime.startsWith("image/"))
+      .map((part) => ({ url: part.url, filename: part.filename?.trim() || "image" })),
+    tools: message.parts
+      .filter((part): part is AccumulatedToolPart => part.type === "tool" && !isQuestionPart(part as AccumulatedToolPart))
+      .map((part) => withDelegation(toToolCardItem(part, finished), part)),
+    questionParts: message.parts
+      .filter((part): part is AccumulatedToolPart => part.type === "tool" && isQuestionPart(part as AccumulatedToolPart)),
+    reasoningParts: message.parts
+      .filter((part): part is AccumulatedReasoningPart => part.type === "reasoning"),
+    clusterPosition: "single" as const,
+    showIdentity: true,
+    turnError: message.turnError,
+  } satisfies ActivityMessage;
+}
 
 const deliveredMessages = computed<ActivityMessage[]>(() => {
   const finished = finishedBackground.value;
   // Preserve upstream order from sessionMessages (snapshot + live events)
   return sessionMessages.value
     .map((message) => {
-      const author = getDisplayAuthor(message);
-      const rawBody = renderMessageBody(message.parts);
-      // A notice comes from the harness, not the user or the agent: Fleet gives it its own role, which the client
-      // reads as an assistant-side message.
-      const background = parseBackgroundNotice(rawBody);
-      const peerMessage = message.role === "user" && !background ? parsePeerMessage(rawBody) : null;
-      const peerUpdate = message.role === "user" && !peerMessage && !background ? parsePeerUpdate(rawBody) : null;
-      const fromPeer = peerMessage ?? peerUpdate;
+      const inputs = derivationInputs(message, finished);
+      const cached = derivedMessages.get(message);
+      if (cached && sameItems(cached.inputs, inputs)) {
+        return cached.message;
+      }
 
-      return {
-        id: message.messageId,
-        author,
-        modelName: modelDisplayName(message.modelID, models.value),
-        senderKey: getSenderKey(message.role, message.agent),
-        role: message.role,
-        createdAt: message.createdAt,
-        body: background ? background.text : fromPeer ? fromPeer.text : rawBody,
-        peer: fromPeer?.peer,
-        peerOutcome: peerUpdate?.outcome,
-        background: background ?? undefined,
-        images: message.parts
-          .filter((part): part is AccumulatedFilePart => part.type === "file" && part.mime.startsWith("image/"))
-          .map((part) => ({ url: part.url, filename: part.filename?.trim() || "image" })),
-        tools: message.parts
-          .filter((part): part is AccumulatedToolPart => part.type === "tool" && !isQuestionPart(part as AccumulatedToolPart))
-          .map((part) => withDelegation(toToolCardItem(part, finished), part)),
-        questionParts: message.parts
-          .filter((part): part is AccumulatedToolPart => part.type === "tool" && isQuestionPart(part as AccumulatedToolPart)),
-        reasoningParts: message.parts
-          .filter((part): part is AccumulatedReasoningPart => part.type === "reasoning"),
-        clusterPosition: "single" as const,
-        showIdentity: true,
-        turnError: message.turnError,
-      } satisfies ActivityMessage;
+      const derived = toActivityMessage(message, finished);
+      derivedMessages.set(message, { inputs, message: derived });
+      return derived;
     })
     .filter((message) => message.role === "user" || hasVisibleMessageContent(message));
 });
@@ -273,6 +330,8 @@ const optimisticMessages = computed<ActivityMessage[]>(() => {
   }));
 });
 
+const clusteredMessages = new WeakMap<ActivityMessage, ActivityMessage>();
+
 const messages = computed<ActivityMessage[]>(() => {
   const deliveredIds = new Set(deliveredMessages.value.map((message) => message.id));
   const pendingOptimisticMessages = optimisticMessages.value.filter((message) => {
@@ -293,16 +352,27 @@ const messages = computed<ActivityMessage[]>(() => {
     const nextMessage = baseMessages[index + 1];
     const groupedWithPrevious = isSameSender(previousMessage, message);
     const groupedWithNext = isSameSender(message, nextMessage);
+    const showIdentity = !groupedWithPrevious;
+    const clusterPosition = getClusterPosition(groupedWithPrevious, groupedWithNext);
 
-    return {
-      ...message,
-      showIdentity: !groupedWithPrevious,
-      clusterPosition: getClusterPosition(groupedWithPrevious, groupedWithNext),
-    } satisfies ActivityMessage;
+    const cached = clusteredMessages.get(message);
+    if (cached && cached.showIdentity === showIdentity && cached.clusterPosition === clusterPosition) {
+      return cached;
+    }
+
+    const clustered = { ...message, showIdentity, clusterPosition } satisfies ActivityMessage;
+    clusteredMessages.set(message, clustered);
+    return clustered;
   });
 });
 
 // --- Visual canvases ---
+interface ConversationVisual {
+  toolId: string;
+  createdAt?: number;
+  payload: VisualPayload;
+}
+
 // Every diagram or document the agent renders is listed in the canvas picker.
 // One that arrives while this conversation is open also opens as a canvas tab;
 // history loaded later (or on first render) never opens tabs on its own.
@@ -310,14 +380,30 @@ const mountedAt = Date.now();
 const LIVE_TOLERANCE_MS = 5_000;
 const autoOpenedToolIds = new Set<string>();
 
-const conversationVisuals = computed(() =>
-  deliveredMessages.value.flatMap((message) =>
+const toolVisuals = new WeakMap<ToolCardItem, VisualPayload | null>();
+
+function toolVisual(tool: ToolCardItem): VisualPayload | null {
+  let payload = toolVisuals.get(tool);
+  if (payload === undefined) {
+    payload = tool.output ? parseVisualPayload(tool.output) : null;
+    toolVisuals.set(tool, payload);
+  }
+  return payload;
+}
+
+const conversationVisuals = computed<ConversationVisual[]>((previous) => {
+  const next = deliveredMessages.value.flatMap((message) =>
     (message.tools ?? []).flatMap((tool) => {
-      const payload = tool.output ? parseVisualPayload(tool.output) : null;
+      const payload = toolVisual(tool);
       return payload ? [{ toolId: tool.id, createdAt: message.createdAt, payload }] : [];
     }),
-  ),
-);
+  );
+  // Unchanged unless a visual came or went, so the watcher below runs only then.
+  const unchanged = previous
+    && previous.length === next.length
+    && previous.every((visual, index) => visual.toolId === next[index].toolId && visual.payload === next[index].payload);
+  return unchanged ? previous : next;
+});
 
 watch(
   conversationVisuals,
@@ -405,6 +491,13 @@ function showMessage(messageId: string): void {
   }
 
   keepPinnedToBottom = false;
+  // A message that was never on screen has a guessed height, and a smooth scroll past guessed heights aims at the
+  // wrong place. Every message is laid out for the scroll; each keeps its real height from then on.
+  const stream = streamRef.value!;
+  stream.classList.add("activity-stream--laid-out");
+  const endLayout = () => stream.classList.remove("activity-stream--laid-out");
+  stream.addEventListener("scrollend", endLayout, { once: true });
+  setTimeout(endLayout, SHOW_MESSAGE_LAYOUT_MS);
   target.scrollIntoView({ block: "center", behavior: "smooth" });
   highlightedMessageId.value = messageId;
   clearTimeout(highlightTimer);
@@ -502,11 +595,32 @@ onMounted(() => {
     scrollToBottom();
   });
 
-  mutationObserver = new MutationObserver(() => {
+  // A message can change height without a DOM change: an off-screen message is laid out at a guessed height until
+  // it scrolls into view, and images and diagrams finish loading later. Runs after layout and before paint, so the
+  // pinned view never shows the gap.
+  resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => {
+    if (keepPinnedToBottom) {
+      scrollToBottom();
+    }
+  });
+
+  mutationObserver = new MutationObserver((records) => {
+    for (const record of records) {
+      if (record.target !== streamRef.value) continue;
+      record.addedNodes.forEach((node) => {
+        if (node instanceof Element) resizeObserver?.observe(node);
+      });
+      record.removedNodes.forEach((node) => {
+        if (node instanceof Element) resizeObserver?.unobserve(node);
+      });
+    }
     scheduleScrollToBottom();
   });
 
   if (streamRef.value) {
+    for (const child of Array.from(streamRef.value.children)) {
+      resizeObserver?.observe(child);
+    }
     mutationObserver.observe(streamRef.value, {
       childList: true,
       subtree: true,
@@ -549,6 +663,8 @@ onMounted(() => {
 onUnmounted(() => {
   mutationObserver?.disconnect();
   mutationObserver = null;
+  resizeObserver?.disconnect();
+  resizeObserver = null;
   clearTimeout(highlightTimer);
 
   for (const cleanup of cleanupCallbacks.splice(0)) {
@@ -737,6 +853,24 @@ function hasRenderableAssistantContent(message: AccumulatedMessage): boolean {
 
     return false;
   });
+}
+
+function sameItems(left: readonly unknown[], right: readonly unknown[]): boolean {
+  return left.length === right.length && left.every((item, index) => item === right[index]);
+}
+
+function sameEntries<K, V>(left: ReadonlyMap<K, V>, right: ReadonlyMap<K, V>): boolean {
+  if (left.size !== right.size) {
+    return false;
+  }
+
+  for (const [key, value] of left) {
+    if (right.get(key) !== value) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function renderMessageBody(parts: readonly AccumulatedPart[]): string {
@@ -1172,6 +1306,20 @@ function handleShowCanvas(canvasId: string): void {
   max-width: 760px;
   gap: 0;
   margin: 0 auto 20px;
+}
+
+/* Off-screen messages skip layout and paint, so resizing and scrolling a long conversation only lays out what
+   shows. The containment this brings would clip the model pill below a hovered message, so a message the pointer
+   or focus is in goes without. A skipped message's content no longer holds it open, so it mustn't shrink: the
+   stream is a flex column and would squash every off-screen message to nothing. */
+.activity-message:not(:hover, :focus-within) {
+  flex-shrink: 0;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 320px;
+}
+
+.activity-stream--laid-out .activity-message {
+  content-visibility: visible;
 }
 
 .activity-message--assistant {
