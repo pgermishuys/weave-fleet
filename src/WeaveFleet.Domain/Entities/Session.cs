@@ -49,5 +49,8 @@ public sealed class Session
     /// </summary>
     public string? SelectedAgent { get; set; }
 
+    /// <summary>The workflow run this session is a step of; null for every other session.</summary>
+    public string? WorkflowRunId { get; set; }
+
     public List<string> Tags { get; set; } = [];
 }
