@@ -71,6 +71,18 @@ public sealed partial class WorkflowRunner(
     /// <summary>The choice that goes on past a missing file or a wrap-up that didn't finish.</summary>
     public const string MoveOnAnywayChoice = "move-on-anyway";
 
+    /// <summary>Tries again to start a step Fleet couldn't start, or whose skill was off.</summary>
+    public const string RetryChoice = "retry";
+
+    /// <summary>What a run whose workflow this Fleet can't read ends with, before the parser's first error.</summary>
+    public const string UnreadableResult = "This run's workflow can't be read by this version of Fleet:";
+
+    /// <summary>What the step tool hears once the run has ended.</summary>
+    public const string RunEndedMessage = "This workflow run has ended, so there's no next step to start. Stop here.";
+
+    /// <summary>Starts a step whose skill is off without it, for the rest of the run.</summary>
+    public const string WithoutSkillChoice = "without-skill";
+
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, StepWatch> _watches = new(StringComparer.Ordinal);
     private readonly Lock _gate = new();
@@ -116,11 +128,15 @@ public sealed partial class WorkflowRunner(
             return new WorkflowStepDoneResult(false, WorkflowStepBridge.NotAStepMessage);
 
         WorkflowStepDoneResult? result = null;
-        await WithRunAsync(scope, visit.RunId, async state =>
+        var run = await WithRunAsync(scope, visit.RunId, async state =>
         {
             result = await FinishVisitAsync(scope, state, sessionId, outcome, summary).ConfigureAwait(false);
             return state;
         }).ConfigureAwait(false);
+
+        // The run couldn't be read, so it has ended: a plain refusal, not an error.
+        if (result is null && run is not null)
+            return new WorkflowStepDoneResult(false, RunEndedMessage);
 
         // The agent hears back at once; starting the next step's session can take a while (a worktree, a harness).
         if (result is { Accepted: true })
@@ -132,7 +148,7 @@ public sealed partial class WorkflowRunner(
     private async Task<WorkflowStepDoneResult> FinishVisitAsync(Scope scope, RunState state, string sessionId, string? outcome, string? summary)
     {
         if (WorkflowRunStatus.IsFinished(state.Run.Status))
-            return new WorkflowStepDoneResult(false, "This workflow run has ended, so there's no next step to start. Stop here.");
+            return new WorkflowStepDoneResult(false, RunEndedMessage);
 
         var visit = state.Current;
         if (visit is null || visit.SessionId != sessionId)
@@ -249,6 +265,28 @@ public sealed partial class WorkflowRunner(
             return null;
         }
 
+        if (run.WaitingKind == WorkflowWaitingKinds.SkillOff && step is WorkflowAgentStep skilled)
+        {
+            switch (choiceId)
+            {
+                case RetryChoice when await scope.Skills.IsOffAsync(skilled.Skill).ConfigureAwait(false):
+                    return FleetError.ValidationError("Choice", $"{skilled.Skill} is still off. Turn it on in Settings → Skills, then retry.");
+                case RetryChoice:
+                    break;
+                case WithoutSkillChoice:
+                    if (!state.Options.WithoutSkills.Contains(skilled.Id))
+                        state.Options.WithoutSkills.Add(skilled.Id);
+                    run.Options = state.Options.Write();
+                    LogWithoutSkill(run.Id, skilled.Id, skilled.Skill ?? string.Empty);
+                    break;
+                default:
+                    return FleetError.ValidationError("Choice", "That isn't one of the choices this run is waiting on.");
+            }
+
+            await StartVisitAsync(scope, state, skilled, visit, ct).ConfigureAwait(false);
+            return null;
+        }
+
         switch (step)
         {
             case WorkflowYouStep you when choiceId.StartsWith("choice:", StringComparison.Ordinal)
@@ -279,7 +317,7 @@ public sealed partial class WorkflowRunner(
                 return null;
             }
 
-            case WorkflowAgentStep agent when visit.SessionId is null && choiceId == "retry":
+            case WorkflowAgentStep agent when visit.SessionId is null && choiceId == RetryChoice:
                 await StartVisitAsync(scope, state, agent, visit, ct).ConfigureAwait(false);
                 return null;
 
@@ -592,6 +630,16 @@ public sealed partial class WorkflowRunner(
     private async Task StartVisitAsync(Scope scope, RunState state, WorkflowAgentStep step, WorkflowRunStep visit, CancellationToken ct)
     {
         var run = state.Run;
+
+        // The skill was on when the run started, but a run can wait for days; a step never starts without it unasked.
+        if (!state.Options.WithoutSkills.Contains(step.Id) && await scope.Skills.IsOffAsync(step.Skill).ConfigureAwait(false))
+        {
+            visit.Status = WorkflowRunStepStatus.Waiting;
+            await scope.Runs.UpdateStepAsync(visit).ConfigureAwait(false);
+            await WaitAsync(scope, state, step.Id, WorkflowSkills.NowOffMessage(step), WorkflowWaitingKinds.SkillOff).ConfigureAwait(false);
+            return;
+        }
+
         run.Status = WorkflowRunStatus.Running;
         run.CurrentStepId = step.Id;
         run.WaitingReason = null;
@@ -685,7 +733,7 @@ public sealed partial class WorkflowRunner(
         // The note the user wrote for the next step when they moved on; not for the same step when it comes round again.
         if (previous is { HandOffNote: { } handOff } && previous.StepId != step.Id)
             parts.Add($"Note from the user:\n{handOff}");
-        if (step.Skill is { } skill)
+        if (step.Skill is { } skill && !state.Options.WithoutSkills.Contains(step.Id))
             parts.Add($"Use the {skill} skill.");
         if (visit.Finish != WorkflowFinishers.You)
             parts.Add(FleetWorkflows.Footer(step.Outcomes));
@@ -747,6 +795,14 @@ public sealed partial class WorkflowRunner(
     {
         var last = state.Visits.LastOrDefault(v => v.Status == WorkflowRunStepStatus.Done && v.SessionId is not null);
         var summary = last?.Summary?.Trim();
+
+        // A step that ended the run because it couldn't do its job says why, even if its summary has a link in it.
+        if (last is { Outcome: WorkflowOutcomes.Failed } && state.Visits[^1] == last && state.Workflow.Find(last.StepId) is { } failed)
+        {
+            var reason = summary?.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
+            return reason is null ? $"{failed.Title} failed" : $"{failed.Title} failed: {reason}";
+        }
+
         if (summary is not null && PullRequestNumber(summary) is { } number)
             return $"PR #{number} opened";
         return state.Visits.LastOrDefault() is { Status: WorkflowRunStepStatus.Decided, Outcome: { } choice }
@@ -1074,6 +1130,7 @@ public sealed partial class WorkflowRunner(
     {
         var gate = _locks.GetOrAdd(runId, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync().ConfigureAwait(false);
+        var released = false;
         RunState state;
         try
         {
@@ -1081,29 +1138,68 @@ public sealed partial class WorkflowRunner(
             if (run is null)
                 return null;
 
-            var workflow = WorkflowYaml.Parse(run.Definition, run.WorkflowId).Definition
-                ?? throw new InvalidOperationException($"Workflow run {runId} has a definition that doesn't read.");
             var visits = (await scope.Runs.ListStepsAsync(runId).ConfigureAwait(false)).ToList();
+            var parsed = WorkflowYaml.Parse(run.Definition, run.WorkflowId);
+            if (parsed.Definition is not { } workflow)
+            {
+                // A run keeps the workflow it started with; a later Fleet that can't read it ends the run rather than
+                // failing every call on it.
+                var unreadable = await EndUnreadableAsync(scope, run, visits, parsed).ConfigureAwait(false);
+                gate.Release();
+                released = true;
+                await BroadcastAsync(scope, unreadable, run.UserId, needsYou: false).ConfigureAwait(false);
+                return unreadable;
+            }
+
             state = await change(new RunState(run, workflow, WorkflowRunOptions.Read(run.Options), visits)).ConfigureAwait(false);
         }
         finally
         {
-            gate.Release();
+            if (!released)
+                gate.Release();
         }
 
         var dto = WorkflowRunView.Build(state.Run, state.Workflow, state.Visits);
+        await BroadcastAsync(scope, dto, state.Run.UserId, state.NeedsYou).ConfigureAwait(false);
+        return dto;
+    }
+
+    private async Task BroadcastAsync(Scope scope, WorkflowRunDto dto, string userId, bool needsYou)
+    {
         try
         {
-            await scope.Events.ChangedAsync(dto, state.Run.UserId).ConfigureAwait(false);
-            if (state.NeedsYou && dto.Status == WorkflowRunStatus.Waiting)
-                await scope.Events.NeedsYouAsync(dto, state.Run.UserId).ConfigureAwait(false);
+            await scope.Events.ChangedAsync(dto, userId).ConfigureAwait(false);
+            if (needsYou && dto.Status == WorkflowRunStatus.Waiting)
+                await scope.Events.NeedsYouAsync(dto, userId).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            LogBroadcastFailed(ex, runId);
+            LogBroadcastFailed(ex, dto.Id);
+        }
+    }
+
+    /// <summary>
+    /// A run whose workflow this Fleet can't read: it fails with the first reason, once, and its sessions stay as ordinary
+    /// sessions. The view still shows the run's rows, without steps.
+    /// </summary>
+    private async Task<WorkflowRunDto> EndUnreadableAsync(Scope scope, WorkflowRun run, List<WorkflowRunStep> visits, WorkflowParseResult parsed)
+    {
+        if (!WorkflowRunStatus.IsFinished(run.Status))
+        {
+            var reason = parsed.Errors.Count > 0 ? parsed.Errors[0].ToString() : "it doesn't read";
+            foreach (var session in visits.Select(v => v.SessionId).OfType<string>())
+                _watches.TryRemove(session, out _);
+            run.Status = WorkflowRunStatus.Failed;
+            run.WaitingReason = null;
+            run.WaitingKind = null;
+            run.Result = $"{UnreadableResult} {reason}";
+            run.EndedAt = Now();
+            run.UpdatedAt = Now();
+            await scope.Runs.UpdateAsync(run).ConfigureAwait(false);
+            LogUnreadable(run.Id, reason);
         }
 
-        return dto;
+        return WorkflowRunView.Build(run, null, visits);
     }
 
     private Scope Begin(string userId)
@@ -1264,6 +1360,7 @@ public sealed partial class WorkflowRunner(
         public IWorkflowRunEvents Events => scope.ServiceProvider.GetRequiredService<IWorkflowRunEvents>();
         public WorkflowsFeature Feature => scope.ServiceProvider.GetRequiredService<WorkflowsFeature>();
         public IWorkflowFiles Files => scope.ServiceProvider.GetRequiredService<IWorkflowFiles>();
+        public WorkflowSkills Skills => scope.ServiceProvider.GetRequiredService<WorkflowSkills>();
 
         public void Dispose()
         {
@@ -1280,6 +1377,12 @@ public sealed partial class WorkflowRunner(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Workflow run {RunId}: {StepId} finished with {Outcome}")]
     private partial void LogStepDone(string runId, string stepId, string outcome);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Workflow run {RunId} failed: this Fleet can't read its workflow ({Reason})")]
+    private partial void LogUnreadable(string runId, string reason);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Workflow run {RunId}: {StepId} starts without {Skill}, which is off")]
+    private partial void LogWithoutSkill(string runId, string stepId, string skill);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Workflow run {RunId}: {StepId} decided {Choice}")]
     private partial void LogDecided(string runId, string stepId, string choice);

@@ -73,7 +73,7 @@ public sealed partial class WorkflowRunnerTests
         var push = _sessions.Started[^1];
         push.StepId.ShouldBe("open-pr");
         push.UserFinishes.ShouldBeFalse();
-        push.Prompt.ShouldEndWith(FleetWorkflows.Footer(["opened"]));
+        push.Prompt.ShouldEndWith(FleetWorkflows.Footer(["opened", "failed"]));
         Visit("open-pr").Finish.ShouldBe(WorkflowFinishers.Agent);
         _events.Last.WithYou.ShouldBeNull();
         _events.Last.CheckWithMe.ShouldBeTrue();

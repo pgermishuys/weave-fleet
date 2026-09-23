@@ -83,6 +83,8 @@ export interface WorkflowStep {
   finishAgent: boolean;
   /** The files the step declares, with their variables, e.g. `docs/design/{{slug}}.md`. */
   writes: string[];
+  /** An agent step's instructions; null for a You step. */
+  prompt?: string | null;
 }
 
 export interface Workflow {
@@ -166,10 +168,13 @@ export interface WorkflowRunChoice {
   involvement?: boolean;
 }
 
-export type WaitingKind = "you" | "no-outcome" | "loop-limit" | "start-failed" | "missing-files" | "wrap-up-failed";
+export type WaitingKind = "you" | "no-outcome" | "loop-limit" | "start-failed" | "missing-files" | "wrap-up-failed" | "skill-off";
 
 /** The choice that goes on past a missing file or a wrap-up that didn't finish. */
 export const MOVE_ON_ANYWAY = "move-on-anyway";
+
+/** The choice that starts a step whose skill is off without it, for the rest of the run. */
+export const WITHOUT_SKILL = "without-skill";
 
 /** A way to move on from a step the user finishes. */
 export interface WorkflowRunMove {

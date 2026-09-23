@@ -237,6 +237,9 @@ public sealed class OpenCodeSessionMessageProxy(
                 ChildActivityStatus = d.ChildSessionId is { } childSessionId
                     ? activityTracker.GetEffectiveActivityStatus(childSessionId)
                     : null,
+                Background = d.ChildSessionId is { } backgroundChildId && activityTracker.IsChildInBackground(backgroundChildId)
+                    ? true
+                    : null,
             }).ToList(),
             ActivityStatus = activityStatus,
             LastEventId = null, // Live harness doesn't use event IDs

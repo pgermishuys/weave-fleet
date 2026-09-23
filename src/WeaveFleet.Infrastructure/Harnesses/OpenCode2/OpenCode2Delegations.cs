@@ -71,6 +71,10 @@ internal sealed partial class OpenCode2Delegations(
                 }
             }
 
+            // The call returned while its child works on: the parent is free, and the child's work isn't its own.
+            if (update.Background && update.Status == "running" && delegation.Status is "pending" or "running")
+                await delegations.HandleDelegationMovedToBackgroundAsync(fleetSessionId, update.ToolCallId).ConfigureAwait(false);
+
             if (update.Status is "completed" or "error" or "cancelled" && delegation.Status is "pending" or "running")
                 await delegations.HandleDelegationFinishedAsync(delegation.DelegationId, update.Status).ConfigureAwait(false);
         }

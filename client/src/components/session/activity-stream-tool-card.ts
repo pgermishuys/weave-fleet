@@ -22,6 +22,8 @@ export interface ToolCardDelegation {
   status: string;
   /** The sub-agent has stopped on a question of its own and waits for you in its session. */
   needsInput?: boolean;
+  /** The call returned and the sub-agent works on in the background; the session is free meanwhile. */
+  background?: boolean;
 }
 
 export interface ToolCardItem {

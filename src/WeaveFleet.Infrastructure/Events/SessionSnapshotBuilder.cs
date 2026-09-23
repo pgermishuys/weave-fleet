@@ -162,6 +162,9 @@ public sealed class SessionSnapshotBuilder(
                 ChildActivityStatus = row.ChildSessionId is { } childSessionId
                     ? activityTracker.GetEffectiveActivityStatus(childSessionId)
                     : null,
+                Background = row.ChildSessionId is { } backgroundChildId && activityTracker.IsChildInBackground(backgroundChildId)
+                    ? true
+                    : null,
             }).ToArray(),
             ActivityStatus = NormalizeActivityStatus(activityTracker.GetEffectiveActivityStatus(sessionId)),
             LastEventId = lastEventId,

@@ -56,7 +56,7 @@ public sealed partial class WorkflowRunnerTests
             registry,
             new HarnessCatalogService(registry, user, new FleetOptions(), NullLogger<HarnessCatalogService>.Instance),
             new WorkflowModelRoles(_preferences),
-            new SkillCatalog(),
+            new WorkflowSkills(new SkillCatalog(), _preferences),
             _preferences,
             user,
             TimeProvider.System);

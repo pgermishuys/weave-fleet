@@ -26,7 +26,9 @@ public sealed record SessionActivitySnapshot(
 /// In addition to per-session status, the tracker maintains a parent-child relationship
 /// index so that a parent session's effective activity status can be derived from its
 /// delegated child sessions. A parent is considered "busy" if it is itself busy
-/// <em>or</em> any of its registered child sessions are busy, and waiting on the user if a child is.
+/// <em>or</em> any of its registered child sessions are busy, and waiting on the user if a child is. A child moved
+/// into the background (<see cref="MoveChildToBackground"/>) doesn't make its parent busy: the parent is free for the
+/// user's next prompt while it works, and wakes by itself when it finishes. Its question still shows on the parent.
 /// </remarks>
 public sealed class SessionActivityTracker
 {
@@ -37,6 +39,9 @@ public sealed class SessionActivityTracker
 
     // parent session id → set of child session ids
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> _parentToChildren = new(StringComparer.Ordinal);
+
+    // child session ids whose delegation was moved into the background
+    private readonly ConcurrentDictionary<string, byte> _backgroundChildren = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Update (or insert) the activity status for a fleet session.
@@ -68,7 +73,10 @@ public sealed class SessionActivityTracker
         if (_parentToChildren.TryRemove(fleetSessionId, out var children))
         {
             foreach (var childId in children.Keys)
+            {
                 _childToParent.TryRemove(childId, out _);
+                _backgroundChildren.TryRemove(childId, out _);
+            }
         }
     }
 
@@ -95,12 +103,26 @@ public sealed class SessionActivityTracker
     /// </summary>
     public void UnregisterChild(string childSessionId)
     {
+        _backgroundChildren.TryRemove(childSessionId, out _);
         if (_childToParent.TryRemove(childSessionId, out var parentSessionId))
         {
             if (_parentToChildren.TryGetValue(parentSessionId, out var children))
                 children.TryRemove(childSessionId, out _);
         }
     }
+
+    /// <summary>
+    /// Records that a registered child's delegation was moved into the background: the call that started it returned
+    /// while the child carries on working (OpenCode 2's <c>subagent</c> with <c>background: true</c>). From then on
+    /// the child's work doesn't make its parent busy; its question still does make the parent wait on the user.
+    /// Returns <c>false</c> when the child isn't registered or was already in the background.
+    /// </summary>
+    public bool MoveChildToBackground(string childSessionId)
+        => _childToParent.ContainsKey(childSessionId) && _backgroundChildren.TryAdd(childSessionId, 0);
+
+    /// <summary>Whether a registered child's delegation was moved into the background.</summary>
+    public bool IsChildInBackground(string childSessionId)
+        => _backgroundChildren.ContainsKey(childSessionId);
 
     /// <summary>
     /// Returns the parent session id for a registered child, or <c>null</c> if the
@@ -112,14 +134,15 @@ public sealed class SessionActivityTracker
     /// <summary>
     /// Returns the effective activity status for <paramref name="sessionId"/>.
     /// Returns <c>"waiting_input"</c> if it, or a child, is stopped on a question, otherwise <c>"busy"</c> if the
-    /// session itself is busy <em>or</em> any registered child session is working.
+    /// session itself is busy <em>or</em> any registered child session is working in the foreground.
     /// Returns <c>null</c> if the session is not tracked.
     /// </summary>
     /// <remarks>
     /// A question outranks work, the parent's own included: a parent whose subagent asks is still busy on its side
     /// (it waits on the subagent's tool call), but nothing moves until the user answers, and only the parent is on
     /// the dashboard. This parent-child index holds every delegation Fleet records (OpenCode's <c>task</c>, OpenCode
-    /// 2's <c>subagent</c>, Fleet's own).
+    /// 2's <c>subagent</c>, Fleet's own). A child working in the background leaves its parent as the parent reports
+    /// itself, usually idle: the parent's turn is over, and the child's notice wakes it when it finishes.
     /// </remarks>
     public string? GetEffectiveActivityStatus(string sessionId)
     {
@@ -136,7 +159,7 @@ public sealed class SessionActivityTracker
                 if (child == ActivityStatuses.WaitingInput)
                     return ActivityStatuses.WaitingInput;
 
-                childWorking |= IsWorking(child);
+                childWorking |= IsWorking(child) && !_backgroundChildren.ContainsKey(childId);
             }
         }
 

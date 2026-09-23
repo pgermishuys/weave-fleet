@@ -40,7 +40,7 @@ public sealed class WorkflowService(
     IHarnessRegistry harnesses,
     HarnessCatalogService catalogs,
     WorkflowModelRoles roles,
-    IBuiltInSkillCatalog builtInSkills,
+    WorkflowSkills skills,
     IUserPreferenceRepository preferences,
     IUserContext user,
     TimeProvider time)
@@ -167,6 +167,74 @@ public sealed class WorkflowService(
         return await runner.StartAsync(run, ct).ConfigureAwait(false);
     }
 
+    // ── Editing ────────────────────────────────────────────────────────────────
+
+    /// <summary>The parser's view of the File view's text or the designer's draft, as the user edits.</summary>
+    public static Result<WorkflowCheckDto> Check(CheckWorkflowRequest request)
+    {
+        if (request.Draft is { } draft)
+            return WorkflowCheckDto.From(WorkflowCheck.Draft(draft.ToDefinition(), "the workflow"));
+        if (request.Text is { } text)
+            return WorkflowCheckDto.From(WorkflowCheck.Text(text, "the workflow"));
+        return FleetError.ValidationError("Text", "Send the file's text or the designer's draft.");
+    }
+
+    public async Task<Result<WorkflowFileDto>> OpenFileAsync(OpenWorkflowFileRequest request, CancellationToken ct)
+    {
+        var repository = await ResolveRepositoryAsync(request.Directory, ct).ConfigureAwait(false);
+        if (repository.IsFailure)
+            return repository.Error;
+        var opened = await WorkflowRepoFiles.OpenAsync(repository.Value.Path, request.WorkflowId, ct).ConfigureAwait(false);
+        return opened.IsFailure ? opened.Error : WorkflowFileDto.From(opened.Value);
+    }
+
+    /// <summary>
+    /// Saves a repository's workflow file. The File view's text is saved exactly as typed; only the designer's draft
+    /// goes through the writer. Fleet doesn't commit it.
+    /// </summary>
+    public async Task<Result<WorkflowFileDto>> SaveFileAsync(SaveWorkflowFileRequest request, CancellationToken ct)
+    {
+        var repository = await ResolveRepositoryAsync(request.Directory, ct).ConfigureAwait(false);
+        if (repository.IsFailure)
+            return repository.Error;
+
+        var text = request.Draft is { } draft ? WorkflowYamlWriter.Write(draft.ToDefinition()) : request.Text;
+        if (text is null)
+            return FleetError.ValidationError("Text", "Send the file's text or the designer's draft.");
+
+        var saved = await WorkflowRepoFiles.SaveAsync(repository.Value.Path, request.WorkflowId, text, request.Hash, request.Force, ct).ConfigureAwait(false);
+        return saved.IsFailure ? saved.Error : WorkflowFileDto.From(saved.Value);
+    }
+
+    /// <summary>
+    /// New workflow (the smallest one that runs) or Duplicate (a built-in, renamed), as a new file in the repository's
+    /// <c>.weave/workflows/</c>, uncommitted.
+    /// </summary>
+    public async Task<Result<WorkflowFileDto>> CreateFileAsync(CreateWorkflowRequest request, CancellationToken ct)
+    {
+        var repository = await ResolveRepositoryAsync(request.Directory, ct).ConfigureAwait(false);
+        if (repository.IsFailure)
+            return repository.Error;
+
+        var name = request.Name?.Trim() ?? string.Empty;
+        WorkflowDefinition workflow;
+        if (request.WorkflowId is { Length: > 0 } source)
+        {
+            var original = WorkflowCatalog.BuiltIns.FirstOrDefault(entry => entry.Id == source);
+            if (original?.Definition is not { } definition)
+                return FleetError.ValidationError("Workflow", "Only a workflow built into Fleet can be duplicated.");
+            workflow = definition with { Name = name };
+        }
+        else
+        {
+            workflow = WorkflowRepoFiles.Blank(name);
+        }
+
+        var library = await WorkflowCatalog.ListAsync(repository.Value.Path, ct).ConfigureAwait(false);
+        var created = await WorkflowRepoFiles.CreateAsync(repository.Value.Path, workflow, library, ct).ConfigureAwait(false);
+        return created.IsFailure ? created.Error : WorkflowFileDto.From(created.Value);
+    }
+
     public static string NotAvailableOn(string harnessName)
         => $"Workflows aren't available on {harnessName}. Pick OpenCode or OpenCode 2.";
 
@@ -185,10 +253,13 @@ public sealed class WorkflowService(
     /// <summary>A built-in skill a step uses has to be on; a skill of the user's own isn't Fleet's to check.</summary>
     private async Task<string?> CheckSkillsAsync(IEnumerable<WorkflowAgentStep> steps)
     {
-        var shipped = builtInSkills.Skills.Select(skill => skill.Name).ToHashSet(StringComparer.Ordinal);
-        var on = await BuiltInSkillService.GetEnabledAsync(preferences).ConfigureAwait(false);
-        var off = steps.FirstOrDefault(step => step.Skill is { } skill && shipped.Contains(skill) && !on.Contains(skill));
-        return off is null ? null : $"{off.Title} uses {off.Skill}, which is off. Turn it on in Settings → Skills.";
+        foreach (var step in steps)
+        {
+            if (await skills.IsOffAsync(step.Skill).ConfigureAwait(false))
+                return $"{step.Title} uses {step.Skill}, which is off. Turn it on in Settings → Skills.";
+        }
+
+        return null;
     }
 
     /// <summary>Every model a step names must be one the harness offers here, or the run doesn't start.</summary>
@@ -319,15 +390,112 @@ public sealed record WorkflowStepDto(
     IReadOnlyList<WorkflowChoice> Choices,
     bool FinishYou,
     bool FinishAgent,
-    IReadOnlyList<string> Writes)
+    IReadOnlyList<string> Writes,
+    string? Prompt = null)
 {
     public static WorkflowStepDto From(WorkflowStep step) => step switch
     {
         WorkflowAgentStep agent => new WorkflowStepDto(
             agent.Id, agent.Title, "agent", agent.Agent, agent.Model, agent.Effort, agent.Skill, agent.Optional, agent.OptionalHint,
-            agent.Outcomes, agent.Routes, agent.MaxLoops, null, [], agent.FinishYou, agent.FinishAgent, agent.Writes),
+            agent.Outcomes, agent.Routes, agent.MaxLoops, null, [], agent.FinishYou, agent.FinishAgent, agent.Writes, agent.Prompt),
         WorkflowYouStep you => new WorkflowStepDto(
             you.Id, you.Title, "you", null, null, null, null, false, null, [], new Dictionary<string, string>(), null, you.Ask, you.Choices, false, false, []),
         _ => throw new InvalidOperationException($"Unknown step {step.GetType().Name}"),
     };
+
+    /// <summary>
+    /// The step the designer describes. Nothing is checked here: the parser checks the file it's written to. A prompt
+    /// ends with one line break, so it's written as a plain <c>|</c> block.
+    /// </summary>
+    public WorkflowStep ToStep()
+    {
+        var id = Id?.Trim() ?? string.Empty;
+        var title = Title?.Trim() ?? string.Empty;
+        if (Kind == "you")
+        {
+            return new WorkflowYouStep(id, title, 0, Ask?.Trim() ?? string.Empty,
+                (Choices ?? []).Select(c => new WorkflowChoice(c.Label?.Trim() ?? string.Empty, c.To?.Trim() ?? string.Empty, c.Note)).ToList());
+        }
+
+        var prompt = (Prompt ?? string.Empty).Replace("\r\n", "\n").TrimEnd();
+        return new WorkflowAgentStep(
+            id,
+            title,
+            0,
+            Blank(Agent),
+            Model?.Trim() ?? string.Empty,
+            Blank(Effort),
+            Blank(Skill),
+            Optional,
+            Optional ? Blank(OptionalHint) : null,
+            prompt.Length > 0 ? prompt + "\n" : string.Empty,
+            (Outcomes ?? []).Select(o => o?.Trim() ?? string.Empty).ToList(),
+            (Routes ?? new Dictionary<string, string>())
+                .GroupBy(pair => pair.Key.Trim(), StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.Last().Value?.Trim() ?? string.Empty, StringComparer.Ordinal),
+            MaxLoops,
+            FinishYou ? WorkflowFinishers.You : FinishAgent ? WorkflowFinishers.Agent : null,
+            (Writes ?? []).Select(w => w?.Trim() ?? string.Empty).ToList());
+    }
+
+    private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
+
+/// <summary>A workflow as the designer edits it: what the file says, whether or not it's valid yet.</summary>
+public sealed record WorkflowDraftDto(string Name, string? Description, string? Placeholder, IReadOnlyList<WorkflowStepDto> Steps)
+{
+    public static WorkflowDraftDto From(WorkflowDefinition workflow)
+        => new(workflow.Name, workflow.Description, workflow.Placeholder, workflow.Steps.Select(WorkflowStepDto.From).ToList());
+
+    /// <summary>Starts from a sentence and runs in a new worktree: the only values this version has.</summary>
+    public WorkflowDefinition ToDefinition() => new(
+        Name?.Trim() ?? string.Empty,
+        string.IsNullOrWhiteSpace(Description) ? null : Description.Trim(),
+        string.IsNullOrWhiteSpace(Placeholder) ? null : Placeholder.Trim(),
+        WorkflowStarts.Sentence,
+        WorkflowPlaces.NewWorktree,
+        (Steps ?? []).Select(step => step.ToStep()).ToList());
+}
+
+/// <summary>What the parser says about the file being edited.</summary>
+/// <param name="Text">What Save writes: the File view's text, or the designer's draft written in Fleet's layout.</param>
+/// <param name="Draft">What the designer shows; null when it can't show this text without losing some of it.</param>
+/// <param name="Comments">The comments a save from the designer would remove.</param>
+public sealed record WorkflowCheckDto(
+    string Text,
+    IReadOnlyList<WorkflowProblem> Errors,
+    WorkflowDraftDto? Draft,
+    IReadOnlyList<WorkflowComment> Comments)
+{
+    public static WorkflowCheckDto From(WorkflowCheckResult check)
+        => new(check.Text, check.Errors, check.Draft is { } draft ? WorkflowDraftDto.From(draft) : null, check.Comments);
+}
+
+/// <summary>A repository's workflow file, open in the editor.</summary>
+/// <param name="Hash">The file as it was read; send it back with a save.</param>
+public sealed record WorkflowFileDto(string WorkflowId, string File, string Hash, WorkflowCheckDto Check)
+{
+    public static WorkflowFileDto From(WorkflowFileOpened opened)
+        => new(opened.WorkflowId, opened.File, opened.Hash, WorkflowCheckDto.From(opened.Check));
+}
+
+/// <summary>Check a file as it's edited: the File view's <paramref name="Text"/>, or the designer's <paramref name="Draft"/>.</summary>
+public sealed record CheckWorkflowRequest(string? Text = null, WorkflowDraftDto? Draft = null);
+
+public sealed record OpenWorkflowFileRequest(string Directory, string WorkflowId);
+
+/// <summary>
+/// Save the File view's <paramref name="Text"/> as it is, or the designer's <paramref name="Draft"/> in Fleet's layout.
+/// </summary>
+/// <param name="Hash">What <see cref="WorkflowFileDto.Hash"/> said when the file was opened or last saved.</param>
+/// <param name="Force">Keep mine: save over a file that changed on disk.</param>
+public sealed record SaveWorkflowFileRequest(
+    string Directory,
+    string WorkflowId,
+    string? Hash,
+    string? Text = null,
+    WorkflowDraftDto? Draft = null,
+    bool Force = false);
+
+/// <summary>New workflow, or Duplicate when <paramref name="WorkflowId"/> names a built-in to copy.</summary>
+public sealed record CreateWorkflowRequest(string Directory, string Name, string? WorkflowId = null);

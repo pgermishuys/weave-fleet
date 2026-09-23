@@ -16,7 +16,26 @@ vi.mock("@/api/client", () => ({
   },
 }));
 
+const { sessionsTopicHandlers } = vi.hoisted(() => ({ sessionsTopicHandlers: new Set<(event: unknown) => void>() }));
+vi.mock("@/composables/use-signalr-socket", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/composables/use-signalr-socket")>()),
+  onGlobalEvent: (topic: string, handler: (event: unknown) => void) => {
+    if (topic !== "sessions") return () => {};
+    sessionsTopicHandlers.add(handler);
+    return () => sessionsTopicHandlers.delete(handler);
+  },
+}));
+
+function pushCatalogChange(sessionIds: string[]): void {
+  const event = {
+    type: "harness.catalog_changed",
+    payload: { harnessType: "opencode2", directory: "/tmp/workspace", profileIds: ["none"], sessionIds },
+  };
+  for (const handler of [...sessionsTopicHandlers]) handler(event);
+}
+
 import { api } from "@/api/client";
+import { useDraftState } from "@/composables/use-draft-state";
 
 const mockApi = vi.mocked(api);
 
@@ -405,6 +424,38 @@ describe("Composer", () => {
     const [, options] = promptCall!;
     const body = options?.body as { model?: { providerID: string; modelID: string } };
     expect(body.model).toEqual({ providerID: "provider-2", modelID: "shared-model" });
+  });
+
+  it("keeps a picked model the harness stops offering while the session is open", async () => {
+    const wrapper = mountComposer({ sessionId: "session-live-catalog" });
+    await flushPromises();
+
+    const picked = createModelSelectionKey("provider-2", "shared-model");
+    await wrapper.get("[data-testid='model-selector']").setValue(picked);
+
+    const answerAsBefore = mockApi.GET.getMockImplementation() as unknown as (url: string) => Promise<unknown>;
+    mockApi.GET.mockImplementation((async (url: string) => {
+      if (url !== "/api/sessions/{id}/models") return answerAsBefore(url);
+      return {
+        data: { providers: [{ id: "provider-1", name: "Provider One", models: [{ id: "shared-model", name: "Model 1" }] }] },
+        error: undefined,
+        response: new Response(),
+      };
+    }) as never);
+    const askedForModels = () =>
+      (mockApi.GET.mock.calls as unknown[][]).filter(([url]) => url === "/api/sessions/{id}/models").length;
+    const before = askedForModels();
+
+    pushCatalogChange(["session-live-catalog"]);
+    await flushPromises();
+
+    expect(askedForModels()).toBe(before + 1);
+    expect(wrapper.findAll("[data-testid='model-selector'] option").map((option) => option.text())).toEqual([
+      "Default",
+      "provider-1::shared-model",
+    ]);
+    expect(useDraftState("session-live-catalog", { agentId: "", modelId: "" }).draft.modelId).toBe(picked);
+    wrapper.unmount();
   });
 
   it("marks @ references behind the text once they're typed, and sends them as plain text", async () => {

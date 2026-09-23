@@ -33,10 +33,27 @@ const workflow: Workflow = {
 
 const nav = {
   activeWorkflow: ref<Workflow | null>(workflow),
+  activeWorkflowId: ref(workflow.id),
   repositoryPath: ref<string | null>("/repo"),
   libraryError: ref<string | null>(null),
+  library: ref(null),
+  showingRuns: ref(true),
+  creating: ref(null),
+  unsavedWorkflowId: ref<string | null>(null),
+  setLeaveGuard: vi.fn(),
+  showRuns: vi.fn(),
+  reload: vi.fn(),
+  startCreate: vi.fn(),
+  endCreate: vi.fn(),
 };
 vi.mock("@/composables/use-workflows-nav", () => ({ useWorkflowsNav: () => nav }));
+// The designer opens only for a repo's own workflow; these are built-ins.
+vi.mock("@/composables/use-workflow-editor", () => ({
+  useWorkflowEditor: () => ({
+    file: ref(null), directory: ref(null), loadError: ref(null), isDirty: ref(false), draft: ref(null),
+    open: vi.fn(), adopt: vi.fn(), dispose: vi.fn(),
+  }),
+}));
 
 const startedBy = { automationId: "a-wf", automationName: "Weekly dependency bump" };
 const SessionItemStub = { name: "SessionItem", props: ["session", "label", "active", "stepNote"], template: "<div class=\"step\">{{ label }}</div>" };

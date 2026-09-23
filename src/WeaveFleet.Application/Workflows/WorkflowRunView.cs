@@ -118,7 +118,8 @@ public sealed record WorkflowRunMoveDto(string Outcome, string? To, string? ToTi
 /// <summary>What the run waits on you for, and what you can do.</summary>
 /// <param name="Kind">
 /// <c>you</c> (a You step), <c>no-outcome</c> (a step stopped without calling the tool), <c>loop-limit</c> (a step
-/// sent work back more times than it may) or <c>start-failed</c> (Fleet couldn't start a step).
+/// sent work back more times than it may), <c>start-failed</c> (Fleet couldn't start a step) or <c>skill-off</c> (a built-in
+/// skill the step uses was turned off after the run started).
 /// </param>
 /// <param name="SessionId">The session the card shows in: the step's own, or the last step's before a You step.</param>
 /// <param name="Question">What a You step asks.</param>
@@ -144,8 +145,8 @@ public sealed record WorkflowRunWaitingDto(
     string? NextYouTitle);
 
 /// <param name="Id">
-/// What to send back to answer: <c>choice:&lt;n&gt;</c>, <c>outcome:&lt;name&gt;</c>, <c>retry</c> or
-/// <c>move-on-anyway</c>.
+/// What to send back to answer: <c>choice:&lt;n&gt;</c>, <c>outcome:&lt;name&gt;</c>, <c>retry</c>,
+/// <c>without-skill</c> or <c>move-on-anyway</c>.
 /// </param>
 /// <param name="Note">The choice asks for a note.</param>
 /// <param name="To">The step it leads to, or <c>end</c>.</param>
@@ -162,6 +163,8 @@ public static class WorkflowWaitingKinds
     public const string MissingFiles = "missing-files";
     /// <summary>The wrap-up turn of a step you finish failed, or a restart cut it off.</summary>
     public const string WrapUpFailed = "wrap-up-failed";
+    /// <summary>A built-in skill the step uses was turned off after the run started.</summary>
+    public const string SkillOff = "skill-off";
 }
 
 /// <summary>Builds <see cref="WorkflowRunDto"/> from a run's rows.</summary>
@@ -353,6 +356,22 @@ public static class WorkflowRunView
                     visit.SessionId,
                     [new WorkflowRunChoiceDto(WorkflowRunner.MoveOnAnywayChoice, "Move on anyway", false, null)],
                     run.WaitingKind == WorkflowWaitingKinds.MissingFiles ? WorkflowRunner.FilesOf(state, agent) : [],
+                    [],
+                    null);
+
+            case WorkflowAgentStep agent when run.WaitingKind == WorkflowWaitingKinds.SkillOff:
+                return new WorkflowRunWaitingDto(
+                    WorkflowWaitingKinds.SkillOff,
+                    agent.Id,
+                    agent.Title,
+                    message,
+                    null,
+                    LastSessionBefore(visits, visits.Count - 1),
+                    [
+                        new WorkflowRunChoiceDto(WorkflowRunner.RetryChoice, "Retry", false, agent.Id),
+                        new WorkflowRunChoiceDto(WorkflowRunner.WithoutSkillChoice, "Start without it", false, agent.Id),
+                    ],
+                    [],
                     [],
                     null);
 

@@ -200,6 +200,55 @@ public sealed class OpenCodeSessionMessageProxyTests
         snapshot.Delegations.Single(d => d.DelegationId == "unlinked").ChildActivityStatus.ShouldBeNull();
     }
 
+    // A parent reopened while only a background subagent works: it's free, and the row says where the child is.
+    [Fact]
+    public async Task GetSnapshotAsync_reads_a_parent_whose_only_work_is_in_the_background_as_idle()
+    {
+        var sessionRepository = new InMemorySessionRepository();
+        sessionRepository.Seed(new Session
+        {
+            Id = "parent",
+            InstanceId = "instance-parent",
+            HarnessType = "opencode2",
+            Title = "Parent",
+            Status = "active",
+            UserId = "user-1",
+        });
+
+        var instanceTracker = new InstanceTracker();
+        instanceTracker.Register("instance-parent", new FakeHarnessSession("instance-parent")
+        {
+            GetMessagesBehavior = (_, _) => Task.FromResult(new MessagePage([], false)),
+        });
+
+        var delegationRepository = new InMemoryDelegationRepository();
+        delegationRepository.Seed(
+            new Delegation { Id = "background", ParentSessionId = "parent", ChildSessionId = "child-background", Title = "background", Status = "running", CreatedAt = "2026-09-23T00:00:00Z" },
+            new Delegation { Id = "done", ParentSessionId = "parent", ChildSessionId = "child-done", Title = "done", Status = "completed", CreatedAt = "2026-09-23T00:00:00Z" });
+
+        var activityTracker = new SessionActivityTracker();
+        activityTracker.Update("parent", "idle", "user-1");
+        activityTracker.Update("child-background", "busy", "user-1");
+        activityTracker.RegisterChild("child-background", "parent");
+        activityTracker.MoveChildToBackground("child-background");
+
+        var proxy = new OpenCodeSessionMessageProxy(
+            sessionRepository,
+            instanceTracker,
+            activityTracker,
+            delegationRepository,
+            new FakeSessionSnapshotBuilder(),
+            CreateServiceProvider(new FakeSessionActivator()),
+            Harnesses(),
+            NullLogger<OpenCodeSessionMessageProxy>.Instance);
+
+        var snapshot = await proxy.GetSnapshotAsync("parent");
+
+        snapshot.ActivityStatus.ShouldBe("idle");
+        snapshot.Delegations.Single(d => d.DelegationId == "background").Background.ShouldBe(true);
+        snapshot.Delegations.Single(d => d.DelegationId == "done").Background.ShouldBeNull();
+    }
+
     [Fact]
     public async Task GetSnapshotAsync_falls_back_to_persisted_when_harness_unavailable()
     {

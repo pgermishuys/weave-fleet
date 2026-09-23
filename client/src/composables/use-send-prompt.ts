@@ -6,6 +6,7 @@ import { useDraftState, type EffortLevel } from "@/composables/use-draft-state";
 import { useModels } from "@/composables/use-models";
 import { api } from "@/api/client";
 import type { AccumulatedMessage, ImageAttachment } from "@/lib/client-types";
+import { modelFromKey } from "@/lib/agent-model-choice";
 import { diagLog } from "@/lib/message-diagnostics";
 import { useSessionsStore } from "@/stores/sessions";
 
@@ -492,15 +493,17 @@ export function useSendPrompt(sessionId: string) {
 
     sendError.value = undefined;
 
-    const agent = agentsById.value[draft.agentId] ?? agentsById.value[defaultAgentId.value];
-    const model = modelsByKey.value[draft.modelId] ?? modelsByKey.value[defaultModelKey.value];
+    // A pick the harness no longer lists (its agent file removed, its provider signed out) is sent as picked, not
+    // swapped for another: the harness says what's wrong with it.
+    const agent = draft.agentId ? agentsById.value[draft.agentId] : agentsById.value[defaultAgentId.value];
+    const pickedModel = modelFromKey(draft.modelId);
+    const model = draft.modelId ? modelsByKey.value[draft.modelId] : modelsByKey.value[defaultModelKey.value];
     const now = new Date();
     const promptId = `user-${crypto.randomUUID().replaceAll("-", "")}`;
     const correlationId = `prompt-${crypto.randomUUID().replaceAll("-", "")}`;
-    const resolvedAgentId = agent?.id ?? draft.agentId ?? defaultAgentId.value;
-    const resolvedModelId = model?.id ?? "";
+    const resolvedAgentId = draft.agentId || agent?.id || defaultAgentId.value;
+    const resolvedModelId = model?.id ?? pickedModel?.modelID ?? "";
     const usesDefaultAgent = !draft.agentId;
-    const usesDefaultModel = !draft.modelId;
 
     ensureSentPrompts(sessionId).push({
       id: promptId,
@@ -509,9 +512,9 @@ export function useSendPrompt(sessionId: string) {
       body,
       createdAt: now.getTime(),
       agentId: resolvedAgentId,
-      agentName: agent?.name ?? "Unknown agent",
+      agentName: agent?.name ?? (draft.agentId || "Unknown agent"),
       modelId: resolvedModelId,
-      modelName: model?.name ?? "Unknown model",
+      modelName: model?.name ?? pickedModel?.modelID ?? "Unknown model",
       effort: draft.effort,
       images: attachments
         ? attachments.map((a) => ({
@@ -543,8 +546,8 @@ export function useSendPrompt(sessionId: string) {
       request.agent = resolvedAgentId;
     }
 
-    if (resolvedModelId && !usesDefaultModel) {
-      request.model = { providerID: model?.providerId ?? "", modelID: resolvedModelId };
+    if (pickedModel) {
+      request.model = pickedModel;
     }
 
     // The server keeps a named agent or model as the session's own, which "Default" then means.

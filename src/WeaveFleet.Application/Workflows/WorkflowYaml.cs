@@ -13,6 +13,12 @@ public sealed record WorkflowParseResult(WorkflowDefinition? Definition, IReadOn
 
     /// <summary>The name the file gives, even when it has errors, so the library can list it by that.</summary>
     public string? Name { get; init; }
+
+    /// <summary>
+    /// The workflow as far as it reads, errors or not: what the designer shows. Null when the file isn't a mapping or
+    /// isn't YAML. It leaves out what the parser couldn't place, such as a step without an id (see <see cref="WorkflowCheck"/>).
+    /// </summary>
+    public WorkflowDefinition? Draft { get; init; }
 }
 
 /// <summary>
@@ -106,7 +112,7 @@ public static partial class WorkflowYaml
             startsFrom,
             runsIn,
             steps);
-        return new WorkflowParseResult(errors.Count == 0 ? definition : null, errors) { Name = definition.Name.Length > 0 ? definition.Name : null };
+        return new WorkflowParseResult(errors.Count == 0 ? definition : null, errors) { Name = definition.Name.Length > 0 ? definition.Name : null, Draft = definition };
     }
 
     private static WorkflowStep? ReadStep(YamlMappingNode map, Action<YamlNode?, string> error)

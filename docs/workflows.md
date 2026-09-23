@@ -5,7 +5,9 @@ agent, model and optional skill. Fleet moves the run from step to step, which co
 step asks you. Workflows are experimental and off until you turn them on in **Settings → Workflows**.
 
 Fleet ships one workflow, **Build a feature**. Your own live in the repository, one file each, under
-`.weave/workflows/*.yaml`, so the people you work with get them with the code. In this version you write them by hand.
+`.weave/workflows/*.yaml`, so the people you work with get them with the code. Make one with **New workflow** or
+**Duplicate** in the Workflows page and change it in the designer, or write the file by hand. See
+[The designer](#the-designer).
 
 ## A workflow file
 
@@ -75,7 +77,7 @@ steps:
 | `agent`    | The harness agent, e.g. `build` or `plan`. Left out, the harness's default agent.                           |
 | `model`    | Required. A role (`strong`, `standard`, `fast`) or an exact `provider/model`. See [Models](#models).      |
 | `effort`   | The model's reasoning effort (its variant), e.g. `low` or `high`.                                           |
-| `skill`    | A skill the step should use. Fleet adds "Use the \<skill\> skill." to the prompt. A built-in skill has to be on in Settings → Skills. |
+| `skill`    | A skill the step should use. Fleet adds "Use the \<skill\> skill." to the prompt. A built-in skill has to be on in Settings → Skills, both when the run starts and when the step starts (see [A skill turned off](#a-skill-turned-off)). |
 | `optional` | `true`, or a hint for when to switch it on (`For UI and new features`). Off unless switched on in the Run box. |
 | `finish`   | `you`: you work through the step together and only you end it. `agent`: the agent always ends it with `fleet_step_done`, even with Check with me on. Left out, the agent ends it unless Check with me is on. See [Steps you finish](#steps-you-finish). |
 | `writes`   | The files the step writes, relative to the run's worktree, e.g. `docs/design/{{slug}}.md`. Fleet checks they exist before the next step starts, then commits them. See [Declared files](#declared-files). |
@@ -234,6 +236,45 @@ haven't set uses the composer's default model. The mapping is yours, kept in Fle
 box's **Models** menu changes the roles for one run. A step can pin an exact `provider/model` instead; anyone without
 that model can't run it. If a step's model isn't available when you press Run, the run doesn't start and says which
 step.
+
+### A skill turned off
+
+A run checks every step's built-in skill when it starts, and each step's again as that step starts, because a run can
+wait for days. If the skill is off by then, the step doesn't start: it waits under **Needs you** with "Review uses
+fleet-code-review, which is now off." **Retry** starts it once the skill is on again (Settings → Skills); **Start
+without it** starts it without the skill, and every later visit of that step in the run does too.
+
+### A step that couldn't do its job
+
+An outcome called `failed` that ends the run makes the run's result say why: the step's title and the first line of
+its summary, e.g. "Push and open the PR failed: there's no remote called origin." Build a feature's **Push and open
+the PR** has it: `outcomes: [opened, failed]` and `on: { failed: end }`.
+
+## The designer
+
+A workflow in `.weave/workflows/` opens in the designer. Built-ins don't: **Duplicate to this repo** copies one into
+the repository picked in the Run box, under the name you give it, and opens the copy. **New workflow** starts from the
+smallest workflow that runs: one agent step, **Do the work**, on Standard, with `The request: {{request}}` and the
+outcome `done`. Both make `.weave/workflows/<name>.yaml` in that repository's checkout, uncommitted; a name another
+workflow or file already has is refused.
+
+- **Designer** shows the steps top to bottom with their loops drawn beside them. **+** between two steps adds an
+  agent step or a You decide step there. The inspector edits the selected step, or, with none selected (or from the
+  **Starts from** box), the workflow's name, description and Run box hint.
+- A step's **id** is what loops, choices and `{{steps.<id>.…}}` point at, so renaming a step's title changes nothing
+  else. Changing the id on purpose changes every reference to it.
+- A step has one `max` for its loops; with two loop outcomes, both rows edit it.
+- **File** shows the YAML, and you can edit it there. What the designer saves is exactly what the File view shows.
+- Fleet checks the file with the same parser runs use as you edit. Errors show on the step, under the canvas and on
+  their line in the File view, and **Save** waits until there are none.
+
+Saving from the designer writes the whole file in Fleet's layout, the one this page uses. A file with comments says so
+when it opens, and the first save from the designer lists the comments it would remove. To keep them, edit in the
+File view: it saves your text exactly as it is. Saving never commits: the file is an ordinary change in your
+checkout. If the file changed on disk after you opened it, Save says so and offers **Reload** or **Keep mine**.
+
+A run keeps the workflow it started with, so saving doesn't change runs in progress. **Try it** opens the Run box for
+the file as saved; with unsaved edits it asks you to save first.
 
 ## Running a workflow on a schedule
 

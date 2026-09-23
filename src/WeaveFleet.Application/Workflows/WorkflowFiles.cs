@@ -65,10 +65,20 @@ public sealed class WorkflowFiles : IWorkflowFiles
             if (changed.Count == 0)
                 return WorkflowFilesCommit.Nothing;
 
+            var staging = NotStaged(status, changed);
             await Git(worktree, ["add", "--", .. changed]).ConfigureAwait(false);
 
             // With paths, commit takes only those, whatever else is staged. The repo's identity and hooks apply.
-            await Git(worktree, ["commit", "--quiet", "-m", Message(title, changed), "--", .. changed]).ConfigureAwait(false);
+            try
+            {
+                await Git(worktree, ["commit", "--quiet", "-m", Message(title, changed), "--", .. changed]).ConfigureAwait(false);
+            }
+            catch (GitCommandException)
+            {
+                // Leave the index as Fleet found it: unstage what Fleet staged, and only that.
+                await UnstageAsync(worktree, staging).ConfigureAwait(false);
+                throw;
+            }
             var sha = (await Git(worktree, ["rev-parse", "--short", "HEAD"]).ConfigureAwait(false)).Trim();
             return new WorkflowFilesCommit(sha, changed, null);
         }
@@ -115,6 +125,39 @@ public sealed class WorkflowFiles : IWorkflowFiles
         }
 
         return files.Where(listed.Contains).ToList();
+    }
+
+    /// <summary>The paths Fleet stages itself: new or changed, and nothing of them in the index yet.</summary>
+    internal static IReadOnlyList<string> NotStaged(string status, IReadOnlyList<string> files)
+    {
+        var fleets = new HashSet<string>(StringComparer.Ordinal);
+        var entries = status.Split('\0');
+        for (var i = 0; i < entries.Length; i++)
+        {
+            var entry = entries[i];
+            if (entry.Length < 4)
+                continue;
+            if (entry[0] is ' ' or '?')
+                fleets.Add(entry[3..]);
+            if (entry[0] is 'R' or 'C')
+                i++;
+        }
+
+        return files.Where(fleets.Contains).ToList();
+    }
+
+    private static async Task UnstageAsync(string worktree, IReadOnlyList<string> paths)
+    {
+        if (paths.Count == 0)
+            return;
+        try
+        {
+            await Git(worktree, ["reset", "--quiet", "--", .. paths]).ConfigureAwait(false);
+        }
+        catch (GitCommandException)
+        {
+            // The commit's own error is the one to report.
+        }
     }
 
     private static Task<string> Git(string worktree, string[] args)

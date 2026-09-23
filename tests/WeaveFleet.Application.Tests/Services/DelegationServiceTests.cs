@@ -233,6 +233,95 @@ public sealed class DelegationServiceTests
     }
 
     [Fact]
+    public async Task HandleDelegationMovedToBackgroundAsync_FreesTheParent_AndSaysSoOnTheDelegation()
+    {
+        var activityTracker = new SessionActivityTracker();
+        var sut = new DelegationService(
+            _delegationRepository, _eventBroadcaster, _userContext,
+            sessionActivityWriteService: null, activityTracker: activityTracker);
+
+        _delegationRepository.Seed(new Delegation
+        {
+            Id = "del-1",
+            ParentSessionId = "parent-1",
+            ParentToolCallId = "tool-1",
+            ChildSessionId = "child-1",
+            Title = "Subagent",
+            Status = "running",
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UpdatedAt = DateTime.UtcNow.ToString("O")
+        });
+        activityTracker.RegisterChild("child-1", "parent-1");
+        activityTracker.Update("parent-1", "idle", "user-1");
+        activityTracker.Update("child-1", "busy", "user-1");
+
+        var result = await sut.HandleDelegationMovedToBackgroundAsync("parent-1", "tool-1");
+
+        // Still running: only the child's notice ends it.
+        result!.Status.ShouldBe("running");
+        _delegationRepository.All.Single().Status.ShouldBe("running");
+        activityTracker.GetEffectiveActivityStatus("parent-1").ShouldBe("idle");
+
+        var updated = _eventBroadcaster.Broadcasts.Single(b => b.Topic == "session:parent-1" && b.Type == "delegation.updated");
+        updated.Payload.GetProperty("background").GetBoolean().ShouldBeTrue();
+        updated.Payload.GetProperty("status").GetString().ShouldBe("running");
+
+        // The list and the parent's conversation hear the parent is free.
+        _eventBroadcaster.Broadcasts
+            .Where(b => b.Type == "activity_status")
+            .Select(b => (b.Topic, b.Payload.GetProperty("activityStatus").GetString()))
+            .ShouldBe([("session:parent-1", "idle"), ("sessions", "idle")]);
+
+        // Once is enough.
+        _eventBroadcaster.Broadcasts.Clear();
+        await sut.HandleDelegationMovedToBackgroundAsync("parent-1", "tool-1");
+        _eventBroadcaster.Broadcasts.ShouldBeEmpty();
+
+        // Its finish says background too, and after it the child is forgotten.
+        await sut.HandleDelegationFinishedAsync("del-1", "completed");
+        activityTracker.IsChildInBackground("child-1").ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task HandleDelegationMovedToBackgroundAsync_LeavesAFinishedOrChildlessDelegationAlone()
+    {
+        var activityTracker = new SessionActivityTracker();
+        var sut = new DelegationService(
+            _delegationRepository, _eventBroadcaster, _userContext,
+            sessionActivityWriteService: null, activityTracker: activityTracker);
+
+        _delegationRepository.Seed(new Delegation
+        {
+            Id = "del-1",
+            ParentSessionId = "parent-1",
+            ParentToolCallId = "tool-1",
+            Title = "Subagent",
+            Status = "pending",
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UpdatedAt = DateTime.UtcNow.ToString("O")
+        });
+        _delegationRepository.Seed(new Delegation
+        {
+            Id = "del-2",
+            ParentSessionId = "parent-1",
+            ParentToolCallId = "tool-2",
+            ChildSessionId = "child-2",
+            Title = "Subagent",
+            Status = "completed",
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UpdatedAt = DateTime.UtcNow.ToString("O")
+        });
+        activityTracker.RegisterChild("child-2", "parent-1");
+
+        (await sut.HandleDelegationMovedToBackgroundAsync("parent-1", "tool-1")).ShouldNotBeNull();
+        (await sut.HandleDelegationMovedToBackgroundAsync("parent-1", "tool-2")).ShouldNotBeNull();
+        (await sut.HandleDelegationMovedToBackgroundAsync("parent-1", "tool-3")).ShouldBeNull();
+
+        activityTracker.IsChildInBackground("child-2").ShouldBeFalse();
+        _eventBroadcaster.Broadcasts.ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task Every_step_of_a_delegation_reaches_progress_tracking()
     {
         var observer = new RecordingProgressObserver();

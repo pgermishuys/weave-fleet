@@ -326,7 +326,7 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : IClas
         fleet.Answer(request =>
         {
             if (LlmRequest.Starts(request, childPrompt))
-                return ToolCall("call_child_work", "shell", new { command = "sleep 4; echo child-worked", description = "The child's work" });
+                return ToolCall("call_child_work", "shell", new { command = "sleep 6; echo child-worked", description = "The child's work" });
             if (LlmRequest.Continues(request, childPrompt))
                 return new ScriptedLlmResponse { Text = "The child is done." };
             if (LlmRequest.Starts(request, prompt))
@@ -354,9 +354,16 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : IClas
         var child = await fleet.HarnessSessionAsync(delegation.ChildSessionId!, cts.Token);
         LatestParts<ToolMessageEventPart>(events, id).Single(p => p.CallId == "call_bg_sub").State.ShouldBeOfType<ToolRunningState>();
 
+        // The call returned, so the parent is free while its child works: the child's work isn't the parent's.
+        var tracker = fleet.Services.GetRequiredService<SessionActivityTracker>();
+        await WaitForAsync(events, () => tracker.IsChildInBackground(delegation.ChildSessionId!), cts.Token);
+        (await child.GetActivityStatusAsync(cts.Token)).ShouldBe(ActivityStatuses.Busy);
+        tracker.GetEffectiveActivityStatus(id).ShouldBe(ActivityStatuses.Idle);
+
         // The child finishes, the notice says so, and only then is the delegation done.
         await WaitForAsync(events, async () => (await Delegations(id)).Single(d => d.ParentToolCallId == "call_bg_sub").Status == "completed", cts.Token);
         (await child.GetActivityStatusAsync(cts.Token)).ShouldBe(ActivityStatuses.Idle);
+        tracker.IsChildInBackground(delegation.ChildSessionId!).ShouldBeFalse();
         LatestParts<TextMessageEventPart>(events, id)
             .ShouldContain(p => p.Text.StartsWith("<subagent", StringComparison.Ordinal) && p.Text.Contains("The child is done.", StringComparison.Ordinal));
         await WaitForAsync(events, () => LatestParts<TextMessageEventPart>(events, id).Any(p => p.Text == "The helper came back."), cts.Token);

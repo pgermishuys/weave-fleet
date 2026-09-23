@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Skills;
 using WeaveFleet.Application.Workflows;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
@@ -21,6 +22,7 @@ public sealed partial class WorkflowRunnerTests
     private readonly InMemoryUserPreferenceRepository _preferences = new();
     private readonly SessionActivityTracker _activity = new();
     private readonly FakeFiles _files = new();
+    private readonly FakeSkillCatalog _skills = new();
     private WorkflowRunner _runner;
 
     public WorkflowRunnerTests()
@@ -415,6 +417,8 @@ public sealed partial class WorkflowRunnerTests
             services.AddSingleton(new FleetOptions());
             services.AddSingleton<IUserPreferenceRepository>(_preferences);
             services.AddScoped<WorkflowsFeature>();
+            services.AddSingleton<IBuiltInSkillCatalog>(_skills);
+            services.AddScoped<WorkflowSkills>();
         }),
         _activity,
         TimeProvider.System,
@@ -527,6 +531,14 @@ public sealed partial class WorkflowRunnerTests
                 NeedsYou.Add(run);
             return Task.CompletedTask;
         }
+    }
+
+    /// <summary>Fleet's built-in skills in these tests: none unless a test ships one.</summary>
+    private sealed class FakeSkillCatalog : IBuiltInSkillCatalog
+    {
+        public List<BuiltInSkill> Shipped { get; } = [];
+
+        public IReadOnlyList<BuiltInSkill> Skills => Shipped;
     }
 
     private sealed class NoUserScope : IBackgroundUserScope
