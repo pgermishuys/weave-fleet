@@ -290,6 +290,7 @@ public sealed record WorkflowDto(
 /// <param name="Model">A role or an exact <c>provider/model</c>; null for a You step.</param>
 /// <param name="Routes">Outcome → the step it leads to; outcomes not here go to the next step.</param>
 /// <param name="FinishYou"><c>finish: you</c>: you move the step on, not the agent.</param>
+/// <param name="FinishAgent"><c>finish: agent</c>: the agent moves it on, even with Check with me on.</param>
 /// <param name="Writes">The files it declares, with their variables, e.g. <c>docs/design/{{slug}}.md</c>.</param>
 public sealed record WorkflowStepDto(
     string Id,
@@ -307,15 +308,16 @@ public sealed record WorkflowStepDto(
     string? Ask,
     IReadOnlyList<WorkflowChoice> Choices,
     bool FinishYou,
+    bool FinishAgent,
     IReadOnlyList<string> Writes)
 {
     public static WorkflowStepDto From(WorkflowStep step) => step switch
     {
         WorkflowAgentStep agent => new WorkflowStepDto(
             agent.Id, agent.Title, "agent", agent.Agent, agent.Model, agent.Effort, agent.Skill, agent.Optional, agent.OptionalHint,
-            agent.Outcomes, agent.Routes, agent.MaxLoops, null, [], agent.FinishYou, agent.Writes),
+            agent.Outcomes, agent.Routes, agent.MaxLoops, null, [], agent.FinishYou, agent.FinishAgent, agent.Writes),
         WorkflowYouStep you => new WorkflowStepDto(
-            you.Id, you.Title, "you", null, null, null, null, false, null, [], new Dictionary<string, string>(), null, you.Ask, you.Choices, false, []),
+            you.Id, you.Title, "you", null, null, null, null, false, null, [], new Dictionary<string, string>(), null, you.Ask, you.Choices, false, false, []),
         _ => throw new InvalidOperationException($"Unknown step {step.GetType().Name}"),
     };
 }

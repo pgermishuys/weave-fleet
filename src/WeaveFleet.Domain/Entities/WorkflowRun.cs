@@ -89,6 +89,13 @@ public sealed class WorkflowRunStep
     public string? HandOffNote { get; set; }
     /// <summary>The step's declared files were all there before the next step started.</summary>
     public bool FilesChecked { get; set; }
+    /// <summary>
+    /// The short SHA of the commit Fleet made of the step's declared files after the check; null when there was nothing
+    /// to commit or it failed.
+    /// </summary>
+    public string? FilesCommit { get; set; }
+    /// <summary>Why Fleet couldn't commit the declared files, in git's words. It doesn't stop the run.</summary>
+    public string? FilesCommitError { get; set; }
     public string StartedAt { get; set; } = string.Empty;
     public string? FinishedAt { get; set; }
 }

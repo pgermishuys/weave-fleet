@@ -1,3 +1,5 @@
+using WeaveFleet.Domain.Entities;
+
 namespace WeaveFleet.Application.Workflows;
 
 /// <summary>A workflow as its file describes it: a short list of steps Fleet runs one after another.</summary>
@@ -76,9 +78,11 @@ public abstract record WorkflowStep(string Id, string Title, int Line);
 /// <param name="OptionalHint">When to switch it on, e.g. "For UI and new features".</param>
 /// <param name="Routes">Outcome → the step it leads to, or <see cref="WorkflowTargets.End"/>. Outcomes not here go to the next step.</param>
 /// <param name="MaxLoops">How many times this step may send work back to an earlier step in a run.</param>
-/// <param name="FinishYou">
-/// <c>finish: you</c>: the user and the agent work through the step together and only the user ends it, with Move on.
-/// The step's session has no <c>fleet_step_done</c> and its prompt no footer.
+/// <param name="Finish">
+/// What the file says: <see cref="WorkflowFinishers.You"/> (the user and the agent work through the step together and
+/// only the user ends it, with Move on; the step's session has no <c>fleet_step_done</c> and its prompt no footer),
+/// <see cref="WorkflowFinishers.Agent"/> (the agent always ends it, even with Check with me on), or null when the file
+/// doesn't say, so Check with me decides.
 /// </param>
 /// <param name="Writes">
 /// The files the step declares (<c>writes:</c>), relative to the run's worktree, with variables still in them. Fleet
@@ -98,8 +102,23 @@ public sealed record WorkflowAgentStep(
     IReadOnlyList<string> Outcomes,
     IReadOnlyDictionary<string, string> Routes,
     int? MaxLoops,
-    bool FinishYou,
-    IReadOnlyList<string> Writes) : WorkflowStep(Id, Title, Line);
+    string? Finish,
+    IReadOnlyList<string> Writes) : WorkflowStep(Id, Title, Line)
+{
+    /// <summary>The file says <c>finish: you</c>.</summary>
+    public bool FinishYou => Finish == WorkflowFinishers.You;
+
+    /// <summary>The file says <c>finish: agent</c>: Check with me doesn't make it a step the user finishes.</summary>
+    public bool FinishAgent => Finish == WorkflowFinishers.Agent;
+
+    /// <summary>Whether a visit that starts now is one the user finishes: what the file says, else Check with me.</summary>
+    public bool UserFinishes(bool checkWithMe) => Finish switch
+    {
+        WorkflowFinishers.You => true,
+        WorkflowFinishers.Agent => false,
+        _ => checkWithMe,
+    };
+}
 
 /// <summary>The run stops and asks the user; each choice leads to a step or ends the run.</summary>
 /// <param name="Ask">The question, e.g. "Build it this way?".</param>

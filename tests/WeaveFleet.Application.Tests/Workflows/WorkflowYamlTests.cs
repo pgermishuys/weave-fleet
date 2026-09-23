@@ -315,6 +315,44 @@ public sealed class WorkflowYamlTests
     }
 
     [Fact]
+    public void finish_agent_is_kept_apart_from_a_step_that_doesnt_say()
+    {
+        var result = Parse(
+            """
+              - id: push
+                title: Push
+                model: fast
+                finish: agent
+                prompt: Push it.
+                outcomes: [opened]
+              - id: review
+                title: Review
+                model: strong
+                prompt: Review it.
+                outcomes: [pass]
+            """);
+
+        result.Errors.ShouldBeEmpty();
+        var push = result.Definition!.Find("push").ShouldBeOfType<WorkflowAgentStep>();
+        (push.Finish, push.FinishAgent, push.FinishYou).ShouldBe(("agent", true, false));
+        (push.UserFinishes(checkWithMe: true), push.UserFinishes(checkWithMe: false)).ShouldBe((false, false));
+
+        var review = result.Definition.Find("review").ShouldBeOfType<WorkflowAgentStep>();
+        (review.Finish, review.FinishAgent, review.FinishYou).ShouldBe((null, false, false));
+        (review.UserFinishes(checkWithMe: true), review.UserFinishes(checkWithMe: false)).ShouldBe((true, false));
+    }
+
+    [Fact]
+    public void the_built_in_push_step_is_the_agents_to_finish_and_every_later_step_is_told_the_request()
+    {
+        var workflow = WorkflowCatalog.BuiltIns.Single(e => e.Id == "builtin:build-a-feature").Definition!;
+
+        workflow.Find("open-pr").ShouldBeOfType<WorkflowAgentStep>().FinishAgent.ShouldBeTrue();
+        workflow.Steps.OfType<WorkflowAgentStep>().Where(s => s.Id is not ("open-pr" or "design")).ShouldAllBe(s => s.Finish == null);
+        workflow.Steps.OfType<WorkflowAgentStep>().ShouldAllBe(s => s.Prompt.Contains("{{request}}"));
+    }
+
+    [Fact]
     public void finish_is_you_or_agent()
     {
         var result = Parse(
@@ -329,7 +367,7 @@ public sealed class WorkflowYamlTests
 
         var error = result.Errors.ShouldHaveSingleItem();
         error.Line.ShouldBe(8);
-        error.Message.ShouldBe("design: finish is \"user\"; use you (you move the step on) or agent (the default).");
+        error.Message.ShouldBe("design: finish is \"user\"; use you (you move the step on) or agent (the agent does).");
     }
 
     [Theory]
