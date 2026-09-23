@@ -13,9 +13,13 @@ steps:
     model: strong
     skill: fleet-mockups
     optional: For UI and new features
+    finish: you
+    writes:
+      - docs/design/{{slug}}.md
+      - docs/design/{{slug}}.html
     prompt: |
       Design {{request}}.
-      Write it to docs/design/{{slug}}.md with a mockup next to it.
+      Write it to docs/design/{{slug}}.md with a mockup next to it in docs/design/{{slug}}.html.
       Don't change any code.
     outcomes: [ready]
 
@@ -23,11 +27,15 @@ steps:
     title: Plan
     agent: plan
     model: strong
+    writes:
+      - .weave/plans/{{slug}}.md
     prompt: |
       Plan {{request}}.
       Write .weave/plans/{{slug}}.md: a short design section, then the files to change and the tests to add, in order.
       Reuse what the code already has.
-      Follow docs/design/{{slug}}.md if it exists.
+      Read {{previous.files}} first.
+
+      {{previous.summary}}
     outcomes: [ready]
 
   - id: ok-plan
@@ -42,7 +50,7 @@ steps:
     agent: build
     model: standard
     prompt: |
-      Build .weave/plans/{{slug}}.md, including the tests it names.
+      Build {{steps.plan.files}}, including the tests it names.
       Commit after each step and run those tests.
 
       {{previous.summary}}
@@ -54,9 +62,11 @@ steps:
     model: strong
     skill: fleet-code-review
     prompt: |
-      Review this branch against {{run.base}} and .weave/plans/{{slug}}.md.
+      Review this branch against {{run.base}} and {{steps.plan.files}}.
       Use changes only for bugs, or for tests the plan named that are missing.
       Put style nits in the summary and use pass.
+
+      {{previous.summary}}
     outcomes: [pass, changes]
     on: { changes: implement, max: 2 }
 
@@ -84,7 +94,7 @@ steps:
     model: fast
     prompt: |
       Push this branch and open a pull request against {{run.base}} with gh pr create.
-      Take the title and description from .weave/plans/{{slug}}.md, and add what Review found:
+      Take the title and description from {{steps.plan.files}}, and add what Review found:
 
       {{steps.review.summary}}
 

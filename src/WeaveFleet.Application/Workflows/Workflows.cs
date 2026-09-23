@@ -117,6 +117,12 @@ public sealed record WorkflowRunOptions
     /// <summary>The model each agent step runs on, resolved when the run started.</summary>
     public Dictionary<string, WorkflowModelChoice> StepModels { get; init; } = [];
 
+    /// <summary>
+    /// "Check with me after each step": every agent step that starts while it's on is one the user finishes. A change
+    /// applies from the next step; the running one keeps the way it started.
+    /// </summary>
+    public bool CheckWithMe { get; set; }
+
     public static WorkflowRunOptions Read(string json)
     {
         try

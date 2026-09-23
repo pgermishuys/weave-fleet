@@ -47,8 +47,8 @@ public sealed partial class OpenCode2LiveTests
         try
         {
             var normal = await fleet.CreateSessionAsync(folder, "Ordinary session", cts.Token);
-            var runId = await SeedRunAsync(folder);
-            var step = await CreateStepSessionAsync(folder, runId, cts.Token);
+            var runId = await SeedRunAsync(folder, StepWorkflow, "check");
+            var step = await CreateStepSessionAsync(folder, runId, "check", userFinishes: false, cts.Token);
 
             var events = fleet.Watch(cts.Token, normal, step);
             await PromptAsync(normal, normalPrompt, options: null, cts.Token);
@@ -64,6 +64,71 @@ public sealed partial class OpenCode2LiveTests
                 .ShouldNotBeNull().ShouldContain("Recorded outcome pass.");
 
             await WaitForAsync(events, async () => (await RunAsync(runId))?.Status == WorkflowRunStatus.Done, cts.Token);
+        }
+        finally
+        {
+            await SetWorkflowsAsync(false);
+        }
+    }
+
+    private const string TogetherWorkflow = """
+        name: Live together
+        steps:
+          - id: talk
+            title: Talk
+            model: standard
+            finish: you
+            writes: [notes.md]
+            prompt: Talk it through.
+            outcomes: [ready]
+          - id: approve
+            title: Approve
+            you: Keep it?
+            choices:
+              Keep: end
+        """;
+
+    [OpenCode2Fact]
+    public async Task A_step_you_finish_has_no_step_tool_and_its_summary_is_the_reply_to_the_wrap_up()
+    {
+        const string talkPrompt = "Let's talk it through. (workflows: together)";
+        const string wrapUpStart = "The user is moving on to Approve.";
+        fleet.Answer(request => LlmRequest.Starts(request, talkPrompt) ? new ScriptedLlmResponse { Text = "Here's a first idea." } : null);
+        fleet.Answer(request => LlmRequest.Starts(request, wrapUpStart)
+            ? new ScriptedLlmResponse { Text = "Summary for Approve: notes.md has the idea." }
+            : null);
+        using var cts = new CancellationTokenSource(Timeout);
+        var folder = fleet.NewFolder("workflow-together");
+        File.WriteAllText(Path.Combine(folder, "notes.md"), "# Notes");
+
+        await SetWorkflowsAsync(true);
+        try
+        {
+            var runId = await SeedRunAsync(folder, TogetherWorkflow, "talk");
+            var step = await CreateStepSessionAsync(folder, runId, "talk", userFinishes: true, cts.Token);
+
+            var events = fleet.Watch(cts.Token, step);
+            await PromptAsync(step, talkPrompt, options: null, cts.Token);
+            await WaitForAsync(events, () => fleet.Llm.Queue.Requests.Any(r => LlmRequest.Starts(r, talkPrompt)), cts.Token);
+
+            // Made like any session that isn't a step: the rule hides the tool.
+            var tools = LlmRequest.OfferedToolNames(fleet.Llm.Queue.Requests.First(r => LlmRequest.Starts(r, talkPrompt)));
+            tools.ShouldContain("fleet_canvas_list");
+            tools.ShouldNotContain(FleetWorkflows.StepTool);
+            await WaitForAsync(events, async () => !SessionActivityTracker.IsInTurn(fleet.Services.GetRequiredService<SessionActivityTracker>().Get(step)?.ActivityStatus)
+                && (await RunAsync(runId))?.Status == WorkflowRunStatus.Running, cts.Token);
+
+            var moved = await fleet.Services.GetRequiredService<WorkflowRunner>().MoveOnAsync(OpenCode2LiveFleet.Owner, runId, null, "Keep it short.", cts.Token);
+            moved.IsSuccess.ShouldBeTrue(moved.IsFailure ? moved.Error.Description : null);
+
+            // The run moves on when the turn answering the wrap-up ends, and its reply is the summary.
+            await WaitForAsync(events, async () => (await RunAsync(runId))?.CurrentStepId == "approve", cts.Token);
+            var visit = (await StepsAsync(runId)).Single(v => v.StepId == "talk");
+            (visit.Status, visit.Outcome, visit.Summary, visit.FilesChecked)
+                .ShouldBe((WorkflowRunStepStatus.Done, "ready", "Summary for Approve: notes.md has the idea.", true));
+            var wrapUp = fleet.Llm.Queue.Requests.Select(LlmRequest.LastUserText).First(t => t?.StartsWith(wrapUpStart, StringComparison.Ordinal) == true);
+            wrapUp.ShouldBe("The user is moving on to Approve. Update notes.md with everything agreed in this conversation, then reply with a short summary for Approve.\n\nTheir note: Keep it short.");
+            fleet.Llm.Queue.Requests.Where(r => LlmRequest.LastUserText(r) == wrapUp).ShouldAllBe(r => !LlmRequest.OfferedToolNames(r).Contains(FleetWorkflows.StepTool));
         }
         finally
         {
@@ -122,8 +187,8 @@ public sealed partial class OpenCode2LiveTests
         await scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>().SetAsync(FleetWorkflows.PreferenceKey, enabled ? "true" : "false");
     }
 
-    /// <summary>A one-step run, as the runner saves one, whose step the next session will be.</summary>
-    private async Task<string> SeedRunAsync(string folder)
+    /// <summary>A run, as the runner saves one, whose first step the next session will be.</summary>
+    private async Task<string> SeedRunAsync(string folder, string definition, string firstStep)
     {
         var runId = $"run-{Guid.NewGuid():N}";
         using var user = BackgroundUserContext.BeginScope(OpenCode2LiveFleet.Owner);
@@ -134,14 +199,15 @@ public sealed partial class OpenCode2LiveTests
             UserId = OpenCode2LiveFleet.Owner,
             WorkflowId = "repo:live",
             WorkflowName = "Live check",
-            Definition = StepWorkflow,
+            Definition = definition,
             Request = "Check it",
             Slug = "check-it",
             Title = "Check it",
             RepositoryPath = folder,
+            WorktreePath = folder,
             HarnessType = OpenCode2HarnessSession.Type,
             Status = WorkflowRunStatus.Running,
-            CurrentStepId = "check",
+            CurrentStepId = firstStep,
             CreatedAt = DateTime.UtcNow.ToString("O"),
             UpdatedAt = DateTime.UtcNow.ToString("O"),
         });
@@ -149,10 +215,17 @@ public sealed partial class OpenCode2LiveTests
     }
 
     /// <summary>Starts the step's session the way the runner does, and records it as the running step.</summary>
-    private async Task<string> CreateStepSessionAsync(string folder, string runId, CancellationToken ct)
+    private async Task<string> CreateStepSessionAsync(string folder, string runId, string stepId, bool userFinishes, CancellationToken ct)
     {
         var created = await fleet.WithOrchestratorAsync(orchestrator => orchestrator.CreateSessionAsync(
-            new CreateSessionRequest { Directory = folder, Title = "Check it · Check", HarnessType = OpenCode2HarnessSession.Type, WorkflowRunId = runId }, ct));
+            new CreateSessionRequest
+            {
+                Directory = folder,
+                Title = $"Check it · {stepId}",
+                HarnessType = OpenCode2HarnessSession.Type,
+                WorkflowRunId = runId,
+                WorkflowUserFinishes = userFinishes,
+            }, ct));
         created.IsSuccess.ShouldBeTrue(created.IsFailure ? created.Error.Description : null);
 
         using var user = BackgroundUserContext.BeginScope(OpenCode2LiveFleet.Owner);
@@ -161,12 +234,20 @@ public sealed partial class OpenCode2LiveTests
         {
             Id = $"visit-{Guid.NewGuid():N}",
             RunId = runId,
-            StepId = "check",
+            StepId = stepId,
             SessionId = created.Value.Session.Id,
             Status = WorkflowRunStepStatus.Running,
+            Finish = userFinishes ? WorkflowFinishers.You : WorkflowFinishers.Agent,
             StartedAt = DateTime.UtcNow.ToString("O"),
         });
         return created.Value.Session.Id;
+    }
+
+    private async Task<IReadOnlyList<WorkflowRunStep>> StepsAsync(string runId)
+    {
+        using var user = BackgroundUserContext.BeginScope(OpenCode2LiveFleet.Owner);
+        using var scope = fleet.Services.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<IWorkflowRunRepository>().ListStepsAsync(runId);
     }
 
     private async Task<WorkflowRun?> RunAsync(string runId)

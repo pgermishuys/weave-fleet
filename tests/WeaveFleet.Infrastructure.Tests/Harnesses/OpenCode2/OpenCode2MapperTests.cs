@@ -163,6 +163,23 @@ public sealed class OpenCode2MapperTests
         Describe(ended.ShouldHaveSingleItem()).ShouldBe($"message.part.updated {part} reasoning 'Thinking it over'");
     }
 
+    [Fact]
+    public async Task A_reply_names_the_prompt_it_answers_as_its_parent()
+    {
+        // V2's assistant messages don't say; its inbox says when each prompt, under the id Fleet gave it, went in.
+        var replies = (await MapSessionAsync("text-and-tool-turn.sse", OpenCode2Fixtures.TextSession))
+            .Where(e => e.Type == EventTypes.MessageUpdated)
+            .Select(e => e.Payload!.Value.GetProperty("info"))
+            .Where(info => info.GetProperty("role").GetString() == "assistant")
+            .Select(info => (Id: info.GetProperty("id").GetString(), Parent: info.GetProperty("parentID").GetString()))
+            .Distinct()
+            .ToList();
+
+        replies.ShouldContain(("msg_0b63b955c001u44eHxDgFRDgyU", "msg_0b63b9238001OvZJBWxeqMXBt9"));
+        replies.ShouldContain(("msg_0b63bab75001C9vNf84H8W266g", "msg_0b63bab52001kuhR7YFeQSihFV"));
+        replies.ShouldAllBe(r => r.Parent == "msg_0b63b9238001OvZJBWxeqMXBt9" || r.Parent == "msg_0b63bab52001kuhR7YFeQSihFV");
+    }
+
     [Theory]
     [InlineData("session.something.new", """{"sessionID":"ses_1"}""")]
     [InlineData("session.text.delta", """{"sessionID":"ses_1"}""")]

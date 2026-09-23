@@ -1,6 +1,7 @@
 using System.Text.Json;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.SessionSources;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 
@@ -10,9 +11,9 @@ namespace WeaveFleet.Application.Workflows;
 /// Starts a step as an ordinary Fleet session in the run's worktree: the first agent step makes the worktree from the
 /// base branch, named by Settings → Worktree naming from the run's request, and every later step works in it.
 /// </summary>
-public sealed class WorkflowStepSessions(SessionOrchestrator orchestrator) : IWorkflowStepSessions
+public sealed class WorkflowStepSessions(SessionOrchestrator orchestrator, ISessionMessageProxy messages) : IWorkflowStepSessions
 {
-    public async Task<WorkflowStepSession> StartAsync(WorkflowRun run, WorkflowAgentStep agentStep, string prompt, WorkflowModelChoice model, CancellationToken ct)
+    public async Task<WorkflowStepSession> StartAsync(WorkflowRun run, WorkflowAgentStep agentStep, string prompt, WorkflowModelChoice model, bool userFinishes, CancellationToken ct)
     {
         var (providerId, modelId) = model.Split();
         var created = await orchestrator.CreateSessionAsync(new CreateSessionRequest
@@ -25,6 +26,7 @@ public sealed class WorkflowStepSessions(SessionOrchestrator orchestrator) : IWo
             ProviderId = providerId,
             ModelId = modelId,
             WorkflowRunId = run.Id,
+            WorkflowUserFinishes = userFinishes,
             BranchNamingText = run.Request,
         }, ct).ConfigureAwait(false);
         if (created.IsFailure)
@@ -42,7 +44,22 @@ public sealed class WorkflowStepSessions(SessionOrchestrator orchestrator) : IWo
 
         return sent.IsFailure
             ? WorkflowStepSession.Failed(sent.Error.Description, session.Id)
-            : new WorkflowStepSession(session.Id, session.Directory, created.Value.Branch, null);
+            : new WorkflowStepSession(session.Id, session.Directory, created.Value.Branch, null, sent.Value.MessageId);
+    }
+
+    public async Task<WorkflowPromptSent> PromptAsync(string sessionId, string text, CancellationToken ct)
+    {
+        var sent = await orchestrator.PromptSessionWithReceiptAsync(sessionId, text, options: null, userMessageId: null, correlationId: null, ct)
+            .ConfigureAwait(false);
+        return sent.IsFailure
+            ? new WorkflowPromptSent(null, sent.Error.Description)
+            : new WorkflowPromptSent(sent.Value.MessageId, sent.Value.MessageId is null ? "the harness gave the prompt no id." : null);
+    }
+
+    public async Task<string?> ReplyToAsync(string sessionId, string messageId, CancellationToken ct)
+    {
+        var page = await messages.GetMessagesAsync(sessionId, limit: 30, ct: ct).ConfigureAwait(false);
+        return SessionUpdateSender.LastReply(page.Messages, messageId);
     }
 
     /// <summary>The repository source: a new worktree for the run's first step, the run's worktree after that.</summary>

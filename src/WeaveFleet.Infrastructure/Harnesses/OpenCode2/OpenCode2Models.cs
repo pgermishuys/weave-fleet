@@ -448,6 +448,8 @@ internal sealed record OpenCode2MessageInfo
     public required string Id { get; init; }
     public required string Role { get; init; }
     [JsonPropertyName("sessionID")] public required string SessionId { get; init; }
+    /// <summary>For an assistant message, the prompt it answers, as OpenCode 1 names it.</summary>
+    [JsonPropertyName("parentID")] public string? ParentId { get; init; }
     public string? Agent { get; init; }
     [JsonPropertyName("modelID")] public string? ModelId { get; init; }
     [JsonPropertyName("providerID")] public string? ProviderId { get; init; }

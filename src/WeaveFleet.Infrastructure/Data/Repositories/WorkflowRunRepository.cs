@@ -20,11 +20,11 @@ public sealed class WorkflowRunRepository(IDbConnectionFactory connectionFactory
             INSERT INTO workflow_runs (
                 id, user_id, workflow_id, workflow_name, definition, request, slug, title, repository_path, base_branch,
                 branch, worktree_path, harness_type, harness_profile_id, options, status, current_step_id,
-                waiting_reason, result, created_at, updated_at, ended_at
+                waiting_reason, waiting_kind, result, created_at, updated_at, ended_at
             ) VALUES (
                 @Id, @UserId, @WorkflowId, @WorkflowName, @Definition, @Request, @Slug, @Title, @RepositoryPath, @BaseBranch,
                 @Branch, @WorktreePath, @HarnessType, @HarnessProfileId, @Options, @Status, @CurrentStepId,
-                @WaitingReason, @Result, @CreatedAt, @UpdatedAt, @EndedAt
+                @WaitingReason, @WaitingKind, @Result, @CreatedAt, @UpdatedAt, @EndedAt
             )
             """,
             cmd => AddRunParameters(cmd, run));
@@ -37,7 +37,7 @@ public sealed class WorkflowRunRepository(IDbConnectionFactory connectionFactory
             """
             UPDATE workflow_runs SET
                 title = @Title, branch = @Branch, worktree_path = @WorktreePath, options = @Options, status = @Status,
-                current_step_id = @CurrentStepId, waiting_reason = @WaitingReason, result = @Result,
+                current_step_id = @CurrentStepId, waiting_reason = @WaitingReason, waiting_kind = @WaitingKind, result = @Result,
                 updated_at = @UpdatedAt, ended_at = @EndedAt
             WHERE id = @Id
             """,
@@ -90,9 +90,11 @@ public sealed class WorkflowRunRepository(IDbConnectionFactory connectionFactory
         await conn.ExecuteNonQueryAsync(
             """
             INSERT INTO workflow_run_steps (
-                id, run_id, step_id, visit, session_id, status, outcome, summary, note, started_at, finished_at
+                id, run_id, step_id, visit, session_id, status, outcome, summary, note, finish, prompt_message_id,
+                wrap_up_message_id, hand_off_note, files_checked, started_at, finished_at
             ) VALUES (
-                @Id, @RunId, @StepId, @Visit, @SessionId, @Status, @Outcome, @Summary, @Note, @StartedAt, @FinishedAt
+                @Id, @RunId, @StepId, @Visit, @SessionId, @Status, @Outcome, @Summary, @Note, @Finish, @PromptMessageId,
+                @WrapUpMessageId, @HandOffNote, @FilesChecked, @StartedAt, @FinishedAt
             )
             """,
             cmd => AddStepParameters(cmd, visit));
@@ -105,7 +107,8 @@ public sealed class WorkflowRunRepository(IDbConnectionFactory connectionFactory
             """
             UPDATE workflow_run_steps SET
                 session_id = @SessionId, status = @Status, outcome = @Outcome, summary = @Summary, note = @Note,
-                finished_at = @FinishedAt
+                finish = @Finish, prompt_message_id = @PromptMessageId, wrap_up_message_id = @WrapUpMessageId,
+                hand_off_note = @HandOffNote, files_checked = @FilesChecked, finished_at = @FinishedAt
             WHERE id = @Id
             """,
             cmd => AddStepParameters(cmd, visit));
@@ -149,6 +152,7 @@ public sealed class WorkflowRunRepository(IDbConnectionFactory connectionFactory
         cmd.AddParameter("Status", run.Status);
         cmd.AddParameter("CurrentStepId", run.CurrentStepId);
         cmd.AddParameter("WaitingReason", run.WaitingReason);
+        cmd.AddParameter("WaitingKind", run.WaitingKind);
         cmd.AddParameter("Result", run.Result);
         cmd.AddParameter("CreatedAt", run.CreatedAt);
         cmd.AddParameter("UpdatedAt", run.UpdatedAt);
@@ -166,6 +170,11 @@ public sealed class WorkflowRunRepository(IDbConnectionFactory connectionFactory
         cmd.AddParameter("Outcome", step.Outcome);
         cmd.AddParameter("Summary", step.Summary);
         cmd.AddParameter("Note", step.Note);
+        cmd.AddParameter("Finish", step.Finish);
+        cmd.AddParameter("PromptMessageId", step.PromptMessageId);
+        cmd.AddParameter("WrapUpMessageId", step.WrapUpMessageId);
+        cmd.AddParameter("HandOffNote", step.HandOffNote);
+        cmd.AddParameter("FilesChecked", step.FilesChecked ? 1 : 0);
         cmd.AddParameter("StartedAt", step.StartedAt);
         cmd.AddParameter("FinishedAt", step.FinishedAt);
     }
@@ -190,6 +199,7 @@ public sealed class WorkflowRunRepository(IDbConnectionFactory connectionFactory
         Status = r.GetString(r.GetOrdinal("status")),
         CurrentStepId = r.GetNullableString(r.GetOrdinal("current_step_id")),
         WaitingReason = r.GetNullableString(r.GetOrdinal("waiting_reason")),
+        WaitingKind = r.GetNullableString(r.GetOrdinal("waiting_kind")),
         Result = r.GetNullableString(r.GetOrdinal("result")),
         CreatedAt = r.GetString(r.GetOrdinal("created_at")),
         UpdatedAt = r.GetString(r.GetOrdinal("updated_at")),
@@ -207,6 +217,11 @@ public sealed class WorkflowRunRepository(IDbConnectionFactory connectionFactory
         Outcome = r.GetNullableString(r.GetOrdinal("outcome")),
         Summary = r.GetNullableString(r.GetOrdinal("summary")),
         Note = r.GetNullableString(r.GetOrdinal("note")),
+        Finish = r.GetNullableString(r.GetOrdinal("finish")),
+        PromptMessageId = r.GetNullableString(r.GetOrdinal("prompt_message_id")),
+        WrapUpMessageId = r.GetNullableString(r.GetOrdinal("wrap_up_message_id")),
+        HandOffNote = r.GetNullableString(r.GetOrdinal("hand_off_note")),
+        FilesChecked = r.GetInt64(r.GetOrdinal("files_checked")) != 0,
         StartedAt = r.GetString(r.GetOrdinal("started_at")),
         FinishedAt = r.GetNullableString(r.GetOrdinal("finished_at")),
     };

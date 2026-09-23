@@ -33,6 +33,11 @@ public sealed class WorkflowRun
     public string? CurrentStepId { get; set; }
     /// <summary>Why the run is waiting on the user, in words; null unless <see cref="Status"/> is waiting.</summary>
     public string? WaitingReason { get; set; }
+    /// <summary>
+    /// What the run waits on, when it's something its current visit alone doesn't say: <c>missing-files</c> or
+    /// <c>wrap-up-failed</c>. Null otherwise.
+    /// </summary>
+    public string? WaitingKind { get; set; }
     /// <summary>How the run ended, in words ("PR #12 opened", "Ended by you at Review").</summary>
     public string? Result { get; set; }
     public string CreatedAt { get; set; } = string.Empty;
@@ -43,7 +48,10 @@ public sealed class WorkflowRun
 public static class WorkflowRunStatus
 {
     public const string Running = "running";
-    /// <summary>Stopped on the user: a You step, a step that stopped without an outcome, or a loop past its maximum.</summary>
+    /// <summary>
+    /// Stopped on the user: a You step, a step that stopped without an outcome, a loop past its maximum, a declared
+    /// file that's missing, or a wrap-up that didn't finish. A step you finish is still running: it's a conversation.
+    /// </summary>
     public const string Waiting = "waiting";
     public const string Done = "done";
     /// <summary>The user ended it. Its sessions stay as ordinary sessions.</summary>
@@ -71,6 +79,16 @@ public sealed class WorkflowRunStep
     public string? Summary { get; set; }
     /// <summary>A note the user sent back into this visit.</summary>
     public string? Note { get; set; }
+    /// <summary>Who ends the visit (<see cref="WorkflowFinishers"/>), decided when it started; null is the agent.</summary>
+    public string? Finish { get; set; }
+    /// <summary>The id of the prompt the visit's session started with.</summary>
+    public string? PromptMessageId { get; set; }
+    /// <summary>The id of the wrap-up prompt Fleet sent when the user moved on; its reply is the summary.</summary>
+    public string? WrapUpMessageId { get; set; }
+    /// <summary>The user's note for the next step, from Move on.</summary>
+    public string? HandOffNote { get; set; }
+    /// <summary>The step's declared files were all there before the next step started.</summary>
+    public bool FilesChecked { get; set; }
     public string StartedAt { get; set; } = string.Empty;
     public string? FinishedAt { get; set; }
 }
@@ -84,4 +102,13 @@ public static class WorkflowRunStepStatus
     public const string Skipped = "skipped";
     /// <summary>A You step the user answered.</summary>
     public const string Decided = "decided";
+    /// <summary>The user moved on from a step they finish; its session is bringing the files up to date.</summary>
+    public const string WrappingUp = "wrapping-up";
+}
+
+/// <summary>Who ends a step: the agent, with <c>fleet_step_done</c>, or the user, with Move on.</summary>
+public static class WorkflowFinishers
+{
+    public const string Agent = "agent";
+    public const string You = "you";
 }

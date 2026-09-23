@@ -13,6 +13,7 @@ namespace WeaveFleet.Application.Workflows;
 /// <param name="Directory">The repository the run's worktree is made from.</param>
 /// <param name="OptionalSteps">The optional steps switched on for this run.</param>
 /// <param name="RoleOverrides">The run's own model per role, from the Models menu.</param>
+/// <param name="CheckWithMe">"Check with me after each step", from the Run box: every agent step is one you finish.</param>
 public sealed record StartWorkflowRunRequest(
     string WorkflowId,
     string Directory,
@@ -21,7 +22,8 @@ public sealed record StartWorkflowRunRequest(
     string? HarnessType = null,
     string? HarnessProfileId = null,
     IReadOnlyList<string>? OptionalSteps = null,
-    IReadOnlyDictionary<string, WorkflowModelChoice>? RoleOverrides = null);
+    IReadOnlyDictionary<string, WorkflowModelChoice>? RoleOverrides = null,
+    bool CheckWithMe = false);
 
 /// <summary>The library for a repository: the workflows Fleet can run there.</summary>
 /// <param name="Repository">The repository's folder, or null when none was given or it isn't a repository.</param>
@@ -68,8 +70,14 @@ public sealed class WorkflowService(
         return run is null ? FleetError.NotFoundFor("WorkflowRun", id) : await ViewAsync(run).ConfigureAwait(false);
     }
 
-    public Task<Result<WorkflowRunDto>> AnswerAsync(string runId, string choiceId, string? note, CancellationToken ct)
-        => runner.AnswerAsync(user.UserId, runId, choiceId, note, ct);
+    public Task<Result<WorkflowRunDto>> AnswerAsync(string runId, string choiceId, string? note, bool? checkWithMe, CancellationToken ct)
+        => runner.AnswerAsync(user.UserId, runId, choiceId, note, checkWithMe, ct);
+
+    public Task<Result<WorkflowRunDto>> MoveOnAsync(string runId, string? outcome, string? note, CancellationToken ct)
+        => runner.MoveOnAsync(user.UserId, runId, outcome, note, ct);
+
+    public Task<Result<WorkflowRunDto>> SetCheckWithMeAsync(string runId, bool on, CancellationToken ct)
+        => runner.SetCheckWithMeAsync(user.UserId, runId, on, ct);
 
     public Task<Result<WorkflowRunDto>> EndAsync(string runId, CancellationToken ct)
         => runner.EndAsync(user.UserId, runId, ct);
@@ -140,7 +148,7 @@ public sealed class WorkflowService(
             BaseBranch = string.IsNullOrWhiteSpace(request.BaseBranch) ? null : request.BaseBranch.Trim(),
             HarnessType = harnessType,
             HarnessProfileId = string.IsNullOrWhiteSpace(request.HarnessProfileId) ? null : request.HarnessProfileId,
-            Options = new WorkflowRunOptions { OptionalSteps = optional, RoleOverrides = overrides, StepModels = models }.Write(),
+            Options = new WorkflowRunOptions { OptionalSteps = optional, RoleOverrides = overrides, StepModels = models, CheckWithMe = request.CheckWithMe }.Write(),
             Status = WorkflowRunStatus.Running,
             CreatedAt = now,
             UpdatedAt = now,
@@ -281,6 +289,8 @@ public sealed record WorkflowDto(
 /// <param name="Kind"><c>agent</c> or <c>you</c>.</param>
 /// <param name="Model">A role or an exact <c>provider/model</c>; null for a You step.</param>
 /// <param name="Routes">Outcome → the step it leads to; outcomes not here go to the next step.</param>
+/// <param name="FinishYou"><c>finish: you</c>: you move the step on, not the agent.</param>
+/// <param name="Writes">The files it declares, with their variables, e.g. <c>docs/design/{{slug}}.md</c>.</param>
 public sealed record WorkflowStepDto(
     string Id,
     string Title,
@@ -295,15 +305,17 @@ public sealed record WorkflowStepDto(
     IReadOnlyDictionary<string, string> Routes,
     int? MaxLoops,
     string? Ask,
-    IReadOnlyList<WorkflowChoice> Choices)
+    IReadOnlyList<WorkflowChoice> Choices,
+    bool FinishYou,
+    IReadOnlyList<string> Writes)
 {
     public static WorkflowStepDto From(WorkflowStep step) => step switch
     {
         WorkflowAgentStep agent => new WorkflowStepDto(
             agent.Id, agent.Title, "agent", agent.Agent, agent.Model, agent.Effort, agent.Skill, agent.Optional, agent.OptionalHint,
-            agent.Outcomes, agent.Routes, agent.MaxLoops, null, []),
+            agent.Outcomes, agent.Routes, agent.MaxLoops, null, [], agent.FinishYou, agent.Writes),
         WorkflowYouStep you => new WorkflowStepDto(
-            you.Id, you.Title, "you", null, null, null, null, false, null, [], new Dictionary<string, string>(), null, you.Ask, you.Choices),
+            you.Id, you.Title, "you", null, null, null, null, false, null, [], new Dictionary<string, string>(), null, you.Ask, you.Choices, false, []),
         _ => throw new InvalidOperationException($"Unknown step {step.GetType().Name}"),
     };
 }

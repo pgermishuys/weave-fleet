@@ -41,10 +41,23 @@ public static class WorkflowEndpoints
             .WithName("StartWorkflowRun")
             .Produces<WorkflowRunDto>();
 
-        // POST /api/workflows/runs/{id}/answer { "choice": "choice:0" | "outcome:pass" | "retry", "note": "…" }
+        // POST /api/workflows/runs/{id}/answer
+        // { "choice": "choice:0" | "outcome:pass" | "retry" | "move-on-anyway", "note": "…", "checkWithMe": true }
         group.MapPost("/runs/{id}/answer", async (string id, AnswerWorkflowRunRequest request, WorkflowService workflows, CancellationToken ct)
-                => (await workflows.AnswerAsync(id, request.Choice, request.Note, ct)).ToApiResult())
+                => (await workflows.AnswerAsync(id, request.Choice, request.Note, request.CheckWithMe, ct)).ToApiResult())
             .WithName("AnswerWorkflowRun")
+            .Produces<WorkflowRunDto>();
+
+        // POST /api/workflows/runs/{id}/move-on { "outcome": "pass", "note": "…" } — from a step you finish.
+        group.MapPost("/runs/{id}/move-on", async (string id, MoveOnWorkflowRunRequest request, WorkflowService workflows, CancellationToken ct)
+                => (await workflows.MoveOnAsync(id, request.Outcome, request.Note, ct)).ToApiResult())
+            .WithName("MoveOnWorkflowRun")
+            .Produces<WorkflowRunDto>();
+
+        // PUT /api/workflows/runs/{id}/check-with-me { "on": true } — applies from the next step.
+        group.MapPut("/runs/{id}/check-with-me", async (string id, CheckWithMeRequest request, WorkflowService workflows, CancellationToken ct)
+                => (await workflows.SetCheckWithMeAsync(id, request.On, ct)).ToApiResult())
+            .WithName("SetWorkflowRunCheckWithMe")
             .Produces<WorkflowRunDto>();
 
         // Ending a run only stops Fleet advancing it; its sessions stay.
@@ -58,6 +71,12 @@ public static class WorkflowEndpoints
 }
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record AnswerWorkflowRunRequest(string Choice, string? Note = null);
+public sealed record AnswerWorkflowRunRequest(string Choice, string? Note = null, bool? CheckWithMe = null);
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record MoveOnWorkflowRunRequest(string? Outcome = null, string? Note = null);
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record CheckWithMeRequest(bool On);
 
 #pragma warning restore IL2026

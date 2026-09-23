@@ -173,6 +173,8 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(List<WeaveFleet.Application.Workflows.WorkflowRunDto>))]
 [JsonSerializable(typeof(WeaveFleet.Application.Workflows.StartWorkflowRunRequest))]
 [JsonSerializable(typeof(WeaveFleet.Api.Endpoints.AnswerWorkflowRunRequest))]
+[JsonSerializable(typeof(WeaveFleet.Api.Endpoints.MoveOnWorkflowRunRequest))]
+[JsonSerializable(typeof(WeaveFleet.Api.Endpoints.CheckWithMeRequest))]
 [JsonSerializable(typeof(CanvasToolResponse))]
 [JsonSerializable(typeof(List<CanvasToolAttachmentResponse>))]
 [JsonSerializable(typeof(BrowserProxyRequest))]

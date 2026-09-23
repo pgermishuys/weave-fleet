@@ -303,7 +303,7 @@ public sealed partial class SessionOrchestrator(
                 ProjectName = projectName,
                 ScenarioId = request.ScenarioId,
                 LaunchArtifacts = launchArtifacts,
-                WorkflowStep = request.WorkflowRunId is not null,
+                WorkflowStep = request.WorkflowRunId is not null && !request.WorkflowUserFinishes,
             }, ct);
         }
         catch (Exception ex)
@@ -361,6 +361,7 @@ public sealed partial class SessionOrchestrator(
             SelectedProviderId = HasModel(request.ProviderId, request.ModelId) ? request.ProviderId!.Trim() : null,
             SelectedModelId = HasModel(request.ProviderId, request.ModelId) ? request.ModelId!.Trim() : null,
             WorkflowRunId = request.WorkflowRunId,
+            WorkflowUserFinishes = request.WorkflowRunId is not null && request.WorkflowUserFinishes,
         };
 
         var createdAt = DateTime.UtcNow.ToString("O");
@@ -1912,7 +1913,7 @@ public sealed partial class SessionOrchestrator(
                     ProjectId = session.ProjectId,
                     ProjectName = projectName,
                     LaunchArtifacts = launchArtifacts,
-                    WorkflowStep = session.WorkflowRunId is not null,
+                    WorkflowStep = session.WorkflowRunId is not null && !session.WorkflowUserFinishes,
                 }, ct).ConfigureAwait(false)
                 : await harnessRuntime.ResumeAsync(new HarnessResumeOptions
                 {
@@ -1923,7 +1924,7 @@ public sealed partial class SessionOrchestrator(
                     ProjectId = session.ProjectId,
                     ProjectName = projectName,
                     LaunchArtifacts = launchArtifacts,
-                    WorkflowStep = session.WorkflowRunId is not null,
+                    WorkflowStep = session.WorkflowRunId is not null && !session.WorkflowUserFinishes,
                     DelegatedChild = session.ParentSessionId is not null,
                 }, ct).ConfigureAwait(false);
         }
@@ -2267,6 +2268,11 @@ public sealed record CreateSessionRequest
     /// which every other session has hidden.
     /// </summary>
     internal string? WorkflowRunId { get; init; }
+    /// <summary>
+    /// The workflow step is one the user finishes: the session is made like any session that isn't a step, with the
+    /// step tool hidden, so only the user can end it.
+    /// </summary>
+    internal bool WorkflowUserFinishes { get; init; }
     /// <summary>What a new worktree's branch is named from, when it isn't <see cref="InitialPrompt"/>.</summary>
     internal string? BranchNamingText { get; init; }
 }

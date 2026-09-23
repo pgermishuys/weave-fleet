@@ -66,6 +66,41 @@ public sealed class WorkflowRunRepositoryTests
     }
 
     [Fact]
+    public async Task A_step_you_finish_and_what_a_run_waits_on_round_trip()
+    {
+        var (keeper, repo, _) = await CreateAsync();
+        using var _ = keeper;
+        var run = Run("run-1", "2026-09-23T10:00:00.0000000Z");
+        await repo.InsertAsync(run);
+        run.Status = WorkflowRunStatus.Waiting;
+        run.WaitingKind = "missing-files";
+        await repo.UpdateAsync(run);
+
+        var step = new WorkflowRunStep
+        {
+            Id = "v1", RunId = "run-1", StepId = "design", Visit = 1, SessionId = "s1", Status = WorkflowRunStepStatus.Running,
+            Finish = WorkflowFinishers.You, PromptMessageId = "msg_1", StartedAt = "2026-09-23T10:00:01.0000000Z",
+        };
+        await repo.InsertStepAsync(step);
+        step.Status = WorkflowRunStepStatus.WrappingUp;
+        step.Outcome = "ready";
+        step.WrapUpMessageId = "msg_2";
+        step.HandOffNote = "Keep the status-bar shortcuts.";
+        step.FilesChecked = true;
+        await repo.UpdateStepAsync(step);
+
+        (await repo.GetAsync("run-1")).ShouldNotBeNull().WaitingKind.ShouldBe("missing-files");
+        var visit = (await repo.ListStepsAsync("run-1")).ShouldHaveSingleItem();
+        (visit.Status, visit.Finish, visit.PromptMessageId, visit.WrapUpMessageId, visit.HandOffNote, visit.FilesChecked)
+            .ShouldBe((WorkflowRunStepStatus.WrappingUp, WorkflowFinishers.You, "msg_1", "msg_2", "Keep the status-bar shortcuts.", true));
+
+        // A visit from before this change reads as one the agent finishes, with its files not checked.
+        await repo.InsertStepAsync(new WorkflowRunStep { Id = "v0", RunId = "run-1", StepId = "plan", Status = "done", StartedAt = "2026-09-23T09:00:00.0000000Z" });
+        var old = (await repo.ListStepsAsync("run-1"))[0];
+        (old.Finish, old.FilesChecked).ShouldBe(((string?)null, false));
+    }
+
+    [Fact]
     public async Task Lists_are_the_owners_and_unfinished_runs_span_everyone()
     {
         var (keeper, repo, someone) = await CreateAsync();
