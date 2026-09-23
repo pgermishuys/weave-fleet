@@ -202,6 +202,7 @@ public static class DependencyInjection
         services.AddScoped<AutomationRunService>();
         services.AddScoped<AutomationDraftService>();
         services.AddScoped<HarnessCatalogService>();
+        services.AddSingleton<HarnessCatalogChanges>();
         services.AddScoped<EventTriggerMatcher>();
         services.AddScoped<SessionActivityWriteService>();
         services.AddScoped<ILegacySessionImporter, LegacySessionImporter>();
