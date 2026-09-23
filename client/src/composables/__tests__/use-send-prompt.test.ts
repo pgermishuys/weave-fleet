@@ -229,3 +229,40 @@ describe("use-send-prompt retry", () => {
     expect(draft.draft.text).toBe("")
   })
 })
+
+describe("use-send-prompt picks the harness no longer lists", () => {
+  function sentBody(): { agent?: string; model?: unknown } {
+    const promptCall = (mockApi.POST.mock.calls as unknown[][]).find(([url]) => url === "/api/sessions/{id}/prompt")
+    return (promptCall?.[1] as { body: { agent?: string; model?: unknown } }).body
+  }
+
+  it("sends the agent and model as picked instead of swapping them for the first listed", async () => {
+    const sessionId = "session-gone-picks"
+    const draft = useDraftState(sessionId, { agentId: "", modelId: "" })
+    draft.setAgentId("removed-agent")
+    draft.setModelId(JSON.stringify(["signed-out", "gone-model"]))
+    draft.setText("hello")
+
+    mockApi.POST.mockReturnValueOnce(new Promise(() => {}))
+    useSendPrompt(sessionId).sendPrompt()
+    await nextTick()
+
+    expect(sentBody().agent).toBe("removed-agent")
+    expect(sentBody().model).toEqual({ providerID: "signed-out", modelID: "gone-model" })
+    const [sent] = useSentPrompts(sessionId).sentPrompts.value
+    expect(sent?.agentName).toBe("removed-agent")
+    expect(sent?.modelName).toBe("gone-model")
+  })
+
+  it("sends neither when the draft is on Default", async () => {
+    const sessionId = "session-default-picks"
+    useDraftState(sessionId, { agentId: "", modelId: "" }).setText("hello")
+
+    mockApi.POST.mockReturnValueOnce(new Promise(() => {}))
+    useSendPrompt(sessionId).sendPrompt()
+    await nextTick()
+
+    expect(sentBody().agent).toBeUndefined()
+    expect(sentBody().model).toBeUndefined()
+  })
+})

@@ -1,10 +1,9 @@
 import { storeToRefs } from "pinia";
 import { computed, readonly, shallowRef } from "vue";
 import type { components } from "@/api/generated/schema";
-import { useAgents } from "@/composables/use-agents";
 import { useDraftState } from "@/composables/use-draft-state";
-import { useModels } from "@/composables/use-models";
 import { api } from "@/api/client";
+import { modelFromKey } from "@/lib/agent-model-choice";
 import { useSessionsStore } from "@/stores/sessions";
 
 interface BackendSendCommandRequest {
@@ -46,8 +45,6 @@ async function readCommandErrorMessage(response: Response): Promise<string> {
 export function useSendCommand(sessionId: string) {
   const sessionsStore = useSessionsStore();
   const { sessions } = storeToRefs(sessionsStore);
-  const { defaultAgentId, agentsById } = useAgents(sessionId);
-  const { defaultModelKey, modelsByKey } = useModels(sessionId);
   const sendError = shallowRef<string | undefined>(undefined);
   const { draft, resetText } = useDraftState(sessionId, {
     agentId: "",
@@ -87,12 +84,8 @@ export function useSendCommand(sessionId: string) {
 
     sendError.value = undefined;
 
-    const agent = agentsById.value[draft.agentId] ?? agentsById.value[defaultAgentId.value];
-    const model = modelsByKey.value[draft.modelId] ?? modelsByKey.value[defaultModelKey.value];
-    const resolvedAgentId = agent?.id ?? draft.agentId ?? defaultAgentId.value;
-    const resolvedModelId = model?.id ?? "";
-    const usesDefaultAgent = !draft.agentId;
-    const usesDefaultModel = !draft.modelId;
+    // A pick the harness no longer lists is sent as picked, not swapped for another: the harness says what's wrong.
+    const pickedModel = modelFromKey(draft.modelId);
 
     if (selectedSession.value) {
       selectedSession.value.activityStatus = "busy";
@@ -109,12 +102,12 @@ export function useSendCommand(sessionId: string) {
       request.arguments = args.trim();
     }
 
-    if (resolvedAgentId && !usesDefaultAgent) {
-      request.agent = resolvedAgentId;
+    if (draft.agentId) {
+      request.agent = draft.agentId;
     }
 
-    if (resolvedModelId && !usesDefaultModel) {
-      request.model = { providerID: model?.providerId ?? "", modelID: resolvedModelId };
+    if (pickedModel) {
+      request.model = pickedModel;
     }
 
     void postCommand(request);
