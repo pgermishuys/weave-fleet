@@ -2,6 +2,7 @@ import { storeToRefs } from "pinia";
 import { computed, readonly, ref, shallowRef, watch } from "vue";
 import { api } from "@/api/client";
 import type { AutocompleteAgent, ModelReference } from "@/api/client";
+import { shareInFlight } from "@/lib/shared-request";
 import { useSessionsStore } from "@/stores/sessions";
 
 export interface AgentOption {
@@ -22,6 +23,20 @@ export function toAgentOptions(agents: readonly AutocompleteAgent[]): AgentOptio
       ...(agent.model?.providerID && agent.model.modelID ? { model: agent.model } : {}),
     }));
 }
+
+const loadSessionAgents = shareInFlight(async (sessionId: string): Promise<AgentOption[]> => {
+  const { data, error, response } = await api.GET("/api/sessions/{id}/agents", {
+    params: { path: { id: sessionId } },
+  });
+
+  if (error || !response.ok) {
+    const payload = error as { error?: string } | undefined;
+    throw new Error(payload?.error ?? `HTTP ${response.status}`);
+  }
+
+  const body = data as unknown as { agents?: AutocompleteAgent[] } | AutocompleteAgent[];
+  return toAgentOptions(Array.isArray(body) ? body : body.agents ?? []);
+});
 
 export function useAgents(sessionId?: string) {
   const sessionsStore = useSessionsStore();
@@ -46,32 +61,25 @@ export function useAgents(sessionId?: string) {
         return;
       }
 
-      const controller = new AbortController();
+      // The request is shared with every other caller, so leaving only drops its answer.
+      let left = false;
       onCleanup(() => {
-        controller.abort();
+        left = true;
       });
 
       isLoading.value = true;
       error.value = undefined;
 
       try {
-        const { data, error, response } = await api.GET("/api/sessions/{id}/agents", {
-          params: { path: { id: nextSessionId } },
-          signal: controller.signal,
-        });
-
-        if (error || !response.ok) {
-          const payload = error as { error?: string } | undefined;
-          throw new Error(payload?.error ?? `HTTP ${response.status}`);
+        const nextAgents = await loadSessionAgents(nextSessionId);
+        if (left) {
+          return;
         }
-
-        const body = data as unknown as { agents?: AutocompleteAgent[] } | AutocompleteAgent[];
-        const nextAgents = toAgentOptions(Array.isArray(body) ? body : body.agents ?? []);
 
         agents.value = nextAgents;
         agentsById.value = Object.fromEntries(nextAgents.map((agent) => [agent.id, agent])) as Record<string, AgentOption>;
       } catch (fetchError) {
-        if (fetchError instanceof DOMException && fetchError.name === "AbortError") {
+        if (left) {
           return;
         }
 
@@ -79,7 +87,9 @@ export function useAgents(sessionId?: string) {
         agentsById.value = {};
         error.value = fetchError instanceof Error ? fetchError.message : "Failed to load agents";
       } finally {
-        isLoading.value = false;
+        if (!left) {
+          isLoading.value = false;
+        }
       }
     },
     { immediate: true },

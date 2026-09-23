@@ -1,7 +1,8 @@
 import { storeToRefs } from "pinia";
-import { computed, readonly, ref, shallowRef, toValue, watch, type MaybeRefOrGetter } from "vue";
+import { computed, readonly, shallowRef, toValue, watch, type MaybeRefOrGetter } from "vue";
 import { api } from "@/api/client";
 import type { AvailableProvider } from "@/api/client";
+import { shareInFlight } from "@/lib/shared-request";
 import { useSessionsStore } from "@/stores/sessions";
 
 export interface ModelOption {
@@ -32,12 +33,28 @@ export function toModelOptions(providers: readonly AvailableProvider[]): ModelOp
   });
 }
 
+const loadSessionModels = shareInFlight(async (sessionId: string): Promise<ModelOption[]> => {
+  const { data, error, response } = await api.GET("/api/sessions/{id}/models", {
+    params: { path: { id: sessionId } },
+  });
+
+  if (error || !response.ok) {
+    const payload = error as { error?: string } | undefined;
+    throw new Error(payload?.error ?? `HTTP ${response.status}`);
+  }
+
+  const body = data as unknown as { providers?: AvailableProvider[] } | AvailableProvider[];
+  return toModelOptions(Array.isArray(body) ? body : body.providers ?? []);
+});
+
 export function useModels(sessionId?: MaybeRefOrGetter<string | undefined>) {
   const sessionsStore = useSessionsStore();
   const { activeSessionId } = storeToRefs(sessionsStore);
 
-  const models = ref<ModelOption[]>([]);
-  const modelsByKey = ref<Record<string, ModelOption>>({});
+  // Replaced whole, never changed in place. Shallow, because a deep proxy made every read of a model go through Vue:
+  // naming the model on each of a hundred messages took a third of a second.
+  const models = shallowRef<ModelOption[]>([]);
+  const modelsByKey = shallowRef<Record<string, ModelOption>>({});
   const isLoading = shallowRef(false);
   const error = shallowRef<string | undefined>(undefined);
 
@@ -55,33 +72,25 @@ export function useModels(sessionId?: MaybeRefOrGetter<string | undefined>) {
           return;
         }
 
-      const controller = new AbortController();
+      // The request is shared with every other caller, so leaving only drops its answer.
+      let left = false;
       onCleanup(() => {
-        controller.abort();
+        left = true;
       });
 
       isLoading.value = true;
       error.value = undefined;
 
       try {
-        const { data, error, response } = await api.GET("/api/sessions/{id}/models", {
-          params: { path: { id: nextSessionId } },
-          signal: controller.signal,
-        });
-
-        if (error || !response.ok) {
-          const payload = error as { error?: string } | undefined;
-          throw new Error(payload?.error ?? `HTTP ${response.status}`);
+        const nextModels = await loadSessionModels(nextSessionId);
+        if (left) {
+          return;
         }
-
-        const body = data as unknown as { providers?: AvailableProvider[] } | AvailableProvider[];
-        const providers = Array.isArray(body) ? body : body.providers ?? [];
-        const nextModels = toModelOptions(providers);
 
         models.value = nextModels;
         modelsByKey.value = Object.fromEntries(nextModels.map((model) => [model.selectionKey, model])) as Record<string, ModelOption>;
       } catch (fetchError) {
-        if (fetchError instanceof DOMException && fetchError.name === "AbortError") {
+        if (left) {
           return;
         }
 
@@ -89,15 +98,17 @@ export function useModels(sessionId?: MaybeRefOrGetter<string | undefined>) {
         modelsByKey.value = {};
         error.value = fetchError instanceof Error ? fetchError.message : "Failed to load models";
       } finally {
-        isLoading.value = false;
+        if (!left) {
+          isLoading.value = false;
+        }
       }
     },
     { immediate: true },
   );
 
   return {
-    models: readonly(models),
-    modelsByKey: readonly(modelsByKey),
+    models: computed(() => models.value),
+    modelsByKey: computed(() => modelsByKey.value),
     defaultModelKey,
     isLoading: readonly(isLoading),
     error: readonly(error),
