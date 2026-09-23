@@ -2,7 +2,8 @@ import { computed, readonly, ref, shallowRef, toValue, watch, type ComputedRef, 
 import { useFindFiles } from "@/composables/use-find-files";
 import { api } from "@/api/client";
 import type { AutocompleteAgent, AutocompleteCommand } from "@/api/client";
-import { onCatalogChange } from "@/lib/harness-catalog-changes";
+import { loadSessionAgentList } from "@/composables/use-agents";
+import { sessionCatalogChanges } from "@/lib/harness-catalog-changes";
 
 export interface AutocompleteItem {
   id: string;
@@ -43,17 +44,6 @@ interface UseStaticInstanceDataResult<T> {
   data: Readonly<Ref<readonly T[]>>;
   isLoading: Readonly<ShallowRef<boolean>>;
   error: Readonly<ShallowRef<string | undefined>>;
-}
-
-/** Counts the pushed changes to what the session's harness offers where it runs, so its lists ask again. */
-function sessionCatalogChanges(sessionId: Ref<string>): Ref<number> {
-  const changes = shallowRef(0);
-  onCatalogChange((change) => {
-    if (sessionId.value && change.sessionIds.includes(sessionId.value)) {
-      changes.value += 1;
-    }
-  });
-  return changes;
 }
 
 function useSessionCommands(sessionId: MaybeRefOrGetter<string | null | undefined>): UseStaticInstanceDataResult<AutocompleteCommand> {
@@ -129,9 +119,10 @@ function useSessionAgents(sessionId: MaybeRefOrGetter<string | null | undefined>
         return;
       }
 
-      const controller = new AbortController();
+      // The request is shared with the session's agent picker, so leaving only drops its answer.
+      let left = false;
       onCleanup(() => {
-        controller.abort();
+        left = true;
       });
       // Asked again because the harness's list changed: the old one stays up meanwhile.
       if (previous?.[0] !== nextSessionId) {
@@ -140,26 +131,18 @@ function useSessionAgents(sessionId: MaybeRefOrGetter<string | null | undefined>
       error.value = undefined;
 
       try {
-        const { data: responseData, error, response } = await api.GET("/api/sessions/{id}/agents", {
-          params: { path: { id: nextSessionId } },
-          signal: controller.signal,
-        });
-
-        if (error || !response.ok) {
-          const payload = error as { error?: string } | undefined;
-          throw new Error(payload?.error ?? `HTTP ${response.status}`);
+        const agents = await loadSessionAgentList(nextSessionId);
+        if (!left) {
+          data.value = agents;
         }
-
-        const body = responseData as unknown as { agents?: AutocompleteAgent[] } | AutocompleteAgent[];
-        data.value = Array.isArray(body) ? body : body.agents ?? [];
       } catch (fetchError) {
-        if (fetchError instanceof DOMException && fetchError.name === "AbortError") {
-          return;
+        if (!left) {
+          error.value = fetchError instanceof Error ? fetchError.message : "Failed to load agents";
         }
-
-        error.value = fetchError instanceof Error ? fetchError.message : "Failed to load agents";
       } finally {
-        isLoading.value = false;
+        if (!left) {
+          isLoading.value = false;
+        }
       }
     },
     { immediate: true },

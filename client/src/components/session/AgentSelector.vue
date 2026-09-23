@@ -36,13 +36,16 @@ const items = computed(() => {
     })),
   ];
 });
+
+/** An agent picked that the list no longer has (its file was removed) still shows by name. */
+const placeholder = computed(() => selectedAgentId.value || "Select agent");
 </script>
 
 <template>
   <SelectorDropdown
     v-model="selectedAgentId"
     label="Agent selector"
-    placeholder="Select agent"
+    :placeholder="placeholder"
     :items="items"
     :disabled="disabled"
     :test-id="testId"

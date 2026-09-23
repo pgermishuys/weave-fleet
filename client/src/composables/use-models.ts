@@ -2,6 +2,7 @@ import { storeToRefs } from "pinia";
 import { computed, readonly, shallowRef, toValue, watch, type MaybeRefOrGetter } from "vue";
 import { api } from "@/api/client";
 import type { AvailableProvider } from "@/api/client";
+import { sessionCatalogChanges } from "@/lib/harness-catalog-changes";
 import { shareInFlight } from "@/lib/shared-request";
 import { useSessionsStore } from "@/stores/sessions";
 
@@ -60,17 +61,19 @@ export function useModels(sessionId?: MaybeRefOrGetter<string | undefined>) {
 
   const resolvedSessionId = computed(() => toValue(sessionId) ?? activeSessionId.value ?? "");
   const defaultModelKey = computed(() => models.value[0]?.selectionKey ?? "");
+  // The harness says what the session's folder offers changed (a provider signed in, a model added): ask again.
+  const changes = sessionCatalogChanges(resolvedSessionId);
 
   watch(
-    resolvedSessionId,
-    async (nextSessionId, _previous, onCleanup) => {
-        if (!nextSessionId) {
-          models.value = [];
-          modelsByKey.value = {};
-          isLoading.value = false;
-          error.value = undefined;
-          return;
-        }
+    [resolvedSessionId, changes],
+    async ([nextSessionId], previous, onCleanup) => {
+      if (!nextSessionId) {
+        models.value = [];
+        modelsByKey.value = {};
+        isLoading.value = false;
+        error.value = undefined;
+        return;
+      }
 
       // The request is shared with every other caller, so leaving only drops its answer.
       let left = false;
@@ -78,7 +81,11 @@ export function useModels(sessionId?: MaybeRefOrGetter<string | undefined>) {
         left = true;
       });
 
-      isLoading.value = true;
+      // Asked again because the harness's list changed: the old one stays up meanwhile.
+      const isRefresh = previous?.[0] === nextSessionId;
+      if (!isRefresh) {
+        isLoading.value = true;
+      }
       error.value = undefined;
 
       try {
@@ -94,8 +101,11 @@ export function useModels(sessionId?: MaybeRefOrGetter<string | undefined>) {
           return;
         }
 
-        models.value = [];
-        modelsByKey.value = {};
+        // A refresh that fails keeps the list it had.
+        if (!isRefresh) {
+          models.value = [];
+          modelsByKey.value = {};
+        }
         error.value = fetchError instanceof Error ? fetchError.message : "Failed to load models";
       } finally {
         if (!left) {

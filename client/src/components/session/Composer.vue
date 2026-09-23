@@ -497,13 +497,17 @@ watch(
   { immediate: true },
 );
 
+// A model picked in an earlier visit that the session no longer offers goes back to "Default" when the list first
+// loads. Once it's up, a list the harness changed doesn't change the pick: the chip names the model it had.
+let draftModelChecked = false;
 watch(
   [models, defaultModelKey],
   ([nextModels, nextDefaultModelKey]) => {
-    if (!nextDefaultModelKey) {
+    if (!nextDefaultModelKey || draftModelChecked) {
       return;
     }
 
+    draftModelChecked = true;
     if (draft.modelId && !nextModels.some((model) => model.selectionKey === draft.modelId)) {
       setModelId("");
     }

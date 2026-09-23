@@ -718,3 +718,29 @@ foreground subagent still shows Working, and a background child's question still
 - **Checked live** (scratch Fleet, V2 2.0.9, fake model): background, background question, foreground on V2, and
   foreground on OpenCode 1. The extended `A_background_subagents_delegation_stays_open_while_its_child_works` live
   test passes, and so does the rest of the OpenCode 2 live suite.
+
+## A session's own agent and model pickers follow the live catalog (2026-09-23)
+
+Closes the first "left for later" of the live catalog (Track H) above.
+
+- [x] `useAgents` and `useModels` ask again when `harness.catalog_changed` names their session
+      (`sessionCatalogChanges`, next to `onCatalogChange` in `harness-catalog-changes.ts`; the slash-command and `@`
+      lists use the same counter). Every picker of a session asks through a request they share (`shareInFlight`), and
+      the `@` agent list now shares the agent picker's (`loadSessionAgentList`), so one change is one `agents` and one
+      `models` request per page, however many pickers and helpers show them. No polling. The list stays up while it's
+      asked again, and when asking again fails.
+- [x] A pick the list no longer has (its agent file removed, its provider gone) is kept: the chip names it (the agent
+      by name, the model by id), and the prompt or command sends it as picked. Before, sending swapped it for the
+      first listed agent or model, and the composer reset a missing model to Default on every list change; it now does
+      that only when the list first loads (a pick left from an earlier visit).
+- Nothing server-side changed: #274's message already names the sessions in the folder on the server that changed,
+  so a session on a profile hears only its own server.
+- Checked live (2.0.9, separate install, scratch Fleet, fake model), with an OpenCode 2 session on No profile and one
+  on a Work profile open in alpha: an agent file in the repo's `.opencode/agents/` reached both agent pickers without
+  reopening, one `agents` + one `models` request per page although two servers told it; the pick (`plan`) was kept.
+  Removing the picked agent's file took it out of the list and left the chip on it. A provider added to V2's config
+  folder, and a dummy Anthropic key signed in through Settings (18 models), each reached the open model picker with
+  one request; the pick (`Fake Two`) was kept. Editing the Work profile's own file (V2 watches `OPENCODE_CONFIG`)
+  was told once, by the Work server: the Work session listed the new agent, the No-profile page asked for nothing.
+  An OpenCode 1 session in the same folder asked for nothing on a change and answered.
+- **Left for later:** unchanged from #274: a catalog that changed while its server was down isn't told.
