@@ -594,9 +594,11 @@ same conversation (the retry), the token count, and more time. So:
     null: "Describe it needs pooled OpenCode".
 - **OpenCode 2:** V2's `POST /api/session/{id}/generate` (the recap's call) answers from the session's context and
   leaves no trace, but it's one-shot. The follow-up is a second `generate` whose prompt carries the first question,
-  the first answer and the errors, so it still reads the session's context from cache. Session-less:
-  `POST /api/experimental/generate { prompt, model: { id, providerID, variant } }`, the same way. V2 reports no
-  tokens for either, so the banner shows none. Nothing to delete.
+  the first answer and the errors, so it still reads the session's context from cache. Session-less: a throwaway V2
+  session in the folder, switched to the Standard model (else the folder's default), asked with `generate` the same
+  way, and deleted on dispose. (Built first on `POST /api/experimental/generate`; the live test showed it reads only
+  the server's base config, which lacks the providers Fleet's config gives sessions: "Model unavailable".) V2 reports
+  no tokens, so the banner shows none.
 
 ### 2. The question and the retry (Application, `Workflows/WorkflowDrafter.cs`)
 
@@ -670,6 +672,16 @@ same conversation (the retry), the token count, and more time. So:
 - Live on a scratch Fleet (5371, fake model 4992, Playwright): the four checks in the brief on both OpenCode
   harnesses, with fake-model keywords that answer the draft question with YAML, one of them bad first.
 
+### Found by the live check
+
+- Saving a draft cleared what kept the editor on screen, so it unmounted before its `saved` reached the page: the draft
+  was written but the page lost it. The draft stays in the editor through its first save now.
+- `useWorkflowsNav`'s folder watch was made in the first caller's setup. A session row (Save as workflow…) can be that
+  caller now, and the watch died with the Sessions page, so the library never loaded the draft's repository. It lives
+  in a detached effect scope, with the computed it reads at module level.
+
 ### Not in this change
 
 - Agents writing workflow files through a tool; parallel plans; a "Redraft" button (Describe it again instead).
+- A crash mid-ask can leave an empty throwaway session on OpenCode 2 (OpenCode's are swept by the `fleet-recap`
+  title; V2 has no such sweep yet).
