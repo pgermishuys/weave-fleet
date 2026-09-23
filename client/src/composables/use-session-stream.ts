@@ -130,12 +130,25 @@ export function useSessionStream(
     }
   }
 
+  /**
+   * Applies one event, or skips it when the reducer can't: a malformed event (the server's tool-result parts, for one)
+   * must not take the rest of a frame's events, or a snapshot, down with it.
+   */
+  function applySafely(state: SessionStreamState, event: DomainEvent, live: boolean): SessionStreamState {
+    try {
+      return live ? applyLiveDomainEvent(state, event) : applyDomainEvent(state, event)
+    } catch (error) {
+      console.error(`Skipped a ${event.type} event the conversation couldn't apply:`, error)
+      return state
+    }
+  }
+
   function flushFrame(): void {
     const events = frameEvents.splice(0, frameEvents.length)
     cancelFrame()
     let nextState = streamState.value
     for (const { event, live } of events) {
-      nextState = live ? applyLiveDomainEvent(nextState, event) : applyDomainEvent(nextState, event)
+      nextState = applySafely(nextState, event, live)
     }
     if (nextState !== streamState.value) {
       streamState.value = nextState
@@ -232,10 +245,10 @@ export function useSessionStream(
           let nextState = createSessionStreamState(snapshot)
 
           for (const event of pendingEvents.splice(0, pendingEvents.length)) {
-            nextState = applyLiveDomainEvent(nextState, event)
+            nextState = applySafely(nextState, event, true)
           }
           for (const event of pendingActivity.splice(0, pendingActivity.length)) {
-            nextState = applyDomainEvent(nextState, event)
+            nextState = applySafely(nextState, event, false)
           }
 
           streamState.value = nextState
