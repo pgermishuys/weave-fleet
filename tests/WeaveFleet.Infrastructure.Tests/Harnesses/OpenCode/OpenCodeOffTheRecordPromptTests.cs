@@ -174,7 +174,77 @@ public sealed class OpenCodeOffTheRecordPromptTests
         http.Requests.ShouldBeEmpty();
     }
 
-    private static OpenCodeHarnessSession CreateSession(ScriptedHandler handler, string? openCodeSessionId = "oc-1")
+    [Fact]
+    public async Task the_recap_fork_of_a_session_without_the_step_tool_denies_it_after_asking_for_everything()
+    {
+        var http = new ScriptedHandler()
+            .On("GET /session/oc-1/message", Messages(UserMessage("msg_1", "github-copilot", "claude-sonnet-5")))
+            .On("GET /session", "[]")
+            .On("POST /session/oc-1/fork", """{"id":"fork-1"}""")
+            .On("PATCH /session/fork-1", """{"id":"fork-1"}""")
+            .On("POST /session/fork-1/message", """{"parts":[{"type":"text","text":"Recap."}],"info":{"id":"msg_3","role":"assistant"}}""")
+            .On("POST /session/fork-1/abort", "true")
+            .On("DELETE /session/fork-1", "true");
+        await using var session = CreateSession(http, hideStepTool: true);
+
+        await session.AskOffTheRecordAsync("recap please", CancellationToken.None);
+
+        // OpenCode applies the last matching rule: the deny has to come after the ask, or the fork offers the tool the
+        // parent doesn't, and the recap misses the provider's cache.
+        using var patch = JsonDocument.Parse(http.Body("PATCH /session/fork-1"));
+        var rules = patch.RootElement.GetProperty("permission").EnumerateArray().ToList();
+        rules.Select(r => (r.GetProperty("permission").GetString(), r.GetProperty("pattern").GetString(), r.GetProperty("action").GetString()))
+            .ShouldBe([("*", "*", "ask"), ("fleet_step_done", "*", "deny")]);
+    }
+
+    [Fact]
+    public async Task a_session_without_the_step_tool_switches_it_off_on_every_prompt()
+    {
+        var http = new ScriptedHandler().On("POST /session/oc-1/prompt_async", "");
+        await using var session = CreateSession(http, hideStepTool: true);
+
+        await session.SendPromptAsync("hello", null, CancellationToken.None);
+        await session.SendPromptAsync("again", null, CancellationToken.None);
+
+        foreach (var body in http.Requests.Where(r => r.Key == "POST /session/oc-1/prompt_async").Select(r => r.Value))
+        {
+            using var prompt = JsonDocument.Parse(body);
+            prompt.RootElement.GetProperty("tools").GetProperty("fleet_step_done").GetBoolean().ShouldBeFalse();
+        }
+    }
+
+    [Fact]
+    public async Task a_workflow_step_keeps_the_step_tool()
+    {
+        var http = new ScriptedHandler().On("POST /session/oc-1/prompt_async", "");
+        await using var session = CreateSession(http);
+
+        await session.SendPromptAsync("hello", null, CancellationToken.None);
+
+        using var prompt = JsonDocument.Parse(http.Body("POST /session/oc-1/prompt_async"));
+        prompt.RootElement.TryGetProperty("tools", out _).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void a_new_session_without_the_step_tool_is_created_with_a_rule_that_denies_it()
+    {
+        var request = OpenCodeHarnessSession.CreateRequest(hideStepTool: true).ShouldNotBeNull();
+        var rule = request.Permission.ShouldNotBeNull().ShouldHaveSingleItem();
+        (rule.Permission, rule.Pattern, rule.Action).ShouldBe(("fleet_step_done", "*", "deny"));
+        OpenCodeHarnessSession.CreateRequest(hideStepTool: false).ShouldBeNull();
+    }
+
+    [Fact]
+    public void only_a_process_with_workflows_on_hides_the_step_tool_and_never_from_a_step()
+    {
+        var on = new Dictionary<string, string> { ["FLEET_WORKFLOWS"] = "1" };
+
+        OpenCodeHarnessRuntime.HidesStepTool(on, workflowStep: false).ShouldBeTrue();
+        OpenCodeHarnessRuntime.HidesStepTool(on, workflowStep: true).ShouldBeFalse();
+        OpenCodeHarnessRuntime.HidesStepTool(new Dictionary<string, string>(), workflowStep: false).ShouldBeFalse();
+    }
+
+    private static OpenCodeHarnessSession CreateSession(ScriptedHandler handler, string? openCodeSessionId = "oc-1", bool hideStepTool = false)
     {
         var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:1234") };
         var handle = new FakeInstanceHandle(new OpenCodeHttpClient(httpClient, NullLogger<OpenCodeHttpClient>.Instance));
@@ -186,7 +256,10 @@ public sealed class OpenCodeOffTheRecordPromptTests
             scopeFactory: new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
             logger: NullLogger<OpenCodeHarnessSession>.Instance,
             ownerUserId: "user-1",
-            openCodeSessionId: openCodeSessionId);
+            openCodeSessionId: openCodeSessionId)
+        {
+            HideStepTool = hideStepTool,
+        };
     }
 
     private static string Messages(params string[] messages) => $"[{string.Join(",", messages)}]";

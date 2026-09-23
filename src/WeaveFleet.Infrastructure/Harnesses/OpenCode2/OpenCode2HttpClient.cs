@@ -22,17 +22,28 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
     internal static readonly IReadOnlyList<OpenCode2PermissionRule> AllowAll =
         [new OpenCode2PermissionRule { Action = "*", Resource = "*", Effect = "allow" }];
 
+    /// <summary>
+    /// Hides the workflow step tool. V2 applies the last rule that matches, and drops a tool that's denied for every
+    /// resource from what the model is offered, so the deny goes after <see cref="AllowAll"/>.
+    /// </summary>
+    internal static readonly OpenCode2PermissionRule DenyStepTool =
+        new() { Action = WeaveFleet.Application.Workflows.FleetWorkflows.StepTool, Resource = "*", Effect = "deny" };
+
+    /// <summary><see cref="AllowAll"/>, then <see cref="DenyStepTool"/>: every session on a server with workflows on that isn't a step.</summary>
+    internal static readonly IReadOnlyList<OpenCode2PermissionRule> AllowAllButStepTool = [.. AllowAll, DenyStepTool];
+
     public Task<OpenCode2ServerInfo?> GetInfoAsync(CancellationToken ct)
         => http.GetFromJsonAsync("api/info", OpenCode2JsonContext.Default.OpenCode2ServerInfo, ct);
 
-    public async Task<OpenCode2SessionInfo> CreateSessionAsync(string directory, CancellationToken ct)
+    /// <param name="hideStepTool">The server has the workflow step tool and the session isn't a step.</param>
+    public async Task<OpenCode2SessionInfo> CreateSessionAsync(string directory, CancellationToken ct, bool hideStepTool = false)
     {
         using var response = await http.PostAsJsonAsync(
             "api/session",
             new OpenCode2CreateSessionRequest
             {
                 Location = new OpenCode2Location { Directory = directory },
-                Permissions = AllowAll,
+                Permissions = hideStepTool ? AllowAllButStepTool : AllowAll,
             },
             OpenCode2JsonContext.Default.OpenCode2CreateSessionRequest,
             ct).ConfigureAwait(false);
@@ -56,6 +67,19 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
         var body = await response.Content.ReadFromJsonAsync(
             OpenCode2JsonContext.Default.OpenCode2EnvelopeOpenCode2SessionInfo, ct).ConfigureAwait(false);
         return body?.Data;
+    }
+
+    /// <summary>Replaces the session's permission rules.</summary>
+    public async Task SetPermissionsAsync(string sessionId, IReadOnlyList<OpenCode2PermissionRule> permissions, CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"api/session/{Uri.EscapeDataString(sessionId)}")
+        {
+            Content = JsonContent.Create(
+                new OpenCode2SessionUpdateRequest { Permissions = permissions },
+                OpenCode2JsonContext.Default.OpenCode2SessionUpdateRequest),
+        };
+        using var response = await http.SendAsync(request, ct).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, "change the session's permissions", ct).ConfigureAwait(false);
     }
 
     public async Task PromptAsync(

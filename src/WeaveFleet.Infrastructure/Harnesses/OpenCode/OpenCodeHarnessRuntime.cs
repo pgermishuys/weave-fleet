@@ -14,6 +14,7 @@ using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Skills;
 using WeaveFleet.Application.Weave;
+using WeaveFleet.Application.Workflows;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
@@ -390,8 +391,30 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         if (await IsSessionMessagesEnabledAsync(context.UserId).ConfigureAwait(false))
             envVars[SessionMessages.EnvironmentVariable] = "1";
 
+        // Workflows add the step tool to the process, and every session on it that isn't a step has it denied. Like
+        // messages, sessions with it on and off never share a process.
+        if (await IsWorkflowsEnabledAsync(context.UserId).ConfigureAwait(false))
+            envVars[FleetWorkflows.EnvironmentVariable] = "1";
+
         return new RuntimePreparation.Ready(new OpenCodeLaunchArtifacts(envVars, GetRuntimePreparationModelIds(context.ModelId)));
     }
+
+    private async Task<bool> IsWorkflowsEnabledAsync(string userId)
+    {
+        using var userScope = BackgroundUserContext.BeginScope(userId);
+        using var scope = _scopeFactory.CreateScope();
+        return scope.ServiceProvider.GetService<WorkflowsFeature>() is { } feature
+            && await feature.IsEnabledAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>Whether a session on a process with these variables must have the step tool hidden.</summary>
+    internal static bool HidesStepTool(IReadOnlyDictionary<string, string> environmentVariables, bool workflowStep)
+        => !workflowStep
+           && environmentVariables.TryGetValue(FleetWorkflows.EnvironmentVariable, out var value)
+           && value == "1";
+
+    private static bool HidesStepTool(RuntimeLaunchArtifacts? artifacts, bool workflowStep)
+        => artifacts is OpenCodeLaunchArtifacts launch && HidesStepTool(launch.EnvironmentVariables, workflowStep);
 
     private async Task<bool> IsSessionMessagesEnabledAsync(string userId)
     {
@@ -615,7 +638,10 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
                 ownerUserId: options.OwnerUserId,
                 analyticsCollector: _analyticsCollector,
                 projectId: options.ProjectId,
-                projectName: options.ProjectName);
+                projectName: options.ProjectName)
+            {
+                HideStepTool = HidesStepTool(options.LaunchArtifacts, options.WorkflowStep),
+            };
 
             if (options.InitialPrompt is not null)
             {
@@ -681,8 +707,9 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
                 ?? throw new InvalidOperationException("Pooled OpenCode instance does not expose an HTTP client.");
 
             // (c) Eagerly create the OpenCode session for this exact workspace directory.
+            var hideStepTool = HidesStepTool(environmentVariables, options.WorkflowStep);
             var openCodeSession = await openCodeHttpClient
-                .CreateSessionAsync(null, options.WorkingDirectory, ct)
+                .CreateSessionAsync(OpenCodeHarnessSession.CreateRequest(hideStepTool), options.WorkingDirectory, ct)
                 .ConfigureAwait(false);
 
             var leaseGeneration = Interlocked.Increment(ref _pooledLeaseGeneration);
@@ -730,7 +757,10 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
                 projectId: options.ProjectId,
                 projectName: options.ProjectName,
                 openCodeSessionId: openCodeSession.Id,
-                initialStatus: HarnessSessionStatus.Starting);
+                initialStatus: HarnessSessionStatus.Starting)
+            {
+                HideStepTool = hideStepTool,
+            };
 
             // The OpenCodeHarnessSession now owns the handle and the in-memory mapping.
             // Clear the tracking variable so the catch block does not also try to remove it.
@@ -1287,7 +1317,10 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
                 analyticsCollector: _analyticsCollector,
                 projectId: options.ProjectId,
                 projectName: options.ProjectName,
-                openCodeSessionId: options.ResumeToken);
+                openCodeSessionId: options.ResumeToken)
+            {
+                HideStepTool = HidesStepTool(options.LaunchArtifacts, options.WorkflowStep),
+            };
 
             // Expire any pending question tool parts from the previous harness lifetime.
             // When an OpenCode session is resumed, the previous process is gone and any
@@ -1430,7 +1463,10 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
                 analyticsCollector: _analyticsCollector,
                 projectId: options.ProjectId,
                 projectName: options.ProjectName,
-                openCodeSessionId: resolvedOpenCodeSessionId);
+                openCodeSessionId: resolvedOpenCodeSessionId)
+            {
+                HideStepTool = HidesStepTool(environmentVariables, options.WorkflowStep),
+            };
 
             leaseToRelease = null;
             instanceHandle = null;

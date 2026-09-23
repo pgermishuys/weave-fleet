@@ -11,6 +11,7 @@ using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Skills;
 using WeaveFleet.Application.Terminals;
+using WeaveFleet.Application.Workflows;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
@@ -194,7 +195,9 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         HarnessHelpers.ValidateWorkingDirectory(options.WorkingDirectory);
 
         var server = await GetServerAsync(options.OwnerUserId, ProfileOf(options.LaunchArtifacts), ct).ConfigureAwait(false);
-        var created = await server.Client.CreateSessionAsync(options.WorkingDirectory, ct).ConfigureAwait(false);
+        // On a server with the step tool, every session that isn't a workflow step has it denied.
+        var created = await server.Client.CreateSessionAsync(
+            options.WorkingDirectory, ct, hideStepTool: server.Setup.Workflows && !options.WorkflowStep).ConfigureAwait(false);
 
         var session = NewSession(
             created,
@@ -227,6 +230,26 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             ?? await GetServerAsync(options.OwnerUserId, ProfileOf(options.LaunchArtifacts), ct).ConfigureAwait(false);
         var info = await server.Client.GetSessionAsync(options.ResumeToken, ct).ConfigureAwait(false)
             ?? throw new InvalidOperationException($"OpenCode 2 has no session {options.ResumeToken}.");
+
+        // A session made before workflows were on reaches a server with the step tool: deny it here too. Only Fleet's
+        // own sessions, which it made allowing everything; a subagent's child keeps the rules its agent gave it.
+        if (server.Setup.Workflows
+            && !options.WorkflowStep
+            && options.ParentSessionId is null
+            && string.IsNullOrEmpty(info.ParentID)
+            && !(info.Permissions ?? []).Contains(OpenCode2HttpClient.DenyStepTool))
+        {
+            try
+            {
+                await server.Client.SetPermissionsAsync(
+                    options.ResumeToken, [.. info.Permissions ?? OpenCode2HttpClient.AllowAll, OpenCode2HttpClient.DenyStepTool], ct).ConfigureAwait(false);
+            }
+            catch (HttpRequestException ex)
+            {
+                // The session still works; it can see a tool Fleet refuses to take from it.
+                LogStepToolNotHidden(_logger, options.ResumeToken, ex);
+            }
+        }
 
         // A subagent's child session attaches here too, and gets the events held for it since it started.
         var session = NewSession(
@@ -450,7 +473,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     private async Task<OpenCode2ServerSetup> GetSetupAsync(string ownerUserId, OpenCode2Profile? profile)
     {
         var fleetUrl = ResolveLocalFleetUrl();
-        var (builtInSkills, sessionMessages) = await ReadOwnerSettingsAsync(ownerUserId).ConfigureAwait(false);
+        var (builtInSkills, sessionMessages, workflows) = await ReadOwnerSettingsAsync(ownerUserId).ConfigureAwait(false);
 
         string? plugin = null;
         List<string> skills = [];
@@ -474,7 +497,8 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             SessionMessages: sessionMessages && plugin is not null,
             install?.ExecutablePath,
             install?.Mode ?? OpenCode2InstallMode.Default,
-            profile);
+            profile,
+            Workflows: workflows && plugin is not null);
     }
 
     /// <inheritdoc />
@@ -485,7 +509,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     /// </remarks>
     public async Task BuiltInSkillsChangedAsync(string ownerUserId, CancellationToken ct)
     {
-        var (builtInSkills, _) = await ReadOwnerSettingsAsync(ownerUserId).ConfigureAwait(false);
+        var (builtInSkills, _, _) = await ReadOwnerSettingsAsync(ownerUserId).ConfigureAwait(false);
         SyncBuiltInSkills(ownerUserId, builtInSkills);
     }
 
@@ -507,8 +531,11 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         }
     }
 
-    /// <summary>The built-in skills the owner turned on that this Fleet ships, in name order, and whether messages between sessions are on.</summary>
-    private async Task<(IReadOnlyList<string> BuiltInSkills, bool SessionMessages)> ReadOwnerSettingsAsync(string ownerUserId)
+    /// <summary>
+    /// The built-in skills the owner turned on that this Fleet ships, in name order, and whether messages between
+    /// sessions and workflows are on.
+    /// </summary>
+    private async Task<(IReadOnlyList<string> BuiltInSkills, bool SessionMessages, bool Workflows)> ReadOwnerSettingsAsync(string ownerUserId)
     {
         using var userScope = BackgroundUserContext.BeginScope(ownerUserId);
         using var scope = _scopeFactory.CreateScope();
@@ -522,7 +549,9 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
 
         var sessionMessages = scope.ServiceProvider.GetService<SessionMessagesFeature>() is { } feature
             && await feature.IsEnabledAsync().ConfigureAwait(false);
-        return (builtInSkills, sessionMessages);
+        var workflows = scope.ServiceProvider.GetService<WorkflowsFeature>() is { } workflowsFeature
+            && await workflowsFeature.IsEnabledAsync().ConfigureAwait(false);
+        return (builtInSkills, sessionMessages, workflows);
     }
 
     /// <summary>
@@ -589,6 +618,8 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             environment[OpenCode2Profiles.EnvironmentVariable] = profile.ConfigPath;
         if (setup.SessionMessages)
             environment[SessionMessages.EnvironmentVariable] = "1";
+        if (setup.Workflows)
+            environment[FleetWorkflows.EnvironmentVariable] = "1";
 
         // The agent's shell commands inherit the server's environment. Fleet's plugin takes out what's for the server
         // alone, in every shell V2 starts: an `opencode` the agent runs must not open this server's config and database,
@@ -694,4 +725,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
 
     [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 session {InstanceId} resumed {HarnessSessionId} on server {ProcessId}")]
     private static partial void LogResumed(ILogger logger, string instanceId, string harnessSessionId, int processId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not hide the workflow step tool from OpenCode 2 session {HarnessSessionId}")]
+    private static partial void LogStepToolNotHidden(ILogger logger, string harnessSessionId, Exception exception);
 }

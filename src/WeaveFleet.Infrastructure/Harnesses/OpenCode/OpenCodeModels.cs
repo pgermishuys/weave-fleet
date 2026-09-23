@@ -101,7 +101,7 @@ internal sealed record OpenCodeCreateSessionRequest
 {
     [JsonPropertyName("parentId")] public string? ParentId { get; init; }
     [JsonPropertyName("title")] public string? Title { get; init; }
-    [JsonPropertyName("permission")] public JsonElement? Permission { get; init; }
+    [JsonPropertyName("permission")] public IReadOnlyList<OpenCodePermissionRule>? Permission { get; init; }
     [JsonPropertyName("workspaceId")] public string? WorkspaceId { get; init; }
 }
 
@@ -493,6 +493,13 @@ internal sealed record OpenCodePromptRequest
     [JsonPropertyName("variant")] public string? Variant { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonPropertyName("messageID")] public string? MessageId { get; init; }
+
+    /// <summary>
+    /// Tools switched on or off for this turn. OpenCode 1.x also saves the map as the session's permission rules,
+    /// replacing the ones it had, so later prompts without it keep them.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("tools")] public IReadOnlyDictionary<string, bool>? Tools { get; init; }
 }
 
 /// <summary>Polymorphic prompt part (discriminated by "type").</summary>

@@ -31,6 +31,35 @@ public sealed class OpenCode2SessionTests
     }
 
     [Fact]
+    public async Task A_session_that_isnt_a_workflow_step_is_created_with_the_step_tool_denied_after_allowing_everything()
+    {
+        var api = new StubHandler(_ => Json("""{"data":{"id":"ses_new"}}"""));
+        using var client = OpenCode2Fixtures.ClientServing("", api);
+
+        await client.CreateSessionAsync("/work", CancellationToken.None, hideStepTool: true);
+
+        // V2 applies the last rule that matches, so the deny has to come after the allow.
+        var body = JsonDocument.Parse(api.Requests.ShouldHaveSingleItem().Body!).RootElement;
+        body.GetProperty("permissions").EnumerateArray()
+            .Select(r => (r.GetProperty("action").GetString(), r.GetProperty("resource").GetString(), r.GetProperty("effect").GetString()))
+            .ShouldBe([("*", "*", "allow"), ("fleet_step_done", "*", "deny")]);
+    }
+
+    [Fact]
+    public async Task Setting_a_sessions_permissions_patches_them()
+    {
+        var api = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.NoContent));
+        using var client = OpenCode2Fixtures.ClientServing("", api);
+
+        await client.SetPermissionsAsync("ses_old", OpenCode2HttpClient.AllowAllButStepTool, CancellationToken.None);
+
+        var request = api.Requests.ShouldHaveSingleItem();
+        request.Method.ShouldBe(HttpMethod.Patch);
+        request.Path.ShouldBe("/api/session/ses_old");
+        JsonDocument.Parse(request.Body!).RootElement.GetProperty("permissions").GetArrayLength().ShouldBe(2);
+    }
+
+    [Fact]
     public async Task A_permission_ask_that_still_arrives_is_allowed_once()
     {
         var replied = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
