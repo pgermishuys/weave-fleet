@@ -8,7 +8,8 @@ import { computed, nextTick, shallowRef, useTemplateRef, watch } from "vue";
 import { useRouter } from "@tanstack/vue-router";
 import { ArrowRight, Check, CornerUpLeft, FileCheck2, LoaderCircle, Play, RotateCcw, Send, TriangleAlert, UserRound } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
-import { fileName, listFiles, MOVE_ON_ANYWAY, type WorkflowRunChoice, type WorkflowRunSession } from "@/lib/workflows";
+import { useSettingsNav } from "@/composables/use-settings-nav";
+import { fileName, listFiles, MOVE_ON_ANYWAY, WITHOUT_SKILL, type WorkflowRunChoice, type WorkflowRunSession } from "@/lib/workflows";
 import { useCanvasesStore } from "@/stores/canvases";
 import { useSidebarStore } from "@/stores/sidebar";
 import { useWorkflowsStore } from "@/stores/workflows";
@@ -26,6 +27,7 @@ const router = useRouter();
 const store = useWorkflowsStore();
 const canvases = useCanvasesStore();
 const sidebar = useSidebarStore();
+const { setActiveSection } = useSettingsNav();
 const noteRef = useTemplateRef<HTMLTextAreaElement>("note");
 
 const run = computed(() => store.runForSession(props.sessionId));
@@ -80,7 +82,7 @@ function stepTitle(id: string | null): string {
 }
 
 function describe(choice: WorkflowRunChoice): string | null {
-  if (!waiting.value || waiting.value.kind === "start-failed") return null;
+  if (!waiting.value || waiting.value.kind === "start-failed" || waiting.value.kind === "skill-off") return null;
   if (!choice.to) return null;
   return choice.to === "end" ? "Ends the run" : `Starts ${stepTitle(choice.to)}`;
 }
@@ -144,6 +146,11 @@ const movedOn = computed(() => {
 function checkedFiles(visit: WorkflowRunSession): { files: string[]; commit: string | null; commitError: string | null } {
   if (!visit.filesChecked) return { files: [], commit: null, commitError: null };
   return { files: visit.files ?? [], commit: visit.filesCommit ?? null, commitError: visit.filesCommitError ?? null };
+}
+
+function openSkillsSettings(): void {
+  setActiveSection("skills");
+  void router.navigate({ to: "/settings" });
 }
 
 function openSession(sessionId: string): void {
@@ -279,7 +286,7 @@ function openSession(sessionId: string): void {
             v-else-if="index === 0"
             class="size-3.5"
           />
-          {{ waiting.kind === "you" || choice.id === "retry" || choice.id === MOVE_ON_ANYWAY ? choice.label : `Continue as ${choice.label}` }}
+          {{ waiting.kind === "you" || choice.id === "retry" || choice.id === MOVE_ON_ANYWAY || choice.id === WITHOUT_SKILL ? choice.label : `Continue as ${choice.label}` }}
         </Button>
       </template>
       <Button
@@ -298,6 +305,19 @@ function openSession(sessionId: string): void {
       class="wf-card__hint"
     >
       Or reply to the agent below: if it finishes the step, the run carries on.
+    </p>
+    <p
+      v-if="waiting.kind === 'skill-off'"
+      class="wf-card__hint"
+      data-testid="workflow-card-skill-off"
+    >
+      Turn it on in <button
+        type="button"
+        class="wf-card__link"
+        @click="openSkillsSettings"
+      >
+        Settings → Skills
+      </button>, then retry. Or start the step without it for the rest of this run.
     </p>
     <p
       v-if="error"
@@ -500,6 +520,19 @@ function openSession(sessionId: string): void {
   margin: 0;
   color: var(--muted);
   font-size: 12px;
+}
+
+.wf-card__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.wf-card__link:hover {
+  text-decoration: underline;
 }
 
 .wf-card__error {
