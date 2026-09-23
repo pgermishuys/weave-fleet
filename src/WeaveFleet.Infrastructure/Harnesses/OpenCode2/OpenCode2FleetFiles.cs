@@ -126,6 +126,36 @@ internal static class OpenCode2FleetFiles
         return Encoding.UTF8.GetString(buffer.WrittenSpan);
     }
 
+    /// <summary>
+    /// The variable that tells Fleet's plugin how the agent's shell commands differ from the server's environment. The
+    /// plugin applies it to every shell V2 starts (<c>ctx.shell.hook("create.before")</c>): the session's own, a
+    /// subagent's, a backgrounded one and the user's.
+    /// </summary>
+    internal const string ShellEnvironmentVariable = "FLEET_SHELL_ENVIRONMENT";
+
+    /// <summary>
+    /// <see cref="ShellEnvironmentVariable"/>'s value: <c>{"NAME": null}</c> removes a variable from the shell,
+    /// <c>{"NAME": "value"}</c> sets it (see <see cref="WeaveFleet.Application.Terminals.TerminalEnvironment.AgentShellChanges"/>).
+    /// </summary>
+    public static string BuildShellEnvironment(IReadOnlyDictionary<string, string?> changes)
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var json = new Utf8JsonWriter(buffer))
+        {
+            json.WriteStartObject();
+            foreach (var (name, value) in changes.OrderBy(change => change.Key, StringComparer.Ordinal))
+            {
+                if (value is null)
+                    json.WriteNull(name);
+                else
+                    json.WriteString(name, value);
+            }
+            json.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
+
     internal static byte[] Read(string resourceName)
     {
         using var stream = typeof(OpenCode2FleetFiles).Assembly.GetManifestResourceStream(resourceName)

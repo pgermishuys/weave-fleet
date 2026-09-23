@@ -624,3 +624,31 @@ What Track G learned (2.0.9, scratch HOME, dummy keys only):
       - When V2 can't be asked, the server still counts as busy.
       This covers the profile-server idle stop, the replacement after a settings change, and the stop after an
       update.
+
+## Track F — the agent's shell environment (2026-09-22)
+
+- [x] **The agent's shell no longer gets the server's private environment.** Measured on 2.0.9 by having the agent run
+      `env` through its shell tool on a scratch Fleet. Every shell inherited `OPENCODE_SERVER_PASSWORD`,
+      `OPENCODE_CONFIG_CONTENT` and `FLEET_BRIDGE_TOKEN`. In separate mode it also got `OPENCODE_CONFIG_DIR` and
+      `OPENCODE_DB`, and with a profile `OPENCODE_CONFIG`. `opencode db path` run by the agent in separate mode answered
+      "Database is not empty and has no session table": OpenCode 1 opened OpenCode 2's database.
+- **`PUT /api/session/{id}/environment` doesn't fit** (`.poc-runtime/probe-env.sh` in the Track F worktree):
+  - It replaces the whole shell environment, applies to that session's background shells, and survives
+    `location/reload`.
+  - It is per session and in memory: a subagent's child session starts with the server's again, and a restart
+    forgets it.
+  - Sending it when the child's `session.created` arrived lost the race to the child's first command in 2 of 4 runs
+    of the live suite.
+- **What Fleet does instead:** `ctx.shell.hook("create.before", event => …)` in Fleet's plugin. V2's replacement for
+  V1's `shell.env` gets the full `event.env` of every shell V2 starts: the session's, a subagent's (5/5), a background
+  one, the user's (`POST /session/{id}/shell`), after `location/reload` and after a restart. It works on 2.0.6 and
+  2.0.9 (`probe-hook.sh`).
+  - Fleet passes the edits in `FLEET_SHELL_ENVIRONMENT` (`{"NAME": null}` removes, `{"NAME": "value"}` restores),
+    decided by `TerminalEnvironment.AgentShellChanges` from the terminal's `IsFleetOwned` list.
+  - `FLEET_URL` stays for the fleet-api skill.
+  - `OPENCODE_CONFIG`/`_DIR`/`_DB` go back to the user's own values or away. They aren't added to `IsFleetOwned`: that
+    list also filters what OpenCode 1 and the V2 server inherit.
+- **Left out:**
+  - The hook is in Fleet's plugin, which loads only once Fleet knows its own address (as before).
+  - OpenCode 1's shell isn't changed.
+  - MCP servers, LSPs and formatters V2 starts still inherit the server's environment.

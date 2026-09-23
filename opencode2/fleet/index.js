@@ -269,11 +269,38 @@ if (process.env.FLEET_SESSION_MESSAGES === "1") {
   )
 }
 
+/**
+ * How the agent's shell commands differ from this server's environment, from Fleet (FLEET_SHELL_ENVIRONMENT):
+ * {"NAME": null} removes a variable, {"NAME": "value"} sets it. Fleet starts the server with variables for the server
+ * alone (its password, its config and database, Fleet's config for it), and every shell V2 starts would inherit them:
+ * an `opencode` the agent ran would open this server's database. V2 hands each new shell's environment to the
+ * "create.before" hook first: the session's own commands, a subagent's, a backgrounded one and the user's.
+ */
+function shellEnvironment() {
+  try {
+    const changes = JSON.parse(process.env.FLEET_SHELL_ENVIRONMENT ?? "null")
+    return changes && typeof changes === "object" ? changes : null
+  } catch {
+    return null
+  }
+}
+
 export default {
   id: "fleet",
   async setup(ctx) {
     await ctx.tool.transform((editor) => {
       for (const tool of tools) editor.add(tool)
     })
+
+    const changes = shellEnvironment()
+    if (changes && ctx.shell?.hook) {
+      await ctx.shell.hook("create.before", (event) => {
+        if (!event.env) return
+        for (const [name, value] of Object.entries(changes)) {
+          if (value === null) delete event.env[name]
+          else event.env[name] = String(value)
+        }
+      })
+    }
   },
 }

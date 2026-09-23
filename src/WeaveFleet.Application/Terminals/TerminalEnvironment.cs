@@ -24,6 +24,10 @@ public static class TerminalEnvironment
         "OPENCODE_CONFIG_CONTENT",
     ];
 
+    private static readonly string[] AgentNames = ["FLEET_URL"];
+
+    private static readonly string[] HarnessServerSettings = ["OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "OPENCODE_DB"];
+
     public static Dictionary<string, string> Build(IDictionary source, bool windows)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -81,4 +85,40 @@ public static class TerminalEnvironment
         }
         return false;
     }
+
+    /// <summary>
+    /// What an agent's shell commands must not keep of the variables Fleet set for its harness server
+    /// (<paramref name="setForServer"/>): each name maps to <see langword="null"/> to remove it, or to the value the
+    /// server <paramref name="inherited"/> from Fleet to put back. Fleet's own variables (the server's password, its
+    /// config, the bridge token) are removed, except what's meant for the agent: <c>FLEET_URL</c>, which Fleet's skills
+    /// call it through. The settings that say which config and data OpenCode reads go back to the user's own, or away:
+    /// an <c>opencode</c> the agent runs must not open the server's database. Anything else Fleet set stays.
+    /// </summary>
+    public static Dictionary<string, string?> AgentShellChanges(IDictionary inherited, IEnumerable<string> setForServer)
+    {
+        ArgumentNullException.ThrowIfNull(inherited);
+        ArgumentNullException.ThrowIfNull(setForServer);
+
+        var changes = new Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach (var key in setForServer)
+        {
+            if (IsForTheAgent(key))
+                continue;
+            if (IsFleetOwned(key))
+                changes[key] = null;
+            else if (IsHarnessServerSetting(key))
+                changes[key] = inherited[key] as string;
+        }
+
+        return changes;
+    }
+
+    /// <summary>Variables Fleet sets for a harness server that its agent needs too.</summary>
+    public static bool IsForTheAgent(string key) => AgentNames.Contains(key, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Settings that say which config and data an OpenCode process reads. A user may set them for their own OpenCode,
+    /// so they aren't Fleet's and pass through to what Fleet starts; the values Fleet sets for a server stay with it.
+    /// </summary>
+    public static bool IsHarnessServerSetting(string key) => HarnessServerSettings.Contains(key, StringComparer.OrdinalIgnoreCase);
 }

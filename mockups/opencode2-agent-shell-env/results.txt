@@ -1,0 +1,128 @@
+# Scratch Fleet, 2.0.9, scripted model. The agent ran show-env.sh through its shell tool (names only, plus the three OpenCode data settings).
+=== before-separate / session
+names: DOTNET_CLI_HOME FLEET_BRIDGE_TOKEN FLEET_URL HOME LANG NUGET_PACKAGES OPENCODE_CONFIG OPENCODE_CONFIG_CONTENT OPENCODE_CONFIG_DIR OPENCODE_DB OPENCODE_SERVER_PASSWORD OPENCODE_TERMINAL PATH PWD SHLVL TERM TMPDIR USER XDG_CACHE_HOME XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME _ 
+OPENCODE_CONFIG_DIR=<kit>/run/home/.weave/harnesses/opencode2/config
+OPENCODE_DB=<kit>/run/home/.weave/harnesses/opencode2/data/opencode.db
+OPENCODE_CONFIG=<kit>/run/fleet/opencode2/profiles/profile-20afb15ce4227c57.json
+opencode1 db path: Database is not empty and has no session table
+fleet via FLEET_URL: 200
+
+=== before-separate / subagent
+names: DOTNET_CLI_HOME FLEET_BRIDGE_TOKEN FLEET_URL HOME LANG NUGET_PACKAGES OPENCODE_CONFIG OPENCODE_CONFIG_CONTENT OPENCODE_CONFIG_DIR OPENCODE_DB OPENCODE_SERVER_PASSWORD OPENCODE_TERMINAL PATH PWD SHLVL TERM TMPDIR USER XDG_CACHE_HOME XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME _ 
+OPENCODE_CONFIG_DIR=<kit>/run/home/.weave/harnesses/opencode2/config
+OPENCODE_DB=<kit>/run/home/.weave/harnesses/opencode2/data/opencode.db
+OPENCODE_CONFIG=<kit>/run/fleet/opencode2/profiles/profile-20afb15ce4227c57.json
+opencode1 db path: Database is not empty and has no session table
+fleet via FLEET_URL: 200
+
+(before-separate: waited 20 s for the idle stop)
+=== before-separate / after-idle
+names: DOTNET_CLI_HOME FLEET_BRIDGE_TOKEN FLEET_URL HOME LANG NUGET_PACKAGES OPENCODE_CONFIG OPENCODE_CONFIG_CONTENT OPENCODE_CONFIG_DIR OPENCODE_DB OPENCODE_SERVER_PASSWORD OPENCODE_TERMINAL PATH PWD SHLVL TERM TMPDIR USER XDG_CACHE_HOME XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME _ 
+OPENCODE_CONFIG_DIR=<kit>/run/home/.weave/harnesses/opencode2/config
+OPENCODE_DB=<kit>/run/home/.weave/harnesses/opencode2/data/opencode.db
+OPENCODE_CONFIG=<kit>/run/fleet/opencode2/profiles/profile-20afb15ce4227c57.json
+opencode1 db path: Database is not empty and has no session table
+fleet via FLEET_URL: 200
+
+
+=== before-default / session
+names: DOTNET_CLI_HOME FLEET_BRIDGE_TOKEN FLEET_URL HOME LANG NUGET_PACKAGES OPENCODE_CONFIG_CONTENT OPENCODE_SERVER_PASSWORD OPENCODE_TERMINAL PATH PWD SHLVL TERM TMPDIR USER XDG_CACHE_HOME XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME _ 
+OPENCODE_CONFIG_DIR=(unset)
+OPENCODE_DB=(unset)
+OPENCODE_CONFIG=(unset)
+opencode1 db path: <kit>/run/data/opencode/opencode.db
+fleet via FLEET_URL: 200
+
+=== before-default / subagent
+names: DOTNET_CLI_HOME FLEET_BRIDGE_TOKEN FLEET_URL HOME LANG NUGET_PACKAGES OPENCODE_CONFIG_CONTENT OPENCODE_SERVER_PASSWORD OPENCODE_TERMINAL PATH PWD SHLVL TERM TMPDIR USER XDG_CACHE_HOME XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME _ 
+OPENCODE_CONFIG_DIR=(unset)
+OPENCODE_DB=(unset)
+OPENCODE_CONFIG=(unset)
+opencode1 db path: <kit>/run/data/opencode/opencode.db
+fleet via FLEET_URL: 200
+
+
+=== after-separate / session
+names: DOTNET_CLI_HOME FLEET_URL HOME LANG NUGET_PACKAGES OPENCODE_TERMINAL PATH PWD SHLVL TERM TMPDIR USER XDG_CACHE_HOME XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME _ 
+OPENCODE_CONFIG_DIR=(unset)
+OPENCODE_DB=(unset)
+OPENCODE_CONFIG=(unset)
+opencode1 db path: <kit>/run/data/opencode/opencode.db
+fleet via FLEET_URL: 200
+
+=== after-separate / subagent
+names: DOTNET_CLI_HOME FLEET_URL HOME LANG NUGET_PACKAGES OPENCODE_TERMINAL PATH PWD SHLVL TERM TMPDIR USER XDG_CACHE_HOME XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME _ 
+OPENCODE_CONFIG_DIR=(unset)
+OPENCODE_DB=(unset)
+OPENCODE_CONFIG=(unset)
+opencode1 db path: <kit>/run/data/opencode/opencode.db
+fleet via FLEET_URL: 200
+
+(after-separate: waited 20 s for the idle stop)
+=== after-separate / after-idle
+names: DOTNET_CLI_HOME FLEET_URL HOME LANG NUGET_PACKAGES OPENCODE_TERMINAL PATH PWD SHLVL TERM TMPDIR USER XDG_CACHE_HOME XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME _ 
+OPENCODE_CONFIG_DIR=(unset)
+OPENCODE_DB=(unset)
+OPENCODE_CONFIG=(unset)
+opencode1 db path: <kit>/run/data/opencode/opencode.db
+fleet via FLEET_URL: 200
+
+
+(after-default, on the same hook code before merging #275: no server-only names, OPENCODE_* unset, opencode1 db path = OpenCode 1's own, FLEET_URL 200, in the session and the subagent)
+
+# probe-env.sh: PUT /api/session/{id}/environment on a bare V2
+=== V2 agent shell environment | opencode opencode v2.0.9 | 2026-09-22T22:19:48+00:00
+session ses_f34cbd7a4ffeEqcw1YGK4q57cA
+   1. default (server env inherited): 20 vars; 9 server-private-ish: FLEET_BRIDGE_TOKEN FLEET_URL HOME OPENCODE_CONFIG_CONTENT OPENCODE_CONFIG_DIR OPENCODE_DB OPENCODE_PRINT_LOGS OPENCODE_SERVER_PASSWORD OPENCODE_TERMINAL PATH SERVER_PRIVATE 
+   full list:
+FLEET_BRIDGE_TOKEN FLEET_URL HOME OPENCODE_CONFIG_CONTENT OPENCODE_CONFIG_DIR OPENCODE_DB OPENCODE_PRINT_LOGS OPENCODE_SERVER_PASSWORD OPENCODE_TERMINAL PATH PWD SERVER_PRIVATE SHLVL TERM TMPDIR XDG_CACHE_HOME XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME _ 
+--- 2. PUT environment {ONLY_ME, PATH, HOME}
+PUT environment -> 204
+   2. after PUT: 8 vars; 1 server-private-ish: HOME ONLY_ME OPENCODE_TERMINAL PATH 
+   full list:
+HOME ONLY_ME OPENCODE_TERMINAL PATH PWD SHLVL TERM _ 
+   session info mentions environment? 
+--- 3. background shell
+   3. background shell: 8 vars; 1 server-private-ish: HOME ONLY_ME OPENCODE_TERMINAL PATH 
+--- 4. subagent child session
+   4. subagent child: 20 vars; 9 server-private-ish: FLEET_BRIDGE_TOKEN FLEET_URL HOME OPENCODE_CONFIG_CONTENT OPENCODE_CONFIG_DIR OPENCODE_DB OPENCODE_PRINT_LOGS OPENCODE_SERVER_PASSWORD OPENCODE_TERMINAL PATH SERVER_PRIVATE 
+--- 5. after POST /api/location/reload
+reload -> 204
+   5. after reload: 8 vars; 1 server-private-ish: HOME ONLY_ME OPENCODE_TERMINAL PATH 
+--- 6. second PUT {KEEP_ME}: replace or merge?
+PUT environment -> 204
+   6. after second PUT: 6 vars; 1 server-private-ish: KEEP_ME OPENCODE_TERMINAL 
+--- 7. other session in the same folder (no PUT)
+   7. other session: 20 vars; 9 server-private-ish: FLEET_BRIDGE_TOKEN FLEET_URL HOME OPENCODE_CONFIG_CONTENT OPENCODE_CONFIG_DIR OPENCODE_DB OPENCODE_PRINT_LOGS OPENCODE_SERVER_PASSWORD OPENCODE_TERMINAL PATH SERVER_PRIVATE 
+--- 8. server restart (same database)
+   8. after restart: 20 vars; 9 server-private-ish: FLEET_BRIDGE_TOKEN FLEET_URL HOME OPENCODE_CONFIG_CONTENT OPENCODE_CONFIG_DIR OPENCODE_DB OPENCODE_PRINT_LOGS OPENCODE_SERVER_PASSWORD OPENCODE_TERMINAL PATH SERVER_PRIVATE 
+--- 9. PUT {} (empty)
+PUT environment -> 204
+   9. after PUT {}: 5 vars; 1 server-private-ish: OPENCODE_TERMINAL 
+   full list:
+OPENCODE_TERMINAL PWD SHLVL TERM _ 
+--- fake model saw (calls):
+=== done
+
+# probe-hook.sh: the plugin's ctx.shell.hook("create.before")
+=== plugin shell hook | opencode opencode v2.0.9 | 2026-09-23T00:59:02+00:00
+session ses_f343a0d98ffea4pePbEiQNU2FO
+   1. session: 16 vars; server-only left: []; kept: FLEET_URL HOME PATH 
+   2. background shell: 16 vars; server-only left: []; kept: FLEET_URL HOME PATH 
+   3.1 subagent: 16 vars; server-only left: []; kept: FLEET_URL HOME PATH 
+   3.2 subagent: 16 vars; server-only left: []; kept: FLEET_URL HOME PATH 
+   3.3 subagent: 16 vars; server-only left: []; kept: FLEET_URL HOME PATH 
+   3.4 subagent: 16 vars; server-only left: []; kept: FLEET_URL HOME PATH 
+   3.5 subagent: 16 vars; server-only left: []; kept: FLEET_URL HOME PATH 
+user shell -> 204
+   4. user shell (POST /session/{id}/shell): 16 vars; server-only left: []; kept: FLEET_URL HOME PATH 
+reload -> 204
+   5. after location reload: 16 vars; server-only left: []; kept: FLEET_URL HOME PATH 
+   6. after restart: 16 vars; server-only left: []; kept: FLEET_URL HOME PATH 
+--- plugin log
+create.before event keys: ["command","cwd","timeout","shell","env"]
+ctx.session: ["hook","create","get","switchAgent","switchModel","prompt","generate","command","synthetic","interrupt","update","move","wait","context"]
+ctx.shell: ["hook"]
+  env keys: ["CTX_DUMP","FLEET_BRIDGE_TOKEN","FLEET_URL","HOME","OPENCODE_CONFIG_CONTENT","OPENCODE_CONFIG_DIR","OPENCODE_DB","OPENCODE_PRINT_LOGS","OPENCODE_SERVER_PASSWORD","OPENCODE_TERMINAL","PATH","PROBE_UNSET","SERVER_PRIVATE","TERM","TMPDIR","XDG_CACHE_HOME","XDG_CONFIG_HOME","XDG_DATA_HOME","XDG_STATE_HOME"]
+  event (no env): {"command":"env | sort > <kit>/probe-hook/out/6-after-restart.txt","cwd":"<kit>/probe-hook/proj1","timeout":120000,"shell":"/usr/bin/bash"}
+=== done
