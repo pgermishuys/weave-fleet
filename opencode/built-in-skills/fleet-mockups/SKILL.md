@@ -32,6 +32,8 @@ edit the user only needs to reload the canvas. Show the other pages in the same 
 
 - **Start from the real app.** When the mockup changes an existing app, read its stylesheet and copy the real colour
   variables, fonts, spacing and components. A mockup in a generic style can't show whether the idea fits.
+- **Design it.** For a new page, or the gaps the app doesn't cover, follow fleet-design if it's turned on: palette,
+  type, layout and the generic looks to avoid.
 - **Real content.** Use real-looking names and lengths, and include the awkward cases: a long title, an empty list, an
   error, a loading state. Not lorem ipsum.
 - **Compare on the same content.** For before-and-after, or for options A, B and C, show them side by side or behind a

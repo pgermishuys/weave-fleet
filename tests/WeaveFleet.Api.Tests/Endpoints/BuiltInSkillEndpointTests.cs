@@ -28,7 +28,7 @@ public sealed class BuiltInSkillEndpointTests : IAsyncDisposable
         var skills = await ListAsync();
 
         skills.Select(skill => skill.GetProperty("name").GetString())
-            .ShouldBe(["fleet-code-review", "fleet-mockups", "fleet-run", "fleet-simplify"]);
+            .ShouldBe(["fleet-code-review", "fleet-design", "fleet-mockups", "fleet-run", "fleet-simplify"]);
         skills.ShouldAllBe(skill => !skill.GetProperty("enabled").GetBoolean());
         skills.ShouldAllBe(skill => skill.GetProperty("description").GetString()!.Length > 20);
     }
