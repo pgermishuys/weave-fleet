@@ -51,26 +51,35 @@ internal sealed class OpenCodeHttpClient
     private readonly HttpClient _httpClient;
     private readonly ILogger<OpenCodeHttpClient> _logger;
     private readonly string? _expectedDirectory;
+    private readonly OpenCodeCatalogCache _catalog;
 
     public OpenCodeHttpClient(HttpClient httpClient, ILogger<OpenCodeHttpClient> logger)
-        : this(httpClient, logger, expectedDirectory: null)
+        : this(httpClient, logger, expectedDirectory: null, new OpenCodeCatalogCache(TimeProvider.System))
+    {
+    }
+
+    internal OpenCodeHttpClient(HttpClient httpClient, ILogger<OpenCodeHttpClient> logger, TimeProvider time)
+        : this(httpClient, logger, expectedDirectory: null, new OpenCodeCatalogCache(time))
     {
     }
 
     private OpenCodeHttpClient(
         HttpClient httpClient,
         ILogger<OpenCodeHttpClient> logger,
-        string? expectedDirectory)
+        string? expectedDirectory,
+        OpenCodeCatalogCache catalog)
     {
         _httpClient = httpClient;
         _logger = logger;
         _expectedDirectory = expectedDirectory;
+        _catalog = catalog;
     }
 
     internal OpenCodeHttpClient WithExpectedDirectory(string expectedDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(expectedDirectory);
-        return new OpenCodeHttpClient(_httpClient, _logger, expectedDirectory);
+        // Same process, so the same catalog.
+        return new OpenCodeHttpClient(_httpClient, _logger, expectedDirectory, _catalog);
     }
 
     // -----------------------------------------------------------------------
@@ -518,33 +527,41 @@ internal sealed class OpenCodeHttpClient
         return await PostAsync(url, request, OpenCodeJsonContext.Default.OpenCodeForkRequest, OpenCodeJsonContext.Default.OpenCodeSessionInfo, ct).ConfigureAwait(false);
     }
 
-    /// <summary>GET /agent?directory={directory}</summary>
-    public async Task<IReadOnlyList<OpenCodeAgentInfo>> GetAgentsAsync(string directory, CancellationToken ct)
+    /// <summary>GET /agent?directory={directory}, kept in the catalog cache.</summary>
+    public Task<IReadOnlyList<OpenCodeAgentInfo>> GetAgentsAsync(string directory, CancellationToken ct)
     {
         var url = BuildUrl("/agent", directory);
-        return await GetAsync(url, OpenCodeJsonContext.Default.ListOpenCodeAgentInfo, ct).ConfigureAwait(false) ?? [];
+        ValidateDirectoryScope(url);
+        return _catalog.GetAsync<IReadOnlyList<OpenCodeAgentInfo>>("agent", directory,
+            async fetchCt => await GetAsync(url, OpenCodeJsonContext.Default.ListOpenCodeAgentInfo, fetchCt).ConfigureAwait(false) ?? [], ct);
     }
 
-    /// <summary>GET /command?directory={directory}</summary>
-    public async Task<IReadOnlyList<OpenCodeCommandInfo>> GetCommandsAsync(string directory, CancellationToken ct)
+    /// <summary>GET /command?directory={directory}, kept in the catalog cache.</summary>
+    public Task<IReadOnlyList<OpenCodeCommandInfo>> GetCommandsAsync(string directory, CancellationToken ct)
     {
         var url = BuildUrl("/command", directory);
-        return await GetAsync(url, OpenCodeJsonContext.Default.ListOpenCodeCommandInfo, ct).ConfigureAwait(false) ?? [];
+        ValidateDirectoryScope(url);
+        return _catalog.GetAsync<IReadOnlyList<OpenCodeCommandInfo>>("command", directory,
+            async fetchCt => await GetAsync(url, OpenCodeJsonContext.Default.ListOpenCodeCommandInfo, fetchCt).ConfigureAwait(false) ?? [], ct);
     }
 
-    /// <summary>GET /provider?directory={directory}</summary>
-    public async Task<OpenCodeProvidersResponse> GetProvidersAsync(string directory, CancellationToken ct)
+    /// <summary>GET /provider?directory={directory}, kept in the catalog cache.</summary>
+    public Task<OpenCodeProvidersResponse> GetProvidersAsync(string directory, CancellationToken ct)
     {
         var url = BuildUrl("/provider", directory);
-        return await GetAsync(url, OpenCodeJsonContext.Default.OpenCodeProvidersResponse, ct).ConfigureAwait(false);
+        ValidateDirectoryScope(url);
+        return _catalog.GetAsync("provider", directory,
+            fetchCt => GetAsync(url, OpenCodeJsonContext.Default.OpenCodeProvidersResponse, fetchCt), ct);
     }
 
-    /// <summary>GET /config?directory={directory}, read only for its default agent and model.</summary>
-    public async Task<OpenCodeConfigDefaults> GetConfigDefaultsAsync(string directory, CancellationToken ct)
+    /// <summary>GET /config?directory={directory}, read only for its default agent and model; kept in the catalog cache.</summary>
+    public Task<OpenCodeConfigDefaults> GetConfigDefaultsAsync(string directory, CancellationToken ct)
     {
         var url = BuildUrl("/config", directory);
-        return await GetAsync(url, OpenCodeJsonContext.Default.OpenCodeConfigDefaults, ct).ConfigureAwait(false)
-               ?? new OpenCodeConfigDefaults();
+        ValidateDirectoryScope(url);
+        return _catalog.GetAsync("config-defaults", directory,
+            async fetchCt => await GetAsync(url, OpenCodeJsonContext.Default.OpenCodeConfigDefaults, fetchCt).ConfigureAwait(false)
+                             ?? new OpenCodeConfigDefaults(), ct);
     }
 
     /// <summary>GET /config?directory={directory}, read only for the plugins OpenCode loads there.</summary>
@@ -568,6 +585,8 @@ internal sealed class OpenCodeHttpClient
         using var response = await _httpClient.PostAsync(url, content: null, ct).ConfigureAwait(false);
         LogResponse(_logger, (int)response.StatusCode, url, null);
         response.EnsureSuccessStatusCode();
+        // The folder's agents, commands and providers come from the config just dropped.
+        _catalog.Forget(directory);
     }
 
     /// <summary>GET /session/status?directory={directory}</summary>
