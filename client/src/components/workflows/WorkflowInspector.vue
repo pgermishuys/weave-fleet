@@ -299,7 +299,7 @@ function setChoiceTarget(at: number, target: string): void {
           v-else
           class="wf-help"
         >
-          Lowercase letters, digits and dashes. Changing it changes every loop, choice and {{ braces(`steps.${step.id}.…`) }} that points at it.
+          Lowercase letters, digits and dashes. Changing it changes every loop and choice that leads here, and {{ braces(`steps.${step.id}.summary`) }} and .files in the prompts.
         </p>
       </div>
 
@@ -671,7 +671,7 @@ function setChoiceTarget(at: number, target: string): void {
 <style scoped>
 .wf-insp {
   display: flex;
-  width: 340px;
+  width: 360px;
   flex: none;
   flex-direction: column;
   gap: 14px;

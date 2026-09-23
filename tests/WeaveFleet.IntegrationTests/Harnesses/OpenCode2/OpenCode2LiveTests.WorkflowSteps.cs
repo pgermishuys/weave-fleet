@@ -71,6 +71,59 @@ public sealed partial class OpenCode2LiveTests
         }
     }
 
+    private const string SkillWorkflow = """
+        name: Live skills
+        steps:
+          - id: check
+            title: Check
+            model: standard
+            prompt: Check it.
+            outcomes: [pass]
+          - id: review
+            title: Review
+            model: standard
+            skill: fleet-code-review
+            prompt: Review it. (workflows: skill-off)
+            outcomes: [pass]
+        """;
+
+    /// <summary>Check finishes on V2; Review's built-in skill is off, so Fleet never starts Review's session without it.</summary>
+    [OpenCode2Fact]
+    public async Task A_step_whose_built_in_skill_is_off_waits_before_its_session_starts()
+    {
+        const string checkPrompt = "Check the change, then finish the step. (workflows: skill-off)";
+        fleet.Answer(request => LlmRequest.Starts(request, checkPrompt)
+            ? ToolCall("call_check_done", FleetWorkflows.StepTool, new { outcome = "pass", summary = "Checked." })
+            : LlmRequest.Continues(request, checkPrompt) ? new ScriptedLlmResponse { Text = "Done." }
+            : null);
+        using var cts = new CancellationTokenSource(Timeout);
+        var folder = fleet.NewFolder("workflow-skill-off");
+
+        await SetWorkflowsAsync(true);
+        try
+        {
+            var runId = await SeedRunAsync(folder, SkillWorkflow, "check");
+            var step = await CreateStepSessionAsync(folder, runId, "check", userFinishes: false, cts.Token);
+            var events = fleet.Watch(cts.Token, step);
+            await PromptAsync(step, checkPrompt, options: null, cts.Token);
+
+            await WaitForAsync(events, async () => (await RunAsync(runId)) is { Status: WorkflowRunStatus.Waiting, CurrentStepId: "review" }, cts.Token);
+            var run = (await RunAsync(runId)).ShouldNotBeNull();
+            (run.WaitingKind, run.WaitingReason).ShouldBe((WorkflowWaitingKinds.SkillOff, "Review uses fleet-code-review, which is now off."));
+            var review = (await StepsAsync(runId)).Single(v => v.StepId == "review");
+            (review.Status, review.SessionId).ShouldBe((WorkflowRunStepStatus.Waiting, null));
+
+            var retried = await fleet.Services.GetRequiredService<WorkflowRunner>().AnswerAsync(OpenCode2LiveFleet.Owner, runId, WorkflowRunner.RetryChoice, null, null, cts.Token);
+            retried.IsFailure.ShouldBeTrue();
+            retried.Error.Description.ShouldBe("fleet-code-review is still off. Turn it on in Settings → Skills, then retry.");
+            fleet.Llm.Queue.Requests.ShouldNotContain(r => LlmRequest.FirstUserText(r) != null && LlmRequest.FirstUserText(r)!.StartsWith("Review it.", StringComparison.Ordinal));
+        }
+        finally
+        {
+            await SetWorkflowsAsync(false);
+        }
+    }
+
     private const string TogetherWorkflow = """
         name: Live together
         steps:

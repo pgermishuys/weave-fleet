@@ -46,6 +46,8 @@ export function useWorkflowEditor() {
   const conflict = shallowRef<string | null>(null);
 
   let savedText = "";
+  /** The text as it was when the designer's edits began: what Edit in File view goes back to, comments and all. */
+  let textBeforeDesigner: string | null = null;
   let savedDraft: WorkflowDraft | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let generation = 0;
@@ -69,6 +71,7 @@ export function useWorkflowEditor() {
     savedDraft = draft.value ? cloneDraft(draft.value) : null;
     comments.value = opened.check.comments;
     source.value = null;
+    textBeforeDesigner = null;
     designerBlocked.value = null;
     saveError.value = null;
   }
@@ -153,6 +156,7 @@ export function useWorkflowEditor() {
   }
 
   function editDraft(next: WorkflowDraft): void {
+    if (source.value !== "draft") textBeforeDesigner = text.value;
     draft.value = next;
     source.value = "draft";
     saveError.value = null;
@@ -240,10 +244,25 @@ export function useWorkflowEditor() {
     return save();
   }
 
-  /** Edit in File view, from the banner or the confirmation: the text keeps its comments. */
+  /**
+   * Edit in File view, from the banner or the confirmation: the text as it was, comments and all. Edits made in the
+   * designer since would be written in Fleet's layout, so they're dropped: make them in the File view instead.
+   */
   async function keepComments(): Promise<void> {
     askingToRemoveComments.value = false;
-    await setView("file");
+    if (source.value !== "draft" || textBeforeDesigner === null) {
+      await setView("file");
+      return;
+    }
+
+    cancelCheck();
+    text.value = textBeforeDesigner;
+    textBeforeDesigner = null;
+    source.value = text.value === savedText ? null : "text";
+    if (source.value === null) draft.value = savedDraft ? cloneDraft(savedDraft) : null;
+    designerBlocked.value = null;
+    view.value = "file";
+    await runCheck();
   }
 
   /** Reload, from the conflict dialog: what's on disk now, and the edits are dropped. */

@@ -182,6 +182,25 @@ describe("WorkflowEditor", () => {
     expect(wrapper.find("[data-testid='workflow-comments-confirm']").exists()).toBe(false);
   });
 
+  it("Edit in File view from the confirmation goes back to the text with its comments, not the designer's edits", async () => {
+    const { editor, wrapper } = await mountEditor({ comments: true });
+    await wrapper.get("[data-testid='workflow-node-plan']").trigger("click");
+    await wrapper.get("[data-testid='workflow-step-title']").setValue("Outline");
+    await settle();
+    await saveButton(wrapper).trigger("click");
+    await flushPromises();
+
+    checks.push((body) => checkOf(reviewDraft(), { text: body.text as string, comments: [{ line: 1, text: "Kept by the platform team." }, { line: 9, text: "Minor versions only." }] }));
+    await wrapper.get("[data-testid='workflow-comments-confirm-file']").trigger("click");
+    await flushPromises();
+
+    expect(editor.view.value).toBe("file");
+    expect(editor.text.value).toBe("# Kept by the platform team.\nname: Build it our way\n");
+    expect(editor.isDirty.value).toBe(false);
+    expect(calls.at(-1)).toMatchObject({ path: "/api/workflows/check", body: { text: "# Kept by the platform team.\nname: Build it our way\n" } });
+    expect(calls.some((call) => call.method === "PUT")).toBe(false);
+  });
+
   it("stays in the File view when the designer can't show the text", async () => {
     const { editor, wrapper } = await mountEditor();
     await wrapper.get("[data-testid='workflow-view-file']").trigger("click");

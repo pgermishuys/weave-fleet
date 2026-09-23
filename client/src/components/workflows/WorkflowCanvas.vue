@@ -151,7 +151,10 @@ watch(() => [props.draft, props.errors, props.selected], () => void nextTick(dra
         data-testid="workflow-canvas-settings"
         @click="emit('select', null)"
       >
-        <span><b>Starts from</b> · a sentence you type &nbsp;·&nbsp; <b>Runs in</b> · a new worktree</span>
+        <span class="wf-node__lines">
+          <span><b>Starts from</b> · a sentence you type</span>
+          <span><b>Runs in</b> · a new worktree</span>
+        </span>
         <span class="wf-node__settings"><Settings aria-hidden="true" />Workflow settings</span>
       </button>
 
@@ -431,6 +434,12 @@ watch(() => [props.draft, props.errors, props.selected], () => void nextTick(dra
 
 .wf-node--settings {
   cursor: pointer;
+}
+
+.wf-node__lines {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .wf-node__settings {

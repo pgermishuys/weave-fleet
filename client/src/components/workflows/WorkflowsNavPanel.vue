@@ -27,7 +27,7 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
   if (run?.status === "waiting") return { label: "Needs you", tone: "wait" };
   if (run?.status === "running" && run.withYou) return { label: "With you", tone: "with" };
   if (run?.status === "running") return { label: "Running", tone: "working" };
-  return { label: `${workflow.steps.length} steps`, tone: "" };
+  return { label: `${workflow.steps.length} step${workflow.steps.length === 1 ? "" : "s"}`, tone: "" };
 }
 </script>
 

@@ -612,6 +612,9 @@ onBeforeUnmount(() => {
 }
 
 .wf-editor__comments {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   margin: 0;
   padding-left: 18px;
   color: var(--muted);
