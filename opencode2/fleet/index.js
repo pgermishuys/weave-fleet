@@ -18,9 +18,12 @@ const STEP_DONE_PATH = "/api/bridge/workflow/step-done"
 
 /**
  * Calls Fleet's bridge for one tool call. FLEET_URL names this server (…/agent/{token}), and the bridge token says
- * which server is calling; Fleet finds its session from the OpenCode 2 session id.
+ * which server is calling; Fleet finds its session from the OpenCode 2 session id (`call.sessionID`).
+ *
+ * `call.signal` fires when the turn is interrupted (OpenCode 2.0.12 and later). It closes the request, and Fleet stops
+ * the work with it: a screenshot or an app start doesn't carry on after the user pressed stop.
  */
-async function callFleet(tool, sessionID, args, path = BRIDGE_PATH + tool) {
+async function callFleet(name, call, args, path = BRIDGE_PATH + name) {
   const url = process.env.FLEET_URL
   const token = process.env.FLEET_BRIDGE_TOKEN
   if (!url || !token) {
@@ -32,9 +35,11 @@ async function callFleet(tool, sessionID, args, path = BRIDGE_PATH + tool) {
     response = await fetch(url + path, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: "Bearer " + token },
-      body: JSON.stringify({ ...args, harnessSessionId: sessionID }),
+      body: JSON.stringify({ ...args, harnessSessionId: call.sessionID }),
+      signal: call.signal,
     })
   } catch (error) {
+    if (call.signal?.aborted) throw error
     throw new Error("Couldn't reach Fleet at " + url + ": " + (error instanceof Error ? error.message : String(error)))
   }
 
@@ -71,12 +76,20 @@ const canvasId = {
   description: "The canvas id (cv_…) from fleet_canvas_list or fleet_canvas_open.",
 }
 
-/** A tool whose every property is required, as Fleet's tools have always been. */
-function fleetTool(name, description, properties, execute, options = {}) {
+/**
+ * A tool whose properties are all required except those `optional` names. OpenCode 2 rejects a call that leaves out
+ * a required property, so one the agent may skip (fleet_message's notifyWhenDone) has to be optional here.
+ */
+function fleetTool(name, description, properties, execute, { optional = [], ...options } = {}) {
   return {
     name,
     description,
-    input: { type: "object", properties, required: Object.keys(properties), additionalProperties: false },
+    input: {
+      type: "object",
+      properties,
+      required: Object.keys(properties).filter((key) => !optional.includes(key)),
+      additionalProperties: false,
+    },
     options: { codemode: false, ...options },
     execute,
   }
@@ -87,7 +100,7 @@ const tools = [
     "fleet_canvas_list",
     "List the canvases open in this session's side panel: id, kind, title and version.",
     {},
-    (_input, tool) => callFleet("list", tool.sessionID, {}),
+    (_input, tool) => callFleet("list", tool, {}),
   ),
 
   fleetTool(
@@ -118,14 +131,14 @@ const tools = [
         ].join(" "),
       },
     },
-    (input, tool) => callFleet("open", tool.sessionID, { kind: input.kind, title: input.title, state: input.state }),
+    (input, tool) => callFleet("open", tool, { kind: input.kind, title: input.title, state: input.state }),
   ),
 
   fleetTool(
     "fleet_canvas_read",
     "Read a canvas as compact text: every box and edge by id, the Mermaid source, or a browser canvas's page with its app's status and recent output.",
     { canvasId },
-    (input, tool) => callFleet("read", tool.sessionID, { canvasId: input.canvasId }),
+    (input, tool) => callFleet("read", tool, { canvasId: input.canvasId }),
   ),
 
   fleetTool(
@@ -145,14 +158,14 @@ const tools = [
         description: "The ops, each an object whose \"op\" field names it.",
       },
     },
-    (input, tool) => callFleet("patch", tool.sessionID, { canvasId: input.canvasId, ops: input.ops }),
+    (input, tool) => callFleet("patch", tool, { canvasId: input.canvasId, ops: input.ops }),
   ),
 
   fleetTool(
     "fleet_canvas_focus",
     "Bring a canvas to the front of the side panel, reopening it if the user closed it.",
     { canvasId },
-    (input, tool) => callFleet("focus", tool.sessionID, { canvasId: input.canvasId }),
+    (input, tool) => callFleet("focus", tool, { canvasId: input.canvasId }),
   ),
 
   fleetTool(
@@ -179,7 +192,7 @@ const tools = [
         description: "Short title for the canvas tab, e.g. \"Storefront\".",
       },
     },
-    (input, tool) => callFleet("app-start", tool.sessionID, { command: input.command, title: input.title }),
+    (input, tool) => callFleet("app-start", tool, { command: input.command, title: input.title }),
     // The command runs in a shell, so the tool goes under the shell permission, as OpenCode 2's own shell tool does:
     // an agent that may not run shell commands doesn't get it.
     { permission: "shell" },
@@ -201,7 +214,7 @@ const tools = [
         description: "Short title for the canvas tab.",
       },
     },
-    (input, tool) => callFleet("browser-open", tool.sessionID, { url: input.url, title: input.title }),
+    (input, tool) => callFleet("browser-open", tool, { url: input.url, title: input.title }),
   ),
 
   fleetTool(
@@ -226,7 +239,7 @@ const tools = [
       },
     },
     (input, tool) =>
-      callFleet("screenshot", tool.sessionID, { canvasId: input.canvasId, path: input.path, viewport: input.viewport }),
+      callFleet("screenshot", tool, { canvasId: input.canvasId, path: input.path, viewport: input.viewport }),
   ),
 ]
 
@@ -262,10 +275,11 @@ if (process.env.FLEET_SESSION_MESSAGES === "1") {
       (input, tool) =>
         callFleet(
           "message",
-          tool.sessionID,
+          tool,
           { sessionId: input.sessionId, text: input.text, notifyWhenDone: input.notifyWhenDone === true },
           MESSAGE_PATH,
         ),
+      { optional: ["notifyWhenDone"] },
     ),
   )
 }
@@ -301,7 +315,7 @@ if (process.env.FLEET_WORKFLOWS === "1") {
         outcome: { type: "string", description: "One of the outcomes the step's instructions list." },
         summary: { type: "string", description: "What you did and what the next step needs to know, in a few sentences." },
       },
-      (input, tool) => callFleet("step-done", tool.sessionID, { outcome: input.outcome, summary: input.summary }, STEP_DONE_PATH),
+      (input, tool) => callFleet("step-done", tool, { outcome: input.outcome, summary: input.summary }, STEP_DONE_PATH),
     ),
   )
 }

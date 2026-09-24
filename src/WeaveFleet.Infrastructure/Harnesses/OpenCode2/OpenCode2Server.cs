@@ -204,6 +204,29 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     }
 
     /// <summary>
+    /// Forgets that a folder is loaded once V2 shut it down. V2 unloads a folder that has been quiet for an hour, and
+    /// <c>POST /api/location/reload</c> shuts every folder down; the next request loads the folder again in the
+    /// background, and until then its agents list is empty and its commands leave out the folder's own. So the next
+    /// catalog read waits for the folder again, and its catalog events count as its loading, not a change.
+    /// </summary>
+    private void ForgetLocation(OpenCode2Event evt)
+    {
+        if (evt.Location?.Directory is not { Length: > 0 } directory)
+            return;
+
+        if (_locations.TryGetValue(directory, out var loaded) && loaded.Task.IsCompleted)
+            _locations.TryRemove(new KeyValuePair<string, TaskCompletionSource>(directory, loaded));
+        if (_locationEvents.TryGetValue(directory, out var seen))
+        {
+            lock (seen)
+                seen.Clear();
+        }
+
+        _loadedAt.TryRemove(directory, out _);
+        LogLocationShutDown(_logger, ProcessId ?? 0, directory);
+    }
+
+    /// <summary>
     /// Notes a change to a loaded folder's catalog, and tells <see cref="CatalogChanged"/> once V2 is quiet about it.
     /// Only folders Fleet uses count: V2 also loads its own working folder, which no session runs in.
     /// </summary>
@@ -333,7 +356,9 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     /// </summary>
     internal void Route(OpenCode2Event evt)
     {
-        if (!ObserveLocation(evt))
+        if (evt.Type == "location.shutdown")
+            ForgetLocation(evt);
+        else if (!ObserveLocation(evt))
             ObserveCatalogChange(evt);
         if (evt.SessionId is not { } sessionId)
             return;
@@ -603,6 +628,9 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
 
     [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 server {ProcessId}: the agents, models or commands in {Directory} changed")]
     private static partial void LogCatalogChanged(ILogger logger, int processId, string directory);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 server {ProcessId} unloaded {Directory}; the next catalog read waits for it to load again")]
+    private static partial void LogLocationShutDown(ILogger logger, int processId, string directory);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "OpenCode 2 session {HarnessSessionId} is a child of {ParentSessionId}; holding its events until Fleet attaches it")]
     private static partial void LogChildHeld(ILogger logger, string harnessSessionId, string parentSessionId);
