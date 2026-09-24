@@ -1407,16 +1407,20 @@ function handleShowCanvas(canvasId: string): void {
   max-width: 760px;
   gap: 0;
   margin: 0 auto 20px;
+  /* A skipped message's content no longer holds it open, so it mustn't shrink: the stream is a flex column and
+     would squash every off-screen message to nothing. */
+  flex-shrink: 0;
+  /* Every message keeps this, hovered or not: a message without `auto` forgets its last height, and one the pointer
+     had just left dropped to 320px while off screen. Scroll anchoring then moved the conversation by the difference,
+     the pinned view lost the bottom, and wheeling down jumped back. */
+  contain-intrinsic-size: auto 320px;
 }
 
 /* Off-screen messages skip layout and paint, so resizing and scrolling a long conversation only lays out what
    shows. The containment this brings would clip the model pill below a hovered message, so a message the pointer
-   or focus is in goes without. A skipped message's content no longer holds it open, so it mustn't shrink: the
-   stream is a flex column and would squash every off-screen message to nothing. */
+   or focus is in goes without. */
 .activity-message:not(:hover, :focus-within) {
-  flex-shrink: 0;
   content-visibility: auto;
-  contain-intrinsic-size: auto 320px;
 }
 
 .activity-stream--laid-out .activity-message {
