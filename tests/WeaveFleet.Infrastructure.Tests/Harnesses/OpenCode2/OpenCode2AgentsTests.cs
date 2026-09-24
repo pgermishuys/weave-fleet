@@ -84,6 +84,40 @@ public sealed class OpenCode2AgentsTests
     }
 
     [Fact]
+    public async Task A_folder_V2_unloaded_is_waited_for_again()
+    {
+        // V2 unloads a folder that has been quiet for an hour. Read straight after, its agents come back empty
+        // (checked on 2.0.15), so the next read loads it and waits as it did the first time.
+        await using var server = Server(CatalogApi());
+        var first = server.LoadLocationAsync(Folder, CancellationToken.None);
+        foreach (var evt in LocationLoaded(Folder))
+            server.Route(evt);
+        await first.WaitAsync(TimeSpan.FromSeconds(5));
+
+        server.Route(LocationShutDown(Folder));
+        var again = server.LoadLocationAsync(Folder, CancellationToken.None);
+        await Task.Delay(200);
+        again.IsCompleted.ShouldBeFalse();
+
+        foreach (var evt in LocationLoaded(Folder))
+            server.Route(evt);
+        await again.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task Another_folder_unloading_leaves_this_one_loaded()
+    {
+        var api = CatalogApi();
+        await using var server = LoadingServer(api);
+        await OpenCode2Catalog.ReadAsync(server, Folder, CancellationToken.None);
+
+        server.Route(LocationShutDown("/work/comet"));
+        await OpenCode2Catalog.ReadAsync(server, Folder, CancellationToken.None);
+
+        api.Requests.Count(r => r.Path == "/api/location").ShouldBe(1);
+    }
+
+    [Fact]
     public async Task A_folder_V2_is_slow_to_load_is_listed_as_it_is_after_a_while()
     {
         var api = CatalogApi();
@@ -414,6 +448,14 @@ public sealed class OpenCode2AgentsTests
             Location = new OpenCode2EventLocation { Directory = directory },
             Data = JsonDocument.Parse("{}").RootElement.Clone(),
         });
+
+    private static OpenCode2Event LocationShutDown(string directory) => new()
+    {
+        Id = "evt_shutdown",
+        Type = "location.shutdown",
+        Location = new OpenCode2EventLocation { Directory = directory },
+        Data = JsonDocument.Parse("{}").RootElement.Clone(),
+    };
 
     /// <summary>A server whose V2 loads a folder when asked to, and then says so in its catalog events.</summary>
     private static OpenCode2Server LoadingServer(StubHandler api)

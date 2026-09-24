@@ -95,6 +95,21 @@ public sealed class OpenCode2CatalogChangeTests
     }
 
     [Fact]
+    public async Task A_folder_loading_again_after_V2_unloaded_it_is_not_a_change()
+    {
+        // V2 unloads a folder quiet for an hour and loads it again on the next request, with the whole catalog.
+        var changes = new ConcurrentQueue<string>();
+        await using var server = await LoadedServerAsync(changes);
+        server.Route(Updated("location.shutdown", Folder));
+
+        foreach (var type in LoadEvents)
+            server.Route(Updated(type, Folder));
+        await Task.Delay(Quiet * 4);
+
+        changes.ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task Events_for_a_folder_V2_has_not_loaded_are_not_a_change()
     {
         var changes = new ConcurrentQueue<string>();
