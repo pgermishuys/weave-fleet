@@ -1538,4 +1538,86 @@ public sealed class OpenCodeSessionMessageProxyTests
         latest.Messages.ShouldHaveSingleItem().Id.ShouldBe("msg_first");
         older.Messages.ShouldBeEmpty();
     }
+
+    // ── Slash commands ───────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetSnapshotAsync_marks_a_user_message_that_came_from_a_command()
+    {
+        // OpenCode's message holds the command's whole template; Fleet remembered what was sent.
+        var repository = new InMemoryMessageRepository();
+        await repository.SaveCommandAsync("session-new", "msg_command", new SlashCommand("tidy", "src/auth"));
+        var proxy = CreateLiveProxy(
+            [
+                HarnessMessage("msg_prompt", "user", _promptSentAt),
+                HarnessMessage("msg_command", "user", _promptSentAt.AddMinutes(1)),
+                HarnessMessage("msg_reply", "assistant", _promptSentAt.AddMinutes(2)),
+            ],
+            repository);
+
+        var snapshot = await proxy.GetSnapshotAsync("session-new");
+
+        snapshot.Messages.Select(m => m.Info.Command).ShouldBe([null, new SlashCommand("tidy", "src/auth"), null]);
+        // The template stays in the message, for "Show prompt".
+        snapshot.Messages[1].Parts.ShouldHaveSingleItem().ShouldBeOfType<TextMessageEventPart>().Text.ShouldBe("msg_command");
+    }
+
+    [Fact]
+    public async Task GetMessagesAsync_marks_a_user_message_that_came_from_a_command()
+    {
+        var repository = new InMemoryMessageRepository();
+        await repository.SaveCommandAsync("session-new", "msg_command", new SlashCommand("init", null));
+        var proxy = CreateLiveProxy([HarnessMessage("msg_command", "user", _promptSentAt)], repository);
+
+        var page = await proxy.GetMessagesAsync("session-new");
+
+        page.Messages.ShouldHaveSingleItem().Command.ShouldBe(new SlashCommand("init", null));
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_marks_a_command_in_history_Fleet_keeps()
+    {
+        // Claude Code's history is Fleet's own: the snapshot comes from the database.
+        var sessionRepository = new InMemorySessionRepository();
+        sessionRepository.Seed(new Session
+        {
+            Id = "session-cc", HarnessType = "claude-code", Title = "T", Status = "active", UserId = "user-1",
+        });
+        var repository = new InMemoryMessageRepository();
+        await repository.SaveCommandAsync("session-cc", "msg_command", new SlashCommand("review", null));
+        var fallback = new FakeSessionSnapshotBuilder
+        {
+            BuildBehavior = (sid, _, _) => Task.FromResult(new SessionSnapshot
+            {
+                Session = new SessionSnapshotSession { Id = sid, Title = "T", Status = "active" },
+                Messages =
+                [
+                    new MessageLifecyclePayload
+                    {
+                        Info = new MessageEventInfo
+                        {
+                            Id = "msg_command", Role = "user", SessionId = sid,
+                            Time = new MessageEventTime { Created = 1 },
+                        },
+                        Parts = [],
+                    },
+                ],
+                ActivityStatus = "idle",
+            }),
+        };
+        var proxy = new OpenCodeSessionMessageProxy(
+            sessionRepository,
+            new InstanceTracker(),
+            new SessionActivityTracker(),
+            new InMemoryDelegationRepository(),
+            fallback,
+            CreateServiceProvider(new FakeSessionActivator()),
+            Harnesses(),
+            NullLogger<OpenCodeSessionMessageProxy>.Instance,
+            repository);
+
+        var snapshot = await proxy.GetSnapshotAsync("session-cc");
+
+        snapshot.Messages.ShouldHaveSingleItem().Info.Command.ShouldBe(new SlashCommand("review", null));
+    }
 }

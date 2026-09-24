@@ -79,10 +79,16 @@ public sealed class FakeHarnessSession : IHarnessSession
         return SendPromptBehavior?.Invoke(text, options, ct) ?? Task.CompletedTask;
     }
 
-    public Task SendCommandAsync(CommandOptions options, CancellationToken ct)
+    /// <summary>
+    /// The id <see cref="SendCommandAsync"/> reports for the command's user message: by default the one it was given,
+    /// as a harness that stores the message under Fleet's id does.
+    /// </summary>
+    public Func<CommandOptions, string?> CommandMessageIdBehavior { get; set; } = options => options.MessageId;
+
+    public Task<string?> SendCommandAsync(CommandOptions options, CancellationToken ct)
     {
         _sendCommandCalls.Add(options);
-        return Task.CompletedTask;
+        return Task.FromResult(CommandMessageIdBehavior(options));
     }
 
     public Task StopAsync(CancellationToken ct)

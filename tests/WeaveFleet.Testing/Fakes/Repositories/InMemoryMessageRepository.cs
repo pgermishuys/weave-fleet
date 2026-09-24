@@ -1,5 +1,6 @@
 using System.Data;
 using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Testing.Fakes.Repositories;
@@ -8,6 +9,7 @@ public sealed class InMemoryMessageRepository : IMessageRepository
 {
     // Composite key: (id, sessionId)
     private readonly Dictionary<(string Id, string SessionId), PersistedMessage> _store = new();
+    private readonly Dictionary<(string SessionId, string MessageId), SlashCommand> _commands = new();
 
     // ── Seeding API ──────────────────────────────────────────────────────────
 
@@ -153,4 +155,15 @@ public sealed class InMemoryMessageRepository : IMessageRepository
         _store[(messageId, sessionId)] = updated;
         return Task.CompletedTask;
     }
+
+    public Task SaveCommandAsync(string sessionId, string messageId, SlashCommand command)
+    {
+        _commands[(sessionId, messageId)] = command;
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyDictionary<string, SlashCommand>> GetCommandsAsync(string sessionId) =>
+        Task.FromResult<IReadOnlyDictionary<string, SlashCommand>>(_commands
+            .Where(c => c.Key.SessionId == sessionId)
+            .ToDictionary(c => c.Key.MessageId, c => c.Value, StringComparer.Ordinal));
 }

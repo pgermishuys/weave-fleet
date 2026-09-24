@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Domain.Events;
 
@@ -188,6 +189,12 @@ public sealed record MessageEventInfo
     /// the harness reports one.
     /// </summary>
     public string? Finish { get; init; }
+
+    /// <summary>
+    /// Gets the slash command a user message came from, so the conversation shows <c>/name arguments</c> rather than
+    /// the prompt the harness expanded it into.
+    /// </summary>
+    public SlashCommand? Command { get; init; }
 }
 
 /// <summary>

@@ -159,7 +159,7 @@ public sealed class TestHarnessSession : IHarnessSession
     }
 
     /// <inheritdoc/>
-    public Task SendCommandAsync(CommandOptions options, CancellationToken ct)
+    public async Task<string?> SendCommandAsync(CommandOptions options, CancellationToken ct)
     {
         // Sanitize arguments: collapse newlines to spaces to prevent prompt injection
         var sanitizedArgs = options.Arguments?.ReplaceLineEndings(" ");
@@ -168,11 +168,10 @@ public sealed class TestHarnessSession : IHarnessSession
             ? $"/{options.Command}"
             : $"/{options.Command} {sanitizedArgs}";
 
-        var promptOptions = options.Agent is not null || options.ModelId is not null
-            ? new PromptOptions { Agent = options.Agent, ModelId = options.ModelId }
-            : null;
+        var promptOptions = new PromptOptions { Agent = options.Agent, ModelId = options.ModelId, MessageId = options.MessageId };
 
-        return SendPromptAsync(text, promptOptions, ct);
+        await SendPromptAsync(text, promptOptions, ct).ConfigureAwait(false);
+        return options.MessageId;
     }
 
     /// <inheritdoc/>

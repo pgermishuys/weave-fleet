@@ -1108,6 +1108,61 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task CommandSessionAsync_ShowsTheCommandUnderAnIdThatSortsWhereItWasSent()
+    {
+        SeedCommandSession();
+
+        var result = await _sut.CommandSessionAsync("s1", new CommandOptions { Command = "tidy", Arguments = "src/auth" });
+
+        result.IsSuccess.ShouldBeTrue();
+        var messageId = _defaultSession.SendCommandCalls.ShouldHaveSingleItem().MessageId;
+        // Fleet's ascending form, which sorts with the harness's ids; a bare timestamp sorted before all of them.
+        messageId.ShouldNotBeNull().Length.ShouldBe(30);
+        var info = _builder.EventBroadcaster.Broadcasts
+            .Where(b => b.Topic == "session:s1" && b.Type == EventTypes.MessageUpdated)
+            .ShouldHaveSingleItem().Payload.GetProperty("info");
+        info.GetProperty("id").GetString().ShouldBe(messageId);
+        info.GetProperty("command").GetProperty("name").GetString().ShouldBe("tidy");
+        info.GetProperty("command").GetProperty("arguments").GetString().ShouldBe("src/auth");
+    }
+
+    [Fact]
+    public async Task CommandSessionAsync_RemembersTheCommandUnderTheIdTheHarnessStoredItUnder()
+    {
+        // OpenCode 2 picks its own id for the command's message.
+        SeedCommandSession();
+        _defaultSession.CommandMessageIdBehavior = _ => "msg_harness";
+
+        await _sut.CommandSessionAsync("s1", new CommandOptions { Command = "tidy", Arguments = "src/auth" });
+
+        var commands = await _builder.MessageRepository.GetCommandsAsync("s1");
+        commands.ShouldHaveSingleItem().Key.ShouldBe("msg_harness");
+        commands["msg_harness"].ShouldBe(new SlashCommand("tidy", "src/auth"));
+    }
+
+    [Fact]
+    public async Task CommandSessionAsync_RemembersNothingWhenTheHarnessPutNoMessageIn()
+    {
+        SeedCommandSession();
+        _defaultSession.CommandMessageIdBehavior = _ => null;
+
+        var result = await _sut.CommandSessionAsync("s1", new CommandOptions { Command = "review" });
+
+        result.IsSuccess.ShouldBeTrue();
+        (await _builder.MessageRepository.GetCommandsAsync("s1")).ShouldBeEmpty();
+    }
+
+    private void SeedCommandSession()
+    {
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "s1", InstanceId = "inst-1", Title = "T", Status = "active",
+            Directory = "/tmp", CreatedAt = "2026-01-01", RetentionStatus = "active"
+        });
+        _builder.InstanceTracker.Register("inst-1", _defaultSession);
+    }
+
+    [Fact]
     public async Task PromptSessionAsync_WhenArchived_ReturnsValidationFailure()
     {
         _builder.SessionRepository.Seed(new Session

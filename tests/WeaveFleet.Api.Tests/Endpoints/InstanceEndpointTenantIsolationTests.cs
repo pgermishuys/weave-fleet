@@ -186,7 +186,7 @@ public sealed class InstanceEndpointTenantIsolationTests : IAsyncLifetime
 
         public Task SendPromptAsync(string text, PromptOptions? options, CancellationToken ct) => Task.CompletedTask;
 
-        public Task SendCommandAsync(CommandOptions options, CancellationToken ct) => Task.CompletedTask;
+        public Task<string?> SendCommandAsync(CommandOptions options, CancellationToken ct) => Task.FromResult(options.MessageId);
 
         public Task AbortAsync(CancellationToken ct) => Task.CompletedTask;
         public Task AnswerQuestionAsync(string requestId, IReadOnlyList<IReadOnlyList<string>> answers, CancellationToken ct) => Task.CompletedTask;

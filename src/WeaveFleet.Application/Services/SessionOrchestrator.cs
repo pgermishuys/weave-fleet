@@ -1091,11 +1091,19 @@ public sealed partial class SessionOrchestrator(
         if (instanceResult.IsFailure)
             return instanceResult.Error;
 
-        // Broadcast user command message for optimistic UI update.
+        // Shown straight away as "/name arguments", under an id that sorts where it was sent. A harness that takes the
+        // id stores the command's message under it; one that doesn't says which id it chose.
+        options = options with { MessageId = AscendingMessageId.New() };
         var userMsg = MessagePersistenceService.CreateUserCommandMessage(options, DateTimeOffset.UtcNow);
         await BroadcastUserMessageAsync(id, userMsg, ct).ConfigureAwait(false);
 
-        await instanceResult.Value.SendCommandAsync(options, ct);
+        var harnessMessageId = await instanceResult.Value.SendCommandAsync(options, ct);
+
+        // The harness's message holds what it made of the command (OpenCode's whole template). Remembering the command
+        // under that message's id lets the conversation show "/name arguments" there too, after a reload.
+        if (harnessMessageId is not null && messageRepository is not null && userMsg.Command is { } command)
+            await messageRepository.SaveCommandAsync(id, harnessMessageId, command).ConfigureAwait(false);
+
         return Unit.Value;
     }
 
@@ -1164,7 +1172,8 @@ public sealed partial class SessionOrchestrator(
                 sessionId,
                 message.Agent,
                 message.ModelId,
-                new CommittedMessageTime(message.Timestamp.ToUnixTimeMilliseconds())),
+                new CommittedMessageTime(message.Timestamp.ToUnixTimeMilliseconds()),
+                message.Command),
             parts),
             ApplicationJsonContext.Default.CommittedMessage);
 
@@ -1204,7 +1213,8 @@ public sealed partial class SessionOrchestrator(
                 sessionId,
                 message.Agent,
                 message.ModelId,
-                new CommittedMessageTime(message.Timestamp.ToUnixTimeMilliseconds())),
+                new CommittedMessageTime(message.Timestamp.ToUnixTimeMilliseconds()),
+                message.Command),
             parts,
             correlationId),
             ApplicationJsonContext.Default.CommittedUserPromptMessage);

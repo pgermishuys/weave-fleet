@@ -11,7 +11,7 @@ import type {
   SessionRetentionStatus,
   InstanceStatus,
 } from "@/lib/types";
-import type { TurnError } from "@/lib/domain-events";
+import type { SlashCommand, TurnError } from "@/lib/domain-events";
 
 // Re-export status types for consumer convenience
 export type { SessionActivityStatus, SessionActionCapabilities, SessionLifecycleStatus, SessionRetentionStatus, InstanceStatus };
@@ -112,6 +112,11 @@ export interface AccumulatedMessage {
   turnError?: TurnError;
   /** Why the model stopped producing this message (e.g. "stop", "length"), when reported. */
   finish?: string;
+  /**
+   * The slash command a user message came from. Its parts then hold what the harness made of the command (OpenCode's
+   * expanded template), which the conversation keeps behind the command.
+   */
+  command?: SlashCommand;
 }
 
 // ─── Image Attachment ───────────────────────────────────────────────────────

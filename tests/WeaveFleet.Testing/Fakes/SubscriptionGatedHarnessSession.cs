@@ -77,8 +77,8 @@ public sealed class SubscriptionGatedHarnessSession : IHarnessSession
         return Task.CompletedTask;
     }
 
-    public Task SendCommandAsync(CommandOptions options, CancellationToken ct)
-        => Task.CompletedTask;
+    public Task<string?> SendCommandAsync(CommandOptions options, CancellationToken ct)
+        => Task.FromResult(options.MessageId);
 
     public Task StopAsync(CancellationToken ct)
         => Task.CompletedTask;

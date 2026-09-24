@@ -173,6 +173,18 @@ public sealed class MessagePersistenceServiceTests
         message.Agent.ShouldBe("loom");
         message.Parts.Count.ShouldBe(1);
         message.Parts[0].ShouldBeOfType<TextPart>().Text.ShouldBe("/review line one line two");
+        message.Command.ShouldBe(new SlashCommand("review", "line one line two"));
+    }
+
+    [Fact]
+    public void CreateUserCommandMessage_UsesTheIdTheCommandWasGiven()
+    {
+        var message = MessagePersistenceService.CreateUserCommandMessage(
+            new CommandOptions { Command = "init", Arguments = "  ", MessageId = "msg_0d1eda667001SQ0X1r7eLpxOMf" },
+            DateTimeOffset.UtcNow);
+
+        message.Id.ShouldBe("msg_0d1eda667001SQ0X1r7eLpxOMf");
+        message.Command.ShouldBe(new SlashCommand("init", null));
     }
 
     [Fact]

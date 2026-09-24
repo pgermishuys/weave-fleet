@@ -132,7 +132,7 @@ internal sealed class PiHarnessSession : IHarnessSession
         _status = HarnessSessionStatus.Running;
     }
 
-    public Task SendCommandAsync(CommandOptions options, CancellationToken ct)
+    public Task<string?> SendCommandAsync(CommandOptions options, CancellationToken ct)
         => throw new NotSupportedException("The Pi harness does not expose slash commands yet.");
 
     public async Task AbortAsync(CancellationToken ct)

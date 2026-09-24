@@ -308,6 +308,12 @@ public sealed record HarnessMessage
     /// <summary>Why the model stopped producing this message (e.g. "stop", "length"), when reported.</summary>
     public string? Finish { get; init; }
 
+    /// <summary>
+    /// The slash command this user message came from, when it did. Its text is then what the harness made of the
+    /// command (OpenCode's expanded template), and the conversation shows the command instead.
+    /// </summary>
+    public SlashCommand? Command { get; init; }
+
     /// <summary>Convenience: concatenated text parts.</summary>
     public string TextContent =>
         string.Join("", Parts.OfType<TextPart>().Select(p => p.Text));
@@ -355,6 +361,11 @@ public sealed record CommandOptions
     public string? ModelId { get; init; }
 
     /// <summary>
+    /// The id Fleet gave the user message the command becomes, for a harness that stores it under an id it's given.
+    /// </summary>
+    public string? MessageId { get; init; }
+
+    /// <summary>
     /// Validates the command name and arguments. Returns <c>null</c> when valid,
     /// or an error message describing the first violation found.
     /// </summary>
@@ -378,6 +389,9 @@ public sealed record CommandOptions
         return null;
     }
 }
+
+/// <summary>A slash command as the user sent it: <c>/name arguments</c>.</summary>
+public sealed record SlashCommand(string Name, string? Arguments);
 
 /// <summary>An agent available for selection in the UI.</summary>
 public sealed record AgentInfo

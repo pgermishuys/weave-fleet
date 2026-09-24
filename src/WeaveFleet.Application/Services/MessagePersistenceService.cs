@@ -88,14 +88,19 @@ public sealed class MessagePersistenceService
     }
 
     /// <summary>
-    /// Creates a synthetic user message representing a slash command for durable history.
+    /// Creates the user message a slash command shows as: <c>/name arguments</c>, under
+    /// <see cref="CommandOptions.MessageId"/> when it has one, carrying the command.
     /// </summary>
     public static HarnessMessage CreateUserCommandMessage(CommandOptions options, DateTimeOffset timestamp)
     {
         ArgumentNullException.ThrowIfNull(options);
 
         var prompt = CommandFormatting.FormatCommandPrompt(options);
-        return CreateUserPromptMessage(prompt, timestamp, options.Agent);
+        var message = options.MessageId is { } messageId
+            ? CreateUserPromptMessage(prompt, timestamp, options.Agent, messageId)
+            : CreateUserPromptMessage(prompt, timestamp, options.Agent);
+        var arguments = options.Arguments?.ReplaceLineEndings(" ").Trim();
+        return message with { Command = new SlashCommand(options.Command, string.IsNullOrEmpty(arguments) ? null : arguments) };
     }
 
     /// <summary>

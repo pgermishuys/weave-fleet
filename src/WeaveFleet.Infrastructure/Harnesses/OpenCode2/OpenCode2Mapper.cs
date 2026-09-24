@@ -263,6 +263,19 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
                 metadata)
             : [];
 
+    /// <summary>
+    /// The id of a user message V2 took into its inbox (<c>session.inbox.enqueued</c> with a <c>user</c> item): a prompt,
+    /// under the id Fleet gave it, or a command's expanded template, under V2's own. Null for any other event.
+    /// </summary>
+    internal static string? ReadUserMessageTakenIn(OpenCode2Event evt)
+        => evt.Type == "session.inbox.enqueued"
+            && evt.Data.ValueKind == JsonValueKind.Object
+            && evt.Data.TryGetProperty("item", out var item)
+            && item.ValueKind == JsonValueKind.Object
+            && ReadString(item, "type") == "user"
+                ? ReadString(evt.Data, "inboxID")
+                : null;
+
     /// <summary>The synthetic item an inbox event carries, when it carries one.</summary>
     private static JsonElement? ReadNoticeItem(JsonElement data)
         => data.TryGetProperty("item", out var item)

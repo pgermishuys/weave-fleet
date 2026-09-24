@@ -439,7 +439,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     }
 
     /// <inheritdoc />
-    public async Task SendCommandAsync(CommandOptions options, CancellationToken ct)
+    public async Task<string?> SendCommandAsync(CommandOptions options, CancellationToken ct)
     {
         // OpenCode's CommandInput expects "model" as a plain string (e.g. "provider/model"),
         // unlike the prompt endpoint which accepts { providerID, modelID }.
@@ -458,6 +458,8 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             Arguments = options.Arguments ?? string.Empty,
             Agent = options.Agent,
             Model = commandModel,
+            // OpenCode stores the command's user message under this id, as it does a prompt's.
+            MessageId = options.MessageId,
         };
 
         LogSendCommand(_logger, InstanceId, null);
@@ -468,6 +470,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             ct).ConfigureAwait(false);
 
         _status = HarnessSessionStatus.Running;
+        return options.MessageId;
     }
 
     /// <inheritdoc />

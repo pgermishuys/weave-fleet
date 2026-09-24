@@ -4,6 +4,7 @@ using System.Text.Json;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Infrastructure.Data.Repositories;
@@ -337,6 +338,51 @@ public sealed class MessageRepository : IMessageRepository
                 cmd.AddParameter("SessionId", sessionId);
                 cmd.AddParameter("UserId", _userContext.UserId);
             });
+    }
+
+    public async Task SaveCommandAsync(string sessionId, string messageId, SlashCommand command)
+    {
+        using var conn = _connectionFactory.CreateConnection();
+        await conn.ExecuteNonQueryAsync(
+            """
+            INSERT INTO message_commands (session_id, message_id, command, arguments)
+            SELECT @SessionId, @MessageId, @Command, @Arguments
+            FROM sessions
+            WHERE id = @SessionId AND user_id = @UserId
+            ON CONFLICT(session_id, message_id) DO UPDATE SET
+                command = excluded.command,
+                arguments = excluded.arguments
+            """,
+            cmd =>
+            {
+                cmd.AddParameter("SessionId", sessionId);
+                cmd.AddParameter("MessageId", messageId);
+                cmd.AddParameter("Command", command.Name);
+                cmd.AddParameter("Arguments", command.Arguments);
+                cmd.AddParameter("UserId", _userContext.UserId);
+            });
+    }
+
+    public async Task<IReadOnlyDictionary<string, SlashCommand>> GetCommandsAsync(string sessionId)
+    {
+        using var conn = _connectionFactory.CreateConnection();
+        var rows = await conn.QueryAsync(
+            """
+            SELECT c.message_id, c.command, c.arguments
+            FROM message_commands c
+            INNER JOIN sessions s ON s.id = c.session_id
+            WHERE c.session_id = @SessionId AND s.user_id = @UserId
+            """,
+            cmd =>
+            {
+                cmd.AddParameter("SessionId", sessionId);
+                cmd.AddParameter("UserId", _userContext.UserId);
+            },
+            r => (
+                MessageId: r.GetString(r.GetOrdinal("message_id")),
+                Command: new SlashCommand(r.GetString(r.GetOrdinal("command")), r.GetNullableString(r.GetOrdinal("arguments")))));
+
+        return rows.ToDictionary(row => row.MessageId, row => row.Command, StringComparer.Ordinal);
     }
 
     private static PersistedMessage ReadMessage(DbDataReader r) => new()

@@ -304,7 +304,7 @@ public sealed class OpenCode2AgentsTests
     public async Task A_command_runs_with_its_arguments_as_the_text()
     {
         var api = Accepting();
-        await using var server = Server(api);
+        await using var server = TakingCommandsIn(api, "msg_command");
         await using var session = NewSession(server);
 
         await session.SendCommandAsync(new CommandOptions { Command = "hello", Arguments = "the world" }, CancellationToken.None);
@@ -319,12 +319,63 @@ public sealed class OpenCode2AgentsTests
     {
         // V2 requires the text.
         var api = Accepting();
-        await using var server = Server(api);
+        await using var server = TakingCommandsIn(api, "msg_command");
         await using var session = NewSession(server);
 
         await session.SendCommandAsync(new CommandOptions { Command = "init" }, CancellationToken.None);
 
         Body(api, 0).GetProperty("text").GetString().ShouldBe("");
+    }
+
+    [Fact]
+    public async Task A_command_says_which_user_message_V2_made_of_it()
+    {
+        // V2's command route neither takes an id nor returns one: the message's id is in V2's inbox.
+        var api = Accepting();
+        await using var server = TakingCommandsIn(api, "msg_0d1eda667001SQ0X1r7eLpxOMf");
+        await using var session = NewSession(server);
+
+        var messageId = await session.SendCommandAsync(
+            new CommandOptions { Command = "tidy", Arguments = "src/auth", MessageId = "msg_fleet" },
+            CancellationToken.None);
+
+        messageId.ShouldBe("msg_0d1eda667001SQ0X1r7eLpxOMf");
+    }
+
+    [Fact]
+    public async Task A_prompt_V2_takes_in_while_a_command_runs_is_not_the_commands()
+    {
+        var api = Accepting();
+        await using var server = Server(api);
+        await using var session = NewSession(server);
+        // Sent before the command; V2 takes it in while the command runs.
+        await session.SendPromptAsync("hello", new PromptOptions { MessageId = "msg_prompt" }, CancellationToken.None);
+        api.OnRequest = request =>
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("/command", StringComparison.Ordinal))
+            {
+                server.Route(UserMessageTakenIn("msg_prompt"));
+                server.Route(UserMessageTakenIn("msg_command"));
+            }
+        };
+
+        var messageId = await session.SendCommandAsync(new CommandOptions { Command = "tidy" }, CancellationToken.None);
+
+        messageId.ShouldBe("msg_command");
+    }
+
+    [Fact]
+    public async Task A_command_that_puts_no_message_in_says_so()
+    {
+        // A command that runs as a subagent puts its prompt in a child session.
+        var api = Accepting();
+        await using var server = Server(api);
+        await using var session = NewSession(server);
+        session.CommandMessageWait = TimeSpan.FromMilliseconds(50);
+
+        var messageId = await session.SendCommandAsync(new CommandOptions { Command = "review" }, CancellationToken.None);
+
+        messageId.ShouldBeNull();
     }
 
     [Fact]
@@ -474,6 +525,22 @@ public sealed class OpenCode2AgentsTests
         : new HttpResponseMessage(HttpStatusCode.NoContent));
 
     private static JsonElement Body(StubHandler api, int index) => JsonDocument.Parse(api.Requests[index].Body!).RootElement;
+
+    /// <summary>A server whose V2 takes a command it runs into the session's inbox as a user message, under <paramref name="messageId"/>.</summary>
+    private static OpenCode2Server TakingCommandsIn(StubHandler api, string messageId)
+    {
+        var server = Server(api);
+        api.OnRequest = request =>
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("/command", StringComparison.Ordinal))
+                server.Route(UserMessageTakenIn(messageId));
+        };
+        return server;
+    }
+
+    private static OpenCode2Event UserMessageTakenIn(string messageId) => Event("session.inbox.enqueued", $$"""
+        {"inboxID":"{{messageId}}","sessionID":"{{Session}}","item":{"type":"user","payload":{"text":"Tidy up the code"},"delivery":"steer"} }
+        """);
 
     private static OpenCode2Server Server(StubHandler api)
         => new("local-user", OpenCode2Fixtures.ClientServing("", api), "token", process: null, NullLogger.Instance);

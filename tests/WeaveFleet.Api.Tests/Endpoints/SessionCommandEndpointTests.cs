@@ -185,12 +185,13 @@ public sealed class SessionCommandEndpointTests : IAsyncLifetime, IDisposable
         public List<CommandOptions> SendCommandCalls { get; } = [];
         public CancellationToken LastCancellationToken { get; private set; }
 
-        public Task SendCommandAsync(CommandOptions options, CancellationToken ct)
+        public async Task<string?> SendCommandAsync(CommandOptions options, CancellationToken ct)
         {
             SendCommandCalls.Add(options);
             LastCancellationToken = ct;
             // Simulate a long-running command — should NOT block the endpoint
-            return Task.Delay(TimeSpan.FromSeconds(5), CancellationToken.None);
+            await Task.Delay(TimeSpan.FromSeconds(5), CancellationToken.None);
+            return options.MessageId;
         }
 
         public Task SendPromptAsync(string text, PromptOptions? options, CancellationToken ct) => Task.CompletedTask;
