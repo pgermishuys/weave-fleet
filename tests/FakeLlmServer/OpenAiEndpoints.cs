@@ -23,7 +23,9 @@ internal static class OpenAiEndpoints
             var body = await reader.ReadToEndAsync();
             queue.Record(body);
 
-            var response = queue.ToolLessResponse is { } toolLess && !OffersTools(body)
+            var toolLessAnswer = OffersTools(body) ? null : queue.ToolLessAnswer?.Invoke(body);
+            var response = toolLessAnswer is not null ? toolLessAnswer
+                : queue.ToolLessResponse is { } toolLess && !OffersTools(body)
                 ? toolLess
                 : queue.TryDequeue(body, out var scripted) ? scripted : queue.Fallback?.Invoke(body);
             if (response is null)

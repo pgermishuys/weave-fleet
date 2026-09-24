@@ -48,6 +48,45 @@ export interface WorkflowFile {
   check: WorkflowCheck;
 }
 
+/** What asking the model for a workflow cost: all its tokens, and how many were read from the provider's cache. */
+export interface DraftTokens {
+  total: number;
+  fromCache: number;
+}
+
+/** A workflow the model drafted, from a session or a description. Nothing is written until it's saved. */
+export interface DraftedWorkflow {
+  /** The repository Save creates the file in. */
+  repository: string;
+  repositoryName: string;
+  /** The session it was drafted from; null when it was drafted from a description. */
+  sessionTitle: string | null;
+  check: WorkflowCheck;
+  /** 2 when the first answer had errors and the model was asked again. */
+  asks: number;
+  /** Null when the harness doesn't report tokens. */
+  tokens: DraftTokens | null;
+}
+
+/** "Drafted from Fix the login bug. Review it before saving." */
+export function draftedFrom(drafted: Pick<DraftedWorkflow, "sessionTitle">): string {
+  return drafted.sessionTitle
+    ? `Drafted from ${drafted.sessionTitle}. Review it before saving.`
+    : "Drafted from your description. Review it before saving.";
+}
+
+/** "Asked the model once · 3,412 tokens, 3,100 from the cache." */
+export function draftCost(drafted: Pick<DraftedWorkflow, "asks" | "tokens">): string {
+  const asked = drafted.asks > 1 ? "Asked the model twice: its first answer had errors" : "Asked the model once";
+  if (!drafted.tokens) return `${asked}.`;
+  const total = drafted.tokens.total.toLocaleString("en-US");
+  const cached = drafted.tokens.fromCache > 0 ? `, ${drafted.tokens.fromCache.toLocaleString("en-US")} from the cache` : "";
+  return `${asked} · ${total} tokens${cached}.`;
+}
+
+/** What the menu item and the dialog say it costs. */
+export const DRAFT_COST_NOTE = "Asks the model once. From a session it reads the conversation from the cache, so it's cheap.";
+
 /** "Tidy up a flaky test" → `tidy-up-a-flaky-test`, as the server names the file. */
 export function slugOf(name: string): string {
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60).replace(/-+$/, "");

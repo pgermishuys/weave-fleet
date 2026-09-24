@@ -42,6 +42,15 @@ public interface IHarnessSession : IAsyncDisposable
     /// </summary>
     Task<string?> AskOffTheRecordAsync(string prompt, CancellationToken ct);
 
+    /// <summary>
+    /// Starts a conversation off the record: it sees the whole session, as <see cref="AskOffTheRecordAsync"/> does,
+    /// and a follow-up question sees the earlier questions and answers. Nothing reaches the session's history; disposing
+    /// the conversation deletes whatever the harness made for it. Null when the harness can't, or the session has no
+    /// prompt to answer from yet. Used to draft a workflow from a session.
+    /// </summary>
+    Task<IOffTheRecordConversation?> StartOffTheRecordAsync(CancellationToken ct)
+        => Task.FromResult<IOffTheRecordConversation?>(null);
+
     /// <summary>Execute a slash command on the agent.</summary>
     Task SendCommandAsync(CommandOptions options, CancellationToken ct);
 

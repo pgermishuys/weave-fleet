@@ -80,6 +80,14 @@ public interface IHarnessRuntime
         => Task.FromResult<HarnessCatalog?>(null);
 
     /// <summary>
+    /// Starts a conversation off the record with no session behind it, in <paramref name="options"/>' folder and on its
+    /// model: nothing is kept afterwards. Null when the harness can't ask that way. The folder must already be
+    /// validated by the caller. Used to draft a workflow from a description.
+    /// </summary>
+    Task<IOffTheRecordConversation?> StartOffTheRecordAsync(OffTheRecordOptions options, CancellationToken ct)
+        => Task.FromResult<IOffTheRecordConversation?>(null);
+
+    /// <summary>
     /// The harness's own provider sign-ins, for harnesses that declare
     /// <see cref="HarnessCapabilities.SupportsProviderSignIn"/>; <see langword="null"/> for the rest.
     /// </summary>
@@ -118,3 +126,14 @@ public interface IHarnessRuntime
     /// <summary>How far the owner's last save has got in running processes; null when there's nothing to report.</summary>
     WeaveApplyStatus? GetWeaveApplyStatus(string ownerUserId) => null;
 }
+
+/// <summary>Where and on what a session-less conversation off the record runs.</summary>
+/// <param name="ProviderId">With <paramref name="ModelId"/>, the model; both null for the harness's default.</param>
+/// <param name="Variant">The model's reasoning effort, if any.</param>
+public sealed record OffTheRecordOptions(
+    string OwnerUserId,
+    string Directory,
+    HarnessProfile? Profile,
+    string? ProviderId,
+    string? ModelId,
+    string? Variant);

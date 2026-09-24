@@ -4,7 +4,7 @@ import { onGlobalEvent } from "@/composables/use-signalr-socket";
 import { apiFetch } from "@/lib/api-client";
 import { extractApiError } from "@/lib/api-error";
 import type { DomainEvent } from "@/lib/domain-events";
-import type { WorkflowCheck, WorkflowDraft, WorkflowFile } from "@/lib/workflow-draft";
+import type { DraftedWorkflow, WorkflowCheck, WorkflowDraft, WorkflowFile } from "@/lib/workflow-draft";
 import {
   isWorkflowRun,
   WORKFLOW_RUN_EVENT,
@@ -205,6 +205,27 @@ export const useWorkflowsStore = defineStore("workflows", () => {
     return send("/api/workflows/files", "POST", { directory, name, workflowId: workflowId ?? null }, "Couldn't create the workflow file.");
   }
 
+  /**
+   * Saves a drafted workflow for the first time: a new file named after the workflow, with the File view's text as it
+   * is or the designer's draft. A name that's taken is refused, as New's is.
+   */
+  function createDrafted(directory: string, content: { text: string } | { draft: WorkflowDraft }): Promise<WorkflowFile> {
+    return send("/api/workflows/files", "POST", { directory, ...content }, "Couldn't save the workflow file.");
+  }
+
+  /** Save as workflow…: the model describes the session's process as a workflow, off the record. Nothing is written. */
+  function draftFromSession(sessionId: string, signal?: AbortSignal): Promise<DraftedWorkflow> {
+    return send("/api/workflows/drafts/from-session", "POST", { sessionId }, "Couldn't draft a workflow from this session.", signal);
+  }
+
+  /** New workflow → Describe it: one question with no session, on the Standard role's model. Nothing is written. */
+  function draftFromDescription(
+    request: { directory: string; description: string; harnessType: string | null },
+    signal?: AbortSignal,
+  ): Promise<DraftedWorkflow> {
+    return send("/api/workflows/drafts/from-description", "POST", request, "Couldn't draft the workflow.", signal);
+  }
+
   return {
     runs,
     orderedRuns,
@@ -223,5 +244,8 @@ export const useWorkflowsStore = defineStore("workflows", () => {
     openFile,
     saveFile,
     createFile,
+    createDrafted,
+    draftFromSession,
+    draftFromDescription,
   };
 });

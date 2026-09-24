@@ -40,18 +40,20 @@ const nav = {
   showingRuns: ref(true),
   creating: ref(null),
   unsavedWorkflowId: ref<string | null>(null),
+  drafting: ref(null),
+  drafted: ref(null),
   setLeaveGuard: vi.fn(),
   showRuns: vi.fn(),
   reload: vi.fn(),
   startCreate: vi.fn(),
   endCreate: vi.fn(),
 };
-vi.mock("@/composables/use-workflows-nav", () => ({ useWorkflowsNav: () => nav }));
+vi.mock("@/composables/use-workflows-nav", () => ({ DRAFT_ID: "draft:new", useWorkflowsNav: () => nav }));
 // The designer opens only for a repo's own workflow; these are built-ins.
 vi.mock("@/composables/use-workflow-editor", () => ({
   useWorkflowEditor: () => ({
-    file: ref(null), directory: ref(null), loadError: ref(null), isDirty: ref(false), draft: ref(null),
-    open: vi.fn(), adopt: vi.fn(), dispose: vi.fn(),
+    file: ref(null), directory: ref(null), loadError: ref(null), isDirty: ref(false), draft: ref(null), drafted: ref(null),
+    open: vi.fn(), adopt: vi.fn(), adoptDraft: vi.fn(), dispose: vi.fn(),
   }),
 }));
 

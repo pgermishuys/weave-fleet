@@ -12,6 +12,7 @@ import {
   GitFork,
   Pencil,
   Repeat,
+  Sparkles,
   Trash2,
 } from "lucide-vue-next";
 import {
@@ -32,6 +33,10 @@ import {
 } from "@/composables/use-session-actions";
 import { useProjects } from "@/composables/use-projects";
 import { useAutomationsNav } from "@/composables/use-automations-nav";
+import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
+import { useWorkflowsFeature } from "@/composables/use-workflows-feature";
+import { useWorkflowsNav } from "@/composables/use-workflows-nav";
+import { DRAFT_COST_NOTE } from "@/lib/workflow-draft";
 import type { SessionListItem } from "@/api/client";
 import { sessionCache } from "@/lib/session-cache";
 import { dispatchSessionRemoved } from "@/lib/session-sync";
@@ -65,6 +70,9 @@ const archiveQueue = useArchiveQueueStore();
 const selection = useSessionSelectionStore();
 const router = useRouter();
 const { startCreateFromSession } = useAutomationsNav();
+const { isWorkflowsEnabled } = useWorkflowsFeature();
+const { harnesses } = useEnabledHarnesses();
+const workflowsNav = useWorkflowsNav();
 
 const isInlineEditing = shallowRef(false);
 const isContextMenuOpen = shallowRef(false);
@@ -130,6 +138,13 @@ const isSelected = computed(() => selection.isSelected(sessionId.value));
 const canFork = computed(() => props.session.capabilities?.canFork ?? true);
 const canDelete = computed(() => props.session.capabilities?.canDelete ?? true);
 const isForkingCurrentSession = computed(() => isForking.value && forkingSessionId.value === sessionId.value);
+/**
+ * Save as workflow… asks the session's harness off the record, as the recap does, so only a harness that can shows
+ * it. Decided by the capability, not the harness's name.
+ */
+const canSaveAsWorkflow = computed(() => isWorkflowsEnabled.value
+  && !isArchivedSession.value
+  && harnesses.value.find((harness) => harness.type === (props.session.harnessType ?? "opencode"))?.capabilities.supportsOffTheRecordPrompt === true);
 const isAnyActionPending = computed(() =>
   isRestoring.value
   || isDeleting.value
@@ -329,6 +344,11 @@ async function handleFork(): Promise<void> {
 function handleRepeatOnSchedule(): void {
   startCreateFromSession(sessionId.value);
   void router.navigate({ to: "/automations" });
+}
+
+function handleSaveAsWorkflow(): void {
+  void router.navigate({ to: "/workflows" });
+  void workflowsNav.draftFromSession(sessionId.value, displayTitle.value);
 }
 
 async function handleMove(projectId: string | null): Promise<void> {
@@ -568,6 +588,23 @@ function removeSessionFromStore(): void {
       >
         <Repeat class="size-3.5" />
         Repeat on a schedule…
+      </ContextMenuItem>
+
+      <ContextMenuItem
+        v-if="canSaveAsWorkflow"
+        :disabled="isAnyActionPending"
+        :title="DRAFT_COST_NOTE"
+        data-testid="session-save-as-workflow"
+        @select="handleSaveAsWorkflow"
+      >
+        <Sparkles class="size-3.5" />
+        <span class="flex flex-col">
+          <span>Save as workflow…</span>
+          <span
+            class="text-[11px] text-muted-foreground"
+            data-testid="session-save-as-workflow-cost"
+          >Asks the model once, from the cache</span>
+        </span>
       </ContextMenuItem>
 
       <OpenToolContextSubmenu :directory="session.workspaceDirectory" />

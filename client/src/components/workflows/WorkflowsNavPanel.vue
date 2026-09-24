@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
-import { AlertTriangle, GitPullRequest, Loader2, MessageSquareText, Plus } from "lucide-vue-next";
+import { AlertTriangle, GitPullRequest, Loader2, MessageSquareText, Plus, Sparkles } from "lucide-vue-next";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
-import { useWorkflowsNav } from "@/composables/use-workflows-nav";
+import { DRAFT_ID, useWorkflowsNav } from "@/composables/use-workflows-nav";
 import type { Workflow } from "@/lib/workflows";
 import { useWorkflowsStore } from "@/stores/workflows";
 
@@ -14,6 +14,13 @@ onMounted(() => {
 });
 
 const repoLabel = computed(() => (nav.library.value?.repositoryName ? `${nav.library.value.repositoryName} · .weave/workflows` : "This repo · .weave/workflows"));
+
+/** The draft being asked for, or open unsaved: it has a row until it's saved or dropped. */
+const draftRow = computed(() => {
+  if (nav.drafting.value) return { title: "New workflow", label: nav.drafting.value.error ? "Failed" : "Drafting…" };
+  if (nav.drafted.value) return { title: nav.drafted.value.check.draft?.name || "New workflow", label: "Unsaved" };
+  return null;
+});
 
 /** A workflow's latest run, for the word at the end of its row. */
 function latestRun(workflow: Workflow) {
@@ -116,8 +123,23 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
           :class="rowMeta(workflow).tone && `workflow-row__meta--${rowMeta(workflow).tone}`"
         >{{ rowMeta(workflow).label }}</span>
       </button>
+      <button
+        v-if="draftRow"
+        type="button"
+        class="workflow-row"
+        :class="{ 'workflow-row--active': nav.activeWorkflowId.value === DRAFT_ID }"
+        :aria-current="nav.activeWorkflowId.value === DRAFT_ID ? 'page' : undefined"
+        data-testid="workflow-draft-row"
+      >
+        <Sparkles
+          class="workflow-row__icon"
+          aria-hidden="true"
+        />
+        <span class="workflow-row__title">{{ draftRow.title }}</span>
+        <span class="workflow-row__meta workflow-row__meta--wait">{{ draftRow.label }}</span>
+      </button>
       <p
-        v-if="nav.repoWorkflows.value.length === 0"
+        v-if="nav.repoWorkflows.value.length === 0 && !draftRow"
         class="empty-message"
       >
         {{ nav.library.value.repository ? "No workflow files in this repo yet." : "Pick a repository in the Run box to see its workflows." }}

@@ -2,6 +2,8 @@ import { computed, markRaw, shallowRef } from "vue";
 import {
   cloneDraft,
   sameDraft,
+  slugOf,
+  type DraftedWorkflow,
   type WorkflowCheck,
   type WorkflowComment,
   type WorkflowDraft,
@@ -44,6 +46,8 @@ export function useWorkflowEditor() {
   const askingToRemoveComments = shallowRef(false);
   /** The file changed on disk since it was opened: Reload or Keep mine. */
   const conflict = shallowRef<string | null>(null);
+  /** A drafted workflow that has never been saved: there's no file yet, and Save creates it. */
+  const drafted = shallowRef<DraftedWorkflow | null>(null);
 
   let savedText = "";
   /** The text as it was when the designer's edits began: what Edit in File view goes back to, comments and all. */
@@ -56,6 +60,7 @@ export function useWorkflowEditor() {
 
   const errors = computed(() => check.value?.errors ?? []);
   const isDirty = computed(() => {
+    if (drafted.value) return true;
     if (source.value === "draft") return !sameDraft(draft.value, savedDraft);
     if (source.value === "text") return text.value !== savedText;
     return false;
@@ -78,6 +83,7 @@ export function useWorkflowEditor() {
 
   async function open(repository: string, workflowId: string): Promise<void> {
     cancelCheck();
+    drafted.value = null;
     directory.value = repository;
     loadError.value = null;
     commentsConfirmed.value = false;
@@ -95,6 +101,7 @@ export function useWorkflowEditor() {
   /** A file New or Duplicate just made: open it without reading it again. */
   function adopt(repository: string, created: WorkflowFile): void {
     cancelCheck();
+    drafted.value = null;
     directory.value = repository;
     loadError.value = null;
     commentsConfirmed.value = false;
@@ -102,6 +109,32 @@ export function useWorkflowEditor() {
     reset(created);
     view.value = created.check.draft ? "designer" : "file";
   }
+
+  /**
+   * A drafted workflow, unsaved: its file is the one Save would create, named after the workflow. A draft the designer
+   * can show opens there; one with errors opens in the File view, with them.
+   */
+  function adoptDraft(next: DraftedWorkflow): void {
+    cancelCheck();
+    directory.value = next.repository;
+    loadError.value = null;
+    commentsConfirmed.value = false;
+    conflict.value = null;
+    reset({ workflowId: "", file: draftFile(next.check.draft?.name ?? ""), hash: "", check: next.check });
+    drafted.value = next;
+    view.value = next.check.draft && next.check.errors.length === 0 ? "designer" : "file";
+  }
+
+  function draftFile(name: string): string {
+    return `.weave/workflows/${slugOf(name)}.yaml`;
+  }
+
+  /** The file a drafted workflow would be saved as, following its name as it's edited. */
+  const fileName = computed(() => {
+    if (!drafted.value) return file.value?.file ?? "";
+    const name = source.value === "text" ? check.value?.draft?.name : draft.value?.name;
+    return draftFile(name ?? draft.value?.name ?? "");
+  });
 
   function cancelCheck(): void {
     if (timer) clearTimeout(timer);
@@ -215,6 +248,7 @@ export function useWorkflowEditor() {
 
     isSaving.value = true;
     saveError.value = null;
+    if (drafted.value) return saveDrafted(fromDesigner);
     try {
       const saved = await store.saveFile({
         directory: directory.value,
@@ -231,6 +265,22 @@ export function useWorkflowEditor() {
     } catch (error) {
       if (error instanceof WorkflowFileChangedError) conflict.value = error.message;
       else saveError.value = error instanceof Error ? error.message : "Couldn't save the workflow file.";
+      return false;
+    } finally {
+      isSaving.value = false;
+    }
+  }
+
+  /** The first save of a drafted workflow: the file is created, under New's rules for names. */
+  async function saveDrafted(fromDesigner: boolean): Promise<boolean> {
+    try {
+      const created = await store.createDrafted(directory.value!, fromDesigner ? { draft: draft.value! } : { text: text.value });
+      drafted.value = null;
+      reset(created);
+      if (!created.check.draft) view.value = "file";
+      return true;
+    } catch (error) {
+      saveError.value = error instanceof Error ? error.message : "Couldn't save the workflow file.";
       return false;
     } finally {
       isSaving.value = false;
@@ -297,8 +347,11 @@ export function useWorkflowEditor() {
     designerBlocked,
     askingToRemoveComments,
     conflict,
+    drafted,
+    fileName,
     open,
     adopt,
+    adoptDraft,
     editDraft,
     editText,
     setView,

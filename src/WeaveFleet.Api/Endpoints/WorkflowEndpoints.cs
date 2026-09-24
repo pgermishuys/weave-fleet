@@ -90,8 +90,24 @@ public static class WorkflowEndpoints
             .WithName("CreateWorkflowFile")
             .Produces<WorkflowFileDto>();
 
+        // ── Drafting a workflow ────────────────────────────────────────────────
+        // Asks the model off the record; nothing is written until the draft is saved with POST /files.
+
+        group.MapPost("/drafts/from-session", async (DraftWorkflowFromSessionRequest request, WorkflowDrafter drafter, CancellationToken ct)
+                => Drafted(await drafter.FromSessionAsync(request.SessionId, ct)))
+            .WithName("DraftWorkflowFromSession")
+            .Produces<DraftedWorkflowDto>();
+
+        group.MapPost("/drafts/from-description", async (DraftWorkflowFromDescriptionRequest request, WorkflowDrafter drafter, CancellationToken ct)
+                => Drafted(await drafter.FromDescriptionAsync(request.Directory, request.Description, request.HarnessType, request.HarnessProfileId, ct)))
+            .WithName("DraftWorkflowFromDescription")
+            .Produces<DraftedWorkflowDto>();
+
         return app;
     }
+
+    private static IResult Drafted(WeaveFleet.Domain.Common.Result<WorkflowDrafted> drafted)
+        => drafted.IsFailure ? drafted.Error.ToErrorResult() : Results.Ok(DraftedWorkflowDto.From(drafted.Value));
 }
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]

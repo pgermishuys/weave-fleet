@@ -139,6 +139,18 @@ public sealed class FakeHarnessRuntime : IHarnessRuntime
         return CatalogBehavior?.Invoke(ownerUserId, directory, ct) ?? Task.FromResult<HarnessCatalog?>(null);
     }
 
+    /// <summary>What <see cref="StartOffTheRecordAsync"/> returns; null (the default) means the harness can't ask that way.</summary>
+    public IOffTheRecordConversation? OffTheRecordConversation { get; set; }
+
+    /// <summary>What <see cref="StartOffTheRecordAsync"/> was asked for.</summary>
+    public List<OffTheRecordOptions> OffTheRecordCalls { get; } = [];
+
+    public Task<IOffTheRecordConversation?> StartOffTheRecordAsync(OffTheRecordOptions options, CancellationToken ct)
+    {
+        OffTheRecordCalls.Add(options);
+        return Task.FromResult(OffTheRecordConversation);
+    }
+
     /// <summary>The harness's provider sign-in; null (the default) for a harness without one.</summary>
     public IHarnessProviderSignIn? ProviderSignIn { get; set; }
 

@@ -70,7 +70,7 @@ public sealed partial class HarnessCatalogService(
     }
 
     /// <summary>The profile a new session would start with, the way SessionOrchestrator picks it.</summary>
-    private async Task<Result<HarnessProfile?>> ResolveProfileAsync(string harnessType, string? profileId)
+    public async Task<Result<HarnessProfile?>> ResolveProfileAsync(string harnessType, string? profileId)
     {
         if (profileId == HarnessProfileService.NoProfile
             || harnessProfiles is null
