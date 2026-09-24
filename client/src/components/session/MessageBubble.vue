@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { X, User, Bot, Copy } from "lucide-vue-next";
+import { X, User, Bot, Copy, ChevronRight } from "lucide-vue-next";
 import ToolCard from "@/components/session/ToolCard.vue";
 import AgentTaskRow from "@/components/session/AgentTaskRow.vue";
 import type { ToolCardDelegation } from "@/components/session/activity-stream-tool-card";
 import QuestionCard from "@/components/session/QuestionCard.vue";
 import type { AccumulatedToolPart } from "@/lib/client-types";
+import type { SlashCommand } from "@/lib/domain-events";
 import type { VisualPayload } from "@/lib/visual-payload";
 import { useQuestionAnswer } from "@/composables/use-question-answer";
 import { useRelativeTime } from "@/composables/use-relative-time";
 import { formatRelativeTime, formatAbsoluteTimestamp } from "@/lib/format-utils";
 import { sharedMarkdownRenderer } from "@/lib/markdown-renderer";
+import { formatSlashCommand } from "@/lib/slash-command-utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ToolCardDiffLine {
@@ -53,6 +55,8 @@ const props = defineProps<{
   sessionId?: string;
   showIdentity: boolean;
   clusterPosition: "single" | "first" | "middle" | "last";
+  /** The slash command a message of yours came from: it shows as the command, with what it expanded to kept behind it. */
+  command?: SlashCommand;
 }>();
 
 const emit = defineEmits<{
@@ -90,8 +94,13 @@ const markdownRenderer = sharedMarkdownRenderer();
 
 const bodyHtml = computed(() => markdownRenderer.render(props.body));
 
+const commandLine = computed(() => props.command ? formatSlashCommand(props.command) : "");
+// What the harness made of the command, when that's more than the command itself (OpenCode's expanded template).
+const commandPrompt = computed(() => props.command && props.body.trim() !== commandLine.value ? props.body : "");
+const showPrompt = ref(false);
+
 function copyMessage() {
-  navigator.clipboard.writeText(props.body);
+  navigator.clipboard.writeText(props.command ? commandLine.value : props.body);
   copied.value = true;
   setTimeout(() => {
     copied.value = false;
@@ -147,9 +156,43 @@ function handleExpandVisual(payload: VisualPayload): void {
       
       <div class="msg-content">
         <div class="msg-body">
+          <template v-if="command">
+            <p
+              class="msg-command"
+              data-testid="message-command"
+            >
+              <span class="msg-command__name">/{{ command.name }}</span>
+              <span
+                v-if="command.arguments"
+                class="msg-command__args"
+              >{{ ` ${command.arguments}` }}</span>
+            </p>
+            <button
+              v-if="commandPrompt"
+              type="button"
+              class="msg-command__toggle"
+              :aria-expanded="showPrompt"
+              data-testid="message-command-toggle"
+              @click="showPrompt = !showPrompt"
+            >
+              <ChevronRight
+                class="msg-command__chevron"
+                :class="{ 'msg-command__chevron--open': showPrompt }"
+                aria-hidden="true"
+              />
+              {{ showPrompt ? "Hide prompt" : "Show prompt" }}
+            </button>
+            <!-- eslint-disable-next-line vue/no-v-html -->
+            <div
+              v-if="commandPrompt && showPrompt"
+              class="msg-command__prompt msg-body__content md-content"
+              data-testid="message-command-prompt"
+              v-html="bodyHtml"
+            />
+          </template>
           <!-- eslint-disable-next-line vue/no-v-html -->
           <div
-            v-if="body"
+            v-else-if="body"
             class="msg-body__content md-content"
             v-html="bodyHtml"
           />
@@ -385,6 +428,55 @@ function handleExpandVisual(payload: VisualPayload): void {
 
 .message--user .msg-body__content {
   text-align: left;
+}
+
+/* A slash command shows as you sent it; what it expanded to stays behind "Show prompt". */
+.msg-command {
+  margin: 0;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.msg-command__name {
+  color: var(--accent);
+  font-family: var(--font-mono-stack);
+  font-size: 0.92em;
+  font-weight: 600;
+}
+
+.msg-command__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin: 4px 0 0 -2px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.msg-command__toggle:hover {
+  color: var(--text);
+}
+
+.msg-command__chevron {
+  width: 0.85rem;
+  height: 0.85rem;
+  transition: transform 120ms ease;
+}
+
+.msg-command__chevron--open {
+  transform: rotate(90deg);
+}
+
+.msg-command__prompt {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  color: var(--text-secondary, var(--muted));
+  font-size: 0.875rem;
 }
 
 .msg-tools {

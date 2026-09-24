@@ -726,3 +726,48 @@ describe("message ordering", () => {
     });
   });
 });
+
+describe("slash commands", () => {
+  it("keeps_the_command_a_user_message_came_from", () => {
+    const messages = ensureMessage([], {
+      id: "msg_0d1eda667001SQ0X1r7eLpxOMf",
+      sessionID: "session-1",
+      role: "user",
+      time: { created: 1000 },
+      command: { name: "tidy", arguments: "src/auth" },
+    });
+
+    expect(messages[0]!.command).toEqual({ name: "tidy", arguments: "src/auth" });
+  });
+
+  it("drops_empty_arguments_and_ignores_a_command_on_an_agent_message", () => {
+    const messages = ensureMessage(
+      ensureMessage([], {
+        id: "msg_0000010000000001_user",
+        sessionID: "session-1",
+        role: "user",
+        command: { name: "init", arguments: null },
+      }),
+      {
+        id: "msg_0000010000000002_agent",
+        sessionID: "session-1",
+        role: "assistant",
+        command: { name: "init" },
+      },
+    );
+
+    expect(messages[0]!.command).toEqual({ name: "init" });
+    expect(messages[1]!.command).toBeUndefined();
+  });
+
+  it("takes_the_command_from_a_later_update", () => {
+    const messages = ensureMessage([], { id: "msg_0000010000000001_user", sessionID: "session-1", role: "user" });
+
+    const updated = mergeMessageUpdate(messages, {
+      id: "msg_0000010000000001_user",
+      command: { name: "review", arguments: "main" },
+    });
+
+    expect(updated[0]!.command).toEqual({ name: "review", arguments: "main" });
+  });
+});

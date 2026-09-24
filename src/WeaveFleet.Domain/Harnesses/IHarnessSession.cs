@@ -51,8 +51,12 @@ public interface IHarnessSession : IAsyncDisposable
     Task<IOffTheRecordConversation?> StartOffTheRecordAsync(CancellationToken ct)
         => Task.FromResult<IOffTheRecordConversation?>(null);
 
-    /// <summary>Execute a slash command on the agent.</summary>
-    Task SendCommandAsync(CommandOptions options, CancellationToken ct);
+    /// <summary>
+    /// Execute a slash command on the agent. Returns the id of the user message the command put in the conversation:
+    /// <see cref="CommandOptions.MessageId"/> when the harness stored it under that, the harness's own id when it
+    /// didn't, or null when it put none there Fleet can name (a command that runs as a subagent).
+    /// </summary>
+    Task<string?> SendCommandAsync(CommandOptions options, CancellationToken ct);
 
     /// <summary>Abort the current agent operation.</summary>
     Task AbortAsync(CancellationToken ct);

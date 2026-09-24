@@ -29,6 +29,13 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
     /// <summary>How many of the newest messages a catch-up reads: enough for the turn that ran while the stream was down.</summary>
     private const int ResyncMessages = 20;
 
+    /// <summary>
+    /// How long a command waits, after V2 has run it, to hear which user message it became. V2 takes the message in
+    /// while it runs the command, so the wait is only for its event to arrive; a command that runs as a subagent puts
+    /// no message in this session, and waits it out.
+    /// </summary>
+    internal TimeSpan CommandMessageWait { get; set; } = TimeSpan.FromSeconds(5);
+
     private readonly OpenCode2SessionContext _context;
     private readonly Func<CancellationToken, Task<OpenCode2Server>> _servers;
     private readonly OpenCode2Mapper _mapper;
@@ -45,6 +52,12 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
 
     // The questions waiting on the user, by the tool call that asked: the client answers by call id.
     private readonly ConcurrentDictionary<string, OpenCode2Form> _questions = new(StringComparer.Ordinal);
+
+    // The prompts sent that V2 hasn't taken into the conversation yet, by the id Fleet gave them. A user message V2
+    // takes in that isn't one of them is a command's: V2's command route neither takes an id nor returns one.
+    private readonly ConcurrentDictionary<string, byte> _promptsNotTakenIn = new(StringComparer.Ordinal);
+    private readonly SemaphoreSlim _commandLock = new(1, 1);
+    private volatile TaskCompletionSource<string>? _commandMessage;
 
     private OpenCode2Server? _server;
     private volatile HarnessSessionStatus _status = HarnessSessionStatus.Idle;
@@ -104,6 +117,8 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
 
         // The user message keeps the id Fleet showed it with (V2 takes ids of the same msg_ form).
         // The status follows V2's execution events: a short turn can be over before this request returns.
+        if (options?.MessageId is { } messageId)
+            _promptsNotTakenIn[messageId] = 0;
         await server.Client.PromptAsync(ResumeToken, text, options?.MessageId, PromptFiles(options?.Attachments), ct).ConfigureAwait(false);
     }
 
@@ -248,15 +263,36 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
             OpenCode2HarnessRuntime.ConversationQuestionTimeout);
     }
 
-    /// <summary>Runs one of V2's commands as the next turn; V2 expands its template into the user's message.</summary>
-    public async Task SendCommandAsync(CommandOptions options, CancellationToken ct)
+    /// <summary>
+    /// Runs one of V2's commands as the next turn; V2 expands its template into the user's message, under an id of its
+    /// own. That id is read off V2's inbox (<see cref="OnEvent"/>), one command at a time.
+    /// </summary>
+    public async Task<string?> SendCommandAsync(CommandOptions options, CancellationToken ct)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         var server = await AttachedServerAsync(ct).ConfigureAwait(false);
         LogCommand(_logger, InstanceId, options.Command);
 
         await ApplyChoicesAsync(server, options.Agent, options.ProviderId, options.ModelId, effort: null, ct).ConfigureAwait(false);
-        await server.Client.RunCommandAsync(ResumeToken, options.Command, options.Arguments ?? string.Empty, ct).ConfigureAwait(false);
+
+        await _commandLock.WaitAsync(ct).ConfigureAwait(false);
+        var message = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _commandMessage = message;
+        try
+        {
+            await server.Client.RunCommandAsync(ResumeToken, options.Command, options.Arguments ?? string.Empty, ct).ConfigureAwait(false);
+            return await message.Task.WaitAsync(CommandMessageWait, ct).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            LogCommandMessageNotSeen(_logger, InstanceId, options.Command);
+            return null;
+        }
+        finally
+        {
+            _commandMessage = null;
+            _commandLock.Release();
+        }
     }
 
     /// <summary>
@@ -310,6 +346,9 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         // Read before mapping too: the mapper forgets a tool call once it ends.
         if (_delegations is not null && _mapper.TryReadDelegation(evt) is { } delegation)
             _delegations.Queue(delegation);
+
+        if (OpenCode2Mapper.ReadUserMessageTakenIn(evt) is { } userMessageId && !_promptsNotTakenIn.TryRemove(userMessageId, out _))
+            _commandMessage?.TrySetResult(userMessageId);
 
         switch (evt.Type)
         {
@@ -616,6 +655,9 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
 
     [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 session {InstanceId} ({HarnessSessionId}) attached again, on server {ProcessId}")]
     private static partial void LogReattached(ILogger logger, string instanceId, string harnessSessionId, int processId);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "OpenCode 2 session {InstanceId} put no user message in for command {Command} that Fleet saw")]
+    private static partial void LogCommandMessageNotSeen(ILogger logger, string instanceId, string command);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't delete OpenCode 2 session {InstanceId} from its server")]
     private static partial void LogDeleteFailed(ILogger logger, string instanceId, Exception exception);

@@ -15,6 +15,7 @@
 import { toolDiffLines, toolDiffText, toolInput, toolStatus } from "@/components/session/activity-stream-tool-card";
 import type { AccumulatedMessage, AccumulatedToolPart, DelegationDto } from "@/lib/client-types";
 import { parseDiffLines, type DiffLine } from "@/lib/diff-parser";
+import { formatSlashCommand } from "@/lib/slash-command-utils";
 
 /** A file a turn wrote, with the lines that turn wrote to it. */
 export interface TurnFile {
@@ -330,6 +331,10 @@ function toRounds(messages: readonly AccumulatedMessage[]): Round[] {
 }
 
 function promptOf(message: AccumulatedMessage): string {
+  // A slash command reads as you sent it, not as the prompt the harness expanded it into.
+  if (message.command) {
+    return formatSlashCommand(message.command);
+  }
   return message.parts
     .map((part) => (part.type === "text" ? part.text : ""))
     .filter((text) => text.trim())

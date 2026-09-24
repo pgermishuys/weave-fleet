@@ -1,5 +1,6 @@
 using System.Data;
 using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Domain.Repositories;
 
@@ -73,4 +74,13 @@ public interface IMessageRepository
     /// Used when a message.part.removed event is received from the harness.
     /// </summary>
     Task RemovePartAsync(string messageId, string sessionId, string partId);
+
+    /// <summary>
+    /// Remembers that the user message <paramref name="messageId"/> (the id the harness stored it under) came from
+    /// <paramref name="command"/>.
+    /// </summary>
+    Task SaveCommandAsync(string sessionId, string messageId, SlashCommand command);
+
+    /// <summary>The slash commands the session's user messages came from, by message id.</summary>
+    Task<IReadOnlyDictionary<string, SlashCommand>> GetCommandsAsync(string sessionId);
 }

@@ -68,6 +68,15 @@ describe("round boundaries", () => {
     expect(turns[1]!.id).toBe("u1");
   });
 
+  it("shows a slash command as it was sent, not the prompt it expanded to", () => {
+    const [turn] = deriveTurns([
+      { ...user("u1", "Tidy up the code in src/auth without changing what it does."), command: { name: "tidy", arguments: "src/auth" } },
+      assistant("a1", [text("ok")]),
+    ]);
+
+    expect(turn!.prompt).toBe("/tidy src/auth");
+  });
+
   it("shows the prompt's first line only, and keeps the whole prompt for the tooltip", () => {
     const [turn] = deriveTurns([user("u1", "Fix the header\n\nIt wraps on phones."), assistant("a1", [text("ok")])]);
 

@@ -18,7 +18,7 @@ import { isSubagentTool, subagentKind, subagentTask, toToolCardItem } from "@/co
 import type { ToolCardItem } from "@/components/session/activity-stream-tool-card";
 import type { CommandEventName } from "@/lib/command-events";
 import type { AccumulatedMessage, AccumulatedPart, AccumulatedToolPart, AccumulatedFilePart, AccumulatedReasoningPart } from "@/lib/client-types";
-import type { TurnError } from "@/lib/domain-events";
+import type { SlashCommand, TurnError } from "@/lib/domain-events";
 import { parseVisualPayload, type VisualPayload } from "@/lib/visual-payload";
 import { isQuestionPart } from "@/lib/question-types";
 import { diagLog } from "@/lib/message-diagnostics";
@@ -63,6 +63,8 @@ interface ActivityMessage {
    * the prompt the step started with, "Fleet · you pressed Move on" on the wrap-up.
    */
   workflowStep?: string;
+  /** The slash command a message of yours came from; its body is then what the harness made of the command. */
+  command?: SlashCommand;
 }
 
 const props = defineProps<{
@@ -283,6 +285,7 @@ function toActivityMessage(message: AccumulatedMessage, finished: ReadonlyMap<st
     clusterPosition: "single" as const,
     showIdentity: true,
     turnError: message.turnError,
+    command: message.role === "user" ? message.command : undefined,
   } satisfies ActivityMessage;
 }
 
@@ -1126,6 +1129,7 @@ function handleShowCanvas(canvasId: string): void {
           :session-id="props.sessionId"
           :show-identity="message.showIdentity"
           :cluster-position="message.clusterPosition"
+          :command="message.command"
           @expand-visual="handleExpandVisual"
           @show-canvas="handleShowCanvas"
         />

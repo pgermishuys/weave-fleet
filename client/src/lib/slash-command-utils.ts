@@ -3,7 +3,13 @@
  * Used to detect and parse /command-style input before routing to the SDK command API.
  */
 
+import type { SlashCommand } from "./domain-events";
 import { extractText } from "./markdown-utils";
+
+/** A slash command as the user typed it: `/name arguments`. */
+export function formatSlashCommand(command: SlashCommand): string {
+  return command.arguments ? `/${command.name} ${command.arguments}` : `/${command.name}`;
+}
 
 export interface ParsedSlashCommand {
   /** The command name without the leading slash, e.g. "metrics" */

@@ -17,7 +17,8 @@ internal sealed record CommittedMessageInfo(
     string SessionID,
     string? Agent,
     string? ModelID,
-    CommittedMessageTime Time);
+    CommittedMessageTime Time,
+    SlashCommand? Command = null);
 
 internal sealed record CommittedMessage(CommittedMessageInfo Info, List<JsonElement> Parts);
 

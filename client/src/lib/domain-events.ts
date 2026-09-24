@@ -82,6 +82,12 @@ export interface MessageTokenUsage {
   reasoning: number;
 }
 
+/** A slash command as the user sent it: `/name arguments`. */
+export interface SlashCommand {
+  name: string;
+  arguments?: string | null;
+}
+
 export interface MessageEventInfo {
   id: string;
   role: string;
@@ -97,6 +103,8 @@ export interface MessageEventInfo {
   turnError?: TurnError | null;
   /** Why the model stopped (e.g. "stop", "length", "error"), when the harness reports it. */
   finish?: string | null;
+  /** The slash command a user message came from; its text is then what the harness made of the command. */
+  command?: SlashCommand | null;
 }
 
 export interface BaseMessageEventPart {

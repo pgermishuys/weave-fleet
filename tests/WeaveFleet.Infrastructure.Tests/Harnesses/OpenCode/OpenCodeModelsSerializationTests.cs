@@ -558,6 +558,22 @@ public sealed class OpenCodeModelsSerializationTests
         json.ShouldContain("\"arguments\":\"some args\"");
     }
 
+    [Fact]
+    public void CommandRequest_Serializes_TheMessageIdFleetGaveIt()
+    {
+        // OpenCode stores the command's user message under it, so Fleet knows which message the command became.
+        var request = new OpenCodeCommandRequest
+        {
+            Command = "tidy",
+            Arguments = "src/auth",
+            MessageId = "msg_0d1eda667001SQ0X1r7eLpxOMf",
+        };
+
+        var json = JsonSerializer.Serialize(request, Options);
+
+        json.ShouldContain("\"messageID\":\"msg_0d1eda667001SQ0X1r7eLpxOMf\"");
+    }
+
     // ---------------------------------------------------------------------------
     // OpenCodeToolResultPart — tool-result type
     // ---------------------------------------------------------------------------

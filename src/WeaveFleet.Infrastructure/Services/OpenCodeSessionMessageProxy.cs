@@ -119,6 +119,10 @@ public sealed class OpenCodeSessionMessageProxy(
         LogFallingBackToPersisted(logger, fleetSessionId, null);
         var fallbackSnapshot = await fallbackSnapshotBuilder.BuildAsync(fleetSessionId, pageSize, cursor)
             .ConfigureAwait(false);
+        fallbackSnapshot = fallbackSnapshot with
+        {
+            Messages = await WithCommandsAsync(fleetSessionId, fallbackSnapshot.Messages).ConfigureAwait(false),
+        };
 
         // Mark the snapshot partial when the history lives in the harness and we couldn't read it. Other
         // harnesses (Claude Code) keep their history in Fleet's database, so theirs is complete.
@@ -189,7 +193,9 @@ public sealed class OpenCodeSessionMessageProxy(
             .ConfigureAwait(false);
 
         // Convert MessageLifecyclePayload to HarnessMessage
-        var messages = snapshot.Messages.Select(ToHarnessMessage).ToList();
+        var messages = (await WithCommandsAsync(fleetSessionId, snapshot.Messages).ConfigureAwait(false))
+            .Select(ToHarnessMessage)
+            .ToList();
         return new MessagePage(messages, snapshot.HasMore, snapshot.Cursor);
     }
 
@@ -258,10 +264,47 @@ public sealed class OpenCodeSessionMessageProxy(
         CancellationToken ct)
     {
         var page = await harnessSession.GetMessagesAsync(new MessageQuery(limit, before), ct).ConfigureAwait(false);
+        page = await WithCommandsAsync(fleetSessionId, page).ConfigureAwait(false);
         return before is null
             ? await AddPromptsTheHarnessHasNotStoredAsync(fleetSessionId, page).ConfigureAwait(false)
             : page;
     }
+
+    /// <summary>
+    /// Marks the user messages that came from a slash command with the command, so they show as <c>/name arguments</c>
+    /// rather than the prompt the harness made of it.
+    /// </summary>
+    private async Task<MessagePage> WithCommandsAsync(string fleetSessionId, MessagePage page)
+    {
+        var commands = await GetCommandsAsync(fleetSessionId, page.Messages.Select(m => m.Role)).ConfigureAwait(false);
+        return commands.Count == 0
+            ? page
+            : page with
+            {
+                Messages = [.. page.Messages.Select(m => m.Role == "user" && commands.TryGetValue(m.Id, out var command)
+                    ? m with { Command = command }
+                    : m)],
+            };
+    }
+
+    /// <inheritdoc cref="WithCommandsAsync(string, MessagePage)"/>
+    private async Task<IReadOnlyList<MessageLifecyclePayload>> WithCommandsAsync(
+        string fleetSessionId,
+        IReadOnlyList<MessageLifecyclePayload> messages)
+    {
+        var commands = await GetCommandsAsync(fleetSessionId, messages.Select(m => m.Info.Role)).ConfigureAwait(false);
+        return commands.Count == 0
+            ? messages
+            : [.. messages.Select(m => m.Info.Role == "user" && commands.TryGetValue(m.Info.Id, out var command)
+                ? m with { Info = m.Info with { Command = command } }
+                : m)];
+    }
+
+    /// <summary>The session's commands by message id; none are read for a page without a user message.</summary>
+    private async Task<IReadOnlyDictionary<string, SlashCommand>> GetCommandsAsync(string fleetSessionId, IEnumerable<string> roles)
+        => messageRepository is not null && roles.Contains("user")
+            ? await messageRepository.GetCommandsAsync(fleetSessionId).ConfigureAwait(false)
+            : new Dictionary<string, SlashCommand>();
 
     /// <summary>
     /// Adds prompts Fleet saved when it sent them (a new session's first message) that the harness
@@ -375,6 +418,7 @@ public sealed class OpenCodeSessionMessageProxy(
                 // Carried into the snapshot so a failed turn still says why it failed after a reload.
                 Error = message.Error,
                 Finish = message.Finish,
+                Command = message.Command,
             },
             Parts = parts,
         };
@@ -481,6 +525,7 @@ public sealed class OpenCodeSessionMessageProxy(
             Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(payload.Info.Time.Created),
             Agent = payload.Info.Agent,
             ModelId = payload.Info.ModelId,
+            Command = payload.Info.Command,
         };
     }
 

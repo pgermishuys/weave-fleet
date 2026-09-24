@@ -10,7 +10,15 @@ import type {
   AccumulatedToolPart,
   AccumulatedFilePart,
 } from "@/lib/client-types";
-import type { TurnError } from "@/lib/domain-events";
+import type { SlashCommand, TurnError } from "@/lib/domain-events";
+
+/** The slash command carried on a message info, which reaches here as loosely typed data. */
+function readCommand(value: unknown): SlashCommand | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const { name, arguments: args } = value as Record<string, unknown>;
+  if (typeof name !== "string" || name.length === 0) return undefined;
+  return typeof args === "string" && args.length > 0 ? { name, arguments: args } : { name };
+}
 
 /** The failure carried on a message info, which reaches here as loosely typed harness data. */
 function isTurnError(value: unknown): value is TurnError {
@@ -91,6 +99,7 @@ export function ensureMessage(
     agent: info.agent,
     modelID,
     parentID: info.parentID,
+    command: role === "user" ? readCommand(info.command) : undefined,
   };
   
   return insertMessageSorted(prev, newMsg);
@@ -155,8 +164,10 @@ export function mergeMessageUpdate(
   const hasNewTurnError = Boolean(turnError && turnError.message !== existing.turnError?.message);
   const finish = typeof info.finish === "string" ? info.finish : undefined;
   const hasNewFinish = Boolean(finish && finish !== existing.finish);
+  const command = existing.role === "user" ? readCommand(info.command) : undefined;
+  const hasNewCommand = Boolean(command && (command.name !== existing.command?.name || command.arguments !== existing.command?.arguments));
 
-  if (!hasNewCompletedAt && !hasNewCreatedAt && !hasNewTokens && !hasUpdatedTokens && !hasNewCost && !hasSnapshotParts && !hasNewModelID && !hasNewTurnError && !hasNewFinish) {
+  if (!hasNewCompletedAt && !hasNewCreatedAt && !hasNewTokens && !hasUpdatedTokens && !hasNewCost && !hasSnapshotParts && !hasNewModelID && !hasNewTurnError && !hasNewFinish && !hasNewCommand) {
     return prev; // nothing new to merge
   }
 
@@ -169,6 +180,7 @@ export function mergeMessageUpdate(
     ...(hasNewModelID ? { modelID } : {}),
     ...(hasNewTurnError ? { turnError } : {}),
     ...(hasNewFinish ? { finish } : {}),
+    ...(hasNewCommand ? { command } : {}),
     tokens: mergedTokens,
     cost: mergedCost,
   };
