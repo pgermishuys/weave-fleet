@@ -52,6 +52,9 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
 {
     private static readonly TimeSpan ReconnectDelay = TimeSpan.FromSeconds(1);
 
+    /// <summary>How often the server checks for folders to keep loaded (<see cref="KeepBusyFoldersLoadedAsync"/>).</summary>
+    private static readonly TimeSpan KeepLoadedInterval = TimeSpan.FromMinutes(5);
+
     /// <summary>How long a child session's events are held for Fleet to attach it, and how many.</summary>
     internal static readonly TimeSpan PendingChildLifetime = TimeSpan.FromMinutes(10);
     internal const int PendingChildEventLimit = 5000;
@@ -87,6 +90,13 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     private readonly ConcurrentDictionary<string, long> _loadedAt = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, byte> _asked = new(StringComparer.Ordinal);
     private readonly Dictionary<string, long> _catalogChanges = new(StringComparer.Ordinal);
+
+    // When each folder a session runs in last had a session event (Environment.TickCount64), and the timer that keeps
+    // folders with work in them loaded (KeepBusyFoldersLoadedAsync).
+    private readonly ConcurrentDictionary<string, long> _sessionActivity = new(StringComparer.Ordinal);
+    private readonly Timer? _keepLoaded;
+    private int _keepingLoaded;
+
     private readonly CancellationTokenSource _stopping = new();
     private readonly Task _pump;
     private TaskCompletionSource _connected = NewConnectedSource();
@@ -110,7 +120,10 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
         _logger = logger;
 
         if (_process is not null)
+        {
             _process.Exited += (_, _) => _ = StopRoutingAsync();
+            _keepLoaded = new Timer(_ => _ = KeepBusyFoldersLoadedAsync(_stopping.Token), null, KeepLoadedInterval, KeepLoadedInterval);
+        }
 
         _pump = Task.Run(PumpAsync, CancellationToken.None);
     }
@@ -325,6 +338,7 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     /// <summary>Routes the session's events to <paramref name="sink"/>, starting with any held while it was a new child session.</summary>
     public void Attach(string harnessSessionId, IOpenCode2EventSink sink)
     {
+        _sessionActivity.TryAdd(Path.TrimEndingDirectorySeparator(sink.Context.WorkingDirectory), Environment.TickCount64);
         lock (_routing)
         {
             _sinks[harnessSessionId] = sink;
@@ -365,6 +379,8 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
 
         // Only a session's own events count as use: V2 also sends catalog events whenever files it watches change.
         Touch();
+        if (evt.Location?.Directory is { Length: > 0 } directory)
+            _sessionActivity[Path.TrimEndingDirectorySeparator(directory)] = Environment.TickCount64;
 
         IOpenCode2EventSink? sink;
         lock (_routing)
@@ -449,6 +465,81 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
         {
             return false;
         }
+    }
+
+    /// <summary>How long a folder may go without a session event before the server keeps it loaded.</summary>
+    internal TimeSpan FolderQuietLimit { get; init; } = TimeSpan.FromMinutes(40);
+
+    /// <summary>
+    /// V2 unloads a folder after an hour without a session event, and interrupts the turns still running there first:
+    /// a question the user hasn't answered in an hour is cancelled, and a command that printed nothing for an hour is
+    /// stopped. Unloading also kills the folder's background shells. So for each folder a session runs in that has
+    /// been quiet for <see cref="FolderQuietLimit"/> while V2 still has work there (a turn or a background shell),
+    /// this writes one session's permission rules back unchanged: V2 records that as a session event, which counts as
+    /// activity. A folder with nothing running is left to unload. Returns the folders it kept.
+    /// </summary>
+    internal async Task<IReadOnlyList<string>> KeepBusyFoldersLoadedAsync(CancellationToken ct)
+    {
+        if (Interlocked.Exchange(ref _keepingLoaded, 1) == 1)
+            return [];
+
+        var kept = new List<string>();
+        try
+        {
+            var now = Environment.TickCount64;
+            var quiet = _sinks
+                .GroupBy(pair => Path.TrimEndingDirectorySeparator(pair.Value.Context.WorkingDirectory), StringComparer.Ordinal)
+                .Where(folder => now - _sessionActivity.GetValueOrDefault(folder.Key, now) >= (long)FolderQuietLimit.TotalMilliseconds)
+                .ToList();
+            if (quiet.Count == 0)
+                return kept;
+
+            var active = await Client.GetActiveSessionIdsAsync(ct).ConfigureAwait(false);
+            foreach (var folder in quiet)
+            {
+                var sessions = folder.Select(pair => pair.Key).ToList();
+                if (!sessions.Any(active.Contains) && !await HasRunningShellsAsync(folder.Key, ct).ConfigureAwait(false))
+                    continue;
+
+                foreach (var sessionId in sessions)
+                {
+                    if (await Client.GetSessionAsync(sessionId, ct).ConfigureAwait(false) is not { Permissions: { } rules })
+                        continue;
+
+                    await Client.SetPermissionsAsync(sessionId, rules, ct).ConfigureAwait(false);
+                    _sessionActivity[folder.Key] = Environment.TickCount64;
+                    LogFolderKeptLoaded(_logger, ProcessId ?? 0, folder.Key);
+                    kept.Add(folder.Key);
+                    break;
+                }
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // The server stopped.
+        }
+        catch (Exception ex)
+        {
+            // It runs from a timer; the next round tries again.
+            LogKeepLoadedFailed(_logger, ProcessId ?? 0, ex);
+        }
+        finally
+        {
+            Volatile.Write(ref _keepingLoaded, 0);
+        }
+
+        return kept;
+    }
+
+    private async Task<bool> HasRunningShellsAsync(string directory, CancellationToken ct)
+    {
+        // Asking about a folder V2 hasn't loaded would load it, and an unloaded folder runs nothing.
+        var loaded = await Client.GetLoadedLocationsAsync(ct).ConfigureAwait(false);
+        if (!loaded.Any(location => string.Equals(Path.TrimEndingDirectorySeparator(location), directory, StringComparison.Ordinal)))
+            return false;
+
+        return (await Client.GetRunningShellsAsync(directory, ct).ConfigureAwait(false))
+            .Any(shell => string.Equals(shell.Status, "running", StringComparison.Ordinal));
     }
 
     private async Task PumpAsync()
@@ -600,6 +691,8 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        if (_keepLoaded is not null)
+            await _keepLoaded.DisposeAsync().ConfigureAwait(false);
         await StopRoutingAsync().ConfigureAwait(false);
         try
         {
@@ -631,6 +724,12 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
 
     [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 server {ProcessId} unloaded {Directory}; the next catalog read waits for it to load again")]
     private static partial void LogLocationShutDown(ILogger logger, int processId, string directory);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 server {ProcessId}: {Directory} was quiet with work still running there; told V2 so it stays loaded")]
+    private static partial void LogFolderKeptLoaded(ILogger logger, int processId, string directory);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "OpenCode 2 server {ProcessId}: couldn't check which folders to keep loaded")]
+    private static partial void LogKeepLoadedFailed(ILogger logger, int processId, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "OpenCode 2 session {HarnessSessionId} is a child of {ParentSessionId}; holding its events until Fleet attaches it")]
     private static partial void LogChildHeld(ILogger logger, string harnessSessionId, string parentSessionId);
