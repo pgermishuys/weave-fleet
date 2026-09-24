@@ -7,7 +7,8 @@ step asks you. Workflows are experimental and off until you turn them on in **Se
 Fleet ships one workflow, **Build a feature**. Your own live in the repository, one file each, under
 `.weave/workflows/*.yaml`, so the people you work with get them with the code. Make one with **New workflow** or
 **Duplicate** in the Workflows page and change it in the designer, or write the file by hand. See
-[The designer](#the-designer).
+[The designer](#the-designer). Fleet can also draft one from a session or a sentence: see
+[Drafting a workflow](#drafting-a-workflow).
 
 ## A workflow file
 
@@ -275,6 +276,34 @@ checkout. If the file changed on disk after you opened it, Save says so and offe
 
 A run keeps the workflow it started with, so saving doesn't change runs in progress. **Try it** opens the Run box for
 the file as saved; with unsaved edits it asks you to save first.
+
+## Drafting a workflow
+
+Fleet can write a first draft for you, from a session or from a sentence. Either way it asks the model **once**, and the
+draft opens in the designer **unsaved**: nothing is written to the repository until you press **Save**.
+
+- **Save as workflow…** in a session's menu asks the model to describe the process that session followed as a
+  workflow: steps in general terms, so it's reusable rather than a replay of the session; roles, not pinned models;
+  and a You decide step wherever you steered or approved. The question is asked **off the record**, the way the
+  welcome-back recap is: OpenCode answers from a fork of the session with its last model, agent and effort, so the
+  conversation is read from the provider's cache, and the fork is deleted afterwards. OpenCode 2 uses its own
+  `generate`, which leaves no trace. The session's history doesn't change. A harness that can't ask off the record
+  (Claude Code, Pi) doesn't offer it.
+- **New workflow → Describe it** takes a sentence ("What should it do?") and asks the harness you pick, on its
+  **Standard** model (Settings → Workflows → Model roles). There's no session to read, so Fleet asks a throwaway one and
+  deletes it.
+
+The answer goes through the same check the designer uses. If it has errors, Fleet asks once more in the same
+conversation, with the errors, and then opens what it has. A valid draft opens in the Designer; one that still has
+errors opens in the File view with them, and Save waits until they're fixed. A banner says where it came from and what
+it cost:
+
+> Drafted from Fix the login bug. Review it before saving. Nothing is saved until you press Save. Asked the model
+> twice: its first answer had errors · 7,584 tokens, 6,200 from the cache.
+
+OpenCode reports the tokens; OpenCode 2 doesn't, so its banner has no count. Save creates
+`.weave/workflows/<name>.yaml` under the same rules as New workflow: a name that's taken is refused, so rename it in
+Workflow settings and save again. Nothing runs in the background and no text is added to any session.
 
 ## Running a workflow on a schedule
 

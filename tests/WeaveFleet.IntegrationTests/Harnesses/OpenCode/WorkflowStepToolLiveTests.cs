@@ -77,6 +77,87 @@ public sealed partial class WorkflowStepToolLiveTests
         });
     }
 
+    private const string DraftQuestionStart = "Describe the process this session followed as a Fleet workflow";
+    private const string DraftRetryStart = "That file has errors:";
+
+    /// <summary>A loop back to the same step without a max: the parser's error.</summary>
+    private const string DraftWithErrors = """
+        ```yaml
+        name: Live draft
+        steps:
+          - id: look
+            title: Look
+            model: standard
+            prompt: |
+              The request: {{request}}
+            outcomes: [done, again]
+            on: { again: look }
+        ```
+        """;
+
+    private const string DraftFixed = """
+        ```yaml
+        name: Live draft
+        steps:
+          - id: look
+            title: Look
+            model: standard
+            prompt: |
+              The request: {{request}}
+            outcomes: [done, again]
+            on: { again: look, max: 2 }
+        ```
+        """;
+
+    [OpenCodeFact]
+    public async Task A_session_drafts_a_workflow_off_the_record_with_one_retry_and_its_history_and_folder_are_unchanged()
+    {
+        await RunAsync(workflowsOn: true, stepPrompt: StepPrompt, async (services, llm, normal, _, _, workspace, ct) =>
+        {
+            await normal.SendPromptAsync(NormalPrompt, null, ct);
+            await WaitForAsync(() => Turns(llm), r => r.Any(t => FirstUserText(t) == NormalPrompt), ct);
+            var activity = services.GetRequiredService<SessionActivityTracker>();
+            await WaitForAsync(() => activity.Get(Normal)?.ActivityStatus, status => status is not null && !SessionActivityTracker.IsInTurn(status), ct);
+            var history = (await normal.GetMessagesAsync(null, ct)).Messages.Select(m => m.Id).ToList();
+            var opencode = (OpenCodeHarnessSession)normal;
+            var sessionsBefore = (await opencode.ListFolderSessionsAsync(ct)).Select(x => x.Id).ToList();
+
+            var conversation = (await normal.StartOffTheRecordAsync(ct)).ShouldNotBeNull();
+            var forkId = ((OpenCodeOffTheRecordConversation)conversation).SessionId;
+            WorkflowDrafted drafted;
+            using (BackgroundUserContext.BeginScope(Owner))
+            using (var scope = services.CreateScope())
+            {
+                var drafter = scope.ServiceProvider.GetRequiredService<WorkflowDrafter>();
+                var result = await drafter.DraftAsync(
+                    conversation, WorkflowDraftPrompt.FromSession(), new RepositoryInfo(workspace, "live", "main", "", ""), "Ordinary session", ct);
+                result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : null);
+                drafted = result.Value;
+            }
+
+            // The first answer had errors; the second question carried them, in the same fork.
+            (drafted.Asks, drafted.Check.IsValid, drafted.Check.Draft!.Name).ShouldBe((2, true, "Live draft"));
+            drafted.Tokens.ShouldNotBeNull().Total.ShouldBeGreaterThan(0);
+            var retry = Turns(llm).Single(t => LastUserText(t)?.StartsWith(DraftRetryStart, StringComparison.Ordinal) == true);
+            LastUserText(retry)!.ShouldContain("max");
+            UserTexts(retry).ShouldContain(t => t.StartsWith(DraftQuestionStart, StringComparison.Ordinal));
+            UserTexts(retry).ShouldContain(NormalPrompt);
+
+            // Both questions offered exactly the parent's tools, so they're read from the provider's cache like the recap.
+            var parentTools = OfferedToolNames(Turns(llm).Where(t => FirstUserText(t) == NormalPrompt).Take(1));
+            OfferedToolNames([Turns(llm).Single(t => LastUserText(t)?.StartsWith(DraftQuestionStart, StringComparison.Ordinal) == true)])
+                .ShouldBe(parentTools, ignoreOrder: true);
+            OfferedToolNames([retry]).ShouldBe(parentTools, ignoreOrder: true);
+
+            // Nothing reached the session's history, the fork is gone, and nothing was written.
+            (await normal.GetMessagesAsync(null, ct)).Messages.Select(m => m.Id).ShouldBe(history);
+            var sessionsAfter = (await opencode.ListFolderSessionsAsync(ct)).Select(x => x.Id).ToList();
+            sessionsAfter.ShouldNotContain(forkId);
+            sessionsAfter.ShouldBe(sessionsBefore, ignoreOrder: true);
+            Directory.Exists(Path.Combine(workspace, ".weave")).ShouldBeFalse();
+        });
+    }
+
     /// <summary>A step the user finishes, then a You step: the files check runs before the run stops there.</summary>
     private const string TogetherWorkflow = """
         name: Live together
@@ -286,6 +367,10 @@ public sealed partial class WorkflowStepToolLiveTests
             {
                 if (LastUserText(request) == RecapPrompt)
                     return new ScriptedLlmResponse { Text = "Recap." };
+                if (LastUserText(request) is { } draftQuestion && draftQuestion.StartsWith(DraftQuestionStart, StringComparison.Ordinal))
+                    return new ScriptedLlmResponse { Text = DraftWithErrors };
+                if (LastUserText(request) is { } draftRetry && draftRetry.StartsWith(DraftRetryStart, StringComparison.Ordinal))
+                    return new ScriptedLlmResponse { Text = DraftFixed };
                 if (LastUserText(request) is { } wrapUp && wrapUp.StartsWith(WrapUpStart, StringComparison.Ordinal))
                     return new ScriptedLlmResponse { Text = "Summary for Approve: notes.md has the idea." };
                 if (LastRole(request) == "tool")

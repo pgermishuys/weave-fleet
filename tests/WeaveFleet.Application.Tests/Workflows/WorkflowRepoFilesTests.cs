@@ -235,4 +235,47 @@ public sealed class WorkflowRepoFilesTests : IDisposable
     [InlineData("  --Weird!! Name__ ", "weird-name")]
     [InlineData("!!!", "workflow")]
     public void slugs(string name, string slug) => WorkflowRepoFiles.Slug(name).ShouldBe(slug);
+
+    private const string Drafted = """
+        # Drafted from a session.
+        name: Deps
+        steps:
+          - id: bump
+            title: Bump
+            model: standard
+            prompt: |
+              The request: {{request}}
+            outcomes: [done]
+        """;
+
+    [Fact]
+    public async Task saving_a_drafted_workflow_creates_its_file_with_the_text_as_it_is_named_after_its_name()
+    {
+        var created = (await WorkflowRepoFiles.CreateAsync(_repo, Drafted, Library(), default)).Value;
+
+        created.WorkflowId.ShouldBe("repo:deps");
+        File.ReadAllText(Path.Combine(_folder, "deps.yaml")).ShouldBe(Drafted);
+        created.Check.Comments.ShouldHaveSingleItem().Text.ShouldBe("Drafted from a session.");
+    }
+
+    [Fact]
+    public async Task saving_a_drafted_workflow_follows_the_new_workflow_rules_for_names()
+    {
+        await WorkflowRepoFiles.CreateAsync(_repo, WorkflowRepoFiles.Blank("Deps"), Library(), default);
+
+        var result = await WorkflowRepoFiles.CreateAsync(_repo, Drafted, Library(_repo), default);
+
+        result.Error.Code.ShouldBe("General.Conflict");
+        result.Error.Description.ShouldBe("There's already a workflow called Deps. Pick another name.");
+    }
+
+    [Fact]
+    public async Task a_drafted_workflow_with_errors_isnt_saved()
+    {
+        var result = await WorkflowRepoFiles.CreateAsync(_repo, Drafted.Replace("outcomes: [done]", "outcomes: []"), Library(), default);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Description.ShouldStartWith("Line ");
+        Directory.Exists(_folder).ShouldBeFalse();
+    }
 }

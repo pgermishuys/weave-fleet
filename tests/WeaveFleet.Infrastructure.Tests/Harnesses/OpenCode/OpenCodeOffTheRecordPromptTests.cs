@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
+using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
 
@@ -259,6 +260,99 @@ public sealed class OpenCodeOffTheRecordPromptTests
         prompt.RootElement.TryGetProperty("tools", out _).ShouldBeFalse();
     }
 
+    [Fact]
+    public async Task a_conversation_asks_each_question_on_one_fork_the_recaps_way_reports_tokens_and_deletes_the_fork_once()
+    {
+        var http = new ScriptedHandler()
+            .On("GET /session/oc-1/message", Messages(UserMessage("msg_1", "github-copilot", "claude-sonnet-5", "build", "high")))
+            .On("GET /session", "[]")
+            .On("POST /session/oc-1/fork", """{"id":"fork-1"}""")
+            .On("PATCH /session/fork-1", """{"id":"fork-1"}""")
+            .Then("POST /session/fork-1/message", """{"parts":[{"type":"text","text":"name: first"}],"info":{"id":"msg_3","role":"assistant","tokens":{"input":200,"output":300,"reasoning":0,"cache":{"read":3000,"write":0}}}}""")
+            .On("POST /session/fork-1/message", """{"parts":[{"type":"text","text":"name: second"}],"info":{"id":"msg_5","role":"assistant","tokens":{"input":150,"output":350,"reasoning":0,"cache":{"read":3500,"write":0}}}}""")
+            .On("POST /session/fork-1/abort", "true")
+            .On("DELETE /session/fork-1", "true");
+        await using var session = CreateSession(http, hideStepTool: true);
+
+        var conversation = (await session.StartOffTheRecordAsync(CancellationToken.None)).ShouldNotBeNull();
+        var first = await conversation.AskAsync("draft it", CancellationToken.None);
+        var second = await conversation.AskAsync("fix the errors", CancellationToken.None);
+        await conversation.DisposeAsync();
+        await conversation.DisposeAsync();
+
+        first.ShouldBe(new OffTheRecordAnswer("name: first", new OffTheRecordTokens(3500, 3000)));
+        second.ShouldBe(new OffTheRecordAnswer("name: second", new OffTheRecordTokens(4000, 3500)));
+        http.Requests.Select(r => r.Key).ShouldBe([
+            "GET /session/oc-1/message",
+            "GET /session",
+            "POST /session/oc-1/fork",
+            "PATCH /session/fork-1",
+            "POST /session/fork-1/message",
+            "POST /session/fork-1/message",
+            "POST /session/fork-1/abort",
+            "DELETE /session/fork-1"]);
+
+        // The fork is set up as the recap's is, deny rule and all, and both questions are sent the way the recap's is:
+        // the parent's model, agent and variant, and no tools map, so the prefix is read from the provider's cache.
+        using var patch = JsonDocument.Parse(http.Body("PATCH /session/fork-1"));
+        patch.RootElement.GetProperty("permission").EnumerateArray()
+            .Select(r => (r.GetProperty("permission").GetString(), r.GetProperty("pattern").GetString(), r.GetProperty("action").GetString()))
+            .ShouldBe([("*", "*", "ask"), ("fleet_step_done", "*", "deny")]);
+        var prompts = http.Requests.Where(r => r.Key == "POST /session/fork-1/message").Select(r => JsonDocument.Parse(r.Value).RootElement).ToList();
+        prompts.Select(p => p.GetProperty("parts")[0].GetProperty("text").GetString()).ShouldBe(["draft it", "fix the errors"]);
+        foreach (var prompt in prompts)
+        {
+            prompt.GetProperty("model").GetProperty("providerID").GetString().ShouldBe("github-copilot");
+            prompt.GetProperty("model").GetProperty("modelID").GetString().ShouldBe("claude-sonnet-5");
+            prompt.GetProperty("agent").GetString().ShouldBe("build");
+            prompt.GetProperty("variant").GetString().ShouldBe("high");
+            prompt.TryGetProperty("tools", out _).ShouldBeFalse();
+        }
+    }
+
+    [Fact]
+    public async Task a_conversation_whose_question_is_cancelled_still_deletes_its_fork()
+    {
+        var http = new ScriptedHandler()
+            .On("GET /session/oc-1/message", Messages(UserMessage("msg_1", "openrouter", "anthropic/claude-haiku-4.5")))
+            .On("GET /session", "[]")
+            .On("POST /session/oc-1/fork", """{"id":"fork-1"}""")
+            .On("PATCH /session/fork-1", """{"id":"fork-1"}""")
+            .Hang("POST /session/fork-1/message")
+            .On("POST /session/fork-1/abort", "true")
+            .On("DELETE /session/fork-1", "true");
+        await using var session = CreateSession(http);
+        using var cts = new CancellationTokenSource();
+
+        var conversation = (await session.StartOffTheRecordAsync(CancellationToken.None)).ShouldNotBeNull();
+        await using (conversation)
+        {
+            var ask = conversation.AskAsync("draft it", cts.Token);
+            await http.WaitForAsync("POST /session/fork-1/message");
+            await cts.CancelAsync();
+            await Should.ThrowAsync<OperationCanceledException>(() => ask);
+        }
+
+        http.Requests.Select(r => r.Key).TakeLast(2).ShouldBe(["POST /session/fork-1/abort", "DELETE /session/fork-1"]);
+    }
+
+    [Fact]
+    public async Task a_fork_that_cant_be_set_up_is_deleted()
+    {
+        var http = new ScriptedHandler()
+            .On("GET /session/oc-1/message", Messages(UserMessage("msg_1", "openrouter", "anthropic/claude-haiku-4.5")))
+            .On("GET /session", "[]")
+            .On("POST /session/oc-1/fork", """{"id":"fork-1"}""")
+            .On("PATCH /session/fork-1", "{}", HttpStatusCode.InternalServerError)
+            .On("POST /session/fork-1/abort", "true")
+            .On("DELETE /session/fork-1", "true");
+        await using var session = CreateSession(http);
+
+        await Should.ThrowAsync<HttpRequestException>(() => session.StartOffTheRecordAsync(CancellationToken.None));
+
+        http.Requests.Select(r => r.Key).ShouldContain("DELETE /session/fork-1");
+    }
+
     private static OpenCodeHarnessSession CreateSession(ScriptedHandler handler, string? openCodeSessionId = "oc-1", bool hideStepTool = false)
     {
         var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:1234") };
@@ -298,6 +392,7 @@ public sealed class OpenCodeOffTheRecordPromptTests
     {
         private readonly Dictionary<string, (string Body, HttpStatusCode Status, string? NextCursor)> _responses = new(StringComparer.Ordinal);
         private readonly HashSet<string> _hanging = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, Queue<string>> _then = new(StringComparer.Ordinal);
         private readonly Dictionary<string, TaskCompletionSource> _seen = new(StringComparer.Ordinal);
         private readonly Lock _gate = new();
 
@@ -306,6 +401,15 @@ public sealed class OpenCodeOffTheRecordPromptTests
         public ScriptedHandler On(string key, string body, HttpStatusCode status = HttpStatusCode.OK, string? nextCursor = null)
         {
             _responses[key] = (body, status, nextCursor);
+            return this;
+        }
+
+        /// <summary>Answers the next request to <paramref name="key"/> with <paramref name="body"/>, before the one <see cref="On"/> gave.</summary>
+        public ScriptedHandler Then(string key, string body)
+        {
+            if (!_then.TryGetValue(key, out var queue))
+                _then[key] = queue = new Queue<string>();
+            queue.Enqueue(body);
             return this;
         }
 
@@ -335,6 +439,11 @@ public sealed class OpenCodeOffTheRecordPromptTests
             if (_hanging.Contains(key))
             {
                 await Task.Delay(Timeout.Infinite, cancellationToken);
+            }
+
+            if (_then.TryGetValue(key, out var queued) && queued.TryDequeue(out var next))
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(next, Encoding.UTF8, "application/json") };
             }
 
             if (!_responses.TryGetValue(key, out var response))

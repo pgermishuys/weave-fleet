@@ -51,6 +51,12 @@ public sealed class ScriptedResponseStore
     public ScriptedLlmResponse? ToolLessResponse { get; set; }
 
     /// <summary>
+    /// When set, answers a request that offers no tools before <see cref="ToolLessResponse"/> does, from its body;
+    /// <see langword="null"/> leaves it to <see cref="ToolLessResponse"/>. For questions asked with tools off.
+    /// </summary>
+    public Func<string, ScriptedLlmResponse?>? ToolLessAnswer { get; set; }
+
+    /// <summary>
     /// When set, answers a request the queue has nothing for, from its body; <see langword="null"/> means no answer.
     /// For tests where several sessions share the model and each is answered by what it asks.
     /// </summary>

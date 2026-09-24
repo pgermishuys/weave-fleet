@@ -5,6 +5,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }));
 vi.mock("@/lib/api-client", () => ({ apiFetch: apiFetchMock }));
 vi.mock("@/composables/use-signalr-socket", () => ({ onGlobalEvent: () => () => {} }));
+vi.mock("@/composables/use-enabled-harnesses", async () => {
+  const { ref } = await import("vue");
+  const harnesses = [
+    { type: "opencode", displayName: "OpenCode", capabilities: { supportsWorkflowSteps: true } },
+    { type: "opencode2", displayName: "OpenCode 2", capabilities: { supportsWorkflowSteps: true } },
+    { type: "claude-code", displayName: "Claude Code", capabilities: { supportsWorkflowSteps: false } },
+  ];
+  return { useEnabledHarnesses: () => ({ enabledHarnesses: ref(harnesses), defaultHarnessType: ref("opencode") }) };
+});
+vi.mock("@/composables/use-model-roles", () => ({
+  useModelRoles: () => ({ choiceFor: (harness: string) => ({ model: harness === "opencode2" ? "anthropic/claude-sonnet-5" : "github-copilot/gpt-5.4", effort: null }) }),
+}));
 vi.mock("@/components/ui/dialog", () => {
   const pass = (name: string) => defineComponent({ name, setup: (_p, { slots }) => () => h("div", slots.default?.()) });
   return {
@@ -74,5 +86,37 @@ describe("WorkflowCreateDialog", () => {
 
     expect(wrapper.get("[data-testid='workflow-create-error']").text()).toBe("There's already a workflow called Build a feature. Pick another name.");
     expect(wrapper.emitted("created")).toBeUndefined();
+  });
+
+  it("Describe it asks for what the workflow should do, says what it costs, and hands it on to be drafted", async () => {
+    const wrapper = dialog();
+    await wrapper.setProps({ open: true });
+
+    await wrapper.get("[data-testid='workflow-create-describe']").trigger("click");
+    const submit = wrapper.get("[data-testid='workflow-describe-submit']");
+    expect(wrapper.text()).toContain("What should it do?");
+    expect(wrapper.get("[data-testid='workflow-describe-cost']").text())
+      .toBe("Asks the model once. From a session it reads the conversation from the cache, so it's cheap.");
+    expect(submit.attributes("disabled")).toBeDefined();
+    // Only the harnesses workflows run on, on their Standard model.
+    const options = wrapper.findAll("[data-testid='workflow-describe-harness'] option").map((o) => o.text());
+    expect(options).toEqual(["OpenCode", "OpenCode 2"]);
+    expect(wrapper.text()).toContain("On your Standard model: gpt-5.4.");
+
+    await wrapper.get("[data-testid='workflow-describe-harness']").setValue("opencode2");
+    await wrapper.get("[data-testid='workflow-describe-text']").setValue("  Bump the dependencies and check nothing broke.  ");
+    await wrapper.get("[data-testid='workflow-describe-form']").trigger("submit");
+
+    expect(wrapper.emitted("describe")![0]).toEqual([{ description: "Bump the dependencies and check nothing broke.", harnessType: "opencode2" }]);
+    expect(wrapper.emitted("update:open")!.at(-1)).toEqual([false]);
+    // Nothing is created: the draft opens unsaved.
+    expect(apiFetchMock).not.toHaveBeenCalled();
+  });
+
+  it("Duplicate has no Describe it", async () => {
+    const wrapper = dialog({ id: "builtin:build-a-feature", name: "Build a feature" });
+    await wrapper.setProps({ open: true });
+
+    expect(wrapper.find("[data-testid='workflow-create-describe']").exists()).toBe(false);
   });
 });

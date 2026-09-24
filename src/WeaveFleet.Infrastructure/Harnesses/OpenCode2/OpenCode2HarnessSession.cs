@@ -234,6 +234,20 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         return await server.Client.GenerateAsync(ResumeToken, prompt, ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// V2's <c>generate</c> again, once per question: each follow-up carries the questions and answers before it, since
+    /// V2 keeps nothing between calls.
+    /// </summary>
+    public async Task<IOffTheRecordConversation?> StartOffTheRecordAsync(CancellationToken ct)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var server = await AttachedServerAsync(ct).ConfigureAwait(false);
+        var sessionId = ResumeToken;
+        return new OpenCode2OffTheRecordConversation(
+            (prompt, token) => server.Client.GenerateAsync(sessionId, prompt, token),
+            OpenCode2HarnessRuntime.ConversationQuestionTimeout);
+    }
+
     /// <summary>Runs one of V2's commands as the next turn; V2 expands its template into the user's message.</summary>
     public async Task SendCommandAsync(CommandOptions options, CancellationToken ct)
     {

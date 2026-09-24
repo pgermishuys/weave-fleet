@@ -67,10 +67,34 @@ public static partial class WorkflowRepoFiles
     /// Creates <c>.weave/workflows/&lt;slug&gt;.yaml</c> with <paramref name="workflow"/> written in Fleet's layout.
     /// Refused when a file with that name is there, or the library already has a workflow called that.
     /// </summary>
-    public static async Task<Result<WorkflowFileOpened>> CreateAsync(
+    public static Task<Result<WorkflowFileOpened>> CreateAsync(
         string repository, WorkflowDefinition workflow, IReadOnlyList<WorkflowEntry> library, CancellationToken ct)
     {
         var name = workflow.Name.Trim();
+        return CreateAsync(repository, name, WorkflowYamlWriter.Write(workflow with { Name = name }), library, ct);
+    }
+
+    /// <summary>
+    /// Creates the file for a drafted workflow with <paramref name="text"/> exactly as given, once the parser takes it,
+    /// under the same rules as New: named after the workflow's own name.
+    /// </summary>
+    public static Task<Result<WorkflowFileOpened>> CreateAsync(
+        string repository, string text, IReadOnlyList<WorkflowEntry> library, CancellationToken ct)
+    {
+        var parsed = WorkflowYaml.Parse(text, "the workflow");
+        if (parsed.Errors.Count > 0 || parsed.Definition is not { } workflow)
+        {
+            var first = parsed.Errors.Count > 0 ? parsed.Errors[0] : null;
+            return Task.FromResult<Result<WorkflowFileOpened>>(FleetError.ValidationError("Text",
+                first is null ? "The workflow doesn't read." : first.Line > 0 ? $"Line {first.Line}: {first.Message}" : first.Message));
+        }
+
+        return CreateAsync(repository, workflow.Name.Trim(), text, library, ct);
+    }
+
+    private static async Task<Result<WorkflowFileOpened>> CreateAsync(
+        string repository, string name, string text, IReadOnlyList<WorkflowEntry> library, CancellationToken ct)
+    {
         if (name.Length == 0)
             return FleetError.ValidationError("Name", "Give the workflow a name.");
 
@@ -89,7 +113,6 @@ public static partial class WorkflowRepoFiles
         if (path.IsFailure)
             return path.Error;
 
-        var text = WorkflowYamlWriter.Write(workflow with { Name = name });
         var bytes = Encoding.UTF8.GetBytes(text);
         try
         {

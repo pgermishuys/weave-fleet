@@ -216,6 +216,15 @@ public sealed class WorkflowService(
         if (repository.IsFailure)
             return repository.Error;
 
+        // Save on a drafted workflow: its content, named after its own name.
+        var content = request.Draft is { } draft ? WorkflowYamlWriter.Write(draft.ToDefinition()) : request.Text;
+        if (content is not null)
+        {
+            var existing = await WorkflowCatalog.ListAsync(repository.Value.Path, ct).ConfigureAwait(false);
+            var saved = await WorkflowRepoFiles.CreateAsync(repository.Value.Path, content, existing, ct).ConfigureAwait(false);
+            return saved.IsFailure ? saved.Error : WorkflowFileDto.From(saved.Value);
+        }
+
         var name = request.Name?.Trim() ?? string.Empty;
         WorkflowDefinition workflow;
         if (request.WorkflowId is { Length: > 0 } source)
@@ -497,5 +506,13 @@ public sealed record SaveWorkflowFileRequest(
     WorkflowDraftDto? Draft = null,
     bool Force = false);
 
-/// <summary>New workflow, or Duplicate when <paramref name="WorkflowId"/> names a built-in to copy.</summary>
-public sealed record CreateWorkflowRequest(string Directory, string Name, string? WorkflowId = null);
+/// <summary>
+/// New workflow, or Duplicate when <paramref name="WorkflowId"/> names a built-in to copy. Saving a drafted workflow
+/// sends its <paramref name="Text"/> (saved as it is) or <paramref name="Draft"/> instead, and the name is its own.
+/// </summary>
+public sealed record CreateWorkflowRequest(
+    string Directory,
+    string? Name = null,
+    string? WorkflowId = null,
+    string? Text = null,
+    WorkflowDraftDto? Draft = null);
