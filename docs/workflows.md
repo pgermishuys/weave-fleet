@@ -276,6 +276,30 @@ checkout. If the file changed on disk after you opened it, Save says so and offe
 A run keeps the workflow it started with, so saving doesn't change runs in progress. **Try it** opens the Run box for
 the file as saved; with unsaved edits it asks you to save first.
 
+## Running a workflow on a schedule
+
+An automation can run a workflow instead of starting a session. In the automation composer, set **Runs** to **a
+workflow**, pick one from the Library for the chosen repository, and switch on its optional steps as in the Run box.
+The When, folder and base branch chips work as they do for any automation; each run gets its own worktree. The
+Library's **Repeat on a schedule…** opens the composer with the workflow and what's in the Run box filled in.
+
+- The automation's message is the run's `{{request}}`.
+- A run starts the same way as from the Run box, so it has the same checks: Workflows on, a harness that runs
+  workflows, a file without errors, and every step's model and skill. Model roles are read from Settings → Workflows
+  when the automation fires, not when it was saved.
+- **Check with me** is always off, since nobody is watching. A You decide step still stops the run under Needs you,
+  with the usual notification.
+- A run never stacks on an unfinished one. A firing while the last run is running, with you or waiting on you is
+  **Skipped**, with the reason: "Skipped: the last run is still waiting on you (Approve the plan)." Run now isn't held
+  back this way: you asked for it.
+- A firing that can't start is Skipped too, with why: "Skipped: Workflows are turned off in Settings.", or the start's
+  own error, e.g. a step's model that isn't available.
+- The automation's run opens the workflow run, and shows its state (Running, Needs you, Done, Ended). The run says
+  **Started by** the automation in the Library, in its header and on its group in Sessions.
+
+With Workflows off, the composer doesn't offer a workflow, and an automation that runs one says its runs are skipped
+until they're back on.
+
 ## Harnesses
 
 Workflows run on **OpenCode** and **OpenCode 2**. `fleet_step_done` is a tool only step sessions see: with workflows on,

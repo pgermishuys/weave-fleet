@@ -444,6 +444,112 @@ fixed here, agreed with the user; nothing else changes.
 - The `fleet-mockups` skill leaves its preview server running after the step; a step agent may use `git stash` in the
   run's worktree (the stash is shared with the repo).
 
+## Automations that run workflows
+
+Stage 3's automation target, brought forward (decided with the user, 2026-09-23). An automation can start a workflow
+run instead of a session: the automation's message is the run's `{{request}}`, and the run starts through the same
+start path as the Run box, so every check the Run box gets still applies. Nothing about session targets changes.
+
+### 1. The target and what it stores
+
+- A fifth target type, `workflow`, next to `new_session`, `same_session`, `most_recent_session` and `tagged_session`
+  (`AutomationService.TargetTypes`, `AutomationExecutionService`, the client's target labels).
+- What a workflow automation keeps:
+  - `workflow_id` (new column): `builtin:…` or `repo:…`, as the Library names it.
+  - `workflow_steps` (new column, JSON array): the optional steps switched on.
+  - the folder in `workspace_id` (the repository the run's worktree is made from), `isolation = worktree` (a run always
+    gets a new worktree, so the server sets it), `base_branch`, and `harness_type` (null: the default harness at fire
+    time, as the Run box reads it).
+  - no agent and no model: models come from the roles when it fires. Saving a workflow automation clears both.
+- Validation on create and update: a workflow target needs a workflow id and a folder ("A workflow runs in a
+  repository. Pick one."). The workflow itself isn't looked up on save: the file can change later, and the start
+  check at fire time is the one that counts. Tags are ignored for this target.
+- Migration `041_add_automation_workflows.sql`: `automations.workflow_id`, `automations.workflow_steps`,
+  `automation_runs.workflow_run_id`, `workflow_runs.automation_id`, `workflow_runs.automation_name`.
+
+### 2. Firing
+
+- `AutomationExecutionService` routes `workflow` to `IAutomationWorkflowStarter` (Application/Workflows,
+  `AutomationWorkflowStarter`), which:
+  1. checks `WorkflowsFeature` → `Skipped: Workflows are turned off in Settings.`;
+  2. calls `WorkflowService.StartAsync` with `StartWorkflowRunRequest(workflowId, folder, prompt, baseBranch,
+     harnessType, optionalSteps, RoleOverrides: null, CheckWithMe: false)` and who started it (below). The prompt is
+     the automation's prompt after `{{name}}`/`{{timestamp}}` expansion and the event context, as a session target
+     gets it. No role overrides: `StartAsync` resolves the roles from Settings → Workflows at that moment, so a role
+     changed after the automation was saved applies to its next run;
+  3. a start error → `Skipped: <the error>` (the file's errors, a model or effort that isn't offered, a skill that's
+     off, a harness without workflows, a folder that isn't a repository).
+- `AutomationExecutionOutcome` gains `WorkflowRunId` and `Skipped`. `AutomationRunService.FinishAsync` records a
+  skipped outcome as `skipped` with its reason, a started one as `started` with `workflow_run_id` and `session_id` =
+  the run's first step session (so an automation run always has somewhere to open).
+- **Check with me is always off** (`CheckWithMe: false`): nobody is watching. A You decide step still stops the run
+  under Needs you and sends the existing notification; the runner does that already.
+- **Don't stack runs.** In `AutomationRunService.BeginAsync`, for a workflow target, when the automation's newest
+  run that started a workflow run points at one that's `running` or `waiting`, the new run is recorded as skipped,
+  at once, with the step it's on:
+  - waiting: `Skipped: the last run is still waiting on you (Approve the plan).`
+  - a step the user finishes that's open: `Skipped: the last run is still with you (Design).`
+  - running: `Skipped: the last run is still running (Implement).`
+  This applies whatever "Skip a run while the last one is still going" says (the composer hides that switch for a
+  workflow target), and to schedule, catch-up, once and event firings. **Run now** is never skipped for this, as
+  today: someone asked for it. The switch-off and start-failure skips apply to Run now too, since nothing can start.
+- Missed schedules keep today's catch-up rules untouched (the scheduler decides before any of this).
+
+### 3. Links both ways
+
+- Automation run → workflow run: `automation_runs.workflow_run_id`; `AutomationRunResponse` gains `workflowRunId`,
+  and its state follows the workflow run: `running` → Running, `waiting` → **Needs you** (a new state, `waiting`),
+  `done` → Done, `ended` → Ended (new), `failed` → Failed. `AutomationRunService.StateOf` becomes `StateOfAsync` and
+  reads the workflow run for a run that has one. The sidebar row says Needs you while the latest run waits.
+- Workflow run → automation: `workflow_runs.automation_id` and `automation_name` (the name when it started, so a
+  deleted automation still reads right). `WorkflowRunDto.startedBy { automationId, automationName }`.
+  `WorkflowService.StartAsync` takes it as a separate argument, never from the HTTP body.
+- "Started by <automation name>", a link that opens the automation, in the Library's recent runs, the run line of the
+  stepper (the run header), and the run group's row in Sessions.
+
+### 4. Client
+
+- Composer: a **Runs** chip, "A session" / "A workflow". "A session" keeps today's chip (new / same session). "A
+  workflow" shows a **workflow** chip (the Library for the chosen folder: built-ins, then `.weave/workflows`; a file
+  with errors listed but not pickable), one on/off chip per optional step as in the Run box, and the harness picker
+  when more than one harness supports workflows. When, folder and base branch stay. The worktree chip becomes a fixed
+  "New worktree" chip (as in the Run box), and the folder picker only offers repositories. Agent and model pickers
+  hide. The line under the composer says: "Each run: Build a feature in a new worktree of `~/repo` from `main`, with
+  your message as the request. Check with me is off; the run stops only where the workflow asks you."
+- With Workflows off, "A workflow" isn't offered. An automation that already targets a workflow shows a warning in
+  its detail pane: "This automation runs a workflow, and Workflows are turned off in Settings. Its runs are skipped
+  until they're back on." with a link to Settings → Workflows.
+- Runs list: a workflow run's row says Needs you / Ended as well, and opens the run's session that needs you, else
+  its newest step session (from the workflows store), else the first step session.
+- Library: a **Repeat on a schedule…** button in the workflow's header opens the new-automation composer with the
+  workflow, the Library's folder, the optional steps switched on in the Run box, the base branch, the harness and the
+  Run box's request filled in, and When still to add, like the session menu's.
+
+### 5. Tests
+
+- Application: the target starts a run with the prompt as `{{request}}` and Check with me off, through the real
+  `WorkflowService` (temp git repo); skipped when the last run is waiting (with the step), running, with you; skipped
+  when the switch is off and when the start fails, each with its reason; Run now isn't skipped for an unfinished run;
+  roles changed after saving apply at fire time; both links (automation run → workflow run id, run → startedBy);
+  the run state follows the workflow run; validation.
+- Infrastructure: migration 041 and a repository round trip of the new columns (automations, automation runs,
+  workflow runs).
+- Integration (live, CI; locally only with a scratch HOME): OpenCode 1.18.31 and OpenCode 2 2.0.9 — an automation
+  with a workflow target fires, its step session gets the message as the request and ends with `fleet_step_done`,
+  the run shows who started it, and a second firing while the run waits at a You step is skipped with the step's
+  name. OpenCode 1 gets `OpenCodeHarnessRuntime.ProcessEnvironment` (like OpenCode 2's `ServerEnvironment`) so a
+  session the orchestrator starts runs with the test's scratch HOME.
+- Client: the composer's target switch and workflow picker (optional-step chips, the request sent), no workflow
+  choice with Workflows off, the detail pane's warning, Repeat on a schedule… from the Library, Started by in the run
+  group, stepper and Library runs, run states.
+- Live on a scratch Fleet (port 5361, fake model 4991, OpenCode 1): a "once" automation runs Build a feature and the
+  run shows "Started by…"; a second firing while it waits on the plan approval is skipped with its reason; Workflows
+  off → skipped; Run now from the automation page.
+
+### Not in this change
+
+- New trigger kinds (GitHub labels and the like), Wait steps, and any change to how session targets behave.
+
 ## Stage 2 — Bug triage and Review a pull request (outline)
 
 - Starting from a GitHub issue (`starts-from: issue`, `{{issue}}`) or a PR (`starts-from: pr`, `runs-in:

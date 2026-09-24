@@ -66,6 +66,27 @@ public sealed class WorkflowRunRepositoryTests
     }
 
     [Fact]
+    public async Task A_run_keeps_the_automation_that_started_it()
+    {
+        var (keeper, repo, _) = await CreateAsync();
+        using var _ = keeper;
+        var started = Run("run-1", "2026-09-23T10:00:00.0000000Z");
+        started.AutomationId = "auto-1";
+        started.AutomationName = "Weekly dependency bump";
+        await repo.InsertAsync(started);
+        await repo.InsertAsync(Run("run-2", "2026-09-23T11:00:00.0000000Z"));
+
+        // An update never loses who started it.
+        started.Status = WorkflowRunStatus.Waiting;
+        await repo.UpdateAsync(started);
+
+        var saved = (await repo.GetAsync("run-1")).ShouldNotBeNull();
+        (saved.AutomationId, saved.AutomationName).ShouldBe(("auto-1", "Weekly dependency bump"));
+        var fromTheRunBox = (await repo.GetAsync("run-2")).ShouldNotBeNull();
+        (fromTheRunBox.AutomationId, fromTheRunBox.AutomationName).ShouldBe(((string?)null, (string?)null));
+    }
+
+    [Fact]
     public async Task A_step_you_finish_and_what_a_run_waits_on_round_trip()
     {
         var (keeper, repo, _) = await CreateAsync();

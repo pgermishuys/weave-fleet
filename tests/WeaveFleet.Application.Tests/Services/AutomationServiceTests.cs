@@ -26,6 +26,51 @@ public sealed class AutomationServiceTests
     }
 
     [Fact]
+    public async Task A_workflow_target_keeps_the_workflow_its_steps_and_harness_and_runs_in_a_new_worktree()
+    {
+        var result = await _sut.CreateAsync(
+            "Weekly dependency bump", "Bump the client's dependencies", "schedule", "0 9 * * 1", 0, 10, 30,
+            workspaceId: "/repos/fleet", model: "anthropic/claude-sonnet-5", agent: "build", targetTags: ["deps"],
+            targetType: "workflow", isolation: "existing", baseBranch: "main", harnessType: "opencode2",
+            workflowId: "builtin:build-a-feature", workflowSteps: ["design", " design ", ""]);
+
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : null);
+        var saved = (await _repository.GetByIdAsync(result.Value.Id))!;
+        (saved.TargetType, saved.WorkflowId, saved.Isolation, saved.BaseBranch, saved.HarnessType)
+            .ShouldBe(("workflow", "builtin:build-a-feature", "worktree", "main", "opencode2"));
+        saved.WorkflowSteps.ShouldBe(["design"]);
+
+        // Its steps take their models from the roles when it fires, so it keeps no agent, model or tags.
+        (saved.Model, saved.Agent).ShouldBe((null, null));
+        saved.TargetTags.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_workflow_target_needs_the_workflow_and_a_repository()
+    {
+        var noWorkflow = await _sut.CreateAsync("Bump", "Bump it", "schedule", "0 9 * * 1", 0, 10, 30,
+            workspaceId: "/repos/fleet", targetType: "workflow");
+        noWorkflow.Error.Description.ShouldBe("Pick the workflow it runs.");
+
+        var noFolder = await _sut.CreateAsync("Bump", "Bump it", "schedule", "0 9 * * 1", 0, 10, 30,
+            targetType: "workflow", workflowId: "builtin:build-a-feature");
+        noFolder.Error.Description.ShouldBe("A workflow runs in a repository. Pick one.");
+    }
+
+    [Fact]
+    public async Task Switching_a_workflow_target_back_to_a_session_forgets_the_workflow()
+    {
+        var created = await _sut.CreateAsync("Bump", "Bump it", "schedule", "0 9 * * 1", 0, 10, 30,
+            workspaceId: "/repos/fleet", targetType: "workflow", workflowId: "builtin:build-a-feature", workflowSteps: ["design"]);
+
+        var updated = await _sut.UpdateAsync(created.Value.Id, "Bump", "Bump it", "schedule", "0 9 * * 1", 1, 10, 30,
+            workspaceId: "/repos/fleet", targetType: "new_session", isolation: "existing");
+
+        updated.IsSuccess.ShouldBeTrue();
+        (updated.Value.WorkflowId, updated.Value.WorkflowSteps.Count).ShouldBe((null, 0));
+    }
+
+    [Fact]
     public async Task Create_keeps_the_time_zone()
     {
         var result = await CreateScheduleAsync("0 9 * * 1", timeZone: " Africa/Johannesburg ");

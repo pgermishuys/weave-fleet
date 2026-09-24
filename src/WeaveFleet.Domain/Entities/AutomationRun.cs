@@ -18,6 +18,8 @@ public sealed class AutomationRun
     public string Status { get; set; } = AutomationRunStatus.Starting;
     public string? SessionId { get; set; }
     public string? InstanceId { get; set; }
+    /// <summary>The workflow run it started, for a <c>workflow</c> target; its state follows that run's.</summary>
+    public string? WorkflowRunId { get; set; }
     /// <summary>Why it failed or was skipped, in words.</summary>
     public string? Error { get; set; }
 }

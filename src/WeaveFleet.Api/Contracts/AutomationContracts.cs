@@ -16,8 +16,15 @@ public sealed record CreateAutomationRequest(
     string? TimeZone = null,
     string? Isolation = null,
     string? BaseBranch = null,
-    /// <summary>The harness <c>Model</c> and <c>Agent</c> were picked from; ignored without either.</summary>
-    string? HarnessType = null);
+    /// <summary>
+    /// The harness <c>Model</c> and <c>Agent</c> were picked from, ignored without either; for a <c>workflow</c> target,
+    /// the harness its runs use (null: the default harness when it fires).
+    /// </summary>
+    string? HarnessType = null,
+    /// <summary>For a <c>workflow</c> target: the workflow it runs (<c>builtin:…</c> or <c>repo:…</c>).</summary>
+    string? WorkflowId = null,
+    /// <summary>For a <c>workflow</c> target: the optional steps switched on.</summary>
+    List<string>? WorkflowSteps = null);
 
 public sealed record UpdateAutomationRequest(
     string Name,
@@ -35,8 +42,15 @@ public sealed record UpdateAutomationRequest(
     string? TimeZone = null,
     string? Isolation = null,
     string? BaseBranch = null,
-    /// <summary>The harness <c>Model</c> and <c>Agent</c> were picked from; ignored without either.</summary>
-    string? HarnessType = null);
+    /// <summary>
+    /// The harness <c>Model</c> and <c>Agent</c> were picked from, ignored without either; for a <c>workflow</c> target,
+    /// the harness its runs use (null: the default harness when it fires).
+    /// </summary>
+    string? HarnessType = null,
+    /// <summary>For a <c>workflow</c> target: the workflow it runs (<c>builtin:…</c> or <c>repo:…</c>).</summary>
+    string? WorkflowId = null,
+    /// <summary>For a <c>workflow</c> target: the optional steps switched on.</summary>
+    List<string>? WorkflowSteps = null);
 
 public sealed record AutomationResponse(
     string Id,
@@ -60,11 +74,18 @@ public sealed record AutomationResponse(
     string? BaseBranch,
     /// <summary>The harness runs use; null for the default harness at the time of the run.</summary>
     string? HarnessType,
+    /// <summary>The workflow a <c>workflow</c> target runs; null for other targets.</summary>
+    string? WorkflowId,
+    /// <summary>The workflow's optional steps switched on.</summary>
+    List<string>? WorkflowSteps,
     /// <summary>When it runs next (UTC, ISO 8601); null when it's off or waits for an event.</summary>
     string? NextRunAt,
     AutomationRunResponse? LastRun);
 
-/// <summary>One run. State is "starting", "running", "done", "failed" or "skipped".</summary>
+/// <summary>
+/// One run. State is "starting", "running", "done", "failed" or "skipped"; a run that started a workflow run follows it,
+/// and can also be "waiting" (on you) or "ended".
+/// </summary>
 public sealed record AutomationRunResponse(
     string Id,
     string AutomationId,
@@ -74,7 +95,9 @@ public sealed record AutomationRunResponse(
     string State,
     string? SessionId,
     string? InstanceId,
-    string? Error);
+    string? Error,
+    /// <summary>The workflow run it started, for a <c>workflow</c> target.</summary>
+    string? WorkflowRunId = null);
 
 public sealed record AutomationRunListResponse(IReadOnlyList<AutomationRunResponse> Runs);
 

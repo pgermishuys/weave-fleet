@@ -241,6 +241,14 @@ export interface WorkflowRun {
   /** "Check with me after each step": agent steps that start from now on are ones the user finishes. */
   checkWithMe?: boolean;
   withYou?: WorkflowRunWithYou | null;
+  /** The automation that started the run; null when it was started from the Run box. */
+  startedBy?: WorkflowRunStartedBy | null;
+}
+
+/** "Started by …": the automation that started a run, by its name when it did. */
+export interface WorkflowRunStartedBy {
+  automationId: string;
+  automationName: string;
 }
 
 export function isWorkflowRun(value: unknown): value is WorkflowRun {

@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.SessionSources;
+using WeaveFleet.Application.Workflows;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
@@ -9,9 +10,12 @@ using WeaveFleet.Domain.Repositories;
 namespace WeaveFleet.Application.Services;
 
 /// <summary>Which session a run used, or why it couldn't start one.</summary>
-public sealed record AutomationExecutionOutcome(string? SessionId, string? InstanceId, string? Error)
+/// <param name="WorkflowRunId">The workflow run it started, for a <c>workflow</c> target.</param>
+/// <param name="Skipped">Nothing started, on purpose or because the start was refused; <paramref name="Error"/> says why.</param>
+public sealed record AutomationExecutionOutcome(string? SessionId, string? InstanceId, string? Error, string? WorkflowRunId = null, bool Skipped = false)
 {
     public static AutomationExecutionOutcome Failed(string error) => new(null, null, error);
+    public static AutomationExecutionOutcome SkippedBecause(string reason) => new(null, null, reason, Skipped: true);
 }
 
 /// <summary>Starts an automation's session; <see cref="AutomationRunService"/> records the run around it.</summary>
@@ -31,7 +35,8 @@ public interface IAutomationExecutor
 public sealed partial class AutomationExecutionService(
     SessionOrchestrator sessionOrchestrator,
     ISessionRepository sessionRepository,
-    ILogger<AutomationExecutionService> logger) : IAutomationExecutor
+    ILogger<AutomationExecutionService> logger,
+    IAutomationWorkflows? workflows = null) : IAutomationExecutor
 {
     /// <summary>
     /// Runs an automation: starts a session with its prompt, or prompts the session a target type picks. Never throws;
@@ -65,6 +70,7 @@ public sealed partial class AutomationExecutionService(
                 "same_session" => await ExecuteOnSameSessionAsync(automation, finalPrompt, eventType, previousSessionId, ct),
                 "most_recent_session" => await ExecuteOnMostRecentSessionAsync(automation, finalPrompt, ct),
                 "tagged_session" => await ExecuteOnTaggedSessionAsync(automation, finalPrompt, ct),
+                AutomationTargets.Workflow => await ExecuteWorkflowAsync(automation, finalPrompt, ct),
                 _ => await ExecuteOnNewSessionAsync(automation, finalPrompt, eventType, ct),
             };
         }
@@ -73,6 +79,26 @@ public sealed partial class AutomationExecutionService(
             LogExecutionException(ex, automation.Id, automation.Name);
             return AutomationExecutionOutcome.Failed($"Couldn't start: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Starts the automation's workflow with the prompt as the run's request. A start the workflow refuses (it's off, the
+    /// file has errors, a model or skill isn't there) is a skipped run with the reason, never a silent one.
+    /// </summary>
+    private async Task<AutomationExecutionOutcome> ExecuteWorkflowAsync(Automation automation, string finalPrompt, CancellationToken ct)
+    {
+        if (workflows is null)
+            return AutomationExecutionOutcome.SkippedBecause($"Skipped: {AutomationWorkflows.TurnedOffReason}");
+
+        var started = await workflows.StartAsync(automation, finalPrompt, ct);
+        if (started.RunId is null)
+        {
+            LogExecutionFailed(automation.Id, automation.Name, "Workflow.Skipped", started.SkipReason ?? "");
+            return AutomationExecutionOutcome.SkippedBecause(started.SkipReason ?? "Skipped.");
+        }
+
+        LogWorkflowStarted(automation.Id, automation.Name, started.RunId);
+        return new AutomationExecutionOutcome(started.FirstSessionId, null, null, started.RunId);
     }
 
     /// <summary>
@@ -308,6 +334,9 @@ public sealed partial class AutomationExecutionService(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Automation execution succeeded: {AutomationId} ({AutomationName}), session: {SessionId}")]
     private partial void LogExecutionSucceeded(string automationId, string automationName, string sessionId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Automation {AutomationId} ({AutomationName}) started workflow run {RunId}")]
+    private partial void LogWorkflowStarted(string automationId, string automationName, string runId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Automation execution failed: {AutomationId} ({AutomationName}), error: {ErrorCode} - {ErrorMessage}")]
     private partial void LogExecutionFailed(string automationId, string automationName, string errorCode, string errorMessage);

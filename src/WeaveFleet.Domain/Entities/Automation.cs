@@ -41,6 +41,13 @@ public sealed class Automation
     /// <summary>Where a run's worktree starts (<c>origin/main</c>); null means the repository's default.</summary>
     public string? BaseBranch { get; set; }
     /// <summary>
+    /// The workflow a <c>workflow</c> target runs (<c>builtin:…</c> or <c>repo:…</c>), in the repository
+    /// <see cref="WorkspaceId"/> names. Null for every other target.
+    /// </summary>
+    public string? WorkflowId { get; set; }
+    /// <summary>The workflow's optional steps switched on for its runs.</summary>
+    public List<string> WorkflowSteps { get; set; } = [];
+    /// <summary>
     /// When this automation's runs started being recorded, for automations made before runs were: the scheduler
     /// doesn't count anything earlier as missed. Null means since it was made. Set by migration 034 only.
     /// </summary>

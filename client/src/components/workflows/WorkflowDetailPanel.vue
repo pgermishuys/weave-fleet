@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, useTemplateRef, watch } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import { AlertTriangle, Bot, Check, Copy, Pencil, Repeat, UserRound, Workflow as WorkflowIcon } from "lucide-vue-next";
+import { AlertTriangle, Bot, CalendarClock, Check, Copy, Pencil, Repeat, UserRound, Workflow as WorkflowIcon } from "lucide-vue-next";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { Button } from "@/components/ui/button";
 import WorkflowCreateDialog from "@/components/workflows/WorkflowCreateDialog.vue";
 import WorkflowEditor from "@/components/workflows/WorkflowEditor.vue";
 import WorkflowRunBox from "@/components/workflows/WorkflowRunBox.vue";
+import WorkflowStartedBy from "@/components/workflows/WorkflowStartedBy.vue";
+import { useAutomationsNav } from "@/composables/use-automations-nav";
 import { useWorkflowEditor } from "@/composables/use-workflow-editor";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { useModelRoles } from "@/composables/use-model-roles";
@@ -27,6 +29,8 @@ const nav = useWorkflowsNav();
 const store = useWorkflowsStore();
 const { choiceFor } = useModelRoles();
 const { defaultHarnessType } = useEnabledHarnesses();
+const { startCreateFromWorkflow } = useAutomationsNav();
+const runBox = useTemplateRef<InstanceType<typeof WorkflowRunBox>>("runBox");
 
 const workflow = computed(() => nav.activeWorkflow.value);
 
@@ -117,6 +121,19 @@ function runText(run: WorkflowRun): string {
   return runStatusLabel(run).label;
 }
 
+/** "Repeat on a schedule…": a new automation that runs this workflow, with the Run box's choices, When still to add. */
+function repeatOnSchedule(): void {
+  const current = workflow.value;
+  const folder = nav.repositoryPath.value;
+  if (!current || !folder) return;
+  startCreateFromWorkflow({
+    workflowId: current.id,
+    folder,
+    ...(runBox.value?.scheduleDraft() ?? { request: "", optionalSteps: [], baseBranch: null, harnessType: null }),
+  });
+  void router.navigate({ to: "/automations" });
+}
+
 function openRun(run: WorkflowRun): void {
   const session = run.waiting?.sessionId ?? run.sessions.at(-1)?.sessionId;
   if (session) void router.navigate({ to: "/sessions/$id", params: { id: session }, search: { instanceId: undefined, parentSessionId: undefined } });
@@ -153,6 +170,21 @@ function openRun(run: WorkflowRun): void {
           class="wf-pill"
           :class="{ 'wf-pill--accent': !workflow.builtIn }"
         >{{ workflow.builtIn ? "Built into Fleet" : workflow.file }}</span>
+        <Button
+          variant="outline"
+          size="sm"
+          class="wf-detail__repeat"
+          data-testid="workflow-repeat-on-schedule"
+          :disabled="!nav.repositoryPath.value || workflow.errors.length > 0"
+          :title="nav.repositoryPath.value ? 'Run this workflow on a schedule, as an automation' : 'Pick a repository in the Run box first'"
+          @click="repeatOnSchedule"
+        >
+          <CalendarClock
+            class="size-3.5"
+            aria-hidden="true"
+          />
+          Repeat on a schedule…
+        </Button>
         <Button
           v-if="workflow.builtIn"
           size="sm"
@@ -310,6 +342,12 @@ function openRun(run: WorkflowRun): void {
               />
             </span>
             <span class="wf-runs__title">{{ run.title }}</span>
+            <WorkflowStartedBy
+              v-if="run.startedBy"
+              class="wf-runs__by"
+              :started-by="run.startedBy"
+              plain
+            />
             <span class="wf-runs__when">{{ when(run.createdAt) }}</span>
             <span
               class="wf-runs__status"
@@ -325,7 +363,10 @@ function openRun(run: WorkflowRun): void {
         </p>
       </div>
 
-      <WorkflowRunBox :workflow="workflow" />
+      <WorkflowRunBox
+        ref="runBox"
+        :workflow="workflow"
+      />
     </div>
 
     <p
@@ -348,6 +389,14 @@ function openRun(run: WorkflowRun): void {
 </template>
 
 <style scoped>
+.wf-detail__repeat {
+  margin-left: auto;
+}
+
+.wf-detail__repeat + .wf-detail__action {
+  margin-left: 0;
+}
+
 .wf-detail {
   display: flex;
   flex: 1;
@@ -383,6 +432,7 @@ function openRun(run: WorkflowRun): void {
 .wf-detail__head {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
@@ -605,6 +655,11 @@ function openRun(run: WorkflowRun): void {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.wf-runs__by {
+  max-width: 34%;
+  flex-shrink: 1;
 }
 
 .wf-runs__when,

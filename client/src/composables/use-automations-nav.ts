@@ -18,8 +18,12 @@ export interface AutomationComposerState {
   /** "new" is a new worktree for each run; "current" the folder as it is. */
   workspace: NewSessionWorkspace;
   baseBranch: string | null;
-  /** "new_session", "same_session", or an older automation's target type. */
+  /** "new_session", "same_session", "workflow", or an older automation's target type. */
   targetType: string;
+  /** The workflow a "workflow" target runs. */
+  workflowId: string | null;
+  /** The workflow's optional steps switched on. */
+  workflowSteps: string[];
   name: string;
   /** Skip a run while the last one is still going. */
   skip: boolean;
@@ -27,7 +31,19 @@ export interface AutomationComposerState {
   agent: string;
   /** The model runs use, as a model selection key; empty for the agent's default. */
   model: string;
-  /** The harness the agent and model come from; null for the default harness. */
+  /** The harness the agent and model come from, or a workflow runs on; null for the default harness. */
+  harnessType: string | null;
+}
+
+/** What "Repeat on a schedule…" in the Workflows Library starts a new automation from. */
+export interface WorkflowAutomationSeed {
+  workflowId: string;
+  /** The repository the Library lists and the Run box runs in. */
+  folder: string;
+  /** What's typed in the Run box, if anything: the run's request. */
+  request: string;
+  optionalSteps: string[];
+  baseBranch: string | null;
   harnessType: string | null;
 }
 
@@ -41,6 +57,8 @@ export function freshComposerState(): AutomationComposerState {
     workspace: { kind: "new" },
     baseBranch: null,
     targetType: "new_session",
+    workflowId: null,
+    workflowSteps: [],
     name: "",
     skip: true,
     agent: "",
@@ -74,6 +92,23 @@ export function useAutomationsNav() {
     startCreate();
   }
 
+  /** A new automation that runs a workflow, with the Run box's choices, and When still to add. */
+  function startCreateFromWorkflow(seed: WorkflowAutomationSeed): void {
+    Object.assign(draft, freshComposerState(), {
+      text: seed.request,
+      folder: { kind: "repository", path: seed.folder },
+      hasChosenFolder: true,
+      workspace: { kind: "new" },
+      baseBranch: seed.baseBranch,
+      targetType: "workflow",
+      workflowId: seed.workflowId,
+      workflowSteps: [...seed.optionalSteps],
+      harnessType: seed.harnessType,
+    } satisfies Partial<AutomationComposerState>);
+    seedSessionId.value = null;
+    startCreate();
+  }
+
   function resetDraft(): void {
     Object.assign(draft, freshComposerState());
   }
@@ -91,6 +126,7 @@ export function useAutomationsNav() {
     setActiveAutomation,
     startCreate,
     startCreateFromSession,
+    startCreateFromWorkflow,
     resetDraft,
     clearSelection,
   };

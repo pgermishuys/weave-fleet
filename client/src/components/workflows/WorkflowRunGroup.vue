@@ -4,6 +4,7 @@ import { Workflow as WorkflowIcon } from "lucide-vue-next";
 import type { SessionListItem } from "@/api/client";
 import SessionItem from "@/components/sessions/SessionItem.vue";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
+import WorkflowStartedBy from "@/components/workflows/WorkflowStartedBy.vue";
 import { runStatusLabel, type WorkflowRun } from "@/lib/workflows";
 
 /**
@@ -68,6 +69,12 @@ function openRun(): void {
       >{{ status.label }}</span>
     </button>
     <div
+      v-if="run?.startedBy"
+      class="wf-group__by"
+    >
+      <WorkflowStartedBy :started-by="run.startedBy" />
+    </div>
+    <div
       v-for="step in steps"
       :key="step.session.session.id"
       class="wf-group__step"
@@ -86,6 +93,12 @@ function openRun(): void {
 </template>
 
 <style scoped>
+.wf-group__by {
+  display: flex;
+  min-width: 0;
+  padding: 0 10px 2px 30px;
+}
+
 .wf-group__head {
   display: flex;
   width: 100%;

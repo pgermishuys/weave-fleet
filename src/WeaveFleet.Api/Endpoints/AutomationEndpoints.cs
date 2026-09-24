@@ -33,7 +33,8 @@ public static class AutomationEndpoints
                 request.Name, request.Prompt, request.TriggerType, request.TriggerConfig,
                 request.MaxConcurrentRuns, request.MaxRunsPerHour, request.TimeoutMinutes,
                 request.WorkspaceId, request.Model, request.Agent, request.TargetTags, request.TargetType,
-                request.TimeZone, request.Isolation, request.BaseBranch, request.HarnessType);
+                request.TimeZone, request.Isolation, request.BaseBranch, request.HarnessType,
+                request.WorkflowId, request.WorkflowSteps);
             return result.IsSuccess
                 ? Results.Created($"/api/automations/{result.Value.Id}", MapToResponse(result.Value, null, time))
                 : ErrorResult(result.Error);
@@ -52,11 +53,12 @@ public static class AutomationEndpoints
                 request.Name, request.Prompt, request.TriggerType, request.TriggerConfig,
                 request.MaxConcurrentRuns, request.MaxRunsPerHour, request.TimeoutMinutes,
                 request.WorkspaceId, request.Model, request.Agent, request.TargetTags, request.TargetType,
-                request.TimeZone, request.Isolation, request.BaseBranch, request.HarnessType);
+                request.TimeZone, request.Isolation, request.BaseBranch, request.HarnessType,
+                request.WorkflowId, request.WorkflowSteps);
             if (result.IsFailure)
                 return ErrorResult(result.Error);
 
-            return Results.Ok(MapToResponse(result.Value, MapRun(await LatestRunAsync(runs, id), runService), time));
+            return Results.Ok(MapToResponse(result.Value, await MapRunAsync(await LatestRunAsync(runs, id), runService), time));
         });
 
         // GET / — list, each with when it runs next and its latest run
@@ -72,9 +74,10 @@ public static class AutomationEndpoints
                 return Results.Problem(result.Error.Description);
 
             var latest = await runs.GetLatestPerAutomationAsync();
-            return Results.Ok(new AutomationListResponse(result.Value
-                .Select(automation => MapToResponse(automation, MapRun(latest.GetValueOrDefault(automation.Id), runService), time))
-                .ToList()));
+            var responses = new List<AutomationResponse>(result.Value.Count);
+            foreach (var automation in result.Value)
+                responses.Add(MapToResponse(automation, await MapRunAsync(latest.GetValueOrDefault(automation.Id), runService), time));
+            return Results.Ok(new AutomationListResponse(responses));
         });
 
         // GET /{id} — get by ID
@@ -89,7 +92,7 @@ public static class AutomationEndpoints
             if (result.IsFailure)
                 return ErrorResult(result.Error);
 
-            return Results.Ok(MapToResponse(result.Value, MapRun(await LatestRunAsync(runs, id), runService), time));
+            return Results.Ok(MapToResponse(result.Value, await MapRunAsync(await LatestRunAsync(runs, id), runService), time));
         });
 
         // GET /{id}/runs — newest first
@@ -106,7 +109,10 @@ public static class AutomationEndpoints
                 return ErrorResult(result.Error);
 
             var list = await runs.ListByAutomationAsync(id, Math.Clamp(limit ?? 50, 1, 200));
-            return Results.Ok(new AutomationRunListResponse(list.Select(run => MapRun(run, runService)!).ToList()));
+            var responses = new List<AutomationRunResponse>(list.Count);
+            foreach (var run in list)
+                responses.Add((await MapRunAsync(run, runService))!);
+            return Results.Ok(new AutomationRunListResponse(responses));
         });
 
         // DELETE /{id} — soft-delete
@@ -149,7 +155,7 @@ public static class AutomationEndpoints
                 var scopedRuns = scope.ServiceProvider.GetRequiredService<AutomationRunService>();
                 await scopedRuns.FinishAsync(automation, run, trigger);
             });
-            return Results.Accepted($"/api/automations/{automation.Id}/runs", MapRun(run, runService));
+            return Results.Accepted($"/api/automations/{automation.Id}/runs", await MapRunAsync(run, runService));
         });
 
         // GET /draft-from-session/{sessionId} — "Repeat on a schedule…": a session's first message and its folder
@@ -182,17 +188,17 @@ public static class AutomationEndpoints
         _ => Results.Problem(error.Description)
     };
 
-    private static AutomationRunResponse? MapRun(AutomationRun? run, AutomationRunService runService) => run is null
+    private static async Task<AutomationRunResponse?> MapRunAsync(AutomationRun? run, AutomationRunService runService) => run is null
         ? null
         : new AutomationRunResponse(
             run.Id, run.AutomationId, run.Trigger, run.ScheduledFor, run.StartedAt,
-            runService.StateOf(run), run.SessionId, run.InstanceId, run.Error);
+            await runService.StateOfAsync(run), run.SessionId, run.InstanceId, run.Error, run.WorkflowRunId);
 
     private static AutomationResponse MapToResponse(Automation a, AutomationRunResponse? lastRun, TimeProvider time) => new(
         a.Id, a.Name, a.Prompt, a.TriggerType, a.TriggerConfig,
         a.MaxConcurrentRuns, a.MaxRunsPerHour, a.TimeoutMinutes,
         a.IsEnabled, a.WorkspaceId, a.Model, a.Agent, a.CreatedAt, a.UpdatedAt, a.TargetTags, a.TargetType, a.TimeZone,
-        a.Isolation, a.BaseBranch, a.HarnessType,
+        a.Isolation, a.BaseBranch, a.HarnessType, a.WorkflowId, a.WorkflowId is null ? null : a.WorkflowSteps,
         a.IsEnabled ? AutomationSchedule.NextOccurrenceUtc(a, time.GetUtcNow().UtcDateTime)?.ToString("O") : null,
         lastRun);
 }
