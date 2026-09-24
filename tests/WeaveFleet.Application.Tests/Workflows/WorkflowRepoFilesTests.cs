@@ -49,7 +49,7 @@ public sealed class WorkflowRepoFilesTests : IDisposable
     [Fact]
     public async Task duplicate_copies_a_built_in_with_its_new_name_and_without_its_comment()
     {
-        var builtIn = WorkflowCatalog.BuiltIns.Single().Definition!;
+        var builtIn = WorkflowCatalog.BuiltIns.Single(e => e.Id == "builtin:build-a-feature").Definition!;
 
         var created = (await WorkflowRepoFiles.CreateAsync(_repo, builtIn with { Name = "Build a feature, our way" }, Library(), default)).Value;
 
@@ -154,7 +154,7 @@ public sealed class WorkflowRepoFilesTests : IDisposable
     [Fact]
     public async Task a_built_in_is_refused()
     {
-        var result = await WorkflowRepoFiles.SaveAsync(_repo, "builtin:build-a-feature", WorkflowCatalog.BuiltIns.Single().Text, null, force: true, default);
+        var result = await WorkflowRepoFiles.SaveAsync(_repo, "builtin:build-a-feature", WorkflowCatalog.BuiltIns.Single(e => e.Id == "builtin:build-a-feature").Text, null, force: true, default);
 
         result.Error.Description.ShouldBe("Built-in workflows can't be edited. Duplicate it into this repo to change it.");
     }

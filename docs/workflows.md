@@ -4,10 +4,13 @@ A workflow is a short list of steps that Fleet runs for you. Each agent step is 
 agent, model and optional skill. Fleet moves the run from step to step, which costs no tokens, and stops wherever a
 step asks you. Workflows are experimental and off until you turn them on in **Settings → Workflows**.
 
-Fleet ships one workflow, **Build a feature**. Your own live in the repository, one file each, under
-`.weave/workflows/*.yaml`, so the people you work with get them with the code. Make one with **New workflow** or
-**Duplicate** in the Workflows page and change it in the designer, or write the file by hand. See
-[The designer](#the-designer). Fleet can also draft one from a session or a sentence: see
+Fleet ships two workflows. **Build a feature** turns a sentence into a reviewed pull request, stopping once for you
+to approve the plan. **Fix a bug** finds the root cause first (with the fleet-debug skill), stops once for you to agree
+with it, then fixes it with a test that fails first, reviews the fix and opens a pull request.
+
+Your own live in the repository, one file each, under `.weave/workflows/*.yaml`, so the people you work with get them
+with the code. Make one with **New workflow** or **Duplicate** in the Workflows page and change it in the designer, or
+write the file by hand. See [The designer](#the-designer). Fleet can also draft one from a session or a sentence: see
 [Drafting a workflow](#drafting-a-workflow).
 
 ## A workflow file

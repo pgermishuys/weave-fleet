@@ -1,0 +1,97 @@
+# Fleet workflow, built into Fleet. The format is described in docs/workflows.md.
+name: Fix a bug
+description: >-
+  Finds the root cause before any code changes, and stops once for you to agree with it. Then fixes it with a test
+  that fails first, reviews the fix and opens a pull request.
+placeholder: "What's wrong? e.g. Archiving a session sometimes leaves it in the list"
+starts-from: sentence
+runs-in: new-worktree
+steps:
+  - id: investigate
+    title: Find the cause
+    agent: build
+    model: strong
+    skill: fleet-debug
+    writes:
+      - .weave/plans/{{slug}}.md
+    prompt: |
+      The bug: {{request}}
+      Find its root cause. Reproduce it if you can, with a failing test or a command, but don't fix it yet.
+      Write .weave/plans/{{slug}}.md: the symptom, the cause with its file and line, the evidence, the smallest fix, and the test that fails now and will pass after.
+      If you need something only the user can give, such as steps to reproduce or a log, ask for it.
+      If you can't find the cause, use failed and put what you tried in summary.
+    outcomes: [found, failed]
+    on: { failed: end }
+
+  - id: ok-cause
+    title: Agree on the cause
+    you: Fix it this way?
+    choices:
+      Approve: fix
+      Send back with a note: { to: investigate, note: true }
+      Stop here: end
+
+  - id: fix
+    title: Fix
+    agent: build
+    model: standard
+    prompt: |
+      The bug: {{request}}
+      Fix it as {{steps.investigate.files}} says.
+      Write the test first and run it to see it fail, then make the smallest change that makes it pass.
+      Run the tests around the change, and fix the same mistake anywhere else it's made. Commit.
+
+      {{previous.summary}}
+    outcomes: [done]
+
+  - id: review
+    title: Review
+    agent: build
+    model: strong
+    skill: fleet-code-review
+    prompt: |
+      The bug: {{request}}
+      Review this branch against {{run.base}} and {{steps.investigate.files}}.
+      Check the fix removes the cause, not only the symptom, and that the new test fails without it.
+      Use changes only for bugs, or a missing test. Put style nits in the summary and use pass.
+
+      {{previous.summary}}
+    outcomes: [pass, changes]
+    on: { changes: fix, max: 2 }
+
+  - id: verify
+    title: Check it runs
+    agent: build
+    model: standard
+    skill: fleet-run
+    optional: For bugs you can see
+    prompt: |
+      The bug: {{request}}
+      Start the app, follow the steps in {{steps.investigate.files}} the way a person would, and attach screenshots.
+    outcomes: [fixed, broken]
+    on: { broken: fix, max: 2 }
+
+  - id: ok-pr
+    title: Open the pull request
+    you: Push the branch and open a PR?
+    choices:
+      Open PR: open-pr
+      Keep the branch only: end
+
+  - id: open-pr
+    title: Push and open the PR
+    agent: build
+    model: fast
+    finish: agent
+    prompt: |
+      The bug: {{request}}
+      Push this branch and open a pull request against {{run.base}} with gh pr create.
+      Take the title and description from {{steps.investigate.files}}: the symptom, the cause and the fix.
+      Add what Review found:
+
+      {{steps.review.summary}}
+
+      Put the pull request's URL in summary.
+      If you can't push the branch or open the pull request, use failed and put the reason in summary.
+    outcomes: [opened, failed]
+    on: { failed: end }
