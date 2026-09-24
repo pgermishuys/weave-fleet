@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import "@/components/sessions/new-session/new-session.css";
 import { computed, nextTick, onMounted, shallowRef, useTemplateRef, watch } from "vue";
-import { ArrowUp, LoaderCircle } from "lucide-vue-next";
+import { ArrowUp, GitBranch, LoaderCircle } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import { Button } from "@/components/ui/button";
 import AgentSelector from "@/components/session/AgentSelector.vue";
@@ -9,9 +9,12 @@ import ComposerFrame from "@/components/session/ComposerFrame.vue";
 import ModelSelector from "@/components/session/ModelSelector.vue";
 import BasePicker from "@/components/sessions/new-session/BasePicker.vue";
 import FolderPicker from "@/components/sessions/new-session/FolderPicker.vue";
+import HarnessPicker from "@/components/sessions/new-session/HarnessPicker.vue";
 import WorkspacePicker from "@/components/sessions/new-session/WorkspacePicker.vue";
 import AutomationMoreOptions from "@/components/automations/AutomationMoreOptions.vue";
 import AutomationRunsInPicker from "@/components/automations/AutomationRunsInPicker.vue";
+import AutomationTargetPicker from "@/components/automations/AutomationTargetPicker.vue";
+import AutomationWorkflowPicker from "@/components/automations/AutomationWorkflowPicker.vue";
 import AutomationWhenPicker from "@/components/automations/AutomationWhenPicker.vue";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { useHarnessCatalog } from "@/composables/use-harness-catalog";
@@ -19,13 +22,16 @@ import { useIsMobile } from "@/composables/use-media-query";
 import { useNewSessionDefaults } from "@/composables/use-new-session-defaults";
 import { useRepositories } from "@/composables/use-repositories";
 import { useRepositoryDetail } from "@/composables/use-repository-detail";
+import { useWorkflowsFeature } from "@/composables/use-workflows-feature";
 import type { AutomationComposerState } from "@/composables/use-automations-nav";
 import { describeDefaults, modelFromKey, modelToPath } from "@/lib/agent-model-choice";
 import { autoName, parseSchedule, promptFrom, toTrigger, type When } from "@/lib/automation-schedule";
 import { browserTimeZone, describeAutomationPlan } from "@/lib/automations";
 import type { NewSessionFolder } from "@/lib/new-session-request";
+import type { Workflow } from "@/lib/workflows";
 import { useAppShellStore } from "@/stores/app-shell";
 import type { Automation, CreateAutomationRequest } from "@/stores/automations";
+import { useWorkflowsStore } from "@/stores/workflows";
 
 /**
  * One composer for making and changing an automation, like the new-session page: say what it should do and when,
@@ -69,15 +75,92 @@ const recentFolders = computed(() => defaults.recentFolders(repositories.value))
 const areRepositoriesReady = computed(() => scannedAt.value !== null || repositoriesError.value !== null);
 
 // Runs use the automation's own harness when it has an agent or model, else the default one.
-const { defaultHarnessType } = useEnabledHarnesses();
+const { enabledHarnesses, defaultHarnessType } = useEnabledHarnesses();
 const harnessType = computed(() => state.value.harnessType ?? defaultHarnessType.value);
+
+// ── A workflow target ──────────────────────────────────────────────────────────
+const { isWorkflowsEnabled } = useWorkflowsFeature();
+const workflowsStore = useWorkflowsStore();
+const isWorkflow = computed(() => state.value.targetType === "workflow");
+const library = shallowRef<Workflow[] | null>(null);
+const libraryNote = shallowRef<string | null>(null);
+const isLoadingLibrary = shallowRef(false);
+let libraryGeneration = 0;
+
+/** The Library for the chosen repository, as the Workflows page lists it. */
+async function loadLibrary(): Promise<void> {
+  const mine = ++libraryGeneration;
+  library.value = null;
+  libraryNote.value = null;
+  if (!isWorkflow.value) return;
+  if (!isWorkflowsEnabled.value) {
+    libraryNote.value = "Workflows are turned off in Settings.";
+    return;
+  }
+  if (!repositoryPath.value) {
+    libraryNote.value = "Pick the repository it runs in first.";
+    return;
+  }
+  isLoadingLibrary.value = true;
+  try {
+    const loaded = await workflowsStore.loadLibrary(repositoryPath.value);
+    if (mine === libraryGeneration) library.value = loaded.workflows;
+  } catch (error) {
+    if (mine === libraryGeneration) libraryNote.value = error instanceof Error ? error.message : "Couldn't load the workflows.";
+  } finally {
+    if (mine === libraryGeneration) isLoadingLibrary.value = false;
+  }
+}
+
+watch([isWorkflow, repositoryPath, isWorkflowsEnabled], () => void loadLibrary(), { immediate: true });
+
+const chosenWorkflow = computed(() => library.value?.find((workflow) => workflow.id === state.value.workflowId) ?? null);
+const optionalSteps = computed(() => chosenWorkflow.value?.steps.filter((step) => step.optional) ?? []);
+
+// Built into Fleet, Build a feature is the one most people want first.
+watch(library, (workflows) => {
+  if (!workflows || state.value.workflowId) return;
+  state.value.workflowId = workflows.find((workflow) => workflow.errors.length === 0)?.id ?? null;
+});
+
+/** The harnesses a run can use: the ones that can hide the step tool from sessions that aren't steps. */
+const workflowHarnesses = computed(() => enabledHarnesses.value.filter((harness) => harness.capabilities.supportsWorkflowSteps));
+const defaultRunsWorkflows = computed(() => workflowHarnesses.value.some((harness) => harness.type === defaultHarnessType.value));
+const workflowHarness = computed({
+  get: () => state.value.harnessType
+    ?? (defaultRunsWorkflows.value ? defaultHarnessType.value : workflowHarnesses.value[0]?.type ?? defaultHarnessType.value),
+  set: (value: string) => { state.value.harnessType = value; },
+});
+
+function setTargetKind(kind: "session" | "workflow"): void {
+  if (kind === (isWorkflow.value ? "workflow" : "session")) return;
+  state.value.targetType = kind === "workflow" ? "workflow" : "new_session";
+  // A workflow's steps take their models from the roles; the session's agent and model don't carry over.
+  state.value.agent = "";
+  state.value.model = "";
+  state.value.harnessType = null;
+  if (kind === "workflow") {
+    state.value.workspace = { kind: "new" };
+    if (state.value.folder && state.value.folder.kind !== "repository") state.value.folder = null;
+  }
+}
+
+function toggleWorkflowStep(stepId: string): void {
+  const steps = state.value.workflowSteps;
+  state.value.workflowSteps = steps.includes(stepId) ? steps.filter((id) => id !== stepId) : [...steps, stepId];
+}
+
+function setWorkflow(workflowId: string): void {
+  if (workflowId !== state.value.workflowId) state.value.workflowSteps = [];
+  state.value.workflowId = workflowId;
+}
 /** A run's folder, as the harness sees it: a worktree of the repository is a checkout of it; none for a quick chat. */
 const catalogDirectory = computed(() => {
   const folder = state.value.folder;
   return folder && folder.kind !== "none" ? folder.path : null;
 });
 const { catalog, agents, models, isSupported: offersAgentsAndModels } = useHarnessCatalog(
-  computed(() => (state.value.folder ? harnessType.value : "")),
+  computed(() => (state.value.folder && !isWorkflow.value ? harnessType.value : "")),
   catalogDirectory,
 );
 const defaultLabels = computed(() => describeDefaults(
@@ -129,6 +212,7 @@ const plan = computed(() => describeAutomationPlan({
   worktree: isWorktree.value,
   base: isWorktree.value ? state.value.baseBranch ?? defaultBase.value ?? currentBranch.value : null,
   sameSession: state.value.targetType === "same_session",
+  ...(isWorkflow.value ? { workflow: chosenWorkflow.value?.name ?? (state.value.workflowId ? state.value.workflowId.replace(/^(builtin|repo):/, "") : null) } : {}),
   timeZone,
   ...(props.automation && props.automation.triggerType !== "event" ? { savedTimeZone: props.automation.timeZone ?? null } : {}),
   legacyFolderless: Boolean(props.automation && !props.automation.isolation && !props.automation.workspaceId),
@@ -142,6 +226,34 @@ const request = computed<CreateAutomationRequest | null>(() => {
   const folder = state.value.folder;
   const workspaceId = folder && folder.kind !== "none" ? folder.path : null;
   const existing = props.automation;
+  if (isWorkflow.value) {
+    if (!state.value.workflowId || folder?.kind !== "repository") return null;
+    const offered = new Set(optionalSteps.value.map((step) => step.id));
+    return {
+      name: state.value.name.trim() || existing?.name || autoName(prompt.value),
+      prompt: prompt.value,
+      ...toTrigger(schedule),
+      // A workflow run never stacks on an unfinished one, whatever this says; the server decides.
+      maxConcurrentRuns: Math.max(1, existing?.maxConcurrentRuns ?? 1),
+      maxRunsPerHour: existing?.maxRunsPerHour ?? 10,
+      timeoutMinutes: existing?.timeoutMinutes ?? 30,
+      workspaceId,
+      model: null,
+      agent: null,
+      // Null follows the default harness when it fires, unless that one can't run workflows. Until the harnesses have
+      // loaded there's nothing to go on, so nothing is pinned.
+      harnessType: state.value.harnessType
+        ?? (workflowHarnesses.value.length > 0 && !defaultRunsWorkflows.value ? workflowHarness.value : null),
+      targetType: "workflow",
+      targetTags: [],
+      timeZone,
+      isolation: "worktree",
+      baseBranch: state.value.baseBranch,
+      workflowId: state.value.workflowId,
+      // A saved step the Library hasn't loaded yet stays; one the workflow no longer has goes.
+      workflowSteps: library.value ? state.value.workflowSteps.filter((id) => offered.has(id)) : [...state.value.workflowSteps],
+    };
+  }
   return {
     name: state.value.name.trim() || existing?.name || autoName(prompt.value),
     prompt: prompt.value,
@@ -181,6 +293,9 @@ const isDirty = computed(() => {
     || next.targetType !== (existing.targetType ?? "new_session")
     || (next.agent ?? null) !== (existing.agent ?? null)
     || (next.model ?? null) !== (existing.model ?? null)
+    || (next.harnessType ?? null) !== (existing.harnessType ?? null)
+    || (next.workflowId ?? null) !== (existing.workflowId ?? null)
+    || [...(next.workflowSteps ?? [])].sort().join(",") !== [...(existing.workflowSteps ?? [])].sort().join(",")
     || next.maxConcurrentRuns !== existing.maxConcurrentRuns;
 });
 
@@ -298,7 +413,7 @@ defineExpose({ focusMessage });
       </div>
 
       <template #toolbar>
-        <template v-if="offersAgentsAndModels">
+        <template v-if="offersAgentsAndModels && !isWorkflow">
           <AgentSelector
             v-model="agentChoice"
             :agents="agents"
@@ -363,13 +478,40 @@ defineExpose({ focusMessage });
         :repositories="repositories"
         :recent-folders="recentFolders"
         :allow-browse="!config.cloudMode"
-        :allow-none="true"
+        :allow-none="!isWorkflow"
         :disabled="busy"
         @update:folder="setFolder($event, true)"
         @close-auto-focus="returnFocusToMessage"
         @folder-added="refreshRepositories"
       />
-      <template v-if="state.folder?.kind === 'repository'">
+      <template v-if="isWorkflow">
+        <span
+          class="ns-chip automation-composer__static"
+          title="Each run gets its own worktree and branch; every step works in it."
+        >
+          <GitBranch
+            class="ns-chip__icon"
+            aria-hidden="true"
+          />
+          <span class="ns-chip__label">New worktree</span>
+        </span>
+        <BasePicker
+          v-if="state.folder?.kind === 'repository'"
+          v-model:base-branch="state.baseBranch"
+          v-model:fetch-origin="fetchOrigin"
+          v-model:branch-name="branchName"
+          :branches="repositoryDetail?.branches ?? []"
+          :default-base="defaultBase"
+          :current-branch="currentBranch"
+          :is-loading="isLoadingRepositoryDetail || !repositoryDetail"
+          :generated-branch="undefined"
+          :hide-branch-name="true"
+          :hide-fetch="true"
+          :disabled="busy"
+          @close-auto-focus="returnFocusToMessage"
+        />
+      </template>
+      <template v-else-if="state.folder?.kind === 'repository'">
         <WorkspacePicker
           :repository-path="state.folder.path"
           :workspace="state.workspace"
@@ -397,7 +539,49 @@ defineExpose({ focusMessage });
           @close-auto-focus="returnFocusToMessage"
         />
       </template>
+      <AutomationTargetPicker
+        v-if="isWorkflowsEnabled || isWorkflow"
+        :kind="isWorkflow ? 'workflow' : 'session'"
+        :workflows-enabled="isWorkflowsEnabled"
+        :disabled="busy"
+        @update:kind="setTargetKind"
+        @close-auto-focus="returnFocusToMessage"
+      />
+      <template v-if="isWorkflow">
+        <AutomationWorkflowPicker
+          :workflow-id="state.workflowId"
+          :workflows="library"
+          :is-loading="isLoadingLibrary"
+          :note="libraryNote"
+          :disabled="busy"
+          @update:workflow-id="setWorkflow"
+          @close-auto-focus="returnFocusToMessage"
+        />
+        <button
+          v-for="step in optionalSteps"
+          :key="step.id"
+          type="button"
+          class="ns-chip"
+          role="switch"
+          :aria-checked="state.workflowSteps.includes(step.id)"
+          :title="step.optionalHint ?? undefined"
+          :data-testid="`automation-workflow-step-${step.id}`"
+          :disabled="busy"
+          @click="toggleWorkflowStep(step.id)"
+        >
+          <span class="ns-chip__hint">{{ step.title }}:</span>
+          <span class="ns-chip__label">{{ state.workflowSteps.includes(step.id) ? "on" : "off" }}</span>
+        </button>
+        <HarnessPicker
+          v-if="workflowHarnesses.length > 1"
+          v-model="workflowHarness"
+          :harnesses="workflowHarnesses"
+          :disabled="busy"
+          @close-auto-focus="returnFocusToMessage"
+        />
+      </template>
       <AutomationRunsInPicker
+        v-else
         :target-type="state.targetType"
         :disabled="busy"
         @update:target-type="state.targetType = $event"
@@ -407,6 +591,7 @@ defineExpose({ focusMessage });
         <AutomationMoreOptions
           v-model:name="state.name"
           v-model:skip="state.skip"
+          :always-skips="isWorkflow"
           :name-placeholder="namePlaceholder"
           :disabled="busy"
           @close-auto-focus="returnFocusToMessage"
@@ -527,6 +712,10 @@ defineExpose({ focusMessage });
   height: 14px;
   margin-inline: 3px;
   background: var(--border);
+}
+
+.automation-composer__static {
+  cursor: default;
 }
 
 .automation-composer__strip-end {

@@ -19,9 +19,11 @@ public sealed class AutomationRunRepository(IDbConnectionFactory connectionFacto
         await conn.ExecuteNonQueryAsync(
             """
             INSERT INTO automation_runs (
-                id, automation_id, user_id, trigger, scheduled_for, started_at, status, session_id, instance_id, error
+                id, automation_id, user_id, trigger, scheduled_for, started_at, status, session_id, instance_id, error,
+                workflow_run_id
             ) VALUES (
-                @Id, @AutomationId, @UserId, @Trigger, @ScheduledFor, @StartedAt, @Status, @SessionId, @InstanceId, @Error
+                @Id, @AutomationId, @UserId, @Trigger, @ScheduledFor, @StartedAt, @Status, @SessionId, @InstanceId, @Error,
+                @WorkflowRunId
             )
             """,
             cmd =>
@@ -36,16 +38,18 @@ public sealed class AutomationRunRepository(IDbConnectionFactory connectionFacto
                 cmd.AddParameter("SessionId", run.SessionId);
                 cmd.AddParameter("InstanceId", run.InstanceId);
                 cmd.AddParameter("Error", run.Error);
+                cmd.AddParameter("WorkflowRunId", run.WorkflowRunId);
             });
     }
 
-    public async Task CompleteAsync(string id, string status, string? sessionId, string? instanceId, string? reason)
+    public async Task CompleteAsync(string id, string status, string? sessionId, string? instanceId, string? reason, string? workflowRunId = null)
     {
         using var conn = connectionFactory.CreateConnection();
         await conn.ExecuteNonQueryAsync(
             """
             UPDATE automation_runs
-            SET status = @Status, session_id = @SessionId, instance_id = @InstanceId, error = @Error
+            SET status = @Status, session_id = @SessionId, instance_id = @InstanceId, error = @Error,
+                workflow_run_id = @WorkflowRunId
             WHERE id = @Id
             """,
             cmd =>
@@ -55,6 +59,7 @@ public sealed class AutomationRunRepository(IDbConnectionFactory connectionFacto
                 cmd.AddParameter("SessionId", sessionId);
                 cmd.AddParameter("InstanceId", instanceId);
                 cmd.AddParameter("Error", reason);
+                cmd.AddParameter("WorkflowRunId", workflowRunId);
             });
     }
 
@@ -138,5 +143,6 @@ public sealed class AutomationRunRepository(IDbConnectionFactory connectionFacto
         SessionId = r.GetNullableString(r.GetOrdinal("session_id")),
         InstanceId = r.GetNullableString(r.GetOrdinal("instance_id")),
         Error = r.GetNullableString(r.GetOrdinal("error")),
+        WorkflowRunId = r.GetNullableString(r.GetOrdinal("workflow_run_id")),
     };
 }

@@ -40,6 +40,10 @@ public sealed class WorkflowRun
     public string? WaitingKind { get; set; }
     /// <summary>How the run ended, in words ("PR #12 opened", "Ended by you at Review").</summary>
     public string? Result { get; set; }
+    /// <summary>The automation that started it; null when it was started from the Run box.</summary>
+    public string? AutomationId { get; set; }
+    /// <summary>That automation's name when it started the run, so the run still says who started it after a rename or delete.</summary>
+    public string? AutomationName { get; set; }
     public string CreatedAt { get; set; } = string.Empty;
     public string UpdatedAt { get; set; } = string.Empty;
     public string? EndedAt { get; set; }

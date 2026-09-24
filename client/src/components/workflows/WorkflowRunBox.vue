@@ -178,6 +178,18 @@ async function run(): Promise<void> {
   }
 }
 
+/** What "Repeat on a schedule…" carries over to the new automation: what's typed and chosen here. */
+function scheduleDraft(): { request: string; optionalSteps: string[]; baseBranch: string | null; harnessType: string | null } {
+  return {
+    request: request.value.trim(),
+    optionalSteps: [...optionalOn],
+    baseBranch: baseBranch.value,
+    harnessType: harnessChoice.value,
+  };
+}
+
+defineExpose({ scheduleDraft });
+
 function handleKeydown(event: KeyboardEvent): void {
   if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
   event.preventDefault();

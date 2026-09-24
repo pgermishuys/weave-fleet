@@ -31,7 +31,12 @@ public sealed record WorkflowRunDto
     public bool CheckWithMe { get; init; }
     /// <summary>The step you finish that's open now; null when there's none.</summary>
     public WorkflowRunWithYouDto? WithYou { get; init; }
+    /// <summary>The automation that started the run; null when it was started from the Run box.</summary>
+    public WorkflowRunStartedByDto? StartedBy { get; init; }
 }
+
+/// <summary>"Started by …": the automation that started a run, by its name when it did.</summary>
+public sealed record WorkflowRunStartedByDto(string AutomationId, string AutomationName);
 
 /// <summary>A step of the run, in the workflow's order.</summary>
 /// <param name="Kind"><c>agent</c> or <c>you</c>.</param>
@@ -202,6 +207,7 @@ public static class WorkflowRunView
         return new WorkflowRunDto
         {
             Id = run.Id,
+            StartedBy = run.AutomationId is { } automationId ? new WorkflowRunStartedByDto(automationId, run.AutomationName ?? "an automation") : null,
             WorkflowId = run.WorkflowId,
             WorkflowName = run.WorkflowName,
             Title = run.Title,

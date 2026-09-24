@@ -22,6 +22,15 @@ public sealed class InMemoryWorkflowRunRepository : IWorkflowRunRepository
         }
     }
 
+    public IReadOnlyList<WorkflowRun> Runs
+    {
+        get
+        {
+            lock (_gate)
+                return _runs.Values.Select(Copy).ToList();
+        }
+    }
+
     public WorkflowRun Run(string id)
     {
         lock (_gate)
@@ -130,6 +139,8 @@ public sealed class InMemoryWorkflowRunRepository : IWorkflowRunRepository
         WaitingReason = run.WaitingReason,
         WaitingKind = run.WaitingKind,
         Result = run.Result,
+        AutomationId = run.AutomationId,
+        AutomationName = run.AutomationName,
         CreatedAt = run.CreatedAt,
         UpdatedAt = run.UpdatedAt,
         EndedAt = run.EndedAt,

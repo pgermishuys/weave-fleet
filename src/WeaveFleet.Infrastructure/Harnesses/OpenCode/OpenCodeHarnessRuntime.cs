@@ -313,6 +313,14 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
     /// <inheritdoc />
     public string HarnessType => "opencode";
 
+    /// <summary>
+    /// Variables every process a session gets starts with, under Fleet's own. Empty in Fleet, and only the live tests
+    /// set it, to give OpenCode a scratch HOME, config and model. It's internal on purpose: no config key and no request
+    /// can reach it, so a real session never runs with another HOME. OpenCode 2's is
+    /// <see cref="OpenCode2.OpenCode2HarnessRuntime.ServerEnvironment"/>.
+    /// </summary>
+    internal IReadOnlyDictionary<string, string> ProcessEnvironment { get; set; } = new Dictionary<string, string>();
+
     /// <inheritdoc />
     public async Task<RuntimePreparation> PrepareRuntimeAsync(RuntimePreparationContext context, CancellationToken ct)
     {
@@ -321,7 +329,7 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
 
         // Step 2: validate that all required credentials are present in the user's credential bag.
         var errors = new List<RuntimePreparationError>();
-        var envVars = new Dictionary<string, string>();
+        var envVars = new Dictionary<string, string>(ProcessEnvironment);
 
         foreach (var requirement in requirements)
         {

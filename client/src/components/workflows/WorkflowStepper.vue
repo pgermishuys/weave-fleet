@@ -3,6 +3,7 @@ import { computed, shallowRef } from "vue";
 import { useRouter } from "@tanstack/vue-router";
 import { Check, UserRound, Workflow as WorkflowIcon } from "lucide-vue-next";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
+import WorkflowStartedBy from "@/components/workflows/WorkflowStartedBy.vue";
 import { checkWithMeNote, ordinal, type WorkflowRunStep } from "@/lib/workflows";
 import { useWorkflowsStore } from "@/stores/workflows";
 
@@ -63,6 +64,10 @@ function open(step: WorkflowRunStep): void {
         v-if="run.branch"
         class="wf-stepper__branch"
       >{{ run.branch }}</span>
+      <WorkflowStartedBy
+        v-if="run.startedBy"
+        :started-by="run.startedBy"
+      />
       <button
         v-if="!finished"
         type="button"

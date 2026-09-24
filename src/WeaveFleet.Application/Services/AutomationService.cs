@@ -4,6 +4,19 @@ using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Services;
 
+/// <summary>What an automation's run goes to.</summary>
+public static class AutomationTargets
+{
+    public const string NewSession = "new_session";
+    public const string SameSession = "same_session";
+    public const string MostRecentSession = "most_recent_session";
+    public const string TaggedSession = "tagged_session";
+    /// <summary>A workflow run, with the automation's prompt as its request.</summary>
+    public const string Workflow = "workflow";
+
+    public static readonly string[] All = [NewSession, SameSession, MostRecentSession, TaggedSession, Workflow];
+}
+
 /// <summary>
 /// Encapsulates business logic for automation management.
 /// </summary>
@@ -31,11 +44,17 @@ public sealed class AutomationService(
         string? timeZone = null,
         string? isolation = null,
         string? baseBranch = null,
-        string? harnessType = null)
+        string? harnessType = null,
+        string? workflowId = null,
+        List<string>? workflowSteps = null)
     {
+        var isWorkflow = targetType == AutomationTargets.Workflow;
+        if (isWorkflow)
+            isolation = "worktree";
         var error = AutomationSchedule.Validate(triggerType, triggerConfig, timeZone, DateTime.UtcNow, requireFuture: true)
-            ?? ValidateWhere(workspaceId, isolation, baseBranch)
             ?? ValidateTargetType(targetType)
+            ?? ValidateWorkflow(targetType, workflowId, workspaceId)
+            ?? ValidateWhere(workspaceId, isolation, baseBranch)
             ?? ValidateModel(model);
         if (error is not null)
             return error;
@@ -53,11 +72,14 @@ public sealed class AutomationService(
             IsEnabled = true,
             IsDeleted = false,
             WorkspaceId = workspaceId,
-            Model = NormalizeOptional(model),
-            Agent = NormalizeOptional(agent),
-            HarnessType = HarnessFor(model, agent, harnessType),
-            TargetTags = targetTags ?? [],
-            TargetType = targetType ?? "new_session",
+            // A workflow's steps take their models from the roles when it fires; it keeps only its harness.
+            Model = isWorkflow ? null : NormalizeOptional(model),
+            Agent = isWorkflow ? null : NormalizeOptional(agent),
+            HarnessType = isWorkflow ? NormalizeOptional(harnessType) : HarnessFor(model, agent, harnessType),
+            TargetTags = isWorkflow ? [] : targetTags ?? [],
+            TargetType = targetType ?? AutomationTargets.NewSession,
+            WorkflowId = isWorkflow ? NormalizeOptional(workflowId) : null,
+            WorkflowSteps = isWorkflow ? NormalizeSteps(workflowSteps) : [],
             TimeZone = NormalizeTimeZone(timeZone),
             Isolation = NormalizeOptional(isolation),
             BaseBranch = NormalizeOptional(baseBranch),
@@ -90,16 +112,22 @@ public sealed class AutomationService(
         string? timeZone = null,
         string? isolation = null,
         string? baseBranch = null,
-        string? harnessType = null)
+        string? harnessType = null,
+        string? workflowId = null,
+        List<string>? workflowSteps = null)
     {
         var existing = await automationRepository.GetByIdAsync(id);
         if (existing is null)
             return FleetError.NotFoundFor(nameof(Automation), id);
 
         // A one-off time that has passed is fine on an automation that's off (it already ran); not on one that's on.
+        var isWorkflow = targetType == AutomationTargets.Workflow;
+        if (isWorkflow)
+            isolation = "worktree";
         var error = AutomationSchedule.Validate(triggerType, triggerConfig, timeZone, DateTime.UtcNow, requireFuture: existing.IsEnabled)
-            ?? ValidateWhere(workspaceId, isolation, baseBranch)
             ?? ValidateTargetType(targetType)
+            ?? ValidateWorkflow(targetType, workflowId, workspaceId)
+            ?? ValidateWhere(workspaceId, isolation, baseBranch)
             ?? ValidateModel(model);
         if (error is not null)
             return error;
@@ -112,11 +140,13 @@ public sealed class AutomationService(
         existing.MaxRunsPerHour = maxRunsPerHour;
         existing.TimeoutMinutes = timeoutMinutes;
         existing.WorkspaceId = workspaceId;
-        existing.Model = NormalizeOptional(model);
-        existing.Agent = NormalizeOptional(agent);
-        existing.HarnessType = HarnessFor(model, agent, harnessType);
-        existing.TargetTags = targetTags ?? [];
-        existing.TargetType = targetType ?? "new_session";
+        existing.Model = isWorkflow ? null : NormalizeOptional(model);
+        existing.Agent = isWorkflow ? null : NormalizeOptional(agent);
+        existing.HarnessType = isWorkflow ? NormalizeOptional(harnessType) : HarnessFor(model, agent, harnessType);
+        existing.TargetTags = isWorkflow ? [] : targetTags ?? [];
+        existing.TargetType = targetType ?? AutomationTargets.NewSession;
+        existing.WorkflowId = isWorkflow ? NormalizeOptional(workflowId) : null;
+        existing.WorkflowSteps = isWorkflow ? NormalizeSteps(workflowSteps) : [];
         existing.TimeZone = NormalizeTimeZone(timeZone);
         existing.Isolation = NormalizeOptional(isolation);
         existing.BaseBranch = NormalizeOptional(baseBranch);
@@ -231,12 +261,28 @@ public sealed class AutomationService(
             : FleetError.ValidationError("BaseBranch", $"'{branch}' is not a valid branch name.");
     }
 
-    private static readonly string[] TargetTypes = ["new_session", "same_session", "most_recent_session", "tagged_session"];
-
     private static FleetError? ValidateTargetType(string? targetType) =>
-        targetType is null || TargetTypes.Contains(targetType, StringComparer.Ordinal)
+        targetType is null || AutomationTargets.All.Contains(targetType, StringComparer.Ordinal)
             ? null
-            : FleetError.ValidationError("TargetType", $"Unknown target '{targetType}'. Use one of: {string.Join(", ", TargetTypes)}.");
+            : FleetError.ValidationError("TargetType", $"Unknown target '{targetType}'. Use one of: {string.Join(", ", AutomationTargets.All)}.");
+
+    /// <summary>
+    /// A workflow target needs the workflow and the repository it runs in. The workflow itself is checked when it fires,
+    /// by the Run box's own checks: the file can change between now and then.
+    /// </summary>
+    private static FleetError? ValidateWorkflow(string? targetType, string? workflowId, string? workspaceId)
+    {
+        if (targetType != AutomationTargets.Workflow)
+            return null;
+        if (string.IsNullOrWhiteSpace(workflowId))
+            return FleetError.ValidationError("WorkflowId", "Pick the workflow it runs.");
+        return string.IsNullOrWhiteSpace(workspaceId)
+            ? FleetError.ValidationError("WorkspaceId", "A workflow runs in a repository. Pick one.")
+            : null;
+    }
+
+    private static List<string> NormalizeSteps(List<string>? steps) =>
+        (steps ?? []).Where(step => !string.IsNullOrWhiteSpace(step)).Select(step => step.Trim()).Distinct(StringComparer.Ordinal).ToList();
 
     /// <summary>A model is <c>provider/model</c>, split at the first slash: the model part may have slashes of its own.</summary>
     private static FleetError? ValidateModel(string? model)

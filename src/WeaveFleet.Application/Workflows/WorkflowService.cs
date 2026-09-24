@@ -25,6 +25,9 @@ public sealed record StartWorkflowRunRequest(
     IReadOnlyDictionary<string, WorkflowModelChoice>? RoleOverrides = null,
     bool CheckWithMe = false);
 
+/// <summary>The automation starting a run, so the run can say "Started by …". Never read from a request body.</summary>
+public sealed record WorkflowRunStartedBy(string AutomationId, string AutomationName);
+
 /// <summary>The library for a repository: the workflows Fleet can run there.</summary>
 /// <param name="Repository">The repository's folder, or null when none was given or it isn't a repository.</param>
 public sealed record WorkflowLibrary(string? Repository, string? RepositoryName, IReadOnlyList<WorkflowEntry> Workflows);
@@ -86,7 +89,12 @@ public sealed class WorkflowService(
     /// Checks everything a run needs before any session starts, and says what's wrong in words the user can act on:
     /// the harness, the workflow file, and every enabled step's model and skill. Then starts the run.
     /// </summary>
-    public async Task<Result<WorkflowRunDto>> StartAsync(StartWorkflowRunRequest request, CancellationToken ct)
+    public Task<Result<WorkflowRunDto>> StartAsync(StartWorkflowRunRequest request, CancellationToken ct)
+        => StartAsync(request, startedBy: null, ct);
+
+    /// <inheritdoc cref="StartAsync(StartWorkflowRunRequest, CancellationToken)"/>
+    /// <param name="startedBy">The automation starting it; null for the Run box.</param>
+    public async Task<Result<WorkflowRunDto>> StartAsync(StartWorkflowRunRequest request, WorkflowRunStartedBy? startedBy, CancellationToken ct)
     {
         var text = request.Request?.Trim();
         if (string.IsNullOrEmpty(text))
@@ -150,6 +158,8 @@ public sealed class WorkflowService(
             HarnessProfileId = string.IsNullOrWhiteSpace(request.HarnessProfileId) ? null : request.HarnessProfileId,
             Options = new WorkflowRunOptions { OptionalSteps = optional, RoleOverrides = overrides, StepModels = models, CheckWithMe = request.CheckWithMe }.Write(),
             Status = WorkflowRunStatus.Running,
+            AutomationId = startedBy?.AutomationId,
+            AutomationName = startedBy?.AutomationName,
             CreatedAt = now,
             UpdatedAt = now,
         };

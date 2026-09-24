@@ -21,11 +21,14 @@ import {
 import { freshComposerState, useAutomationsNav, type AutomationComposerState } from "@/composables/use-automations-nav";
 import { useAutomations } from "@/composables/use-automations";
 import { useRepositories } from "@/composables/use-repositories";
+import { useSettingsNav } from "@/composables/use-settings-nav";
+import { useWorkflowsFeature } from "@/composables/use-workflows-feature";
 import { keyForModel, modelFromPath } from "@/lib/agent-model-choice";
 import { describeDate, fromTrigger, nextRun } from "@/lib/automation-schedule";
 import { describeEventType, describeRunState, describeRunTrigger, eventTypeOf } from "@/lib/automations";
 import type { NewSessionFolder } from "@/lib/new-session-request";
 import { useAutomationsStore, type Automation, type AutomationRun, type CreateAutomationRequest } from "@/stores/automations";
+import { useWorkflowsStore } from "@/stores/workflows";
 
 const navigate = useNavigate();
 const { viewMode, activeAutomationId, draft, seedSessionId, setActiveAutomation, resetDraft, clearSelection } = useAutomationsNav();
@@ -42,6 +45,9 @@ const {
 } = useAutomations();
 const store = useAutomationsStore();
 const { repositories } = useRepositories();
+const workflowRuns = useWorkflowsStore();
+const { isWorkflowsEnabled } = useWorkflowsFeature();
+const { setActiveSection } = useSettingsNav();
 
 const composerRef = useTemplateRef<InstanceType<typeof AutomationComposer>>("composer");
 const isSubmitting = shallowRef(false);
@@ -92,6 +98,8 @@ function stateFor(automation: Automation): AutomationComposerState {
     workspace: worktree ? { kind: "new" } : { kind: "current" },
     baseBranch: automation.baseBranch ?? null,
     targetType: automation.targetType ?? "new_session",
+    workflowId: automation.workflowId ?? null,
+    workflowSteps: [...(automation.workflowSteps ?? [])],
     name: automation.name,
     skip: automation.maxConcurrentRuns > 0,
     agent: automation.agent ?? "",
@@ -220,7 +228,8 @@ async function handleRunNow(): Promise<void> {
   try {
     const run = await runAutomation(automation.id);
     runs.value = [run, ...runs.value.filter((existing) => existing.id !== run.id)];
-    showNotice("info", "Started a run. It shows below and in Sessions.");
+    if (run.state === "skipped") showNotice("error", run.error ?? "The run was skipped.");
+    else showNotice("info", "Started a run. It shows below and in Sessions.");
     void loadRuns();
   } catch (error) {
     showNotice("error", messageOf(error, "Couldn't start a run."));
@@ -280,14 +289,34 @@ function runTime(run: AutomationRun): string {
   return describeDate(new Date(run.scheduledFor ?? run.startedAt));
 }
 
+/** Its workflow run, once the workflows store has it: the run's session that needs you, else its newest step. */
+function sessionOf(run: AutomationRun): string | null {
+  const workflowRun = run.workflowRunId ? workflowRuns.runs[run.workflowRunId] : undefined;
+  return workflowRun?.waiting?.sessionId ?? workflowRun?.sessions.at(-1)?.sessionId ?? run.sessionId;
+}
+
 function openRun(run: AutomationRun): void {
-  if (!run.sessionId) return;
+  const sessionId = sessionOf(run);
+  if (!sessionId) return;
   void navigate({
     to: "/sessions/$id",
-    params: { id: run.sessionId },
-    search: { instanceId: run.instanceId ?? undefined, parentSessionId: undefined },
+    params: { id: sessionId },
+    search: { instanceId: run.workflowRunId ? undefined : run.instanceId ?? undefined, parentSessionId: undefined },
   });
 }
+
+/** An automation that runs a workflow, while Workflows are off: its runs are skipped until they're back on. */
+const workflowsOffWarning = computed(() => currentAutomation.value?.targetType === "workflow" && !isWorkflowsEnabled.value);
+
+function openWorkflowsSettings(): void {
+  setActiveSection("workflows");
+  void navigate({ to: "/settings" });
+}
+
+// A workflow run's row opens where it is now, so follow the runs while workflows are on.
+watch(isWorkflowsEnabled, (on) => {
+  if (on) void workflowRuns.ensureLoaded();
+}, { immediate: true });
 
 /** The empty runs list says when the first one will be. */
 const firstRunHint = computed(() => {
@@ -425,6 +454,27 @@ const firstRunHint = computed(() => {
         </div>
 
         <div
+          v-if="workflowsOffWarning"
+          class="automation-page__notice automation-page__notice--warn"
+          role="status"
+          data-testid="automation-workflows-off"
+        >
+          <AlertCircle
+            class="size-4 shrink-0"
+            aria-hidden="true"
+          />
+          <span>
+            This automation runs a workflow, and Workflows are turned off in Settings. Its runs are skipped until they're
+            back on.
+            <button
+              type="button"
+              class="automation-page__link"
+              @click="openWorkflowsSettings"
+            >Open Settings → Workflows</button>
+          </span>
+        </div>
+
+        <div
           v-if="hasLoadedRuns && runs.length === 0"
           class="automation-page__empty"
           data-testid="automation-no-runs"
@@ -458,6 +508,11 @@ const firstRunHint = computed(() => {
                 :label="describeRunState(run).label"
               />
               <StatusGlyph
+                v-else-if="run.state === 'waiting'"
+                status="waiting_input"
+                label="Needs you"
+              />
+              <StatusGlyph
                 v-else-if="run.state === 'failed'"
                 status="error"
                 label="Failed"
@@ -471,7 +526,7 @@ const firstRunHint = computed(() => {
               <span
                 v-if="run.sessionId"
                 class="automation-run__open"
-              >Open session →</span>
+              >{{ run.workflowRunId ? "Open run →" : "Open session →" }}</span>
               <span
                 class="automation-run__state"
                 :class="`automation-run__state--${describeRunState(run).tone}`"
@@ -646,6 +701,27 @@ const firstRunHint = computed(() => {
   border-color: color-mix(in srgb, var(--error) 30%, transparent);
   background: color-mix(in srgb, var(--error) 10%, transparent);
   color: var(--error);
+}
+
+.automation-page__notice--warn {
+  border-color: color-mix(in srgb, var(--status-waiting) 35%, transparent);
+  background: color-mix(in srgb, var(--status-waiting) 10%, transparent);
+  color: var(--text);
+}
+
+.automation-page__notice--warn svg {
+  color: var(--status-waiting);
+}
+
+.automation-page__link {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
 }
 
 .automation-page__error {

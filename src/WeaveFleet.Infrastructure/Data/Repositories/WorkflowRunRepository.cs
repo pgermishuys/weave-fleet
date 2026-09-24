@@ -20,11 +20,11 @@ public sealed class WorkflowRunRepository(IDbConnectionFactory connectionFactory
             INSERT INTO workflow_runs (
                 id, user_id, workflow_id, workflow_name, definition, request, slug, title, repository_path, base_branch,
                 branch, worktree_path, harness_type, harness_profile_id, options, status, current_step_id,
-                waiting_reason, waiting_kind, result, created_at, updated_at, ended_at
+                waiting_reason, waiting_kind, result, automation_id, automation_name, created_at, updated_at, ended_at
             ) VALUES (
                 @Id, @UserId, @WorkflowId, @WorkflowName, @Definition, @Request, @Slug, @Title, @RepositoryPath, @BaseBranch,
                 @Branch, @WorktreePath, @HarnessType, @HarnessProfileId, @Options, @Status, @CurrentStepId,
-                @WaitingReason, @WaitingKind, @Result, @CreatedAt, @UpdatedAt, @EndedAt
+                @WaitingReason, @WaitingKind, @Result, @AutomationId, @AutomationName, @CreatedAt, @UpdatedAt, @EndedAt
             )
             """,
             cmd => AddRunParameters(cmd, run));
@@ -155,6 +155,8 @@ public sealed class WorkflowRunRepository(IDbConnectionFactory connectionFactory
         cmd.AddParameter("WaitingReason", run.WaitingReason);
         cmd.AddParameter("WaitingKind", run.WaitingKind);
         cmd.AddParameter("Result", run.Result);
+        cmd.AddParameter("AutomationId", run.AutomationId);
+        cmd.AddParameter("AutomationName", run.AutomationName);
         cmd.AddParameter("CreatedAt", run.CreatedAt);
         cmd.AddParameter("UpdatedAt", run.UpdatedAt);
         cmd.AddParameter("EndedAt", run.EndedAt);
@@ -204,6 +206,8 @@ public sealed class WorkflowRunRepository(IDbConnectionFactory connectionFactory
         WaitingReason = r.GetNullableString(r.GetOrdinal("waiting_reason")),
         WaitingKind = r.GetNullableString(r.GetOrdinal("waiting_kind")),
         Result = r.GetNullableString(r.GetOrdinal("result")),
+        AutomationId = r.GetNullableString(r.GetOrdinal("automation_id")),
+        AutomationName = r.GetNullableString(r.GetOrdinal("automation_name")),
         CreatedAt = r.GetString(r.GetOrdinal("created_at")),
         UpdatedAt = r.GetString(r.GetOrdinal("updated_at")),
         EndedAt = r.GetNullableString(r.GetOrdinal("ended_at")),

@@ -22,7 +22,7 @@ namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode;
 /// deny rule or a prompt's <c>tools</c> map hides a tool.
 /// </summary>
 [Trait("Category", "Integration")]
-public sealed class WorkflowStepToolLiveTests
+public sealed partial class WorkflowStepToolLiveTests
 {
     private const string Owner = "local-user";
     private const string Normal = "wf-normal";

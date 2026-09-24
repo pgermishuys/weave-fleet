@@ -188,6 +188,7 @@ public static class DependencyInjection
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowService>();
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowDrafter>();
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowSkills>();
+        services.AddScoped<WeaveFleet.Application.Workflows.IAutomationWorkflows, WeaveFleet.Application.Workflows.AutomationWorkflows>();
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowStepBridge>();
         services.AddScoped<WeaveFleet.Application.Workflows.IWorkflowStepSessions, WeaveFleet.Application.Workflows.WorkflowStepSessions>();
         services.AddScoped<WeaveFleet.Application.Workflows.IWorkflowRunEvents, WeaveFleet.Application.Workflows.WorkflowRunEvents>();

@@ -116,4 +116,48 @@ public sealed class AutomationRunRepositoryTests
         var updated = (await automations.GetByIdAsync("auto-1")).ShouldNotBeNull();
         (updated.Isolation, updated.BaseBranch).ShouldBe(("existing", (string?)null));
     }
+
+    [Fact]
+    public async Task An_automation_keeps_the_workflow_it_runs_and_its_runs_keep_the_workflow_run()
+    {
+        var (keeper, factory, repo) = await CreateAsync();
+        using var _ = keeper;
+        var automations = new AutomationRepository(factory, new TestUserContext(OwnerId));
+        await automations.InsertAsync(new Automation
+        {
+            Id = "auto-1",
+            Name = "Weekly dependency bump",
+            Prompt = "Bump the client's dependencies",
+            TriggerType = "schedule",
+            TriggerConfig = "0 9 * * 1",
+            WorkspaceId = "/home/me/source/weave-fleet",
+            Isolation = "worktree",
+            TargetType = "workflow",
+            WorkflowId = "builtin:build-a-feature",
+            WorkflowSteps = ["design", "verify"],
+            HarnessType = "opencode2",
+            CreatedAt = "2026-09-23T09:00:00.0000000Z",
+        });
+
+        var stored = (await automations.GetByIdAsync("auto-1")).ShouldNotBeNull();
+        (stored.TargetType, stored.WorkflowId, stored.HarnessType).ShouldBe(("workflow", "builtin:build-a-feature", "opencode2"));
+        stored.WorkflowSteps.ShouldBe(["design", "verify"]);
+
+        stored.WorkflowId = "repo:deps";
+        stored.WorkflowSteps = [];
+        await automations.UpdateAsync(stored);
+        var updated = (await automations.GetByIdAsync("auto-1")).ShouldNotBeNull();
+        (updated.WorkflowId, updated.WorkflowSteps.Count).ShouldBe(("repo:deps", 0));
+
+        // A run that started a workflow run, and one skipped with the reason.
+        await repo.InsertAsync(Run("run-1", "auto-1", "2026-09-23T09:00:01.0000000Z", status: "starting"));
+        await repo.CompleteAsync("run-1", "started", "step-session", null, null, workflowRunId: "wf-run-1");
+        await repo.InsertAsync(Run("run-2", "auto-1", "2026-09-30T09:00:01.0000000Z", status: "starting"));
+        await repo.CompleteAsync("run-2", "skipped", null, null, "Skipped: the last run is still waiting on you (Approve the plan).");
+
+        var runs = await repo.ListByAutomationAsync("auto-1", 10);
+        (runs[1].Status, runs[1].SessionId, runs[1].WorkflowRunId).ShouldBe(("started", "step-session", "wf-run-1"));
+        (runs[0].Status, runs[0].WorkflowRunId, runs[0].Error).ShouldBe(("skipped", (string?)null, "Skipped: the last run is still waiting on you (Approve the plan)."));
+        (await repo.GetLatestPerAutomationAsync())["auto-1"].Id.ShouldBe("run-2");
+    }
 }

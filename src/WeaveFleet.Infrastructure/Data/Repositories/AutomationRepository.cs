@@ -27,12 +27,14 @@ public sealed class AutomationRepository : IAutomationRepository
                 id, name, prompt, trigger_type, trigger_config,
                 max_concurrent_runs, max_runs_per_hour, timeout_minutes,
                 is_enabled, is_deleted, workspace_id, model, agent,
-                created_at, updated_at, user_id, target_tags, target_type, time_zone, isolation, base_branch, harness_type
+                created_at, updated_at, user_id, target_tags, target_type, time_zone, isolation, base_branch, harness_type,
+                workflow_id, workflow_steps
             ) VALUES (
                 @Id, @Name, @Prompt, @TriggerType, @TriggerConfig,
                 @MaxConcurrentRuns, @MaxRunsPerHour, @TimeoutMinutes,
                 @IsEnabled, @IsDeleted, @WorkspaceId, @Model, @Agent,
-                @CreatedAt, @UpdatedAt, @UserId, @TargetTags, @TargetType, @TimeZone, @Isolation, @BaseBranch, @HarnessType
+                @CreatedAt, @UpdatedAt, @UserId, @TargetTags, @TargetType, @TimeZone, @Isolation, @BaseBranch, @HarnessType,
+                @WorkflowId, @WorkflowSteps
             )
             """,
             cmd =>
@@ -59,6 +61,8 @@ public sealed class AutomationRepository : IAutomationRepository
                 cmd.AddParameter("Isolation", automation.Isolation);
                 cmd.AddParameter("BaseBranch", automation.BaseBranch);
                 cmd.AddParameter("HarnessType", automation.HarnessType);
+                cmd.AddParameter("WorkflowId", automation.WorkflowId);
+                cmd.AddParameter("WorkflowSteps", SerializeWorkflowSteps(automation.WorkflowSteps));
             });
     }
 
@@ -84,7 +88,9 @@ public sealed class AutomationRepository : IAutomationRepository
                 time_zone = @TimeZone,
                 isolation = @Isolation,
                 base_branch = @BaseBranch,
-                harness_type = @HarnessType
+                harness_type = @HarnessType,
+                workflow_id = @WorkflowId,
+                workflow_steps = @WorkflowSteps
             WHERE id = @Id AND user_id = @UserId AND is_deleted = 0
             """,
             cmd =>
@@ -108,6 +114,8 @@ public sealed class AutomationRepository : IAutomationRepository
                 cmd.AddParameter("Isolation", automation.Isolation);
                 cmd.AddParameter("BaseBranch", automation.BaseBranch);
                 cmd.AddParameter("HarnessType", automation.HarnessType);
+                cmd.AddParameter("WorkflowId", automation.WorkflowId);
+                cmd.AddParameter("WorkflowSteps", SerializeWorkflowSteps(automation.WorkflowSteps));
             });
     }
 
@@ -244,8 +252,13 @@ public sealed class AutomationRepository : IAutomationRepository
             BaseBranch = r.GetNullableString(r.GetOrdinal("base_branch")),
             HistoryStartsAt = r.GetNullableString(r.GetOrdinal("history_starts_at")),
             HarnessType = r.GetNullableString(r.GetOrdinal("harness_type")),
+            WorkflowId = r.GetNullableString(r.GetOrdinal("workflow_id")),
+            WorkflowSteps = DeserializeTargetTags(r.GetNullableString(r.GetOrdinal("workflow_steps"))),
         };
     }
+
+    /// <summary>The optional steps switched on, as a JSON array; null when none are (and for other targets).</summary>
+    private static string? SerializeWorkflowSteps(List<string> steps) => SerializeTargetTags(steps);
 
     private static string? SerializeTargetTags(List<string> targetTags)
     {
