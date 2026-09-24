@@ -156,7 +156,7 @@ builder.Services.AddSingleton<WeaveFleet.Application.Services.ILocalFleetUrl, We
 if (fleetOptions.Desktop.Enabled)
 {
     builder.Services.AddHostedService(sp => new WeaveFleet.Api.Desktop.StandardInputWatcher(
-        Console.OpenStandardInput,
+        WeaveFleet.Api.Desktop.StandardInputWatcher.OpenAppInput,
         sp.GetRequiredService<IHostApplicationLifetime>(),
         sp.GetRequiredService<ILogger<WeaveFleet.Api.Desktop.StandardInputWatcher>>()));
 }
