@@ -216,6 +216,32 @@ internal sealed record OpenCode2ShellRequest
 }
 
 /// <summary>An attachment as a user message keeps it (<c>Prompt.FileAttachment</c>): base64 <c>data</c> whatever the source.</summary>
+/// <summary>
+/// An input waiting in V2's inbox (<c>GET /api/session/{id}/inbox</c>): a prompt not yet taken into the conversation,
+/// such as a steer waiting for the running turn's next step.
+/// </summary>
+internal sealed record OpenCode2InboxItem
+{
+    public string? Id { get; init; }
+    public string? Type { get; init; }
+    public OpenCode2MessageTimes? Time { get; init; }
+    public OpenCode2InboxPayload? Payload { get; init; }
+    public string? Delivery { get; init; }
+}
+
+/// <summary>What an inbox input will say: a prompt's text, its metadata and attachments.</summary>
+internal sealed record OpenCode2InboxPayload
+{
+    public string? Text { get; init; }
+    public JsonElement Metadata { get; init; }
+    public IReadOnlyList<OpenCode2MessageFile>? Files { get; init; }
+}
+
+internal sealed record OpenCode2InboxPage
+{
+    public IReadOnlyList<OpenCode2InboxItem>? Data { get; init; }
+}
+
 internal sealed record OpenCode2MessageFile
 {
     public string? Data { get; init; }
@@ -400,6 +426,28 @@ internal sealed record OpenCode2PromptRequest
     public string? Id { get; init; }
     public required string Text { get; init; }
     public IReadOnlyList<OpenCode2PromptFile>? Files { get; init; }
+
+    /// <summary>
+    /// <c>steer</c> (into the running turn, at its next step) or <c>queue</c> (after it). Left out, V2 steers.
+    /// </summary>
+    public string? Delivery { get; init; }
+
+    /// <summary>Kept on the user message and never sent to the model.</summary>
+    public OpenCode2PromptMetadata? Metadata { get; init; }
+}
+
+/// <summary>What Fleet keeps on a prompt's user message in V2's history.</summary>
+internal sealed record OpenCode2PromptMetadata
+{
+    /// <summary><see cref="OpenCode2Deliveries.Steer"/> on a prompt the user sent into a running turn.</summary>
+    public string? FleetDelivery { get; init; }
+}
+
+/// <summary>V2's <c>Session.Inbox.Delivery</c>: when a prompt sent while a turn runs is taken in.</summary>
+internal static class OpenCode2Deliveries
+{
+    public const string Steer = "steer";
+    public const string Queue = "queue";
 }
 
 /// <summary>
@@ -742,6 +790,7 @@ internal sealed record OpenCode2ErrorBody
 [JsonSerializable(typeof(OpenCode2ShellInput))]
 [JsonSerializable(typeof(OpenCode2GenerateRequest))]
 [JsonSerializable(typeof(OpenCode2MessagePage))]
+[JsonSerializable(typeof(OpenCode2InboxPage))]
 [JsonSerializable(typeof(OpenCode2Form))]
 [JsonSerializable(typeof(List<OpenCode2ToolContent>))]
 [JsonSerializable(typeof(string))]

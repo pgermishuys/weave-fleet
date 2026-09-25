@@ -557,7 +557,7 @@ describe("Composer", () => {
 
 describe("Composer shell commands", () => {
   const harnesses = [
-    { type: "opencode", displayName: "OpenCode", available: true, userEnabled: true, capabilities: { supportsShellCommands: true } },
+    { type: "opencode", displayName: "OpenCode", available: true, userEnabled: true, capabilities: { supportsShellCommands: true, supportsSteering: true } },
     { type: "claude-code", displayName: "Claude Code", available: true, userEnabled: true, capabilities: { supportsShellCommands: false } },
   ];
 
@@ -694,11 +694,14 @@ describe("Composer shell commands", () => {
     const textarea = wrapper.get("[data-testid='prompt-input']");
 
     await textarea.setValue("!git status");
+    // A command runs between turns, so nothing offers to send it into the turn.
+    expect(wrapper.find("[data-testid='prompt-send-now-button']").exists()).toBe(false);
     pressKey(textarea.element, "Enter");
     await flushPromises();
 
     expect(shellCalls()).toHaveLength(0);
-    expect(wrapper.get(".queue-badge").text()).toContain("1 queued");
+    expect(wrapper.findAll("[data-testid='queued-message']").map((item) => item.text())).toEqual([expect.stringContaining("!git status")]);
+    expect(wrapper.find("[data-testid='queued-send-now']").exists()).toBe(false);
 
     useSessionsStore().patchSession("session-1", { activityStatus: "idle" });
     await flushPromises();
@@ -801,7 +804,7 @@ describe("Composer side questions (/btw)", () => {
     }));
     expect(mockApi.POST).not.toHaveBeenCalledWith("/api/sessions/{id}/prompt", expect.anything());
     expect(mockApi.POST).not.toHaveBeenCalledWith("/api/sessions/{id}/command", expect.anything());
-    expect(wrapper.find(".queue-badge").exists()).toBe(false);
+    expect(wrapper.find("[data-testid='queued-message']").exists()).toBe(false);
     expect((textarea.element as HTMLTextAreaElement).value).toBe("");
     // The composer now talks to the side conversation.
     expect(wrapper.find("[data-testid='composer-side-mode']").exists()).toBe(true);
@@ -951,5 +954,115 @@ describe("Composer with a minimized side conversation", () => {
     await setMinimized(false);
     await flushPromises();
     expect((textarea.element as HTMLTextAreaElement).value).toBe("for the side");
+  });
+});
+
+describe("Composer steering", () => {
+  const harnesses = [
+    { type: "opencode", displayName: "OpenCode", available: true, userEnabled: true, capabilities: { supportsSteering: true } },
+    { type: "claude-code", displayName: "Claude Code", available: true, userEnabled: true, capabilities: { supportsSteering: false } },
+  ];
+
+  function pressKey(element: Element, key: string, init: KeyboardEventInit = {}): KeyboardEvent {
+    const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init });
+    element.dispatchEvent(event);
+    return event;
+  }
+
+  function promptBodies(): Record<string, unknown>[] {
+    return (mockApi.POST.mock.calls as unknown as [string, { body?: Record<string, unknown> }][])
+      .filter(([url]) => url === "/api/sessions/{id}/prompt")
+      .map(([, init]) => init.body ?? {});
+  }
+
+  beforeEach(() => {
+    mockApi.GET.mockReset();
+    mockApi.POST.mockReset();
+    configureApiFetch();
+    const fallback = mockApi.GET.getMockImplementation() as unknown as (url: string, init?: unknown) => Promise<unknown>;
+    mockApi.GET.mockImplementation((async (url: string, init?: unknown) => {
+      if (url === "/api/harnesses") {
+        return { data: harnesses, error: undefined, response: new Response() };
+      }
+      return fallback(url, init);
+    }) as never);
+    useDraftState("session-1", { agentId: "", modelId: "" }).resetText();
+  });
+
+  it("queues a message on Enter while the agent works, and sends it into the turn on Ctrl+Enter", async () => {
+    const wrapper = mountComposer({ session: createSession({ activityStatus: "busy" }) });
+    await flushPromises();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+
+    await textarea.setValue("also check the tests");
+    expect(wrapper.find("[data-testid='prompt-send-now-button']").exists()).toBe(true);
+    pressKey(textarea.element, "Enter");
+    await flushPromises();
+
+    expect(promptBodies()).toHaveLength(0);
+    expect(wrapper.findAll("[data-testid='queued-message']")).toHaveLength(1);
+
+    await textarea.setValue("stop, that's the wrong file");
+    pressKey(textarea.element, "Enter", { ctrlKey: true });
+    await flushPromises();
+
+    expect(promptBodies()).toEqual([expect.objectContaining({ text: "stop, that's the wrong file", delivery: "steer" })]);
+    expect(wrapper.findAll("[data-testid='queued-message']")).toHaveLength(1);
+  });
+
+  it("sends a queued message into the turn with Send now, leaving the draft alone", async () => {
+    const wrapper = mountComposer({ session: createSession({ activityStatus: "busy" }) });
+    await flushPromises();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+
+    await textarea.setValue("use the other branch");
+    pressKey(textarea.element, "Enter");
+    await flushPromises();
+    await textarea.setValue("still typing");
+
+    await wrapper.get("[data-testid='queued-send-now']").trigger("click");
+    await flushPromises();
+
+    expect(promptBodies()).toEqual([expect.objectContaining({ text: "use the other branch", delivery: "steer" })]);
+    expect(wrapper.find("[data-testid='queued-message']").exists()).toBe(false);
+    expect((textarea.element as HTMLTextAreaElement).value).toBe("still typing");
+  });
+
+  it("offers only the queue for a harness that can't steer", async () => {
+    const wrapper = mountComposer({ session: createSession({ activityStatus: "busy", harnessType: "claude-code" }) });
+    await flushPromises();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+
+    await textarea.setValue("also check the tests");
+    expect(wrapper.find("[data-testid='prompt-send-now-button']").exists()).toBe(false);
+    pressKey(textarea.element, "Enter", { ctrlKey: true });
+    await flushPromises();
+
+    expect(promptBodies()).toHaveLength(0);
+    expect(wrapper.findAll("[data-testid='queued-message']")).toHaveLength(1);
+    expect(wrapper.find("[data-testid='queued-send-now']").exists()).toBe(false);
+  });
+
+  it("offers no Send now for a side question, which never waits for the turn", async () => {
+    const wrapper = mountComposer({ session: createSession({ activityStatus: "busy" }) });
+    await flushPromises();
+
+    await wrapper.get("[data-testid='prompt-input']").setValue("/btw what does this file do?");
+
+    expect(wrapper.find("[data-testid='prompt-send-now-button']").exists()).toBe(false);
+  });
+
+  it("sends the normal way when the agent is idle, even on Ctrl+Enter", async () => {
+    const wrapper = mountComposer();
+    await flushPromises();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+
+    expect(wrapper.find("[data-testid='prompt-send-now-button']").exists()).toBe(false);
+    await textarea.setValue("hello");
+    pressKey(textarea.element, "Enter", { ctrlKey: true });
+    await flushPromises();
+
+    expect(promptBodies()).toHaveLength(1);
+    expect(promptBodies()[0].delivery).toBeUndefined();
   });
 });

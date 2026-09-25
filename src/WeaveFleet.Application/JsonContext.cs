@@ -18,6 +18,7 @@ internal sealed record CommittedMessageInfo(
     string? Agent,
     string? ModelID,
     CommittedMessageTime Time,
+    bool? Steered = null,
     SlashCommand? Command = null);
 
 internal sealed record CommittedMessage(CommittedMessageInfo Info, List<JsonElement> Parts);

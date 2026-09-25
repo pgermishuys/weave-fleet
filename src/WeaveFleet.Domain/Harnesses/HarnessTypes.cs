@@ -60,6 +60,12 @@ public sealed record HarnessCapabilities
     public bool SupportsWorkflowSteps { get; init; }
 
     /// <summary>
+    /// A prompt sent while a turn runs can go into that turn (<see cref="PromptDelivery.Steer"/>): the agent reads it at
+    /// its next step instead of after the turn ends. Without it, Fleet only queues prompts until the session is idle.
+    /// </summary>
+    public bool SupportsSteering { get; init; }
+
+    /// <summary>
     /// The user can run a shell command in the session's folder from the composer (<c>!git status</c>):
     /// <see cref="IHarnessSession.RunShellCommandAsync"/> runs it without a model turn, the command and its output
     /// show in the conversation as a message of role <see cref="ShellCommands.Role"/>, and the agent sees them on
@@ -345,6 +351,9 @@ public sealed record HarnessMessage
     /// <summary>Why the model stopped producing this message (e.g. "stop", "length"), when reported.</summary>
     public string? Finish { get; init; }
 
+    /// <summary>A prompt the user sent into a running turn (<see cref="PromptDelivery.Steer"/>), rather than after it.</summary>
+    public bool Steered { get; init; }
+
     /// <summary>
     /// The slash command this user message came from, when it did. Its text is then what the harness made of the
     /// command (OpenCode's expanded template), and the conversation shows the command instead.
@@ -387,6 +396,22 @@ public sealed record PromptOptions
     /// <see cref="HarnessCapabilities.SupportsSideConversations"/>; others ignore it.
     /// </summary>
     public IReadOnlyList<string>? ModelNotes { get; init; }
+
+    /// <summary>
+    /// When the prompt reaches the agent if a turn is running. <see langword="null"/> leaves it to the harness (OpenCode 2
+    /// steers); prompts the user sends always say.
+    /// </summary>
+    public PromptDelivery? Delivery { get; init; }
+}
+
+/// <summary>When a prompt sent while a turn runs reaches the agent.</summary>
+public enum PromptDelivery
+{
+    /// <summary>After the running turn ends, as a new turn.</summary>
+    Queue,
+
+    /// <summary>Into the running turn, at the agent's next step (<see cref="HarnessCapabilities.SupportsSteering"/>).</summary>
+    Steer,
 }
 
 /// <summary>

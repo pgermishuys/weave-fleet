@@ -59,6 +59,7 @@ function convertToAccumulatedMessage(message: MessageLifecyclePayload): Accumula
     parentID: message.info.parentID ?? undefined,
     cost: message.info.cost ?? undefined,
     tokens: message.info.tokens ?? undefined,
+    ...(message.info.steered === true ? { steered: true } : {}),
   }
 }
 

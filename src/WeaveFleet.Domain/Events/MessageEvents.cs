@@ -191,6 +191,12 @@ public sealed record MessageEventInfo
     public string? Finish { get; init; }
 
     /// <summary>
+    /// Gets whether the user sent this prompt into a running turn (steered it), rather than after the turn. Set only
+    /// on such a prompt.
+    /// </summary>
+    public bool? Steered { get; init; }
+
+    /// <summary>
     /// Gets the slash command a user message came from, so the conversation shows <c>/name arguments</c> rather than
     /// the prompt the harness expanded it into.
     /// </summary>

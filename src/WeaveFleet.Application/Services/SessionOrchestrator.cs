@@ -828,6 +828,12 @@ public sealed partial class SessionOrchestrator(
         if (string.Equals(sessionResult.Value.RetentionStatus, "archived", StringComparison.Ordinal))
             return FleetError.ValidationError("Session.RetentionStatus", "Archived sessions are read-only.");
 
+        var delivery = SteeringDelivery(options?.Delivery, sessionResult.Value, out var steeringError);
+        if (steeringError is not null)
+            return steeringError;
+        if (options is not null && delivery != options.Delivery)
+            options = options with { Delivery = delivery };
+
         // What the caller named is remembered below; what it left out comes from the session.
         var requestedOptions = rememberChoices ? options : null;
         options = WithSessionChoices(options, sessionResult.Value);
@@ -851,7 +857,7 @@ public sealed partial class SessionOrchestrator(
                 DateTimeOffset.UtcNow,
                 options?.Agent,
                 generatedMessageId,
-                options?.Attachments);
+                options?.Attachments) with { Steered = delivery == PromptDelivery.Steer };
 
             await BroadcastUserMessageAsync(id, userMsg, effectiveCorrelationId, ct).ConfigureAwait(false);
 
@@ -1175,6 +1181,7 @@ public sealed partial class SessionOrchestrator(
                 message.Agent,
                 message.ModelId,
                 new CommittedMessageTime(message.Timestamp.ToUnixTimeMilliseconds()),
+                message.Steered ? true : null,
                 message.Command),
             parts),
             ApplicationJsonContext.Default.CommittedMessage);
@@ -1216,6 +1223,7 @@ public sealed partial class SessionOrchestrator(
                 message.Agent,
                 message.ModelId,
                 new CommittedMessageTime(message.Timestamp.ToUnixTimeMilliseconds()),
+                message.Steered ? true : null,
                 message.Command),
             parts,
             correlationId),
@@ -1614,6 +1622,31 @@ public sealed partial class SessionOrchestrator(
 
     private static bool HasModel(string? providerId, string? modelId)
         => !string.IsNullOrWhiteSpace(providerId) && !string.IsNullOrWhiteSpace(modelId);
+
+    /// <summary>
+    /// How a prompt goes in: a steer needs a harness that can take one, and only steers a turn that is running. When the
+    /// turn ended before the prompt got here, the prompt starts a turn of its own, the way a queued one does, and isn't
+    /// shown as having gone in mid-turn.
+    /// </summary>
+    private PromptDelivery? SteeringDelivery(PromptDelivery? requested, Session session, out FleetError? error)
+    {
+        error = null;
+        if (requested != PromptDelivery.Steer)
+            return requested;
+
+        if (harnessRegistry.GetByType(session.HarnessType)?.Capabilities.SupportsSteering != true)
+        {
+            error = FleetError.ValidationError(
+                "Prompt.Delivery",
+                "This session's harness can't take a message while it works. Queue it instead: it's sent when the turn ends.");
+            return requested;
+        }
+
+        return sessionActivityTracker.Get(session.Id)?.ActivityStatus
+            is ActivityStatuses.Busy or ActivityStatuses.Retry or ActivityStatuses.Delegating
+            ? PromptDelivery.Steer
+            : PromptDelivery.Queue;
+    }
 
     /// <summary>
     /// A prompt that names no agent or model gets the session's: the ones it started with or was last given. So

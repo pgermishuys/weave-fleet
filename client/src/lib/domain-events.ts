@@ -103,6 +103,8 @@ export interface MessageEventInfo {
   turnError?: TurnError | null;
   /** Why the model stopped (e.g. "stop", "length", "error"), when the harness reports it. */
   finish?: string | null;
+  /** Set on a prompt the user sent into a running turn (steered). */
+  steered?: boolean | null;
   /** The slash command a user message came from; its text is then what the harness made of the command. */
   command?: SlashCommand | null;
 }

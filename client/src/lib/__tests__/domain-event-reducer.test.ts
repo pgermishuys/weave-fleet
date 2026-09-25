@@ -188,6 +188,7 @@ function createMessageLifecyclePayload(
       tokens: overrides.tokens ?? null,
       turnError: overrides.turnError ?? null,
       finish: overrides.finish ?? null,
+      ...(overrides.steered ? { steered: overrides.steered } : {}),
     },
     parts: text == null
       ? []
@@ -231,6 +232,40 @@ function deferResponse(): { promise: Promise<{ data: unknown; error: undefined; 
 
   return { promise, resolve }
 }
+
+describe("domain-event-reducer steered prompts", () => {
+  it("keeps the mark on a prompt sent into a running turn, live and from a snapshot", () => {
+    const step = createMessageLifecyclePayload({ id: "msg_0001", role: "assistant", createdAt: 1000, text: "Running the tests", finish: "tool-calls" })
+    const steered = createMessageLifecyclePayload({ id: "msg_0002", role: "user", createdAt: 2000, text: "stop, wrong file", steered: true })
+    const nextStep = createMessageLifecyclePayload({ id: "msg_0003", role: "assistant", createdAt: 3000, text: "Switching files" })
+
+    const live = [steered, nextStep].reduce(
+      (state, payload) => applyDomainEvent(state, { type: "message.updated", payload }),
+      createSessionStreamState(createSnapshot({ messages: [step] })),
+    )
+    const reloaded = createSessionStreamState(createSnapshot({ messages: [step, steered, nextStep] }))
+
+    for (const state of [live, reloaded]) {
+      expect(state.messages.map((m) => [m.messageId, m.steered ?? false])).toEqual([
+        ["msg_0001", false],
+        ["msg_0002", true],
+        ["msg_0003", false],
+      ])
+    }
+  })
+
+  it("marks a prompt the server says was steered after it was first shown without the mark", () => {
+    const plain = createMessageLifecyclePayload({ id: "msg_0002", role: "user", createdAt: 2000, text: "stop" })
+    const marked = createMessageLifecyclePayload({ id: "msg_0002", role: "user", createdAt: 2000, text: "stop", steered: true })
+
+    const state = applyDomainEvent(createSessionStreamState(createSnapshot({ messages: [plain] })), {
+      type: "message.updated",
+      payload: marked,
+    })
+
+    expect(state.messages[0]?.steered).toBe(true)
+  })
+})
 
 describe("domain-event-reducer", () => {
   it("keeps_user_prompt_before_assistant_response_when_lifecycle_events_have_equal_timestamps", () => {

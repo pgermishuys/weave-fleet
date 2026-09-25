@@ -20,6 +20,23 @@ internal static class OpenCode2History
     public static IReadOnlyList<HarnessMessage> ToHarnessMessages(IEnumerable<OpenCode2Message> messages)
         => messages.Select(ToHarnessMessage).OfType<HarnessMessage>().ToList();
 
+    /// <summary>
+    /// The prompts waiting in V2's inbox, as the user messages they become. A steer waits there until the running turn's
+    /// next step, and the user sent it already, so it shows now, as it did live.
+    /// </summary>
+    public static IReadOnlyList<HarnessMessage> PendingPrompts(IEnumerable<OpenCode2InboxItem> inbox)
+        => ToHarnessMessages(inbox
+            .Where(item => item.Type == "user" && item.Payload is not null)
+            .Select(item => new OpenCode2Message
+            {
+                Id = item.Id,
+                Type = "user",
+                Time = item.Time,
+                Text = item.Payload!.Text,
+                Metadata = item.Payload.Metadata,
+                Files = item.Payload.Files,
+            }));
+
     private static HarnessMessage? ToHarnessMessage(OpenCode2Message message)
     {
         if (message.Id is not { } id)
@@ -35,6 +52,7 @@ internal static class OpenCode2History
                 Role = "user",
                 Parts = UserParts(id, message),
                 Timestamp = timestamp,
+                Steered = IsSteered(message.Metadata),
             },
             "assistant" => new HarnessMessage
             {
@@ -71,6 +89,13 @@ internal static class OpenCode2History
             && metadata.TryGetProperty("source", out var source)
             && source.ValueKind == JsonValueKind.String
             && source.GetString() is "shell" or OpenCode2Mapper.SubagentTool;
+
+    /// <summary>Whether a prompt carries the mark Fleet puts on one sent into a running turn.</summary>
+    private static bool IsSteered(JsonElement metadata)
+        => metadata.ValueKind == JsonValueKind.Object
+            && metadata.TryGetProperty("fleetDelivery", out var delivery)
+            && delivery.ValueKind == JsonValueKind.String
+            && delivery.GetString() == OpenCode2Deliveries.Steer;
 
     /// <summary>A user's shell command as the tool part the live events give it (<see cref="OpenCode2Mapper.ShellCommand"/>).</summary>
     private static ToolUsePart ShellPart(string messageId, string shellId, OpenCode2Message message)

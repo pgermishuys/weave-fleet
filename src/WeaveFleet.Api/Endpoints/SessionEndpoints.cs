@@ -258,10 +258,11 @@ public static class SessionEndpoints
             if (modelResolution.ErrorResult is not null)
                 return modelResolution.ErrorResult;
 
+            if (!TryReadDelivery(req.Delivery, out var delivery))
+                return Results.BadRequest(new ErrorResponse("delivery must be \"queue\" or \"steer\"."));
+
             var attachments = req.Attachments?.Select(a => new HarnessAttachment(a.Mime, a.Filename ?? "image.png", a.Data)).ToList();
-            var options = req.Agent is not null || req.Model is not null || attachments is { Count: > 0 } || req.Effort is not null
-                ? new PromptOptions { Agent = req.Agent, ProviderId = modelResolution.ProviderId, ModelId = modelResolution.ModelId, Attachments = attachments, Effort = req.Effort }
-                : null;
+            var options = new PromptOptions { Agent = req.Agent, ProviderId = modelResolution.ProviderId, ModelId = modelResolution.ModelId, Attachments = attachments, Effort = req.Effort, Delivery = delivery };
             var result = await orchestrator.PromptSessionWithReceiptAsync(id, req.Text, options, req.UserMessageId, req.CorrelationId, ct);
             return result.Match(r => Results.Ok(new SendPromptApiResponse(r.EventId, r.CorrelationId)), err => err.ToSessionApiResult());
         })
@@ -1001,6 +1002,23 @@ public static class SessionEndpoints
         };
     }
 
+    /// <summary>A prompt the user sends says how it goes in: a request that leaves it out is queued, as before.</summary>
+    internal static bool TryReadDelivery(string? value, out PromptDelivery delivery)
+    {
+        switch (value)
+        {
+            case null or "" or "queue":
+                delivery = PromptDelivery.Queue;
+                return true;
+            case "steer":
+                delivery = PromptDelivery.Steer;
+                return true;
+            default:
+                delivery = PromptDelivery.Queue;
+                return false;
+        }
+    }
+
     private static async Task<ModelResolutionResult> ResolveSessionModelAsync(
         string sessionId,
         ModelRef? model,
@@ -1061,7 +1079,9 @@ internal sealed record SendPromptApiRequest(
     ImageAttachmentDto[]? Attachments,
     string? UserMessageId,
     string? CorrelationId,
-    string? Effort);
+    string? Effort,
+    // "queue" (the default: Fleet sends it once the session is idle) or "steer" (into the running turn).
+    string? Delivery = null);
 
 internal sealed record SendPromptApiResponse(long? EventId, string CorrelationId);
 

@@ -29,6 +29,8 @@ export interface SentPromptMessage {
   modelName: string;
   effort: EffortLevel;
   images: SentPromptImage[];
+  /** Sent into a running turn (steered) rather than after it. */
+  steered?: boolean;
 }
 
 const sentPromptRegistry = reactive<Record<string, SentPromptMessage[]>>({});
@@ -404,6 +406,13 @@ interface BackendSendPromptRequest {
   userMessageId?: string;
   correlationId: string;
   effort?: string;
+  /** "steer": into the running turn, at the agent's next step. Left out, the prompt is a turn of its own. */
+  delivery?: "steer";
+}
+
+export interface SendPromptOptions {
+  /** Send into the running turn instead of waiting for it to end; only for a harness that supports steering. */
+  steer?: boolean;
 }
 
 interface BackendSendPromptResponse {
@@ -503,10 +512,10 @@ export function useSendPrompt(sessionId: string) {
   }
 
   /**
-   * Sends the composer draft, or `overrideText` when re-sending a prompt whose turn failed. An
-   * override leaves the draft alone: the user may well have started typing something else.
+   * Sends the composer draft, or `overrideText` when re-sending a prompt whose turn failed or sending a queued one now.
+   * An override leaves the draft alone: the user may well have started typing something else.
    */
-  function sendPrompt(attachments?: ImageAttachment[], overrideText?: string): boolean {
+  function sendPrompt(attachments?: ImageAttachment[], overrideText?: string, options?: SendPromptOptions): boolean {
     if (!canSend.value) {
       return false;
     }
@@ -548,6 +557,7 @@ export function useSendPrompt(sessionId: string) {
             filename: a.filename ?? "image.png",
           }))
         : [],
+      ...(options?.steer ? { steered: true } : {}),
     });
     incrementPendingPrompts(sessionId);
     schedulePromptConfirmationTimeout(sessionId, correlationId);
@@ -590,6 +600,10 @@ export function useSendPrompt(sessionId: string) {
 
     if (draft.effort !== "medium") {
       request.effort = draft.effort;
+    }
+
+    if (options?.steer) {
+      request.delivery = "steer";
     }
 
     void postPrompt(promptId, request);

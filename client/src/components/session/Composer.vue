@@ -1,20 +1,21 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, shallowRef, ref, useTemplateRef, watch } from "vue";
 import { storeToRefs } from "pinia";
-import { ArrowUp, Paperclip, SquareTerminal, X, CircleX, MessageCircleQuestionMark } from "lucide-vue-next";
+import { ArrowUp, CornerDownRight, Paperclip, SquareTerminal, X, CircleX, MessageCircleQuestionMark } from "lucide-vue-next";
 import AutocompletePopup from "@/components/session/AutocompletePopup.vue";
 import ComposerFrame from "@/components/session/ComposerFrame.vue";
 import ImageLightbox from "@/components/session/ImageLightbox.vue";
 import AgentSelector from "@/components/session/AgentSelector.vue";
 import ModelSelector from "@/components/session/ModelSelector.vue";
 import EffortToggle from "@/components/session/EffortToggle.vue";
+import QueuedMessages from "@/components/session/QueuedMessages.vue";
 import { Button } from "@/components/ui/button";
 import { useAgents } from "@/composables/use-agents";
 import { useAbortSession } from "@/composables/use-session-actions";
 import { useAutocomplete } from "@/composables/use-autocomplete";
 import { useDraftState } from "@/composables/use-draft-state";
 import { useInputHistory } from "@/composables/use-input-history";
-import { useMessageQueue } from "@/composables/use-message-queue";
+import { useMessageQueue, type QueuedMessage } from "@/composables/use-message-queue";
 import { useIsMobile } from "@/composables/use-media-query";
 import { useSendCommand } from "@/composables/use-send-command";
 import { useRunShellCommand } from "@/composables/use-run-shell-command";
@@ -279,6 +280,22 @@ const sessionStatus = computed<"idle" | "busy" | "waiting_input">(() => {
 
 const canInterrupt = computed(() => sessionStatus.value === "busy" && !isAborting.value);
 
+/**
+ * The session's harness can take a message into a running turn (steer), which the agent reads at its next step. Without
+ * it, a message sent while the agent works only waits in the queue, and nothing offers to send it now.
+ */
+const canSteer = computed(() => {
+  const harnessType = selectedSession.value?.harnessType ?? "opencode";
+  return harnesses.value.find((harness) => harness.type === harnessType)?.capabilities.supportsSteering === true;
+});
+
+/** While a turn runs: Send now (Ctrl+Enter) steers the draft in; Send (Enter) queues it for when the turn ends. */
+const showSendNow = computed(() => canSteer.value && sessionStatus.value === "busy");
+
+/** The Send now button: only for a message to the session's agent, not a shell command or a side question (/btw). */
+const offerSendNowButton = computed(() =>
+  showSendNow.value && !isShellMode.value && !isSideMode.value && parseSideQuestion(draft.text.trim()) === null);
+
 async function handleInterrupt(): Promise<void> {
   if (!canInterrupt.value || !props.instanceId) return;
   try {
@@ -379,7 +396,7 @@ onUnmounted(() => {
   clearPasteError();
 });
 
-const { queue, enqueue } = useMessageQueue(
+const { queue, enqueue, removeAt } = useMessageQueue(
   computed<"idle" | "busy">(() => sessionStatus.value === "idle" ? "idle" : "busy"),
   async (text) => {
     setText(text);
@@ -402,6 +419,31 @@ const { queue, enqueue } = useMessageQueue(
     });
   },
 );
+
+/**
+ * A queued slash command runs as a command when the turn ends, and a queued shell command runs between turns; only a
+ * message can go into the turn.
+ */
+function canSendQueuedNow(item: QueuedMessage): boolean {
+  return showSendNow.value
+    && !parseSlashCommand(item.text)
+    && !(supportsShellCommands.value && isShellDraft(item.text));
+}
+
+/** Takes a queued message out of the queue and steers it into the running turn, leaving the draft alone. */
+function sendQueuedNow(index: number): void {
+  const item = queue.value[index];
+  if (!item || isDisabled.value || !canSendQueuedNow(item)) {
+    return;
+  }
+
+  removeAt(index);
+  if (sendPrompt(undefined, item.text, { steer: true })) {
+    optimisticBusy.value = true;
+    emit("promptSent");
+    trackAction("session.prompt.steer", props.sessionId);
+  }
+}
 
 const textareaRef = useTemplateRef<HTMLTextAreaElement>("textarea");
 const mirrorRef = useTemplateRef<HTMLDivElement>("mirror");
@@ -659,7 +701,7 @@ function handleSideSend(question: string): void {
   });
 }
 
-function sendCurrentDraft(): boolean {
+function sendCurrentDraft(steer = false): boolean {
   const parsedCommand = parseSlashCommand(draft.text);
   if (parsedCommand) {
     return sendCommand(parsedCommand.command, parsedCommand.args);
@@ -672,7 +714,7 @@ function sendCurrentDraft(): boolean {
 
   const attachments: ImageAttachment[] = pendingAttachments.value.map(({ mime, filename, data }) => ({ mime, filename, data }));
   clearAttachments();
-  const sent = sendPrompt(attachments.length > 0 ? attachments : undefined);
+  const sent = sendPrompt(attachments.length > 0 ? attachments : undefined, undefined, steer ? { steer: true } : undefined);
   if (withTerminalLines) {
     if (sent) clearTerminalContexts();
     else setText(typed);
@@ -680,7 +722,11 @@ function sendCurrentDraft(): boolean {
   return sent;
 }
 
-function handleSend(): void {
+/**
+ * Sends the draft. While a turn runs it waits in the queue, unless `steer` asks for it to go into the turn now and the
+ * harness can take it there. A slash command always waits: it runs as a command, not inside the turn.
+ */
+function handleSend(steer = false): void {
   if (isDisabled.value) {
     return;
   }
@@ -709,7 +755,8 @@ function handleSend(): void {
     return;
   }
 
-  if (sessionStatus.value === "busy") {
+  const steering = steer && showSendNow.value && !parseSlashCommand(draft.text);
+  if (sessionStatus.value === "busy" && !steering) {
     enqueue(formatTerminalContext(terminalContexts.value, text));
     clearTerminalContexts();
     setText("");
@@ -720,13 +767,13 @@ function handleSend(): void {
     return;
   }
 
-  if (!sendCurrentDraft()) {
+  if (!sendCurrentDraft(steering)) {
     return;
   }
 
   optimisticBusy.value = true;
   emit("promptSent");
-  trackAction("session.prompt", props.sessionId);
+  trackAction(steering ? "session.prompt.steer" : "session.prompt", props.sessionId);
 
   void nextTick(() => {
     resizeTextarea();
@@ -833,7 +880,8 @@ function handleKeydown(event: KeyboardEvent): void {
   }
 
   event.preventDefault();
-  handleSend();
+  // Ctrl+Enter (Cmd+Enter) sends now, into the running turn, where the harness can take it; Enter queues.
+  handleSend(event.ctrlKey || event.metaKey);
 }
 </script>
 
@@ -850,6 +898,14 @@ function handleKeydown(event: KeyboardEvent): void {
     >
       {{ sendError || pasteError }}
     </div>
+
+    <QueuedMessages
+      v-if="queue.length > 0"
+      :items="queue"
+      :can-send-now="canSendQueuedNow"
+      @send-now="sendQueuedNow"
+      @remove="removeAt"
+    />
 
     <ComposerFrame
       :class="{ 'composer-frame--shell': isShellMode, 'composer-frame--side': isSideMode }"
@@ -1067,24 +1123,33 @@ function handleKeydown(event: KeyboardEvent): void {
         </Button>
 
         <Button
+          v-if="offerSendNowButton"
+          variant="outline"
+          size="sm"
+          class="composer-send-now"
+          data-testid="prompt-send-now-button"
+          title="Send now (Ctrl+Enter): the agent reads it at its next step, without waiting for the turn to end"
+          :disabled="isDisabled || !hasContent"
+          @click="handleSend(true)"
+        >
+          <CornerDownRight
+            class="size-3.5"
+            aria-hidden="true"
+          />
+          Send now
+        </Button>
+        <Button
           variant="default"
           size="toolbar-lg"
           class="composer-frame__send"
           data-testid="prompt-send-button"
-          :aria-label="isShellMode ? 'Run command' : isSideMode ? 'Ask in the side conversation' : 'Send'"
-          :title="isShellMode ? 'Run command' : isSideMode ? 'Ask in the side conversation' : 'Send'"
+          :aria-label="isShellMode ? 'Run command' : isSideMode ? 'Ask in the side conversation' : sessionStatus === 'busy' ? 'Queue' : 'Send'"
+          :title="isShellMode ? 'Run command' : isSideMode ? 'Ask in the side conversation' : sessionStatus === 'busy' ? 'Queue (Enter): sent when the agent finishes' : 'Send'"
           :disabled="isDisabled || !hasContent"
-          @click="handleSend"
+          @click="handleSend()"
         >
           <ArrowUp class="size-4" />
         </Button>
-        <span
-          v-if="queue.length > 0"
-          class="queue-badge"
-          :title="`${queue.length} message(s) queued`"
-        >
-          {{ queue.length }} queued
-        </span>
       </template>
     </ComposerFrame>
 
@@ -1255,10 +1320,10 @@ function handleKeydown(event: KeyboardEvent): void {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
-.queue-badge {
-  font-size: 11px;
-  color: var(--muted);
-  white-space: nowrap;
+.composer-send-now {
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
 }
 
 .terminal-context-strip {

@@ -113,6 +113,8 @@ export interface AccumulatedMessage {
   turnError?: TurnError;
   /** Why the model stopped producing this message (e.g. "stop", "length"), when reported. */
   finish?: string;
+  /** A prompt the user sent into a running turn (steered), which the agent read at its next step. */
+  steered?: boolean;
   /**
    * The slash command a user message came from. Its parts then hold what the harness made of the command (OpenCode's
    * expanded template), which the conversation keeps behind the command.

@@ -82,16 +82,26 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
         await EnsureSuccessAsync(response, "change the session's permissions", ct).ConfigureAwait(false);
     }
 
+    /// <param name="delivery">One of <see cref="OpenCode2Deliveries"/>; <see langword="null"/> leaves it to V2, which steers.</param>
+    /// <remarks>A steered prompt is marked in its metadata, so history can say it went into a running turn.</remarks>
     public async Task PromptAsync(
         string sessionId,
         string text,
         string? messageId,
         IReadOnlyList<OpenCode2PromptFile>? files,
+        string? delivery,
         CancellationToken ct)
     {
         using var response = await http.PostAsJsonAsync(
             $"api/session/{Uri.EscapeDataString(sessionId)}/prompt",
-            new OpenCode2PromptRequest { Id = messageId, Text = text, Files = files is { Count: > 0 } ? files : null },
+            new OpenCode2PromptRequest
+            {
+                Id = messageId,
+                Text = text,
+                Files = files is { Count: > 0 } ? files : null,
+                Delivery = delivery,
+                Metadata = delivery == OpenCode2Deliveries.Steer ? new OpenCode2PromptMetadata { FleetDelivery = delivery } : null,
+            },
             OpenCode2JsonContext.Default.OpenCode2PromptRequest,
             ct).ConfigureAwait(false);
         await EnsureSuccessAsync(response, "send the prompt", ct).ConfigureAwait(false);
@@ -129,6 +139,15 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
         await EnsureSuccessAsync(response, "read the session's messages", ct).ConfigureAwait(false);
         return await response.Content.ReadFromJsonAsync(OpenCode2JsonContext.Default.OpenCode2MessagePage, ct).ConfigureAwait(false)
             ?? new OpenCode2MessagePage();
+    }
+
+    /// <summary>The inputs waiting in the session's inbox: prompts V2 hasn't taken into the conversation yet.</summary>
+    public async Task<IReadOnlyList<OpenCode2InboxItem>> GetInboxAsync(string sessionId, CancellationToken ct)
+    {
+        using var response = await http.GetAsync($"api/session/{Uri.EscapeDataString(sessionId)}/inbox", ct).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, "read the session's inbox", ct).ConfigureAwait(false);
+        var page = await response.Content.ReadFromJsonAsync(OpenCode2JsonContext.Default.OpenCode2InboxPage, ct).ConfigureAwait(false);
+        return page?.Data ?? [];
     }
 
     /// <summary>The session's forms waiting for an answer (the question tool asks with a form).</summary>

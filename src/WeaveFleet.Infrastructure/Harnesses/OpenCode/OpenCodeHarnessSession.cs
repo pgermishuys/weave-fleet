@@ -224,7 +224,16 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         var parts = new List<OpenCodePromptPart>();
         foreach (var note in options?.ModelNotes ?? [])
             parts.Add(new OpenCodePromptTextPart { Text = note, Synthetic = true });
-        parts.Add(new OpenCodePromptTextPart { Text = text });
+
+        // OpenCode reads a prompt sent while a turn runs at the turn's next step: it steers. A queued one arrives only
+        // after the turn, since Fleet holds it until then; the mark tells the two apart in history.
+        parts.Add(new OpenCodePromptTextPart
+        {
+            Text = text,
+            Metadata = options?.Delivery == PromptDelivery.Steer
+                ? new OpenCodePromptPartMetadata { FleetDelivery = OpenCodePromptPartMetadata.Steer }
+                : null,
+        });
 
         if (options?.Attachments is { Count: > 0 } attachments)
         {

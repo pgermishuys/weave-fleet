@@ -3604,6 +3604,7 @@ export interface components {
             userMessageId: null | string;
             correlationId: null | string;
             effort: null | string;
+            delivery?: null | string;
         };
         SessionActionCapabilities: {
             canPrompt: boolean;
