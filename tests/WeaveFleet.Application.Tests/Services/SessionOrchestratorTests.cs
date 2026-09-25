@@ -1631,6 +1631,43 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
         apps.Stopped.ShouldBe(["s-apps"]);
     }
 
+    [Theory]
+    [InlineData("archive", false)]
+    [InlineData("delete", true)]
+    public async Task Deleting_a_session_deletes_its_screenshots_and_archiving_keeps_them(string action, bool deleted)
+    {
+        var screenshots = new WeaveFleet.Application.Tests.Browser.FakeScreenshotStore();
+        var builder = new SessionOrchestratorBuilder().WithSessionScreenshots(screenshots);
+        builder.InstanceRepository.Seed(new Instance
+        {
+            Id = "inst-shots",
+            Directory = "/tmp",
+            Url = string.Empty,
+            Status = "running",
+            CreatedAt = "2026-01-01"
+        });
+        builder.SessionRepository.Seed(new Session
+        {
+            Id = "s-shots",
+            InstanceId = "inst-shots",
+            Title = "Shots",
+            Status = "active",
+            RetentionStatus = "active",
+            Directory = "/tmp",
+            CreatedAt = "2026-01-01"
+        });
+        await screenshots.SaveAsync("s-shots", [1, 2, 3]);
+        var sut = builder.Build();
+
+        var result = action == "archive"
+            ? await sut.ArchiveSessionAsync("s-shots")
+            : await sut.DeleteSessionAsync("s-shots");
+
+        result.IsSuccess.ShouldBeTrue();
+        screenshots.Saved.Count.ShouldBe(deleted ? 0 : 1);
+        screenshots.DeletedSessions.ShouldBe(deleted ? ["s-shots"] : []);
+    }
+
     private sealed class RecordingSessionApps : WeaveFleet.Application.Browser.ISessionAppCleanup
     {
         public List<string> Stopped { get; } = [];

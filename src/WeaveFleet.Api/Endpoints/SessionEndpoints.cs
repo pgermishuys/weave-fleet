@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using WeaveFleet.Api;
+using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Progress;
 using WeaveFleet.Application.Services;
@@ -392,6 +393,30 @@ public static class SessionEndpoints
                 error => Task.FromResult(error.ToSessionApiResult()));
         })
         .WithName("GetSessionFileDiff");
+
+        // GET /api/sessions/{id}/screenshots/{screenshotId} — a screenshot an agent took, for its tool row in the conversation
+        group.MapGet("/{id}/screenshots/{screenshotId}", async (
+            string id,
+            string screenshotId,
+            SessionService sessionService,
+            ISessionScreenshotStore screenshots,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var result = await sessionService.GetSessionAsync(id);
+            return await result.Match<Task<IResult>>(
+                async _ =>
+                {
+                    if (await screenshots.ReadAsync(id, screenshotId, ct) is not { } png)
+                        return Results.NotFound();
+
+                    // A shot never changes under its id, so the browser can keep it for as long as it likes.
+                    http.Response.Headers.CacheControl = "private, max-age=31536000, immutable";
+                    return Results.File(png, "image/png");
+                },
+                error => Task.FromResult(error.ToSessionApiResult()));
+        })
+        .WithName("GetSessionScreenshot");
 
         // GET /api/sessions/{id}/progress — the session's todo list and counts; 204 when there's nothing to show
         group.MapGet("/{id}/progress", async (string id, SessionService sessionService, SessionProgressReader progressReader, CancellationToken ct) =>

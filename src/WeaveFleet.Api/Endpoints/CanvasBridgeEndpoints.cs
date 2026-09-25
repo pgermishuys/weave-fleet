@@ -97,7 +97,10 @@ public static class CanvasBridgeEndpoints
             var attachments = output.Attachments?
                 .Select(file => new CanvasToolAttachmentResponse(file.Mime, file.FileName, Convert.ToBase64String(file.Content)))
                 .ToList();
-            return Results.Ok(new CanvasToolResponse(output.Title, output.Output, new CanvasToolMetadata(output.CanvasId, output.Version), attachments));
+            var screenshot = output.Screenshot is { } shot
+                ? new CanvasToolScreenshotMetadata(shot.SessionId, shot.Id, shot.Width, shot.Height)
+                : null;
+            return Results.Ok(new CanvasToolResponse(output.Title, output.Output, new CanvasToolMetadata(output.CanvasId, output.Version, screenshot), attachments));
         }
 
         var error = new ErrorResponse(result.Error.Message);

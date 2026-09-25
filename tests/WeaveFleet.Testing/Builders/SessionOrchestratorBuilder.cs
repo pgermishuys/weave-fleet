@@ -52,6 +52,7 @@ public sealed class SessionOrchestratorBuilder
     private FleetOptions _options = new();
     private GitDiffService? _gitDiffService;
     private ISessionAppCleanup? _sessionApps;
+    private ISessionScreenshotStore? _sessionScreenshots;
 
     public SessionOrchestratorBuilder WithUserContext(IUserContext userContext)
     {
@@ -74,6 +75,12 @@ public sealed class SessionOrchestratorBuilder
     public SessionOrchestratorBuilder WithSessionApps(ISessionAppCleanup sessionApps)
     {
         _sessionApps = sessionApps;
+        return this;
+    }
+
+    public SessionOrchestratorBuilder WithSessionScreenshots(ISessionScreenshotStore sessionScreenshots)
+    {
+        _sessionScreenshots = sessionScreenshots;
         return this;
     }
 
@@ -144,6 +151,7 @@ public sealed class SessionOrchestratorBuilder
             gitDiffService: _gitDiffService,
             sessionApps: _sessionApps,
             messageRepository: MessageRepository,
-            harnessProfiles: HarnessProfileRepository);
+            harnessProfiles: HarnessProfileRepository,
+            sessionScreenshots: _sessionScreenshots);
     }
 }

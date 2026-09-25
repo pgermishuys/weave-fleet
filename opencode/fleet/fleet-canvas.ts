@@ -229,6 +229,7 @@ export const FleetCanvasPlugin = async () => ({
         "Take one after a change, and again after the fix.",
         "Fleet shoots the page in its own headless browser, so the user's tab doesn't move and nothing is clicked.",
         "A shot costs roughly width × height / 750 tokens of context (about 1,400 for desktop, 500 for phone), so take the ones you'll actually read.",
+        "The user sees each shot in the conversation, under this call: when they ask to see it, point them there. Don't save it or serve it on a page.",
       ].join(" "),
       args: {
         canvasId,

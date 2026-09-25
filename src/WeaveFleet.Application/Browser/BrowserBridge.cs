@@ -14,7 +14,8 @@ public sealed class BrowserBridge(
     BrowserPreviews previews,
     AppRunService apps,
     ICanvasService canvases,
-    IScreenshotter screenshots)
+    IScreenshotter screenshots,
+    ISessionScreenshotStore screenshotStore)
 {
     /// <summary>Long enough for a first <c>dotnet run</c> or <c>npm install</c>-then-serve on a cold machine.</summary>
     public static readonly TimeSpan ReadyTimeout = TimeSpan.FromMinutes(3);
@@ -92,6 +93,7 @@ public sealed class BrowserBridge(
     /// Takes a picture of the page a browser canvas shows and hands it back with the text, so the agent can
     /// look at the UI it just changed. <paramref name="path"/> moves to another page of the same app without
     /// opening a second canvas; the shot is taken off to the side, so what the user is looking at doesn't move.
+    /// Fleet keeps a copy for the conversation, which shows the user the same picture under the tool's row.
     /// </summary>
     public Task<CanvasResult<CanvasToolOutput>> ScreenshotAsync(
         string? bridgeToken,
@@ -125,19 +127,25 @@ public sealed class BrowserBridge(
             if (shot.Image is not { } image)
                 return Invalid(shot.Problem ?? "The screenshot failed.");
 
+            var kept = await screenshotStore.SaveAsync(sessionId, image.Png, ct);
+
             var output = new StringBuilder()
                 .Append("Screenshot of ").Append(target).Append(" at ").Append(width).Append('×').Append(height)
                 .Append(", from ").Append(CanvasText.CanvasName(canvas)).Append('.');
             if (image.Note is { } note)
                 output.Append('\n').Append(note);
             output.Append("\nThe image is attached: look at it, don't guess. Call this again after a change to see it.");
+            // Without this, an agent asked to show the user its screenshot serves the file on a page of its own.
+            if (kept is not null)
+                output.Append("\nThe user sees this screenshot in the conversation, under this call: to show it to them, point them there. Don't save it or serve it on a page.");
 
             return CanvasResult.Ok(new CanvasToolOutput(
                 $"{canvas.Title} · {width}×{height}",
                 output.ToString(),
                 canvas.Id,
                 canvas.Version,
-                [new CanvasToolAttachment("image/png", "screenshot.png", image.Png)]));
+                [new CanvasToolAttachment("image/png", "screenshot.png", image.Png)],
+                kept is null ? null : new ScreenshotReference(sessionId, kept, image.Width, image.Height)));
         }, ct);
 
     /// <summary>The page the canvas shows, or why there isn't one to shoot yet.</summary>

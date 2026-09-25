@@ -112,6 +112,10 @@ public sealed class FleetOptions
     /// <summary>Apps Fleet runs for browser canvases.</summary>
     public BrowserOptions Browser { get; set; } = new();
 
+    /// <summary>Where the screenshots agents take are kept, per session: "screenshots" next to <see cref="DatabasePath"/>.</summary>
+    public string ResolvedScreenshotDirectory
+        => Path.Combine(Path.GetDirectoryName(Path.GetFullPath(DatabasePath)) ?? ".", "screenshots");
+
     // ─── Claude Code ─────────────────────────────────────────────────────────
 
     /// <summary>Claude Code harness configuration.</summary>

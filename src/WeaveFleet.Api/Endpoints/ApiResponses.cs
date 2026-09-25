@@ -316,7 +316,15 @@ public sealed record CanvasToolResponse(
 
 public sealed record CanvasToolAttachmentResponse(string Mime, string FileName, string Base64);
 
-public sealed record CanvasToolMetadata(string? CanvasId, int? Version);
+public sealed record CanvasToolMetadata(
+    string? CanvasId,
+    int? Version,
+    // A screenshot Fleet kept for the conversation. The harness stores metadata with the call and never shows it
+    // to the model, so the tool row finds the picture again after a reload at no cost in tokens.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CanvasToolScreenshotMetadata? Screenshot = null);
+
+/// <summary>Where the conversation fetches a screenshot: <c>GET /api/sessions/{SessionId}/screenshots/{Id}</c>.</summary>
+public sealed record CanvasToolScreenshotMetadata(string SessionId, string Id, int Width, int Height);
 
 /// <summary>Ask for the preview proxy in front of a page on this machine.</summary>
 public sealed record BrowserProxyRequest(string? Url);

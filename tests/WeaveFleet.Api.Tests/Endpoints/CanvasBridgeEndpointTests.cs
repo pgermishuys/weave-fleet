@@ -84,6 +84,25 @@ public sealed class CanvasBridgeEndpointTests : IAsyncLifetime
         attachment.GetProperty("fileName").GetString().ShouldBe("screenshot.png");
         Convert.FromBase64String(attachment.GetProperty("base64").GetString()!).ShouldBe(FakeScreenshotter.Png);
         body.GetProperty("title").GetString().ShouldBe("Shop · 1280×800");
+
+        // Fleet's copy for the conversation, which the tool row finds through the call's metadata.
+        var screenshot = body.GetProperty("metadata").GetProperty("screenshot");
+        screenshot.EnumerateObject().Select(property => property.Name).ShouldBe(["sessionId", "id", "width", "height"]);
+        screenshot.GetProperty("sessionId").GetString().ShouldBe(SessionId);
+        screenshot.GetProperty("width").GetInt32().ShouldBe(1280);
+        screenshot.GetProperty("height").GetInt32().ShouldBe(800);
+        using var scope = _factory!.Services.CreateScope();
+        (await scope.ServiceProvider.GetRequiredService<ISessionScreenshotStore>().ReadAsync(SessionId, screenshot.GetProperty("id").GetString()!))
+            .ShouldBe(FakeScreenshotter.Png);
+    }
+
+    [Fact]
+    public async Task Other_tools_carry_no_screenshot_in_their_metadata()
+    {
+        var response = await PostAsync("open", Token, new { harnessSessionId = HarnessSessionId, kind = "diagram", title = "Flow", state = Flow });
+
+        var metadata = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("metadata");
+        metadata.EnumerateObject().Select(property => property.Name).ShouldBe(["canvasId", "version"]);
     }
 
     [Fact]

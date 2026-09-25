@@ -56,7 +56,8 @@ public sealed partial class SessionOrchestrator(
     IMessageRepository? messageRepository = null,
     SessionRecapService? sessionRecaps = null,
     IHarnessProfileRepository? harnessProfiles = null,
-    SessionNotifier? sessionNotifier = null) : ISessionActivator
+    SessionNotifier? sessionNotifier = null,
+    ISessionScreenshotStore? sessionScreenshots = null) : ISessionActivator
 {
     private readonly DelegationService _delegationService = delegationService;
     private readonly GitDiffService _gitDiffService = gitDiffService ?? new GitDiffService();
@@ -1377,6 +1378,22 @@ public sealed partial class SessionOrchestrator(
         }
     }
 
+    /// <summary>Deletes the screenshots the session's agents took. Best effort: it never fails the caller.</summary>
+    private async Task DeleteScreenshotsAsync(string sessionId, CancellationToken ct)
+    {
+        if (sessionScreenshots is null)
+            return;
+
+        try
+        {
+            await sessionScreenshots.DeleteSessionAsync(sessionId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogScreenshotCleanupFailed(ex, sessionId);
+        }
+    }
+
     /// <summary>Brings an archived session back to the active list. Its conversation is intact; the terminals archiving ended stay gone.</summary>
     public async Task<Result<Unit>> UnarchiveSessionAsync(string id, CancellationToken ct = default)
     {
@@ -1558,6 +1575,9 @@ public sealed partial class SessionOrchestrator(
                 },
                 ct);
         }
+
+        // Only once the session is gone: an archived one keeps its screenshots, since its conversation comes back.
+        await DeleteScreenshotsAsync(id, ct);
 
         // Emit analytics snapshot marking session as stopped
         analyticsCollector.AcceptSessionSnapshot(new SessionSnapshotData(
@@ -2098,6 +2118,9 @@ public sealed partial class SessionOrchestrator(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to stop the apps of session {SessionId}")]
     private partial void LogAppCleanupFailed(Exception ex, string sessionId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to delete the screenshots of session {SessionId}")]
+    private partial void LogScreenshotCleanupFailed(Exception ex, string sessionId);
 
     [LoggerMessage(Level = LogLevel.Error,
         Message = "Failed to retrieve messages for session {SessionId} — returning error result")]
