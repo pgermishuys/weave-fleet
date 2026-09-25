@@ -204,6 +204,21 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
     }
 
     /// <summary>
+    /// Runs a command the user typed in the session's folder. V2 keeps it as a <c>shell</c> message under
+    /// <paramref name="messageId"/>, streams <c>session.shell.started</c> and <c>session.shell.ended</c>, and gives the
+    /// output to the model with the next prompt.
+    /// </summary>
+    public async Task RunShellAsync(string sessionId, string? messageId, string command, CancellationToken ct)
+    {
+        using var response = await http.PostAsJsonAsync(
+            $"api/session/{Uri.EscapeDataString(sessionId)}/shell",
+            new OpenCode2ShellRequest { Id = messageId, Command = command },
+            OpenCode2JsonContext.Default.OpenCode2ShellRequest,
+            ct).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, "run the command", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Answers <paramref name="prompt"/> from the session's conversation without adding to it. It waits for the whole
     /// answer, so it has no request timeout of its own; <paramref name="ct"/> bounds it.
     /// </summary>

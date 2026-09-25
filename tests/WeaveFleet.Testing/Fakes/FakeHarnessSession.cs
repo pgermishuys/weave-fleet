@@ -91,6 +91,20 @@ public sealed class FakeHarnessSession : IHarnessSession
         return Task.FromResult(CommandMessageIdBehavior(options));
     }
 
+    private readonly ConcurrentBag<ShellCommandOptions> _shellCommandCalls = [];
+
+    /// <summary>Records each <see cref="RunShellCommandAsync"/> call for test assertions.</summary>
+    public IReadOnlyList<ShellCommandOptions> ShellCommandCalls => [.. _shellCommandCalls];
+
+    /// <summary>Optional override for <see cref="RunShellCommandAsync"/>, called after the call is recorded.</summary>
+    public Func<ShellCommandOptions, CancellationToken, Task>? RunShellCommandBehavior { get; set; }
+
+    public Task RunShellCommandAsync(ShellCommandOptions options, CancellationToken ct)
+    {
+        _shellCommandCalls.Add(options);
+        return RunShellCommandBehavior?.Invoke(options, ct) ?? Task.CompletedTask;
+    }
+
     public Task StopAsync(CancellationToken ct)
     {
         StopCalled = true;

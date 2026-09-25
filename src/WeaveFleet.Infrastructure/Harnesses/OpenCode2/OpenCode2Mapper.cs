@@ -40,6 +40,12 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
     /// </summary>
     private readonly Dictionary<string, OpenCode2Delegation> _backgroundSubagents = new(StringComparer.Ordinal);
     private readonly HashSet<string> _questions = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The user's shell commands this mapper saw start, by shell id: their message, and when it started. The end
+    /// names only the shell. V2's notice that one finished is for the model; the command's own message shows it.
+    /// </summary>
+    private readonly Dictionary<string, (string MessageId, long Created)> _userShells = new(StringComparer.Ordinal);
     private int _nextStepIndex;
 
     /// <summary>
@@ -82,6 +88,8 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
             "form.created" => QuestionAsked(data),
             "form.replied" or "form.cancelled" => QuestionSettled(data),
             "session.inbox.enqueued" => BackgroundNotice(evt, data),
+            "session.shell.started" => ShellStarted(evt, data),
+            "session.shell.ended" => ShellEnded(evt, data),
             "session.inbox.delivered" => Delivered(data),
             _ => [],
         };
@@ -311,6 +319,10 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
         if (metadata.ValueKind != JsonValueKind.Object || ReadString(metadata, "source") is not ("shell" or SubagentTool))
             return [];
 
+        // The user's own command shows as its own message; this is only V2 passing it to the model.
+        if (IsUserShellNotice(text, metadata) || (ReadString(metadata, "shellID") is { } shellId && _userShells.ContainsKey(shellId)))
+            return [];
+
         return
         [
             Event(EventTypes.MessageUpdated, JsonSerializer.SerializeToElement(
@@ -329,6 +341,113 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
         ];
     }
 
+    /// <summary>
+    /// The text V2 starts its notice of a user's shell command with (<c>POST /api/session/{id}/shell</c>). The notice
+    /// is how the model hears of the command; the user sees the command's own <c>shell</c> message.
+    /// </summary>
+    internal const string UserShellNoticePrefix = "The following shell command was executed by the user";
+
+    /// <summary>Whether a synthetic message is V2 telling the model about a shell command the user ran.</summary>
+    internal static bool IsUserShellNotice(string? text, JsonElement metadata)
+        => metadata.ValueKind == JsonValueKind.Object
+            && ReadString(metadata, "source") == "shell"
+            && text?.StartsWith(UserShellNoticePrefix, StringComparison.Ordinal) == true;
+
+    /// <summary>
+    /// The id V2 gives the message of a shell command it started with <paramref name="evt"/>: the event's own id,
+    /// <c>evt_</c> for <c>msg_</c> (the id Fleet asked for, when it gave one).
+    /// </summary>
+    private static string? ShellMessageId(OpenCode2Event evt)
+        => evt.Id is { Length: > 4 } id && id.StartsWith("evt_", StringComparison.Ordinal) ? "msg_" + id[4..] : null;
+
+    /// <summary>A shell command the user ran started: its message shows the command, running.</summary>
+    private List<HarnessEvent> ShellStarted(OpenCode2Event evt, JsonElement data)
+    {
+        if (!data.TryGetProperty("shell", out var shell)
+            || shell.ValueKind != JsonValueKind.Object
+            || ReadString(shell, "id") is not { } shellId
+            || ShellMessageId(evt) is not { } messageId)
+        {
+            return [];
+        }
+
+        var created = evt.Created ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        _userShells[shellId] = (messageId, created);
+        return ShellCommand(messageId, shellId, created, completed: null, ReadString(shell, "command") ?? string.Empty,
+            status: "running", exit: null, output: null, truncated: null);
+    }
+
+    /// <summary>The command ended: its message shows the output and how it ended.</summary>
+    private List<HarnessEvent> ShellEnded(OpenCode2Event evt, JsonElement data)
+    {
+        if (!data.TryGetProperty("shell", out var shell)
+            || shell.ValueKind != JsonValueKind.Object
+            || ReadString(shell, "id") is not { } shellId
+            || !_userShells.Remove(shellId, out var started))
+        {
+            return [];
+        }
+
+        string? output = null;
+        bool? truncated = null;
+        if (data.TryGetProperty("output", out var o) && o.ValueKind == JsonValueKind.Object)
+        {
+            output = ReadString(o, "output");
+            truncated = o.TryGetProperty("truncated", out var t) && t.ValueKind is JsonValueKind.True or JsonValueKind.False ? t.GetBoolean() : null;
+        }
+
+        return ShellCommand(started.MessageId, shellId, started.Created, evt.Created ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            ReadString(shell, "command") ?? string.Empty, ReadString(shell, "status") ?? "exited", ReadExit(shell), output, truncated);
+    }
+
+    /// <summary>An exit code, when V2 has one: a number, not its <c>"NaN"</c> for a command that didn't exit.</summary>
+    internal static int? ReadExit(JsonElement owner)
+        => owner.TryGetProperty("exit", out var exit) && exit.ValueKind == JsonValueKind.Number && exit.TryGetInt32(out var code)
+            ? code
+            : null;
+
+    /// <summary>
+    /// A user's shell command as Fleet shows it (<see cref="ShellCommands"/>): a message of its own holding one tool
+    /// part, whose input is the command, whose output is what it printed, and whose metadata says how it ended.
+    /// </summary>
+    internal List<HarnessEvent> ShellCommand(
+        string messageId,
+        string shellId,
+        long created,
+        long? completed,
+        string command,
+        string status,
+        int? exit,
+        string? output,
+        bool? truncated)
+    {
+        var running = status == "running";
+        return
+        [
+            Event(EventTypes.MessageUpdated, JsonSerializer.SerializeToElement(
+                new OpenCode2MessageUpdatedPayload
+                {
+                    Info = new OpenCode2MessageInfo
+                    {
+                        Id = messageId,
+                        Role = ShellCommands.Role,
+                        SessionId = fleetSessionId,
+                        Time = new OpenCode2MessageTime { Created = created, Completed = completed },
+                    },
+                },
+                OpenCode2JsonContext.Default.OpenCode2MessageUpdatedPayload)),
+            ToolPart(messageId, shellId, "shell", new OpenCode2ToolPartState
+            {
+                Status = running ? "running" : "completed",
+                Input = JsonSerializer.SerializeToElement(new OpenCode2ShellInput { Command = command }, OpenCode2JsonContext.Default.OpenCode2ShellInput),
+                Output = running ? null : JsonSerializer.SerializeToElement(output ?? string.Empty, OpenCode2JsonContext.Default.String),
+                Metadata = running ? null : JsonSerializer.SerializeToElement(
+                    new OpenCode2ShellMetadata { Exit = exit, Status = status, Truncated = truncated },
+                    OpenCode2JsonContext.Default.OpenCode2ShellMetadata),
+            }),
+        ];
+    }
+
     /// <summary>The events that show a V2 message as it is now, for catching up after the event stream was down.</summary>
     /// <remarks>
     /// Parts carry the same ids as live ones, so they replace what the client has. A message that is still
@@ -344,6 +463,19 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
                 message.Time?.Created ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                 message.Text ?? string.Empty,
                 message.Metadata);
+        }
+
+        // A command the user ran while the stream was down, or one still running: the same message as live.
+        if (message is { Type: "shell", Id: { } shellMessageId, ShellId: { } shellId })
+        {
+            var shellCreated = message.Time?.Created ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            if (message.Status == "running")
+                _userShells[shellId] = (shellMessageId, shellCreated);
+            else
+                _userShells.Remove(shellId);
+            return ShellCommand(shellMessageId, shellId, shellCreated, message.Time?.Completed, message.Command ?? string.Empty,
+                message.Status ?? "exited", message.Exit.ValueKind == JsonValueKind.Number && message.Exit.TryGetInt32(out var code) ? code : null,
+                message.Output?.Output, message.Output?.Truncated);
         }
 
         if (message is not { Type: "assistant", Id: { } messageId })

@@ -58,6 +58,16 @@ public interface IHarnessSession : IAsyncDisposable
     /// </summary>
     Task<string?> SendCommandAsync(CommandOptions options, CancellationToken ct);
 
+    /// <summary>
+    /// Runs a shell command the user typed in the session's folder, without a model turn: the command and its output
+    /// go into the conversation (<see cref="ShellCommands"/>), where the agent sees them on its next turn. Returns
+    /// once the harness has taken the command; it may still be running. Throws <see cref="HarnessBusyException"/>
+    /// when the harness won't run one during a turn. Only for a harness with
+    /// <see cref="HarnessCapabilities.SupportsShellCommands"/>.
+    /// </summary>
+    Task RunShellCommandAsync(ShellCommandOptions options, CancellationToken ct)
+        => throw new NotSupportedException($"{HarnessType} sessions can't run shell commands.");
+
     /// <summary>Abort the current agent operation.</summary>
     Task AbortAsync(CancellationToken ct);
 

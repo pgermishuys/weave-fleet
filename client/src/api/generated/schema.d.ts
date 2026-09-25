@@ -581,6 +581,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{id}/shell": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["RunSessionShellCommand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{id}/retention": {
         parameters: {
             query?: never;
@@ -3474,6 +3490,9 @@ export interface components {
             /** Format: int32 */
             position: number | string;
         };
+        RunShellCommandApiRequest: {
+            command: null | string;
+        };
         SaveHarnessProfileRequest: {
             name: null | string;
             content: null | string;
@@ -5230,6 +5249,30 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SendCommandApiRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RunSessionShellCommand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunShellCommandApiRequest"];
             };
         };
         responses: {

@@ -10,6 +10,7 @@ import type {
   AccumulatedToolPart,
   AccumulatedFilePart,
 } from "@/lib/client-types";
+import { toMessageRole } from "@/lib/shell-commands";
 import type { SlashCommand, TurnError } from "@/lib/domain-events";
 
 /** The slash command carried on a message info, which reaches here as loosely typed data. */
@@ -84,8 +85,7 @@ export function ensureMessage(
   const existing = prev.find((m) => m.messageId === messageId);
   if (existing) return prev;
 
-  const role: "user" | "assistant" =
-    info.role === "user" ? "user" : "assistant";
+  const role = toMessageRole(info.role);
   const modelID = typeof info.modelID === "string"
     ? info.modelID
     : undefined;
@@ -164,10 +164,13 @@ export function mergeMessageUpdate(
   const hasNewTurnError = Boolean(turnError && turnError.message !== existing.turnError?.message);
   const finish = typeof info.finish === "string" ? info.finish : undefined;
   const hasNewFinish = Boolean(finish && finish !== existing.finish);
-  const command = existing.role === "user" ? readCommand(info.command) : undefined;
+  // A part can arrive before its message, which then starts out as the agent's; a shell command says whose it is here.
+  const role = info.role === undefined ? existing.role : toMessageRole(info.role);
+  const hasNewRole = role !== existing.role;
+  const command = role === "user" ? readCommand(info.command) : undefined;
   const hasNewCommand = Boolean(command && (command.name !== existing.command?.name || command.arguments !== existing.command?.arguments));
 
-  if (!hasNewCompletedAt && !hasNewCreatedAt && !hasNewTokens && !hasUpdatedTokens && !hasNewCost && !hasSnapshotParts && !hasNewModelID && !hasNewTurnError && !hasNewFinish && !hasNewCommand) {
+  if (!hasNewCompletedAt && !hasNewCreatedAt && !hasNewTokens && !hasUpdatedTokens && !hasNewCost && !hasSnapshotParts && !hasNewModelID && !hasNewTurnError && !hasNewFinish && !hasNewRole && !hasNewCommand) {
     return prev; // nothing new to merge
   }
 
@@ -180,6 +183,7 @@ export function mergeMessageUpdate(
     ...(hasNewModelID ? { modelID } : {}),
     ...(hasNewTurnError ? { turnError } : {}),
     ...(hasNewFinish ? { finish } : {}),
+    ...(hasNewRole ? { role } : {}),
     ...(hasNewCommand ? { command } : {}),
     tokens: mergedTokens,
     cost: mergedCost,

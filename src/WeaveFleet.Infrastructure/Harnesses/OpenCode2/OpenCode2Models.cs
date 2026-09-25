@@ -174,6 +174,45 @@ internal sealed record OpenCode2Message
     public double? Cost { get; init; }
     public OpenCode2TokenUsage? Tokens { get; init; }
     public OpenCode2StructuredError? Error { get; init; }
+
+    // A `shell` message: a command the user ran (POST /api/session/{id}/shell) and how it ended.
+    [JsonPropertyName("shellID")] public string? ShellId { get; init; }
+    public string? Command { get; init; }
+
+    /// <summary><c>running</c>, <c>exited</c>, <c>timeout</c> or <c>killed</c>.</summary>
+    public string? Status { get; init; }
+
+    /// <summary>The exit code: a number, or V2's <c>"NaN"</c>/<c>"Infinity"</c> when there's none.</summary>
+    public JsonElement Exit { get; init; }
+    public OpenCode2ShellOutput? Output { get; init; }
+}
+
+/// <summary>What a shell command printed (stdout and stderr together), as far as V2 kept it.</summary>
+internal sealed record OpenCode2ShellOutput
+{
+    public string? Output { get; init; }
+    public bool? Truncated { get; init; }
+}
+
+/// <summary>How a user's shell command ended, as the tool part Fleet shows it with carries it.</summary>
+internal sealed record OpenCode2ShellMetadata
+{
+    public int? Exit { get; init; }
+    public string? Status { get; init; }
+    public bool? Truncated { get; init; }
+}
+
+/// <summary>A user's shell command as its tool part's input.</summary>
+internal sealed record OpenCode2ShellInput
+{
+    public required string Command { get; init; }
+}
+
+/// <summary><c>POST /api/session/{id}/shell</c>: a command to run in the session's folder, under a message id of Fleet's.</summary>
+internal sealed record OpenCode2ShellRequest
+{
+    public string? Id { get; init; }
+    public required string Command { get; init; }
 }
 
 /// <summary>An attachment as a user message keeps it (<c>Prompt.FileAttachment</c>): base64 <c>data</c> whatever the source.</summary>
@@ -680,6 +719,9 @@ internal sealed record OpenCode2ErrorBody
 [JsonSerializable(typeof(OpenCode2SwitchAgentRequest))]
 [JsonSerializable(typeof(OpenCode2SwitchModelRequest))]
 [JsonSerializable(typeof(OpenCode2CommandRequest))]
+[JsonSerializable(typeof(OpenCode2ShellRequest))]
+[JsonSerializable(typeof(OpenCode2ShellMetadata))]
+[JsonSerializable(typeof(OpenCode2ShellInput))]
 [JsonSerializable(typeof(OpenCode2GenerateRequest))]
 [JsonSerializable(typeof(OpenCode2MessagePage))]
 [JsonSerializable(typeof(OpenCode2Form))]

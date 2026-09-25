@@ -64,6 +64,10 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(10, "PermissionApprovalFailed"),
             "Failed to auto-approve permission request {RequestId}");
 
+    private static readonly Action<ILogger, string, Exception?> LogShellCommandFailed =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(12, "ShellCommandFailed"),
+            "A shell command in instance {InstanceId} failed after OpenCode took it");
+
     private static readonly Action<ILogger, string, Exception?> LogOffTheRecordForkLeft =
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(11, "OffTheRecordForkLeft"),
             "Could not delete off-the-record fork {ForkId}; the next ask in its directory will remove it");
@@ -474,6 +478,100 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// OpenCode files the command under an agent, which it requires: the session's, else the one a prompt would get.
+    /// It records a user message (<see cref="OpenCodeMapper.ShellCommandMarker"/>) under the id given here and an
+    /// assistant message holding the command as a <c>bash</c> tool part, which Fleet shows as the command's
+    /// (<see cref="OpenCodeMapper.AsShellCommand"/>). OpenCode answers only once the command has finished, and refuses
+    /// one while a turn runs, so this waits just long enough to hear a refusal (<see cref="ShellCommandCall"/>).
+    /// </remarks>
+    public async Task RunShellCommandAsync(ShellCommandOptions options, CancellationToken ct)
+    {
+        var requestedModel = ResolveRequestedModel(options.ProviderId, options.ModelId);
+
+        await EnsureConnectedAsync(requestedModel.ProviderId, requestedModel.ModelId, ct).ConfigureAwait(false);
+        await EnsureSessionAsync(ct).ConfigureAwait(false);
+        await WaitForPostRecoveryEventSubscriptionAsync(_openCodeSessionId!, ct).ConfigureAwait(false);
+
+        var agent = options.Agent is { Length: > 0 } named
+            ? named
+            : await ResolveDefaultAgentAsync(ct).ConfigureAwait(false);
+        var request = new OpenCodeShellRequest
+        {
+            Agent = agent,
+            Command = options.Command,
+            Model = !string.IsNullOrWhiteSpace(requestedModel.ProviderId) && !string.IsNullOrWhiteSpace(requestedModel.ModelId)
+                ? new OpenCodeModelRefRequest { ProviderId = requestedModel.ProviderId!, ModelId = requestedModel.ModelId! }
+                : null,
+            MessageId = options.MessageId,
+        };
+
+        // Known before OpenCode sends the messages, so the reply to this one is shown as the command.
+        if (options.MessageId is { } messageId)
+            RememberShellCommand(messageId);
+
+        var openCodeSessionId = _openCodeSessionId!;
+        await ShellCommandCall.RunUntilTakenAsync(
+            token => _instanceHandle.RunShellAsync(openCodeSessionId, request, token),
+            ex => LogShellCommandFailed(_logger, InstanceId, ex),
+            CancellationToken.None).ConfigureAwait(false);
+    }
+
+    /// <summary>The agent OpenCode would give a prompt that names none; <c>build</c> when it can't say.</summary>
+    private async Task<string> ResolveDefaultAgentAsync(CancellationToken ct)
+    {
+        try
+        {
+            var agents = await _instanceHandle.HttpClient.GetAgentsAsync(_workingDirectory, ct).ConfigureAwait(false);
+            var config = await _instanceHandle.HttpClient.GetConfigDefaultsAsync(_workingDirectory, ct).ConfigureAwait(false);
+            return OpenCodeMapper.DefaultAgent(OpenCodeMapper.ToAgentInfos(agents), config)?.Name ?? "build";
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException)
+        {
+            return "build";
+        }
+    }
+
+    private const int MaxRememberedShellCommands = 1_000;
+
+    /// <summary>
+    /// The user messages OpenCode filed the user's shell commands under. The assistant message answering one holds
+    /// the command, and is shown as the command rather than as the agent's.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, byte> _shellCommandMessages = new(StringComparer.Ordinal);
+
+    private void RememberShellCommand(string userMessageId)
+    {
+        if (_shellCommandMessages.Count >= MaxRememberedShellCommands)
+            _shellCommandMessages.Clear();
+        _shellCommandMessages.TryAdd(userMessageId, 0);
+    }
+
+    /// <summary>
+    /// A user's shell command reaches Fleet as its own message (role <see cref="ShellCommands.Role"/>), not as the
+    /// agent's: the assistant message answering a command's user message is relabelled. A command run some other way
+    /// (from OpenCode's own TUI) is recognised by the user message's marker text, which arrives before the reply.
+    /// </summary>
+    private HarnessEvent MarkShellCommand(HarnessEvent harnessEvent)
+    {
+        if (harnessEvent.Payload is not { } payload)
+            return harnessEvent;
+
+        if (harnessEvent.Type == EventTypes.MessagePartUpdated)
+        {
+            if (OpenCodeMapper.TryReadShellCommandMarker(payload) is { } markedMessageId)
+                RememberShellCommand(markedMessageId);
+            return harnessEvent;
+        }
+
+        return harnessEvent.Type is EventTypes.MessageCreated or EventTypes.MessageUpdated
+            && OpenCodeMapper.TryReadAssistantParentId(payload) is { } parentId
+            && _shellCommandMessages.ContainsKey(parentId)
+                ? OpenCodeMapper.AsShellCommand(harnessEvent)
+                : harnessEvent;
+    }
+
+    /// <inheritdoc />
     public async Task<MessagePage> GetMessagesAsync(MessageQuery? query, CancellationToken ct)
     {
         if (_openCodeSessionId is null)
@@ -556,6 +654,9 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
 
             if (harnessEvent.Type is EventTypes.MessageCreated or EventTypes.MessageUpdated)
                 harnessEvent = await EnrichWithModelInfoWhenMissingAsync(harnessEvent, ct).ConfigureAwait(false);
+
+            if (isParentEvent)
+                harnessEvent = MarkShellCommand(harnessEvent);
 
             if (tokenEvent is not null)
             {

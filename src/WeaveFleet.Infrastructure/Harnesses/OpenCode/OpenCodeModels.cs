@@ -714,6 +714,21 @@ internal sealed record OpenCodeCommandRequest
 }
 
 // ---------------------------------------------------------------------------
+// Shell Request
+// ---------------------------------------------------------------------------
+
+/// <summary>Request body for POST /session/:id/shell: a command the user runs, filed under an agent (required) and model.</summary>
+internal sealed record OpenCodeShellRequest
+{
+    [JsonPropertyName("agent")] public required string Agent { get; init; }
+    [JsonPropertyName("command")] public required string Command { get; init; }
+    [JsonPropertyName("model")] public OpenCodeModelRefRequest? Model { get; init; }
+
+    /// <summary>The id of the user message OpenCode records the command under.</summary>
+    [JsonPropertyName("messageID")] public string? MessageId { get; init; }
+}
+
+// ---------------------------------------------------------------------------
 // Questions
 // ---------------------------------------------------------------------------
 

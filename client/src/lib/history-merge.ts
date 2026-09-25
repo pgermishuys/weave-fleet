@@ -10,6 +10,7 @@ import type {
   AccumulatedTextPart,
   AccumulatedToolPart,
 } from "@/lib/client-types"
+import { toMessageRole } from "@/lib/shell-commands"
 import type { MessageLifecyclePayload, MessageEventPart } from "@/lib/domain-events"
 
 /**
@@ -40,7 +41,7 @@ export function prependHistoryPage(
 }
 
 function convertToAccumulatedMessage(message: MessageLifecyclePayload): AccumulatedMessage {
-  const role: "user" | "assistant" = message.info.role === "user" ? "user" : "assistant"
+  const role = toMessageRole(message.info.role)
   const modelID = typeof message.info.modelID === "string" ? message.info.modelID : undefined
   const parts = message.parts
     .map(convertPart)

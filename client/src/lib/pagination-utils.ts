@@ -6,6 +6,7 @@
  */
 
 import type { AccumulatedMessage, AccumulatedPart } from "@/lib/client-types";
+import { toMessageRole } from "@/lib/shell-commands";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -241,7 +242,7 @@ export function convertFleetMessageToAccumulated(msg: FleetMessage): Accumulated
   return {
     messageId: msg.id,
     sessionId: "",  // Fleet HarnessMessage doesn't carry sessionId — set from context
-    role: msg.role === "user" ? "user" : "assistant",
+    role: toMessageRole(msg.role),
     parts,
     createdAt,
     agent: msg.agent,
@@ -316,7 +317,7 @@ export function convertSDKMessageToAccumulated(msg: SDKMessage): AccumulatedMess
   return {
     messageId: msg.info.id,
     sessionId: msg.info.sessionID,
-    role: msg.info.role === "user" ? ("user" as const) : ("assistant" as const),
+    role: toMessageRole(msg.info.role),
     parts,
     createdAt: msg.info.time?.created,
     completedAt: msg.info.time?.completed,

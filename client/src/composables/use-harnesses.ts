@@ -17,6 +17,29 @@ export function refreshAllHarnesses(): void {
   harnessesChanged.value++;
 }
 
+function fetchHarnessList() {
+  return api.GET("/api/harnesses");
+}
+
+/**
+ * The request every list on screen shares while it runs. A page mounts many lists at once (one per session row), and
+ * the server answers them one at a time, so separate requests left the last list waiting seconds for its answer.
+ */
+let sharedRequest: { generation: number; answer: ReturnType<typeof fetchHarnessList> } | undefined;
+
+/** The list's answer: the request already running for this change, or a new one (always, when `fresh`). */
+function requestHarnessList(fresh: boolean): ReturnType<typeof fetchHarnessList> {
+  if (fresh || sharedRequest?.generation !== harnessesChanged.value) {
+    const entry = { generation: harnessesChanged.value, answer: fetchHarnessList() };
+    sharedRequest = entry;
+    const forget = () => {
+      if (sharedRequest === entry) sharedRequest = undefined;
+    };
+    entry.answer.then(forget, forget);
+  }
+  return sharedRequest!.answer;
+}
+
 export function useHarnesses(): UseHarnessesResult {
   const harnesses = ref<HarnessInfo[]>([]);
   const isLoading = shallowRef(true);
@@ -25,13 +48,13 @@ export function useHarnesses(): UseHarnessesResult {
   /** Numbers each fetch, so a slow older answer can't overwrite a newer one (checks overlap while an update runs). */
   let latestRequest = 0;
 
-  async function fetchHarnesses(): Promise<void> {
+  async function fetchHarnesses(fresh = false): Promise<void> {
     const request = ++latestRequest;
     isLoading.value = true;
     error.value = undefined;
 
     try {
-      const { data, error, response } = await api.GET("/api/harnesses");
+      const { data, error, response } = await requestHarnessList(fresh);
       if (request !== latestRequest) return;
       if (error || !response.ok) {
         const payload = error as { error?: string } | undefined;
@@ -55,6 +78,6 @@ export function useHarnesses(): UseHarnessesResult {
     harnesses: readonly(harnesses),
     isLoading: readonly(isLoading),
     error: readonly(error),
-    refresh: fetchHarnesses,
+    refresh: () => fetchHarnesses(true),
   };
 }
