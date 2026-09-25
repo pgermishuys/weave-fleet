@@ -26,6 +26,10 @@ const props = defineProps<Props>()
   width: 100%;
   height: 100%;
   border: none;
+  /* Pages without a background of their own expect a white one. */
   background: white;
+  /* Same as the browser canvas: keep Fleet's dark scheme off the frame, or
+     a dark page shows its light text on the white above. */
+  color-scheme: light;
 }
 </style>
