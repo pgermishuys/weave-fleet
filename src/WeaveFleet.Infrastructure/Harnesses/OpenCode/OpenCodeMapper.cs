@@ -34,6 +34,11 @@ internal static class OpenCodeMapper
 
         foreach (var part in msg.Parts)
         {
+            // Synthetic text in a user message was never the user's: OpenCode's own notes, and Fleet's notes to the
+            // model (PromptOptions.ModelNotes). The model reads them; the conversation doesn't show them.
+            if (msg.Info is OpenCodeUserMessage && part is OpenCodeTextPart { Synthetic: true })
+                continue;
+
             var mapped = MapPart(part);
             if (mapped is not null)
                 parts.Add(mapped);

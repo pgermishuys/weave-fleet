@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, shallowRef, ref, useTemplateRef, watch } from "vue";
 import { storeToRefs } from "pinia";
-import { ArrowUp, Paperclip, SquareTerminal, X, CircleX } from "lucide-vue-next";
+import { ArrowUp, Paperclip, SquareTerminal, X, CircleX, MessageCircleQuestionMark } from "lucide-vue-next";
 import AutocompletePopup from "@/components/session/AutocompletePopup.vue";
 import ComposerFrame from "@/components/session/ComposerFrame.vue";
 import ImageLightbox from "@/components/session/ImageLightbox.vue";
@@ -18,16 +18,18 @@ import { useMessageQueue } from "@/composables/use-message-queue";
 import { useIsMobile } from "@/composables/use-media-query";
 import { useSendCommand } from "@/composables/use-send-command";
 import { useRunShellCommand } from "@/composables/use-run-shell-command";
+import { useSideConversation, type SideQuestionChoice } from "@/composables/use-side-conversation";
 import { useHarnesses } from "@/composables/use-harnesses";
 import { useModels } from "@/composables/use-models";
 import { useDraftAttachments } from "@/composables/use-draft-attachments";
 import { useDraftTerminalContext } from "@/composables/use-draft-terminal-context";
-import { describeSessionDefaults } from "@/lib/agent-model-choice";
+import { describeSessionDefaults, modelFromKey } from "@/lib/agent-model-choice";
 import { formatTerminalContext, terminalLineRange } from "@/lib/format-terminal-context";
 import { splitDraftReferences } from "@/lib/composer-references";
 import { useSendPrompt } from "@/composables/use-send-prompt";
 import { parseSlashCommand } from "@/lib/slash-command-utils";
 import { isShellDraft, shellDraftCommand } from "@/lib/shell-commands";
+import { parseSideQuestion, SIDE_QUESTION_COMMAND } from "@/lib/side-conversation";
 import { trackAction } from "@/lib/track-action";
 import { useSessionsStore } from "@/stores/sessions";
 import type { ImageAttachment } from "@/lib/client-types";
@@ -58,6 +60,9 @@ const { canSend, error: sendPromptError, sendPrompt } = useSendPrompt(props.sess
 const { error: sendCommandError, sendCommand } = useSendCommand(props.sessionId);
 const { error: shellCommandError, runShellCommand } = useRunShellCommand(props.sessionId);
 const { harnesses, isLoading: harnessesLoading } = useHarnesses();
+const sideConversation = useSideConversation(() => props.sessionId);
+/** A `/btw` refused before it reached the server (nothing after it). */
+const sideDraftError = shallowRef<string | undefined>(undefined);
 const inputHistory = useInputHistory(props.sessionId);
 const historyEl = ref<HTMLElement | null>(null);
 
@@ -69,7 +74,11 @@ const localDisabledOverride = shallowRef<boolean | null>(null);
 const statusIndicatorVisible = shallowRef(false);
 const statusIndicatorPhase = shallowRef<"thinking" | "responding">("thinking");
 const statusIndicatorDotCount = shallowRef(1);
-const sendError = computed(() => shellCommandError.value ?? sendCommandError.value ?? sendPromptError.value);
+const sendError = computed(() => sideDraftError.value
+  ?? sideConversation.error.value
+  ?? shellCommandError.value
+  ?? sendCommandError.value
+  ?? sendPromptError.value);
 let disabledStateObserver: MutationObserver | null = null;
 let statusIndicatorTimer: ReturnType<typeof setTimeout> | null = null;
 let statusIndicatorDotsTimer: ReturnType<typeof setInterval> | null = null;
@@ -198,8 +207,38 @@ const supportsShellCommands = computed(() => {
   return harnesses.value.find((harness) => harness.type === harnessType)?.capabilities.supportsShellCommands === true;
 });
 
+/** The session's harness can fork it for a side conversation (`/btw`); the `/` popup offers it only then. */
+const supportsSideConversations = computed(() => {
+  const harnessType = selectedSession.value?.harnessType ?? "opencode";
+  return harnesses.value.find((harness) => harness.type === harnessType)?.capabilities.supportsSideConversations === true;
+});
+
+/**
+ * The side conversation (`/btw`) is open above the composer: what's typed goes to it, not to the session, which carries
+ * on undisturbed. Minimizing or closing it returns the composer to the session.
+ */
+const isSideMode = computed(() => sideConversation.isOpen.value);
+
+// Each side keeps its own draft: minimizing puts away what was typed for the side conversation and brings back what
+// was typed for the session, and opening it does the reverse. Only when one side conversation changes mode (minimize,
+// open, discard, Undo), not when one first loads.
+watch(
+  () => [sideConversation.side.value?.sessionId ?? sideConversation.discarded.value?.sessionId ?? null, isSideMode.value] as const,
+  ([sideId, sideMode], [previousSideId, previousSideMode]) => {
+    if (!sideId || sideId !== previousSideId || sideMode === previousSideMode) return;
+    const drafts = sideConversation.drafts.value;
+    if (sideMode) {
+      drafts.main = draft.text;
+      setText(drafts.side);
+    } else {
+      drafts.side = draft.text;
+      setText(drafts.main);
+    }
+  },
+);
+
 /** A draft that starts with `!` is a shell command to run in the session's folder, not a prompt. */
-const isShellMode = computed(() => supportsShellCommands.value && isShellDraft(draft.text));
+const isShellMode = computed(() => supportsShellCommands.value && !isSideMode.value && isShellDraft(draft.text));
 
 /**
  * A `!` draft while the harness list is still loading: it may be a command, so it isn't sent as a prompt until the
@@ -403,6 +442,7 @@ const autocomplete = useAutocomplete({
   sessionId: computed(() => props.sessionId),
   inputRef: textareaRef,
   cursorPosition,
+  fleetCommands: computed(() => supportsSideConversations.value ? [SIDE_QUESTION_COMMAND] : []),
 });
 const draftSegments = computed(() => isShellMode.value
   ? [{ text: draft.text }]
@@ -584,6 +624,41 @@ async function runShellDraft(): Promise<boolean> {
   return ran;
 }
 
+/** The agent, model and effort picked in the composer, for a side question; none picked means the session's own. */
+function sideQuestionChoice(): SideQuestionChoice {
+  const model = modelFromKey(draft.modelId);
+  return {
+    agent: draft.agentId || undefined,
+    model: model ?? undefined,
+    effort: draft.effort !== "medium" ? draft.effort : undefined,
+  };
+}
+
+/**
+ * Sends a side question: `/btw <question>`, or anything typed while the side conversation is open. It never waits for
+ * the session's turn, which it doesn't touch. The draft clears at once and comes back if the server refuses it.
+ */
+function handleSideSend(question: string): void {
+  if (!question) {
+    sideDraftError.value = "Type a question after /btw.";
+    return;
+  }
+
+  trackAction("session.side_question", props.sessionId);
+  const typed = draft.text;
+  const text = terminalContexts.value.length > 0 ? formatTerminalContext(terminalContexts.value, question) : question;
+  clearTerminalContexts();
+  setText("");
+  void sideConversation.ask(text, sideQuestionChoice()).then((asked) => {
+    if (!asked && draft.text.length === 0) setText(typed);
+  });
+
+  void nextTick(() => {
+    resizeTextarea();
+    textareaRef.value?.focus();
+  });
+}
+
 function sendCurrentDraft(): boolean {
   const parsedCommand = parseSlashCommand(draft.text);
   if (parsedCommand) {
@@ -620,6 +695,14 @@ function handleSend(): void {
   }
 
   inputHistory.push(text);
+  sideDraftError.value = undefined;
+  sideConversation.clearError();
+
+  const sideQuestion = parseSideQuestion(text);
+  if (sideQuestion !== null || isSideMode.value) {
+    handleSideSend(sideQuestion ?? text);
+    return;
+  }
 
   if (isShellMode.value) {
     handleShellSend(text);
@@ -769,7 +852,7 @@ function handleKeydown(event: KeyboardEvent): void {
     </div>
 
     <ComposerFrame
-      :class="{ 'composer-frame--shell': isShellMode }"
+      :class="{ 'composer-frame--shell': isShellMode, 'composer-frame--side': isSideMode }"
       :dragging="isDragging"
       @dragover="handleDragOver"
       @dragleave="handleDragLeave"
@@ -836,7 +919,7 @@ function handleKeydown(event: KeyboardEvent): void {
           :value="draft.text"
           :disabled="isDisabled"
           rows="1"
-          placeholder="Type a message…"
+          :placeholder="isSideMode ? 'Ask a follow-up in the side conversation…' : 'Type a message…'"
           @input="handleInput"
           @keydown="handleKeydown"
           @keyup="handleCursorPositionChange"
@@ -933,7 +1016,20 @@ function handleKeydown(event: KeyboardEvent): void {
           <span class="composer-shell-mode__hint">Runs in the session's folder, no model turn · Esc for a prompt</span>
         </span>
         <template v-else>
+          <span
+            v-if="isSideMode"
+            class="composer-side-mode"
+            data-testid="composer-side-mode"
+            title="Goes to the side conversation above, not the session. Close it to talk to the session again."
+          >
+            <MessageCircleQuestionMark
+              class="composer-side-mode__icon"
+              aria-hidden="true"
+            />
+            <span>btw</span>
+          </span>
           <Button
+            v-else
             variant="toolbar-icon"
             size="toolbar"
             title="Attach image"
@@ -975,8 +1071,8 @@ function handleKeydown(event: KeyboardEvent): void {
           size="toolbar-lg"
           class="composer-frame__send"
           data-testid="prompt-send-button"
-          :aria-label="isShellMode ? 'Run command' : 'Send'"
-          :title="isShellMode ? 'Run command' : 'Send'"
+          :aria-label="isShellMode ? 'Run command' : isSideMode ? 'Ask in the side conversation' : 'Send'"
+          :title="isShellMode ? 'Run command' : isSideMode ? 'Ask in the side conversation' : 'Send'"
           :disabled="isDisabled || !hasContent"
           @click="handleSend"
         >
@@ -1038,6 +1134,31 @@ function handleKeydown(event: KeyboardEvent): void {
 .composer-frame--shell,
 .composer-frame--shell:focus-within {
   border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
+}
+
+/* Side mode: the draft goes to the side conversation docked above, so the frame takes its colour. */
+.composer-frame--side,
+.composer-frame--side:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
+}
+
+.composer-side-mode {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--radius-btn);
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.composer-side-mode__icon {
+  width: 13px;
+  height: 13px;
 }
 
 .composer-shell-mode {

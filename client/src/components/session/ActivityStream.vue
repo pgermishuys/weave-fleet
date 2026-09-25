@@ -31,6 +31,7 @@ import { mergeMessagesByTimestamp } from "@/lib/merge-messages";
 import { workflowMessageKey, workflowMessageLabel } from "@/lib/workflows";
 import { useWorkflowsStore } from "@/stores/workflows";
 import { toShellCommandView, type ShellCommandView } from "@/lib/shell-commands";
+import { messagesAfter } from "@/lib/side-conversation";
 
 interface ImageAttachmentDisplay {
   url: string;
@@ -73,6 +74,16 @@ interface ActivityMessage {
 
 const props = defineProps<{
   sessionId: string;
+  /**
+   * For a side conversation (`/btw`): the newest message it copied from its session. Only what came after it shows,
+   * and older history isn't offered.
+   */
+  after?: string | null;
+}>();
+
+const emit = defineEmits<{
+  /** Whether a turn is running, and the newest reply's text: a side conversation's tab shows both while it's folded. */
+  progress: [progress: { working: boolean; latestAnswer: string | null }];
 }>();
 
 const router = useRouter();
@@ -89,9 +100,11 @@ const selectedSession = computed(() => {
   return sessions.value.find((session) => session.session.id === props.sessionId) ?? null;
 });
 
-const { messages: sessionMessages, delegations, sessionStatus, hasMore, isLoadingOlder, isPartial, loadOlder } = useSessionStream(
-  computed(() => props.sessionId),
-);
+const stream = useSessionStream(computed(() => props.sessionId));
+const { delegations, sessionStatus, isLoadingOlder, isPartial, loadOlder } = stream;
+const sessionMessages = computed(() => messagesAfter(stream.messages.value, props.after));
+/** A side conversation's older messages are its session's, which it doesn't show. */
+const hasMore = computed(() => stream.hasMore.value && sessionMessages.value.length === stream.messages.value.length);
 // Names for the model ids the messages carry; the catalog belongs to the session on screen.
 const { models } = useModels(() => props.sessionId);
 const { sentPrompts } = useSentPrompts(props.sessionId);
@@ -469,6 +482,30 @@ watch(
 );
 
 const isStreaming = computed(() => isStreamWorking(sessionStatus.value));
+
+const latestAnswer = computed<string | null>(() => {
+  for (let index = sessionMessages.value.length - 1; index >= 0; index -= 1) {
+    const message = sessionMessages.value[index];
+    if (message.role !== "assistant") continue;
+    const body = messageBody(message).trim();
+    if (body) return body;
+  }
+  return null;
+});
+
+// Once its snapshot has loaded: before that (the stream starts out empty and not loading), no answer isn't news.
+let snapshotLoading = false;
+watch(
+  [isStreaming, latestAnswer, () => stream.isLoading.value],
+  ([working, answer, loading]) => {
+    if (loading) {
+      snapshotLoading = true;
+    } else if (snapshotLoading) {
+      emit("progress", { working, latestAnswer: answer });
+    }
+  },
+  { immediate: true },
+);
 // The turn is stopped on a question, a sub-agent's or its own: the header and the session row say so, and so
 // does the line that otherwise says Working.
 const isWaitingForInput = computed(() =>

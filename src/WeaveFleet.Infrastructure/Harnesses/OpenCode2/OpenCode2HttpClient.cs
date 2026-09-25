@@ -219,6 +219,40 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
     }
 
     /// <summary>
+    /// Forks the session: a new child session holding its history before message <paramref name="before"/>, or all of
+    /// it when that's null.
+    /// </summary>
+    public async Task<OpenCode2SessionInfo> ForkSessionAsync(string sessionId, string? before, CancellationToken ct)
+    {
+        using var response = await http.PostAsJsonAsync(
+            $"api/session/{Uri.EscapeDataString(sessionId)}/fork",
+            new OpenCode2ForkRequest { Before = before },
+            OpenCode2JsonContext.Default.OpenCode2ForkRequest,
+            ct).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, "fork the session", ct).ConfigureAwait(false);
+
+        var body = await response.Content.ReadFromJsonAsync(
+            OpenCode2JsonContext.Default.OpenCode2EnvelopeOpenCode2SessionInfo, ct).ConfigureAwait(false);
+        return body?.Data is { Id: { Length: > 0 } } session
+            ? session
+            : throw new InvalidOperationException("OpenCode 2 forked the session but didn't say the fork's id.");
+    }
+
+    /// <summary>
+    /// Adds text for the model to the session, without starting a turn: the next prompt takes it along. V2 keeps it as a
+    /// <c>synthetic</c> message, which the conversation doesn't show.
+    /// </summary>
+    public async Task AddSyntheticAsync(string sessionId, string text, CancellationToken ct)
+    {
+        using var response = await http.PostAsJsonAsync(
+            $"api/session/{Uri.EscapeDataString(sessionId)}/synthetic",
+            new OpenCode2SyntheticRequest { Text = text, Resume = false },
+            OpenCode2JsonContext.Default.OpenCode2SyntheticRequest,
+            ct).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, "add a note for the model", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Answers <paramref name="prompt"/> from the session's conversation without adding to it. It waits for the whole
     /// answer, so it has no request timeout of its own; <paramref name="ct"/> bounds it.
     /// </summary>

@@ -57,5 +57,32 @@ public sealed class Session
     /// </summary>
     public bool WorkflowUserFinishes { get; set; }
 
+    /// <summary>
+    /// The session this one is a side conversation of (<c>/btw</c>): a fork of it, shown only in its conversation panel
+    /// and left out of every list. Null for every other session.
+    /// </summary>
+    public string? SideOfSessionId { get; set; }
+
+    /// <summary>
+    /// For a side conversation, the newest message it copied from its session; what comes after it is the side
+    /// conversation's own. Null when it copied nothing.
+    /// </summary>
+    public string? SideBoundaryMessageId { get; set; }
+
+    /// <summary>
+    /// The session started as a side conversation and was kept as a session of its own. Its history still has the side
+    /// conversation's notes to the model, so its prompts carry one that lifts them.
+    /// </summary>
+    public bool KeptFromSide { get; set; }
+
+    /// <summary>A side conversation folded into its tab on the composer; the composer talks to its session meanwhile.</summary>
+    public bool SideMinimized { get; set; }
+
+    /// <summary>
+    /// When the user discarded this side conversation. It's gone from its session at once and deleted once the undo
+    /// window has passed; Undo clears it. Null for one that wasn't discarded.
+    /// </summary>
+    public string? SideDiscardedAt { get; set; }
+
     public List<string> Tags { get; set; } = [];
 }

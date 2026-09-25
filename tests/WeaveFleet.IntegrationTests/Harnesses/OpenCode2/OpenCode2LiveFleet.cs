@@ -272,6 +272,8 @@ internal static class LlmRequest
 
     public static string? LastUserText(string request) => Texts(request, "user").LastOrDefault();
 
+    public static List<string> UserTexts(string request) => Texts(request, "user");
+
     public static string System(string request) => string.Join("\n", Texts(request, "system"));
 
     /// <summary>The latest tool result, when the request answers a tool call.</summary>

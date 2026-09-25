@@ -215,6 +215,7 @@ public static class DependencyInjection
             sp.GetRequiredService<ILogger<SessionScreenshotStore>>()));
         services.AddSingleton<ISessionScreenshotStore>(sp => sp.GetRequiredService<SessionScreenshotStore>());
         services.AddHostedService<SessionScreenshotCleanupService>();
+        services.AddHostedService<SideConversationSweeper>();
         services.AddScoped<BrowserPreviews>();
         services.AddScoped<BrowserBridge>();
         services.AddSingleton<IBackgroundUserScope, BackgroundUserScope>();

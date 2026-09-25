@@ -76,6 +76,49 @@ public sealed class InMemorySessionRepository : ISessionRepository
         return Task.FromResult(_store.Values.FirstOrDefault(s => s.OpencodeSessionId == harnessSessionId));
     }
 
+    public Task<Session?> GetSideConversationAsync(string sessionId)
+        => Task.FromResult(_store.Values
+            .Where(s => s.SideOfSessionId == sessionId && s.SideDiscardedAt is null)
+            .OrderByDescending(s => s.CreatedAt, StringComparer.Ordinal)
+            .FirstOrDefault());
+
+    public Task<Session?> GetDiscardedSideConversationAsync(string sessionId)
+        => Task.FromResult(_store.Values
+            .Where(s => s.SideOfSessionId == sessionId && s.SideDiscardedAt is not null)
+            .OrderByDescending(s => s.SideDiscardedAt, StringComparer.Ordinal)
+            .FirstOrDefault());
+
+    public Task<IReadOnlyList<Session>> ListSideConversationsAsync(string sessionId)
+        => Task.FromResult<IReadOnlyList<Session>>([.. _store.Values.Where(s => s.SideOfSessionId == sessionId)]);
+
+    public Task<IReadOnlyList<Session>> ListSideConversationsDiscardedBeforeAsync(string cutoff)
+        => Task.FromResult<IReadOnlyList<Session>>([.. _store.Values.Where(s =>
+            s.SideOfSessionId is not null && s.SideDiscardedAt is not null && string.CompareOrdinal(s.SideDiscardedAt, cutoff) < 0)]);
+
+    public Task SetSideConversationStateAsync(string id, bool minimized, string? discardedAt)
+    {
+        if (_store.TryGetValue(id, out var session))
+        {
+            session.SideMinimized = minimized;
+            session.SideDiscardedAt = discardedAt;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task KeepSideConversationAsync(string id, string workspaceId)
+    {
+        if (_store.TryGetValue(id, out var session))
+        {
+            session.WorkspaceId = workspaceId;
+            session.SideOfSessionId = null;
+            session.IsHidden = false;
+            session.KeptFromSide = true;
+        }
+
+        return Task.CompletedTask;
+    }
+
     public Task<IReadOnlyList<Session>> ListAsync(int limit = 100, int offset = 0, IReadOnlyList<string>? statuses = null, string? projectId = null)
         => ListAsync(limit, offset, statuses, projectId, retentionStatuses: null, tags: null);
 
@@ -94,7 +137,7 @@ public sealed class InMemorySessionRepository : ISessionRepository
             query = query.Where(s => retentionStatuses.Contains(s.RetentionStatus));
         if (tags is { Count: > 0 })
             query = query.Where(s => s.Tags.Any(t => tags.Contains(t)));
-        query = query.Where(s => s.ParentSessionId is null);
+        query = query.Where(s => s.ParentSessionId is null && s.SideOfSessionId is null);
         IReadOnlyList<Session> result = [.. query.Skip(offset).Take(limit)];
         return Task.FromResult(result);
     }

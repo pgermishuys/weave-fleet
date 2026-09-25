@@ -9,6 +9,27 @@ public interface ISessionRepository
     Task InsertAsync(IDbConnection connection, IDbTransaction? transaction, Session session);
     Task<Session?> GetByIdAsync(string id);
     Task<Session?> GetByHarnessIdAsync(string harnessSessionId);
+
+    /// <summary>The side conversation open on session <paramref name="sessionId"/> (<c>/btw</c>), if there is one.</summary>
+    Task<Session?> GetSideConversationAsync(string sessionId);
+
+    /// <summary>The side conversation of session <paramref name="sessionId"/> discarded most recently, still in its undo window.</summary>
+    Task<Session?> GetDiscardedSideConversationAsync(string sessionId);
+
+    /// <summary>Every side conversation of session <paramref name="sessionId"/>, discarded ones included.</summary>
+    Task<IReadOnlyList<Session>> ListSideConversationsAsync(string sessionId);
+
+    /// <summary>Every owner's side conversations discarded before <paramref name="cutoff"/> (ISO 8601): past their undo window.</summary>
+    Task<IReadOnlyList<Session>> ListSideConversationsDiscardedBeforeAsync(string cutoff);
+
+    /// <summary>Sets whether side conversation <paramref name="id"/> is minimized, and when it was discarded (null: it wasn't).</summary>
+    Task SetSideConversationStateAsync(string id, bool minimized, string? discardedAt);
+
+    /// <summary>
+    /// Makes side conversation <paramref name="id"/> a session of its own, listed like any other, in workspace
+    /// <paramref name="workspaceId"/>.
+    /// </summary>
+    Task KeepSideConversationAsync(string id, string workspaceId);
     Task<IReadOnlyList<Session>> ListAsync(int limit = 100, int offset = 0, IReadOnlyList<string>? statuses = null, string? projectId = null);
     Task<IReadOnlyList<Session>> ListAsync(int limit, int offset, IReadOnlyList<string>? statuses, string? projectId, IReadOnlyList<string>? retentionStatuses);
     Task<IReadOnlyList<Session>> ListAsync(int limit, int offset, IReadOnlyList<string>? statuses, string? projectId, IReadOnlyList<string>? retentionStatuses, IReadOnlyList<string>? tags);

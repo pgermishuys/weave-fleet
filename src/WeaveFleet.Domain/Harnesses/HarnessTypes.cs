@@ -66,6 +66,14 @@ public sealed record HarnessCapabilities
     /// its next turn.
     /// </summary>
     public bool SupportsShellCommands { get; init; }
+
+    /// <summary>
+    /// A session can fork into a side conversation (<c>/btw</c> in the composer):
+    /// <see cref="IHarnessSession.ForkSideConversationAsync"/> copies the conversation up to its last finished turn into
+    /// a new harness session, which Fleet runs as a hidden session of its own beside the first. Prompts to it carry
+    /// <see cref="PromptOptions.ModelNotes"/>, which the harness gives the model without showing them as the user's.
+    /// </summary>
+    public bool SupportsSideConversations { get; init; }
 }
 
 /// <summary>What a shell command the user ran from the composer looks like in the conversation.</summary>
@@ -372,7 +380,25 @@ public sealed record PromptOptions
     public IReadOnlyList<HarnessAttachment>? Attachments { get; init; }
     public string? Effort { get; init; }
     public string? MessageId { get; init; }
+
+    /// <summary>
+    /// Text Fleet sends with the prompt for the model alone: the harness passes it on as its own words, not the
+    /// user's, and the conversation doesn't show it. Only for a harness with
+    /// <see cref="HarnessCapabilities.SupportsSideConversations"/>; others ignore it.
+    /// </summary>
+    public IReadOnlyList<string>? ModelNotes { get; init; }
 }
+
+/// <summary>
+/// A side conversation's start (<see cref="IHarnessSession.ForkSideConversationAsync"/>): a harness session holding a
+/// copy of the conversation up to its last finished turn.
+/// </summary>
+/// <param name="ResumeToken">The new harness session, which Fleet resumes as the side conversation's session.</param>
+/// <param name="BoundaryMessageId">
+/// The newest message the fork copied, under the fork's own id; the side conversation is what comes after it. Null when
+/// the fork copied nothing.
+/// </param>
+public sealed record SideConversationFork(string ResumeToken, string? BoundaryMessageId);
 
 /// <summary>A shell command the user runs in the session's folder (see <see cref="HarnessCapabilities.SupportsShellCommands"/>).</summary>
 public sealed record ShellCommandOptions

@@ -491,6 +491,78 @@ public static class SessionEndpoints
         })
         .WithName("RunSessionShellCommand");
 
+        // GET /api/sessions/{id}/side — the side conversation open on the session (/btw), or 204 when there is none.
+        group.MapGet("/{id}/side", async (string id, SessionOrchestrator orchestrator) =>
+        {
+            var result = await orchestrator.GetSideConversationAsync(id);
+            return result.Match(
+                side => side is null ? Results.NoContent() : Results.Ok(SideConversationResponse.Of(side)),
+                err => err.ToSessionApiResult());
+        })
+        .Produces<SideConversationResponse>(200)
+        .WithName("GetSideConversation");
+
+        // POST /api/sessions/{id}/side — ask a side question (/btw): in the open side conversation, or a new fork of the
+        // session at its last finished turn. The session itself isn't prompted. The answer arrives as the side
+        // conversation's events (topic session:{sideConversation.sessionId}).
+        group.MapPost("/{id}/side", async (string id, SideQuestionApiRequest req, SessionOrchestrator orchestrator, SessionService sessionService, InstanceTracker tracker, HttpContext http, CancellationToken ct) =>
+        {
+            // A side question is the user's aside; agents talk to sessions with fleet_message.
+            if (http.IsAgentRequest())
+                return Results.Json(new ErrorResponse("Side conversations are for the user."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
+
+            // The side conversation runs on the session's harness process, so the session's models are its models.
+            var modelResolution = await ResolveSessionModelAsync(id, req.Model, sessionService, tracker, ct);
+            if (modelResolution.ErrorResult is not null)
+                return modelResolution.ErrorResult;
+
+            var options = req.Agent is not null || req.Model is not null || req.Effort is not null
+                ? new PromptOptions { Agent = req.Agent, ProviderId = modelResolution.ProviderId, ModelId = modelResolution.ModelId, Effort = req.Effort }
+                : null;
+            var result = await orchestrator.AskSideQuestionAsync(id, req.Text, options, req.CorrelationId, ct);
+            return result.Match(
+                r => Results.Ok(new SideQuestionApiResponse(SideConversationResponse.Of(r.SideConversation), r.Prompt.CorrelationId, r.Prompt.MessageId)),
+                err => err.ToSessionApiResult());
+        })
+        .Produces<SideQuestionApiResponse>(200)
+        .WithName("AskSideQuestion");
+
+        // DELETE /api/sessions/{id}/side — discard the side conversation: gone at once, its fork deleted once the undo
+        // window has passed (POST .../side/restore brings it back until then). 204 when there was none too.
+        group.MapDelete("/{id}/side", async (string id, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        {
+            var result = await orchestrator.CloseSideConversationAsync(id, ct);
+            return result.Match(_ => Results.NoContent(), err => err.ToSessionApiResult());
+        })
+        .WithName("CloseSideConversation");
+
+        // POST /api/sessions/{id}/side/restore — Undo a discard, within its window: the side conversation comes back as it was.
+        group.MapPost("/{id}/side/restore", async (string id, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        {
+            var result = await orchestrator.RestoreSideConversationAsync(id, ct);
+            return result.Match(side => Results.Ok(SideConversationResponse.Of(side)), err => err.ToSessionApiResult());
+        })
+        .Produces<SideConversationResponse>(200)
+        .WithName("RestoreSideConversation");
+
+        // PUT /api/sessions/{id}/side/minimized — fold the side conversation into its tab on the composer, or open it.
+        group.MapPut("/{id}/side/minimized", async (string id, SideMinimizedApiRequest req, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        {
+            var result = await orchestrator.SetSideConversationMinimizedAsync(id, req.Minimized, ct);
+            return result.Match(side => Results.Ok(SideConversationResponse.Of(side)), err => err.ToSessionApiResult());
+        })
+        .Produces<SideConversationResponse>(200)
+        .WithName("SetSideConversationMinimized");
+
+        // POST /api/sessions/{id}/side/keep — keep the side conversation as a session of its own, listed like any other.
+        group.MapPost("/{id}/side/keep", async (string id, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        {
+            var result = await orchestrator.KeepSideConversationAsync(id, ct);
+            return result.Match(side => Results.Ok(SideConversationResponse.Of(side)), err => err.ToSessionApiResult());
+        })
+        .Produces<SideConversationResponse>(200)
+        .WithName("KeepSideConversation");
+
         // DELETE /api/sessions/{id}
         group.MapDelete("/{id}", async (string id, SessionService sessionService) =>
         {
@@ -1004,6 +1076,30 @@ internal sealed record SendCommandApiRequest(
     ModelRef? Model);
 
 internal sealed record RunShellCommandApiRequest(string? Command);
+
+internal sealed record SideQuestionApiRequest(
+    string? Text,
+    string? Agent,
+    ModelRef? Model,
+    string? Effort,
+    string? CorrelationId);
+
+/// <summary>A side conversation (<c>/btw</c>): a hidden session of its own, shown after message <c>BoundaryMessageId</c>.</summary>
+internal sealed record SideConversationResponse(
+    string SessionId,
+    string InstanceId,
+    string Title,
+    string? BoundaryMessageId,
+    string CreatedAt,
+    bool Minimized)
+{
+    public static SideConversationResponse Of(Session side)
+        => new(side.Id, side.InstanceId, side.Title, side.SideBoundaryMessageId, side.CreatedAt, side.SideMinimized);
+}
+
+internal sealed record SideMinimizedApiRequest(bool Minimized);
+
+internal sealed record SideQuestionApiResponse(SideConversationResponse SideConversation, string CorrelationId, string? MessageId);
 
 internal sealed record QuestionAnswerApiRequest(IReadOnlyList<IReadOnlyList<string>> Answers);
 

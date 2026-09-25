@@ -68,6 +68,15 @@ public interface IHarnessSession : IAsyncDisposable
     Task RunShellCommandAsync(ShellCommandOptions options, CancellationToken ct)
         => throw new NotSupportedException($"{HarnessType} sessions can't run shell commands.");
 
+    /// <summary>
+    /// Copies the conversation up to its last finished turn into a new harness session, for a side conversation
+    /// (<c>/btw</c>). A turn still running isn't copied: the fork would carry on with it instead of answering. The
+    /// session itself is left as it is. Null when the harness can't. Only for a harness with
+    /// <see cref="HarnessCapabilities.SupportsSideConversations"/>.
+    /// </summary>
+    Task<SideConversationFork?> ForkSideConversationAsync(CancellationToken ct)
+        => Task.FromResult<SideConversationFork?>(null);
+
     /// <summary>Abort the current agent operation.</summary>
     Task AbortAsync(CancellationToken ct);
 

@@ -5,6 +5,7 @@ import Composer from "@/components/session/Composer.vue";
 import type { SessionListItem } from "@/api/client";
 import { createModelSelectionKey } from "@/composables/use-models";
 import { addDraftTerminalContext, clearDraftTerminalContext } from "@/composables/use-draft-terminal-context";
+import { _resetSideConversationsForTesting, useSideConversation } from "@/composables/use-side-conversation";
 
 vi.mock("@/api/client", () => ({
   api: {
@@ -718,5 +719,237 @@ describe("Composer shell commands", () => {
 
     expect((textarea.element as HTMLTextAreaElement).value).toBe("!git status");
     expect(wrapper.get("[data-testid='send-prompt-error']").text()).toBe("The agent is working. Run the command when its turn ends.");
+  });
+});
+
+describe("Composer side questions (/btw)", () => {
+  const harnesses = [
+    { type: "opencode", displayName: "OpenCode", available: true, userEnabled: true, capabilities: { supportsSideConversations: true } },
+    { type: "claude-code", displayName: "Claude Code", available: true, userEnabled: true, capabilities: { supportsSideConversations: false } },
+  ];
+  const side = {
+    sessionId: "side-1",
+    instanceId: "instance-side",
+    title: "btw: what changed?",
+    boundaryMessageId: "msg_boundary",
+    createdAt: "2026-09-25T00:00:00Z",
+    minimized: false,
+  };
+
+  function pressKey(element: Element, key: string): KeyboardEvent {
+    const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+    element.dispatchEvent(event);
+    return event;
+  }
+
+  function sideCalls() {
+    return (mockApi.POST.mock.calls as unknown as [string, unknown][]).filter(([url]) => url === "/api/sessions/{id}/side");
+  }
+
+  function respondToSide(response: Response, data?: unknown, error?: unknown): void {
+    const fallback = mockApi.POST.getMockImplementation() as unknown as (url: string, init?: unknown) => Promise<unknown>;
+    mockApi.POST.mockImplementation((async (url: string, init?: unknown) => {
+      if (url === "/api/sessions/{id}/side") {
+        return { data, error, response };
+      }
+      return fallback(url, init);
+    }) as never);
+  }
+
+  function withOpenSideConversation(): void {
+    const fallback = mockApi.GET.getMockImplementation() as unknown as (url: string, init?: unknown) => Promise<unknown>;
+    mockApi.GET.mockImplementation((async (url: string, init?: unknown) => {
+      if (url === "/api/sessions/{id}/side") {
+        return { data: side, error: undefined, response: new Response(null, { status: 200 }) };
+      }
+      return fallback(url, init);
+    }) as never);
+  }
+
+  beforeEach(() => {
+    _resetSideConversationsForTesting();
+    mockApi.GET.mockReset();
+    mockApi.POST.mockReset();
+    configureApiFetch();
+    const fallback = mockApi.GET.getMockImplementation() as unknown as (url: string, init?: unknown) => Promise<unknown>;
+    mockApi.GET.mockImplementation((async (url: string, init?: unknown) => {
+      if (url === "/api/harnesses") {
+        return { data: harnesses, error: undefined, response: new Response() };
+      }
+      if (url === "/api/sessions/{id}/side") {
+        return { data: undefined, error: undefined, response: new Response(null, { status: 204 }) };
+      }
+      return fallback(url, init);
+    }) as never);
+    respondToSide(new Response(), { sideConversation: side, correlationId: "c-1", messageId: "msg_question" });
+    useDraftState("session-1", { agentId: "", modelId: "" }).resetText();
+  });
+
+  it("asks /btw <question> in the side conversation, not the session, even while the session works", async () => {
+    const wrapper = mountComposer({ session: createSession({ activityStatus: "busy" }) });
+    await flushPromises();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+
+    await textarea.setValue("/btw what changed?");
+    pressKey(textarea.element, "Enter");
+    await flushPromises();
+
+    expect(sideCalls()).toHaveLength(1);
+    expect(sideCalls()[0][1]).toEqual(expect.objectContaining({
+      params: { path: { id: "session-1" } },
+      body: expect.objectContaining({ text: "what changed?" }),
+    }));
+    expect(mockApi.POST).not.toHaveBeenCalledWith("/api/sessions/{id}/prompt", expect.anything());
+    expect(mockApi.POST).not.toHaveBeenCalledWith("/api/sessions/{id}/command", expect.anything());
+    expect(wrapper.find(".queue-badge").exists()).toBe(false);
+    expect((textarea.element as HTMLTextAreaElement).value).toBe("");
+    // The composer now talks to the side conversation.
+    expect(wrapper.find("[data-testid='composer-side-mode']").exists()).toBe(true);
+  });
+
+  it("sends what's typed to the open side conversation", async () => {
+    withOpenSideConversation();
+    const wrapper = mountComposer();
+    await flushPromises();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+
+    expect(wrapper.find("[data-testid='composer-side-mode']").exists()).toBe(true);
+    expect(textarea.attributes("placeholder")).toBe("Ask a follow-up in the side conversation…");
+
+    await textarea.setValue("and the tests?");
+    pressKey(textarea.element, "Enter");
+    await flushPromises();
+
+    expect(sideCalls()).toHaveLength(1);
+    expect(sideCalls()[0][1]).toEqual(expect.objectContaining({ body: expect.objectContaining({ text: "and the tests?" }) }));
+    expect(mockApi.POST).not.toHaveBeenCalledWith("/api/sessions/{id}/prompt", expect.anything());
+  });
+
+  it("asks for a question after a bare /btw", async () => {
+    const wrapper = mountComposer();
+    await flushPromises();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+
+    await textarea.setValue("/btw");
+    await wrapper.get("[data-testid='prompt-send-button']").trigger("click");
+    await flushPromises();
+
+    expect(sideCalls()).toHaveLength(0);
+    expect(wrapper.get("[data-testid='send-prompt-error']").text()).toBe("Type a question after /btw.");
+  });
+
+  it("puts a refused question back and says why", async () => {
+    respondToSide(new Response(null, { status: 400 }), undefined, { error: "Claude Code sessions can't fork, so /btw isn't available here." });
+    const wrapper = mountComposer({ session: createSession({ harnessType: "claude-code" }) });
+    await flushPromises();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+
+    await textarea.setValue("/btw what changed?");
+    pressKey(textarea.element, "Enter");
+    await flushPromises();
+
+    expect((textarea.element as HTMLTextAreaElement).value).toBe("/btw what changed?");
+    expect(wrapper.get("[data-testid='send-prompt-error']").text()).toBe("Claude Code sessions can't fork, so /btw isn't available here.");
+    expect(wrapper.find("[data-testid='composer-side-mode']").exists()).toBe(false);
+    expect(mockApi.POST).not.toHaveBeenCalledWith("/api/sessions/{id}/command", expect.anything());
+  });
+
+  it("lists /btw in the / popup only for a harness that can fork", async () => {
+    const wrapper = mountComposer();
+    await flushPromises();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+    await textarea.setValue("/");
+    (textarea.element as HTMLTextAreaElement).setSelectionRange(1, 1);
+    await textarea.trigger("keyup");
+    await flushPromises();
+
+    const labels = wrapper.findAll(".autocomplete-popup__item").map((item) => item.text());
+    expect(labels[0]).toContain("/btw");
+    expect(labels[0]).toContain("Ask a side question without disturbing the session");
+
+    wrapper.unmount();
+    const other = mountComposer({ session: createSession({ harnessType: "claude-code" }) });
+    await flushPromises();
+    const otherTextarea = other.get("[data-testid='prompt-input']");
+    await otherTextarea.setValue("/");
+    (otherTextarea.element as HTMLTextAreaElement).setSelectionRange(1, 1);
+    await otherTextarea.trigger("keyup");
+    await flushPromises();
+
+    expect(other.findAll(".autocomplete-popup__item").map((item) => item.text()).join(" ")).not.toContain("/btw");
+  });
+});
+
+describe("Composer with a minimized side conversation", () => {
+  const harnesses = [
+    { type: "opencode", displayName: "OpenCode", available: true, userEnabled: true, capabilities: { supportsSideConversations: true } },
+  ];
+  const side = {
+    sessionId: "side-1",
+    instanceId: "instance-side",
+    title: "btw: what changed?",
+    boundaryMessageId: "msg_boundary",
+    createdAt: "2026-09-25T00:00:00Z",
+    minimized: true,
+  };
+
+  function pressKey(element: Element, key: string): void {
+    element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  }
+
+  beforeEach(() => {
+    _resetSideConversationsForTesting();
+    mockApi.GET.mockReset();
+    mockApi.POST.mockReset();
+    mockApi.PUT.mockReset();
+    configureApiFetch();
+    const fallback = mockApi.GET.getMockImplementation() as unknown as (url: string, init?: unknown) => Promise<unknown>;
+    mockApi.GET.mockImplementation((async (url: string, init?: unknown) => {
+      if (url === "/api/harnesses") return { data: harnesses, error: undefined, response: new Response() };
+      if (url === "/api/sessions/{id}/side") return { data: side, error: undefined, response: new Response(null, { status: 200 }) };
+      return fallback(url, init);
+    }) as never);
+    mockApi.PUT.mockImplementation((async (_url: string, init: { body: { minimized: boolean } }) =>
+      ({ data: { ...side, minimized: init.body.minimized }, error: undefined, response: new Response() })) as never);
+    useDraftState("session-side", { agentId: "", modelId: "" }).resetText();
+  });
+
+  it("sends to the session, looking like the plain composer", async () => {
+    const wrapper = mountComposer({ sessionId: "session-side" });
+    await flushPromises();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+
+    expect(wrapper.find("[data-testid='composer-side-mode']").exists()).toBe(false);
+    expect(textarea.attributes("placeholder")).toBe("Type a message…");
+
+    await textarea.setValue("carry on");
+    pressKey(textarea.element, "Enter");
+    await flushPromises();
+
+    expect(mockApi.POST).toHaveBeenCalledWith("/api/sessions/{id}/prompt", expect.anything());
+    expect(mockApi.POST).not.toHaveBeenCalledWith("/api/sessions/{id}/side", expect.anything());
+    wrapper.unmount();
+  });
+
+  it("keeps each side's draft when the side conversation opens and folds", async () => {
+    const wrapper = mountComposer({ sessionId: "session-side" });
+    await flushPromises();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+    const { setMinimized } = useSideConversation("session-side");
+
+    await textarea.setValue("for the session");
+    await setMinimized(false);
+    await flushPromises();
+    expect(wrapper.find("[data-testid='composer-side-mode']").exists()).toBe(true);
+    expect((textarea.element as HTMLTextAreaElement).value).toBe("");
+
+    await textarea.setValue("for the side");
+    await setMinimized(true);
+    await flushPromises();
+    expect((textarea.element as HTMLTextAreaElement).value).toBe("for the session");
+
+    await setMinimized(false);
+    await flushPromises();
+    expect((textarea.element as HTMLTextAreaElement).value).toBe("for the side");
   });
 });

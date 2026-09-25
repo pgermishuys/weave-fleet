@@ -378,6 +378,22 @@ internal sealed record OpenCode2ToolContent
     public string? Name { get; init; }
 }
 
+/// <summary><c>POST /api/session/{id}/fork</c>: a child session holding the history before <see cref="Before"/> (all of it when null).</summary>
+internal sealed record OpenCode2ForkRequest
+{
+    public string? Before { get; init; }
+}
+
+/// <summary>
+/// <c>POST /api/session/{id}/synthetic</c>: text for the model that isn't the user's. With <see cref="Resume"/> false it
+/// waits in the session for the next prompt instead of starting a turn.
+/// </summary>
+internal sealed record OpenCode2SyntheticRequest
+{
+    public required string Text { get; init; }
+    public bool Resume { get; init; }
+}
+
 /// <summary><c>POST /api/session/{id}/prompt</c>. <see cref="Id"/> names the user message, so it matches Fleet's own.</summary>
 internal sealed record OpenCode2PromptRequest
 {
@@ -720,6 +736,8 @@ internal sealed record OpenCode2ErrorBody
 [JsonSerializable(typeof(OpenCode2SwitchModelRequest))]
 [JsonSerializable(typeof(OpenCode2CommandRequest))]
 [JsonSerializable(typeof(OpenCode2ShellRequest))]
+[JsonSerializable(typeof(OpenCode2ForkRequest))]
+[JsonSerializable(typeof(OpenCode2SyntheticRequest))]
 [JsonSerializable(typeof(OpenCode2ShellMetadata))]
 [JsonSerializable(typeof(OpenCode2ShellInput))]
 [JsonSerializable(typeof(OpenCode2GenerateRequest))]
