@@ -4,6 +4,7 @@ import { storeToRefs } from "pinia";
 import { ArrowUp, Paperclip, SquareTerminal, X, CircleX } from "lucide-vue-next";
 import AutocompletePopup from "@/components/session/AutocompletePopup.vue";
 import ComposerFrame from "@/components/session/ComposerFrame.vue";
+import ImageLightbox from "@/components/session/ImageLightbox.vue";
 import AgentSelector from "@/components/session/AgentSelector.vue";
 import ModelSelector from "@/components/session/ModelSelector.vue";
 import EffortToggle from "@/components/session/EffortToggle.vue";
@@ -882,28 +883,10 @@ function handleKeydown(event: KeyboardEvent): void {
       </template>
     </ComposerFrame>
 
-    <Teleport to="body">
-      <div
-        v-if="lightboxUrl"
-        class="lightbox-overlay"
-        @click="lightboxUrl = null"
-      >
-        <img
-          :src="lightboxUrl"
-          alt="Image preview"
-          class="lightbox-image"
-          @click.stop
-        >
-        <button
-          type="button"
-          class="lightbox-close"
-          title="Close preview"
-          @click="lightboxUrl = null"
-        >
-          <X class="lightbox-close__icon" />
-        </button>
-      </div>
-    </Teleport>
+    <ImageLightbox
+      :src="lightboxUrl"
+      @close="lightboxUrl = null"
+    />
   </section>
 </template>
 
@@ -1161,53 +1144,5 @@ function handleKeydown(event: KeyboardEvent): void {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
-}
-</style>
-
-<style>
-.lightbox-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.8);
-  cursor: pointer;
-}
-
-.lightbox-image {
-  max-width: 90vw;
-  max-height: 90vh;
-  border-radius: 0;
-  object-fit: contain;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-  cursor: default;
-}
-
-.lightbox-close {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.15);
-  color: #fff;
-  cursor: pointer;
-}
-
-.lightbox-close:hover {
-  background: rgba(255, 255, 255, 0.25);
-}
-
-.lightbox-close__icon {
-  width: 20px;
-  height: 20px;
 }
 </style>
