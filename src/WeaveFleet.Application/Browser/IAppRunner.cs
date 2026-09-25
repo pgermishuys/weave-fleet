@@ -94,6 +94,9 @@ public interface IAppRunner
 
     AppRunSnapshot? Find(string appId);
 
+    /// <summary>Whether a live run listens on <paramref name="port"/> (its app's ports, not its dev tools').</summary>
+    bool IsAppPort(int port);
+
     /// <summary>The newest live run of <paramref name="command"/> in this session.</summary>
     AppRunSnapshot? FindActive(string sessionId, string command);
 

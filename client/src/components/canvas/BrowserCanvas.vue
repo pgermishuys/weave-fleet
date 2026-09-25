@@ -2,9 +2,10 @@
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from "vue";
 import { ArrowLeft, ArrowRight, ExternalLink, Play, RotateCcw, RotateCw, ScrollText, Square } from "lucide-vue-next";
 import { apiFetch } from "@/lib/api-client";
+import { fetchServerCanvases } from "@/composables/use-server-canvases";
 import { onReconnect } from "@/composables/use-weave-socket";
 import { appAddress, navMessage, readBridgeMessage, type NavAction, type PreviewHmr } from "@/lib/preview-bridge";
-import { currentRunLines, useAppRunsStore } from "@/stores/app-runs";
+import { addressForPort, currentRunLines, useAppRunsStore } from "@/stores/app-runs";
 import { serverCanvasTabId, useCanvasesStore } from "@/stores/canvases";
 
 /**
@@ -169,6 +170,28 @@ function onMessage(event: MessageEvent): void {
     case "update":
       pulse();
       return;
+    case "open":
+      void openLink(message.href, message.newTab);
+      return;
+  }
+}
+
+/**
+ * A link on the page to another address on Fleet's machine. Followed in the frame it would leave the preview (and
+ * from another device reach nothing), so it opens through Fleet: a new tab like the + menu's, or this one.
+ */
+async function openLink(href: string, newTab: boolean): Promise<void> {
+  if (!newTab) {
+    void show(href);
+    return;
+  }
+  try {
+    const canvasId = await appRuns.openAddress(props.sessionId, href);
+    canvases.setServerCanvases(props.sessionId, await fetchServerCanvases(props.sessionId));
+    canvases.activate(props.sessionId, serverCanvasTabId(canvasId));
+  } catch {
+    // Fleet wouldn't open a tab for it: this one still can.
+    void show(href);
   }
 }
 
@@ -222,7 +245,7 @@ function openOutside(): void {
 
 function pickPort(event: Event): void {
   const port = Number((event.target as HTMLSelectElement).value);
-  if (Number.isFinite(port)) void show(`http://localhost:${port}/`);
+  if (Number.isFinite(port)) void show(addressForPort(port, app.value?.printedUrls ?? []));
 }
 
 async function loadApp(): Promise<void> {

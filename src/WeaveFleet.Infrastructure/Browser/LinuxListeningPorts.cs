@@ -2,26 +2,35 @@ using System.Globalization;
 
 namespace WeaveFleet.Infrastructure.Browser;
 
-/// <summary>Ports a process tree listens on: the app's, and its dev tools' (see <see cref="LinuxListeningPorts.ForProcessTree"/>).</summary>
+/// <summary>Ports a run's processes listen on: the app's, and its dev tools' (see <see cref="LinuxListeningPorts.ForRun"/>).</summary>
 internal sealed record TreePorts(IReadOnlyList<int> App, IReadOnlyList<int> Helper)
 {
     public static readonly TreePorts None = new([], []);
 }
 
 /// <summary>
-/// The TCP ports a process and its descendants listen on, read from <c>/proc</c>: socket inodes from each
-/// process's <c>fd</c> links, matched against the LISTEN rows of <c>/proc/net/tcp</c> and <c>tcp6</c>.
-/// Works for any framework, since it doesn't depend on what the process prints. Empty on other platforms.
+/// The TCP ports a run's processes listen on, read from <c>/proc</c>: socket inodes from each process's
+/// <c>fd</c> links, matched against the LISTEN rows of <c>/proc/net/tcp</c> and <c>tcp6</c>. Works for any
+/// framework, since it doesn't depend on what the process prints. Empty on other platforms.
 /// </summary>
 internal static class LinuxListeningPorts
 {
+    /// <summary>
+    /// The variable Fleet sets to the run's id. A process keeps the environment it started with, so this finds
+    /// the run's processes that left its tree: an orchestrator that detaches (Aspire's DCP, which then starts
+    /// the dashboard and every service) is reparented to init, but still carries it.
+    /// </summary>
+    public const string RunMarker = "FLEET_APP_RUN";
+
     private const string ListenState = "0A";
 
     /// <summary>
-    /// The ports the tree listens on. Ports of dev tools that serve no page themselves (<c>dotnet watch</c>'s
-    /// browser-refresh servers) come back as <see cref="TreePorts.Helper"/>, apart from the app's.
+    /// The ports the run listens on: the process tree under <paramref name="rootPid"/>, and any process of this
+    /// user that carries <see cref="RunMarker"/> set to <paramref name="runId"/>. Ports of dev tools that serve
+    /// no page themselves (<c>dotnet watch</c>'s browser-refresh servers) come back as
+    /// <see cref="TreePorts.Helper"/>, apart from the app's.
     /// </summary>
-    public static TreePorts ForProcessTree(int rootPid)
+    public static TreePorts ForRun(int rootPid, string runId)
     {
         if (!OperatingSystem.IsLinux())
             return TreePorts.None;
@@ -30,7 +39,7 @@ internal static class LinuxListeningPorts
         {
             var inodes = new HashSet<long>();
             var helperInodes = new HashSet<long>();
-            foreach (var pid in ProcessTree(rootPid))
+            foreach (var pid in RunProcesses(rootPid, $"{RunMarker}={runId}"))
                 AddSocketInodes(pid, IsHelper(pid) ? helperInodes : inodes);
 
             if (inodes.Count == 0 && helperInodes.Count == 0)
@@ -97,8 +106,25 @@ internal static class LinuxListeningPorts
         return fields.Length > 1 && int.TryParse(fields[1], NumberStyles.None, CultureInfo.InvariantCulture, out var parent) ? parent : null;
     }
 
-    private static List<int> ProcessTree(int rootPid)
+    /// <summary>Whether a <c>/proc/{pid}/environ</c> (NUL-separated) holds exactly <paramref name="entry"/>.</summary>
+    internal static bool HasEnvironmentEntry(string environ, string entry)
+        => environ.Split('\0').Contains(entry, StringComparer.Ordinal);
+
+    private static bool CarriesMarker(int pid, string entry)
     {
+        try
+        {
+            return HasEnvironmentEntry(File.ReadAllText($"/proc/{pid}/environ"), entry);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false; // Another user's process, or it ended while we looked.
+        }
+    }
+
+    private static List<int> RunProcesses(int rootPid, string marker)
+    {
+        var pids = new List<int>();
         var children = new Dictionary<int, List<int>>();
         foreach (var dir in Directory.EnumerateDirectories("/proc"))
         {
@@ -115,6 +141,7 @@ internal static class LinuxListeningPorts
                 continue; // The process ended while we looked.
             }
 
+            pids.Add(pid);
             if (ParentPid(stat) is { } parent)
             {
                 if (!children.TryGetValue(parent, out var list))
@@ -130,6 +157,8 @@ internal static class LinuxListeningPorts
                 tree.AddRange(list);
         }
 
+        var inTree = tree.ToHashSet();
+        tree.AddRange(pids.Where(pid => !inTree.Contains(pid) && CarriesMarker(pid, marker)));
         return tree;
     }
 

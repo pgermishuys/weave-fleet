@@ -10,6 +10,14 @@ describe("preview bridge v1", () => {
     expect(readBridgeMessage({ fleet: 1, type: "update" })).toEqual({ type: "update" });
   });
 
+  it("reads a link the page wants opened, in this tab unless it says a new one", () => {
+    expect(readBridgeMessage({ fleet: 1, type: "open", href: "http://localhost:5199/", newTab: true }))
+      .toEqual({ type: "open", href: "http://localhost:5199/", newTab: true });
+    expect(readBridgeMessage({ fleet: 1, type: "open", href: "http://localhost:5199/" }))
+      .toEqual({ type: "open", href: "http://localhost:5199/", newTab: false });
+    expect(readBridgeMessage({ fleet: 1, type: "open", newTab: true })).toBeNull();
+  });
+
   it("takes a hot-reload client it doesn't know as none", () => {
     expect(readBridgeMessage({ fleet: 1, type: "hello", hmr: "parcel", href: "http://p:1/" })).toMatchObject({ hmr: "none" });
   });

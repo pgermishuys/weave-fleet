@@ -4,6 +4,7 @@
 //   to the canvas    { fleet: 1, type: "hello", hmr, href, title }   once per page load
 //                    { fleet: 1, type: "location", href, title }     after every navigation
 //                    { fleet: 1, type: "update" }                    the page's hot reload applied a change
+//                    { fleet: 1, type: "open", href, newTab }        a link to another address on Fleet's machine
 //   from the canvas  { fleet: 1, type: "nav", action: "back" | "forward" | "reload" }
 // Both sides ignore types and versions they don't know, so later types don't break older pages.
 // `hmr` names the page's hot-reload client: vite, next, bun, webpack, dotnet-watch or none.
@@ -90,6 +91,60 @@
     FleetSocket.CLOSED = 3;
     window.WebSocket = FleetSocket;
   }
+
+  // Another address on Fleet's machine: another port (Aspire's dashboard links each service), or the app's own
+  // address written out in full. Followed as it is, it leaves the preview, and from another device "localhost"
+  // is that device. The canvas opens it through Fleet instead.
+  var LOOPBACK_HOST = /^(localhost|[a-z0-9-]+\.localhost|127(\.\d{1,3}){3}|\[::1\]|0\.0\.0\.0|\[::\])$/i;
+
+  function elsewhereOnMachine(href) {
+    var url;
+    try {
+      url = new URL(href, location.href);
+    } catch (e) {
+      return null;
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    return url.origin !== location.origin && LOOPBACK_HOST.test(url.hostname) ? url.href : null;
+  }
+
+  // The link clicked, found through shadow roots too (web components render their own anchors).
+  function linkOf(event) {
+    var path = event.composedPath ? event.composedPath() : [event.target];
+    for (var i = 0; i < path.length; i++) {
+      var node = path[i];
+      if (node && node.nodeName === "A" && node.href && !node.hasAttribute("download")) return node;
+    }
+    return null;
+  }
+
+  function opensNewTab(link, event) {
+    var target = (link.getAttribute("target") || "").toLowerCase();
+    return event.button === 1 || event.ctrlKey || event.metaKey || event.shiftKey
+      || (target !== "" && target !== "_self" && target !== "_parent" && target !== "_top");
+  }
+
+  // After the page's own handlers: a click the app handled itself (a router, a menu) is left to it.
+  function onLinkClick(event) {
+    if (event.defaultPrevented || event.button > 1) return;
+    var link = linkOf(event);
+    var href = link && elsewhereOnMachine(link.href);
+    if (!href) return;
+    event.preventDefault();
+    send("open", { href: href, newTab: opensNewTab(link, event) });
+  }
+  addEventListener("click", onLinkClick);
+  addEventListener("auxclick", onLinkClick);
+
+  var nativeOpen = window.open;
+  window.open = function (url) {
+    var href = url === undefined || url === null ? null : elsewhereOnMachine(String(url));
+    // Only for a click or a key press, as a browser allows a pop-up: a page can't open tabs on its own.
+    var activated = !navigator.userActivation || navigator.userActivation.isActive;
+    if (!href || !activated) return nativeOpen.apply(window, arguments);
+    send("open", { href: href, newTab: true });
+    return null;
+  };
 
   function isStyle(node) {
     return !!node && (node.nodeName === "STYLE" || (node.nodeName === "LINK" && /stylesheet/i.test(node.rel || "")));

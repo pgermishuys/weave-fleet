@@ -50,6 +50,8 @@ internal sealed class FakeAppRunner : IAppRunner
 
     public AppRunSnapshot? Find(string appId) => _runs.GetValueOrDefault(appId);
 
+    public bool IsAppPort(int port) => _runs.Values.Any(run => run.IsLive && run.Ports.Contains(port));
+
     public AppRunSnapshot? FindActive(string sessionId, string command)
         => _runs.Values.LastOrDefault(run => run.SessionId == sessionId && run.Command == command && run.IsLive);
 
