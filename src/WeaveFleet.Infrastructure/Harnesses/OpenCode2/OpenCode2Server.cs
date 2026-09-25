@@ -26,7 +26,7 @@ internal interface IOpenCode2EventSink
 /// whether the server gets the tools for messages between sessions and workflow steps, the install it runs (<see cref="OpenCode2Install"/>),
 /// and the profile its sessions use, if any (<see cref="OpenCode2Profiles"/>).
 /// When the owner changes a setting behind it, the server is replaced once nothing runs on it (no turn, no background
-/// shell).
+/// shell, no sign-in under way).
 /// </summary>
 internal sealed record OpenCode2ServerSetup(
     string? FleetUrl,
@@ -97,6 +97,9 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     private readonly Timer? _keepLoaded;
     private int _keepingLoaded;
 
+    // The sign-ins under way here (OpenCode2SignIn), by attempt id, with when V2 forgets each.
+    private readonly ConcurrentDictionary<string, DateTimeOffset> _signIns = new(StringComparer.Ordinal);
+
     private readonly CancellationTokenSource _stopping = new();
     private readonly Task _pump;
     private TaskCompletionSource _connected = NewConnectedSource();
@@ -147,6 +150,18 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
 
     /// <summary>Notes that the server is in use now, so it isn't stopped as idle.</summary>
     public void Touch() => Interlocked.Exchange(ref _lastUsedTicks, DateTimeOffset.UtcNow.UtcTicks);
+
+    /// <summary>The clock a sign-in's expiry is read against.</summary>
+    internal TimeProvider Time { get; init; } = TimeProvider.System;
+
+    /// <summary>
+    /// Notes a sign-in started here, which V2 keeps in this server's memory until <paramref name="expires"/>: until it
+    /// ends, the server isn't idle, so it isn't replaced or stopped under it.
+    /// </summary>
+    public void HoldForSignIn(string attemptId, DateTimeOffset expires) => _signIns[attemptId] = expires;
+
+    /// <summary>Notes that sign-in <paramref name="attemptId"/> has ended (finished, failed or cancelled).</summary>
+    public void ReleaseSignIn(string attemptId) => _signIns.TryRemove(attemptId, out _);
 
     /// <summary>Whether Fleet session <paramref name="fleetSessionId"/> listens on this server.</summary>
     public bool Serves(string fleetSessionId)
@@ -433,14 +448,21 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
         => _sinks.TryGetValue(harnessSessionId, out var sink) ? sink.Context : null;
 
     /// <summary>
-    /// Whether nothing runs on this server: no session is running a turn and no shell command is running in any folder
-    /// it has loaded; <see langword="false"/> when V2 can't say. A shell call moved to the background keeps running
-    /// after its turn ended, and V2 no longer counts its session as active, so stopping the server then would kill the
-    /// command and lose the notice V2 posts when it finishes. A background subagent's child session counts as active
-    /// while it works.
+    /// Whether nothing runs on this server: no sign-in is under way, no session is running a turn and no shell command
+    /// is running in any folder it has loaded; <see langword="false"/> when V2 can't say. A shell call moved to the
+    /// background keeps running after its turn ended, and V2 no longer counts its session as active, so stopping the
+    /// server then would kill the command and lose the notice V2 posts when it finishes. A background subagent's child
+    /// session counts as active while it works. A sign-in lives only in this server's memory, so replacing the server
+    /// would lose it (<see cref="HoldForSignIn"/>).
     /// </summary>
     public async Task<bool> IsIdleAsync(CancellationToken ct)
     {
+        if (SignInsUnderWay() is > 0 and var signIns)
+        {
+            LogSignInsUnderWay(_logger, ProcessId ?? 0, signIns);
+            return false;
+        }
+
         try
         {
             if ((await Client.GetActiveSessionIdsAsync(ct).ConfigureAwait(false)).Count > 0)
@@ -465,6 +487,18 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
         {
             return false;
         }
+    }
+
+    /// <summary>How many sign-ins are under way here; ones V2 has forgotten by now are dropped.</summary>
+    private int SignInsUnderWay()
+    {
+        var now = Time.GetUtcNow();
+        foreach (var (attemptId, expires) in _signIns)
+        {
+            if (expires <= now)
+                _signIns.TryRemove(new KeyValuePair<string, DateTimeOffset>(attemptId, expires));
+        }
+        return _signIns.Count;
     }
 
     /// <summary>How long a folder may go without a session event before the server keeps it loaded.</summary>
@@ -742,6 +776,9 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "OpenCode 2 server {ProcessId}: no turn running, but {Count} shell command(s) still running in {Directory}; not idle")]
     private static partial void LogShellsRunning(ILogger logger, int processId, int count, string directory);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "OpenCode 2 server {ProcessId}: {Count} sign-in(s) under way; not idle")]
+    private static partial void LogSignInsUnderWay(ILogger logger, int processId, int count);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "OpenCode 2 server {ProcessId}: event stream open")]
     private static partial void LogConnected(ILogger logger, int processId);

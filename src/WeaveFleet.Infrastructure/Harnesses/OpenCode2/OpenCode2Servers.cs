@@ -17,8 +17,8 @@ internal readonly record struct OpenCode2ServerKey(string OwnerUserId, string? P
 
 /// <summary>
 /// The V2 servers Fleet runs, by <see cref="OpenCode2ServerKey"/>. A server is started on first use and stays up; one
-/// started with other settings is replaced once nothing runs on it: no turn and no background shell
-/// (<see cref="OpenCode2Server.IsIdleAsync"/>). A profile's server also stops once it's gone
+/// started with other settings is replaced once nothing runs on it: no turn, no background shell and no sign-in under
+/// way (<see cref="OpenCode2Server.IsIdleAsync"/>). A profile's server also stops once it's gone
 /// <see cref="ProfileIdleTimeout"/> without use and nothing runs on it (<see cref="StopIdleAsync"/>):
 /// each is a process of its own, with inotify watches on the user's home, and a session that needs it again starts it.
 /// The owner's server without a profile stays up, as before profiles.
