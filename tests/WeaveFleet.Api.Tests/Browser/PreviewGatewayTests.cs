@@ -272,6 +272,29 @@ public sealed class PreviewGatewayTests
     }
 
     [Fact]
+    public async Task A_redirect_to_another_port_of_a_running_app_gets_its_own_preview_and_others_are_left_alone()
+    {
+        await using var identity = await StartUpstreamAsync();
+        var identityPort = new Uri(identity.Urls.Single()).Port;
+        var strangerPort = FreeLoopbackPort();
+        await using var app = await StartRedirectingAsync(new Dictionary<string, string>
+        {
+            ["/login"] = $"http://localhost:{identityPort}/connect/authorize?client_id=shop#top",
+            ["/away"] = $"http://localhost:{strangerPort}/admin",
+        });
+        await using var gateway = new PreviewGateway(new FleetOptions(), port => port == identityPort);
+        var preview = await gateway.EnsureAsync(new Uri(app.Urls.Single()));
+
+        using var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+        using var login = await client.GetAsync($"http://127.0.0.1:{preview.Port}/login");
+        using var away = await client.GetAsync($"http://127.0.0.1:{preview.Port}/away");
+
+        var identityPreview = await gateway.EnsureAsync(new Uri($"http://localhost:{identityPort}"));
+        login.Headers.Location!.ToString().ShouldBe(PreviewGateway.OriginFor("127.0.0.1", identityPreview) + "/connect/authorize?client_id=shop#top");
+        away.Headers.Location!.ToString().ShouldBe($"http://localhost:{strangerPort}/admin");
+    }
+
+    [Fact]
     public async Task A_preview_of_an_app_that_is_not_there_says_so()
     {
         var deadPort = FreeLoopbackPort();
@@ -319,6 +342,25 @@ public sealed class PreviewGatewayTests
     /// A dev server that forbids framing, redirects to itself, echoes on a websocket, reports the
     /// <c>Sec-Fetch-Dest</c> it got, streams a page in two parts, and serves a refresh script naming <paramref name="refreshPort"/>.
     /// </summary>
+    /// <summary>An app that answers each path in <paramref name="redirects"/> with a redirect to its address.</summary>
+    private static async Task<WebApplication> StartRedirectingAsync(Dictionary<string, string> redirects)
+    {
+        var builder = WebApplication.CreateEmptyBuilder(new WebApplicationOptions());
+        builder.WebHost.UseKestrelCore();
+        builder.WebHost.UseUrls("http://127.0.0.1:0");
+        var app = builder.Build();
+        app.Run(context =>
+        {
+            if (redirects.TryGetValue(context.Request.Path.Value ?? "", out var to))
+                context.Response.Redirect(to);
+            else
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return Task.CompletedTask;
+        });
+        await app.StartAsync();
+        return app;
+    }
+
     private static async Task<WebApplication> StartUpstreamAsync(Task? streamRest = null, int refreshPort = 0)
     {
         var builder = WebApplication.CreateEmptyBuilder(new WebApplicationOptions());

@@ -114,6 +114,9 @@ public sealed partial class AppRunner(FleetOptions options, ILogger<AppRunner> l
 
     public AppRunSnapshot? Find(string appId) => _runs.TryGetValue(appId, out var run) ? run.Snapshot() : null;
 
+    public bool IsAppPort(int port)
+        => _runs.Values.Select(run => run.Snapshot()).Any(run => run.IsLive && run.Ports.Contains(port));
+
     public AppRunSnapshot? FindActive(string sessionId, string command)
         => _runs.Values
             .Select(run => run.Snapshot())
