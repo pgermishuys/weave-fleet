@@ -15,7 +15,9 @@ export type BridgeMessage =
   /** After every navigation. */
   | { type: "location"; href: string; title: string }
   /** The page's hot reload applied a change without reloading. */
-  | { type: "update" };
+  | { type: "update" }
+  /** A link to another address on Fleet's machine, which the canvas opens through Fleet: in a new tab, or in this one. */
+  | { type: "open"; href: string; newTab: boolean };
 
 export type NavAction = "back" | "forward" | "reload";
 
@@ -42,6 +44,8 @@ export function readBridgeMessage(data: unknown): BridgeMessage | null {
       return href === null ? null : { type: "location", href, title };
     case "update":
       return { type: "update" };
+    case "open":
+      return href === null ? null : { type: "open", href, newTab: message.newTab === true };
     default:
       return null;
   }

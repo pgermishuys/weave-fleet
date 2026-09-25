@@ -110,6 +110,40 @@ describe("BrowserCanvas", () => {
     wrapper.unmount();
   });
 
+  it("opens a link to another port on Fleet's machine in a new tab through Fleet, not in the frame", async () => {
+    const wrapper = mountCanvas();
+    await flushPromises();
+    const served = apiFetchMock.getMockImplementation()!;
+    apiFetchMock.mockImplementation((path: string, init?: RequestInit) => {
+      if (path.endsWith("/browser")) return Promise.resolve(jsonResponse({ canvasId: "cv_2" }));
+      if (path.endsWith("/canvases")) return Promise.resolve(jsonResponse([]));
+      return served(path, init);
+    });
+
+    fromPage(wrapper, { fleet: 1, type: "open", href: "http://localhost:5199/", newTab: true });
+    await flushPromises();
+
+    const opened = apiFetchMock.mock.calls.find(([path]) => String(path).endsWith("/browser"));
+    expect(JSON.parse(String((opened![1] as RequestInit).body))).toEqual({ url: "http://localhost:5199/" });
+    expect(apiFetchMock.mock.calls.some(([path]) => String(path).endsWith("/canvases"))).toBe(true);
+    expect(wrapper.find("iframe").attributes("src")).toBe(`${PREVIEW}/`);
+    wrapper.unmount();
+  });
+
+  it("follows a link meant for this tab through the preview of its address", async () => {
+    const wrapper = mountCanvas();
+    await flushPromises();
+
+    fromPage(wrapper, { fleet: 1, type: "open", href: "http://localhost:5199/shop", newTab: false });
+    await flushPromises();
+
+    const proxied = apiFetchMock.mock.calls.filter(([path]) => String(path).endsWith("/browser/proxy"));
+    expect(JSON.parse(String((proxied.at(-1)![1] as RequestInit).body))).toEqual({ url: "http://localhost:5199/shop" });
+    expect(wrapper.find("iframe").attributes("src")).toBe(`${PREVIEW}/shop`);
+    expect((wrapper.find("input[aria-label='Address']").element as HTMLInputElement).value).toBe("http://localhost:5199/shop");
+    wrapper.unmount();
+  });
+
   it("offers Start for a stopped app, and shows the current run's output while it starts", async () => {
     app = { status: "stopped", url: null, exitCode: null };
     output = ["old run", "Error: crashed", RESTART_MARKER, "$ npm run dev", "> vite"];
