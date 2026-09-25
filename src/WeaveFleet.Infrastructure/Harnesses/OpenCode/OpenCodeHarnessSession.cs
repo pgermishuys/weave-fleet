@@ -219,10 +219,12 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         await EnsureSessionAsync(ct).ConfigureAwait(false);
         await WaitForPostRecoveryEventSubscriptionAsync(_openCodeSessionId!, ct).ConfigureAwait(false);
 
-        var parts = new List<OpenCodePromptPart>
-        {
-            new OpenCodePromptTextPart { Text = text },
-        };
+        // Fleet's notes to the model go as synthetic parts: OpenCode gives them to the model, and they aren't the user's
+        // words (the conversation leaves them out, OpenCodeMapper). Before the prompt, so the question is read last.
+        var parts = new List<OpenCodePromptPart>();
+        foreach (var note in options?.ModelNotes ?? [])
+            parts.Add(new OpenCodePromptTextPart { Text = note, Synthetic = true });
+        parts.Add(new OpenCodePromptTextPart { Text = text });
 
         if (options?.Attachments is { Count: > 0 } attachments)
         {
@@ -350,6 +352,71 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             askTimeout,
             DeleteOffTheRecordForkAsync);
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// OpenCode's fork copies the messages before the one it's given. A turn still running is left out: its prompt and
+    /// half a reply would be the newest thing the fork reads, and it would carry on with that turn.
+    /// </remarks>
+    public async Task<SideConversationFork?> ForkSideConversationAsync(CancellationToken ct)
+    {
+        await EnsureSessionAsync(ct).ConfigureAwait(false);
+        var sessionId = _openCodeSessionId;
+        if (sessionId is null)
+            return null;
+
+        var http = _instanceHandle.HttpClient;
+        var forkBefore = await FindSideForkPointAsync(sessionId, ct).ConfigureAwait(false);
+        var fork = await http.ForkSessionAsync(sessionId, new OpenCodeForkRequest { MessageId = forkBefore }, _workingDirectory, ct).ConfigureAwait(false);
+        try
+        {
+            // The fork's copies have ids of their own: the newest one marks where the side conversation starts.
+            var newest = await http.GetMessagePageAsync(fork.Id, _workingDirectory, 1, null, ct).ConfigureAwait(false);
+            return new SideConversationFork(fork.Id, newest.Messages.Count > 0 ? newest.Messages[^1].Info.Id : null);
+        }
+        catch
+        {
+            await DeleteThrowawayAsync(http, fork.Id, _workingDirectory, _logger).ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// The message a side conversation's fork stops before: the first one after the last finished turn, or null when
+    /// the conversation ends with a finished turn (copy it all). With no finished turn at all, the oldest message, so
+    /// nothing is copied.
+    /// </summary>
+    private async Task<string?> FindSideForkPointAsync(string sessionId, CancellationToken ct)
+    {
+        string? before = null;
+        string? firstAfterFinishedTurn = null;
+        for (var page = 0; page < LastPromptMaxPages; page++)
+        {
+            var messagePage = await _instanceHandle.HttpClient.GetMessagePageAsync(
+                sessionId, _workingDirectory, LastPromptPageSize, before, ct).ConfigureAwait(false);
+            var messages = messagePage.Messages;
+            for (var i = messages.Count - 1; i >= 0; i--)
+            {
+                if (EndsTurn(messages[i].Info))
+                    return firstAfterFinishedTurn;
+                firstAfterFinishedTurn = messages[i].Info.Id;
+            }
+
+            if (messagePage.NextCursor is null)
+                return firstAfterFinishedTurn;
+            before = messagePage.NextCursor;
+        }
+
+        return firstAfterFinishedTurn;
+    }
+
+    /// <summary>
+    /// Whether a message is the last of a finished turn: a reply OpenCode completed that didn't stop for tool calls (the
+    /// turn goes on after those), or one that ended in an error, an abort included.
+    /// </summary>
+    internal static bool EndsTurn(OpenCodeMessageInfo message)
+        => message is OpenCodeAssistantMessage { Time.Completed: not null } reply
+            && (reply.Finish != "tool-calls" || reply.Error is not null);
 
     /// <summary>
     /// Title given to the throwaway sessions asked off the record (forks, and the session-less ones), so the next ask

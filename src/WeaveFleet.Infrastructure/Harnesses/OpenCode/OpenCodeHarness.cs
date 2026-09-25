@@ -36,5 +36,6 @@ public sealed class OpenCodeHarness : IHarness
         HistoryLivesInHarness = true,
         // POST /session/{id}/shell, between turns (OpenCode refuses one while a turn runs).
         SupportsShellCommands = true,
+        SupportsSideConversations = true,
     };
 }

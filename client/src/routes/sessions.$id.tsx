@@ -6,6 +6,7 @@ import ConfirmDeleteSessionDialog from "@/components/sessions/ConfirmDeleteSessi
 import ActivityStream from "@/components/session/ActivityStream.vue";
 import Composer from "@/components/session/Composer.vue";
 import RecapLine from "@/components/session/RecapLine.vue";
+import SideConversationPanel from "@/components/session/SideConversationPanel.vue";
 import DiffsTray from "@/components/session/DiffsTray.vue";
 import FilesChangedView from "@/components/session/FilesChangedView.vue";
 import ForkSessionDialog from "@/components/session/ForkSessionDialog.vue";
@@ -879,6 +880,7 @@ const SessionDetailPage = defineComponent({
             <WorkflowRunCard sessionId={params.value.id} />
             <WorkflowFinishBar sessionId={params.value.id} />
             <RecapLine recap={recap.value} />
+            <SideConversationPanel sessionId={params.value.id} />
             <Composer
               ref={composerRef}
               sessionId={params.value.id}

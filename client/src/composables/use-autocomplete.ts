@@ -20,6 +20,8 @@ export interface UseAutocompleteParams {
   sessionId: MaybeRefOrGetter<string | null | undefined>;
   inputRef: Ref<HTMLTextAreaElement | null>;
   cursorPosition: Ref<number>;
+  /** Fleet's own commands (`/btw`), listed before the harness's; a harness command of the same name is left out. */
+  fleetCommands?: MaybeRefOrGetter<readonly AutocompleteCommand[]>;
 }
 
 export interface UseAutocompleteResult {
@@ -157,6 +159,7 @@ export function useAutocomplete({
   sessionId,
   inputRef,
   cursorPosition,
+  fleetCommands = [],
 }: UseAutocompleteParams): UseAutocompleteResult {
   const selectedIndex = ref(0);
   const suppressedValue = ref<string | null>(null);
@@ -217,7 +220,9 @@ export function useAutocomplete({
 
     if (computedTrigger.value.type === "slash") {
       const filter = filterText.value.toLowerCase();
-      return commands.value
+      const own = toValue(fleetCommands);
+      const ownNames = new Set(own.map((command) => command.name));
+      return [...own, ...commands.value.filter((command) => !ownNames.has(command.name))]
         .filter((command) => command.name.toLowerCase().startsWith(filter))
         .map((command) => ({
           id: `command:${command.name}`,

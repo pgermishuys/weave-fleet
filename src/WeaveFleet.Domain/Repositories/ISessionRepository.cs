@@ -9,6 +9,15 @@ public interface ISessionRepository
     Task InsertAsync(IDbConnection connection, IDbTransaction? transaction, Session session);
     Task<Session?> GetByIdAsync(string id);
     Task<Session?> GetByHarnessIdAsync(string harnessSessionId);
+
+    /// <summary>The side conversation open on session <paramref name="sessionId"/> (<c>/btw</c>), if there is one.</summary>
+    Task<Session?> GetSideConversationAsync(string sessionId);
+
+    /// <summary>
+    /// Makes side conversation <paramref name="id"/> a session of its own, listed like any other, in workspace
+    /// <paramref name="workspaceId"/>.
+    /// </summary>
+    Task KeepSideConversationAsync(string id, string workspaceId);
     Task<IReadOnlyList<Session>> ListAsync(int limit = 100, int offset = 0, IReadOnlyList<string>? statuses = null, string? projectId = null);
     Task<IReadOnlyList<Session>> ListAsync(int limit, int offset, IReadOnlyList<string>? statuses, string? projectId, IReadOnlyList<string>? retentionStatuses);
     Task<IReadOnlyList<Session>> ListAsync(int limit, int offset, IReadOnlyList<string>? statuses, string? projectId, IReadOnlyList<string>? retentionStatuses, IReadOnlyList<string>? tags);

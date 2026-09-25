@@ -859,15 +859,16 @@ public sealed partial class SessionOrchestrator(
             // This prevents early events from being lost during activation/resume.
             await EnsureEventSubscriptionReadyAsync(instanceResult.Value, id, ct).ConfigureAwait(false);
 
-            // Pass the generated message ID through to the harness.
+            // Pass the generated message ID through to the harness, with any notes the session's prompts carry.
             var promptOptionsWithMessageId = options is null
-                ? new PromptOptions { MessageId = generatedMessageId }
-                : options with { MessageId = generatedMessageId };
+                ? new PromptOptions { MessageId = generatedMessageId, ModelNotes = SideConversations.ModelNotesFor(sessionResult.Value) }
+                : options with { MessageId = generatedMessageId, ModelNotes = SideConversations.ModelNotesFor(sessionResult.Value) };
 
             await instanceResult.Value.SendPromptAsync(text, promptOptionsWithMessageId, ct);
 
-            // Your reply is what a recap waits for: it clears the current one and counts toward the next.
-            if (sessionRecaps is not null)
+            // Your reply is what a recap waits for: it clears the current one and counts toward the next. A side
+            // conversation gets none: it's only ever seen beside its session.
+            if (sessionRecaps is not null && sessionResult.Value.SideOfSessionId is null)
                 await sessionRecaps.OnPromptSentAsync(id, sessionResult.Value.UserId, ct).ConfigureAwait(false);
 
             // Saved under the id the harness was given, so the snapshot can tell when the harness has its own copy.
@@ -1440,6 +1441,16 @@ public sealed partial class SessionOrchestrator(
         var session = await sessionRepository.GetByIdAsync(id);
         if (session is null)
             return FleetError.NotFoundFor(nameof(Session), id);
+
+        // A side conversation shares its session's folder, which must outlive it; and it goes with its session.
+        if (session.SideOfSessionId is not null)
+        {
+            await DiscardSideConversationAsync(session, ct).ConfigureAwait(false);
+            return Unit.Value;
+        }
+
+        if (await sessionRepository.GetSideConversationAsync(id).ConfigureAwait(false) is { } side)
+            await DiscardSideConversationAsync(side, ct).ConfigureAwait(false);
 
         var delegation = await delegationRepository.GetByChildSessionIdAsync(id);
         var parentDelegations = await delegationRepository.GetByParentSessionIdAsync(id);

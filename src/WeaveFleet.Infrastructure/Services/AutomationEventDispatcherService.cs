@@ -89,6 +89,11 @@ public sealed partial class AutomationEventDispatcherService : BackgroundService
         if (!string.IsNullOrWhiteSpace(notification.SessionId))
         {
             var session = await sessionRepo.GetByIdAsync(notification.SessionId).ConfigureAwait(false);
+
+            // A side conversation (/btw) is the user's aside, seen only beside its session: nothing it does triggers.
+            if (session?.SideOfSessionId is not null)
+                return;
+
             sessionTags = session?.Tags;
         }
 

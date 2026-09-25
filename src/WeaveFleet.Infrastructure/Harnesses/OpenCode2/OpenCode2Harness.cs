@@ -44,5 +44,6 @@ public sealed class OpenCode2Harness : IHarness
         SupportsProviderSignIn = true,
         // POST /api/session/{id}/shell: a shell message in the history, its output passed to the model next turn.
         SupportsShellCommands = true,
+        SupportsSideConversations = true,
     };
 }

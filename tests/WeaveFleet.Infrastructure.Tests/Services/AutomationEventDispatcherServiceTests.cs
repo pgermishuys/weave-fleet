@@ -336,6 +336,8 @@ internal sealed class FakeSessionRepository : ISessionRepository
     public Task InsertAsync(Domain.Entities.Session session) => throw new NotImplementedException();
     public Task InsertAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, Domain.Entities.Session session) => throw new NotImplementedException();
     public Task<Domain.Entities.Session?> GetByHarnessIdAsync(string harnessSessionId) => throw new NotImplementedException();
+    public Task<Domain.Entities.Session?> GetSideConversationAsync(string sessionId) => throw new NotImplementedException();
+    public Task KeepSideConversationAsync(string id, string workspaceId) => throw new NotImplementedException();
     public Task<IReadOnlyList<Domain.Entities.Session>> ListAsync(int limit = 100, int offset = 0, IReadOnlyList<string>? statuses = null, string? projectId = null) => throw new NotImplementedException();
     public Task<IReadOnlyList<Domain.Entities.Session>> ListAsync(int limit, int offset, IReadOnlyList<string>? statuses, string? projectId, IReadOnlyList<string>? retentionStatuses) => throw new NotImplementedException();
     public Task<IReadOnlyList<Domain.Entities.Session>> ListAsync(int limit, int offset, IReadOnlyList<string>? statuses, string? projectId, IReadOnlyList<string>? retentionStatuses, IReadOnlyList<string>? tags) => throw new NotImplementedException();

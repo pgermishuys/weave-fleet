@@ -690,7 +690,8 @@ internal sealed record OpenCodeSseEvent
 /// <summary>Request body for POST /session/:id/fork.</summary>
 internal sealed record OpenCodeForkRequest
 {
-    [JsonPropertyName("messageId")] public string? MessageId { get; init; }
+    /// <summary>The message the fork stops before: it copies only the messages older than this one. Null copies all.</summary>
+    [JsonPropertyName("messageID")] public string? MessageId { get; init; }
 }
 
 // ---------------------------------------------------------------------------

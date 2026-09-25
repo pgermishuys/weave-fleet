@@ -357,6 +357,32 @@ export function seedSentPrompt(sessionId: string, body: string, createdAt: numbe
   schedulePromptConfirmationTimeout(sessionId, correlationId);
 }
 
+/**
+ * Shows a prompt the server has already taken, under the id it stored it with, until the conversation has it: a side
+ * question (`/btw`), which goes to a session the page only learns of from the answer.
+ */
+export function showSentPrompt(sessionId: string, prompt: { id: string; correlationId: string; body: string }): void {
+  const text = prompt.body.trim();
+  if (!text) {
+    return;
+  }
+
+  ensureSentPrompts(sessionId).push({
+    id: prompt.id,
+    correlationId: prompt.correlationId,
+    serverMessageId: prompt.id,
+    status: "confirmed",
+    body: text,
+    createdAt: Date.now(),
+    agentId: "",
+    agentName: "",
+    modelId: "",
+    modelName: "",
+    effort: "medium",
+    images: [],
+  });
+}
+
 export function useSentPrompts(sessionId: string) {
   ensureSentPrompts(sessionId);
   ensurePendingPromptCount(sessionId);

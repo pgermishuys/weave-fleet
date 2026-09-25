@@ -581,6 +581,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{id}/side": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetSideConversation"];
+        put?: never;
+        post: operations["AskSideQuestion"];
+        delete: operations["CloseSideConversation"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/side/keep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["KeepSideConversation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{id}/shell": {
         parameters: {
             query?: never;
@@ -3493,6 +3525,25 @@ export interface components {
         RunShellCommandApiRequest: {
             command: null | string;
         };
+        SideConversationResponse: {
+            sessionId: string;
+            instanceId: string;
+            title: string;
+            boundaryMessageId: null | string;
+            createdAt: string;
+        };
+        SideQuestionApiRequest: {
+            text: null | string;
+            agent: null | string;
+            model: null | components["schemas"]["ModelRef"];
+            effort: null | string;
+            correlationId: null | string;
+        };
+        SideQuestionApiResponse: {
+            sideConversation: components["schemas"]["SideConversationResponse"];
+            correlationId: string;
+            messageId: null | string;
+        };
         SaveHarnessProfileRequest: {
             name: null | string;
             content: null | string;
@@ -5258,6 +5309,103 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    GetSideConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SideConversationResponse"];
+                };
+            };
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AskSideQuestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SideQuestionApiRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SideQuestionApiResponse"];
+                };
+            };
+        };
+    };
+    CloseSideConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    KeepSideConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SideConversationResponse"];
+                };
             };
         };
     };

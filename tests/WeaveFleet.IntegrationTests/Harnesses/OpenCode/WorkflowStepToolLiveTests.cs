@@ -38,6 +38,9 @@ public sealed partial class WorkflowStepToolLiveTests
     private const string ChildAgainPrompt = "CHILD-AGAIN: and once more.";
     private const string TalkPrompt = "TALK: let's work through it together.";
     private const string WrapUpStart = "The user is moving on to Approve.";
+    private const string PickPrompt = "PICK: choose one for me.";
+    private const string SidePrompt = "SIDE: what did I ask first?";
+    private const string SideAnswer = "You asked what this folder holds.";
     private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(3);
 
     private const string Workflow = """
@@ -383,6 +386,10 @@ public sealed partial class WorkflowStepToolLiveTests
                     return ToolCall("call_look", "task", new { description = "Look around", prompt = LookPrompt, subagent_type = "general" });
                 if (LastUserText(request) is { } look && (look.StartsWith(LookPrompt, StringComparison.Ordinal) || look.StartsWith(ChildAgainPrompt, StringComparison.Ordinal)))
                     return new ScriptedLlmResponse { Text = "Looked." };
+                if (LastUserText(request) is { } side && side.Contains(SidePrompt, StringComparison.Ordinal))
+                    return new ScriptedLlmResponse { Text = SideAnswer };
+                if (LastUserText(request) is { } pick && pick.StartsWith(PickPrompt, StringComparison.Ordinal))
+                    return ToolCall("call_pick", "question", new { questions = new[] { new { question = "Which one?", header = "Pick", options = new[] { new { label = "A", description = "a" }, new { label = "B", description = "b" } } } } });
                 if (LastUserText(request) is { } child && child.StartsWith(ChildPrompt, StringComparison.Ordinal))
                     return ToolCall("call_child_done", FleetWorkflows.StepTool, new { outcome = "pass", summary = "From the child." });
                 return new ScriptedLlmResponse { Text = "It holds the workspace." };

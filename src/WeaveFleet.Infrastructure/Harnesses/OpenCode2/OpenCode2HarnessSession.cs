@@ -119,6 +119,11 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         // The status follows V2's execution events: a short turn can be over before this request returns.
         if (options?.MessageId is { } messageId)
             _promptsNotTakenIn[messageId] = 0;
+
+        // Fleet's notes to the model go in as synthetic messages that wait for the prompt, as V2's own notes do: the
+        // model reads them, the conversation doesn't show them (OpenCode2History).
+        foreach (var note in options?.ModelNotes ?? [])
+            await server.Client.AddSyntheticAsync(ResumeToken, note, ct).ConfigureAwait(false);
         await server.Client.PromptAsync(ResumeToken, text, options?.MessageId, PromptFiles(options?.Attachments), ct).ConfigureAwait(false);
     }
 
@@ -239,6 +244,81 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
             OpenCode2History.ToHarnessMessages(messages.Reverse()),
             hasMore,
             hasMore ? page.Cursor!.Next : null);
+    }
+
+    /// <summary>
+    /// A child session holding this one's history up to its last finished turn: V2 copies what comes before the message
+    /// it's given. A turn still running is left out, or the fork would carry on with it.
+    /// </summary>
+    public async Task<SideConversationFork?> ForkSideConversationAsync(CancellationToken ct)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var server = await AttachedServerAsync(ct).ConfigureAwait(false);
+        var before = await FindSideForkPointAsync(server, ct).ConfigureAwait(false);
+        var fork = await server.Client.ForkSessionAsync(ResumeToken, before, ct).ConfigureAwait(false);
+        try
+        {
+            // The newest message the fork holds marks where the side conversation starts.
+            var newest = await server.Client.GetMessagesAsync(fork.Id!, 1, null, ct).ConfigureAwait(false);
+            return new SideConversationFork(fork.Id!, newest.Data is { Count: > 0 } data ? data[0].Id : null);
+        }
+        catch
+        {
+            await DeleteQuietlyAsync(server, fork.Id!).ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    private const int SideForkPageSize = 50;
+    private const int SideForkMaxPages = 10;
+
+    /// <summary>
+    /// The message a side conversation's fork stops before: the first one after the last finished turn, or null when
+    /// the session ends with one (copy it all). With no finished turn at all, the oldest message, so nothing is copied.
+    /// </summary>
+    private async Task<string?> FindSideForkPointAsync(OpenCode2Server server, CancellationToken ct)
+    {
+        string? cursor = null;
+        string? firstAfterFinishedTurn = null;
+        for (var page = 0; page < SideForkMaxPages; page++)
+        {
+            var messages = await server.Client.GetMessagesAsync(ResumeToken, SideForkPageSize, cursor, ct).ConfigureAwait(false);
+            var data = messages.Data ?? [];
+            foreach (var message in data)
+            {
+                if (EndsTurn(message))
+                    return firstAfterFinishedTurn;
+                firstAfterFinishedTurn = message.Id;
+            }
+
+            // V2 sends a next cursor with every page; one that isn't full is the last.
+            if (data.Count < SideForkPageSize || messages.Cursor?.Next is not { } next)
+                return firstAfterFinishedTurn;
+            cursor = next;
+        }
+
+        return firstAfterFinishedTurn;
+    }
+
+    /// <summary>
+    /// Whether a message is the last of a finished turn. A V2 turn is several assistant steps, each completed on its
+    /// own; the turn goes on after a step that stopped for tool calls, and ends with any other, or an error.
+    /// </summary>
+    internal static bool EndsTurn(OpenCode2Message message)
+        => message is { Type: "assistant", Time.Completed: not null }
+            && (message.Finish != "tool-calls" || message.Error is not null);
+
+    private async Task DeleteQuietlyAsync(OpenCode2Server server, string sessionId)
+    {
+        using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        try
+        {
+            await server.Client.DeleteSessionAsync(sessionId, cleanup.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            LogDeleteFailed(_logger, sessionId, ex);
+        }
     }
 
     /// <summary>V2's <c>generate</c>: an answer from the session's conversation, by its agent and model, left out of its history.</summary>

@@ -31,6 +31,7 @@ import { mergeMessagesByTimestamp } from "@/lib/merge-messages";
 import { workflowMessageKey, workflowMessageLabel } from "@/lib/workflows";
 import { useWorkflowsStore } from "@/stores/workflows";
 import { toShellCommandView, type ShellCommandView } from "@/lib/shell-commands";
+import { messagesAfter } from "@/lib/side-conversation";
 
 interface ImageAttachmentDisplay {
   url: string;
@@ -73,6 +74,11 @@ interface ActivityMessage {
 
 const props = defineProps<{
   sessionId: string;
+  /**
+   * For a side conversation (`/btw`): the newest message it copied from its session. Only what came after it shows,
+   * and older history isn't offered.
+   */
+  after?: string | null;
 }>();
 
 const router = useRouter();
@@ -89,9 +95,11 @@ const selectedSession = computed(() => {
   return sessions.value.find((session) => session.session.id === props.sessionId) ?? null;
 });
 
-const { messages: sessionMessages, delegations, sessionStatus, hasMore, isLoadingOlder, isPartial, loadOlder } = useSessionStream(
-  computed(() => props.sessionId),
-);
+const stream = useSessionStream(computed(() => props.sessionId));
+const { delegations, sessionStatus, isLoadingOlder, isPartial, loadOlder } = stream;
+const sessionMessages = computed(() => messagesAfter(stream.messages.value, props.after));
+/** A side conversation's older messages are its session's, which it doesn't show. */
+const hasMore = computed(() => stream.hasMore.value && sessionMessages.value.length === stream.messages.value.length);
 // Names for the model ids the messages carry; the catalog belongs to the session on screen.
 const { models } = useModels(() => props.sessionId);
 const { sentPrompts } = useSentPrompts(props.sessionId);

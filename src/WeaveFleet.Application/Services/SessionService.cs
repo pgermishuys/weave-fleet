@@ -118,7 +118,8 @@ public sealed class SessionService(
         var activeCount = 0;
         var idleCount = 0;
 
-        foreach (var session in activeSessions)
+        // A side conversation (/btw) is only ever seen beside its session: it isn't one of the fleet's.
+        foreach (var session in activeSessions.Where(s => s.SideOfSessionId is null))
         {
             var effectiveStatus = activityTracker.GetEffectiveActivityStatus(session.Id) ?? "idle";
             // A session stopped on a question is mid-turn, not idle.
