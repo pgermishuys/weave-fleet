@@ -223,18 +223,17 @@ const isSideMode = computed(() => sideConversation.isOpen.value);
 
 // Each side keeps its own draft: minimizing puts away what was typed for the side conversation and brings back what
 // was typed for the session, and opening it does the reverse. Only when one side conversation changes mode (minimize,
-// open, discard, Undo), not when one first loads.
+// open, discard, Undo), not when one first loads. The put-away draft survives a reload, as the composer's does.
 watch(
   () => [sideConversation.side.value?.sessionId ?? sideConversation.discarded.value?.sessionId ?? null, isSideMode.value] as const,
   ([sideId, sideMode], [previousSideId, previousSideMode]) => {
     if (!sideId || sideId !== previousSideId || sideMode === previousSideMode) return;
-    const drafts = sideConversation.drafts.value;
     if (sideMode) {
-      drafts.main = draft.text;
-      setText(drafts.side);
+      sideConversation.putAwayDraft("main", draft.text);
+      setText(sideConversation.takeOutDraft("side"));
     } else {
-      drafts.side = draft.text;
-      setText(drafts.main);
+      sideConversation.putAwayDraft("side", draft.text);
+      setText(sideConversation.takeOutDraft("main"));
     }
   },
 );

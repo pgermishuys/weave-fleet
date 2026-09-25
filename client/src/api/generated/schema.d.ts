@@ -613,6 +613,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{id}/side/discarded": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetUndoableSideConversation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/side/seen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["SetSideConversationSeen"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{id}/side/minimized": {
         parameters: {
             query?: never;
@@ -3627,9 +3659,18 @@ export interface components {
             boundaryMessageId: null | string;
             createdAt: string;
             minimized: boolean;
+            seenAnswerId: null | string;
         };
         SideMinimizedApiRequest: {
             minimized: boolean;
+        };
+        SideSeenApiRequest: {
+            answerId: null | string;
+        };
+        UndoableSideConversationResponse: {
+            sideConversation: components["schemas"]["SideConversationResponse"];
+            /** Format: int64 */
+            undoRemainingMs: number;
         };
         SideQuestionApiRequest: {
             text: null | string;
@@ -5497,6 +5538,61 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SideConversationResponse"];
+                };
+            };
+        };
+    };
+    GetUndoableSideConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UndoableSideConversationResponse"];
+                };
+            };
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    SetSideConversationSeen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SideSeenApiRequest"];
+            };
+        };
         responses: {
             /** @description OK */
             200: {

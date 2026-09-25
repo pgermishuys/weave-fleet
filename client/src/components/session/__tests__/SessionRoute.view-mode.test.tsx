@@ -74,6 +74,11 @@ vi.mock("@/components/session/ActivityStream.vue", () => ({
   },
 }));
 
+// The real one asks the server for the session's side conversation (/btw), which these tests don't serve.
+vi.mock("@/components/session/SideConversationPanel.vue", () => ({
+  default: { name: "SideConversationPanelStub", template: "<div />" },
+}));
+
 vi.mock("@/components/session/Composer.vue", () => ({
   default: {
     name: "ComposerStub",

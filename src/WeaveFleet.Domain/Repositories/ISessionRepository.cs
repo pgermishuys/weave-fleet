@@ -22,6 +22,9 @@ public interface ISessionRepository
     /// <summary>Every owner's side conversations discarded before <paramref name="cutoff"/> (ISO 8601): past their undo window.</summary>
     Task<IReadOnlyList<Session>> ListSideConversationsDiscardedBeforeAsync(string cutoff);
 
+    /// <summary>Records the newest answer of side conversation <paramref name="id"/> the user has seen.</summary>
+    Task SetSideSeenAnswerAsync(string id, string? answerId);
+
     /// <summary>Sets whether side conversation <paramref name="id"/> is minimized, and when it was discarded (null: it wasn't).</summary>
     Task SetSideConversationStateAsync(string id, bool minimized, string? discardedAt);
 

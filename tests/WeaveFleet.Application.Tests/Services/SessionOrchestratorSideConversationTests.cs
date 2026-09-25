@@ -196,19 +196,91 @@ public sealed class SessionOrchestratorSideConversationTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task undo_is_refused_once_a_newer_side_question_is_open()
+    public async Task a_new_side_question_ends_the_undo_window_of_a_discarded_one()
     {
         Seed();
         var orchestrator = _builder.Build();
-        await orchestrator.AskSideQuestionAsync("s1", "one", null, null);
+        var first = (await orchestrator.AskSideQuestionAsync("s1", "one", null, null)).Value.SideConversation;
         await orchestrator.CloseSideConversationAsync("s1");
+        var secondHarness = new FakeHarnessSession("inst-side-2");
+        _runtime.ResumeBehavior = (_, _) => Task.FromResult<IHarnessSession>(secondHarness);
         _session.SideConversationFork = new SideConversationFork("ses_fork2", "msg_boundary");
-        await orchestrator.AskSideQuestionAsync("s1", "two", null, null);
+
+        var second = await orchestrator.AskSideQuestionAsync("s1", "two", null, null);
+
+        second.IsSuccess.ShouldBeTrue();
+        _side.DeleteCalled.ShouldBeTrue();
+        (await _builder.SessionRepository.GetByIdAsync(first.Id)).ShouldBeNull();
+        (await orchestrator.GetUndoableSideConversationAsync("s1")).Value.ShouldBeNull();
+        // Nothing left for Undo to bring back.
+        (await orchestrator.RestoreSideConversationAsync("s1")).IsFailure.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task undo_still_guards_against_a_newer_open_side_question()
+    {
+        // Asking deletes a discarded one first; this is the race where both exist anyway.
+        Seed();
+        var orchestrator = _builder.Build();
+        var first = (await orchestrator.AskSideQuestionAsync("s1", "one", null, null)).Value.SideConversation;
+        await orchestrator.CloseSideConversationAsync("s1");
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "side-newer", WorkspaceId = "ws-1", InstanceId = "inst-x", Title = "btw: two", Status = "active",
+            Directory = "/tmp/repo", CreatedAt = "2099-01-01", HarnessType = "opencode", UserId = "user-1", SideOfSessionId = "s1",
+        });
 
         var restored = await orchestrator.RestoreSideConversationAsync("s1");
 
         restored.IsFailure.ShouldBeTrue();
         restored.Error.Code.ShouldBe("General.Conflict");
+        (await _builder.SessionRepository.GetByIdAsync(first.Id)).ShouldNotBeNull().SideDiscardedAt.ShouldNotBeNull();
+    }
+
+    [Fact]
+    public async Task a_discarded_one_says_how_long_undo_is_still_offered()
+    {
+        Seed();
+        var orchestrator = _builder.Build();
+        var side = (await orchestrator.AskSideQuestionAsync("s1", "one", null, null)).Value.SideConversation;
+        await orchestrator.CloseSideConversationAsync("s1");
+
+        var undoable = (await orchestrator.GetUndoableSideConversationAsync("s1")).Value.ShouldNotBeNull();
+
+        undoable.SideConversation.Id.ShouldBe(side.Id);
+        undoable.UndoLeft.ShouldBeGreaterThan(TimeSpan.FromSeconds(6));
+        undoable.UndoLeft.ShouldBeLessThanOrEqualTo(SideConversations.UndoOffered);
+
+        // Once the offer has run out, there's nothing to show.
+        var discarded = (await _builder.SessionRepository.GetByIdAsync(side.Id))!;
+        discarded.SideDiscardedAt = DateTime.UtcNow.AddSeconds(-9).ToString("O");
+        (await orchestrator.GetUndoableSideConversationAsync("s1")).Value.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task remembers_the_newest_answer_seen()
+    {
+        Seed();
+        var orchestrator = _builder.Build();
+        await orchestrator.AskSideQuestionAsync("s1", "one", null, null);
+
+        var seen = await orchestrator.SetSideConversationSeenAsync("s1", "msg_answer");
+
+        seen.Value.SideSeenAnswerId.ShouldBe("msg_answer");
+        (await orchestrator.GetSideConversationAsync("s1")).Value!.SideSeenAnswerId.ShouldBe("msg_answer");
+    }
+
+    [Theory]
+    [InlineData(-1, 7)]
+    [InlineData(-8, 0)]
+    [InlineData(-30, 0)]
+    public void undo_left_counts_from_the_discard(int secondsAgo, int wholeSecondsLeft)
+    {
+        var now = DateTimeOffset.Parse("2026-09-25T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+        var discardedAt = now.AddSeconds(secondsAgo).UtcDateTime.ToString("O");
+
+        ((int)SideConversations.UndoLeft(discardedAt, now).TotalSeconds).ShouldBe(wholeSecondsLeft);
+        SideConversations.UndoLeft(null, now).ShouldBe(TimeSpan.Zero);
     }
 
     [Fact]

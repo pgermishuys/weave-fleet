@@ -36,13 +36,13 @@ public sealed class SessionRepository(
                 lifecycle_status, retention_status, archived_at, is_hidden, total_tokens, total_cost,
                 harness_type, runtime_mode, harness_profile_id, harness_resume_token, git_baseline_ref, git_repo_root, user_id,
                 source_reference, tags, selected_agent, selected_provider_id, selected_model_id, workflow_run_id, workflow_user_finishes,
-                side_of_session_id, side_boundary_message_id, kept_from_side, side_minimized, side_discarded_at)
+                side_of_session_id, side_boundary_message_id, kept_from_side, side_minimized, side_discarded_at, side_seen_answer_id)
             SELECT @Id, @WorkspaceId, @InstanceId, @ProjectId, @OpencodeSessionId, @Title,
                 @Status, @Directory, @CreatedAt, @StoppedAt, @ParentSessionId,
                 @LifecycleStatus, @RetentionStatus, @ArchivedAt, @IsHidden, @TotalTokens, @TotalCost,
                 @HarnessType, @RuntimeMode, @HarnessProfileId, @HarnessResumeToken, @GitBaselineRef, @GitRepoRoot, @UserId,
                 @SourceReference, @Tags, @SelectedAgent, @SelectedProviderId, @SelectedModelId, @WorkflowRunId, @WorkflowUserFinishes,
-                @SideOfSessionId, @SideBoundaryMessageId, @KeptFromSide, @SideMinimized, @SideDiscardedAt
+                @SideOfSessionId, @SideBoundaryMessageId, @KeptFromSide, @SideMinimized, @SideDiscardedAt, @SideSeenAnswerId
             FROM workspaces workspace_row
             WHERE workspace_row.id = @WorkspaceId
               AND workspace_row.user_id = @UserId
@@ -93,6 +93,7 @@ public sealed class SessionRepository(
                 cmd.AddParameter("KeptFromSide", session.KeptFromSide ? 1 : 0);
                 cmd.AddParameter("SideMinimized", session.SideMinimized ? 1 : 0);
                 cmd.AddParameter("SideDiscardedAt", session.SideDiscardedAt);
+                cmd.AddParameter("SideSeenAnswerId", session.SideSeenAnswerId);
             },
             transaction);
     }
@@ -165,6 +166,19 @@ public sealed class SessionRepository(
             "SELECT * FROM sessions WHERE side_of_session_id IS NOT NULL AND side_discarded_at IS NOT NULL AND side_discarded_at < @Cutoff",
             cmd => cmd.AddParameter("Cutoff", cutoff),
             ReadSession);
+    }
+
+    public async Task SetSideSeenAnswerAsync(string id, string? answerId)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        await conn.ExecuteNonQueryAsync(
+            "UPDATE sessions SET side_seen_answer_id = @AnswerId WHERE id = @Id AND user_id = @UserId",
+            cmd =>
+            {
+                cmd.AddParameter("Id", id);
+                cmd.AddParameter("AnswerId", answerId);
+                cmd.AddParameter("UserId", userContext.UserId);
+            });
     }
 
     public async Task SetSideConversationStateAsync(string id, bool minimized, string? discardedAt)
@@ -786,6 +800,7 @@ public sealed class SessionRepository(
             KeptFromSide = r.GetInt64(r.GetOrdinal("kept_from_side")) != 0,
             SideMinimized = r.GetInt64(r.GetOrdinal("side_minimized")) != 0,
             SideDiscardedAt = r.GetNullableString(r.GetOrdinal("side_discarded_at")),
+            SideSeenAnswerId = r.GetNullableString(r.GetOrdinal("side_seen_answer_id")),
             Tags = tags,
         };
     }

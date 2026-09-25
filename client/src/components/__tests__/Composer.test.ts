@@ -6,6 +6,7 @@ import type { SessionListItem } from "@/api/client";
 import { createModelSelectionKey } from "@/composables/use-models";
 import { addDraftTerminalContext, clearDraftTerminalContext } from "@/composables/use-draft-terminal-context";
 import { _resetSideConversationsForTesting, useSideConversation } from "@/composables/use-side-conversation";
+import { readStoredDraft } from "@/lib/draft-storage";
 
 vi.mock("@/api/client", () => ({
   api: {
@@ -998,6 +999,34 @@ describe("Composer with a minimized side conversation", () => {
     await setMinimized(false);
     await flushPromises();
     expect((textarea.element as HTMLTextAreaElement).value).toBe("for the side");
+    wrapper.unmount();
+  });
+
+  it("keeps the put-away draft through a reload", async () => {
+    localStorage.clear();
+    const first = mountComposer({ sessionId: "session-side" });
+    await flushPromises();
+    const textarea = first.get("[data-testid='prompt-input']");
+    await textarea.setValue("for the session");
+    await useSideConversation("session-side").setMinimized(false);
+    await flushPromises();
+    await textarea.setValue("for the side");
+    await useSideConversation("session-side").setMinimized(true);
+    await flushPromises();
+    first.unmount();
+
+    // The browser has both: the composer's (the session's, now) and the side conversation's, put away.
+    expect(readStoredDraft("session.session-side")).toBe("for the session");
+    expect(readStoredDraft("side.session-side.side-1")).toBe("for the side");
+
+    // A reload: nothing in memory, the side conversation loads again (minimized), and opening it brings its draft.
+    _resetSideConversationsForTesting();
+    const second = mountComposer({ sessionId: "session-side" });
+    await flushPromises();
+    await useSideConversation("session-side").setMinimized(false);
+    await flushPromises();
+    expect((second.get("[data-testid='prompt-input']").element as HTMLTextAreaElement).value).toBe("for the side");
+    second.unmount();
   });
 });
 

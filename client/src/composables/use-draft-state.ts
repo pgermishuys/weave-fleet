@@ -1,4 +1,5 @@
 import { reactive } from "vue";
+import { readStoredDraft, sessionDraftKey, writeStoredDraft } from "@/lib/draft-storage";
 
 export type EffortLevel = string;
 
@@ -32,7 +33,8 @@ function ensureDraft(sessionId: string, defaults: DraftDefaults): DraftState {
   }
 
   const draftState: DraftState = {
-    text: "",
+    // What was typed before a reload (the browser keeps it, lib/draft-storage).
+    text: readStoredDraft(sessionDraftKey(sessionId)) ?? "",
     agentId: defaults.agentId,
     modelId: defaults.modelId,
     effort: defaults.effort ?? "medium",
@@ -47,6 +49,7 @@ export function useDraftState(sessionId: string, defaults: DraftDefaults) {
 
   function setText(text: string): void {
     draft.text = text;
+    writeStoredDraft(sessionDraftKey(sessionId), text);
   }
 
   function setAgentId(agentId: string): void {
@@ -63,6 +66,7 @@ export function useDraftState(sessionId: string, defaults: DraftDefaults) {
 
   function resetText(): void {
     draft.text = "";
+    writeStoredDraft(sessionDraftKey(sessionId), "");
   }
 
   return {
@@ -79,10 +83,12 @@ export function clearDraftText(sessionId: string): void {
   const draft = draftRegistry[sessionId];
 
   if (!draft) {
+    writeStoredDraft(sessionDraftKey(sessionId), "");
     return;
   }
 
   draft.text = "";
+  writeStoredDraft(sessionDraftKey(sessionId), "");
 }
 
 /**
@@ -94,4 +100,5 @@ export function appendDraftReference(sessionId: string, reference: string): void
   const draft = ensureDraft(sessionId, { agentId: "", modelId: "" });
   const separator = draft.text.length === 0 || /\s$/.test(draft.text) ? "" : " ";
   draft.text = `${draft.text}${separator}${reference} `;
+  writeStoredDraft(sessionDraftKey(sessionId), draft.text);
 }

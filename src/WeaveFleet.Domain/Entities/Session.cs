@@ -84,5 +84,11 @@ public sealed class Session
     /// </summary>
     public string? SideDiscardedAt { get; set; }
 
+    /// <summary>
+    /// The newest answer of this side conversation the user has seen with its panel open. A newer finished one is news:
+    /// the minimized tab says New answer. Null when they've seen none.
+    /// </summary>
+    public string? SideSeenAnswerId { get; set; }
+
     public List<string> Tags { get; set; } = [];
 }

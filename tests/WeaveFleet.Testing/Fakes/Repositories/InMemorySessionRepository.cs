@@ -95,6 +95,13 @@ public sealed class InMemorySessionRepository : ISessionRepository
         => Task.FromResult<IReadOnlyList<Session>>([.. _store.Values.Where(s =>
             s.SideOfSessionId is not null && s.SideDiscardedAt is not null && string.CompareOrdinal(s.SideDiscardedAt, cutoff) < 0)]);
 
+    public Task SetSideSeenAnswerAsync(string id, string? answerId)
+    {
+        if (_store.TryGetValue(id, out var session))
+            session.SideSeenAnswerId = answerId;
+        return Task.CompletedTask;
+    }
+
     public Task SetSideConversationStateAsync(string id, bool minimized, string? discardedAt)
     {
         if (_store.TryGetValue(id, out var session))

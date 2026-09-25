@@ -44,6 +44,18 @@ public static class SideConversations
     /// </summary>
     public static readonly TimeSpan DiscardUndoWindow = TimeSpan.FromSeconds(10);
 
+    /// <summary>How long Undo is offered after a discard: from the discard, not from a reload that shows it again.</summary>
+    public static readonly TimeSpan UndoOffered = TimeSpan.FromSeconds(8);
+
+    /// <summary>How much of the Undo offer is left for a side conversation discarded at <paramref name="discardedAt"/>.</summary>
+    public static TimeSpan UndoLeft(string? discardedAt, DateTimeOffset now)
+    {
+        if (!DateTimeOffset.TryParse(discardedAt, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var at))
+            return TimeSpan.Zero;
+        var left = at + UndoOffered - now;
+        return left > TimeSpan.Zero ? left : TimeSpan.Zero;
+    }
+
     /// <summary>The longest title a side conversation gets from its first question.</summary>
     public const int MaxTitleLength = 80;
 
