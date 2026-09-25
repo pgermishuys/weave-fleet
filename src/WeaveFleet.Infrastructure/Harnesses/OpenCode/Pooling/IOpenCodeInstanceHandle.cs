@@ -19,6 +19,9 @@ internal interface IOpenCodeInstanceHandle : IAsyncDisposable
 
     Task SendCommandAsync(string openCodeSessionId, OpenCodeCommandRequest request, CancellationToken ct);
 
+    /// <summary>Runs a command the user typed in the session's folder; checked like <see cref="SendCommandAsync"/>.</summary>
+    Task RunShellAsync(string openCodeSessionId, OpenCodeShellRequest request, CancellationToken ct);
+
     IAsyncEnumerable<OpenCodeSseEvent> SubscribeEvents(string? openCodeSessionId, CancellationToken ct);
 
     Task StopAsync(CancellationToken ct);

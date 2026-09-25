@@ -553,3 +553,170 @@ describe("Composer", () => {
     expect(wrapper.get("[data-testid='prompt-send-button']").attributes("disabled")).toBeDefined();
   });
 });
+
+describe("Composer shell commands", () => {
+  const harnesses = [
+    { type: "opencode", displayName: "OpenCode", available: true, userEnabled: true, capabilities: { supportsShellCommands: true } },
+    { type: "claude-code", displayName: "Claude Code", available: true, userEnabled: true, capabilities: { supportsShellCommands: false } },
+  ];
+
+  function pressKey(element: Element, key: string): KeyboardEvent {
+    const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+    element.dispatchEvent(event);
+    return event;
+  }
+
+  function shellCalls() {
+    return (mockApi.POST.mock.calls as unknown as [string, unknown][]).filter(([url]) => url === "/api/sessions/{id}/shell");
+  }
+
+  function respondToShell(response: Response, body?: unknown): void {
+    const fallback = mockApi.POST.getMockImplementation() as unknown as (url: string, init?: unknown) => Promise<unknown>;
+    mockApi.POST.mockImplementation((async (url: string, init?: unknown) => {
+      if (url === "/api/sessions/{id}/shell") {
+        return { data: undefined, error: body, response };
+      }
+      return fallback(url, init);
+    }) as never);
+  }
+
+  beforeEach(() => {
+    mockApi.GET.mockReset();
+    mockApi.POST.mockReset();
+    configureApiFetch();
+    const fallback = mockApi.GET.getMockImplementation() as unknown as (url: string, init?: unknown) => Promise<unknown>;
+    mockApi.GET.mockImplementation((async (url: string, init?: unknown) => {
+      if (url === "/api/harnesses") {
+        return { data: harnesses, error: undefined, response: new Response() };
+      }
+      return fallback(url, init);
+    }) as never);
+    respondToShell(new Response(null, { status: 202 }));
+    useDraftState("session-1", { agentId: "", modelId: "" }).resetText();
+  });
+
+  it("runs a draft that starts with ! as a shell command, not a prompt", async () => {
+    const wrapper = mountComposer();
+    await flushPromises();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+
+    await textarea.setValue("!git status");
+    expect(wrapper.find("[data-testid='composer-shell-mode']").exists()).toBe(true);
+    expect(wrapper.get("[data-testid='prompt-send-button']").attributes("title")).toBe("Run command");
+
+    const enter = pressKey(textarea.element, "Enter");
+    await flushPromises();
+
+    expect(enter.defaultPrevented).toBe(true);
+    expect(shellCalls()).toHaveLength(1);
+    expect(shellCalls()[0][1]).toEqual(expect.objectContaining({
+      params: { path: { id: "session-1" } },
+      body: { command: "git status" },
+    }));
+    expect(mockApi.POST).not.toHaveBeenCalledWith("/api/sessions/{id}/prompt", expect.anything());
+    expect(wrapper.emitted("promptSent")).toBeUndefined();
+    expect((textarea.element as HTMLTextAreaElement).value).toBe("");
+  });
+
+  it("leaves ! as plain text for a harness that can't run shell commands", async () => {
+    const wrapper = mountComposer({ session: createSession({ harnessType: "claude-code" }) });
+    await flushPromises();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+
+    await textarea.setValue("!ls");
+    expect(wrapper.find("[data-testid='composer-shell-mode']").exists()).toBe(false);
+
+    pressKey(textarea.element, "Enter");
+    await flushPromises();
+
+    expect(shellCalls()).toHaveLength(0);
+    expect(mockApi.POST).toHaveBeenCalledWith("/api/sessions/{id}/prompt", expect.anything());
+  });
+
+  it("doesn't send a ! draft as a prompt before it knows whether the harness runs commands", async () => {
+    let answerHarnesses: (() => void) | undefined;
+    const harnessesAnswered = new Promise<void>((resolve) => { answerHarnesses = resolve; });
+    const fallback = mockApi.GET.getMockImplementation() as unknown as (url: string, init?: unknown) => Promise<unknown>;
+    mockApi.GET.mockImplementation((async (url: string, init?: unknown) => {
+      if (url === "/api/harnesses") await harnessesAnswered;
+      return fallback(url, init);
+    }) as never);
+
+    const wrapper = mountComposer();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+    await textarea.setValue("!git status");
+    pressKey(textarea.element, "Enter");
+    await flushPromises();
+
+    expect(mockApi.POST).not.toHaveBeenCalledWith("/api/sessions/{id}/prompt", expect.anything());
+    expect(wrapper.get("[data-testid='prompt-send-button']").attributes("disabled")).toBeDefined();
+
+    answerHarnesses?.();
+    await flushPromises();
+    expect(wrapper.find("[data-testid='composer-shell-mode']").exists()).toBe(true);
+    pressKey(textarea.element, "Enter");
+    await flushPromises();
+
+    expect(shellCalls()).toHaveLength(1);
+    expect(mockApi.POST).not.toHaveBeenCalledWith("/api/sessions/{id}/prompt", expect.anything());
+  });
+
+  it("goes back to a prompt on Escape, keeping what was typed", async () => {
+    const wrapper = mountComposer();
+    await flushPromises();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+
+    await textarea.setValue("!npm test");
+    const escape = pressKey(textarea.element, "Escape");
+    await flushPromises();
+
+    expect(escape.defaultPrevented).toBe(true);
+    expect((textarea.element as HTMLTextAreaElement).value).toBe("npm test");
+    expect(wrapper.find("[data-testid='composer-shell-mode']").exists()).toBe(false);
+  });
+
+  it("offers no @ references or / commands in a shell command", async () => {
+    const wrapper = mountComposer();
+    await flushPromises();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+
+    await textarea.setValue("!cat @src");
+    await flushPromises();
+
+    expect(wrapper.find(".autocomplete-popup__item").exists()).toBe(false);
+    expect(wrapper.find(".composer-reference").exists()).toBe(false);
+  });
+
+  it("holds a command typed during a turn until the turn ends", async () => {
+    const wrapper = mountComposer({ session: createSession({ activityStatus: "busy" }) });
+    await flushPromises();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+
+    await textarea.setValue("!git status");
+    pressKey(textarea.element, "Enter");
+    await flushPromises();
+
+    expect(shellCalls()).toHaveLength(0);
+    expect(wrapper.get(".queue-badge").text()).toContain("1 queued");
+
+    useSessionsStore().patchSession("session-1", { activityStatus: "idle" });
+    await flushPromises();
+
+    expect(shellCalls()).toHaveLength(1);
+    expect(shellCalls()[0][1]).toEqual(expect.objectContaining({ body: { command: "git status" } }));
+  });
+
+  it("puts a refused command back and says why", async () => {
+    respondToShell(new Response(null, { status: 409 }), { error: "The agent is working. Run the command when its turn ends." });
+    const wrapper = mountComposer();
+    await flushPromises();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+
+    await textarea.setValue("!git status");
+    pressKey(textarea.element, "Enter");
+    await flushPromises();
+
+    expect((textarea.element as HTMLTextAreaElement).value).toBe("!git status");
+    expect(wrapper.get("[data-testid='send-prompt-error']").text()).toBe("The agent is working. Run the command when its turn ends.");
+  });
+});

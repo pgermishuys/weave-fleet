@@ -7,6 +7,7 @@ import { useRouter } from "@tanstack/vue-router";
 import { storeToRefs } from "pinia";
 import MessageBubble from "@/components/session/MessageBubble.vue";
 import ReasoningBlock from "@/components/session/ReasoningBlock.vue";
+import ShellCommandBlock from "@/components/session/ShellCommandBlock.vue";
 import WorkingIndicator from "@/components/session/WorkingIndicator.vue";
 import { useSessionStream } from "@/composables/use-session-stream";
 import { useModels } from "@/composables/use-models";
@@ -29,6 +30,7 @@ import { focusServerCanvas } from "@/composables/use-server-canvases";
 import { mergeMessagesByTimestamp } from "@/lib/merge-messages";
 import { workflowMessageKey, workflowMessageLabel } from "@/lib/workflows";
 import { useWorkflowsStore } from "@/stores/workflows";
+import { toShellCommandView, type ShellCommandView } from "@/lib/shell-commands";
 
 interface ImageAttachmentDisplay {
   url: string;
@@ -63,6 +65,8 @@ interface ActivityMessage {
    * the prompt the step started with, "Fleet · you pressed Move on" on the wrap-up.
    */
   workflowStep?: string;
+  /** Set on a shell command the user ran from the composer: the command and what it printed. */
+  shell?: ShellCommandView;
   /** The slash command a message of yours came from; its body is then what the harness made of the command. */
   command?: SlashCommand;
 }
@@ -251,6 +255,10 @@ function derivationInputs(message: AccumulatedMessage, finished: ReadonlyMap<str
 }
 
 function toActivityMessage(message: AccumulatedMessage, finished: ReadonlyMap<string, BackgroundState>): ActivityMessage {
+  if (message.role === "shell") {
+    return toShellActivityMessage(message);
+  }
+
   const author = getDisplayAuthor(message);
   const rawBody = messageBody(message);
   // A notice comes from the harness, not the user or the agent: Fleet gives it its own role, which the client
@@ -287,6 +295,25 @@ function toActivityMessage(message: AccumulatedMessage, finished: ReadonlyMap<st
     turnError: message.turnError,
     command: message.role === "user" ? message.command : undefined,
   } satisfies ActivityMessage;
+}
+
+/** A shell command the user ran: its own block, on the user's side, not a bubble or a tool card of the agent's. */
+function toShellActivityMessage(message: AccumulatedMessage): ActivityMessage {
+  return {
+    id: message.messageId,
+    author: "You",
+    senderKey: "shell",
+    role: "shell",
+    createdAt: message.createdAt,
+    body: "",
+    images: [],
+    tools: [],
+    questionParts: [],
+    reasoningParts: [],
+    clusterPosition: "single",
+    showIdentity: true,
+    shell: toShellCommandView(message) ?? undefined,
+  };
 }
 
 const deliveredMessages = computed<ActivityMessage[]>(() => {
@@ -914,6 +941,7 @@ function hasVisibleMessageContent(message: ActivityMessage): boolean {
     || message.images.length > 0
     || (message.tools?.length ?? 0) > 0
     || (message.questionParts?.length ?? 0) > 0
+    || message.shell != null
     // A turn can fail before it produces anything; the failure is the content.
     || message.turnError != null;
 }
@@ -1117,10 +1145,15 @@ function handleShowCanvas(canvasId: string): void {
             aria-hidden="true"
           />
         </a>
+        <ShellCommandBlock
+          v-if="message.shell"
+          :command="message.shell"
+        />
         <MessageBubble
+          v-else
           :author="message.author"
           :model-name="message.modelName"
-          :role="message.role"
+          :role="message.role === 'user' ? 'user' : 'assistant'"
           :created-at="message.createdAt"
           :body="message.body"
           :images="message.images"
@@ -1431,7 +1464,8 @@ function handleShowCanvas(canvasId: string): void {
   align-items: flex-start;
 }
 
-.activity-message--user {
+.activity-message--user,
+.activity-message--shell {
   align-items: flex-end;
 }
 

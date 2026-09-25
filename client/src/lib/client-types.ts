@@ -96,7 +96,8 @@ export type AccumulatedPart = AccumulatedTextPart | AccumulatedReasoningPart | A
 export interface AccumulatedMessage {
   messageId: string;
   sessionId: string;
-  role: "user" | "assistant";
+  /** `shell` is a command the user ran from the composer (see `@/lib/shell-commands`). */
+  role: "user" | "assistant" | "shell";
   parts: AccumulatedPart[];
   /** Cost in USD — populated from step-finish parts */
   cost?: number;

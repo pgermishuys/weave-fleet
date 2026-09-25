@@ -11,10 +11,11 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 /// </summary>
 internal static class OpenCode2History
 {
-    /// <summary>The messages Fleet shows, in the order given; V2's other message types (idle, shell, compaction, …) are left out.</summary>
+    /// <summary>The messages Fleet shows, in the order given; V2's other message types (idle, compaction, …) are left out.</summary>
     /// <remarks>
     /// A <c>synthetic</c> message is V2 talking to the model: only a background completion is news for the user, and
-    /// it shows as a message of the session's own, the way it does live.
+    /// it shows as a message of the session's own, the way it does live. A <c>shell</c> message is a command the user
+    /// ran (<see cref="ShellCommands"/>); V2's synthetic note passing it to the model is left out.
     /// </remarks>
     public static IReadOnlyList<HarnessMessage> ToHarnessMessages(IEnumerable<OpenCode2Message> messages)
         => messages.Select(ToHarnessMessage).OfType<HarnessMessage>().ToList();
@@ -46,7 +47,14 @@ internal static class OpenCode2History
                 Finish = message.Finish,
                 Error = TurnFailure(message.Error),
             },
-            "synthetic" when IsBackgroundNotice(message.Metadata) => new HarnessMessage
+            "shell" when message.ShellId is { } shellId => new HarnessMessage
+            {
+                Id = id,
+                Role = ShellCommands.Role,
+                Parts = [ShellPart(id, shellId, message)],
+                Timestamp = timestamp,
+            },
+            "synthetic" when IsBackgroundNotice(message.Metadata) && !OpenCode2Mapper.IsUserShellNotice(message.Text, message.Metadata) => new HarnessMessage
             {
                 Id = id,
                 Role = OpenCode2Mapper.NoticeRole,
@@ -63,6 +71,29 @@ internal static class OpenCode2History
             && metadata.TryGetProperty("source", out var source)
             && source.ValueKind == JsonValueKind.String
             && source.GetString() is "shell" or OpenCode2Mapper.SubagentTool;
+
+    /// <summary>A user's shell command as the tool part the live events give it (<see cref="OpenCode2Mapper.ShellCommand"/>).</summary>
+    private static ToolUsePart ShellPart(string messageId, string shellId, OpenCode2Message message)
+    {
+        var running = message.Status is null or "running";
+        return new ToolUsePart(
+            shellId,
+            "shell",
+            JsonSerializer.SerializeToElement(new OpenCode2ShellInput { Command = message.Command ?? string.Empty }, OpenCode2JsonContext.Default.OpenCode2ShellInput),
+            running ? ToolUseState.Running : ToolUseState.Completed)
+        {
+            PartId = OpenCode2Mapper.ToolPartId(messageId, shellId),
+            Output = running ? null : JsonSerializer.SerializeToElement(message.Output?.Output ?? string.Empty, OpenCode2JsonContext.Default.String),
+            Metadata = running ? null : JsonSerializer.SerializeToElement(
+                new OpenCode2ShellMetadata
+                {
+                    Exit = message.Exit.ValueKind == JsonValueKind.Number && message.Exit.TryGetInt32(out var code) ? code : null,
+                    Status = message.Status,
+                    Truncated = message.Output?.Truncated,
+                },
+                OpenCode2JsonContext.Default.OpenCode2ShellMetadata),
+        };
+    }
 
     /// <summary>A prompt's text, then each attachment as a file part, the way Fleet showed the prompt when it was sent.</summary>
     private static List<MessagePart> UserParts(string messageId, OpenCode2Message message)

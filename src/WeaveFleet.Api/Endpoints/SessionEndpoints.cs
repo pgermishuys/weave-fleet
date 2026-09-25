@@ -477,6 +477,20 @@ public static class SessionEndpoints
         })
         .WithName("SendSessionCommand");
 
+        // POST /api/sessions/{id}/shell — run a shell command the user typed (!git status) in the session's folder.
+        // Gated as a prompt is (sign-in, the caller's own session, not archived); the orchestrator checks the rest.
+        // 202 once the harness has taken it: the command and its output arrive in the conversation as events.
+        group.MapPost("/{id}/shell", async (string id, RunShellCommandApiRequest req, SessionOrchestrator orchestrator, HttpContext http, CancellationToken ct) =>
+        {
+            // The block reads as the user's; an agent runs commands with its own shell tool.
+            if (http.IsAgentRequest())
+                return Results.Json(new ErrorResponse("Agents run commands with their own shell tool."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
+
+            var result = await orchestrator.RunShellCommandAsync(id, req.Command, ct);
+            return result.Match(_ => Results.Accepted(), err => err.ToSessionApiResult());
+        })
+        .WithName("RunSessionShellCommand");
+
         // DELETE /api/sessions/{id}
         group.MapDelete("/{id}", async (string id, SessionService sessionService) =>
         {
@@ -988,6 +1002,8 @@ internal sealed record SendCommandApiRequest(
     string? Arguments,
     string? Agent,
     ModelRef? Model);
+
+internal sealed record RunShellCommandApiRequest(string? Command);
 
 internal sealed record QuestionAnswerApiRequest(IReadOnlyList<IReadOnlyList<string>> Answers);
 

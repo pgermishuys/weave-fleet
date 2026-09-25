@@ -191,6 +191,32 @@ internal sealed class LeasedInstanceHandle : IOpenCodeInstanceHandle
         await HttpClient.SendCommandAsync(openCodeSessionId, request, _workingDirectory, ct).ConfigureAwait(false);
     }
 
+    public async Task RunShellAsync(string openCodeSessionId, OpenCodeShellRequest request, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(openCodeSessionId);
+        ArgumentNullException.ThrowIfNull(request);
+        await EnsureConnectedAsync(ct).ConfigureAwait(false);
+        var lease = CurrentLease;
+        var leaseGeneration = CurrentLeaseGeneration;
+
+        // A shell command runs with the agent's rights in a folder, so it goes only where the binding says this
+        // Fleet session and its user are, as a slash command does.
+        if (!_bindingTable.TryVerifyCommandBinding(
+                lease.Instance,
+                _fleetSessionId,
+                _ownerUserId,
+                openCodeSessionId,
+                _workingDirectory,
+                leaseGeneration,
+                out _))
+        {
+            throw new InvalidOperationException(
+                "Cannot route the shell command because the pooled session binding does not match the Fleet session, user, OpenCode session, directory, and lease generation.");
+        }
+
+        await HttpClient.RunShellAsync(openCodeSessionId, request, _workingDirectory, ct).ConfigureAwait(false);
+    }
+
     public async Task<PoolDemuxBinding> BindSessionAsync(string openCodeSessionId, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(openCodeSessionId);

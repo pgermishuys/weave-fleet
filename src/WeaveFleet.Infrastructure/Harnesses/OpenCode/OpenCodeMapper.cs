@@ -158,11 +158,15 @@ internal static class OpenCodeMapper
 
     /// <summary>
     /// Maps a list of <see cref="OpenCodeMessageWithParts"/> to <see cref="HarnessMessage"/> instances.
-    /// Messages with an unrecognised role (neither "user" nor "assistant") are silently skipped.
+    /// Messages with an unrecognised role (neither "user" nor "assistant") are silently skipped. A shell command the
+    /// user ran is one message of role <see cref="ShellCommands.Role"/>, as it is live: OpenCode's note to the model
+    /// (<see cref="ShellCommandMarker"/>) is left out, and the reply holding the command is relabelled.
     /// </summary>
     internal static IReadOnlyList<HarnessMessage> ToHarnessMessages(
         IReadOnlyList<OpenCodeMessageWithParts> msgs)
     {
+        var shellCommandNotes = msgs.Where(IsShellCommandNote).Select(m => m.Info.Id).ToHashSet(StringComparer.Ordinal);
+        var ids = msgs.Select(m => m.Info.Id).ToHashSet(StringComparer.Ordinal);
         var result = new List<HarnessMessage>(msgs.Count);
         for (int i = 0; i < msgs.Count; i++)
         {
@@ -172,9 +176,73 @@ internal static class OpenCodeMapper
             if (msg.Info.Role is not ("user" or "assistant"))
                 continue;
 
-            result.Add(ToHarnessMessage(msg));
+            if (shellCommandNotes.Contains(msg.Info.Id))
+                continue;
+
+            var mapped = ToHarnessMessage(msg);
+            var isShellCommand = msg.Info is OpenCodeAssistantMessage { ParentId: { } parentId }
+                && (shellCommandNotes.Contains(parentId) || (!ids.Contains(parentId) && LooksLikeShellCommand(msg)));
+            result.Add(isShellCommand ? mapped with { Role = ShellCommands.Role } : mapped);
         }
         return result;
+    }
+
+    /// <summary>
+    /// The text of the user message OpenCode files a user's shell command under (<c>POST /session/{id}/shell</c>). The
+    /// command itself is a <c>bash</c> tool part in the assistant message that answers it.
+    /// </summary>
+    internal const string ShellCommandMarker = "The following tool was executed by the user";
+
+    /// <summary>Whether a message is OpenCode's note that the user ran a shell command.</summary>
+    private static bool IsShellCommandNote(OpenCodeMessageWithParts msg)
+        => msg.Info is OpenCodeUserMessage
+            && msg.Parts.Count > 0
+            && msg.Parts.All(part => part is OpenCodeTextPart { Synthetic: true, Text: ShellCommandMarker });
+
+    /// <summary>
+    /// A shell command's reply whose note is on an older page: one <c>bash</c> call and nothing else. A turn's reply
+    /// always starts with a step.
+    /// </summary>
+    private static bool LooksLikeShellCommand(OpenCodeMessageWithParts msg)
+        => msg.Info is OpenCodeAssistantMessage { Finish: null }
+            && msg.Parts.Count == 1
+            && msg.Parts[0] is OpenCodeToolPart { Tool: "bash" };
+
+    /// <summary>The message id of a part update that carries OpenCode's shell-command note, else null.</summary>
+    internal static string? TryReadShellCommandMarker(JsonElement payload)
+        => payload.ValueKind == JsonValueKind.Object
+            && payload.TryGetProperty("part", out var part)
+            && part.ValueKind == JsonValueKind.Object
+            && part.TryGetProperty("type", out var type) && type.ValueEquals("text")
+            && part.TryGetProperty("synthetic", out var synthetic) && synthetic.ValueKind == JsonValueKind.True
+            && part.TryGetProperty("text", out var text) && text.ValueEquals(ShellCommandMarker)
+            && part.TryGetProperty("messageID", out var messageId) && messageId.ValueKind == JsonValueKind.String
+                ? messageId.GetString()
+                : null;
+
+    /// <summary>The message an assistant message answers, from a <c>message.updated</c> payload; null for any other.</summary>
+    internal static string? TryReadAssistantParentId(JsonElement payload)
+        => payload.ValueKind == JsonValueKind.Object
+            && payload.TryGetProperty("info", out var info)
+            && info.ValueKind == JsonValueKind.Object
+            && info.TryGetProperty("role", out var role) && role.ValueEquals("assistant")
+            && info.TryGetProperty("parentID", out var parentId) && parentId.ValueKind == JsonValueKind.String
+                ? parentId.GetString()
+                : null;
+
+    /// <summary>A <c>message.updated</c> event for a shell command's reply, relabelled as the user's command.</summary>
+    internal static HarnessEvent AsShellCommand(HarnessEvent evt)
+    {
+        if (evt.Payload is not { ValueKind: JsonValueKind.Object } payload
+            || System.Text.Json.Nodes.JsonNode.Parse(payload.GetRawText()) is not System.Text.Json.Nodes.JsonObject root
+            || root["info"] is not System.Text.Json.Nodes.JsonObject info)
+        {
+            return evt;
+        }
+
+        info["role"] = ShellCommands.Role;
+        using var relabelled = JsonDocument.Parse(root.ToJsonString());
+        return evt with { Payload = relabelled.RootElement.Clone() };
     }
 
     /// <summary>The OpenCode event sent whenever the agent's todo list changes.</summary>
@@ -456,12 +524,7 @@ internal static class OpenCodeMapper
         OpenCodeConfigDefaults config)
     {
         var agentInfos = ToAgentInfos(agents);
-        var selectable = agentInfos
-            .Where(agent => !agent.Hidden && agent.Name.Length > 0 && !string.Equals(agent.Mode, "subagent", StringComparison.Ordinal))
-            .ToList();
-        var defaultAgent = selectable.FirstOrDefault(agent => string.Equals(agent.Name, config.DefaultAgent, StringComparison.Ordinal))
-            ?? selectable.FirstOrDefault(agent => string.Equals(agent.Name, "build", StringComparison.Ordinal))
-            ?? selectable.FirstOrDefault();
+        var defaultAgent = DefaultAgent(agentInfos, config);
 
         string? defaultProviderId = null;
         string? defaultModelId = null;
@@ -480,6 +543,17 @@ internal static class OpenCodeMapper
             DefaultModelProviderId = defaultProviderId,
             DefaultModelId = defaultModelId,
         };
+    }
+
+    /// <summary>The agent OpenCode uses when a request names none; see <see cref="ToHarnessCatalog"/>.</summary>
+    internal static AgentInfo? DefaultAgent(IReadOnlyList<AgentInfo> agents, OpenCodeConfigDefaults config)
+    {
+        var selectable = agents
+            .Where(agent => !agent.Hidden && agent.Name.Length > 0 && !string.Equals(agent.Mode, "subagent", StringComparison.Ordinal))
+            .ToList();
+        return selectable.FirstOrDefault(agent => string.Equals(agent.Name, config.DefaultAgent, StringComparison.Ordinal))
+            ?? selectable.FirstOrDefault(agent => string.Equals(agent.Name, "build", StringComparison.Ordinal))
+            ?? selectable.FirstOrDefault();
     }
 
     /// <summary>Converts a Unix millisecond timestamp to <see cref="DateTimeOffset"/>.</summary>

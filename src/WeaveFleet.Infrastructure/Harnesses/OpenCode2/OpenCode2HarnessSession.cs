@@ -296,6 +296,24 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
     }
 
     /// <summary>
+    /// Runs a command the user typed in the session's folder, under the message id Fleet gave it. V2 runs one during a
+    /// turn too, and steers its output into the turn; Fleet's composer holds one back until the turn ends instead.
+    /// The request can last as long as the command, so this waits only long enough to hear a refusal.
+    /// </summary>
+    public async Task RunShellCommandAsync(ShellCommandOptions options, CancellationToken ct)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var server = await AttachedServerAsync(ct).ConfigureAwait(false);
+        LogShellCommand(_logger, InstanceId);
+
+        var sessionId = ResumeToken;
+        await ShellCommandCall.RunUntilTakenAsync(
+            token => server.Client.RunShellAsync(sessionId, options.MessageId, options.Command, token),
+            ex => LogShellCommandFailed(_logger, InstanceId, ex),
+            CancellationToken.None).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Answers the form a question tool call asked with. <paramref name="requestId"/> is the tool call's id (what
     /// the question card knows) or the form's; <paramref name="answers"/> has the chosen labels, one list per question.
     /// </summary>
@@ -646,6 +664,12 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Running command {Command} in OpenCode 2 session {InstanceId}")]
     private static partial void LogCommand(ILogger logger, string instanceId, string command);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Running a shell command in OpenCode 2 session {InstanceId}")]
+    private static partial void LogShellCommand(ILogger logger, string instanceId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "A shell command in OpenCode 2 session {InstanceId} failed after V2 took it")]
+    private static partial void LogShellCommandFailed(ILogger logger, string instanceId, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Interrupting OpenCode 2 session {InstanceId}")]
     private static partial void LogAbort(ILogger logger, string instanceId);

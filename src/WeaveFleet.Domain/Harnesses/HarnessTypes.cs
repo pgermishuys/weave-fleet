@@ -58,6 +58,35 @@ public sealed record HarnessCapabilities
     /// workflow starts and hides it from every other session. Without it, workflows can't run on the harness.
     /// </summary>
     public bool SupportsWorkflowSteps { get; init; }
+
+    /// <summary>
+    /// The user can run a shell command in the session's folder from the composer (<c>!git status</c>):
+    /// <see cref="IHarnessSession.RunShellCommandAsync"/> runs it without a model turn, the command and its output
+    /// show in the conversation as a message of role <see cref="ShellCommands.Role"/>, and the agent sees them on
+    /// its next turn.
+    /// </summary>
+    public bool SupportsShellCommands { get; init; }
+}
+
+/// <summary>What a shell command the user ran from the composer looks like in the conversation.</summary>
+/// <remarks>
+/// A message of role <see cref="Role"/> with one tool part: its input is <c>{ command }</c>, its output the command's
+/// output, and its metadata says how it ended when the harness reports it (<see cref="ExitMetadata"/>,
+/// <see cref="TruncatedMetadata"/>). Not <c>user</c>: Fleet drops a harness's echo of the user's messages. Not
+/// <c>assistant</c>: the agent didn't run it, and it isn't a turn.
+/// </remarks>
+public static class ShellCommands
+{
+    public const string Role = "shell";
+
+    /// <summary>The metadata key for the command's exit code.</summary>
+    public const string ExitMetadata = "exit";
+
+    /// <summary>The metadata key that says the harness kept only part of the output.</summary>
+    public const string TruncatedMetadata = "truncated";
+
+    /// <summary>The longest command Fleet passes on.</summary>
+    public const int MaxCommandLength = 16_384;
 }
 
 /// <summary>What a harness needs before sessions can use it. Sent to the client as <c>state</c>.</summary>
@@ -344,6 +373,23 @@ public sealed record PromptOptions
     public string? Effort { get; init; }
     public string? MessageId { get; init; }
 }
+
+/// <summary>A shell command the user runs in the session's folder (see <see cref="HarnessCapabilities.SupportsShellCommands"/>).</summary>
+public sealed record ShellCommandOptions
+{
+    public required string Command { get; init; }
+
+    /// <summary>The id Fleet gives the command's message, when the harness takes one.</summary>
+    public string? MessageId { get; init; }
+
+    /// <summary>The session's agent and model, for a harness that files the command under them.</summary>
+    public string? Agent { get; init; }
+    public string? ProviderId { get; init; }
+    public string? ModelId { get; init; }
+}
+
+/// <summary>The harness won't run a shell command now: its turn is running. <see cref="Exception.Message"/> says so.</summary>
+public sealed class HarnessBusyException(string message) : Exception(message);
 
 /// <summary>Options for executing a slash command on an agent.</summary>
 public sealed record CommandOptions

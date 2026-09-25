@@ -245,6 +245,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(ImageAttachmentDto))]
 [JsonSerializable(typeof(ForkSessionApiRequest))]
 [JsonSerializable(typeof(SendCommandApiRequest))]
+[JsonSerializable(typeof(RunShellCommandApiRequest))]
 [JsonSerializable(typeof(QuestionAnswerApiRequest))]
 [JsonSerializable(typeof(ModelRef))]
 [JsonSerializable(typeof(UpdateSessionTagsRequest))]

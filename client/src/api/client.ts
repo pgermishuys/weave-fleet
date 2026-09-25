@@ -301,6 +301,8 @@ export interface HarnessCapabilities {
   supportsWorkflowSteps?: boolean;
   /** The harness can ask about a session off the record, leaving its history alone: recaps and Save as workflow…. */
   supportsOffTheRecordPrompt?: boolean;
+  /** The user can run a shell command in the session's folder from the composer (`!git status`). */
+  supportsShellCommands?: boolean;
 }
 
 /** A field a sign-in method asks for besides the key or browser (`HarnessSignInField` on the server). */

@@ -341,6 +341,41 @@ internal sealed class OpenCodeHttpClient
         }
     }
 
+    /// <summary>
+    /// POST /session/{sessionId}/shell?directory={directory} — runs a command the user typed in the session's folder.
+    /// OpenCode records it as a user message (<see cref="OpenCodeMapper.ShellCommandMarker"/>) and an assistant message
+    /// holding a <c>bash</c> tool part, and answers when the command has finished. A session in a turn is refused
+    /// (409), as <see cref="HarnessBusyException"/>.
+    /// </summary>
+    public async Task RunShellAsync(
+        string sessionId,
+        OpenCodeShellRequest request,
+        string directory,
+        CancellationToken ct)
+    {
+        var url = BuildUrl($"/session/{Uri.EscapeDataString(sessionId)}/shell", directory);
+        ValidateDirectoryScope(url);
+        var logUrl = RedactDirectory(url);
+        LogRequest(_logger, $"POST {logUrl}", null);
+
+        using var content = new StringContent(
+            JsonSerializer.Serialize(request, OpenCodeJsonContext.Default.OpenCodeShellRequest),
+            Encoding.UTF8,
+            "application/json");
+        using var response = await _httpClient.PostAsync(url, content, ct).ConfigureAwait(false);
+        LogResponse(_logger, (int)response.StatusCode, logUrl, null);
+
+        if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+            throw new HarnessBusyException("The agent is working. Run the command when its turn ends.");
+
+        if (!response.IsSuccessStatusCode)
+        {
+            LogRequestFailed(_logger, (int)response.StatusCode, logUrl, null);
+            LogResponseBody(_logger, await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false), null);
+            response.EnsureSuccessStatusCode();
+        }
+    }
+
     /// <summary>GET /session/{sessionId}/message?directory={directory}[&amp;limit=N][&amp;before=cursor]</summary>
     /// <remarks>
     /// Deserializes each message manually to work around a STJ polymorphism limitation:

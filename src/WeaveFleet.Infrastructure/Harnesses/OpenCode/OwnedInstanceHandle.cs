@@ -63,6 +63,9 @@ internal sealed class OwnedInstanceHandle : IOpenCodeInstanceHandle
     public Task SendCommandAsync(string openCodeSessionId, OpenCodeCommandRequest request, CancellationToken ct) =>
         HttpClient.SendCommandAsync(openCodeSessionId, request, _workingDirectory, ct);
 
+    public Task RunShellAsync(string openCodeSessionId, OpenCodeShellRequest request, CancellationToken ct) =>
+        HttpClient.RunShellAsync(openCodeSessionId, request, _workingDirectory, ct);
+
     public IAsyncEnumerable<OpenCodeSseEvent> SubscribeEvents(string? openCodeSessionId, CancellationToken ct) =>
         HttpClient.SubscribeToEventsAsync(_workingDirectory, () => { _sseConnected.TrySetResult(); return Task.CompletedTask; }, ct);
 

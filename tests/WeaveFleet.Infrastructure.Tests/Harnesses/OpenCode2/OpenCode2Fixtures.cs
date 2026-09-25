@@ -17,6 +17,9 @@ namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode2;
 ///   the turn). <c>tools-questions.messages.json</c> is the same session's history afterwards
 ///   (<c>GET /api/session/{id}/message</c>), and <c>.messages-page1/2.json</c> the same read three at a time.
 ///   <c>tools-questions.forms.json</c> is <c>GET /api/session/{id}/form</c> while the first question waited.</item>
+///   <item><c>user-shell.sse</c> (2.0.9): shell commands the user ran (<c>POST /api/session/{id}/shell</c>) between and
+///   during turns; <c>user-shell.messages.json</c> is the session's history afterwards. See
+///   <see cref="OpenCode2ShellCommandTests"/>.</item>
 /// </list>
 /// </summary>
 internal static class OpenCode2Fixtures

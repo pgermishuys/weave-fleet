@@ -17,6 +17,8 @@ import { useInputHistory } from "@/composables/use-input-history";
 import { useMessageQueue } from "@/composables/use-message-queue";
 import { useIsMobile } from "@/composables/use-media-query";
 import { useSendCommand } from "@/composables/use-send-command";
+import { useRunShellCommand } from "@/composables/use-run-shell-command";
+import { useHarnesses } from "@/composables/use-harnesses";
 import { useModels } from "@/composables/use-models";
 import { useDraftAttachments } from "@/composables/use-draft-attachments";
 import { useDraftTerminalContext } from "@/composables/use-draft-terminal-context";
@@ -25,6 +27,7 @@ import { formatTerminalContext, terminalLineRange } from "@/lib/format-terminal-
 import { splitDraftReferences } from "@/lib/composer-references";
 import { useSendPrompt } from "@/composables/use-send-prompt";
 import { parseSlashCommand } from "@/lib/slash-command-utils";
+import { isShellDraft, shellDraftCommand } from "@/lib/shell-commands";
 import { trackAction } from "@/lib/track-action";
 import { useSessionsStore } from "@/stores/sessions";
 import type { ImageAttachment } from "@/lib/client-types";
@@ -53,6 +56,8 @@ const { draft, setText, setAgentId, setModelId, setEffort } = useDraftState(prop
 });
 const { canSend, error: sendPromptError, sendPrompt } = useSendPrompt(props.sessionId);
 const { error: sendCommandError, sendCommand } = useSendCommand(props.sessionId);
+const { error: shellCommandError, runShellCommand } = useRunShellCommand(props.sessionId);
+const { harnesses, isLoading: harnessesLoading } = useHarnesses();
 const inputHistory = useInputHistory(props.sessionId);
 const historyEl = ref<HTMLElement | null>(null);
 
@@ -64,7 +69,7 @@ const localDisabledOverride = shallowRef<boolean | null>(null);
 const statusIndicatorVisible = shallowRef(false);
 const statusIndicatorPhase = shallowRef<"thinking" | "responding">("thinking");
 const statusIndicatorDotCount = shallowRef(1);
-const sendError = computed(() => sendCommandError.value ?? sendPromptError.value);
+const sendError = computed(() => shellCommandError.value ?? sendCommandError.value ?? sendPromptError.value);
 let disabledStateObserver: MutationObserver | null = null;
 let statusIndicatorTimer: ReturnType<typeof setTimeout> | null = null;
 let statusIndicatorDotsTimer: ReturnType<typeof setInterval> | null = null;
@@ -176,8 +181,9 @@ function handleFileInput(event: Event): void {
   input.value = "";
 }
 
-const hasContent = computed(() =>
-  draft.text.trim().length > 0 || pendingAttachments.value.length > 0 || terminalContexts.value.length > 0);
+const hasContent = computed(() => isShellMode.value
+  ? shellDraftCommand(draft.text).length > 0
+  : !shellSupportPending.value && (draft.text.trim().length > 0 || pendingAttachments.value.length > 0 || terminalContexts.value.length > 0));
 
 const STATUS_INDICATOR_LINGER_MS = 1600;
 const STATUS_INDICATOR_DOTS_INTERVAL_MS = 400;
@@ -185,6 +191,22 @@ const STATUS_INDICATOR_DOTS_INTERVAL_MS = 400;
 const selectedSession = computed(() => {
   return sessions.value.find((session) => session.session.id === props.sessionId) ?? null;
 });
+
+/** The session's harness can run a shell command from the composer; elsewhere `!` is just text. */
+const supportsShellCommands = computed(() => {
+  const harnessType = selectedSession.value?.harnessType ?? "opencode";
+  return harnesses.value.find((harness) => harness.type === harnessType)?.capabilities.supportsShellCommands === true;
+});
+
+/** A draft that starts with `!` is a shell command to run in the session's folder, not a prompt. */
+const isShellMode = computed(() => supportsShellCommands.value && isShellDraft(draft.text));
+
+/**
+ * A `!` draft while the harness list is still loading: it may be a command, so it isn't sent as a prompt until the
+ * list says whether the harness runs them.
+ */
+const shellSupportPending = computed(() =>
+  isShellDraft(draft.text) && !supportsShellCommands.value && harnessesLoading.value);
 
 const sessionStateOverride = computed(() => {
   return sessionStateOverrides.value[props.sessionId] ?? null;
@@ -323,7 +345,15 @@ const { queue, enqueue } = useMessageQueue(
   async (text) => {
     setText(text);
     await nextTick();
-    if (sendCurrentDraft()) {
+    if (isShellMode.value) {
+      await runShellDraft();
+      // A command isn't a turn, so no turn ends to send what's queued after it: pass the queue on.
+      if (queue.value.length > 0) {
+        optimisticBusy.value = true;
+        await nextTick();
+        optimisticBusy.value = false;
+      }
+    } else if (sendCurrentDraft()) {
       optimisticBusy.value = true;
       emit("promptSent");
     }
@@ -367,13 +397,16 @@ defineExpose({
 const cursorPosition = shallowRef(0);
 const hasValidSessionId = computed(() => Boolean(props.sessionId?.trim()));
 const autocomplete = useAutocomplete({
-  value: computed(() => draft.text),
+  // A shell command is sent as typed: no @ references or / commands in it.
+  value: computed(() => isShellMode.value ? "" : draft.text),
   setValue: setText,
   sessionId: computed(() => props.sessionId),
   inputRef: textareaRef,
   cursorPosition,
 });
-const draftSegments = computed(() => splitDraftReferences(draft.text, cursorPosition.value));
+const draftSegments = computed(() => isShellMode.value
+  ? [{ text: draft.text }]
+  : splitDraftReferences(draft.text, cursorPosition.value));
 
 const selectedAgentId = computed({
   get: () => draft.agentId,
@@ -532,6 +565,25 @@ function handleCursorPositionChange(event: Event): void {
   cursorPosition.value = target.selectionStart ?? target.value.length;
 }
 
+/**
+ * Runs the shell-mode draft's command. The draft clears at once; a command the server refuses comes back, unless
+ * something new has been typed since.
+ */
+async function runShellDraft(): Promise<boolean> {
+  const typed = draft.text;
+  const command = shellDraftCommand(typed);
+  if (!command) {
+    return false;
+  }
+
+  setText("");
+  const ran = await runShellCommand(command);
+  if (!ran && draft.text.length === 0) {
+    setText(typed);
+  }
+  return ran;
+}
+
 function sendCurrentDraft(): boolean {
   const parsedCommand = parseSlashCommand(draft.text);
   if (parsedCommand) {
@@ -563,7 +615,16 @@ function handleSend(): void {
     return;
   }
 
+  if (shellSupportPending.value) {
+    return;
+  }
+
   inputHistory.push(text);
+
+  if (isShellMode.value) {
+    handleShellSend(text);
+    return;
+  }
 
   if (sessionStatus.value === "busy") {
     enqueue(formatTerminalContext(terminalContexts.value, text));
@@ -583,6 +644,29 @@ function handleSend(): void {
   optimisticBusy.value = true;
   emit("promptSent");
   trackAction("session.prompt", props.sessionId);
+
+  void nextTick(() => {
+    resizeTextarea();
+    textareaRef.value?.focus();
+  });
+}
+
+/**
+ * Shell mode's Enter. A command runs between turns: one typed while the agent works waits in the queue with the
+ * prompts, since OpenCode won't run one during a turn and OpenCode 2 would steer its output into the turn.
+ */
+function handleShellSend(text: string): void {
+  if (!shellDraftCommand(text)) {
+    return;
+  }
+
+  trackAction("session.shell", props.sessionId);
+  if (sessionStatus.value === "busy") {
+    enqueue(text);
+    setText("");
+  } else {
+    void runShellDraft();
+  }
 
   void nextTick(() => {
     resizeTextarea();
@@ -635,6 +719,13 @@ function handleKeydown(event: KeyboardEvent): void {
     return;
   }
 
+  // Escape leaves shell mode: the `!` goes, and what was typed stays as a prompt.
+  if (event.key === "Escape" && isShellMode.value) {
+    event.preventDefault();
+    setText(draft.text.slice(1));
+    return;
+  }
+
   const autocompleteWasOpen = hasValidSessionId.value && autocomplete.isOpen.value;
 
   if (hasValidSessionId.value) {
@@ -678,6 +769,7 @@ function handleKeydown(event: KeyboardEvent): void {
     </div>
 
     <ComposerFrame
+      :class="{ 'composer-frame--shell': isShellMode }"
       :dragging="isDragging"
       @dragover="handleDragOver"
       @dragleave="handleDragLeave"
@@ -715,7 +807,10 @@ function handleKeydown(event: KeyboardEvent): void {
         </button>
       </div>
 
-      <div class="composer-input">
+      <div
+        class="composer-input"
+        :class="{ 'composer-input--shell': isShellMode }"
+      >
         <!--
           No whitespace between these nodes: the mirror lays text out as the text area does. The
           trailing space gives a draft that ends in a newline its last line, as the text area has.
@@ -825,32 +920,46 @@ function handleKeydown(event: KeyboardEvent): void {
       >
 
       <template #toolbar>
-        <Button
-          variant="toolbar-icon"
-          size="toolbar"
-          title="Attach image"
-          :disabled="isDisabled"
-          @click="fileInputRef?.click()"
+        <span
+          v-if="isShellMode"
+          class="composer-shell-mode"
+          data-testid="composer-shell-mode"
         >
-          <Paperclip class="size-3.5" />
-        </Button>
-        <AgentSelector
-          v-model="selectedAgentId"
-          :agents="agents"
-          :default-label="defaultLabels.agentLabel"
-          :default-description="defaultLabels.agentDescription"
-        />
-        <ModelSelector
-          v-model="selectedModelId"
-          :models="models"
-          :default-label="defaultLabels.modelLabel"
-          :default-description="defaultLabels.modelDescription"
-        />
-        <EffortToggle
-          v-if="supportsReasoning"
-          v-model="selectedEffort"
-          :variants="selectedModelVariants"
-        />
+          <SquareTerminal
+            class="composer-shell-mode__icon"
+            aria-hidden="true"
+          />
+          <span class="composer-shell-mode__label">Shell command</span>
+          <span class="composer-shell-mode__hint">Runs in the session's folder, no model turn · Esc for a prompt</span>
+        </span>
+        <template v-else>
+          <Button
+            variant="toolbar-icon"
+            size="toolbar"
+            title="Attach image"
+            :disabled="isDisabled"
+            @click="fileInputRef?.click()"
+          >
+            <Paperclip class="size-3.5" />
+          </Button>
+          <AgentSelector
+            v-model="selectedAgentId"
+            :agents="agents"
+            :default-label="defaultLabels.agentLabel"
+            :default-description="defaultLabels.agentDescription"
+          />
+          <ModelSelector
+            v-model="selectedModelId"
+            :models="models"
+            :default-label="defaultLabels.modelLabel"
+            :default-description="defaultLabels.modelDescription"
+          />
+          <EffortToggle
+            v-if="supportsReasoning"
+            v-model="selectedEffort"
+            :variants="selectedModelVariants"
+          />
+        </template>
         <Button
           variant="toolbar-icon-danger"
           size="toolbar"
@@ -866,8 +975,8 @@ function handleKeydown(event: KeyboardEvent): void {
           size="toolbar-lg"
           class="composer-frame__send"
           data-testid="prompt-send-button"
-          aria-label="Send"
-          title="Send"
+          :aria-label="isShellMode ? 'Run command' : 'Send'"
+          :title="isShellMode ? 'Run command' : 'Send'"
           :disabled="isDisabled || !hasContent"
           @click="handleSend"
         >
@@ -917,6 +1026,47 @@ function handleKeydown(event: KeyboardEvent): void {
 /* Above the mirror, which only paints the reference tints behind the text. */
 .composer-input > textarea {
   position: relative;
+}
+
+/* Shell mode: the draft is a command, set in the terminal's type. */
+.composer-input--shell > textarea,
+.composer-input--shell > .composer-input__mirror {
+  font-family: var(--font-mono-stack);
+  font-size: 13px;
+}
+
+.composer-frame--shell,
+.composer-frame--shell:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
+}
+
+.composer-shell-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.composer-shell-mode__icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.composer-shell-mode__label {
+  flex-shrink: 0;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.composer-shell-mode__hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .composer-input__mirror {

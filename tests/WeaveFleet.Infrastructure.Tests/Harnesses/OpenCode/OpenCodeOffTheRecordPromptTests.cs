@@ -491,6 +491,9 @@ public sealed class OpenCodeOffTheRecordPromptTests
 
         public Task SendCommandAsync(string openCodeSessionId, OpenCodeCommandRequest request, CancellationToken ct) => Task.CompletedTask;
 
+        public Task RunShellAsync(string openCodeSessionId, OpenCodeShellRequest request, CancellationToken ct) =>
+            HttpClient.RunShellAsync(openCodeSessionId, request, Directory, ct);
+
         public IAsyncEnumerable<OpenCodeSseEvent> SubscribeEvents(string? openCodeSessionId, CancellationToken ct) => AsyncEnumerable.Empty<OpenCodeSseEvent>();
 
         public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
