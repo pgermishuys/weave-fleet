@@ -48,7 +48,7 @@ internal static class GitHubItems
 
     internal const string WorkQuery = PullRequestFields + IssueFields + """
         query($review: String!, $authored: String!, $assigned: String!) {
-          viewer { login }
+          viewer { login avatarUrl }
           review: search(query: $review, type: ISSUE, first: 20) { nodes { ...Pr } }
           authored: search(query: $authored, type: ISSUE, first: 20) { nodes { ...Pr } }
           assigned: search(query: $assigned, type: ISSUE, first: 20) { nodes { ...Iss ...Pr } }
@@ -173,6 +173,7 @@ internal static class GitHubItems
         var data = response?["data"];
         return new GitHubWorkResponse(
             data?["viewer"]?["login"]?.GetValue<string>(),
+            data?["viewer"]?["avatarUrl"]?.GetValue<string>(),
             ParseNodes(data?["review"]?["nodes"] as JsonArray),
             ParseNodes(data?["authored"]?["nodes"] as JsonArray),
             ParseNodes(data?["assigned"]?["nodes"] as JsonArray),
@@ -487,6 +488,7 @@ public sealed record GitHubRepoCounts(string FullName, int OpenPullRequests, int
 /// </summary>
 public sealed record GitHubWorkResponse(
     string? Login,
+    string? AvatarUrl,
     IReadOnlyList<GitHubItemSummary> ReviewRequested,
     IReadOnlyList<GitHubItemSummary> Authored,
     IReadOnlyList<GitHubItemSummary> Assigned,

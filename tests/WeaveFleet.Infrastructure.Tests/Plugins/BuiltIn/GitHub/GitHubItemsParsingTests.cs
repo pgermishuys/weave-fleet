@@ -211,7 +211,7 @@ public sealed class GitHubItemsParsingTests
     {
         var response = JsonNode.Parse($$"""
             { "data": {
-              "viewer": { "login": "pat" },
+              "viewer": { "login": "pat", "avatarUrl": "https://avatars/pat" },
               "review": { "nodes": [ {{PullRequestNode}} ] },
               "authored": { "nodes": [] },
               "assigned": { "nodes": [ {{IssueNode}} ] }
@@ -221,6 +221,7 @@ public sealed class GitHubItemsParsingTests
         var work = GitHubItems.ParseWork(response, []);
 
         work.Login.ShouldBe("pat");
+        work.AvatarUrl.ShouldBe("https://avatars/pat");
         work.ReviewRequested.ShouldHaveSingleItem().Number.ShouldBe(314);
         work.Authored.ShouldBeEmpty();
         work.Assigned.ShouldHaveSingleItem().Kind.ShouldBe("issue");
