@@ -78,9 +78,33 @@ public sealed class InMemorySessionRepository : ISessionRepository
 
     public Task<Session?> GetSideConversationAsync(string sessionId)
         => Task.FromResult(_store.Values
-            .Where(s => s.SideOfSessionId == sessionId)
+            .Where(s => s.SideOfSessionId == sessionId && s.SideDiscardedAt is null)
             .OrderByDescending(s => s.CreatedAt, StringComparer.Ordinal)
             .FirstOrDefault());
+
+    public Task<Session?> GetDiscardedSideConversationAsync(string sessionId)
+        => Task.FromResult(_store.Values
+            .Where(s => s.SideOfSessionId == sessionId && s.SideDiscardedAt is not null)
+            .OrderByDescending(s => s.SideDiscardedAt, StringComparer.Ordinal)
+            .FirstOrDefault());
+
+    public Task<IReadOnlyList<Session>> ListSideConversationsAsync(string sessionId)
+        => Task.FromResult<IReadOnlyList<Session>>([.. _store.Values.Where(s => s.SideOfSessionId == sessionId)]);
+
+    public Task<IReadOnlyList<Session>> ListSideConversationsDiscardedBeforeAsync(string cutoff)
+        => Task.FromResult<IReadOnlyList<Session>>([.. _store.Values.Where(s =>
+            s.SideOfSessionId is not null && s.SideDiscardedAt is not null && string.CompareOrdinal(s.SideDiscardedAt, cutoff) < 0)]);
+
+    public Task SetSideConversationStateAsync(string id, bool minimized, string? discardedAt)
+    {
+        if (_store.TryGetValue(id, out var session))
+        {
+            session.SideMinimized = minimized;
+            session.SideDiscardedAt = discardedAt;
+        }
+
+        return Task.CompletedTask;
+    }
 
     public Task KeepSideConversationAsync(string id, string workspaceId)
     {

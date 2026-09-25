@@ -81,6 +81,11 @@ const props = defineProps<{
   after?: string | null;
 }>();
 
+const emit = defineEmits<{
+  /** Whether a turn is running, and the newest reply's text: a side conversation's tab shows both while it's folded. */
+  progress: [progress: { working: boolean; latestAnswer: string | null }];
+}>();
+
 const router = useRouter();
 const sessionsStore = useSessionsStore();
 const workflowsStore = useWorkflowsStore();
@@ -477,6 +482,30 @@ watch(
 );
 
 const isStreaming = computed(() => isStreamWorking(sessionStatus.value));
+
+const latestAnswer = computed<string | null>(() => {
+  for (let index = sessionMessages.value.length - 1; index >= 0; index -= 1) {
+    const message = sessionMessages.value[index];
+    if (message.role !== "assistant") continue;
+    const body = messageBody(message).trim();
+    if (body) return body;
+  }
+  return null;
+});
+
+// Once its snapshot has loaded: before that (the stream starts out empty and not loading), no answer isn't news.
+let snapshotLoading = false;
+watch(
+  [isStreaming, latestAnswer, () => stream.isLoading.value],
+  ([working, answer, loading]) => {
+    if (loading) {
+      snapshotLoading = true;
+    } else if (snapshotLoading) {
+      emit("progress", { working, latestAnswer: answer });
+    }
+  },
+  { immediate: true },
+);
 // The turn is stopped on a question, a sub-agent's or its own: the header and the session row say so, and so
 // does the line that otherwise says Working.
 const isWaitingForInput = computed(() =>

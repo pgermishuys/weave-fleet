@@ -1449,7 +1449,7 @@ public sealed partial class SessionOrchestrator(
             return Unit.Value;
         }
 
-        if (await sessionRepository.GetSideConversationAsync(id).ConfigureAwait(false) is { } side)
+        foreach (var side in await sessionRepository.ListSideConversationsAsync(id).ConfigureAwait(false))
             await DiscardSideConversationAsync(side, ct).ConfigureAwait(false);
 
         var delegation = await delegationRepository.GetByChildSessionIdAsync(id);

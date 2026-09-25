@@ -5,7 +5,7 @@ import Composer from "@/components/session/Composer.vue";
 import type { SessionListItem } from "@/api/client";
 import { createModelSelectionKey } from "@/composables/use-models";
 import { addDraftTerminalContext, clearDraftTerminalContext } from "@/composables/use-draft-terminal-context";
-import { _resetSideConversationsForTesting } from "@/composables/use-side-conversation";
+import { _resetSideConversationsForTesting, useSideConversation } from "@/composables/use-side-conversation";
 
 vi.mock("@/api/client", () => ({
   api: {
@@ -733,6 +733,7 @@ describe("Composer side questions (/btw)", () => {
     title: "btw: what changed?",
     boundaryMessageId: "msg_boundary",
     createdAt: "2026-09-25T00:00:00Z",
+    minimized: false,
   };
 
   function pressKey(element: Element, key: string): KeyboardEvent {
@@ -876,5 +877,79 @@ describe("Composer side questions (/btw)", () => {
     await flushPromises();
 
     expect(other.findAll(".autocomplete-popup__item").map((item) => item.text()).join(" ")).not.toContain("/btw");
+  });
+});
+
+describe("Composer with a minimized side conversation", () => {
+  const harnesses = [
+    { type: "opencode", displayName: "OpenCode", available: true, userEnabled: true, capabilities: { supportsSideConversations: true } },
+  ];
+  const side = {
+    sessionId: "side-1",
+    instanceId: "instance-side",
+    title: "btw: what changed?",
+    boundaryMessageId: "msg_boundary",
+    createdAt: "2026-09-25T00:00:00Z",
+    minimized: true,
+  };
+
+  function pressKey(element: Element, key: string): void {
+    element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  }
+
+  beforeEach(() => {
+    _resetSideConversationsForTesting();
+    mockApi.GET.mockReset();
+    mockApi.POST.mockReset();
+    mockApi.PUT.mockReset();
+    configureApiFetch();
+    const fallback = mockApi.GET.getMockImplementation() as unknown as (url: string, init?: unknown) => Promise<unknown>;
+    mockApi.GET.mockImplementation((async (url: string, init?: unknown) => {
+      if (url === "/api/harnesses") return { data: harnesses, error: undefined, response: new Response() };
+      if (url === "/api/sessions/{id}/side") return { data: side, error: undefined, response: new Response(null, { status: 200 }) };
+      return fallback(url, init);
+    }) as never);
+    mockApi.PUT.mockImplementation((async (_url: string, init: { body: { minimized: boolean } }) =>
+      ({ data: { ...side, minimized: init.body.minimized }, error: undefined, response: new Response() })) as never);
+    useDraftState("session-side", { agentId: "", modelId: "" }).resetText();
+  });
+
+  it("sends to the session, looking like the plain composer", async () => {
+    const wrapper = mountComposer({ sessionId: "session-side" });
+    await flushPromises();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+
+    expect(wrapper.find("[data-testid='composer-side-mode']").exists()).toBe(false);
+    expect(textarea.attributes("placeholder")).toBe("Type a message…");
+
+    await textarea.setValue("carry on");
+    pressKey(textarea.element, "Enter");
+    await flushPromises();
+
+    expect(mockApi.POST).toHaveBeenCalledWith("/api/sessions/{id}/prompt", expect.anything());
+    expect(mockApi.POST).not.toHaveBeenCalledWith("/api/sessions/{id}/side", expect.anything());
+    wrapper.unmount();
+  });
+
+  it("keeps each side's draft when the side conversation opens and folds", async () => {
+    const wrapper = mountComposer({ sessionId: "session-side" });
+    await flushPromises();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+    const { setMinimized } = useSideConversation("session-side");
+
+    await textarea.setValue("for the session");
+    await setMinimized(false);
+    await flushPromises();
+    expect(wrapper.find("[data-testid='composer-side-mode']").exists()).toBe(true);
+    expect((textarea.element as HTMLTextAreaElement).value).toBe("");
+
+    await textarea.setValue("for the side");
+    await setMinimized(true);
+    await flushPromises();
+    expect((textarea.element as HTMLTextAreaElement).value).toBe("for the session");
+
+    await setMinimized(false);
+    await flushPromises();
+    expect((textarea.element as HTMLTextAreaElement).value).toBe("for the side");
   });
 });

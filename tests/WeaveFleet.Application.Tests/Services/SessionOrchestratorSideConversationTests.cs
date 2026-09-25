@@ -151,7 +151,7 @@ public sealed class SessionOrchestratorSideConversationTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task closing_deletes_the_fork_and_leaves_the_sessions_folder()
+    public async Task discarding_hides_it_at_once_and_deletes_the_fork_only_once_its_undo_window_has_passed()
     {
         Seed();
         var orchestrator = _builder.Build();
@@ -160,12 +160,71 @@ public sealed class SessionOrchestratorSideConversationTests : IAsyncDisposable
         var result = await orchestrator.CloseSideConversationAsync("s1");
 
         result.IsSuccess.ShouldBeTrue();
+        (await orchestrator.GetSideConversationAsync("s1")).Value.ShouldBeNull();
+        _side.DeleteCalled.ShouldBeFalse();
+        (await _builder.SessionRepository.GetByIdAsync(side.Id)).ShouldNotBeNull().SideDiscardedAt.ShouldNotBeNull();
+
+        // The sweeper's call once the window has passed.
+        await orchestrator.DeleteDiscardedSideConversationAsync(side.Id);
+
         _side.DeleteCalled.ShouldBeTrue();
         _session.DeleteCalled.ShouldBeFalse();
         (await _builder.SessionRepository.GetByIdAsync(side.Id)).ShouldBeNull();
         (await _builder.SessionRepository.GetByIdAsync("s1")).ShouldNotBeNull();
         (await _builder.WorkspaceRepository.GetByIdAsync("ws-1")).ShouldNotBeNull().CleanedUpAt.ShouldBeNull();
         (await orchestrator.GetSideConversationAsync("s1")).Value.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task undo_brings_it_back_as_it_was_and_the_sweeper_leaves_it_alone()
+    {
+        Seed();
+        var orchestrator = _builder.Build();
+        var side = (await orchestrator.AskSideQuestionAsync("s1", "one", null, null)).Value.SideConversation;
+        await orchestrator.SetSideConversationMinimizedAsync("s1", minimized: true);
+        await orchestrator.CloseSideConversationAsync("s1");
+
+        var restored = await orchestrator.RestoreSideConversationAsync("s1");
+
+        restored.IsSuccess.ShouldBeTrue(restored.IsFailure ? restored.Error.Description : null);
+        restored.Value.Id.ShouldBe(side.Id);
+        restored.Value.SideMinimized.ShouldBeTrue();
+        (await orchestrator.GetSideConversationAsync("s1")).Value.ShouldNotBeNull().Id.ShouldBe(side.Id);
+
+        await orchestrator.DeleteDiscardedSideConversationAsync(side.Id);
+        _side.DeleteCalled.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task undo_is_refused_once_a_newer_side_question_is_open()
+    {
+        Seed();
+        var orchestrator = _builder.Build();
+        await orchestrator.AskSideQuestionAsync("s1", "one", null, null);
+        await orchestrator.CloseSideConversationAsync("s1");
+        _session.SideConversationFork = new SideConversationFork("ses_fork2", "msg_boundary");
+        await orchestrator.AskSideQuestionAsync("s1", "two", null, null);
+
+        var restored = await orchestrator.RestoreSideConversationAsync("s1");
+
+        restored.IsFailure.ShouldBeTrue();
+        restored.Error.Code.ShouldBe("General.Conflict");
+    }
+
+    [Fact]
+    public async Task minimized_is_kept_with_it_and_asking_again_opens_it()
+    {
+        Seed();
+        var orchestrator = _builder.Build();
+        var side = (await orchestrator.AskSideQuestionAsync("s1", "one", null, null)).Value.SideConversation;
+
+        (await orchestrator.SetSideConversationMinimizedAsync("s1", minimized: true)).Value.SideMinimized.ShouldBeTrue();
+        (await orchestrator.GetSideConversationAsync("s1")).Value!.SideMinimized.ShouldBeTrue();
+
+        var again = await orchestrator.AskSideQuestionAsync("s1", "two", null, null);
+        again.Value.SideConversation.Id.ShouldBe(side.Id);
+        again.Value.SideConversation.SideMinimized.ShouldBeFalse();
+        (await orchestrator.GetSideConversationAsync("s1")).Value!.SideMinimized.ShouldBeFalse();
     }
 
     [Fact]
@@ -182,11 +241,12 @@ public sealed class SessionOrchestratorSideConversationTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task deleting_the_session_deletes_its_side_conversation()
+    public async Task deleting_the_session_deletes_its_side_conversation_even_one_waiting_out_its_undo()
     {
         Seed();
         var orchestrator = _builder.Build();
         var side = (await orchestrator.AskSideQuestionAsync("s1", "one", null, null)).Value.SideConversation;
+        await orchestrator.CloseSideConversationAsync("s1");
 
         await orchestrator.DeleteSessionAsync("s1");
 

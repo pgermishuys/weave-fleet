@@ -63,8 +63,10 @@ public sealed partial class OpenCode2LiveTests
         (await harness.GetActivityStatusAsync(cts.Token)).ShouldBe(ActivityStatuses.WaitingInput);
         (await harness.GetMessagesAsync(null, cts.Token)).Messages.Select(m => m.Id).ShouldBe(history);
 
+        // Discarding hides it at once and keeps the fork for Undo; once the window has passed, the fork is deleted.
         (await fleet.WithOrchestratorAsync(o => o.CloseSideConversationAsync(id, cts.Token))).IsSuccess.ShouldBeTrue();
         (await fleet.WithOrchestratorAsync(o => o.GetSideConversationAsync(id))).Value.ShouldBeNull();
+        await fleet.WithOrchestratorAsync(async o => { await o.DeleteDiscardedSideConversationAsync(sideConversation.Id, cts.Token); return true; });
         // V2 no longer has the fork: reading it fails.
         await Should.ThrowAsync<Exception>(() => sideHarness.GetMessagesAsync(null, cts.Token));
 

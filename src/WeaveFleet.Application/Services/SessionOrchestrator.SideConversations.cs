@@ -76,6 +76,13 @@ public sealed partial class SessionOrchestrator
             var existing = await sessionRepository.GetSideConversationAsync(sessionId).ConfigureAwait(false);
             if (existing is not null)
             {
+                // Asking again brings a minimized one back: the answer shows where it's asked.
+                if (existing.SideMinimized)
+                {
+                    await sessionRepository.SetSideConversationStateAsync(existing.Id, minimized: false, discardedAt: null).ConfigureAwait(false);
+                    existing.SideMinimized = false;
+                }
+
                 side = existing;
             }
             else
@@ -100,7 +107,12 @@ public sealed partial class SessionOrchestrator
         return new SideQuestionResult(side, prompt.Value);
     }
 
-    /// <summary>Closes the session's side conversation: the fork is deleted, in the harness and in Fleet.</summary>
+    /// <summary>
+    /// Discards the session's side conversation: it's gone from the session at once, and deleted (in the harness and in
+    /// Fleet) once <see cref="SideConversations.DiscardUndoWindow"/> has passed, unless
+    /// <see cref="RestoreSideConversationAsync"/> brings it back first. Deferred on the server, so a reload or leaving
+    /// the page doesn't keep a fork alive or lose one that was brought back.
+    /// </summary>
     public async Task<Result<Unit>> CloseSideConversationAsync(string sessionId, CancellationToken ct = default)
     {
         using var _ = BeginSessionScope(sessionId);
@@ -112,8 +124,74 @@ public sealed partial class SessionOrchestrator
         if (side is null)
             return Unit.Value;
 
-        await DiscardSideConversationAsync(side, ct).ConfigureAwait(false);
+        await sessionRepository.SetSideConversationStateAsync(side.Id, side.SideMinimized, DateTime.UtcNow.ToString("O")).ConfigureAwait(false);
+        LogSideConversationDiscarded(side.Id, sessionId);
         return Unit.Value;
+    }
+
+    /// <summary>
+    /// Undoes the discard of the session's side conversation, within its undo window: it comes back as it was, minimized
+    /// or not. Refused once a newer one is open, or when there's nothing to bring back.
+    /// </summary>
+    public async Task<Result<Session>> RestoreSideConversationAsync(string sessionId, CancellationToken ct = default)
+    {
+        using var _ = BeginSessionScope(sessionId);
+        var sessionResult = await GetSessionAsync(sessionId).ConfigureAwait(false);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        var sideLock = SideConversationLocks.GetOrAdd(sessionId, static _ => new SemaphoreSlim(1, 1));
+        await sideLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (await sessionRepository.GetSideConversationAsync(sessionId).ConfigureAwait(false) is not null)
+                return new FleetError("General.Conflict", "A newer side question is open. Close it to bring this one back.");
+
+            var discarded = await sessionRepository.GetDiscardedSideConversationAsync(sessionId).ConfigureAwait(false);
+            if (discarded is null)
+                return FleetError.NotFoundFor("SideConversation", sessionId);
+
+            await sessionRepository.SetSideConversationStateAsync(discarded.Id, discarded.SideMinimized, discardedAt: null).ConfigureAwait(false);
+            discarded.SideDiscardedAt = null;
+            return discarded;
+        }
+        finally
+        {
+            sideLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Folds the session's side conversation into its tab on the composer, or opens it again. Kept with it, so a reload
+    /// or coming back to the session finds it as it was left.
+    /// </summary>
+    public async Task<Result<Session>> SetSideConversationMinimizedAsync(string sessionId, bool minimized, CancellationToken ct = default)
+    {
+        using var _ = BeginSessionScope(sessionId);
+        var sessionResult = await GetSessionAsync(sessionId).ConfigureAwait(false);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        var side = await sessionRepository.GetSideConversationAsync(sessionId).ConfigureAwait(false);
+        if (side is null)
+            return FleetError.NotFoundFor("SideConversation", sessionId);
+
+        await sessionRepository.SetSideConversationStateAsync(side.Id, minimized, discardedAt: null).ConfigureAwait(false);
+        side.SideMinimized = minimized;
+        return side;
+    }
+
+    /// <summary>
+    /// Deletes side conversation <paramref name="sideSessionId"/> if it's still discarded: its undo window has passed.
+    /// Called by the sweeper, as the side conversation's owner.
+    /// </summary>
+    public async Task DeleteDiscardedSideConversationAsync(string sideSessionId, CancellationToken ct = default)
+    {
+        var side = await sessionRepository.GetByIdAsync(sideSessionId).ConfigureAwait(false);
+        if (side is not { SideOfSessionId: not null, SideDiscardedAt: not null })
+            return;
+
+        await DiscardSideConversationAsync(side, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -339,6 +417,9 @@ public sealed partial class SessionOrchestrator
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Side conversation {SideSessionId} started on session {SessionId} after message {BoundaryMessageId}")]
     private partial void LogSideConversationStarted(string sideSessionId, string sessionId, string? boundaryMessageId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Side conversation {SideSessionId} of session {SessionId} discarded; deleted once its undo window has passed")]
+    private partial void LogSideConversationDiscarded(string sideSessionId, string sessionId);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Side conversation {SideSessionId} of session {SessionId} closed")]
     private partial void LogSideConversationClosed(string sideSessionId, string sessionId);

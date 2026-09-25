@@ -57,12 +57,13 @@ public sealed partial class WorkflowStepToolLiveTests
             activity.Get(Normal)!.ActivityStatus.ShouldBe(ActivityStatuses.WaitingInput);
             (await normal.GetMessagesAsync(null, ct)).Messages.Select(m => m.Id).ShouldBe(history);
 
-            // Closing deletes the fork from OpenCode.
+            // Discarding hides it at once and keeps the fork for Undo; once the window has passed, the fork is deleted.
             var opencode = (OpenCodeHarnessSession)normal;
-            (await opencode.ListFolderSessionsAsync(ct)).Select(s => s.Id).ShouldContain(side.OpencodeSessionId);
             (await WithOrchestratorAsync(services, o => o.CloseSideConversationAsync(Normal, ct))).IsSuccess.ShouldBeTrue();
-            (await opencode.ListFolderSessionsAsync(ct)).Select(s => s.Id).ShouldNotContain(side.OpencodeSessionId);
             (await WithOrchestratorAsync(services, o => o.GetSideConversationAsync(Normal))).Value.ShouldBeNull();
+            (await opencode.ListFolderSessionsAsync(ct)).Select(s => s.Id).ShouldContain(side.OpencodeSessionId);
+            await WithOrchestratorAsync(services, async o => { await o.DeleteDiscardedSideConversationAsync(side.Id, ct); return true; });
+            (await opencode.ListFolderSessionsAsync(ct)).Select(s => s.Id).ShouldNotContain(side.OpencodeSessionId);
 
             await normal.AbortAsync(ct);
         });

@@ -249,6 +249,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(SideQuestionApiRequest))]
 [JsonSerializable(typeof(SideConversationResponse))]
 [JsonSerializable(typeof(SideQuestionApiResponse))]
+[JsonSerializable(typeof(SideMinimizedApiRequest))]
 [JsonSerializable(typeof(QuestionAnswerApiRequest))]
 [JsonSerializable(typeof(ModelRef))]
 [JsonSerializable(typeof(UpdateSessionTagsRequest))]

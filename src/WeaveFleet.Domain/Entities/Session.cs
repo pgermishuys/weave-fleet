@@ -75,5 +75,14 @@ public sealed class Session
     /// </summary>
     public bool KeptFromSide { get; set; }
 
+    /// <summary>A side conversation folded into its tab on the composer; the composer talks to its session meanwhile.</summary>
+    public bool SideMinimized { get; set; }
+
+    /// <summary>
+    /// When the user discarded this side conversation. It's gone from its session at once and deleted once the undo
+    /// window has passed; Undo clears it. Null for one that wasn't discarded.
+    /// </summary>
+    public string? SideDiscardedAt { get; set; }
+
     public List<string> Tags { get; set; } = [];
 }

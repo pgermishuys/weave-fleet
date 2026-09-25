@@ -36,13 +36,13 @@ public sealed class SessionRepository(
                 lifecycle_status, retention_status, archived_at, is_hidden, total_tokens, total_cost,
                 harness_type, runtime_mode, harness_profile_id, harness_resume_token, git_baseline_ref, git_repo_root, user_id,
                 source_reference, tags, selected_agent, selected_provider_id, selected_model_id, workflow_run_id, workflow_user_finishes,
-                side_of_session_id, side_boundary_message_id, kept_from_side)
+                side_of_session_id, side_boundary_message_id, kept_from_side, side_minimized, side_discarded_at)
             SELECT @Id, @WorkspaceId, @InstanceId, @ProjectId, @OpencodeSessionId, @Title,
                 @Status, @Directory, @CreatedAt, @StoppedAt, @ParentSessionId,
                 @LifecycleStatus, @RetentionStatus, @ArchivedAt, @IsHidden, @TotalTokens, @TotalCost,
                 @HarnessType, @RuntimeMode, @HarnessProfileId, @HarnessResumeToken, @GitBaselineRef, @GitRepoRoot, @UserId,
                 @SourceReference, @Tags, @SelectedAgent, @SelectedProviderId, @SelectedModelId, @WorkflowRunId, @WorkflowUserFinishes,
-                @SideOfSessionId, @SideBoundaryMessageId, @KeptFromSide
+                @SideOfSessionId, @SideBoundaryMessageId, @KeptFromSide, @SideMinimized, @SideDiscardedAt
             FROM workspaces workspace_row
             WHERE workspace_row.id = @WorkspaceId
               AND workspace_row.user_id = @UserId
@@ -91,6 +91,8 @@ public sealed class SessionRepository(
                 cmd.AddParameter("SideOfSessionId", session.SideOfSessionId);
                 cmd.AddParameter("SideBoundaryMessageId", session.SideBoundaryMessageId);
                 cmd.AddParameter("KeptFromSide", session.KeptFromSide ? 1 : 0);
+                cmd.AddParameter("SideMinimized", session.SideMinimized ? 1 : 0);
+                cmd.AddParameter("SideDiscardedAt", session.SideDiscardedAt);
             },
             transaction);
     }
@@ -112,13 +114,71 @@ public sealed class SessionRepository(
     {
         using var conn = connectionFactory.CreateConnection();
         return await conn.QueryFirstOrDefaultAsync(
-            "SELECT * FROM sessions WHERE side_of_session_id = @SessionId AND user_id = @UserId ORDER BY created_at DESC LIMIT 1",
+            """
+            SELECT * FROM sessions
+            WHERE side_of_session_id = @SessionId AND side_discarded_at IS NULL AND user_id = @UserId
+            ORDER BY created_at DESC LIMIT 1
+            """,
             cmd =>
             {
                 cmd.AddParameter("SessionId", sessionId);
                 cmd.AddParameter("UserId", userContext.UserId);
             },
             ReadSession);
+    }
+
+    public async Task<Session?> GetDiscardedSideConversationAsync(string sessionId)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        return await conn.QueryFirstOrDefaultAsync(
+            """
+            SELECT * FROM sessions
+            WHERE side_of_session_id = @SessionId AND side_discarded_at IS NOT NULL AND user_id = @UserId
+            ORDER BY side_discarded_at DESC LIMIT 1
+            """,
+            cmd =>
+            {
+                cmd.AddParameter("SessionId", sessionId);
+                cmd.AddParameter("UserId", userContext.UserId);
+            },
+            ReadSession);
+    }
+
+    public async Task<IReadOnlyList<Session>> ListSideConversationsAsync(string sessionId)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        return await conn.QueryAsync(
+            "SELECT * FROM sessions WHERE side_of_session_id = @SessionId AND user_id = @UserId",
+            cmd =>
+            {
+                cmd.AddParameter("SessionId", sessionId);
+                cmd.AddParameter("UserId", userContext.UserId);
+            },
+            ReadSession);
+    }
+
+    public async Task<IReadOnlyList<Session>> ListSideConversationsDiscardedBeforeAsync(string cutoff)
+    {
+        // Every owner's: the sweeper that deletes them runs outside any request, then acts as each owner.
+        using var conn = connectionFactory.CreateConnection();
+        return await conn.QueryAsync(
+            "SELECT * FROM sessions WHERE side_of_session_id IS NOT NULL AND side_discarded_at IS NOT NULL AND side_discarded_at < @Cutoff",
+            cmd => cmd.AddParameter("Cutoff", cutoff),
+            ReadSession);
+    }
+
+    public async Task SetSideConversationStateAsync(string id, bool minimized, string? discardedAt)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        await conn.ExecuteNonQueryAsync(
+            "UPDATE sessions SET side_minimized = @Minimized, side_discarded_at = @DiscardedAt WHERE id = @Id AND user_id = @UserId",
+            cmd =>
+            {
+                cmd.AddParameter("Id", id);
+                cmd.AddParameter("Minimized", minimized ? 1 : 0);
+                cmd.AddParameter("DiscardedAt", discardedAt);
+                cmd.AddParameter("UserId", userContext.UserId);
+            });
     }
 
     public async Task KeepSideConversationAsync(string id, string workspaceId)
@@ -724,6 +784,8 @@ public sealed class SessionRepository(
             SideOfSessionId = r.GetNullableString(r.GetOrdinal("side_of_session_id")),
             SideBoundaryMessageId = r.GetNullableString(r.GetOrdinal("side_boundary_message_id")),
             KeptFromSide = r.GetInt64(r.GetOrdinal("kept_from_side")) != 0,
+            SideMinimized = r.GetInt64(r.GetOrdinal("side_minimized")) != 0,
+            SideDiscardedAt = r.GetNullableString(r.GetOrdinal("side_discarded_at")),
             Tags = tags,
         };
     }

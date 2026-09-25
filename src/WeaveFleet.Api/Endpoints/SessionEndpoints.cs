@@ -527,13 +527,32 @@ public static class SessionEndpoints
         .Produces<SideQuestionApiResponse>(200)
         .WithName("AskSideQuestion");
 
-        // DELETE /api/sessions/{id}/side — close the side conversation: its fork is deleted. 204 when there was none too.
+        // DELETE /api/sessions/{id}/side — discard the side conversation: gone at once, its fork deleted once the undo
+        // window has passed (POST .../side/restore brings it back until then). 204 when there was none too.
         group.MapDelete("/{id}/side", async (string id, SessionOrchestrator orchestrator, CancellationToken ct) =>
         {
             var result = await orchestrator.CloseSideConversationAsync(id, ct);
             return result.Match(_ => Results.NoContent(), err => err.ToSessionApiResult());
         })
         .WithName("CloseSideConversation");
+
+        // POST /api/sessions/{id}/side/restore — Undo a discard, within its window: the side conversation comes back as it was.
+        group.MapPost("/{id}/side/restore", async (string id, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        {
+            var result = await orchestrator.RestoreSideConversationAsync(id, ct);
+            return result.Match(side => Results.Ok(SideConversationResponse.Of(side)), err => err.ToSessionApiResult());
+        })
+        .Produces<SideConversationResponse>(200)
+        .WithName("RestoreSideConversation");
+
+        // PUT /api/sessions/{id}/side/minimized — fold the side conversation into its tab on the composer, or open it.
+        group.MapPut("/{id}/side/minimized", async (string id, SideMinimizedApiRequest req, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        {
+            var result = await orchestrator.SetSideConversationMinimizedAsync(id, req.Minimized, ct);
+            return result.Match(side => Results.Ok(SideConversationResponse.Of(side)), err => err.ToSessionApiResult());
+        })
+        .Produces<SideConversationResponse>(200)
+        .WithName("SetSideConversationMinimized");
 
         // POST /api/sessions/{id}/side/keep — keep the side conversation as a session of its own, listed like any other.
         group.MapPost("/{id}/side/keep", async (string id, SessionOrchestrator orchestrator, CancellationToken ct) =>
@@ -1071,11 +1090,14 @@ internal sealed record SideConversationResponse(
     string InstanceId,
     string Title,
     string? BoundaryMessageId,
-    string CreatedAt)
+    string CreatedAt,
+    bool Minimized)
 {
     public static SideConversationResponse Of(Session side)
-        => new(side.Id, side.InstanceId, side.Title, side.SideBoundaryMessageId, side.CreatedAt);
+        => new(side.Id, side.InstanceId, side.Title, side.SideBoundaryMessageId, side.CreatedAt, side.SideMinimized);
 }
+
+internal sealed record SideMinimizedApiRequest(bool Minimized);
 
 internal sealed record SideQuestionApiResponse(SideConversationResponse SideConversation, string CorrelationId, string? MessageId);
 

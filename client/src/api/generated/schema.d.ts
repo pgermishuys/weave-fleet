@@ -597,6 +597,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{id}/side/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["RestoreSideConversation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/side/minimized": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["SetSideConversationMinimized"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{id}/side/keep": {
         parameters: {
             query?: never;
@@ -3531,6 +3563,10 @@ export interface components {
             title: string;
             boundaryMessageId: null | string;
             createdAt: string;
+            minimized: boolean;
+        };
+        SideMinimizedApiRequest: {
+            minimized: boolean;
         };
         SideQuestionApiRequest: {
             text: null | string;
@@ -5384,6 +5420,54 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    RestoreSideConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SideConversationResponse"];
+                };
+            };
+        };
+    };
+    SetSideConversationMinimized: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SideMinimizedApiRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SideConversationResponse"];
+                };
             };
         };
     };

@@ -215,9 +215,27 @@ const supportsSideConversations = computed(() => {
 
 /**
  * The side conversation (`/btw`) is open above the composer: what's typed goes to it, not to the session, which carries
- * on undisturbed. Closing the panel returns the composer to the session.
+ * on undisturbed. Minimizing or closing it returns the composer to the session.
  */
 const isSideMode = computed(() => sideConversation.isOpen.value);
+
+// Each side keeps its own draft: minimizing puts away what was typed for the side conversation and brings back what
+// was typed for the session, and opening it does the reverse. Only when one side conversation changes mode (minimize,
+// open, discard, Undo), not when one first loads.
+watch(
+  () => [sideConversation.side.value?.sessionId ?? sideConversation.discarded.value?.sessionId ?? null, isSideMode.value] as const,
+  ([sideId, sideMode], [previousSideId, previousSideMode]) => {
+    if (!sideId || sideId !== previousSideId || sideMode === previousSideMode) return;
+    const drafts = sideConversation.drafts.value;
+    if (sideMode) {
+      drafts.main = draft.text;
+      setText(drafts.side);
+    } else {
+      drafts.side = draft.text;
+      setText(drafts.main);
+    }
+  },
+);
 
 /** A draft that starts with `!` is a shell command to run in the session's folder, not a prompt. */
 const isShellMode = computed(() => supportsShellCommands.value && !isSideMode.value && isShellDraft(draft.text));

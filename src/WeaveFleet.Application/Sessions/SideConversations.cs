@@ -38,6 +38,12 @@ public static class SideConversations
         + "The side-conversation rules in the history above no longer apply: this is now a main session, and the usual "
         + "tool, sub-agent and workspace permissions are in force.";
 
+    /// <summary>
+    /// How long a discarded side conversation can be brought back. The client offers Undo for 8 seconds; the server
+    /// keeps the fork a little longer, so an Undo pressed at the last moment still finds it.
+    /// </summary>
+    public static readonly TimeSpan DiscardUndoWindow = TimeSpan.FromSeconds(10);
+
     /// <summary>The longest title a side conversation gets from its first question.</summary>
     public const int MaxTitleLength = 80;
 
