@@ -13,6 +13,14 @@ public static class SmartLinkEndpoints
 {
     public static IEndpointRouteBuilder MapSmartLinkEndpoints(this IEndpointRouteBuilder app)
     {
+        // GET /api/smart-links — the links every session header shows (origin, own, pinned), for all sessions
+        // that aren't archived: the sessions list's pull request badges and the GitHub pages' session chips.
+        app.MapGet("/api/smart-links", async (SmartLinkService smartLinkService, CancellationToken ct) =>
+            Results.Ok(await smartLinkService.ListHeaderLinksAsync(ct)))
+        .WithTags("SmartLinks")
+        .Produces<IReadOnlyList<SmartLinkDto>>(200)
+        .WithName("GetHeaderSmartLinks");
+
         var group = app.MapGroup("/api/sessions/{sessionId}/smart-links").WithTags("SmartLinks");
 
         // GET /api/sessions/{sessionId}/smart-links — list active (non-dismissed) links

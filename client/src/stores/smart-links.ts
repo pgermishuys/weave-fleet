@@ -1,7 +1,7 @@
 import { defineStore } from "pinia"
 import { shallowRef } from "vue"
 import { apiFetch } from "@/lib/api-client"
-import { isHeaderLink, isVisibleLink, parseWireLink, type SmartLink, type SmartLinkWire } from "@/lib/smart-links"
+import { isHeaderLink, isPullRequest, isVisibleLink, parseWireLink, type SmartLink, type SmartLinkWire } from "@/lib/smart-links"
 
 /** A request from a header chip to show one link in the Context tab. */
 export interface SmartLinkFocusRequest {
@@ -18,10 +18,19 @@ const HEADER_ORDER = { origin: 0, own: 1, pinned: 2, mentioned: 3 } as const
 const path = (sessionId: string, suffix = "") =>
   `/api/sessions/${encodeURIComponent(sessionId)}/smart-links${suffix}`
 
+// Which of a session's pull requests is "its" pull request: one it opened, then the one it started from, then
+// one the user pinned; open ones before merged or closed ones.
+const PULL_REQUEST_ORDER = { own: 0, origin: 1, pinned: 2, mentioned: 3 } as const
+
 export const useSmartLinksStore = defineStore("smart-links", () => {
   const bySession = shallowRef<Record<string, SmartLink[]>>({})
+  // Every session's header links (origin, own, pinned), from one request: the sessions list and GitHub pages
+  // need them for sessions that were never opened.
+  const headerBySession = shallowRef<Record<string, SmartLink[]>>({})
+  const headerLinksLoaded = shallowRef(false)
   const focusRequest = shallowRef<SmartLinkFocusRequest | null>(null)
   const loading = new Map<string, Promise<void>>()
+  let loadingAll: Promise<void> | null = null
   let focusNonce = 0
 
   function replace(sessionId: string, links: SmartLink[]): void {
@@ -41,12 +50,95 @@ export const useSmartLinksStore = defineStore("smart-links", () => {
       link.sessionId,
       index >= 0 ? existing.map((l, i) => (i === index ? link : l)) : [...existing, link],
     )
+    upsertHeaderLink(link)
+  }
+
+  function upsertHeaderLink(link: SmartLink): void {
+    if (!headerLinksLoaded.value) return
+    const others = (headerBySession.value[link.sessionId] ?? []).filter((l) => l.id !== link.id)
+    const keep = isHeaderLink(link) && !link.isDismissed
+    headerBySession.value = { ...headerBySession.value, [link.sessionId]: keep ? [...others, link] : others }
+  }
+
+  /**
+   * Applies a pushed update: always to the header links, and to a session's full list once it's loaded
+   * (sessions that were never opened load their full list on first view instead).
+   */
+  function applyPushed(wire: SmartLinkWire): void {
+    if (bySession.value[wire.sessionId]) {
+      upsertLink(wire)
+    } else {
+      upsertHeaderLink(parseWireLink(wire))
+    }
+  }
+
+  /** Loads every session's header links once; pushed updates keep them current afterwards. */
+  function ensureHeaderLinksLoaded(): Promise<void> {
+    if (headerLinksLoaded.value) return Promise.resolve()
+    if (loadingAll) return loadingAll
+
+    loadingAll = (async () => {
+      try {
+        const response = await apiFetch("/api/smart-links")
+        if (!response.ok) return
+        const grouped: Record<string, SmartLink[]> = {}
+        for (const link of ((await response.json()) as SmartLinkWire[]).map(parseWireLink)) {
+          (grouped[link.sessionId] ??= []).push(link)
+        }
+        headerBySession.value = grouped
+        headerLinksLoaded.value = true
+      } catch {
+        // Badges are extra; the list works without them.
+      } finally {
+        loadingAll = null
+      }
+    })()
+    return loadingAll
+  }
+
+  /** Loads every session's header links again, e.g. after missing pushed updates while disconnected. */
+  function reloadHeaderLinks(): Promise<void> {
+    headerLinksLoaded.value = false
+    return ensureHeaderLinksLoaded()
+  }
+
+  /** A session's header links: its full list when it's been opened, otherwise the ones loaded for every session. */
+  function knownHeaderLinks(sessionId: string): SmartLink[] {
+    const full = bySession.value[sessionId]
+    return full ? full.filter((l) => isVisibleLink(l) && isHeaderLink(l)) : (headerBySession.value[sessionId] ?? [])
+  }
+
+  /** The pull request a session is about, for its row badge and header pill; null when it has none. */
+  function sessionPullRequest(sessionId: string): SmartLink | null {
+    return knownHeaderLinks(sessionId)
+      .filter(isPullRequest)
+      .sort((a, b) => Number(a.isTerminal) - Number(b.isTerminal)
+        || PULL_REQUEST_ORDER[a.relationship] - PULL_REQUEST_ORDER[b.relationship])[0] ?? null
+  }
+
+  /**
+   * The sessions working on a pull request or issue (`owner/repo#123`), for GitHub pages: the ones it's the
+   * header link of. Needs `ensureHeaderLinksLoaded`.
+   */
+  function sessionsFor(resourceId: string): string[] {
+    const wanted = resourceId.toLowerCase()
+    const sessionIds = new Set<string>()
+    for (const [sessionId, links] of Object.entries(headerBySession.value)) {
+      if (links.some((l) => l.resourceId.toLowerCase() === wanted)) sessionIds.add(sessionId)
+    }
+    for (const [sessionId, links] of Object.entries(bySession.value)) {
+      if (links.some((l) => isVisibleLink(l) && isHeaderLink(l) && l.resourceId.toLowerCase() === wanted)) sessionIds.add(sessionId)
+      else sessionIds.delete(sessionId)
+    }
+    return [...sessionIds]
   }
 
   function patchLink(sessionId: string, linkId: string, patch: Partial<SmartLink>): void {
     const existing = bySession.value[sessionId]
     if (!existing) return
     replace(sessionId, existing.map((l) => (l.id === linkId ? { ...l, ...patch } : l)))
+    const patched = bySession.value[sessionId]?.find((l) => l.id === linkId)
+    if (patched) upsertHeaderLink(patched)
   }
 
   /** Loads a session's links once; pushed updates keep them current afterwards. */
@@ -146,10 +238,17 @@ export const useSmartLinksStore = defineStore("smart-links", () => {
 
   return {
     bySession,
+    headerBySession,
+    headerLinksLoaded,
     focusRequest,
     setLinks,
     upsertLink,
+    applyPushed,
     ensureLoaded,
+    ensureHeaderLinksLoaded,
+    reloadHeaderLinks,
+    sessionPullRequest,
+    sessionsFor,
     visibleLinks,
     headerLinks,
     lastCheckedAt,

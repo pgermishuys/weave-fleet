@@ -471,6 +471,111 @@ internal static class GitHubEndpointMappings
         })
         .WithName("GitHubGetJobLogs");
 
+        // GET /search?q=…&after=…&first=… — pull requests and issues from GitHub search, with checks and reviews.
+        group.MapGet("/search", async (HttpContext httpContext) =>
+        {
+            var q = GetQueryString(httpContext, "q");
+            if (string.IsNullOrWhiteSpace(q))
+            {
+                await Results.BadRequest(new GitHubEndpointError("q is required.")).ExecuteAsync(httpContext).ConfigureAwait(false);
+                return;
+            }
+
+            var variables = new JsonObject
+            {
+                ["q"] = q,
+                ["first"] = Math.Clamp(GetQueryInt(httpContext, "first") ?? 30, 1, 50),
+                ["after"] = GetQueryString(httpContext, "after"),
+            };
+
+            var response = await PostGraphQLAsync(httpContext, GitHubItems.SearchQuery, variables).ConfigureAwait(false);
+            if (response is not null)
+                await Results.Ok(GitHubItems.ParseSearch(response)).ExecuteAsync(httpContext).ConfigureAwait(false);
+        })
+        .WithName("GitHubSearchItems");
+
+        // GET /work — the GitHub home: review requests, the user's pull requests and assigned issues, in the
+        // repositories they follow (all of theirs when they follow none), plus open counts per followed repository.
+        group.MapGet("/work", async (HttpContext httpContext) =>
+        {
+            var store = httpContext.RequestServices.GetRequiredService<IPluginStateStore>();
+            var userContext = httpContext.RequestServices.GetRequiredService<IUserContext>();
+            var config = await store.GetStateAsync("github_bookmarks", userContext.UserId, httpContext.RequestAborted).ConfigureAwait(false);
+            var followed = ToBookmarkedRepos(config?["repos"] as JsonArray)
+                .Where(r => r.Owner.Length > 0 && r.Name.Length > 0)
+                .ToArray();
+
+            var scope = string.Join(' ', followed.Select(r => $"repo:{r.FullName}"));
+            var variables = new JsonObject
+            {
+                ["review"] = $"is:open is:pr archived:false review-requested:@me {scope}".Trim(),
+                ["authored"] = $"is:open is:pr archived:false author:@me {scope}".Trim(),
+                ["assigned"] = $"is:open archived:false assignee:@me {scope}".Trim(),
+            };
+
+            var response = await PostGraphQLAsync(httpContext, GitHubItems.WorkQuery, variables).ConfigureAwait(false);
+            if (response is null)
+                return;
+
+            IReadOnlyList<GitHubRepoCounts> counts = [];
+            if (followed.Length > 0)
+            {
+                var (countsQuery, countsVariables) = GitHubItems.BuildRepoCountsQuery(followed.Select(r => (r.Owner, r.Name)).ToArray());
+                var countsResponse = await PostGraphQLAsync(httpContext, countsQuery, countsVariables, writeErrors: false).ConfigureAwait(false);
+                counts = GitHubItems.ParseRepoCounts(countsResponse);
+            }
+
+            await Results.Ok(GitHubItems.ParseWork(response, counts)).ExecuteAsync(httpContext).ConfigureAwait(false);
+        })
+        .WithName("GitHubWork");
+
+        // GET /repos/{owner}/{repo}/items?numbers=12,34 — pull requests and issues picked by number.
+        group.MapGet("/repos/{owner}/{repo}/items", async (HttpContext httpContext) =>
+        {
+            var numbers = (GetQueryString(httpContext, "numbers") ?? string.Empty)
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(n => int.TryParse(n, CultureInfo.InvariantCulture, out var number) ? number : 0)
+                .Where(n => n > 0)
+                .Distinct()
+                .Take(50)
+                .ToArray();
+
+            if (numbers.Length == 0)
+            {
+                await Results.Ok(Array.Empty<GitHubItemSummary>()).ExecuteAsync(httpContext).ConfigureAwait(false);
+                return;
+            }
+
+            var (query, variables) = GitHubItems.BuildNumbersQuery(GetRouteString(httpContext, "owner"), GetRouteString(httpContext, "repo"), numbers);
+            // A number GitHub doesn't know comes back as an error beside the rest; the rest still show.
+            var response = await PostGraphQLAsync(httpContext, query, variables, requireData: false).ConfigureAwait(false);
+            if (response is not null)
+                await Results.Ok(GitHubItems.ParseNumbers(response, numbers.Length)).ExecuteAsync(httpContext).ConfigureAwait(false);
+        })
+        .WithName("GitHubItemsByNumber");
+
+        // GET /repos/{owner}/{repo}/items/{number} — a pull request or issue page: body, checks, timeline.
+        group.MapGet("/repos/{owner}/{repo}/items/{number:int}", async (HttpContext httpContext) =>
+        {
+            var variables = new JsonObject
+            {
+                ["owner"] = GetRouteString(httpContext, "owner"),
+                ["repo"] = GetRouteString(httpContext, "repo"),
+                ["number"] = GetRouteInt(httpContext, "number"),
+            };
+
+            var response = await PostGraphQLAsync(httpContext, GitHubItems.DetailQuery, variables, requireData: false).ConfigureAwait(false);
+            if (response is null)
+                return;
+
+            var detail = GitHubItems.ParseDetail(response);
+            IResult result = detail is null
+                ? Results.NotFound(new GitHubEndpointError(GitHubItems.ErrorMessage(response) ?? "GitHub couldn't find this pull request or issue."))
+                : Results.Ok(detail);
+            await result.ExecuteAsync(httpContext).ConfigureAwait(false);
+        })
+        .WithName("GitHubItemDetail");
+
         group.MapGet("/bookmarks", async (HttpContext httpContext) =>
         {
             var store = httpContext.RequestServices.GetRequiredService<IPluginStateStore>();
@@ -606,6 +711,48 @@ internal static class GitHubEndpointMappings
         await response.ExecuteAsync(httpContext).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Sends a GraphQL request with the user's token. When it fails, writes the response (401 without a token,
+    /// 502 with GitHub's message) and returns null. With <paramref name="requireData"/> off, a response with
+    /// some data and some errors counts as an answer.
+    /// </summary>
+    [RequiresUnreferencedCode("Writes a GitHubEndpointError, a concrete type preserved at runtime, like the endpoint delegates.")]
+    [RequiresDynamicCode("Writes a GitHubEndpointError, a concrete type preserved at runtime, like the endpoint delegates.")]
+    private static async Task<JsonNode?> PostGraphQLAsync(
+        HttpContext httpContext,
+        string query,
+        JsonObject variables,
+        bool requireData = true,
+        bool writeErrors = true)
+    {
+        var gitHubService = httpContext.RequestServices.GetRequiredService<GitHubService>();
+        var proxy = httpContext.RequestServices.GetRequiredService<GitHubApiProxy>();
+        var userContext = httpContext.RequestServices.GetRequiredService<IUserContext>();
+        var ct = httpContext.RequestAborted;
+
+        var token = await gitHubService.GetTokenAsync(userContext.UserId, ct).ConfigureAwait(false);
+        if (token is null)
+        {
+            if (writeErrors)
+                await Results.Unauthorized().ExecuteAsync(httpContext).ConfigureAwait(false);
+            return null;
+        }
+
+        var response = await proxy.PostGraphQLAsync(token, query, variables, ct).ConfigureAwait(false);
+        var hasData = response?["data"] is JsonObject;
+        var failed = response is null || !hasData || (requireData && response["errors"] is JsonArray { Count: > 0 });
+        if (!failed)
+            return response;
+
+        if (writeErrors)
+        {
+            var message = GitHubItems.ErrorMessage(response) ?? "GitHub didn't answer.";
+            await Results.Json(new GitHubEndpointError(message), statusCode: StatusCodes.Status502BadGateway).ExecuteAsync(httpContext).ConfigureAwait(false);
+        }
+
+        return null;
+    }
+
     internal static GitHubCiStatusResponse BuildCiStatusResponse(string headSha, JsonNode? checkRunsNode)
     {
         var checkRunsArray = checkRunsNode?["check_runs"] as JsonArray ?? [];
@@ -655,6 +802,9 @@ internal static class GitHubEndpointMappings
         query($owner: String!, $repo: String!, $number: Int!) {
           repository(owner: $owner, name: $repo) {
             pullRequest(number: $number) {
+              reviewDecision
+              latestOpinionatedReviews(first: 20) { nodes { state author { login avatarUrl } } }
+              reviewRequests(first: 20) { nodes { requestedReviewer { __typename ... on User { login avatarUrl } ... on Team { name } } } }
               reviewThreads(first: 100) {
                 nodes {
                   id

@@ -105,4 +105,44 @@ public sealed class SmartLinkWatcherMappingTests
     {
         SmartLinkWatcherService.ParseGitHubRemote(remote).ShouldBeNull();
     }
+
+    [Fact]
+    public void ApplyPullRequest_keeps_the_size_and_author_for_the_pill()
+    {
+        var pr = PullRequest();
+        pr["additions"] = 412;
+        pr["deletions"] = 88;
+        pr["changed_files"] = 14;
+        pr["user"] = new JsonObject { ["login"] = "pat" };
+        var metadata = new JsonObject();
+
+        SmartLinkWatcherService.ApplyPullRequest(new SmartLink(), Pr, pr, metadata, sessionBranch: null);
+
+        metadata["additions"]!.GetValue<int>().ShouldBe(412);
+        metadata["deletions"]!.GetValue<int>().ShouldBe(88);
+        metadata["changedFiles"]!.GetValue<int>().ShouldBe(14);
+        metadata["author"]!.GetValue<string>().ShouldBe("pat");
+    }
+
+    [Fact]
+    public void ApplyReviews_keeps_the_decision_and_each_reviewers_verdict()
+    {
+        var pullRequest = (JsonObject)JsonNode.Parse("""
+            {
+              "reviewDecision": "CHANGES_REQUESTED",
+              "latestOpinionatedReviews": { "nodes": [ { "state": "CHANGES_REQUESTED", "author": { "login": "sarah", "avatarUrl": "https://avatars/sarah" } } ] },
+              "reviewRequests": { "nodes": [ { "requestedReviewer": { "__typename": "User", "login": "kim", "avatarUrl": null } } ] }
+            }
+            """)!;
+        var metadata = new JsonObject();
+
+        SmartLinkWatcherService.ApplyReviews(pullRequest, metadata);
+
+        metadata["reviewDecision"]!.GetValue<string>().ShouldBe("CHANGES_REQUESTED");
+        var reviewers = metadata["reviewers"]!.AsArray();
+        reviewers.Count.ShouldBe(2);
+        reviewers[0]!["login"]!.GetValue<string>().ShouldBe("sarah");
+        reviewers[0]!["state"]!.GetValue<string>().ShouldBe("CHANGES_REQUESTED");
+        reviewers[1]!["state"]!.GetValue<string>().ShouldBe("REQUESTED");
+    }
 }

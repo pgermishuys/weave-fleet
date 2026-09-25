@@ -28,6 +28,16 @@ public sealed class SmartLinkService(
         return links.Select(ToDto).ToList();
     }
 
+    /// <summary>
+    /// Every link that shows in a session header, across the user's sessions that aren't archived: what the
+    /// sessions list and the GitHub pages need to show a session's pull request, or a pull request's session.
+    /// </summary>
+    public async Task<IReadOnlyList<SmartLinkDto>> ListHeaderLinksAsync(CancellationToken ct = default)
+    {
+        var links = await smartLinkRepository.ListHeaderLinksForUserAsync(ct);
+        return links.Select(ToDto).ToList();
+    }
+
     public async Task<IReadOnlyList<SmartLinkDto>> ListAllBySessionIdAsync(string sessionId)
     {
         if (!await OwnsSessionAsync(sessionId))

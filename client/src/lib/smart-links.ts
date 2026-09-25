@@ -4,6 +4,8 @@
  * keeps their status fresh, and pushes changes. The client only reads and renders them.
  */
 
+import { checksFromCounts, parseReviewers, reviewDecision, type PrFacts, type Reviewer } from "@/lib/pr-state"
+
 /** How a link relates to its session. */
 export type SmartLinkRelationship = "origin" | "own" | "pinned" | "mentioned"
 
@@ -227,6 +229,31 @@ export function summarizeChecks(link: SmartLink): CheckSummary {
   return { state: failing ? "failing" : "running", failing, running, passed, text: parts.join(" · ") }
 }
 
+/** What the pull request state language needs to know about a linked pull request. */
+export function linkPrFacts(link: SmartLink): PrFacts {
+  const checks = summarizeChecks(link)
+  const counts = { passed: checks.passed, failing: checks.failing, pending: checks.running }
+  return {
+    state: link.status === "merged" ? "merged" : link.status === "closed" ? "closed" : "open",
+    draft: link.status === "draft",
+    checks: checksFromCounts(counts),
+    conflict: hasMergeConflict(link),
+    review: reviewDecision(link.metadata.reviewDecision),
+    unresolvedThreads: reviewThreads(link).length,
+    checkCounts: counts,
+  }
+}
+
+export function linkReviewers(link: SmartLink): Reviewer[] {
+  return parseReviewers(link.metadata.reviewers)
+}
+
+/** Lines added and removed, once the watcher has read them. */
+export function linkDiff(link: SmartLink): { additions: number; deletions: number } | null {
+  const { additions, deletions } = link.metadata
+  return typeof additions === "number" && typeof deletions === "number" ? { additions, deletions } : null
+}
+
 /** Something on this link needs the user: a failing check or a merge conflict on an open pull request. */
 export function needsAttention(link: SmartLink): boolean {
   return isPullRequest(link) && !link.isTerminal && (summarizeChecks(link).failing > 0 || hasMergeConflict(link))
@@ -299,6 +326,14 @@ export function formatReviewThreadPrompt(link: SmartLink, thread: ReviewThread):
   }
   lines.push("", "Please analyze this review comment and suggest a response or fix.")
   return lines.join("\n")
+}
+
+/** One message with every failing check and open review thread, for "Fix checks and address review". */
+export function formatFixPrompt(link: SmartLink, runs: CheckRun[], threads: ReviewThread[]): string {
+  return [
+    ...runs.map((run) => formatCheckFailurePrompt(link, run)),
+    ...threads.map((thread) => formatReviewThreadPrompt(link, thread)),
+  ].join("\n\n---\n\n")
 }
 
 /** "just now", "12s ago", "4m ago", "2h ago". */

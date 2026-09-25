@@ -1,23 +1,27 @@
 <script setup lang="ts">
-import { computed, ref, shallowRef } from "vue";
+import { computed, ref } from "vue";
 import {
   Check,
   ChevronRight,
-  CircleCheckBig,
-  CircleX,
-  Clock,
   ExternalLink,
   GitMerge,
   LoaderCircle,
   MessageSquare,
-  Minus,
   PinOff,
   Send,
   TriangleAlert,
+  Users,
   X,
 } from "lucide-vue-next";
+import CheckIcon from "@/components/github/CheckIcon.vue";
+import ChecksSummary from "@/components/github/ChecksSummary.vue";
+import DiffStat from "@/components/github/DiffStat.vue";
+import GitHubLabel from "@/components/github/GitHubLabel.vue";
+import PrStatePill from "@/components/github/PrStatePill.vue";
+import ReviewerAvatar from "@/components/github/ReviewerAvatar.vue";
 import SmartLinkIcon from "@/components/session-context/SmartLinkIcon.vue";
-import { apiFetch } from "@/lib/api-client";
+import { useSendToAgent } from "@/composables/use-send-to-agent";
+import { prState, prStateLabel, prWords, reviewerWords } from "@/lib/pr-state";
 import {
   checkState,
   ciStatus,
@@ -25,9 +29,12 @@ import {
   formatReviewThreadPrompt,
   hasMergeConflict,
   isPullRequest,
+  linkDiff,
   linkHref,
   linkLabels,
   linkNumber,
+  linkPrFacts,
+  linkReviewers,
   linkTitle,
   needsAttention,
   reviewThreads,
@@ -44,8 +51,6 @@ const props = defineProps<{
 
 const store = useSmartLinksStore();
 
-const HEX_COLOR = /^[0-9a-fA-F]{6}$/;
-
 const number = computed(() => linkNumber(props.link));
 const title = computed(() => linkTitle(props.link));
 const href = computed(() => linkHref(props.link));
@@ -59,6 +64,23 @@ const conflict = computed(() => hasMergeConflict(props.link));
 const attention = computed(() => needsAttention(props.link));
 const headRef = computed(() => (typeof props.link.metadata.headRef === "string" ? props.link.metadata.headRef : null));
 const baseRef = computed(() => (typeof props.link.metadata.baseRef === "string" ? props.link.metadata.baseRef : null));
+const facts = computed(() => linkPrFacts(props.link));
+const diff = computed(() => linkDiff(props.link));
+const reviewers = computed(() => linkReviewers(props.link));
+const stateLabel = computed(() => {
+  if (!isPullRequest(props.link)) return { state: props.link.status === "closed" ? "closed" as const : "open" as const, label: props.link.statusLabel };
+  const state = prState(facts.value);
+  // The words say what it's waiting on while it's open; the signals below list it all.
+  return { state, label: state === "open" ? prWords(facts.value) : prStateLabel(state) };
+});
+// "Changes requested by sarah", "Approved by tvdb", "Waiting for kim".
+const reviewSummary = computed(() => {
+  const by = (state: string) => reviewers.value.filter((r) => r.state === state).map((r) => r.login).join(", ");
+  if (by("CHANGES_REQUESTED")) return `${reviewerWords("CHANGES_REQUESTED")} by ${by("CHANGES_REQUESTED")}`;
+  if (by("APPROVED")) return `Approved by ${by("APPROVED")}`;
+  if (by("REQUESTED")) return `Waiting for ${by("REQUESTED")}`;
+  return `${reviewers.value.length} reviewer${reviewers.value.length === 1 ? "" : "s"}`;
+});
 
 const checksOpen = ref(checks.value.state === "failing");
 const reviewOpen = ref(false);
@@ -73,49 +95,18 @@ const pendingNote = computed(() => {
   }
 });
 
-function labelStyle(color: string) {
-  const safe = HEX_COLOR.test(color) ? color : "888888";
-  return { color: `#${safe}`, borderColor: `#${safe}55`, backgroundColor: `#${safe}14` };
-}
-
-function checkIcon(run: CheckRun) {
+function runState(run: CheckRun) {
   switch (checkState(run)) {
-    case "failing": return { icon: CircleX, tone: "bad" };
-    case "running": return { icon: Clock, tone: "warn" };
-    case "passed": return { icon: CircleCheckBig, tone: "good" };
-    default: return { icon: Minus, tone: "muted" };
+    case "failing": return "failure";
+    case "running": return "pending";
+    case "passed": return "success";
+    default: return "neutral";
   }
 }
 
 // ── Send to agent ─────────────────────────────────────────────────────────────
 
-const sending = shallowRef<ReadonlySet<string>>(new Set());
-const sent = shallowRef<ReadonlySet<string>>(new Set());
-const sendError = ref<string | null>(null);
-
-async function send(key: string, text: string): Promise<void> {
-  if (sending.value.has(key)) return;
-  sending.value = new Set([...sending.value, key]);
-  sendError.value = null;
-  try {
-    const response = await apiFetch(`/api/sessions/${encodeURIComponent(props.link.sessionId)}/prompt`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, userMessageId: crypto.randomUUID() }),
-    });
-    if (response.ok) {
-      sent.value = new Set([...sent.value, key]);
-    } else {
-      sendError.value = `Couldn't send to the agent (HTTP ${response.status}).`;
-    }
-  } catch {
-    sendError.value = "Couldn't reach Fleet to send this to the agent.";
-  } finally {
-    const next = new Set(sending.value);
-    next.delete(key);
-    sending.value = next;
-  }
-}
+const { send, sending, sent, error: sendError } = useSendToAgent(() => props.link.sessionId);
 
 const sendCheck = (run: CheckRun) => send(`check:${run.name}`, formatCheckFailurePrompt(props.link, run));
 const sendThread = (thread: ReviewThread) => send(`thread:${thread.threadNodeId}`, formatReviewThreadPrompt(props.link, thread));
@@ -141,11 +132,12 @@ const sendThread = (thread: ReviewThread) => send(`thread:${thread.threadNodeId}
           rel="noopener noreferrer"
         >{{ title }}</a>
         <div class="link-card__meta">
-          <span
+          <PrStatePill
             v-if="resolved && link.statusLabel"
-            class="link-card__state"
-            :data-state="link.status"
-          >{{ link.statusLabel }}</span>
+            :kind="isPullRequest(link) ? 'pull' : 'issue'"
+            :state="stateLabel.state"
+            :label="stateLabel.label"
+          />
           <span
             v-else-if="pendingNote"
             class="link-card__note"
@@ -155,12 +147,17 @@ const sendThread = (thread: ReviewThread) => send(`thread:${thread.threadNodeId}
             class="link-card__branch"
             :title="`${headRef} into ${baseRef}`"
           >{{ headRef }} → {{ baseRef }}</span>
-          <span
+          <DiffStat
+            v-if="diff && isOpenPullRequest"
+            :additions="diff.additions"
+            :deletions="diff.deletions"
+          />
+          <GitHubLabel
             v-for="label in labels"
             :key="label.name"
-            class="link-card__label"
-            :style="labelStyle(label.color)"
-          >{{ label.name }}</span>
+            :name="label.name"
+            :color="label.color"
+          />
         </div>
       </div>
       <div class="link-card__trail">
@@ -231,12 +228,9 @@ const sendThread = (thread: ReviewThread) => send(`thread:${thread.threadNodeId}
           :aria-expanded="checksOpen"
           @click="checksOpen = !checksOpen"
         >
-          <component
-            :is="checks.state === 'failing' ? CircleX : checks.state === 'running' ? Clock : CircleCheckBig"
-            :size="14"
+          <CheckIcon
+            :state="checks.state === 'failing' ? 'failure' : checks.state === 'running' ? 'pending' : 'success'"
             class="signal__icon"
-            :data-tone="checks.state === 'failing' ? 'bad' : checks.state === 'running' ? 'warn' : 'good'"
-            aria-hidden="true"
           />
           <span class="signal__what">Checks</span>
           <span class="signal__detail">{{ checks.text }}</span>
@@ -246,6 +240,11 @@ const sendThread = (thread: ReviewThread) => send(`thread:${thread.threadNodeId}
             aria-hidden="true"
           />
         </button>
+        <ChecksSummary
+          class="signal__bar"
+          bar-only
+          :counts="facts.checkCounts!"
+        />
         <ul
           v-if="checksOpen"
           class="signal__list"
@@ -256,12 +255,10 @@ const sendThread = (thread: ReviewThread) => send(`thread:${thread.threadNodeId}
             :key="run.id"
             class="signal__item"
           >
-            <component
-              :is="checkIcon(run).icon"
+            <CheckIcon
+              :state="runState(run)"
               :size="12"
               class="signal__icon"
-              :data-tone="checkIcon(run).tone"
-              aria-hidden="true"
             />
             <span
               class="signal__name"
@@ -318,6 +315,29 @@ const sendThread = (thread: ReviewThread) => send(`thread:${thread.threadNodeId}
           </li>
         </ul>
       </template>
+
+      <div
+        v-if="reviewers.length > 0"
+        class="signal signal--static signal--avatars"
+      >
+        <Users
+          :size="14"
+          class="signal__icon"
+          aria-hidden="true"
+        />
+        <span class="signal__what">Reviews</span>
+        <span class="signal__detail">{{ reviewSummary }}</span>
+        <span class="signal__avatars">
+          <ReviewerAvatar
+            v-for="reviewer in reviewers"
+            :key="reviewer.login"
+            :login="reviewer.login"
+            :avatar-url="reviewer.avatarUrl"
+            :state="reviewer.state"
+            :size="16"
+          />
+        </span>
+      </div>
 
       <template v-if="threads.length > 0">
         <button
@@ -487,35 +507,18 @@ const sendThread = (thread: ReviewThread) => send(`thread:${thread.threadNodeId}
   gap: 4px 6px;
 }
 
-.link-card__state,
-.link-card__label {
+.signal__bar {
+  padding: 0 12px 8px 34px;
+}
+
+.signal.signal--avatars {
+  grid-template-columns: 16px auto minmax(0, 1fr) auto;
+}
+
+.signal__avatars {
   display: inline-flex;
-  align-items: center;
-  height: 18px;
-  padding: 0 7px;
-  border-radius: 999px;
-  font-size: 10.5px;
-  font-weight: 600;
-}
-
-.link-card__state {
-  color: var(--running);
-  background: color-mix(in srgb, var(--running) 13%, transparent);
-}
-
-.link-card__state[data-state="merged"] {
-  color: var(--queued);
-  background: color-mix(in srgb, var(--queued) 13%, transparent);
-}
-
-.link-card__state[data-state="closed"],
-.link-card__state[data-state="draft"] {
-  color: var(--muted);
-  background: color-mix(in srgb, var(--muted) 16%, transparent);
-}
-
-.link-card__label {
-  border: 1px solid transparent;
+  gap: 5px;
+  padding-right: 2px;
 }
 
 .link-card__note {
@@ -782,7 +785,7 @@ const sendThread = (thread: ReviewThread) => send(`thread:${thread.threadNodeId}
 }
 
 .link-card--attention {
-  border-color: color-mix(in srgb, var(--error) 28%, var(--border));
+  border-color: color-mix(in srgb, var(--pr-blocked) 35%, var(--border));
 }
 
 @keyframes link-card-spin {

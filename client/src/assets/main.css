@@ -40,6 +40,18 @@
      resting state, so it stays quiet; waiting on the user is amber. */
   --status-idle: var(--muted);
   --status-waiting: var(--idle);
+  /* Pull requests: one colour per state and for checks, on every GitHub surface. "Blocked" is an open pull
+     request something stops (a failing check, a conflict, changes requested), in the waiting colour. */
+  --pr-open: var(--running);
+  --pr-draft: var(--muted);
+  --pr-blocked: var(--status-waiting);
+  --pr-merged: var(--queued);
+  --pr-closed: var(--error);
+  --check-pass: var(--running);
+  --check-fail: var(--error);
+  --check-pending: var(--status-waiting);
+  --diff-add: var(--running);
+  --diff-del: var(--error);
   --bg: var(--main-bg);
   --font-sans-stack: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
   --font-mono-stack: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;

@@ -498,6 +498,10 @@ internal sealed partial class SmartLinkWatcherService(
         metadata["headRef"] = headRef;
         metadata["baseRef"] = pr["base"]?["ref"]?.GetValue<string>();
         metadata["mergedAt"] = pr["merged_at"]?.GetValue<string>();
+        metadata["additions"] = pr["additions"]?.GetValue<int>();
+        metadata["deletions"] = pr["deletions"]?.GetValue<int>();
+        metadata["changedFiles"] = pr["changed_files"]?.GetValue<int>();
+        metadata["author"] = pr["user"]?["login"]?.GetValue<string>();
 
         // A pull request from the session's own branch belongs to the session.
         if (headRef is not null
@@ -618,10 +622,30 @@ internal sealed partial class SmartLinkWatcherService(
         };
 
         var response = await cycle.PostGraphQLAsync(token, GitHubEndpointMappings.ReviewThreadsQuery, variables, ct).ConfigureAwait(false);
-        if (response?["data"]?["repository"]?["pullRequest"] is null)
+        if (response?["data"]?["repository"]?["pullRequest"] is not JsonObject pullRequest)
             return;
 
         metadata["reviewThreads"] = ReviewThreadsToJson(GitHubEndpointMappings.BuildReviewThreadsResponse(response));
+        ApplyReviews(pullRequest, metadata);
+    }
+
+    /// <summary>The review decision and each reviewer's verdict, for the session's pull request badge and pill.</summary>
+    internal static void ApplyReviews(JsonObject pullRequest, JsonObject metadata)
+    {
+        metadata["reviewDecision"] = pullRequest["reviewDecision"]?.GetValue<string>();
+
+        var reviewers = new JsonArray();
+        foreach (var reviewer in GitHubItems.ParseReviewers(pullRequest))
+        {
+            reviewers.Add((JsonNode)new JsonObject
+            {
+                ["login"] = reviewer.Login,
+                ["avatarUrl"] = reviewer.AvatarUrl,
+                ["state"] = reviewer.State,
+            });
+        }
+
+        metadata["reviewers"] = reviewers;
     }
 
     private static bool IsFailedRun(GitHubCheckRunDto cr)

@@ -48,6 +48,26 @@ public sealed class SmartLinkRepository : ISmartLinkRepository
             MapSmartLink);
     }
 
+    public async Task<IReadOnlyList<SmartLink>> ListHeaderLinksForUserAsync(CancellationToken ct)
+    {
+        using var conn = _connectionFactory.CreateConnection();
+        return await conn.QueryAsync(
+            """
+            SELECT sl.*
+            FROM smart_links sl
+            INNER JOIN sessions s ON s.id = sl.session_id
+            WHERE sl.user_id = @UserId
+              AND s.user_id = @UserId
+              AND s.retention_status = 'active'
+              AND sl.is_dismissed = 0
+              AND sl.relationship IN ('origin', 'own', 'pinned')
+            ORDER BY sl.created_at ASC
+            """,
+            cmd => cmd.AddParameter("UserId", _userContext.UserId),
+            MapSmartLink,
+            ct).ConfigureAwait(false);
+    }
+
     public async Task DismissAsync(string id)
     {
         using var conn = _connectionFactory.CreateConnection();
