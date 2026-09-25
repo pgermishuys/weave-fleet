@@ -210,6 +210,11 @@ public static class DependencyInjection
         services.AddScoped<AppRunRecorder>();
         services.AddHostedService<AppRunRecorderService>();
         services.AddSingleton<IScreenshotter, HeadlessChromeScreenshotter>();
+        services.AddSingleton(sp => new SessionScreenshotStore(
+            sp.GetRequiredService<FleetOptions>().ResolvedScreenshotDirectory,
+            sp.GetRequiredService<ILogger<SessionScreenshotStore>>()));
+        services.AddSingleton<ISessionScreenshotStore>(sp => sp.GetRequiredService<SessionScreenshotStore>());
+        services.AddHostedService<SessionScreenshotCleanupService>();
         services.AddScoped<BrowserPreviews>();
         services.AddScoped<BrowserBridge>();
         services.AddSingleton<IBackgroundUserScope, BackgroundUserScope>();

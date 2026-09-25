@@ -1,4 +1,5 @@
 import type { AccumulatedToolPart } from "@/lib/client-types";
+import { apiUrl } from "@/lib/api-client";
 import { backgroundWorkId, type BackgroundState } from "@/lib/background-work";
 import { getToolLabel } from "@/lib/tool-labels";
 
@@ -26,6 +27,14 @@ export interface ToolCardDelegation {
   background?: boolean;
 }
 
+/** A screenshot the agent took, which Fleet kept so the conversation can show it under the call. */
+export interface ToolCardScreenshot {
+  url: string;
+  /** The size it was taken at, so the thumbnail keeps its shape before the image arrives. */
+  width: number;
+  height: number;
+}
+
 export interface ToolCardItem {
   id: string;
   title: string;
@@ -41,6 +50,7 @@ export interface ToolCardItem {
   canvasId?: string;
   /** Set on a sub-agent call once its session exists; the row then opens that session. */
   delegation?: ToolCardDelegation;
+  screenshot?: ToolCardScreenshot;
 }
 
 /** The kind of sub-agent a call asked for: OpenCode names it `subagent_type`, OpenCode 2 `agent`. */
@@ -124,6 +134,26 @@ export function toolDiffLines(part: AccumulatedToolPart): DiffLine[] {
   return getDiffLines(asRecord(part.state));
 }
 
+/**
+ * The screenshot Fleet kept for the call, from `metadata.screenshot` ({ sessionId, id, width, height }). The harness
+ * keeps metadata with the call, so it's there after a reload too. The session is Fleet's, and can be the parent's:
+ * a sub-agent's shot is kept under the session you started.
+ */
+export function toolScreenshot(part: AccumulatedToolPart): ToolCardScreenshot | undefined {
+  const shot = asRecord(asRecord(asRecord(part.state)?.metadata)?.screenshot);
+  const sessionId = getStringValue(shot?.sessionId);
+  const id = getStringValue(shot?.id);
+  const width = getNumberValue(shot?.width);
+  const height = getNumberValue(shot?.height);
+  if (!sessionId || !id || !width || !height) return undefined;
+
+  return {
+    url: apiUrl(`/api/sessions/${encodeURIComponent(sessionId)}/screenshots/${encodeURIComponent(id)}`),
+    width,
+    height,
+  };
+}
+
 /** Anything on the call's state or metadata that looks like a unified diff, as text. */
 export function toolDiffText(part: AccumulatedToolPart): string | undefined {
   const state = asRecord(part.state);
@@ -164,6 +194,7 @@ export function toToolCardItem(
     preview: buildPreview(output, summary),
     isPatternTool: part.tool === "glob" || part.tool === "grep",
     canvasId,
+    screenshot: toolScreenshot(part),
   };
 }
 

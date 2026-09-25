@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { X, User, Bot, Copy, ChevronRight } from "lucide-vue-next";
+import { User, Bot, Copy, ChevronRight } from "lucide-vue-next";
 import ToolCard from "@/components/session/ToolCard.vue";
+import ToolScreenshot from "@/components/session/ToolScreenshot.vue";
+import ImageLightbox from "@/components/session/ImageLightbox.vue";
 import AgentTaskRow from "@/components/session/AgentTaskRow.vue";
-import type { ToolCardDelegation } from "@/components/session/activity-stream-tool-card";
+import type { ToolCardDelegation, ToolCardScreenshot } from "@/components/session/activity-stream-tool-card";
 import QuestionCard from "@/components/session/QuestionCard.vue";
 import type { AccumulatedToolPart } from "@/lib/client-types";
 import type { SlashCommand } from "@/lib/domain-events";
@@ -35,6 +37,7 @@ interface ToolCardItem {
   isPatternTool?: boolean;
   canvasId?: string;
   delegation?: ToolCardDelegation;
+  screenshot?: ToolCardScreenshot;
 }
 
 interface ImageAttachmentDisplay {
@@ -217,30 +220,10 @@ function handleExpandVisual(payload: VisualPayload): void {
             </button>
           </div>
 
-          <Teleport to="body">
-            <div
-              v-if="lightboxUrl"
-              class="lightbox-overlay"
-              @click="lightboxUrl = null"
-            >
-              <img
-                :src="lightboxUrl"
-                alt="Image preview"
-                class="lightbox-image"
-                @click.stop
-              >
-              <button
-                type="button"
-                class="lightbox-close"
-                @click="lightboxUrl = null"
-              >
-                <X
-                  class="lightbox-close__icon"
-                  aria-hidden="true"
-                />
-              </button>
-            </div>
-          </Teleport>
+          <ImageLightbox
+            :src="lightboxUrl"
+            @close="lightboxUrl = null"
+          />
 
           <div
             v-if="tools && tools.length > 0"
@@ -269,6 +252,11 @@ function handleExpandVisual(payload: VisualPayload): void {
                 :canvas-id="tool.canvasId"
                 @expand-visual="handleExpandVisual"
                 @show-canvas="emit('show-canvas', $event)"
+              />
+              <ToolScreenshot
+                v-if="tool.screenshot && !tool.delegation"
+                :screenshot="tool.screenshot"
+                :title="tool.title"
               />
             </template>
           </div>

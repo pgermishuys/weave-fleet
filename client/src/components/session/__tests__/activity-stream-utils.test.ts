@@ -27,6 +27,31 @@ describe("toToolCardItem", () => {
     expect(running).toMatchObject({ title: "Shop · npm run dev", canvasId: undefined });
   });
 
+  it("points a screenshot call at the copy Fleet kept, under the session it names", () => {
+    const shot = toToolCardItem(create_tool_part({
+      status: "completed",
+      input: { canvasId: "cv_1", path: "", viewport: "phone" },
+      title: "Shop · 390×844",
+      output: "Screenshot of http://localhost:5173/ at 390×844.",
+      metadata: { canvasId: "cv_1", version: 2, screenshot: { sessionId: "ses parent", id: "shot_01J", width: 390, height: 844 } },
+    }, "fleet_browser_screenshot"));
+
+    expect(shot.screenshot).toEqual({ url: "/api/sessions/ses%20parent/screenshots/shot_01J", width: 390, height: 844 });
+  });
+
+  it("gives a call no screenshot when its metadata doesn't name a whole one", () => {
+    const shotWith = (screenshot: unknown) => toToolCardItem(create_tool_part({
+      status: "completed",
+      metadata: { canvasId: "cv_1", screenshot },
+    }, "fleet_browser_screenshot")).screenshot;
+
+    expect(shotWith(undefined)).toBeUndefined();
+    expect(shotWith({ sessionId: "ses-1", id: "shot_1" })).toBeUndefined();
+    expect(shotWith({ sessionId: "ses-1", width: 1280, height: 800 })).toBeUndefined();
+    expect(shotWith("shot_1")).toBeUndefined();
+    expect(toToolCardItem(create_tool_part({ status: "running" }, "fleet_browser_screenshot")).screenshot).toBeUndefined();
+  });
+
   it("uses_result_as_output_when_output_is_absent", () => {
     const item = toToolCardItem(create_tool_part({
       status: "completed",

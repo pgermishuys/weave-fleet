@@ -22,6 +22,7 @@ public sealed class BrowserBridgeTests : IDisposable
     private readonly FakeCallers _callers = new();
     private readonly FakeAppRunner _apps = new();
     private readonly FakeScreenshotter _shots = new();
+    private readonly FakeScreenshotStore _kept = new();
     private readonly BrowserBridge _bridge;
 
     public BrowserBridgeTests()
@@ -32,7 +33,7 @@ public sealed class BrowserBridgeTests : IDisposable
         _callers.Add(Token, OpenCodeSessionId, new HarnessCanvasCaller(SessionId, Owner));
         var canvases = new CanvasService(_canvasRepository, new FakeEventBroadcaster(), _user);
         var apps = new AppRunService(_apps, _runs, _sessions, _user);
-        _bridge = new BrowserBridge([_callers], _user, new BrowserPreviews(canvases, apps), apps, canvases, _shots);
+        _bridge = new BrowserBridge([_callers], _user, new BrowserPreviews(canvases, apps), apps, canvases, _shots, _kept);
     }
 
     public void Dispose() => _folder.Delete(recursive: true);
@@ -259,8 +260,35 @@ public sealed class BrowserBridgeTests : IDisposable
         shot.Value!.Output.ShouldBe(
             "Screenshot of http://localhost:5173/ at 1280×800, from \"Shop\" (" + canvasId + ")."
             + "\nThe page hadn't finished loading after 10 seconds; this is how far it had got."
-            + "\nThe image is attached: look at it, don't guess. Call this again after a change to see it.");
+            + "\nThe image is attached: look at it, don't guess. Call this again after a change to see it."
+            + "\nThe user sees this screenshot in the conversation, under this call: to show it to them, point them there. Don't save it or serve it on a page.");
         shot.Value.Attachments.ShouldHaveSingleItem();
+    }
+
+    [Fact]
+    public async Task Fleet_keeps_a_copy_of_the_screenshot_for_the_conversation_and_says_where_it_is()
+    {
+        var canvasId = await ShownAppAsync();
+
+        var shot = await _bridge.ScreenshotAsync(Token, OpenCodeSessionId, canvasId, "", "phone");
+
+        var (key, png) = _kept.Saved.ShouldHaveSingleItem();
+        key.SessionId.ShouldBe(SessionId);
+        png.ShouldBe(_shots.NextPng);
+        shot.Value!.Screenshot.ShouldBe(new ScreenshotReference(SessionId, key.Id, 390, 844));
+    }
+
+    [Fact]
+    public async Task A_screenshot_Fleet_could_not_keep_still_goes_to_the_agent_without_pointing_at_the_conversation()
+    {
+        var canvasId = await ShownAppAsync();
+        _kept.Fail = true;
+
+        var shot = await _bridge.ScreenshotAsync(Token, OpenCodeSessionId, canvasId, "", "desktop");
+
+        shot.Value!.Attachments.ShouldHaveSingleItem();
+        shot.Value.Screenshot.ShouldBeNull();
+        shot.Value.Output.ShouldNotContain("conversation");
     }
 
     [Fact]
@@ -283,6 +311,7 @@ public sealed class BrowserBridgeTests : IDisposable
         var shot = await _bridge.ScreenshotAsync(Token, OpenCodeSessionId, canvasId, "", "desktop");
 
         shot.Error!.Message.ShouldBe(_shots.NextProblem);
+        _kept.Saved.ShouldBeEmpty();
     }
 
     [Fact]
