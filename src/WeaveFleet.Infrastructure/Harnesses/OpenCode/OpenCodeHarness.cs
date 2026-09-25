@@ -34,6 +34,8 @@ public sealed class OpenCodeHarness : IHarness
         SupportsWorkflowSteps = true,
         SupportsProfiles = true,
         HistoryLivesInHarness = true,
+        // A prompt sent while a turn runs is read at the turn's next model call.
+        SupportsSteering = true,
         // POST /session/{id}/shell, between turns (OpenCode refuses one while a turn runs).
         SupportsShellCommands = true,
         SupportsSideConversations = true,

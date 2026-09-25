@@ -183,6 +183,10 @@ public static class DependencyInjection
         services.AddScoped<ISessionUpdateSender, SessionUpdateSender>();
         // Singleton: holds which messages a session asked to hear back about, until the turn handling them ends.
         services.AddSingleton<SessionUpdates>();
+        services.AddScoped<IQueuedPromptRepository, QueuedPromptRepository>();
+        services.AddScoped<PromptQueueService>();
+        // Singleton: the relay hands it every event; it sends a session's next queued message when its turn ends.
+        services.AddSingleton<PromptQueueDispatcher>();
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowsFeature>();
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowModelRoles>();
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowService>();

@@ -266,3 +266,47 @@ describe("use-send-prompt picks the harness no longer lists", () => {
     expect(sentBody().model).toBeUndefined()
   })
 })
+
+describe("use-send-prompt steering", () => {
+  function sentBody(): { text: string; delivery?: string } {
+    const promptCall = (mockApi.POST.mock.calls as unknown[][]).find(([url]) => url === "/api/sessions/{id}/prompt")
+    return (promptCall?.[1] as { body: { text: string; delivery?: string } }).body
+  }
+
+  it("asks for the running turn and shows the message as sent mid-turn", async () => {
+    const sessionId = "session-steer-draft"
+    useDraftState(sessionId, { agentId: "", modelId: "" }).setText("stop, wrong file")
+
+    mockApi.POST.mockReturnValueOnce(new Promise(() => {}))
+    useSendPrompt(sessionId).sendPrompt(undefined, undefined, { steer: true })
+    await nextTick()
+
+    expect(sentBody()).toMatchObject({ text: "stop, wrong file", delivery: "steer" })
+    expect(useSentPrompts(sessionId).sentPrompts.value[0]?.steered).toBe(true)
+  })
+
+  it("sends a queued message now without touching what is in the composer", async () => {
+    const sessionId = "session-steer-queued"
+    const draft = useDraftState(sessionId, { agentId: "", modelId: "" })
+    draft.setText("half a thought")
+
+    mockApi.POST.mockReturnValueOnce(new Promise(() => {}))
+    useSendPrompt(sessionId).sendPrompt(undefined, "the queued message", { steer: true })
+    await nextTick()
+
+    expect(sentBody()).toMatchObject({ text: "the queued message", delivery: "steer" })
+    expect(draft.draft.text).toBe("half a thought")
+  })
+
+  it("leaves the delivery out of a normal send, which the server queues", async () => {
+    const sessionId = "session-steer-normal"
+    useDraftState(sessionId, { agentId: "", modelId: "" }).setText("after the turn")
+
+    mockApi.POST.mockReturnValueOnce(new Promise(() => {}))
+    useSendPrompt(sessionId).sendPrompt()
+    await nextTick()
+
+    expect(sentBody().delivery).toBeUndefined()
+    expect(useSentPrompts(sessionId).sentPrompts.value[0]?.steered).toBeUndefined()
+  })
+})

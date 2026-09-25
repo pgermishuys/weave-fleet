@@ -103,6 +103,8 @@ export interface MessageEventInfo {
   turnError?: TurnError | null;
   /** Why the model stopped (e.g. "stop", "length", "error"), when the harness reports it. */
   finish?: string | null;
+  /** Set on a prompt the user sent into a running turn (steered). */
+  steered?: boolean | null;
   /** The slash command a user message came from; its text is then what the harness made of the command. */
   command?: SlashCommand | null;
 }
@@ -497,6 +499,18 @@ export function isTerminalEvent(event: DomainEvent): event is TerminalEvent {
   return event.type === "terminal.opened" || event.type === "terminal.closed";
 }
 
+/**
+ * A session's queue changed: the messages its user queued while the agent worked, in the order Fleet sends them.
+ * Carries the whole queue. Not persisted; the queue itself is loaded from `GET /api/sessions/{id}/queue`.
+ */
+export interface SessionQueueChanged extends EventCursorMetadata {
+  type: "session.queue";
+  payload: {
+    sessionId: string;
+    items: { id: string; kind: string; text: string; createdAt: string }[];
+  };
+}
+
 export function isCanvasEvent(event: DomainEvent): event is CanvasEvent {
   return event.type === "canvas.updated" || event.type === "canvas.closed" || event.type === "canvas.focused";
 }
@@ -526,4 +540,5 @@ export type DomainEvent =
   | TerminalClosed
   | AppUpdated
   | SessionRecap
-  | SessionNotification;
+  | SessionNotification
+  | SessionQueueChanged;

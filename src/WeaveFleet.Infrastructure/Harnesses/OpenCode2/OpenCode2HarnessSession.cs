@@ -124,8 +124,22 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         // model reads them, the conversation doesn't show them (OpenCode2History).
         foreach (var note in options?.ModelNotes ?? [])
             await server.Client.AddSyntheticAsync(ResumeToken, note, ct).ConfigureAwait(false);
-        await server.Client.PromptAsync(ResumeToken, text, options?.MessageId, PromptFiles(options?.Attachments), ct).ConfigureAwait(false);
+        await server.Client.PromptAsync(ResumeToken, text, options?.MessageId, PromptFiles(options?.Attachments), Delivery(options?.Delivery), ct)
+            .ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// V2's delivery for a prompt. Fleet holds a queued prompt until the turn ends, so V2 keeps no queue of its own the
+    /// user can't see; saying <c>queue</c> keeps a prompt that meets a turn Fleet didn't know was running from steering
+    /// it. A prompt that doesn't say (Fleet's own, from automations, workflows and other sessions) gets V2's default,
+    /// which steers.
+    /// </summary>
+    internal static string? Delivery(PromptDelivery? delivery) => delivery switch
+    {
+        PromptDelivery.Steer => OpenCode2Deliveries.Steer,
+        PromptDelivery.Queue => OpenCode2Deliveries.Queue,
+        _ => null,
+    };
 
     /// <summary>A prompt's attachments (pasted images) as V2's prompt files: inline, as <c>data:</c> URIs.</summary>
     internal static IReadOnlyList<OpenCode2PromptFile>? PromptFiles(IReadOnlyList<HarnessAttachment>? attachments)
@@ -240,10 +254,33 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         var hasMore = page.Cursor?.Next is not null
             && messages.Count > 0
             && (query?.Limit is not { } limit || messages.Count >= limit);
-        return new MessagePage(
-            OpenCode2History.ToHarnessMessages(messages.Reverse()),
-            hasMore,
-            hasMore ? page.Cursor!.Next : null);
+        var history = OpenCode2History.ToHarnessMessages(messages.Reverse());
+        if (query?.Before is null)
+            history = [.. history, .. await PendingPromptsAsync(server, history, ct).ConfigureAwait(false)];
+
+        return new MessagePage(history, hasMore, hasMore ? page.Cursor!.Next : null);
+    }
+
+    /// <summary>
+    /// The prompts sent that V2 hasn't taken in yet (a steer waits for the turn's next step), newest last, so a reload
+    /// mid-turn still shows them. Without them the history is still right, only short of those, so a failure is logged.
+    /// </summary>
+    private async Task<IReadOnlyList<HarnessMessage>> PendingPromptsAsync(
+        OpenCode2Server server,
+        IReadOnlyList<HarnessMessage> history,
+        CancellationToken ct)
+    {
+        try
+        {
+            var shown = history.Select(message => message.Id).ToHashSet(StringComparer.Ordinal);
+            var inbox = await server.Client.GetInboxAsync(ResumeToken, ct).ConfigureAwait(false);
+            return OpenCode2History.PendingPrompts(inbox).Where(message => !shown.Contains(message.Id)).ToList();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException)
+        {
+            LogInboxReadFailed(_logger, InstanceId, ex);
+            return [];
+        }
     }
 
     /// <summary>
@@ -750,6 +787,9 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "A shell command in OpenCode 2 session {InstanceId} failed after V2 took it")]
     private static partial void LogShellCommandFailed(ILogger logger, string instanceId, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not read the inbox of OpenCode 2 session {InstanceId}; prompts it hasn't taken in yet are left out of the history")]
+    private static partial void LogInboxReadFailed(ILogger logger, string instanceId, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Interrupting OpenCode 2 session {InstanceId}")]
     private static partial void LogAbort(ILogger logger, string instanceId);

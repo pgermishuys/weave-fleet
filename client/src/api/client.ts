@@ -301,6 +301,8 @@ export interface HarnessCapabilities {
   supportsWorkflowSteps?: boolean;
   /** The harness can ask about a session off the record, leaving its history alone: recaps and Save as workflow…. */
   supportsOffTheRecordPrompt?: boolean;
+  /** A message sent while a turn runs can go into that turn (steer) instead of waiting in the queue. */
+  supportsSteering?: boolean;
   /** The user can run a shell command in the session's folder from the composer (`!git status`). */
   supportsShellCommands?: boolean;
   /** A session can fork into a side conversation at its last finished turn (`/btw` in the composer). */

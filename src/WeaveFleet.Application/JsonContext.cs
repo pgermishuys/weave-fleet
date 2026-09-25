@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using WeaveFleet.Application.DTOs;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.DTOs;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
@@ -18,6 +19,7 @@ internal sealed record CommittedMessageInfo(
     string? Agent,
     string? ModelID,
     CommittedMessageTime Time,
+    bool? Steered = null,
     SlashCommand? Command = null);
 
 internal sealed record CommittedMessage(CommittedMessageInfo Info, List<JsonElement> Parts);
@@ -111,6 +113,7 @@ internal sealed record QuickChatSourceInput;
 [JsonSerializable(typeof(List<MessagePart>))]
 [JsonSerializable(typeof(DelegationEventDto))]
 [JsonSerializable(typeof(CommittedMessage))]
+[JsonSerializable(typeof(SessionQueueChanged))]
 [JsonSerializable(typeof(CommittedUserPromptMessage))]
 [JsonSerializable(typeof(CommittedTextPart))]
 [JsonSerializable(typeof(CommittedFilePart))]

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import { ArrowUpRight, Bot, RotateCw, TerminalSquare, TriangleAlert, Workflow } from "lucide-vue-next";
+import { ArrowUpRight, Bot, CornerDownRight, RotateCw, TerminalSquare, TriangleAlert, Workflow } from "lucide-vue-next";
 import { parsePeerMessage, parsePeerUpdate, type PeerOutcome, type PeerSender } from "@/lib/session-messages";
 import { finishedBackgroundWork, parseBackgroundNotice, type BackgroundNotice, type BackgroundState } from "@/lib/background-work";
 import { useRouter } from "@tanstack/vue-router";
@@ -66,6 +66,8 @@ interface ActivityMessage {
    * the prompt the step started with, "Fleet · you pressed Move on" on the wrap-up.
    */
   workflowStep?: string;
+  /** Set on a prompt the user sent into a running turn (steered): the agent read it at its next step. */
+  steered?: boolean;
   /** Set on a shell command the user ran from the composer: the command and what it printed. */
   shell?: ShellCommandView;
   /** The slash command a message of yours came from; its body is then what the harness made of the command. */
@@ -293,6 +295,7 @@ function toActivityMessage(message: AccumulatedMessage, finished: ReadonlyMap<st
     peerOutcome: peerUpdate?.outcome,
     background: background ?? undefined,
     workflowStep: message.role === "user" ? workflowMessageLabel(workflowRun.value, props.sessionId, message.messageId, rawBody) ?? undefined : undefined,
+    steered: message.role === "user" && message.steered ? true : undefined,
     images: message.parts
       .filter((part): part is AccumulatedFilePart => part.type === "file" && part.mime.startsWith("image/"))
       .map((part) => ({ url: part.url, filename: part.filename?.trim() || "image" })),
@@ -385,6 +388,7 @@ const optimisticMessages = computed<ActivityMessage[]>(() => {
     optimisticStatus: prompt.status,
     clusterPosition: "single",
     showIdentity: true,
+    steered: prompt.steered,
   }));
 });
 
@@ -1155,6 +1159,18 @@ function handleShowCanvas(canvasId: string): void {
             aria-hidden="true"
           />
           <span class="peer-from__title">{{ message.workflowStep }}</span>
+        </span>
+        <span
+          v-if="message.steered"
+          class="peer-from"
+          data-testid="steered-prompt"
+          title="You sent this while the agent was working. It read it at its next step, without waiting for the turn to end."
+        >
+          <CornerDownRight
+            class="peer-from__icon"
+            aria-hidden="true"
+          />
+          <span class="peer-from__title">Sent mid-turn</span>
         </span>
         <a
           v-if="message.peer"

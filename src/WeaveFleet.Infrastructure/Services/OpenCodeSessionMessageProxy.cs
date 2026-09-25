@@ -418,6 +418,8 @@ public sealed class OpenCodeSessionMessageProxy(
                 // Carried into the snapshot so a failed turn still says why it failed after a reload.
                 Error = message.Error,
                 Finish = message.Finish,
+                // So a prompt sent into a running turn still says so after a reload.
+                Steered = message.Steered ? true : null,
                 Command = message.Command,
             },
             Parts = parts,
@@ -525,6 +527,7 @@ public sealed class OpenCodeSessionMessageProxy(
             Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(payload.Info.Time.Created),
             Agent = payload.Info.Agent,
             ModelId = payload.Info.ModelId,
+            Steered = payload.Info.Steered == true,
             Command = payload.Info.Command,
         };
     }

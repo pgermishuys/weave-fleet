@@ -116,7 +116,7 @@ public sealed class OpenCode2RuntimeTests
             Content = new StringContent("""{"error":"bad text"}"""),
         }));
 
-        var ex = await Should.ThrowAsync<HttpRequestException>(() => client.PromptAsync("ses_1", "hi", null, null, CancellationToken.None));
+        var ex = await Should.ThrowAsync<HttpRequestException>(() => client.PromptAsync("ses_1", "hi", null, null, null, CancellationToken.None));
 
         ex.Message.ShouldBe("""OpenCode 2 couldn't send the prompt: 400 Bad Request. {"error":"bad text"}""");
     }

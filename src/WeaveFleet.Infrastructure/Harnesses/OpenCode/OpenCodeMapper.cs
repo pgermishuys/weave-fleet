@@ -56,8 +56,16 @@ internal static class OpenCodeMapper
                 ? HarnessErrorReader.TryRead(error)
                 : null,
             Finish = (msg.Info as OpenCodeAssistantMessage)?.Finish,
+            Steered = msg.Info.Role == "user" && msg.Parts.OfType<OpenCodeTextPart>().Any(p => IsSteered(p.Metadata)),
         };
     }
+
+    /// <summary>Whether a text part carries the mark Fleet puts on a prompt sent into a running turn.</summary>
+    private static bool IsSteered(JsonElement? metadata)
+        => metadata is { ValueKind: JsonValueKind.Object } m
+            && m.TryGetProperty("fleetDelivery", out var delivery)
+            && delivery.ValueKind == JsonValueKind.String
+            && delivery.GetString() == OpenCodePromptPartMetadata.Steer;
 
     /// <summary>
     /// Maps a single <see cref="OpenCodeMessagePart"/> to a Fleet <see cref="MessagePart"/>.

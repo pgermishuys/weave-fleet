@@ -661,6 +661,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{id}/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListSessionQueue"];
+        put?: never;
+        post: operations["QueueSessionPrompt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/queue/{itemId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["RemoveQueuedPrompt"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/queue/{itemId}/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["SendQueuedPromptNow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{id}/retention": {
         parameters: {
             query?: never;
@@ -3554,6 +3602,21 @@ export interface components {
             /** Format: int32 */
             position: number | string;
         };
+        QueuePromptApiRequest: {
+            text: string;
+            kind?: null | string;
+            command?: null | string;
+            arguments?: null | string;
+            agent?: null | string;
+            model?: null | components["schemas"]["ModelRef"];
+            effort?: null | string;
+        };
+        QueuedPromptView: {
+            id: string;
+            kind: string;
+            text: string;
+            createdAt: string;
+        };
         RunShellCommandApiRequest: {
             command: null | string;
         };
@@ -3604,6 +3667,7 @@ export interface components {
             userMessageId: null | string;
             correlationId: null | string;
             effort: null | string;
+            delivery?: null | string;
         };
         SessionActionCapabilities: {
             canPrompt: boolean;
@@ -5510,6 +5574,96 @@ export interface operations {
         responses: {
             /** @description OK */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ListSessionQueue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueuedPromptView"][];
+                };
+            };
+        };
+    };
+    QueueSessionPrompt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QueuePromptApiRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueuedPromptView"];
+                };
+            };
+        };
+    };
+    RemoveQueuedPrompt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                itemId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    SendQueuedPromptNow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                itemId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };

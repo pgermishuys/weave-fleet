@@ -526,6 +526,19 @@ internal sealed record OpenCodePromptTextPart : OpenCodePromptPart
     [JsonPropertyName("text")] public required string Text { get; init; }
     [JsonPropertyName("synthetic")] public bool? Synthetic { get; init; }
     [JsonPropertyName("ignored")] public bool? Ignored { get; init; }
+
+    /// <summary>Kept on the stored part and never sent to the model.</summary>
+    [JsonPropertyName("metadata")] public OpenCodePromptPartMetadata? Metadata { get; init; }
+}
+
+/// <summary>What Fleet keeps on a prompt's text part in OpenCode's history.</summary>
+internal sealed record OpenCodePromptPartMetadata
+{
+    /// <summary>The value of <see cref="FleetDelivery"/> on a prompt the user sent into a running turn.</summary>
+    public const string Steer = "steer";
+
+    /// <summary><see cref="Steer"/> on a prompt sent into a running turn, so it still says so when history is read back.</summary>
+    [JsonPropertyName("fleetDelivery")] public string? FleetDelivery { get; init; }
 }
 
 /// <summary>File/image prompt part.</summary>

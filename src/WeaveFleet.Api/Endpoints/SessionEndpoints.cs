@@ -258,14 +258,65 @@ public static class SessionEndpoints
             if (modelResolution.ErrorResult is not null)
                 return modelResolution.ErrorResult;
 
+            if (!TryReadDelivery(req.Delivery, out var delivery))
+                return Results.BadRequest(new ErrorResponse("delivery must be \"queue\" or \"steer\"."));
+
             var attachments = req.Attachments?.Select(a => new HarnessAttachment(a.Mime, a.Filename ?? "image.png", a.Data)).ToList();
-            var options = req.Agent is not null || req.Model is not null || attachments is { Count: > 0 } || req.Effort is not null
-                ? new PromptOptions { Agent = req.Agent, ProviderId = modelResolution.ProviderId, ModelId = modelResolution.ModelId, Attachments = attachments, Effort = req.Effort }
-                : null;
+            var options = new PromptOptions { Agent = req.Agent, ProviderId = modelResolution.ProviderId, ModelId = modelResolution.ModelId, Attachments = attachments, Effort = req.Effort, Delivery = delivery };
             var result = await orchestrator.PromptSessionWithReceiptAsync(id, req.Text, options, req.UserMessageId, req.CorrelationId, ct);
             return result.Match(r => Results.Ok(new SendPromptApiResponse(r.EventId, r.CorrelationId)), err => err.ToSessionApiResult());
         })
         .WithName("PromptSession");
+
+        // GET /api/sessions/{id}/queue — the messages the user queued while the agent works, first to go first.
+        group.MapGet("/{id}/queue", async (string id, PromptQueueService queue) =>
+        {
+            var result = await queue.ListAsync(id);
+            return result.Match(
+                items => Results.Json(items.Select(QueuedPromptView.From).ToList(), ApiJsonContext.Default.ListQueuedPromptView),
+                err => err.ToSessionApiResult());
+        })
+        .WithName("ListSessionQueue");
+
+        // POST /api/sessions/{id}/queue — queue a message, a slash command or a shell command. Fleet sends it when the
+        // turn ends (at once, when the session turns out to be idle); the queue is Fleet's, so leaving the session or
+        // closing the browser doesn't lose it. Gated as a prompt is.
+        group.MapPost("/{id}/queue", async (string id, QueuePromptApiRequest req, PromptQueueService queue, SessionService sessionService, InstanceTracker tracker, HttpContext http, CancellationToken ct) =>
+        {
+            // The queue is the user's composer; agents message sessions with their own tool.
+            if (http.IsAgentRequest())
+                return Results.Json(new ErrorResponse("Agents message sessions with their own tool."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
+
+            var modelResolution = await ResolveSessionModelAsync(id, req.Model, sessionService, tracker, ct);
+            if (modelResolution.ErrorResult is not null)
+                return modelResolution.ErrorResult;
+
+            var result = await queue.EnqueueAsync(
+                id,
+                new QueuePromptRequest(req.Text, req.Kind, req.Command, req.Arguments, req.Agent, modelResolution.ProviderId, modelResolution.ModelId, req.Effort),
+                ct);
+            return result.Match(
+                item => Results.Json(QueuedPromptView.From(item), ApiJsonContext.Default.QueuedPromptView, statusCode: StatusCodes.Status201Created),
+                err => err.ToSessionApiResult());
+        })
+        .WithName("QueueSessionPrompt");
+
+        // DELETE /api/sessions/{id}/queue/{itemId} — take a queued message back.
+        group.MapDelete("/{id}/queue/{itemId}", async (string id, string itemId, PromptQueueService queue, CancellationToken ct) =>
+        {
+            var result = await queue.RemoveAsync(id, itemId, ct);
+            return result.Match(_ => Results.NoContent(), err => err.ToSessionApiResult());
+        })
+        .WithName("RemoveQueuedPrompt");
+
+        // POST /api/sessions/{id}/queue/{itemId}/send — send a queued message now: into the running turn where the
+        // harness can take it (a steer), or as usual when the session is idle.
+        group.MapPost("/{id}/queue/{itemId}/send", async (string id, string itemId, PromptQueueService queue, CancellationToken ct) =>
+        {
+            var result = await queue.SendNowAsync(id, itemId, ct);
+            return result.Match(_ => Results.Accepted(), err => err.ToSessionApiResult());
+        })
+        .WithName("SendQueuedPromptNow");
 
         // POST /api/sessions/{id}/abort
         group.MapPost("/{id}/abort", async (string id, SessionOrchestrator orchestrator) =>
@@ -1001,6 +1052,23 @@ public static class SessionEndpoints
         };
     }
 
+    /// <summary>A prompt the user sends says how it goes in: a request that leaves it out is queued, as before.</summary>
+    internal static bool TryReadDelivery(string? value, out PromptDelivery delivery)
+    {
+        switch (value)
+        {
+            case null or "" or "queue":
+                delivery = PromptDelivery.Queue;
+                return true;
+            case "steer":
+                delivery = PromptDelivery.Steer;
+                return true;
+            default:
+                delivery = PromptDelivery.Queue;
+                return false;
+        }
+    }
+
     private static async Task<ModelResolutionResult> ResolveSessionModelAsync(
         string sessionId,
         ModelRef? model,
@@ -1061,9 +1129,21 @@ internal sealed record SendPromptApiRequest(
     ImageAttachmentDto[]? Attachments,
     string? UserMessageId,
     string? CorrelationId,
-    string? Effort);
+    string? Effort,
+    // "queue" (the default: Fleet sends it once the session is idle) or "steer" (into the running turn).
+    string? Delivery = null);
 
 internal sealed record SendPromptApiResponse(long? EventId, string CorrelationId);
+
+/// <summary>A message to queue. <c>kind</c> is "prompt" (the default), "command" (with its name and arguments) or "shell".</summary>
+internal sealed record QueuePromptApiRequest(
+    string Text,
+    string? Kind = null,
+    string? Command = null,
+    string? Arguments = null,
+    string? Agent = null,
+    ModelRef? Model = null,
+    string? Effort = null);
 
 internal sealed record ImageAttachmentDto(string Mime, string? Filename, string Data);
 

@@ -99,6 +99,7 @@ export function ensureMessage(
     agent: info.agent,
     modelID,
     parentID: info.parentID,
+    ...(info.steered === true ? { steered: true } : {}),
     command: role === "user" ? readCommand(info.command) : undefined,
   };
   
@@ -170,7 +171,9 @@ export function mergeMessageUpdate(
   const command = role === "user" ? readCommand(info.command) : undefined;
   const hasNewCommand = Boolean(command && (command.name !== existing.command?.name || command.arguments !== existing.command?.arguments));
 
-  if (!hasNewCompletedAt && !hasNewCreatedAt && !hasNewTokens && !hasUpdatedTokens && !hasNewCost && !hasSnapshotParts && !hasNewModelID && !hasNewTurnError && !hasNewFinish && !hasNewRole && !hasNewCommand) {
+  const hasNewSteered = info.steered === true && !existing.steered;
+
+  if (!hasNewCompletedAt && !hasNewCreatedAt && !hasNewTokens && !hasUpdatedTokens && !hasNewCost && !hasSnapshotParts && !hasNewModelID && !hasNewTurnError && !hasNewFinish && !hasNewRole && !hasNewCommand && !hasNewSteered) {
     return prev; // nothing new to merge
   }
 
@@ -183,6 +186,7 @@ export function mergeMessageUpdate(
     ...(hasNewModelID ? { modelID } : {}),
     ...(hasNewTurnError ? { turnError } : {}),
     ...(hasNewFinish ? { finish } : {}),
+    ...(hasNewSteered ? { steered: true } : {}),
     ...(hasNewRole ? { role } : {}),
     ...(hasNewCommand ? { command } : {}),
     tokens: mergedTokens,
