@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.E2E.Infrastructure;
@@ -40,9 +41,10 @@ public sealed class SessionProgressTests : E2ETestBase,
             var sessionId = await CreateSessionAsync("Session progress");
             await new SessionDetailPage(Page).SendPromptAsync("Drop the dead tables", 30_000);
 
-            // The row shows the ring and the count, pushed on the "sessions" topic.
+            // The row shows the ring and the count, pushed on the "sessions" topic. The number shows only while the
+            // session works; once the turn ends an unfinished list keeps the ring, and the count stays in its tooltip.
             var row = new FleetSidebarPage(Page).GetSessionLeaf(sessionId);
-            await Assertions.Expect(row.Locator(".session-progress__count")).ToHaveTextAsync("1/3", new() { Timeout = 15_000 });
+            await Assertions.Expect(row.Locator(".session-progress")).ToHaveAttributeAsync("title", new Regex("^1 of 3 done"), new() { Timeout = 15_000 });
             await Assertions.Expect(row.Locator(".progress-ring")).ToBeVisibleAsync();
 
             // The open session's strip shows the todo being worked on.
@@ -51,8 +53,8 @@ public sealed class SessionProgressTests : E2ETestBase,
 
             // Both come back after a reload: the list and GET /progress read what the server stored.
             await Page.ReloadAsync();
-            await Assertions.Expect(new FleetSidebarPage(Page).GetSessionLeaf(sessionId).Locator(".session-progress__count"))
-                .ToHaveTextAsync("1/3", new() { Timeout = 15_000 });
+            await Assertions.Expect(new FleetSidebarPage(Page).GetSessionLeaf(sessionId).Locator(".session-progress"))
+                .ToHaveAttributeAsync("title", new Regex("^1 of 3 done"), new() { Timeout = 15_000 });
             await Assertions.Expect(Page.Locator(".progress-strip__count")).ToHaveTextAsync("1/3", new() { Timeout = 15_000 });
         });
     }
@@ -99,13 +101,13 @@ public sealed class SessionProgressTests : E2ETestBase,
 
                 // Written: a plan at 0 of 3, with the Progress tab added and the strip naming the next step.
                 await detail.SendPromptAsync("Plan it", 30_000);
-                await Assertions.Expect(row.Locator(".session-progress__count")).ToHaveTextAsync("0/3", new() { Timeout = 15_000 });
+                await Assertions.Expect(row.Locator(".session-progress")).ToHaveAttributeAsync("title", new Regex("^0 of 3 done"), new() { Timeout = 15_000 });
                 await Assertions.Expect(Page.Locator(".progress-strip__current")).ToHaveTextAsync("Next: 1. Write the migration", new() { Timeout = 15_000 });
 
                 // Ticked: 1 of 3.
                 await File.WriteAllTextAsync(planPath, plan.Replace("- [ ] 1.", "- [x] 1.", StringComparison.Ordinal));
                 await detail.SendPromptAsync("Tick it", 30_000);
-                await Assertions.Expect(row.Locator(".session-progress__count")).ToHaveTextAsync("1/3", new() { Timeout = 15_000 });
+                await Assertions.Expect(row.Locator(".session-progress")).ToHaveAttributeAsync("title", new Regex("^1 of 3 done"), new() { Timeout = 15_000 });
 
                 // The Progress tab shows the phases, the tick, and the next step.
                 await Page.GetByRole(AriaRole.Tab, new() { Name = "Progress" }).ClickAsync();
