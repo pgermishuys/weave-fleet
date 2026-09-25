@@ -1,987 +1,1122 @@
 <script setup lang="ts">
-import { computed, nextTick, shallowRef, watch } from "vue";
+import { computed, shallowRef, watch } from "vue";
 import { useRouter } from "@tanstack/vue-router";
 import {
-  CheckCircle2,
-  CircleDot,
+  ChevronDown,
+  ChevronRight,
   ExternalLink,
-  GitCommitHorizontal,
-  GitMerge,
-  GitPullRequest,
-  GitPullRequestClosed,
+  GitBranch,
   LoaderCircle,
   MessageSquare,
+  Plus,
   RefreshCw,
+  Sparkles,
   TriangleAlert,
 } from "lucide-vue-next";
-import { Button } from "@/components/ui/button";
-import { apiFetch } from "@/lib/api-client";
+import type { SessionListItem } from "@/api/client";
+import CheckIcon from "@/components/github/CheckIcon.vue";
+import ChecksSummary from "@/components/github/ChecksSummary.vue";
+import DiffStat from "@/components/github/DiffStat.vue";
+import GitHubItemIcon from "@/components/github/GitHubItemIcon.vue";
+import GitHubLabel from "@/components/github/GitHubLabel.vue";
+import PrStatePill from "@/components/github/PrStatePill.vue";
+import ReviewerAvatar from "@/components/github/ReviewerAvatar.vue";
+import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
+import MarkdownRenderer from "@/components/visual-renderers/MarkdownRenderer.vue";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useGitHubSessions } from "@/composables/use-github-sessions";
+import { useSendToAgent } from "@/composables/use-send-to-agent";
 import { formatRelativeTime } from "@/lib/format-utils";
-import { createGitHubSessionSourcePreset } from "@/lib/github-session-source";
-import { createMarkdownRenderer } from "@/lib/markdown-renderer";
-import type { GitHubIssue, GitHubPullRequest } from "@/plugins/builtin/github/composables/github-types";
-import { useSidebarStore } from "@/stores/sidebar";
-import { useWorkspaceUiStore } from "@/stores/workspace-ui";
+import {
+  checkCounts,
+  fetchGitHubItem,
+  itemPrFacts,
+  itemResourceId,
+  itemSessionPreset,
+  type GitHubItemDetail,
+  type GitHubTimelineEntry,
+} from "@/lib/github-items";
+import { prState, prStateLabel, prWords, reviewerWords, type PrState } from "@/lib/pr-state";
+import { isSessionLive, sessionRowStatus } from "@/lib/session-row-status";
+import { checkState, ciStatus, formatFixPrompt, reviewThreads, type SmartLink } from "@/lib/smart-links";
+import { useSmartLinksStore } from "@/stores/smart-links";
 
-interface GitHubComment {
-  id: number;
-  body: string | null;
-  html_url: string;
-  created_at: string;
-  updated_at: string;
-  user: {
-    login: string;
-    avatar_url: string;
-  };
-}
-
-interface Props {
+const props = defineProps<{
   owner: string;
   repo: string;
   number: string;
   kind: "issue" | "pull";
-}
+}>();
 
-const props = defineProps<Props>();
 const router = useRouter();
-const sidebarStore = useSidebarStore();
-const workspaceUiStore = useWorkspaceUiStore();
+const smartLinks = useSmartLinksStore();
+const { useSessionsFor, openSession, startSession } = useGitHubSessions();
 
-const detail = shallowRef<GitHubIssue | GitHubPullRequest | null>(null);
-const comments = shallowRef<readonly GitHubComment[]>([]);
+const detail = shallowRef<GitHubItemDetail | null>(null);
 const errorMessage = shallowRef<string | null>(null);
-const commentsError = shallowRef<string | null>(null);
 const isLoading = shallowRef(true);
 const isRefreshing = shallowRef(false);
 
-const markdownRenderer = createMarkdownRenderer();
-
-const isPullRequest = computed(() => props.kind === "pull");
 const parsedNumber = computed(() => Number.parseInt(props.number, 10));
-const hasValidNumber = computed(() => Number.isInteger(parsedNumber.value) && parsedNumber.value > 0);
 const repoFullName = computed(() => `${props.owner}/${props.repo}`);
-const detailLabel = computed(() => (isPullRequest.value ? "pull request" : "issue"));
-const detailHeading = computed(() => (isPullRequest.value ? "Pull request" : "Issue"));
-const detailEndpoint = computed(() => {
-  const pathType = isPullRequest.value ? "pulls" : "issues";
-  return `/api/integrations/github/repos/${encodeURIComponent(props.owner)}/${encodeURIComponent(props.repo)}/${pathType}/${encodeURIComponent(props.number)}`;
-});
-const commentsEndpoint = computed(() => {
-  return `${detailEndpoint.value}/comments`;
-});
+const noun = computed(() => (props.kind === "pull" ? "pull request" : "issue"));
 
-const resolvedState = computed(() => {
-  if (!detail.value) {
-    return null;
-  }
-
-  if (isPullRequest.value) {
-    const pullRequest = detail.value as GitHubPullRequest;
-    return pullRequest.merged_at ? "merged" : pullRequest.state;
-  }
-
-  const issue = detail.value as GitHubIssue;
-  return issue.state;
-});
-
-const statusIcon = computed(() => {
-  switch (resolvedState.value) {
-    case "merged":
-      return GitMerge;
-    case "closed":
-      return isPullRequest.value ? GitPullRequestClosed : CheckCircle2;
-    case "open":
-    default:
-      return isPullRequest.value ? GitPullRequest : CircleDot;
-  }
-});
-
-const statusClassName = computed(() => {
-  switch (resolvedState.value) {
-    case "merged":
-      return "status-icon status-icon--merged";
-    case "closed":
-      return "status-icon status-icon--closed";
-    case "open":
-    default:
-      return "status-icon status-icon--open";
-  }
-});
-
-const title = computed(() => detail.value?.title ?? `${detailHeading.value} #${props.number}`);
-const bodyHtml = computed(() => renderMarkdown(detail.value?.body));
-const labels = computed(() => detail.value?.labels ?? []);
-const authorLogin = computed(() => detail.value?.user.login ?? "Unknown user");
-const authorAvatarUrl = computed(() => detail.value?.user.avatar_url ?? "");
-const htmlUrl = computed(() => detail.value?.html_url ?? `https://github.com/${repoFullName.value}/${isPullRequest.value ? "pull" : "issues"}/${props.number}`);
-const createdAtLabel = computed(() => (detail.value ? formatDateTime(detail.value.created_at) : "—"));
-const updatedAtLabel = computed(() => (detail.value ? formatDateTime(detail.value.updated_at) : "—"));
-const updatedRelativeLabel = computed(() => (detail.value ? formatRelativeTime(detail.value.updated_at) : ""));
-const commentsCountLabel = computed(() => {
-  const count = detail.value?.comments ?? comments.value.length;
-  return `${count} comment${count === 1 ? "" : "s"}`;
-});
-const pullRequestStats = computed(() => {
-  if (!detail.value || !isPullRequest.value) {
-    return null;
-  }
-
-  const pullRequest = detail.value as GitHubPullRequest;
-  return {
-    additions: pullRequest.additions,
-    deletions: pullRequest.deletions,
-    changedFiles: pullRequest.changed_files,
-    baseRef: pullRequest.base.ref,
-    headRef: pullRequest.head.ref,
-  };
-});
-
-const createSessionPreset = computed(() => {
-  if (!detail.value) {
-    return null;
-  }
-
-  return createGitHubSessionSourcePreset({
-    sourceType: isPullRequest.value ? "github-pull-request" : "github-issue",
-    owner: props.owner,
-    repo: props.repo,
-    number: detail.value.number,
-    title: detail.value.title,
-    body: detail.value.body,
-    htmlUrl: detail.value.html_url,
-    repoFullName: repoFullName.value,
-    suggestedBranch: isPullRequest.value ? pullRequestStats.value?.headRef ?? null : null,
-  });
-});
-
-function renderMarkdown(markdown: string | null | undefined): string {
-  if (!markdown || !markdown.trim()) {
-    return "";
-  }
-
-  return markdownRenderer.render(markdown);
-}
-
-function formatDateTime(value: string): string {
-  return new Date(value).toLocaleString();
-}
-
-function getLabelStyle(color: string): { backgroundColor: string; borderColor: string; color: string } {
-  return {
-    backgroundColor: `#${color}22`,
-    borderColor: `#${color}55`,
-    color: `#${color}`,
-  };
-}
-
-async function fetchDetail(signal?: AbortSignal): Promise<void> {
-  detail.value = null;
-  comments.value = [];
-  commentsError.value = null;
+async function load(signal?: AbortSignal): Promise<void> {
   errorMessage.value = null;
-
-  if (!props.owner || !props.repo || !hasValidNumber.value) {
-    errorMessage.value = `Invalid GitHub ${detailLabel.value} URL.`;
+  if (!props.owner || !props.repo || !(parsedNumber.value > 0)) {
+    detail.value = null;
+    errorMessage.value = `That isn't a GitHub ${noun.value} link.`;
     return;
   }
-
   try {
-    const detailResponse = await apiFetch(detailEndpoint.value, { signal });
-    if (!detailResponse.ok) {
-      throw new Error(
-        detailResponse.status === 404
-          ? `GitHub ${detailLabel.value} not found.`
-          : `Unable to load GitHub ${detailLabel.value} (HTTP ${detailResponse.status}).`,
-      );
-    }
-
-    detail.value = (await detailResponse.json()) as GitHubIssue | GitHubPullRequest;
-
-    const commentsResponse = await apiFetch(commentsEndpoint.value, { signal });
-    if (!commentsResponse.ok) {
-      commentsError.value = `Unable to load comments (HTTP ${commentsResponse.status}).`;
-      return;
-    }
-
-    comments.value = (await commentsResponse.json()) as readonly GitHubComment[];
+    detail.value = await fetchGitHubItem(props.owner, props.repo, parsedNumber.value, signal);
   } catch (error) {
-    if (signal?.aborted) {
-      return;
-    }
-
+    if (signal?.aborted) return;
     detail.value = null;
-    comments.value = [];
-    errorMessage.value = error instanceof Error ? error.message : `Unable to load GitHub ${detailLabel.value}.`;
+    errorMessage.value = error instanceof Error ? error.message : `Couldn't load the ${noun.value}.`;
   }
 }
 
 watch(
-  () => [props.owner, props.repo, props.number, props.kind] as const,
-  async (_value, _previousValue, onCleanup) => {
-    const abortController = new AbortController();
-    onCleanup(() => {
-      abortController.abort();
-    });
-
+  () => [props.owner, props.repo, props.number] as const,
+  async (_value, _previous, onCleanup) => {
+    const controller = new AbortController();
+    onCleanup(() => controller.abort());
     isLoading.value = true;
-    await fetchDetail(abortController.signal);
-
-    if (!abortController.signal.aborted) {
-      isLoading.value = false;
-    }
+    detail.value = null;
+    await load(controller.signal);
+    if (!controller.signal.aborted) isLoading.value = false;
   },
   { immediate: true },
 );
 
-async function handleRefresh(): Promise<void> {
+async function refresh(): Promise<void> {
   isRefreshing.value = true;
-  await fetchDetail();
+  await load();
   isRefreshing.value = false;
 }
 
-async function handleCreateSession(): Promise<void> {
-  if (!createSessionPreset.value) {
-    return;
-  }
+const summary = computed(() => detail.value?.summary ?? null);
+const isPull = computed(() => summary.value?.kind === "pull");
+const facts = computed(() => (summary.value ? itemPrFacts(summary.value, detail.value ?? undefined) : null));
+const state = computed<PrState>(() => {
+  if (!summary.value || !facts.value) return "open";
+  if (!isPull.value) return summary.value.state === "closed" ? "closed" : "open";
+  return prState(facts.value);
+});
+const stateLabel = computed(() => {
+  if (!isPull.value || !facts.value) return summary.value?.state === "closed" ? "Closed" : "Open";
+  return state.value === "open" || state.value === "blocked" ? prWords(facts.value) : prStateLabel(state.value);
+});
+const counts = computed(() => checkCounts(detail.value?.checks ?? []));
+const reviewers = computed(() => summary.value?.reviewers ?? []);
+const linkedPullRequests = computed(() =>
+  (detail.value?.timeline ?? []).filter((entry) => entry.kind === "referenced" && entry.reference?.kind === "pull"));
 
-  sidebarStore.setPanelCollapsed(false);
-  sidebarStore.setActiveRail("sessions");
-  await nextTick();
-  
-  // Set the preset in the store so the form can read it
-  workspaceUiStore.setNewSessionInitialSource(createSessionPreset.value);
-  
-  // Navigate to the new session form
-  void router.navigate({
-    to: "/sessions/new",
-    search: {
-      projectId: undefined,
-      source: undefined,
-    },
-  });
+// ── Fleet ──────────────────────────────────────────────────────────────────────
+
+const resourceId = computed(() => (summary.value ? itemResourceId(summary.value) : null));
+const sessions = useSessionsFor(resourceId);
+const firstSession = computed(() => sessions.value[0] ?? null);
+
+/** The first session's link to this pull request, which carries the failing checks' logs and the threads. */
+const sessionLink = computed<SmartLink | null>(() => {
+  const session = firstSession.value;
+  const id = resourceId.value?.toLowerCase();
+  if (!session || !id) return null;
+  const links = smartLinks.bySession[session.session.id] ?? smartLinks.headerBySession[session.session.id] ?? [];
+  return links.find((link) => link.resourceId.toLowerCase() === id) ?? null;
+});
+const failingRuns = computed(() => (sessionLink.value ? (ciStatus(sessionLink.value)?.checkRuns ?? []).filter((run) => checkState(run) === "failing") : []));
+const threads = computed(() => (sessionLink.value ? reviewThreads(sessionLink.value) : []));
+const fixLabel = computed(() => {
+  if (!isPull.value || summary.value?.state !== "open") return null;
+  const checks = failingRuns.value.length > 0;
+  const review = threads.value.length > 0;
+  if (checks && review) return "Fix checks and address review";
+  if (checks) return "Fix failing checks";
+  if (review) return "Address review";
+  return null;
+});
+
+const { send, sending, sent, error: sendError } = useSendToAgent(() => firstSession.value?.session.id ?? "");
+
+async function sendFix(): Promise<void> {
+  if (!sessionLink.value) return;
+  await send("fix", formatFixPrompt(sessionLink.value, failingRuns.value, threads.value));
 }
+
+function start(): void {
+  if (summary.value) void startSession(itemSessionPreset(summary.value, detail.value?.body ?? null));
+}
+
+type Primary = { label: string; icon: "fix" | "open" | "start"; run: () => void };
+const primary = computed<Primary>(() => {
+  const session = firstSession.value;
+  if (session && fixLabel.value) return { label: sent.value.has("fix") ? "Sent to the session" : fixLabel.value, icon: "fix", run: () => void sendFix() };
+  if (session) return { label: "Open session", icon: "open", run: () => openSession(session) };
+  return { label: isPull.value && summary.value?.state === "open" ? "Start a session on this branch" : "Start a session", icon: "start", run: start };
+});
+
+function sessionName(item: SessionListItem): string {
+  return item.session.title?.trim() || "Untitled session";
+}
+
+function sessionWords(item: SessionListItem): string {
+  if (item.sessionStatus === "waiting_input") return "Needs you";
+  const status = sessionRowStatus(item, Date.now());
+  return status.tone === "working" ? status.description : "Idle";
+}
+
+// ── Navigation ─────────────────────────────────────────────────────────────────
+
+function goToRepo(): void {
+  void router.navigate({ to: "/github/$owner/$repo", params: { owner: props.owner, repo: props.repo } });
+}
+
+function goHome(): void {
+  void router.navigate({ to: "/github" });
+}
+
+function referenceHref(entry: GitHubTimelineEntry): string | undefined {
+  return entry.url ?? undefined;
+}
+
+function openReference(event: MouseEvent, entry: GitHubTimelineEntry): void {
+  const reference = entry.reference;
+  if (!reference || reference.repository.toLowerCase() !== repoFullName.value.toLowerCase()) return;
+  event.preventDefault();
+  const kind = reference.kind === "pull" ? "pulls" : "issues";
+  void router.navigate({ to: `/github/${props.owner}/${props.repo}/${kind}/${reference.number}` as string });
+}
+
+// ── Timeline words ─────────────────────────────────────────────────────────────
+
+function timelineWords(entry: GitHubTimelineEntry): string {
+  switch (entry.kind) {
+    case "comment": return "commented";
+    case "review":
+      return entry.state === "APPROVED" ? "approved"
+        : entry.state === "CHANGES_REQUESTED" ? "requested changes"
+          : entry.state === "DISMISSED" ? "had a review dismissed" : "reviewed";
+    case "merged": return "merged this";
+    case "closed": return "closed this";
+    case "reopened": return "reopened this";
+    case "ready": return "marked this ready for review";
+    case "draft": return "marked this as a draft";
+    case "referenced": return "mentioned this in";
+  }
+}
+
+function timelineTone(entry: GitHubTimelineEntry): string {
+  if (entry.kind === "merged") return "merged";
+  if (entry.kind === "closed") return "closed";
+  if (entry.kind === "review") return entry.state === "APPROVED" ? "approved" : entry.state === "CHANGES_REQUESTED" ? "changes" : "plain";
+  return "plain";
+}
+
+const ago = (value: string | null | undefined) => (value ? formatRelativeTime(value) : "");
+const fullDate = (value: string | null | undefined) => (value ? new Date(value).toLocaleString() : "");
 </script>
 
 <template>
   <section
-    class="detail-page"
+    class="gh-item"
     :aria-busy="isLoading || isRefreshing"
   >
     <div
       v-if="isLoading"
-      class="detail-state detail-state--loading"
+      class="gh-item__state"
     >
       <LoaderCircle
-        :size="18"
-        class="detail-state__icon detail-state__icon--spin"
+        :size="16"
+        class="gh-item__spin"
         aria-hidden="true"
       />
-      <span>Loading GitHub {{ detailLabel }}…</span>
+      Loading the {{ noun }}…
     </div>
 
     <div
-      v-else-if="errorMessage"
-      class="detail-state detail-state--error"
+      v-else-if="errorMessage || !summary"
+      class="gh-item__state gh-item__state--error"
       role="alert"
     >
       <TriangleAlert
-        :size="18"
-        class="detail-state__icon"
+        :size="16"
         aria-hidden="true"
       />
-      <div class="detail-state__copy">
-        <p class="detail-state__title">
-          Unable to load GitHub {{ detailLabel }}
-        </p>
-        <p>{{ errorMessage }}</p>
-      </div>
+      <span>{{ errorMessage ?? `Couldn't load the ${noun}.` }}</span>
       <button
         type="button"
-        class="detail-action-button"
-        @click="handleRefresh"
+        class="gh-btn"
+        @click="refresh"
       >
         <RefreshCw
-          :size="14"
-          :class="{ 'detail-state__icon--spin': isRefreshing }"
+          :size="13"
           aria-hidden="true"
         />
-        Retry
+        Try again
       </button>
     </div>
 
-    <article
-      v-else-if="detail"
-      class="detail-shell"
-    >
-      <header class="detail-hero">
-        <div class="detail-hero__content">
-          <div class="detail-status-row">
-            <component
-              :is="statusIcon"
-              :class="statusClassName"
-              :size="16"
-              aria-hidden="true"
-            />
-            <span class="detail-status-row__state">{{ resolvedState }}</span>
-            <span aria-hidden="true">•</span>
-            <span>{{ repoFullName }}</span>
-            <span aria-hidden="true">•</span>
-            <span>#{{ detail.number }}</span>
-          </div>
+    <template v-else>
+      <header class="gh-item__head">
+        <nav
+          class="gh-item__crumbs"
+          aria-label="Breadcrumbs"
+        >
+          <a
+            href="/github"
+            @click.prevent="goHome"
+          >GitHub</a>
+          <ChevronRight
+            :size="12"
+            aria-hidden="true"
+          />
+          <a
+            :href="`/github/${owner}/${repo}`"
+            @click.prevent="goToRepo()"
+          >{{ owner }} / {{ repo }}</a>
+          <ChevronRight
+            :size="12"
+            aria-hidden="true"
+          />
+          <span>{{ isPull ? "Pull requests" : "Issues" }}</span>
+        </nav>
 
-          <h1 class="detail-title">
-            {{ title }}
+        <div class="gh-item__title-row">
+          <h1 class="gh-item__title">
+            {{ summary.title }} <span class="gh-item__number">#{{ summary.number }}</span>
           </h1>
-
-          <div
-            class="detail-labels"
-            aria-label="GitHub labels"
-          >
-            <span
-              v-for="label in labels"
-              :key="label.name"
-              class="detail-label"
-              :style="getLabelStyle(label.color)"
+          <div class="gh-item__actions">
+            <button
+              type="button"
+              class="gh-btn gh-btn--ghost"
+              :disabled="isRefreshing"
+              aria-label="Refresh"
+              title="Refresh"
+              @click="refresh"
             >
-              {{ label.name }}
+              <RefreshCw
+                :size="14"
+                :class="{ 'gh-item__spin': isRefreshing }"
+                aria-hidden="true"
+              />
+            </button>
+            <a
+              class="gh-btn"
+              :href="summary.url"
+              target="_blank"
+              rel="noreferrer noopener"
+            >
+              <ExternalLink
+                :size="13"
+                aria-hidden="true"
+              />
+              GitHub
+            </a>
+            <span class="gh-split">
+              <button
+                type="button"
+                class="gh-btn gh-btn--primary"
+                :disabled="sending.has('fix') || sent.has('fix')"
+                data-testid="github-item-primary"
+                @click="primary.run"
+              >
+                <LoaderCircle
+                  v-if="sending.has('fix')"
+                  :size="13"
+                  class="gh-item__spin"
+                  aria-hidden="true"
+                />
+                <Sparkles
+                  v-else-if="primary.icon === 'fix'"
+                  :size="13"
+                  aria-hidden="true"
+                />
+                <MessageSquare
+                  v-else-if="primary.icon === 'open'"
+                  :size="13"
+                  aria-hidden="true"
+                />
+                <Plus
+                  v-else
+                  :size="13"
+                  aria-hidden="true"
+                />
+                {{ primary.label }}
+              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger as-child>
+                  <button
+                    type="button"
+                    class="gh-btn gh-btn--primary gh-split__more"
+                    aria-label="More ways to work on this"
+                  >
+                    <ChevronDown
+                      :size="13"
+                      aria-hidden="true"
+                    />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  class="w-64"
+                >
+                  <template v-if="sessions.length">
+                    <DropdownMenuLabel>In Fleet</DropdownMenuLabel>
+                    <DropdownMenuItem
+                      v-for="item in sessions"
+                      :key="item.session.id"
+                      @select="openSession(item)"
+                    >
+                      <MessageSquare class="size-3.5" />
+                      <span class="truncate">{{ sessionName(item) }}</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </template>
+                  <DropdownMenuItem @select="start">
+                    <Plus class="size-3.5" />
+                    {{ sessions.length ? "Start another session" : primary.label }}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </span>
           </div>
         </div>
 
-        <div class="detail-actions">
-          <Button
-            type="button"
-            variant="default"
-            size="sm"
-            :disabled="isRefreshing || !createSessionPreset"
-            @click="handleCreateSession"
-          >
-            Start a session
-          </Button>
-
-          <button
-            type="button"
-            class="detail-action-button"
-            :disabled="isRefreshing"
-            @click="handleRefresh"
-          >
-            <RefreshCw
-              :size="14"
-              :class="{ 'detail-state__icon--spin': isRefreshing }"
-              aria-hidden="true"
+        <div class="gh-item__by">
+          <PrStatePill
+            :kind="isPull ? 'pull' : 'issue'"
+            :state="state"
+            :label="stateLabel"
+          />
+          <ReviewerAvatar
+            v-if="summary.author"
+            :login="summary.author"
+            :avatar-url="summary.authorAvatarUrl"
+          />
+          <span v-if="isPull && summary.headRef">
+            <strong>{{ summary.author }}</strong> {{ summary.state === "merged" ? "merged" : "wants to merge" }}
+            <span class="gh-branch">{{ summary.headRef }}</span> → <span class="gh-branch">{{ summary.baseRef }}</span>
+          </span>
+          <span v-else><strong>{{ summary.author }}</strong> opened this</span>
+          <span :title="fullDate(summary.createdAt)">· {{ ago(summary.createdAt) }}</span>
+          <template v-if="isPull && summary.additions !== null && summary.deletions !== null">
+            <span aria-hidden="true">·</span>
+            <DiffStat
+              :additions="summary.additions"
+              :deletions="summary.deletions"
             />
-            Refresh
-          </button>
-
-          <a
-            class="detail-link-button"
-            :href="htmlUrl"
-            target="_blank"
-            rel="noreferrer noopener"
-          >
-            <ExternalLink
-              :size="14"
-              aria-hidden="true"
-            />
-            Open on GitHub
-          </a>
+            <span v-if="detail?.changedFiles">in {{ detail.changedFiles }} file{{ detail.changedFiles === 1 ? "" : "s" }}</span>
+          </template>
         </div>
+        <p
+          v-if="sendError"
+          class="gh-item__error"
+          role="alert"
+        >
+          {{ sendError }}
+        </p>
       </header>
 
-      <section
-        class="detail-panel detail-metadata"
-        :aria-label="`${detailHeading} metadata`"
-      >
-        <div class="detail-meta-item">
-          <span class="detail-meta-item__label">Author</span>
-          <div class="detail-author">
-            <img
-              v-if="authorAvatarUrl"
-              class="detail-author__avatar"
-              :src="authorAvatarUrl"
-              :alt="`${authorLogin} avatar`"
-            >
-            <span class="detail-author__name">{{ authorLogin }}</span>
-          </div>
-        </div>
-
-        <div class="detail-meta-item">
-          <span class="detail-meta-item__label">Created</span>
-          <span class="detail-meta-item__value">{{ createdAtLabel }}</span>
-        </div>
-
-        <div class="detail-meta-item">
-          <span class="detail-meta-item__label">Updated</span>
-          <span class="detail-meta-item__value">{{ updatedAtLabel }}</span>
-          <span class="detail-meta-item__hint">{{ updatedRelativeLabel }}</span>
-        </div>
-
-        <div class="detail-meta-item">
-          <span class="detail-meta-item__label">Discussion</span>
-          <span class="detail-meta-item__value">{{ commentsCountLabel }}</span>
-        </div>
-
-        <template v-if="pullRequestStats">
-          <div class="detail-meta-item">
-            <span class="detail-meta-item__label">Branches</span>
-            <div class="detail-branch-list">
-              <span>{{ pullRequestStats.headRef }}</span>
-              <GitCommitHorizontal
-                :size="14"
-                aria-hidden="true"
-              />
-              <span>{{ pullRequestStats.baseRef }}</span>
-            </div>
-          </div>
-
-          <div class="detail-meta-item">
-            <span class="detail-meta-item__label">Changes</span>
-            <div class="detail-change-list">
-              <span class="detail-change-list__additions">+{{ pullRequestStats.additions }}</span>
-              <span class="detail-change-list__deletions">-{{ pullRequestStats.deletions }}</span>
-              <span>{{ pullRequestStats.changedFiles }} files</span>
-            </div>
-          </div>
-        </template>
-      </section>
-
-      <section
-        class="detail-panel"
-        aria-label="Overview"
-      >
-        <h2 class="detail-panel__title">
-          Overview
-        </h2>
-
-        <!-- eslint-disable-next-line vue/no-v-html -->
-        <div
-          v-if="bodyHtml"
-          class="detail-markdown"
-          v-html="bodyHtml"
-        />
-        <p
-          v-else
-          class="detail-panel__empty"
-        >
-          No description was provided for this {{ detailLabel }}.
-        </p>
-      </section>
-
-      <section
-        class="detail-panel"
-        aria-label="Comments"
-      >
-        <div class="detail-panel__header">
-          <h2 class="detail-panel__title">
-            Comments
-          </h2>
-          <span class="detail-panel__count">
-            <MessageSquare
-              :size="14"
-              aria-hidden="true"
-            />
-            {{ commentsCountLabel }}
-          </span>
-        </div>
-
-        <p
-          v-if="commentsError"
-          class="detail-panel__banner detail-panel__banner--warning"
-        >
-          {{ commentsError }}
-        </p>
-
-        <p
-          v-if="comments.length === 0"
-          class="detail-panel__empty"
-        >
-          No comments yet.
-        </p>
-
-        <div
-          v-else
-          class="detail-comment-list"
-        >
-          <article
-            v-for="comment in comments"
-            :key="comment.id"
-            class="detail-comment"
+      <div class="gh-item__body">
+        <main class="gh-item__main">
+          <MarkdownRenderer
+            v-if="detail?.body?.trim()"
+            class="gh-item__description"
+            :content="detail.body"
+          />
+          <p
+            v-else
+            class="gh-item__empty"
           >
-            <header class="detail-comment__header">
-              <div class="detail-author">
-                <img
-                  class="detail-author__avatar"
-                  :src="comment.user.avatar_url"
-                  :alt="`${comment.user.login} avatar`"
+            No description.
+          </p>
+
+          <ol
+            v-if="detail?.timeline.length"
+            class="gh-timeline"
+            aria-label="Conversation"
+          >
+            <li
+              v-for="(entry, index) in detail.timeline"
+              :key="index"
+              class="gh-timeline__entry"
+              :data-tone="timelineTone(entry)"
+            >
+              <div class="gh-timeline__head">
+                <ReviewerAvatar
+                  v-if="entry.author"
+                  :login="entry.author"
+                  :avatar-url="entry.authorAvatarUrl"
+                  :size="20"
+                />
+                <strong>{{ entry.author ?? "Someone" }}</strong>
+                <span>{{ timelineWords(entry) }}</span>
+                <a
+                  v-if="entry.kind === 'referenced' && entry.reference"
+                  class="gh-timeline__ref"
+                  :href="referenceHref(entry)"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  @click="openReference($event, entry)"
                 >
-                <span class="detail-author__name">{{ comment.user.login }}</span>
+                  <GitHubItemIcon
+                    :kind="entry.reference.kind"
+                    :state="entry.state === 'merged' ? 'merged' : entry.state === 'closed' ? 'closed' : 'open'"
+                    :size="12"
+                  />
+                  #{{ entry.reference.number }} {{ entry.body }}
+                </a>
+                <span
+                  class="gh-timeline__when"
+                  :title="fullDate(entry.createdAt)"
+                >· {{ ago(entry.createdAt) }}</span>
               </div>
+              <MarkdownRenderer
+                v-if="entry.kind !== 'referenced' && entry.body?.trim()"
+                class="gh-timeline__body"
+                :content="entry.body"
+              />
+            </li>
+          </ol>
+        </main>
 
-              <div class="detail-comment__meta">
-                <span>{{ formatDateTime(comment.updated_at) }}</span>
-                <span aria-hidden="true">•</span>
-                <span>{{ formatRelativeTime(comment.updated_at) }}</span>
-              </div>
-            </header>
-
-            <!-- eslint-disable-next-line vue/no-v-html -->
-            <div
-              v-if="renderMarkdown(comment.body)"
-              class="detail-markdown"
-              v-html="renderMarkdown(comment.body)"
-            />
+        <aside
+          class="gh-item__rail"
+          aria-label="Details"
+        >
+          <section class="gh-rail__section">
+            <h2 class="gh-rail__heading">
+              In Fleet
+            </h2>
+            <ul
+              v-if="sessions.length"
+              class="gh-rail__sessions"
+            >
+              <li
+                v-for="item in sessions"
+                :key="item.session.id"
+              >
+                <button
+                  type="button"
+                  class="gh-rail__session"
+                  data-testid="github-item-session"
+                  @click="openSession(item)"
+                >
+                  <StatusGlyph
+                    v-if="isSessionLive(item)"
+                    :status="item.sessionStatus"
+                    :activity="item.activityStatus"
+                  />
+                  <MessageSquare
+                    v-else
+                    :size="12"
+                    aria-hidden="true"
+                  />
+                  <span class="gh-rail__session-name">{{ sessionName(item) }}</span>
+                  <span class="gh-rail__muted">{{ sessionWords(item) }}</span>
+                </button>
+              </li>
+            </ul>
             <p
               v-else
-              class="detail-panel__empty"
+              class="gh-rail__muted"
             >
-              Comment body is empty.
+              No session is working on this yet.
             </p>
+          </section>
 
-            <footer class="detail-comment__footer">
-              <a
-                :href="comment.html_url"
-                target="_blank"
-                rel="noreferrer noopener"
-              >View on GitHub</a>
-            </footer>
-          </article>
-        </div>
-      </section>
-    </article>
+          <section
+            v-if="isPull && detail?.checks.length"
+            class="gh-rail__section"
+          >
+            <h2 class="gh-rail__heading">
+              Checks
+            </h2>
+            <ChecksSummary :counts="counts" />
+            <ul class="gh-rail__list">
+              <li
+                v-for="check in detail.checks"
+                :key="check.name"
+                class="gh-rail__check"
+              >
+                <CheckIcon
+                  :state="check.state"
+                  :size="13"
+                />
+                <span
+                  class="gh-rail__check-name"
+                  :title="check.workflowName ? `${check.workflowName} / ${check.name}` : check.name"
+                >{{ check.name }}</span>
+                <a
+                  v-if="check.url"
+                  class="gh-rail__icon-link"
+                  :href="check.url"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  :aria-label="`Open ${check.name} on GitHub`"
+                >
+                  <ExternalLink
+                    :size="12"
+                    aria-hidden="true"
+                  />
+                </a>
+              </li>
+            </ul>
+          </section>
+
+          <section
+            v-if="isPull && (reviewers.length || (detail?.unresolvedThreads ?? 0) > 0)"
+            class="gh-rail__section"
+          >
+            <h2 class="gh-rail__heading">
+              Reviewers
+            </h2>
+            <ul class="gh-rail__list">
+              <li
+                v-for="reviewer in reviewers"
+                :key="reviewer.login"
+                class="gh-rail__reviewer"
+              >
+                <ReviewerAvatar
+                  :login="reviewer.login"
+                  :avatar-url="reviewer.avatarUrl"
+                  :state="reviewer.state"
+                />
+                <span>{{ reviewer.login }}</span>
+                <span
+                  class="gh-rail__verdict"
+                  :data-state="reviewer.state"
+                >{{ reviewerWords(reviewer.state) }}</span>
+              </li>
+            </ul>
+            <p
+              v-if="(detail?.unresolvedThreads ?? 0) > 0"
+              class="gh-rail__muted"
+            >
+              {{ detail?.unresolvedThreads }} unresolved thread{{ detail?.unresolvedThreads === 1 ? "" : "s" }}
+            </p>
+          </section>
+
+          <section
+            v-if="linkedPullRequests.length"
+            class="gh-rail__section"
+          >
+            <h2 class="gh-rail__heading">
+              Linked pull requests
+            </h2>
+            <ul class="gh-rail__list">
+              <li
+                v-for="(entry, index) in linkedPullRequests"
+                :key="index"
+              >
+                <a
+                  class="gh-rail__linked"
+                  :href="referenceHref(entry)"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  @click="openReference($event, entry)"
+                >
+                  <GitHubItemIcon
+                    kind="pull"
+                    :state="entry.state === 'merged' ? 'merged' : entry.state === 'closed' ? 'closed' : 'open'"
+                    :size="13"
+                  />
+                  <span class="gh-rail__session-name">#{{ entry.reference?.number }} {{ entry.body }}</span>
+                </a>
+              </li>
+            </ul>
+          </section>
+
+          <section
+            v-if="summary.labels.length"
+            class="gh-rail__section"
+          >
+            <h2 class="gh-rail__heading">
+              Labels
+            </h2>
+            <div class="gh-rail__labels">
+              <GitHubLabel
+                v-for="label in summary.labels"
+                :key="label.name"
+                :name="label.name"
+                :color="label.color"
+              />
+            </div>
+          </section>
+
+          <section
+            v-if="summary.assignees.length"
+            class="gh-rail__section"
+          >
+            <h2 class="gh-rail__heading">
+              Assignees
+            </h2>
+            <ul class="gh-rail__list">
+              <li
+                v-for="login in summary.assignees"
+                :key="login"
+                class="gh-rail__reviewer"
+              >
+                <ReviewerAvatar :login="login" />
+                <span>{{ login }}</span>
+              </li>
+            </ul>
+          </section>
+
+          <section
+            v-if="isPull && summary.headRef"
+            class="gh-rail__section"
+          >
+            <h2 class="gh-rail__heading">
+              Branch
+            </h2>
+            <p class="gh-rail__branch">
+              <GitBranch
+                :size="12"
+                aria-hidden="true"
+              />
+              <span class="gh-branch">{{ summary.headRef }}</span>
+            </p>
+          </section>
+        </aside>
+      </div>
+    </template>
   </section>
 </template>
 
 <style scoped>
-.detail-page {
+.gh-item {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
   height: 100%;
+  min-height: 0;
   overflow: auto;
+  color: var(--text);
 }
 
-.detail-shell {
+.gh-item__state {
   display: flex;
-  max-width: 960px;
-  margin: 0 auto;
-  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 28px;
+  color: var(--muted);
+}
+
+.gh-item__state--error {
+  color: var(--text);
+}
+
+.gh-item__state--error > svg {
+  color: var(--error);
+}
+
+.gh-item__spin {
+  animation: gh-item-spin 1s linear infinite;
+}
+
+@keyframes gh-item-spin {
+  to { transform: rotate(360deg); }
+}
+
+.gh-item__head {
+  display: grid;
+  gap: 10px;
+  padding: 18px 28px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.gh-item__crumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.gh-item__crumbs a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.gh-item__crumbs a:hover {
+  color: var(--text);
+}
+
+.gh-item__title-row {
+  display: flex;
+  align-items: flex-start;
   gap: 16px;
 }
 
-.detail-panel,
-.detail-state {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  background: var(--card-bg);
-}
-
-/* The title sits on the page, like the other pages' headings; the panels below hold the details. */
-.detail-hero {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 12px 16px;
-  padding: 0 0 4px;
-}
-
-.detail-hero__content {
-  display: flex;
-  min-width: 0;
+.gh-item__title {
   flex: 1;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.detail-status-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.detail-status-row__state {
-  font-weight: 600;
-  text-transform: capitalize;
-  color: var(--text);
-}
-
-.detail-title {
+  min-width: 0;
   margin: 0;
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 600;
   letter-spacing: -0.01em;
-  line-height: 1.25;
-  color: var(--text);
+  line-height: 1.3;
   text-wrap: balance;
 }
 
-.detail-labels {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.gh-item__number {
+  color: var(--muted);
+  font-weight: 400;
 }
 
-.detail-label {
-  display: inline-flex;
+.gh-item__actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+.gh-item__by {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  min-height: 20px;
-  padding: 0 8px;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  font-size: 11px;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.gh-item__by strong {
+  color: var(--text);
   font-weight: 500;
 }
 
-.detail-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
+.gh-item__error {
+  margin: 0;
+  color: var(--error);
+  font-size: 12px;
 }
 
-.detail-action-button,
-.detail-link-button {
+.gh-branch {
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--accent-dim);
+  color: var(--text);
+  font-family: var(--font-mono-stack);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+
+.gh-btn {
   display: inline-flex;
-  box-sizing: border-box;
-  flex: 0 0 auto;
   align-items: center;
-  justify-content: center;
   gap: 6px;
-  min-height: 32px;
-  height: 32px;
-  padding: 0 10px;
+  height: 30px;
+  padding: 0 11px;
   border: 1px solid var(--border);
   border-radius: var(--radius-btn);
-  background: transparent;
+  background: var(--card-bg);
   color: var(--text);
   font-size: 12.5px;
   font-weight: 500;
-  line-height: 1;
   text-decoration: none;
   white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--transition), background-color var(--transition);
 }
 
-.detail-action-button:hover,
-.detail-link-button:hover {
-  background: color-mix(in srgb, var(--text) 6%, transparent);
+.gh-btn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--text) 18%, transparent);
 }
 
-.detail-action-button:focus-visible,
-.detail-link-button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.detail-action-button:disabled {
+.gh-btn:disabled {
   opacity: 0.7;
-  cursor: not-allowed;
+  cursor: default;
 }
 
-.detail-metadata {
+.gh-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.gh-btn--ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+.gh-btn--primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--primary-foreground);
+}
+
+.gh-btn--primary:hover:not(:disabled) {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--accent) 88%, white);
+}
+
+.gh-split {
+  display: inline-flex;
+}
+
+.gh-split > .gh-btn:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.gh-split__more {
+  padding: 0 7px;
+  border-left: 1px solid color-mix(in srgb, var(--primary-foreground) 25%, transparent);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.gh-item__body {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 14px 16px;
-  padding: 14px 16px;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  flex: 1;
+  min-height: 0;
 }
 
-.detail-meta-item {
-  display: flex;
+.gh-item__main {
+  display: grid;
+  align-content: start;
+  gap: 18px;
   min-width: 0;
-  flex-direction: column;
-  gap: 3px;
+  padding: 20px 28px 32px;
 }
 
-.detail-meta-item__label {
-  font-size: 12px;
+.gh-item__description {
+  max-width: 78ch;
+  font-size: 13.5px;
+}
+
+.gh-item__empty {
+  margin: 0;
   color: var(--muted);
+  font-style: italic;
 }
 
-.detail-meta-item__value {
-  font-size: 13px;
+.gh-timeline {
+  display: grid;
+  margin: 0;
+  padding: 0 0 0 18px;
+  border-left: 1px solid var(--border);
+  list-style: none;
+}
+
+.gh-timeline__entry {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  padding: 9px 0;
+}
+
+.gh-timeline__entry::before {
+  content: "";
+  position: absolute;
+  top: 14px;
+  left: -24px;
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--gh-dot, color-mix(in srgb, var(--text) 18%, transparent));
+  border-radius: 50%;
+  background: var(--panel-bg);
+}
+
+.gh-timeline__entry[data-tone="approved"] { --gh-dot: var(--check-pass); }
+.gh-timeline__entry[data-tone="changes"] { --gh-dot: var(--pr-blocked); }
+.gh-timeline__entry[data-tone="merged"] { --gh-dot: var(--pr-merged); }
+.gh-timeline__entry[data-tone="closed"] { --gh-dot: var(--pr-closed); }
+
+.gh-timeline__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.gh-timeline__head strong {
   color: var(--text);
+  font-weight: 500;
 }
 
-.detail-meta-item__hint {
-  font-size: 11px;
-  color: var(--muted);
-}
-
-.detail-author {
+.gh-timeline__ref {
   display: inline-flex;
   align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.gh-timeline__ref:hover {
+  text-decoration: underline;
+}
+
+.gh-timeline__body {
+  max-width: 78ch;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--card-bg);
+  font-size: 13px;
+}
+
+.gh-item__rail {
+  display: grid;
+  align-content: start;
+  gap: 20px;
+  min-width: 0;
+  padding: 20px 20px 32px;
+  border-left: 1px solid var(--border);
+  background: color-mix(in srgb, var(--text) 2%, transparent);
+}
+
+.gh-rail__section {
+  display: grid;
   gap: 8px;
   min-width: 0;
 }
 
-.detail-author__avatar {
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  object-fit: cover;
+.gh-rail__heading {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
-.detail-author__name {
+.gh-rail__muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.gh-rail__list,
+.gh-rail__sessions {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gh-rail__session,
+.gh-rail__linked {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: var(--radius-btn);
+  background: var(--accent-dim);
+  color: var(--text);
+  font-size: 12.5px;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.gh-rail__linked {
+  border-color: transparent;
+  background: transparent;
+  padding: 4px 0;
+}
+
+.gh-rail__session-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-rail__check,
+.gh-rail__reviewer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  font-size: 12.5px;
+}
+
+.gh-rail__check-name {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.gh-rail__icon-link {
+  display: inline-grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+.gh-rail__icon-link:hover {
   color: var(--text);
 }
 
-.detail-branch-list,
-.detail-change-list {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  color: var(--text);
+.gh-rail__verdict {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11.5px;
 }
 
-.detail-change-list__additions {
-  color: var(--running);
-  font-family: var(--font-mono-stack);
-  font-size: 12.5px;
-}
+.gh-rail__verdict[data-state="APPROVED"] { color: var(--check-pass); }
+.gh-rail__verdict[data-state="CHANGES_REQUESTED"] { color: var(--pr-blocked); }
 
-.detail-change-list__deletions {
-  color: var(--error);
-  font-family: var(--font-mono-stack);
-  font-size: 12.5px;
-}
-
-.detail-panel {
-  padding: 16px 20px;
-}
-
-.detail-panel__header {
+.gh-rail__labels {
   display: flex;
   flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 6px;
 }
 
-.detail-panel__header .detail-panel__title {
-  margin: 0;
-}
-
-.detail-panel__title {
-  margin: 0 0 12px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.detail-panel__count {
-  display: inline-flex;
+.gh-rail__branch {
+  display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
-  color: var(--muted);
-}
-
-.detail-panel__empty,
-.detail-panel__banner {
   margin: 0;
-  font-size: 13px;
   color: var(--muted);
 }
 
-.detail-panel__banner--warning {
-  margin-bottom: 16px;
-  color: var(--error);
-}
-
-.detail-comment-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.detail-comment {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
-}
-
-.detail-comment:first-child {
-  padding-top: 0;
-  border-top: 0;
-}
-
-.detail-comment__header,
-.detail-comment__footer {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.detail-comment__meta,
-.detail-comment__footer a {
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.detail-comment__meta {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.detail-markdown {
-  color: var(--text);
-  font-size: 13.5px;
-  line-height: 1.65;
-}
-
-.detail-markdown :deep(p),
-.detail-markdown :deep(ul),
-.detail-markdown :deep(ol),
-.detail-markdown :deep(pre),
-.detail-markdown :deep(blockquote),
-.detail-markdown :deep(h1),
-.detail-markdown :deep(h2),
-.detail-markdown :deep(h3),
-.detail-markdown :deep(h4) {
-  margin: 0 0 12px;
-}
-
-.detail-markdown :deep(ul),
-.detail-markdown :deep(ol) {
-  padding-left: 20px;
-}
-
-.detail-markdown :deep(ul) {
-  list-style: disc;
-}
-
-.detail-markdown :deep(ol) {
-  list-style: decimal;
-}
-
-.detail-markdown :deep(pre) {
-  overflow: auto;
-  padding: 12px;
-  border-radius: var(--radius-btn);
-  background: color-mix(in srgb, var(--text) 5%, transparent);
-}
-
-.detail-markdown :deep(code) {
-  font-family: var(--font-mono-stack);
-  font-size: 0.9em;
-}
-
-.detail-markdown :deep(a) {
-  color: var(--accent);
-}
-
-.detail-markdown :deep(table) {
-  width: auto;
-  margin: 0 0 12px;
-  border-collapse: collapse;
-}
-
-.detail-markdown :deep(th),
-.detail-markdown :deep(td) {
-  padding: 6px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  text-align: left;
-}
-
-.detail-markdown :deep(th) {
-  font-weight: 600;
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.detail-markdown :deep(tr:nth-child(even)) {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.detail-state {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 18px 20px;
-}
-
-.detail-state--loading {
-  align-items: center;
-  justify-content: center;
-}
-
-.detail-state--error {
-  color: var(--error);
-}
-
-.detail-state__copy {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.detail-state__title {
-  margin: 0;
-  font-weight: 700;
-}
-
-.detail-state__copy p:last-child {
-  margin: 0;
-}
-
-.detail-state__icon {
-  flex-shrink: 0;
-}
-
-.detail-state__icon--spin {
-  animation: detail-spin 1s linear infinite;
-}
-
-.status-icon {
-  flex-shrink: 0;
-}
-
-.status-icon--open {
-  color: #22c55e;
-}
-
-.status-icon--closed {
-  color: var(--muted);
-}
-
-.status-icon--merged {
-  color: #a855f7;
-}
-
-@keyframes detail-spin {
-  from {
-    transform: rotate(0deg);
+@container (max-width: 820px) {
+  .gh-item__body {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  to {
-    transform: rotate(360deg);
+  .gh-item__rail {
+    order: -1;
+    border-left: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .gh-item__title-row {
+    flex-direction: column;
   }
 }
 
-@media (max-width: 720px) {
-  .detail-page {
-    padding: 16px;
+@container (max-width: 520px) {
+  .gh-item__head,
+  .gh-item__main {
+    padding-inline: 16px;
   }
+}
 
-  .detail-hero,
-  .detail-panel,
-  .detail-metadata {
-    padding: 18px;
-  }
-
-  .detail-title {
-    font-size: 22px;
-  }
+@media (prefers-reduced-motion: reduce) {
+  .gh-item__spin { animation: none; }
 }
 </style>
