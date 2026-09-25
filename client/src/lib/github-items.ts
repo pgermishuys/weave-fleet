@@ -147,6 +147,11 @@ export function fetchGitHubWork(signal?: AbortSignal): Promise<GitHubWork> {
   return getJson("/api/integrations/github/work", signal)
 }
 
+/** A body as GitHub shows it: HTML comments (bots leave notes in them) are hidden there, so they are here. */
+export function visibleBody(body: string | null | undefined): string {
+  return (body ?? "").replace(/<!--[\s\S]*?-->/g, "").trim()
+}
+
 /** `owner/repo#123`, the key smart links use. */
 export const itemResourceId = (item: Pick<GitHubItemSummary, "owner" | "repo" | "number">): string =>
   `${item.owner}/${item.repo}#${item.number}`
@@ -228,9 +233,10 @@ export function summaryFromLink(link: SmartLink): GitHubItemSummary | null {
     state: link.status === "draft" ? "open" : link.status || "open",
     isDraft: link.status === "draft",
     author: meta("author"),
-    authorAvatarUrl: null,
+    authorAvatarUrl: meta("authorAvatarUrl"),
     createdAt: link.createdAt,
-    updatedAt: link.updatedAt,
+    // When GitHub last saw a change, not when Fleet last checked.
+    updatedAt: meta("updatedAt") ?? link.updatedAt,
     comments: 0,
     labels: linkLabels(link),
     headRef: meta("headRef"),

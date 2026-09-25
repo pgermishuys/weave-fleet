@@ -1116,19 +1116,9 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
             ],
             tags: [],
             recentCommits: [],
-            // weave-fleet is on GitHub, so its # picker has something to ask.
+            // weave-fleet is on GitHub, so its # picker has something to ask. The server sends the URL only.
             remotes: path.endsWith("/weave-fleet")
-              ? [{
-                  name: "origin",
-                  url: "git@github.com:pgermishuys/weave-fleet.git",
-                  github: {
-                    owner: "pgermishuys",
-                    repo: "weave-fleet",
-                    repoUrl: "https://github.com/pgermishuys/weave-fleet",
-                    issuesUrl: "https://github.com/pgermishuys/weave-fleet/issues",
-                    pullsUrl: "https://github.com/pgermishuys/weave-fleet/pulls",
-                  },
-                }]
+              ? [{ name: "origin", url: "git@github.com:pgermishuys/weave-fleet.git", github: null }]
               : [],
             readmeContent: null,
             readmeFilename: null,

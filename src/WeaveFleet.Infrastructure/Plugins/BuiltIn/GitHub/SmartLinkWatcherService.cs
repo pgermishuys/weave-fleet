@@ -502,6 +502,7 @@ internal sealed partial class SmartLinkWatcherService(
         metadata["deletions"] = pr["deletions"]?.GetValue<int>();
         metadata["changedFiles"] = pr["changed_files"]?.GetValue<int>();
         metadata["author"] = pr["user"]?["login"]?.GetValue<string>();
+        metadata["authorAvatarUrl"] = pr["user"]?["avatar_url"]?.GetValue<string>();
 
         // A pull request from the session's own branch belongs to the session.
         if (headRef is not null
@@ -522,6 +523,7 @@ internal sealed partial class SmartLinkWatcherService(
         metadata["repo"] = reference.Repo;
         metadata["number"] = reference.Number;
         metadata["htmlUrl"] = resource["html_url"]?.GetValue<string>();
+        metadata["updatedAt"] = resource["updated_at"]?.GetValue<string>();
 
         var labels = new JsonArray();
         foreach (var label in (resource["labels"] as JsonArray ?? []).OfType<JsonObject>())

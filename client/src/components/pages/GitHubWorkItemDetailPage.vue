@@ -40,6 +40,7 @@ import {
   itemPrFacts,
   itemResourceId,
   itemSessionPreset,
+  visibleBody,
   type GitHubItemDetail,
   type GitHubTimelineEntry,
 } from "@/lib/github-items";
@@ -430,9 +431,9 @@ const fullDate = (value: string | null | undefined) => (value ? new Date(value).
       <div class="gh-item__body">
         <main class="gh-item__main">
           <MarkdownRenderer
-            v-if="detail?.body?.trim()"
+            v-if="visibleBody(detail?.body)"
             class="gh-item__description"
-            :content="detail.body"
+            :content="visibleBody(detail?.body)"
           />
           <p
             v-else
@@ -482,9 +483,9 @@ const fullDate = (value: string | null | undefined) => (value ? new Date(value).
                 >· {{ ago(entry.createdAt) }}</span>
               </div>
               <MarkdownRenderer
-                v-if="entry.kind !== 'referenced' && entry.body?.trim()"
+                v-if="entry.kind !== 'referenced' && visibleBody(entry.body)"
                 class="gh-timeline__body"
-                :content="entry.body"
+                :content="visibleBody(entry.body)"
               />
             </li>
           </ol>

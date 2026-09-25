@@ -55,8 +55,8 @@ const reviewers = computed(() => linkReviewers(props.link));
 const threads = computed(() => reviewThreads(props.link));
 const runs = computed(() => ciStatus(props.link)?.checkRuns ?? []);
 const failingRuns = computed(() => runs.value.filter((run) => checkState(run) === "failing"));
-// Passed checks are the bar; the list is what's left to look at.
-const listedRuns = computed(() => runs.value.filter((run) => checkState(run) !== "passed").slice(0, 4));
+// The bar counts every check; the list is only the ones still running or failing.
+const listedRuns = computed(() => runs.value.filter((run) => checkState(run) === "failing" || checkState(run) === "running").slice(0, 4));
 const headRef = computed(() => stringMeta("headRef"));
 const baseRef = computed(() => stringMeta("baseRef") ?? "main");
 const repo = computed(() => stringMeta("repo"));

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findHashTrigger, removeTrigger } from "@/lib/github-reference";
+import { findHashTrigger, parseGitHubRemote, removeTrigger } from "@/lib/github-reference";
 
 describe("github-reference", () => {
   it("finds # at the start or after a space, up to the caret", () => {
@@ -13,6 +13,14 @@ describe("github-reference", () => {
     expect(findHashTrigger("issue#3", 7)).toBeNull();
     expect(findHashTrigger("Fix #31 now", 11)).toBeNull();
     expect(findHashTrigger("Fix #31", null)).toBeNull();
+  });
+
+  it("reads the repository from a GitHub remote", () => {
+    expect(parseGitHubRemote("git@github.com:acme/rocket.git")).toEqual({ owner: "acme", repo: "rocket" });
+    expect(parseGitHubRemote("https://github.com/acme/rocket")).toEqual({ owner: "acme", repo: "rocket" });
+    expect(parseGitHubRemote("https://github.com/acme/rocket.js.git/")).toEqual({ owner: "acme", repo: "rocket.js" });
+    expect(parseGitHubRemote("https://gitlab.com/acme/rocket.git")).toBeNull();
+    expect(parseGitHubRemote(null)).toBeNull();
   });
 
   it("drops the #query without leaving two spaces", () => {

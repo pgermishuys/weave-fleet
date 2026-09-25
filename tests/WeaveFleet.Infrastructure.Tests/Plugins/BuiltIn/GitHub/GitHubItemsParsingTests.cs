@@ -171,6 +171,22 @@ public sealed class GitHubItemsParsingTests
     }
 
     [Fact]
+    public void ParseDetail_leaves_out_the_close_that_comes_with_a_merge()
+    {
+        var node = JsonNode.Parse(PullRequestNode)!.AsObject();
+        node["state"] = "MERGED";
+        node["timelineItems"] = JsonNode.Parse("""
+            { "nodes": [
+              { "__typename": "MergedEvent", "actor": { "login": "pat", "avatarUrl": null }, "createdAt": "t1" },
+              { "__typename": "ClosedEvent", "actor": { "login": "pat", "avatarUrl": null }, "createdAt": "t1" }
+            ] }
+            """);
+        var response = new JsonObject { ["data"] = new JsonObject { ["repository"] = new JsonObject { ["issueOrPullRequest"] = node } } };
+
+        GitHubItems.ParseDetail(response)!.Timeline.Select(e => e.Kind).ShouldBe(["merged"]);
+    }
+
+    [Fact]
     public void ParseDetail_returns_null_when_github_found_nothing()
         => GitHubItems.ParseDetail(JsonNode.Parse("""{ "data": { "repository": { "issueOrPullRequest": null } }, "errors": [ { "message": "Could not resolve" } ] }""")).ShouldBeNull();
 

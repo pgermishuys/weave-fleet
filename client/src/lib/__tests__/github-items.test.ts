@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_ISSUE_FILTER } from "@/plugins/builtin/github/composables/github-types";
-import { issueFilterQuery, itemPrFacts, itemRoute, needsYou, summaryFromLink, yourPullRequests, type GitHubItemSummary, type GitHubWork } from "@/lib/github-items";
+import { issueFilterQuery, itemPrFacts, itemRoute, needsYou, summaryFromLink, visibleBody, yourPullRequests, type GitHubItemSummary, type GitHubWork } from "@/lib/github-items";
 import { parseWireLink } from "@/lib/smart-links";
 
 function pull(number: number, extra: Partial<GitHubItemSummary> = {}): GitHubItemSummary {
@@ -57,6 +57,11 @@ describe("github-items", () => {
       kind: "pull", owner: "acme", repo: "rocket", number: 7, title: "Queue", state: "open", isDraft: true,
       headRef: "feat/q", additions: 3, deletions: 1, mergeable: "CONFLICTING", author: "pat", checks: "none",
     });
+  });
+
+  it("hides HTML comments, as GitHub does", () => {
+    expect(visibleBody("Fixes it.\n<!-- This is an auto-generated comment: release notes -->\n<!--\nmulti\n-->")).toBe("Fixes it.");
+    expect(visibleBody(null)).toBe("");
   });
 
   it("routes to Fleet's page for the item", () => {

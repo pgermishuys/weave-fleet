@@ -226,7 +226,12 @@ internal static class GitHubItems
             node["mergedBy"]?["login"]?.GetValue<string>(),
             contexts.OfType<JsonObject>().Select(ParseCheck).OfType<GitHubCheckDto>().ToArray(),
             threads.OfType<JsonObject>().Count(t => t["isResolved"]?.GetValue<bool>() != true && t["isOutdated"]?.GetValue<bool>() != true),
-            (node["timelineItems"]?["nodes"] as JsonArray ?? []).OfType<JsonObject>().Select(ParseTimelineEntry).OfType<GitHubTimelineEntry>().ToArray());
+            (node["timelineItems"]?["nodes"] as JsonArray ?? []).OfType<JsonObject>()
+                .Select(ParseTimelineEntry)
+                .OfType<GitHubTimelineEntry>()
+                // GitHub closes a pull request as it merges it; "merged" says both.
+                .Where(entry => !(entry.Kind == "closed" && summary.State == "merged"))
+                .ToArray());
     }
 
     private static GitHubItemSummary[] ParseNodes(JsonArray? nodes)

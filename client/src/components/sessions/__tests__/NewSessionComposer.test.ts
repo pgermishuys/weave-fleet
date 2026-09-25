@@ -852,7 +852,8 @@ describe("NewSessionComposer", () => {
       rememberFolder({ kind: "repository", path: rocket.path });
       repositoryDetail.value = {
         ...repositoryDetail.value!,
-        remotes: [{ name: "origin", url: "git@github.com:acme/rocket.git", github: { owner: "acme", repo: "rocket", repoUrl: "", issuesUrl: "", pullsUrl: "" } }],
+        // The server sends the URL only; the composer reads the repository from it.
+        remotes: [{ name: "upstream", url: "https://gitlab.com/x/y.git", github: null }, { name: "origin", url: "https://github.com/acme/rocket", github: null }],
       };
     });
 

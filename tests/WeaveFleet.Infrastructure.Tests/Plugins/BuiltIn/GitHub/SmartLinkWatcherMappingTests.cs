@@ -113,7 +113,8 @@ public sealed class SmartLinkWatcherMappingTests
         pr["additions"] = 412;
         pr["deletions"] = 88;
         pr["changed_files"] = 14;
-        pr["user"] = new JsonObject { ["login"] = "pat" };
+        pr["user"] = new JsonObject { ["login"] = "pat", ["avatar_url"] = "https://avatars/pat" };
+        pr["updated_at"] = "2026-09-25T12:00:00Z";
         var metadata = new JsonObject();
 
         SmartLinkWatcherService.ApplyPullRequest(new SmartLink(), Pr, pr, metadata, sessionBranch: null);
@@ -122,6 +123,8 @@ public sealed class SmartLinkWatcherMappingTests
         metadata["deletions"]!.GetValue<int>().ShouldBe(88);
         metadata["changedFiles"]!.GetValue<int>().ShouldBe(14);
         metadata["author"]!.GetValue<string>().ShouldBe("pat");
+        metadata["authorAvatarUrl"]!.GetValue<string>().ShouldBe("https://avatars/pat");
+        metadata["updatedAt"]!.GetValue<string>().ShouldBe("2026-09-25T12:00:00Z");
     }
 
     [Fact]

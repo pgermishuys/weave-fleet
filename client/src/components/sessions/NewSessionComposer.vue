@@ -33,7 +33,7 @@ import { resolveWorktreeName } from "@/lib/worktree-naming";
 import { describeDefaults, keepOffered, modelFromKey } from "@/lib/agent-model-choice";
 import { findRepositoryForGitHubPreset } from "@/lib/github-session-source";
 import { itemResourceId, itemSessionPreset, type GitHubItemSummary } from "@/lib/github-items";
-import { findHashTrigger, removeTrigger } from "@/lib/github-reference";
+import { findHashTrigger, parseGitHubRemote, removeTrigger } from "@/lib/github-reference";
 import { describeNewSession } from "@/lib/new-session-plan";
 import {
   buildCreateSessionRequest,
@@ -144,9 +144,13 @@ const hashTrigger = computed(() => (draft.isStarting ? null : findHashTrigger(me
 const isPickerOpen = computed(() => hashTrigger.value !== null && dismissedAt.value !== message.value);
 const gitHubRepository = computed(() => {
   if (folder.value?.kind !== "repository") return null;
-  const remotes = repositoryDetail.value?.remotes ?? [];
-  const remote = remotes.find((r) => r.name === "origin" && r.github) ?? remotes.find((r) => r.github);
-  return remote?.github ? { owner: remote.github.owner, repo: remote.github.repo } : null;
+  // origin first; the remote's URL says which GitHub repository it is.
+  const remotes = [...(repositoryDetail.value?.remotes ?? [])].sort((a, b) => Number(b.name === "origin") - Number(a.name === "origin"));
+  for (const remote of remotes) {
+    const repository = remote.github ? { owner: remote.github.owner, repo: remote.github.repo } : parseGitHubRemote(remote.url);
+    if (repository) return repository;
+  }
+  return null;
 });
 const picker = useGitHubPicker(
   () => (isPickerOpen.value ? gitHubRepository.value : null),

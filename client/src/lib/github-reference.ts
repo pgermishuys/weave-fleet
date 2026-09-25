@@ -29,3 +29,11 @@ export function removeTrigger(text: string, trigger: HashTrigger): { text: strin
   const joined = before + after
   return { text: before.length === 0 ? joined.trimStart() : joined, caret: before.length === 0 ? 0 : before.length }
 }
+
+const GITHUB_REMOTE = /github\.com[:/]([A-Za-z0-9-]+)\/([A-Za-z0-9._-]+?)(?:\.git)?\/?$/i
+
+/** `owner/repo` from a GitHub remote: `git@github.com:owner/repo.git`, `https://github.com/owner/repo`. */
+export function parseGitHubRemote(url: string | null | undefined): { owner: string; repo: string } | null {
+  const match = url ? GITHUB_REMOTE.exec(url.trim()) : null
+  return match ? { owner: match[1], repo: match[2] } : null
+}
