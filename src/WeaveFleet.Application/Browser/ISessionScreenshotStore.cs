@@ -9,7 +9,7 @@ public sealed record ScreenshotReference(string SessionId, string Id, int Width,
 
 /// <summary>
 /// Keeps each session's agent screenshots on disk. The harness hands the image to the model and nothing else;
-/// Fleet keeps its own copy for the user, until the session is deleted.
+/// Fleet keeps its own copy for the user, for a week or until the session is deleted.
 /// </summary>
 public interface ISessionScreenshotStore
 {

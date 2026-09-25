@@ -82,4 +82,48 @@ public sealed class SessionScreenshotStoreTests : IDisposable
 
         (await _store.SaveAsync("ses-1", Png)).ShouldBeNull();
     }
+
+    [Fact]
+    public async Task Clearing_old_screenshots_keeps_the_recent_ones_and_drops_emptied_folders()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var old = await _store.SaveAsync("ses-1", Png);
+        var recent = await _store.SaveAsync("ses-1", Png);
+        var alsoOld = await _store.SaveAsync("ses-2", Png);
+        Age("ses-1", old!, now.AddDays(-8));
+        Age("ses-1", recent!, now.AddDays(-6));
+        Age("ses-2", alsoOld!, now.AddDays(-8));
+
+        var deleted = _store.DeleteOlderThan(now - SessionScreenshotStore.Retention);
+
+        deleted.ShouldBe(2);
+        (await _store.ReadAsync("ses-1", old!)).ShouldBeNull();
+        (await _store.ReadAsync("ses-1", recent!)).ShouldBe(Png);
+        Directory.Exists(Path.Combine(_root, "ses-2")).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Clearing_old_screenshots_leaves_files_that_are_not_screenshots()
+    {
+        var now = DateTimeOffset.UtcNow;
+        await _store.SaveAsync("ses-1", Png);
+        var stranger = Path.Combine(_root, "ses-1", "notes.txt");
+        await File.WriteAllTextAsync(stranger, "mine");
+        File.SetLastWriteTimeUtc(stranger, now.AddDays(-30).UtcDateTime);
+
+        _store.DeleteOlderThan(now.AddDays(1));
+
+        File.Exists(stranger).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Clearing_old_screenshots_before_any_were_taken_does_nothing()
+    {
+        var store = new SessionScreenshotStore(Path.Combine(_root, "never-made"), NullLogger<SessionScreenshotStore>.Instance);
+
+        store.DeleteOlderThan(DateTimeOffset.UtcNow).ShouldBe(0);
+    }
+
+    private void Age(string sessionId, string id, DateTimeOffset when)
+        => File.SetLastWriteTimeUtc(Path.Combine(_root, sessionId, id + ".png"), when.UtcDateTime);
 }
