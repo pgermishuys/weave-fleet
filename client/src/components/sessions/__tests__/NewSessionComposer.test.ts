@@ -87,7 +87,7 @@ function branch(name: string, extra: Partial<BranchInfo> = {}): BranchInfo {
 const repositoryDetail = shallowRef<RepositoryDetail | null>(null);
 
 // The # picker's GitHub answers; the composer is what's under test here.
-const picker = vi.hoisted(() => ({ asked: [] as Array<{ repository: unknown; query: unknown }>, items: [] as unknown[] }));
+const picker = vi.hoisted(() => ({ asked: [] as Array<{ repository: unknown; query: unknown }>, items: [] as unknown[], loading: false }));
 vi.mock("@/composables/use-github-picker", async () => {
   const { computed, toValue } = await import("vue");
   return {
@@ -98,7 +98,7 @@ vi.mock("@/composables/use-github-picker", async () => {
         picker.asked.push(asked);
         return [{ label: "Assigned to you", items: picker.items }];
       }),
-      isLoading: computed(() => false),
+      isLoading: computed(() => picker.loading),
       error: computed(() => null),
     }),
   };
@@ -849,6 +849,7 @@ describe("NewSessionComposer", () => {
     beforeEach(() => {
       picker.asked.length = 0;
       picker.items = [flicker];
+      picker.loading = false;
       rememberFolder({ kind: "repository", path: rocket.path });
       repositoryDetail.value = {
         ...repositoryDetail.value!,
@@ -886,6 +887,25 @@ describe("NewSessionComposer", () => {
       expect(view.find("[data-testid='github-item-picker']").exists()).toBe(false);
       expect(textarea(view).element.value).toBe("Fix #31");
       expect(view.find("[data-testid='new-session-github-attachment']").exists()).toBe(false);
+    });
+
+    it("Enter waits while GitHub is still answering", async () => {
+      picker.items = [];
+      picker.loading = true;
+      const view = await mountComposer();
+      await type(view, "Fix #31");
+      await pressEnter(view);
+
+      expect(mocks.createSession).not.toHaveBeenCalled();
+    });
+
+    it("Enter sends the message when there's nothing to pick", async () => {
+      picker.items = [];
+      const view = await mountComposer();
+      await type(view, "Fix #999");
+      await pressEnter(view);
+
+      expect(mocks.createSession).toHaveBeenCalled();
     });
 
     it("stays shut for # inside a word", async () => {

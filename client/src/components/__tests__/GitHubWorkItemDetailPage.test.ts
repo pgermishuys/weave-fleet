@@ -6,7 +6,6 @@ import GitHubWorkItemDetailPage from "@/components/pages/GitHubWorkItemDetailPag
 import type { SmartLinkWire } from "@/lib/smart-links";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSidebarStore } from "@/stores/sidebar";
-import { useSmartLinksStore } from "@/stores/smart-links";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 
 const { apiFetchMock, mockNavigate } = vi.hoisted(() => ({

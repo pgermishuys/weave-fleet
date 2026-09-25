@@ -221,6 +221,11 @@ function handlePickerKeydown(event: KeyboardEvent): boolean {
     case "Enter":
     case "Tab": {
       const item = pickerItems.value[Math.min(pickerIndex.value, count - 1)];
+      // Still asking GitHub: wait rather than send "Fix #" by accident. With nothing to pick, Enter sends.
+      if (!item && picker.isLoading.value) {
+        event.preventDefault();
+        return true;
+      }
       if (!item) return false;
       event.preventDefault();
       pickGitHubItem(item, event.shiftKey);
