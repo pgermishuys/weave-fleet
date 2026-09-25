@@ -63,6 +63,9 @@ and settles a doubt (a test, a log line), run it.
 
 If, after reading, the source doesn't give a clear story in order, say so, and answer in words instead.
 
+Put the checked script in your reply, with its sources, before you build anything. It's short, and it lets the user
+see that the animation will answer their question before any time goes into drawing it.
+
 ## 4. Build it
 
 One self-contained HTML file in a folder of its own, in a temp directory unless the user wants it in the repository.
@@ -91,8 +94,9 @@ No build step and no animation library; SVG and a little JavaScript are enough.
 - **No sideways scrolling** at 375px: the page is exactly as wide as the screen.
 - **Real names, real values:** the file names, event names and limits from the code, like `MinimumPlanSteps = 3`.
 - **The drawing makes claims too.** A station says the component exists; an arrow says who calls whom; two things
-  moving together say they run at the same time; something inside a box says it belongs there. Draw only what the
-  checked script says. Take the captions, names and values from the script word for word.
+  moving together say they run at the same time; a station in a lane or inside a box says that thread, process or
+  component does it. Draw only what the checked script says, and put each station in the lane of whoever does that
+  work in the source. Take the captions, names and values from the script word for word.
 - **Design:** follow fleet-design if it's on. Colours as variables with a dark theme; the moving thing gets the one
   strong colour.
 
@@ -101,17 +105,19 @@ No build step and no animation library; SVG and a little JavaScript are enough.
 Serve the folder with **`fleet_app_start`** (`python3 -m http.server $PORT --bind 127.0.0.1 --directory <folder>`).
 Fleet shows it in a browser canvas beside the chat.
 
-First check what it says. Read the beats in the finished page against the script and the source, and pass all of
-these:
+Take **`fleet_browser_screenshot`** stills with `path: "?step=N"`: two key steps at desktop, and one with
+`viewport: "phone"`. Check what each still says before how it looks. Each must pass all of these:
+
+What it says:
 
 - [ ] It answers the question from step 1, and the part the user asked about gets the most time.
-- [ ] Every beat's title, sentences, names and values match the checked script, and the script matches the source.
-- [ ] Every station, arrow and ordering in the drawing is in the checked script. Nothing was added to fill space or
-      to look good.
+- [ ] The caption's title, sentences, names and values match the checked script.
+- [ ] Read the drawing as sentences: "this station is in this lane", "this arrow goes from here to there", "this
+      comes before that". Each sentence is in the checked script. A station in the wrong lane or box, or an arrow the
+      source doesn't have, is a fail even when the caption is right.
 - [ ] Anything simplified says so in its caption.
 
-Then check how it looks. Take **`fleet_browser_screenshot`** stills with `path: "?step=N"`: two key steps at desktop,
-and one with `viewport: "phone"`. Each must pass all of these:
+How it looks:
 
 - [ ] The moving thing is where the caption says, and it doesn't cover any text.
 - [ ] Every label in the drawing is at least as large as the caption's small print. "Small but legible" is a fail.
@@ -119,7 +125,8 @@ and one with `viewport: "phone"`. Each must pass all of these:
 - [ ] On the phone, the stations are in a column and there's no sideways scrolling.
 - [ ] `TOTAL` is 30 or less.
 
-If one fails, fix the page and take that still again. Don't hand over a page that fails a check. Each screenshot
+Say in your reply which checks each still passed, what it says first. If one fails, fix the page and take that still
+again. Don't hand over a page that fails a check. Each screenshot
 costs context, so shoot only what you need to decide.
 
 ## 6. Hand it over
