@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
 import QueuedMessages from "@/components/session/QueuedMessages.vue";
-import type { QueuedMessage } from "@/composables/use-message-queue";
+import type { QueuedMessage } from "@/composables/use-session-queue";
 
 const items: QueuedMessage[] = [
-  { id: "queue-1", text: "also update the changelog" },
-  { id: "queue-2", text: "/review" },
+  { id: "queue-1", text: "also update the changelog", kind: "prompt" },
+  { id: "queue-2", text: "/review", kind: "command" },
 ];
 
 describe("QueuedMessages", () => {

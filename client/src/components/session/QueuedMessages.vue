@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { CornerDownRight, X } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
-import type { QueuedMessage } from "@/composables/use-message-queue";
+import type { QueuedMessage } from "@/composables/use-session-queue";
 
 defineOptions({
   name: "QueuedMessages",

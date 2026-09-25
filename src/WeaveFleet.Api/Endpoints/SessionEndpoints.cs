@@ -268,6 +268,56 @@ public static class SessionEndpoints
         })
         .WithName("PromptSession");
 
+        // GET /api/sessions/{id}/queue — the messages the user queued while the agent works, first to go first.
+        group.MapGet("/{id}/queue", async (string id, PromptQueueService queue) =>
+        {
+            var result = await queue.ListAsync(id);
+            return result.Match(
+                items => Results.Json(items.Select(QueuedPromptView.From).ToList(), ApiJsonContext.Default.ListQueuedPromptView),
+                err => err.ToSessionApiResult());
+        })
+        .WithName("ListSessionQueue");
+
+        // POST /api/sessions/{id}/queue — queue a message, a slash command or a shell command. Fleet sends it when the
+        // turn ends (at once, when the session turns out to be idle); the queue is Fleet's, so leaving the session or
+        // closing the browser doesn't lose it. Gated as a prompt is.
+        group.MapPost("/{id}/queue", async (string id, QueuePromptApiRequest req, PromptQueueService queue, SessionService sessionService, InstanceTracker tracker, HttpContext http, CancellationToken ct) =>
+        {
+            // The queue is the user's composer; agents message sessions with their own tool.
+            if (http.IsAgentRequest())
+                return Results.Json(new ErrorResponse("Agents message sessions with their own tool."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
+
+            var modelResolution = await ResolveSessionModelAsync(id, req.Model, sessionService, tracker, ct);
+            if (modelResolution.ErrorResult is not null)
+                return modelResolution.ErrorResult;
+
+            var result = await queue.EnqueueAsync(
+                id,
+                new QueuePromptRequest(req.Text, req.Kind, req.Command, req.Arguments, req.Agent, modelResolution.ProviderId, modelResolution.ModelId, req.Effort),
+                ct);
+            return result.Match(
+                item => Results.Json(QueuedPromptView.From(item), ApiJsonContext.Default.QueuedPromptView, statusCode: StatusCodes.Status201Created),
+                err => err.ToSessionApiResult());
+        })
+        .WithName("QueueSessionPrompt");
+
+        // DELETE /api/sessions/{id}/queue/{itemId} — take a queued message back.
+        group.MapDelete("/{id}/queue/{itemId}", async (string id, string itemId, PromptQueueService queue, CancellationToken ct) =>
+        {
+            var result = await queue.RemoveAsync(id, itemId, ct);
+            return result.Match(_ => Results.NoContent(), err => err.ToSessionApiResult());
+        })
+        .WithName("RemoveQueuedPrompt");
+
+        // POST /api/sessions/{id}/queue/{itemId}/send — send a queued message now: into the running turn where the
+        // harness can take it (a steer), or as usual when the session is idle.
+        group.MapPost("/{id}/queue/{itemId}/send", async (string id, string itemId, PromptQueueService queue, CancellationToken ct) =>
+        {
+            var result = await queue.SendNowAsync(id, itemId, ct);
+            return result.Match(_ => Results.Accepted(), err => err.ToSessionApiResult());
+        })
+        .WithName("SendQueuedPromptNow");
+
         // POST /api/sessions/{id}/abort
         group.MapPost("/{id}/abort", async (string id, SessionOrchestrator orchestrator) =>
         {
@@ -1084,6 +1134,16 @@ internal sealed record SendPromptApiRequest(
     string? Delivery = null);
 
 internal sealed record SendPromptApiResponse(long? EventId, string CorrelationId);
+
+/// <summary>A message to queue. <c>kind</c> is "prompt" (the default), "command" (with its name and arguments) or "shell".</summary>
+internal sealed record QueuePromptApiRequest(
+    string Text,
+    string? Kind = null,
+    string? Command = null,
+    string? Arguments = null,
+    string? Agent = null,
+    ModelRef? Model = null,
+    string? Effort = null);
 
 internal sealed record ImageAttachmentDto(string Mime, string? Filename, string Data);
 

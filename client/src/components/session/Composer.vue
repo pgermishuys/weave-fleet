@@ -15,7 +15,7 @@ import { useAbortSession } from "@/composables/use-session-actions";
 import { useAutocomplete } from "@/composables/use-autocomplete";
 import { useDraftState } from "@/composables/use-draft-state";
 import { useInputHistory } from "@/composables/use-input-history";
-import { useMessageQueue, type QueuedMessage } from "@/composables/use-message-queue";
+import { useSessionQueue, type QueuedMessage, type QueueOptions } from "@/composables/use-session-queue";
 import { useIsMobile } from "@/composables/use-media-query";
 import { useSendCommand } from "@/composables/use-send-command";
 import { useRunShellCommand } from "@/composables/use-run-shell-command";
@@ -77,6 +77,7 @@ const statusIndicatorPhase = shallowRef<"thinking" | "responding">("thinking");
 const statusIndicatorDotCount = shallowRef(1);
 const sendError = computed(() => sideDraftError.value
   ?? sideConversation.error.value
+  ?? queueError.value
   ?? shellCommandError.value
   ?? sendCommandError.value
   ?? sendPromptError.value);
@@ -396,53 +397,54 @@ onUnmounted(() => {
   clearPasteError();
 });
 
-const { queue, enqueue, removeAt } = useMessageQueue(
-  computed<"idle" | "busy">(() => sessionStatus.value === "idle" ? "idle" : "busy"),
-  async (text) => {
-    setText(text);
-    await nextTick();
-    if (isShellMode.value) {
-      await runShellDraft();
-      // A command isn't a turn, so no turn ends to send what's queued after it: pass the queue on.
-      if (queue.value.length > 0) {
-        optimisticBusy.value = true;
-        await nextTick();
-        optimisticBusy.value = false;
-      }
-    } else if (sendCurrentDraft()) {
-      optimisticBusy.value = true;
-      emit("promptSent");
-    }
-    void nextTick(() => {
-      resizeTextarea();
-      textareaRef.value?.focus();
-    });
-  },
-);
+// The queue is Fleet's: it keeps what's queued and sends the next one when a turn ends, so leaving the session or
+// closing the tab loses nothing.
+const { queue, error: queueError, enqueue, remove: removeQueued, sendNow: sendQueuedItemNow } = useSessionQueue(props.sessionId);
 
-/**
- * A queued slash command runs as a command when the turn ends, and a queued shell command runs between turns; only a
- * message can go into the turn.
- */
-function canSendQueuedNow(item: QueuedMessage): boolean {
-  return showSendNow.value
-    && !parseSlashCommand(item.text)
-    && !(supportsShellCommands.value && isShellDraft(item.text));
+/** What the composer has picked, kept with a queued message so it goes out as it would have now. */
+function queueChoices(): Pick<QueueOptions, "agent" | "model" | "effort"> {
+  return {
+    agent: draft.agentId || undefined,
+    model: modelFromKey(draft.modelId) ?? undefined,
+    effort: draft.effort !== "medium" ? draft.effort : undefined,
+  };
 }
 
-/** Takes a queued message out of the queue and steers it into the running turn, leaving the draft alone. */
+/** Queues what was typed. The draft clears at once and comes back if Fleet refuses it, unless something new was typed. */
+function queueDraft(typed: string, text: string, options: QueueOptions): void {
+  setText("");
+  void enqueue(text, options).then((queued) => {
+    if (!queued && draft.text.length === 0) setText(typed);
+  });
+}
+
+/**
+ * A queued item Send now can go out: while a turn runs, only a message, and only where the harness can take one mid-
+ * turn (a command waits for the turn to end); when the session is idle, anything left over (say, after a restart).
+ */
+function canSendQueuedNow(item: QueuedMessage): boolean {
+  if (sessionStatus.value === "idle") return true;
+  return showSendNow.value && item.kind === "prompt";
+}
+
+/** Sends a queued item now, leaving the draft alone: into the running turn, or as usual when the session is idle. */
 function sendQueuedNow(index: number): void {
   const item = queue.value[index];
   if (!item || isDisabled.value || !canSendQueuedNow(item)) {
     return;
   }
 
-  removeAt(index);
-  if (sendPrompt(undefined, item.text, { steer: true })) {
-    optimisticBusy.value = true;
+  const steering = sessionStatus.value !== "idle";
+  void sendQueuedItemNow(item.id).then((sent) => {
+    if (!sent) return;
     emit("promptSent");
-    trackAction("session.prompt.steer", props.sessionId);
-  }
+    trackAction(steering ? "session.prompt.steer" : "session.prompt", props.sessionId);
+  });
+}
+
+function removeQueuedAt(index: number): void {
+  const item = queue.value[index];
+  if (item) void removeQueued(item.id);
 }
 
 const textareaRef = useTemplateRef<HTMLTextAreaElement>("textarea");
@@ -755,11 +757,17 @@ function handleSend(steer = false): void {
     return;
   }
 
-  const steering = steer && showSendNow.value && !parseSlashCommand(draft.text);
+  const slashCommand = parseSlashCommand(draft.text);
+  const steering = steer && showSendNow.value && !slashCommand;
   if (sessionStatus.value === "busy" && !steering) {
-    enqueue(formatTerminalContext(terminalContexts.value, text));
+    queueDraft(
+      draft.text,
+      slashCommand ? text : formatTerminalContext(terminalContexts.value, text),
+      slashCommand
+        ? { kind: "command", command: slashCommand.command, arguments: slashCommand.args || undefined, ...queueChoices() }
+        : { kind: "prompt", ...queueChoices() },
+    );
     clearTerminalContexts();
-    setText("");
     void nextTick(() => {
       resizeTextarea();
       textareaRef.value?.focus();
@@ -792,8 +800,7 @@ function handleShellSend(text: string): void {
 
   trackAction("session.shell", props.sessionId);
   if (sessionStatus.value === "busy") {
-    enqueue(text);
-    setText("");
+    queueDraft(draft.text, text, { kind: "shell" });
   } else {
     void runShellDraft();
   }
@@ -904,7 +911,7 @@ function handleKeydown(event: KeyboardEvent): void {
       :items="queue"
       :can-send-now="canSendQueuedNow"
       @send-now="sendQueuedNow"
-      @remove="removeAt"
+      @remove="removeQueuedAt"
     />
 
     <ComposerFrame

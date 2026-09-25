@@ -17,7 +17,10 @@ vi.mock("@/api/client", () => ({
   },
 }));
 
-const { sessionsTopicHandlers } = vi.hoisted(() => ({ sessionsTopicHandlers: new Set<(event: unknown) => void>() }));
+const { sessionsTopicHandlers, sessionTopicHandlers } = vi.hoisted(() => ({
+  sessionsTopicHandlers: new Set<(event: unknown) => void>(),
+  sessionTopicHandlers: new Map<string, Set<(event: unknown) => void>>(),
+}));
 vi.mock("@/composables/use-signalr-socket", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/composables/use-signalr-socket")>()),
   onGlobalEvent: (topic: string, handler: (event: unknown) => void) => {
@@ -25,7 +28,20 @@ vi.mock("@/composables/use-signalr-socket", async (importOriginal) => ({
     sessionsTopicHandlers.add(handler);
     return () => sessionsTopicHandlers.delete(handler);
   },
+  // No hub in tests: a session topic's events are pushed with pushSessionEvent.
+  useWeaveSocket: () => ({
+    subscribeV2: (topic: string, _onSnapshot: unknown, onEvent: (event: unknown) => void) => {
+      const handlers = sessionTopicHandlers.get(topic) ?? new Set();
+      sessionTopicHandlers.set(topic, handlers);
+      handlers.add(onEvent);
+      return () => handlers.delete(onEvent);
+    },
+  }),
 }));
+
+function pushSessionEvent(sessionId: string, event: unknown): void {
+  for (const handler of [...(sessionTopicHandlers.get(`session:${sessionId}`) ?? [])]) handler(event);
+}
 
 function pushCatalogChange(sessionIds: string[]): void {
   const event = {
@@ -94,6 +110,8 @@ function createSession(overrides: Partial<SessionListItem> = {}): SessionListIte
     ...overrides,
   };
 }
+
+let queuedIds = 0;
 
 function configureApiFetch(): void {
   mockApi.GET.mockImplementation(async (url: string) => {
@@ -172,10 +190,35 @@ function configureApiFetch(): void {
       } as any;
     }
 
+    if (url === "/api/sessions/{id}/queue") {
+      return { data: [], error: undefined, response: new Response() } as never;
+    }
+
     throw new Error(`Unhandled GET call: ${url}`);
   });
 
-  mockApi.POST.mockImplementation(async (url: string) => {
+  mockApi.DELETE.mockImplementation((async (url: string) => {
+    if (url === "/api/sessions/{id}/queue/{itemId}") {
+      return { data: undefined, error: undefined, response: new Response(null, { status: 204 }) };
+    }
+    throw new Error(`Unhandled DELETE call: ${url}`);
+  }) as never);
+
+  mockApi.POST.mockImplementation(async (url: string, init?: unknown) => {
+    // Fleet keeps the queue: it answers with the item it queued.
+    if (url === "/api/sessions/{id}/queue") {
+      const body = (init as { body: { text: string; kind: string } }).body;
+      return {
+        data: { id: `queued-${++queuedIds}`, kind: body.kind, text: body.text, createdAt: "2026-09-25T10:00:00Z" },
+        error: undefined,
+        response: new Response(null, { status: 201 }),
+      } as never;
+    }
+
+    if (url === "/api/sessions/{id}/queue/{itemId}/send") {
+      return { data: undefined, error: undefined, response: new Response(null, { status: 202 }) } as never;
+    }
+
     if (url === "/api/sessions/{id}/prompt") {
       return {
         data: {},
@@ -688,7 +731,7 @@ describe("Composer shell commands", () => {
     expect(wrapper.find(".composer-reference").exists()).toBe(false);
   });
 
-  it("holds a command typed during a turn until the turn ends", async () => {
+  it("queues a command typed during a turn with Fleet, which runs it when the turn ends", async () => {
     const wrapper = mountComposer({ session: createSession({ activityStatus: "busy" }) });
     await flushPromises();
     const textarea = wrapper.get("[data-testid='prompt-input']");
@@ -700,14 +743,15 @@ describe("Composer shell commands", () => {
     await flushPromises();
 
     expect(shellCalls()).toHaveLength(0);
+    const queued = (mockApi.POST.mock.calls as unknown as [string, { body?: unknown }][]).filter(([url]) => url === "/api/sessions/{id}/queue");
+    expect(queued.map(([, init]) => init.body)).toEqual([expect.objectContaining({ text: "!git status", kind: "shell" })]);
     expect(wrapper.findAll("[data-testid='queued-message']").map((item) => item.text())).toEqual([expect.stringContaining("!git status")]);
     expect(wrapper.find("[data-testid='queued-send-now']").exists()).toBe(false);
 
+    // Fleet sends what's queued, not the browser.
     useSessionsStore().patchSession("session-1", { activityStatus: "idle" });
     await flushPromises();
-
-    expect(shellCalls()).toHaveLength(1);
-    expect(shellCalls()[0][1]).toEqual(expect.objectContaining({ body: { command: "git status" } }));
+    expect(shellCalls()).toHaveLength(0);
   });
 
   it("puts a refused command back and says why", async () => {
@@ -969,10 +1013,19 @@ describe("Composer steering", () => {
     return event;
   }
 
-  function promptBodies(): Record<string, unknown>[] {
+  function bodiesFor(path: string): Record<string, unknown>[] {
     return (mockApi.POST.mock.calls as unknown as [string, { body?: Record<string, unknown> }][])
-      .filter(([url]) => url === "/api/sessions/{id}/prompt")
+      .filter(([url]) => url === path)
       .map(([, init]) => init.body ?? {});
+  }
+
+  const promptBodies = () => bodiesFor("/api/sessions/{id}/prompt");
+  const queuedBodies = () => bodiesFor("/api/sessions/{id}/queue");
+
+  function sendNowCalls(): unknown[] {
+    return (mockApi.POST.mock.calls as unknown as [string, { params?: unknown }][])
+      .filter(([url]) => url === "/api/sessions/{id}/queue/{itemId}/send")
+      .map(([, init]) => init.params);
   }
 
   beforeEach(() => {
@@ -1000,6 +1053,7 @@ describe("Composer steering", () => {
     await flushPromises();
 
     expect(promptBodies()).toHaveLength(0);
+    expect(queuedBodies()).toEqual([expect.objectContaining({ text: "also check the tests", kind: "prompt" })]);
     expect(wrapper.findAll("[data-testid='queued-message']")).toHaveLength(1);
 
     await textarea.setValue("stop, that's the wrong file");
@@ -1023,7 +1077,9 @@ describe("Composer steering", () => {
     await wrapper.get("[data-testid='queued-send-now']").trigger("click");
     await flushPromises();
 
-    expect(promptBodies()).toEqual([expect.objectContaining({ text: "use the other branch", delivery: "steer" })]);
+    // Fleet takes it out of the queue and steers it in.
+    expect(sendNowCalls()).toEqual([{ path: { id: "session-1", itemId: expect.stringMatching(/^queued-/) } }]);
+    expect(promptBodies()).toHaveLength(0);
     expect(wrapper.find("[data-testid='queued-message']").exists()).toBe(false);
     expect((textarea.element as HTMLTextAreaElement).value).toBe("still typing");
   });
@@ -1050,6 +1106,60 @@ describe("Composer steering", () => {
     await wrapper.get("[data-testid='prompt-input']").setValue("/btw what does this file do?");
 
     expect(wrapper.find("[data-testid='prompt-send-now-button']").exists()).toBe(false);
+  });
+
+  it("queues a slash command as a command, to run when the turn ends", async () => {
+    const wrapper = mountComposer({ session: createSession({ activityStatus: "busy" }) });
+    await flushPromises();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+
+    await textarea.setValue("/review src/auth");
+    pressKey(textarea.element, "Enter", { ctrlKey: true });
+    await flushPromises();
+
+    expect(promptBodies()).toHaveLength(0);
+    expect(queuedBodies()).toEqual([expect.objectContaining({ kind: "command", command: "review", arguments: "src/auth" })]);
+    expect(wrapper.find("[data-testid='queued-send-now']").exists()).toBe(false);
+  });
+
+  it("shows what Fleet has queued when the session opens again", async () => {
+    const fallback = mockApi.GET.getMockImplementation() as unknown as (url: string, init?: unknown) => Promise<unknown>;
+    mockApi.GET.mockImplementation((async (url: string, init?: unknown) => {
+      if (url === "/api/sessions/{id}/queue") {
+        return {
+          data: [{ id: "queued-kept", kind: "prompt", text: "queued before you left", createdAt: "2026-09-25T10:00:00Z" }],
+          error: undefined,
+          response: new Response(),
+        };
+      }
+      return fallback(url, init);
+    }) as never);
+
+    const wrapper = mountComposer({ session: createSession({ activityStatus: "busy" }) });
+    await flushPromises();
+
+    expect(wrapper.findAll("[data-testid='queued-message']").map((item) => item.text())).toEqual([expect.stringContaining("queued before you left")]);
+  });
+
+  it("follows the queue Fleet announces: sent, removed or queued from another tab", async () => {
+    const wrapper = mountComposer({ session: createSession({ activityStatus: "busy" }) });
+    await flushPromises();
+
+    pushSessionEvent("session-1", {
+      type: "session.queue",
+      payload: { sessionId: "session-1", items: [{ id: "q1", kind: "prompt", text: "from the other tab", createdAt: "" }] },
+    });
+    await flushPromises();
+    expect(wrapper.findAll("[data-testid='queued-message']").map((item) => item.text())).toEqual([expect.stringContaining("from the other tab")]);
+
+    // Another session's queue isn't this one's.
+    pushSessionEvent("session-1", { type: "session.queue", payload: { sessionId: "session-2", items: [] } });
+    await flushPromises();
+    expect(wrapper.findAll("[data-testid='queued-message']")).toHaveLength(1);
+
+    pushSessionEvent("session-1", { type: "session.queue", payload: { sessionId: "session-1", items: [] } });
+    await flushPromises();
+    expect(wrapper.find("[data-testid='queued-message']").exists()).toBe(false);
   });
 
   it("sends the normal way when the agent is idle, even on Ctrl+Enter", async () => {
