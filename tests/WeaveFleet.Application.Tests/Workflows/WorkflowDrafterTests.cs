@@ -22,7 +22,7 @@ public sealed class WorkflowDrafterTests : IDisposable
 {
     private const string Valid = """
         ```yaml
-        name: Fix a bug
+        name: Fix the login bug
         description: Finds a bug and fixes it.
         steps:
           - id: fix
@@ -40,7 +40,7 @@ public sealed class WorkflowDrafterTests : IDisposable
         Here it is:
 
         ```yaml
-        name: Fix a bug
+        name: Fix the login bug
         steps:
           - id: fix
             title: Fix
@@ -164,8 +164,8 @@ public sealed class WorkflowDrafterTests : IDisposable
         var drafted = (await _sut.FromSessionAsync("s-1", CancellationToken.None)).ShouldBeSuccess();
 
         drafted.Check.IsValid.ShouldBeTrue();
-        drafted.Check.Draft!.Name.ShouldBe("Fix a bug");
-        drafted.Check.Text.ShouldStartWith("name: Fix a bug\n");
+        drafted.Check.Draft!.Name.ShouldBe("Fix the login bug");
+        drafted.Check.Text.ShouldStartWith("name: Fix the login bug\n");
         (drafted.Asks, drafted.Tokens, drafted.SessionTitle, drafted.RepositoryName).ShouldBe((1, new OffTheRecordTokens(3400, 3100), "Fix the login bug", "repo"));
         _conversation.Prompts.ShouldBe([WorkflowDraftPrompt.FromSession()]);
         _conversation.Disposals.ShouldBe(1);
@@ -275,8 +275,8 @@ public sealed class WorkflowDrafterTests : IDisposable
         Git("status", "--porcelain").ShouldBeEmpty();
 
         var saved = (await WorkflowRepoFiles.CreateAsync(_repo, drafted.Check.Text, await WorkflowCatalog.ListAsync(_repo), CancellationToken.None)).ShouldBeSuccess();
-        saved.WorkflowId.ShouldBe("repo:fix-a-bug");
-        File.ReadAllText(Path.Combine(_repo, ".weave", "workflows", "fix-a-bug.yaml")).ShouldBe(drafted.Check.Text);
+        saved.WorkflowId.ShouldBe("repo:fix-the-login-bug");
+        File.ReadAllText(Path.Combine(_repo, ".weave", "workflows", "fix-the-login-bug.yaml")).ShouldBe(drafted.Check.Text);
     }
 
     // ── Where it can't ──────────────────────────────────────────────────────────

@@ -45,7 +45,10 @@ public sealed class WorkflowCheckTests
 
     [Fact]
     public void a_file_without_comments_has_none()
-        => WorkflowComments.Find(WorkflowCatalog.BuiltIns.Single().Text.Replace("# Fleet workflow, built into Fleet. The format is described in docs/workflows.md.\n", "")).ShouldBeEmpty();
+    {
+        foreach (var builtIn in WorkflowCatalog.BuiltIns)
+            WorkflowComments.Find(builtIn.Text.Replace("# Fleet workflow, built into Fleet. The format is described in docs/workflows.md.\n", "")).ShouldBeEmpty(builtIn.Id);
+    }
 
     [Fact]
     public void a_valid_file_comes_back_with_its_draft_and_comments()
@@ -120,7 +123,7 @@ public sealed class WorkflowCheckTests
     [Fact]
     public void a_draft_is_written_then_checked_and_its_errors_land_on_its_steps()
     {
-        var workflow = WorkflowCatalog.BuiltIns.Single().Definition!;
+        var workflow = WorkflowCatalog.BuiltIns.Single(e => e.Id == "builtin:build-a-feature").Definition!;
         var review = (WorkflowAgentStep)workflow.Find("review")!;
         var steps = workflow.Steps.Select(s => s.Id == "review" ? review with { MaxLoops = null } : s).ToList();
 

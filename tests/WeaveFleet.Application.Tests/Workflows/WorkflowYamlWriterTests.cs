@@ -51,7 +51,7 @@ public sealed class WorkflowYamlWriterTests
     [Fact]
     public void it_writes_the_built_in_in_fleets_layout()
     {
-        var written = WorkflowYamlWriter.Write(WorkflowCatalog.BuiltIns.Single().Definition!);
+        var written = WorkflowYamlWriter.Write(WorkflowCatalog.BuiltIns.Single(e => e.Id == "builtin:build-a-feature").Definition!);
 
         written.ShouldStartWith("""
             name: Build a feature
