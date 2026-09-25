@@ -144,6 +144,33 @@ public sealed class OpenCodeModelsSerializationTests
     }
 
     [Fact]
+    public void AssistantMessage_DeserializesCompactionSummaryFlag()
+    {
+        // OpenCode marks the message a compaction writes with "summary": true.
+        const string json = """
+        {
+          "role":"assistant",
+          "id":"msg-3",
+          "sessionID":"sess-1",
+          "time":{"created":2000000,"completed":2500000},
+          "mode":"compaction",
+          "summary":true,
+          "providerID":"anthropic",
+          "modelID":"claude-sonnet-5",
+          "cost":0.002,
+          "finish":"stop"
+        }
+        """;
+
+        var result = OpenCodeMessageDeserializer.DeserializeAssistantMessage(JsonDocument.Parse(json).RootElement);
+
+        result.ShouldNotBeNull();
+        result.Summary?.ValueKind.ShouldBe(JsonValueKind.True);
+        result.ModelId.ShouldBe("claude-sonnet-5");
+        result.Finish.ShouldBe("stop");
+    }
+
+    [Fact]
     public void MessageParts_TextPart_Deserializes()
     {
         const string json = """
