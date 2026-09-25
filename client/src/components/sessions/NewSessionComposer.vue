@@ -11,11 +11,13 @@ import ModelSelector from "@/components/session/ModelSelector.vue";
 import MessageBubble from "@/components/session/MessageBubble.vue";
 import BasePicker from "@/components/sessions/new-session/BasePicker.vue";
 import FolderPicker from "@/components/sessions/new-session/FolderPicker.vue";
+import GitHubItemPicker from "@/components/sessions/new-session/GitHubItemPicker.vue";
 import HarnessPicker from "@/components/sessions/new-session/HarnessPicker.vue";
 import MoreOptions from "@/components/sessions/new-session/MoreOptions.vue";
 import ProfilePicker from "@/components/sessions/new-session/ProfilePicker.vue";
 import WorkspacePicker from "@/components/sessions/new-session/WorkspacePicker.vue";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
+import { useGitHubPicker } from "@/composables/use-github-picker";
 import { useHarnessCatalog } from "@/composables/use-harness-catalog";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useIsMobile } from "@/composables/use-media-query";
@@ -30,6 +32,8 @@ import { useWorktreeNamingStore } from "@/stores/worktree-naming";
 import { resolveWorktreeName } from "@/lib/worktree-naming";
 import { describeDefaults, keepOffered, modelFromKey } from "@/lib/agent-model-choice";
 import { findRepositoryForGitHubPreset } from "@/lib/github-session-source";
+import { itemResourceId, itemSessionPreset, type GitHubItemSummary } from "@/lib/github-items";
+import { findHashTrigger, removeTrigger } from "@/lib/github-reference";
 import { describeNewSession } from "@/lib/new-session-plan";
 import {
   buildCreateSessionRequest,
@@ -42,6 +46,7 @@ import { useAppShellStore } from "@/stores/app-shell";
 import { useHarnessProfilesStore } from "@/stores/harness-profiles";
 import { useHarnessSetupStore } from "@/stores/harness-setup";
 import { useSessionsStore } from "@/stores/sessions";
+import { useSmartLinksStore } from "@/stores/smart-links";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 
 const MAX_TEXTAREA_HEIGHT = 180;
@@ -128,6 +133,104 @@ const { worktrees, isLoading: isLoadingWorktrees } = useWorktrees({ repositoryPa
 const { detail: repositoryDetail, isLoading: isLoadingRepositoryDetail } = useRepositoryDetail(repositoryPath);
 
 const isCloudMode = computed(() => config.value.cloudMode);
+
+// ── # picks a pull request or issue from the folder's repository ─────────────────
+const smartLinks = useSmartLinksStore();
+const caret = shallowRef<number | null>(null);
+// The message when the person closed the picker; it stays shut until they type again.
+const dismissedAt = shallowRef<string | null>(null);
+const pickerIndex = shallowRef(0);
+const hashTrigger = computed(() => (draft.isStarting ? null : findHashTrigger(message.value, caret.value)));
+const isPickerOpen = computed(() => hashTrigger.value !== null && dismissedAt.value !== message.value);
+const gitHubRepository = computed(() => {
+  if (folder.value?.kind !== "repository") return null;
+  const remotes = repositoryDetail.value?.remotes ?? [];
+  const remote = remotes.find((r) => r.name === "origin" && r.github) ?? remotes.find((r) => r.github);
+  return remote?.github ? { owner: remote.github.owner, repo: remote.github.repo } : null;
+});
+const picker = useGitHubPicker(
+  () => (isPickerOpen.value ? gitHubRepository.value : null),
+  () => (isPickerOpen.value ? hashTrigger.value?.query ?? null : null),
+);
+const pickerItems = computed(() => picker.groups.value.flatMap((group) => group.items));
+const withSessions = computed(() => {
+  const keys = new Set<string>();
+  for (const item of pickerItems.value) {
+    if (smartLinks.sessionsFor(itemResourceId(item)).length > 0) keys.add(itemResourceId(item).toLowerCase());
+  }
+  return keys;
+});
+
+watch(() => hashTrigger.value?.query, () => {
+  pickerIndex.value = 0;
+});
+
+function trackCaret(): void {
+  caret.value = textareaRef.value?.selectionStart ?? null;
+}
+
+/** Starts the session from the picked item, or opens the session already on it when asked. */
+function pickGitHubItem(item: GitHubItemSummary, openItsSession = false): void {
+  const sessionIds = smartLinks.sessionsFor(itemResourceId(item));
+  const existing = sessionsStore.sessions.find((row) => sessionIds.includes(row.session.id));
+  if (openItsSession && existing) {
+    void navigate({
+      to: "/sessions/$id",
+      params: { id: existing.session.id },
+      search: { instanceId: existing.instanceId, parentSessionId: undefined },
+    });
+    return;
+  }
+
+  const trigger = hashTrigger.value;
+  if (trigger) {
+    const next = removeTrigger(message.value, trigger);
+    message.value = next.text;
+    caret.value = next.caret;
+    void nextTick(() => {
+      const textarea = textareaRef.value;
+      if (!textarea) return;
+      textarea.value = next.text;
+      textarea.setSelectionRange(next.caret, next.caret);
+      resizeTextarea();
+      focusMessage();
+    });
+  }
+  gitHubPreset.value = itemSessionPreset(item);
+  workspace.value = { kind: "new" };
+  branchName.value = "";
+}
+
+/** Arrow keys, Enter, Tab and Esc drive the picker while it's open. Returns whether the key was its. */
+function handlePickerKeydown(event: KeyboardEvent): boolean {
+  if (!isPickerOpen.value || event.isComposing) return false;
+  const count = pickerItems.value.length;
+  switch (event.key) {
+    case "ArrowDown":
+      event.preventDefault();
+      pickerIndex.value = count ? (pickerIndex.value + 1) % count : 0;
+      return true;
+    case "ArrowUp":
+      event.preventDefault();
+      pickerIndex.value = count ? (pickerIndex.value - 1 + count) % count : 0;
+      return true;
+    case "Enter":
+    case "Tab": {
+      const item = pickerItems.value[Math.min(pickerIndex.value, count - 1)];
+      if (!item) return false;
+      event.preventDefault();
+      pickGitHubItem(item, event.shiftKey);
+      return true;
+    }
+    case "Escape":
+      event.preventDefault();
+      event.stopPropagation();
+      dismissedAt.value = message.value;
+      return true;
+    default:
+      return false;
+  }
+}
 const areRepositoriesReady = computed(() => scannedAt.value !== null || repositoriesError.value !== null);
 const showHarnessPicker = computed(() => enabledHarnesses.value.length > 1);
 const hasMessage = computed(() => message.value.trim().length > 0);
@@ -475,6 +578,9 @@ async function submit(withoutMessage: boolean): Promise<void> {
 }
 
 function handleKeydown(event: KeyboardEvent): void {
+  if (handlePickerKeydown(event)) {
+    return;
+  }
   if (event.key !== "Enter" || event.shiftKey || event.isComposing) {
     return;
   }
@@ -489,6 +595,7 @@ function handleKeydown(event: KeyboardEvent): void {
 function handleInput(event: Event): void {
   message.value = (event.target as HTMLTextAreaElement).value;
   validationError.value = null;
+  trackCaret();
   resizeTextarea();
 }
 
@@ -633,110 +740,128 @@ onUnmounted(() => {
         </button>
       </div>
 
-      <ComposerFrame>
-        <div
-          v-if="gitHubPreset"
-          class="new-session__attachments"
-        >
-          <span
-            class="new-session__attachment"
-            data-testid="new-session-github-attachment"
-            :title="gitHubPreset.htmlUrl"
-          >
-            <GitPullRequest
-              v-if="gitHubPreset.sourceType === 'github-pull-request'"
-              class="new-session__attachment-icon"
-              aria-hidden="true"
-            />
-            <CircleDot
-              v-else
-              class="new-session__attachment-icon"
-              aria-hidden="true"
-            />
-            <span class="new-session__attachment-number">#{{ gitHubPreset.number }}</span>
-            <span class="new-session__attachment-title">{{ gitHubPreset.title }}</span>
-            <button
-              type="button"
-              class="new-session__attachment-remove"
-              :aria-label="`Remove ${gitHubPreset.sourceType === 'github-pull-request' ? 'pull request' : 'issue'} #${gitHubPreset.number}`"
-              :disabled="isStarting"
-              @click="removeGitHubPreset"
-            >
-              <X
-                class="new-session__attachment-remove-icon"
-                aria-hidden="true"
-              />
-            </button>
-          </span>
-        </div>
-
-        <textarea
-          ref="textarea"
-          class="composer-frame__textarea new-session__textarea"
-          data-testid="new-session-message"
-          aria-label="First message"
-          rows="2"
-          :value="sentMessage ? '' : message"
-          :placeholder="placeholder"
-          :readonly="isStarting"
-          @input="handleInput"
-          @keydown="handleKeydown"
+      <div class="new-session__frame">
+        <GitHubItemPicker
+          v-if="isPickerOpen"
+          :repository="gitHubRepository ? `${gitHubRepository.owner}/${gitHubRepository.repo}` : null"
+          :query="hashTrigger?.query ?? ''"
+          :groups="picker.groups.value"
+          :selected-index="pickerIndex"
+          :is-loading="picker.isLoading.value"
+          :error="picker.error.value"
+          :with-sessions="withSessions"
+          @pick="pickGitHubItem($event)"
+          @hover="pickerIndex = $event"
         />
 
-        <template #toolbar>
-          <HarnessPicker
-            v-if="showHarnessPicker"
-            v-model="harnessType"
-            :harnesses="enabledHarnesses"
-            :disabled="isStarting"
-            @close-auto-focus="returnFocusToMessage"
-          />
-          <ProfilePicker
-            v-if="showProfilePicker"
-            v-model="selectedProfileId"
-            :profiles="profiles"
-            :disabled="isStarting"
-            @close-auto-focus="returnFocusToMessage"
-          />
-          <template v-if="offersAgentsAndModels">
-            <AgentSelector
-              v-model="agentChoice"
-              :agents="agents"
-              :default-label="defaultLabels.agentLabel"
-              :default-description="defaultLabels.agentDescription"
-              :disabled="isStarting"
-              test-id="new-session-agent"
-            />
-            <ModelSelector
-              v-model="modelChoice"
-              :models="models"
-              :default-label="defaultLabels.modelLabel"
-              :default-description="defaultLabels.modelDescription"
-              :disabled="isStarting"
-              test-id="new-session-model"
-            />
-          </template>
-          <Button
-            variant="default"
-            size="toolbar-lg"
-            class="composer-frame__send"
-            data-testid="create-session-submit"
-            aria-label="Start session"
-            title="Start session (Enter)"
-            :disabled="!canSend"
-            @click="submit(false)"
+        <ComposerFrame>
+          <div
+            v-if="gitHubPreset"
+            class="new-session__attachments"
           >
-            <LoaderCircle
-              v-if="isStarting"
-              class="size-4 animate-spin"
+            <span
+              class="new-session__attachment"
+              data-testid="new-session-github-attachment"
+              :title="gitHubPreset.htmlUrl"
+            >
+              <GitPullRequest
+                v-if="gitHubPreset.sourceType === 'github-pull-request'"
+                class="new-session__attachment-icon"
+                aria-hidden="true"
+              />
+              <CircleDot
+                v-else
+                class="new-session__attachment-icon"
+                aria-hidden="true"
+              />
+              <span class="new-session__attachment-number">#{{ gitHubPreset.number }}</span>
+              <span class="new-session__attachment-title">{{ gitHubPreset.title }}</span>
+              <button
+                type="button"
+                class="new-session__attachment-remove"
+                :aria-label="`Remove ${gitHubPreset.sourceType === 'github-pull-request' ? 'pull request' : 'issue'} #${gitHubPreset.number}`"
+                :disabled="isStarting"
+                @click="removeGitHubPreset"
+              >
+                <X
+                  class="new-session__attachment-remove-icon"
+                  aria-hidden="true"
+                />
+              </button>
+            </span>
+          </div>
+
+          <textarea
+            ref="textarea"
+            class="composer-frame__textarea new-session__textarea"
+            data-testid="new-session-message"
+            aria-label="First message"
+            rows="2"
+            :value="sentMessage ? '' : message"
+            :placeholder="placeholder"
+            :readonly="isStarting"
+            @input="handleInput"
+            @keydown="handleKeydown"
+            @keyup="trackCaret"
+            @click="trackCaret"
+            @blur="dismissedAt = message"
+          />
+
+          <template #toolbar>
+            <HarnessPicker
+              v-if="showHarnessPicker"
+              v-model="harnessType"
+              :harnesses="enabledHarnesses"
+              :disabled="isStarting"
+              @close-auto-focus="returnFocusToMessage"
             />
-            <ArrowUp
-              v-else
-              class="size-4"
+            <ProfilePicker
+              v-if="showProfilePicker"
+              v-model="selectedProfileId"
+              :profiles="profiles"
+              :disabled="isStarting"
+              @close-auto-focus="returnFocusToMessage"
             />
-          </Button>
-        </template>
-      </ComposerFrame>
+            <template v-if="offersAgentsAndModels">
+              <AgentSelector
+                v-model="agentChoice"
+                :agents="agents"
+                :default-label="defaultLabels.agentLabel"
+                :default-description="defaultLabels.agentDescription"
+                :disabled="isStarting"
+                test-id="new-session-agent"
+              />
+              <ModelSelector
+                v-model="modelChoice"
+                :models="models"
+                :default-label="defaultLabels.modelLabel"
+                :default-description="defaultLabels.modelDescription"
+                :disabled="isStarting"
+                test-id="new-session-model"
+              />
+            </template>
+            <Button
+              variant="default"
+              size="toolbar-lg"
+              class="composer-frame__send"
+              data-testid="create-session-submit"
+              aria-label="Start session"
+              title="Start session (Enter)"
+              :disabled="!canSend"
+              @click="submit(false)"
+            >
+              <LoaderCircle
+                v-if="isStarting"
+                class="size-4 animate-spin"
+              />
+              <ArrowUp
+                v-else
+                class="size-4"
+              />
+            </Button>
+          </template>
+        </ComposerFrame>
+      </div>
 
       <div class="new-session__strip">
         <FolderPicker
@@ -920,6 +1045,11 @@ onUnmounted(() => {
 .new-session__composer > * {
   max-width: 760px;
   margin-inline: auto;
+}
+
+/* The # picker opens above the message box, as wide as it. */
+.new-session__frame {
+  position: relative;
 }
 
 .new-session__error {

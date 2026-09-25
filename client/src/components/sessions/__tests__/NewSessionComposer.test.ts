@@ -86,6 +86,24 @@ function branch(name: string, extra: Partial<BranchInfo> = {}): BranchInfo {
 
 const repositoryDetail = shallowRef<RepositoryDetail | null>(null);
 
+// The # picker's GitHub answers; the composer is what's under test here.
+const picker = vi.hoisted(() => ({ asked: [] as Array<{ repository: unknown; query: unknown }>, items: [] as unknown[] }));
+vi.mock("@/composables/use-github-picker", async () => {
+  const { computed, toValue } = await import("vue");
+  return {
+    useGitHubPicker: (repository: () => unknown, query: () => unknown) => ({
+      groups: computed(() => {
+        const asked = { repository: toValue(repository), query: toValue(query) };
+        if (asked.query === null) return [];
+        picker.asked.push(asked);
+        return [{ label: "Assigned to you", items: picker.items }];
+      }),
+      isLoading: computed(() => false),
+      error: computed(() => null),
+    }),
+  };
+});
+
 vi.mock("@/composables/use-repository-detail", () => ({
   useRepositoryDetail: () => ({
     detail: repositoryDetail,
@@ -818,6 +836,62 @@ describe("NewSessionComposer", () => {
         initialPrompt: "What is a monad?",
         source: { key: { providerId: "builtin.quickchat" } },
       });
+    });
+  });
+
+  describe("# picker", () => {
+    const flicker = {
+      kind: "issue", owner: "acme", repo: "rocket", number: 318, title: "Session list flickers", url: "https://github.com/acme/rocket/issues/318",
+      state: "open", isDraft: false, author: "pat", authorAvatarUrl: null, createdAt: "", updatedAt: "", comments: 0, labels: [],
+      headRef: null, baseRef: null, additions: null, deletions: null, checks: null, reviewDecision: null, mergeable: null, reviewers: [], assignees: [],
+    };
+
+    beforeEach(() => {
+      picker.asked.length = 0;
+      picker.items = [flicker];
+      rememberFolder({ kind: "repository", path: rocket.path });
+      repositoryDetail.value = {
+        ...repositoryDetail.value!,
+        remotes: [{ name: "origin", url: "git@github.com:acme/rocket.git", github: { owner: "acme", repo: "rocket", repoUrl: "", issuesUrl: "", pullsUrl: "" } }],
+      };
+    });
+
+    it("opens on # and asks the folder's repository", async () => {
+      const view = await mountComposer();
+      await type(view, "Fix #31");
+
+      expect(view.find("[data-testid='github-item-picker']").exists()).toBe(true);
+      expect(picker.asked.at(-1)).toEqual({ repository: { owner: "acme", repo: "rocket" }, query: "31" });
+      expect(view.get("[data-testid='github-item-picker-row']").text()).toContain("#318");
+    });
+
+    it("Enter attaches the item, drops the #query and starts in a new worktree", async () => {
+      const view = await mountComposer();
+      await type(view, "Fix #31");
+      await pressEnter(view);
+
+      expect(mocks.createSession).not.toHaveBeenCalled();
+      expect(view.find("[data-testid='github-item-picker']").exists()).toBe(false);
+      expect(view.get("[data-testid='new-session-github-attachment']").text()).toContain("#318");
+      expect(textarea(view).element.value).toBe("Fix ");
+      expect(view.get("[data-testid='new-session-workspace-chip']").text()).toContain("New worktree");
+    });
+
+    it("Esc closes it and leaves the message alone", async () => {
+      const view = await mountComposer();
+      await type(view, "Fix #31");
+      await textarea(view).trigger("keydown", { key: "Escape" });
+
+      expect(view.find("[data-testid='github-item-picker']").exists()).toBe(false);
+      expect(textarea(view).element.value).toBe("Fix #31");
+      expect(view.find("[data-testid='new-session-github-attachment']").exists()).toBe(false);
+    });
+
+    it("stays shut for # inside a word", async () => {
+      const view = await mountComposer();
+      await type(view, "Port it to C#");
+
+      expect(view.find("[data-testid='github-item-picker']").exists()).toBe(false);
     });
   });
 
