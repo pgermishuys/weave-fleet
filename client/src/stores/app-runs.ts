@@ -18,6 +18,8 @@ export interface AppRun {
   /** The page Fleet found, once one answered. */
   url: string | null;
   ports: number[];
+  /** The addresses on this machine it printed, in order; loaded with the app, not carried by events. */
+  printedUrls: string[];
   /** Why it last changed, when that came from an event. */
   reason?: AppChangeReason;
 }
@@ -41,6 +43,7 @@ interface AppRunResponse {
   exitCode: number | null;
   url: string | null;
   ports: number[];
+  printedUrls?: string[];
 }
 
 /** Fleet keeps this many lines of an app's output; so does the canvas. */
@@ -50,6 +53,22 @@ const MAX_OUTPUT_LINES = 2000;
 export const RESTART_MARKER = "── restarted by Fleet ──";
 
 /** The output of the app's current run: the lines after Fleet last started it again. */
+/**
+ * The address to open for one of the app's ports: a link it printed for that port, one with a query string
+ * first (a sign-in link, like Aspire's `/login?t=…`, signs the user's browser in), or else plain http on it.
+ */
+export function addressForPort(port: number, printedUrls: readonly string[]): string {
+  const onPort = printedUrls.filter((url) => {
+    try {
+      const parsed = new URL(url);
+      return Number(parsed.port || (parsed.protocol === "https:" ? 443 : 80)) === port;
+    } catch {
+      return false;
+    }
+  });
+  return onPort.find((url) => new URL(url).search.length > 1) ?? onPort[0] ?? `http://localhost:${port}/`;
+}
+
 export function currentRunLines(lines: readonly string[]): string[] {
   const restart = lines.lastIndexOf(RESTART_MARKER);
   return restart < 0 ? [...lines] : lines.slice(restart + 1);
@@ -72,6 +91,7 @@ function fromResponse(sessionId: string, body: AppRunResponse): AppRun {
     exitCode: body.exitCode ?? null,
     url: body.url ?? null,
     ports: body.ports ?? [],
+    printedUrls: body.printedUrls ?? [],
   };
 }
 
@@ -108,6 +128,8 @@ export const useAppRunsStore = defineStore("app-runs", () => {
       exitCode: payload.exitCode ?? null,
       url: payload.url ?? null,
       ports: payload.ports ?? [],
+      // Events don't carry them; a restart clears them until the app is loaded again.
+      printedUrls: payload.reason === "restarted" ? [] : byId.value[payload.appId]?.printedUrls ?? [],
       reason: payload.reason,
     });
   }

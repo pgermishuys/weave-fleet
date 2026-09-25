@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import type { AppUpdated } from "@/lib/domain-events";
-import { currentRunLines, RESTART_MARKER, useAppRunsStore } from "@/stores/app-runs";
+import { addressForPort, currentRunLines, RESTART_MARKER, useAppRunsStore } from "@/stores/app-runs";
 
 const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }));
 vi.mock("@/lib/api-client", () => ({ apiFetch: apiFetchMock }));
@@ -83,5 +83,26 @@ describe("app runs", () => {
   it("keeps only the current run's output for the panel", () => {
     expect(currentRunLines(["old", "crash", RESTART_MARKER, "$ npm run dev", "ready"])).toEqual(["$ npm run dev", "ready"]);
     expect(currentRunLines(["first run"])).toEqual(["first run"]);
+  });
+
+  it("keeps the printed addresses it loaded when an event comes, and drops them on a restart", async () => {
+    const store = useAppRunsStore();
+    apiFetchMock.mockResolvedValueOnce(jsonResponse({ ...response, printedUrls: ["https://localhost:17155/login?t=abc"] }));
+
+    await store.load("s1", "app_1");
+    store.applyEvent(appUpdated("running", "ready"));
+    expect(store.byId.app_1?.printedUrls).toEqual(["https://localhost:17155/login?t=abc"]);
+
+    store.applyEvent(appUpdated("starting", "restarted"));
+    expect(store.byId.app_1?.printedUrls).toEqual([]);
+  });
+
+  it("opens a port at the link the app printed for it, a sign-in link first", () => {
+    const printed = ["https://localhost:17155/", "https://localhost:17155/login?t=abc", "http://localhost:5173/app/"];
+
+    expect(addressForPort(17155, printed)).toBe("https://localhost:17155/login?t=abc");
+    expect(addressForPort(5173, printed)).toBe("http://localhost:5173/app/");
+    expect(addressForPort(5199, printed)).toBe("http://localhost:5199/");
+    expect(addressForPort(443, ["https://localhost/"])).toBe("https://localhost/");
   });
 });

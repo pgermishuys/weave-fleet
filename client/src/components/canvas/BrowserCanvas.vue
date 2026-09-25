@@ -4,7 +4,7 @@ import { ArrowLeft, ArrowRight, ExternalLink, Play, RotateCcw, RotateCw, ScrollT
 import { apiFetch } from "@/lib/api-client";
 import { onReconnect } from "@/composables/use-weave-socket";
 import { appAddress, navMessage, readBridgeMessage, type NavAction, type PreviewHmr } from "@/lib/preview-bridge";
-import { currentRunLines, useAppRunsStore } from "@/stores/app-runs";
+import { addressForPort, currentRunLines, useAppRunsStore } from "@/stores/app-runs";
 import { serverCanvasTabId, useCanvasesStore } from "@/stores/canvases";
 
 /**
@@ -222,7 +222,7 @@ function openOutside(): void {
 
 function pickPort(event: Event): void {
   const port = Number((event.target as HTMLSelectElement).value);
-  if (Number.isFinite(port)) void show(`http://localhost:${port}/`);
+  if (Number.isFinite(port)) void show(addressForPort(port, app.value?.printedUrls ?? []));
 }
 
 async function loadApp(): Promise<void> {
