@@ -5,8 +5,10 @@ agent, model and optional skill. Fleet moves the run from step to step, which co
 step asks you. Workflows are experimental and off until you turn them on in **Settings → Workflows**.
 
 Fleet ships two workflows. **Build a feature** turns a sentence into a reviewed pull request, stopping once for you
-to approve the plan. **Fix a bug** finds the root cause first (with the fleet-debug skill), stops once for you to agree
-with it, then fixes it with a test that fails first, reviews the fix and opens a pull request.
+to approve the plan. Its plan is a Weave plan in `.weave/plans/`, with a `- [ ]` line per task that Implement ticks
+off, so the Progress panel follows it and Weave's `/weave:start` could carry it out. **Fix a bug** finds the root cause
+first (with the fleet-debug skill) and writes it to `.weave/bugs/`, stops once for you to agree with it, then fixes it
+with a test that fails first, reviews the fix and opens a pull request.
 
 Your own live in the repository, one file each, under `.weave/workflows/*.yaml`, so the people you work with get them
 with the code. Make one with **New workflow** or **Duplicate** in the Workflows page and change it in the designer, or

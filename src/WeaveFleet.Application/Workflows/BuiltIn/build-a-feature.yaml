@@ -31,7 +31,7 @@ steps:
       - .weave/plans/{{slug}}.md
     prompt: |
       Plan {{request}}.
-      Write .weave/plans/{{slug}}.md: a short design section, then the files to change and the tests to add, in order.
+      Write .weave/plans/{{slug}}.md in Weave's plan format, so Weave's /weave:start can carry it out and Fleet's Progress panel can track it: a title, a TL;DR section of a sentence or two, a Scope section saying what's in and out, then a Tasks section with one "- [ ] N. <title>" line per task, in order, each followed by the files it changes, the tests it adds and how to tell it's done.
       Carry every constraint in the request into the plan, such as what not to install, run or change.
       Reuse what the code already has.
       Read {{previous.files}} first.
@@ -55,8 +55,8 @@ steps:
     model: standard
     prompt: |
       The request: {{request}}
-      Build {{steps.plan.files}}, including the tests it names.
-      Commit after each step and run those tests.
+      Carry out the tasks in {{steps.plan.files}} in order, including the tests each one names.
+      After each task, run its tests, tick it off in the plan ("- [ ]" becomes "- [x]") and commit.
 
       {{previous.summary}}
     outcomes: [done]

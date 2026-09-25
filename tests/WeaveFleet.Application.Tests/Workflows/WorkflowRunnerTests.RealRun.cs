@@ -47,6 +47,33 @@ public sealed partial class WorkflowRunnerTests
             + "Ask a question only if you truly can't go on without the answer.");
     }
 
+    [Fact]
+    public async Task plan_writes_a_weave_plan_and_implement_ticks_off_its_tasks()
+    {
+        // A file in .weave/plans is one Weave's /weave:start can carry out and Progress tracks: both read "- [ ]" tasks.
+        var run = await StartAsync();
+        Prompt("plan").ShouldContain(
+            "Write .weave/plans/press-see-every-keyboard-shortcut.md in Weave's plan format, so Weave's /weave:start can carry it out and Fleet's Progress panel can track it:");
+        Prompt("plan").ShouldContain("then a Tasks section with one \"- [ ] N. <title>\" line per task");
+
+        await DoneAsync(_sessions.Started[^1].SessionId, "ready", "Plan.");
+        await _runner.AnswerAsync(UserId, run, "choice:0", null);
+
+        Prompt("implement").ShouldContain(
+            "Carry out the tasks in .weave/plans/press-see-every-keyboard-shortcut.md in order, including the tests each one names.\n"
+            + "After each task, run its tests, tick it off in the plan (\"- [ ]\" becomes \"- [x]\") and commit.");
+    }
+
+    [Fact]
+    public void only_plans_go_in_weaves_plans_folder()
+    {
+        // Fix a bug's cause note isn't a plan, so it has a folder of its own.
+        var fixABug = WorkflowCatalog.BuiltIns.Single(e => e.Id == "builtin:fix-a-bug").Definition!;
+        var investigate = (WorkflowAgentStep)fixABug.Find("investigate")!;
+        investigate.Writes.ShouldBe([".weave/bugs/{{slug}}.md"]);
+        fixABug.Steps.OfType<WorkflowAgentStep>().ShouldAllBe(step => !step.Prompt.Contains(".weave/plans"));
+    }
+
     // ── finish: agent ──────────────────────────────────────────────────────────
 
     [Fact]

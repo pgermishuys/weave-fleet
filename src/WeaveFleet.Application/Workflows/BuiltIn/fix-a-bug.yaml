@@ -13,11 +13,11 @@ steps:
     model: strong
     skill: fleet-debug
     writes:
-      - .weave/plans/{{slug}}.md
+      - .weave/bugs/{{slug}}.md
     prompt: |
       The bug: {{request}}
       Find its root cause. Reproduce it if you can, with a failing test or a command, but don't fix it yet.
-      Write .weave/plans/{{slug}}.md: the symptom, the cause with its file and line, the evidence, the smallest fix, and the test that fails now and will pass after.
+      Write .weave/bugs/{{slug}}.md: the symptom, the cause with its file and line, the evidence, the smallest fix, and the test that fails now and will pass after.
       If you need something only the user can give, such as steps to reproduce or a log, ask for it.
       If you can't find the cause, use failed and put what you tried in summary.
     outcomes: [found, failed]
