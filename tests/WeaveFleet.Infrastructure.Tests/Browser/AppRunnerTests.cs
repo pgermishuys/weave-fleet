@@ -21,6 +21,45 @@ public sealed class AppRunnerTests
         => AppRunner.NormalizePrintedUrl(printed).ShouldBe(expected);
 
     [Fact]
+    public void A_printed_sign_in_link_goes_ahead_of_the_bare_address_on_its_port()
+        // Aspire: "Now listening on" is announced, the login link isn't.
+        => AppRunner.SignInLinksFirst([
+                "https://localhost:17155/",
+                "https://localhost:17155/login?t=e6f64fdc",
+            ])
+            .ShouldBe(["https://localhost:17155/login?t=e6f64fdc", "https://localhost:17155/"]);
+
+    [Fact]
+    public void Sign_in_links_move_only_within_their_port()
+        => AppRunner.SignInLinksFirst([
+                "http://localhost:5173/",
+                "https://localhost:17155/",
+                "http://localhost:8888/tree?token=abc",
+                "https://localhost:17155/login?t=e6f64fdc",
+            ])
+            .ShouldBe([
+                "http://localhost:5173/",
+                "https://localhost:17155/login?t=e6f64fdc",
+                "https://localhost:17155/",
+                "http://localhost:8888/tree?token=abc",
+            ]);
+
+    [Fact]
+    public void Addresses_without_a_query_keep_the_order_they_were_printed_in()
+        => AppRunner.SignInLinksFirst(["http://localhost:5000/", "http://localhost:5000/swagger", "http://localhost:5001/"])
+            .ShouldBe(["http://localhost:5000/", "http://localhost:5000/swagger", "http://localhost:5001/"]);
+
+    [Theory]
+    // Aspire's dashboard: http only to send browsers to its https port.
+    [InlineData("http://localhost:15155/", "https://localhost:35717/", true)]
+    [InlineData("http://localhost:5000/", "http://localhost:5001/", true)]
+    [InlineData("https://localhost:17155/", "https://localhost:17155/login?returnUrl=%2F", false)]
+    [InlineData("https://localhost:17155/login?t=abc", "/", false)]
+    [InlineData("http://localhost:5000/", null, false)]
+    public void A_redirect_to_another_port_or_scheme_is_not_the_page(string from, string? location, bool elsewhere)
+        => AppRunner.RedirectsElsewhere(new Uri(from), location is null ? null : new Uri(location, UriKind.RelativeOrAbsolute)).ShouldBe(elsewhere);
+
+    [Fact]
     public void Printed_addresses_elsewhere_are_dropped()
         => AppRunner.NormalizePrintedUrl("http://example.com:5341/ingest").ShouldBeNull();
 
@@ -42,6 +81,15 @@ public sealed class AppRunnerTests
     [InlineData("4243 (Web Content (x)) R 4242 4243 17 0 -1", 4242)]
     public void The_parent_pid_counts_fields_from_the_end_of_the_name(string stat, int parent)
         => LinuxListeningPorts.ParentPid(stat).ShouldBe(parent);
+
+    [Theory]
+    [InlineData("PATH=/usr/bin\0FLEET_APP_RUN=app_1\0PORT=5000\0", true)]
+    [InlineData("FLEET_APP_RUN=app_1", true)]
+    [InlineData("FLEET_APP_RUN=app_12\0", false)]
+    [InlineData("X=FLEET_APP_RUN=app_1\0", false)]
+    [InlineData("PATH=/usr/bin\0", false)]
+    public void A_process_belongs_to_a_run_only_by_the_exact_marker(string environ, bool carries)
+        => LinuxListeningPorts.HasEnvironmentEntry(environ, "FLEET_APP_RUN=app_1").ShouldBe(carries);
 
     [Theory]
     [InlineData("/usr/lib/dotnet/dotnet exec /usr/lib/dotnet/sdk/10.0.112/DotnetTools/dotnet-watch/10.0.112-servicing/tools/net10.0/any/dotnet-watch.dll ", true)]
@@ -86,6 +134,37 @@ public sealed class AppRunnerTests
         }
         finally
         {
+            folder.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task A_server_that_leaves_the_process_tree_is_still_found()
+    {
+        if (!OperatingSystem.IsLinux() || !OnPath("python3") || !OnPath("setsid"))
+            return;
+
+        var folder = Directory.CreateTempSubdirectory("fleet-app-runner-");
+        await File.WriteAllTextAsync(Path.Combine(folder.FullName, "index.html"), "<html><body>hello</body></html>");
+        using var runner = NewRunner();
+        int? port = null;
+        try
+        {
+            // Like Aspire's DCP: the server is started detached, so init adopts it and it leaves the tree.
+            var app = await StartAsync(runner, "app_1", "ses-1", folder.FullName,
+                "setsid -f python3 -m http.server $PORT --bind 127.0.0.1; echo \"Serving at http://127.0.0.1:$PORT/\"; exec sleep 60");
+            port = app.Port;
+
+            var ready = await runner.WaitUntilReadyAsync(app.Id, TimeSpan.FromSeconds(30));
+
+            ready.Problem.ShouldBeNull();
+            ready.Url.ShouldBe($"http://127.0.0.1:{app.Port}/");
+            runner.Find(app.Id)!.Ports.ShouldContain(app.Port);
+        }
+        finally
+        {
+            if (port is { } leftover)
+                KillListener(leftover);
             folder.Delete(recursive: true);
         }
     }
@@ -310,6 +389,28 @@ public sealed class AppRunnerTests
         for (var i = 0; i < 100 && !condition(); i++)
             await Task.Delay(50);
         condition().ShouldBeTrue();
+    }
+
+    /// <summary>Kills the detached server a test left behind: stopping the run doesn't reach it.</summary>
+    private static void KillListener(int port)
+    {
+        foreach (var dir in Directory.EnumerateDirectories("/proc"))
+        {
+            if (!int.TryParse(Path.GetFileName(dir), out var pid))
+                continue;
+            try
+            {
+                var environ = File.ReadAllText(Path.Combine(dir, "environ"));
+                if (LinuxListeningPorts.HasEnvironmentEntry(environ, $"PORT={port}")
+                    && environ.Contains(LinuxListeningPorts.RunMarker + "=", StringComparison.Ordinal))
+                {
+                    Process.GetProcessById(pid).Kill();
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
+            {
+            }
+        }
     }
 
     private static bool OnPath(string command)

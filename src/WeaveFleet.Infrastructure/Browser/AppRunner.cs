@@ -245,6 +245,8 @@ public sealed partial class AppRunner(FleetOptions options, ILogger<AppRunner> l
         shell.Environment["NO_COLOR"] = "1";
         shell.Environment["DOTNET_WATCH_SUPPRESS_LAUNCH_BROWSER"] = "1";
         shell.Environment["DOTNET_WATCH_RESTART_ON_RUDE_EDIT"] = "1";
+        // Marks every process of the run, including ones that leave its tree (see LinuxListeningPorts).
+        shell.Environment[LinuxListeningPorts.RunMarker] = run.Id;
 
         var process = new Process { StartInfo = shell, EnableRaisingEvents = true };
         var generation = run.BeginGeneration(process);
@@ -323,7 +325,7 @@ public sealed partial class AppRunner(FleetOptions options, ILogger<AppRunner> l
         {
             try
             {
-                var ports = LinuxListeningPorts.ForProcessTree(pid);
+                var ports = LinuxListeningPorts.ForRun(pid, run.Id);
                 run.SetPorts(ports);
                 if (ports.App.Count > 0)
                     firstPortAt ??= DateTimeOffset.UtcNow;
@@ -378,7 +380,7 @@ public sealed partial class AppRunner(FleetOptions options, ILogger<AppRunner> l
         if (knowsPorts && ports.Count == 0)
             return null;
 
-        var printed = run.PrintedUrlsSnapshot().Where(url => !knowsPorts || ports.Contains(new Uri(url).Port)).ToList();
+        var printed = SignInLinksFirst(run.PrintedUrlsSnapshot().Where(url => !knowsPorts || ports.Contains(new Uri(url).Port)).ToList());
         foreach (var url in printed)
         {
             if (await AnswersAsync(url, strict: true))
@@ -409,6 +411,19 @@ public sealed partial class AppRunner(FleetOptions options, ILogger<AppRunner> l
         return null;
     }
 
+    /// <summary>
+    /// A printed address with a query string goes ahead of the others on its port. Tools that guard a page with
+    /// a token print the link to open it for people, next to the bare address they listen on: Aspire's dashboard
+    /// prints <c>/login?t=…</c>, Jupyter <c>?token=…</c>. The bare address lands on a sign-in page the user has no
+    /// token for; the link signs the user's own browser in. Ports keep the order they were first printed in.
+    /// </summary>
+    internal static List<string> SignInLinksFirst(IReadOnlyList<string> printed)
+        => [.. printed
+            .Select((url, index) => (Url: url, Uri: new Uri(url), Index: index))
+            .GroupBy(p => p.Uri.Port)
+            .SelectMany(port => port.OrderBy(p => p.Uri.Query.Length > 1 ? 0 : 1).ThenBy(p => p.Index))
+            .Select(p => p.Url)];
+
     private static async Task<bool> AnswersAsync(string url, bool strict)
     {
         try
@@ -418,6 +433,8 @@ public sealed partial class AppRunner(FleetOptions options, ILogger<AppRunner> l
                 return true;
 
             var status = (int)response.StatusCode;
+            if (status is >= 300 and < 400 && RedirectsElsewhere(new Uri(url), response.Headers.Location))
+                return false;
             var html = response.Content.Headers.ContentType?.MediaType?.Contains("html", StringComparison.OrdinalIgnoreCase) == true;
             return status is >= 200 and < 400 || html;
         }
@@ -425,6 +442,20 @@ public sealed partial class AppRunner(FleetOptions options, ILogger<AppRunner> l
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Whether a redirect leaves the address it came from (another scheme or port). Such a port isn't the page,
+    /// only a way to it: Aspire's dashboard listens on http to send browsers to its https port. A preview keeps
+    /// only the app's own redirects inside it, so framing that port would send the user's browser to a
+    /// <c>localhost</c> of its own.
+    /// </summary>
+    internal static bool RedirectsElsewhere(Uri from, Uri? location)
+    {
+        if (location is null)
+            return false;
+        var to = location.IsAbsoluteUri ? location : new Uri(from, location);
+        return !string.Equals(to.Scheme, from.Scheme, StringComparison.OrdinalIgnoreCase) || to.Port != from.Port;
     }
 
     /// <summary><c>0.0.0.0</c> and <c>[::]</c> become <c>localhost</c>; anything not on this machine is dropped.</summary>
