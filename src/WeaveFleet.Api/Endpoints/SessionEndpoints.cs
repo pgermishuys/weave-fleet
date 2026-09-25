@@ -596,6 +596,29 @@ public static class SessionEndpoints
         .Produces<SideConversationResponse>(200)
         .WithName("RestoreSideConversation");
 
+        // GET /api/sessions/{id}/side/discarded — the side conversation discarded moments ago that Undo can still bring
+        // back, with how long Undo is still offered; 204 when there's none. A reload shows Undo again from this.
+        group.MapGet("/{id}/side/discarded", async (string id, SessionOrchestrator orchestrator) =>
+        {
+            var result = await orchestrator.GetUndoableSideConversationAsync(id);
+            return result.Match(
+                undoable => undoable is { } found
+                    ? Results.Ok(new UndoableSideConversationResponse(SideConversationResponse.Of(found.SideConversation), (long)found.UndoLeft.TotalMilliseconds))
+                    : Results.NoContent(),
+                err => err.ToSessionApiResult());
+        })
+        .Produces<UndoableSideConversationResponse>(200)
+        .WithName("GetUndoableSideConversation");
+
+        // PUT /api/sessions/{id}/side/seen — the newest answer the user has seen with the side conversation open.
+        group.MapPut("/{id}/side/seen", async (string id, SideSeenApiRequest req, SessionOrchestrator orchestrator) =>
+        {
+            var result = await orchestrator.SetSideConversationSeenAsync(id, req.AnswerId);
+            return result.Match(side => Results.Ok(SideConversationResponse.Of(side)), err => err.ToSessionApiResult());
+        })
+        .Produces<SideConversationResponse>(200)
+        .WithName("SetSideConversationSeen");
+
         // PUT /api/sessions/{id}/side/minimized — fold the side conversation into its tab on the composer, or open it.
         group.MapPut("/{id}/side/minimized", async (string id, SideMinimizedApiRequest req, SessionOrchestrator orchestrator, CancellationToken ct) =>
         {
@@ -1171,13 +1194,19 @@ internal sealed record SideConversationResponse(
     string Title,
     string? BoundaryMessageId,
     string CreatedAt,
-    bool Minimized)
+    bool Minimized,
+    string? SeenAnswerId)
 {
     public static SideConversationResponse Of(Session side)
-        => new(side.Id, side.InstanceId, side.Title, side.SideBoundaryMessageId, side.CreatedAt, side.SideMinimized);
+        => new(side.Id, side.InstanceId, side.Title, side.SideBoundaryMessageId, side.CreatedAt, side.SideMinimized, side.SideSeenAnswerId);
 }
 
 internal sealed record SideMinimizedApiRequest(bool Minimized);
+
+internal sealed record SideSeenApiRequest(string? AnswerId);
+
+/// <summary>A side conversation discarded moments ago, and how many milliseconds Undo is still offered for.</summary>
+internal sealed record UndoableSideConversationResponse(SideConversationResponse SideConversation, long UndoRemainingMs);
 
 internal sealed record SideQuestionApiResponse(SideConversationResponse SideConversation, string CorrelationId, string? MessageId);
 

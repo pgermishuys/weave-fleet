@@ -87,6 +87,14 @@ public sealed partial class SessionOrchestrator
             }
             else
             {
+                // A new question ends the undo window of one discarded moments ago: that fork goes now, so Undo is never
+                // left to refuse because a newer one is open.
+                foreach (var discarded in await sessionRepository.ListSideConversationsAsync(sessionId).ConfigureAwait(false))
+                {
+                    if (discarded.SideDiscardedAt is not null)
+                        await DiscardSideConversationAsync(discarded, ct).ConfigureAwait(false);
+                }
+
                 var started = await StartSideConversationAsync(session, question, ct).ConfigureAwait(false);
                 if (started.IsFailure)
                     return started.Error;
@@ -144,6 +152,7 @@ public sealed partial class SessionOrchestrator
         await sideLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
+            // Asking a new question deletes a discarded one first, so this is only a guard against a race between the two.
             if (await sessionRepository.GetSideConversationAsync(sessionId).ConfigureAwait(false) is not null)
                 return new FleetError("General.Conflict", "A newer side question is open. Close it to bring this one back.");
 
@@ -159,6 +168,46 @@ public sealed partial class SessionOrchestrator
         {
             sideLock.Release();
         }
+    }
+
+    /// <summary>
+    /// The session's side conversation discarded moments ago that Undo can still bring back, with how long it's still
+    /// offered (<see cref="SideConversations.UndoOffered"/> from the discard), so a reload can show Undo again. Null
+    /// when there's none, or its offer has run out.
+    /// </summary>
+    public async Task<Result<(Session SideConversation, TimeSpan UndoLeft)?>> GetUndoableSideConversationAsync(string sessionId)
+    {
+        var sessionResult = await GetSessionAsync(sessionId).ConfigureAwait(false);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        var discarded = await sessionRepository.GetDiscardedSideConversationAsync(sessionId).ConfigureAwait(false);
+        if (discarded is null)
+            return Result.Success<(Session, TimeSpan)?>(null);
+
+        var left = SideConversations.UndoLeft(discarded.SideDiscardedAt, DateTimeOffset.UtcNow);
+        return left > TimeSpan.Zero
+            ? Result.Success<(Session, TimeSpan)?>((discarded, left))
+            : Result.Success<(Session, TimeSpan)?>(null);
+    }
+
+    /// <summary>
+    /// Records <paramref name="answerId"/> as the newest answer of the session's side conversation the user has seen, with
+    /// its panel open. A newer finished answer is then news, after a reload too.
+    /// </summary>
+    public async Task<Result<Session>> SetSideConversationSeenAsync(string sessionId, string? answerId)
+    {
+        var sessionResult = await GetSessionAsync(sessionId).ConfigureAwait(false);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        var side = await sessionRepository.GetSideConversationAsync(sessionId).ConfigureAwait(false);
+        if (side is null)
+            return FleetError.NotFoundFor("SideConversation", sessionId);
+
+        await sessionRepository.SetSideSeenAnswerAsync(side.Id, answerId).ConfigureAwait(false);
+        side.SideSeenAnswerId = answerId;
+        return side;
     }
 
     /// <summary>

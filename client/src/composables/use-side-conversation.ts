@@ -1,7 +1,9 @@
 import { computed, reactive, toValue, watch, type MaybeRefOrGetter } from "vue";
 import { api } from "@/api/client";
 import type { components } from "@/api/generated/schema";
+import { useDraftState } from "@/composables/use-draft-state";
 import { showSentPrompt } from "@/composables/use-send-prompt";
+import { readStoredDraft, sideDraftKey, sideMainDraftKey, storedDraftKeys, writeStoredDraft } from "@/lib/draft-storage";
 
 /** A session's side conversation (`/btw`): a hidden session of its own, shown after `boundaryMessageId`. */
 export type SideConversation = components["schemas"]["SideConversationResponse"];
@@ -16,6 +18,16 @@ export interface SideQuestionChoice {
 /** How long Undo is offered after a discard. The server keeps the fork a little longer, so a late Undo still finds it. */
 export const SIDE_DISCARD_UNDO_MS = 8_000;
 
+/** Which composer draft: the session's, or its side conversation's. */
+export type DraftTarget = "main" | "side";
+
+/** What a side conversation's stream reports: whether it's working, and its newest answer. */
+export interface SideProgress {
+  working: boolean;
+  latestAnswer: string | null;
+  latestAnswerId: string | null;
+}
+
 interface SideConversationState {
   side: SideConversation | null;
   loaded: boolean;
@@ -24,23 +36,26 @@ interface SideConversationState {
   /** The question that started the side conversation, shown while the fork is made. */
   starting: string | null;
   error?: string;
-  /** A turn is running in it (reported by its conversation, which stays mounted while it's folded). */
+  /** Its conversation has reported since the page loaded (it stays mounted while it's folded). */
+  reported: boolean;
   working: boolean;
-  /** The newest answer's text, for the tab's peek. */
   latestAnswer: string | null;
-  /** The newest answer the user has had open in front of them; undefined until the conversation first reports. */
-  seenAnswer: string | null | undefined;
-  /** What was typed for the side conversation while it's folded, and for the session while it's open. */
-  drafts: { side: string; main: string };
+  latestAnswerId: string | null;
+  /** An answer that landed on this page while it was folded: its dot pulses. One found on a reload doesn't. */
+  pulseAnswerId: string | null;
+  /** The draft that isn't in the composer: the side's while it's folded, the session's while it's open. */
+  drafts: Record<DraftTarget, string>;
   /** A side conversation discarded moments ago, which Undo can still bring back. */
   discarded: SideConversation | null;
+  /** How long Undo was offered for when it was shown: 8 s, or what the server says is left after a reload. */
+  undoMs: number;
   discardTimer: ReturnType<typeof setTimeout> | null;
 }
 
 /**
  * Per session, shared by the panel and the composer, and kept while the user is on other sessions. The server has
- * the side conversation and whether it's minimized (both survive a reload); this mirrors them and keeps what's only
- * the page's: drafts, the unread answer, Undo.
+ * the side conversation, whether it's minimized, the newest answer the user has seen, and a discard's Undo window
+ * (all survive a reload); the browser keeps the drafts.
  */
 const states = reactive<Record<string, SideConversationState>>({});
 
@@ -50,11 +65,14 @@ function stateOf(sessionId: string): SideConversationState {
     loaded: false,
     asking: false,
     starting: null,
+    reported: false,
     working: false,
     latestAnswer: null,
-    seenAnswer: undefined,
-    drafts: { side: "", main: "" },
+    latestAnswerId: null,
+    pulseAnswerId: null,
+    drafts: { main: "", side: "" },
     discarded: null,
+    undoMs: SIDE_DISCARD_UNDO_MS,
     discardTimer: null,
   };
   return states[sessionId];
@@ -73,6 +91,31 @@ function errorMessage(body: unknown): string | undefined {
   return undefined;
 }
 
+/** The storage key of the draft for `target` that isn't in the composer, or null when there's no side conversation. */
+function stashKey(sessionId: string, state: SideConversationState, target: DraftTarget): string | null {
+  if (target === "main") return sideMainDraftKey(sessionId);
+  const sideId = state.side?.sessionId ?? state.discarded?.sessionId;
+  return sideId ? sideDraftKey(sessionId, sideId) : null;
+}
+
+/** Forgets the draft of a side conversation that's gone for good. */
+function dropSideDraft(sessionId: string, sideId: string): void {
+  writeStoredDraft(sideDraftKey(sessionId, sideId), "");
+}
+
+/** Shows Undo for a discarded side conversation for `ms`, then lets it go (the server deletes it). */
+function offerUndo(sessionId: string, state: SideConversationState, discarded: SideConversation, ms: number): void {
+  if (state.discardTimer) clearTimeout(state.discardTimer);
+  state.discarded = discarded;
+  state.undoMs = ms;
+  state.discardTimer = setTimeout(() => {
+    state.discarded = null;
+    state.discardTimer = null;
+    state.drafts.side = "";
+    dropSideDraft(sessionId, discarded.sessionId);
+  }, ms);
+}
+
 async function load(sessionId: string): Promise<void> {
   const state = stateOf(sessionId);
   try {
@@ -81,11 +124,42 @@ async function load(sessionId: string): Promise<void> {
     if (!state.asking) {
       state.side = response.status === 200 && data ? data : null;
     }
+
+    // A discard still in its Undo window (the page was reloaded, or left and come back to): Undo again, for what's left.
+    if (!state.side && !state.discarded) {
+      const discarded = await api.GET("/api/sessions/{id}/side/discarded", { params: { path: { id: sessionId } } });
+      if (discarded.response.status === 200 && discarded.data && discarded.data.undoRemainingMs > 0 && !state.side) {
+        offerUndo(sessionId, state, discarded.data.sideConversation, discarded.data.undoRemainingMs);
+      }
+    }
   } catch {
     // The panel stays closed; the next visit asks again.
     return;
   }
+
   state.loaded = true;
+  restoreDrafts(sessionId, state);
+}
+
+/** Brings back the stashed drafts after a reload, and forgets those of side conversations that are gone. */
+function restoreDrafts(sessionId: string, state: SideConversationState): void {
+  const sideId = state.side?.sessionId ?? state.discarded?.sessionId;
+  for (const key of storedDraftKeys(`side.${sessionId}.`)) {
+    if (!sideId || key !== sideDraftKey(sessionId, sideId)) writeStoredDraft(key, "");
+  }
+
+  if (sideId) {
+    state.drafts.side = readStoredDraft(sideDraftKey(sessionId, sideId)) ?? state.drafts.side;
+    state.drafts.main = readStoredDraft(sideMainDraftKey(sessionId)) ?? state.drafts.main;
+    return;
+  }
+
+  // The side conversation went for good while the page was away: the session's draft goes back in the composer.
+  const main = readStoredDraft(sideMainDraftKey(sessionId));
+  if (main !== null) {
+    useDraftState(sessionId, { agentId: "", modelId: "" }).setText(main);
+    writeStoredDraft(sideMainDraftKey(sessionId), "");
+  }
 }
 
 /** Forgets what's kept for every session: for tests. */
@@ -109,19 +183,33 @@ export function useSideConversation(sessionId: MaybeRefOrGetter<string>) {
   const minimized = computed(() => state.value.side?.minimized === true);
   /** The panel is open: a side conversation that isn't minimized, or the first question making one. */
   const isOpen = computed(() => (state.value.side !== null && !minimized.value) || state.value.starting !== null);
-  /** An answer landed while it was folded, and the user hasn't opened it since. */
+  /** It's folded and its newest finished answer is newer than the newest one the user has seen with it open. */
   const unread = computed(() => {
     const current = state.value;
     return minimized.value
+      && current.reported
       && !current.working
-      && current.latestAnswer !== null
-      && current.seenAnswer !== undefined
-      && current.latestAnswer !== current.seenAnswer;
+      && current.latestAnswerId !== null
+      && current.latestAnswerId !== (current.side?.seenAnswerId ?? null);
   });
+  /** The unread dot pulses for an answer that landed on this page, not for one found after a reload. */
+  const pulse = computed(() => unread.value && state.value.pulseAnswerId === state.value.latestAnswerId);
+
+  /** Records `answerId` as seen, on the server (so a reload knows) and here. */
+  async function markSeen(parentId: string, answerId: string): Promise<void> {
+    const current = stateOf(parentId);
+    if (!current.side || current.side.seenAnswerId === answerId) return;
+    current.side = { ...current.side, seenAnswerId: answerId };
+    try {
+      await api.PUT("/api/sessions/{id}/side/seen", { params: { path: { id: parentId } }, body: { answerId } });
+    } catch {
+      // Seen here; a reload may call it new again.
+    }
+  }
 
   /**
    * Asks `question` in the side conversation, starting one when there's none. The question shows in the panel at once;
-   * a question the server refuses sets `error` and returns false.
+   * a question the server refuses sets `error` and returns false. A new one ends a discarded one's Undo.
    */
   async function ask(question: string, choice: SideQuestionChoice = {}): Promise<boolean> {
     const parentId = id.value;
@@ -149,6 +237,15 @@ export function useSideConversation(sessionId: MaybeRefOrGetter<string>) {
         return false;
       }
 
+      // The server deleted a discarded one to start this: its Undo goes.
+      if (current.discarded && current.discarded.sessionId !== data.sideConversation.sessionId) {
+        if (current.discardTimer) clearTimeout(current.discardTimer);
+        dropSideDraft(parentId, current.discarded.sessionId);
+        current.discarded = null;
+        current.discardTimer = null;
+        current.drafts.side = "";
+      }
+
       // Asking a minimized one opens it (the server says so too).
       current.side = data.sideConversation;
       current.loaded = true;
@@ -172,7 +269,10 @@ export function useSideConversation(sessionId: MaybeRefOrGetter<string>) {
     if (!current.side || current.side.minimized === value) return;
 
     current.side = { ...current.side, minimized: value };
-    if (!value) current.seenAnswer = current.latestAnswer;
+    if (!value) {
+      current.pulseAnswerId = null;
+      if (current.latestAnswerId && !current.working) void markSeen(parentId, current.latestAnswerId);
+    }
     try {
       const { data, error, response } = await api.PUT("/api/sessions/{id}/side/minimized", {
         params: { path: { id: parentId } },
@@ -182,7 +282,7 @@ export function useSideConversation(sessionId: MaybeRefOrGetter<string>) {
         current.error = errorMessage(error) ?? `The side conversation couldn't be ${value ? "minimized" : "opened"} (HTTP ${response.status}).`;
         return;
       }
-      if (current.side?.sessionId === data.sessionId) current.side = data;
+      if (current.side?.sessionId === data.sessionId) current.side = { ...data, seenAnswerId: current.side.seenAnswerId };
     } catch (caught) {
       current.error = caught instanceof Error ? caught.message : "The side conversation couldn't be changed.";
     }
@@ -192,12 +292,42 @@ export function useSideConversation(sessionId: MaybeRefOrGetter<string>) {
     return setMinimized(!minimized.value);
   }
 
-  /** Its conversation's report: whether it's working, and its newest answer. Seen while it's open. */
-  function reportProgress(progress: { working: boolean; latestAnswer: string | null }): void {
+  /** Its conversation's report. An answer that finishes while it's open is seen; one while it's folded is news. */
+  function reportProgress(progress: SideProgress): void {
+    const parentId = id.value;
     const current = state.value;
+    const first = !current.reported;
+    const wasWorking = current.working;
+    const previousId = current.latestAnswerId;
+    current.reported = true;
     current.working = progress.working;
     current.latestAnswer = progress.latestAnswer;
-    if (current.seenAnswer === undefined || !minimized.value) current.seenAnswer = progress.latestAnswer;
+    current.latestAnswerId = progress.latestAnswerId;
+
+    if (progress.working || !progress.latestAnswerId) return;
+    if (!minimized.value) {
+      void markSeen(parentId, progress.latestAnswerId);
+    } else if (!first && (wasWorking || progress.latestAnswerId !== previousId)) {
+      current.pulseAnswerId = progress.latestAnswerId;
+    }
+  }
+
+  /** Puts away the draft for `target` that's leaving the composer, in memory and in the browser. */
+  function putAwayDraft(target: DraftTarget, text: string): void {
+    const current = state.value;
+    current.drafts[target] = text;
+    const key = stashKey(id.value, current, target);
+    if (key) writeStoredDraft(key, text);
+  }
+
+  /** Takes out the put-away draft for `target`, which goes back in the composer. */
+  function takeOutDraft(target: DraftTarget): string {
+    const current = state.value;
+    const text = current.drafts[target];
+    current.drafts[target] = "";
+    const key = stashKey(id.value, current, target);
+    if (key) writeStoredDraft(key, "");
+    return text;
   }
 
   /**
@@ -208,50 +338,51 @@ export function useSideConversation(sessionId: MaybeRefOrGetter<string>) {
     const parentId = id.value;
     const current = stateOf(parentId);
     const closing = current.side;
-    current.side = null;
-    current.error = undefined;
     if (!closing) return;
-
-    if (current.discardTimer) clearTimeout(current.discardTimer);
-    current.discarded = closing;
-    current.discardTimer = setTimeout(() => {
-      current.discarded = null;
-      current.discardTimer = null;
-    }, SIDE_DISCARD_UNDO_MS);
+    current.error = undefined;
+    offerUndo(parentId, current, closing, SIDE_DISCARD_UNDO_MS);
+    current.side = null;
 
     try {
       const { error, response } = await api.DELETE("/api/sessions/{id}/side", { params: { path: { id: parentId } } });
       if (!response.ok) {
-        current.side = closing;
-        current.discarded = null;
+        restoreClosed(current, closing);
         current.error = errorMessage(error) ?? `The side conversation couldn't be discarded (HTTP ${response.status}).`;
       }
     } catch (caught) {
-      current.side = closing;
-      current.discarded = null;
+      restoreClosed(current, closing);
       current.error = caught instanceof Error ? caught.message : "The side conversation couldn't be discarded.";
     }
+  }
+
+  function restoreClosed(current: SideConversationState, closing: SideConversation): void {
+    if (current.discardTimer) clearTimeout(current.discardTimer);
+    current.discardTimer = null;
+    current.discarded = null;
+    current.side = closing;
   }
 
   /** Brings back the side conversation discarded moments ago, as it was (minimized or open, draft and all). */
   async function undoDiscard(): Promise<boolean> {
     const parentId = id.value;
     const current = stateOf(parentId);
-    if (!current.discarded) return false;
+    const discarded = current.discarded;
+    if (!discarded) return false;
 
     if (current.discardTimer) clearTimeout(current.discardTimer);
     current.discardTimer = null;
-    const discarded = current.discarded;
-    current.discarded = null;
     try {
       const { data, error, response } = await api.POST("/api/sessions/{id}/side/restore", { params: { path: { id: parentId } } });
       if (!response.ok || !data) {
+        current.discarded = null;
         current.error = errorMessage(error) ?? `The side conversation couldn't be brought back (HTTP ${response.status}).`;
         return false;
       }
       current.side = { ...discarded, ...data };
+      current.discarded = null;
       return true;
     } catch (caught) {
+      current.discarded = null;
       current.error = caught instanceof Error ? caught.message : "The side conversation couldn't be brought back.";
       return false;
     }
@@ -288,10 +419,11 @@ export function useSideConversation(sessionId: MaybeRefOrGetter<string>) {
     isOpen,
     minimized,
     unread,
+    pulse,
     working: computed(() => state.value.working),
     latestAnswer: computed(() => state.value.latestAnswer),
-    drafts: computed(() => state.value.drafts),
     discarded: computed(() => state.value.discarded),
+    undoMs: computed(() => state.value.undoMs),
     starting: computed(() => state.value.starting),
     asking: computed(() => state.value.asking),
     error: computed(() => state.value.error),
@@ -299,6 +431,8 @@ export function useSideConversation(sessionId: MaybeRefOrGetter<string>) {
     setMinimized,
     toggleMinimized,
     reportProgress,
+    putAwayDraft,
+    takeOutDraft,
     close,
     undoDiscard,
     keep,

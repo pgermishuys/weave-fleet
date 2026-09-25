@@ -4,7 +4,7 @@ import { useRouter } from "@tanstack/vue-router";
 import { Minus, MessageCircleQuestionMark, SquareArrowOutUpRight, Undo2, X } from "lucide-vue-next";
 import ActivityStream from "@/components/session/ActivityStream.vue";
 import { Button } from "@/components/ui/button";
-import { SIDE_DISCARD_UNDO_MS, useSideConversation } from "@/composables/use-side-conversation";
+import { useSideConversation } from "@/composables/use-side-conversation";
 
 /**
  * A session's side conversation (`/btw`), docked above the composer. It's a fork of the session made at its last
@@ -22,9 +22,11 @@ const {
   side,
   minimized,
   unread,
+  pulse,
   working,
   latestAnswer,
   discarded,
+  undoMs,
   starting,
   setMinimized,
   toggleMinimized,
@@ -126,7 +128,23 @@ onUnmounted(() => {
   if (pressTimer) clearTimeout(pressTimer);
 });
 
-const drainStyle = { animationDuration: `${SIDE_DISCARD_UNDO_MS}ms` };
+// Undo's countdown: from the discard (after a reload, what the server says is left), not from when it's shown.
+const drainStyle = computed(() => ({ animationDuration: `${undoMs.value}ms` }));
+const secondsLeft = shallowRef(0);
+let countdown: ReturnType<typeof setInterval> | null = null;
+watch(discarded, (value) => {
+  if (countdown) clearInterval(countdown);
+  countdown = null;
+  if (!value) return;
+  const endsAt = Date.now() + undoMs.value;
+  secondsLeft.value = Math.ceil(undoMs.value / 1000);
+  countdown = setInterval(() => {
+    secondsLeft.value = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
+  }, 250);
+}, { immediate: true });
+onUnmounted(() => {
+  if (countdown) clearInterval(countdown);
+});
 </script>
 
 <template>
@@ -274,6 +292,7 @@ const drainStyle = { animationDuration: `${SIDE_DISCARD_UNDO_MS}ms` };
             <template v-else-if="unread">
               <span
                 class="side-tab__unread"
+                :class="{ 'side-tab__unread--pulse': pulse }"
                 aria-hidden="true"
               />New answer
             </template>
@@ -298,31 +317,43 @@ const drainStyle = { animationDuration: `${SIDE_DISCARD_UNDO_MS}ms` };
     </div>
   </section>
 
-  <Transition name="side-toast">
-    <div
-      v-if="discarded"
-      class="side-toast"
-      role="status"
-      data-testid="side-conversation-undo-toast"
+  <!-- Where the tab sits, just above the composer, so it never covers what's being typed. -->
+  <div
+    v-if="discarded"
+    class="side-toast-dock"
+  >
+    <Transition
+      name="side-toast"
+      appear
     >
-      <div class="side-toast__row">
-        <span>Side question discarded</span>
-        <button
-          type="button"
-          class="side-toast__action"
-          data-testid="side-conversation-undo"
-          @click="undoDiscard"
-        >
-          <Undo2 aria-hidden="true" />
-          Undo
-        </button>
-      </div>
       <div
-        class="side-toast__drain"
-        :style="drainStyle"
-      />
-    </div>
-  </Transition>
+        class="side-toast"
+        role="status"
+        data-testid="side-conversation-undo-toast"
+      >
+        <div class="side-toast__row">
+          <span>Side question discarded</span>
+          <span
+            class="side-toast__left"
+            data-testid="side-conversation-undo-left"
+          >{{ secondsLeft }} s</span>
+          <button
+            type="button"
+            class="side-toast__action"
+            data-testid="side-conversation-undo"
+            @click="undoDiscard"
+          >
+            <Undo2 aria-hidden="true" />
+            Undo
+          </button>
+        </div>
+        <div
+          class="side-toast__drain"
+          :style="drainStyle"
+        />
+      </div>
+    </Transition>
+  </div>
 </template>
 
 <style scoped>
@@ -538,6 +569,10 @@ const drainStyle = { animationDuration: `${SIDE_DISCARD_UNDO_MS}ms` };
   flex-shrink: 0;
   border-radius: 50%;
   background: var(--accent);
+}
+
+/* Twice, for an answer that landed on this page; not again for one found after a reload. */
+.side-tab__unread--pulse {
   animation: side-unread 1.6s ease-out 2;
 }
 
@@ -616,26 +651,37 @@ const drainStyle = { animationDuration: `${SIDE_DISCARD_UNDO_MS}ms` };
   font-size: 11px;
 }
 
+/* Where the tab was: on the composer's column, just above it, left-aligned with the tab. */
+.side-toast-dock {
+  display: flex;
+  flex-shrink: 0;
+  max-width: calc(760px + 48px);
+  width: 100%;
+  margin: 0 auto;
+  padding: 6px 24px 6px;
+}
+
 /* Inverted like the archive toast, so it reads over any panel; the bar drains while Undo is still possible. */
 .side-toast {
-  position: fixed;
-  left: 50%;
-  bottom: max(16px, env(safe-area-inset-bottom));
-  z-index: 60;
-  width: min(360px, calc(100vw - 32px));
+  width: min(360px, calc(100% - 28px));
+  margin-left: 14px;
   overflow: hidden;
   border-radius: var(--radius-card);
   background: var(--text);
   box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.45);
   color: var(--main-bg);
   font-size: 13px;
-  transform: translateX(-50%);
+}
+
+.side-toast__left {
+  margin-left: auto;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
 }
 
 .side-toast__row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   padding: 9px 8px 9px 14px;
 }
@@ -680,7 +726,7 @@ const drainStyle = { animationDuration: `${SIDE_DISCARD_UNDO_MS}ms` };
 .side-toast-enter-from,
 .side-toast-leave-to {
   opacity: 0;
-  transform: translate(-50%, 8px);
+  transform: translateY(6px);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -693,7 +739,7 @@ const drainStyle = { animationDuration: `${SIDE_DISCARD_UNDO_MS}ms` };
 
   .side-tab,
   .side-tab__dots i,
-  .side-tab__unread,
+  .side-tab__unread--pulse,
   .side-toast__drain {
     animation: none;
   }

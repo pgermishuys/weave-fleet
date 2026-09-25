@@ -85,7 +85,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   /** Whether a turn is running, and the newest reply's text: a side conversation's tab shows both while it's folded. */
-  progress: [progress: { working: boolean; latestAnswer: string | null }];
+  progress: [progress: { working: boolean; latestAnswer: string | null; latestAnswerId: string | null }];
 }>();
 
 const router = useRouter();
@@ -487,25 +487,27 @@ watch(
 
 const isStreaming = computed(() => isStreamWorking(sessionStatus.value));
 
-const latestAnswer = computed<string | null>(() => {
+const latestAnswerMessage = computed<{ id: string; text: string } | null>(() => {
   for (let index = sessionMessages.value.length - 1; index >= 0; index -= 1) {
     const message = sessionMessages.value[index];
     if (message.role !== "assistant") continue;
     const body = messageBody(message).trim();
-    if (body) return body;
+    if (body) return { id: message.messageId, text: body };
   }
   return null;
 });
+const latestAnswer = computed(() => latestAnswerMessage.value?.text ?? null);
+const latestAnswerId = computed(() => latestAnswerMessage.value?.id ?? null);
 
 // Once its snapshot has loaded: before that (the stream starts out empty and not loading), no answer isn't news.
 let snapshotLoading = false;
 watch(
-  [isStreaming, latestAnswer, () => stream.isLoading.value],
-  ([working, answer, loading]) => {
+  [isStreaming, latestAnswer, latestAnswerId, () => stream.isLoading.value],
+  ([working, answer, answerId, loading]) => {
     if (loading) {
       snapshotLoading = true;
     } else if (snapshotLoading) {
-      emit("progress", { working, latestAnswer: answer });
+      emit("progress", { working, latestAnswer: answer, latestAnswerId: answerId });
     }
   },
   { immediate: true },
