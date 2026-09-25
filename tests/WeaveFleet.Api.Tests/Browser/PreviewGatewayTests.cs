@@ -116,6 +116,45 @@ public sealed class PreviewGatewayTests
         => PreviewGateway.OriginFor(browserHost, new PreviewListener("p1", 41234, new Uri("http://localhost:5173/"), "0.0.0.0")).ShouldBe(origin);
 
     [Theory]
+    [InlineData("http://p1.localhost:41234", "CrossSite")]
+    [InlineData("http://192.168.1.20:41234", "Insecure")]
+    [InlineData("http://desktop:41234", "Insecure")]
+    [InlineData("http://[fd7a:115c::5]:41234", "Insecure")]
+    [InlineData("https://desktop:41234", "AsSent")]
+    [InlineData("http://localhost:41234", "AsSent")]
+    [InlineData("http://127.0.0.1:41234", "AsSent")]
+    public void A_previews_cookies_follow_where_the_canvas_loads_it(string proxyOrigin, string rule)
+        => PreviewGateway.CookieRuleFor(proxyOrigin).ToString().ShouldBe(rule);
+
+    [Theory]
+    // Aspire's dashboard sign-in cookie, as it sends it over https.
+    [InlineData(".Aspire.Dashboard.Auth=abc; expires=Mon, 28 Sep 2026 08:12:26 GMT; path=/; secure; samesite=lax; httponly",
+        ".Aspire.Dashboard.Auth=abc; expires=Mon, 28 Sep 2026 08:12:26 GMT; path=/; samesite=lax; httponly")]
+    [InlineData("a=1; Secure", "a=1")]
+    [InlineData("a=1; SameSite=None; Secure; Path=/", "a=1; samesite=lax; Path=/")]
+    [InlineData("a=1; domain=localhost; path=/; secure", "a=1; path=/")]
+    [InlineData("secure=yes; path=/", "secure=yes; path=/")]
+    [InlineData("a=1; path=/secure; HttpOnly", "a=1; path=/secure; HttpOnly")]
+    [InlineData("__Host-a=1; path=/; secure", "__Host-a=1; path=/; secure")]
+    [InlineData("__Secure-a=1; secure", "__Secure-a=1; secure")]
+    public void From_another_device_a_cookie_loses_Secure(string cookie, string expected)
+        => PreviewGateway.RewriteSetCookie(cookie, PreviewGateway.CookieRule.Insecure).ShouldBe(expected);
+
+    [Theory]
+    // Aspire's antiforgery cookie: Strict, which a frame from another site never keeps.
+    [InlineData(".Aspire.Dashboard.Antiforgery=abc; path=/; samesite=strict; httponly", ".Aspire.Dashboard.Antiforgery=abc; path=/; httponly; SameSite=None; Secure")]
+    [InlineData("a=1; path=/", "a=1; path=/; SameSite=None; Secure")]
+    [InlineData("a=1; domain=localhost; secure; samesite=lax", "a=1; SameSite=None; Secure")]
+    [InlineData("__Host-a=1; path=/; secure; samesite=strict", "__Host-a=1; path=/; SameSite=None; Secure")]
+    public void On_Fleets_machine_a_cookie_is_kept_across_sites(string cookie, string expected)
+        => PreviewGateway.RewriteSetCookie(cookie, PreviewGateway.CookieRule.CrossSite).ShouldBe(expected);
+
+    [Fact]
+    public void Over_https_a_cookie_only_loses_its_domain()
+        => PreviewGateway.RewriteSetCookie("a=1; domain=localhost; path=/; secure; samesite=none", PreviewGateway.CookieRule.AsSent)
+            .ShouldBe("a=1; path=/; secure; samesite=none");
+
+    [Theory]
     [InlineData("127.0.0.1", "Localhost")]
     [InlineData("localhost", "Localhost")]
     [InlineData("::1", "Localhost")]

@@ -532,11 +532,70 @@ public sealed partial class PreviewGateway : IAsyncDisposable
             {
                 "Content-Security-Policy" => values.Select(WithoutFrameAncestors).Where(value => value.Length > 0).ToArray(),
                 "Location" => values.Select(value => RewriteLocation(value, proxyOrigin, target)).ToArray(),
-                "Set-Cookie" => values.Select(value => CookieDomain().Replace(value, string.Empty)).ToArray(),
+                "Set-Cookie" => values.Select(value => RewriteSetCookie(value, CookieRuleFor(proxyOrigin))).ToArray(),
                 _ => values.ToArray(),
             };
             if (copied.Length > 0)
                 response.Headers[name] = copied;
+        }
+    }
+
+    /// <summary>What a preview's cookies need so the browser keeps them in the canvas (see <see cref="CookieRuleFor"/>).</summary>
+    internal enum CookieRule
+    {
+        /// <summary>As the app sent them.</summary>
+        AsSent,
+
+        /// <summary><c>SameSite=None; Secure</c>: the canvas frames the preview from another site.</summary>
+        CrossSite,
+
+        /// <summary>Without <c>Secure</c>: the browser doesn't count the preview as secure.</summary>
+        Insecure,
+    }
+
+    /// <summary>
+    /// On Fleet's machine a preview is a <c>*.localhost</c> name (<see cref="OriginFor"/>), another site than the
+    /// Fleet page that frames it, and a browser keeps no <c>Lax</c> or <c>Strict</c> cookie in a frame from
+    /// another site: that's the default, so no app could sign in. Those names count as secure, so the cookies
+    /// can be <c>SameSite=None; Secure</c>. From another device a preview is plain http on the host the browser
+    /// used for Fleet: the same site, but not secure, so a <c>Secure</c> cookie would be dropped.
+    /// </summary>
+    internal static CookieRule CookieRuleFor(string proxyOrigin)
+    {
+        if (!Uri.TryCreate(proxyOrigin, UriKind.Absolute, out var origin))
+            return CookieRule.AsSent;
+        if (origin.Host.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase))
+            return CookieRule.CrossSite;
+        if (origin.Scheme == Uri.UriSchemeHttps)
+            return CookieRule.AsSent;
+
+        var host = origin.Host.Trim('[', ']');
+        return host.Equals("localhost", StringComparison.OrdinalIgnoreCase) || (IPAddress.TryParse(host, out var ip) && IPAddress.IsLoopback(ip))
+            ? CookieRule.AsSent
+            : CookieRule.Insecure;
+    }
+
+    /// <summary>
+    /// A cookie is for the preview's host, not the app's, and gets what <paramref name="rule"/> says the canvas
+    /// needs. Sign-in cookies are why: an https dev server marks them <c>Secure</c> (Aspire's dashboard), and
+    /// ASP.NET makes them <c>Lax</c> or <c>Strict</c>; the user would sign in and land on the sign-in page again.
+    /// Without <c>Secure</c>, <c>SameSite=None</c> (which needs it) becomes <c>Lax</c>. A <c>__Secure-</c> or
+    /// <c>__Host-</c> cookie can't lose <c>Secure</c> at all, so there it's left as the app sent it.
+    /// </summary>
+    internal static string RewriteSetCookie(string cookie, CookieRule rule)
+    {
+        cookie = CookieDomain().Replace(cookie, string.Empty);
+        switch (rule)
+        {
+            case CookieRule.CrossSite:
+                cookie = CookieSameSite().Replace(CookieSecure().Replace(cookie, string.Empty), string.Empty);
+                return cookie + "; SameSite=None; Secure";
+            case CookieRule.Insecure when !cookie.StartsWith("__Secure-", StringComparison.OrdinalIgnoreCase)
+                                          && !cookie.StartsWith("__Host-", StringComparison.OrdinalIgnoreCase):
+                cookie = CookieSecure().Replace(cookie, string.Empty);
+                return CookieSameSiteNone().Replace(cookie, "; samesite=lax");
+            default:
+                return cookie;
         }
     }
 
@@ -621,6 +680,15 @@ public sealed partial class PreviewGateway : IAsyncDisposable
 
     [GeneratedRegex(@";\s*domain=[^;]*", RegexOptions.IgnoreCase)]
     private static partial Regex CookieDomain();
+
+    [GeneratedRegex(@";\s*secure\s*(?=;|$)", RegexOptions.IgnoreCase)]
+    private static partial Regex CookieSecure();
+
+    [GeneratedRegex(@";\s*samesite\s*=\s*none\s*(?=;|$)", RegexOptions.IgnoreCase)]
+    private static partial Regex CookieSameSiteNone();
+
+    [GeneratedRegex(@";\s*samesite\s*=[^;]*", RegexOptions.IgnoreCase)]
+    private static partial Regex CookieSameSite();
 
     internal enum BindKind
     {
