@@ -371,6 +371,52 @@ public sealed class OpenCode2SignInTests
     }
 
     [Fact]
+    public async Task A_sign_in_under_way_keeps_its_server_busy_until_V2_says_it_has_ended()
+    {
+        // V2 keeps the attempt in this server's memory, and a server whose settings changed is replaced once it's idle.
+        var status = "pending";
+        var api = IdleServing(request => Json(request.Method == HttpMethod.Post
+            ? BrowserAttempt
+            : """{"data":{"status":"STATUS","message":"access_denied","time":{"created":1,"expires":2}}}""".Replace("STATUS", status)));
+        var (signIn, _, server) = SignInOn(api);
+        (await server.IsIdleAsync(CancellationToken.None)).ShouldBeTrue();
+
+        await signIn.StartAsync("local-user", "openai", "chatgpt-browser", new Dictionary<string, JsonElement>(), CancellationToken.None);
+        (await server.IsIdleAsync(CancellationToken.None)).ShouldBeFalse();
+        await signIn.GetAttemptAsync("local-user", "openai", "con_browser", CancellationToken.None);
+        (await server.IsIdleAsync(CancellationToken.None)).ShouldBeFalse();
+
+        status = "failed";
+        await signIn.GetAttemptAsync("local-user", "openai", "con_browser", CancellationToken.None);
+        (await server.IsIdleAsync(CancellationToken.None)).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task A_cancelled_sign_in_leaves_its_server_idle()
+    {
+        var api = IdleServing(request => request.Method == HttpMethod.Delete
+            ? new HttpResponseMessage(HttpStatusCode.NoContent)
+            : Json(BrowserAttempt));
+        var (signIn, _, server) = SignInOn(api);
+        await signIn.StartAsync("local-user", "openai", "chatgpt-browser", new Dictionary<string, JsonElement>(), CancellationToken.None);
+
+        await signIn.CancelAsync("local-user", "openai", "con_browser", CancellationToken.None);
+
+        (await server.IsIdleAsync(CancellationToken.None)).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task A_sign_in_past_its_expiry_no_longer_keeps_its_server_busy()
+    {
+        // Nobody asked about it again, and V2 has forgotten it by now.
+        var (signIn, _, server) = SignInOn(IdleServing(_ => Json(BrowserAttempt.Replace("1790114505285", "1790113935285"))));
+
+        await signIn.StartAsync("local-user", "openai", "chatgpt-browser", new Dictionary<string, JsonElement>(), CancellationToken.None);
+
+        (await server.IsIdleAsync(CancellationToken.None)).ShouldBeTrue();
+    }
+
+    [Fact]
     public async Task Cancelling_a_sign_in_V2_already_forgot_is_fine()
     {
         var (signIn, _) = SignIn(Answer("""{"_tag":"IntegrationAttemptNotFoundError","message":"gone"}""", HttpStatusCode.NotFound));
@@ -441,9 +487,25 @@ public sealed class OpenCode2SignInTests
     private static StubHandler Serving(Func<HttpRequestMessage, HttpResponseMessage> respond)
         => new(request => request.RequestUri!.AbsolutePath == "/api/location" ? new HttpResponseMessage(HttpStatusCode.OK) : respond(request));
 
+    /// <summary>V2 with no turn running and no folder loaded, answering the rest with <paramref name="respond"/>.</summary>
+    private static StubHandler IdleServing(Func<HttpRequestMessage, HttpResponseMessage> respond)
+        => Serving(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/api/session/active" => Json("""{"data":{}}"""),
+            "/api/debug/location" => Json("[]"),
+            _ => respond(request),
+        });
+
     private static (OpenCode2SignIn SignIn, StubHandler Callbacks) SignIn(StubHandler api, OpenCode2InstallMode mode = OpenCode2InstallMode.Separate)
     {
-        var server = new OpenCode2Server("local-user", OpenCode2Fixtures.ClientServing("", api), "token", process: null, NullLogger.Instance);
+        var (signIn, callbacks, _) = SignInOn(api, mode);
+        return (signIn, callbacks);
+    }
+
+    private static (OpenCode2SignIn SignIn, StubHandler Callbacks, OpenCode2Server Server) SignInOn(StubHandler api, OpenCode2InstallMode mode = OpenCode2InstallMode.Separate)
+    {
+        var now = new FixedTime(DateTimeOffset.FromUnixTimeMilliseconds(1790113905285) + TimeSpan.FromMinutes(1));
+        var server = new OpenCode2Server("local-user", OpenCode2Fixtures.ClientServing("", api), "token", process: null, NullLogger.Instance) { Time = now };
         api.OnRequest = request =>
         {
             if (request.RequestUri!.AbsolutePath == "/api/location")
@@ -455,8 +517,8 @@ public sealed class OpenCode2SignInTests
             () => Folder,
             () => mode,
             () => new HttpClient(callbacks, disposeHandler: false),
-            new FixedTime(DateTimeOffset.FromUnixTimeMilliseconds(1790113905285) + TimeSpan.FromMinutes(1)));
-        return (signIn, callbacks);
+            now);
+        return (signIn, callbacks, server);
     }
 
     /// <summary>A minute after the recorded attempts started, well inside their ten minutes.</summary>

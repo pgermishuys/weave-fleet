@@ -21,6 +21,10 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 /// one folder of Fleet's own, with nothing in it but the user's and Fleet's config, and waits for it to load.
 /// </para>
 /// <para>
+/// A sign-in under way keeps its server from being replaced (<see cref="OpenCode2Server.HoldForSignIn"/>): a server
+/// whose settings changed is otherwise replaced as soon as nothing runs on it, and the sign-in would be gone.
+/// </para>
+/// <para>
 /// A browser sign-in either finishes on its own (V2 polls the provider, or a provider sends the browser back to a
 /// listener V2 opened on <c>localhost</c>) or asks for a code. A listener on <c>localhost</c> is on the machine Fleet
 /// runs on, which a browser on another device can't reach: the attempt says so (<see cref="HarnessSignInAttempt.CallbackAddress"/>),
@@ -85,6 +89,7 @@ internal sealed class OpenCode2SignIn(
         var started = await server.Client.StartOAuthAsync(location, providerId, methodId, answers, ct).ConfigureAwait(false);
 
         var expires = ReadTime(started.Time?.Expires) ?? timeProvider.GetUtcNow() + AttemptLifetime;
+        server.HoldForSignIn(started.AttemptId!, expires);
         var callback = LoopbackCallback(started.Url!);
         if (callback is not null)
             _callbacks[(ownerUserId, started.AttemptId!)] = new PendingCallback(providerId, callback, expires);
@@ -106,7 +111,10 @@ internal sealed class OpenCode2SignIn(
         var status = await server.Client.GetOAuthStatusAsync(location, providerId, attemptId, ct).ConfigureAwait(false);
         var state = status?.Status ?? HarnessSignInAttemptStates.Gone;
         if (state != HarnessSignInAttemptStates.Pending)
+        {
             _callbacks.TryRemove((ownerUserId, attemptId), out _);
+            server.ReleaseSignIn(attemptId);
+        }
         return new HarnessSignInAttemptStatus(state, state == HarnessSignInAttemptStates.Failed ? status?.Message : null);
     }
 
@@ -156,6 +164,7 @@ internal sealed class OpenCode2SignIn(
         _callbacks.TryRemove((ownerUserId, attemptId), out _);
         var (server, location) = await ServerAsync(ownerUserId, ct).ConfigureAwait(false);
         await server.Client.CancelOAuthAsync(location, providerId, attemptId, ct).ConfigureAwait(false);
+        server.ReleaseSignIn(attemptId);
     }
 
     public async Task UseAsync(string ownerUserId, string connectionId, CancellationToken ct)

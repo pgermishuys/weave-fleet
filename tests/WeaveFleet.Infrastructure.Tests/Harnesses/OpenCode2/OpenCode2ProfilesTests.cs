@@ -311,6 +311,24 @@ public sealed class OpenCode2ProfilesTests : IDisposable
     }
 
     [Fact]
+    public async Task A_server_started_with_other_settings_is_replaced_only_once_its_sign_in_has_ended()
+    {
+        // V2 keeps a sign-in in the server's memory: the next server wouldn't know it.
+        await using var servers = Servers([]);
+        var key = OpenCode2ServerKey.For("local-user", null);
+        var before = await servers.GetAsync(key, OpenCode2ServerSetup.None, CancellationToken.None);
+        before.HoldForSignIn("con_browser", DateTimeOffset.UtcNow.AddMinutes(10));
+        var changed = OpenCode2ServerSetup.None with { Workflows = true };
+
+        (await servers.GetAsync(key, changed, CancellationToken.None)).ShouldBeSameAs(before);
+
+        before.ReleaseSignIn("con_browser");
+        var after = await servers.GetAsync(key, changed, CancellationToken.None);
+        after.ShouldNotBeSameAs(before);
+        before.IsRunning.ShouldBeFalse();
+    }
+
+    [Fact]
     public async Task After_an_update_a_server_with_a_background_shell_running_is_kept_until_it_has_finished()
     {
         var shells = new Dictionary<string, string[]> { ["/work"] = [OpenCode2Fixtures.Shell("running")] };

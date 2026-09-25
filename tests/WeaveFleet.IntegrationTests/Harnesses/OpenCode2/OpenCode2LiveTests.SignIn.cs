@@ -1,7 +1,11 @@
+extern alias FakeLlm;
+
+using FakeLlm::FakeLlmServer;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Common;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 using WeaveFleet.Infrastructure.Services;
 
@@ -84,6 +88,46 @@ public sealed partial class OpenCode2LiveTests
         finally
         {
             await WithSignInAsync(s => s.CancelAsync(OpenCode2HarnessSession.Type, "openai", attempt.Id, CancellationToken.None));
+        }
+    }
+
+    /// <summary>
+    /// V2 keeps a browser sign-in in its server's memory. A server whose settings changed is replaced once nothing
+    /// runs on it; a sign-in started while a turn ran there must keep it after the turn ends.
+    /// </summary>
+    [OpenCode2Fact]
+    public async Task A_browser_sign_in_keeps_its_server_after_a_setting_changed_and_the_last_turn_ended()
+    {
+        const string prompt = "Wait a moment. (sign-in: busy server)";
+        fleet.Answer(request => LlmRequest.Starts(request, prompt) ? ToolCall("call_wait", "shell", new { command = "sleep 5", description = "Wait" })
+            : LlmRequest.Continues(request, prompt) ? new ScriptedLlmResponse { Text = "Waited." }
+            : null);
+        using var cts = new CancellationTokenSource(Timeout);
+        var id = await fleet.CreateSessionAsync(fleet.NewFolder("sign-in-busy"), "Busy server", cts.Token);
+        var events = fleet.Watch(cts.Token, id);
+        await PromptAsync(id, prompt, options: null, cts.Token);
+        await WaitForAsync(events, () => Parts<ToolMessageEventPart>(events, id).Any(p => p.CallId == "call_wait" && p.State is ToolRunningState), cts.Token);
+
+        // The owner's server now has other settings, and is kept only while something runs on it.
+        await SetWorkflowsAsync(true);
+        try
+        {
+            var attempt = Ok(await WithSignInAsync(s => s.StartAsync(OpenCode2HarnessSession.Type, "openai", "chatgpt-browser", null, cts.Token)));
+            try
+            {
+                await WaitForAsync(events, () => events.For(id).Any(e => e.Type == "session.idle"), cts.Token);
+
+                Ok(await WithSignInAsync(s => s.GetAttemptAsync(OpenCode2HarnessSession.Type, "openai", attempt.Id, cts.Token)))
+                    .Status.ShouldBe(HarnessSignInAttemptStates.Pending);
+            }
+            finally
+            {
+                await WithSignInAsync(s => s.CancelAsync(OpenCode2HarnessSession.Type, "openai", attempt.Id, CancellationToken.None));
+            }
+        }
+        finally
+        {
+            await SetWorkflowsAsync(false);
         }
     }
 
