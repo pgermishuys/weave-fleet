@@ -628,6 +628,11 @@ onBeforeUnmount(() => {
   display: block;
   /* Pages without a background of their own expect a white one. */
   background: #fff;
+  /* The frame would inherit Fleet's dark scheme. A page that is dark too
+     then gets a see-through canvas, and its light text lands on the white
+     above. With the schemes apart, the browser paints the page's own
+     backdrop behind it. */
+  color-scheme: light;
 }
 
 .browser-canvas__error {
