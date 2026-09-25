@@ -169,7 +169,11 @@ internal sealed record OpenCodeAssistantMessage : OpenCodeMessageInfo
     [JsonPropertyName("tokens")] public OpenCodeTokenUsage? Tokens { get; init; }
     [JsonPropertyName("mode")] public string? Mode { get; init; }
     [JsonPropertyName("error")] public JsonElement? Error { get; init; }
-    [JsonPropertyName("summary")] public string? Summary { get; init; }
+    /// <summary>
+    /// <c>true</c> on the assistant message a compaction writes. Kept loose: typed as a string,
+    /// one compacted message failed the whole message page and the session never went live.
+    /// </summary>
+    [JsonPropertyName("summary")] public JsonElement? Summary { get; init; }
     [JsonPropertyName("finish")] public string? Finish { get; init; }
     [JsonPropertyName("variant")] public string? Variant { get; init; }
 }
