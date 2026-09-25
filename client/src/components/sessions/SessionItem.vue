@@ -118,11 +118,14 @@ const isLive = computed(() => isSessionLive(props.session));
 const rowDim = computed(() => (props.active ? 0 : sessionRowDim(props.session, now.value)));
 const progress = computed(() => {
   const summary = props.session.progress;
-  return summary && summary.total > 0 ? summary : null;
+  if (!summary || summary.total <= 0) return null;
+  // A quiet session that finished its list shows nothing; its age comes back.
+  if (rowStatus.value.tone === "quiet" && summary.done >= summary.total) return null;
+  return summary;
 });
-// The count replaces "Working" and the age; words the user has to act on stay.
-const showProgressCount = computed(() => progress.value !== null
-  && (rowStatus.value.tone === "working" || rowStatus.value.tone === "quiet"));
+// Only a working session's count replaces its age. A quiet session with unfinished items keeps the ring next to its
+// age, without the number; words the user has to act on stay next to the ring.
+const showProgressCount = computed(() => progress.value !== null && rowStatus.value.tone === "working");
 const progressDescription = computed(() => {
   const summary = progress.value;
   if (!summary) return "";

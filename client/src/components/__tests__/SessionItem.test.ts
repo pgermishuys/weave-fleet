@@ -147,14 +147,49 @@ describe("SessionItem", () => {
     }
   });
 
-  it("shows the count instead of the age for a quiet session", () => {
+  it("keeps the ring but shows the age instead of the count for a quiet session with unfinished items", () => {
     const wrapper = mountSessionItem(createSession({
       sessionStatus: "idle",
       activityStatus: "idle",
       progress: { sessionId: "session-1", kind: "plan", done: 11, total: 17, current: "Add migration" },
     }));
 
-    expect(wrapper.get(".session-progress__count").text()).toBe("11/17");
+    expect(wrapper.find(".progress-ring").exists()).toBe(true);
+    expect(wrapper.find(".session-progress__count").exists()).toBe(false);
+    expect(wrapper.get(".session-progress").attributes("title")).toBe("11 of 17 done. Now: Add migration");
+    expect(wrapper.get(".session-meta").classes()).toContain("session-meta--quiet");
+    expect(wrapper.get(".session-meta").text()).not.toBe("");
+  });
+
+  it("shows no progress once a quiet session has finished its list, and its status label comes back", () => {
+    const idle = mountSessionItem(createSession({
+      sessionStatus: "idle",
+      activityStatus: "idle",
+      progress: { sessionId: "session-1", kind: "todos", done: 2, total: 2, current: null },
+    }));
+    const completed = mountSessionItem(createSession({
+      sessionStatus: "completed",
+      activityStatus: "idle",
+      progress: { sessionId: "session-1", kind: "plan", done: 5, total: 5, current: null },
+    }));
+
+    for (const wrapper of [idle, completed]) {
+      expect(wrapper.find(".session-progress").exists()).toBe(false);
+      expect(wrapper.find(".progress-ring").exists()).toBe(false);
+      expect(wrapper.find(".session-progress__count").exists()).toBe(false);
+      expect(wrapper.get(".session-meta").classes()).toContain("session-meta--quiet");
+    }
+    expect(idle.get(".session-meta").text()).not.toBe("");
+    expect(completed.get(".session-meta").text()).toBe("Done");
+  });
+
+  it("still shows the count while a session works through its last item", () => {
+    const wrapper = mountSessionItem(createSession({
+      progress: { sessionId: "session-1", kind: "todos", done: 2, total: 2, current: null },
+    }));
+
+    expect(wrapper.find(".progress-ring").exists()).toBe(true);
+    expect(wrapper.get(".session-progress__count").text()).toBe("2/2");
     expect(wrapper.find(".session-meta").exists()).toBe(false);
   });
 

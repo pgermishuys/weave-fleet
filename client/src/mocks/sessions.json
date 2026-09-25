@@ -101,5 +101,165 @@
     "projectId": "mock-project-2",
     "projectName": "Documentation",
     "harnessType": "opencode"
+  },
+  {
+    "instanceId": "mock-instance-progress-working",
+    "workspaceId": "mock-workspace-1",
+    "workspaceDirectory": "C:\\Users\\demo\\projects\\weave-fleet",
+    "workspaceDisplayName": "weave-fleet",
+    "isolationStrategy": "worktree",
+    "sessionStatus": "active",
+    "session": {
+      "id": "mock-session-progress-working",
+      "title": "Add progress rings to session rows",
+      "isHidden": false,
+      "time": {
+        "created": 1722259830000,
+        "updated": 1722263430000
+      }
+    },
+    "instanceStatus": "running",
+    "parentSessionId": null,
+    "sourceDirectory": "C:\\Users\\demo\\projects\\weave-fleet",
+    "branch": null,
+    "activityStatus": "busy",
+    "lifecycleStatus": "running",
+    "retentionStatus": "active",
+    "archivedAt": null,
+    "typedInstanceStatus": "running",
+    "isHidden": false,
+    "totalTokens": 0,
+    "totalCost": 0,
+    "projectId": "mock-project-1",
+    "projectName": "Fleet Core",
+    "harnessType": "opencode",
+    "origin": null,
+    "progress": {
+      "sessionId": "mock-session-progress-working",
+      "kind": "todos",
+      "done": 1,
+      "total": 3,
+      "current": "Draw the ring"
+    }
+  },
+  {
+    "instanceId": "mock-instance-progress-done",
+    "workspaceId": "mock-workspace-1",
+    "workspaceDirectory": "C:\\Users\\demo\\projects\\weave-fleet",
+    "workspaceDisplayName": "weave-fleet",
+    "isolationStrategy": "worktree",
+    "sessionStatus": "idle",
+    "session": {
+      "id": "mock-session-progress-done",
+      "title": "Refactor the session cache",
+      "isHidden": false,
+      "time": {
+        "created": 1722252660000,
+        "updated": 1722256260000
+      }
+    },
+    "instanceStatus": "running",
+    "parentSessionId": null,
+    "sourceDirectory": "C:\\Users\\demo\\projects\\weave-fleet",
+    "branch": null,
+    "activityStatus": "idle",
+    "lifecycleStatus": "running",
+    "retentionStatus": "active",
+    "archivedAt": null,
+    "typedInstanceStatus": "running",
+    "isHidden": false,
+    "totalTokens": 0,
+    "totalCost": 0,
+    "projectId": "mock-project-1",
+    "projectName": "Fleet Core",
+    "harnessType": "opencode",
+    "origin": null,
+    "progress": {
+      "sessionId": "mock-session-progress-done",
+      "kind": "todos",
+      "done": 2,
+      "total": 2,
+      "current": null
+    }
+  },
+  {
+    "instanceId": "mock-instance-progress-unfinished",
+    "workspaceId": "mock-workspace-1",
+    "workspaceDirectory": "C:\\Users\\demo\\projects\\weave-fleet",
+    "workspaceDisplayName": "weave-fleet",
+    "isolationStrategy": "worktree",
+    "sessionStatus": "idle",
+    "session": {
+      "id": "mock-session-progress-unfinished",
+      "title": "Wire up the retry banner",
+      "isHidden": false,
+      "time": {
+        "created": 1722241860000,
+        "updated": 1722245460000
+      }
+    },
+    "instanceStatus": "running",
+    "parentSessionId": null,
+    "sourceDirectory": "C:\\Users\\demo\\projects\\weave-fleet",
+    "branch": null,
+    "activityStatus": "idle",
+    "lifecycleStatus": "running",
+    "retentionStatus": "active",
+    "archivedAt": null,
+    "typedInstanceStatus": "running",
+    "isHidden": false,
+    "totalTokens": 0,
+    "totalCost": 0,
+    "projectId": "mock-project-1",
+    "projectName": "Fleet Core",
+    "harnessType": "opencode",
+    "origin": null,
+    "progress": {
+      "sessionId": "mock-session-progress-unfinished",
+      "kind": "todos",
+      "done": 1,
+      "total": 3,
+      "current": "Add the countdown"
+    }
+  },
+  {
+    "instanceId": "mock-instance-progress-plan",
+    "workspaceId": "mock-workspace-1",
+    "workspaceDirectory": "C:\\Users\\demo\\projects\\weave-fleet",
+    "workspaceDisplayName": "weave-fleet",
+    "isolationStrategy": "worktree",
+    "sessionStatus": "idle",
+    "session": {
+      "id": "mock-session-progress-plan",
+      "title": "Migrate settings storage",
+      "isHidden": false,
+      "time": {
+        "created": 1722166260000,
+        "updated": 1722169860000
+      }
+    },
+    "instanceStatus": "running",
+    "parentSessionId": null,
+    "sourceDirectory": "C:\\Users\\demo\\projects\\weave-fleet",
+    "branch": null,
+    "activityStatus": "idle",
+    "lifecycleStatus": "running",
+    "retentionStatus": "active",
+    "archivedAt": null,
+    "typedInstanceStatus": "running",
+    "isHidden": false,
+    "totalTokens": 0,
+    "totalCost": 0,
+    "projectId": "mock-project-1",
+    "projectName": "Fleet Core",
+    "harnessType": "opencode",
+    "origin": null,
+    "progress": {
+      "sessionId": "mock-session-progress-plan",
+      "kind": "plan",
+      "done": 5,
+      "total": 5,
+      "current": null
+    }
   }
 ]
