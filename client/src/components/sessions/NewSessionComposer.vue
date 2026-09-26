@@ -247,8 +247,11 @@ const areRepositoriesReady = computed(() => scannedAt.value !== null || reposito
 const showHarnessPicker = computed(() => enabledHarnesses.value.length > 1);
 const hasMessage = computed(() => message.value.trim().length > 0);
 const isStarting = computed(() => isCreating.value || draft.isStarting);
+/** A clone for the chosen folder is still running; the session starts in it once it's there. */
+const isPreparingFolder = shallowRef(false);
 const canSend = computed(() =>
-  !isStarting.value && noHarnessReason.value === null && (hasMessage.value || gitHubPreset.value !== null));
+  !isStarting.value && !isPreparingFolder.value && noHarnessReason.value === null
+  && (hasMessage.value || gitHubPreset.value !== null));
 const currentBranch = computed(() => repositoryDetail.value?.branch ?? null);
 const defaultBase = computed(() => repositoryDetail.value?.defaultBase ?? null);
 
@@ -503,7 +506,7 @@ function projectForRow(): { id: string; name: string } | null {
 }
 
 async function submit(withoutMessage: boolean): Promise<void> {
-  if (isStarting.value || noHarnessReason.value !== null) {
+  if (isStarting.value || isPreparingFolder.value || noHarnessReason.value !== null) {
     return;
   }
 
@@ -888,8 +891,12 @@ onUnmounted(() => {
           :recent-folders="recentFolders"
           :allow-browse="!isCloudMode && !gitHubPreset"
           :allow-none="!gitHubPreset"
+          :allow-create="!isCloudMode && !gitHubPreset"
+          :last-new-folder-root="defaults.lastNewFolderRoot()"
           :disabled="isStarting"
           @update:folder="setFolder($event, true)"
+          @update:busy="isPreparingFolder = $event"
+          @created="defaults.rememberNewFolderRoot($event)"
           @close-auto-focus="returnFocusToMessage"
           @folder-added="refreshRepositories"
         />

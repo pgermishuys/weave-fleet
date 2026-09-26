@@ -19,6 +19,19 @@ beforeEach(() => {
 });
 
 describe("useNewSessionDefaults", () => {
+  describe("new folders", () => {
+    it("remembers the root the last new folder went into, alongside everything else", async () => {
+      const defaults = await mountDefaults();
+      expect(defaults.lastNewFolderRoot()).toBeNull();
+
+      defaults.rememberNewFolderRoot("/work");
+      defaults.remember({ kind: "repository", path: rocket.path }, { kind: "new" });
+
+      expect(defaults.lastNewFolderRoot()).toBe("/work");
+      expect(defaults.initialFolder(repositories)).toEqual({ kind: "repository", path: rocket.path });
+    });
+  });
+
   describe("first use", () => {
     it("has no folder and no recent folders", async () => {
       const defaults = await mountDefaults();

@@ -1454,7 +1454,7 @@ export interface paths {
         };
         get: operations["GetDirectories"];
         put?: never;
-        post?: never;
+        post: operations["CreateDirectory"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1471,6 +1471,22 @@ export interface paths {
         get: operations["InspectDirectory"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/directories/clone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CloneDirectory"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3258,6 +3274,10 @@ export interface components {
             availableHarnesses: string[];
             terminalEnabled: boolean;
         };
+        CloneFolderRequest: {
+            repository: string;
+            path: string;
+        };
         CreateAutomationRequest: {
             name: string;
             prompt: string;
@@ -3305,6 +3325,10 @@ export interface components {
         CreateBoardSourceRequest: {
             providerType: null | string;
             config: null | string;
+        };
+        CreateFolderRequest: {
+            path: string;
+            git: boolean;
         };
         CreateProjectRequest: {
             name: string;
@@ -7145,6 +7169,50 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CreateDirectory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateFolderRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CloneDirectory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CloneFolderRequest"];
+            };
+        };
         responses: {
             /** @description OK */
             200: {

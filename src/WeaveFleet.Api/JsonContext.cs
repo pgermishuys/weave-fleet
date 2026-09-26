@@ -215,6 +215,10 @@ internal sealed record ErrorResponse(string Error);
 // Directories
 [JsonSerializable(typeof(DirectoryListingResponse))]
 [JsonSerializable(typeof(FolderInspectionResponse))]
+[JsonSerializable(typeof(CreateFolderRequest))]
+[JsonSerializable(typeof(CloneFolderRequest))]
+[JsonSerializable(typeof(NewFolderResponse))]
+[JsonSerializable(typeof(CloneStreamLine))]
 [JsonSerializable(typeof(DirectoryEntryResponse))]
 // Boards
 [JsonSerializable(typeof(WeaveFleet.Api.Endpoints.CreateBoardRequest))]
