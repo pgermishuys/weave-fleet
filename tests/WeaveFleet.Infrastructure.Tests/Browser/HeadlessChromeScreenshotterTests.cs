@@ -113,9 +113,12 @@ public sealed class HeadlessChromeScreenshotterTests
         var desktopRed = await screenshots.CaptureAsync(new ScreenshotRequest(narrow.Url, 1280, 800));
 
         // Same pixels, same encoder: a phone shot of the page is the all-red page, and a desktop one isn't.
-        phone.Image.ShouldNotBeNull().Png.ShouldBe(allRed.Image.ShouldNotBeNull().Png);
-        desktop.Image.ShouldNotBeNull().Png.ShouldNotBe(desktopRed.Image.ShouldNotBeNull().Png);
+        Png(phone).ShouldBe(Png(allRed));
+        Png(desktop).ShouldNotBe(Png(desktopRed));
     }
+
+    /// <summary>The shot's picture, or a failure that says why there isn't one.</summary>
+    private static byte[] Png(ScreenshotOutcome shot) => shot.Image.ShouldNotBeNull(shot.Problem).Png;
 
     /// <summary>
     /// Options pointing at a browser to drive, or null when this machine has none and the test can only pass by

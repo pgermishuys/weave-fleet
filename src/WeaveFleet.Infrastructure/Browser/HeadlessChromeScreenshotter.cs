@@ -21,7 +21,9 @@ public sealed class HeadlessChromeScreenshotter(FleetOptions options, ILogger<He
 
     private static readonly TimeSpan LaunchTimeout = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan LoadTimeout = TimeSpan.FromSeconds(10);
-    private static readonly TimeSpan CaptureTimeout = TimeSpan.FromSeconds(30);
+
+    /// <summary>How long closing a tab may take after a shot; a browser that doesn't answer is quit anyway.</summary>
+    private static readonly TimeSpan CloseTabTimeout = TimeSpan.FromSeconds(2);
 
     /// <summary>After the load event: enough for a framework to paint its first frame, short enough not to drag.</summary>
     private static readonly TimeSpan SettleDelay = TimeSpan.FromMilliseconds(400);
@@ -142,28 +144,27 @@ public sealed class HeadlessChromeScreenshotter(FleetOptions options, ILogger<He
 
             await Task.Delay(SettleDelay, ct);
 
+            // Like every call here, it gives up when the browser stops answering (CdpConnection.DefaultReplyTimeout),
+            // and CaptureAsync quits that browser so the next shot starts a fresh one.
             using var captured = await cdp.SendAsync("Page.captureScreenshot", write =>
             {
                 write.WriteString("format", "png");
                 write.WriteBoolean("captureBeyondViewport", false);
-            }, page, ct).WaitAsync(CaptureTimeout, ct);
+            }, page, ct);
 
             var data = captured.RootElement.GetProperty("result").GetProperty("data").GetString();
             return string.IsNullOrEmpty(data)
                 ? ScreenshotOutcome.Fail("The browser returned an empty screenshot.")
                 : ScreenshotOutcome.Ok(Convert.FromBase64String(data), request.Width, request.Height, note);
         }
-        catch (TimeoutException)
-        {
-            return ScreenshotOutcome.Fail($"The browser didn't answer within {CaptureTimeout.TotalSeconds:0} seconds.");
-        }
         finally
         {
             try
             {
-                (await cdp.SendAsync("Target.closeTarget", write => write.WriteString("targetId", target), ct: CancellationToken.None)).Dispose();
+                using var closing = new CancellationTokenSource(CloseTabTimeout);
+                (await cdp.SendAsync("Target.closeTarget", write => write.WriteString("targetId", target), ct: closing.Token)).Dispose();
             }
-            catch (CdpException)
+            catch (Exception error) when (error is CdpException or OperationCanceledException)
             {
                 // The tab goes with the browser.
             }
