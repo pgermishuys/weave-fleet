@@ -71,7 +71,9 @@ against `GET /api/machine` before saving them.
 The sidebar lists every machine's sessions, grouped by machine. The machine you're working in is live: its
 conversations stream, and diffs, files, terminals, Settings, Automations and Workflows all belong to it. Clicking
 a session on another machine makes that machine live. The page reloads so nothing from one machine carries over
-into another. Other machines' rows refresh every 15 seconds.
+into another. Other machines' rows refresh every 15 seconds. A machine that stops answering keeps its last rows,
+dimmed and marked unreachable. If it's the one you're working in, its header turns red, and a reload offers the way
+back to this machine.
 
 ## The client contract
 
@@ -101,8 +103,8 @@ This is what any client relies on. The web app is one client. A native app would
 - `authMode` is `token` (local mode: present the access token) or `sign-in` (a hosted Fleet with an identity
   provider, which this contract doesn't cover yet).
 
-`PUT /api/machine` with `{ "name": "…" }` renames the machine for every client. An empty name goes back to the
-host name.
+`PUT /api/machine` with `{ "name": "…" }` renames the machine for every client (local mode only). An empty name goes
+back to the host name.
 
 ### Authentication
 

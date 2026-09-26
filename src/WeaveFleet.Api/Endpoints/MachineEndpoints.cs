@@ -37,6 +37,11 @@ public static class MachineEndpoints
             .Produces<MachineResponse>(200)
             .WithName("GetMachine");
 
+        // Only local mode has an access token, and only there is whoever signs in the machine's owner. A Fleet with
+        // sign-in identifies people, not devices, and its users shouldn't rename the server they share.
+        if (fleetOptions.Auth.Enabled || !fleetOptions.Auth.TokenAuthEnabled)
+            return app;
+
         group.MapPut("", (UpdateMachineRequest request, MachineIdentityStore store, LoopbackAuthPolicy policy) =>
         {
             var name = request.Name?.Trim();
@@ -48,10 +53,6 @@ public static class MachineEndpoints
         })
         .Produces<MachineResponse>(200)
         .WithName("UpdateMachine");
-
-        // Only local mode has an access token; a Fleet with sign-in identifies people, not devices.
-        if (fleetOptions.Auth.Enabled || !fleetOptions.Auth.TokenAuthEnabled)
-            return app;
 
         group.MapGet("/access", (ILocalTokenAuthService tokens, LoopbackAuthPolicy policy) =>
             Results.Ok(ToAccessResponse(tokens, fleetOptions, policy)))

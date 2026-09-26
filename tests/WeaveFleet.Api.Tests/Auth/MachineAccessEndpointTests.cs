@@ -59,6 +59,22 @@ public sealed class MachineAccessEndpointTests
     }
 
     [Fact]
+    public async Task A_fleet_with_sign_in_shows_its_identity_but_its_users_cannot_rename_it()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: true, useTestAuthentication: true);
+        using var client = factory.CreateClient();
+
+        var identity = await client.GetFromJsonAsync<JsonElement>("/api/machine");
+        identity.GetProperty("authMode").GetString().ShouldBe("sign-in");
+
+        (await client.PutAsJsonAsync("/api/machine", new { name = "mine now" })).IsSuccessStatusCode.ShouldBeFalse();
+        // No access endpoint, so no token: an unmatched path gets the app's page, as every unknown path does.
+        var access = await client.GetAsync("/api/machine/access");
+        access.Content.Headers.ContentType?.MediaType.ShouldNotBe("application/json");
+        (await access.Content.ReadAsStringAsync()).ShouldNotContain("\"token\"");
+    }
+
+    [Fact]
     public async Task Machine_identity_needs_the_token_on_a_reachable_bind()
     {
         await using var factory = CreateFactory("0.0.0.0");
