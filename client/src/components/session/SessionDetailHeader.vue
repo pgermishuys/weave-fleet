@@ -10,6 +10,7 @@ import { useHarnesses } from "@/composables/use-harnesses";
 import { useModels } from "@/composables/use-models";
 import { modelDisplayName } from "@/lib/agent-model-choice";
 import { useSessionsStore } from "@/stores/sessions";
+import { apiFetch } from "@/lib/api-client";
 import { useSidebarStore } from "@/stores/sidebar";
 import { ArchiveRestore, GitBranch, Layers, Loader2, X, Plus } from "lucide-vue-next";
 
@@ -272,12 +273,11 @@ async function addTag(): Promise<void> {
 
 async function updateTags(tags: readonly string[]): Promise<void> {
   try {
-    const response = await fetch(`/api/sessions/${props.id}/tags`, {
+    const response = await apiFetch(`/api/sessions/${encodeURIComponent(props.id)}/tags`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
       },
-      credentials: "include",
       body: JSON.stringify({ tags: [...tags] }),
     });
     

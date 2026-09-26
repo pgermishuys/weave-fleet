@@ -5,12 +5,15 @@ import { storeToRefs } from "pinia";
 import OnboardingGate from "@/components/auth/OnboardingGate.vue";
 import { api } from "@/api/client";
 import { useAppShellStore } from "@/stores/app-shell";
+import { getActiveMachine, switchToMachine } from "@/lib/machines";
 
 const appShellStore = useAppShellStore();
 const { isLoading, user } = storeToRefs(appShellStore);
 const errorMessage = shallowRef<string | null>(null);
 
 const isReady = computed(() => !isLoading.value && user.value !== null);
+// The page works in another machine; this machine's login page can't fix that machine turning it away.
+const remoteMachine = getActiveMachine();
 
 onMounted(() => {
   void hydrateShell();
@@ -50,7 +53,9 @@ async function hydrateShell(): Promise<void> {
     appShellStore.setUser(currentUser as UserMeResponse);
   } catch (error) {
     appShellStore.clear();
-    errorMessage.value = error instanceof Error ? error.message : "Unable to verify your session.";
+    errorMessage.value = remoteMachine
+      ? `Couldn't reach ${remoteMachine.name} at ${remoteMachine.baseUrl}.`
+      : error instanceof Error ? error.message : "Unable to verify your session.";
   } finally {
     if (errorMessage.value === null && user.value !== null) {
       appShellStore.setLoading(false);
@@ -65,6 +70,11 @@ async function hydrateShell(): Promise<void> {
 
 function redirectToLogin(): void {
   if (typeof window === "undefined") {
+    return;
+  }
+
+  if (remoteMachine) {
+    errorMessage.value = `${remoteMachine.name} didn't accept this device's token. It may have been replaced; add the machine again with the new one.`;
     return;
   }
 
@@ -90,7 +100,18 @@ function redirectToLogin(): void {
     class="auth-gate auth-gate--status"
     role="alert"
   >
-    {{ errorMessage }}
+    <div class="auth-gate__message">
+      <p>{{ errorMessage }}</p>
+      <button
+        v-if="remoteMachine"
+        type="button"
+        class="auth-gate__home"
+        data-testid="machine-go-home"
+        @click="switchToMachine(null, '/')"
+      >
+        Back to this machine
+      </button>
+    </div>
   </div>
 
   <div
@@ -118,5 +139,30 @@ function redirectToLogin(): void {
   color: var(--muted);
   font-size: 0.95rem;
   padding: 24px;
+}
+
+.auth-gate__message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 420px;
+  text-align: center;
+}
+
+.auth-gate__home {
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.875rem;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.auth-gate__home:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 </style>
