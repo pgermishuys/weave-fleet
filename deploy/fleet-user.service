@@ -1,0 +1,28 @@
+# Fleet as a systemd user service, for a machine other devices reach (see docs/machines.md).
+#
+#   cp deploy/fleet-user.service ~/.config/systemd/user/fleet.service
+#   systemctl --user daemon-reload && systemctl --user enable --now fleet.service
+#   loginctl enable-linger "$USER"
+#
+# Logs: journalctl --user -u fleet.service
+#
+# Listening on 0.0.0.0 makes Fleet ask every request for its access token, its own machine's included.
+# Behind `tailscale serve`, bind to loopback and add --require-token instead:
+#   ExecStart=%h/.weave/fleet/bin/fleet --port 2113 --require-token
+
+[Unit]
+Description=Weave Fleet
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.weave/fleet/bin/fleet --host 0.0.0.0 --port 2113
+Restart=always
+RestartSec=5
+WorkingDirectory=%h
+# Agents run your tools; give the service the PATH your shell has, e.g.
+# Environment=PATH=%h/.opencode/bin:%h/.local/bin:%h/.weave/fleet/bin:/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=default.target

@@ -80,6 +80,7 @@ public static class EndpointExtensions
         apiScope.MapAutomationEndpoints();
         apiScope.MapTelemetryEndpoints();
         apiScope.MapAdminEndpoints();
+        apiScope.MapMachineEndpoints(fleetOptions);
 
         // SignalR hub
         apiScope.MapHub<WeaveFleet.Api.Hubs.SessionEventsHub>("/hubs/session-events");

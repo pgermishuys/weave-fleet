@@ -52,6 +52,8 @@ for (var i = 0; i < args.Length; i++)
         cliOverrides[$"{FleetOptions.SectionName}:Host"] = args[++i];
     else if (args[i] is "--port" && i + 1 < args.Length)
         cliOverrides[$"{FleetOptions.SectionName}:Port"] = args[++i];
+    else if (args[i] is "--require-token")
+        cliOverrides[$"{FleetOptions.SectionName}:Auth:RequireToken"] = "true";
     else if (args[i] is "--harness" && i + 1 < args.Length)
         harnessMode = args[++i];
     else if (args[i].StartsWith("--harness=", StringComparison.Ordinal))
@@ -92,8 +94,10 @@ builder.Services.Configure<FleetOptions>(
 
 // Whether a loopback request may skip authentication is decided by the address Fleet BINDS to, never
 // by the address a request arrives from — a reverse proxy makes every remote caller look like loopback.
-var loopbackAuthPolicy = new LoopbackAuthPolicy(fleetOptions.Host);
+var loopbackAuthPolicy = new LoopbackAuthPolicy(fleetOptions.Host, fleetOptions.Auth.RequireToken);
 builder.Services.AddSingleton(loopbackAuthPolicy);
+// Who this Fleet is to other devices, and the token they present. Lives next to the database.
+builder.Services.AddSingleton(new MachineIdentityStore(fleetOptions.DatabasePath));
 // WebApplicationFactory-based E2E tests call ConfigureWebHost(...).UseEnvironment("Testing") to
 // isolate startup services (legacy import, warmup, etc.) from the host. For minimal-hosting apps,
 // that setting lands in configuration (builder.Configuration) but NOT in the already-materialized
@@ -217,6 +221,10 @@ builder.Services.AddCors(options =>
     });
 });
 
+// A page on another machine may call this Fleet when it presents the access token; see MachineCorsPolicyProvider.
+if (!fleetOptions.Auth.Enabled && fleetOptions.Auth.TokenAuthEnabled)
+    builder.Services.AddSingleton<Microsoft.AspNetCore.Cors.Infrastructure.ICorsPolicyProvider, MachineCorsPolicyProvider>();
+
 // ── Authentication / Authorization ───────────────────────────────────────────
 builder.Services.AddHttpContextAccessor();
 
@@ -292,7 +300,7 @@ if (fleetOptions.Auth.Enabled)
 else
 {
     // Local mode: cookie authentication + local token service + passthrough IUserContext
-    builder.Services.AddSingleton<LocalTokenAuthService>();
+    builder.Services.AddSingleton(sp => new LocalTokenAuthService(sp.GetRequiredService<MachineIdentityStore>()));
     builder.Services.AddSingleton<ILocalTokenAuthService>(sp =>
         sp.GetRequiredService<LocalTokenAuthService>());
 
@@ -356,7 +364,7 @@ else
             if (fleetOptions.Auth.TokenAuthEnabled)
             {
                 options.ForwardDefaultSelector = context =>
-                    HasBearerAuthorizationHeader(context.Request)
+                    BearerTokenHandler.PresentsToken(context.Request)
                         ? BearerTokenHandler.SchemeName
                         : null;
             }
@@ -459,7 +467,13 @@ if (!fleetOptions.Auth.Enabled)
 {
     var localTokenAuthService = app.Services.GetRequiredService<ILocalTokenAuthService>();
     Console.WriteLine();
-    var displayHost = fleetOptions.Host is "0.0.0.0" or "::" ? Environment.MachineName : "localhost";
+    // A wildcard bind is reached by the machine's name; a specific address by that address.
+    var displayHost = fleetOptions.Host switch
+    {
+        "0.0.0.0" or "::" or "[::]" => Environment.MachineName,
+        _ when loopbackAuthPolicy.IsRemoteReachable => fleetOptions.Host,
+        _ => "localhost",
+    };
     Console.WriteLine($"  Access Weave Fleet at http://{displayHost}:{fleetOptions.Port}/login?token={localTokenAuthService.Token}");
     if (loopbackAuthPolicy.IsRemoteReachable)
     {
@@ -536,6 +550,12 @@ app.UseAgentRequests();
 app.UseRouting();
 
 app.UseCors();
+
+// An unhandled exception answered by Kestrel goes out with its headers cleared, CORS ones included, so a page on
+// another machine saw a CORS failure instead of the 500. Handled here, inside CORS, the 500 keeps them. Development
+// keeps the exception page, which WebApplication puts in front of everything.
+if (!app.Environment.IsDevelopment())
+    app.UseExceptionHandler();
 
 app.Use(async (context, next) =>
 {
@@ -661,15 +681,6 @@ await app.RunAsync();
 
 static bool IsApiOrWebSocketRequest(PathString path)
     => path.StartsWithSegments("/api") || path.StartsWithSegments("/hubs");
-
-static bool HasBearerAuthorizationHeader(HttpRequest request)
-{
-    if (!request.Headers.TryGetValue(Microsoft.Net.Http.Headers.HeaderNames.Authorization, out var authorizationHeaderValues))
-        return false;
-
-    var authorizationHeader = authorizationHeaderValues.ToString();
-    return authorizationHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase);
-}
 
 static bool IsHubOriginAllowed(HttpContext context, FleetOptions fleetOptions)
 {
