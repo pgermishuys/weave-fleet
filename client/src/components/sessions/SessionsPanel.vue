@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, shallowRef, watch } from "vue";
+import { computed, onMounted, onUnmounted, shallowRef, watch } from "vue";
 import { useLocation, useRouter } from "@tanstack/vue-router";
 import { Archive, ArchiveRestore, ArrowLeft, FolderPlus, LoaderCircle, Plus, Search, X } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
@@ -10,7 +10,7 @@ import { useMoveSession } from "@/composables/use-session-actions";
 import { useArchiveQueueStore } from "@/stores/archive-queue";
 import { useSessionSelectionStore } from "@/stores/session-selection";
 import { useSessionsStore } from "@/stores/sessions";
-import { useSidebarStore } from "@/stores/sidebar";
+import { machineGroupKey, projectGroupKey, useSidebarStore } from "@/stores/sidebar";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 import { useMachinesStore, type MachineEntry } from "@/stores/machines";
 
@@ -111,14 +111,20 @@ const sessions = computed(() => {
 
 const isArchivedView = computed(() => retentionStatus.value === "archived");
 
-// Other machines: every machine is listed, the live one in full, the rest as their last polled list.
+// Other machines: every machine is listed, the live one first and in full, the rest as their last polled list.
 const machines = useMachinesStore();
 const { entries: machineEntries, hasMachines, others: machineSessions } = storeToRefs(machines);
 const showMachines = computed(() => hasMachines.value && !isArchivedView.value);
-const liveMachineIndex = computed(() => Math.max(0, machineEntries.value.findIndex((entry) => entry.isLive)));
-const liveMachineEntry = computed(() => machineEntries.value[liveMachineIndex.value]);
-const machinesBefore = computed(() => (showMachines.value ? machineEntries.value.slice(0, liveMachineIndex.value) : []));
-const machinesAfter = computed(() => (showMachines.value ? machineEntries.value.slice(liveMachineIndex.value + 1) : []));
+const liveMachineEntry = computed(() => machineEntries.value.find((entry) => entry.isLive) ?? machineEntries.value[0]);
+const otherMachines = computed(() => (showMachines.value ? machineEntries.value.filter((entry) => entry !== liveMachineEntry.value) : []));
+// Folding the live machine hides its whole tree; without other machines there's no heading to fold it with.
+const liveMachineExpanded = computed(() => !showMachines.value || !sidebarStore.isGroupCollapsed(machineGroupKey(machines.liveKey)));
+
+const liveSessionCount = computed(() => filteredProjectGroups.value.reduce((total, group) => total + group.sessionCount, 0));
+
+function handleToggleLiveMachine(): void {
+  sidebarStore.toggleGroupCollapsed(machineGroupKey(machines.liveKey));
+}
 
 let stopMachinePolling: (() => void) | null = null;
 watch(hasMachines, (has) => {
@@ -142,7 +148,11 @@ function handleMachineSessionOpen(machine: MachineEntry, session: SessionListIte
 }
 
 const searchQuery = shallowRef("");
-const expandedProjects = reactive<Record<string, boolean>>({});
+
+function isProjectExpanded(projectId: string): boolean {
+  return !sidebarStore.isGroupCollapsed(projectGroupKey(machines.liveKey, projectId));
+}
+
 const isNewProjectDialogOpen = shallowRef(false);
 
 
@@ -381,7 +391,7 @@ function showArchived(show: boolean): void {
 // Shift-click ranges follow the rows as the list shows them.
 watch(
   () => filteredProjectGroups.value
-    .filter((group) => expandedProjects[group.id] ?? true)
+    .filter((group) => liveMachineExpanded.value && isProjectExpanded(group.id))
     .flatMap((group) => group.sessions.map((session) => session.session.id)),
   (order) => selection.setVisibleOrder(order),
   { immediate: true },
@@ -413,7 +423,8 @@ const draftGroupId = computed<string | null>(() => {
 // A draft shows in its group, so that group opens when a draft lands in it.
 watch(draftGroupId, (groupId) => {
   if (groupId) {
-    expandedProjects[groupId] = true;
+    sidebarStore.setGroupCollapsed(machineGroupKey(machines.liveKey), false);
+    sidebarStore.setGroupCollapsed(projectGroupKey(machines.liveKey, groupId), false);
   }
 });
 
@@ -429,7 +440,7 @@ function handleOpenDraft(): void {
 }
 
 function handleToggleProject(projectId: string): void {
-  expandedProjects[projectId] = !(expandedProjects[projectId] ?? true);
+  sidebarStore.toggleGroupCollapsed(projectGroupKey(machines.liveKey, projectId));
 }
 
 function openNewSessionPage(projectId: string | null): void {
@@ -687,118 +698,113 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
     </div>
 
     <div class="sessions-list">
-      <template v-if="showMachines">
-        <MachineSessionsGroup
-          v-for="machine in machinesBefore"
-          :key="machine.key"
-          :machine="machine"
-          :state="machineSessions[machine.key]"
-          :query="normalizedQuery"
-          @open="handleMachineSessionOpen(machine, $event)"
-        />
-        <MachineHeader
-          v-if="liveMachineEntry"
-          :name="liveMachineEntry.name"
-          live
-          :unreachable="!machines.liveReachable"
-          :note="machines.liveReachable ? null : 'unreachable'"
-        />
-      </template>
-
-      <div
-        v-if="errorMessage && hasSessions"
-        class="sessions-feedback-banner"
-        aria-live="polite"
-      >
-        <p class="sessions-feedback-banner__copy">
-          Showing cached sessions. Refresh failed: {{ errorMessage }}
-        </p>
-        <button
-          type="button"
-          class="sessions-feedback-banner__button"
-          @click="handleRetry"
-        >
-          Retry
-        </button>
-      </div>
-
-      <div
-        v-if="isLoading && !hasSessions"
-        class="sessions-feedback-state"
-        aria-live="polite"
-      >
-        <LoaderCircle
-          class="sessions-feedback-state__icon sessions-feedback-state__icon--spinning"
-          aria-hidden="true"
-        />
-        <p class="sessions-feedback-state__title">
-          Loading sessions
-        </p>
-        <p class="sessions-feedback-state__copy">
-          Fetching the latest sessions and projects.
-        </p>
-      </div>
-
-      <div
-        v-else-if="errorMessage && !hasSessions"
-        class="sessions-feedback-state sessions-feedback-state--error"
-        aria-live="polite"
-      >
-        <p class="sessions-feedback-state__title">
-          Unable to load sessions
-        </p>
-        <p class="sessions-feedback-state__copy">
-          {{ errorMessage }}
-        </p>
-        <button
-          type="button"
-          class="sessions-feedback-state__button"
-          @click="handleRetry"
-        >
-          Retry
-        </button>
-      </div>
-
-      <ProjectGroup
-        v-for="project in filteredProjectGroups"
-        v-else
-        :key="project.id"
-        :project="project"
-        :expanded="expandedProjects[project.id] ?? true"
-        :active-session-id="activeSessionId"
-        :active-drag-session-id="activeSessionDrag?.sessionId ?? null"
-        :active-drag-project-id="activeSessionDrag?.projectId ?? null"
-        :draft="project.id === draftGroupId ? newSessionDraftRow : null"
-        :draft-active="isNewSessionOpen"
-        :row-keys="sessionRowKeys"
-        @new-session="handleProjectSessionCreate"
-        @open-draft="handleOpenDraft"
-        @project-changed="handleProjectChanged"
-        @session-changed="handleRetry"
-        @toggle="handleToggleProject"
-        @select-session="handleSessionSelect"
-        @drag-session-start="handleSessionDragStart"
-        @drag-session-end="handleSessionDragEnd"
-        @move-session="handleMoveSession"
+      <MachineHeader
+        v-if="showMachines && liveMachineEntry"
+        :name="liveMachineEntry.name"
+        live
+        :unreachable="!machines.liveReachable"
+        :note="machines.liveReachable ? null : 'unreachable'"
+        :count="liveSessionCount"
+        :expanded="liveMachineExpanded"
+        @toggle="handleToggleLiveMachine"
       />
 
-      <div
-        v-if="!isLoading && !errorMessage && filteredProjectGroups.length === 0"
-        class="sessions-empty-state"
-      >
-        <p class="sessions-empty-state__title">
-          {{ isArchivedView && !normalizedQuery ? "No archived sessions" : "No sessions found" }}
-        </p>
-        <p
-          v-if="!isArchivedView || normalizedQuery"
-          class="sessions-empty-state__copy"
+      <template v-if="liveMachineExpanded">
+        <div
+          v-if="errorMessage && hasSessions"
+          class="sessions-feedback-banner"
+          aria-live="polite"
         >
-          Try a different search term or clear the filter.
-        </p>
-      </div>
+          <p class="sessions-feedback-banner__copy">
+            Showing cached sessions. Refresh failed: {{ errorMessage }}
+          </p>
+          <button
+            type="button"
+            class="sessions-feedback-banner__button"
+            @click="handleRetry"
+          >
+            Retry
+          </button>
+        </div>
+
+        <div
+          v-if="isLoading && !hasSessions"
+          class="sessions-feedback-state"
+          aria-live="polite"
+        >
+          <LoaderCircle
+            class="sessions-feedback-state__icon sessions-feedback-state__icon--spinning"
+            aria-hidden="true"
+          />
+          <p class="sessions-feedback-state__title">
+            Loading sessions
+          </p>
+          <p class="sessions-feedback-state__copy">
+            Fetching the latest sessions and projects.
+          </p>
+        </div>
+
+        <div
+          v-else-if="errorMessage && !hasSessions"
+          class="sessions-feedback-state sessions-feedback-state--error"
+          aria-live="polite"
+        >
+          <p class="sessions-feedback-state__title">
+            Unable to load sessions
+          </p>
+          <p class="sessions-feedback-state__copy">
+            {{ errorMessage }}
+          </p>
+          <button
+            type="button"
+            class="sessions-feedback-state__button"
+            @click="handleRetry"
+          >
+            Retry
+          </button>
+        </div>
+
+        <ProjectGroup
+          v-for="project in filteredProjectGroups"
+          v-else
+          :key="project.id"
+          :project="project"
+          :expanded="isProjectExpanded(project.id)"
+          :active-session-id="activeSessionId"
+          :active-drag-session-id="activeSessionDrag?.sessionId ?? null"
+          :active-drag-project-id="activeSessionDrag?.projectId ?? null"
+          :draft="project.id === draftGroupId ? newSessionDraftRow : null"
+          :draft-active="isNewSessionOpen"
+          :row-keys="sessionRowKeys"
+          @new-session="handleProjectSessionCreate"
+          @open-draft="handleOpenDraft"
+          @project-changed="handleProjectChanged"
+          @session-changed="handleRetry"
+          @toggle="handleToggleProject"
+          @select-session="handleSessionSelect"
+          @drag-session-start="handleSessionDragStart"
+          @drag-session-end="handleSessionDragEnd"
+          @move-session="handleMoveSession"
+        />
+
+        <div
+          v-if="!isLoading && !errorMessage && filteredProjectGroups.length === 0"
+          class="sessions-empty-state"
+        >
+          <p class="sessions-empty-state__title">
+            {{ isArchivedView && !normalizedQuery ? "No archived sessions" : "No sessions found" }}
+          </p>
+          <p
+            v-if="!isArchivedView || normalizedQuery"
+            class="sessions-empty-state__copy"
+          >
+            Try a different search term or clear the filter.
+          </p>
+        </div>
+      </template>
 
       <MachineSessionsGroup
-        v-for="machine in machinesAfter"
+        v-for="machine in otherMachines"
         :key="machine.key"
         :machine="machine"
         :state="machineSessions[machine.key]"

@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, shallowRef } from "vue";
+import { computed } from "vue";
 import type { SessionListItem } from "@/api/client";
 import MachineHeader from "@/components/sessions/MachineHeader.vue";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { useRelativeTime } from "@/composables/use-relative-time";
 import { formatCompactAge, isSessionLive, sessionRowDim, sessionRowStatus } from "@/lib/session-row-status";
 import type { MachineEntry, MachineSessions } from "@/stores/machines";
+import { machineGroupKey, useSidebarStore } from "@/stores/sidebar";
 
 /**
  * A machine the app isn't working in: its sessions as it last listed them, refreshed on a timer. Its rows only
@@ -21,7 +22,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{ open: [session: SessionListItem] }>();
 
-const expanded = shallowRef(true);
+const sidebar = useSidebarStore();
+const expanded = computed(() => !sidebar.isGroupCollapsed(machineGroupKey(props.machine.key)));
 const now = useRelativeTime();
 
 const sessions = computed(() => {
@@ -62,7 +64,7 @@ function age(item: SessionListItem): string {
       :note="note"
       :count="sessions.length"
       :expanded="expanded"
-      @toggle="expanded = !expanded"
+      @toggle="sidebar.toggleGroupCollapsed(machineGroupKey(machine.key))"
     />
 
     <template v-if="expanded">

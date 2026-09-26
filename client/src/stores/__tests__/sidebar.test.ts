@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { useSessionsStore } from "@/stores/sessions";
-import { useSidebarStore } from "@/stores/sidebar";
+import { machineGroupKey, projectGroupKey, useSidebarStore } from "@/stores/sidebar";
 
 describe("useSidebarStore", () => {
   beforeEach(() => {
@@ -46,6 +46,33 @@ describe("useSidebarStore", () => {
 
     expect(rehydratedStore.panelCollapsed).toBe(true);
     expect(rehydratedStore.rightPanelCollapsed).toBe(true);
+  });
+
+  it("remembers which session-list groups are collapsed across a reload", () => {
+    const store = useSidebarStore();
+    const machine = machineGroupKey("mac");
+    const project = projectGroupKey("mac", "p1");
+
+    expect(store.isGroupCollapsed(machine)).toBe(false);
+
+    store.toggleGroupCollapsed(machine);
+    store.setGroupCollapsed(project, true);
+    store.setGroupCollapsed(projectGroupKey("mac", "p2"), true);
+    store.setGroupCollapsed(projectGroupKey("mac", "p2"), false);
+
+    setActivePinia(createPinia());
+    const rehydrated = useSidebarStore();
+
+    expect(rehydrated.isGroupCollapsed(machine)).toBe(true);
+    expect(rehydrated.isGroupCollapsed(project)).toBe(true);
+    expect(rehydrated.isGroupCollapsed(projectGroupKey("mac", "p2"))).toBe(false);
+    // The same project id on another machine is its own group.
+    expect(rehydrated.isGroupCollapsed(projectGroupKey("linux", "p1"))).toBe(false);
+    // Only collapsed groups are kept.
+    expect(JSON.parse(localStorage.getItem("weave:sessions-collapsed-groups") ?? "{}")).toEqual({
+      [machine]: true,
+      [project]: true,
+    });
   });
 
   it("remembers the right panel per session", () => {
