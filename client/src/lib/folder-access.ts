@@ -1,4 +1,4 @@
-import { api, type FolderInspection } from "@/api/client";
+import { api, type FolderInspection, type WorkspaceRootsResponse } from "@/api/client";
 import type { NewSessionFolder } from "@/lib/new-session-request";
 
 /** Whether a folder exists, is a git repository, and is inside the workspace roots. */
@@ -60,8 +60,8 @@ export async function listWorkspaceRoots(): Promise<string[]> {
   if (error || !data) {
     throw new Error("Couldn't load your workspace roots.");
   }
-  const { items } = data as { items: { path: string; exists: boolean }[] };
-  return items.filter((item) => item.exists).map((item) => item.path);
+  const { roots } = data as WorkspaceRootsResponse;
+  return roots.filter((root) => root.exists).map((root) => root.path);
 }
 
 /** Creates a folder, and parent folders it needs; with `git`, a repository with an empty first commit. */

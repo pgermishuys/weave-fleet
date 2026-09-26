@@ -1234,6 +1234,7 @@ describe("NewSessionComposer", () => {
       expect(row.text()).toContain("Clone pgermishuys/recipe-box");
       expect(row.text()).toContain("into ~/src/recipe-box");
       expect(inDocument().find("[data-testid='new-session-folder-create']").exists()).toBe(false);
+      expect(inDocument().get(".ns-pop__label").text()).toBe("Repository to clone");
 
       await row.trigger("click");
       await flushPromises();

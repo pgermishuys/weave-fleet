@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const post = vi.hoisted(() => vi.fn());
+const get = vi.hoisted(() => vi.fn());
 
-vi.mock("@/api/client", () => ({ api: { POST: post } }));
+vi.mock("@/api/client", () => ({ api: { POST: post, GET: get } }));
 
-import { cloneRepository, createFolder, FolderExistsError } from "@/lib/folder-access";
+import { cloneRepository, createFolder, FolderExistsError, listWorkspaceRoots } from "@/lib/folder-access";
 
 function streamOf(...chunks: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
@@ -73,5 +74,16 @@ describe("createFolder", () => {
     post.mockResolvedValue({ error: { error: "New folders aren't available in cloud mode." }, response: new Response(null, { status: 400 }) });
 
     await expect(createFolder("/src/x", true)).rejects.toThrow("New folders aren't available in cloud mode.");
+  });
+});
+
+describe("listWorkspaceRoots", () => {
+  it("lists the roots that exist, in the server's shape", async () => {
+    get.mockResolvedValue({
+      data: { roots: [{ path: "/src", exists: true, id: "1", source: "user" }, { path: "/gone", exists: false, id: null, source: "env" }] },
+      response: new Response(null, { status: 200 }),
+    });
+
+    await expect(listWorkspaceRoots()).resolves.toEqual(["/src"]);
   });
 });

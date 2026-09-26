@@ -321,6 +321,9 @@ function groupLabel(index: number): string | null {
   if (!option || (index > 0 && options.value[index - 1]?.group === option.group)) {
     return null;
   }
+  if (option.group === "New" && option.icon === "clone") {
+    return "Repository to clone";
+  }
   if (option.group === "New") {
     return hasRepositoryMatches.value ? "Or start something new" : "No repository matches";
   }
