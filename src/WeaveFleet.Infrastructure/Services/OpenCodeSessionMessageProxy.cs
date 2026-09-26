@@ -59,6 +59,50 @@ public sealed class OpenCodeSessionMessageProxy(
         string? cursor = null,
         CancellationToken ct = default)
     {
+        var snapshot = await ReadSnapshotAsync(fleetSessionId, pageSize, cursor, ct).ConfigureAwait(false);
+        if (InTurn(fleetSessionId))
+            return snapshot;
+
+        var stillWorking = CutOffToolCalls.StillWorking(
+            snapshot.Delegations.Select(d => (d.ParentToolCallId, d.ChildSessionId)),
+            ChildStillWorking);
+        return snapshot with { Messages = CutOffToolCalls.Settle(snapshot.Messages, stillWorking) };
+    }
+
+    /// <inheritdoc />
+    public async Task<MessagePage> GetMessagesAsync(
+        string fleetSessionId,
+        int? limit = null,
+        string? before = null,
+        CancellationToken ct = default)
+    {
+        var page = await ReadMessagesAsync(fleetSessionId, limit, before, ct).ConfigureAwait(false);
+        if (InTurn(fleetSessionId) || !page.Messages.Any(HasUnfinishedCall))
+            return page;
+
+        var delegations = await delegationRepository.GetByParentSessionIdAsync(fleetSessionId).ConfigureAwait(false);
+        var stillWorking = CutOffToolCalls.StillWorking(
+            delegations.Select(d => (d.ParentToolCallId, d.ChildSessionId)),
+            ChildStillWorking);
+        return page with { Messages = CutOffToolCalls.Settle(page.Messages, stillWorking) };
+    }
+
+    /// <summary>Whether the session is in a turn: working, retrying, or stopped on a question. Only then can a call run.</summary>
+    private bool InTurn(string sessionId)
+        => SessionActivityTracker.IsInTurn(activityTracker.GetEffectiveActivityStatus(sessionId));
+
+    private bool ChildStillWorking(string childSessionId)
+        => activityTracker.IsChildInBackground(childSessionId) || InTurn(childSessionId);
+
+    private static bool HasUnfinishedCall(HarnessMessage message)
+        => message.Parts.Any(part => part is ToolUsePart { State: ToolUseState.Pending or ToolUseState.Running });
+
+    private async Task<SessionSnapshot> ReadSnapshotAsync(
+        string fleetSessionId,
+        int pageSize,
+        string? cursor,
+        CancellationToken ct)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(fleetSessionId);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pageSize);
 
@@ -131,12 +175,11 @@ public sealed class OpenCodeSessionMessageProxy(
             : fallbackSnapshot;
     }
 
-    /// <inheritdoc />
-    public async Task<MessagePage> GetMessagesAsync(
+    private async Task<MessagePage> ReadMessagesAsync(
         string fleetSessionId,
-        int? limit = null,
-        string? before = null,
-        CancellationToken ct = default)
+        int? limit,
+        string? before,
+        CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(fleetSessionId);
 
