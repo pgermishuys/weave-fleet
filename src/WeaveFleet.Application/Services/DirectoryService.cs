@@ -171,7 +171,7 @@ public sealed partial class DirectoryService(
         string normalised;
         try
         {
-            normalised = WorkspaceRootService.CanonicalizePath(path.Trim());
+            normalised = WorkspaceRootService.CanonicalizePath(WorkspaceRootService.ExpandHome(path.Trim()));
         }
         catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
         {

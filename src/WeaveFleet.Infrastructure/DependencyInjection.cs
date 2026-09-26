@@ -246,6 +246,7 @@ public static class DependencyInjection
 
         // DirectoryService — scoped (depends on scoped WorkspaceRootService)
         services.AddScoped<DirectoryService>();
+        services.AddScoped<NewFolderService>();
 
         // RepositoryService — singleton, owns the in-memory scan cache
         services.AddSingleton<RepositoryService>();
@@ -271,6 +272,7 @@ public static class DependencyInjection
 
         // GitHub services — singleton
         services.AddScoped<GitHubService>();
+        services.AddScoped<IGitHubTokenSource>(sp => sp.GetRequiredService<GitHubService>());
         services.AddSingleton<GitHubApiProxy>();
         services.AddBuiltInPlugin<GitHubBackendPlugin>();
 

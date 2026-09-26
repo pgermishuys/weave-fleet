@@ -22,6 +22,10 @@ const mocks = vi.hoisted(() => ({
   refreshRepositories: vi.fn(),
   inspectFolder: vi.fn(),
   addFolderToFleet: vi.fn(),
+  listWorkspaceRoots: vi.fn(),
+  createFolder: vi.fn(),
+  cloneRepository: vi.fn(),
+  refreshGitHubRepos: vi.fn(),
   search: { value: { projectId: undefined as string | undefined, source: undefined as string | undefined } },
 }));
 
@@ -51,6 +55,15 @@ vi.mock("@/lib/folder-access", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/folder-access")>()),
   inspectFolder: mocks.inspectFolder,
   addFolderToFleet: mocks.addFolderToFleet,
+  listWorkspaceRoots: mocks.listWorkspaceRoots,
+  createFolder: mocks.createFolder,
+  cloneRepository: mocks.cloneRepository,
+}));
+
+const gitHubRepos = shallowRef<{ id: number; full_name: string; name: string }[]>([]);
+
+vi.mock("@/plugins/builtin/github/composables/use-github-repos", () => ({
+  useGitHubRepos: () => ({ repos: gitHubRepos, refresh: mocks.refreshGitHubRepos }),
 }));
 
 vi.mock("@/composables/use-projects", () => ({
@@ -225,6 +238,16 @@ beforeEach(() => {
   mocks.search.value = { projectId: undefined, source: undefined };
   mocks.refreshRepositories.mockReset().mockResolvedValue(undefined);
   mocks.addFolderToFleet.mockReset().mockResolvedValue(undefined);
+  mocks.listWorkspaceRoots.mockReset().mockResolvedValue(["/home/me/src", "/home/me/work"]);
+  mocks.createFolder.mockReset().mockImplementation(async (path: string, git: boolean) => ({
+    path,
+    isGitRepo: git,
+    addedToFleet: false,
+    warning: null,
+  }));
+  mocks.cloneRepository.mockReset();
+  mocks.refreshGitHubRepos.mockReset().mockResolvedValue(undefined);
+  gitHubRepos.value = [];
   mocks.inspectFolder.mockReset().mockImplementation(async (path: string) => ({
     path,
     exists: true,
@@ -796,7 +819,7 @@ describe("NewSessionComposer", () => {
 
       await textarea(view).trigger("keydown", { key: "Escape" });
       await openFolderMenu(view);
-      await inDocument().get("input[aria-label='Search repositories']").trigger("keydown", { key: "Escape" });
+      await inDocument().get("input[aria-label='Search, or create a folder']").trigger("keydown", { key: "Escape" });
       await flushPromises();
 
       expect(mocks.navigate).not.toHaveBeenCalled();
@@ -811,7 +834,7 @@ describe("NewSessionComposer", () => {
       await pressEnter(view);
 
       expect(mocks.createSession).not.toHaveBeenCalled();
-      expect(inDocument().find("input[aria-label='Search repositories']").exists()).toBe(true);
+      expect(inDocument().find("input[aria-label='Search, or create a folder']").exists()).toBe(true);
     });
   });
 
@@ -1064,14 +1087,255 @@ describe("NewSessionComposer", () => {
       expect(view.find("[data-testid='new-session-workspace-chip']").exists()).toBe(true);
     });
 
-    it("says so when the folder doesn't exist", async () => {
-      mocks.inspectFolder.mockResolvedValue({ path: "/nope", exists: false, isGitRepo: false, isWithinRoots: false });
+    it("offers to create a folder that doesn't exist, as a git repository unless told not to", async () => {
+      mocks.inspectFolder.mockResolvedValue({ path: "/home/me/src/recipe-box", exists: false, isGitRepo: false, isWithinRoots: false });
       const view = await mountComposer();
 
-      await browseTo(view, "/nope");
+      await browseTo(view, "~/src/recipe-box");
 
-      expect(inDocument().get("[role='alert']").text()).toBe("There's no folder at that path.");
-      expect(view.get("[data-testid='new-session-folder-chip']").text()).not.toContain("/nope");
+      const card = inDocument().get("[data-testid='new-session-create-folder']");
+      expect(card.text()).toContain("recipe-box doesn't exist yet");
+      expect(card.text()).toContain("Fleet can create ~/src/recipe-box.");
+      expect(view.get("[data-testid='new-session-folder-chip']").text()).not.toContain("recipe-box");
+
+      await inDocument().get("[data-testid='new-session-create-folder-git']").setValue(false);
+      await inDocument().get("[data-testid='new-session-create-folder-submit']").trigger("click");
+      await flushPromises();
+
+      expect(mocks.createFolder).toHaveBeenCalledWith("/home/me/src/recipe-box", false);
+      expect(mocks.refreshRepositories).toHaveBeenCalled();
+      expect(view.get("[data-testid='new-session-folder-chip']").text()).toContain("~/src/recipe-box");
+      expect(view.find("[data-testid='new-session-folder-new']").exists()).toBe(true);
+    });
+
+    it("says a folder outside the roots is added too", async () => {
+      mocks.inspectFolder.mockResolvedValue({ path: "/srv/side", exists: false, isGitRepo: false, isWithinRoots: false });
+      const view = await mountComposer();
+
+      await browseTo(view, "/srv/side");
+
+      expect(inDocument().get("[data-testid='new-session-create-folder']").text())
+        .toContain("Fleet can create /srv/side and add it to your folders.");
+    });
+  });
+
+  describe("making a folder", () => {
+    async function search(view: VueWrapper, text: string) {
+      await openFolderMenu(view);
+      const input = inDocument().get<HTMLInputElement>("input[aria-label='Search, or create a folder']");
+      await input.setValue(text);
+      await flushPromises();
+      return input;
+    }
+
+    it("a name no repository has offers to create it, and Enter does", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path });
+      const view = await mountComposer();
+
+      const input = await search(view, "recipe box");
+
+      const row = inDocument().get("[data-testid='new-session-folder-create']");
+      expect(row.text()).toContain("Create recipe-box");
+      expect(row.text()).toContain("~/src/recipe-box · git repository");
+      expect(row.attributes("data-highlighted")).toBeDefined();
+
+      await input.trigger("keydown", { key: "Enter" });
+      await flushPromises();
+
+      expect(mocks.createFolder).toHaveBeenCalledWith("/home/me/src/recipe-box", true);
+      expect(view.get("[data-testid='new-session-folder-chip']").text()).toContain("recipe-box");
+      expect(view.find("[data-testid='new-session-folder-new']").exists()).toBe(true);
+      // A new repository gets New worktree like any other; its first commit gives it a base.
+      expect(view.find("[data-testid='new-session-workspace-chip']").exists()).toBe(true);
+    });
+
+    it("never offers to create a repository that's already there", async () => {
+      const view = await mountComposer();
+
+      await search(view, "Rocket");
+
+      expect(inDocument().find("[data-testid='new-session-folder-create']").exists()).toBe(false);
+      expect(folderOption("rocket").exists()).toBe(true);
+    });
+
+    it("puts new folders in the root used last, and remembers a different pick", async () => {
+      localStorage.setItem(NEW_SESSION_DEFAULTS_KEY, JSON.stringify({ lastNewFolderRoot: "/home/me/work" }));
+      const view = await mountComposer();
+
+      await search(view, "invoices");
+      expect(inDocument().get("[data-testid='new-session-folder-create']").text()).toContain("~/work/invoices");
+
+      await inDocument().get("[data-testid='new-session-folder-root']").setValue("/home/me/src");
+      await inDocument().get("[data-testid='new-session-folder-create']").trigger("click");
+      await flushPromises();
+
+      expect(mocks.createFolder).toHaveBeenCalledWith("/home/me/src/invoices", true);
+      expect(JSON.parse(localStorage.getItem(NEW_SESSION_DEFAULTS_KEY) ?? "{}").lastNewFolderRoot).toBe("/home/me/src");
+    });
+
+    it("the first time, a new folder goes in the root of the folder in use", async () => {
+      rememberFolder({ kind: "repository", path: "/home/me/work/billing" });
+      repositories.value = [rocket, comet, { name: "billing", path: "/home/me/work/billing", parentRoot: "/home/me/work" }];
+      const view = await mountComposer();
+
+      await search(view, "invoices");
+
+      expect(inDocument().get("[data-testid='new-session-folder-create']").text()).toContain("~/work/invoices");
+    });
+
+    it("an existing folder says so and can be used instead", async () => {
+      const { FolderExistsError } = await import("@/lib/folder-access");
+      mocks.createFolder.mockRejectedValue(new FolderExistsError("/home/me/src/notes already exists.", "/home/me/src/notes"));
+      mocks.inspectFolder.mockResolvedValue({ path: "/home/me/src/notes", exists: true, isGitRepo: false, isWithinRoots: true });
+      const view = await mountComposer();
+
+      await search(view, "notes");
+      await inDocument().get("[data-testid='new-session-folder-create']").trigger("click");
+      await flushPromises();
+
+      const alert = inDocument().get("[role='alert']");
+      expect(alert.text()).toContain("/home/me/src/notes already exists.");
+      await alert.get("button").trigger("click");
+      await flushPromises();
+
+      expect(view.get("[data-testid='new-session-folder-chip']").text()).toContain("~/src/notes");
+    });
+
+    it("keeps the menu open to say the first commit couldn't be made", async () => {
+      mocks.createFolder.mockResolvedValue({
+        path: "/home/me/src/recipe-box",
+        isGitRepo: true,
+        addedToFleet: false,
+        warning: "Git couldn't make the first commit: empty ident name not allowed New worktree works once the repository has a commit.",
+      });
+      const view = await mountComposer();
+
+      await search(view, "recipe-box");
+      await inDocument().get("[data-testid='new-session-folder-create']").trigger("click");
+      await flushPromises();
+
+      expect(inDocument().get("[data-testid='new-session-folder-warning']").text()).toContain("empty ident name");
+      expect(view.get("[data-testid='new-session-folder-chip']").text()).toContain("recipe-box");
+    });
+
+    it("a pasted repository offers a clone, which starting waits for", async () => {
+      let finish: (folder: object) => void = () => {};
+      let report: (progress: { phase: string; percent: number }) => void = () => {};
+      mocks.cloneRepository.mockImplementation((_repository: string, _path: string, onProgress: typeof report) => {
+        report = onProgress;
+        return new Promise((resolve) => {
+          finish = resolve;
+        });
+      });
+      const view = await mountComposer();
+
+      await search(view, "https://github.com/pgermishuys/recipe-box.git");
+      const row = inDocument().get("[data-testid='new-session-folder-clone']");
+      expect(row.text()).toContain("Clone pgermishuys/recipe-box");
+      expect(row.text()).toContain("into ~/src/recipe-box");
+      expect(inDocument().find("[data-testid='new-session-folder-create']").exists()).toBe(false);
+
+      await row.trigger("click");
+      await flushPromises();
+      expect(mocks.cloneRepository).toHaveBeenCalledWith("pgermishuys/recipe-box", "/home/me/src/recipe-box", expect.any(Function));
+
+      report({ phase: "Receiving objects", percent: 38 });
+      await flushPromises();
+      expect(view.get("[data-testid='new-session-folder-chip']").text()).toContain("Cloning recipe-box… 38%");
+
+      await type(view, "Add a README");
+      await pressEnter(view);
+      expect(mocks.createSession).not.toHaveBeenCalled();
+      expect(view.get("[data-testid='create-session-submit']").attributes("disabled")).toBeDefined();
+
+      finish({ path: "/home/me/src/recipe-box", isGitRepo: true, addedToFleet: false, warning: null });
+      await flushPromises();
+
+      expect(view.get("[data-testid='new-session-folder-chip']").text()).toContain("recipe-box");
+      expect(view.get("[data-testid='create-session-submit']").attributes("disabled")).toBeUndefined();
+      await pressEnter(view);
+      expect(mocks.createSession).toHaveBeenCalled();
+    });
+
+    it("picking another folder while a clone runs lets the clone finish without taking over", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path });
+      let finish: (folder: object) => void = () => {};
+      mocks.cloneRepository.mockImplementation(() => new Promise((resolve) => {
+        finish = resolve;
+      }));
+      const view = await mountComposer();
+
+      await search(view, "pgermishuys/recipe-box");
+      await inDocument().get("[data-testid='new-session-folder-clone']").trigger("click");
+      await flushPromises();
+      await inDocument().get("input[aria-label='Search, or create a folder']").setValue("comet");
+      await folderOption("comet").trigger("click");
+      await flushPromises();
+      finish({ path: "/home/me/src/recipe-box", isGitRepo: true, addedToFleet: false, warning: null });
+      await flushPromises();
+
+      expect(view.get("[data-testid='new-session-folder-chip']").text()).toContain("comet");
+      expect(mocks.refreshRepositories).toHaveBeenCalled();
+    });
+
+    it("New folder… makes an empty folder, a repository or a clone, anywhere", async () => {
+      gitHubRepos.value = [
+        { id: 1, full_name: "pgermishuys/rocket", name: "rocket" },
+        { id: 2, full_name: "pgermishuys/weave-website", name: "weave-website" },
+      ];
+      mocks.cloneRepository.mockResolvedValue({ path: "/home/me/work/weave-website", isGitRepo: true, addedToFleet: false, warning: null });
+      const view = await mountComposer();
+
+      await search(view, "landing page");
+      await folderOption("New folder").trigger("click");
+      await flushPromises();
+
+      const name = inDocument().get<HTMLInputElement>("[data-testid='new-session-new-folder-name']");
+      expect(name.element.value).toBe("landing-page");
+      expect(inDocument().get("[data-testid='new-session-new-folder-preview']").text())
+        .toContain("A git repository with an empty first commit");
+
+      await inDocument().get("[data-testid='new-session-new-folder-location']").setValue("\u0000other");
+      await inDocument().get("[data-testid='new-session-new-folder-parent']").setValue("/srv");
+      expect(inDocument().get("[data-testid='new-session-new-folder-preview']").text())
+        .toContain("/srv/landing-page");
+      expect(inDocument().get("[data-testid='new-session-new-folder-preview']").text())
+        .toContain("added to your folders");
+
+      await inDocument().findAll("[data-testid='new-session-new-folder'] button").find((button) => button.text() === "Clone")!.trigger("click");
+      await flushPromises();
+      expect(mocks.refreshGitHubRepos).toHaveBeenCalled();
+      // Only repositories that aren't on this computer yet.
+      const suggestions = inDocument().findAll(".ns-folder-suggestion").map((button) => button.text());
+      expect(suggestions).toEqual(["pgermishuys/weave-website"]);
+
+      await inDocument().findAll(".ns-folder-suggestion")[0]!.trigger("click");
+      await inDocument().get("[data-testid='new-session-new-folder-location']").setValue("/home/me/work");
+      await inDocument().get("[data-testid='new-session-new-folder-submit']").trigger("click");
+      await flushPromises();
+
+      expect(mocks.cloneRepository).toHaveBeenCalledWith("pgermishuys/weave-website", "/home/me/work/weave-website", expect.any(Function));
+      expect(view.get("[data-testid='new-session-folder-chip']").text()).toContain("weave-website");
+    });
+
+    it("isn't offered with a GitHub issue attached", async () => {
+      useWorkspaceUiStore().setNewSessionInitialSource(createGitHubSessionSourcePreset({
+        sourceType: "github-issue",
+        owner: "acme",
+        repo: "rocket",
+        number: 7,
+        title: "Login",
+        body: null,
+        htmlUrl: "https://github.com/acme/rocket/issues/7",
+        repoFullName: "acme/rocket",
+        suggestedBranch: "fix/issue-7",
+      }));
+      const view = await mountComposer();
+
+      await openFolderMenu(view);
+
+      expect(inDocument().find("input[aria-label='Search, or create a folder']").exists()).toBe(false);
+      expect(inDocument().findAll("[role='option']").some((option) => option.text().includes("New folder"))).toBe(false);
     });
   });
 

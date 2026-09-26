@@ -13,6 +13,8 @@ interface NewSessionDefaults {
   workspaceByRepository: Record<string, RememberedWorkspace>;
   /** The agent and model last started with, by folder (path, or "none" for a quick chat) and then harness. */
   choiceByFolder: Record<string, Record<string, AgentModelChoice>>;
+  /** The workspace root the last new folder or clone went into. */
+  lastNewFolderRoot: string | null;
 }
 
 export const NEW_SESSION_DEFAULTS_KEY = "weave:new-session:defaults";
@@ -23,6 +25,7 @@ const EMPTY_DEFAULTS: NewSessionDefaults = {
   recentFolders: [],
   workspaceByRepository: {},
   choiceByFolder: {},
+  lastNewFolderRoot: null,
 };
 
 export interface UseNewSessionDefaultsResult {
@@ -39,6 +42,10 @@ export interface UseNewSessionDefaultsResult {
   lastWorktreeFor: (repositoryPath: string) => string | null;
   /** The agent and model last started with in a folder on a harness; Default for both the first time. */
   choiceFor: (folder: NewSessionFolder, harnessType: string) => AgentModelChoice;
+  /** The workspace root the last new folder or clone went into, if any. */
+  lastNewFolderRoot: () => string | null;
+  /** Records where a new folder or clone went, so the next one goes there too. */
+  rememberNewFolderRoot: (root: string) => void;
   /** Records the choices a session was just created with. */
   remember: (folder: NewSessionFolder, workspace: NewSessionWorkspace, choice?: { harnessType: string } & AgentModelChoice) => void;
 }
@@ -98,6 +105,7 @@ function normalize(stored: unknown): NewSessionDefaults {
     recentFolders: Array.isArray(value.recentFolders) ? value.recentFolders.filter(isFolder) : [],
     workspaceByRepository: workspaces as Record<string, string>,
     choiceByFolder: normalizeChoices(value.choiceByFolder),
+    lastNewFolderRoot: typeof value.lastNewFolderRoot === "string" ? value.lastNewFolderRoot : null,
   };
 }
 
@@ -148,6 +156,14 @@ export function useNewSessionDefaults(): UseNewSessionDefaultsResult {
     return normalize(stored.value).choiceByFolder[folderKey(folder)]?.[harnessType] ?? DEFAULT_CHOICE;
   }
 
+  function lastNewFolderRoot(): string | null {
+    return normalize(stored.value).lastNewFolderRoot;
+  }
+
+  function rememberNewFolderRoot(root: string): void {
+    setStored((previous) => ({ ...normalize(previous), lastNewFolderRoot: root }));
+  }
+
   function remember(
     folder: NewSessionFolder,
     workspace: NewSessionWorkspace,
@@ -173,6 +189,7 @@ export function useNewSessionDefaults(): UseNewSessionDefaultsResult {
           ? { ...current.workspaceByRepository, [folder.path]: toRemembered(workspace) }
           : current.workspaceByRepository,
         choiceByFolder: choices,
+        lastNewFolderRoot: current.lastNewFolderRoot,
       };
     });
   }
@@ -183,6 +200,8 @@ export function useNewSessionDefaults(): UseNewSessionDefaultsResult {
     workspaceFor,
     lastWorktreeFor,
     choiceFor,
+    lastNewFolderRoot,
+    rememberNewFolderRoot,
     remember,
   };
 }

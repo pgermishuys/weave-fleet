@@ -16,7 +16,7 @@ public sealed class GitHubService(
     IHttpClientFactory httpClientFactory,
     IPluginStateStore pluginStateStore,
     IUserCredentialRepository credentialRepository,
-    ICredentialProtector credentialProtector)
+    ICredentialProtector credentialProtector) : IGitHubTokenSource
 {
     private const string _integrationId = "github";
     private const string _credentialNamespace = "github";
