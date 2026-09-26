@@ -125,6 +125,15 @@ public interface IHarnessRuntime
 
     /// <summary>How far the owner's last save has got in running processes; null when there's nothing to report.</summary>
     WeaveApplyStatus? GetWeaveApplyStatus(string ownerUserId) => null;
+
+    /// <summary>Where Weave goes in this harness's own config, for Add Weave. Null when Fleet can't add Weave here.</summary>
+    WeavePluginHome? GetWeavePluginHome() => null;
+
+    /// <summary>
+    /// Fleet added Weave to this harness's config, or took it out. Running processes load the change as soon as they
+    /// can without interrupting anything; the rest read it when they start.
+    /// </summary>
+    Task WeavePluginsChangedAsync(string ownerUserId, CancellationToken ct) => Task.CompletedTask;
 }
 
 /// <summary>Where and on what a session-less conversation off the record runs.</summary>

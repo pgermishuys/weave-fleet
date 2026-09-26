@@ -5,6 +5,7 @@ import {
   type WeaveFlavor,
   type WeaveHarnessCheck,
   type WeaveOwnConfig,
+  type WeavePluginChange,
   type WeaveSaveResult,
 } from "@/api/client";
 
@@ -81,6 +82,22 @@ export function useWeaveConfig() {
     return result;
   }
 
+  /**
+   * Add Weave (`add`) or take out what it added: Fleet edits the harness's own plugin list and has the harness load
+   * the change. The view comes back asked afresh.
+   */
+  async function changePlugin(harnessType: string, add: boolean): Promise<WeavePluginChange> {
+    const options = { params: { path: { harnessType } } };
+    const { data, error: apiError, response } = add
+      ? await api.POST("/api/weave/harnesses/{harnessType}/plugin", options)
+      : await api.DELETE("/api/weave/harnesses/{harnessType}/plugin", options);
+    if (!response.ok) throw new Error(errorMessage(apiError, response));
+    const result = data as unknown as WeavePluginChange;
+    view.value = result.config;
+    schedulePoll();
+    return result;
+  }
+
   async function readOwn(flavor: WeaveFlavor): Promise<WeaveOwnConfig> {
     const { data, error: apiError, response } = await api.GET("/api/weave/own", { params: { query: { flavor } } });
     if (!response.ok) throw new Error(errorMessage(apiError, response));
@@ -99,5 +116,6 @@ export function useWeaveConfig() {
     check,
     save,
     readOwn,
+    changePlugin,
   };
 }

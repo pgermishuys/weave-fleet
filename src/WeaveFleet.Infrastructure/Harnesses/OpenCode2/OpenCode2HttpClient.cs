@@ -305,6 +305,25 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
             OpenCode2JsonContext.Default.OpenCode2EnvelopeListOpenCode2AgentInfo,
             ct).ConfigureAwait(false))?.Data ?? [];
 
+    /// <summary>The plugins V2 loaded in <paramref name="directory"/>, its own built-in ones too; load the location first.</summary>
+    public async Task<IReadOnlyList<OpenCode2PluginInfo>> GetPluginsAsync(string directory, CancellationToken ct)
+        => (await http.GetFromJsonAsync(
+            $"api/plugin?{LocationQuery(directory)}",
+            OpenCode2JsonContext.Default.OpenCode2EnvelopeListOpenCode2PluginInfo,
+            ct).ConfigureAwait(false))?.Data ?? [];
+
+    /// <summary>
+    /// Shuts down and rebuilds every folder the server has loaded (<c>POST /api/location/reload</c>), which reads the
+    /// config again, plugins included. Running turns go on at their next step; open questions and permission asks are
+    /// cancelled. Returns once the rebuilt folders have settled.
+    /// </summary>
+    public async Task ReloadLocationsAsync(CancellationToken ct)
+    {
+        using var content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
+        using var response = await http.PostAsync("api/location/reload", content, ct).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, "reload its folders", ct).ConfigureAwait(false);
+    }
+
     /// <summary>The models in <paramref name="directory"/>, of every provider; load the location first.</summary>
     public async Task<IReadOnlyList<OpenCode2ModelInfo>> GetModelsAsync(string directory, CancellationToken ct)
         => (await http.GetFromJsonAsync(

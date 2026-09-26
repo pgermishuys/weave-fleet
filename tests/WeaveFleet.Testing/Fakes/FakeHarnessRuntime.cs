@@ -199,5 +199,23 @@ public sealed class FakeHarnessRuntime : IHarnessRuntime
 
     public WeaveApplyStatus? GetWeaveApplyStatus(string ownerUserId) => WeaveApplyStatus;
 
+    /// <summary>What <see cref="GetWeavePluginHome"/> answers; null (the default) means Fleet can't add Weave here.</summary>
+    public WeavePluginHome? WeavePluginHome { get; set; }
+
+    public WeavePluginHome? GetWeavePluginHome() => WeavePluginHome;
+
+    /// <summary>The owners <see cref="WeavePluginsChangedAsync"/> was told about, in order.</summary>
+    public List<string> WeavePluginChanges { get; } = [];
+
+    /// <summary>Runs when <see cref="WeavePluginsChangedAsync"/> is told, e.g. to change what detection answers next.</summary>
+    public Action? OnWeavePluginsChanged { get; set; }
+
+    public Task WeavePluginsChangedAsync(string ownerUserId, CancellationToken ct)
+    {
+        WeavePluginChanges.Add(ownerUserId);
+        OnWeavePluginsChanged?.Invoke();
+        return Task.CompletedTask;
+    }
+
     private sealed record FakeRuntimeLaunchArtifacts : RuntimeLaunchArtifacts;
 }

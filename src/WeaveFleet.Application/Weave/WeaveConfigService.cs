@@ -43,6 +43,8 @@ public sealed class WeaveDetectionCache
 /// Keeps the user's Weave config and hands it to the harnesses. Fleet never edits the user's own Weave files: with
 /// source <see cref="WeaveConfigSource.Fleet"/> each harness points Weave at a folder Fleet writes. A save is tried by
 /// the harness first, so a config that would leave Weave with no agents is never used.
+/// Add Weave is the one edit Fleet makes to the user's files: it puts the Weave adapter in a harness's plugin list,
+/// when the user asks and the harness has no Weave, and remembers the entry so it takes out only what it put in.
 /// </summary>
 public sealed partial class WeaveConfigService(
     IWeaveConfigRepository configs,
@@ -51,7 +53,9 @@ public sealed partial class WeaveConfigService(
     FleetOptions options,
     WeaveDetectionCache detections,
     TimeProvider timeProvider,
-    ILogger<WeaveConfigService> logger)
+    ILogger<WeaveConfigService> logger,
+    IUserPreferenceRepository? preferences = null,
+    IWeavePackageVersions? versions = null)
 {
     public async Task<Result<WeaveConfigView>> GetAsync(bool redetect, CancellationToken ct)
     {
@@ -178,6 +182,189 @@ public sealed partial class WeaveConfigService(
         return new WeaveSaveResult(true, checks, ToView(config, harnesses));
     }
 
+    /// <summary>
+    /// Puts the Weave adapter, at its newest version on npm, into <paramref name="harnessType"/>'s plugin list, has the
+    /// harness load it, and asks the harness again which Weave it loads.
+    /// </summary>
+    public async Task<Result<WeavePluginChange>> AddPluginAsync(string harnessType, CancellationToken ct)
+    {
+        var target = PluginTarget(harnessType);
+        if (target.IsFailure)
+            return target.Error;
+        var (runtime, home, name) = target.Value;
+
+        var detection = (await DetectAsync(redetect: false, ct).ConfigureAwait(false)).FirstOrDefault(h => h.HarnessType == harnessType);
+        if (detection is { Installs.Count: > 0 })
+            return Conflict($"{name} already has Weave in its plugin list.");
+
+        var chosen = ChooseConfigFile(home);
+        if (chosen.IsFailure)
+            return chosen.Error;
+        var path = chosen.Value;
+
+        string text;
+        try
+        {
+            text = File.Exists(path) ? await File.ReadAllTextAsync(path, ct).ConfigureAwait(false) : "{}\n";
+            var listed = WeavePluginList.Read(text, home.ListKey);
+            if (listed.FirstOrDefault(entry => PackageOf(entry) == home.Package) is { } existing)
+            {
+                return Conflict(
+                    $"{path} already lists {existing}, but {name} didn't load it. Check {name}'s log, or fix the entry by hand.");
+            }
+        }
+        catch (FormatException ex)
+        {
+            return FleetError.ValidationError("Weave.Plugin", $"Fleet can't edit {path}: {ex.Message}");
+        }
+
+        if (versions is null || await versions.NewestAsync(home.Package, ct).ConfigureAwait(false) is not { } version)
+            return FleetError.ValidationError("Weave.Plugin", $"Fleet couldn't look up {home.Package} on npm. Check the connection and try again.");
+
+        var entry = $"{home.Package}@{version}";
+        await WriteConfigAsync(path, WeavePluginList.Add(text, home.ListKey, entry), ct).ConfigureAwait(false);
+        await RememberAddedAsync(harnessType, path, entry).ConfigureAwait(false);
+        LogPluginAdded(entry, path);
+
+        var view = await ReloadAndDetectAsync(runtime, harnessType, ct).ConfigureAwait(false);
+        var install = view.Harnesses.FirstOrDefault(h => h.HarnessType == harnessType)?.Installs
+            .FirstOrDefault(i => i.Package == home.Package);
+        var message = install switch
+        {
+            { Error: { } error } => $"Added {entry} to {path}, but {name} couldn't load it: {error}",
+            not null => $"Added {entry} to {path}. {name} loaded it.",
+            null => $"Added {entry} to {path}. {name} loads it when its sessions next start.",
+        };
+        return new WeavePluginChange(path, entry, install is { Error: null }, message, view);
+    }
+
+    /// <summary>Takes the entry Add Weave put in <paramref name="harnessType"/>'s plugin list out again.</summary>
+    public async Task<Result<WeavePluginChange>> RemovePluginAsync(string harnessType, CancellationToken ct)
+    {
+        var target = PluginTarget(harnessType);
+        if (target.IsFailure)
+            return target.Error;
+        var (runtime, home, name) = target.Value;
+
+        if (await ReadAddedAsync(harnessType).ConfigureAwait(false) is not { } added)
+            return FleetError.ValidationError("Weave.Plugin", $"Fleet didn't add Weave to {name}, so it leaves {name}'s plugin list alone.");
+
+        string? edited;
+        try
+        {
+            edited = File.Exists(added.Path)
+                ? WeavePluginList.Remove(await File.ReadAllTextAsync(added.Path, ct).ConfigureAwait(false), home.ListKey, added.Entry)
+                : null;
+        }
+        catch (FormatException ex)
+        {
+            return FleetError.ValidationError("Weave.Plugin", $"Fleet can't edit {added.Path}: {ex.Message}");
+        }
+
+        if (edited is not null)
+            await WriteConfigAsync(added.Path, edited, ct).ConfigureAwait(false);
+        await ForgetAddedAsync(harnessType).ConfigureAwait(false);
+        LogPluginRemoved(added.Entry, added.Path);
+
+        var view = await ReloadAndDetectAsync(runtime, harnessType, ct).ConfigureAwait(false);
+        var gone = view.Harnesses.FirstOrDefault(h => h.HarnessType == harnessType)?.Installs.All(i => i.Entry != added.Entry) ?? true;
+        var message = edited is null
+            ? $"{added.Entry} wasn't in {added.Path} any more, so there was nothing to take out."
+            : gone
+                ? $"Took {added.Entry} out of {added.Path}."
+                : $"Took {added.Entry} out of {added.Path}. {name} drops it when its sessions next start.";
+        return new WeavePluginChange(added.Path, added.Entry, gone, message, view);
+    }
+
+    private Result<(IHarnessRuntime Runtime, WeavePluginHome Home, string Name)> PluginTarget(string harnessType)
+    {
+        if (options.Auth.Enabled)
+            return FleetError.ValidationError("Weave.Plugin", "Fleet can't change a harness's plugins when it runs with sign-in.");
+
+        var harness = registry.GetAll().FirstOrDefault(h => h.Type == harnessType);
+        if (harness is null || registry.GetRuntimeByType(harnessType) is not { } runtime)
+            return FleetError.NotFoundFor("Harness", harnessType);
+        if (runtime.GetWeavePluginHome() is not { } home)
+            return FleetError.ValidationError("Weave.Plugin", $"Fleet can't add Weave to {harness.DisplayName}.");
+
+        return (runtime, home, harness.DisplayName);
+    }
+
+    /// <summary>The config file Add Weave edits: the one that's there, or the last candidate when none is.</summary>
+    private static Result<string> ChooseConfigFile(WeavePluginHome home)
+    {
+        var existing = home.ConfigFiles.Select(file => Path.Combine(home.ConfigFolder, file)).Where(File.Exists).ToList();
+        return existing.Count switch
+        {
+            0 => Path.Combine(home.ConfigFolder, home.ConfigFiles[^1]),
+            1 => existing[0],
+            _ => Conflict(
+                $"{home.ConfigFolder} has {string.Join(" and ", existing.Select(Path.GetFileName))}, and Fleet doesn't know which one you use. Keep one, then try again."),
+        };
+    }
+
+    /// <summary>Replaces the file in one step, so the harness never reads half of it.</summary>
+    private static async Task WriteConfigAsync(string path, string text, CancellationToken ct)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var temporary = $"{path}.{Guid.NewGuid():N}.tmp";
+        await File.WriteAllTextAsync(temporary, text, ct).ConfigureAwait(false);
+        File.Move(temporary, path, overwrite: true);
+    }
+
+    private async Task<WeaveConfigView> ReloadAndDetectAsync(IHarnessRuntime runtime, string harnessType, CancellationToken ct)
+    {
+        try
+        {
+            await runtime.WeavePluginsChangedAsync(userContext.UserId, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogApplyFailed(ex, harnessType);
+        }
+
+        var config = await configs.GetAsync().ConfigureAwait(false);
+        return ToView(config, await DetectAsync(redetect: true, ct).ConfigureAwait(false));
+    }
+
+    /// <summary>The npm package a plugin entry names: <c>@scope/name@1.2.3</c> loses its version.</summary>
+    internal static string PackageOf(string entry)
+    {
+        var versionAt = entry.LastIndexOf('@');
+        return versionAt > 0 ? entry[..versionAt] : entry;
+    }
+
+    private static FleetError Conflict(string message) => new(FleetError.Conflict.Code, message);
+
+    private sealed record AddedPlugin(string Path, string Entry);
+
+    private static string AddedKey(string harnessType, string part) => $"weave.added.{harnessType}.{part}";
+
+    private async Task RememberAddedAsync(string harnessType, string path, string entry)
+    {
+        if (preferences is null)
+            return;
+        await preferences.SetAsync(AddedKey(harnessType, "path"), path).ConfigureAwait(false);
+        await preferences.SetAsync(AddedKey(harnessType, "entry"), entry).ConfigureAwait(false);
+    }
+
+    private async Task<AddedPlugin?> ReadAddedAsync(string harnessType)
+    {
+        if (preferences is null)
+            return null;
+        var path = await preferences.GetAsync(AddedKey(harnessType, "path")).ConfigureAwait(false);
+        var entry = await preferences.GetAsync(AddedKey(harnessType, "entry")).ConfigureAwait(false);
+        return string.IsNullOrEmpty(path) || string.IsNullOrEmpty(entry) ? null : new AddedPlugin(path, entry);
+    }
+
+    private async Task ForgetAddedAsync(string harnessType)
+    {
+        if (preferences is null)
+            return;
+        await preferences.SetAsync(AddedKey(harnessType, "path"), string.Empty).ConfigureAwait(false);
+        await preferences.SetAsync(AddedKey(harnessType, "entry"), string.Empty).ConfigureAwait(false);
+    }
+
     private async Task<IReadOnlyList<WeaveHarnessCheck>> RunChecksAsync(
         WeaveFlavor flavor,
         IReadOnlyDictionary<string, string> files,
@@ -231,10 +418,20 @@ public sealed partial class WeaveConfigService(
             try
             {
                 var installs = await runtime.DetectWeaveAsync(userContext.UserId, ct).ConfigureAwait(false);
-                found.Add(installs is null
-                    ? new WeaveHarnessDetection(harness.Type, harness.DisplayName, false, [],
-                        $"Fleet doesn't hand Weave a config in {harness.DisplayName} yet.")
-                    : new WeaveHarnessDetection(harness.Type, harness.DisplayName, true, installs));
+                if (installs is null)
+                {
+                    found.Add(new WeaveHarnessDetection(harness.Type, harness.DisplayName, false, [],
+                        $"Fleet doesn't hand Weave a config in {harness.DisplayName} yet."));
+                    continue;
+                }
+
+                var added = await ReadAddedAsync(harness.Type).ConfigureAwait(false);
+                var marked = installs.Select(install => install with { AddedByFleet = install.Entry == added?.Entry }).ToList();
+                // With two config files there, Add Weave is still offered, and says why it won't pick one.
+                string? addTo = null;
+                if (marked.Count == 0 && !options.Auth.Enabled && runtime.GetWeavePluginHome() is { } home)
+                    addTo = ChooseConfigFile(home) is { IsSuccess: true } file ? file.Value : home.ConfigFolder;
+                found.Add(new WeaveHarnessDetection(harness.Type, harness.DisplayName, true, marked, AddTo: addTo));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -277,4 +474,10 @@ public sealed partial class WeaveConfigService(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Harness {HarnessType} couldn't apply the saved Weave config")]
     private partial void LogApplyFailed(Exception ex, string harnessType);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Added Weave plugin {Entry} to {Path}")]
+    private partial void LogPluginAdded(string entry, string path);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Took Weave plugin {Entry} out of {Path}")]
+    private partial void LogPluginRemoved(string entry, string path);
 }

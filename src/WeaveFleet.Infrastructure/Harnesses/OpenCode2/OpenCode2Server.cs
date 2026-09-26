@@ -24,7 +24,8 @@ internal interface IOpenCode2EventSink
 /// <summary>
 /// What Fleet starts an owner's server with: where Fleet is, the config it adds (<see cref="OpenCode2FleetFiles"/>),
 /// whether the server gets the tools for messages between sessions and workflow steps, the install it runs (<see cref="OpenCode2Install"/>),
-/// and the profile its sessions use, if any (<see cref="OpenCode2Profiles"/>).
+/// the profile its sessions use, if any (<see cref="OpenCode2Profiles"/>), and the folder Weave reads when the owner keeps
+/// their Weave config in Fleet (<see cref="OpenCode2Weave"/>).
 /// When the owner changes a setting behind it, the server is replaced once nothing runs on it (no turn, no background
 /// shell, no sign-in under way).
 /// </summary>
@@ -35,7 +36,8 @@ internal sealed record OpenCode2ServerSetup(
     string? ExecutablePath = null,
     OpenCode2InstallMode Mode = OpenCode2InstallMode.Default,
     OpenCode2Profile? Profile = null,
-    bool Workflows = false)
+    bool Workflows = false,
+    string? WeaveConfigFolder = null)
 {
     public static readonly OpenCode2ServerSetup None = new(null, null, false);
 }
@@ -323,6 +325,14 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
             LogSinkFailed(_logger, "catalog change", ex);
         }
     }
+
+    /// <summary>The folders the Fleet sessions on this server run in.</summary>
+    public IReadOnlyList<string> SessionFolders
+        => _sinks.Values
+            .Select(sink => Path.TrimEndingDirectorySeparator(sink.Context.WorkingDirectory))
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToList();
 
     /// <summary>The Fleet sessions on this server that run in <paramref name="directory"/>.</summary>
     public IReadOnlyList<string> SessionsIn(string directory)

@@ -170,6 +170,7 @@ public static class DependencyInjection
         services.AddScoped<HarnessProfileService>();
         services.AddScoped<WeaveFleet.Application.Weave.WeaveConfigService>();
         services.AddSingleton<WeaveFleet.Application.Weave.WeaveDetectionCache>();
+        services.AddSingleton<WeaveFleet.Application.Weave.IWeavePackageVersions, WeaveFleet.Infrastructure.Weave.NpmWeavePackageVersions>();
         services.AddSingleton<IBuiltInSkillCatalog, WeaveFleet.Infrastructure.Harnesses.OpenCode.OpenCodeBuiltInSkillCatalog>();
         services.AddScoped<BuiltInSkillService>();
         services.AddScoped<ISessionActivator>(sp => sp.GetRequiredService<SessionOrchestrator>());

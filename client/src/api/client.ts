@@ -412,7 +412,7 @@ export interface HarnessProfileCheck {
 /** Which Weave a harness loaded: Weave (`config.weave`) or Weave Legacy (`weave-opencode.jsonc`). */
 export type WeaveFlavor = "weave" | "legacy";
 
-/** A Weave plugin a harness loaded. */
+/** A Weave plugin a harness loaded, or tried to. */
 export interface WeaveInstall {
   flavor: WeaveFlavor;
   package: string;
@@ -420,6 +420,10 @@ export interface WeaveInstall {
   entry: string;
   /** Whether this version reads the folder Fleet points it at (Weave 0.2.0-next.1+, Legacy 0.9.0+). */
   acceptsFleetConfig: boolean;
+  /** Why the harness couldn't load it, when it's in the plugin list but didn't load. */
+  error?: string | null;
+  /** Fleet put this entry in the harness's config (Add Weave), so it can take it out again. */
+  addedByFleet?: boolean;
 }
 
 /** What Fleet found in one harness. `checked` is false when Fleet can't hand it a config; `note` says why. */
@@ -429,6 +433,18 @@ export interface WeaveHarnessDetection {
   checked: boolean;
   installs: WeaveInstall[];
   note?: string | null;
+  /** The config file Add Weave would write, when Fleet can add Weave to this harness. */
+  addTo?: string | null;
+}
+
+/** `POST`/`DELETE /api/weave/harnesses/{type}/plugin`: what Add Weave or Remove did. */
+export interface WeavePluginChange {
+  configPath: string;
+  entry: string;
+  /** After an add, whether the harness loaded Weave; after a remove, whether it no longer does. */
+  loaded: boolean;
+  message: string;
+  config: WeaveConfigView;
 }
 
 /** What a harness loaded when it tried a draft. */

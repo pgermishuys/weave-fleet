@@ -1140,6 +1140,24 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
     /// <inheritdoc />
     public WeaveApplyStatus? GetWeaveApplyStatus(string ownerUserId) => Weave.GetApplyStatus(ownerUserId);
 
+    /// <inheritdoc />
+    /// <remarks>OpenCode's user config folder, <c>$XDG_CONFIG_HOME/opencode</c> or <c>~/.config/opencode</c>.</remarks>
+    public WeavePluginHome? GetWeavePluginHome()
+    {
+        var folder = ProcessEnvironment.TryGetValue("XDG_CONFIG_HOME", out var configHome)
+            ? Path.Combine(configHome, "opencode")
+            : HarnessInstallPaths.FromEnvironment().OpenCodeGlobalDirectory;
+        return new WeavePluginHome(folder, ["opencode.jsonc", "opencode.json"], "plugin", OpenCodeWeave.WeavePackage);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// OpenCode reads its user config once per process, so a folder reload doesn't pick up a new plugin: idle pooled
+    /// processes stop now (the Weave check's too) and the next session starts a new one. Busy ones keep their plugins
+    /// until they restart.
+    /// </remarks>
+    public Task WeavePluginsChangedAsync(string ownerUserId, CancellationToken ct) => RecycleIdlePooledInstancesAsync(ct);
+
     private string FleetDataDirectory() =>
         Path.GetDirectoryName(Path.GetFullPath(_options.DatabasePath)) ?? Environment.CurrentDirectory;
 

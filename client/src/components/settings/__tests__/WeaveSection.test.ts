@@ -1,7 +1,7 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { defineComponent, h, shallowRef } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { WeaveConfigView, WeaveHarnessCheck, WeaveInstall, WeaveSaveResult } from "@/api/client";
+import type { WeaveConfigView, WeaveHarnessCheck, WeaveInstall, WeavePluginChange, WeaveSaveResult } from "@/api/client";
 import WeaveSection from "@/components/settings/WeaveSection.vue";
 
 const view = shallowRef<WeaveConfigView | null>(null);
@@ -9,9 +9,10 @@ const load = vi.fn(async () => {});
 const check = vi.fn(async (): Promise<WeaveHarnessCheck[]> => []);
 const save = vi.fn(async (): Promise<WeaveSaveResult> => ({ saved: true, checks: [], config: null }));
 const readOwn = vi.fn();
+const changePlugin = vi.fn(async (): Promise<WeavePluginChange> => { throw new Error("not set up"); });
 
 vi.mock("@/composables/use-weave-config", () => ({
-  useWeaveConfig: () => ({ view, loading: shallowRef(false), error: shallowRef(null), load, check, save, readOwn }),
+  useWeaveConfig: () => ({ view, loading: shallowRef(false), error: shallowRef(null), load, check, save, readOwn, changePlugin }),
 }));
 
 // CodeMirror needs layout jsdom doesn't have; a textarea stands in for the editor.
@@ -170,5 +171,96 @@ describe("WeaveSection", () => {
     await flushPromises();
 
     expect(save).toHaveBeenCalledWith("own", { "config.weave": "x" });
+  });
+
+  describe("Add Weave", () => {
+    const v2Entry = "@weaveio/weave-adapter-opencode2@0.2.0-next.3";
+    const v2Install: WeaveInstall = {
+      flavor: "weave",
+      package: "@weaveio/weave-adapter-opencode2",
+      entry: v2Entry,
+      acceptsFleetConfig: true,
+      addedByFleet: true,
+    };
+    const without = config({
+      harnesses: [
+        { harnessType: "opencode", harnessName: "OpenCode", checked: true, installs: [], addTo: "/home/you/.config/opencode/opencode.json" },
+        { harnessType: "opencode2", harnessName: "OpenCode 2", checked: true, installs: [], addTo: "/home/you/.weave/harnesses/opencode2/config/opencode.json" },
+      ],
+    });
+
+    it("lists OpenCode 2 first and says where Add Weave writes", async () => {
+      const wrapper = await mountSection(without);
+
+      const rows = wrapper.get("[data-testid='weave-harnesses']").findAll("li");
+      expect(rows[0]!.text()).toContain("OpenCode 2");
+      expect(rows[0]!.text()).toContain("Add Weave puts it in /home/you/.weave/harnesses/opencode2/config/opencode.json.");
+      expect(wrapper.find("[data-testid='weave-add-opencode2']").exists()).toBe(true);
+      expect(wrapper.get("[data-testid='weave-none']").text()).toContain("Add Weave above puts it there for you.");
+    });
+
+    it("adds Weave to the harness and says what happened", async () => {
+      const after = config({
+        harnesses: [{ harnessType: "opencode2", harnessName: "OpenCode 2", checked: true, installs: [v2Install] }],
+      });
+      changePlugin.mockImplementation(async () => {
+        view.value = after;
+        return { configPath: "/cfg/opencode.json", entry: v2Entry, loaded: true, message: `Added ${v2Entry} to /cfg/opencode.json. OpenCode 2 loaded it.`, config: after };
+      });
+      const wrapper = await mountSection(without);
+
+      await wrapper.get("[data-testid='weave-add-opencode2']").trigger("click");
+      await flushPromises();
+
+      expect(changePlugin).toHaveBeenCalledWith("opencode2", true);
+      expect(wrapper.get("[data-testid='weave-plugin-notice']").text()).toBe(`Added ${v2Entry} to /cfg/opencode.json. OpenCode 2 loaded it.`);
+      expect(wrapper.find("[data-testid='weave-remove-opencode2']").exists()).toBe(true);
+      expect(wrapper.find("[data-testid='weave-none']").exists()).toBe(false);
+    });
+
+    it("shows why an add was refused", async () => {
+      changePlugin.mockRejectedValue(new Error("Fleet couldn't look up @weaveio/weave-adapter-opencode2 on npm."));
+      const wrapper = await mountSection(without);
+
+      await wrapper.get("[data-testid='weave-add-opencode2']").trigger("click");
+      await flushPromises();
+
+      const notice = wrapper.get("[data-testid='weave-plugin-notice']");
+      expect(notice.text()).toBe("Fleet couldn't look up @weaveio/weave-adapter-opencode2 on npm.");
+      expect(notice.attributes("role")).toBe("alert");
+    });
+
+    it("offers Remove only for the entry Fleet added", async () => {
+      const wrapper = await mountSection(config({
+        harnesses: [
+          { harnessType: "opencode2", harnessName: "OpenCode 2", checked: true, installs: [v2Install] },
+          { harnessType: "opencode", harnessName: "OpenCode", checked: true, installs: [weave] },
+        ],
+      }));
+
+      expect(wrapper.find("[data-testid='weave-remove-opencode2']").exists()).toBe(true);
+      expect(wrapper.find("[data-testid='weave-remove-opencode']").exists()).toBe(false);
+      expect(wrapper.find("[data-testid='weave-add-opencode']").exists()).toBe(false);
+
+      changePlugin.mockResolvedValue({ configPath: "/cfg/opencode.json", entry: v2Entry, loaded: true, message: "Took it out.", config: without });
+      await wrapper.get("[data-testid='weave-remove-opencode2']").trigger("click");
+      await flushPromises();
+      expect(changePlugin).toHaveBeenCalledWith("opencode2", false);
+    });
+
+    it("says why a listed Weave didn't load", async () => {
+      const wrapper = await mountSection(config({
+        harnesses: [{
+          harnessType: "opencode2",
+          harnessName: "OpenCode 2",
+          checked: true,
+          installs: [{ ...v2Install, entry: "@weaveio/weave-adapter-opencode2@9.9.9", acceptsFleetConfig: false, error: "No matching version found" }],
+        }],
+      }));
+
+      const row = wrapper.get("[data-testid='weave-harnesses']").get("li");
+      expect(row.text()).toContain("@weaveio/weave-adapter-opencode2@9.9.9 · didn't load: No matching version found");
+      expect(row.text()).toContain("Weave · didn't load");
+    });
   });
 });

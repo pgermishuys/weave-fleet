@@ -1989,6 +1989,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/weave/harnesses/{harnessType}/plugin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AddWeavePlugin"];
+        delete: operations["RemoveWeavePlugin"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/harnesses/{harnessType}/sign-in": {
         parameters: {
             query?: never;
@@ -8146,6 +8162,46 @@ export interface operations {
                 "application/json": components["schemas"]["CheckWeaveConfigRequest"];
             };
         };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AddWeavePlugin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                harnessType: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RemoveWeavePlugin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                harnessType: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description OK */
             200: {
