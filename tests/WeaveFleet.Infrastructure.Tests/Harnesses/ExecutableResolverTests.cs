@@ -58,6 +58,20 @@ public sealed class ExecutableResolverTests : IDisposable
         ExecutableResolver.TryResolve(Path.Combine(_root, "missing", "tool"), null, [], out _).ShouldBeFalse();
     }
 
+    [Fact]
+    public void Finds_every_copy_in_order_once_each()
+    {
+        // opencode can be OpenCode 1 in one folder and OpenCode 2 in another; the caller runs them to tell.
+        var onPath = Folder("on-path");
+        var installFolder = Folder("install");
+        var first = Executable(onPath, "tool");
+        var second = Executable(installFolder, "tool");
+        Folder("empty");
+
+        ExecutableResolver.FindAll("tool", $"{onPath}{Path.PathSeparator}{Path.Combine(_root, "empty")}", [installFolder, onPath])
+            .ShouldBe([first, second]);
+    }
+
     private string Folder(string name) => Directory.CreateDirectory(Path.Combine(_root, name)).FullName;
 
     private static string Executable(string folder, string name)
