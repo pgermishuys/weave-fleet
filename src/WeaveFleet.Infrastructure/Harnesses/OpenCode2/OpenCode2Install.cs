@@ -24,6 +24,9 @@ internal sealed record OpenCode2InstallCheck(OpenCode2InstallMode Mode, bool Rem
     /// empty once there is (or when a remembered separate install is gone, which is installed again in its place).
     /// </summary>
     public IReadOnlyList<OpenCode2InstallMode> Choices { get; init; } = [];
+
+    /// <summary>The OpenCode 1 found while working out <see cref="Choices"/>, which the default place may replace.</summary>
+    public string? OpenCode1Path { get; init; }
 }
 
 /// <summary>
@@ -32,7 +35,8 @@ internal sealed record OpenCode2InstallCheck(OpenCode2InstallMode Mode, bool Rem
 /// <c>~/.opencode/bin/opencode</c>, and they'd share one database, which V2 migrates in place.
 /// <para>
 /// Until V2 is installed the user picks where it goes: its own folder (recommended, since OpenCode 1 can then be
-/// installed at any time) or the default place, which is only offered while there's no OpenCode 1 for it to replace.
+/// installed at any time) or the default place, as V2's installer does when run as it is, which replaces an OpenCode 1
+/// there. Each choice says what it does to the OpenCode 1 Fleet found.
 /// The mode is decided when Fleet first finds a working V2 and written to <c>~/.weave/harnesses/opencode2/install-mode</c>.
 /// After that it doesn't change while that install works: an OpenCode 1 installed later mustn't move V2's sessions to
 /// another database. A default install that stops working (OpenCode 1's installer replaces it) gives way to a separate
@@ -155,9 +159,9 @@ internal sealed partial class OpenCode2Install
     }
 
     /// <summary>
-    /// Checks the install. With a remembered mode, only that mode's executable counts. Otherwise the first working
-    /// V2 (separate, then default) decides the mode and is remembered; with none, the mode is separate when an
-    /// OpenCode 1 is installed and default when not.
+    /// Checks the install. With a remembered mode, only that mode's executable counts (a default one that stopped
+    /// working gives way to a working separate one). Otherwise the first working V2 (separate, then default) decides the
+    /// mode and is remembered; with none, the user picks, and the mode is separate until they do.
     /// </summary>
     public async Task<OpenCode2InstallCheck> CheckAsync(CancellationToken ct)
     {
@@ -182,7 +186,8 @@ internal sealed partial class OpenCode2Install
             }
             return new OpenCode2InstallCheck(remembered, Remembered: true, availability)
             {
-                Choices = await ChoicesAsync(ct).ConfigureAwait(false),
+                Choices = AllChoices,
+                OpenCode1Path = await FindOpenCode1Async(ct).ConfigureAwait(false),
             };
         }
 
@@ -200,26 +205,20 @@ internal sealed partial class OpenCode2Install
             failures[mode] = availability;
         }
 
-        var choices = await ChoicesAsync(ct).ConfigureAwait(false);
-        var choice = choices[0];
-        var notInstalled = choices.Count > 1
-            ? HarnessAvailability.NotInstalled(
-                $"OpenCode 2 isn't installed: Fleet couldn't find it in a folder of its own ({SeparateBin}), on PATH or in {DefaultBin}.")
-            : NotInstalled(choice);
-        return new OpenCode2InstallCheck(choice, Remembered: false, failures.GetValueOrDefault(choice) ?? notInstalled)
+        var notInstalled = HarnessAvailability.NotInstalled(
+            $"OpenCode 2 isn't installed: Fleet couldn't find it in a folder of its own ({SeparateBin}), on PATH or in {DefaultBin}.");
+        return new OpenCode2InstallCheck(AllChoices[0], Remembered: false, failures.GetValueOrDefault(AllChoices[0]) ?? notInstalled)
         {
-            Choices = choices,
+            Choices = AllChoices,
+            OpenCode1Path = await FindOpenCode1Async(ct).ConfigureAwait(false),
         };
     }
 
     /// <summary>
-    /// Where V2 can go: its own folder, and the default place too while there's no OpenCode 1 there to replace. The
-    /// default place is the one OpenCode 1's installer writes to, so picking it means not installing OpenCode 1 later.
+    /// Where V2 can go: its own folder, recommended since OpenCode 1 can be installed next to it at any time, or the
+    /// default place, where both OpenCode 1's installer and V2's write <c>opencode</c>.
     /// </summary>
-    private async Task<IReadOnlyList<OpenCode2InstallMode>> ChoicesAsync(CancellationToken ct) =>
-        await IsOpenCode1InstalledAsync(ct).ConfigureAwait(false)
-            ? [OpenCode2InstallMode.Separate]
-            : [OpenCode2InstallMode.Separate, OpenCode2InstallMode.Default];
+    private static readonly IReadOnlyList<OpenCode2InstallMode> AllChoices = [OpenCode2InstallMode.Separate, OpenCode2InstallMode.Default];
 
     /// <summary>The environment Fleet starts the server with, after making the separate install's folders.</summary>
     public IReadOnlyDictionary<string, string> PrepareEnvironment(OpenCode2InstallMode mode)
@@ -253,11 +252,12 @@ internal sealed partial class OpenCode2Install
         }
 
         // With a choice to make, each choice says what it means.
-        if (mode == OpenCode2InstallMode.Separate && check.Choices.Count < 2)
+        var picking = !_windows && check.Choices.Count > 1;
+        if (mode == OpenCode2InstallMode.Separate && !picking)
         {
             notes.Add(installed
                 ? "Installed in a folder of its own. OpenCode 1's program, settings and sessions are left alone."
-                : $"OpenCode 1 is installed here, so OpenCode 2 goes into a folder of its own ({Root}). OpenCode 1's program, settings and sessions are left alone.");
+                : $"OpenCode 2 goes into a folder of its own ({Root}). OpenCode 1's program, settings and sessions are left alone.");
             notes.Add(SeparateSignInNote);
             notes.Add("Both versions still read a repository's opencode.json and .opencode folder.");
         }
@@ -276,7 +276,7 @@ internal sealed partial class OpenCode2Install
             Mode = ModeLabel(mode),
             Folders = Folders(mode, executable ?? bin),
             Notes = notes,
-            InstallChoices = _windows || check.Choices.Count < 2 ? [] : [.. check.Choices.Select(Choice)],
+            InstallChoices = picking ? [.. check.Choices.Select(choice => Choice(choice, check.OpenCode1Path))] : [],
         };
     }
 
@@ -286,22 +286,39 @@ internal sealed partial class OpenCode2Install
     private static string ModeLabel(OpenCode2InstallMode mode) =>
         mode == OpenCode2InstallMode.Separate ? "In its own folder" : "As your main opencode";
 
-    /// <summary>A place to install V2, with what picking it means. Separate mode is the recommended one.</summary>
-    private HarnessInstallChoice Choice(OpenCode2InstallMode mode) => mode == OpenCode2InstallMode.Separate
-        ? new HarnessInstallChoice(
-            ModeName(mode),
-            ModeLabel(mode),
-            $"Fleet runs it from {Root}, with its own settings and sessions, and keeps its own provider sign-ins. " +
-            $"{DefaultBin} stays free, so OpenCode 1 can be installed next to it at any time. It isn't added to your PATH.",
-            InstallCommand(mode)!,
-            Folders(mode, SeparateBin)) { Recommended = true }
-        : new HarnessInstallChoice(
-            ModeName(mode),
-            ModeLabel(mode),
-            $"OpenCode 2's usual install: {DefaultBin}, added to your PATH, with OpenCode's usual settings and sessions. " +
-            "OpenCode 1 installs to the same folder, so installing OpenCode 1 later replaces OpenCode 2.",
-            InstallCommand(mode)!,
-            Folders(mode, DefaultBin));
+    /// <summary>
+    /// A place to install V2, with what picking it means for the OpenCode 1 at <paramref name="openCode1"/>, if there is
+    /// one. Separate mode is the recommended one.
+    /// </summary>
+    private HarnessInstallChoice Choice(OpenCode2InstallMode mode, string? openCode1)
+    {
+        if (mode == OpenCode2InstallMode.Separate)
+        {
+            var description = openCode1 is null
+                ? $"Fleet runs it from {Root}, with its own settings and sessions, and keeps its own provider sign-ins. " +
+                  $"{DefaultBin} stays free, so OpenCode 1 can be installed next to it at any time. It isn't added to your PATH."
+                : $"Next to OpenCode 1, which is left alone: Fleet runs OpenCode 2 from {Root}, with its own settings and sessions. " +
+                  "It keeps its own provider sign-ins, so OpenCode 1's don't carry over. It isn't added to your PATH.";
+            return new HarnessInstallChoice(ModeName(mode), ModeLabel(mode), description, InstallCommand(mode)!, Folders(mode, SeparateBin))
+            {
+                Recommended = true,
+            };
+        }
+
+        var main = openCode1 switch
+        {
+            null => $"OpenCode 2's usual install: {DefaultBin}, added to your PATH, with OpenCode's usual settings and sessions. " +
+                    "OpenCode 1 installs to the same folder, so installing OpenCode 1 later replaces OpenCode 2.",
+            _ when IsUnder(openCode1, DefaultBin) =>
+                $"Replaces OpenCode 1 at {openCode1}, as OpenCode 2's installer does when you run it yourself. OpenCode 2 then uses " +
+                "OpenCode 1's settings and sessions, and Fleet's OpenCode harness stops working until OpenCode 1 is installed again, " +
+                "which replaces OpenCode 2 in turn.",
+            _ => $"OpenCode 2's usual install: {DefaultBin}, added to your PATH, with OpenCode's usual settings and sessions. " +
+                 $"OpenCode 1 at {openCode1} stays, but both are called opencode: the one first on your PATH is the one you and " +
+                 "Fleet's OpenCode harness get.",
+        };
+        return new HarnessInstallChoice(ModeName(mode), ModeLabel(mode), main, InstallCommand(mode)!, Folders(mode, DefaultBin));
+    }
 
     /// <summary>V2's installer as the user types it; <see langword="null"/> on Windows, where it doesn't run.</summary>
     public string? InstallCommand(OpenCode2InstallMode mode)
@@ -373,7 +390,7 @@ internal sealed partial class OpenCode2Install
     }
 
     private HarnessAvailability NotInstalled(OpenCode2InstallMode mode) => HarnessAvailability.NotInstalled(mode == OpenCode2InstallMode.Separate
-        ? $"OpenCode 2 isn't installed: Fleet couldn't find it in {SeparateBin}, where it goes next to OpenCode 1."
+        ? $"OpenCode 2 isn't installed: Fleet couldn't find it in its own folder ({SeparateBin})."
         : $"OpenCode 2 isn't installed: Fleet couldn't find {OpenCode2Executable.Command} on PATH or in {DefaultBin}.");
 
     /// <summary>A default install that runs OpenCode 1 now was most likely replaced by OpenCode 1's installer.</summary>
@@ -392,15 +409,15 @@ internal sealed partial class OpenCode2Install
     }
 
     /// <summary>
-    /// Whether an OpenCode 1 is installed: an <c>opencode</c> that isn't OpenCode 2. One that won't say its version
-    /// counts too, so V2's installer never overwrites it.
+    /// The OpenCode 1 installed here, if there is one: an <c>opencode</c> that isn't OpenCode 2. One that won't say its
+    /// version counts too, so the user is told before V2's installer overwrites it.
     /// </summary>
-    private async Task<bool> IsOpenCode1InstalledAsync(CancellationToken ct)
+    private async Task<string?> FindOpenCode1Async(CancellationToken ct)
     {
         if (!ExecutableResolver.TryResolve(OpenCode1Command, _environment("PATH"), [DefaultBin, .. _userBinDirectories], out var path))
-            return false;
+            return null;
         var availability = await _probe(path, ct).ConfigureAwait(false);
-        return availability.Version is not { } version || !OpenCode2Executable.IsOpenCode2(version);
+        return availability.Version is not { } version || !OpenCode2Executable.IsOpenCode2(version) ? path : null;
     }
 
     private string XdgFolder(string variable, string fallback)
