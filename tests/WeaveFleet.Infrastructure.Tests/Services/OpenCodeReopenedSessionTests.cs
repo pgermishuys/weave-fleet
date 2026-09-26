@@ -179,10 +179,15 @@ public sealed class OpenCodeReopenedSessionTests
             GetMessagesBehavior = (_, _) => Task.FromResult(new MessagePage(messages, false)),
         });
 
+        // Reopened while its turn is still going: a running call stays running. Outside a turn it reads as cut off
+        // (CutOffToolCallsTests).
+        var activity = new SessionActivityTracker();
+        activity.Update(FleetSessionId, "busy", "user-1");
+
         var proxy = new OpenCodeSessionMessageProxy(
             sessions,
             instances,
-            new SessionActivityTracker(),
+            activity,
             delegations,
             new FakeSessionSnapshotBuilder(),
             new ServiceCollection().BuildServiceProvider(),

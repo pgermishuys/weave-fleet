@@ -914,7 +914,9 @@ public sealed class OpenCodeSessionMessageProxyTests
         var instanceTracker = new InstanceTracker();
         instanceTracker.Register(instanceId, harnessSession);
 
+        // In a turn: a call is only pending or running while one is going (see CutOffToolCallsTests).
         var activityTracker = new SessionActivityTracker();
+        activityTracker.Update(sessionId, "busy", "user-1");
         var delegationRepository = new InMemoryDelegationRepository();
         var fallbackSnapshotBuilder = new FakeSessionSnapshotBuilder();
 
