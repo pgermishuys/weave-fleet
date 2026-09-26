@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using WeaveFleet.Domain.Harnesses;
 
@@ -48,13 +49,16 @@ internal sealed partial class OpenCode2Install
     public const string InstallerUrl = "https://opencode.ai/v2/install";
     public const string DocsUrl = "https://opencode.ai/v2/docs";
 
-    private const string OpenCode1Command = "opencode";
-
     private readonly string _home;
     private readonly Func<string, string?> _environment;
     private readonly IReadOnlyList<string> _userBinDirectories;
     private readonly Func<string, CancellationToken, Task<HarnessAvailability>> _probe;
     private readonly bool _windows;
+
+    // Whether each executable was OpenCode 2 when last run. Locate doesn't run anything, and a plain opencode may be
+    // OpenCode 1, so it only takes one a check found to be 2.x.
+    private readonly ConcurrentDictionary<string, bool> _isOpenCode2 =
+        new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
     /// <param name="home">The user's home folder.</param>
     /// <param name="environment">Reads an environment variable (<c>PATH</c>, <c>XDG_CONFIG_HOME</c>, <c>XDG_DATA_HOME</c>).</param>
@@ -131,19 +135,47 @@ internal sealed partial class OpenCode2Install
     }
 
     /// <summary>
-    /// The executable of the install in <paramref name="mode"/>. Separate mode only uses its own folder; default mode
-    /// looks on <c>PATH</c>, in <c>~/.opencode/bin</c>, then in the usual user folders (a V2 the user installed another
-    /// way is used as it is).
+    /// Every executable that may be the install in <paramref name="mode"/>, in the order they're tried: each
+    /// <c>opencode2</c>, then each <c>opencode</c>. Separate mode only uses its own folder; default mode looks on
+    /// <c>PATH</c>, in <c>~/.opencode/bin</c>, then in the usual user folders (a V2 the user installed another way, such
+    /// as Homebrew or npm, is used as it is). Which of them is OpenCode 2 is down to the version it reports.
     /// </summary>
-    public string? Find(OpenCode2InstallMode mode) => mode switch
+    private IEnumerable<string> Candidates(OpenCode2InstallMode mode)
     {
-        OpenCode2InstallMode.Separate => ExecutableResolver.TryResolve(OpenCode2Executable.Command, pathEnv: null, [SeparateBin], out var separate)
-            ? separate
-            : null,
-        _ => ExecutableResolver.TryResolve(OpenCode2Executable.Command, _environment("PATH"), [DefaultBin, .. _userBinDirectories], out var found)
-            ? found
-            : null,
-    };
+        var (pathEnv, directories) = mode == OpenCode2InstallMode.Separate
+            ? (null, [SeparateBin])
+            : (_environment("PATH"), (IReadOnlyList<string>)[DefaultBin, .. _userBinDirectories]);
+        return ((string[])[OpenCode2Executable.Command, OpenCode2Executable.PlainCommand])
+            .SelectMany(name => ExecutableResolver.FindAll(name, pathEnv, directories));
+    }
+
+    /// <summary>
+    /// The executable of the install in <paramref name="mode"/>, without running anything: the first one the last check
+    /// found to be OpenCode 2, or an <c>opencode2</c> not checked yet. A plain <c>opencode</c> only counts once a check
+    /// has seen it report 2.x.
+    /// </summary>
+    public string? Find(OpenCode2InstallMode mode) => Candidates(mode).FirstOrDefault(path =>
+        _isOpenCode2.TryGetValue(path, out var isOpenCode2)
+            ? isOpenCode2
+            : OpenCode2Executable.Name(path) == OpenCode2Executable.Command);
+
+    /// <summary>
+    /// Runs the executables of the install in <paramref name="mode"/> until one is OpenCode 2. With none, the first
+    /// one's state, so a V2 that OpenCode 1's installer replaced says so; <see langword="null"/> when there are none.
+    /// </summary>
+    private async Task<HarnessAvailability?> ProbeAsync(OpenCode2InstallMode mode, CancellationToken ct)
+    {
+        HarnessAvailability? first = null;
+        foreach (var path in Candidates(mode))
+        {
+            var availability = OpenCode2Executable.RequireOpenCode2(await _probe(path, ct).ConfigureAwait(false));
+            _isOpenCode2[path] = availability.Available;
+            if (availability.Available)
+                return availability;
+            first ??= availability;
+        }
+        return first;
+    }
 
     /// <summary>
     /// The install to start a server from, without running anything: the remembered mode's executable, else a separate
@@ -163,6 +195,18 @@ internal sealed partial class OpenCode2Install
     }
 
     /// <summary>
+    /// <see cref="Locate"/>, or when that finds nothing, a check: a plain <c>opencode</c> only counts once it's been run,
+    /// and a server may be wanted before anything has checked the install (an automation just after Fleet starts).
+    /// </summary>
+    public async Task<(OpenCode2InstallMode Mode, string ExecutablePath)?> LocateAsync(CancellationToken ct)
+    {
+        if (Locate() is { } located)
+            return located;
+        var check = await CheckAsync(ct).ConfigureAwait(false);
+        return check.Availability is { Available: true, ExecutablePath: { } path } ? (check.Mode, path) : null;
+    }
+
+    /// <summary>
     /// Checks the install. With a remembered mode, only that mode's executable counts (a default one that stopped
     /// working gives way to a working separate one). Otherwise the first working V2 (separate, then default) decides the
     /// mode and is remembered; with none, the user picks, and the mode is separate until they do.
@@ -171,22 +215,17 @@ internal sealed partial class OpenCode2Install
     {
         if (RememberedMode() is { } remembered)
         {
-            var path = Find(remembered);
-            var availability = path is null
-                ? NotInstalled(remembered)
-                : Explain(remembered, OpenCode2Executable.RequireOpenCode2(await _probe(path, ct).ConfigureAwait(false)));
+            var availability = await ProbeAsync(remembered, ct).ConfigureAwait(false) is { } probed
+                ? Explain(remembered, probed)
+                : NotInstalled(remembered);
             if (availability.Available || remembered == OpenCode2InstallMode.Separate)
                 return new OpenCode2InstallCheck(remembered, Remembered: true, availability);
 
             // The default install is gone or runs OpenCode 1 now: one the user has since put in its own folder takes over.
-            if (Find(OpenCode2InstallMode.Separate) is { } separate)
+            if (await ProbeAsync(OpenCode2InstallMode.Separate, ct).ConfigureAwait(false) is { Available: true } separate)
             {
-                var separateAvailability = OpenCode2Executable.RequireOpenCode2(await _probe(separate, ct).ConfigureAwait(false));
-                if (separateAvailability.Available)
-                {
-                    Remember(OpenCode2InstallMode.Separate);
-                    return new OpenCode2InstallCheck(OpenCode2InstallMode.Separate, Remembered: true, separateAvailability);
-                }
+                Remember(OpenCode2InstallMode.Separate);
+                return new OpenCode2InstallCheck(OpenCode2InstallMode.Separate, Remembered: true, separate);
             }
             return new OpenCode2InstallCheck(remembered, Remembered: true, availability)
             {
@@ -198,9 +237,8 @@ internal sealed partial class OpenCode2Install
         var failures = new Dictionary<OpenCode2InstallMode, HarnessAvailability>();
         foreach (var mode in (OpenCode2InstallMode[])[OpenCode2InstallMode.Separate, OpenCode2InstallMode.Default])
         {
-            if (Find(mode) is not { } path)
+            if (await ProbeAsync(mode, ct).ConfigureAwait(false) is not { } availability)
                 continue;
-            var availability = OpenCode2Executable.RequireOpenCode2(await _probe(path, ct).ConfigureAwait(false));
             if (availability.Available)
             {
                 Remember(mode);
@@ -210,7 +248,7 @@ internal sealed partial class OpenCode2Install
         }
 
         var notInstalled = HarnessAvailability.NotInstalled(
-            $"OpenCode 2 isn't installed: Fleet couldn't find it in a folder of its own ({SeparateBin}), on PATH or in {DefaultBin}.");
+            $"OpenCode 2 isn't installed: Fleet couldn't find an opencode2, or an opencode that's version 2.x, in a folder of its own ({SeparateBin}), on PATH or in {DefaultBin}.");
         return new OpenCode2InstallCheck(AllChoices[0], Remembered: false, failures.GetValueOrDefault(AllChoices[0]) ?? notInstalled)
         {
             Choices = AllChoices,
@@ -395,7 +433,7 @@ internal sealed partial class OpenCode2Install
 
     private HarnessAvailability NotInstalled(OpenCode2InstallMode mode) => HarnessAvailability.NotInstalled(mode == OpenCode2InstallMode.Separate
         ? $"OpenCode 2 isn't installed: Fleet couldn't find it in its own folder ({SeparateBin})."
-        : $"OpenCode 2 isn't installed: Fleet couldn't find {OpenCode2Executable.Command} on PATH or in {DefaultBin}.");
+        : $"OpenCode 2 isn't installed: Fleet couldn't find {OpenCode2Executable.Command} or {OpenCode2Executable.PlainCommand} on PATH or in {DefaultBin}.");
 
     /// <summary>A default install that runs OpenCode 1 now was most likely replaced by OpenCode 1's installer.</summary>
     private HarnessAvailability Explain(OpenCode2InstallMode mode, HarnessAvailability availability)
@@ -418,7 +456,7 @@ internal sealed partial class OpenCode2Install
     /// </summary>
     private async Task<string?> FindOpenCode1Async(CancellationToken ct)
     {
-        if (!ExecutableResolver.TryResolve(OpenCode1Command, _environment("PATH"), [DefaultBin, .. _userBinDirectories], out var path))
+        if (!ExecutableResolver.TryResolve(OpenCode2Executable.PlainCommand, _environment("PATH"), [DefaultBin, .. _userBinDirectories], out var path))
             return null;
         var availability = await _probe(path, ct).ConfigureAwait(false);
         return availability.Version is not { } version || !OpenCode2Executable.IsOpenCode2(version) ? path : null;

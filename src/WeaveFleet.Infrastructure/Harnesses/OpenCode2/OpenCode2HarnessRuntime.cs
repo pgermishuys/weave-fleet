@@ -100,7 +100,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             ExecutableResolver.HomeDirectory() ?? Environment.CurrentDirectory,
             Environment.GetEnvironmentVariable,
             ExecutableResolver.UserBinDirectories(),
-            (path, ct) => HarnessProbe.CheckInstalledAsync("OpenCode 2", OpenCode2Executable.Command, path, logger, ct),
+            (path, ct) => HarnessProbe.CheckInstalledAsync("OpenCode 2", OpenCode2Executable.Name(path), path, logger, ct),
             OperatingSystem.IsWindows());
         _servers = new OpenCode2Servers(
             (key, setup, ct) => StartServerAsync(key.OwnerUserId, setup, logLine: null, OnCatalogChanged, ct),
@@ -577,7 +577,8 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     /// <summary>
     /// What the owner's server should start with. The tools and the Fleet API skill call back into Fleet, so they load
     /// only when the server can be told where Fleet is. The owner's built-in skills folder loads either way. The
-    /// install is looked up on every request (files only), so a V2 installed while Fleet runs is found.
+    /// install is looked up on every request (files only, unless they don't settle it), so a V2 installed while Fleet runs
+    /// is found.
     /// </summary>
     private async Task<OpenCode2ServerSetup> GetSetupAsync(string ownerUserId, OpenCode2Profile? profile)
     {
@@ -599,7 +600,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         if (SyncBuiltInSkills(ownerUserId, builtInSkills) is { } builtIn)
             skills.Add(builtIn);
 
-        var install = _install.Locate();
+        var install = await _install.LocateAsync(CancellationToken.None).ConfigureAwait(false);
         return new OpenCode2ServerSetup(
             fleetUrl,
             OpenCode2FleetFiles.BuildConfigContent(plugin, skills),

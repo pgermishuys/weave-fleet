@@ -52,6 +52,19 @@ internal static class ExecutableResolver
         // Absolute or relative path already — trust the caller.
         if (name.Contains('/') || name.Contains('\\')) return File.Exists(name);
 
+        if (FindAll(name, pathEnv, directories).FirstOrDefault() is not { } found) return false;
+        path = found;
+        return true;
+    }
+
+    /// <summary>
+    /// Every <paramref name="name"/> on the given <c>PATH</c> value, then in <paramref name="directories"/>, in that
+    /// order and each once. For a command several installs may provide, such as <c>opencode</c> being OpenCode 1 or 2.
+    /// </summary>
+    internal static IEnumerable<string> FindAll(string name, string? pathEnv, IEnumerable<string> directories)
+    {
+        if (string.IsNullOrWhiteSpace(name) || name.Contains('/') || name.Contains('\\')) yield break;
+
         var separator = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? ';' : ':';
         var pathDirectories = string.IsNullOrEmpty(pathEnv)
             ? []
@@ -61,6 +74,7 @@ internal static class ExecutableResolver
             ? WindowsExtensions()
             : [""]; // Non-Windows: try the bare name.
 
+        var seen = new HashSet<string>(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         foreach (var dir in pathDirectories.Concat(directories))
         {
             if (string.IsNullOrWhiteSpace(dir)) continue;
@@ -69,14 +83,13 @@ internal static class ExecutableResolver
                 string candidate;
                 try { candidate = Path.Combine(dir, name + ext); }
                 catch (ArgumentException) { continue; } // skip malformed PATH entries
-                if (File.Exists(candidate))
+                if (File.Exists(candidate) && seen.Add(Path.GetFullPath(candidate)))
                 {
-                    path = candidate;
-                    return true;
+                    yield return candidate;
+                    break; // one per folder, as a shell would run
                 }
             }
         }
-        return false;
     }
 
     /// <summary>

@@ -40,7 +40,7 @@ public sealed class OpenCode2InstallTests : IDisposable
         check.Remembered.ShouldBeFalse();
         check.Availability.State.ShouldBe(HarnessStates.NotInstalled);
         check.Availability.Reason.ShouldBe(
-            $"OpenCode 2 isn't installed: Fleet couldn't find it in a folder of its own ({SeparateBin}), on PATH or in {DefaultBin}.");
+            $"OpenCode 2 isn't installed: Fleet couldn't find an opencode2, or an opencode that's version 2.x, in a folder of its own ({SeparateBin}), on PATH or in {DefaultBin}.");
         var setup = install.Setup(check);
         setup.InstallCommand.ShouldBe($"curl -fsSL https://opencode.ai/v2/install | HOME={Root} bash -s -- --no-modify-path");
         setup.Notes.ShouldBeEmpty();
@@ -68,6 +68,96 @@ public sealed class OpenCode2InstallTests : IDisposable
         check.Choices.ShouldBeEmpty();
         install.Setup(check).InstallChoices.ShouldBeEmpty();
         install.RememberedMode().ShouldBe(OpenCode2InstallMode.Default);
+    }
+
+    [Fact]
+    public async Task A_plain_opencode_that_reports_2x_is_OpenCode_2()
+    {
+        // Homebrew, npm and opencode upgrade install opencode alone, with no opencode2 next to it.
+        var executable = Executable(DefaultBin, "opencode", "opencode v2.0.18");
+        var install = Install();
+
+        var check = await install.CheckAsync(CancellationToken.None);
+
+        check.Mode.ShouldBe(OpenCode2InstallMode.Default);
+        check.Availability.Available.ShouldBeTrue();
+        check.Availability.ExecutablePath.ShouldBe(executable);
+        check.Choices.ShouldBeEmpty();
+        install.RememberedMode().ShouldBe(OpenCode2InstallMode.Default);
+        install.Locate().ShouldBe((OpenCode2InstallMode.Default, executable));
+    }
+
+    [Fact]
+    public async Task A_plain_opencode_on_PATH_that_reports_2x_is_found_there()
+    {
+        var executable = Executable(_path, "opencode", "opencode v2.0.18");
+
+        (await Install().CheckAsync(CancellationToken.None)).Availability.ExecutablePath.ShouldBe(executable);
+    }
+
+    [Fact]
+    public async Task A_plain_opencode_isnt_started_as_OpenCode_2_until_its_been_run()
+    {
+        var executable = Executable(DefaultBin, "opencode", "opencode v2.0.18");
+        var install = Install();
+
+        // Nothing has checked it yet (a server wanted just after Fleet starts), so it may be OpenCode 1.
+        install.Locate().ShouldBeNull();
+        (await install.LocateAsync(CancellationToken.None)).ShouldBe((OpenCode2InstallMode.Default, executable));
+    }
+
+    [Fact]
+    public async Task A_plain_opencode_that_reports_1x_is_OpenCode_1_not_2()
+    {
+        var openCode1 = Executable(_path, "opencode", "1.18.31");
+        var install = Install();
+
+        var check = await install.CheckAsync(CancellationToken.None);
+
+        check.Availability.State.ShouldBe(HarnessStates.NotInstalled);
+        check.OpenCode1Path.ShouldBe(openCode1);
+        install.RememberedMode().ShouldBeNull();
+        (await install.LocateAsync(CancellationToken.None)).ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task An_OpenCode_1_first_on_PATH_doesnt_hide_an_OpenCode_2_further_on()
+    {
+        Executable(_path, "opencode", "1.18.31");
+        var openCode2 = Executable(DefaultBin, "opencode", "opencode v2.0.18");
+        var install = Install();
+
+        var check = await install.CheckAsync(CancellationToken.None);
+
+        check.Mode.ShouldBe(OpenCode2InstallMode.Default);
+        check.Availability.ExecutablePath.ShouldBe(openCode2);
+        install.Locate().ShouldBe((OpenCode2InstallMode.Default, openCode2));
+    }
+
+    [Fact]
+    public async Task An_opencode2_is_tried_before_a_plain_opencode()
+    {
+        Executable(_path, "opencode", "opencode v2.0.18");
+        var shim = Executable(DefaultBin, "opencode2", "opencode v2.0.18");
+
+        (await Install().CheckAsync(CancellationToken.None)).Availability.ExecutablePath.ShouldBe(shim);
+    }
+
+    [Fact]
+    public async Task A_plain_default_install_that_OpenCode_1s_installer_replaced_says_so()
+    {
+        var executable = Executable(DefaultBin, "opencode", "opencode v2.0.18");
+        var install = Install();
+        await install.CheckAsync(CancellationToken.None);
+
+        File.WriteAllText(executable, "1.18.31");
+        var check = await install.CheckAsync(CancellationToken.None);
+
+        check.Mode.ShouldBe(OpenCode2InstallMode.Default);
+        check.Availability.State.ShouldBe(HarnessStates.NotWorking);
+        check.Availability.Reason.ShouldBe(
+            $"{executable} runs OpenCode 1.18.31 now: OpenCode 1's installer replaced OpenCode 2 in {DefaultBin}, where both install.");
+        install.Locate().ShouldBeNull();
     }
 
     [Fact]
