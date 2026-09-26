@@ -188,7 +188,12 @@ const draftGroupKey = computed<string | null>(() => {
   }
   return projects.value.find((project) => project.type === "scratch")?.id ?? "Ungrouped";
 });
-const errorMessage = computed(() => sessionsError.value ?? projectsError.value);
+const errorMessage = computed(() => {
+  const error = sessionsError.value ?? projectsError.value;
+  // Working in another machine that stopped answering: say which, not the browser's "Failed to fetch".
+  if (error && hasMachines.value && !machines.live.isHome && !machines.liveReachable) return `Can't reach ${machines.live.name}.`;
+  return error;
+});
 const hasSessions = computed(() => sessions.value.length > 0);
 
 function getProjectDisplayName(session: SessionListItem): string {
@@ -695,6 +700,8 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
           v-if="liveMachineEntry"
           :name="liveMachineEntry.name"
           live
+          :unreachable="!machines.liveReachable"
+          :note="machines.liveReachable ? null : 'unreachable'"
         />
       </template>
 

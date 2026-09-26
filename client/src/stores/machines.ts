@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { computed, ref, shallowRef } from "vue";
 import type { SessionListItem } from "@/api/client";
+import { onDisconnect, onReconnect } from "@/composables/use-signalr-socket";
 import {
   HOME_MACHINE_KEY,
   fetchOnMachine,
@@ -63,6 +64,8 @@ export interface MachineSessions {
 }
 
 const POLL_INTERVAL_MS = 15_000;
+/** How often a live machine that isn't home is asked whether it's still there. */
+const LIVE_CHECK_INTERVAL_MS = 10_000;
 const SESSIONS_CACHE_KEY = "weave:machine-sessions";
 
 /** Only what a machine group's rows show, so the cache stays small. */
@@ -147,6 +150,12 @@ export const useMachinesStore = defineStore("machines", () => {
   const others = ref<Record<string, MachineSessions>>(loadCachedSessions());
   const liveMachine = getActiveMachine();
   const liveKey = liveMachine?.id ?? HOME_MACHINE_KEY;
+
+  /**
+   * Whether the live machine answers. Home serves the page, so it's taken as there. Another machine is asked every
+   * few seconds, and at once when the event hub drops, so the sidebar says it's gone rather than looking live.
+   */
+  const liveReachable = shallowRef(true);
 
   /** Whether the client knows any machine besides home. Everything machine-shaped hides until it does. */
   const hasMachines = computed(() => connections.value.length > 0);
@@ -316,8 +325,26 @@ export const useMachinesStore = defineStore("machines", () => {
     rememberSessionMachines(liveMachine?.id ?? null, sessionIds);
   }
 
+  let liveCheckInFlight = false;
+
+  /** Asks the live machine, when it isn't home, whether it's there. */
+  async function checkLive(): Promise<void> {
+    if (!liveMachine || liveCheckInFlight) return;
+    liveCheckInFlight = true;
+    try {
+      const response = await fetchOnMachine(liveMachine, "/api/machine");
+      liveReachable.value = response.ok;
+    } catch {
+      liveReachable.value = false;
+    } finally {
+      liveCheckInFlight = false;
+    }
+  }
+
   let pollTimer: ReturnType<typeof setInterval> | undefined;
   let pollers = 0;
+  let liveTimer: ReturnType<typeof setInterval> | undefined;
+  let stopHubWatch: (() => void)[] = [];
 
   /** Starts polling machines that aren't live; returns the stop. Several callers share one timer. */
   function startPolling(): () => void {
@@ -329,15 +356,24 @@ export const useMachinesStore = defineStore("machines", () => {
         if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
         void refreshOthers();
       }, POLL_INTERVAL_MS);
+      if (liveMachine) {
+        void checkLive();
+        liveTimer = setInterval(() => void checkLive(), LIVE_CHECK_INTERVAL_MS);
+        stopHubWatch = [onDisconnect(() => void checkLive()), onReconnect(() => void checkLive())];
+      }
     }
     let stopped = false;
     return () => {
       if (stopped) return;
       stopped = true;
       pollers -= 1;
-      if (pollers === 0 && pollTimer) {
-        clearInterval(pollTimer);
+      if (pollers === 0) {
+        if (pollTimer) clearInterval(pollTimer);
+        if (liveTimer) clearInterval(liveTimer);
         pollTimer = undefined;
+        liveTimer = undefined;
+        for (const stop of stopHubWatch) stop();
+        stopHubWatch = [];
       }
     };
   }
@@ -354,6 +390,8 @@ export const useMachinesStore = defineStore("machines", () => {
     others,
     liveKey,
     hasMachines,
+    liveReachable,
+    checkLive,
     entries,
     live,
     loadHome,

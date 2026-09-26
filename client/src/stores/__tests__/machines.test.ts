@@ -198,6 +198,24 @@ describe("machines store", () => {
       expect(loadSessionMachines()["home-1"]).toBe(HOME_MACHINE_KEY);
     });
 
+    it("notices when the live machine stops answering, and when it's back", async () => {
+      setActiveMachine(falcon);
+      const store = useMachinesStore();
+
+      await store.checkLive();
+      expect(store.liveReachable).toBe(true);
+
+      routes["http://100.64.90.72:2113/api/machine"] = () => {
+        throw new TypeError("Failed to fetch");
+      };
+      await store.checkLive();
+      expect(store.liveReachable).toBe(false);
+
+      routes["http://100.64.90.72:2113/api/machine"] = () => json(falconInfo);
+      await store.checkLive();
+      expect(store.liveReachable).toBe(true);
+    });
+
     it("renames a machine on the machine itself", async () => {
       routes["http://100.64.90.72:2113/api/machine"] = (_, init) => {
         expect(init.method).toBe("PUT");
