@@ -19,8 +19,9 @@ public sealed class OpenCodeExecutableTests : IDisposable
         result.Version.ShouldBe("2.0.8");
         result.ExecutablePath.ShouldBe("/home/me/.opencode/bin/opencode");
         result.Reason.ShouldBe(
-            "This is OpenCode 2 (2.0.8). The OpenCode harness needs OpenCode 1.x; Fleet runs OpenCode 2 with the OpenCode 2 harness, which you can turn on in Settings. " +
-            "OpenCode 1's installer (curl -fsSL https://opencode.ai/install | bash) puts it back, in place of OpenCode 2.");
+            "/home/me/.opencode/bin/opencode is OpenCode 2 (2.0.8), and the OpenCode harness needs OpenCode 1. " +
+            "Installing OpenCode 1 replaces an OpenCode 2 in ~/.opencode/bin, where both install. " +
+            "To keep OpenCode 2 as well, install it again in its own folder afterwards (Settings → Harnesses → OpenCode 2).");
     }
 
     [Theory]
@@ -59,7 +60,7 @@ public sealed class OpenCodeExecutableTests : IDisposable
         var error = await Should.ThrowAsync<InvalidOperationException>(
             () => OpenCodeExecutable.RejectOpenCode2Async(opencode, CancellationToken.None));
 
-        error.Message.ShouldStartWith("This is OpenCode 2 (2.0.8).");
+        error.Message.ShouldStartWith($"{opencode} is OpenCode 2 (2.0.8)");
     }
 
     [Fact]

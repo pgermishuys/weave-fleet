@@ -155,9 +155,15 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     internal const string MinimumOpenCode2Version = "2.0.6";
 
     /// <inheritdoc />
-    /// <remarks>V2's installer again, in the install's mode and with its HOME; V2 installed another way isn't Fleet's to update.</remarks>
+    /// <remarks>
+    /// V2's installer again, in the install's mode and with its HOME; V2 installed another way isn't Fleet's to update.
+    /// Nothing when the program there isn't V2 any more: a default install OpenCode 1's installer replaced would have
+    /// OpenCode 1 replaced in turn.
+    /// </remarks>
     public HarnessCommand? GetUpdateCommand(HarnessAvailability availability, string? version)
-        => availability.ExecutablePath is { } path ? _install.UpdateCommand(path, version) : null;
+        => availability is { ExecutablePath: { } path, Version: { } installed } && OpenCode2Executable.IsOpenCode2(installed)
+            ? _install.UpdateCommand(path, version)
+            : null;
 
     /// <inheritdoc />
     /// <remarks>

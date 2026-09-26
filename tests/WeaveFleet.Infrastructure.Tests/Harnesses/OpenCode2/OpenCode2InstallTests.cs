@@ -29,16 +29,45 @@ public sealed class OpenCode2InstallTests : IDisposable
     private string DefaultBin => Path.Combine(_home, ".opencode", "bin");
 
     [Fact]
-    public async Task Without_OpenCode_1_the_install_is_the_default_one()
+    public async Task Without_OpenCode_1_the_user_picks_its_own_folder_or_the_default_place()
     {
         var install = Install();
 
         var check = await install.CheckAsync(CancellationToken.None);
 
-        check.Mode.ShouldBe(OpenCode2InstallMode.Default);
+        check.Mode.ShouldBe(OpenCode2InstallMode.Separate);
+        check.Choices.ShouldBe([OpenCode2InstallMode.Separate, OpenCode2InstallMode.Default]);
         check.Remembered.ShouldBeFalse();
         check.Availability.State.ShouldBe(HarnessStates.NotInstalled);
-        install.Setup(check).InstallCommand.ShouldBe("curl -fsSL https://opencode.ai/v2/install | bash");
+        check.Availability.Reason.ShouldBe(
+            $"OpenCode 2 isn't installed: Fleet couldn't find it in a folder of its own ({SeparateBin}), on PATH or in {DefaultBin}.");
+        var setup = install.Setup(check);
+        setup.InstallCommand.ShouldBe($"curl -fsSL https://opencode.ai/v2/install | HOME={Root} bash -s -- --no-modify-path");
+        setup.Notes.ShouldBeEmpty();
+        setup.InstallChoices.Select(choice => (choice.Id, choice.Label, choice.Command, choice.Recommended)).ShouldBe(
+        [
+            ("separate", "In its own folder", $"curl -fsSL https://opencode.ai/v2/install | HOME={Root} bash -s -- --no-modify-path", true),
+            ("default", "As your main opencode", "curl -fsSL https://opencode.ai/v2/install | bash", false),
+        ]);
+        setup.InstallChoices[0].Description.ShouldContain("OpenCode 1 can be installed next to it at any time");
+        setup.InstallChoices[0].Folders[0].ShouldBe(new HarnessFolder("Program", SeparateBin));
+        setup.InstallChoices[1].Description.ShouldContain("installing OpenCode 1 later replaces OpenCode 2");
+        setup.InstallChoices[1].Folders[0].ShouldBe(new HarnessFolder("Program", DefaultBin));
+    }
+
+    [Fact]
+    public async Task Whichever_place_the_user_picked_is_found_and_remembered()
+    {
+        var executable = Executable(DefaultBin, "opencode2", "opencode v2.0.9");
+        var install = Install();
+
+        var check = await install.CheckAsync(CancellationToken.None);
+
+        check.Mode.ShouldBe(OpenCode2InstallMode.Default);
+        check.Availability.ExecutablePath.ShouldBe(executable);
+        check.Choices.ShouldBeEmpty();
+        install.Setup(check).InstallChoices.ShouldBeEmpty();
+        install.RememberedMode().ShouldBe(OpenCode2InstallMode.Default);
     }
 
     [Fact]
@@ -50,11 +79,13 @@ public sealed class OpenCode2InstallTests : IDisposable
         var check = await install.CheckAsync(CancellationToken.None);
 
         check.Mode.ShouldBe(OpenCode2InstallMode.Separate);
+        check.Choices.ShouldBe([OpenCode2InstallMode.Separate]);
         check.Remembered.ShouldBeFalse();
         check.Availability.Reason.ShouldBe($"OpenCode 2 isn't installed: Fleet couldn't find it in {SeparateBin}, where it goes next to OpenCode 1.");
         var setup = install.Setup(check);
         setup.InstallCommand.ShouldBe($"curl -fsSL https://opencode.ai/v2/install | HOME={Root} bash -s -- --no-modify-path");
-        setup.Mode.ShouldBe("Separate from OpenCode 1");
+        setup.InstallChoices.ShouldBeEmpty();
+        setup.Mode.ShouldBe("In its own folder");
         setup.Notes!.ShouldContain(note => note.Contains("provider sign-ins"));
         setup.Notes!.ShouldContain("Both versions still read a repository's opencode.json and .opencode folder.");
     }
@@ -64,7 +95,7 @@ public sealed class OpenCode2InstallTests : IDisposable
     {
         Executable(_path, "opencode", "opencode v2.0.9");
 
-        (await Install().CheckAsync(CancellationToken.None)).Mode.ShouldBe(OpenCode2InstallMode.Default);
+        (await Install().CheckAsync(CancellationToken.None)).Choices.ShouldContain(OpenCode2InstallMode.Default);
     }
 
     [Fact]
@@ -72,7 +103,7 @@ public sealed class OpenCode2InstallTests : IDisposable
     {
         Executable(_path, "opencode", "");
 
-        (await Install().CheckAsync(CancellationToken.None)).Mode.ShouldBe(OpenCode2InstallMode.Separate);
+        (await Install().CheckAsync(CancellationToken.None)).Choices.ShouldBe([OpenCode2InstallMode.Separate]);
     }
 
     [Fact]
@@ -109,7 +140,7 @@ public sealed class OpenCode2InstallTests : IDisposable
     }
 
     [Fact]
-    public async Task A_default_install_that_OpenCode_1s_installer_replaced_says_so_and_stays_default()
+    public async Task A_default_install_that_OpenCode_1s_installer_replaced_offers_its_own_folder()
     {
         var executable = Executable(DefaultBin, "opencode2", "opencode v2.0.9");
         var install = Install();
@@ -124,9 +155,46 @@ public sealed class OpenCode2InstallTests : IDisposable
         check.Availability.State.ShouldBe(HarnessStates.NotWorking);
         check.Availability.Reason.ShouldBe(
             $"{executable} runs OpenCode 1.18.31 now: OpenCode 1's installer replaced OpenCode 2 in {DefaultBin}, where both install.");
+        // Installing it in the default place again would replace OpenCode 1 in turn.
+        check.Choices.ShouldBe([OpenCode2InstallMode.Separate]);
         var setup = install.Setup(check);
-        setup.InstallCommand.ShouldBe("curl -fsSL https://opencode.ai/v2/install | bash");
-        setup.Notes!.ShouldContain($"OpenCode 1 and OpenCode 2 both install to {DefaultBin}. Installing OpenCode 2 again replaces OpenCode 1 there.");
+        setup.InstallCommand.ShouldBe($"curl -fsSL https://opencode.ai/v2/install | HOME={Root} bash -s -- --no-modify-path");
+        setup.Mode.ShouldBe("In its own folder");
+        setup.Folders![0].ShouldBe(new HarnessFolder("Program", SeparateBin));
+        setup.Notes![0].ShouldStartWith("To have both versions, install OpenCode 2 again in a folder of its own.");
+    }
+
+    [Fact]
+    public async Task A_separate_install_takes_over_from_a_default_one_OpenCode_1s_installer_replaced()
+    {
+        var replaced = Executable(DefaultBin, "opencode2", "opencode v2.0.9");
+        var install = Install();
+        await install.CheckAsync(CancellationToken.None);
+        File.WriteAllText(replaced, "1.18.31");
+        Executable(DefaultBin, "opencode", "1.18.31");
+
+        var separate = Executable(SeparateBin, "opencode2", "opencode v2.0.9");
+        var check = await install.CheckAsync(CancellationToken.None);
+
+        check.Mode.ShouldBe(OpenCode2InstallMode.Separate);
+        check.Availability.Available.ShouldBeTrue();
+        check.Availability.ExecutablePath.ShouldBe(separate);
+        install.RememberedMode().ShouldBe(OpenCode2InstallMode.Separate);
+        install.Locate().ShouldBe((OpenCode2InstallMode.Separate, separate));
+    }
+
+    [Fact]
+    public async Task A_working_default_install_isnt_replaced_by_a_separate_one()
+    {
+        var executable = Executable(DefaultBin, "opencode2", "opencode v2.0.9");
+        var install = Install();
+        await install.CheckAsync(CancellationToken.None);
+
+        Executable(SeparateBin, "opencode2", "opencode v2.0.9");
+        var check = await install.CheckAsync(CancellationToken.None);
+
+        check.Mode.ShouldBe(OpenCode2InstallMode.Default);
+        check.Availability.ExecutablePath.ShouldBe(executable);
     }
 
     [Fact]
@@ -236,7 +304,7 @@ public sealed class OpenCode2InstallTests : IDisposable
 
         var setup = install.Setup(await install.CheckAsync(CancellationToken.None));
 
-        setup.Folders.ShouldBe(
+        setup.InstallChoices[1].Folders.ShouldBe(
         [
             new HarnessFolder("Program", DefaultBin),
             new HarnessFolder("Settings", Path.Combine(config, "opencode")),
@@ -254,6 +322,7 @@ public sealed class OpenCode2InstallTests : IDisposable
         var setup = install.Setup(await install.CheckAsync(CancellationToken.None));
 
         setup.InstallCommand.ShouldBeNull();
+        setup.InstallChoices.ShouldBeEmpty();
         setup.DownloadUrl.ShouldBe("https://opencode.ai/v2/docs");
         setup.Notes!.ShouldContain(note => note.Contains(Path.Combine(SeparateBin, "opencode2.exe")));
         install.UpdateCommand(Path.Combine(SeparateBin, "opencode2"), "2.0.9").ShouldBeNull();

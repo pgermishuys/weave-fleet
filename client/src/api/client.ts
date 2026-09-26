@@ -517,11 +517,23 @@ export interface HarnessSetup {
   folders?: readonly HarnessFolder[] | null;
   /** What to know about this install, one sentence each. */
   notes?: readonly string[] | null;
+  /** Where the user can install it, when there's more than one place to pick; the recommended one first. */
+  installChoices?: readonly HarnessInstallChoice[] | null;
 }
 
 export interface HarnessFolder {
   label: string;
   path: string;
+}
+
+/** One place a harness can be installed, with what picking it means. */
+export interface HarnessInstallChoice {
+  id: string;
+  label: string;
+  description: string;
+  command: string;
+  folders: readonly HarnessFolder[];
+  recommended: boolean;
 }
 
 export interface HarnessInfo {

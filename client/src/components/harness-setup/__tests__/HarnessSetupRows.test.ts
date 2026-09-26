@@ -95,7 +95,7 @@ function openCode2(overrides: Partial<HarnessInfo> = {}): HarnessInfo {
     capabilities,
     setup: {
       installCommand: "curl -fsSL https://opencode.ai/v2/install | HOME=/home/you/.weave/harnesses/opencode2 bash -s -- --no-modify-path",
-      mode: "Separate from OpenCode 1",
+      mode: "In its own folder",
       notes: [
         "OpenCode 1 is installed here, so OpenCode 2 goes into a folder of its own.",
         "OpenCode 2 keeps its own provider sign-ins here.",
@@ -148,6 +148,51 @@ describe("HarnessSetupRows", () => {
       "OpenCode 1 is installed here, so OpenCode 2 goes into a folder of its own.",
       "OpenCode 2 keeps its own provider sign-ins here.",
     ]);
+  });
+
+  it("lets the user pick where OpenCode 2 goes, and types the picked place's installer", async () => {
+    const separate = "curl -fsSL https://opencode.ai/v2/install | HOME=/home/you/.weave/harnesses/opencode2 bash -s -- --no-modify-path";
+    const main = "curl -fsSL https://opencode.ai/v2/install | bash";
+    const view = await mountRows([openCode2({
+      setup: {
+        installCommand: separate,
+        mode: "In its own folder",
+        notes: [],
+        installChoices: [
+          { id: "separate", label: "In its own folder", description: "OpenCode 1 can be installed next to it at any time.", command: separate, folders: [], recommended: true },
+          { id: "default", label: "As your main opencode", description: "Installing OpenCode 1 later replaces OpenCode 2.", command: main, folders: [], recommended: false },
+        ],
+      },
+    })]);
+
+    const choices = view.get("[data-testid='harness-setup-choices-opencode2']");
+    expect(choices.text()).toMatch(/In its own folder\s*Recommended/);
+    expect(choices.text()).toContain("Installing OpenCode 1 later replaces OpenCode 2.");
+    expect((choices.get("[data-testid='harness-setup-choice-opencode2-separate'] input").element as HTMLInputElement).checked).toBe(true);
+
+    await choices.get("[data-testid='harness-setup-choice-opencode2-default'] input").setValue(true);
+    await view.get("[data-testid='harness-setup-install-opencode2']").trigger("click");
+    await flushPromises();
+
+    expect(view.get("[data-testid='terminal-view']").text()).toBe(`/api/setup/terminals|t_setup|${main}`);
+  });
+
+  it("offers no choice once OpenCode 2 is installed", async () => {
+    const view = await mountRows([openCode2({
+      available: true,
+      state: "ready",
+      version: "2.0.9",
+      executablePath: "/x/opencode2",
+      setup: {
+        installCommand: "curl",
+        installChoices: [
+          { id: "separate", label: "In its own folder", description: "", command: "a", folders: [], recommended: true },
+          { id: "default", label: "As your main opencode", description: "", command: "b", folders: [], recommended: false },
+        ],
+      },
+    })]);
+
+    expect(view.find("[data-testid='harness-setup-choices-opencode2']").exists()).toBe(false);
   });
 
   it("links to the download when there's no installer to type", async () => {

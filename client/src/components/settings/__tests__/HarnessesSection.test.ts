@@ -139,7 +139,7 @@ describe("HarnessesSection", () => {
       setup: {
         installCommand: "curl -fsSL https://opencode.ai/v2/install | HOME=/home/you/.weave/harnesses/opencode2 bash -s -- --no-modify-path",
         signInCommand: "OPENCODE_CONFIG_DIR=/c OPENCODE_DB=/d /home/you/.weave/harnesses/opencode2/.opencode/bin/opencode2 auth login",
-        mode: "Separate from OpenCode 1",
+        mode: "In its own folder",
         folders: [
           { label: "Settings", path: "/home/you/.weave/harnesses/opencode2/config" },
           { label: "Sessions", path: "/home/you/.weave/harnesses/opencode2/data/opencode.db" },
@@ -151,7 +151,7 @@ describe("HarnessesSection", () => {
     const wrapper = await mountHarnessesSection();
 
     const install = wrapper.get("[data-testid='harness-install']");
-    expect(install.get("[data-testid='harness-install-mode']").text()).toBe("Separate from OpenCode 1");
+    expect(install.get("[data-testid='harness-install-mode']").text()).toBe("In its own folder");
     expect(install.text()).toContain("2.0.9");
     expect(install.text()).toContain("Sessions/home/you/.weave/harnesses/opencode2/data/opencode.db");
     expect(install.text()).toContain("OpenCode 2 keeps its own provider sign-ins here.");
@@ -166,7 +166,7 @@ describe("HarnessesSection", () => {
       version: "2.0.9",
       executablePath: "/home/you/.weave/harnesses/opencode2/.opencode/bin/opencode2",
       capabilities: { ...createHarness("x", "x").capabilities, supportsProviderSignIn: enabled },
-      setup: { installCommand: "curl", signInCommand: "opencode2 auth login --standalone", mode: "Separate from OpenCode 1" },
+      setup: { installCommand: "curl", signInCommand: "opencode2 auth login --standalone", mode: "In its own folder" },
     });
     mockApiResponses({ "opencode2.enabled": "true" }, () => [withSignIn(true)]);
     apiFetchMock.mockImplementation((path: string) => {
@@ -188,7 +188,7 @@ describe("HarnessesSection", () => {
     mockApiResponses({ "opencode2.enabled": "true" }, () => [createHarness("opencode2", "OpenCode 2", {
       version: "2.0.9",
       executablePath: "/home/you/.weave/harnesses/opencode2/.opencode/bin/opencode2",
-      setup: { installCommand: "curl", signInCommand: "opencode2 auth login --standalone", mode: "Separate from OpenCode 1" },
+      setup: { installCommand: "curl", signInCommand: "opencode2 auth login --standalone", mode: "In its own folder" },
     })]);
 
     const wrapper = await mountHarnessesSection();
@@ -197,17 +197,67 @@ describe("HarnessesSection", () => {
     expect(wrapper.get("[data-testid='harness-install']").text()).toContain("Sign in to a provider in a terminal:");
   });
 
-  it("offers no sign-in before OpenCode 2 is installed", async () => {
+  it("offers no sign-in before OpenCode 2 is installed, and shows its installer", async () => {
+    const separate = "curl -fsSL https://opencode.ai/v2/install | HOME=/home/you/.weave/harnesses/opencode2 bash -s -- --no-modify-path";
     mockApiResponses({}, () => [createHarness("opencode2", "OpenCode 2", {
       available: false,
       state: "not-installed",
-      setup: { installCommand: "curl -fsSL https://opencode.ai/v2/install | bash", signInCommand: "opencode2 auth login", mode: "Default install" },
+      setup: { installCommand: separate, signInCommand: "opencode2 auth login", mode: "In its own folder" },
     })]);
 
     const wrapper = await mountHarnessesSection();
 
-    expect(wrapper.get("[data-testid='harness-install']").text()).toContain("Not installed yet");
-    expect(wrapper.find("[data-testid='harness-install-sign-in']").exists()).toBe(false);
+    const install = wrapper.get("[data-testid='harness-install']");
+    expect(install.text()).toContain("Not installed yet");
+    expect(install.get("[data-testid='harness-install-command']").text()).toBe(separate);
+    expect(install.find("[data-testid='harness-install-sign-in']").exists()).toBe(false);
+
+    await install.get("[data-testid='harness-install-set-up']").trigger("click");
+    expect(useHarnessSetupStore().isOpen).toBe(true);
+  });
+
+  it("shows both places OpenCode 2 can go, with each one's folders and installer", async () => {
+    mockApiResponses({}, () => [createHarness("opencode2", "OpenCode 2", {
+      available: false,
+      state: "not-installed",
+      setup: {
+        installCommand: "separate-installer",
+        mode: "In its own folder",
+        folders: [{ label: "Program", path: "/home/you/.weave/harnesses/opencode2/.opencode/bin" }],
+        installChoices: [
+          {
+            id: "separate",
+            label: "In its own folder",
+            description: "OpenCode 1 can be installed next to it at any time.",
+            command: "separate-installer",
+            folders: [{ label: "Program", path: "/home/you/.weave/harnesses/opencode2/.opencode/bin" }],
+            recommended: true,
+          },
+          {
+            id: "default",
+            label: "As your main opencode",
+            description: "Installing OpenCode 1 later replaces OpenCode 2.",
+            command: "default-installer",
+            folders: [{ label: "Program", path: "/home/you/.opencode/bin" }],
+            recommended: false,
+          },
+        ],
+      },
+    })]);
+
+    const wrapper = await mountHarnessesSection();
+
+    const install = wrapper.get("[data-testid='harness-install']");
+    expect(install.find("[data-testid='harness-install-mode']").exists()).toBe(false);
+    expect(install.find("[data-testid='harness-install-command']").exists()).toBe(false);
+    const separate = install.get("[data-testid='harness-install-choice-separate']").text();
+    expect(separate).toMatch(/In its own folder\s*Recommended/);
+    expect(separate).toContain("Program/home/you/.weave/harnesses/opencode2/.opencode/bin");
+    expect(separate).toContain("separate-installer");
+    const main = install.get("[data-testid='harness-install-choice-default']").text();
+    expect(main).toContain("Installing OpenCode 1 later replaces OpenCode 2.");
+    expect(main).toContain("Program/home/you/.opencode/bin");
+    expect(main).toContain("default-installer");
   });
 
   it("checks again, so a harness installed a moment ago shows up", async () => {

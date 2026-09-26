@@ -40,15 +40,19 @@ internal static class OpenCodeExecutable
 
     public static bool IsOpenCode2(string version) => !HarnessVersion.IsOlder(version, FirstOpenCode2Version);
 
-    /// <summary>Why this harness won't use <paramref name="version"/>, and how to get OpenCode 1 back.</summary>
-    public static string OpenCode2Reason(string version) =>
-        $"This is OpenCode 2 ({version}). The OpenCode harness needs OpenCode 1.x; Fleet runs OpenCode 2 with the OpenCode 2 harness, which you can turn on in Settings. " +
-        "OpenCode 1's installer (curl -fsSL https://opencode.ai/install | bash) puts it back, in place of OpenCode 2.";
+    /// <summary>
+    /// Why this harness won't use <paramref name="executablePath"/>, and what installing OpenCode 1 does to the OpenCode 2
+    /// there: both installers write <c>~/.opencode/bin/opencode</c>, and V2's <c>opencode2</c> runs whatever is in it.
+    /// </summary>
+    public static string OpenCode2Reason(string version, string? executablePath) =>
+        $"{executablePath ?? Command} is OpenCode 2 ({version}), and the OpenCode harness needs OpenCode 1. " +
+        "Installing OpenCode 1 replaces an OpenCode 2 in ~/.opencode/bin, where both install. " +
+        "To keep OpenCode 2 as well, install it again in its own folder afterwards (Settings → Harnesses → OpenCode 2).";
 
     /// <summary>A ready OpenCode 2 install is not working for this harness; anything else is returned as it is.</summary>
     public static HarnessAvailability RejectOpenCode2(HarnessAvailability availability) =>
         availability is { Available: true, Version: { } version } && IsOpenCode2(version)
-            ? HarnessAvailability.NotWorking(OpenCode2Reason(version), version, availability.ExecutablePath)
+            ? HarnessAvailability.NotWorking(OpenCode2Reason(version, availability.ExecutablePath), version, availability.ExecutablePath)
             : availability;
 
     /// <summary>
@@ -81,6 +85,6 @@ internal static class OpenCodeExecutable
         }
 
         if (version is not null && IsOpenCode2(version))
-            throw new InvalidOperationException(OpenCode2Reason(version));
+            throw new InvalidOperationException(OpenCode2Reason(version, executablePath));
     }
 }

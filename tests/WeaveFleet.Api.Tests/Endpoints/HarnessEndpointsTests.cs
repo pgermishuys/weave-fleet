@@ -72,7 +72,14 @@ public sealed class HarnessEndpointsTests
             Setup = new HarnessSetup(
                 "curl -fsSL https://claude.ai/install.sh | bash",
                 "/home/you/.local/bin/claude auth login",
-                "https://code.claude.com/docs/en/setup"),
+                "https://code.claude.com/docs/en/setup")
+            {
+                InstallChoices =
+                [
+                    new HarnessInstallChoice("native", "Native", "Updates itself.", "curl -fsSL https://claude.ai/install.sh | bash",
+                        [new HarnessFolder("Program", "/home/you/.local/bin")]) { Recommended = true },
+                ],
+            },
         });
         await using var factory = new ApiWebApplicationFactory(
             authEnabled: false,
@@ -102,6 +109,13 @@ public sealed class HarnessEndpointsTests
         setup.GetProperty("installCommand").GetString().ShouldBe("curl -fsSL https://claude.ai/install.sh | bash");
         setup.GetProperty("signInCommand").GetString().ShouldBe("/home/you/.local/bin/claude auth login");
         setup.GetProperty("docsUrl").GetString().ShouldBe("https://code.claude.com/docs/en/setup");
+        var choice = setup.GetProperty("installChoices").EnumerateArray().Single();
+        choice.GetProperty("id").GetString().ShouldBe("native");
+        choice.GetProperty("label").GetString().ShouldBe("Native");
+        choice.GetProperty("description").GetString().ShouldBe("Updates itself.");
+        choice.GetProperty("command").GetString().ShouldBe("curl -fsSL https://claude.ai/install.sh | bash");
+        choice.GetProperty("recommended").GetBoolean().ShouldBeTrue();
+        choice.GetProperty("folders")[0].GetProperty("path").GetString().ShouldBe("/home/you/.local/bin");
     }
 
     [Fact]
