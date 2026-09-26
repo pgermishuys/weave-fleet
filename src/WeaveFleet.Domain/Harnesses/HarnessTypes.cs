@@ -206,6 +206,23 @@ public sealed record HarnessSetup(string? InstallCommand, string? SignInCommand,
 
     /// <summary>What the user should know about this install, one sentence each; shown with the install command and in Settings.</summary>
     public IReadOnlyList<string>? Notes { get; init; }
+
+    /// <summary>
+    /// The places the user can install it, when there's more than one to pick from; the recommended one first, and its
+    /// command is <see cref="InstallCommand"/>. Empty when there's nothing to pick.
+    /// </summary>
+    public IReadOnlyList<HarnessInstallChoice> InstallChoices { get; init; } = [];
+}
+
+/// <summary>One place a harness can be installed, for the user to pick.</summary>
+/// <param name="Id">Stays the same across checks, e.g. <c>separate</c>.</param>
+/// <param name="Label">In a few words, e.g. "In its own folder".</param>
+/// <param name="Description">What installing it there means, including what it rules out.</param>
+/// <param name="Command">The installer to type for it.</param>
+/// <param name="Folders">The folders it would use.</param>
+public sealed record HarnessInstallChoice(string Id, string Label, string Description, string Command, IReadOnlyList<HarnessFolder> Folders)
+{
+    public bool Recommended { get; init; }
 }
 
 /// <summary>A folder a harness install uses.</summary>

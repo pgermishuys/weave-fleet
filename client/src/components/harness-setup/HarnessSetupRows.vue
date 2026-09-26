@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { Check, CheckCircle2, Copy, Download, ExternalLink, KeyRound, LoaderCircle, X } from "lucide-vue-next";
 import TerminalView from "@/components/terminal/TerminalView.vue";
-import type { HarnessInfo } from "@/api/client";
+import type { HarnessInfo, HarnessInstallChoice } from "@/api/client";
 import { refreshAllHarnesses } from "@/composables/use-harnesses";
 import {
   harnessDisplay,
@@ -21,7 +21,8 @@ import { usePreferencesStore } from "@/stores/preferences";
  * The harnesses Fleet can help set up, each with Install or Sign in. Either opens the setup terminal under
  * the row with the harness's command typed in; the user presses Enter. While it's open Fleet checks the
  * harnesses again every few seconds, so a finished install shows up without a restart. A harness with no installer
- * to type on this platform (OpenCode 2 on Windows) links to its download instead.
+ * to type on this platform (OpenCode 2 on Windows) links to its download instead. One that can go in more than one
+ * place (OpenCode 2: its own folder, or as the main `opencode`) lets the user pick before installing.
  */
 
 const props = defineProps<{
@@ -49,6 +50,8 @@ const active = shallowRef<ActiveTerminal | null>(null);
 /** Why the terminal couldn't open, with the command to run elsewhere. */
 const failure = shallowRef<{ harnessType: string; message: string; command: string } | null>(null);
 const copied = shallowRef(false);
+/** The install place picked per harness type; the recommended one until the user picks another. */
+const picked = shallowRef<Readonly<Record<string, string>>>({});
 let checkTimer: ReturnType<typeof setInterval> | undefined;
 
 /** Harnesses Fleet has an installer or a download for, the default one first. */
@@ -58,8 +61,27 @@ const rows = computed(() =>
     .sort((a, b) => Number(b.type === props.defaultHarnessType) - Number(a.type === props.defaultHarnessType)),
 );
 
+/** The places to pick from, while it needs installing and there's more than one. */
+function choicesFor(harness: HarnessInfo): readonly HarnessInstallChoice[] {
+  const choices = harness.setup?.installChoices ?? [];
+  return choices.length > 1 && actionFor(harness) === "install" ? choices : [];
+}
+
+function pickedChoice(harness: HarnessInfo): HarnessInstallChoice | null {
+  const choices = choicesFor(harness);
+  return choices.find((choice) => choice.id === picked.value[harness.type])
+    ?? choices.find((choice) => choice.recommended)
+    ?? choices[0]
+    ?? null;
+}
+
+function pick(harness: HarnessInfo, choice: HarnessInstallChoice): void {
+  picked.value = { ...picked.value, [harness.type]: choice.id };
+}
+
 function commandFor(harness: HarnessInfo, action: SetupAction): string | null {
-  return (action === "install" ? harness.setup?.installCommand : harness.setup?.signInCommand) ?? null;
+  if (action === "sign-in") return harness.setup?.signInCommand ?? null;
+  return pickedChoice(harness)?.command ?? harness.setup?.installCommand ?? null;
 }
 
 function actionFor(harness: HarnessInfo): SetupAction | null {
@@ -287,6 +309,44 @@ defineExpose({ closeTerminal });
         </div>
       </div>
 
+      <div
+        v-if="choicesFor(harness).length > 0"
+        class="harness-setup-rows__choices"
+        role="radiogroup"
+        :aria-label="`Where to install ${harness.displayName}`"
+        :data-testid="`harness-setup-choices-${harness.type}`"
+      >
+        <p class="harness-setup-rows__choices-title">
+          Where to install it
+        </p>
+        <label
+          v-for="choice in choicesFor(harness)"
+          :key="choice.id"
+          class="harness-setup-rows__choice"
+          :class="{ 'harness-setup-rows__choice--picked': pickedChoice(harness)?.id === choice.id }"
+          :data-testid="`harness-setup-choice-${harness.type}-${choice.id}`"
+        >
+          <input
+            type="radio"
+            :name="`harness-setup-choice-${harness.type}`"
+            :value="choice.id"
+            :checked="pickedChoice(harness)?.id === choice.id"
+            :disabled="active?.harnessType === harness.type"
+            @change="pick(harness, choice)"
+          >
+          <span class="harness-setup-rows__choice-text">
+            <span class="harness-setup-rows__choice-label">
+              {{ choice.label }}
+              <span
+                v-if="choice.recommended"
+                class="harness-setup-rows__recommended"
+              >Recommended</span>
+            </span>
+            <span class="harness-setup-rows__choice-description">{{ choice.description }}</span>
+          </span>
+        </label>
+      </div>
+
       <ul
         v-if="notesFor(harness).length > 0"
         class="harness-setup-rows__notes"
@@ -511,6 +571,73 @@ defineExpose({ closeTerminal });
   color: var(--muted);
   font-size: 12px;
   list-style: disc;
+}
+
+.harness-setup-rows__choices {
+  display: grid;
+  gap: 6px;
+  margin-left: 46px;
+}
+
+.harness-setup-rows__choices-title {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.harness-setup-rows__choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  padding: 9px 11px;
+  background: var(--main-bg);
+  cursor: pointer;
+  transition: border-color var(--transition);
+}
+
+.harness-setup-rows__choice:hover,
+.harness-setup-rows__choice--picked {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.harness-setup-rows__choice input {
+  flex: none;
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+
+.harness-setup-rows__choice-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.harness-setup-rows__choice-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.harness-setup-rows__recommended {
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 999px;
+  padding: 0 7px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 500;
+}
+
+.harness-setup-rows__choice-description {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .harness-setup-rows__terminal-wrap {

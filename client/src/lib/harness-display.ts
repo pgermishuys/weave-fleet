@@ -22,7 +22,7 @@ const harnessDisplayMetadata: Record<string, HarnessDisplayMetadata> = {
     eyebrow: "CLI harness",
     description: "Harness for sessions backed by OpenCode 2's server, next to OpenCode 1 or on its own.",
     icon: TerminalSquare,
-    pitch: "The new OpenCode. Fleet keeps it apart from OpenCode 1 when both are installed.",
+    pitch: "The new OpenCode. It can live in a folder of its own, next to OpenCode 1.",
   },
   "claude-code": {
     eyebrow: "CLI harness",

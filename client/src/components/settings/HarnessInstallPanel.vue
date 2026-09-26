@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import { Check, Copy, ExternalLink } from "lucide-vue-next";
+import { Check, Copy, Download, ExternalLink } from "lucide-vue-next";
 import type { HarnessInfo } from "@/api/client";
+import { harnessState } from "@/lib/harness-display";
+import { useHarnessSetupStore } from "@/stores/harness-setup";
 
 /**
  * How a harness is installed here, under its card in Settings → Harnesses: the install's mode, the version, the
  * folders it uses, what to know about it, and its provider sign-in. Shown for harnesses that describe their
- * install (`setup.mode`), such as OpenCode 2, which installs separately next to OpenCode 1.
+ * install (`setup.mode`), such as OpenCode 2, which can go in a folder of its own next to OpenCode 1. Until it's
+ * installed, it shows where it can go and the command for each place, to run here (Set up) or in any terminal.
  */
 
 const props = defineProps<{
@@ -15,21 +18,34 @@ const props = defineProps<{
   signsInHere?: boolean;
 }>();
 
+const harnessSetup = useHarnessSetupStore();
+
 const setup = computed(() => props.harness.setup ?? null);
 const installed = computed(() => Boolean(props.harness.executablePath));
+/** Not installed, or what's there isn't this harness any more: it's installed (again) with the installer. */
+const needsInstall = computed(() => {
+  const state = harnessState(props.harness);
+  return state === "not-installed" || state === "not-working";
+});
+const choices = computed(() => (needsInstall.value ? setup.value?.installChoices ?? [] : []));
+const hasChoices = computed(() => choices.value.length > 1);
 const folders = computed(() => setup.value?.folders ?? []);
 const notes = computed(() => setup.value?.notes ?? []);
+/** The one installer to show when there's no place to pick. */
+const installCommand = computed(() => (needsInstall.value && !hasChoices.value ? setup.value?.installCommand ?? null : null));
 /** Signing in only means something once it's installed. */
-const signIn = computed(() => (installed.value ? setup.value?.signInCommand ?? null : null));
+const signIn = computed(() => (installed.value && !needsInstall.value ? setup.value?.signInCommand ?? null : null));
 
-const copied = shallowRef(false);
+/** The command copied last, while its button says so. */
+const copied = shallowRef<string | null>(null);
 
-async function copySignIn(): Promise<void> {
-  if (!signIn.value) return;
+async function copy(command: string): Promise<void> {
   try {
-    await navigator.clipboard?.writeText(signIn.value);
-    copied.value = true;
-    setTimeout(() => (copied.value = false), 1500);
+    await navigator.clipboard?.writeText(command);
+    copied.value = command;
+    setTimeout(() => {
+      if (copied.value === command) copied.value = null;
+    }, 1500);
   } catch {
     // The command is on screen to select by hand.
   }
@@ -47,21 +63,78 @@ async function copySignIn(): Promise<void> {
         Install
       </p>
       <span
+        v-if="!hasChoices"
         class="harness-install__mode"
         data-testid="harness-install-mode"
       >{{ setup.mode }}</span>
       <span
-        v-if="harness.version"
+        v-if="needsInstall"
+        class="harness-install__version"
+      >{{ installed ? "Needs installing again" : "Not installed yet" }}</span>
+      <span
+        v-else-if="harness.version"
         class="harness-install__version"
       >{{ harness.version }}</span>
-      <span
-        v-else-if="!installed"
-        class="harness-install__version"
-      >Not installed yet</span>
+    </div>
+
+    <div
+      v-if="hasChoices"
+      class="harness-install__choices"
+      data-testid="harness-install-choices"
+    >
+      <p class="harness-install__lead">
+        It can go in one of two places. Pick one when you install it:
+      </p>
+      <section
+        v-for="choice in choices"
+        :key="choice.id"
+        class="harness-install__choice"
+        :data-testid="`harness-install-choice-${choice.id}`"
+      >
+        <p class="harness-install__choice-label">
+          {{ choice.label }}
+          <span
+            v-if="choice.recommended"
+            class="harness-install__mode"
+          >Recommended</span>
+        </p>
+        <p class="harness-install__choice-description">
+          {{ choice.description }}
+        </p>
+        <dl class="harness-install__folders">
+          <template
+            v-for="folder in choice.folders"
+            :key="folder.label"
+          >
+            <dt>{{ folder.label }}</dt>
+            <dd>{{ folder.path }}</dd>
+          </template>
+        </dl>
+        <div class="harness-install__copy">
+          <code>{{ choice.command }}</code>
+          <button
+            type="button"
+            class="harness-install__btn"
+            @click="void copy(choice.command)"
+          >
+            <Check
+              v-if="copied === choice.command"
+              :size="14"
+              aria-hidden="true"
+            />
+            <Copy
+              v-else
+              :size="14"
+              aria-hidden="true"
+            />
+            {{ copied === choice.command ? "Copied" : "Copy" }}
+          </button>
+        </div>
+      </section>
     </div>
 
     <dl
-      v-if="folders.length > 0"
+      v-if="!hasChoices && folders.length > 0"
       class="harness-install__folders"
     >
       <template
@@ -86,6 +159,47 @@ async function copySignIn(): Promise<void> {
     </ul>
 
     <div
+      v-if="installCommand"
+      class="harness-install__sign-in"
+    >
+      <p>Install it in a terminal:</p>
+      <div class="harness-install__copy">
+        <code data-testid="harness-install-command">{{ installCommand }}</code>
+        <button
+          type="button"
+          class="harness-install__btn"
+          @click="void copy(installCommand)"
+        >
+          <Check
+            v-if="copied === installCommand"
+            :size="14"
+            aria-hidden="true"
+          />
+          <Copy
+            v-else
+            :size="14"
+            aria-hidden="true"
+          />
+          {{ copied === installCommand ? "Copied" : "Copy" }}
+        </button>
+      </div>
+    </div>
+
+    <button
+      v-if="needsInstall && (installCommand || hasChoices)"
+      type="button"
+      class="harness-install__btn harness-install__set-up"
+      data-testid="harness-install-set-up"
+      @click="harnessSetup.open('harnesses')"
+    >
+      <Download
+        :size="14"
+        aria-hidden="true"
+      />
+      Install {{ harness.displayName }} here
+    </button>
+
+    <div
       v-if="signIn"
       class="harness-install__sign-in"
     >
@@ -95,10 +209,10 @@ async function copySignIn(): Promise<void> {
         <button
           type="button"
           class="harness-install__btn"
-          @click="void copySignIn()"
+          @click="void copy(signIn)"
         >
           <Check
-            v-if="copied"
+            v-if="copied === signIn"
             :size="14"
             aria-hidden="true"
           />
@@ -107,7 +221,7 @@ async function copySignIn(): Promise<void> {
             :size="14"
             aria-hidden="true"
           />
-          {{ copied ? "Copied" : "Copy" }}
+          {{ copied === signIn ? "Copied" : "Copy" }}
         </button>
       </div>
     </div>
@@ -168,9 +282,45 @@ async function copySignIn(): Promise<void> {
   font-size: 11.5px;
 }
 
+.harness-install__lead {
+  color: var(--muted);
+}
+
+.harness-install__choices {
+  display: grid;
+  gap: 10px;
+}
+
+.harness-install__choice {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  padding: 10px 12px;
+  background: var(--card-bg);
+}
+
+.harness-install__choice-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.harness-install__choice-description {
+  color: var(--muted);
+}
+
+.harness-install__set-up {
+  justify-self: start;
+}
+
 .harness-install__folders {
   display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
+  grid-template-columns: fit-content(15em) minmax(0, 1fr);
   gap: 4px 14px;
   margin: 0;
 }
