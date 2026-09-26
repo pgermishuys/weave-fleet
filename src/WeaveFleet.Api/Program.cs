@@ -551,6 +551,12 @@ app.UseRouting();
 
 app.UseCors();
 
+// An unhandled exception answered by Kestrel goes out with its headers cleared, CORS ones included, so a page on
+// another machine saw a CORS failure instead of the 500. Handled here, inside CORS, the 500 keeps them. Development
+// keeps the exception page, which WebApplication puts in front of everything.
+if (!app.Environment.IsDevelopment())
+    app.UseExceptionHandler();
+
 app.Use(async (context, next) =>
 {
     if (!fleetOptions.Auth.Enabled)

@@ -8,7 +8,10 @@ using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Api.Auth;
 using WeaveFleet.Api.Endpoints;
 using WeaveFleet.Api.Tests.Infrastructure;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Routing;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Plugins;
 using WeaveFleet.Application.Services;
 
 namespace WeaveFleet.Api.Tests.Auth;
@@ -159,6 +162,36 @@ public sealed class MachineAccessEndpointTests
         var response = await client.SendAsync(request);
 
         response.Headers.Contains("Access-Control-Allow-Origin").ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task A_server_error_still_answers_another_origin()
+    {
+        // Without CORS headers on the 500, the browser reports a CORS failure and the page never sees the error.
+        await using var factory = new ApiWebApplicationFactory(
+            authEnabled: false,
+            tokenAuthEnabled: true,
+            simulateLocalhostRequest: true,
+            host: "0.0.0.0",
+            configureTestServices: services => services.AddSingleton<IBackendPlugin, ThrowingPlugin>());
+        using var client = CreateClient(factory, Token(factory));
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/test/throw");
+        request.Headers.Add("Origin", ForeignOrigin);
+        var response = await client.SendAsync(request);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+        response.Headers.GetValues("Access-Control-Allow-Origin").Single().ShouldBe(ForeignOrigin);
+    }
+
+    private sealed class ThrowingPlugin : IBackendPlugin
+    {
+        public FleetPluginDescriptor Descriptor { get; } = new("test-throw", "Throws", PluginTrustLevel.BuiltIn, HasFrontend: false, HasBackend: true);
+
+        public Task<PluginStatus> GetStatusAsync(CancellationToken cancellationToken) => Task.FromResult(new PluginStatus("test-throw", PluginConnectionStatus.Connected, null, []));
+
+        public void MapEndpoints(IEndpointRouteBuilder builder)
+            => builder.MapGet("/api/test/throw", () => { throw new InvalidOperationException("Broken on purpose."); });
     }
 
     // ── The token on sockets ──────────────────────────────────────────────────
