@@ -12,8 +12,11 @@ import { useSessionSelectionStore } from "@/stores/session-selection";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSidebarStore } from "@/stores/sidebar";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
+import { useMachinesStore, type MachineEntry } from "@/stores/machines";
 
 import { Button } from "@/components/ui/button";
+import MachineHeader from "./MachineHeader.vue";
+import MachineSessionsGroup from "./MachineSessionsGroup.vue";
 import NewProjectDialog from "./NewProjectDialog.vue";
 
 import ProjectGroup from "./ProjectGroup.vue";
@@ -107,6 +110,36 @@ const sessions = computed(() => {
 });
 
 const isArchivedView = computed(() => retentionStatus.value === "archived");
+
+// Other machines: every machine is listed, the live one in full, the rest as their last polled list.
+const machines = useMachinesStore();
+const { entries: machineEntries, hasMachines, others: machineSessions } = storeToRefs(machines);
+const showMachines = computed(() => hasMachines.value && !isArchivedView.value);
+const liveMachineIndex = computed(() => Math.max(0, machineEntries.value.findIndex((entry) => entry.isLive)));
+const liveMachineEntry = computed(() => machineEntries.value[liveMachineIndex.value]);
+const machinesBefore = computed(() => (showMachines.value ? machineEntries.value.slice(0, liveMachineIndex.value) : []));
+const machinesAfter = computed(() => (showMachines.value ? machineEntries.value.slice(liveMachineIndex.value + 1) : []));
+
+let stopMachinePolling: (() => void) | null = null;
+watch(hasMachines, (has) => {
+  if (has && !stopMachinePolling) {
+    stopMachinePolling = machines.startPolling();
+  } else if (!has && stopMachinePolling) {
+    stopMachinePolling();
+    stopMachinePolling = null;
+  }
+}, { immediate: true });
+onUnmounted(() => stopMachinePolling?.());
+
+watch(
+  () => sessionsStore.sessions.map((item) => item.session.id),
+  (ids) => machines.rememberLiveSessions(ids),
+);
+
+function handleMachineSessionOpen(machine: MachineEntry, session: SessionListItem): void {
+  const search = session.instanceId ? `?instanceId=${encodeURIComponent(session.instanceId)}` : "";
+  machines.openOn(machine.key, `/sessions/${encodeURIComponent(session.session.id)}${search}`);
+}
 
 const searchQuery = shallowRef("");
 const expandedProjects = reactive<Record<string, boolean>>({});
@@ -649,6 +682,22 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
     </div>
 
     <div class="sessions-list">
+      <template v-if="showMachines">
+        <MachineSessionsGroup
+          v-for="machine in machinesBefore"
+          :key="machine.key"
+          :machine="machine"
+          :state="machineSessions[machine.key]"
+          :query="normalizedQuery"
+          @open="handleMachineSessionOpen(machine, $event)"
+        />
+        <MachineHeader
+          v-if="liveMachineEntry"
+          :name="liveMachineEntry.name"
+          live
+        />
+      </template>
+
       <div
         v-if="errorMessage && hasSessions"
         class="sessions-feedback-banner"
@@ -740,6 +789,15 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
           Try a different search term or clear the filter.
         </p>
       </div>
+
+      <MachineSessionsGroup
+        v-for="machine in machinesAfter"
+        :key="machine.key"
+        :machine="machine"
+        :state="machineSessions[machine.key]"
+        :query="normalizedQuery"
+        @open="handleMachineSessionOpen(machine, $event)"
+      />
 
       <!-- Complete drop zone -->
       <Transition name="complete-drop-zone">

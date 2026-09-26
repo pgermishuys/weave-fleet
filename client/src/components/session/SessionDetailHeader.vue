@@ -10,6 +10,7 @@ import { useHarnesses } from "@/composables/use-harnesses";
 import { useModels } from "@/composables/use-models";
 import { modelDisplayName } from "@/lib/agent-model-choice";
 import { useSessionsStore } from "@/stores/sessions";
+import { useMachinesStore } from "@/stores/machines";
 import { apiFetch } from "@/lib/api-client";
 import { useSidebarStore } from "@/stores/sidebar";
 import { ArchiveRestore, GitBranch, Layers, Loader2, X, Plus } from "lucide-vue-next";
@@ -56,6 +57,8 @@ const emit = defineEmits<{
 const { harnesses } = useHarnesses();
 const { models } = useModels(() => props.id);
 const sessionsStore = useSessionsStore();
+// With more than one machine, say which one this session runs on.
+const machines = useMachinesStore();
 const { sessions } = storeToRefs(sessionsStore);
 const { sessionListShown } = storeToRefs(useSidebarStore());
 let composerDisabledSyncTimer: ReturnType<typeof setInterval> | null = null;
@@ -386,6 +389,12 @@ onUnmounted(() => {
         </div>
 
         <div class="session-detail-header__meta-row">
+          <span
+            v-if="machines.hasMachines"
+            class="session-detail-header__machine"
+            :title="`Runs on ${machines.live.name}`"
+            data-testid="session-machine"
+          >{{ machines.live.name }}</span>
           <span
             v-if="props.projectName"
             class="session-detail-header__project"
@@ -727,6 +736,17 @@ onUnmounted(() => {
   line-height: 1.4;
   color: var(--muted);
   white-space: nowrap;
+}
+
+.session-detail-header__machine {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--coral) 14%, transparent);
+  color: var(--coral);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
 }
 
 .session-detail-header__project,

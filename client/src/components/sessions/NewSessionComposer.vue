@@ -48,6 +48,7 @@ import { useHarnessSetupStore } from "@/stores/harness-setup";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSmartLinksStore } from "@/stores/smart-links";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
+import { useMachinesStore } from "@/stores/machines";
 
 const MAX_TEXTAREA_HEIGHT = 180;
 
@@ -58,6 +59,8 @@ const workspaceUiStore = useWorkspaceUiStore();
 const { newSessionInitialSource } = storeToRefs(workspaceUiStore);
 const { enabledHarnesses, defaultHarnessType, noHarnessReason } = useEnabledHarnesses();
 const { setActiveSection } = useSettingsNav();
+// A new session starts on the machine you're working in.
+const machines = useMachinesStore();
 const harnessSetup = useHarnessSetupStore();
 const defaults = useNewSessionDefaults();
 const isMobile = useIsMobile();
@@ -690,6 +693,11 @@ onUnmounted(() => {
         New session
       </h2>
       <span class="new-session__pill">Not started</span>
+      <span
+        v-if="machines.hasMachines"
+        class="new-session__machine"
+        data-testid="new-session-machine"
+      >on {{ machines.live.name }}</span>
     </header>
 
     <!-- Once sent, the message sits where the session page will show it. -->
@@ -988,6 +996,16 @@ onUnmounted(() => {
   letter-spacing: -0.005em;
   line-height: 1.3;
   color: var(--text);
+}
+
+.new-session__machine {
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--coral) 14%, transparent);
+  color: var(--coral);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .new-session__pill {
