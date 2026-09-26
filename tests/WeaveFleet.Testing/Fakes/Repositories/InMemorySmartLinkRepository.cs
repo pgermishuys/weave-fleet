@@ -24,6 +24,12 @@ public sealed class InMemorySmartLinkRepository : ISmartLinkRepository
         return Task.FromResult(result);
     }
 
+    public Task<IReadOnlyList<SmartLink>> ListHeaderLinksForUserAsync(CancellationToken ct)
+    {
+        IReadOnlyList<SmartLink> result = [.. _store.Where(l => !l.IsDismissed && l.Relationship is "origin" or "own" or "pinned")];
+        return Task.FromResult(result);
+    }
+
     public Task DismissAsync(string id)
     {
         var link = _store.FirstOrDefault(l => l.Id == id);

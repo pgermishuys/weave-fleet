@@ -155,6 +155,36 @@ public sealed class SmartLinkRepositoryTests
     }
 
     [Fact]
+    public async Task ListHeaderLinksForUser_returns_origin_own_and_pinned_links_on_sessions_that_arent_archived()
+    {
+        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
+        using var _ = keeper;
+        var (_, _, kept) = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, TestUserContext.DefaultUserId);
+        var (_, _, archived) = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, TestUserContext.DefaultUserId);
+        var (_, _, someoneElses) = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "other-user");
+        using (var conn = factory.CreateConnection())
+            conn.Execute("UPDATE sessions SET retention_status = 'archived' WHERE id = @Id", new { archived.Id });
+
+        var repo = new SmartLinkRepository(factory, new TestUserContext());
+        var own = Link(kept.Id, "https://github.com/o/r/pull/1", "o/r#1", SmartLinkRelationships.Own);
+        var origin = Link(kept.Id, "https://github.com/o/r/issues/2", "o/r#2", SmartLinkRelationships.Origin);
+        var pinned = Link(kept.Id, "https://github.com/o/r/pull/3", "o/r#3", SmartLinkRelationships.Pinned);
+        var mentioned = Link(kept.Id, "https://github.com/o/r/pull/4", "o/r#4", SmartLinkRelationships.Mentioned);
+        var dismissed = Link(kept.Id, "https://github.com/o/r/pull/5", "o/r#5", SmartLinkRelationships.Own);
+        var onArchived = Link(archived.Id, "https://github.com/o/r/pull/6", "o/r#6", SmartLinkRelationships.Own);
+        foreach (var link in new[] { own, origin, pinned, mentioned, dismissed, onArchived })
+            await repo.InsertDetectedAsync(link, false, CancellationToken.None);
+        await repo.DismissAsync(dismissed.Id);
+        var otherUsers = Link(someoneElses.Id, "https://github.com/o/r/pull/7", "o/r#7", SmartLinkRelationships.Own);
+        otherUsers.UserId = "other-user";
+        await new SmartLinkRepository(factory, new TestUserContext("other-user")).InsertDetectedAsync(otherUsers, false, CancellationToken.None);
+
+        var links = await repo.ListHeaderLinksForUserAsync(CancellationToken.None);
+
+        links.Select(l => l.Id).ShouldBe([own.Id, origin.Id, pinned.Id], ignoreOrder: true);
+    }
+
+    [Fact]
     public async Task ListDueForEnrichment_returns_pending_and_stale_open_links_on_running_sessions()
     {
         var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();

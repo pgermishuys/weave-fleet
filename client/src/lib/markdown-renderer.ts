@@ -63,6 +63,30 @@ export function sharedMarkdownRenderer(): MarkdownIt {
   return sharedRenderer;
 }
 
+// "- [ ] todo" and "- [x] done", as GitHub draws them.
+const TASK_MARKER = /^\[([ xX])\]\s+/;
+
+/**
+ * Marks task list items with a class (the checkbox is drawn in CSS) and drops the `[ ]` / `[x]` text, so pull
+ * request test plans read as checklists. No HTML is added, so the sanitizer has nothing new to allow.
+ */
+function taskLists(md: MarkdownIt): void {
+  md.core.ruler.after("inline", "task-lists", (state) => {
+    const tokens = state.tokens;
+    for (let i = 2; i < tokens.length; i++) {
+      const inline = tokens[i];
+      if (inline.type !== "inline" || tokens[i - 1].type !== "paragraph_open" || tokens[i - 2].type !== "list_item_open") continue;
+      const match = TASK_MARKER.exec(inline.content);
+      const first = inline.children?.[0];
+      if (!match || first?.type !== "text" || !TASK_MARKER.test(first.content)) continue;
+
+      first.content = first.content.replace(TASK_MARKER, "");
+      inline.content = inline.content.replace(TASK_MARKER, "");
+      tokens[i - 2].attrJoin("class", match[1] === " " ? "task-list-item" : "task-list-item task-list-item--done");
+    }
+  });
+}
+
 export function createMarkdownRenderer(): MarkdownIt {
   return new MarkdownIt({
     html: false,
@@ -83,5 +107,5 @@ export function createMarkdownRenderer(): MarkdownIt {
 
       return `<pre class="hljs"><code>${escapeHtml(code)}</code></pre>`;
     },
-  });
+  }).use(taskLists);
 }

@@ -105,4 +105,58 @@ describe("useSmartLinksStore", () => {
 
     expect(store.lastCheckedAt("s1")).toBe("2026-09-12T11:00:00Z");
   });
+
+  it("loads every session's header links in one request and keeps them current from pushes", async () => {
+    apiFetchMock.mockResolvedValue(json([
+      wire("1", "own", { sessionId: "s1" }),
+      wire("2", "origin", { sessionId: "s2", resourceType: "issue", url: "https://github.com/o/r/issues/2" }),
+    ]));
+    const store = useSmartLinksStore();
+
+    await Promise.all([store.ensureHeaderLinksLoaded(), store.ensureHeaderLinksLoaded()]);
+
+    expect(apiFetchMock).toHaveBeenCalledTimes(1);
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/smart-links");
+    expect(store.sessionPullRequest("s1")?.id).toBe("1");
+    expect(store.sessionPullRequest("s2")).toBeNull();
+
+    // A pushed update for a session that was never opened lands in the header links only.
+    store.applyPushed(wire("3", "own", { sessionId: "s2" }));
+    expect(store.sessionPullRequest("s2")?.id).toBe("3");
+    expect(store.bySession.s2).toBeUndefined();
+
+    store.applyPushed(wire("3", "own", { sessionId: "s2", isDismissed: true }));
+    expect(store.sessionPullRequest("s2")).toBeNull();
+  });
+
+  it("picks the session's own open pull request before one it started from or pinned, and open before merged", () => {
+    const store = useSmartLinksStore();
+    store.setLinks("s1", [
+      wire("1", "pinned"),
+      wire("2", "own", { status: "merged", isTerminal: true }),
+      wire("3", "origin"),
+      wire("4", "own"),
+      wire("5", "own", { resourceType: "issue", url: "https://github.com/o/r/issues/5" }),
+    ]);
+
+    expect(store.sessionPullRequest("s1")?.id).toBe("4");
+    store.setLinks("s1", [wire("1", "pinned"), wire("2", "own", { status: "merged", isTerminal: true })]);
+    expect(store.sessionPullRequest("s1")?.id).toBe("1");
+  });
+
+  it("finds the sessions working on a pull request", async () => {
+    apiFetchMock.mockResolvedValue(json([
+      wire("7", "own", { sessionId: "s1", resourceId: "O/R#7" }),
+      wire("7", "pinned", { id: "x", sessionId: "s2" }),
+      wire("8", "own", { sessionId: "s3" }),
+    ]));
+    const store = useSmartLinksStore();
+    await store.ensureHeaderLinksLoaded();
+
+    expect(store.sessionsFor("o/r#7").sort()).toEqual(["s1", "s2"]);
+
+    // Once a session's full list is loaded, it decides.
+    store.setLinks("s2", [wire("7", "pinned", { id: "x", sessionId: "s2", isDismissed: true })]);
+    expect(store.sessionsFor("o/r#7")).toEqual(["s1"]);
+  });
 });

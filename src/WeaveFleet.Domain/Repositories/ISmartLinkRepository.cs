@@ -7,6 +7,12 @@ public interface ISmartLinkRepository
 {
     Task<IReadOnlyList<SmartLink>> ListBySessionIdAsync(string sessionId);
     Task<IReadOnlyList<SmartLink>> ListActiveBySessionIdAsync(string sessionId);
+
+    /// <summary>
+    /// The current user's links that show in a session header (origin, own, pinned, not dismissed), across
+    /// every session that isn't archived.
+    /// </summary>
+    Task<IReadOnlyList<SmartLink>> ListHeaderLinksForUserAsync(CancellationToken ct);
     Task DismissAsync(string id);
 
     /// <summary>

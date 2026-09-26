@@ -306,7 +306,7 @@ function mockSmartLink(
   const checkedAt = new Date(Date.now() - 12_000).toISOString();
   return {
     id,
-    sessionId: "mock-session-1",
+    sessionId: (metadata.sessionId as string | undefined) ?? "mock-session-1",
     url: `https://github.com/example/weave-fleet/${kind}/${number}`,
     providerId: "github",
     resourceType: kind === "pull" ? "pull_request" : "issue",
@@ -335,6 +335,15 @@ const MOCK_SMART_LINKS: Record<string, unknown[]> = {
       headRef: "feat/mock-api",
       baseRef: "main",
       mergeable: false,
+      additions: 412,
+      deletions: 88,
+      changedFiles: 14,
+      author: "pgermishuys",
+      reviewDecision: "CHANGES_REQUESTED",
+      reviewers: [
+        { login: "tvdb", avatarUrl: null, state: "APPROVED" },
+        { login: "reviewer", avatarUrl: null, state: "CHANGES_REQUESTED" },
+      ],
       ci: {
         headSha: "a1b2c3d4e5f6",
         ciStatus: "failure",
@@ -353,6 +362,18 @@ const MOCK_SMART_LINKS: Record<string, unknown[]> = {
       },
     }),
     mockSmartLink("mock-link-mention", "issues", 156, "SignalR hub in mock mode", "mentioned", "closed", {}),
+  ],
+  "mock-session-2": [
+    mockSmartLink("mock-link-2", "pull", 191, "feat(sessions): progress rings", "own", "open", {
+      sessionId: "mock-session-2", headRef: "feat/progress-rings", baseRef: "main", mergeable: true, additions: 96, deletions: 12,
+      reviewDecision: "APPROVED", reviewers: [{ login: "tvdb", avatarUrl: null, state: "APPROVED" }],
+      ci: { headSha: "b2", ciStatus: "success", checkRuns: [
+        { id: 11, name: "client-tests", status: "completed", conclusion: "success", htmlUrl: "", workflowName: "CI", startedAt: null, completedAt: null },
+      ] },
+    }),
+  ],
+  "mock-session-3": [
+    mockSmartLink("mock-link-3", "pull", 183, "refactor: session cache", "own", "merged", { sessionId: "mock-session-3" }),
   ],
 };
 
@@ -1095,7 +1116,10 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
             ],
             tags: [],
             recentCommits: [],
-            remotes: [],
+            // weave-fleet is on GitHub, so its # picker has something to ask. The server sends the URL only.
+            remotes: path.endsWith("/weave-fleet")
+              ? [{ name: "origin", url: "git@github.com:pgermishuys/weave-fleet.git", github: null }]
+              : [],
             readmeContent: null,
             readmeFilename: null,
             defaultBranch: "main",
@@ -1727,6 +1751,15 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
           status: 200,
           headers: { "Content-Type": "application/json" },
         });
+      },
+    },
+    {
+      // Every session's header links, for the sessions list's pull request badges.
+      pattern: /^\/api\/smart-links$/,
+      handler: () => {
+        const header = Object.values(MOCK_SMART_LINKS).flat()
+          .filter((link) => ["origin", "own", "pinned"].includes((link as { relationship: string }).relationship));
+        return new Response(JSON.stringify(header), { status: 200, headers: { "Content-Type": "application/json" } });
       },
     },
     {

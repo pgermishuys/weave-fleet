@@ -46,6 +46,10 @@ import { useSessionsStore } from "@/stores/sessions";
 import { useArchiveQueueStore } from "@/stores/archive-queue";
 import { useSessionSelectionStore } from "@/stores/session-selection";
 import OpenToolContextSubmenu from "@/components/sessions/OpenToolContextSubmenu.vue";
+import PrBadge from "@/components/github/PrBadge.vue";
+import { prState, prWords } from "@/lib/pr-state";
+import { linkNumber, linkPrFacts } from "@/lib/smart-links";
+import { useSmartLinksStore } from "@/stores/smart-links";
 import ConfirmDeleteSessionDialog from "./ConfirmDeleteSessionDialog.vue";
 
 interface Props {
@@ -131,6 +135,15 @@ const progressDescription = computed(() => {
   if (!summary) return "";
   const counts = `${summary.done} of ${summary.total} done`;
   return summary.current ? `${counts}. Now: ${summary.current}` : counts;
+});
+// The pull request the session opened (or started from), once GitHub has answered for it.
+const smartLinks = useSmartLinksStore();
+const prBadge = computed(() => {
+  const link = smartLinks.sessionPullRequest(sessionId.value);
+  const number = link ? linkNumber(link) : null;
+  if (!link || number === null || link.enrichmentStatus !== "resolved") return null;
+  const facts = linkPrFacts(link);
+  return { number, state: prState(facts), checks: facts.checks, description: `Pull request #${number} · ${prWords(facts)}` };
 });
 const isArchivedSession = computed(() => props.session.retentionStatus === "archived");
 const fallbackCanArchive = computed(() => !isArchivedSession.value);
@@ -457,6 +470,11 @@ function removeSessionFromStore(): void {
             <span class="session-copy">
               <span class="session-title">{{ displayTitle }}</span>
             </span>
+
+            <PrBadge
+              v-if="prBadge"
+              v-bind="prBadge"
+            />
 
             <span
               v-if="progress"

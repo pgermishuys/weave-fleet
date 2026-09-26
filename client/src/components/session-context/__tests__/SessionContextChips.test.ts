@@ -49,37 +49,75 @@ describe("SessionContextChips", () => {
     apiFetchMock.mockImplementation(() => Promise.resolve(new Response("[]", { status: 200 })));
   });
 
-  it("shows a chip for origin, own and pinned links but not mentions", async () => {
+  it("shows where the session came from, its pull request as a pill, and pinned links as chips", async () => {
     useSmartLinksStore().setLinks("s1", [
       wire("42", "origin", {}, { resourceType: "issue", url: "https://github.com/o/r/issues/42" }),
       wire("187", "own", failingChecks),
+      wire("9", "pinned"),
       wire("7", "mentioned"),
     ]);
 
     const wrapper = mount(SessionContextChips, { props: { sessionId: "s1" } });
     await flushPromises();
 
-    const chips = wrapper.findAll(".context-chip");
-    expect(chips.map((chip) => chip.find(".context-chip__number").text())).toEqual(["#42", "#187"]);
-
-    const pr = wrapper.get('[data-testid="context-chip-187"]');
-    expect(pr.classes()).toContain("context-chip--attention");
-    expect(pr.attributes("aria-label")).toContain("Checks: 1 failing");
-    expect(pr.attributes("aria-label")).toContain("2 unresolved review threads");
+    expect(wrapper.get('[data-testid="context-chip-42"]').text()).toBe("from #42");
+    const pill = wrapper.get('[data-testid="session-pr-pill"]');
+    expect(pill.attributes("data-pr")).toBe("blocked");
+    expect(pill.text()).toContain("#187");
+    expect(pill.text()).toContain("1 failing · 2 threads");
+    expect(wrapper.find('[data-testid="context-chip-9"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="context-chip-7"]').exists()).toBe(false);
   });
 
-  it("opens the Context tab at the link when clicked", async () => {
-    useSmartLinksStore().setLinks("s1", [wire("187", "own")]);
+  it("opens the Context tab at the origin when clicked", async () => {
+    useSmartLinksStore().setLinks("s1", [wire("42", "origin", {}, { resourceType: "issue", url: "https://github.com/o/r/issues/42" })]);
     const sidebar = useSidebarStore();
     sidebar.setRightPanelCollapsed(true);
 
     const wrapper = mount(SessionContextChips, { props: { sessionId: "s1" } });
     await flushPromises();
-    await wrapper.get('[data-testid="context-chip-187"]').trigger("click");
+    await wrapper.get('[data-testid="context-chip-42"]').trigger("click");
 
     expect(sidebar.rightPanelCollapsed).toBe(false);
     expect(useCanvasesStore().sessionCanvases("s1").activeId).toBe("context");
-    expect(useSmartLinksStore().focusRequest).toMatchObject({ sessionId: "s1", target: "187" });
+    expect(useSmartLinksStore().focusRequest).toMatchObject({ sessionId: "s1", target: "42" });
+  });
+
+  it("sends every failing check and open thread to the agent from the pill", async () => {
+    useSmartLinksStore().setLinks("s1", [wire("187", "own", failingChecks)]);
+    const wrapper = mount(SessionContextChips, { props: { sessionId: "s1" }, attachTo: document.body, global: { stubs: { teleport: false } } });
+    await flushPromises();
+
+    await wrapper.get('[data-testid="session-pr-pill"]').trigger("click");
+    await flushPromises();
+    const fix = document.querySelector<HTMLButtonElement>('[data-testid="session-pr-fix"]');
+    expect(fix?.textContent).toContain("Fix checks and address review");
+
+    fix!.click();
+    await flushPromises();
+
+    const [url, init] = apiFetchMock.mock.calls.find(([path]) => String(path).endsWith("/prompt"))!;
+    expect(url).toBe("/api/sessions/s1/prompt");
+    const text = JSON.parse(String((init as RequestInit).body)).text as string;
+    expect(text).toContain("Workflow: tests");
+    expect(text).toContain("File: a.ts:1");
+    expect(text).toContain("File: b.ts:2");
+    expect(document.querySelector('[data-testid="session-pr-fix"]')?.textContent).toContain("Sent to the agent");
+    wrapper.unmount();
+  });
+
+  it("offers to archive the session once its pull request is merged", async () => {
+    useSmartLinksStore().setLinks("s1", [wire("187", "own", {}, { status: "merged", statusLabel: "Merged", isTerminal: true })]);
+    const wrapper = mount(SessionContextChips, { props: { sessionId: "s1" }, attachTo: document.body, global: { stubs: { teleport: false } } });
+    await flushPromises();
+
+    const pill = wrapper.get('[data-testid="session-pr-pill"]');
+    expect(pill.attributes("data-pr")).toBe("merged");
+    await pill.trigger("click");
+    await flushPromises();
+
+    expect(document.querySelector('[data-testid="session-pr-popover"]')?.textContent).toContain("Archive session");
+    wrapper.unmount();
   });
 
   it("names the automation a session was started by", async () => {

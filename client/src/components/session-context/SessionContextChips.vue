@@ -1,32 +1,21 @@
 <script setup lang="ts">
 import { computed, watch } from "vue";
-import {
-  CircleCheckBig,
-  CircleDot,
-  CircleX,
-  Clock,
-  GitPullRequest,
-  MessageSquare,
-  TriangleAlert,
-  Zap,
-} from "lucide-vue-next";
+import { CircleDot, GitPullRequest, Zap } from "lucide-vue-next";
 import type { SessionOrigin } from "@/api/client";
+import PullRequestPill from "@/components/session-context/PullRequestPill.vue";
 import SmartLinkIcon from "@/components/session-context/SmartLinkIcon.vue";
 import {
-  hasMergeConflict,
   isPullRequest,
   linkNumber,
   linkTitle,
   needsAttention,
-  reviewThreads,
-  summarizeChecks,
   type SmartLink,
 } from "@/lib/smart-links";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { useCanvasesStore } from "@/stores/canvases";
 import { useSmartLinksStore } from "@/stores/smart-links";
 
-const MAX_CHIPS = 3;
+const MAX_CHIPS = 2;
 
 const props = defineProps<{
   sessionId: string;
@@ -46,8 +35,12 @@ watch(
 );
 
 const headerLinks = computed(() => smartLinks.headerLinks(props.sessionId));
-const visibleLinks = computed(() => headerLinks.value.slice(0, MAX_CHIPS));
-const overflow = computed(() => headerLinks.value.length - visibleLinks.value.length);
+// The pull request the session is about gets the pill; the rest stay small.
+const pullRequest = computed(() => smartLinks.sessionPullRequest(props.sessionId));
+const originLink = computed(() => headerLinks.value.find((link) => link.relationship === "origin" && link.id !== pullRequest.value?.id) ?? null);
+const otherLinks = computed(() => headerLinks.value.filter((link) => link.id !== pullRequest.value?.id && link.id !== originLink.value?.id));
+const visibleLinks = computed(() => otherLinks.value.slice(0, MAX_CHIPS));
+const overflow = computed(() => otherLinks.value.length - visibleLinks.value.length);
 
 const automationOrigin = computed(() =>
   props.origin?.sourceType === "automation" ? props.origin : null,
@@ -67,22 +60,7 @@ function describe(link: SmartLink): string {
   const parts = [`${kind} #${linkNumber(link) ?? ""}: ${linkTitle(link)}`];
   if (link.relationship === "origin") parts.push("Session started from this");
   if (link.enrichmentStatus === "resolved" && link.statusLabel) parts.push(link.statusLabel);
-  if (isPullRequest(link) && !link.isTerminal) {
-    const checks = summarizeChecks(link);
-    if (checks.state !== "none") parts.push(`Checks: ${checks.text}`);
-    const threads = reviewThreads(link).length;
-    if (threads) parts.push(`${threads} unresolved review thread${threads === 1 ? "" : "s"}`);
-    if (hasMergeConflict(link)) parts.push("Merge conflicts");
-  }
   return parts.join(". ");
-}
-
-function checkIcon(link: SmartLink) {
-  const state = summarizeChecks(link).state;
-  if (state === "failing") return { icon: CircleX, tone: "bad" };
-  if (state === "running") return { icon: Clock, tone: "warn" };
-  if (state === "passed") return { icon: CircleCheckBig, tone: "good" };
-  return null;
 }
 
 function show(target: string): void {
@@ -95,7 +73,7 @@ function show(target: string): void {
 
 <template>
   <div
-    v-if="automationOrigin || pendingOrigin || visibleLinks.length > 0"
+    v-if="automationOrigin || pendingOrigin || headerLinks.length > 0"
     class="context-chips"
     role="list"
     aria-label="Session context"
@@ -121,18 +99,45 @@ function show(target: string): void {
       v-if="pendingOrigin"
       type="button"
       role="listitem"
-      class="context-chip"
+      class="context-origin"
       :title="`Started from ${pendingOrigin.isPullRequest ? 'pull request' : 'issue'} #${pendingOrigin.number}: ${pendingOrigin.title}`"
       @click="show('origin')"
     >
       <component
         :is="pendingOrigin.isPullRequest ? GitPullRequest : CircleDot"
         :size="13"
-        class="context-chip__pending"
         aria-hidden="true"
       />
-      <span class="context-chip__number">#{{ pendingOrigin.number }}</span>
+      from <span class="context-chip__number">#{{ pendingOrigin.number }}</span>
     </button>
+
+    <button
+      v-if="originLink"
+      type="button"
+      role="listitem"
+      class="context-origin"
+      :title="describe(originLink)"
+      :aria-label="`${describe(originLink)}. Show in Context`"
+      :data-testid="`context-chip-${originLink.id}`"
+      @click="show(originLink.id)"
+    >
+      <SmartLinkIcon
+        :link="originLink"
+        :size="13"
+      />
+      from <span class="context-chip__number">#{{ linkNumber(originLink) }}</span>
+    </button>
+
+    <span
+      v-if="pullRequest"
+      role="listitem"
+      class="context-chips__pill"
+    >
+      <PullRequestPill
+        :link="pullRequest"
+        @show-context="show"
+      />
+    </span>
 
     <button
       v-for="link in visibleLinks"
@@ -151,36 +156,6 @@ function show(target: string): void {
         :size="13"
       />
       <span class="context-chip__number">#{{ linkNumber(link) }}</span>
-      <template v-if="isPullRequest(link) && !link.isTerminal && link.enrichmentStatus === 'resolved'">
-        <span
-          v-if="checkIcon(link) || reviewThreads(link).length || hasMergeConflict(link)"
-          class="context-chip__divider"
-          aria-hidden="true"
-        />
-        <component
-          :is="checkIcon(link)!.icon"
-          v-if="checkIcon(link)"
-          :size="12"
-          class="context-chip__signal"
-          :data-tone="checkIcon(link)!.tone"
-          aria-hidden="true"
-        />
-        <span
-          v-if="reviewThreads(link).length"
-          class="context-chip__signal"
-          data-tone="warn"
-          aria-hidden="true"
-        >
-          <MessageSquare :size="12" />{{ reviewThreads(link).length }}
-        </span>
-        <TriangleAlert
-          v-if="hasMergeConflict(link)"
-          :size="12"
-          class="context-chip__signal"
-          data-tone="warn"
-          aria-hidden="true"
-        />
-      </template>
     </button>
 
     <button
@@ -188,8 +163,8 @@ function show(target: string): void {
       type="button"
       role="listitem"
       class="context-chip context-chip--more"
-      :aria-label="`${overflow} more linked item${overflow === 1 ? '' : 's'}. Show in Context`"
-      @click="show(headerLinks[MAX_CHIPS]!.id)"
+      :aria-label="`${overflow} more linked pull requests and issues. Show in Context`"
+      @click="show(otherLinks[MAX_CHIPS]?.id ?? '')"
     >
       +{{ overflow }}
     </button>
@@ -231,7 +206,39 @@ function show(target: string): void {
 }
 
 .context-chip--attention {
-  border-color: color-mix(in srgb, var(--error) 40%, transparent);
+  border-color: color-mix(in srgb, var(--pr-blocked) 45%, transparent);
+}
+
+/* Where the session came from: quiet, since it rarely changes. */
+.context-origin {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: var(--radius-btn);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--transition), color var(--transition);
+}
+
+.context-origin:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text);
+}
+
+.context-origin:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.context-chips__pill {
+  display: inline-flex;
+  min-width: 0;
 }
 
 .context-chip--more {
@@ -248,42 +255,16 @@ function show(target: string): void {
   text-overflow: ellipsis;
 }
 
-.context-chip__pending {
-  flex-shrink: 0;
-  color: var(--muted);
-}
 
 .context-chip__automation {
   flex-shrink: 0;
   color: var(--status-waiting);
 }
 
-.context-chip__divider {
-  width: 1px;
-  height: 12px;
-  background: var(--border);
-}
 
-.context-chip__signal {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  flex-shrink: 0;
-  font-size: 11.5px;
-  font-variant-numeric: tabular-nums;
-}
 
-.context-chip__signal[data-tone="bad"] {
-  color: var(--error);
-}
 
-.context-chip__signal[data-tone="warn"] {
-  color: var(--status-waiting);
-}
 
-.context-chip__signal[data-tone="good"] {
-  color: var(--running);
-}
 
 @media (prefers-reduced-motion: reduce) {
   .context-chip {
