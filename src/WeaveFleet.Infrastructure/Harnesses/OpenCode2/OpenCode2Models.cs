@@ -277,6 +277,32 @@ internal sealed record OpenCode2AgentInfo
     public string? Mode { get; init; }
     public bool Hidden { get; init; }
     public OpenCode2ModelRef? Model { get; init; }
+
+    /// <summary>What the agent is for; Weave starts its own agents' with <c>[weave-managed]</c>.</summary>
+    public string? Description { get; init; }
+}
+
+/// <summary>
+/// A plugin V2 loaded in a folder (<c>GET /api/plugin</c>). One it couldn't load isn't listed; the reason is only in
+/// its log.
+/// </summary>
+internal sealed record OpenCode2PluginInfo
+{
+    public string? Id { get; init; }
+    public OpenCode2PluginSource? Source { get; init; }
+}
+
+/// <summary>
+/// Where a plugin came from: <c>builtin</c>; <c>package</c> with <see cref="Target"/> as the config names it
+/// (<c>@weaveio/weave-adapter-opencode2@0.2.0-next.3</c>); or <c>local</c> with the <see cref="Path"/> of its entry
+/// file.
+/// </summary>
+internal sealed record OpenCode2PluginSource
+{
+    public string? Type { get; init; }
+    public string? Target { get; init; }
+    public string? Version { get; init; }
+    public string? Path { get; init; }
 }
 
 /// <summary>
@@ -772,6 +798,7 @@ internal sealed record OpenCode2ErrorBody
 [JsonSerializable(typeof(OpenCode2Envelope<Dictionary<string, JsonElement>>))]
 [JsonSerializable(typeof(OpenCode2Envelope<List<OpenCode2Form>>))]
 [JsonSerializable(typeof(OpenCode2Envelope<List<OpenCode2AgentInfo>>))]
+[JsonSerializable(typeof(OpenCode2Envelope<List<OpenCode2PluginInfo>>))]
 [JsonSerializable(typeof(OpenCode2Envelope<List<OpenCode2ModelInfo>>))]
 [JsonSerializable(typeof(OpenCode2Envelope<OpenCode2ModelInfo>))]
 [JsonSerializable(typeof(OpenCode2Envelope<List<OpenCode2ProviderInfo>>))]

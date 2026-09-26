@@ -408,6 +408,7 @@ internal sealed record ErrorResponse(string Error);
 // Weave config
 [JsonSerializable(typeof(WeaveFleet.Application.Weave.WeaveConfigView))]
 [JsonSerializable(typeof(WeaveFleet.Application.Weave.WeaveSaveResult))]
+[JsonSerializable(typeof(WeaveFleet.Application.Weave.WeavePluginChange))]
 [JsonSerializable(typeof(WeaveFleet.Application.Weave.WeaveOwnConfig))]
 [JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Application.Weave.WeaveHarnessCheck>))]
 [JsonSerializable(typeof(WeaveFleet.Api.Endpoints.SaveWeaveConfigRequest))]

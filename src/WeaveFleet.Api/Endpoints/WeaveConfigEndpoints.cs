@@ -37,6 +37,17 @@ public static class WeaveConfigEndpoints
             (await weave.CheckAsync(req.Flavor, req.Files, ct)).ToApiResult())
             .WithName("CheckWeaveConfig");
 
+        // Add Weave: puts the Weave adapter, at its newest version on npm, into the harness's own plugin list and has
+        // the harness load it. Refused when the harness already lists Weave, or Fleet runs with sign-in.
+        group.MapPost("/harnesses/{harnessType}/plugin", async (string harnessType, WeaveConfigService weave, CancellationToken ct) =>
+            (await weave.AddPluginAsync(harnessType, ct)).ToApiResult())
+            .WithName("AddWeavePlugin");
+
+        // Takes out the entry Add Weave put in; an entry the user wrote is theirs, and stays.
+        group.MapDelete("/harnesses/{harnessType}/plugin", async (string harnessType, WeaveConfigService weave, CancellationToken ct) =>
+            (await weave.RemovePluginAsync(harnessType, ct)).ToApiResult())
+            .WithName("RemoveWeavePlugin");
+
         return app;
     }
 }

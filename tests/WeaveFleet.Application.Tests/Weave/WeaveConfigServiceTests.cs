@@ -8,7 +8,7 @@ using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Application.Tests.Weave;
 
-public sealed class WeaveConfigServiceTests
+public sealed class WeaveConfigServiceTests : IDisposable
 {
     private static readonly WeaveInstall Weave = new(WeaveFlavor.Weave, "@weaveio/weave-adapter-opencode", "@weaveio/weave-adapter-opencode@0.2.0-next.1", true);
     private static readonly WeaveInstall Legacy = new(WeaveFlavor.Legacy, "@opencode_weave/weave", "@opencode_weave/weave@0.9.0", true);
@@ -18,6 +18,9 @@ public sealed class WeaveConfigServiceTests
     private readonly FakeHarnessRuntime _pi = new("pi");
     private readonly InMemoryWeaveConfigRepository _configs = new();
     private readonly WeaveDetectionCache _detections = new();
+    private readonly InMemoryUserPreferenceRepository _preferences = new();
+    private readonly FakeVersions _versions = new();
+    private readonly string _configFolder = Path.Combine(Path.GetTempPath(), $"weave-plugin-{Guid.NewGuid():N}");
 
     public WeaveConfigServiceTests()
     {
@@ -28,9 +31,46 @@ public sealed class WeaveConfigServiceTests
         _opencode.WeaveInstalls = [Weave];
     }
 
+    public void Dispose()
+    {
+        if (Directory.Exists(_configFolder))
+            Directory.Delete(_configFolder, recursive: true);
+    }
+
     private WeaveConfigService CreateService(FleetOptions? options = null) => new(
         _configs, _registry, new TestUserContext("user-1"), options ?? new FleetOptions(), _detections, TimeProvider.System,
-        NullLogger<WeaveConfigService>.Instance);
+        NullLogger<WeaveConfigService>.Instance, _preferences, _versions);
+
+    private sealed class FakeVersions : IWeavePackageVersions
+    {
+        public string? Version { get; set; } = "0.2.0-next.3";
+
+        public List<string> Asked { get; } = [];
+
+        public Task<string?> NewestAsync(string package, CancellationToken ct)
+        {
+            Asked.Add(package);
+            return Task.FromResult(Version);
+        }
+    }
+
+    private const string V2Package = "@weaveio/weave-adapter-opencode2";
+    private const string V2Entry = V2Package + "@0.2.0-next.3";
+
+    /// <summary>OpenCode with no Weave yet, whose config lives in the test's folder; a plugin change makes it load what's in the file.</summary>
+    private void WithoutWeave()
+    {
+        _opencode.WeaveInstalls = [];
+        _opencode.WeavePluginHome = new WeavePluginHome(_configFolder, ["opencode.jsonc", "opencode.json"], "plugins", V2Package);
+        _opencode.OnWeavePluginsChanged = () =>
+        {
+            var file = Path.Combine(_configFolder, "opencode.json");
+            var listed = File.Exists(file) ? WeavePluginList.Read(File.ReadAllText(file), "plugins") : [];
+            _opencode.WeaveInstalls = listed.Where(entry => entry.StartsWith(V2Package, StringComparison.Ordinal))
+                .Select(entry => new WeaveInstall(WeaveFlavor.Weave, V2Package, entry, true))
+                .ToList();
+        };
+    }
 
     private static Dictionary<string, string> Files(params (string Path, string Content)[] files) =>
         files.ToDictionary(file => file.Path, file => file.Content, StringComparer.Ordinal);
@@ -219,5 +259,188 @@ public sealed class WeaveConfigServiceTests
 
         result.IsFailure.ShouldBeTrue();
         result.Error.Code.ShouldBe("Validation.Weave.Own");
+    }
+
+    [Fact]
+    public async Task a_harness_without_weave_says_which_file_add_weave_would_write()
+    {
+        WithoutWeave();
+
+        var view = (await CreateService().GetAsync(redetect: true, CancellationToken.None)).Value;
+
+        view.Harnesses.Single(h => h.HarnessType == "opencode").AddTo.ShouldBe(Path.Combine(_configFolder, "opencode.json"));
+        view.Harnesses.Single(h => h.HarnessType == "pi").AddTo.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task add_weave_writes_the_newest_adapter_into_the_harnesses_config_and_the_harness_loads_it()
+    {
+        WithoutWeave();
+        Directory.CreateDirectory(_configFolder);
+        await File.WriteAllTextAsync(Path.Combine(_configFolder, "opencode.json"), """
+            {
+              // mine
+              "model": "anthropic/claude"
+            }
+            """);
+
+        var result = await CreateService().AddPluginAsync("opencode", CancellationToken.None);
+
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : null);
+        _versions.Asked.ShouldBe([V2Package]);
+        (await File.ReadAllTextAsync(Path.Combine(_configFolder, "opencode.json"))).ShouldBe($$"""
+            {
+              "plugins": ["{{V2Entry}}"],
+              // mine
+              "model": "anthropic/claude"
+            }
+            """);
+        _opencode.WeavePluginChanges.ShouldBe(["user-1"]);
+        result.Value.Loaded.ShouldBeTrue();
+        result.Value.Entry.ShouldBe(V2Entry);
+        result.Value.Message.ShouldBe($"Added {V2Entry} to {Path.Combine(_configFolder, "opencode.json")}. OpenCode loaded it.");
+        var install = result.Value.Config.Harnesses.Single(h => h.HarnessType == "opencode").Installs.ShouldHaveSingleItem();
+        install.AddedByFleet.ShouldBeTrue();
+        result.Value.Config.Harnesses.Single(h => h.HarnessType == "opencode").AddTo.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task add_weave_creates_the_config_when_the_harness_has_none()
+    {
+        WithoutWeave();
+
+        var result = await CreateService().AddPluginAsync("opencode", CancellationToken.None);
+
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : null);
+        WeavePluginList.Read(await File.ReadAllTextAsync(Path.Combine(_configFolder, "opencode.json")), "plugins").ShouldBe([V2Entry]);
+    }
+
+    [Fact]
+    public async Task an_adapter_the_harness_couldnt_load_says_why()
+    {
+        WithoutWeave();
+        _opencode.OnWeavePluginsChanged = () => _opencode.WeaveInstalls =
+            [new WeaveInstall(WeaveFlavor.Weave, V2Package, V2Entry, false, "No matching version found")];
+
+        var result = await CreateService().AddPluginAsync("opencode", CancellationToken.None);
+
+        result.Value.Loaded.ShouldBeFalse();
+        result.Value.Message.ShouldBe($"Added {V2Entry} to {Path.Combine(_configFolder, "opencode.json")}, but OpenCode couldn't load it: No matching version found");
+    }
+
+    [Fact]
+    public async Task add_weave_is_refused_when_the_harness_already_has_weave()
+    {
+        _opencode.WeavePluginHome = new WeavePluginHome(_configFolder, ["opencode.json"], "plugins", V2Package);
+
+        var result = await CreateService().AddPluginAsync("opencode", CancellationToken.None);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Code.ShouldBe("General.Conflict");
+        result.Error.Description.ShouldBe("OpenCode already has Weave in its plugin list.");
+        Directory.Exists(_configFolder).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task add_weave_doesnt_guess_between_two_config_files()
+    {
+        WithoutWeave();
+        Directory.CreateDirectory(_configFolder);
+        await File.WriteAllTextAsync(Path.Combine(_configFolder, "opencode.json"), "{}");
+        await File.WriteAllTextAsync(Path.Combine(_configFolder, "opencode.jsonc"), "{}");
+
+        var service = CreateService();
+
+        (await service.GetAsync(redetect: true, CancellationToken.None)).Value.Harnesses.Single(h => h.HarnessType == "opencode").AddTo.ShouldBe(_configFolder);
+        var result = await service.AddPluginAsync("opencode", CancellationToken.None);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Description.ShouldContain("has opencode.jsonc and opencode.json");
+        (await File.ReadAllTextAsync(Path.Combine(_configFolder, "opencode.json"))).ShouldBe("{}");
+    }
+
+    [Fact]
+    public async Task an_entry_the_harness_didnt_load_is_not_added_twice()
+    {
+        WithoutWeave();
+        Directory.CreateDirectory(_configFolder);
+        await File.WriteAllTextAsync(Path.Combine(_configFolder, "opencode.json"), $$"""{ "plugins": ["{{V2Package}}@9.9.9"] }""");
+
+        var result = await CreateService().AddPluginAsync("opencode", CancellationToken.None);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Description.ShouldStartWith($"{Path.Combine(_configFolder, "opencode.json")} already lists {V2Package}@9.9.9, but OpenCode didn't load it.");
+    }
+
+    [Fact]
+    public async Task add_weave_needs_npm_to_pick_the_version()
+    {
+        WithoutWeave();
+        _versions.Version = null;
+
+        var result = await CreateService().AddPluginAsync("opencode", CancellationToken.None);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Description.ShouldBe($"Fleet couldn't look up {V2Package} on npm. Check the connection and try again.");
+        File.Exists(Path.Combine(_configFolder, "opencode.json")).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task a_harness_fleet_cant_add_weave_to_says_so()
+    {
+        _pi.WeaveInstalls = [];
+
+        var result = await CreateService().AddPluginAsync("pi", CancellationToken.None);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Description.ShouldBe("Fleet can't add Weave to Pi.");
+    }
+
+    [Fact]
+    public async Task nothing_is_added_when_fleet_runs_with_sign_in()
+    {
+        WithoutWeave();
+        var options = new FleetOptions();
+        options.Auth.Enabled = true;
+        var service = CreateService(options);
+
+        (await service.GetAsync(redetect: true, CancellationToken.None)).Value.Harnesses.Single(h => h.HarnessType == "opencode").AddTo.ShouldBeNull();
+        var result = await service.AddPluginAsync("opencode", CancellationToken.None);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Description.ShouldBe("Fleet can't change a harness's plugins when it runs with sign-in.");
+    }
+
+    [Fact]
+    public async Task remove_takes_out_only_what_add_weave_put_in()
+    {
+        WithoutWeave();
+        Directory.CreateDirectory(_configFolder);
+        var file = Path.Combine(_configFolder, "opencode.json");
+        await File.WriteAllTextAsync(file, """{ "plugins": ["@my/plugin"] }""");
+        var service = CreateService();
+        (await service.AddPluginAsync("opencode", CancellationToken.None)).IsSuccess.ShouldBeTrue();
+
+        var result = await service.RemovePluginAsync("opencode", CancellationToken.None);
+
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : null);
+        (await File.ReadAllTextAsync(file)).ShouldBe("""{ "plugins": ["@my/plugin"] }""");
+        result.Value.Loaded.ShouldBeTrue();
+        result.Value.Message.ShouldBe($"Took {V2Entry} out of {file}.");
+        _opencode.WeavePluginChanges.Count.ShouldBe(2);
+        result.Value.Config.Harnesses.Single(h => h.HarnessType == "opencode").AddTo.ShouldBe(file);
+    }
+
+    [Fact]
+    public async Task weave_the_user_added_is_not_fleets_to_remove()
+    {
+        _opencode.WeavePluginHome = new WeavePluginHome(_configFolder, ["opencode.json"], "plugins", V2Package);
+
+        var view = (await CreateService().GetAsync(redetect: true, CancellationToken.None)).Value;
+        var result = await CreateService().RemovePluginAsync("opencode", CancellationToken.None);
+
+        view.Harnesses.Single(h => h.HarnessType == "opencode").Installs.ShouldHaveSingleItem().AddedByFleet.ShouldBeFalse();
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Description.ShouldBe("Fleet didn't add Weave to OpenCode, so it leaves OpenCode's plugin list alone.");
     }
 }

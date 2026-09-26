@@ -16,13 +16,18 @@ internal static class WeaveConfigFolder
     public static string ForUser(string dataDirectory, string userId) =>
         Path.Combine(Root(dataDirectory), UserKey(userId));
 
-    /// <summary>Where a harness tries drafts and probes for a user, apart from the saved config.</summary>
-    public static string TrialFor(string dataDirectory, string userId) =>
-        Path.Combine(Root(dataDirectory), UserKey(userId) + "-trial");
+    /// <summary>
+    /// Where a harness tries drafts and probes for a user, apart from the saved config. A harness other than OpenCode
+    /// passes its type, so two harnesses' tries never write the same folder.
+    /// </summary>
+    public static string TrialFor(string dataDirectory, string userId, string? harnessType = null) =>
+        Path.Combine(Root(dataDirectory), UserKey(userId) + "-trial" + Suffix(harnessType));
 
     /// <summary>An empty folder a harness lists agents in while it tries a draft; Weave writes its log under it.</summary>
-    public static string TrialProjectFor(string dataDirectory, string userId) =>
-        Path.Combine(Root(dataDirectory), UserKey(userId) + "-trial-project");
+    public static string TrialProjectFor(string dataDirectory, string userId, string? harnessType = null) =>
+        Path.Combine(Root(dataDirectory), UserKey(userId) + "-trial-project" + Suffix(harnessType));
+
+    private static string Suffix(string? harnessType) => harnessType is null ? string.Empty : "-" + harnessType;
 
     private static string UserKey(string userId) =>
         Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(userId)))[..16];

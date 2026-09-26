@@ -11,6 +11,7 @@ using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Skills;
 using WeaveFleet.Application.Terminals;
+using WeaveFleet.Application.Weave;
 using WeaveFleet.Application.Workflows;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
@@ -28,6 +29,7 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 /// Fleet's plugin (canvas, app and browser tools) and skills load into it through <c>OPENCODE_CONFIG_CONTENT</c>, and a
 /// profile through <c>OPENCODE_CONFIG</c> (<see cref="OpenCode2Profiles"/>).
 /// The install it runs, and in separate mode its own config folder and database, come from <see cref="OpenCode2Install"/>.
+/// Weave is a plugin in the user's V2 config; <see cref="OpenCode2Weave"/> finds it and hands it the config Fleet keeps.
 /// </summary>
 public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDisposable, IDisposable
 {
@@ -54,6 +56,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     private readonly OpenCode2Install _install;
     private readonly OpenCode2Servers _servers;
     private readonly OpenCode2SignIn _signIn;
+    private readonly OpenCode2Weave _weave;
 
     // Profile version (content hash) → the Fleet profiles with that content, as sessions and composers asked for them,
     // so a change on a profile's server names the profiles the browser knows.
@@ -110,6 +113,12 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             () => _install.Locate()?.Mode ?? _install.RememberedMode() ?? OpenCode2InstallMode.Default,
             () => httpClientFactory.CreateClient(SignInCallbackHttpClientName),
             TimeProvider.System);
+        _weave = new OpenCode2Weave(
+            FleetDataDirectory,
+            scopeFactory,
+            StartWeaveTrialAsync,
+            owner => _servers.All.Where(server => server.IsRunning && server.OwnerUserId == owner).ToList(),
+            logger);
     }
 
     /// <inheritdoc />
@@ -392,6 +401,50 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         }
     }
 
+    /// <inheritdoc />
+    /// <remarks>Read from a throwaway server with the owner's config and its log on (<see cref="OpenCode2Weave"/>).</remarks>
+    public async Task<IReadOnlyList<WeaveInstall>?> DetectWeaveAsync(string ownerUserId, CancellationToken ct)
+        => await _weave.DetectAsync(ownerUserId, ct).ConfigureAwait(false);
+
+    /// <inheritdoc />
+    public Task<WeaveCheck?> CheckWeaveConfigAsync(
+        string ownerUserId,
+        WeaveFlavor flavor,
+        IReadOnlyDictionary<string, string> files,
+        CancellationToken ct)
+        => _weave.CheckAsync(ownerUserId, flavor, files, ct);
+
+    /// <inheritdoc />
+    public Task WeaveConfigChangedAsync(string ownerUserId, CancellationToken ct) => _weave.ConfigChangedAsync(ownerUserId, ct);
+
+    /// <inheritdoc />
+    public WeaveApplyStatus? GetWeaveApplyStatus(string ownerUserId) => _weave.GetApplyStatus(ownerUserId);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The config folder V2 reads for the user: a separate install's own, else <c>~/.config/opencode</c>, which it shares
+    /// with OpenCode 1 (V1 reads <c>plugin</c>, V2 <c>plugins</c>).
+    /// </remarks>
+    public WeavePluginHome? GetWeavePluginHome()
+    {
+        var mode = _install.Locate()?.Mode ?? _install.RememberedMode() ?? OpenCode2InstallMode.Default;
+        var folder = ServerEnvironment.TryGetValue("OPENCODE_CONFIG_DIR", out var configDir) ? configDir
+            : ServerEnvironment.TryGetValue("XDG_CONFIG_HOME", out var configHome) ? Path.Combine(configHome, "opencode")
+            : _install.UserConfigDirectory(mode);
+        return new WeavePluginHome(folder, ["opencode.jsonc", "opencode.json"], "plugins", OpenCode2Weave.Package);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Each running server reloads its folders once none of its sessions waits on a question.</remarks>
+    public Task WeavePluginsChangedAsync(string ownerUserId, CancellationToken ct) => _weave.PluginsChangedAsync(ownerUserId, ct);
+
+    /// <summary>A server of the owner's, not one sessions use, whose Weave reads <paramref name="weaveFolder"/>, with its log going to <paramref name="logLine"/>.</summary>
+    private async Task<OpenCode2Server> StartWeaveTrialAsync(string ownerUserId, string weaveFolder, Action<string> logLine, CancellationToken ct)
+    {
+        var setup = await GetSetupAsync(ownerUserId, profile: null).ConfigureAwait(false);
+        return await StartServerAsync(ownerUserId, setup with { WeaveConfigFolder = weaveFolder }, logLine, catalogChanged: null, ct).ConfigureAwait(false);
+    }
+
     /// <summary>How long a profile check waits after the folder loaded for the rest of V2's log.</summary>
     internal TimeSpan ProfileCheckLogGrace { get; set; } = TimeSpan.FromMilliseconds(500);
 
@@ -554,7 +607,8 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             install?.ExecutablePath,
             install?.Mode ?? OpenCode2InstallMode.Default,
             profile,
-            Workflows: workflows && plugin is not null);
+            Workflows: workflows && plugin is not null,
+            WeaveConfigFolder: await _weave.GetConfigFolderAsync(ownerUserId).ConfigureAwait(false));
     }
 
     /// <inheritdoc />
@@ -676,6 +730,8 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             environment[SessionMessages.EnvironmentVariable] = "1";
         if (setup.Workflows)
             environment[FleetWorkflows.EnvironmentVariable] = "1";
+        if (setup.WeaveConfigFolder is { } weaveFolder)
+            environment[WeaveEnvironment.GlobalConfigDir] = weaveFolder;
 
         // The agent's shell commands inherit the server's environment. Fleet's plugin takes out what's for the server
         // alone, in every shell V2 starts: an `opencode` the agent runs must not open this server's config and database,

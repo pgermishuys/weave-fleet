@@ -97,6 +97,10 @@ internal sealed partial class OpenCode2Install
 
     private string ConfigHome => XdgFolder("XDG_CONFIG_HOME", ".config");
 
+    /// <summary>The config folder V2 reads for the user in <paramref name="mode"/>: a separate install's own, else OpenCode's.</summary>
+    public string UserConfigDirectory(OpenCode2InstallMode mode)
+        => mode == OpenCode2InstallMode.Separate ? SeparateConfigDirectory : Path.Combine(ConfigHome, "opencode");
+
     private string DataHome => XdgFolder("XDG_DATA_HOME", Path.Combine(".local", "share"));
 
     /// <summary>The mode written when Fleet first found a working V2, if it has.</summary>

@@ -61,4 +61,28 @@ public sealed class WeaveConfigEndpointTests
 
         response.StatusCode.ShouldNotBe(HttpStatusCode.OK);
     }
+
+    [Fact]
+    public async Task adding_weave_to_a_harness_fleet_doesnt_have_is_not_found()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        using var client = CreateClient(factory);
+
+        var added = await client.PostAsync("/api/weave/harnesses/nope/plugin", content: null);
+        var removed = await client.DeleteAsync("/api/weave/harnesses/nope/plugin");
+
+        added.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        removed.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task a_harnesss_plugins_are_never_changed_with_sign_in_on()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: true);
+        using var client = CreateClient(factory);
+
+        var response = await client.PostAsync("/api/weave/harnesses/opencode2/plugin", content: null);
+
+        response.StatusCode.ShouldNotBe(HttpStatusCode.OK);
+    }
 }

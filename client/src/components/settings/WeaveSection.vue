@@ -42,7 +42,7 @@ const FLAVORS: Record<WeaveFlavor, {
   },
 };
 
-const { view, loading, error, load, check, save, readOwn } = useWeaveConfig();
+const { view, loading, error, load, check, save, readOwn, changePlugin } = useWeaveConfig();
 
 const source = shallowRef<"own" | "fleet">("own");
 const files = shallowRef<Record<string, string>>({});
@@ -52,6 +52,9 @@ const checks = shallowRef<WeaveHarnessCheck[] | null>(null);
 const notice = shallowRef<string | null>(null);
 const addingPrompt = shallowRef(false);
 const newPromptName = shallowRef("");
+/** The harness whose plugin list Fleet is changing (Add Weave or Remove), and what the last change said. */
+const pluginBusy = shallowRef<string | null>(null);
+const pluginNotice = shallowRef<{ text: string; tone: "ok" | "warn" | "error" } | null>(null);
 
 onMounted(() => load());
 
@@ -65,7 +68,16 @@ function sortedEntries(record: Readonly<Record<string, string>>): [string, strin
   return Object.entries(record).sort(([a], [b]) => a.localeCompare(b));
 }
 
-const harnesses = computed<readonly WeaveHarnessDetection[]>(() => view.value?.harnesses ?? []);
+/** OpenCode 2 first: it's the OpenCode Fleet leads with. */
+const HARNESS_ORDER = ["opencode2", "opencode"];
+
+const harnesses = computed<readonly WeaveHarnessDetection[]>(() => [...view.value?.harnesses ?? []].sort((a, b) =>
+  rank(a.harnessType) - rank(b.harnessType)));
+
+function rank(harnessType: string): number {
+  const index = HARNESS_ORDER.indexOf(harnessType);
+  return index < 0 ? HARNESS_ORDER.length : index;
+}
 const installs = computed(() => harnesses.value.flatMap((harness) => harness.installs));
 /** The Weaves some harness loads, in the order they're shown. */
 const flavors = computed<WeaveFlavor[]>(() =>
@@ -222,19 +234,48 @@ function removePrompt(path: string): void {
 
 function describeInstall(detection: WeaveHarnessDetection): string {
   if (!detection.checked) return detection.note ?? "";
-  if (detection.installs.length === 0) return "Weave isn't in its plugin list.";
-  return detection.installs.map((install) => install.entry.startsWith("file://")
-    ? `${install.package} · local build at ${install.entry.slice("file://".length)}`
-    : install.entry).join(" · ");
+  if (detection.installs.length === 0) {
+    return detection.addTo
+      ? `Weave isn't in its plugin list. Add Weave puts it in ${detection.addTo}.`
+      : "Weave isn't in its plugin list.";
+  }
+  return detection.installs.map((install) => {
+    const entry = install.entry.startsWith("file://")
+      ? `${install.package} · local build at ${install.entry.slice("file://".length)}`
+      : install.entry;
+    return install.error ? `${entry} · didn't load: ${install.error}` : entry;
+  }).join(" · ");
 }
 
 function pillFor(detection: WeaveHarnessDetection): { tone: "ok" | "warn" | "off"; label: string } {
   if (!detection.checked) return { tone: "off", label: "Not yet" };
   if (detection.installs.length === 0) return { tone: "off", label: "No Weave" };
   const names = detection.installs.map((install) => FLAVORS[install.flavor].name).join(" + ");
+  if (detection.installs.some((install) => install.error)) return { tone: "warn", label: `${names} · didn't load` };
   return detection.installs.every((install) => install.acceptsFleetConfig)
     ? { tone: "ok", label: names }
     : { tone: "warn", label: `${names} · update` };
+}
+
+/** Fleet can take Weave out of this harness: it's the entry Add Weave put in. */
+function addedByFleet(detection: WeaveHarnessDetection): boolean {
+  return detection.installs.some((install) => install.addedByFleet);
+}
+
+async function changeWeavePlugin(detection: WeaveHarnessDetection, add: boolean): Promise<void> {
+  pluginBusy.value = detection.harnessType;
+  pluginNotice.value = null;
+  try {
+    const result = await changePlugin(detection.harnessType, add);
+    pluginNotice.value = { text: result.message, tone: result.loaded ? "ok" : "warn" };
+  } catch (caught) {
+    pluginNotice.value = {
+      text: caught instanceof Error ? caught.message : `Couldn't change ${detection.harnessName}'s plugins.`,
+      tone: "error",
+    };
+  } finally {
+    pluginBusy.value = null;
+  }
 }
 
 const primaryFlavor = computed<WeaveFlavor | null>(() => usableFlavors.value[0] ?? flavors.value[0] ?? null);
@@ -321,22 +362,80 @@ function folderName(directory: string): string {
           <span class="col-span-2 row-start-2 min-w-0 break-words text-xs text-muted sm:col-span-1 sm:row-start-auto">
             {{ describeInstall(harness) }}
           </span>
-          <span
-            class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-medium"
-            :class="{
-              'border-running/35 bg-running/10 text-running': pillFor(harness).tone === 'ok',
-              'border-idle/35 bg-idle/10 text-idle': pillFor(harness).tone === 'warn',
-              'border-border text-muted': pillFor(harness).tone === 'off',
-            }"
-          >
+          <span class="flex items-center justify-end gap-2">
+            <Button
+              v-if="harness.addTo"
+              variant="outline"
+              size="sm"
+              :data-testid="`weave-add-${harness.harnessType}`"
+              :disabled="pluginBusy !== null"
+              @click="changeWeavePlugin(harness, true)"
+            >
+              <LoaderCircle
+                v-if="pluginBusy === harness.harnessType"
+                class="animate-spin"
+                aria-hidden="true"
+              />
+              <Plus
+                v-else
+                aria-hidden="true"
+              />
+              {{ pluginBusy === harness.harnessType ? "Adding…" : "Add Weave" }}
+            </Button>
+            <Button
+              v-else-if="addedByFleet(harness)"
+              variant="ghost"
+              size="sm"
+              :data-testid="`weave-remove-${harness.harnessType}`"
+              :disabled="pluginBusy !== null"
+              @click="changeWeavePlugin(harness, false)"
+            >
+              <LoaderCircle
+                v-if="pluginBusy === harness.harnessType"
+                class="animate-spin"
+                aria-hidden="true"
+              />
+              {{ pluginBusy === harness.harnessType ? "Removing…" : "Remove" }}
+            </Button>
             <span
-              class="size-1.5 rounded-full bg-current"
-              aria-hidden="true"
-            />
-            {{ pillFor(harness).label }}
+              class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-medium"
+              :class="{
+                'border-running/35 bg-running/10 text-running': pillFor(harness).tone === 'ok',
+                'border-idle/35 bg-idle/10 text-idle': pillFor(harness).tone === 'warn',
+                'border-border text-muted': pillFor(harness).tone === 'off',
+              }"
+            >
+              <span
+                class="size-1.5 rounded-full bg-current"
+                aria-hidden="true"
+              />
+              {{ pillFor(harness).label }}
+            </span>
           </span>
         </li>
       </ul>
+
+      <p
+        v-if="pluginBusy"
+        class="mt-2 text-xs text-muted"
+        role="status"
+        data-testid="weave-plugin-busy"
+      >
+        The first time, the harness downloads Weave from npm, which can take a minute.
+      </p>
+      <p
+        v-else-if="pluginNotice"
+        class="mt-2 break-words text-xs"
+        :class="{
+          'text-muted': pluginNotice.tone === 'ok',
+          'text-idle': pluginNotice.tone === 'warn',
+          'text-error': pluginNotice.tone === 'error',
+        }"
+        :role="pluginNotice.tone === 'error' ? 'alert' : 'status'"
+        data-testid="weave-plugin-notice"
+      >
+        {{ pluginNotice.text }}
+      </p>
 
       <div
         v-for="flavor in outdated"
@@ -380,13 +479,16 @@ function folderName(directory: string): string {
           <p class="max-w-md text-sm text-muted">
             Nothing here changes how Fleet works. Sessions use the harness's own agents. Once Weave is in a harness's
             plugin list, you can set its config here.
+            <template v-if="harnesses.some((harness) => harness.addTo)">
+              Add Weave above puts it there for you.
+            </template>
           </p>
           <a
             class="text-sm text-accent hover:underline"
             href="https://tryweave.io/docs/quickstart/"
             target="_blank"
             rel="noopener"
-          >How to install Weave</a>
+          >What Weave adds</a>
         </div>
 
         <template v-else>
