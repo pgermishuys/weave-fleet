@@ -13,10 +13,18 @@ public sealed class CdpException(string message) : Exception(message);
 /// event on a page. A websocket and JSON, no package: a screenshot isn't worth a browser automation stack, and
 /// everything here has to survive Native AOT. Commands carry an id; replies come back out of order, so each one
 /// waits on its own promise. Every message is either a reply (has "id") or an event (has "method").
+/// <para>
+/// Every command gives up after <see cref="DefaultReplyTimeout"/>: a wedged browser keeps its socket open and says
+/// nothing, and a caller waiting on it would wait for ever.
+/// </para>
 /// </summary>
 internal sealed class CdpConnection : IAsyncDisposable
 {
+    /// <summary>How long a command waits for its reply. A screenshot of a big page is the slowest thing Fleet asks for.</summary>
+    public static readonly TimeSpan DefaultReplyTimeout = TimeSpan.FromSeconds(30);
+
     private readonly ClientWebSocket _socket;
+    private readonly TimeSpan _replyTimeout;
     private readonly ConcurrentDictionary<int, TaskCompletionSource<JsonDocument>> _pending = new();
     private readonly ConcurrentDictionary<string, TaskCompletionSource<bool>> _events = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _send = new(1, 1);
@@ -24,27 +32,30 @@ internal sealed class CdpConnection : IAsyncDisposable
     private readonly Task _reading;
     private int _id;
 
-    private CdpConnection(ClientWebSocket socket)
+    private CdpConnection(ClientWebSocket socket, TimeSpan replyTimeout)
     {
         _socket = socket;
+        _replyTimeout = replyTimeout;
         _reading = Task.Run(ReadAsync);
     }
 
     public bool IsOpen => _socket.State == WebSocketState.Open;
 
-    public static async Task<CdpConnection> ConnectAsync(Uri url, CancellationToken ct)
+    /// <param name="replyTimeout">How long a command waits for its reply; <see cref="DefaultReplyTimeout"/> when not given.</param>
+    public static async Task<CdpConnection> ConnectAsync(Uri url, CancellationToken ct, TimeSpan? replyTimeout = null)
     {
         var socket = new ClientWebSocket();
         // A screenshot arrives as one base64 blob of tens of kilobytes; a bigger receive buffer than the 4 KB
         // default means fewer trips round the read loop for it.
         socket.Options.SetBuffer(64 * 1024, 4 * 1024);
         await socket.ConnectAsync(url, ct);
-        return new CdpConnection(socket);
+        return new CdpConnection(socket, replyTimeout ?? DefaultReplyTimeout);
     }
 
     /// <summary>
     /// Sends <paramref name="method"/> and returns its result object. <paramref name="sessionId"/> addresses a
     /// page attached with <c>Target.attachToTarget</c>; without it the command goes to the browser itself.
+    /// Throws <see cref="CdpException"/> when the browser refuses it, the connection dies, or no reply comes in time.
     /// </summary>
     public async Task<JsonDocument> SendAsync(string method, Action<Utf8JsonWriter>? parameters = null, string? sessionId = null, CancellationToken ct = default)
     {
@@ -88,7 +99,11 @@ internal sealed class CdpConnection : IAsyncDisposable
 
         try
         {
-            return await waiting.Task.WaitAsync(ct);
+            return await waiting.Task.WaitAsync(_replyTimeout, ct);
+        }
+        catch (TimeoutException)
+        {
+            throw new CdpException($"The browser didn't answer {method} within {_replyTimeout.TotalSeconds:0.#} seconds.");
         }
         finally
         {
