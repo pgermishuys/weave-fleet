@@ -9,11 +9,13 @@ import CredentialsSection from "@/components/settings/CredentialsSection.vue";
 import SkillsSection from "@/components/settings/SkillsSection.vue";
 import ToolsSection from "@/components/settings/ToolsSection.vue";
 import HarnessesSection from "@/components/settings/HarnessesSection.vue";
+import MachinesSection from "@/components/settings/MachinesSection.vue";
 import WeaveSection from "@/components/settings/WeaveSection.vue";
 import WorkflowsSection from "@/components/settings/WorkflowsSection.vue";
 import WorkspaceSection from "@/components/settings/WorkspaceSection.vue";
 import WorktreeNamingSection from "@/components/settings/WorktreeNamingSection.vue";
 import { useSettingsNav } from "@/composables/use-settings-nav";
+import { useMachinesStore } from "@/stores/machines";
 import { usePluginRuntime } from "@/plugins/composable";
 import { getSettingsSections } from "@/plugins/slots";
 
@@ -23,6 +25,8 @@ interface DecoratedSettingsSection extends RegisteredSettingsSection {
 
 const pluginRuntime = usePluginRuntime();
 const { activeSection } = useSettingsNav();
+// Settings belong to a machine: when another one is live, these are its settings.
+const machines = useMachinesStore();
 
 const pluginSections = computed<readonly DecoratedSettingsSection[]>(() => {
   const descriptorsById = new Map(
@@ -44,6 +48,13 @@ const pluginSections = computed<readonly DecoratedSettingsSection[]>(() => {
       </h1>
       <p class="mt-1 text-sm text-muted">
         Manage credentials, workspace preferences, appearance, skills, harnesses, Weave, system details, and plugin-provided settings.
+      </p>
+      <p
+        v-if="!machines.live.isHome && activeSection !== 'machines'"
+        class="mt-2 text-sm text-muted"
+        data-testid="settings-machine-note"
+      >
+        These are the settings of <span class="font-mono font-semibold text-[var(--coral)]">{{ machines.live.name }}</span>, the machine you're working in.
       </p>
     </div>
 
@@ -67,6 +78,8 @@ const pluginSections = computed<readonly DecoratedSettingsSection[]>(() => {
     <FeaturesSection v-else-if="activeSection === 'features'" />
 
     <HarnessesSection v-else-if="activeSection === 'harnesses'" />
+
+    <MachinesSection v-else-if="activeSection === 'machines'" />
 
     <WeaveSection v-else-if="activeSection === 'weave'" />
 
