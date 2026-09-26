@@ -249,6 +249,13 @@ public sealed class AuthOptions
     /// <summary>Local authentication token populated at runtime from environment or generation.</summary>
     public string? Token { get; set; }
 
+    /// <summary>
+    /// Ask for the access token on every request in local mode, even from this machine over loopback. Turn it on
+    /// when a reverse proxy such as <c>tailscale serve</c> forwards other devices to a loopback-bound Fleet.
+    /// Default: false (a loopback-bound Fleet signs in its own machine automatically).
+    /// </summary>
+    public bool RequireToken { get; set; }
+
     /// <summary>OIDC authority URL (e.g. Clerk issuer). Required when <see cref="Enabled"/> is true.</summary>
     public string Authority { get; set; } = string.Empty;
 

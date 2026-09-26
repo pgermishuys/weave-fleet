@@ -16,19 +16,38 @@ namespace WeaveFleet.Api.Auth;
 /// <list type="bullet">
 /// <item>Bound to loopback only — nothing outside the machine can connect, so loopback auto-auth is safe.</item>
 /// <item>Bound to anything else (<c>0.0.0.0</c>, <c>::</c>, a LAN/tailnet IP) — a credential is always required.</item>
+/// <item><c>Fleet:Auth:RequireToken</c> (<c>--require-token</c>) — a credential is always required, whatever the bind.
+/// This is the setting for a loopback-bound Fleet behind <c>tailscale serve</c> or another reverse proxy.</item>
 /// </list>
+/// <para>
+/// A loopback request that carries a forwarding header (<c>X-Forwarded-For</c>, <c>Forwarded</c>, Tailscale's
+/// identity headers, …) came through a proxy, so it never gets auto-auth either. Headers can only take the bypass
+/// away, never grant it, so a caller gains nothing by sending or omitting them.
+/// </para>
 /// </summary>
 public sealed class LoopbackAuthPolicy
 {
+    private static readonly string[] ProxyHeaders =
+    [
+        "X-Forwarded-For",
+        "X-Forwarded-Host",
+        "X-Forwarded-Proto",
+        "Forwarded",
+        "X-Real-IP",
+        "Tailscale-User-Login",
+        "Tailscale-User-Name",
+    ];
+
     public LoopbackAuthPolicy(IOptions<FleetOptions> options)
-        : this(options.Value.Host)
+        : this(options.Value.Host, options.Value.Auth.RequireToken)
     {
     }
 
-    public LoopbackAuthPolicy(string? host)
+    public LoopbackAuthPolicy(string? host, bool requireToken = false)
     {
         BoundHost = host ?? string.Empty;
         IsRemoteReachable = IsRemoteReachableHost(host);
+        RequiresToken = requireToken;
     }
 
     /// <summary>The configured bind address the policy was derived from.</summary>
@@ -37,15 +56,30 @@ public sealed class LoopbackAuthPolicy
     /// <summary>True when the bind address lets machines other than this one connect.</summary>
     public bool IsRemoteReachable { get; }
 
+    /// <summary>True when the configuration asks for a credential on every request, loopback ones included.</summary>
+    public bool RequiresToken { get; }
+
     /// <summary>True when a loopback request may be authenticated without presenting a credential.</summary>
-    public bool AllowsLoopbackAutoAuth => !IsRemoteReachable;
+    public bool AllowsLoopbackAutoAuth => !IsRemoteReachable && !RequiresToken;
 
     /// <summary>
-    /// True when this request should be authenticated without a credential: it arrived over loopback
-    /// <em>and</em> Fleet is bound so that only this machine could have sent it.
+    /// True when this request should be authenticated without a credential: it arrived over loopback, not through
+    /// a proxy, <em>and</em> Fleet is bound so that only this machine could have sent it.
     /// </summary>
     public bool GrantsAutoAuth(HttpContext context)
-        => AllowsLoopbackAutoAuth && IsLoopbackRequest(context);
+        => AllowsLoopbackAutoAuth && IsLoopbackRequest(context) && !CameThroughProxy(context.Request);
+
+    /// <summary>True when the request carries a header a reverse proxy adds.</summary>
+    public static bool CameThroughProxy(HttpRequest request)
+    {
+        foreach (var header in ProxyHeaders)
+        {
+            if (request.Headers.ContainsKey(header))
+                return true;
+        }
+
+        return false;
+    }
 
     /// <summary>True when the connection's remote address is a loopback address.</summary>
     public static bool IsLoopbackRequest(HttpContext context)

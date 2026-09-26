@@ -283,6 +283,11 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(ToolCatalogDto[]))]
 // Auth
 [JsonSerializable(typeof(AuthStatusResponse))]
+// Machine
+[JsonSerializable(typeof(MachineResponse))]
+[JsonSerializable(typeof(UpdateMachineRequest))]
+[JsonSerializable(typeof(MachineAccessResponse))]
+[JsonSerializable(typeof(MachineAddress))]
 [JsonSerializable(typeof(TokenLoginRequest))]
 // Open Directory
 [JsonSerializable(typeof(OpenDirectoryRequest))]

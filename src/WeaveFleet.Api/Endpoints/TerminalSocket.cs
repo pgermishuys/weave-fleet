@@ -1,6 +1,7 @@
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using WeaveFleet.Api.Auth;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Terminals;
 
@@ -30,12 +31,15 @@ internal static class TerminalSocket
     /// Terminals are a shell, so the check is stricter than for the event hub. Browsers always send Origin on a
     /// WebSocket; a page on another port of the same machine counts as the same site and carries Fleet's cookie,
     /// so only the page Fleet served, configured origins, and (in Development) local dev servers get in.
-    /// A client with no Origin isn't a browser and still has to authenticate.
+    /// A client with no Origin isn't a browser and still has to authenticate. A page on another machine gets in
+    /// when it presented the access token itself: then the page's origin grants nothing, the token does.
     /// </summary>
     public static bool IsOriginAllowed(HttpContext http, FleetOptions options, bool development)
     {
         var origin = http.Request.Headers.Origin.ToString();
         if (string.IsNullOrEmpty(origin))
+            return true;
+        if (BearerTokenHandler.AuthenticatedWithToken(http.User))
             return true;
         if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri))
             return false;
