@@ -82,6 +82,17 @@ public sealed class QuestionToolTests : E2ETestBase,
             var messageId = $"msg-question-{Guid.NewGuid():N}";
             var toolCallId = "call-q1";
 
+            // The agent asks inside a turn, as a real harness does: a question call is only live while the session is
+            // in one. Outside a turn Fleet reads a running call as cut off.
+            await harness.PushEventAsync(new HarnessEvent
+            {
+                Type = "session.status",
+                SessionId = harness.InstanceId,
+                FleetSessionId = sessionId,
+                Timestamp = DateTimeOffset.UtcNow,
+                Payload = JsonSerializer.SerializeToElement(new { sessionId = harness.InstanceId, status = new { type = "busy" } }),
+            });
+
             // The agent asks the question: an assistant message with a running question tool part
             await harness.PushEventAsync(new HarnessEvent
             {
