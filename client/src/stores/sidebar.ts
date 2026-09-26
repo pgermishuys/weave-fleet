@@ -17,6 +17,18 @@ const RIGHT_PANEL_STORAGE_KEY = "weave:right-collapsed";
 const RIGHT_PANEL_BY_SESSION_STORAGE_KEY = "weave:right-collapsed-by-session";
 // Oldest choices drop off past this, so the map doesn't grow with every session ever opened.
 const RIGHT_PANEL_BY_SESSION_LIMIT = 200;
+// Groups in the sessions list the user collapsed (machines and projects); every other group is open.
+const COLLAPSED_GROUPS_STORAGE_KEY = "weave:sessions-collapsed-groups";
+
+/** A machine's group in the sessions list, as the collapsed-groups map keys it. */
+export function machineGroupKey(machineKey: string): string {
+  return `machine:${machineKey}`;
+}
+
+/** A project's group under a machine; project ids are only unique within their machine. */
+export function projectGroupKey(machineKey: string, projectId: string): string {
+  return `project:${machineKey}:${projectId}`;
+}
 
 function readStoredBoolean(key: string): boolean {
   if (typeof window === "undefined") {
@@ -42,13 +54,13 @@ function persistBoolean(key: string, value: boolean): void {
   }
 }
 
-function readStoredSessionMap(): Record<string, boolean> {
+function readStoredBooleanMap(key: string): Record<string, boolean> {
   if (typeof window === "undefined") {
     return {};
   }
 
   try {
-    const parsed: unknown = JSON.parse(window.localStorage.getItem(RIGHT_PANEL_BY_SESSION_STORAGE_KEY) ?? "{}");
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(key) ?? "{}");
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
     return Object.fromEntries(
       Object.entries(parsed).filter((entry): entry is [string, boolean] => typeof entry[1] === "boolean"),
@@ -58,13 +70,13 @@ function readStoredSessionMap(): Record<string, boolean> {
   }
 }
 
-function persistSessionMap(map: Record<string, boolean>): void {
+function persistBooleanMap(key: string, map: Record<string, boolean>): void {
   if (typeof window === "undefined") {
     return;
   }
 
   try {
-    window.localStorage.setItem(RIGHT_PANEL_BY_SESSION_STORAGE_KEY, JSON.stringify(map));
+    window.localStorage.setItem(key, JSON.stringify(map));
   } catch {
     // localStorage unavailable
   }
@@ -77,7 +89,7 @@ export const useSidebarStore = defineStore("sidebar", () => {
   // The last open/close choice anywhere: the board's panel, and the default for a session never toggled.
   const lastRightPanelCollapsed = shallowRef(readStoredBoolean(RIGHT_PANEL_STORAGE_KEY));
   // Each session remembers whether its panel was open, so switching sessions brings back that session's choice.
-  const rightPanelCollapsedBySession = shallowRef(readStoredSessionMap());
+  const rightPanelCollapsedBySession = shallowRef(readStoredBooleanMap(RIGHT_PANEL_BY_SESSION_STORAGE_KEY));
   const rightPanelSessionId = computed(() =>
     activeRail.value === "sessions" ? sessionsStore.activeSessionId : null,
   );
@@ -95,6 +107,9 @@ export const useSidebarStore = defineStore("sidebar", () => {
   // list is on screen (panel collapsed, another rail open, mobile drawer shut).
   const mountedSessionLists = shallowRef(0);
   const sessionListShown = computed(() => mountedSessionLists.value > 0);
+  // Kept here, not in the list, so leaving for Settings and coming back (or a reload, which switching machines
+  // is) finds the list folded the way it was left.
+  const collapsedGroups = shallowRef(readStoredBooleanMap(COLLAPSED_GROUPS_STORAGE_KEY));
 
   function registerSessionList(): () => void {
     mountedSessionLists.value += 1;
@@ -104,6 +119,23 @@ export const useSidebarStore = defineStore("sidebar", () => {
       released = true;
       mountedSessionLists.value -= 1;
     };
+  }
+
+  function isGroupCollapsed(key: string): boolean {
+    return collapsedGroups.value[key] === true;
+  }
+
+  function setGroupCollapsed(key: string, collapsed: boolean): void {
+    if (isGroupCollapsed(key) === collapsed) return;
+    const next = { ...collapsedGroups.value };
+    if (collapsed) next[key] = true;
+    else delete next[key];
+    collapsedGroups.value = next;
+    persistBooleanMap(COLLAPSED_GROUPS_STORAGE_KEY, next);
+  }
+
+  function toggleGroupCollapsed(key: string): void {
+    setGroupCollapsed(key, !isGroupCollapsed(key));
   }
 
   function setActiveRail(rail: SidebarRail): void {
@@ -130,7 +162,7 @@ export const useSidebarStore = defineStore("sidebar", () => {
     entries.push([sessionId, collapsed]);
     const next = Object.fromEntries(entries.slice(-RIGHT_PANEL_BY_SESSION_LIMIT));
     rightPanelCollapsedBySession.value = next;
-    persistSessionMap(next);
+    persistBooleanMap(RIGHT_PANEL_BY_SESSION_STORAGE_KEY, next);
   }
 
   function toggleRightPanelCollapsed(): void {
@@ -158,6 +190,10 @@ export const useSidebarStore = defineStore("sidebar", () => {
     rightPanelAsSheet,
     rightPanelSheetOpen,
     sessionListShown,
+    collapsedGroups,
+    isGroupCollapsed,
+    setGroupCollapsed,
+    toggleGroupCollapsed,
     registerSessionList,
     setActiveRail,
     setPanelCollapsed,
