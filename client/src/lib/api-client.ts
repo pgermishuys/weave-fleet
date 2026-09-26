@@ -6,7 +6,13 @@
  *   2. `window.__WEAVE_API_BASE__` — injected by backend via <script> tag
  *   3. Build-time `VITE_API_BASE_URL` env var
  *   4. Empty string — relative URLs / same-origin mode (default)
+ *
+ * All of that is the home machine, the Fleet that served the page. When another machine is live
+ * (`@/lib/machines`), every path resolves against it instead and carries its token. Both are read on every
+ * call, never captured, so a request always goes where the app is working now.
  */
+
+import { getActiveMachine, machineRequestInit, machineSocketUrl, machineUrl } from "@/lib/machines";
 
 // Runtime-configurable base URL (overrides all other sources when set)
 let runtimeBase: string | null = null;
@@ -36,8 +42,7 @@ function getApiBase(): string {
  * @param path - Must start with "/" (e.g. "/api/sessions")
  */
 export function apiUrl(path: string): string {
-  const base = getApiBase();
-  return base ? `${base}${path}` : path;
+  return machineUrl(getActiveMachine(), path, getApiBase());
 }
 
 /**
@@ -51,15 +56,7 @@ export function apiUrl(path: string): string {
  * WebSocket URL from the current window location at runtime.
  */
 export function wsUrl(path: string): string {
-  const base = getApiBase();
-  if (base) {
-    const wsBase = base.replace(/^http(s?):\/\//, (_, s: string) => `ws${s}://`);
-    return `${wsBase}${path}`;
-  }
-  // Relative path — derive from window.location at runtime (SSR-safe)
-  if (typeof window === "undefined") return path;
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${window.location.host}${path}`;
+  return machineSocketUrl(getActiveMachine(), path, getApiBase());
 }
 
 /**
@@ -70,21 +67,18 @@ export function apiFetch(
   path: string,
   init?: RequestInit
 ): Promise<Response> {
+  const machine = getActiveMachine();
   const headers = new Headers(init?.headers);
   const method = (init?.method ?? "GET").toUpperCase();
 
-  if (!["GET", "HEAD", "OPTIONS", "TRACE"].includes(method)) {
+  if (!machine && !["GET", "HEAD", "OPTIONS", "TRACE"].includes(method)) {
     const csrfToken = getCookieValue(csrfCookieName);
     if (csrfToken) {
       headers.set("X-CSRF-Token", csrfToken);
     }
   }
 
-  return fetch(apiUrl(path), {
-    ...init,
-    credentials: init?.credentials ?? "include",
-    headers,
-  });
+  return fetch(apiUrl(path), machineRequestInit(machine, { ...init, headers }));
 }
 
 function getCookieValue(name: string): string | null {

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { shallowRef } from "vue";
+import { shallowRef, watch } from "vue";
 import ImageLightbox from "@/components/session/ImageLightbox.vue";
 import type { ToolCardScreenshot } from "@/components/session/activity-stream-tool-card";
+import { useMachineImage } from "@/composables/use-machine-image";
 
 /** What the agent saw when it took a screenshot: a small picture under the call that opens full size. */
 const props = defineProps<{
@@ -13,6 +14,11 @@ const props = defineProps<{
 const expanded = shallowRef(false);
 // A shot whose session was deleted, or kept by a Fleet that has since lost it: show nothing rather than a broken image.
 const missing = shallowRef(false);
+// Another machine's shot needs its token, which an <img> can't send.
+const { src, failed } = useMachineImage(() => props.screenshot.url);
+watch(failed, (value) => {
+  if (value) missing.value = true;
+});
 </script>
 
 <template>
@@ -29,7 +35,8 @@ const missing = shallowRef(false);
       @click="expanded = true"
     >
       <img
-        :src="screenshot.url"
+        v-if="src"
+        :src="src"
         :width="screenshot.width"
         :height="screenshot.height"
         :alt="`Screenshot: ${props.title}`"
@@ -40,7 +47,7 @@ const missing = shallowRef(false);
       >
     </button>
     <ImageLightbox
-      :src="expanded ? screenshot.url : null"
+      :src="expanded ? src : null"
       :alt="`Screenshot: ${props.title}`"
       @close="expanded = false"
     />

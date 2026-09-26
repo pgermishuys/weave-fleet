@@ -1,6 +1,8 @@
 import createClient from "openapi-fetch";
 import type { paths } from "./generated/schema";
 import type { SessionProgressSummary } from "@/lib/session-progress";
+import { apiUrl, setApiBase } from "@/lib/api-client";
+import { getActiveMachine, machineRequestInit } from "@/lib/machines";
 
 /**
  * Typed API client for Weave Fleet API
@@ -25,27 +27,10 @@ import type { SessionProgressSummary } from "@/lib/session-progress";
 const csrfCookieName = ".WeaveFleet.CSRF";
 
 /**
- * Runtime-configurable base URL (overrides all other sources when set)
+ * `setApiBase` lives with the other request paths in `@/lib/api-client`; it is re-exported here for callers
+ * that already import it from this module.
  */
-let runtimeBase: string | null = null;
-
-/**
- * Override the API base URL at runtime.
- * Useful for multi-backend scenarios or testing.
- */
-export function setApiBase(url: string): void {
-  runtimeBase = url.replace(/\/$/, "");
-}
-
-function getApiBase(): string {
-  if (runtimeBase !== null) return runtimeBase;
-  // Check window global (can be injected by backend via <script> tag)
-  if (typeof window !== "undefined" && (window as { __WEAVE_API_BASE__?: string }).__WEAVE_API_BASE__) {
-    return ((window as { __WEAVE_API_BASE__?: string }).__WEAVE_API_BASE__ as string).replace(/\/$/, "");
-  }
-  // Fallback to build-time env var
-  return (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
-}
+export { setApiBase };
 
 function getCookieValue(name: string): string | null {
   if (typeof document === "undefined") {
@@ -64,9 +49,28 @@ function getCookieValue(name: string): string | null {
 }
 
 /**
+ * The client builds every request with an empty base, so it gets `/api/...`. This resolves that path against
+ * the machine the app is working in when the request is made, the same way `apiFetch` does. Resolving it once,
+ * when the client was created, is what left `setApiBase` without effect on these calls.
+ */
+const RequestOnLiveMachine = (typeof Request === "undefined"
+  ? undefined
+  : class extends Request {
+    constructor(input: RequestInfo | URL, init?: RequestInit) {
+      super(typeof input === "string" ? resolveOnPage(apiUrl(input)) : input, init);
+    }
+  }) as typeof Request | undefined;
+
+/** A same-origin path as the full URL a browser would make of it; runtimes without a page need it spelled out. */
+function resolveOnPage(url: string): string {
+  const page = typeof window === "undefined" ? undefined : window.location?.href;
+  return page ? new URL(url, page).href : url;
+}
+
+/**
  * Custom fetch implementation that:
- * - Attaches CSRF token to mutating requests
- * - Sets credentials: "include" on all requests
+ * - Attaches CSRF token to mutating requests on the home machine
+ * - Sends cookies to the home machine, and another machine's token (never cookies) to that machine
  */
 const customFetch: typeof fetch = (input, init) => {
   // openapi-fetch passes a Request object as `input` with headers already set.
@@ -80,26 +84,24 @@ const customFetch: typeof fetch = (input, init) => {
     headers.set(key, value);
   });
 
+  const machine = getActiveMachine();
   const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
 
   // Attach CSRF token to mutating requests
-  if (!["GET", "HEAD", "OPTIONS", "TRACE"].includes(method)) {
+  if (!machine && !["GET", "HEAD", "OPTIONS", "TRACE"].includes(method)) {
     const csrfToken = getCookieValue(csrfCookieName);
     if (csrfToken) {
       headers.set("X-CSRF-Token", csrfToken);
     }
   }
 
-  return fetch(input, {
-    ...init,
-    credentials: init?.credentials ?? "include",
-    headers,
-  });
+  return fetch(input, machineRequestInit(machine, { ...init, headers }));
 };
 
 export const api = createClient<paths>({
-  baseUrl: getApiBase(),
+  baseUrl: "",
   fetch: customFetch,
+  ...(RequestOnLiveMachine ? { Request: RequestOnLiveMachine } : {}),
 });
 
 export type { paths, components } from "./generated/schema";

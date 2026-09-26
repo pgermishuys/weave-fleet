@@ -1,5 +1,7 @@
 import { onMounted, onUnmounted } from "vue"
 import { HubConnection, HubConnectionBuilder, HubConnectionState } from "@microsoft/signalr"
+import { apiUrl } from "@/lib/api-client"
+import { getActiveMachine } from "@/lib/machines"
 import type { DomainEvent } from "@/lib/domain-events"
 import type { SessionHistoryPage, SessionSnapshot } from "@/lib/session-snapshot"
 
@@ -222,8 +224,14 @@ async function connect(): Promise<void> {
     return
   }
 
+  // The hub lives on the machine the app is working in. Another machine takes its token in place of the cookie;
+  // SignalR sends it as a header where it can and as access_token on the WebSocket, where a browser can't.
+  const machine = getActiveMachine()
   const hubConnection = new HubConnectionBuilder()
-    .withUrl(HUB_PATH)
+    .withUrl(
+      apiUrl(HUB_PATH),
+      machine ? { accessTokenFactory: () => machine.token, withCredentials: false } : {},
+    )
     .withAutomaticReconnect([1000, 2000, 5000, 10000])
     .build()
 

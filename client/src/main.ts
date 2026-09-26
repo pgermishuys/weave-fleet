@@ -12,7 +12,11 @@ import { getPromptTrackingState } from "@/composables/use-send-prompt";
 import { useSessionsStore } from "@/stores/sessions";
 import { useThemeStore } from "@/stores/theme";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
+import { restoreActiveMachine } from "@/lib/machines";
 import { router } from "./router";
+
+// Decide which machine this page works in before anything asks a server for something.
+restoreActiveMachine();
 
 const app = createApp(App);
 const pluginRuntime = usePluginRuntime();
