@@ -32,6 +32,26 @@ public sealed class TokenLoginEndpointTests
     }
 
     [Fact]
+    public async Task Should_keep_the_token_sign_in_past_the_browser_session_for_30_days()
+    {
+        await using var factory = CreateFactory();
+        using var client = CreateClient(factory);
+
+        var response = await client.PostAsJsonAsync("/auth/token-login", new TokenLoginRequest(ValidToken));
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        response.Headers.TryGetValues("Set-Cookie", out var setCookieHeaders).ShouldBeTrue();
+        var authCookie = setCookieHeaders!.Single(header => header.StartsWith(".WeaveFleet.Auth=", StringComparison.Ordinal));
+
+        // Without an expiry the browser drops the cookie when it closes, and the token is asked for again.
+        var expires = authCookie.Split(';')
+            .Select(attribute => attribute.Trim())
+            .Single(attribute => attribute.StartsWith("expires=", StringComparison.OrdinalIgnoreCase));
+        var expiresAt = DateTimeOffset.Parse(expires["expires=".Length..], System.Globalization.CultureInfo.InvariantCulture);
+        (expiresAt - DateTimeOffset.UtcNow).ShouldBeGreaterThan(TimeSpan.FromDays(29));
+    }
+
+    [Fact]
     public async Task Should_return_unauthorized_when_token_login_token_is_invalid()
     {
         await using var factory = CreateFactory();
