@@ -15,4 +15,7 @@ public sealed class PersistedMessage
     public string CreatedAt { get; set; } = string.Empty;
     public string? AgentName { get; set; }
     public string? ModelId { get; set; }
+
+    /// <summary>The failure the turn stopped with, as <see cref="WeaveFleet.Domain.Events.TurnError"/> JSON; set only on a saved turn failure.</summary>
+    public string? ErrorJson { get; set; }
 }

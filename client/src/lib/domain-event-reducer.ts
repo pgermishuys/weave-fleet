@@ -167,9 +167,12 @@ function applyTurnFailure(messages: AccumulatedMessage[], payload: TurnFailedPay
   const named = payload.messageID
     ? messages.findIndex((m) => m.messageId === payload.messageID)
     : -1
-  const target = named !== -1
+  const candidate = named !== -1
     ? named
     : messages.findLastIndex((m) => m.role === "assistant")
+  // The failure is the latest turn's. A reply before the latest prompt answered an earlier turn (the server can name
+  // one when this turn failed before replying), and pinning it there hid the failure above the prompt it answered.
+  const target = candidate > messages.findLastIndex((m) => m.role === "user") ? candidate : -1
 
   if (target === -1) {
     return [

@@ -87,6 +87,7 @@ public sealed class HarnessEventRelay : BackgroundService
     private readonly SessionUpdates? _updates;
     private readonly WorkflowRunner? _workflows;
     private readonly PromptQueueDispatcher? _queue;
+    private readonly TurnFailureRecorder? _failures;
     private CancellationToken _stoppingToken;
 
     /// <summary>
@@ -108,7 +109,8 @@ public sealed class HarnessEventRelay : BackgroundService
         SessionNotifier? notifier = null,
         SessionUpdates? updates = null,
         WorkflowRunner? workflows = null,
-        PromptQueueDispatcher? queue = null)
+        PromptQueueDispatcher? queue = null,
+        TurnFailureRecorder? failures = null)
     {
         _tracker = tracker;
         _broadcaster = broadcaster;
@@ -123,6 +125,7 @@ public sealed class HarnessEventRelay : BackgroundService
         _updates = updates;
         _workflows = workflows;
         _queue = queue;
+        _failures = failures;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -332,6 +335,7 @@ public sealed class HarnessEventRelay : BackgroundService
                 _updates?.Observe(targetFleetSessionId, domainEvent);
                 _workflows?.Observe(targetFleetSessionId, domainEvent);
                 _queue?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
+                _failures?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
                 _logger.LogDebug("[Relay:Pump] Translated type={Type} domainEvent={DomainEvent} targetSession={TargetSession}",
                     evt.Type, domainEvent?.GetType().Name ?? "null", targetFleetSessionId);
 

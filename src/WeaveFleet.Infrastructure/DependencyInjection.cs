@@ -202,6 +202,8 @@ public static class DependencyInjection
         services.AddScoped<PromptQueueService>();
         // Singleton: the relay hands it every event; it sends a session's next queued message when its turn ends.
         services.AddSingleton<PromptQueueDispatcher>();
+        // Singleton: the relay hands it every event; it keeps each failed turn's failure so a reload still shows it.
+        services.AddSingleton<TurnFailureRecorder>();
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowsFeature>();
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowModelRoles>();
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowService>();
