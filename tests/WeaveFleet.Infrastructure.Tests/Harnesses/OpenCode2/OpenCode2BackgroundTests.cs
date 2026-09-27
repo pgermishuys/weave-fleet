@@ -184,6 +184,103 @@ public sealed class OpenCode2BackgroundTests
         notices[1].Parts.OfType<TextPart>().ShouldHaveSingleItem().Text.ShouldContain($$""""<subagent sessionID="{{Child}}" """".TrimEnd());
     }
 
+    [Fact]
+    public async Task Work_still_going_on_when_the_server_stops_ends_its_card_and_its_delegation()
+    {
+        // The recording without its notices: both calls returned, and the server stopped before either work finished.
+        var mapper = new OpenCode2Mapper(FleetSession);
+        foreach (var evt in (await OpenCode2Fixtures.ReadEventsAsync("background-tasks.sse"))
+            .Where(e => e.SessionId == Session && !IsNotice(e)))
+        {
+            mapper.TryReadDelegation(evt);
+            mapper.Map(evt);
+        }
+
+        var ended = ToolParts(mapper.BackgroundWorkEnded());
+        ended.Select(p => p.CallId).ShouldBe([ShellCall, SubagentCall], ignoreOrder: true);
+        ended.Select(p => p.State.ShouldBeOfType<ToolErrorState>().Error).ShouldAllBe(error => error == OpenCode2Mapper.BackgroundWorkLost);
+        mapper.BackgroundDelegationsLost().ShouldBe([new OpenCode2Delegation(SubagentCall, "general", "Slow helper", Child, "cancelled", Background: true)]);
+
+        // Once only: nothing is left to end.
+        mapper.BackgroundWorkEnded().ShouldBeEmpty();
+        mapper.BackgroundDelegationsLost().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Work_whose_notice_came_is_not_ended_when_the_server_stops()
+    {
+        var mapper = new OpenCode2Mapper(FleetSession);
+        foreach (var evt in (await OpenCode2Fixtures.ReadEventsAsync("background-tasks.sse")).Where(e => e.SessionId == Session))
+        {
+            mapper.TryReadDelegation(evt);
+            mapper.Map(evt);
+        }
+
+        mapper.BackgroundWorkEnded().ShouldBeEmpty();
+        mapper.BackgroundDelegationsLost().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Work_caught_up_from_history_is_ended_when_the_server_stops_unless_its_notice_is_there_too()
+    {
+        // Caught up after the event stream was down: the calls, with no notice after them.
+        var page = JsonSerializer.Deserialize(OpenCode2Fixtures.Read("background-tasks.messages.json"), OpenCode2JsonContext.Default.OpenCode2MessagePage)!;
+        var oldestFirst = page.Data!.Reverse().ToList();
+        var mapper = new OpenCode2Mapper(FleetSession);
+        foreach (var message in oldestFirst.Where(m => m.Type != "synthetic"))
+            mapper.MapMessage(message);
+        ToolParts(mapper.BackgroundWorkEnded()).Select(p => p.CallId).ShouldBe([ShellCall, SubagentCall], ignoreOrder: true);
+
+        // With the notices, in order, nothing is waiting.
+        var caughtUp = new OpenCode2Mapper(FleetSession);
+        foreach (var message in oldestFirst)
+            caughtUp.MapMessage(message);
+        caughtUp.BackgroundWorkEnded().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void History_names_the_work_each_backgrounded_call_waits_on_and_what_each_notice_ended()
+    {
+        var page = JsonSerializer.Deserialize(OpenCode2Fixtures.Read("background-tasks.messages.json"), OpenCode2JsonContext.Default.OpenCode2MessagePage)!;
+
+        OpenCode2History.BackgroundHandles(History()).ShouldBe(["sh_0ca289192001atCtTyB6Js2f3j", Child], ignoreOrder: true);
+        OpenCode2History.NoticeHandles(page.Data!).ShouldBe(["sh_0ca289192001atCtTyB6Js2f3j", Child], ignoreOrder: true);
+    }
+
+    [Fact]
+    public void A_notice_still_in_the_inbox_names_its_work_and_a_prompt_there_does_not()
+    {
+        OpenCode2History.NoticeHandles(
+        [
+            new OpenCode2InboxItem { Type = "user", Payload = new OpenCode2InboxPayload { Text = "hi" } },
+            new OpenCode2InboxItem
+            {
+                Type = "synthetic",
+                Payload = new OpenCode2InboxPayload
+                {
+                    Text = "<subagent …>",
+                    Metadata = JsonDocument.Parse($$"""{"source":"subagent","childID":"{{Child}}","state":"completed"}""").RootElement.Clone(),
+                },
+            },
+        ]).ShouldBe([Child]);
+    }
+
+    [Fact]
+    public void Only_the_calls_whose_work_is_gone_read_back_ended()
+    {
+        var settled = OpenCode2History.SettleLostBackgroundWork(History(), new HashSet<string>(StringComparer.Ordinal) { Child });
+        var calls = settled.SelectMany(m => m.Parts).OfType<ToolUsePart>().ToDictionary(c => c.ToolCallId);
+
+        calls[SubagentCall].State.ShouldBe(ToolUseState.Error);
+        calls[SubagentCall].Background.ShouldBeFalse();
+        calls[SubagentCall].Error.ShouldBe(OpenCode2Mapper.BackgroundWorkLost);
+        calls[ShellCall].State.ShouldBe(ToolUseState.Running);
+        calls[ShellCall].Background.ShouldBeTrue();
+    }
+
+    private static bool IsNotice(OpenCode2Event evt)
+        => evt.Type == "session.inbox.enqueued" && evt.Data.GetProperty("item").GetProperty("type").GetString() == "synthetic";
+
     /// <summary>The session's history, oldest first, the way a reopened session reads it.</summary>
     private static IReadOnlyList<HarnessMessage> History()
     {

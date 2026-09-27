@@ -37,6 +37,51 @@ internal static class OpenCode2History
                 Files = item.Payload.Files,
             }));
 
+    /// <summary>The handles of the background work the calls in <paramref name="history"/> are still waiting on (<see cref="OpenCode2Mapper.BackgroundHandle"/>).</summary>
+    public static HashSet<string> BackgroundHandles(IEnumerable<HarnessMessage> history)
+        => history
+            .SelectMany(message => message.Parts)
+            .OfType<ToolUsePart>()
+            .Where(tool => tool.Background)
+            .Select(tool => OpenCode2Mapper.BackgroundHandle(tool.Metadata ?? default))
+            .OfType<string>()
+            .ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>The handles of the background work these messages' completion notices say finished.</summary>
+    public static IEnumerable<string> NoticeHandles(IEnumerable<OpenCode2Message> messages)
+        => messages
+            .Where(message => message.Type == "synthetic")
+            .Select(message => OpenCode2Mapper.NoticeHandle(message.Metadata))
+            .OfType<string>();
+
+    /// <summary>The same for the notices still waiting in the inbox, which V2 hasn't put in the conversation yet.</summary>
+    public static IEnumerable<string> NoticeHandles(IEnumerable<OpenCode2InboxItem> inbox)
+        => inbox
+            .Where(item => item.Type == "synthetic" && item.Payload is not null)
+            .Select(item => OpenCode2Mapper.NoticeHandle(item.Payload!.Metadata))
+            .OfType<string>();
+
+    /// <summary>
+    /// <paramref name="history"/> with each call waiting on background work in <paramref name="lost"/> shown failed:
+    /// the server running it stopped before it finished (<see cref="OpenCode2Mapper.BackgroundWorkLost"/>).
+    /// </summary>
+    public static IReadOnlyList<HarnessMessage> SettleLostBackgroundWork(IReadOnlyList<HarnessMessage> history, IReadOnlySet<string> lost)
+        => history
+            .Select(message => message.Parts.Any(part => IsLost(part, lost))
+                ? message with
+                {
+                    Parts = [.. message.Parts.Select(part => IsLost(part, lost) && part is ToolUsePart tool
+                        ? tool with { State = ToolUseState.Error, Background = false, Output = null, Error = OpenCode2Mapper.BackgroundWorkLost }
+                        : part)],
+                }
+                : message)
+            .ToList();
+
+    private static bool IsLost(MessagePart part, IReadOnlySet<string> lost)
+        => part is ToolUsePart { Background: true } tool
+            && OpenCode2Mapper.BackgroundHandle(tool.Metadata ?? default) is { } handle
+            && lost.Contains(handle);
+
     private static HarnessMessage? ToHarnessMessage(OpenCode2Message message)
     {
         if (message.Id is not { } id)

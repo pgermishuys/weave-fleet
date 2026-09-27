@@ -29,6 +29,9 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
     /// <summary>How many of the newest messages a catch-up reads: enough for the turn that ran while the stream was down.</summary>
     private const int ResyncMessages = 20;
 
+    /// <summary>How many messages a page holds when looking for a background notice newer than the page being read.</summary>
+    private const int NoticeSearchPage = 100;
+
     /// <summary>
     /// How long a command waits, after V2 has run it, to hear which user message it became. V2 takes the message in
     /// while it runs the command, so the wait is only for its event to arrive; a command that runs as a subagent puts
@@ -255,10 +258,78 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
             && messages.Count > 0
             && (query?.Limit is not { } limit || messages.Count >= limit);
         var history = OpenCode2History.ToHarnessMessages(messages.Reverse());
+        history = await SettleLostBackgroundWorkAsync(server, history, messages, ct).ConfigureAwait(false);
         if (query?.Before is null)
             history = [.. history, .. await PendingPromptsAsync(server, history, ct).ConfigureAwait(false)];
 
         return new MessagePage(history, hasMore, hasMore ? page.Cursor!.Next : null);
+    }
+
+    /// <summary>
+    /// <paramref name="history"/> with each call whose background work is gone shown failed
+    /// (<see cref="OpenCode2Mapper.BackgroundWorkLost"/>). V2 stores a backgrounded call as running for good and says
+    /// the work finished only with a notice, but it keeps the work in the server process: when that stopped (Fleet
+    /// restarted, or it crashed), the work stopped with it and no notice ever comes. So work the server isn't running
+    /// now (no such shell, no such child session working) that has no notice is gone.
+    /// </summary>
+    /// <param name="messages">The page as V2 sent it, newest first, which holds the notices.</param>
+    private async Task<IReadOnlyList<HarnessMessage>> SettleLostBackgroundWorkAsync(
+        OpenCode2Server server,
+        IReadOnlyList<HarnessMessage> history,
+        IReadOnlyList<OpenCode2Message> messages,
+        CancellationToken ct)
+    {
+        var waiting = OpenCode2History.BackgroundHandles(history);
+        waiting.ExceptWith(OpenCode2History.NoticeHandles(messages));
+        if (waiting.Count == 0)
+            return history;
+
+        try
+        {
+            waiting.ExceptWith(await server.Client.GetActiveSessionIdsAsync(ct).ConfigureAwait(false));
+            // Only a loaded folder can have a shell running, and asking about one that isn't would load it.
+            foreach (var directory in waiting.Count > 0 ? await server.Client.GetLoadedLocationsAsync(ct).ConfigureAwait(false) : [])
+            {
+                var shells = await server.Client.GetRunningShellsAsync(directory, ct).ConfigureAwait(false);
+                waiting.ExceptWith(shells.Where(shell => shell.Status == "running").Select(shell => shell.Id).OfType<string>());
+            }
+            if (waiting.Count == 0)
+                return history;
+
+            // Read after what's running, so work that ended since the page was read has its notice by now: in the
+            // inbox while V2 hasn't delivered it, or in a message newer than the page.
+            waiting.ExceptWith(OpenCode2History.NoticeHandles(await server.Client.GetInboxAsync(ResumeToken, ct).ConfigureAwait(false)));
+            if (waiting.Count > 0)
+                waiting.ExceptWith(await NoticesDownToAsync(server, messages, ct).ConfigureAwait(false));
+
+            return waiting.Count == 0 ? history : OpenCode2History.SettleLostBackgroundWork(history, waiting);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException)
+        {
+            // Unsettled, the call only goes on showing Background.
+            LogBackgroundCheckFailed(_logger, InstanceId, ex);
+            return history;
+        }
+    }
+
+    /// <summary>The handles of the notices from the newest message down to <paramref name="page"/>.</summary>
+    private async Task<IReadOnlySet<string>> NoticesDownToAsync(OpenCode2Server server, IReadOnlyList<OpenCode2Message> page, CancellationToken ct)
+    {
+        var onPage = page.Select(message => message.Id).OfType<string>().ToHashSet(StringComparer.Ordinal);
+        var notices = new HashSet<string>(StringComparer.Ordinal);
+        string? cursor = null;
+        do
+        {
+            var newer = await server.Client.GetMessagesAsync(ResumeToken, NoticeSearchPage, cursor, ct).ConfigureAwait(false);
+            var data = newer.Data ?? [];
+            notices.UnionWith(OpenCode2History.NoticeHandles(data));
+            if (data.Count < NoticeSearchPage || data.Any(message => message.Id is { } id && onPage.Contains(id)))
+                break;
+            cursor = newer.Cursor?.Next;
+        }
+        while (cursor is not null);
+
+        return notices;
     }
 
     /// <summary>
@@ -565,6 +636,12 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
     /// <remarks>A turn that was running is over: say so rather than leave the session looking busy.</remarks>
     public void OnServerStopped()
     {
+        // V2 keeps background work in the server process: it stopped too, and no notice will say so.
+        foreach (var delegation in _mapper.BackgroundDelegationsLost())
+            _delegations?.Queue(delegation);
+        foreach (var harnessEvent in _mapper.BackgroundWorkEnded())
+            _events.Writer.TryWrite(harnessEvent);
+
         if (_status is HarnessSessionStatus.Running)
         {
             _events.Writer.TryWrite(_mapper.Error(new OpenCode2ErrorInfo
@@ -812,6 +889,9 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Could not read the inbox of OpenCode 2 session {InstanceId}; prompts it hasn't taken in yet are left out of the history")]
     private static partial void LogInboxReadFailed(ILogger logger, string instanceId, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't check whether background work of OpenCode 2 session {InstanceId} still runs; it goes on showing as running")]
+    private static partial void LogBackgroundCheckFailed(ILogger logger, string instanceId, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Interrupting OpenCode 2 session {InstanceId}")]
     private static partial void LogAbort(ILogger logger, string instanceId);
