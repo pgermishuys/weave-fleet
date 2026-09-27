@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { api } from "@/api/client";
+import { api, apiOnMachine } from "@/api/client";
 import { apiFetch, apiUrl, setApiBase, wsUrl } from "@/lib/api-client";
 import {
   HOME_MACHINE_KEY,
@@ -103,6 +103,34 @@ describe("machines", () => {
       const [input] = fetchMock.mock.calls.at(-1) as [Request];
       expect(input.method).toBe("PATCH");
       expect(await input.text()).toBe(JSON.stringify({ title: "Renamed" }));
+    });
+
+    it("sends a machine's own client to that machine whichever machine is live", async () => {
+      const onFalcon = apiOnMachine(falcon);
+      await onFalcon.POST("/api/sessions", { body: {} as never });
+
+      const { url, init, headers } = lastFetch(fetchMock);
+      expect(url).toBe("http://100.64.90.72:2113/api/sessions");
+      expect(init.credentials).toBe("omit");
+      expect(headers.get("Authorization")).toBe(`Bearer ${falcon.token}`);
+      expect(headers.has("X-CSRF-Token")).toBe(false);
+
+      // Working in falcon, home's client still goes home, with its cookie.
+      setActiveMachine(falcon);
+      document.cookie = ".WeaveFleet.CSRF=csrf-1";
+      await apiOnMachine(null).POST("/api/sessions", { body: {} as never });
+      const home = lastFetch(fetchMock);
+      expect(home.url).toMatch(/^http:\/\/localhost(:\d+)?\/api\/sessions$/);
+      expect(home.init.credentials).toBe("include");
+      expect(home.headers.get("X-CSRF-Token")).toBe("csrf-1");
+      expect(home.headers.has("Authorization")).toBe(false);
+      document.cookie = ".WeaveFleet.CSRF=; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    });
+
+    it("gives the live machine's own client for the live machine", () => {
+      expect(apiOnMachine(null)).toBe(api);
+      setActiveMachine(falcon);
+      expect(apiOnMachine(falcon)).toBe(api);
     });
 
     it("puts the token in a socket's query, since a browser socket can't send headers", () => {

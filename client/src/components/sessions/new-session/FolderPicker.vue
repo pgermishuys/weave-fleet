@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import DirectoryPickerPopover from "@/components/ui/DirectoryPickerPopover.vue";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useDirectoryBrowser } from "@/composables/use-directory-browser";
+import { useMachineTarget } from "@/lib/machine-target";
 import {
   addFolderToFleet,
   cloneRepository,
@@ -96,6 +97,8 @@ const searchInput = useTemplateRef<HTMLInputElement>("search");
 const directoryInput = useTemplateRef<HTMLInputElement>("directory");
 const newNameInput = useTemplateRef<HTMLInputElement>("newName");
 const newRepositoryInput = useTemplateRef<HTMLInputElement>("newRepository");
+// Folders on the machine the session starts on.
+const { api: machineApi } = useMachineTarget();
 // Any folder on this computer: one outside the workspace roots can be added from here.
 const directoryBrowser = useDirectoryBrowser(false, { unconstrained: true });
 const browseStatus = shallowRef<"idle" | "checking" | "adding">("idle");
@@ -175,7 +178,7 @@ async function loadRoots(): Promise<void> {
     return;
   }
   try {
-    roots.value = await listWorkspaceRoots();
+    roots.value = await listWorkspaceRoots(machineApi);
   } catch {
     roots.value = [];
   }
@@ -408,7 +411,7 @@ async function create(path: string, git: boolean, root: string | null): Promise<
   resetMake();
   makeStatus.value = "creating";
   try {
-    useMade(await createFolder(path, git), root);
+    useMade(await createFolder(path, git, machineApi), root);
   } catch (error) {
     failed(error, "Couldn't create that folder.");
   } finally {
@@ -429,7 +432,7 @@ async function clone(source: CloneSource, path: string, root: string | null): Pr
   try {
     const made = await cloneRepository(source.repository, path, (progress) => {
       cloneProgress.value = progress;
-    });
+    }, machineApi);
     if (isCloneSuperseded.value) {
       createdPaths.value = new Set([...createdPaths.value, made.path]);
       emit("folderAdded");
@@ -458,7 +461,7 @@ async function useExisting(): Promise<void> {
   }
   resetMake();
   try {
-    const inspection = await inspectFolder(path);
+    const inspection = await inspectFolder(path, machineApi);
     if (inspection.isWithinRoots) {
       choose(folderForInspection(inspection));
     } else {
@@ -587,7 +590,7 @@ async function useDirectory(path = directoryDraft.value): Promise<void> {
   resetBrowseCheck();
   browseStatus.value = "checking";
   try {
-    const inspection = await inspectFolder(trimmed);
+    const inspection = await inspectFolder(trimmed, machineApi);
     if (!inspection.exists && props.allowCreate) {
       folderToCreate.value = inspection;
       startGitRepository.value = true;
@@ -614,7 +617,7 @@ async function addAndUseFolder(): Promise<void> {
 
   browseStatus.value = "adding";
   try {
-    await addFolderToFleet(inspection.path);
+    await addFolderToFleet(inspection.path, machineApi);
     emit("folderAdded");
     choose(folderForInspection(inspection));
   } catch (error) {

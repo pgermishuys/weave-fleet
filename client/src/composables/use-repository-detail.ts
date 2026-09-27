@@ -1,5 +1,5 @@
 import { shallowRef, toValue, watch, type MaybeRefOrGetter, type ShallowRef } from "vue";
-import { api } from "@/api/client";
+import { useMachineTarget } from "@/lib/machine-target";
 import type { RepositoryDetail, RepositoryDetailResponse } from "@/api/client";
 
 export interface UseRepositoryDetailResult {
@@ -9,6 +9,7 @@ export interface UseRepositoryDetailResult {
 }
 
 export function useRepositoryDetail(path: MaybeRefOrGetter<string | null>): UseRepositoryDetailResult {
+  const { api } = useMachineTarget();
   const detail = shallowRef<RepositoryDetail | null>(null);
   const isLoading = shallowRef(false);
   const error = shallowRef<string | null>(null);

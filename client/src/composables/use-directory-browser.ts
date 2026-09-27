@@ -1,6 +1,6 @@
 import { computed, onUnmounted, readonly, ref, shallowRef, type ComputedRef, type Ref, type ShallowRef } from "vue";
 import type { DirectoryEntry, DirectoryListResponse } from "@/api/client";
-import { api } from "@/api/client";
+import { useMachineTarget } from "@/lib/machine-target";
 
 export interface UseDirectoryBrowserResult {
   currentPath: Readonly<ShallowRef<string | null>>;
@@ -23,6 +23,7 @@ export interface UseDirectoryBrowserOptions {
 }
 
 export function useDirectoryBrowser(enabled = false, options: UseDirectoryBrowserOptions = {}): UseDirectoryBrowserResult {
+  const { api } = useMachineTarget();
   const currentPath = shallowRef<string | null>(null);
   const entries = ref<DirectoryEntry[]>([]);
   const isLoading = shallowRef(false);

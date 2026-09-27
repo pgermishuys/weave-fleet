@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { shallowRef } from "vue";
+import { MACHINE_TARGET, type MachineTarget } from "@/lib/machine-target";
 import { clearHarnessCatalogCache, useHarnessCatalog } from "@/composables/use-harness-catalog";
 import type { DomainEvent } from "@/lib/domain-events";
 import { HARNESS_CATALOG_CHANGED } from "@/lib/harness-catalog-changes";
@@ -153,5 +154,37 @@ describe("useHarnessCatalog across a reload", () => {
     } finally {
       reloaded.clearHarnessCatalogCache();
     }
+  });
+});
+
+describe("useHarnessCatalog on another machine", () => {
+  beforeEach(() => {
+    clearHarnessCatalogCache();
+    mockApi.GET.mockReset();
+    handlers.clear();
+  });
+
+  it("asks that machine, keeps its catalog apart, and ignores the live machine's changes", async () => {
+    answer("build");
+    const macGet = vi.fn(async () => ({ data: catalogWith("mac-agent"), error: undefined, response: new Response(null, { status: 200 }) }));
+    const mac = { key: "m-mac", connection: null, isLive: false, api: { GET: macGet } } as unknown as MachineTarget;
+
+    const { result } = await mountComposable(
+      () => useHarnessCatalog(shallowRef("opencode2"), shallowRef<string | null>("/work/rocket"), shallowRef("none")),
+      { provide: { [MACHINE_TARGET]: () => mac } },
+    );
+
+    expect(macGet).toHaveBeenCalledTimes(1);
+    expect(mockApi.GET).not.toHaveBeenCalled();
+    expect(result.agents.value.map((agent) => agent.id)).toEqual(["mac-agent"]);
+    expect(Object.keys(JSON.parse(localStorage.getItem("weave:saved:harness-catalogs:m-mac")!))).toHaveLength(1);
+
+    push(change);
+    await flushAll();
+    expect(macGet).toHaveBeenCalledTimes(1);
+
+    // The live machine's catalog for the same folder is its own.
+    const { result: live } = await mountCatalog("none");
+    expect(live.agents.value.map((agent) => agent.id)).toEqual(["build"]);
   });
 });

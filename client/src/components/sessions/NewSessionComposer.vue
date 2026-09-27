@@ -13,6 +13,7 @@ import BasePicker from "@/components/sessions/new-session/BasePicker.vue";
 import FolderPicker from "@/components/sessions/new-session/FolderPicker.vue";
 import GitHubItemPicker from "@/components/sessions/new-session/GitHubItemPicker.vue";
 import HarnessPicker from "@/components/sessions/new-session/HarnessPicker.vue";
+import MachinePicker from "@/components/sessions/new-session/MachinePicker.vue";
 import MoreOptions from "@/components/sessions/new-session/MoreOptions.vue";
 import ProfilePicker from "@/components/sessions/new-session/ProfilePicker.vue";
 import WorkspacePicker from "@/components/sessions/new-session/WorkspacePicker.vue";
@@ -49,6 +50,8 @@ import { useSessionsStore } from "@/stores/sessions";
 import { useSmartLinksStore } from "@/stores/smart-links";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 import { useMachinesStore } from "@/stores/machines";
+import { useMachineTarget } from "@/lib/machine-target";
+import { rememberSessionMachines } from "@/lib/machines";
 
 const MAX_TEXTAREA_HEIGHT = 180;
 
@@ -59,8 +62,27 @@ const workspaceUiStore = useWorkspaceUiStore();
 const { newSessionInitialSource } = storeToRefs(workspaceUiStore);
 const { enabledHarnesses, defaultHarnessType, noHarnessReason } = useEnabledHarnesses();
 const { setActiveSection } = useSettingsNav();
-// A new session starts on the machine you're working in.
+// A new session starts on the machine you're working in, unless the draft picked another: the route provides it, and
+// everything in the box (folders, harnesses, agents and models, profiles) asks that machine.
 const machines = useMachinesStore();
+const target = useMachineTarget();
+const targetName = computed(() => machines.entries.find((entry) => entry.key === target.key)?.name ?? machines.live.name);
+
+/** Picking another machine rebuilds the box for it; the message stays. */
+function pickMachine(machineKey: string): void {
+  workspaceUiStore.setNewSessionMachine(machineKey);
+}
+
+function addMachine(): void {
+  setActiveSection("machines");
+  void navigate({ to: "/settings" });
+}
+
+// The sidebar keeps asking the other machines whether they're there; the chip's menu shows it.
+let stopMachinePolling: (() => void) | null = null;
+watch(() => machines.hasMachines, (has) => {
+  if (has && !stopMachinePolling) stopMachinePolling = machines.startPolling();
+}, { immediate: true });
 const harnessSetup = useHarnessSetupStore();
 const defaults = useNewSessionDefaults();
 const isMobile = useIsMobile();
@@ -270,8 +292,8 @@ const worktreeNaming = useWorktreeNamingStore();
 watch(
   () => (folder.value?.kind === "repository" ? folder.value.path : null),
   (repositoryPath) => {
-    if (repositoryPath && worktreeNaming.loadedFor !== repositoryPath) {
-      void worktreeNaming.load(repositoryPath);
+    if (repositoryPath && (worktreeNaming.loadedFor !== repositoryPath || worktreeNaming.loadedOn !== target.key)) {
+      void worktreeNaming.load(repositoryPath, target);
     }
   },
   { immediate: true },
@@ -355,7 +377,7 @@ const harnessProfiles = useHarnessProfilesStore();
 const supportsProfiles = computed(() =>
   enabledHarnesses.value.find((harness) => harness.type === resolvedHarnessType.value)?.capabilities?.supportsProfiles === true,
 );
-const profiles = computed(() => (supportsProfiles.value ? harnessProfiles.profilesFor(resolvedHarnessType.value) : []));
+const profiles = computed(() => (supportsProfiles.value ? harnessProfiles.profilesFor(resolvedHarnessType.value, target) : []));
 const showProfilePicker = computed(() => profiles.value.length > 0);
 /** The picked profile, else the default, else none. A picked profile that's since been deleted falls back too. */
 const selectedProfileId = computed<string>({
@@ -364,7 +386,7 @@ const selectedProfileId = computed<string>({
     if (picked === NO_PROFILE || profiles.value.some((profile) => profile.id === picked)) {
       return picked as string;
     }
-    return harnessProfiles.defaultFor(resolvedHarnessType.value)?.id ?? NO_PROFILE;
+    return harnessProfiles.defaultFor(resolvedHarnessType.value, target)?.id ?? NO_PROFILE;
   },
   set: (id) => {
     harnessProfileId.value = id;
@@ -373,7 +395,7 @@ const selectedProfileId = computed<string>({
 watch(
   [resolvedHarnessType, supportsProfiles],
   ([type, supported]) => {
-    if (supported) void harnessProfiles.load(type);
+    if (supported) void harnessProfiles.load(type, target);
   },
   { immediate: true },
 );
@@ -487,8 +509,15 @@ function removeGitHubPreset(): void {
   focusMessage();
 }
 
-/** Local Fleet sets a harness up in the wizard; in cloud mode it can only be looked at in Settings. */
+/**
+ * Local Fleet sets a harness up in the wizard; in cloud mode it can only be looked at in Settings. Another machine's
+ * harnesses are set up there, so its Settings open.
+ */
 function fixNoHarness(): void {
+  if (!target.isLive) {
+    machines.openOn(target.key, "/settings");
+    return;
+  }
   if (!config.value.cloudMode) {
     harnessSetup.open("harnesses");
     return;
@@ -557,6 +586,16 @@ async function submit(withoutMessage: boolean): Promise<void> {
     const response = await createSession(request.directory, request.options);
     const sessionId = response.session.id;
     defaults.remember(chosenFolder, chosenWorkspace, chosenAgentAndModel);
+
+    // Started on another machine: the app moves there to show it, as opening one of its sessions from the sidebar
+    // does. That's a reload; the machine keeps the first message, so the session page shows it.
+    if (!target.isLive) {
+      rememberSessionMachines(target.connection?.id ?? null, [sessionId]);
+      workspaceUiStore.handOffNewSessionDraft(sessionId);
+      const instance = response.instanceId ? `?instanceId=${encodeURIComponent(response.instanceId)}` : "";
+      machines.openOn(target.key, `/sessions/${encodeURIComponent(sessionId)}${instance}`);
+      return;
+    }
 
     // All in one tick: the session page has the message before its history loads, and the
     // session's row replaces the draft row where it stands.
@@ -683,6 +722,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   workspaceUiStore.leaveNewSessionDraft();
+  stopMachinePolling?.();
 });
 </script>
 
@@ -696,11 +736,6 @@ onUnmounted(() => {
         New session
       </h2>
       <span class="new-session__pill">Not started</span>
-      <span
-        v-if="machines.hasMachines"
-        class="new-session__machine"
-        data-testid="new-session-machine"
-      >on {{ machines.live.name }}</span>
     </header>
 
     <!-- Once sent, the message sits where the session page will show it. -->
@@ -756,7 +791,7 @@ onUnmounted(() => {
           class="new-session__no-harness-link"
           @click="fixNoHarness"
         >
-          {{ config.cloudMode ? "Open Settings → Harnesses" : "Set up a harness" }}
+          {{ !target.isLive ? `Open ${targetName}'s Settings` : config.cloudMode ? "Open Settings → Harnesses" : "Set up a harness" }}
         </button>
       </div>
 
@@ -884,6 +919,22 @@ onUnmounted(() => {
       </div>
 
       <div class="new-session__strip">
+        <template v-if="machines.hasMachines">
+          <MachinePicker
+            :machines="machines.entries"
+            :selected="target.key"
+            :others="machines.others"
+            :live-reachable="machines.liveReachable"
+            :disabled="isStarting"
+            @update:selected="pickMachine"
+            @add-machine="addMachine"
+            @close-auto-focus="returnFocusToMessage"
+          />
+          <span
+            class="new-session__strip-separator"
+            aria-hidden="true"
+          />
+        </template>
         <FolderPicker
           v-model:open="isFolderMenuOpen"
           :folder="folder"
@@ -947,6 +998,11 @@ onUnmounted(() => {
         data-testid="new-session-plan"
         aria-live="polite"
       >
+        <span
+          v-if="!target.isLive"
+          class="new-session__plan-machine"
+          data-testid="new-session-plan-machine"
+        >On {{ targetName }}:</span>
         <template
           v-for="(part, index) in planParts"
           :key="index"
@@ -1003,16 +1059,6 @@ onUnmounted(() => {
   letter-spacing: -0.005em;
   line-height: 1.3;
   color: var(--text);
-}
-
-.new-session__machine {
-  padding: 2px 7px;
-  border-radius: 5px;
-  background: color-mix(in srgb, var(--coral) 14%, transparent);
-  color: var(--coral);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
 }
 
 .new-session__pill {
@@ -1224,6 +1270,14 @@ onUnmounted(() => {
   font-size: 12px;
   line-height: 1.5;
   overflow-wrap: anywhere;
+}
+
+/* The machine a session on another machine starts on, in the sidebar's machine coral. */
+.new-session__plan-machine {
+  margin-right: 4px;
+  color: var(--coral);
+  font-family: var(--font-mono-stack);
+  font-size: 11.5px;
 }
 
 .new-session__plan-code {

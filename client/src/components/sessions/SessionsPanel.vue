@@ -49,7 +49,7 @@ const sessionsStore = useSessionsStore();
 const archiveQueue = useArchiveQueueStore();
 const selection = useSessionSelectionStore();
 const sidebarStore = useSidebarStore();
-const { newSessionDraftRow, sessionRowKeys } = storeToRefs(useWorkspaceUiStore());
+const { newSessionDraftRow, newSessionMachine, sessionRowKeys } = storeToRefs(useWorkspaceUiStore());
 const router = useRouter();
 
 let releaseSessionList: (() => void) | null = null;
@@ -190,7 +190,8 @@ const isNewSessionOpen = computed(() => pathname.value === "/sessions/new");
  */
 const draftGroupKey = computed<string | null>(() => {
   const draft = newSessionDraftRow.value;
-  if (!draft) {
+  // A draft for another machine shows in that machine's group.
+  if (!draft || newSessionMachine.value !== null) {
     return null;
   }
   if (draft.projectId && projectsById.value.has(draft.projectId)) {
@@ -425,6 +426,13 @@ watch(draftGroupId, (groupId) => {
   if (groupId) {
     sidebarStore.setGroupCollapsed(machineGroupKey(machines.liveKey), false);
     sidebarStore.setGroupCollapsed(projectGroupKey(machines.liveKey, groupId), false);
+  }
+});
+
+// Likewise the group of the other machine a draft starts on.
+watch(newSessionMachine, (machineKey) => {
+  if (machineKey && newSessionDraftRow.value) {
+    sidebarStore.setGroupCollapsed(machineGroupKey(machineKey), false);
   }
 });
 
@@ -809,7 +817,10 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
         :machine="machine"
         :state="machineSessions[machine.key]"
         :query="normalizedQuery"
+        :draft="machine.key === newSessionMachine ? newSessionDraftRow : null"
+        :draft-active="isNewSessionOpen"
         @open="handleMachineSessionOpen(machine, $event)"
+        @open-draft="handleOpenDraft"
       />
 
       <!-- Complete drop zone -->

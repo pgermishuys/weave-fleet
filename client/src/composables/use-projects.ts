@@ -9,7 +9,7 @@ import {
   type ShallowRef,
 } from "vue";
 import type { ProjectResponse } from "@/api/client";
-import { api } from "@/api/client";
+import { useMachineTarget } from "@/lib/machine-target";
 import { extractApiError } from "@/lib/api-error";
 
 export interface UseProjectsOptions {
@@ -25,6 +25,7 @@ export interface UseProjectsResult {
 }
 
 export function useProjects(options: UseProjectsOptions = {}): UseProjectsResult {
+  const { api } = useMachineTarget();
   const projects = ref<ProjectResponse[]>([]);
   const isLoading = shallowRef(false);
   const isRefreshing = shallowRef(false);

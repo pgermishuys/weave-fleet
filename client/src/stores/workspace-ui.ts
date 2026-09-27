@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { computed, reactive, shallowRef } from "vue";
 import type { GitHubSessionSourcePreset } from "@/lib/github-session-source";
+import { liveMachineKey } from "@/lib/saved-per-machine";
 import { titleFromMessage, type NewSessionFolder, type NewSessionWorkspace } from "@/lib/new-session-request";
 
 /** What's on the New Session page, kept while you look at something else. */
@@ -58,6 +59,13 @@ export const useWorkspaceUiStore = defineStore("workspace-ui", () => {
   const isNewSessionPageOpen = shallowRef(false);
   /** Session id → the draft row key it took over. */
   const sessionRowKeys = shallowRef<Readonly<Record<string, string>>>({});
+  /**
+   * The machine the draft starts on, as a machine key (`home` or a machine's id); null for the machine the app is
+   * working in. A draft keeps the machine picked for it; a new one starts on the live machine.
+   */
+  const newSessionMachine = shallowRef<string | null>(null);
+  // Set while the page is rebuilt for another machine, so leaving it doesn't drop the draft.
+  let switchingMachine = false;
 
   const newSessionDraftRow = computed<NewSessionDraftRow | null>(() => {
     const draft = newSessionDraft.value;
@@ -91,6 +99,7 @@ export const useWorkspaceUiStore = defineStore("workspace-ui", () => {
    */
   function openNewSessionDraft(initial: Omit<NewSessionDraft, "rowKey" | "isStarting">): { draft: NewSessionDraft; restored: boolean } {
     isNewSessionPageOpen.value = true;
+    switchingMachine = false;
     const existing = newSessionDraft.value;
     if (existing) {
       return { draft: existing, restored: true };
@@ -105,10 +114,47 @@ export const useWorkspaceUiStore = defineStore("workspace-ui", () => {
   /** Leaving the page: a draft with nothing in it goes; one with a message stays, with its row. */
   function leaveNewSessionDraft(): void {
     isNewSessionPageOpen.value = false;
+    if (switchingMachine) {
+      return;
+    }
     const draft = newSessionDraft.value;
     if (draft && !hasContent(draft)) {
       newSessionDraft.value = null;
     }
+    if (!newSessionDraft.value) {
+      newSessionMachine.value = null;
+    }
+  }
+
+  /**
+   * Starts the draft on another machine (a machine key; null for the live one). What belongs to the old machine goes:
+   * its folder, worktree, branch, project, harness and agent. The message, title, tags and any attached issue stay.
+   * The page is rebuilt for the new machine.
+   */
+  function setNewSessionMachine(picked: string | null): void {
+    const machineKey = picked === liveMachineKey() ? null : picked;
+    if (machineKey === newSessionMachine.value) {
+      return;
+    }
+    const draft = newSessionDraft.value;
+    if (draft) {
+      Object.assign(draft, {
+        folder: null,
+        hasChosenFolder: false,
+        workspace: { kind: "new" },
+        baseBranch: null,
+        fetchOrigin: true,
+        branchName: "",
+        projectId: null,
+        harnessType: "",
+        harnessProfileId: null,
+        agent: "",
+        model: "",
+        hasChosenAgentOrModel: false,
+      } satisfies Partial<NewSessionDraft>);
+    }
+    switchingMachine = isNewSessionPageOpen.value;
+    newSessionMachine.value = machineKey;
   }
 
   /** The draft became a session: its row now shows that session, in the same place. */
@@ -120,6 +166,7 @@ export const useWorkspaceUiStore = defineStore("workspace-ui", () => {
 
     sessionRowKeys.value = { ...sessionRowKeys.value, [sessionId]: draft.rowKey };
     newSessionDraft.value = null;
+    newSessionMachine.value = null;
   }
 
   return {
@@ -129,11 +176,13 @@ export const useWorkspaceUiStore = defineStore("workspace-ui", () => {
     newSessionDraftRow,
     isNewSessionPageOpen,
     sessionRowKeys,
+    newSessionMachine,
     setInlineToolDiffs,
     toggleInlineToolDiffs,
     setNewSessionInitialSource,
     openNewSessionDraft,
     leaveNewSessionDraft,
     handOffNewSessionDraft,
+    setNewSessionMachine,
   };
 });

@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { shallowRef } from "vue";
 import { api, type HarnessProfile, type HarnessProfileCheck } from "@/api/client";
+import type { MachineTarget } from "@/lib/machine-target";
 
 /**
  * The user's harness profiles, by harness. Settings edits them and the new-session box picks from them, so both
@@ -8,33 +9,45 @@ import { api, type HarnessProfile, type HarnessProfileCheck } from "@/api/client
  */
 export const useHarnessProfilesStore = defineStore("harness-profiles", () => {
   const byHarness = shallowRef<Readonly<Record<string, readonly HarnessProfile[]>>>({});
+  /** Other machines' profiles, by machine key and harness: the new-session box can start a session on another machine. */
+  const onOtherMachines = shallowRef<Readonly<Record<string, readonly HarnessProfile[]>>>({});
   const loading = new Map<string, Promise<void>>();
 
-  function profilesFor(harnessType: string): readonly HarnessProfile[] {
-    return byHarness.value[harnessType] ?? [];
+  const otherKey = (target: MachineTarget, harnessType: string) => `${target.key}\n${harnessType}`;
+  const isOther = (target?: MachineTarget): target is MachineTarget => target !== undefined && !target.isLive;
+
+  /** The live machine's profiles for a harness, or `target`'s. */
+  function profilesFor(harnessType: string, target?: MachineTarget): readonly HarnessProfile[] {
+    return isOther(target) ? onOtherMachines.value[otherKey(target, harnessType)] ?? [] : byHarness.value[harnessType] ?? [];
   }
 
-  function defaultFor(harnessType: string): HarnessProfile | null {
-    return profilesFor(harnessType).find((profile) => profile.isDefault) ?? null;
+  function defaultFor(harnessType: string, target?: MachineTarget): HarnessProfile | null {
+    return profilesFor(harnessType, target).find((profile) => profile.isDefault) ?? null;
   }
 
   function put(harnessType: string, profiles: readonly HarnessProfile[]): void {
     byHarness.value = { ...byHarness.value, [harnessType]: profiles };
   }
 
-  async function load(harnessType: string): Promise<void> {
-    const pending = loading.get(harnessType);
+  async function load(harnessType: string, target?: MachineTarget): Promise<void> {
+    const loadingKey = isOther(target) ? otherKey(target, harnessType) : harnessType;
+    const pending = loading.get(loadingKey);
     if (pending) return pending;
 
     const request = (async () => {
-      const { data, response } = await api.GET("/api/harnesses/{harnessType}/profiles", {
+      const { data, response } = await (isOther(target) ? target.api : api).GET("/api/harnesses/{harnessType}/profiles", {
         params: { path: { harnessType } },
       });
       if (response.ok && Array.isArray(data)) {
-        put(harnessType, data as unknown as HarnessProfile[]);
+        const profiles = data as unknown as HarnessProfile[];
+        if (isOther(target)) {
+          onOtherMachines.value = { ...onOtherMachines.value, [otherKey(target, harnessType)]: profiles };
+        } else {
+          put(harnessType, profiles);
+        }
       }
-    })().finally(() => loading.delete(harnessType));
-    loading.set(harnessType, request);
+    })().finally(() => loading.delete(loadingKey));
+    loading.set(loadingKey, request);
     return request;
   }
 

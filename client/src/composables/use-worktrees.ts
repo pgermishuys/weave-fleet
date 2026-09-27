@@ -1,5 +1,5 @@
 import { readonly, shallowRef, watch, type Ref, type ShallowRef } from "vue";
-import { api } from "@/api/client";
+import { useMachineTarget } from "@/lib/machine-target";
 import type { WorktreeInfo, RepositoryWorktreesResponse } from "@/api/client";
 
 interface UseWorktreesOptions {
@@ -16,6 +16,7 @@ interface UseWorktreesResult {
 }
 
 export function useWorktrees(options: UseWorktreesOptions): UseWorktreesResult {
+  const { api } = useMachineTarget();
   const worktrees = shallowRef<readonly WorktreeInfo[]>([]);
   const isLoading = shallowRef(false);
   const error = shallowRef<string | null>(null);

@@ -1,9 +1,13 @@
-import { api, type FolderInspection, type WorkspaceRootsResponse } from "@/api/client";
+import { api, type ApiClient, type FolderInspection, type WorkspaceRootsResponse } from "@/api/client";
 import type { NewSessionFolder } from "@/lib/new-session-request";
 
+/**
+ * Folders on a machine: `client` is the machine to ask (the live one unless the new-session box picked another).
+ */
+
 /** Whether a folder exists, is a git repository, and is inside the workspace roots. */
-export async function inspectFolder(path: string): Promise<FolderInspection> {
-  const { data, error } = await api.GET("/api/directories/inspect", { params: { query: { path } } });
+export async function inspectFolder(path: string, client: ApiClient = api): Promise<FolderInspection> {
+  const { data, error } = await client.GET("/api/directories/inspect", { params: { query: { path } } });
   if (error || !data) {
     throw new Error(error ? String(error) : "Couldn't check that folder.");
   }
@@ -11,8 +15,8 @@ export async function inspectFolder(path: string): Promise<FolderInspection> {
 }
 
 /** Adds a folder to the workspace roots, so sessions can run in it. Rescanning is up to the caller. */
-export async function addFolderToFleet(path: string): Promise<void> {
-  const { error } = await api.POST("/api/workspace-roots", { body: { path } as never });
+export async function addFolderToFleet(path: string, client: ApiClient = api): Promise<void> {
+  const { error } = await client.POST("/api/workspace-roots", { body: { path } as never });
   if (error) {
     const message = (error as { error?: string }).error;
     throw new Error(message ?? "Couldn't add that folder.");
@@ -55,8 +59,8 @@ function failure(error: unknown, response: Response, path: string, fallback: str
 }
 
 /** The workspace roots that exist on disk: where new folders can go. */
-export async function listWorkspaceRoots(): Promise<string[]> {
-  const { data, error } = await api.GET("/api/workspace-roots");
+export async function listWorkspaceRoots(client: ApiClient = api): Promise<string[]> {
+  const { data, error } = await client.GET("/api/workspace-roots");
   if (error || !data) {
     throw new Error("Couldn't load your workspace roots.");
   }
@@ -65,8 +69,8 @@ export async function listWorkspaceRoots(): Promise<string[]> {
 }
 
 /** Creates a folder, and parent folders it needs; with `git`, a repository with an empty first commit. */
-export async function createFolder(path: string, git: boolean): Promise<NewFolder> {
-  const { data, error, response } = await api.POST("/api/directories", { body: { path, git } });
+export async function createFolder(path: string, git: boolean, client: ApiClient = api): Promise<NewFolder> {
+  const { data, error, response } = await client.POST("/api/directories", { body: { path, git } });
   if (error || !data) {
     throw failure(error, response, path, "Couldn't create that folder.");
   }
@@ -86,8 +90,9 @@ export async function cloneRepository(
   repository: string,
   path: string,
   onProgress: (progress: CloneProgress) => void,
+  client: ApiClient = api,
 ): Promise<NewFolder> {
-  const { data, error, response } = await api.POST("/api/directories/clone", {
+  const { data, error, response } = await client.POST("/api/directories/clone", {
     body: { repository, path },
     parseAs: "stream",
   });

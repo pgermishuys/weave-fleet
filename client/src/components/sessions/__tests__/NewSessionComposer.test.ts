@@ -1,15 +1,18 @@
 import { DOMWrapper, flushPromises, mount, type VueWrapper } from "@vue/test-utils";
-import { computed, ref, shallowRef, watchEffect, type Ref } from "vue";
+import { computed, defineComponent, h, ref, shallowRef, watchEffect, type Ref } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { NO_PROFILE } from "@/api/client";
+import { api, NO_PROFILE } from "@/api/client";
 import type { BranchInfo, HarnessCatalog, HarnessInfo, HarnessProfile, RepositoryDetail, ScannedRepository, WorktreeInfo } from "@/api/client";
 import NewSessionComposer from "@/components/sessions/NewSessionComposer.vue";
 import { toAgentOptions } from "@/composables/use-agents";
 import { toModelOptions } from "@/composables/use-models";
-import { NEW_SESSION_DEFAULTS_KEY } from "@/composables/use-new-session-defaults";
+import { NEW_SESSION_DEFAULTS_KEY, newSessionDefaultsKey } from "@/composables/use-new-session-defaults";
 import { clearSentPrompts, useSentPrompts } from "@/composables/use-send-prompt";
 import { createGitHubSessionSourcePreset } from "@/lib/github-session-source";
 import { useHarnessProfilesStore } from "@/stores/harness-profiles";
+import { provideMachineTarget, targetFor } from "@/lib/machine-target";
+import { loadSessionMachines, type MachineConnection } from "@/lib/machines";
+import { useMachinesStore } from "@/stores/machines";
 import { useSessionsStore } from "@/stores/sessions";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 import { useSettingsNav } from "@/composables/use-settings-nav";
@@ -1081,7 +1084,7 @@ describe("NewSessionComposer", () => {
       await button("Add repository").trigger("click");
       await flushPromises();
 
-      expect(mocks.addFolderToFleet).toHaveBeenCalledWith("C:\\source\\agent-playbook");
+      expect(mocks.addFolderToFleet).toHaveBeenCalledWith("C:\\source\\agent-playbook", api);
       expect(mocks.refreshRepositories).toHaveBeenCalled();
       expect(view.get("[data-testid='new-session-folder-chip']").text()).toContain("agent-playbook");
       expect(view.find("[data-testid='new-session-workspace-chip']").exists()).toBe(true);
@@ -1102,7 +1105,7 @@ describe("NewSessionComposer", () => {
       await inDocument().get("[data-testid='new-session-create-folder-submit']").trigger("click");
       await flushPromises();
 
-      expect(mocks.createFolder).toHaveBeenCalledWith("/home/me/src/recipe-box", false);
+      expect(mocks.createFolder).toHaveBeenCalledWith("/home/me/src/recipe-box", false, api);
       expect(mocks.refreshRepositories).toHaveBeenCalled();
       expect(view.get("[data-testid='new-session-folder-chip']").text()).toContain("~/src/recipe-box");
       expect(view.find("[data-testid='new-session-folder-new']").exists()).toBe(true);
@@ -1142,7 +1145,7 @@ describe("NewSessionComposer", () => {
       await input.trigger("keydown", { key: "Enter" });
       await flushPromises();
 
-      expect(mocks.createFolder).toHaveBeenCalledWith("/home/me/src/recipe-box", true);
+      expect(mocks.createFolder).toHaveBeenCalledWith("/home/me/src/recipe-box", true, api);
       expect(view.get("[data-testid='new-session-folder-chip']").text()).toContain("recipe-box");
       expect(view.find("[data-testid='new-session-folder-new']").exists()).toBe(true);
       // A new repository gets New worktree like any other; its first commit gives it a base.
@@ -1169,7 +1172,7 @@ describe("NewSessionComposer", () => {
       await inDocument().get("[data-testid='new-session-folder-create']").trigger("click");
       await flushPromises();
 
-      expect(mocks.createFolder).toHaveBeenCalledWith("/home/me/src/invoices", true);
+      expect(mocks.createFolder).toHaveBeenCalledWith("/home/me/src/invoices", true, api);
       expect(JSON.parse(localStorage.getItem(NEW_SESSION_DEFAULTS_KEY) ?? "{}").lastNewFolderRoot).toBe("/home/me/src");
     });
 
@@ -1238,7 +1241,7 @@ describe("NewSessionComposer", () => {
 
       await row.trigger("click");
       await flushPromises();
-      expect(mocks.cloneRepository).toHaveBeenCalledWith("pgermishuys/recipe-box", "/home/me/src/recipe-box", expect.any(Function));
+      expect(mocks.cloneRepository).toHaveBeenCalledWith("pgermishuys/recipe-box", "/home/me/src/recipe-box", expect.any(Function), api);
 
       report({ phase: "Receiving objects", percent: 38 });
       await flushPromises();
@@ -1315,7 +1318,7 @@ describe("NewSessionComposer", () => {
       await inDocument().get("[data-testid='new-session-new-folder-submit']").trigger("click");
       await flushPromises();
 
-      expect(mocks.cloneRepository).toHaveBeenCalledWith("pgermishuys/weave-website", "/home/me/work/weave-website", expect.any(Function));
+      expect(mocks.cloneRepository).toHaveBeenCalledWith("pgermishuys/weave-website", "/home/me/work/weave-website", expect.any(Function), api);
       expect(view.get("[data-testid='new-session-folder-chip']").text()).toContain("weave-website");
     });
 
@@ -1491,6 +1494,147 @@ describe("NewSessionComposer", () => {
 
       expect(textarea(again).element.value).toBe("Half a thought");
       expect(useWorkspaceUiStore().newSessionDraftRow?.projectId).toBe("project-fleet");
+    });
+  });
+
+  describe("machine", () => {
+    const macbook: MachineConnection = {
+      id: "m-mac",
+      name: "macbook",
+      baseUrl: "http://mac.test:2113",
+      token: "mac-token",
+      os: "macos",
+      addedAt: "2026-09-26T00:00:00Z",
+    };
+    const falcon: MachineConnection = { ...macbook, id: "m-falcon", name: "falcon", baseUrl: "http://falcon.test:2113" };
+
+    beforeEach(() => {
+      // Home answers as andromeda; macbook lists its sessions; falcon is away.
+      vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input instanceof Request ? input.url : input);
+        if (url.startsWith(falcon.baseUrl)) throw new TypeError("Failed to fetch");
+        if (url.endsWith("/api/machine")) return Response.json({ id: "home-id", name: "andromeda", os: "linux" });
+        return Response.json([]);
+      }));
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    function addMachines(...machines: MachineConnection[]): void {
+      localStorage.setItem("weave:machines", JSON.stringify(machines));
+    }
+
+    async function openMachineMenu(view: VueWrapper): Promise<void> {
+      await view.get("[data-testid='new-session-machine']").trigger("click");
+      await flushPromises();
+    }
+
+    it("has no machine chip until another machine is added", async () => {
+      const view = await mountComposer();
+
+      expect(view.find("[data-testid='new-session-machine']").exists()).toBe(false);
+    });
+
+    it("shows the machine first, and lists every machine with whether it can be reached", async () => {
+      addMachines(macbook, falcon);
+      const view = await mountComposer();
+      await flushPromises();
+
+      const chips = view.findAll(".new-session__strip .ns-chip");
+      expect(chips[0]!.attributes("data-testid")).toBe("new-session-machine");
+      expect(chips[0]!.text()).toContain("andromeda");
+
+      await openMachineMenu(view);
+      const home = inDocument().get("[data-testid='new-session-machine-home']");
+      expect(home.text()).toContain("Working here · Linux");
+      expect(inDocument().get("[data-testid='new-session-machine-m-mac']").attributes("data-disabled")).toBeUndefined();
+      const away = inDocument().get("[data-testid='new-session-machine-m-falcon']");
+      expect(away.text()).toContain("Unreachable");
+      expect(away.attributes("data-disabled")).toBeDefined();
+    });
+
+    it("moves the draft to the machine picked, keeping the message and dropping this machine's folder", async () => {
+      addMachines(macbook);
+      rememberFolder({ kind: "repository", path: rocket.path });
+      const view = await mountComposer();
+      await type(view, "Fix the sign-in loop");
+
+      await openMachineMenu(view);
+      await inDocument().get("[data-testid='new-session-machine-m-mac']").trigger("click");
+      await flushPromises();
+
+      const workspaceUi = useWorkspaceUiStore();
+      expect(workspaceUi.newSessionMachine).toBe("m-mac");
+      expect(workspaceUi.newSessionDraft?.message).toBe("Fix the sign-in loop");
+      expect(workspaceUi.newSessionDraft?.folder).toBeNull();
+    });
+
+    it("Add a machine opens Settings → Machines", async () => {
+      addMachines(macbook);
+      const view = await mountComposer();
+
+      await openMachineMenu(view);
+      await inDocument().get("[data-testid='new-session-machine-add']").trigger("click");
+      await flushPromises();
+
+      expect(useSettingsNav().activeSection.value).toBe("machines");
+      expect(mocks.navigate).toHaveBeenCalledWith({ to: "/settings" });
+    });
+
+    describe("on another machine", () => {
+      async function mountOn(machine: MachineConnection): Promise<VueWrapper> {
+        const Page = defineComponent({
+          setup() {
+            provideMachineTarget(() => targetFor(machine));
+            return () => h(NewSessionComposer);
+          },
+        });
+        wrapper = mount(Page, { attachTo: document.body, global: { stubs: { teleport: false } } });
+        await flushPromises();
+        return wrapper;
+      }
+
+      it("remembers its own folders and says where the session starts", async () => {
+        addMachines(macbook);
+        rememberFolder({ kind: "repository", path: rocket.path });
+        localStorage.setItem(newSessionDefaultsKey("m-mac"), JSON.stringify({ lastFolder: { kind: "repository", path: comet.path } }));
+        const view = await mountOn(macbook);
+
+        expect(view.get("[data-testid='new-session-folder-chip']").text()).toContain("comet");
+        expect(view.get("[data-testid='new-session-machine']").text()).toContain("macbook");
+        expect(view.get("[data-testid='new-session-plan-machine']").text()).toBe("On macbook:");
+      });
+
+      it("starts the session there, then opens it on that machine", async () => {
+        addMachines(macbook);
+        localStorage.setItem(newSessionDefaultsKey("m-mac"), JSON.stringify({ lastFolder: { kind: "repository", path: comet.path } }));
+        const view = await mountOn(macbook);
+        const openOn = vi.spyOn(useMachinesStore(), "openOn").mockImplementation(() => {});
+
+        await type(view, "Fix the sign-in loop");
+        await pressEnter(view);
+
+        expect(lastCreateCall()[0]).toBe(comet.path);
+        expect(openOn).toHaveBeenCalledWith("m-mac", "/sessions/session-1?instanceId=instance-1");
+        expect(mocks.navigate).not.toHaveBeenCalled();
+        expect(loadSessionMachines()["session-1"]).toBe("m-mac");
+        expect(useWorkspaceUiStore().newSessionDraft).toBeNull();
+      });
+
+      it("sends a harness that isn't set up there to that machine's Settings", async () => {
+        addMachines(macbook);
+        noHarnessReason.value = "OpenCode isn't installed.";
+        const view = await mountOn(macbook);
+        const openOn = vi.spyOn(useMachinesStore(), "openOn").mockImplementation(() => {});
+
+        const fix = view.get("[data-testid='new-session-no-harness'] button");
+        expect(fix.text()).toBe("Open macbook's Settings");
+        await fix.trigger("click");
+
+        expect(openOn).toHaveBeenCalledWith("m-mac", "/settings");
+      });
     });
   });
 });

@@ -1,6 +1,8 @@
 import type { ScannedRepository, WorktreeInfo } from "@/api/client";
 import { usePersistedState } from "@/composables/use-persisted-state";
 import { DEFAULT_CHOICE, type AgentModelChoice } from "@/lib/agent-model-choice";
+import { useMachineTarget } from "@/lib/machine-target";
+import { HOME_MACHINE_KEY } from "@/lib/machines";
 import type { NewSessionFolder, NewSessionWorkspace } from "@/lib/new-session-request";
 
 /** `"current"`, `"new"`, or the path of an existing worktree. */
@@ -117,8 +119,15 @@ function toRemembered(workspace: NewSessionWorkspace): RememberedWorkspace {
   return workspace.kind === "existing" ? workspace.path : workspace.kind;
 }
 
+/** Where a machine's defaults are kept. Folders are the machine's own, so each machine remembers its own. */
+export function newSessionDefaultsKey(machineKey: string): string {
+  return machineKey === HOME_MACHINE_KEY ? NEW_SESSION_DEFAULTS_KEY : `${NEW_SESSION_DEFAULTS_KEY}:${machineKey}`;
+}
+
+/** What the new-session box remembers on the machine the page asks (see `useMachineTarget`). */
 export function useNewSessionDefaults(): UseNewSessionDefaultsResult {
-  const [stored, setStored] = usePersistedState<NewSessionDefaults>(NEW_SESSION_DEFAULTS_KEY, EMPTY_DEFAULTS);
+  const { key: machineKey } = useMachineTarget();
+  const [stored, setStored] = usePersistedState<NewSessionDefaults>(newSessionDefaultsKey(machineKey), EMPTY_DEFAULTS);
 
   function initialFolder(repositories: readonly ScannedRepository[]): NewSessionFolder | null {
     const { lastFolder, recentFolders } = normalize(stored.value);

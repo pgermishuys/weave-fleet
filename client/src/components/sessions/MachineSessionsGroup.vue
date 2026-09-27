@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { SessionListItem } from "@/api/client";
+import DraftSessionRow from "@/components/sessions/DraftSessionRow.vue";
 import MachineHeader from "@/components/sessions/MachineHeader.vue";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { useRelativeTime } from "@/composables/use-relative-time";
 import { formatCompactAge, isSessionLive, sessionRowDim, sessionRowStatus } from "@/lib/session-row-status";
 import type { MachineEntry, MachineSessions } from "@/stores/machines";
+import type { NewSessionDraftRow } from "@/stores/workspace-ui";
 import { machineGroupKey, useSidebarStore } from "@/stores/sidebar";
 
 /**
@@ -18,9 +20,12 @@ const props = defineProps<{
   state: MachineSessions | undefined;
   /** Lower-case filter from the sidebar's search box. */
   query: string;
+  /** The new-session draft, when it starts on this machine. */
+  draft?: NewSessionDraftRow | null;
+  draftActive?: boolean;
 }>();
 
-const emit = defineEmits<{ open: [session: SessionListItem] }>();
+const emit = defineEmits<{ open: [session: SessionListItem]; openDraft: [] }>();
 
 const sidebar = useSidebarStore();
 const expanded = computed(() => !sidebar.isGroupCollapsed(machineGroupKey(props.machine.key)));
@@ -68,6 +73,12 @@ function age(item: SessionListItem): string {
     />
 
     <template v-if="expanded">
+      <DraftSessionRow
+        v-if="draft"
+        :draft="draft"
+        :active="draftActive ?? false"
+        @open="emit('openDraft')"
+      />
       <p
         v-if="state?.error"
         class="machine-group__error"
@@ -107,7 +118,7 @@ function age(item: SessionListItem): string {
         >{{ sessionRowStatus(item, now).label || age(item) }}</span>
       </button>
       <p
-        v-if="!state?.error && state?.loadedAt && sessions.length === 0"
+        v-if="!state?.error && state?.loadedAt && sessions.length === 0 && !draft"
         class="machine-group__empty"
       >
         {{ query ? "No matching sessions" : "No sessions" }}

@@ -12,7 +12,7 @@
  * call, never captured, so a request always goes where the app is working now.
  */
 
-import { getActiveMachine, machineRequestInit, machineSocketUrl, machineUrl } from "@/lib/machines";
+import { getActiveMachine, machineRequestInit, machineSocketUrl, machineUrl, type MachineConnection } from "@/lib/machines";
 
 // Runtime-configurable base URL (overrides all other sources when set)
 let runtimeBase: string | null = null;
@@ -42,7 +42,12 @@ function getApiBase(): string {
  * @param path - Must start with "/" (e.g. "/api/sessions")
  */
 export function apiUrl(path: string): string {
-  return machineUrl(getActiveMachine(), path, getApiBase());
+  return apiUrlOn(getActiveMachine(), path);
+}
+
+/** A full API URL on a given machine (null: home), whichever machine is live. */
+export function apiUrlOn(machine: MachineConnection | null, path: string): string {
+  return machineUrl(machine, path, getApiBase());
 }
 
 /**
