@@ -8,7 +8,7 @@ import { resolvePaths } from "./paths";
 import { FleetServer, type FleetServerEvent } from "./server";
 import { restorableBounds, SettingsStore } from "./settings";
 import { installLoginShellEnv } from "./shell-env";
-import { updateMode, Updates, type UpdateState } from "./updates";
+import { updateCheckMessage, updateMode, Updates, type UpdateState } from "./updates";
 
 const STATIC_DIR = path.join(__dirname, "..", "static");
 const DEFAULT_PORT = 6262;
@@ -29,7 +29,6 @@ let server: FleetServer | null = null;
 let fleet: { url: string; owned: boolean } | null = null;
 let quitting = false;
 let updates: Updates;
-let notifiedVersion: string | undefined;
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -54,7 +53,7 @@ async function start(): Promise<void> {
   ipcMain.handle("fleet-desktop:retry", () => connect());
   ipcMain.handle("fleet-desktop:get-update-state", () => updates.state);
   ipcMain.handle("fleet-desktop:check-for-updates", () => updates.check());
-  ipcMain.handle("fleet-desktop:install-update", () => installUpdate());
+  ipcMain.handle("fleet-desktop:install-update", (_event, options?: { confirmed?: unknown }) => installUpdate(options?.confirmed === true));
 
   startUpdates();
   createWindow();
@@ -260,33 +259,24 @@ function startUpdates(): void {
   updates.start();
 }
 
+/** The UI tells the user about updates itself, in a card that settles into the status bar, once per version. */
 function onUpdateState(state: UpdateState): void {
   console.log(`[updates] ${state.status}${state.version ? ` ${state.version}` : ""}${state.error ? `: ${state.error}` : ""}`);
   window?.webContents.send("fleet-desktop:update-state", state);
-  if (!state.version || state.version === notifiedVersion || !Notification.isSupported()) return;
-  if (state.status === "ready") {
-    notifiedVersion = state.version;
-    const notification = new Notification({ title: `Fleet ${state.version} is ready`, body: "Restart Fleet to update.", silent: true });
-    notification.on("click", showWindow);
-    notification.show();
-  } else if (state.status === "available" && state.releaseUrl) {
-    notifiedVersion = state.version;
-    const url = state.releaseUrl;
-    const notification = new Notification({ title: `Fleet ${state.version} is available`, body: "Click to download it.", silent: true });
-    notification.on("click", () => void shell.openExternal(url));
-    notification.show();
-  }
 }
 
-/** Restarts into a downloaded update, or opens the download page when the app can't install one itself. */
-async function installUpdate(): Promise<void> {
+/**
+ * Restarts into a downloaded update, or opens the download page when the app can't install one itself. `confirmed`
+ * means the UI already asked about working sessions.
+ */
+async function installUpdate(confirmed = false): Promise<void> {
   const state = updates.state;
   if (state.status === "available" && state.releaseUrl) {
     await shell.openExternal(state.releaseUrl);
     return;
   }
   if (state.status !== "ready") return;
-  if (!(await confirmStoppingSessions("Updating restarts Fleet, which stops them.", "Update Now"))) return;
+  if (!confirmed && !(await confirmStoppingSessions("Updating restarts Fleet, which stops them.", "Update Now"))) return;
   quitting = true;
   await server?.stop();
   updates.install();
@@ -294,14 +284,14 @@ async function installUpdate(): Promise<void> {
 
 async function checkForUpdatesFromMenu(): Promise<void> {
   const state = await updates.check();
-  const messages: Partial<Record<UpdateState["status"], string>> = {
-    off: "This build of Fleet doesn't update itself.",
-    idle: `You're on the latest version (${state.currentVersion}).`,
-    error: `Couldn't check for updates: ${state.error ?? "unknown error"}`,
-  };
-  const message = messages[state.status];
-  if (message) await dialog.showMessageBox({ type: state.status === "error" ? "warning" : "info", message });
-  else showWindow();
+  const message = updateCheckMessage(state);
+  if (message) {
+    await dialog.showMessageBox({ type: state.status === "error" ? "warning" : "info", message });
+    return;
+  }
+  // Found one: the UI opens its update card, even if it has already shown it for this version.
+  showWindow();
+  window?.webContents.send("fleet-desktop:show-update");
 }
 
 /** Sessions working in the Fleet the app started, or 0 when that can't be told. */

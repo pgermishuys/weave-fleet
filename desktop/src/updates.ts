@@ -51,6 +51,8 @@ export function nextState(state: UpdateState, event: UpdaterEvent, now: Date): U
       // A background re-check doesn't hide an update that's already waiting.
       return state.status === "ready" || state.status === "downloading" ? state : { ...base, status: "checking" };
     case "available":
+      // Checking again (Help → Check for Updates…) finds the version that's already downloaded: it stays ready.
+      if (state.status === "ready" && state.version === event.version) return state;
       return state.mode === "install"
         ? { ...base, status: "downloading", version: event.version, percent: 0, checkedAt: now.toISOString() }
         : { ...base, status: "available", version: event.version, releaseUrl: `${RELEASES}/tag/v${event.version}`, checkedAt: now.toISOString() };
@@ -63,6 +65,28 @@ export function nextState(state: UpdateState, event: UpdaterEvent, now: Date): U
     case "error":
       // A failed background check keeps a downloaded update installable.
       return state.status === "ready" ? state : { ...base, status: "error", error: event.message, checkedAt: now.toISOString() };
+  }
+}
+
+/**
+ * What Help → Check for Updates… says in a dialog, or null when the UI shows the update itself (one is ready or can be
+ * downloaded).
+ */
+export function updateCheckMessage(state: UpdateState): string | null {
+  switch (state.status) {
+    case "off":
+      return "This build of Fleet doesn't update itself.";
+    case "idle":
+      return `You're on the latest version (${state.currentVersion}).`;
+    case "checking":
+      return "Fleet is already checking for updates.";
+    case "downloading":
+      return `Fleet ${state.version ?? "update"} is downloading. Fleet lets you know when it's ready to install.`;
+    case "error":
+      return `Couldn't check for updates: ${state.error ?? "unknown error"}`;
+    case "available":
+    case "ready":
+      return null;
   }
 }
 
