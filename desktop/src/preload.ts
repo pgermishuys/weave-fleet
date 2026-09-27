@@ -22,8 +22,17 @@ const bridge = {
     return () => ipcRenderer.removeListener("fleet-desktop:update-state", listener);
   },
   checkForUpdates: (): Promise<UpdateState> => ipcRenderer.invoke("fleet-desktop:check-for-updates"),
-  /** Restarts into a downloaded update (asking first if sessions are working), or opens the download page. */
-  installUpdate: (): Promise<void> => ipcRenderer.invoke("fleet-desktop:install-update"),
+  /**
+   * Restarts into a downloaded update, or opens the download page. Asks first if sessions are working, unless
+   * `confirmed` says the UI already asked.
+   */
+  installUpdate: (options?: { confirmed?: boolean }): Promise<void> => ipcRenderer.invoke("fleet-desktop:install-update", options),
+  /** Calls back when the UI should open its update card (Help → Check for Updates… found one). */
+  onShowUpdate: (callback: () => void): (() => void) => {
+    const listener = () => callback();
+    ipcRenderer.on("fleet-desktop:show-update", listener);
+    return () => ipcRenderer.removeListener("fleet-desktop:show-update", listener);
+  },
 };
 
 contextBridge.exposeInMainWorld("fleetDesktop", bridge);

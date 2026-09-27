@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { AlertCircle, CheckCircle2, Download, LoaderCircle, RefreshCw } from "lucide-vue-next";
 import { useUpdateStatus } from "@/composables/use-update-status";
 import DesktopAppUpdates from "@/components/settings/DesktopAppUpdates.vue";
-import { getDesktopBridge } from "@/lib/desktop";
+import { getDesktopBridge, releaseNotesUrl } from "@/lib/desktop";
 
 const { updateStatus, isLoading, checkForUpdate, downloadUpdate } = useUpdateStatus();
 const inApp = getDesktopBridge() !== null;
@@ -19,7 +19,7 @@ const statusLabel = computed(() => {
     case "downloading":
       return `Downloading v${updateStatus.value.latestVersion}…`;
     case "staged":
-      return `v${updateStatus.value.latestVersion} ready — restart to apply`;
+      return `v${updateStatus.value.latestVersion} is ready`;
     case "error":
       return "Update check failed";
     case "managed":
@@ -57,6 +57,13 @@ const canCheck = computed(
 );
 
 const canDownload = computed(() => updateStatus.value?.status === "available");
+
+const notesUrl = computed(() => {
+  const s = updateStatus.value;
+  return s?.latestVersion && (s.status === "available" || s.status === "downloading" || s.status === "staged")
+    ? releaseNotesUrl(s.latestVersion)
+    : null;
+});
 
 const downloadProgressPercent = computed(() => {
   const s = updateStatus.value;
@@ -167,6 +174,13 @@ const downloadProgressLabel = computed(() => {
           </div>
 
           <div class="flex items-center gap-2">
+            <a
+              v-if="notesUrl"
+              :href="notesUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-xs text-muted underline underline-offset-2 transition-colors hover:text-text"
+            >What's new</a>
             <button
               v-if="canDownload"
               type="button"
@@ -230,7 +244,7 @@ const downloadProgressLabel = computed(() => {
         class="rounded-card border border-border bg-main-bg px-4 py-3"
       >
         <p class="text-xs text-muted">
-          The update has been downloaded and is ready to install. Restart Fleet (<code class="font-mono">fleet</code>) to apply it automatically.
+          It's downloaded and installs the next time you start Fleet (<code class="font-mono">fleet</code>).
         </p>
       </div>
     </div>
