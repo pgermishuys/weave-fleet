@@ -200,9 +200,11 @@ public sealed class OpenCode2RuntimeTests
     {
         var sink = new RecordingSink(stopAt: "session.execution.succeeded");
         var other = new RecordingSink();
-        await using var server = Server(OpenCode2Fixtures.ClientServing(OpenCode2Fixtures.Read("text-and-tool-turn.sse")));
+        var attached = new TaskCompletionSource();
+        await using var server = Server(OpenCode2Fixtures.ClientServing(OpenCode2Fixtures.Read("text-and-tool-turn.sse"), streamWhen: attached.Task));
         server.Attach(Session, sink);
         server.Attach("ses_someone_else", other);
+        attached.SetResult();
 
         await server.WaitForEventsAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
         await sink.Stopped.WaitAsync(TimeSpan.FromSeconds(5));
