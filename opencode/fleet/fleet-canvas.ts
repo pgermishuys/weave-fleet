@@ -93,17 +93,24 @@ type Config = { skills?: { paths?: string[] } }
 
 /**
  * The memory notes for sessions in `directory`, as Fleet wrote them before the prompt: the file named by the
- * SHA-256 of the folder's path in FLEET_MEMORY_DIR. Empty when memory is off or there's no file yet.
+ * SHA-256 of the folder's path in FLEET_MEMORY_DIR (the rules and the repository's notes), then machine.md there
+ * (the machine's notes, one file every folder shares). Empty when memory is off or there's no file yet.
  */
 function readMemoryNotes(directory: string | undefined): string {
   const folder = process.env.FLEET_MEMORY_DIR
   if (!folder || !directory) return ""
   const trimmed = directory.length > 1 ? directory.replace(/[\\/]+$/, "") : directory
   for (const path of new Set([directory, trimmed])) {
+    let notes: string
     try {
-      return readFileSync(folder + "/" + createHash("sha256").update(path).digest("hex") + ".md", "utf8")
+      notes = readFileSync(folder + "/" + createHash("sha256").update(path).digest("hex") + ".md", "utf8")
     } catch {
-      // Not written for this form of the path; try the next.
+      continue // Not written for this form of the path; try the next.
+    }
+    try {
+      return notes + readFileSync(folder + "/machine.md", "utf8")
+    } catch {
+      return notes
     }
   }
   return ""

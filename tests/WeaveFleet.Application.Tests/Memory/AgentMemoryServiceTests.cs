@@ -43,7 +43,8 @@ public sealed class AgentMemoryServiceTests : IDisposable
 
         notes.ShouldNotBeNull();
         notes.ShouldContain("## This repository (weave-fleet)");
-        notes.ShouldContain("## This machine");
+        notes.ShouldContain("## This machine", customMessage: "a harness that takes the notes with the prompt gets both parts");
+        _store.Machine.ShouldNotBeNull().ShouldContain("## This machine");
         notes.ShouldNotContain("fleet_memory_save", customMessage: "a harness without the tools only reads the notes");
         _store.Context[_repository].ShouldContain("fleet_memory_save", customMessage: "the file OpenCode reads has the rules for saving");
     }
@@ -58,6 +59,7 @@ public sealed class AgentMemoryServiceTests : IDisposable
         await _memory.SetEnabledAsync(false);
 
         _store.Context.ShouldBeEmpty();
+        _store.Machine.ShouldBeNull();
         (await _memory.ListAsync(_repository)).MachineNotes.Single().Text.ShouldBe("/tmp fills up here; use ~/.cache.");
         (await _memory.PrepareSessionAsync("owner", _repository, canSave: false)).ShouldBeNull();
     }
@@ -72,8 +74,9 @@ public sealed class AgentMemoryServiceTests : IDisposable
         var saved = await _memory.SaveFromAgentAsync(Session(_repository), "machine", "WebFetch can't read github.com; use gh.", "learned", replaces: null);
 
         saved.IsSuccess.ShouldBeTrue();
-        _store.Context[_repository].ShouldContain($"[{saved.Value.Note.Id}] WebFetch can't read github.com; use gh. (27 Sep 2026)");
-        _store.Context[_otherRepository].ShouldContain("WebFetch can't read github.com", customMessage: "machine notes reach every repository");
+        _store.Machine.ShouldNotBeNull().ShouldContain($"[{saved.Value.Note.Id}] WebFetch can't read github.com; use gh. (27 Sep 2026)",
+            customMessage: "machine notes are in the one file every folder reads");
+        _store.Context[_repository].ShouldNotContain("WebFetch");
         var broadcast = _broadcaster.Broadcasts.Single();
         broadcast.Topic.ShouldBe("sessions");
         broadcast.Type.ShouldBe(AgentMemory.SavedEventType);
@@ -211,7 +214,7 @@ public sealed class AgentMemoryServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task A_repository_note_rewrites_only_that_repositorys_folders_and_a_machine_note_rewrites_them_all()
+    public async Task A_repository_note_rewrites_only_that_repositorys_folders_and_a_machine_note_only_the_machine_file()
     {
         await _memory.SetEnabledAsync(true);
         await _memory.PrepareSessionAsync("owner", _repository, canSave: false);
@@ -225,9 +228,12 @@ public sealed class AgentMemoryServiceTests : IDisposable
         _store.Context[_worktree].ShouldContain("Only for weave-fleet.");
         _store.Writes.Clear();
 
+        var machineWrites = _store.MachineWrites;
         await _memory.SaveFromAgentAsync(Session(_repository), "machine", "For every repository.", "learned", null);
 
-        _store.Writes.ShouldBe([_repository, _worktree, _otherRepository], ignoreOrder: true);
+        _store.Writes.ShouldBeEmpty();
+        _store.MachineWrites.ShouldBe(machineWrites + 1);
+        _store.Machine.ShouldNotBeNull().ShouldContain("For every repository.");
     }
 
     [Fact]
@@ -266,6 +272,8 @@ public sealed class AgentMemoryServiceTests : IDisposable
         public Dictionary<string, string> Context { get; } = new(StringComparer.Ordinal);
         public Dictionary<string, string> ContextRepository { get; } = new(StringComparer.Ordinal);
         public List<string> Writes { get; } = [];
+        public string? Machine { get; private set; }
+        public int MachineWrites { get; private set; }
 
         public Task<IReadOnlyList<MemoryNote>> ListAsync(string userId, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<MemoryNote>>([.. Notes]);
@@ -299,6 +307,13 @@ public sealed class AgentMemoryServiceTests : IDisposable
             return Task.CompletedTask;
         }
 
+        public Task WriteMachineContextAsync(string userId, string content, CancellationToken ct = default)
+        {
+            Machine = content;
+            MachineWrites++;
+            return Task.CompletedTask;
+        }
+
         public Task<IReadOnlyList<MemoryContextFolder>> ListContextFoldersAsync(string userId, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<MemoryContextFolder>>([.. Context.Keys.Select(directory => new MemoryContextFolder(directory, ContextRepository[directory]))]);
 
@@ -311,6 +326,7 @@ public sealed class AgentMemoryServiceTests : IDisposable
 
         public Task ClearContextAsync(string userId, CancellationToken ct = default)
         {
+            Machine = null;
             Context.Clear();
             ContextRepository.Clear();
             return Task.CompletedTask;

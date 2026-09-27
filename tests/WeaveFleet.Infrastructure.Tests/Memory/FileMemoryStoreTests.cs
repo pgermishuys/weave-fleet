@@ -100,6 +100,19 @@ public sealed class FileMemoryStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task The_machines_notes_are_one_file_every_folder_shares_and_are_cleared_with_the_rest()
+    {
+        await _store.WriteMachineContextAsync("local-user", "\n## This machine\n- [aaaa0001] Machine. (27 Sep 2026)\n");
+
+        var path = Path.Combine(_store.ContextFolder("local-user"), "machine.md");
+        File.ReadAllText(path).ShouldContain("[aaaa0001] Machine.");
+
+        await _store.ClearContextAsync("local-user");
+
+        File.Exists(path).ShouldBeFalse();
+    }
+
+    [Fact]
     public async Task The_folder_index_survives_a_restart_and_a_forgotten_folder_loses_its_file()
     {
         var folder = Path.Combine(_data, "repo");

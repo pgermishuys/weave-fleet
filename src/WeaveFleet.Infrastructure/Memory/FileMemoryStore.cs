@@ -19,14 +19,18 @@ namespace WeaveFleet.Infrastructure.Memory;
 /// hand is read again.
 /// </para>
 /// <para>
-/// What sessions read goes in <c>{data}/memory/{user}/context/</c>, one file per session folder named by the SHA-256 of
-/// the folder's path, with <c>folders.json</c> saying which folder and repository each is for. Every write goes to a
+/// What sessions read goes in <c>{data}/memory/{user}/context/</c>: one file per session folder named by the SHA-256 of
+/// the folder's path (the rules and the repository's notes), <c>machine.md</c> with the machine's notes that every
+/// folder shares, and <c>folders.json</c> saying which folder and repository each file is for. Every write goes to a
 /// temporary file first and then replaces the old one, under one lock.
 /// </para>
 /// </summary>
 internal sealed partial class FileMemoryStore(FleetOptions options, ILogger<FileMemoryStore> logger) : IMemoryStore, IDisposable
 {
     private const string FoldersFile = "folders.json";
+
+    /// <summary>The machine's notes, which every session folder's file is read with. Fleet's plugins read it by this name.</summary>
+    internal const string MachineFile = "machine.md";
 
     private readonly SemaphoreSlim _lock = new(1, 1);
 
@@ -130,6 +134,19 @@ internal sealed partial class FileMemoryStore(FleetOptions options, ILogger<File
 
             if (changed)
                 WriteIndex(folder, index);
+            return true;
+        }, ct);
+
+    public Task WriteMachineContextAsync(string userId, string content, CancellationToken ct = default)
+        => LockedAsync(() =>
+        {
+            var path = Path.Combine(ContextFolder(userId), MachineFile);
+            if (!(_contextWritten.TryGetValue(path, out var written) && written == content && File.Exists(path)))
+            {
+                WriteAtomically(path, content);
+                _contextWritten[path] = content;
+            }
+
             return true;
         }, ct);
 

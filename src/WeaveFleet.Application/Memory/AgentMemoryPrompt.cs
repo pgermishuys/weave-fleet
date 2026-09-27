@@ -11,14 +11,23 @@ namespace WeaveFleet.Application.Memory;
 public static class AgentMemoryPrompt
 {
     /// <summary>
-    /// The notes a session in a repository reads. <paramref name="canSave"/> is whether the harness has the memory tools;
-    /// without them the session only reads the notes.
+    /// The notes a session in a repository reads, whole: <see cref="RenderFolder"/> then <see cref="RenderMachine"/>.
+    /// <paramref name="canSave"/> is whether the harness has the memory tools; without them the session only reads the
+    /// notes.
     /// </summary>
     public static string Render(
         string repository,
         IEnumerable<MemoryNote> repositoryNotes,
         IEnumerable<MemoryNote> machineNotes,
         bool canSave = true)
+        => (RenderFolder(repository, repositoryNotes, canSave) + RenderMachine(machineNotes)).TrimEnd() + "\n";
+
+    /// <summary>
+    /// The part only a repository's sessions read: the rules, then the repository's notes. A session folder's file holds
+    /// this; the machine's notes are in one file every folder shares (<see cref="RenderMachine"/>), so a machine note
+    /// changes one file, not every folder's.
+    /// </summary>
+    public static string RenderFolder(string repository, IEnumerable<MemoryNote> repositoryNotes, bool canSave = true)
     {
         var text = new StringBuilder();
         text.AppendLine("# Fleet memory");
@@ -56,6 +65,16 @@ public static class AgentMemoryPrompt
         }
 
         AppendList(text, $"This repository ({AgentMemory.RepositoryName(repository)})", repositoryNotes);
+        return text.ToString().TrimEnd() + "\n";
+    }
+
+    /// <summary>
+    /// The machine's notes, which every session reads after its folder's part. Starts with a blank line, so the two
+    /// read as one text when put together.
+    /// </summary>
+    public static string RenderMachine(IEnumerable<MemoryNote> machineNotes)
+    {
+        var text = new StringBuilder();
         AppendList(text, "This machine", machineNotes);
         return text.ToString().TrimEnd() + "\n";
     }

@@ -32,11 +32,18 @@ public interface IMemoryStore
     string ContextFolder(string userId);
 
     /// <summary>
-    /// Writes what a session in <paramref name="directory"/> reads: the file named by the SHA-256 of the directory, in
-    /// lowercase hex, plus <c>.md</c>, in <see cref="ContextFolder"/>. Remembers which repository the folder is in, so a
-    /// change to that repository's notes rewrites only its folders. Unchanged content isn't written again.
+    /// Writes what only sessions in <paramref name="directory"/> read (the rules and its repository's notes): the file
+    /// named by the SHA-256 of the directory, in lowercase hex, plus <c>.md</c>, in <see cref="ContextFolder"/>. Remembers
+    /// which repository the folder is in, so a change to that repository's notes rewrites only its folders. Unchanged
+    /// content isn't written again.
     /// </summary>
     Task WriteContextAsync(string userId, string directory, string repository, string content, CancellationToken ct = default);
+
+    /// <summary>
+    /// Writes the machine's notes, which every session reads after its folder's file: <c>machine.md</c> in
+    /// <see cref="ContextFolder"/>. Unchanged content isn't written again.
+    /// </summary>
+    Task WriteMachineContextAsync(string userId, string content, CancellationToken ct = default);
 
     /// <summary>The session folders the user's context files were written for, with each one's repository.</summary>
     Task<IReadOnlyList<MemoryContextFolder>> ListContextFoldersAsync(string userId, CancellationToken ct = default);
