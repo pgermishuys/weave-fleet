@@ -125,6 +125,8 @@ export function describeSessionDefaults(input: {
   defaultAgent: string;
   agents: readonly AgentOption[];
   models: readonly ModelOption[];
+  /** The model that answered last, for a session left to the harness's own model. */
+  lastModelId?: string | null;
 }): DefaultLabels {
   const agent = input.sessionAgent || input.defaultAgent;
   const agentLabel = agent ? `Default (${agent})` : "Default";
@@ -136,7 +138,10 @@ export function describeSessionDefaults(input: {
   const agentsOwn = input.agents.find((candidate) => candidate.id === forAgent)?.model;
   const model = input.sessionModel ?? agentsOwn ?? null;
   if (!model) {
-    return { agentLabel, agentDescription, modelLabel: "Default", modelDescription: "Use the session default model" };
+    const lastModel = modelDisplayName(input.lastModelId, input.models);
+    return lastModel
+      ? { agentLabel, agentDescription, modelLabel: `Default (${lastModel})`, modelDescription: `The model that answered last: ${lastModel}` }
+      : { agentLabel, agentDescription, modelLabel: "Default", modelDescription: "Use the session default model" };
   }
 
   const name = input.models.find((candidate) => candidate.providerId === model.providerID && candidate.id === model.modelID)?.name

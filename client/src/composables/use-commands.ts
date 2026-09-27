@@ -325,7 +325,7 @@ export function useCommands() {
       },
       {
         id: "new-session",
-        label: "New Session",
+        label: "New session",
         description: "Create and open a new session.",
         icon: Plus,
         category: "Session",
@@ -336,7 +336,7 @@ export function useCommands() {
       },
       {
         id: "refresh-sessions",
-        label: "Refresh Sessions",
+        label: "Refresh sessions",
         description: "Reload the current sessions list.",
         icon: RefreshCcw,
         category: "Session",
@@ -349,7 +349,7 @@ export function useCommands() {
       },
       {
         id: "go-to-file",
-        label: "Go to File…",
+        label: "Go to file…",
         description: fileSessionId.value ? "Open a file from this session by name." : "Open a session to find its files.",
         icon: FileSearch,
         category: "Session",
@@ -365,7 +365,7 @@ export function useCommands() {
       },
       {
         id: "focus-prompt",
-        label: "Focus Prompt",
+        label: "Focus prompt",
         description: activeSessionId.value ? "Focus the active session prompt." : "Open a session to focus the prompt.",
         icon: Focus,
         category: "Session",
@@ -377,7 +377,7 @@ export function useCommands() {
       },
       {
         id: "nav-go-to-session",
-        label: "Go to Session...",
+        label: "Go to session…",
         description: sessions.value.length > 0
           ? `Switch between ${sessions.value.length} sessions.`
           : "No sessions available.",
@@ -409,7 +409,7 @@ export function useCommands() {
       },
       {
         id: "nav-next-session",
-        label: "Next Session",
+        label: "Next session",
         description: nextSession ? `Switch to ${nextSession.session.title}.` : "A second session is required.",
         icon: ChevronRight,
         category: "Session",
@@ -424,7 +424,7 @@ export function useCommands() {
       },
       {
         id: "nav-prev-session",
-        label: "Previous Session",
+        label: "Previous session",
         description: previousSession ? `Switch to ${previousSession.session.title}.` : "A second session is required.",
         icon: ChevronLeft,
         category: "Session",
@@ -439,7 +439,7 @@ export function useCommands() {
       },
       {
         id: "interrupt-session",
-        label: "Interrupt Session",
+        label: "Interrupt session",
         description: activeSessionId.value ? "Abort the active session." : "No active session selected.",
         icon: SquareDashedBottom,
         category: "Session",
@@ -453,7 +453,7 @@ export function useCommands() {
       },
       {
         id: "copy-session-id",
-        label: "Copy Session ID",
+        label: "Copy session ID",
         description: activeSessionId.value ? "Copy the active session ID." : "No active session selected.",
         icon: Copy,
         category: "Session",
@@ -465,7 +465,7 @@ export function useCommands() {
       },
       {
         id: "fork-session",
-        label: "Fork Session",
+        label: "Fork session",
         description: activeSessionId.value ? "Create a fork from the active session." : "No active session selected.",
         icon: GitBranchPlus,
         category: "Session",
@@ -479,7 +479,7 @@ export function useCommands() {
       },
       {
         id: "export-conversation",
-        label: "Export Conversation",
+        label: "Export conversation",
         description: activeSessionId.value ? "Download the active conversation as JSON." : "No active session selected.",
         icon: Download,
         category: "Session",
@@ -491,7 +491,7 @@ export function useCommands() {
       },
       {
         id: "scroll-to-top",
-        label: "Scroll to Top",
+        label: "Scroll to top",
         description: "Scroll the activity stream to the top.",
         icon: ScrollText,
         category: "Session",
@@ -503,7 +503,7 @@ export function useCommands() {
       },
       {
         id: "scroll-to-bottom",
-        label: "Scroll to Bottom",
+        label: "Scroll to bottom",
         description: "Scroll the activity stream to the latest message.",
         icon: ScrollText,
         category: "Session",
@@ -515,7 +515,7 @@ export function useCommands() {
       },
       {
         id: "clear-conversation",
-        label: "Clear Draft",
+        label: "Clear draft",
         description: activeSessionId.value ? "Clear the current composer draft." : "No active session selected.",
         icon: Eraser,
         category: "Session",
@@ -528,8 +528,8 @@ export function useCommands() {
       {
         id: "toggle-sidebar",
         label: isMobileNav.value
-          ? (mobileDrawerOpen.value ? "Close Menu" : "Open Menu")
-          : (sidebarStore.panelCollapsed ? "Show Sidebar" : "Hide Sidebar"),
+          ? (mobileDrawerOpen.value ? "Close menu" : "Open menu")
+          : (sidebarStore.panelCollapsed ? "Show sidebar" : "Hide sidebar"),
         description: isMobileNav.value
           ? "Open or close the navigation drawer."
           : (sidebarStore.panelCollapsed ? "Expand the left context panel." : "Collapse the left context panel."),
@@ -542,7 +542,7 @@ export function useCommands() {
       },
       {
         id: "toggle-right-panel",
-        label: isRightPanelVisible.value ? "Hide Right Panel" : "Show Right Panel",
+        label: isRightPanelVisible.value ? "Hide right panel" : "Show right panel",
         description: isRightPanelVisible.value ? "Collapse the right detail panel." : "Expand the right detail panel.",
         icon: PanelRightClose,
         category: "View",
@@ -552,7 +552,7 @@ export function useCommands() {
       },
       {
         id: "toggle-terminal",
-        label: terminalSessionId.value && terminalsStore.isOpen(terminalSessionId.value) ? "Hide Terminal" : "Show Terminal",
+        label: terminalSessionId.value && terminalsStore.isOpen(terminalSessionId.value) ? "Hide terminal" : "Show terminal",
         description: terminalSessionId.value
           ? "Show or hide the terminal under the chat."
           : "Open a session to use its terminal.",
@@ -569,7 +569,7 @@ export function useCommands() {
       },
       {
         id: "toggle-diff-view",
-        label: workspaceUiStore.inlineToolDiffs ? "Hide Inline Tool Diffs" : "Show Inline Tool Diffs",
+        label: workspaceUiStore.inlineToolDiffs ? "Hide inline tool diffs" : "Show inline tool diffs",
         description: workspaceUiStore.inlineToolDiffs
           ? "Collapse inline diff rendering in tool cards."
           : "Show inline diff rendering in tool cards.",
@@ -582,7 +582,7 @@ export function useCommands() {
       },
       {
         id: "toggle-activity-filter",
-        label: retentionStatus.value === "active" ? "Show All Sessions" : "Show Active Sessions",
+        label: retentionStatus.value === "active" ? "Show all sessions" : "Show active sessions",
         description: retentionStatus.value === "active"
           ? "Toggle the sessions filter from active to all."
           : "Toggle the sessions filter back to active only.",
@@ -595,7 +595,7 @@ export function useCommands() {
       },
       {
         id: "cycle-theme",
-        label: "Cycle Theme",
+        label: "Cycle theme",
         description: `Current theme: ${currentTheme.value}.`,
         icon: MoonStar,
         category: "View",
@@ -605,7 +605,7 @@ export function useCommands() {
       },
       {
         id: "toggle-dark-light",
-        label: themeStore.resolvedTheme.colorScheme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode",
+        label: themeStore.resolvedTheme.colorScheme === "dark" ? "Switch to light mode" : "Switch to dark mode",
         description: `Current theme: ${themeStore.resolvedTheme.label}.`,
         icon: MoonStar,
         category: "View",
@@ -616,7 +616,7 @@ export function useCommands() {
       },
       {
         id: "toggle-fullscreen",
-        label: "Toggle Fullscreen",
+        label: "Toggle full screen",
         description: "Enter or exit fullscreen mode.",
         icon: Maximize2,
         category: "View",
@@ -626,7 +626,7 @@ export function useCommands() {
       },
       {
         id: "zoom-in",
-        label: "Zoom In",
+        label: "Zoom in",
         description: "Increase the interface scale.",
         icon: ZoomIn,
         category: "View",
@@ -636,7 +636,7 @@ export function useCommands() {
       },
       {
         id: "zoom-out",
-        label: "Zoom Out",
+        label: "Zoom out",
         description: "Decrease the interface scale.",
         icon: ZoomOut,
         category: "View",
@@ -646,7 +646,7 @@ export function useCommands() {
       },
       {
         id: "open-marketplace-panel",
-        label: "Open Marketplace Panel",
+        label: "Open marketplace panel",
         description: "Show plugin and integration options.",
         icon: Puzzle,
         category: "Fleet",

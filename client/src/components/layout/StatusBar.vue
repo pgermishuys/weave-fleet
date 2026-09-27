@@ -60,11 +60,11 @@ const tokenCount = computed(() => {
       class="status-bar__left"
     >
       <span class="shortcut-hint">
-        <kbd>{{ mod }} K</kbd> Command Palette
+        <kbd>{{ mod }} K</kbd> Command palette
       </span>
       <span class="shortcut-separator">·</span>
       <span class="shortcut-hint">
-        <kbd>{{ mod }} [ ]</kbd> Prev / Next Session
+        <kbd>{{ mod }} [ ]</kbd> Prev / next session
       </span>
       <span class="shortcut-separator">·</span>
       <span class="shortcut-hint">
@@ -72,7 +72,7 @@ const tokenCount = computed(() => {
       </span>
       <span class="shortcut-separator">·</span>
       <span class="shortcut-hint">
-        <kbd>Esc</kbd> Cancel
+        <kbd>Esc</kbd> Interrupt
       </span>
       <template v-if="appShell.config.terminalEnabled">
         <span class="shortcut-separator">·</span>

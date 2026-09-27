@@ -120,5 +120,17 @@ describe("agent-model-choice", () => {
       expect(describeSessionDefaults({ sessionAgent: null, sessionModel: null, draftAgent: "build", defaultAgent: "loom", agents, models }))
         .toMatchObject({ modelLabel: "Default" });
     });
+
+    it("a session left to the harness's model names the model that answered last", () => {
+      expect(describeSessionDefaults({
+        sessionAgent: null,
+        sessionModel: null,
+        draftAgent: "build",
+        defaultAgent: "loom",
+        agents,
+        models,
+        lastModelId: "claude-haiku-4.5",
+      })).toMatchObject({ modelLabel: "Default (Claude Haiku 4.5)", modelDescription: "The model that answered last: Claude Haiku 4.5" });
+    });
   });
 });

@@ -208,6 +208,8 @@ const SessionDetailPage = defineComponent({
     const sessionsStore = useSessionsStore();
     const { sessions, sessionStateOverrides } = storeToRefs(sessionsStore);
     const remoteSession = shallowRef<SessionDetailResponse | null>(null);
+    /** The server has no session under this id (a stale link, or one deleted elsewhere). */
+    const sessionMissing = shallowRef(false);
     const composerRef = shallowRef<ComposerInstance | null>(null);
     const viewMode = shallowRef<SessionViewMode>(search.value.view === "files" ? "files-changed" : "chat");
     const selectedChangedFile = shallowRef<{ file: string } | null>(null);
@@ -242,6 +244,7 @@ const SessionDetailPage = defineComponent({
       async (sessionId, _previousSessionId, onCleanup) => {
         sessionsStore.setActiveSessionId(sessionId ?? null);
         remoteSession.value = null;
+        sessionMissing.value = false;
         isEditingTitle.value = false;
 
         if (!sessionId) {
@@ -263,7 +266,11 @@ const SessionDetailPage = defineComponent({
           const response = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}`, {
             signal: abortController.signal,
           });
-          if (!response.ok || abortController.signal.aborted) {
+          if (abortController.signal.aborted) {
+            return;
+          }
+          if (!response.ok) {
+            sessionMissing.value = response.status === 404;
             return;
           }
 
@@ -306,8 +313,8 @@ const SessionDetailPage = defineComponent({
             archivedAt: selectedSession.value?.archivedAt ?? null,
             typedInstanceStatus: selectedSession.value?.typedInstanceStatus ?? "running",
             isHidden: selectedSession.value?.isHidden ?? false,
-            totalTokens: selectedSession.value?.totalTokens,
-            totalCost: selectedSession.value?.totalCost,
+            totalTokens: nextRemoteSession.totalTokens ?? selectedSession.value?.totalTokens,
+            totalCost: nextRemoteSession.totalCost ?? selectedSession.value?.totalCost,
             // The server's project wins: a new session lands in Scratch, not "Ungrouped".
             projectId: nextRemoteSession.projectId ?? selectedSession.value?.projectId ?? null,
             projectName: nextRemoteSession.projectName ?? selectedSession.value?.projectName ?? null,
@@ -692,11 +699,33 @@ const SessionDetailPage = defineComponent({
       selectedChangedFile.value = file;
     }
 
+    function leaveMissingSession(): void {
+      void navigate({ to: "/" });
+    }
+
     function retryFilesChanged(): void {
       void diffState.fetchDiffs();
     }
 
-    return () => (
+    return () => sessionMissing.value ? (
+      <div
+        data-testid="session-not-found"
+        class="flex h-full flex-col items-center justify-center gap-2 px-6 text-center"
+      >
+        <h2 class="text-base font-semibold text-foreground">Session not found</h2>
+        <p class="max-w-sm text-sm text-muted-foreground">
+          It may have been deleted, or the link is from another Fleet.
+        </p>
+        <button
+          type="button"
+          class="mt-2 inline-flex h-8 items-center justify-center gap-2 rounded-md border bg-background px-3 text-sm font-medium hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50"
+          onClick={leaveMissingSession}
+        >
+          <ArrowLeft class="h-4 w-4" />
+          Back to sessions
+        </button>
+      </div>
+    ) : (
       <div
         style={{
           display: "flex",

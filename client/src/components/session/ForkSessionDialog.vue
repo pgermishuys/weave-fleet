@@ -87,7 +87,7 @@ watch(
     >
       <DialogHeader>
         <DialogTitle data-testid="fork-session-dialog-title">
-          Fork Session
+          Fork session
         </DialogTitle>
       </DialogHeader>
 
