@@ -633,8 +633,9 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
     }
 
     /// <summary>
-    /// Switches the V2 session to the agent and model a prompt names, where they differ from what it has. Fleet's effort
-    /// is the model's variant; a prompt that names an effort but no model changes the variant of the model it has.
+    /// Switches the V2 session to the agent and model a prompt names, where they differ from what it has. A prompt that
+    /// names no model gets its agent's own (else the folder's default): V2 would keep whatever model the session has,
+    /// and a new session has none, so V2 would pick one itself. Fleet's effort is the model's variant.
     /// </summary>
     private async Task ApplyChoicesAsync(
         OpenCode2Server server,
@@ -650,23 +651,41 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
             _agent = agent;
         }
 
-        if (ChosenModel(_model, providerId, modelId, effort) is { } model && !SameModel(model, _model))
+        var fallback = string.IsNullOrWhiteSpace(providerId) || string.IsNullOrWhiteSpace(modelId)
+            ? await DefaultModelAsync(server, ct).ConfigureAwait(false)
+            : null;
+        if (ChosenModel(fallback, providerId, modelId, effort) is { } model && !SameModel(model, _model))
         {
             await server.Client.SwitchModelAsync(ResumeToken, model, ct).ConfigureAwait(false);
             _model = model;
         }
     }
 
-    /// <summary>The model a prompt asks for, or <see langword="null"/> when it leaves the session's as it is.</summary>
-    internal static OpenCode2ModelRef? ChosenModel(OpenCode2ModelRef? current, string? providerId, string? modelId, string? effort)
+    /// <summary>The model the session's agent gets when a prompt names none; <see langword="null"/> leaves it to V2.</summary>
+    private async Task<OpenCode2ModelRef?> DefaultModelAsync(OpenCode2Server server, CancellationToken ct)
+    {
+        try
+        {
+            return await OpenCode2Catalog.ReadDefaultModelAsync(server, _context.WorkingDirectory, _agent, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException)
+        {
+            LogDefaultModelReadFailed(_logger, InstanceId, ex);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The model a prompt runs on: the one it names, else <paramref name="fallback"/>; <see langword="null"/> when there
+    /// is neither. Effort picks the variant, else the fallback's own.
+    /// </summary>
+    internal static OpenCode2ModelRef? ChosenModel(OpenCode2ModelRef? fallback, string? providerId, string? modelId, string? effort)
     {
         var variant = string.IsNullOrWhiteSpace(effort) ? null : effort;
         if (!string.IsNullOrWhiteSpace(providerId) && !string.IsNullOrWhiteSpace(modelId))
             return new OpenCode2ModelRef { ProviderId = providerId, Id = modelId, Variant = variant };
 
-        return variant is not null && current is { Id: not null, ProviderId: not null }
-            ? current with { Variant = variant }
-            : null;
+        return fallback is null ? null : fallback with { Variant = variant ?? fallback.Variant };
     }
 
     /// <summary>Same model and variant; V2 reports a model selected without one as variant <c>default</c>.</summary>
@@ -787,6 +806,9 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "A shell command in OpenCode 2 session {InstanceId} failed after V2 took it")]
     private static partial void LogShellCommandFailed(ILogger logger, string instanceId, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not read the default model for OpenCode 2 session {InstanceId}; the prompt runs on the model the session has")]
+    private static partial void LogDefaultModelReadFailed(ILogger logger, string instanceId, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Could not read the inbox of OpenCode 2 session {InstanceId}; prompts it hasn't taken in yet are left out of the history")]
     private static partial void LogInboxReadFailed(ILogger logger, string instanceId, Exception exception);

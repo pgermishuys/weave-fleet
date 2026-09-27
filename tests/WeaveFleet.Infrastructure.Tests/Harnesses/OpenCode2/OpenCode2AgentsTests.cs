@@ -27,7 +27,7 @@ public sealed class OpenCode2AgentsTests
 
         api.Requests[0].Path.ShouldBe("/api/location");
         api.Requests.Skip(1).Select(r => r.Path).Order().ShouldBe(
-            ["/api/agent", "/api/config", "/api/model", "/api/model/default", "/api/provider"]);
+            ["/api/agent", "/api/model", "/api/model/default", "/api/provider"]);
     }
 
     [Fact]
@@ -138,7 +138,7 @@ public sealed class OpenCode2AgentsTests
 
         var catalog = await OpenCode2Catalog.ReadAsync(server, Folder, CancellationToken.None);
 
-        catalog.Agents.Select(a => a.Name).ShouldBe(["build", "general", "title", "plan", "reviewer", "rocket"]);
+        catalog.Agents.Select(a => a.Name).ShouldBe(["rocket", "build", "general", "title", "plan", "reviewer"]);
         catalog.Agents.Single(a => a.Name == "general").Mode.ShouldBe("subagent");
         catalog.Agents.Single(a => a.Name == "title").Hidden.ShouldBeTrue();
         catalog.Agents.Single(a => a.Name == "rocket").ModelId.ShouldBe("fake-model-2");
@@ -159,24 +159,25 @@ public sealed class OpenCode2AgentsTests
 
         var catalog = await OpenCode2Catalog.ReadAsync(server, Folder, CancellationToken.None);
 
-        // The folder's own config sets default_agent after the user's.
+        // V2 lists its default agent first.
         catalog.DefaultAgent.ShouldBe("rocket");
         (catalog.DefaultModelProviderId, catalog.DefaultModelId).ShouldBe(("fakellm", "fake-model"));
     }
 
-    [Theory]
-    [InlineData(null, "build")]
-    [InlineData("general", "build")]
-    [InlineData("title", "build")]
-    [InlineData("nosuch", "build")]
-    [InlineData("plan", "plan")]
-    public void A_default_agent_that_cannot_run_a_session_falls_back_to_build(string? configured, string expected)
+    [Fact]
+    public void The_default_agent_is_the_first_V2_lists_that_can_run_a_session()
     {
-        var agents = JsonSerializer.Deserialize(AgentsJson, OpenCode2JsonContext.Default.OpenCode2EnvelopeListOpenCode2AgentInfo)!.Data!;
+        // V2 puts its default first; that's the config's default_agent, else one a plugin (Weave) picked, else build.
+        var agents = new List<OpenCode2AgentInfo>
+        {
+            new() { Id = "title", Mode = "primary", Hidden = true },
+            new() { Id = "general", Mode = "subagent" },
+            new() { Id = "loom", Mode = "primary" },
+            new() { Id = "build", Mode = "primary" },
+        };
 
-        var catalog = OpenCode2Catalog.ToCatalog(agents, [], [], defaultModel: null, configured);
-
-        catalog.DefaultAgent.ShouldBe(expected);
+        OpenCode2Catalog.ToCatalog(agents, [], [], defaultModel: null).DefaultAgent.ShouldBe("loom");
+        OpenCode2Catalog.ToCatalog([], [], [], defaultModel: null).DefaultAgent.ShouldBeNull();
     }
 
     [Fact]
@@ -257,10 +258,115 @@ public sealed class OpenCode2AgentsTests
         await using var server = Server(api);
         await using var session = NewSession(server);
         session.OnEvent(Event("session.agent.selected", $$"""{"sessionID":"{{Session}}","agent":"plan","previous":"build"}"""));
+        session.OnEvent(Event("session.model.selected", $$$"""{"sessionID":"{{{Session}}}","model":{"id":"fake-model","providerID":"fakellm","variant":"default"}}"""));
 
         await session.SendPromptAsync("hi", new PromptOptions { Agent = "plan" }, CancellationToken.None);
 
-        api.Requests.Select(r => r.Path).ShouldBe([$"/api/session/{Session}/prompt"]);
+        api.Posts().Select(r => r.Path).ShouldBe([$"/api/session/{Session}/prompt"]);
+    }
+
+    [Fact]
+    public async Task A_prompt_that_names_no_model_runs_on_its_agents_own_model()
+    {
+        // V2 keeps the model on the session and never takes it from a primary agent: left alone, a new session runs
+        // on whatever V2 picks (the newest model it can reach), not the model Fleet shows as Default.
+        var api = Accepting();
+        await using var server = Server(api);
+        await using var session = NewSession(server);
+
+        await session.SendPromptAsync("hi", new PromptOptions { Agent = "rocket" }, CancellationToken.None);
+
+        api.Posts().Select(r => r.Path).ShouldBe(
+        [
+            $"/api/session/{Session}/agent",
+            $"/api/session/{Session}/model",
+            $"/api/session/{Session}/prompt",
+        ]);
+        Body(api, 1).GetProperty("model").GetRawText().ShouldBe("""{"id":"fake-model-2","providerID":"fakellm"}""");
+    }
+
+    [Fact]
+    public async Task A_prompt_that_names_neither_runs_on_the_default_agents_own_model()
+    {
+        // V2 lists its default agent (rocket here) first.
+        var api = Accepting();
+        await using var server = Server(api);
+        await using var session = NewSession(server);
+
+        await session.SendPromptAsync("hi", null, CancellationToken.None);
+
+        api.Posts().Select(r => r.Path).ShouldBe([$"/api/session/{Session}/model", $"/api/session/{Session}/prompt"]);
+        Body(api, 0).GetProperty("model").GetRawText().ShouldBe("""{"id":"fake-model-2","providerID":"fakellm"}""");
+    }
+
+    [Fact]
+    public async Task An_agent_without_a_model_of_its_own_runs_on_the_folders_default()
+    {
+        var api = Accepting();
+        await using var server = Server(api);
+        await using var session = NewSession(server, new OpenCode2SessionInfo
+        {
+            Id = Session,
+            Agent = "rocket",
+            Model = new OpenCode2ModelRef { Id = "fake-model-2", ProviderId = "fakellm", Variant = "default" },
+        });
+
+        await session.SendPromptAsync("hi", new PromptOptions { Agent = "plan" }, CancellationToken.None);
+
+        Body(api, 1).GetProperty("model").GetRawText().ShouldBe("""{"id":"fake-model","providerID":"fakellm"}""");
+    }
+
+    [Fact]
+    public async Task A_model_the_prompt_names_wins_over_the_agents_own()
+    {
+        var api = Accepting();
+        await using var server = Server(api);
+        await using var session = NewSession(server);
+
+        await session.SendPromptAsync("hi", new PromptOptions { Agent = "rocket", ProviderId = "fakellm", ModelId = "fake-model" }, CancellationToken.None);
+
+        Body(api, 1).GetProperty("model").GetRawText().ShouldBe("""{"id":"fake-model","providerID":"fakellm"}""");
+        api.Requests.ShouldNotContain(r => r.Path == "/api/agent");
+    }
+
+    [Fact]
+    public async Task Effort_without_a_model_is_the_variant_of_the_agents_own()
+    {
+        var api = Accepting();
+        await using var server = Server(api);
+        await using var session = NewSession(server);
+
+        await session.SendPromptAsync("hi", new PromptOptions { Agent = "rocket", Effort = "high" }, CancellationToken.None);
+
+        Body(api, 1).GetProperty("model").GetRawText().ShouldBe("""{"id":"fake-model-2","providerID":"fakellm","variant":"high"}""");
+    }
+
+    [Fact]
+    public async Task A_session_already_on_its_agents_model_switches_nothing()
+    {
+        var api = Accepting();
+        await using var server = Server(api);
+        await using var session = NewSession(server);
+
+        await session.SendPromptAsync("hi", new PromptOptions { Agent = "rocket" }, CancellationToken.None);
+        await session.SendPromptAsync("again", null, CancellationToken.None);
+
+        api.Posts().Count(r => r.Path.EndsWith("/model", StringComparison.Ordinal)).ShouldBe(1);
+        api.Posts()[^1].Path.ShouldBe($"/api/session/{Session}/prompt");
+    }
+
+    [Fact]
+    public async Task A_prompt_still_goes_when_V2_cannot_say_the_agents_model()
+    {
+        var api = new StubHandler(request => request.RequestUri!.AbsolutePath == "/api/agent"
+            ? new HttpResponseMessage(HttpStatusCode.InternalServerError)
+            : Json("""{"data":{"id":"msg_1"}}"""));
+        await using var server = Server(api);
+        await using var session = NewSession(server);
+
+        await session.SendPromptAsync("hi", new PromptOptions { Agent = "rocket" }, CancellationToken.None);
+
+        api.Posts().Select(r => r.Path).ShouldBe([$"/api/session/{Session}/agent", $"/api/session/{Session}/prompt"]);
     }
 
     [Theory]
@@ -281,13 +387,13 @@ public sealed class OpenCode2AgentsTests
     }
 
     [Fact]
-    public void Effort_alone_changes_the_variant_of_the_model_the_session_has()
+    public void Effort_alone_changes_the_variant_of_the_default_model()
     {
-        var current = new OpenCode2ModelRef { Id = "fake-model", ProviderId = "fakellm", Variant = "default" };
+        var fallback = new OpenCode2ModelRef { Id = "fake-model", ProviderId = "fakellm", Variant = "low" };
 
-        OpenCode2HarnessSession.ChosenModel(current, null, null, "high").ShouldBe(current with { Variant = "high" });
+        OpenCode2HarnessSession.ChosenModel(fallback, null, null, "high").ShouldBe(fallback with { Variant = "high" });
+        OpenCode2HarnessSession.ChosenModel(fallback, null, null, null).ShouldBe(fallback);
         OpenCode2HarnessSession.ChosenModel(null, null, null, "high").ShouldBeNull();
-        OpenCode2HarnessSession.ChosenModel(current, null, null, null).ShouldBeNull();
     }
 
     [Fact]
@@ -309,7 +415,7 @@ public sealed class OpenCode2AgentsTests
 
         await session.SendCommandAsync(new CommandOptions { Command = "hello", Arguments = "the world" }, CancellationToken.None);
 
-        var request = api.Requests.ShouldHaveSingleItem();
+        var request = api.Posts().Single(r => r.Path.EndsWith("/command", StringComparison.Ordinal));
         request.Path.ShouldBe($"/api/session/{Session}/command");
         JsonDocument.Parse(request.Body!).RootElement.GetRawText().ShouldBe("""{"name":"hello","text":"the world"}""");
     }
@@ -324,7 +430,8 @@ public sealed class OpenCode2AgentsTests
 
         await session.SendCommandAsync(new CommandOptions { Command = "init" }, CancellationToken.None);
 
-        Body(api, 0).GetProperty("text").GetString().ShouldBe("");
+        var command = api.Posts().Single(r => r.Path.EndsWith("/command", StringComparison.Ordinal));
+        JsonDocument.Parse(command.Body!).RootElement.GetProperty("text").GetString().ShouldBe("");
     }
 
     [Fact]
@@ -448,14 +555,15 @@ public sealed class OpenCode2AgentsTests
         capabilities.SupportsProfiles.ShouldBeTrue();
     }
 
+    /// <summary>The folder's config sets <c>default_agent</c> to rocket, so V2 lists it first.</summary>
     private const string AgentsJson = """
         {"location":{"directory":"/work/rocket"},"data":[
+          {"id":"rocket","name":"rocket","mode":"primary","hidden":false,"model":{"id":"fake-model-2","providerID":"fakellm"},"permissions":[]},
           {"id":"build","name":"Build","mode":"primary","hidden":false,"permissions":[]},
           {"id":"general","name":"General","mode":"subagent","hidden":false,"permissions":[]},
           {"id":"title","name":"Title","mode":"primary","hidden":true,"permissions":[]},
           {"id":"plan","name":"Plan","mode":"primary","hidden":false,"permissions":[]},
-          {"id":"reviewer","name":"reviewer","mode":"primary","hidden":false,"permissions":[]},
-          {"id":"rocket","name":"rocket","mode":"primary","hidden":false,"model":{"id":"fake-model-2","providerID":"fakellm"},"permissions":[]}]}
+          {"id":"reviewer","name":"reviewer","mode":"primary","hidden":false,"permissions":[]}]}
         """;
 
     private static StubHandler CatalogApi(Action<HttpRequestMessage>? seen = null) => new(request =>
@@ -472,18 +580,13 @@ public sealed class OpenCode2AgentsTests
                   {"id":"fake-model-2","modelID":"fake-model-2","providerID":"fakellm","name":"Fake Two","enabled":true,"variants":[]},
                   {"id":"fake-old","modelID":"fake-old","providerID":"fakellm","name":"Fake Old","enabled":false,"variants":[]}]}
                 """),
-            "/api/model/default" => Json("""{"location":{"directory":"/work/rocket"},"data":{"id":"fake-model","modelID":"fake-model","providerID":"fakellm","name":"Fake","variants":[]}}"""),
+            "/api/model/default" => Json(DefaultModelJson),
             "/api/provider" => Json("""
                 {"location":{"directory":"/work/rocket"},"data":[
                   {"id":"opencode","name":"OpenCode Zen","activation":"disabled","package":"p"},
                   {"id":"fakellm","name":"Fake LLM","activation":"enabled","package":"p"}]}
                 """),
             "/api/command" => Json("""{"location":{"directory":"/work/rocket"},"data":[{"name":"init","description":"guided AGENTS.md setup"},{"name":""},{"name":"hello","description":"Says hello"}]}"""),
-            "/api/config" => Json("""
-                [{"type":"document","path":"/home/u/.config/opencode/opencode.json","info":{"model":{"providerID":"fakellm","model":"fake-model"},"default_agent":"reviewer"}},
-                 {"type":"directory","path":"/home/u/.config/opencode"},
-                 {"type":"document","path":"/work/rocket/opencode.json","info":{"default_agent":"rocket"}}]
-                """),
             _ => new HttpResponseMessage(HttpStatusCode.NotFound),
         };
     });
@@ -520,11 +623,20 @@ public sealed class OpenCode2AgentsTests
         return server;
     }
 
-    private static StubHandler Accepting() => new(request => request.RequestUri!.AbsolutePath.EndsWith("/prompt", StringComparison.Ordinal)
-        ? Json("""{"data":{"id":"msg_1","sessionID":"ses_1","time":{"created":1},"type":"user","payload":{"text":"hi"},"delivery":"steer"}}""")
-        : new HttpResponseMessage(HttpStatusCode.NoContent));
+    /// <summary>V2 taking a session's prompts and switches, and listing the folder's agents and default model.</summary>
+    private static StubHandler Accepting() => new(request => request.RequestUri!.AbsolutePath switch
+    {
+        var path when path.EndsWith("/prompt", StringComparison.Ordinal)
+            => Json("""{"data":{"id":"msg_1","sessionID":"ses_1","time":{"created":1},"type":"user","payload":{"text":"hi"},"delivery":"steer"}}"""),
+        "/api/agent" => Json(AgentsJson),
+        "/api/model/default" => Json(DefaultModelJson),
+        _ => new HttpResponseMessage(HttpStatusCode.NoContent),
+    });
 
-    private static JsonElement Body(StubHandler api, int index) => JsonDocument.Parse(api.Requests[index].Body!).RootElement;
+    private const string DefaultModelJson
+        = """{"location":{"directory":"/work/rocket"},"data":{"id":"fake-model","modelID":"fake-model","providerID":"fakellm","name":"Fake","variants":[]}}""";
+
+    private static JsonElement Body(StubHandler api, int index) => JsonDocument.Parse(api.Posts()[index].Body!).RootElement;
 
     /// <summary>A server whose V2 takes a command it runs into the session's inbox as a user message, under <paramref name="messageId"/>.</summary>
     private static OpenCode2Server TakingCommandsIn(StubHandler api, string messageId)
@@ -557,12 +669,13 @@ public sealed class OpenCode2AgentsTests
             process: null,
             NullLogger.Instance);
 
+    /// <summary>A session in <see cref="Folder"/>, which its server has loaded.</summary>
     private static OpenCode2HarnessSession NewSession(OpenCode2Server server, OpenCode2SessionInfo? info = null)
         => new(
             "opencode2-test",
             info ?? new OpenCode2SessionInfo { Id = Session },
             new OpenCode2SessionContext("fleet-session-1", "local-user", Folder, null, null),
-            server,
+            server.WithFolderLoaded(Folder),
             _ => Task.FromResult(server),
             analytics: null,
             delegations: null,

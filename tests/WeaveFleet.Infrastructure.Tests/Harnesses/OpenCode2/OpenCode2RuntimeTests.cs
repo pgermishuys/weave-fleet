@@ -223,7 +223,7 @@ public sealed class OpenCode2RuntimeTests
 
         await session.SendPromptAsync("say hello", new PromptOptions { MessageId = "msg_fleet_1" }, CancellationToken.None);
 
-        var request = api.Requests.ShouldHaveSingleItem();
+        var request = api.Posts().ShouldHaveSingleItem();
         request.Path.ShouldBe($"/api/session/{Session}/prompt");
         var body = JsonDocument.Parse(request.Body!).RootElement;
         body.GetProperty("id").GetString().ShouldBe("msg_fleet_1");
@@ -281,17 +281,14 @@ public sealed class OpenCode2RuntimeTests
         var api = new StubHandler(request => request.Method == HttpMethod.Get
             ? Json($$$$"""{"data":{"id":"{{{{Session}}}}","projectID":"p","location":{"directory":"/work"}}}""")
             : Json("""{"data":{"id":"msg_1"}}"""));
-        await using var newServer = Server(OpenCode2Fixtures.ClientServing("", api));
+        await using var newServer = Server(OpenCode2Fixtures.ClientServing("", api)).WithFolderLoaded("/work");
         await using var session = NewSession(oldServer, _ => Task.FromResult(newServer));
 
         await oldServer.DisposeAsync();
         await session.SendPromptAsync("again", null, CancellationToken.None);
 
-        api.Requests.Select(r => (r.Method.Method, r.Path)).ShouldBe(
-        [
-            ("GET", $"/api/session/{Session}"),
-            ("POST", $"/api/session/{Session}/prompt"),
-        ]);
+        api.Requests[0].ShouldBe((HttpMethod.Get, $"/api/session/{Session}", null));
+        api.Posts().Select(r => r.Path).ShouldBe([$"/api/session/{Session}/prompt"]);
         (await session.CheckHealthAsync(CancellationToken.None)).Healthy.ShouldBeTrue();
     }
 
@@ -320,7 +317,7 @@ public sealed class OpenCode2RuntimeTests
             Attachments = [new HarnessAttachment("image/png", "a.png", "AAAA")],
         }, CancellationToken.None);
 
-        var body = JsonDocument.Parse(api.Requests.ShouldHaveSingleItem().Body!).RootElement;
+        var body = JsonDocument.Parse(api.Posts().ShouldHaveSingleItem().Body!).RootElement;
         body.GetProperty("text").GetString().ShouldBe("look");
         var file = body.GetProperty("files").EnumerateArray().ShouldHaveSingleItem();
         file.GetProperty("uri").GetString().ShouldBe("data:image/png;base64,AAAA");
@@ -336,7 +333,7 @@ public sealed class OpenCode2RuntimeTests
 
         await session.SendPromptAsync("hi", new PromptOptions { Attachments = [] }, CancellationToken.None);
 
-        JsonDocument.Parse(api.Requests.ShouldHaveSingleItem().Body!).RootElement.TryGetProperty("files", out _).ShouldBeFalse();
+        JsonDocument.Parse(api.Posts().ShouldHaveSingleItem().Body!).RootElement.TryGetProperty("files", out _).ShouldBeFalse();
     }
 
     [Fact]
@@ -357,7 +354,7 @@ public sealed class OpenCode2RuntimeTests
             "opencode2-test",
             new OpenCode2SessionInfo { Id = Session },
             new OpenCode2SessionContext("fleet-session-1", "local-user", "/work", null, null),
-            server,
+            server.WithFolderLoaded("/work"),
             servers,
             analytics: null,
             delegations: null,

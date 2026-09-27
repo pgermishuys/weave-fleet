@@ -26,7 +26,7 @@ public sealed class OpenCode2SideConversationTests
             "opencode2-test",
             new OpenCode2SessionInfo { Id = Session },
             new OpenCode2SessionContext("fleet-session-1", "local-user", "/work", null, null),
-            server,
+            server.WithFolderLoaded("/work"),
             _ => Task.FromResult(server),
             analytics: null,
             delegations: null,
@@ -101,11 +101,11 @@ public sealed class OpenCode2SideConversationTests
         {
             await session.SendPromptAsync("what did I ask first?", new PromptOptions { MessageId = "msg_fleet", ModelNotes = ["reference only"] }, CancellationToken.None);
 
-            api.Requests.Select(r => r.Path).ShouldBe([$"/api/session/{Session}/synthetic", $"/api/session/{Session}/prompt"]);
-            var note = JsonDocument.Parse(api.Requests[0].Body!).RootElement;
+            api.Posts().Select(r => r.Path).ShouldBe([$"/api/session/{Session}/synthetic", $"/api/session/{Session}/prompt"]);
+            var note = JsonDocument.Parse(api.Posts()[0].Body!).RootElement;
             note.GetProperty("text").GetString().ShouldBe("reference only");
             note.GetProperty("resume").GetBoolean().ShouldBeFalse();
-            JsonDocument.Parse(api.Requests[1].Body!).RootElement.GetProperty("text").GetString().ShouldBe("what did I ask first?");
+            JsonDocument.Parse(api.Posts()[1].Body!).RootElement.GetProperty("text").GetString().ShouldBe("what did I ask first?");
         }
     }
 
@@ -119,7 +119,7 @@ public sealed class OpenCode2SideConversationTests
         {
             await session.SendPromptAsync("hello", null, CancellationToken.None);
 
-            api.Requests.Select(r => r.Path).ShouldBe([$"/api/session/{Session}/prompt"]);
+            api.Posts().Select(r => r.Path).ShouldBe([$"/api/session/{Session}/prompt"]);
         }
     }
 }
