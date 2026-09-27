@@ -115,11 +115,12 @@ public sealed partial class OpenCode2FleetFilesTests : IDisposable
     }
 
     [Fact]
-    public void The_plugin_has_no_imports_and_every_tool_is_outside_code_mode()
+    public void The_plugin_imports_only_node_built_ins_and_every_tool_is_outside_code_mode()
     {
         var plugin = Plugin();
 
-        ImportLine().IsMatch(plugin).ShouldBeFalse();
+        ImportLine().Matches(plugin).Select(match => match.Groups[1].Value).ShouldAllBe(module => module.StartsWith("node:"));
+        ImportLine().Count(plugin).ShouldBe(ImportStatement().Count(plugin), "every import names its module on one line");
         plugin.ShouldContain("options: { codemode: false, ...options }");
         plugin.ShouldContain("export default {\n  id: \"fleet\",");
     }
@@ -154,6 +155,7 @@ public sealed partial class OpenCode2FleetFilesTests : IDisposable
 
         ToolNames(Plugin()).ShouldBe(ToolNames(v1));
         ToolNames(Plugin()).ShouldContain("fleet_message");
+        ToolNames(Plugin()).ShouldContain("fleet_memory_save");
     }
 
     private static string Plugin() => Encoding.UTF8.GetString(OpenCode2FleetFiles.Read(OpenCode2FleetFiles.PluginResource)).ReplaceLineEndings("\n");
@@ -161,11 +163,14 @@ public sealed partial class OpenCode2FleetFilesTests : IDisposable
     private static List<string> ToolNames(string source)
         => ToolName().Matches(source).Select(match => match.Groups[1].Value).Distinct().Order(StringComparer.Ordinal).ToList();
 
-    [GeneratedRegex(@"""?(fleet_(?:canvas|app|browser|message)[a-z_]*)""?\s*[,:]")]
+    [GeneratedRegex(@"""?(fleet_(?:canvas|app|browser|message|memory)[a-z_]*)""?\s*[,:]")]
     private static partial Regex ToolName();
 
-    [GeneratedRegex(@"^\s*import\s", RegexOptions.Multiline)]
+    [GeneratedRegex(@"^\s*import\s.*\sfrom\s+""([^""]+)""", RegexOptions.Multiline)]
     private static partial Regex ImportLine();
+
+    [GeneratedRegex(@"^\s*import\s", RegexOptions.Multiline)]
+    private static partial Regex ImportStatement();
 
     private static string RepoPath(string first, params string[] rest)
     {

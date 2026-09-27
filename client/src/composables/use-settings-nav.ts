@@ -5,6 +5,7 @@ export type SettingsSectionId =
   | "credentials"
   | "appearance"
   | "skills"
+  | "memory"
   | "tools"
   | "features"
   | "harnesses"

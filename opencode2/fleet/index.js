@@ -6,13 +6,18 @@
  * repo: Fleet overwrites the installed copy. The OpenCode (1.x) harness has its own plugin
  * (opencode/fleet/fleet-canvas.ts); the two change separately.
  *
- * Plain JavaScript and no imports, on purpose: OpenCode 2 loads it as it is, and a plugin whose import fails breaks
- * every prompt on the server. OpenCode 2 checks the args against each tool's JSON Schema; Fleet checks them again.
+ * Plain JavaScript and only Node's built-in modules, on purpose: OpenCode 2 loads it as it is, a plugin whose import
+ * fails breaks every prompt on the server, and a built-in can't fail to load. OpenCode 2 checks the args against each
+ * tool's JSON Schema; Fleet checks them again.
  *
  * Every tool sets `codemode: false`. Without it OpenCode 2 offers the tool only inside Code Mode's `execute` tool.
  */
 
+import { createHash } from "node:crypto"
+import { readFileSync } from "node:fs"
+
 const BRIDGE_PATH = "/api/bridge/canvas/"
+const MEMORY_PATH = "/api/bridge/memory/"
 const MESSAGE_PATH = "/api/bridge/session/message"
 const STEP_DONE_PATH = "/api/bridge/workflow/step-done"
 
@@ -321,12 +326,85 @@ if (process.env.FLEET_WORKFLOWS === "1") {
   )
 }
 
+// Only in servers started with memory on. The notes and the rules for keeping them are in the system prompt.
+if (process.env.FLEET_MEMORY_DIR) {
+  tools.push(
+    fleetTool(
+      "fleet_memory_save",
+      [
+        "Save a note to Fleet memory, so later sessions start out knowing it. Follow the rules under \"Fleet memory\" in your instructions:",
+        "save when the user asks you to remember something, corrects you, or when you found what works after something failed, timed out or was slow.",
+        "The user sees each note saved and can undo it.",
+      ].join(" "),
+      {
+        text: { type: "string", description: "The note: one fact, in a sentence or two, with dates written out. Say what to do." },
+        list: {
+          type: "string",
+          enum: ["repository", "machine"],
+          description: "repository: true for this repository on any computer. machine: true for any repository on this computer.",
+        },
+        kind: {
+          type: "string",
+          enum: ["from-you", "learned"],
+          description: "from-you: the user asked for it, corrected you, or stated a preference. learned: you found it out.",
+        },
+        replaces: { type: "string", description: "The id of a note this one corrects or merges, from the list in your instructions. Leave it out for a new note." },
+      },
+      (input, tool) =>
+        callFleet("save", tool, { text: input.text, list: input.list, kind: input.kind, replaces: input.replaces ?? "" }, MEMORY_PATH + "save"),
+      { optional: ["replaces"] },
+    ),
+    fleetTool(
+      "fleet_memory_forget",
+      "Remove a note from Fleet memory that turned out wrong or out of date. Use its id from the list in your instructions.",
+      { id: { type: "string", description: "The note's id, from the list under \"Fleet memory\" in your instructions." } },
+      (input, tool) => callFleet("forget", tool, { id: input.id }, MEMORY_PATH + "forget"),
+    ),
+  )
+}
+
+/**
+ * The memory notes for sessions in `directory`, as Fleet wrote them before the prompt: the file named by the SHA-256
+ * of the folder's path in FLEET_MEMORY_DIR (the rules and the repository's notes), then machine.md there (the machine's
+ * notes, one file every folder shares). Empty when memory is off or there's no file yet.
+ */
+function readMemoryNotes(directory) {
+  const folder = process.env.FLEET_MEMORY_DIR
+  if (!folder || !directory) return ""
+  const trimmed = directory.length > 1 ? directory.replace(/[\\/]+$/, "") : directory
+  for (const path of new Set([directory, trimmed])) {
+    let notes
+    try {
+      notes = readFileSync(folder + "/" + createHash("sha256").update(path).digest("hex") + ".md", "utf8")
+    } catch {
+      continue // Not written for this form of the path; try the next.
+    }
+    try {
+      return notes + readFileSync(folder + "/machine.md", "utf8")
+    } catch {
+      return notes
+    }
+  }
+  return ""
+}
+
 export default {
   id: "fleet",
   async setup(ctx) {
     await ctx.tool.transform((editor) => {
       for (const tool of tools) editor.add(tool)
     })
+
+    // With memory on, every model request carries the notes for this folder's repository and this machine. V2 runs
+    // setup once per folder, and doesn't wait for an async hook, so the file is read synchronously each time: a note
+    // saved in any session reaches the next request here. A system part is {type: "text", text}; V2 drops a string.
+    const folder = ctx.location?.directory
+    if (process.env.FLEET_MEMORY_DIR && folder && ctx.session?.hook) {
+      await ctx.session.hook("context", (input) => {
+        const notes = readMemoryNotes(folder)
+        if (notes) input.system.push({ type: "text", text: notes })
+      })
+    }
 
     const changes = shellEnvironment()
     if (changes && ctx.shell?.hook) {

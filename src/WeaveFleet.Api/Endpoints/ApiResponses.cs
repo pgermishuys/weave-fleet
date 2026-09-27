@@ -301,6 +301,14 @@ public sealed record CanvasBridgeRequest(
 /// <summary>What <c>fleet_step_done</c> posts: the outcome it picked and what the next step needs.</summary>
 public sealed record WorkflowStepBridgeRequest(string? HarnessSessionId, string? Outcome = null, string? Summary = null);
 
+public sealed record MemoryBridgeRequest(
+    string? HarnessSessionId,
+    string? List = null,
+    string? Text = null,
+    string? Kind = null,
+    string? Replaces = null,
+    string? Id = null);
+
 public sealed record SessionMessageBridgeRequest(string? HarnessSessionId, string? SessionId = null, string? Text = null, bool NotifyWhenDone = false);
 
 /// <summary>

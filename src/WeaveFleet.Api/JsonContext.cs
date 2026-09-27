@@ -166,6 +166,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(CanvasBridgeRequest))]
 [JsonSerializable(typeof(SessionMessageBridgeRequest))]
 [JsonSerializable(typeof(WorkflowStepBridgeRequest))]
+[JsonSerializable(typeof(MemoryBridgeRequest))]
 // Workflows
 [JsonSerializable(typeof(WeaveFleet.Application.Workflows.WorkflowLibraryDto))]
 [JsonSerializable(typeof(WeaveFleet.Application.Workflows.WorkflowRunDto))]
@@ -425,6 +426,14 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Application.Skills.BuiltInSkillView>))]
 [JsonSerializable(typeof(List<WeaveFleet.Application.Skills.BuiltInSkillView>))]
 [JsonSerializable(typeof(WeaveFleet.Api.Endpoints.SetBuiltInSkillRequest))]
+[JsonSerializable(typeof(WeaveFleet.Application.Memory.MemoryOverview))]
+[JsonSerializable(typeof(WeaveFleet.Application.Memory.MemoryNotesView))]
+[JsonSerializable(typeof(WeaveFleet.Application.Memory.MemoryNoteView))]
+[JsonSerializable(typeof(WeaveFleet.Api.Endpoints.SetMemoryEnabledRequest))]
+[JsonSerializable(typeof(WeaveFleet.Api.Endpoints.AddMemoryNoteRequest))]
+[JsonSerializable(typeof(WeaveFleet.Api.Endpoints.UpdateMemoryNoteRequest))]
+[JsonSerializable(typeof(WeaveFleet.Api.Endpoints.ClearMemoryRequest))]
+[JsonSerializable(typeof(WeaveFleet.Api.Endpoints.ClearMemoryResponse))]
 // Plugins
 [JsonSerializable(typeof(PluginListResponse))]
 [JsonSerializable(typeof(PluginDescriptorItem))]

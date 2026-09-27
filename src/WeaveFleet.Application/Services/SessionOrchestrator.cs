@@ -57,7 +57,8 @@ public sealed partial class SessionOrchestrator(
     SessionRecapService? sessionRecaps = null,
     IHarnessProfileRepository? harnessProfiles = null,
     SessionNotifier? sessionNotifier = null,
-    ISessionScreenshotStore? sessionScreenshots = null) : ISessionActivator
+    ISessionScreenshotStore? sessionScreenshots = null,
+    WeaveFleet.Application.Memory.AgentMemoryService? agentMemory = null) : ISessionActivator
 {
     private readonly DelegationService _delegationService = delegationService;
     private readonly GitDiffService _gitDiffService = gitDiffService ?? new GitDiffService();
@@ -865,10 +866,17 @@ public sealed partial class SessionOrchestrator(
             // This prevents early events from being lost during activation/resume.
             await EnsureEventSubscriptionReadyAsync(instanceResult.Value, id, ct).ConfigureAwait(false);
 
+            // With memory on, write what the session's folder reads before the model sees the prompt: OpenCode reads that
+            // file on every model request. A harness without the memory tools (Claude Code) takes the notes with the
+            // prompt instead, as notes it can read but not change.
+            var memoryNotes = agentMemory is null
+                ? null
+                : await agentMemory.PrepareSessionAsync(sessionResult.Value.UserId, sessionResult.Value.Directory, canSave: false, ct).ConfigureAwait(false);
+
             // Pass the generated message ID through to the harness, with any notes the session's prompts carry.
             var promptOptionsWithMessageId = options is null
-                ? new PromptOptions { MessageId = generatedMessageId, ModelNotes = SideConversations.ModelNotesFor(sessionResult.Value) }
-                : options with { MessageId = generatedMessageId, ModelNotes = SideConversations.ModelNotesFor(sessionResult.Value) };
+                ? new PromptOptions { MessageId = generatedMessageId, ModelNotes = SideConversations.ModelNotesFor(sessionResult.Value), MemoryNotes = memoryNotes }
+                : options with { MessageId = generatedMessageId, ModelNotes = SideConversations.ModelNotesFor(sessionResult.Value), MemoryNotes = memoryNotes };
 
             await instanceResult.Value.SendPromptAsync(text, promptOptionsWithMessageId, ct);
 

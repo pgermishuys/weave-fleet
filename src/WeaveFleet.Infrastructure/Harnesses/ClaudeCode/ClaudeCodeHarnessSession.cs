@@ -174,6 +174,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 AllowedTools = _config.AllowedTools,
                 MaxTurns = _config.MaxTurns,
                 MaxBudgetUsd = _config.MaxBudgetUsd,
+                AppendSystemPrompt = options?.MemoryNotes,
                 ProcessTimeout = _config.ProcessTimeoutSeconds is > 0 and var seconds
                     ? TimeSpan.FromSeconds(seconds)
                     : null,

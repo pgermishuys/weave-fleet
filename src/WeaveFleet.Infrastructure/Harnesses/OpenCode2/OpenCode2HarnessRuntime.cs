@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Memory;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Skills;
@@ -583,7 +584,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     private async Task<OpenCode2ServerSetup> GetSetupAsync(string ownerUserId, OpenCode2Profile? profile)
     {
         var fleetUrl = ResolveLocalFleetUrl();
-        var (builtInSkills, sessionMessages, workflows) = await ReadOwnerSettingsAsync(ownerUserId).ConfigureAwait(false);
+        var (builtInSkills, sessionMessages, workflows, memoryFolder) = await ReadOwnerSettingsAsync(ownerUserId).ConfigureAwait(false);
 
         string? plugin = null;
         List<string> skills = [];
@@ -609,7 +610,8 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             install?.Mode ?? OpenCode2InstallMode.Default,
             profile,
             Workflows: workflows && plugin is not null,
-            WeaveConfigFolder: await _weave.GetConfigFolderAsync(ownerUserId).ConfigureAwait(false));
+            WeaveConfigFolder: await _weave.GetConfigFolderAsync(ownerUserId).ConfigureAwait(false),
+            MemoryFolder: plugin is not null ? memoryFolder : null);
     }
 
     /// <inheritdoc />
@@ -620,7 +622,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     /// </remarks>
     public async Task BuiltInSkillsChangedAsync(string ownerUserId, CancellationToken ct)
     {
-        var (builtInSkills, _, _) = await ReadOwnerSettingsAsync(ownerUserId).ConfigureAwait(false);
+        var (builtInSkills, _, _, _) = await ReadOwnerSettingsAsync(ownerUserId).ConfigureAwait(false);
         SyncBuiltInSkills(ownerUserId, builtInSkills);
     }
 
@@ -643,10 +645,10 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     }
 
     /// <summary>
-    /// The built-in skills the owner turned on that this Fleet ships, in name order, and whether messages between
-    /// sessions and workflows are on.
+    /// The built-in skills the owner turned on that this Fleet ships, in name order, whether messages between sessions
+    /// and workflows are on, and the folder with the owner's memory notes when memory is on.
     /// </summary>
-    private async Task<(IReadOnlyList<string> BuiltInSkills, bool SessionMessages, bool Workflows)> ReadOwnerSettingsAsync(string ownerUserId)
+    private async Task<(IReadOnlyList<string> BuiltInSkills, bool SessionMessages, bool Workflows, string? MemoryFolder)> ReadOwnerSettingsAsync(string ownerUserId)
     {
         using var userScope = BackgroundUserContext.BeginScope(ownerUserId);
         using var scope = _scopeFactory.CreateScope();
@@ -662,7 +664,12 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             && await feature.IsEnabledAsync().ConfigureAwait(false);
         var workflows = scope.ServiceProvider.GetService<WorkflowsFeature>() is { } workflowsFeature
             && await workflowsFeature.IsEnabledAsync().ConfigureAwait(false);
-        return (builtInSkills, sessionMessages, workflows);
+        var memoryFolder = scope.ServiceProvider.GetService<AgentMemoryFeature>() is { } memoryFeature
+                           && scope.ServiceProvider.GetService<IMemoryStore>() is { } memoryStore
+                           && await memoryFeature.IsEnabledAsync().ConfigureAwait(false)
+            ? memoryStore.ContextFolder(ownerUserId)
+            : null;
+        return (builtInSkills, sessionMessages, workflows, memoryFolder);
     }
 
     /// <summary>
@@ -733,6 +740,8 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             environment[FleetWorkflows.EnvironmentVariable] = "1";
         if (setup.WeaveConfigFolder is { } weaveFolder)
             environment[WeaveEnvironment.GlobalConfigDir] = weaveFolder;
+        if (setup.MemoryFolder is { } memoryFolder)
+            environment[AgentMemory.EnvironmentVariable] = memoryFolder;
 
         // The agent's shell commands inherit the server's environment. Fleet's plugin takes out what's for the server
         // alone, in every shell V2 starts: an `opencode` the agent runs must not open this server's config and database,

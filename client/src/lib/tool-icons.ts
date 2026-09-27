@@ -10,6 +10,8 @@ import {
   Terminal,
   GitBranch,
   Globe,
+  Lightbulb,
+  LightbulbOff,
   MessageCircleQuestion,
   Send,
   Wrench,
@@ -31,6 +33,8 @@ const iconMap: Record<string, Component> = {
   fleet_browser_open: Globe,
   fleet_browser_screenshot: Camera,
   fleet_message: Send,
+  fleet_memory_save: Lightbulb,
+  fleet_memory_forget: LightbulbOff,
   fleet_step_done: CircleCheck,
   // OpenCode 2's names for its tools.
   shell: Terminal,
@@ -54,6 +58,8 @@ const labelMap: Record<string, string> = {
   fleet_browser_open: 'Open page',
   fleet_browser_screenshot: 'Screenshot',
   fleet_message: 'Message session',
+  fleet_memory_save: 'Remember',
+  fleet_memory_forget: 'Forget note',
   fleet_step_done: 'Step done',
   // OpenCode 2's names for its tools.
   shell: 'Shell',

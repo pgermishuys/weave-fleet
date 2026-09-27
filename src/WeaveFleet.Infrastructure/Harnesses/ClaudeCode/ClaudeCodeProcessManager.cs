@@ -21,6 +21,9 @@ internal sealed record ClaudeCodeProcessOptions
     public int? MaxTurns { get; init; }
     public decimal? MaxBudgetUsd { get; init; }
 
+    /// <summary>Text added to Claude Code's system prompt (<c>--append-system-prompt</c>): Fleet's memory notes. Null = none.</summary>
+    public string? AppendSystemPrompt { get; init; }
+
     /// <summary>How long the prompt may run before the process is killed. Null = no limit.</summary>
     public TimeSpan? ProcessTimeout { get; init; }
     public IReadOnlyDictionary<string, string> EnvironmentVariables { get; init; }
@@ -162,6 +165,12 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
         {
             psi.ArgumentList.Add("--max-budget-usd");
             psi.ArgumentList.Add(options.MaxBudgetUsd.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.AppendSystemPrompt))
+        {
+            psi.ArgumentList.Add("--append-system-prompt");
+            psi.ArgumentList.Add(options.AppendSystemPrompt);
         }
 
         // Fleet's variables stay with Fleet: the agent's shell tool would pass them on to every command it runs.

@@ -4,14 +4,18 @@
  * Fleet embeds this file, writes it into its data folder, and loads it through the "plugin" list in
  * OPENCODE_CONFIG_CONTENT. Edit it here, in the Fleet repo: Fleet overwrites the installed copy.
  *
- * No imports, on purpose. A plugin whose import fails breaks every prompt in the process. With plain
- * objects as `args`, OpenCode builds each tool's JSON Schema from them as written, and every arg is
- * required. OpenCode doesn't validate the args; Fleet does.
+ * Only Node's built-in modules, on purpose. A plugin whose import fails breaks every prompt in the process,
+ * and a built-in can't fail to load. With plain objects as `args`, OpenCode builds each tool's JSON Schema
+ * from them as written, and every arg is required. OpenCode doesn't validate the args; Fleet does.
  *
  * Every export is treated as a plugin, so export only the plugin function.
  */
 
+import { createHash } from "node:crypto"
+import { readFileSync } from "node:fs"
+
 const BRIDGE_PATH = "/api/bridge/canvas/"
+const MEMORY_PATH = "/api/bridge/memory/"
 const MESSAGE_PATH = "/api/bridge/session/message"
 const STEP_DONE_PATH = "/api/bridge/workflow/step-done"
 
@@ -87,7 +91,32 @@ const canvasId = {
 
 type Config = { skills?: { paths?: string[] } }
 
-export const FleetCanvasPlugin = async () => ({
+/**
+ * The memory notes for sessions in `directory`, as Fleet wrote them before the prompt: the file named by the
+ * SHA-256 of the folder's path in FLEET_MEMORY_DIR (the rules and the repository's notes), then machine.md there
+ * (the machine's notes, one file every folder shares). Empty when memory is off or there's no file yet.
+ */
+function readMemoryNotes(directory: string | undefined): string {
+  const folder = process.env.FLEET_MEMORY_DIR
+  if (!folder || !directory) return ""
+  const trimmed = directory.length > 1 ? directory.replace(/[\\/]+$/, "") : directory
+  for (const path of new Set([directory, trimmed])) {
+    let notes: string
+    try {
+      notes = readFileSync(folder + "/" + createHash("sha256").update(path).digest("hex") + ".md", "utf8")
+    } catch {
+      continue // Not written for this form of the path; try the next.
+    }
+    try {
+      return notes + readFileSync(folder + "/machine.md", "utf8")
+    } catch {
+      return notes
+    }
+  }
+  return ""
+}
+
+export const FleetCanvasPlugin = async (input: { directory?: string }) => ({
   // Fleet's own skills (fleet-api, and the built-in skills the user turned on) are in its data folder, one or more
   // folders separated like PATH. Adding them here keeps the user's skill paths: skills.paths in OPENCODE_CONFIG_CONTENT
   // would replace them.
@@ -98,6 +127,17 @@ export const FleetCanvasPlugin = async () => ({
     config.skills ??= {}
     config.skills.paths = [...(config.skills.paths ?? []), ...folders]
   },
+
+  // With memory on, every model request carries the notes for this folder's repository and this machine. The file is
+  // read each time, so a note saved in any session reaches the next request here.
+  ...(process.env.FLEET_MEMORY_DIR
+    ? {
+        "experimental.chat.system.transform": async (_input: unknown, output: { system: string[] }) => {
+          const notes = readMemoryNotes(input.directory)
+          if (notes) output.system.push(notes)
+        },
+      }
+    : {}),
 
   tool: {
     fleet_canvas_list: {
@@ -284,6 +324,45 @@ export const FleetCanvasPlugin = async () => ({
                 { sessionId: args.sessionId, text: args.text, notifyWhenDone: args.notifyWhenDone === true || args.notifyWhenDone === "true" },
                 MESSAGE_PATH,
               ),
+          },
+        }
+      : {}),
+
+    // Only in processes started with memory on. The notes and the rules for keeping them are in the system prompt.
+    ...(process.env.FLEET_MEMORY_DIR
+      ? {
+          fleet_memory_save: {
+            description: [
+              "Save a note to Fleet memory, so later sessions start out knowing it. Follow the rules under \"Fleet memory\" in your instructions:",
+              "save when the user asks you to remember something, corrects you, or when you found what works after something failed, timed out or was slow.",
+              "The user sees each note saved and can undo it.",
+            ].join(" "),
+            args: {
+              text: { type: "string", description: "The note: one fact, in a sentence or two, with dates written out. Say what to do." },
+              list: {
+                type: "string",
+                enum: ["repository", "machine"],
+                description: "repository: true for this repository on any computer. machine: true for any repository on this computer.",
+              },
+              kind: {
+                type: "string",
+                enum: ["from-you", "learned"],
+                description: "from-you: the user asked for it, corrected you, or stated a preference. learned: you found it out.",
+              },
+              replaces: {
+                type: "string",
+                description: "The id of a note this one corrects or merges (from the list in your instructions), or an empty string for a new note.",
+              },
+            },
+            execute: (args: { text: string; list: string; kind: string; replaces: string }, context: ToolContext) =>
+              callFleet("save", context, { text: args.text, list: args.list, kind: args.kind, replaces: args.replaces }, MEMORY_PATH + "save"),
+          },
+          fleet_memory_forget: {
+            description: "Remove a note from Fleet memory that turned out wrong or out of date. Use its id from the list in your instructions.",
+            args: {
+              id: { type: "string", description: "The note's id, from the list under \"Fleet memory\" in your instructions." },
+            },
+            execute: (args: { id: string }, context: ToolContext) => callFleet("forget", context, { id: args.id }, MEMORY_PATH + "forget"),
           },
         }
       : {}),

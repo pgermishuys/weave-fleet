@@ -42,6 +42,48 @@ public static class GitPaths
         return Path.Combine(parent, $"{Path.GetFileName(trimmed)}-worktrees");
     }
 
+    /// <summary>
+    /// The main checkout of the repository <paramref name="directory"/> is in, or <see langword="null"/> when it isn't in
+    /// one. A folder inside a checkout gives the checkout, and a linked worktree gives the checkout it was made from, so
+    /// every worktree of a repository has the same answer. A submodule or a separate git dir gives its own checkout.
+    /// </summary>
+    public static string? MainCheckoutOf(string directory)
+    {
+        string? current;
+        try
+        {
+            current = Path.GetFullPath(directory);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return null;
+        }
+
+        for (; current is not null; current = Path.GetDirectoryName(current))
+        {
+            var dotGit = Path.Combine(current, ".git");
+            if (Directory.Exists(dotGit))
+                return current;
+
+            if (ReadGitDirPointer(dotGit) is not { } gitDir)
+                continue;
+
+            // A worktree's .git file points at {main}/.git/worktrees/{name}.
+            var target = Path.GetFullPath(Path.IsPathRooted(gitDir) ? gitDir : Path.Combine(current, gitDir));
+            var worktrees = Path.GetDirectoryName(target.TrimEnd('/', '\\'));
+            var mainGit = worktrees is null ? null : Path.GetDirectoryName(worktrees);
+            return worktrees is not null
+                   && string.Equals(Path.GetFileName(worktrees), "worktrees", StringComparison.Ordinal)
+                   && mainGit is not null
+                   && string.Equals(Path.GetFileName(mainGit), ".git", StringComparison.Ordinal)
+                   && Path.GetDirectoryName(mainGit) is { } main
+                ? main
+                : current;
+        }
+
+        return null;
+    }
+
     private static string? ReadGitDirPointer(string dotGitFile)
     {
         if (!File.Exists(dotGitFile))

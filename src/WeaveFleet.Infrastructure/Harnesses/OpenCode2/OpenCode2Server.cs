@@ -37,7 +37,8 @@ internal sealed record OpenCode2ServerSetup(
     OpenCode2InstallMode Mode = OpenCode2InstallMode.Default,
     OpenCode2Profile? Profile = null,
     bool Workflows = false,
-    string? WeaveConfigFolder = null)
+    string? WeaveConfigFolder = null,
+    string? MemoryFolder = null)
 {
     public static readonly OpenCode2ServerSetup None = new(null, null, false);
 }
