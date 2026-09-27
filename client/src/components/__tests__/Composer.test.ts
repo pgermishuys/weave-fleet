@@ -1042,6 +1042,7 @@ describe("Composer steering", () => {
   const harnesses = [
     { type: "opencode", displayName: "OpenCode", available: true, userEnabled: true, capabilities: { supportsSteering: true } },
     { type: "claude-code", displayName: "Claude Code", available: true, userEnabled: true, capabilities: { supportsSteering: false } },
+    { type: "opencode2", displayName: "OpenCode 2", available: true, userEnabled: true, capabilities: { supportsSteering: true } },
   ];
 
   function pressKey(element: Element, key: string, init: KeyboardEventInit = {}): KeyboardEvent {
@@ -1099,6 +1100,34 @@ describe("Composer steering", () => {
 
     expect(promptBodies()).toEqual([expect.objectContaining({ text: "stop, that's the wrong file", delivery: "steer" })]);
     expect(wrapper.findAll("[data-testid='queued-message']")).toHaveLength(1);
+  });
+
+  it("on OpenCode 2, Enter sends into the turn and Ctrl+Enter or Queue waits for it to end", async () => {
+    const wrapper = mountComposer({ session: createSession({ activityStatus: "busy", harnessType: "opencode2" }) });
+    await flushPromises();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+
+    await textarea.setValue("stop, that's the wrong file");
+    expect(wrapper.find("[data-testid='prompt-send-now-button']").exists()).toBe(false);
+    expect(wrapper.get("[data-testid='prompt-queue-button']").text()).toBe("Queue");
+    pressKey(textarea.element, "Enter");
+    await flushPromises();
+
+    expect(promptBodies()).toEqual([expect.objectContaining({ text: "stop, that's the wrong file", delivery: "steer" })]);
+    expect(queuedBodies()).toHaveLength(0);
+
+    await textarea.setValue("also check the tests");
+    pressKey(textarea.element, "Enter", { ctrlKey: true });
+    await flushPromises();
+    await textarea.setValue("and the docs");
+    await wrapper.get("[data-testid='prompt-queue-button']").trigger("click");
+    await flushPromises();
+
+    expect(promptBodies()).toHaveLength(1);
+    expect(queuedBodies()).toEqual([
+      expect.objectContaining({ text: "also check the tests", kind: "prompt" }),
+      expect.objectContaining({ text: "and the docs", kind: "prompt" }),
+    ]);
   });
 
   it("sends a queued message into the turn with Send now, leaving the draft alone", async () => {

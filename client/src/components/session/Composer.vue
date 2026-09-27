@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, shallowRef, ref, useTemplateRef, watch } from "vue";
 import { storeToRefs } from "pinia";
-import { ArrowUp, CornerDownRight, Paperclip, SquareTerminal, X, CircleX, MessageCircleQuestionMark } from "lucide-vue-next";
+import { ArrowUp, CornerDownRight, ListEnd, Paperclip, SquareTerminal, X, CircleX, MessageCircleQuestionMark } from "lucide-vue-next";
 import AutocompletePopup from "@/components/session/AutocompletePopup.vue";
 import ComposerFrame from "@/components/session/ComposerFrame.vue";
 import ImageLightbox from "@/components/session/ImageLightbox.vue";
@@ -292,6 +292,12 @@ const canSteer = computed(() => {
 /** While a turn runs: Send now (Ctrl+Enter) steers the draft in; Send (Enter) queues it for when the turn ends. */
 const showSendNow = computed(() => canSteer.value && sessionStatus.value === "busy");
 
+/**
+ * OpenCode 2 steers by default: Enter sends into the running turn and Ctrl+Enter (or Queue) waits for it to end. Other
+ * harnesses that can steer keep Enter for the queue.
+ */
+const steersByDefault = computed(() => canSteer.value && selectedSession.value?.harnessType === "opencode2");
+
 /** The Send now button: only for a message to the session's agent, not a shell command or a side question (/btw). */
 const offerSendNowButton = computed(() =>
   showSendNow.value && !isShellMode.value && !isSideMode.value && parseSideQuestion(draft.text.trim()) === null);
@@ -515,6 +521,7 @@ const defaultLabels = computed(() => {
     defaultAgent: defaultAgentId.value,
     agents: agents.value,
     models: models.value,
+    lastModelId: session?.lastAssistantModelId,
   });
 });
 
@@ -886,8 +893,10 @@ function handleKeydown(event: KeyboardEvent): void {
   }
 
   event.preventDefault();
-  // Ctrl+Enter (Cmd+Enter) sends now, into the running turn, where the harness can take it; Enter queues.
-  handleSend(event.ctrlKey || event.metaKey);
+  // Ctrl+Enter (Cmd+Enter) is the other choice to Enter: it queues where Enter steers (OpenCode 2), and steers
+  // where Enter queues.
+  const modifier = event.ctrlKey || event.metaKey;
+  handleSend(steersByDefault.value ? !modifier : modifier);
 }
 </script>
 
@@ -1133,26 +1142,36 @@ function handleKeydown(event: KeyboardEvent): void {
           variant="outline"
           size="sm"
           class="composer-send-now"
-          data-testid="prompt-send-now-button"
-          title="Send now (Ctrl+Enter): the agent reads it at its next step, without waiting for the turn to end"
+          :data-testid="steersByDefault ? 'prompt-queue-button' : 'prompt-send-now-button'"
+          :title="steersByDefault
+            ? 'Queue (Ctrl+Enter): sent when the agent finishes'
+            : 'Send now (Ctrl+Enter): the agent reads it at its next step, without waiting for the turn to end'"
           :disabled="isDisabled || !hasContent"
-          @click="handleSend(true)"
+          @click="handleSend(!steersByDefault)"
         >
-          <CornerDownRight
+          <ListEnd
+            v-if="steersByDefault"
             class="size-3.5"
             aria-hidden="true"
           />
-          Send now
+          <CornerDownRight
+            v-else
+            class="size-3.5"
+            aria-hidden="true"
+          />
+          {{ steersByDefault ? "Queue" : "Send now" }}
         </Button>
         <Button
           variant="default"
           size="toolbar-lg"
           class="composer-frame__send"
           data-testid="prompt-send-button"
-          :aria-label="isShellMode ? 'Run command' : isSideMode ? 'Ask in the side conversation' : sessionStatus === 'busy' ? 'Queue' : 'Send'"
-          :title="isShellMode ? 'Run command' : isSideMode ? 'Ask in the side conversation' : sessionStatus === 'busy' ? 'Queue (Enter): sent when the agent finishes' : 'Send'"
+          :aria-label="isShellMode ? 'Run command' : isSideMode ? 'Ask in the side conversation' : sessionStatus === 'busy' ? (steersByDefault ? 'Send now' : 'Queue') : 'Send'"
+          :title="isShellMode ? 'Run command' : isSideMode ? 'Ask in the side conversation' : sessionStatus === 'busy'
+            ? (steersByDefault ? 'Send now (Enter): the agent reads it at its next step' : 'Queue (Enter): sent when the agent finishes')
+            : 'Send'"
           :disabled="isDisabled || !hasContent"
-          @click="handleSend()"
+          @click="handleSend(steersByDefault)"
         >
           <ArrowUp class="size-4" />
         </Button>
