@@ -277,8 +277,11 @@ public sealed class AuthOptions
     /// <summary>Cookie name for the auth session. Default: .WeaveFleet.Auth.</summary>
     public string CookieName { get; set; } = ".WeaveFleet.Auth";
 
-    /// <summary>Auth cookie expiry in minutes. Default: 1440 (24 h).</summary>
-    public int CookieExpirationMinutes { get; set; } = 1440;
+    /// <summary>
+    /// Auth cookie expiry in minutes, renewed while Fleet is in use. Default: 43200 (30 days), so a token sign-in
+    /// lasts as long as the browser keeps visiting. Cloud mode sets its own.
+    /// </summary>
+    public int CookieExpirationMinutes { get; set; } = 43200;
 }
 
 /// <summary>Terminal drawer configuration.</summary>

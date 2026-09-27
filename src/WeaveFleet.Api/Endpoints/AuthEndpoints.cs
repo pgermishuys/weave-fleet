@@ -88,7 +88,12 @@ public static class AuthEndpoints
                 var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
                 var principal = new ClaimsPrincipal(identity);
 
-                await httpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
+                // Persistent, so the cookie outlives the browser session: the token is pasted once per browser, not
+                // on every visit. Sliding expiry renews it while Fleet is in use.
+                await httpContext.SignInAsync(
+                    CookieAuthenticationDefaults.AuthenticationScheme,
+                    principal,
+                    new AuthenticationProperties { IsPersistent = true });
                 return Results.Ok();
             })
             .AllowAnonymous()

@@ -18,6 +18,7 @@ const authMode = shallowRef<"loading" | "token" | "oidc" | "unknown">("loading")
 
 const signInHref = computed(() => apiUrl(`/auth/login?returnUrl=${encodeURIComponent(returnUrl.value)}`));
 const buildLabel = computed(() => `v${import.meta.env.VITE_APP_VERSION} · ${import.meta.env.VITE_COMMIT_SHA}`);
+const savedAccountName = `Fleet (${window.location.host})`;
 const showTokenForm = computed(() => authMode.value !== "oidc");
 const showOidcActions = computed(() => authMode.value !== "token");
 const isLoadingOptions = computed(() => authMode.value === "loading" && !isSubmitting.value);
@@ -208,16 +209,38 @@ function isSafeReturnUrl(value: string): boolean {
               Access token
             </label>
 
+            <!-- Password managers save a token only next to a username; this names the saved entry. -->
+            <input
+              type="text"
+              name="username"
+              autocomplete="username"
+              :value="savedAccountName"
+              class="sr-only"
+              tabindex="-1"
+              aria-hidden="true"
+              readonly
+            >
+
             <input
               id="login-token"
               v-model="token"
-              type="text"
-              autocomplete="off"
+              type="password"
+              name="password"
+              autocomplete="current-password"
               spellcheck="false"
               placeholder="Paste your token"
+              aria-describedby="login-token-hint"
               class="w-full rounded-btn border border-border bg-main-bg px-3 py-2.5 text-sm text-text outline-none transition-colors placeholder:text-muted focus:border-accent/60"
               :disabled="isSubmitting"
             >
+
+            <p
+              id="login-token-hint"
+              class="text-xs leading-relaxed text-muted"
+            >
+              It's in the sign-in link Fleet prints when it starts, and in Settings → Machines on a device that's
+              already signed in. This browser stays signed in for 30 days after your last visit.
+            </p>
 
             <p
               v-if="errorMessage"
