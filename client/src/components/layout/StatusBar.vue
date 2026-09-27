@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { storeToRefs } from "pinia";
+import NoticeChips from "@/components/notices/NoticeChips.vue";
 import { useAppShellStore } from "@/stores/app-shell";
 import { useSessionsStore } from "@/stores/sessions";
 import { useTerminalsStore } from "@/stores/terminals";
@@ -34,6 +35,7 @@ const tokenCount = computed(() => {
 
 <template>
   <footer class="status-bar">
+    <NoticeChips />
     <div
       v-if="terminalFocused"
       class="status-bar__left"
@@ -99,7 +101,7 @@ const tokenCount = computed(() => {
 .status-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
   height: 28px;
   min-height: 28px;
   padding: 0 12px 2px;
@@ -118,6 +120,7 @@ const tokenCount = computed(() => {
 
 .status-bar__right {
   display: flex;
+  margin-left: auto;
   align-items: center;
   gap: 8px;
 }
