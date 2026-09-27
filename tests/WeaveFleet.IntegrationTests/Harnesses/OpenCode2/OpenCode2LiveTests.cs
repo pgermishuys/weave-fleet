@@ -406,6 +406,28 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : IClas
     }
 
     [OpenCode2Fact]
+    public async Task A_prompt_that_names_no_model_runs_on_its_agents_own_model()
+    {
+        // V2 keeps the model on the session and never takes it from a primary agent, so left alone this would run on
+        // the config's fake-model. Fleet selects the agent's own, the model the composer shows as Default.
+        const string prompt = "Plan this. (own model)";
+        fleet.Answer(request => LlmRequest.Starts(request, prompt) ? new ScriptedLlmResponse { Text = "Planned." } : null);
+
+        using var cts = new CancellationTokenSource(Timeout);
+        var folder = fleet.NewFolder("agent-model");
+        var agents = Path.Combine(folder, ".opencode", "agents");
+        Directory.CreateDirectory(agents);
+        File.WriteAllText(Path.Combine(agents, "planner.md"), "---\ndescription: Plans\nmode: primary\nmodel: fake/fake-model-2\n---\nYou plan.\n");
+        var id = await fleet.CreateSessionAsync(folder, "Agent model", cts.Token);
+        var events = fleet.Watch(cts.Token, id);
+
+        await PromptAsync(id, prompt, new PromptOptions { Agent = "planner" }, cts.Token);
+        await WaitForAsync(events, () => events.For(id).Any(e => e.Type == "session.idle"), cts.Token);
+
+        LlmRequest.Model(fleet.Llm.Queue.Requests.Single(r => LlmRequest.Starts(r, prompt))).ShouldBe("fake-model-2");
+    }
+
+    [OpenCode2Fact]
     public async Task A_turn_ends_with_a_failure_when_the_server_stops_and_the_next_prompt_starts_a_new_one()
     {
         const string prompt = "Wait for the slow job. (server stops)";

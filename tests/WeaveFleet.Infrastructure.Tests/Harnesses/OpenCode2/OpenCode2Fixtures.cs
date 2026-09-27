@@ -100,6 +100,30 @@ internal static class OpenCode2Fixtures
              "time":{"started":1790113760000}}
             """;
 
+    /// <summary>
+    /// Has <paramref name="server"/> count <paramref name="directory"/> as loaded, as V2's catalog events for a folder
+    /// do: a prompt that names no model reads the folder's agents, which waits for the folder first.
+    /// </summary>
+    public static OpenCode2Server WithFolderLoaded(this OpenCode2Server server, string directory)
+    {
+        foreach (var type in (string[])["provider.updated", "model.updated", "agent.updated", "command.updated"])
+        {
+            server.Route(new OpenCode2Event
+            {
+                Id = $"evt_{type}",
+                Type = type,
+                Location = new OpenCode2EventLocation { Directory = directory },
+                Data = JsonDocument.Parse("{}").RootElement.Clone(),
+            });
+        }
+
+        return server;
+    }
+
+    /// <summary>What Fleet asked V2 to do, leaving out its reads.</summary>
+    public static IReadOnlyList<(HttpMethod Method, string Path, string? Body)> Posts(this StubHandler api)
+        => [.. api.Requests.Where(r => r.Method == HttpMethod.Post)];
+
     private static HttpResponseMessage Json(string json) => new(HttpStatusCode.OK)
     {
         Content = new StringContent(json, Encoding.UTF8, "application/json"),
