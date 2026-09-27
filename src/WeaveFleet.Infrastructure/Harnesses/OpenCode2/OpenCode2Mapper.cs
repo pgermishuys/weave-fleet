@@ -31,14 +31,26 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
     /// </summary>
     internal const string NoticeRole = "notice";
 
+    /// <summary>
+    /// What a call shows when its work went to the background and the server running it stopped before it finished:
+    /// V2 keeps background work in the server process, so it ended there, and no notice will ever come.
+    /// </summary>
+    internal const string BackgroundWorkLost = "OpenCode 2 stopped before this finished in the background.";
+
     private readonly Dictionary<string, AssistantMessage> _messages = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ToolCall> _tools = new(StringComparer.Ordinal);
     /// <summary>
     /// The subagent calls whose child carried on in the background, by child session, until the notice that ends
-    /// them. Only for as long as this mapper lives: after a restart the notice ends nothing, and the delegation is
-    /// left the way an interrupted one is.
+    /// them, or the server stopping (<see cref="BackgroundDelegationsLost"/>). Only for as long as this mapper lives:
+    /// a restart stops the server too, and Fleet's startup cancels every delegation still running.
     /// </summary>
     private readonly Dictionary<string, OpenCode2Delegation> _backgroundSubagents = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The calls whose work carries on in the background, by the handle it runs under (<see cref="BackgroundHandle"/>),
+    /// until the notice that it finished, or the server stopping (<see cref="BackgroundWorkEnded"/>).
+    /// </summary>
+    private readonly Dictionary<string, BackgroundCall> _backgroundCalls = new(StringComparer.Ordinal);
     private readonly HashSet<string> _questions = new(StringComparer.Ordinal);
 
     /// <summary>
@@ -231,6 +243,53 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
     }
 
     /// <summary>
+    /// The server stopped: the subagents still working in the background stopped with it, and no notice will end
+    /// them, so each delegation ends cancelled.
+    /// </summary>
+    public IReadOnlyList<OpenCode2Delegation> BackgroundDelegationsLost()
+    {
+        var lost = _backgroundSubagents.Values.Select(started => started with { Status = "cancelled" }).ToList();
+        _backgroundSubagents.Clear();
+        return lost;
+    }
+
+    /// <summary>
+    /// The server stopped: the work still going on in the background stopped with it, and no notice will say so, so
+    /// each call's card ends failed (<see cref="BackgroundWorkLost"/>), as history reads it from then on.
+    /// </summary>
+    public IReadOnlyList<HarnessEvent> BackgroundWorkEnded()
+    {
+        var events = _backgroundCalls.Values
+            .Select(call => ToolPart(call.MessageId, call.CallId, call.Name, new OpenCode2ToolPartState
+            {
+                Status = "error",
+                Input = call.Input,
+                Error = BackgroundWorkLost,
+                Metadata = call.Metadata,
+            }))
+            .ToList();
+        _backgroundCalls.Clear();
+        return events;
+    }
+
+    /// <summary>The handle backgrounded work carries on under, from its call's metadata: the shell's id, or the child session.</summary>
+    internal static string? BackgroundHandle(JsonElement metadata)
+        => metadata.ValueKind == JsonValueKind.Object ? ReadString(metadata, "shellID") ?? ReadString(metadata, "sessionID") : null;
+
+    /// <summary>The handle a completion notice's metadata names (the same as <see cref="BackgroundHandle"/>), or null for any other synthetic message.</summary>
+    internal static string? NoticeHandle(JsonElement metadata)
+        => metadata.ValueKind == JsonValueKind.Object && ReadString(metadata, "source") is "shell" or SubagentTool
+            ? ReadString(metadata, "shellID") ?? ReadString(metadata, "childID")
+            : null;
+
+    /// <summary>Remembers a call whose work went to the background, until its notice or the server stopping ends it.</summary>
+    private void TrackBackground(string messageId, string callId, string name, JsonElement? input, JsonElement? metadata)
+    {
+        if (BackgroundHandle(metadata ?? default) is { } handle)
+            _backgroundCalls[handle] = new BackgroundCall(messageId, callId, name, input, metadata);
+    }
+
+    /// <summary>
     /// The id Fleet gives part <paramref name="ordinal"/> of kind <paramref name="kind"/> in a V2 message. V2 counts
     /// text and reasoning separately within a step, and a message's history lists them in that order, so history
     /// derives the same ids.
@@ -319,6 +378,9 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
         // Read from history too, where the synthetic messages haven't been sorted yet.
         if (metadata.ValueKind != JsonValueKind.Object || ReadString(metadata, "source") is not ("shell" or SubagentTool))
             return [];
+
+        if (NoticeHandle(metadata) is { } handle)
+            _backgroundCalls.Remove(handle);
 
         // The user's own command shows as its own message; this is only V2 passing it to the model.
         if (IsUserShellNotice(text, metadata) || (ReadString(metadata, "shellID") is { } shellId && _userShells.ContainsKey(shellId)))
@@ -518,9 +580,11 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
                     }));
                     events.AddRange(ToolFiles(messageId, callId, state.Content));
                     // A call still running finishes with live events, which name it only by call id. A backgrounded
-                    // one is already done as a call, so it isn't waited on.
+                    // one is already done as a call, so it isn't waited on; its notice, or the server stopping, ends it.
                     if (stored is "pending" or "running")
                         _tools[callId] = new ToolCall(messageId, name, input);
+                    else if (status == "running")
+                        TrackBackground(messageId, callId, name, input, state.Metadata.ValueKind == JsonValueKind.Object ? state.Metadata.Clone() : null);
                     break;
             }
         }
@@ -757,6 +821,8 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
         events.AddRange(ToolFiles(call.MessageId, call.CallId, content));
         if (!failed)
             events.AddRange(FileWritten(call.MessageId, tool, evt.Location?.Directory));
+        if (background)
+            TrackBackground(call.MessageId, call.CallId, tool.Name, tool.Input, metadata);
         return events;
     }
 
@@ -974,6 +1040,9 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
 
     /// <summary>A tool call from its first event to its result: later events name it only by call id.</summary>
     private sealed record ToolCall(string MessageId, string Name, JsonElement? Input);
+
+    /// <summary>A call whose work went to the background, as its card shows it: enough to end the card.</summary>
+    private sealed record BackgroundCall(string MessageId, string CallId, string Name, JsonElement? Input, JsonElement? Metadata);
 }
 
 /// <summary>
