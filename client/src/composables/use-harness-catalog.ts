@@ -1,5 +1,5 @@
 import { computed, shallowRef, watch, type Ref } from "vue";
-import { api, type HarnessCatalog } from "@/api/client";
+import type { ApiClient, HarnessCatalog } from "@/api/client";
 import { toAgentOptions } from "@/composables/use-agents";
 import { toModelOptions } from "@/composables/use-models";
 import {
@@ -8,7 +8,8 @@ import {
   onCatalogChange,
   type HarnessCatalogChange,
 } from "@/lib/harness-catalog-changes";
-import { forgetSaved, liveMachineKey, readSaved, writeSaved } from "@/lib/saved-per-machine";
+import { liveTarget, useMachineTarget } from "@/lib/machine-target";
+import { forgetSaved, readSaved, writeSaved } from "@/lib/saved-per-machine";
 
 /** How long a folder's catalog is shown without asking again; the harness is asked anyway once it's older. */
 const FRESH_FOR_MS = 5 * 60_000;
@@ -18,31 +19,33 @@ interface CachedCatalog {
   fetchedAt: number;
 }
 
-const cache = new Map<string, CachedCatalog>();
-
 /**
- * The newest catalogs are saved per machine, so after a reload or a restart of the desktop app the pickers draw at
- * once and are checked behind it, as they would be within the 5 minutes.
+ * Each machine's catalogs, by harness, folder and profile. The newest are saved per machine, so after a reload or a
+ * restart of the desktop app the pickers draw at once and are checked behind it, as they would be within 5 minutes.
  */
+const caches = new Map<string, Map<string, CachedCatalog>>();
 const SAVED_KIND = "harness-catalogs";
 const MAX_SAVED = 12;
-let restoredFor: string | null = null;
 
-/** Adds the machine's saved catalogs to the cache, once per page. A catalog fetched on this page wins. */
-function restoreSaved(): void {
-  const machineKey = liveMachineKey();
-  if (restoredFor === machineKey) return;
-  restoredFor = machineKey;
-  const saved = readSaved<Record<string, CachedCatalog>>(SAVED_KIND, machineKey);
-  if (!saved || typeof saved !== "object") return;
-  for (const [key, entry] of Object.entries(saved)) {
-    if (!cache.has(key) && entry?.catalog && typeof entry.fetchedAt === "number") cache.set(key, entry);
+/** `machineKey`'s catalogs: the ones this page fetched, starting from the ones saved on the last visit. */
+function cacheFor(machineKey: string): Map<string, CachedCatalog> {
+  let cache = caches.get(machineKey);
+  if (!cache) {
+    cache = new Map();
+    const saved = readSaved<Record<string, CachedCatalog>>(SAVED_KIND, machineKey);
+    if (saved && typeof saved === "object") {
+      for (const [key, entry] of Object.entries(saved)) {
+        if (entry?.catalog && typeof entry.fetchedAt === "number") cache.set(key, entry);
+      }
+    }
+    caches.set(machineKey, cache);
   }
+  return cache;
 }
 
-function saveCache(): void {
-  const newest = [...cache.entries()].sort(([, a], [, b]) => b.fetchedAt - a.fetchedAt).slice(0, MAX_SAVED);
-  writeSaved(SAVED_KIND, liveMachineKey(), Object.fromEntries(newest));
+function saveCache(machineKey: string): void {
+  const newest = [...cacheFor(machineKey).entries()].sort(([, a], [, b]) => b.fetchedAt - a.fetchedAt).slice(0, MAX_SAVED);
+  writeSaved(SAVED_KIND, machineKey, Object.fromEntries(newest));
 }
 
 function cacheKey(harnessType: string, directory: string | null, profile: string | undefined): string {
@@ -55,43 +58,46 @@ let stopForgetting: (() => void) | null = null;
 
 /** For tests: forget every folder's catalog. */
 export function clearHarnessCatalogCache(): void {
-  cache.clear();
-  forgetSaved(SAVED_KIND, liveMachineKey());
-  restoredFor = null;
+  caches.clear();
+  forgetSaved(SAVED_KIND, liveTarget().key);
   stopForgetting?.();
   stopForgetting = null;
 }
 
-/** Forgets the cached catalogs `change` is about, so they're asked for again when shown. */
+/** Forgets the cached catalogs `change` is about, so they're asked for again when shown. Changes come from the live machine. */
 function forgetChanged(change: HarnessCatalogChange): void {
+  const machineKey = liveTarget().key;
+  const cache = cacheFor(machineKey);
   for (const key of [...cache.keys()]) {
     const [harnessType = "", directory = "", profile = ""] = key.split("\n");
     if (isCatalogChangeFor(change, harnessType, directory || null, profile || undefined)) {
       cache.delete(key);
     }
   }
-  saveCache();
+  saveCache(machineKey);
 }
 
 /**
- * Forgets `harnessType`'s catalogs in every folder, so the next composer asks again: signing in to a provider or out
- * of one changes the models the harness offers everywhere.
+ * Forgets `harnessType`'s catalogs in every folder of the live machine, so the next composer asks again: signing in to
+ * a provider or out of one changes the models the harness offers everywhere.
  */
 export function forgetHarnessCatalogs(harnessType: string): void {
-  restoreSaved();
+  const machineKey = liveTarget().key;
+  const cache = cacheFor(machineKey);
   for (const key of [...cache.keys()]) {
     if (key.startsWith(`${harnessType}\n`)) cache.delete(key);
   }
-  saveCache();
+  saveCache(machineKey);
 }
 
 async function fetchCatalog(
+  client: ApiClient,
   harnessType: string,
   directory: string | null,
   profile: string | undefined,
   signal: AbortSignal,
 ): Promise<HarnessCatalog> {
-  const { data, error, response } = await api.GET("/api/harnesses/{type}/catalog", {
+  const { data, error, response } = await client.GET("/api/harnesses/{type}/catalog", {
     params: {
       path: { type: harnessType },
       query: { ...(directory ? { directory } : {}), ...(profile ? { profile } : {}) },
@@ -117,7 +123,9 @@ export function useHarnessCatalog(
   directory: Ref<string | null>,
   profile: Ref<string | undefined> = shallowRef(undefined),
 ) {
-  restoreSaved();
+  // The machine the page asks: the new-session box can start a session on another one.
+  const target = useMachineTarget();
+  const cache = cacheFor(target.key);
   const catalog = shallowRef<HarnessCatalog | null>(null);
   const loadedKey = shallowRef<string | null>(null);
   const isLoading = shallowRef(false);
@@ -130,7 +138,7 @@ export function useHarnessCatalog(
   const changes = shallowRef(0);
   stopForgetting ??= listenForCatalogChanges(forgetChanged);
   onCatalogChange((change) => {
-    if (harnessType.value && isCatalogChangeFor(change, harnessType.value, directory.value, profile.value)) {
+    if (target.isLive && harnessType.value && isCatalogChangeFor(change, harnessType.value, directory.value, profile.value)) {
       changes.value += 1;
     }
   });
@@ -159,9 +167,9 @@ export function useHarnessCatalog(
     onCleanup(() => controller.abort());
     isLoading.value = true;
     try {
-      const next = await fetchCatalog(harnessType.value, directory.value, profile.value, controller.signal);
+      const next = await fetchCatalog(target.api, harnessType.value, directory.value, profile.value, controller.signal);
       cache.set(nextKey, { catalog: next, fetchedAt: Date.now() });
-      saveCache();
+      saveCache(target.key);
       catalog.value = next;
       loadedKey.value = nextKey;
     } catch (fetchError) {

@@ -1,6 +1,8 @@
-import { computed, type ComputedRef } from "vue";
+import { computed, shallowRef, type ComputedRef, type ShallowRef } from "vue";
 import { useHarnesses } from "@/composables/use-harnesses";
 import type { HarnessInfo } from "@/api/client";
+import { useMachineTarget, type MachineTarget } from "@/lib/machine-target";
+import { readSaved, writeSaved } from "@/lib/saved-per-machine";
 import { usePreferencesStore } from "@/stores/preferences";
 
 const DEFAULT_HARNESS_TYPE = "opencode";
@@ -17,9 +19,31 @@ export interface UseEnabledHarnessesResult {
   noHarnessReason: ComputedRef<string | null>;
 }
 
+/**
+ * Another machine's default harness, from its own preferences: the new-session box can start a session there. The one
+ * saved on the last visit shows at once.
+ */
+function useDefaultHarnessOn(target: MachineTarget): ShallowRef<string | undefined> {
+  const saved = shallowRef(readSaved<string>("default-harness", target.key));
+  void (async () => {
+    try {
+      const { data } = await target.api.GET("/api/preferences");
+      const preferences = (data ?? {}) as Record<string, string>;
+      saved.value = preferences.defaultHarnessType;
+      writeSaved("default-harness", target.key, preferences.defaultHarnessType ?? null);
+    } catch {
+      // Keep the saved one; the fallback covers a machine that never answered.
+    }
+  })();
+  return saved;
+}
+
+/** The harnesses of the machine the page asks (see `useMachineTarget`), and which can start a session. */
 export function useEnabledHarnesses(): UseEnabledHarnessesResult {
   const preferencesStore = usePreferencesStore();
+  const target = useMachineTarget();
   const { harnesses, isLoading, error } = useHarnesses();
+  const otherMachineDefault = target.isLive ? null : useDefaultHarnessOn(target);
 
   preferencesStore.ensureLoaded();
 
@@ -28,6 +52,7 @@ export function useEnabledHarnesses(): UseEnabledHarnessesResult {
   });
 
   const defaultHarnessType = computed<string>(() => {
+    if (otherMachineDefault) return otherMachineDefault.value ?? DEFAULT_HARNESS_TYPE;
     return preferencesStore.get("defaultHarnessType", DEFAULT_HARNESS_TYPE);
   });
 

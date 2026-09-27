@@ -1,6 +1,7 @@
 import { onMounted, onUnmounted, readonly, ref, shallowRef, type Ref, type ShallowRef } from "vue";
-import { api } from "@/api/client";
 import type { RepositoryScanResponse, ScannedRepository } from "@/api/client";
+import { useMachineTarget } from "@/lib/machine-target";
+import { readSaved, writeSaved } from "@/lib/saved-per-machine";
 
 export function groupByRoot(repositories: ScannedRepository[]): Map<string, ScannedRepository[]> {
   const grouped = new Map<string, ScannedRepository[]>();
@@ -27,16 +28,28 @@ interface UseRepositoriesResult {
 }
 
 const reposBus = new EventTarget();
+const SAVED_KIND = "repositories";
 
-function broadcastReposUpdate(data: RepositoryScanResponse): void {
-  reposBus.dispatchEvent(new CustomEvent<RepositoryScanResponse>("repos-updated", { detail: data }));
+interface ReposUpdate {
+  machineKey: string;
+  data: RepositoryScanResponse;
 }
 
+function broadcastReposUpdate(update: ReposUpdate): void {
+  reposBus.dispatchEvent(new CustomEvent<ReposUpdate>("repos-updated", { detail: update }));
+}
+
+/**
+ * The repositories Fleet found on the machine (the one the page asks: see `useMachineTarget`). The list saved on the
+ * last visit shows at once, so the new-session box can pick its folder before the machine answers.
+ */
 export function useRepositories(): UseRepositoriesResult {
-  const repositories = ref<ScannedRepository[]>([]);
+  const { api, key: machineKey } = useMachineTarget();
+  const saved = readSaved<RepositoryScanResponse>(SAVED_KIND, machineKey);
+  const repositories = ref<ScannedRepository[]>(Array.isArray(saved?.repositories) ? saved.repositories : []);
   const isLoading = shallowRef(false);
   const error = shallowRef<string | null>(null);
-  const scannedAt = shallowRef<number | null>(null);
+  const scannedAt = shallowRef<number | null>(typeof saved?.scannedAt === "number" ? saved.scannedAt : null);
 
   function applyData(data: RepositoryScanResponse): void {
     repositories.value = data.repositories;
@@ -62,7 +75,8 @@ export function useRepositories(): UseRepositoriesResult {
 
       const responseData = data as RepositoryScanResponse;
       applyData(responseData);
-      broadcastReposUpdate(responseData);
+      writeSaved(SAVED_KIND, machineKey, responseData);
+      broadcastReposUpdate({ machineKey, data: responseData });
     } catch (fetchError) {
       error.value = fetchError instanceof Error ? fetchError.message : "Unknown error";
     } finally {
@@ -71,8 +85,8 @@ export function useRepositories(): UseRepositoriesResult {
   }
 
   function handleReposUpdated(event: Event): void {
-    const data = (event as CustomEvent<RepositoryScanResponse>).detail;
-    applyData(data);
+    const update = (event as CustomEvent<ReposUpdate>).detail;
+    if (update.machineKey === machineKey) applyData(update.data);
   }
 
   onMounted(() => {

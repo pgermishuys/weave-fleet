@@ -1,8 +1,8 @@
 import createClient from "openapi-fetch";
 import type { paths } from "./generated/schema";
 import type { SessionProgressSummary } from "@/lib/session-progress";
-import { apiUrl, setApiBase } from "@/lib/api-client";
-import { getActiveMachine, machineRequestInit } from "@/lib/machines";
+import { apiUrlOn, setApiBase } from "@/lib/api-client";
+import { getActiveMachine, machineRequestInit, type MachineConnection } from "@/lib/machines";
 
 /**
  * Typed API client for Weave Fleet API
@@ -48,19 +48,6 @@ function getCookieValue(name: string): string | null {
   return null;
 }
 
-/**
- * The client builds every request with an empty base, so it gets `/api/...`. This resolves that path against
- * the machine the app is working in when the request is made, the same way `apiFetch` does. Resolving it once,
- * when the client was created, is what left `setApiBase` without effect on these calls.
- */
-const RequestOnLiveMachine = (typeof Request === "undefined"
-  ? undefined
-  : class extends Request {
-    constructor(input: RequestInfo | URL, init?: RequestInit) {
-      super(typeof input === "string" ? resolveOnPage(apiUrl(input)) : input, init);
-    }
-  }) as typeof Request | undefined;
-
 /** A same-origin path as the full URL a browser would make of it; runtimes without a page need it spelled out. */
 function resolveOnPage(url: string): string {
   const page = typeof window === "undefined" ? undefined : window.location?.href;
@@ -68,41 +55,77 @@ function resolveOnPage(url: string): string {
 }
 
 /**
- * Custom fetch implementation that:
- * - Attaches CSRF token to mutating requests on the home machine
+ * A typed client whose every request goes to the machine `machineOf` names when the request is made (null: home).
+ *
+ * The client builds every request with an empty base, so it gets `/api/...`; its `Request` resolves that path against
+ * the machine then. Resolving it once, when the client was created, is what left `setApiBase` without effect on these
+ * calls. Its fetch:
+ * - Attaches the CSRF token to mutating requests on the home machine
  * - Sends cookies to the home machine, and another machine's token (never cookies) to that machine
  */
-const customFetch: typeof fetch = (input, init) => {
-  // openapi-fetch passes a Request object as `input` with headers already set.
-  // Merge headers from both the Request and any init overrides.
-  const requestHeaders = input instanceof Request ? input.headers : new Headers();
-  const initHeaders = new Headers(init?.headers);
-  const headers = new Headers(requestHeaders);
+function createApiClient(machineOf: () => MachineConnection | null) {
+  const RequestOnMachine = (typeof Request === "undefined"
+    ? undefined
+    : class extends Request {
+      constructor(input: RequestInfo | URL, init?: RequestInit) {
+        super(typeof input === "string" ? resolveOnPage(apiUrlOn(machineOf(), input)) : input, init);
+      }
+    }) as typeof Request | undefined;
 
-  // Layer init headers on top (overrides request headers)
-  initHeaders.forEach((value, key) => {
-    headers.set(key, value);
-  });
+  const fetchOnMachine: typeof fetch = (input, init) => {
+    // openapi-fetch passes a Request object as `input` with headers already set.
+    // Merge headers from both the Request and any init overrides.
+    const requestHeaders = input instanceof Request ? input.headers : new Headers();
+    const initHeaders = new Headers(init?.headers);
+    const headers = new Headers(requestHeaders);
 
-  const machine = getActiveMachine();
-  const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+    // Layer init headers on top (overrides request headers)
+    initHeaders.forEach((value, key) => {
+      headers.set(key, value);
+    });
 
-  // Attach CSRF token to mutating requests
-  if (!machine && !["GET", "HEAD", "OPTIONS", "TRACE"].includes(method)) {
-    const csrfToken = getCookieValue(csrfCookieName);
-    if (csrfToken) {
-      headers.set("X-CSRF-Token", csrfToken);
+    const machine = machineOf();
+    const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+
+    // Attach CSRF token to mutating requests
+    if (!machine && !["GET", "HEAD", "OPTIONS", "TRACE"].includes(method)) {
+      const csrfToken = getCookieValue(csrfCookieName);
+      if (csrfToken) {
+        headers.set("X-CSRF-Token", csrfToken);
+      }
     }
+
+    return fetch(input, machineRequestInit(machine, { ...init, headers }));
+  };
+
+  return createClient<paths>({
+    baseUrl: "",
+    fetch: fetchOnMachine,
+    ...(RequestOnMachine ? { Request: RequestOnMachine } : {}),
+  });
+}
+
+/** The client for the machine the app is working in. */
+export const api = createApiClient(getActiveMachine);
+
+export type ApiClient = typeof api;
+
+const machineClients = new Map<string, ApiClient>();
+
+/**
+ * A client for one machine (null: home) whichever machine is live: the new-session box starts a session on a machine
+ * the app isn't working in. The live machine's is `api` itself.
+ */
+export function apiOnMachine(machine: MachineConnection | null): ApiClient {
+  if ((machine?.id ?? null) === (getActiveMachine()?.id ?? null)) return api;
+  const key = machine ? `${machine.id}\n${machine.baseUrl}\n${machine.token}` : "home";
+  let client = machineClients.get(key);
+  if (!client) {
+    client = createApiClient(() => machine);
+    machineClients.set(key, client);
   }
-
-  return fetch(input, machineRequestInit(machine, { ...init, headers }));
-};
-
-export const api = createClient<paths>({
-  baseUrl: "",
-  fetch: customFetch,
-  ...(RequestOnLiveMachine ? { Request: RequestOnLiveMachine } : {}),
-});
+  return client;
+}
 
 export type { paths, components } from "./generated/schema";
 

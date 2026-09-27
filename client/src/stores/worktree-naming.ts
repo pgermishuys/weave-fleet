@@ -1,5 +1,6 @@
 import { computed, ref, shallowRef } from "vue";
 import { defineStore } from "pinia";
+import type { MachineTarget } from "@/lib/machine-target";
 import { api } from "@/api/client";
 import { extractApiError } from "@/lib/api-error";
 import {
@@ -31,6 +32,8 @@ export const useWorktreeNamingStore = defineStore("worktree-naming", () => {
   const error = shallowRef<string | null>(null);
   /** The repository the loaded templates are for, so the composer can tell a stale answer. */
   const loadedFor = shallowRef<string | null>(null);
+  /** The machine they were read on (a machine key); the composer can start a session on another machine. */
+  const loadedOn = shallowRef<string | null>(null);
 
   /** True when the repository these templates were read for ships its own convention. */
   const hasProjectConvention = computed(() =>
@@ -59,13 +62,13 @@ export const useWorktreeNamingStore = defineStore("worktree-naming", () => {
     layers.value = data.layers as Record<string, WorktreeNamingLayer>;
   }
 
-  /** Loads the templates for a repository, or the user's own when no repository is given. */
-  async function load(directory?: string | null): Promise<void> {
+  /** Loads the templates for a repository, or the user's own when no repository is given; on `target`'s machine if given. */
+  async function load(directory?: string | null, target?: MachineTarget): Promise<void> {
     isLoading.value = true;
     error.value = null;
 
     try {
-      const { data, error: apiError } = await api.GET("/api/worktrees/naming", {
+      const { data, error: apiError } = await (target?.api ?? api).GET("/api/worktrees/naming", {
         params: { query: directory ? { directory } : {} },
       });
 
@@ -76,6 +79,7 @@ export const useWorktreeNamingStore = defineStore("worktree-naming", () => {
 
       apply(data);
       loadedFor.value = directory ?? null;
+      loadedOn.value = target?.key ?? null;
     } catch (cause) {
       // The composer previews with whatever it has, so a naming request that never lands leaves
       // Fleet's defaults in place rather than taking the composer down with it.
@@ -126,6 +130,7 @@ export const useWorktreeNamingStore = defineStore("worktree-naming", () => {
     isSaving,
     error,
     loadedFor,
+    loadedOn,
     hasProjectConvention,
     load,
     save,

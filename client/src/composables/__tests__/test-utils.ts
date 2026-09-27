@@ -7,7 +7,7 @@ export async function flushAll(): Promise<void> {
   await flushPromises();
 }
 
-export async function mountComposable<T>(useComposable: () => T) {
+export async function mountComposable<T>(useComposable: () => T, options: { provide?: Record<symbol, unknown> } = {}) {
   let result!: T;
 
   const wrapper = mount(
@@ -21,6 +21,7 @@ export async function mountComposable<T>(useComposable: () => T) {
     {
       global: {
         plugins: getActivePinia() ? [getActivePinia()!] : [],
+        provide: options.provide,
       },
     },
   );

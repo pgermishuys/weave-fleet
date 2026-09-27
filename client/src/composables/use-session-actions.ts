@@ -14,6 +14,7 @@ import type {
   UpdateProjectRequest,
 } from "@/api/client";
 import { api } from "@/api/client";
+import { useMachineTarget } from "@/lib/machine-target";
 import { trackAction } from "@/lib/track-action";
 import { dispatchSessionUpsert } from "@/lib/session-sync";
 import { useSessionsStore } from "@/stores/sessions";
@@ -218,8 +219,10 @@ function buildForkedSessionListItem(
   };
 }
 
+/** Creates sessions on the machine the page asks (see `useMachineTarget`): the new-session box can pick another. */
 export function useCreateSession(): UseCreateSessionResult {
   const state = createMutationState();
+  const { api } = useMachineTarget();
 
   async function createSession(directory?: string, opts?: CreateSessionOptions): Promise<CreateSessionResponse> {
     return state.execute(async () => {

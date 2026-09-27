@@ -1,7 +1,7 @@
 import { readonly, shallowRef, type Ref, type ShallowRef } from "vue";
-import { api } from "@/api/client";
-import type { HarnessInfo } from "@/api/client";
-import { liveMachineKey, readSaved, writeSaved } from "@/lib/saved-per-machine";
+import type { ApiClient, HarnessInfo } from "@/api/client";
+import { liveTarget, useMachineTarget, type MachineTarget } from "@/lib/machine-target";
+import { readSaved, writeSaved } from "@/lib/saved-per-machine";
 
 export interface UseHarnessesResult {
   harnesses: Readonly<Ref<readonly HarnessInfo[]>>;
@@ -27,6 +27,7 @@ interface SavedHarnesses {
  */
 interface HarnessList {
   machineKey: string;
+  api: ApiClient;
   harnesses: ShallowRef<HarnessInfo[]>;
   isLoading: ShallowRef<boolean>;
   error: ShallowRef<string | undefined>;
@@ -40,12 +41,14 @@ interface HarnessList {
 
 const lists = new Map<string, HarnessList>();
 
-function listFor(machineKey: string): HarnessList {
+function listFor(target: MachineTarget): HarnessList {
+  const machineKey = target.key;
   let list = lists.get(machineKey);
   if (!list) {
     const saved = readSaved<SavedHarnesses>(SAVED_KIND, machineKey);
     list = {
       machineKey,
+      api: target.api,
       harnesses: shallowRef(Array.isArray(saved?.harnesses) ? saved.harnesses : []),
       isLoading: shallowRef(false),
       error: shallowRef(undefined),
@@ -71,7 +74,7 @@ function load(list: HarnessList, fresh: boolean): Promise<void> {
 
   const answer = (async () => {
     try {
-      const { data, error, response } = await api.GET("/api/harnesses", fresh ? { params: { query: { fresh: true } } } : {});
+      const { data, error, response } = await list.api.GET("/api/harnesses", fresh ? { params: { query: { fresh: true } } } : {});
       if (request !== list.latestRequest) return;
       if (error || !response.ok) {
         const payload = error as { error?: string } | undefined;
@@ -103,10 +106,10 @@ function load(list: HarnessList, fresh: boolean): Promise<void> {
 
 /**
  * Tells every list on screen to check again, e.g. after installing a harness: the machine checks every harness, and
- * every `useHarnesses` gets the answer.
+ * every `useHarnesses` gets the answer. Harnesses are set up on the live machine.
  */
 export function refreshAllHarnesses(): void {
-  void load(listFor(liveMachineKey()), true);
+  void load(listFor(liveTarget()), true);
 }
 
 /** For tests: forget every machine's list, on the page and saved. */
@@ -114,8 +117,9 @@ export function forgetHarnessLists(): void {
   lists.clear();
 }
 
+/** The harnesses of the machine the page asks (see `useMachineTarget`). */
 export function useHarnesses(): UseHarnessesResult {
-  const list = listFor(liveMachineKey());
+  const list = listFor(useMachineTarget());
 
   if (Date.now() - list.answeredAt >= REUSE_FOR_MS) void load(list, false);
 

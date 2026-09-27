@@ -128,5 +128,90 @@ describe("useWorkspaceUiStore", () => {
       expect(store.openNewSessionDraft(blank).draft.message).toBe("");
       expect(store.newSessionDraftRow?.key).not.toBe(rowKey);
     });
+
+    describe("machine", () => {
+      it("starts a draft on the live machine", () => {
+        const store = useWorkspaceUiStore();
+        store.openNewSessionDraft(blank);
+
+        expect(store.newSessionMachine).toBeNull();
+      });
+
+      it("moves the draft to another machine: its message stays, this machine's folder and choices go", () => {
+        const store = useWorkspaceUiStore();
+        const { draft } = store.openNewSessionDraft(blank);
+        Object.assign(draft, {
+          message: "Fix the sign-in loop",
+          title: "Sign-in",
+          folder: { kind: "repository", path: "/home/me/src/rocket" },
+          hasChosenFolder: true,
+          workspace: { kind: "existing", path: "/home/me/src/rocket-worktrees/x" },
+          branchName: "fix/sign-in",
+          projectId: "project-1",
+          agent: "loom",
+          model: "anthropic/claude",
+          hasChosenAgentOrModel: true,
+        });
+
+        store.setNewSessionMachine("m-mac");
+        // The page is rebuilt for the machine: it leaves, then opens the same draft.
+        store.leaveNewSessionDraft();
+        const { draft: reopened, restored } = store.openNewSessionDraft(blank);
+
+        expect(store.newSessionMachine).toBe("m-mac");
+        expect(restored).toBe(true);
+        expect(reopened).toMatchObject({
+          message: "Fix the sign-in loop",
+          title: "Sign-in",
+          folder: null,
+          hasChosenFolder: false,
+          workspace: { kind: "new" },
+          branchName: "",
+          projectId: null,
+          agent: "",
+          model: "",
+          hasChosenAgentOrModel: false,
+        });
+      });
+
+      it("keeps an empty draft while the page is rebuilt for another machine", () => {
+        const store = useWorkspaceUiStore();
+        const { draft } = store.openNewSessionDraft(blank);
+
+        store.setNewSessionMachine("m-mac");
+        store.leaveNewSessionDraft();
+
+        expect(store.newSessionDraft).toBe(draft);
+        expect(store.newSessionMachine).toBe("m-mac");
+      });
+
+      it("goes back to the live machine when the draft is dropped or becomes a session", () => {
+        const store = useWorkspaceUiStore();
+        store.openNewSessionDraft(blank);
+        store.setNewSessionMachine("m-mac");
+        store.leaveNewSessionDraft();
+        store.openNewSessionDraft(blank);
+
+        store.leaveNewSessionDraft();
+        expect(store.newSessionMachine).toBeNull();
+
+        const { draft } = store.openNewSessionDraft(blank);
+        draft.message = "Ship it";
+        store.setNewSessionMachine("m-mac");
+        store.leaveNewSessionDraft();
+        store.openNewSessionDraft(blank);
+        store.handOffNewSessionDraft("s1");
+        expect(store.newSessionMachine).toBeNull();
+      });
+
+      it("picking the live machine is the same as not picking one", () => {
+        const store = useWorkspaceUiStore();
+        store.openNewSessionDraft(blank);
+
+        store.setNewSessionMachine("home");
+
+        expect(store.newSessionMachine).toBeNull();
+      });
+    });
   });
 });

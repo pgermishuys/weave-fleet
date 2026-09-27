@@ -2,6 +2,7 @@ import { flushPromises } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { forgetHarnessLists, refreshAllHarnesses, useHarnesses } from "@/composables/use-harnesses";
 import type { HarnessInfo } from "@/api/client";
+import { MACHINE_TARGET, type MachineTarget } from "@/lib/machine-target";
 import { mountComposable } from "./test-utils";
 
 const { apiFetchMock } = vi.hoisted(() => ({
@@ -126,5 +127,19 @@ describe("useHarnesses", () => {
 
     expect(JSON.parse(window.localStorage.getItem("weave:saved:harnesses:m-mac")!).harnesses[0].version).toBe("0.9.0");
     expect(JSON.parse(window.localStorage.getItem("weave:saved:harnesses:home")!).harnesses[0].version).toBe("1.18.31");
+  });
+
+  it("asks the machine the page provides, and saves its list under that machine", async () => {
+    apiFetchMock.mockImplementation(() => Promise.resolve(reply([harness("1.18.31")])));
+    const macGet = vi.fn(() => Promise.resolve(reply([harness("2.0.18")])));
+    const mac = { key: "m-mac", connection: null, isLive: false, api: { GET: macGet } } as unknown as MachineTarget;
+
+    const { result } = await mountComposable(() => useHarnesses(), { provide: { [MACHINE_TARGET]: () => mac } });
+
+    expect(macGet).toHaveBeenCalledWith("/api/harnesses", {});
+    expect(apiFetchMock).not.toHaveBeenCalled();
+    expect(result.harnesses.value.map((each) => each.version)).toEqual(["2.0.18"]);
+    expect(JSON.parse(window.localStorage.getItem("weave:saved:harnesses:m-mac")!).harnesses[0].version).toBe("2.0.18");
+    expect(window.localStorage.getItem("weave:saved:harnesses:home")).toBeNull();
   });
 });
