@@ -1468,6 +1468,22 @@ public sealed class OpenCodeSessionMessageProxyTests
         snapshot.Messages.Select(m => m.Info.Id).ShouldBe(["msg_first", "msg_reply"]);
     }
 
+    // Seen live on OpenCode 1.18.32: the snapshot a new session's page asks for lists the first prompt before OpenCode has
+    // stored its text, and the relay leaves out OpenCode's own user message events, so the bubble stayed empty.
+    [Fact]
+    public async Task GetSnapshotAsync_fills_a_harness_prompt_listed_before_its_text_from_the_saved_copy()
+    {
+        var proxy = CreateLiveProxy(
+            [HarnessMessage("msg_first", "user", _promptSentAt.AddMilliseconds(80)) with { Parts = [] }],
+            SavedFirstMessage());
+
+        var snapshot = await proxy.GetSnapshotAsync("session-new");
+
+        var message = snapshot.Messages.ShouldHaveSingleItem();
+        message.Info.Id.ShouldBe("msg_first");
+        message.Parts.ShouldHaveSingleItem().ShouldBeOfType<TextMessageEventPart>().Text.ShouldBe("Fix the login redirect");
+    }
+
     [Fact]
     public async Task GetSnapshotAsync_leaves_out_a_saved_prompt_older_than_the_harness_newest_message()
     {
