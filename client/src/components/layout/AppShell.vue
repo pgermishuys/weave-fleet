@@ -19,6 +19,7 @@ import IconRail from "@/components/layout/IconRail.vue";
 import StatusBar from "@/components/layout/StatusBar.vue";
 import SessionsV2RightPanel from "@/components/sessions/SessionsV2RightPanel.vue";
 import ArchiveUndoToast from "@/components/sessions/ArchiveUndoToast.vue";
+import NoticeCard from "@/components/notices/NoticeCard.vue";
 import { Menu } from "lucide-vue-next";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ import { useSessionActivityUpdates } from "@/composables/use-session-activity-up
 import { useSessionNotifications } from "@/composables/use-session-notifications";
 import { useSessionProgressUpdates } from "@/composables/use-session-progress-updates";
 import { useSmartLinkUpdates } from "@/composables/use-smart-link-updates";
+import { useUpdateNotices } from "@/composables/use-update-notices";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { useVisualViewport } from "@/composables/use-visual-viewport";
 import { useKeyboardScroll } from "@/composables/use-keyboard-scroll";
@@ -42,6 +44,7 @@ useSessionActivityUpdates();
 useSessionNotifications();
 useSessionProgressUpdates();
 useSmartLinkUpdates();
+useUpdateNotices();
 useVisualViewport();
 useKeyboardScroll();
 
@@ -347,6 +350,7 @@ function onGutterPointerDown(e: PointerEvent): void {
     <CommandPalette />
     <GoToFileDialog />
     <ArchiveUndoToast />
+    <NoticeCard />
   </div>
 </template>
 

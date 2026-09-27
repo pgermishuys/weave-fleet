@@ -32,6 +32,8 @@ export interface UseUpdateStatusResult {
 }
 
 const POLL_INTERVAL_DOWNLOADING_MS = 1_500;
+/** The server checks GitHub every few hours; asking it for its state is local and cheap, so the UI hears soon after. */
+const REFRESH_INTERVAL_MS = 15 * 60_000;
 
 // ── Module-scoped shared state ─────────────────────────────────────────────────
 // All consumers of useUpdateStatus() share the same reactive state and fetch loop.
@@ -41,6 +43,7 @@ const isUpdateAvailable = shallowRef(false);
 const isUpdateStaged = shallowRef(false);
 
 let pollingTimer: ReturnType<typeof setInterval> | undefined;
+let refreshTimer: ReturnType<typeof setInterval> | undefined;
 let requestId = 0;
 let subscriberCount = 0;
 
@@ -100,18 +103,35 @@ function stopPolling(): void {
   }
 }
 
+function onVisibilityChange(): void {
+  if (document.visibilityState === "visible") void fetchStatus();
+}
+
+function startRefreshing(): void {
+  refreshTimer = setInterval(() => void fetchStatus(), REFRESH_INTERVAL_MS);
+  document.addEventListener("visibilitychange", onVisibilityChange);
+}
+
+function stopRefreshing(): void {
+  clearInterval(refreshTimer);
+  refreshTimer = undefined;
+  document.removeEventListener("visibilitychange", onVisibilityChange);
+}
+
 // ── Composable ─────────────────────────────────────────────────────────────────
 
 export function useUpdateStatus(): UseUpdateStatusResult {
   onMounted(() => {
     if (subscriberCount++ === 0) {
       void fetchStatus();
+      startRefreshing();
     }
   });
 
   onUnmounted(() => {
     if (--subscriberCount === 0) {
       stopPolling();
+      stopRefreshing();
     }
   });
 

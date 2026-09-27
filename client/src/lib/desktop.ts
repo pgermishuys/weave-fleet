@@ -26,7 +26,18 @@ export interface FleetDesktopBridge {
   getUpdateState(): Promise<DesktopUpdateState>;
   onUpdateState(callback: (state: DesktopUpdateState) => void): () => void;
   checkForUpdates(): Promise<DesktopUpdateState>;
-  installUpdate(): Promise<void>;
+  /**
+   * Restarts into a downloaded update, or opens the download page. The app asks first if sessions are working, unless
+   * `confirmed` says the UI already asked. An app from before `confirmed` asks anyway.
+   */
+  installUpdate(options?: { confirmed?: boolean }): Promise<void>;
+  /** Calls back when the app wants the update card open (Help → Check for Updates… found one). Absent in older apps. */
+  onShowUpdate?(callback: () => void): () => void;
+}
+
+/** The release notes for a version, on the public mirror both the app and the CLI update from. */
+export function releaseNotesUrl(version: string): string {
+  return `https://github.com/pgermishuys/fleet-releases/releases/tag/v${version.replace(/^v/, "")}`;
 }
 
 export function getDesktopBridge(): FleetDesktopBridge | null {
