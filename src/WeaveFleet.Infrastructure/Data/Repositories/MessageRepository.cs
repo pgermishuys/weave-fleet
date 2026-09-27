@@ -31,8 +31,8 @@ public sealed class MessageRepository : IMessageRepository
     {
         await connection.ExecuteNonQueryAsync(
             """
-            INSERT INTO messages (id, session_id, role, parts_json, timestamp, created_at, agent_name, model_id)
-            SELECT @Id, @SessionId, @Role, @PartsJson, @Timestamp, @CreatedAt, @AgentName, @ModelId
+            INSERT INTO messages (id, session_id, role, parts_json, timestamp, created_at, agent_name, model_id, error_json)
+            SELECT @Id, @SessionId, @Role, @PartsJson, @Timestamp, @CreatedAt, @AgentName, @ModelId, @ErrorJson
             FROM sessions
             WHERE id = @SessionId AND user_id = @UserId
             ON CONFLICT(id, session_id) DO UPDATE SET
@@ -42,7 +42,8 @@ public sealed class MessageRepository : IMessageRepository
                 -- created_at is intentionally immutable after the first insert so tail-history
                 -- pagination remains anchored to the message's logical timestamp, not later rewrites.
                 agent_name = COALESCE(excluded.agent_name, messages.agent_name),
-                model_id = COALESCE(excluded.model_id, messages.model_id)
+                model_id = COALESCE(excluded.model_id, messages.model_id),
+                error_json = COALESCE(excluded.error_json, messages.error_json)
             """,
             cmd =>
             {
@@ -54,6 +55,7 @@ public sealed class MessageRepository : IMessageRepository
                 cmd.AddParameter("CreatedAt", message.CreatedAt);
                 cmd.AddParameter("AgentName", message.AgentName);
                 cmd.AddParameter("ModelId", message.ModelId);
+                cmd.AddParameter("ErrorJson", message.ErrorJson);
                 cmd.AddParameter("UserId", _userContext.UserId);
             },
             transaction);
@@ -395,5 +397,6 @@ public sealed class MessageRepository : IMessageRepository
         CreatedAt = r.GetString(r.GetOrdinal("created_at")),
         AgentName = r.GetNullableString(r.GetOrdinal("agent_name")),
         ModelId = r.GetNullableString(r.GetOrdinal("model_id")),
+        ErrorJson = r.GetNullableString(r.GetOrdinal("error_json")),
     };
 }

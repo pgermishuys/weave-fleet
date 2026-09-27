@@ -1484,6 +1484,64 @@ public sealed class OpenCodeSessionMessageProxyTests
         message.Parts.ShouldHaveSingleItem().ShouldBeOfType<TextMessageEventPart>().Text.ShouldBe("Fix the login redirect");
     }
 
+    private static InMemoryMessageRepository SavedFailure(DateTimeOffset at)
+    {
+        var repository = new InMemoryMessageRepository();
+        repository.Seed(MessagePersistenceService.ToPersistedMessage(
+            "session-new",
+            MessagePersistenceService.CreateTurnFailureMessage(
+                new TurnError { Name = "ProviderModelNotFoundError", Message = "Model not found: claude-sonnet-4.5" }, at)));
+        return repository;
+    }
+
+    // Seen live: a turn that fails before the model answers leaves nothing in OpenCode, so after a reload the prompt sat
+    // unanswered with no reason given.
+    [Fact]
+    public async Task GetSnapshotAsync_shows_a_kept_turn_failure_after_the_prompt_it_answered()
+    {
+        var proxy = CreateLiveProxy(
+            [HarnessMessage("msg_first", "user", _promptSentAt)],
+            SavedFailure(_promptSentAt.AddSeconds(2)));
+
+        var snapshot = await proxy.GetSnapshotAsync("session-new");
+
+        snapshot.Messages.Select(m => m.Info.Role).ShouldBe(["user", "assistant"]);
+        snapshot.Messages[1].Info.Error.ShouldNotBeNull().Message.ShouldBe("Model not found: claude-sonnet-4.5");
+        snapshot.Messages[1].Parts.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_keeps_a_turn_failure_in_place_once_the_conversation_goes_on()
+    {
+        var proxy = CreateLiveProxy(
+            [
+                HarnessMessage("msg_first", "user", _promptSentAt),
+                HarnessMessage("msg_retry", "user", _promptSentAt.AddMinutes(1)),
+                HarnessMessage("msg_reply", "assistant", _promptSentAt.AddMinutes(1).AddSeconds(2)),
+            ],
+            SavedFailure(_promptSentAt.AddSeconds(2)));
+
+        var snapshot = await proxy.GetSnapshotAsync("session-new");
+
+        snapshot.Messages.Select(m => m.Info.Error is null ? m.Info.Id : "failure").ShouldBe(["msg_first", "failure", "msg_retry", "msg_reply"]);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_does_not_repeat_a_failure_the_harness_kept_on_its_reply()
+    {
+        var failedReply = HarnessMessage("msg_reply", "assistant", _promptSentAt.AddSeconds(1)) with
+        {
+            Error = new TurnError { Name = "APIError", Message = "Rate limited" },
+        };
+        var proxy = CreateLiveProxy(
+            [HarnessMessage("msg_first", "user", _promptSentAt), failedReply],
+            SavedFailure(_promptSentAt.AddSeconds(3)));
+
+        var snapshot = await proxy.GetSnapshotAsync("session-new");
+
+        snapshot.Messages.Select(m => m.Info.Id).ShouldBe(["msg_first", "msg_reply"]);
+    }
+
     [Fact]
     public async Task GetSnapshotAsync_leaves_out_a_saved_prompt_older_than_the_harness_newest_message()
     {

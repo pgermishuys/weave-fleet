@@ -140,6 +140,7 @@ internal sealed record QuickChatSourceInput;
 [JsonSerializable(typeof(FilesChangedPayload))]
 [JsonSerializable(typeof(WeaveFleet.Application.Harnesses.HarnessCatalogChangedPayload))]
 [JsonSerializable(typeof(WeaveFleet.Application.Memory.MemorySavedPayload))]
+[JsonSerializable(typeof(TurnError))]
 internal sealed partial class ApplicationJsonContext : JsonSerializerContext
 {
 }
