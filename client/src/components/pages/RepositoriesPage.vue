@@ -172,7 +172,7 @@ function goToSettings(): void {
 
     <div
       v-else
-      class="grid gap-4 xl:grid-cols-2"
+      class="grid grid-cols-1 gap-4 xl:grid-cols-2"
     >
       <Card
         v-for="repository in sortedRepositories"
@@ -180,7 +180,7 @@ function goToSettings(): void {
         class="gap-4 py-5"
       >
         <CardHeader class="gap-2 px-5">
-          <div class="flex items-start gap-3">
+          <div class="flex min-w-0 items-start gap-3">
             <div class="border border-border bg-muted/30 p-2 text-muted-foreground">
               <FolderGit2 :size="16" />
             </div>

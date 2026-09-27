@@ -157,6 +157,7 @@ public sealed class AnalyticsRepository(
             FROM daily_rollups
             WHERE 1=1
             AND user_id = @UserId
+            {_perProjectRollupsOnly}
             {dateFilter}
             {projectFilter}
             GROUP BY date
@@ -373,6 +374,12 @@ public sealed class AnalyticsRepository(
         if (toStr is not null) parts.Add("AND created_at < @ToDate");
         return string.Join(" ", parts);
     }
+
+    /// <summary>
+    /// <see cref="AnalyticsRollupService"/> writes a row per project and model and, beside them, a fleet-wide total with
+    /// all three empty. Summing both counted every day twice.
+    /// </summary>
+    private const string _perProjectRollupsOnly = "AND NOT (project_id = '' AND model_id = '' AND provider_id = '')";
 
     private static string BuildDateOnlyFilter(string? fromStr, string? toStr)
     {

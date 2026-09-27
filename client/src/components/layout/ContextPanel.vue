@@ -5,6 +5,7 @@ import type { SidebarRail } from "@/stores/sidebar";
 import { computed, defineComponent, h, shallowRef } from "vue";
 import { storeToRefs } from "pinia";
 import BoardControlsPanel from "@/components/board/BoardControlsPanel.vue";
+import { useBoardFeature } from "@/composables/use-board-feature";
 import SessionsPanel from "@/components/sessions/SessionsPanel.vue";
 import SettingsNavPanel from "@/components/settings/SettingsNavPanel.vue";
 import AutomationsNavPanel from "@/components/automations/AutomationsNavPanel.vue";
@@ -101,9 +102,12 @@ const registeredPluginPanels = computed<Record<PluginRailId, Component>>(() => {
   };
 });
 
+const { isBoardFeatureEnabled } = useBoardFeature();
+
 const panelComponents = computed<Record<ContextPanelKey, Component>>(() => ({
   sessions: SessionsPanel,
-  board: BoardControlsPanel,
+  // Its filters are for the board itself; with Board off the page only says how to turn it on.
+  board: isBoardFeatureEnabled.value ? BoardControlsPanel : SessionsPanel,
   analytics: SessionsPanel,
   automations: AutomationsContextPanel,
   workflows: WorkflowsNavPanel,

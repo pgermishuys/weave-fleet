@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, reactive, shallowRef, useTemplateRef, watch } from "vue";
 import { useNavigate } from "@tanstack/vue-router";
-import { AlertCircle, Ellipsis, Play, Trash2 } from "lucide-vue-next";
+import { AlertCircle, Ellipsis, Play, Plus, Trash2 } from "lucide-vue-next";
 import { DropdownMenuItem } from "reka-ui";
 import AutomationComposer from "@/components/automations/AutomationComposer.vue";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
@@ -31,7 +31,7 @@ import { useAutomationsStore, type Automation, type AutomationRun, type CreateAu
 import { useWorkflowsStore } from "@/stores/workflows";
 
 const navigate = useNavigate();
-const { viewMode, activeAutomationId, draft, seedSessionId, setActiveAutomation, resetDraft, clearSelection } = useAutomationsNav();
+const { viewMode, activeAutomationId, draft, seedSessionId, setActiveAutomation, resetDraft, clearSelection, startCreate } = useAutomationsNav();
 const {
   automations,
   createAutomation,
@@ -566,8 +566,20 @@ const firstRunHint = computed(() => {
       class="automation-page__body"
     >
       <div class="automation-page__empty">
-        <strong>Automations</strong>
-        Pick one on the left, or make a new one.
+        <strong>{{ automations.length === 0 ? "No automations yet" : "Automations" }}</strong>
+        {{ automations.length === 0
+          ? "An automation runs a prompt or a workflow on a schedule, or when something happens in Fleet."
+          : "Pick one from the list, or make a new one." }}
+        <Button
+          v-if="automations.length === 0"
+          size="sm"
+          class="mx-auto mt-4 flex"
+          data-testid="automation-empty-create"
+          @click="startCreate"
+        >
+          <Plus class="h-4 w-4" />
+          New automation
+        </Button>
       </div>
     </div>
 

@@ -662,7 +662,7 @@ function removeSessionFromStore(): void {
         @select="handleCopySessionId"
       >
         <Copy class="size-3.5" />
-        Copy Session ID
+        Copy session ID
       </ContextMenuItem>
 
       <ContextMenuItem

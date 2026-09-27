@@ -276,7 +276,7 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
 
     <div
       v-else
-      class="mt-4 grid gap-3"
+      class="mt-4 grid grid-cols-1 gap-3"
     >
       <article
         v-for="root in workspaceRoots"

@@ -673,7 +673,7 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
             class="panel-action-button__icon"
             aria-hidden="true"
           />
-          <span>New Session</span>
+          <span>New session</span>
         </Button>
 
         <Button
@@ -800,13 +800,11 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
           class="sessions-empty-state"
         >
           <p class="sessions-empty-state__title">
-            {{ isArchivedView && !normalizedQuery ? "No archived sessions" : "No sessions found" }}
+            <template v-if="normalizedQuery">No sessions found</template>
+            <template v-else>{{ isArchivedView ? "No archived sessions" : "No sessions yet" }}</template>
           </p>
-          <p
-            v-if="!isArchivedView || normalizedQuery"
-            class="sessions-empty-state__copy"
-          >
-            Try a different search term or clear the filter.
+          <p class="sessions-empty-state__copy">
+            {{ normalizedQuery ? "Try a different search term or clear the filter." : isArchivedView ? "Sessions you archive show up here." : "Start one with New session above." }}
           </p>
         </div>
       </template>

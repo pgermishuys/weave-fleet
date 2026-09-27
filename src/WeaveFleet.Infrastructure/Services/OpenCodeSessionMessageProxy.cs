@@ -354,6 +354,8 @@ public sealed class OpenCodeSessionMessageProxy(
     /// hasn't stored yet. The page asks for the snapshot right after create, which can beat the
     /// harness to it. The harness stores a prompt under the id Fleet saved it with, so a prompt drops
     /// out as soon as the harness has it; anything older than the harness's newest message is not pending.
+    /// The harness can list the prompt before it has stored its text; that copy takes Fleet's text, since
+    /// the relay leaves out the harness's own user message events and the text would never arrive.
     /// </summary>
     private async Task<MessagePage> AddPromptsTheHarnessHasNotStoredAsync(string fleetSessionId, MessagePage page)
     {
@@ -365,14 +367,22 @@ public sealed class OpenCodeSessionMessageProxy(
         if (saved.Count == 0)
             return page;
 
+        var savedPrompts = MessagePersistenceService.ToHarnessMessages(saved).Where(m => m.Role == "user").ToList();
+        var savedById = savedPrompts.DistinctBy(m => m.Id, StringComparer.Ordinal).ToDictionary(m => m.Id, StringComparer.Ordinal);
+        var messages = page.Messages
+            .Select(m => m.Role == "user" && m.Parts.Count == 0 && savedById.TryGetValue(m.Id, out var copy)
+                ? m with { Parts = copy.Parts }
+                : m)
+            .ToList();
+
         var harnessIds = page.Messages.Select(m => m.Id).ToHashSet(StringComparer.Ordinal);
         var newestInHarness = page.Messages.Count > 0 ? page.Messages.Max(m => m.Timestamp) : DateTimeOffset.MinValue;
-        var pending = MessagePersistenceService.ToHarnessMessages(saved)
-            .Where(m => m.Role == "user" && !harnessIds.Contains(m.Id) && m.Timestamp > newestInHarness)
+        var pending = savedPrompts
+            .Where(m => !harnessIds.Contains(m.Id) && m.Timestamp > newestInHarness)
             .OrderBy(m => m.Timestamp)
             .ToList();
 
-        return pending.Count == 0 ? page : page with { Messages = [.. page.Messages, .. pending] };
+        return page with { Messages = [.. messages, .. pending] };
     }
 
     private static MessageLifecyclePayload ToMessageLifecyclePayload(HarnessMessage message, string fleetSessionId)

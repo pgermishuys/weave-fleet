@@ -325,7 +325,7 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
           @select="handleNewSessionRequest"
         >
           <Plus class="h-4 w-4" />
-          New Session
+          New session
         </ContextMenuItem>
 
         <ContextMenuItem

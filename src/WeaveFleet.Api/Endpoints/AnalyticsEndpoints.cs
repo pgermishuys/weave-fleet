@@ -27,7 +27,7 @@ public static class AnalyticsEndpoints
             if (reader is null)
                 return Results.Problem("Analytics is disabled.", statusCode: 503);
 
-            var summary = await reader.GetSummaryAsync(ParseDate(from), ParseDate(to), projectId);
+            var summary = await reader.GetSummaryAsync(ParseDate(from), ParseRangeEnd(to), projectId);
             return Results.Ok(summary);
         })
         .Produces<AnalyticsSummary>(200)
@@ -43,7 +43,7 @@ public static class AnalyticsEndpoints
             if (reader is null)
                 return Results.Problem("Analytics is disabled.", statusCode: 503);
 
-            var daily = await reader.GetDailyAsync(ParseDate(from), ParseDate(to), projectId);
+            var daily = await reader.GetDailyAsync(ParseDate(from), ParseRangeEnd(to), projectId);
             return Results.Ok(daily);
         })
         .Produces<IReadOnlyList<DailyAnalytics>>(200)
@@ -60,7 +60,7 @@ public static class AnalyticsEndpoints
             if (reader is null)
                 return Results.Problem("Analytics is disabled.", statusCode: 503);
 
-            var sessions = await reader.GetSessionsAsync(ParseDate(from), ParseDate(to), projectId, limit ?? 50);
+            var sessions = await reader.GetSessionsAsync(ParseDate(from), ParseRangeEnd(to), projectId, limit ?? 50);
             return Results.Ok(sessions);
         })
         .Produces<IReadOnlyList<SessionAnalytics>>(200)
@@ -75,7 +75,7 @@ public static class AnalyticsEndpoints
             if (reader is null)
                 return Results.Problem("Analytics is disabled.", statusCode: 503);
 
-            var models = await reader.GetModelsAsync(ParseDate(from), ParseDate(to));
+            var models = await reader.GetModelsAsync(ParseDate(from), ParseRangeEnd(to));
             return Results.Ok(models);
         })
         .Produces<IReadOnlyList<ModelAnalytics>>(200)
@@ -92,7 +92,7 @@ public static class AnalyticsEndpoints
             if (reader is null)
                 return Results.Problem("Analytics is disabled.", statusCode: 503);
 
-            var rows = await reader.ExportTokenEventsAsync(ParseDate(from), ParseDate(to), projectId);
+            var rows = await reader.ExportTokenEventsAsync(ParseDate(from), ParseRangeEnd(to), projectId);
 
             if (string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase))
             {
@@ -106,6 +106,18 @@ public static class AnalyticsEndpoints
         .WithName("ExportAnalyticsTokenEvents");
 
         return app;
+    }
+
+    /// <summary>
+    /// The end of a range, which the queries read as exclusive. A bare date ("2026-09-27", what the date pickers send)
+    /// means the whole of that day; read as midnight, a range ending today left today out.
+    /// </summary>
+    public static DateTimeOffset? ParseRangeEnd(string? value)
+    {
+        var end = ParseDate(value);
+        return end is { } day && DateOnly.TryParseExact(value!.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _)
+            ? day.AddDays(1)
+            : end;
     }
 
     private static DateTimeOffset? ParseDate(string? value)

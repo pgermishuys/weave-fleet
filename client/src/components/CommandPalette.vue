@@ -103,28 +103,6 @@ function handleInputKeyDown(event: KeyboardEvent): void {
     goBack();
     return;
   }
-
-  if (
-    currentValue === ""
-    && subStack.value.length === 0
-    && !event.metaKey
-    && !event.ctrlKey
-    && !event.altKey
-    && event.key.length === 1
-  ) {
-    const paletteCommand = commands.value.find((command) => {
-      return command.paletteHotkey?.toLowerCase() === event.key.toLowerCase() && !command.disabled;
-    });
-
-    if (!paletteCommand) {
-      return;
-    }
-
-    event.preventDefault();
-    commandStore.recordUsage(paletteCommand.id);
-    paletteCommand.action();
-    handleOpenChange(false);
-  }
 }
 </script>
 
@@ -189,9 +167,9 @@ function handleInputKeyDown(event: KeyboardEvent): void {
             ›
           </span>
 
-          <CommandShortcut v-else-if="command.globalShortcut || command.paletteHotkey">
+          <CommandShortcut v-else-if="command.globalShortcut">
             <kbd class="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
-              {{ command.globalShortcut ? formatGlobalShortcut(command.globalShortcut) : command.paletteHotkey }}
+              {{ formatGlobalShortcut(command.globalShortcut) }}
             </kbd>
           </CommandShortcut>
         </CommandItem>
@@ -206,7 +184,7 @@ function handleInputKeyDown(event: KeyboardEvent): void {
         <span><kbd class="font-mono">Esc</kbd> Close</span>
       </div>
 
-      <span class="opacity-50"><kbd class="font-mono">⌘K</kbd> toggle</span>
+      <span class="opacity-50"><kbd class="font-mono">{{ isApplePlatform() ? "⌘K" : "Ctrl+K" }}</kbd> toggle</span>
     </div>
   </CommandDialog>
 </template>

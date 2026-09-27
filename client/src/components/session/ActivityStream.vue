@@ -32,6 +32,7 @@ import { workflowMessageKey, workflowMessageLabel } from "@/lib/workflows";
 import { useWorkflowsStore } from "@/stores/workflows";
 import { toShellCommandView, type ShellCommandView } from "@/lib/shell-commands";
 import { messagesAfter } from "@/lib/side-conversation";
+import { splitTurnErrorMessage } from "@/lib/turn-error";
 
 interface ImageAttachmentDisplay {
   url: string;
@@ -1233,9 +1234,17 @@ function handleShowCanvas(canvasId: string): void {
             />
             <span class="turn-failure__title">This turn stopped early</span>
           </div>
-          <p class="turn-failure__message">{{ message.turnError.message }}</p>
+          <p class="turn-failure__message">{{ splitTurnErrorMessage(message.turnError.message).summary }}</p>
+          <details
+            v-if="splitTurnErrorMessage(message.turnError.message).details"
+            class="turn-failure__details"
+          >
+            <summary>Details</summary>
+            <pre>{{ splitTurnErrorMessage(message.turnError.message).details }}</pre>
+          </details>
           <div class="turn-failure__foot">
-            <span class="turn-failure__name">{{ message.turnError.name }}</span>
+            <!-- OpenCode names errors it can't classify "UnknownError", which tells the reader nothing. -->
+            <span class="turn-failure__name">{{ message.turnError.name === "UnknownError" ? "" : message.turnError.name }}</span>
             <button
               v-if="lastUserPrompt"
               class="turn-failure__retry"
@@ -1419,6 +1428,32 @@ function handleShowCanvas(canvasId: string): void {
   color: var(--text);
   font-size: 13px;
   line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.turn-failure__details {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.turn-failure__details summary {
+  width: fit-content;
+  cursor: pointer;
+}
+
+.turn-failure__details summary:hover {
+  color: var(--text);
+}
+
+.turn-failure__details pre {
+  max-height: 180px;
+  margin: 6px 0 0;
+  overflow: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 

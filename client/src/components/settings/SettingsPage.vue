@@ -42,7 +42,7 @@ const pluginSections = computed<readonly DecoratedSettingsSection[]>(() => {
 </script>
 
 <template>
-  <section class="grid gap-6">
+  <section class="grid grid-cols-1 gap-6">
     <div>
       <h1 class="text-2xl font-semibold tracking-tight text-text">
         Settings

@@ -109,6 +109,24 @@ public sealed class AnalyticsRepositoryTests : IAsyncLifetime
         daily.Count.ShouldBe(2);
     }
 
+    [Fact]
+    public async Task GetDailyAsync_does_not_add_the_fleet_wide_rollup_to_the_per_project_rows()
+    {
+        // The rollup service writes both; the dashboard's spend showed twice the real figure.
+        using (var conn = _factory!.CreateConnection())
+        {
+            await conn.ExecuteAsync("""
+                INSERT INTO daily_rollups (date, user_id, project_id, model_id, provider_id,
+                    total_tokens, total_cost, total_estimated_cost, session_count, message_count)
+                VALUES ('2026-01-15','local-user','','','', 810, 0.03, 0.027, 1, 2)
+                """);
+        }
+
+        var daily = await _repo!.GetDailyAsync(null, null, null);
+
+        daily.Single(d => d.Date == "2026-01-15").Tokens.ShouldBe(810);
+    }
+
     // ── GetSessionsAsync ───────────────────────────────────────────────────────
 
     [Fact]
