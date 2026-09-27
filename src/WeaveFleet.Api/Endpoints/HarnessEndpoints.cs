@@ -14,14 +14,17 @@ public static class HarnessEndpoints
     {
         var group = app.MapGroup("/api").WithTags("Harnesses");
 
+        // GET /api/harnesses?fresh= — the harnesses as last checked (at once), or after a check of their own with fresh=true
         group.MapGet("/harnesses", async (
-            IHarnessRegistry registry,
+            bool? fresh,
+            HarnessAvailabilityCache availability,
             IHarnessUpdateService updates,
             IUserPreferenceRepository preferences,
             FleetOptions fleetOptions,
             CancellationToken ct) =>
         {
-            var harnesses = await registry.GetAvailabilityAsync(ct);
+            var check = await availability.GetAsync(fresh == true, ct);
+            var harnesses = check.Harnesses;
             var preferenceValues = await preferences.GetAllAsync();
 
             // Harnesses are updated on the machine Fleet runs on; in cloud mode that's the server, not the user's.
@@ -40,6 +43,7 @@ public static class HarnessEndpoints
                     SupportsProviderSignIn = HarnessSignInService.Supports(harness.Capabilities, fleetOptions),
                 },
                 Update = updateInfo?.GetValueOrDefault(harness.Type),
+                CheckedAt = check.CheckedAt,
             }).ToList();
 
             return Results.Ok(response);

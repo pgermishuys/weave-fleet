@@ -7,6 +7,7 @@ import { createModelSelectionKey } from "@/composables/use-models";
 import { addDraftTerminalContext, clearDraftTerminalContext } from "@/composables/use-draft-terminal-context";
 import { _resetSideConversationsForTesting, useSideConversation } from "@/composables/use-side-conversation";
 import { readStoredDraft } from "@/lib/draft-storage";
+import { forgetHarnessLists } from "@/composables/use-harnesses";
 
 vi.mock("@/api/client", () => ({
   api: {
@@ -304,6 +305,13 @@ function mountComposer(options: MountComposerOptions = {}) {
     },
   });
 }
+
+
+// Each block answers /api/harnesses its own way; a list kept from the last test would answer for it.
+beforeEach(() => {
+  forgetHarnessLists();
+  window.localStorage.removeItem("weave:saved:harnesses:home");
+});
 
 describe("Composer", () => {
   beforeEach(() => {

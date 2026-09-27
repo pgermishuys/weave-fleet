@@ -570,6 +570,8 @@ export interface HarnessInfo {
   /** How to install it or sign in to it here; missing when Fleet can't help. */
   setup?: HarnessSetup | null;
   update?: HarnessUpdateInfo | null;
+  /** When Fleet last checked the harnesses (ISO). Missing from Fleets that check on every request. */
+  checkedAt?: string | null;
 }
 
 export interface WorkspaceRootItem {

@@ -103,3 +103,55 @@ describe("useHarnessCatalog pushed changes", () => {
     expect(result.agents.value.map((agent) => agent.id)).toEqual(["reviewer"]);
   });
 });
+
+describe("useHarnessCatalog across a reload", () => {
+  beforeEach(() => {
+    clearHarnessCatalogCache();
+    mockApi.GET.mockReset();
+    handlers.clear();
+  });
+
+  it("draws the folder's saved catalog at once after a reload, and asks again when it's old", async () => {
+    answer("build");
+    await mountCatalog("none");
+
+    // A reload: the module starts over; the browser still has what was saved.
+    vi.resetModules();
+    const reloaded = await import("@/composables/use-harness-catalog");
+    let reply: (value: unknown) => void = () => {};
+    mockApi.GET.mockImplementation(() => new Promise((resolve) => (reply = resolve)));
+    vi.useFakeTimers({ now: Date.now() + 6 * 60_000, toFake: ["Date"] });
+    try {
+      const { result } = await mountComposable(() =>
+        reloaded.useHarnessCatalog(shallowRef("opencode2"), shallowRef<string | null>("/work/rocket"), shallowRef("none")));
+
+      expect(result.agents.value.map((agent) => agent.id)).toEqual(["build"]);
+      expect(result.isCurrent.value).toBe(true);
+      expect(mockApi.GET).toHaveBeenCalledTimes(2);
+
+      reply({ data: catalogWith("reviewer"), error: undefined, response: new Response(null, { status: 200 }) });
+      await flushAll();
+      expect(result.agents.value.map((agent) => agent.id)).toEqual(["reviewer"]);
+    } finally {
+      vi.useRealTimers();
+      reloaded.clearHarnessCatalogCache();
+    }
+  });
+
+  it("uses a saved catalog that's still fresh without asking", async () => {
+    answer("build");
+    await mountCatalog("none");
+
+    vi.resetModules();
+    const reloaded = await import("@/composables/use-harness-catalog");
+    try {
+      const { result } = await mountComposable(() =>
+        reloaded.useHarnessCatalog(shallowRef("opencode2"), shallowRef<string | null>("/work/rocket"), shallowRef("none")));
+
+      expect(result.agents.value.map((agent) => agent.id)).toEqual(["build"]);
+      expect(mockApi.GET).toHaveBeenCalledTimes(1);
+    } finally {
+      reloaded.clearHarnessCatalogCache();
+    }
+  });
+});
