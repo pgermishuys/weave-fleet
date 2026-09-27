@@ -1,6 +1,6 @@
 // Smoke test for a packaged app: start it on a scratch data directory, wait for the Fleet it bundles, check the UI
 // and API, list a repository (which runs git from Fleet), then kill the app the hard way and check its Fleet stops
-// too and gives up the database lock.
+// too and gives up the database lock, by starting the app again on the same data.
 //
 //   node scripts/smoke.mjs <app executable> [app arguments...]
 //
@@ -53,26 +53,34 @@ async function until(what, check, ms) {
   throw new Error(`Timed out waiting for ${what}`);
 }
 
-const app = spawn(executable, [...appArgs, `--user-data-dir=${path.join(root, "user-data")}`], {
-  env: { ...process.env, FLEET_DESKTOP_DATA_DIR: dataDir, FLEET_HARNESS: "test", FLEET_WORKSPACE_ROOTS: reposDir },
-  stdio: "inherit",
-});
-let appExited = false;
-app.on("exit", () => {
-  appExited = true;
-});
-
-let failed = false;
-try {
-  const instance = await until(
-    "the app's Fleet to write its instance file",
+const apps = [];
+function launch() {
+  const app = spawn(executable, [...appArgs, `--user-data-dir=${path.join(root, "user-data")}`], {
+    env: { ...process.env, FLEET_DESKTOP_DATA_DIR: dataDir, FLEET_HARNESS: "test", FLEET_WORKSPACE_ROOTS: reposDir },
+    stdio: "inherit",
+  });
+  app.exited = false;
+  app.on("exit", () => {
+    app.exited = true;
+  });
+  apps.push(app);
+  return app;
+}
+const waitForFleet = (app, what, previousPid) =>
+  until(
+    what,
     () => {
-      if (appExited) throw new Error("The app exited before its Fleet started");
+      if (app.exited) throw new Error("The app exited before its Fleet started");
       const value = readInstance();
-      return value?.desktop === true && value;
+      return value?.desktop === true && value.pid !== previousPid && value;
     },
     120_000,
   );
+
+let failed = false;
+try {
+  const app = launch();
+  const instance = await waitForFleet(app, "the app's Fleet to write its instance file");
   console.log(`Fleet ${instance.version} is up at ${instance.url} (pid ${instance.pid})`);
 
   const ready = await fetch(`${instance.url}/readyz`);
@@ -98,8 +106,18 @@ try {
 
   app.kill("SIGKILL");
   await until("the app's Fleet to stop after the app was killed", () => !alive(instance.pid), 30_000);
-  await until("the instance file to go", () => !fs.existsSync(instanceFile), 10_000);
-  console.log("Killing the app stopped its Fleet and released the lock.");
+  console.log("Killing the app stopped its Fleet.");
+
+  // Fleet deletes its instance file as it stops cleanly, but on Windows the app's child processes die with it (Node
+  // puts them in a job that's killed when the app goes), so Fleet can be gone before it gets that far. A file left
+  // behind is stale, and the next start replaces it. What matters is the lock: a new app has to start its own Fleet.
+  const again = launch();
+  const restarted = await waitForFleet(again, "a new app to start its own Fleet on the same data", instance.pid);
+  const readyAgain = await fetch(`${restarted.url}/readyz`);
+  if (!readyAgain.ok) throw new Error(`/readyz answered ${readyAgain.status} after the restart`);
+  console.log(`The app started again on the same data (Fleet pid ${restarted.pid}), so the lock was released.`);
+  again.kill("SIGKILL");
+  await until("the second app's Fleet to stop after it was killed", () => !alive(restarted.pid), 30_000);
 } catch (error) {
   failed = true;
   console.error(`Smoke test failed: ${error.message}`);
@@ -107,7 +125,7 @@ try {
     console.error(`\n── ${log}\n${fs.readFileSync(log, "utf8").slice(-8000)}`);
   }
 } finally {
-  if (!appExited) app.kill("SIGKILL");
+  for (const app of apps) if (!app.exited) app.kill("SIGKILL");
   const leftover = readInstance();
   if (leftover && alive(leftover.pid)) process.kill(leftover.pid, "SIGKILL");
 }
