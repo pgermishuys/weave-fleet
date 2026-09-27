@@ -4,6 +4,7 @@ export interface MenuActions {
   openLogs: () => void;
   openDataFolder: () => void;
   checkForUpdates: () => void;
+  reportProblem: () => void;
 }
 
 /** The application menu. The Edit roles are what make copy and paste work on macOS. */
@@ -48,6 +49,8 @@ export function buildAppMenu(platform: NodeJS.Platform, actions: MenuActions): M
     {
       role: "help",
       submenu: [
+        { label: "Report a Problem…", click: actions.reportProblem },
+        { type: "separator" as const },
         ...(mac ? [] : [{ label: "Check for Updates…", click: actions.checkForUpdates }, { type: "separator" as const }]),
         { label: "Open Logs Folder", click: actions.openLogs },
         { label: "Open Fleet Data Folder", click: actions.openDataFolder },

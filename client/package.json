@@ -46,6 +46,7 @@
     "lucide-vue-next": "^1.0.0",
     "markdown-it": "^14.1.1",
     "mermaid": "^11.16.0",
+    "modern-screenshot": "^4.7.0",
     "openapi-fetch": "^0.13.3",
     "pinia": "^3.0.4",
     "reka-ui": "^2.9.6",

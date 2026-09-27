@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import { ArrowUpRight, Bot, CornerDownRight, RotateCw, TerminalSquare, TriangleAlert, Workflow } from "lucide-vue-next";
+import { ArrowUpRight, Bot, Bug, CornerDownRight, RotateCw, TerminalSquare, TriangleAlert, Workflow } from "lucide-vue-next";
 import { parsePeerMessage, parsePeerUpdate, type PeerOutcome, type PeerSender } from "@/lib/session-messages";
 import { finishedBackgroundWork, parseBackgroundNotice, type BackgroundNotice, type BackgroundState } from "@/lib/background-work";
 import { useRouter } from "@tanstack/vue-router";
@@ -30,6 +30,7 @@ import { focusServerCanvas } from "@/composables/use-server-canvases";
 import { mergeMessagesByTimestamp } from "@/lib/merge-messages";
 import { workflowMessageKey, workflowMessageLabel } from "@/lib/workflows";
 import { useWorkflowsStore } from "@/stores/workflows";
+import { useProblemReportStore } from "@/stores/problem-report";
 import { toShellCommandView, type ShellCommandView } from "@/lib/shell-commands";
 import { messagesAfter } from "@/lib/side-conversation";
 import { splitTurnErrorMessage } from "@/lib/turn-error";
@@ -94,6 +95,7 @@ const sessionsStore = useSessionsStore();
 const workflowsStore = useWorkflowsStore();
 
 /** The run this session is a step of, which says which of its messages Fleet sent. */
+const problemReport = useProblemReportStore();
 const workflowRun = computed(() => workflowsStore.runForSession(props.sessionId));
 const { sessions } = storeToRefs(sessionsStore);
 const canvasesStore = useCanvasesStore();
@@ -119,6 +121,16 @@ const lastUserPrompt = computed<string | undefined>(() => {
   const body = lastUser ? messageBody(lastUser).trim() : "";
   return body.length > 0 ? body : undefined;
 });
+
+// Opens Report a problem about this session, starting the description with what the card says.
+function reportTurnFailure(turnError: { name?: string | null; message: string }): void {
+  const summary = splitTurnErrorMessage(turnError.message).summary;
+  void problemReport.show({
+    from: "failure",
+    sessionId: props.sessionId,
+    description: `This turn stopped early: ${summary}\n\n`,
+  });
+}
 
 function handleRetryTurn(): void {
   const prompt = lastUserPrompt.value;
@@ -1245,21 +1257,35 @@ function handleShowCanvas(canvasId: string): void {
           <div class="turn-failure__foot">
             <!-- OpenCode names errors it can't classify "UnknownError", which tells the reader nothing. -->
             <span class="turn-failure__name">{{ message.turnError.name === "UnknownError" ? "" : message.turnError.name }}</span>
-            <!-- Only the latest failure: Retry sends the last prompt again, which an earlier failure didn't answer. -->
-            <button
-              v-if="lastUserPrompt && message.id === messages.at(-1)?.id"
-              class="turn-failure__retry"
-              type="button"
-              data-testid="turn-failure-retry"
-              :disabled="!canSend"
-              @click="handleRetryTurn"
-            >
-              <RotateCw
-                class="turn-failure__retry-icon"
-                aria-hidden="true"
-              />
-              Retry
-            </button>
+            <span class="turn-failure__actions">
+              <button
+                class="turn-failure__retry"
+                type="button"
+                data-testid="turn-failure-report"
+                @click="reportTurnFailure(message.turnError)"
+              >
+                <Bug
+                  class="turn-failure__retry-icon"
+                  aria-hidden="true"
+                />
+                Report this
+              </button>
+              <!-- Only the latest failure: Retry sends the last prompt again, which an earlier failure didn't answer. -->
+              <button
+                v-if="lastUserPrompt && message.id === messages.at(-1)?.id"
+                class="turn-failure__retry"
+                type="button"
+                data-testid="turn-failure-retry"
+                :disabled="!canSend"
+                @click="handleRetryTurn"
+              >
+                <RotateCw
+                  class="turn-failure__retry-icon"
+                  aria-hidden="true"
+                />
+                Retry
+              </button>
+            </span>
           </div>
         </div>
         <div
@@ -1464,6 +1490,13 @@ function handleShowCanvas(canvasId: string): void {
   justify-content: space-between;
   gap: 12px;
   margin-top: 8px;
+}
+
+.turn-failure__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
 }
 
 .turn-failure__name {

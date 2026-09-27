@@ -94,6 +94,10 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(ToolCancelledState))]
 // Shared
 [JsonSerializable(typeof(ApiErrorResponse))]
+[JsonSerializable(typeof(WeaveFleet.Application.Reports.PrepareReportRequest))]
+[JsonSerializable(typeof(WeaveFleet.Application.Reports.PreparedReport))]
+[JsonSerializable(typeof(WeaveFleet.Application.Reports.SendReportRequest))]
+[JsonSerializable(typeof(WeaveFleet.Application.Reports.SendReportResponse))]
 // Fleet
 [JsonSerializable(typeof(VersionResponse))]
 [JsonSerializable(typeof(ProfileResponse))]

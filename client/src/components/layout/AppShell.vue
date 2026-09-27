@@ -12,6 +12,7 @@ import { useElementSize } from "@vueuse/core";
 import { storeToRefs } from "pinia";
 import CommandPalette from "@/components/CommandPalette.vue";
 import GoToFileDialog from "@/components/canvas/GoToFileDialog.vue";
+import ProblemReportDialog from "@/components/report/ProblemReportDialog.vue";
 import BoardRightPanel from "@/components/board/BoardRightPanel.vue";
 import CenterContent from "@/components/layout/CenterContent.vue";
 import ContextPanel from "@/components/layout/ContextPanel.vue";
@@ -353,6 +354,7 @@ function onGutterPointerDown(e: PointerEvent): void {
 
     <CommandPalette />
     <GoToFileDialog />
+    <ProblemReportDialog />
     <ArchiveUndoToast />
     <NoticeCard />
   </div>

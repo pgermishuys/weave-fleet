@@ -2,6 +2,7 @@ import { computed, onMounted, onUnmounted, watch } from "vue";
 import { useLocation, useRouter } from "@tanstack/vue-router";
 import {
   BarChart3,
+  Bug,
   ChevronLeft,
   ChevronRight,
   Copy,
@@ -45,6 +46,7 @@ import { useGoToFileStore } from "@/stores/go-to-file";
 import { useTerminalsStore } from "@/stores/terminals";
 import { useThemeStore, type ThemeSelection } from "@/stores/theme";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
+import { useProblemReportStore } from "@/stores/problem-report";
 
 function isEditableTarget(target: EventTarget | null): boolean {
   return target instanceof HTMLInputElement
@@ -75,6 +77,7 @@ export function useCommands() {
   const keybindingsStore = useKeybindingsStore();
   const sessionsStore = useSessionsStore();
   const sidebarStore = useSidebarStore();
+  const problemReport = useProblemReportStore();
   const themeStore = useThemeStore();
   const workspaceUiStore = useWorkspaceUiStore();
   const appShellStore = useAppShellStore();
@@ -652,6 +655,15 @@ export function useCommands() {
         category: "Fleet",
         keywords: ["plugins", "integrations", "marketplace"],
         action: () => sidebarStore.setActiveRail("marketplace"),
+      },
+      {
+        id: "report-problem",
+        label: "Report a problem",
+        description: "Tell the Fleet maintainers what went wrong.",
+        icon: Bug,
+        category: "Fleet",
+        keywords: ["bug", "issue", "feedback", "help", "report"],
+        action: () => void problemReport.show({ from: "palette" }),
       },
     ];
   });

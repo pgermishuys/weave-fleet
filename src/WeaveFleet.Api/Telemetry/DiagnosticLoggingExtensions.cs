@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Configuration;
@@ -24,6 +25,7 @@ internal static class DiagnosticLoggingExtensions
         if (!enabled)
         {
             Console.WriteLine("[Fleet:DiagnosticLogging] Disabled via configuration.");
+            builder.Services.AddSingleton(FleetLogLocation.Disabled);
             return builder;
         }
 
@@ -59,6 +61,9 @@ internal static class DiagnosticLoggingExtensions
 
         var provider = new FileLoggerProvider(logDirectory, filePrefix, minimumLevel);
         builder.Logging.AddProvider(provider);
+
+        // Problem reports read the last minutes of these files (they record nothing of their own).
+        builder.Services.AddSingleton(new FleetLogLocation(true, logDirectory, filePrefix));
 
         // Register cleanup service as a hosted service.
         builder.Services.AddHostedService(sp =>

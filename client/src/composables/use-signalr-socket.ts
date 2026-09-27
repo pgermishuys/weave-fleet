@@ -511,6 +511,20 @@ export function _isConnected(): boolean {
   return connection !== null
 }
 
+/**
+ * The connection as it is right now, for a problem report. Reads state the socket already keeps; nothing is recorded
+ * for reports ahead of time.
+ */
+export function describeSocketForReport(): { state: string; topics: number; withSnapshot: number; retrying: number } {
+  const topics = Array.from(topicListenersV2.entries()).filter(([, listeners]) => listeners.size > 0).map(([topic]) => topic)
+  return {
+    state: connection?.state ?? "not started",
+    topics: topics.length,
+    withSnapshot: topics.filter((topic) => lastSnapshotsV2.has(topic)).length,
+    retrying: reconnectAttempt,
+  }
+}
+
 export function isWeaveSocketConnected(): boolean {
   return connection?.state === HubConnectionState.Connected
 }

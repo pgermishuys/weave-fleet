@@ -33,6 +33,10 @@ export interface FleetDesktopBridge {
   installUpdate(options?: { confirmed?: boolean }): Promise<void>;
   /** Calls back when the app wants the update card open (Help → Check for Updates… found one). Absent in older apps. */
   onShowUpdate?(callback: () => void): () => void;
+  /** The app's window as a PNG data: URL, for a problem report. Absent in older apps. */
+  captureWindow?(): Promise<string | null>;
+  /** Calls back when Help → Report a Problem… is chosen in the app's menu. Absent in older apps. */
+  onReportProblem?(callback: () => void): () => void;
 }
 
 /** The release notes for a version, on the public mirror both the app and the CLI update from. */
