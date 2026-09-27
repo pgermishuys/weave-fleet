@@ -209,15 +209,16 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     public async Task<IHarnessSession> SpawnAsync(HarnessSpawnOptions options, CancellationToken ct)
     {
         HarnessHelpers.ValidateWorkingDirectory(options.WorkingDirectory);
+        var directory = HarnessHelpers.OnDiskSpelling(options.WorkingDirectory);
 
         var server = await GetServerAsync(options.OwnerUserId, ProfileOf(options.LaunchArtifacts), ct).ConfigureAwait(false);
         // On a server with the step tool, every session that isn't a workflow step has it denied.
         var created = await server.Client.CreateSessionAsync(
-            options.WorkingDirectory, ct, hideStepTool: server.Setup.Workflows && !options.WorkflowStep).ConfigureAwait(false);
+            directory, ct, hideStepTool: server.Setup.Workflows && !options.WorkflowStep).ConfigureAwait(false);
 
         var session = NewSession(
             created,
-            new OpenCode2SessionContext(options.SessionId, options.OwnerUserId, options.WorkingDirectory, options.ProjectId, options.ProjectName),
+            new OpenCode2SessionContext(options.SessionId, options.OwnerUserId, directory, options.ProjectId, options.ProjectName),
             server);
         try
         {
@@ -271,7 +272,8 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         // A subagent's child session attaches here too, and gets the events held for it since it started.
         var session = NewSession(
             info with { Id = options.ResumeToken },
-            new OpenCode2SessionContext(options.SessionId, options.OwnerUserId, options.WorkingDirectory, options.ProjectId, options.ProjectName),
+            new OpenCode2SessionContext(
+                options.SessionId, options.OwnerUserId, HarnessHelpers.OnDiskSpelling(options.WorkingDirectory), options.ProjectId, options.ProjectName),
             server);
         LogResumed(_logger, session.InstanceId, options.ResumeToken, server.ProcessId ?? 0);
         return session;
@@ -286,7 +288,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     {
         HarnessHelpers.ValidateWorkingDirectory(directory);
         var server = await GetServerAsync(ownerUserId, profile is null ? null : WriteProfile(profile), ct).ConfigureAwait(false);
-        return await OpenCode2Catalog.ReadAsync(server, directory, ct).ConfigureAwait(false);
+        return await OpenCode2Catalog.ReadAsync(server, HarnessHelpers.OnDiskSpelling(directory), ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -300,7 +302,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     {
         HarnessHelpers.ValidateWorkingDirectory(options.Directory);
         var server = await GetServerAsync(options.OwnerUserId, options.Profile is null ? null : WriteProfile(options.Profile), ct).ConfigureAwait(false);
-        var session = await server.Client.CreateSessionAsync(options.Directory, ct).ConfigureAwait(false);
+        var session = await server.Client.CreateSessionAsync(HarnessHelpers.OnDiskSpelling(options.Directory), ct).ConfigureAwait(false);
         try
         {
             if (options is { ProviderId: { Length: > 0 } providerId, ModelId: { Length: > 0 } modelId })
