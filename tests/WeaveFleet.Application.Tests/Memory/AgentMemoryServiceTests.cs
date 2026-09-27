@@ -210,6 +210,40 @@ public sealed class AgentMemoryServiceTests : IDisposable
         overview.MachineCount.ShouldBe(1);
     }
 
+    [Fact]
+    public async Task A_repository_note_rewrites_only_that_repositorys_folders_and_a_machine_note_rewrites_them_all()
+    {
+        await _memory.SetEnabledAsync(true);
+        await _memory.PrepareSessionAsync("owner", _repository, canSave: false);
+        await _memory.PrepareSessionAsync("owner", _worktree, canSave: false);
+        await _memory.PrepareSessionAsync("owner", _otherRepository, canSave: false);
+        _store.Writes.Clear();
+
+        await _memory.SaveFromAgentAsync(Session(_worktree), "repository", "Only for weave-fleet.", "learned", null);
+
+        _store.Writes.ShouldBe([_repository, _worktree], ignoreOrder: true);
+        _store.Context[_worktree].ShouldContain("Only for weave-fleet.");
+        _store.Writes.Clear();
+
+        await _memory.SaveFromAgentAsync(Session(_repository), "machine", "For every repository.", "learned", null);
+
+        _store.Writes.ShouldBe([_repository, _worktree, _otherRepository], ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task A_session_folder_that_no_longer_exists_is_forgotten()
+    {
+        await _memory.SetEnabledAsync(true);
+        var gone = Path.Combine(_repository, "src", "gone");
+        Directory.CreateDirectory(gone);
+        await _memory.PrepareSessionAsync("owner", gone, canSave: false);
+        Directory.Delete(gone);
+
+        await _memory.AddAsync("machine", null, "Anything.");
+
+        _store.Context.Keys.ShouldNotContain(gone);
+    }
+
     private static Session Session(string directory) => new()
     {
         Id = "session-1",
@@ -230,9 +264,17 @@ public sealed class AgentMemoryServiceTests : IDisposable
     {
         public List<MemoryNote> Notes { get; } = [];
         public Dictionary<string, string> Context { get; } = new(StringComparer.Ordinal);
+        public Dictionary<string, string> ContextRepository { get; } = new(StringComparer.Ordinal);
+        public List<string> Writes { get; } = [];
 
         public Task<IReadOnlyList<MemoryNote>> ListAsync(string userId, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<MemoryNote>>([.. Notes]);
+
+        public Task<IReadOnlyList<MemoryNote>> ListForAsync(string userId, string? repository, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<MemoryNote>>([.. Notes.Where(note => note.List == MemoryList.Machine || (repository is not null && note.Repository == repository))]);
+
+        public Task<MemoryNote?> FindAsync(string userId, string id, CancellationToken ct = default)
+            => Task.FromResult(Notes.FirstOrDefault(note => note.Id == id));
 
         public Task SaveAsync(string userId, MemoryNote note, CancellationToken ct = default)
         {
@@ -249,18 +291,28 @@ public sealed class AgentMemoryServiceTests : IDisposable
 
         public string ContextFolder(string userId) => "/memory/context";
 
-        public Task WriteContextAsync(string userId, string directory, string content, CancellationToken ct = default)
+        public Task WriteContextAsync(string userId, string directory, string repository, string content, CancellationToken ct = default)
         {
             Context[directory] = content;
+            ContextRepository[directory] = repository;
+            Writes.Add(directory);
             return Task.CompletedTask;
         }
 
-        public Task<IReadOnlyList<string>> ListContextDirectoriesAsync(string userId, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<string>>([.. Context.Keys]);
+        public Task<IReadOnlyList<MemoryContextFolder>> ListContextFoldersAsync(string userId, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<MemoryContextFolder>>([.. Context.Keys.Select(directory => new MemoryContextFolder(directory, ContextRepository[directory]))]);
+
+        public Task ForgetContextAsync(string userId, string directory, CancellationToken ct = default)
+        {
+            Context.Remove(directory);
+            ContextRepository.Remove(directory);
+            return Task.CompletedTask;
+        }
 
         public Task ClearContextAsync(string userId, CancellationToken ct = default)
         {
             Context.Clear();
+            ContextRepository.Clear();
             return Task.CompletedTask;
         }
     }
