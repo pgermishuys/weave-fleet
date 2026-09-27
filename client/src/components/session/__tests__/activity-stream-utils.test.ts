@@ -27,6 +27,19 @@ describe("toToolCardItem", () => {
     expect(running).toMatchObject({ title: "Shop · npm run dev", canvasId: undefined });
   });
 
+  it("shows a saved note as the note itself, whatever the harness says the call was", () => {
+    const done = toToolCardItem(create_tool_part({
+      status: "completed",
+      input: { text: "WebFetch can't read github.com pages; use gh.", list: "machine", kind: "learned" },
+      title: "Remembered for this machine",
+      output: "WebFetch can't read github.com pages; use gh.\nSaved as note 1a2b3c4d for this machine. Sessions read it from their next request.",
+    }, "fleet_memory_save"));
+    const running = toToolCardItem(create_tool_part({ status: "running", input: { text: "WebFetch can't read github.com pages; use gh." } }, "fleet_memory_save"));
+
+    expect(done).toMatchObject({ title: "WebFetch can't read github.com pages; use gh.", preview: "└ WebFetch can't read github.com pages; use gh. (2 lines)" });
+    expect(running.title).toBe("WebFetch can't read github.com pages; use gh.");
+  });
+
   it("points a screenshot call at the copy Fleet kept, under the session it names", () => {
     const shot = toToolCardItem(create_tool_part({
       status: "completed",

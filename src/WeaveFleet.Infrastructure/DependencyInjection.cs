@@ -180,6 +180,10 @@ public static class DependencyInjection
         services.AddScoped<ICanvasService, CanvasService>();
         services.AddScoped<CanvasBridge>();
         services.AddScoped<SessionMessagesFeature>();
+        services.AddSingleton<WeaveFleet.Application.Memory.IMemoryStore, WeaveFleet.Infrastructure.Memory.FileMemoryStore>();
+        services.AddScoped<WeaveFleet.Application.Memory.AgentMemoryFeature>();
+        services.AddScoped<WeaveFleet.Application.Memory.AgentMemoryService>();
+        services.AddScoped<WeaveFleet.Application.Memory.AgentMemoryBridge>();
         services.AddScoped<SessionMessageBridge>();
         services.AddScoped<ISessionUpdateSender, SessionUpdateSender>();
         // Singleton: holds which messages a session asked to hear back about, until the turn handling them ends.

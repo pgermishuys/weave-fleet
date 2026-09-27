@@ -7,6 +7,7 @@ import FeaturesSection from "@/components/settings/FeaturesSection.vue";
 import SystemSection from "@/components/settings/SystemSection.vue";
 import CredentialsSection from "@/components/settings/CredentialsSection.vue";
 import SkillsSection from "@/components/settings/SkillsSection.vue";
+import MemorySection from "@/components/settings/MemorySection.vue";
 import ToolsSection from "@/components/settings/ToolsSection.vue";
 import HarnessesSection from "@/components/settings/HarnessesSection.vue";
 import MachinesSection from "@/components/settings/MachinesSection.vue";
@@ -47,7 +48,7 @@ const pluginSections = computed<readonly DecoratedSettingsSection[]>(() => {
         Settings
       </h1>
       <p class="mt-1 text-sm text-muted">
-        Manage credentials, workspace preferences, appearance, skills, harnesses, Weave, system details, and plugin-provided settings.
+        Manage credentials, workspace preferences, appearance, skills, memory, harnesses, Weave, system details, and plugin-provided settings.
       </p>
       <p
         v-if="!machines.live.isHome && activeSection !== 'machines'"
@@ -72,6 +73,8 @@ const pluginSections = computed<readonly DecoratedSettingsSection[]>(() => {
     </template>
 
     <SkillsSection v-else-if="activeSection === 'skills'" />
+
+    <MemorySection v-else-if="activeSection === 'memory'" />
 
     <ToolsSection v-else-if="activeSection === 'tools'" />
 

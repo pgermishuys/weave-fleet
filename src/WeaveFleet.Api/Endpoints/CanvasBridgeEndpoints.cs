@@ -1,6 +1,7 @@
 using System.Net;
 using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
+using WeaveFleet.Application.Memory;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Workflows;
 
@@ -85,6 +86,23 @@ public static class CanvasBridgeEndpoints
             .MapPost("/step-done", async (WorkflowStepBridgeRequest request, HttpContext http, WorkflowStepBridge bridge, CancellationToken ct)
                 => ToResult(await bridge.DoneAsync(BridgeToken(http), request.HarnessSessionId, request.Outcome, request.Summary, ct)))
             .WithName("WorkflowStepBridgeDone");
+
+        // fleet_memory_save / fleet_memory_forget: notes for the session's repository or this machine.
+        var memory = app.MapGroup($"{PathPrefix}/memory")
+            .AllowAnonymous()
+            .WithTags("MemoryBridge")
+            .AddEndpointFilter(async (context, next) =>
+                IsLoopback(context.HttpContext.Connection.RemoteIpAddress)
+                    ? await next(context)
+                    : UnknownCaller());
+
+        memory.MapPost("/save", async (MemoryBridgeRequest request, HttpContext http, AgentMemoryBridge bridge, CancellationToken ct)
+            => ToResult(await bridge.SaveAsync(BridgeToken(http), request.HarnessSessionId, request.List, request.Text, request.Kind, request.Replaces, ct)))
+            .WithName("MemoryBridgeSave");
+
+        memory.MapPost("/forget", async (MemoryBridgeRequest request, HttpContext http, AgentMemoryBridge bridge, CancellationToken ct)
+            => ToResult(await bridge.ForgetAsync(BridgeToken(http), request.HarnessSessionId, request.Id, ct)))
+            .WithName("MemoryBridgeForget");
 
         return app;
     }

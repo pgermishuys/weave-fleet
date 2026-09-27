@@ -10,6 +10,7 @@ using WeaveFleet.Application;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Memory;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Skills;
@@ -404,7 +405,24 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         if (await IsWorkflowsEnabledAsync(context.UserId).ConfigureAwait(false))
             envVars[FleetWorkflows.EnvironmentVariable] = "1";
 
+        // Memory adds its tools and the notes for each folder. The folder's path never changes, so turning memory on or
+        // off is what gives new sessions a process with or without it.
+        if (await GetMemoryFolderAsync(context.UserId).ConfigureAwait(false) is { } memoryFolder)
+            envVars[AgentMemory.EnvironmentVariable] = memoryFolder;
+
         return new RuntimePreparation.Ready(new OpenCodeLaunchArtifacts(envVars, GetRuntimePreparationModelIds(context.ModelId)));
+    }
+
+    /// <summary>The folder with the owner's notes for sessions to read, when memory is on.</summary>
+    private async Task<string?> GetMemoryFolderAsync(string userId)
+    {
+        using var userScope = BackgroundUserContext.BeginScope(userId);
+        using var scope = _scopeFactory.CreateScope();
+        return scope.ServiceProvider.GetService<AgentMemoryFeature>() is { } feature
+               && scope.ServiceProvider.GetService<IMemoryStore>() is { } store
+               && await feature.IsEnabledAsync().ConfigureAwait(false)
+            ? store.ContextFolder(userId)
+            : null;
     }
 
     private async Task<bool> IsWorkflowsEnabledAsync(string userId)

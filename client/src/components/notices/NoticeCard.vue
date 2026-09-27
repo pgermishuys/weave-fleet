@@ -17,6 +17,8 @@ let holdTimer: ReturnType<typeof setTimeout> | undefined;
 let holdLeft = NOTICE_HOLD_MS;
 let holdStartedAt = 0;
 let held = false;
+/** Whether the hold is paused (hovered or focused), so the countdown bar pauses with it. */
+const holding = ref(false);
 
 function isTextField(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -66,8 +68,9 @@ watch(
 // ── Hold: a card the user didn't ask for settles by itself ────────────────
 function startHold(): void {
   clearTimeout(holdTimer);
-  holdLeft = NOTICE_HOLD_MS;
+  holdLeft = open.value?.holdMs ?? NOTICE_HOLD_MS;
   held = false;
+  holding.value = false;
   resumeHold();
 }
 
@@ -82,6 +85,7 @@ function resumeHold(): void {
 
 function pauseHold(): void {
   held = true;
+  holding.value = true;
   if (holdTimer === undefined) return;
   clearTimeout(holdTimer);
   holdTimer = undefined;
@@ -91,6 +95,7 @@ function pauseHold(): void {
 function release(): void {
   if (card.value?.matches(":hover") || card.value?.contains(document.activeElement)) return;
   held = false;
+  holding.value = false;
   resumeHold();
 }
 
@@ -218,6 +223,17 @@ onUnmounted(() => {
           </p>
         </div>
       </div>
+      <span
+        v-if="open.countdown && !pinned"
+        class="notice__countdown"
+        aria-hidden="true"
+      >
+        <span
+          class="notice__countdown-bar"
+          :class="{ 'notice__countdown-bar--paused': holding }"
+          :style="{ animationDuration: `${open.holdMs ?? NOTICE_HOLD_MS}ms` }"
+        />
+      </span>
       <div
         v-if="open.actions?.length"
         class="notice__actions"
@@ -304,6 +320,8 @@ onUnmounted(() => {
   font-size: 12px;
   line-height: 1.45;
   color: var(--muted);
+  /* A note can hold a long unbroken value (a variable, a path); it wraps rather than leave the card. */
+  overflow-wrap: anywhere;
 }
 
 .notice__link {
@@ -317,6 +335,39 @@ onUnmounted(() => {
 
 .notice__link:hover {
   color: var(--text);
+}
+
+/* The time left to act (Undo), draining left to right; it pauses while the card is held. */
+.notice__countdown {
+  display: block;
+  height: 3px;
+  margin: 10px 0 2px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--border);
+}
+
+.notice__countdown-bar {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left;
+  animation: notice-countdown linear forwards;
+}
+
+.notice__countdown-bar--paused {
+  animation-play-state: paused;
+}
+
+@keyframes notice-countdown {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notice__countdown-bar {
+    animation: none;
+  }
 }
 
 .notice__actions {

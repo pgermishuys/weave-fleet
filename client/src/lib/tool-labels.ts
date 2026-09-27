@@ -88,6 +88,17 @@ export function getToolLabel(
       return `screenshot${path} (${viewport})`;
     }
 
+    // The note itself, beside "Remember".
+    case "fleet_memory_save": {
+      if (typeof input?.text === "string" && input.text) return truncate(input.text, 80);
+      return "remember";
+    }
+
+    case "fleet_memory_forget": {
+      if (typeof input?.id === "string" && input.id) return input.id;
+      return "forget note";
+    }
+
     case "webfetch": {
       if (typeof input?.url === "string" && input.url) {
         return input.url;

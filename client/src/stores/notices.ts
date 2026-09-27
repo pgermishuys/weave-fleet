@@ -32,6 +32,10 @@ export interface Notice extends NoticeContent {
   expiresMs?: number;
   /** Clicking the chip runs this instead of opening the card. */
   onChipClick?: () => void;
+  /** How long the card stays before it settles, instead of NOTICE_HOLD_MS. */
+  holdMs?: number;
+  /** Shows the time left as a bar that drains, for a card whose action (Undo) only lasts that long. */
+  countdown?: boolean;
 }
 
 /** How long a card stays before it settles into its chip. Hovering or focusing it holds it. */

@@ -29,6 +29,7 @@ import { useSessionActivityUpdates } from "@/composables/use-session-activity-up
 import { useSessionNotifications } from "@/composables/use-session-notifications";
 import { useSessionProgressUpdates } from "@/composables/use-session-progress-updates";
 import { useSmartLinkUpdates } from "@/composables/use-smart-link-updates";
+import { useMemoryNotices } from "@/composables/use-memory-notices";
 import { useUpdateNotices } from "@/composables/use-update-notices";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { useVisualViewport } from "@/composables/use-visual-viewport";
@@ -44,6 +45,7 @@ useSessionActivityUpdates();
 useSessionNotifications();
 useSessionProgressUpdates();
 useSmartLinkUpdates();
+useMemoryNotices();
 useUpdateNotices();
 useVisualViewport();
 useKeyboardScroll();
