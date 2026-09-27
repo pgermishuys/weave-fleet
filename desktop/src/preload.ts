@@ -33,6 +33,14 @@ const bridge = {
     ipcRenderer.on("fleet-desktop:show-update", listener);
     return () => ipcRenderer.removeListener("fleet-desktop:show-update", listener);
   },
+  /** The window as it is, as a PNG data: URL, for a problem report. */
+  captureWindow: (): Promise<string | null> => ipcRenderer.invoke("fleet-desktop:capture-window"),
+  /** Calls back when Help → Report a Problem… is chosen in the app's menu. */
+  onReportProblem: (callback: () => void): (() => void) => {
+    const listener = () => callback();
+    ipcRenderer.on("fleet-desktop:report-problem", listener);
+    return () => ipcRenderer.removeListener("fleet-desktop:report-problem", listener);
+  },
 };
 
 contextBridge.exposeInMainWorld("fleetDesktop", bridge);

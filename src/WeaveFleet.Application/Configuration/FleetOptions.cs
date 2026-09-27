@@ -131,6 +131,11 @@ public sealed class FleetOptions
     /// <summary>Settings for a Fleet the desktop app started.</summary>
     public DesktopOptions Desktop { get; set; } = new();
 
+    // ─── Problem reports ──────────────────────────────────────────────────────
+
+    /// <summary>Where Help → Report a problem sends reports.</summary>
+    public ReportOptions Reports { get; set; } = new();
+
     // ─── Auth ──────────────────────────────────────────────────────────────────
 
     /// <summary>Authentication configuration (Clerk/OIDC).</summary>
@@ -371,6 +376,16 @@ public sealed class DesktopOptions
     /// behind holding the database lock. Default: false.
     /// </summary>
     public bool Enabled { get; set; }
+}
+
+/// <summary>Where Help → Report a problem sends reports.</summary>
+public sealed class ReportOptions
+{
+    /// <summary>
+    /// The report inbox, which files reports as private issues for the Fleet maintainers. Empty turns sending off;
+    /// Save as file still works. Default: https://issues.tryweave.io/.
+    /// </summary>
+    public string InboxUrl { get; set; } = "https://issues.tryweave.io/";
 }
 
 /// <summary>Configuration for the Claude Code harness.</summary>

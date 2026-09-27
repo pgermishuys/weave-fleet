@@ -194,6 +194,14 @@ public static class DependencyInjection
         services.AddScoped<WeaveFleet.Application.Memory.AgentMemoryFeature>();
         services.AddScoped<WeaveFleet.Application.Memory.AgentMemoryService>();
         services.AddScoped<WeaveFleet.Application.Memory.AgentMemoryBridge>();
+        // Help → Report a problem. The log location comes from AddFleetDiagnosticLogging; without it, no log is attached.
+        services.TryAddSingleton(FleetLogLocation.Disabled);
+        services.AddScoped<WeaveFleet.Application.Reports.ProblemReportService>();
+        services.AddHttpClient(WeaveFleet.Application.Reports.ProblemReportService.HttpClientName, client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("fleet-reports/1.0");
+        });
         services.AddScoped<SessionMessageBridge>();
         services.AddScoped<ISessionUpdateSender, SessionUpdateSender>();
         // Singleton: holds which messages a session asked to hear back about, until the turn handling them ends.

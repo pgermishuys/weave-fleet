@@ -44,6 +44,10 @@ async function start(): Promise<void> {
       openLogs: () => void shell.openPath(app.getPath("logs")),
       openDataFolder: () => void shell.openPath(paths.dataDir),
       checkForUpdates: () => void checkForUpdatesFromMenu(),
+      reportProblem: () => {
+        showWindow();
+        window?.webContents.send("fleet-desktop:report-problem");
+      },
     }),
   );
   ipcMain.on("fleet-desktop:version", (event) => {
@@ -54,6 +58,11 @@ async function start(): Promise<void> {
   ipcMain.handle("fleet-desktop:get-update-state", () => updates.state);
   ipcMain.handle("fleet-desktop:check-for-updates", () => updates.check());
   ipcMain.handle("fleet-desktop:install-update", (_event, options?: { confirmed?: unknown }) => installUpdate(options?.confirmed === true));
+  // Help → Report a problem: the window as it is, as a PNG data: URL.
+  ipcMain.handle("fleet-desktop:capture-window", async (event) => {
+    const image = await event.sender.capturePage();
+    return image.isEmpty() ? null : image.toDataURL();
+  });
 
   startUpdates();
   createWindow();
