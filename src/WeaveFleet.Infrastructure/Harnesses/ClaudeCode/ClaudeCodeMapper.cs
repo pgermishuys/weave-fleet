@@ -335,7 +335,8 @@ internal static class ClaudeCodeMapper
                 TokensReasoning: 0,
                 TokensCacheRead: cacheReadTokens,
                 TokensCacheWrite: (double)(usage?.CacheCreationInputTokens ?? 0),
-                TokensTotal: inputTokens + outputTokens,
+                // Cached prompt tokens count too, as OpenCode's total does; Anthropic's input_tokens leaves them out.
+                TokensTotal: inputTokens + outputTokens + cacheReadTokens + (double)(usage?.CacheCreationInputTokens ?? 0),
                 Cost: totalCostUsd,
                 EstimatedCost: estimatedCost,
                 CreatedAt: DateTimeOffset.UtcNow,

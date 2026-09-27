@@ -3,6 +3,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Analytics;
 using WeaveFleet.Testing.Fakes;
@@ -20,6 +22,7 @@ public sealed class AnalyticsWriterServiceTests : IAsyncLifetime
     private AnalyticsWriterService? _writer;
 
     private readonly InMemorySessionRepository _sessionRepo = new();
+    private readonly FakeEventBroadcaster _broadcaster = new();
 
     public async Task InitializeAsync()
     {
@@ -29,7 +32,10 @@ public sealed class AnalyticsWriterServiceTests : IAsyncLifetime
         _collector = new AnalyticsCollector(NullLogger<AnalyticsCollector>.Instance);
 
         var scopeFactory = TestServiceScopeFactory.Create(services =>
-            services.AddSingleton<ISessionRepository>(_sessionRepo));
+        {
+            services.AddSingleton<ISessionRepository>(_sessionRepo);
+            services.AddSingleton<IEventBroadcaster>(_broadcaster);
+        });
 
         var options = new FleetOptions
         {
@@ -206,6 +212,25 @@ public sealed class AnalyticsWriterServiceTests : IAsyncLifetime
         await _writer.StopAsync(CancellationToken.None);
 
         _sessionRepo.IncrementTokensAsyncCalls.Count(c => c.Id == "sess-dedup").ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Pushes_the_sessions_new_totals_so_its_page_keeps_up()
+    {
+        _sessionRepo.Seed(new Session { Id = "sess-push", InstanceId = "inst-1", Title = "Push", Status = "active", TotalTokens = 1000, TotalCost = 0.5 });
+        _collector!.AcceptTokenEvent(MakeTokenEvent("evt-push-1", sessionId: "sess-push", tokensTotal: 300, cost: 0.01));
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await _writer!.StartAsync(cts.Token);
+        await Task.Delay(2500, cts.Token);
+        await _writer.StopAsync(CancellationToken.None);
+
+        var push = _broadcaster.Broadcasts.ShouldHaveSingleItem();
+        push.Topic.ShouldBe("sessions");
+        push.Type.ShouldBe(AnalyticsWriterService.SessionTokensEventType);
+        push.Payload.GetProperty("sessionId").GetString().ShouldBe("sess-push");
+        push.Payload.GetProperty("totalTokens").GetInt32().ShouldBe(1300);
+        push.Payload.GetProperty("totalCost").GetDouble().ShouldBe(0.51, 0.000001);
     }
 
     [Fact]

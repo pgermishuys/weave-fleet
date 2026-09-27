@@ -384,6 +384,7 @@ public sealed class ClaudeCodeMapperTests
         data.TokensOutput.ShouldBe(200.0);
         data.TokensCacheRead.ShouldBe(10.0);
         data.TokensCacheWrite.ShouldBe(5.0);
+        data.TokensTotal.ShouldBe(715.0);
         data.Cost.ShouldBe(0.042, 0.000001);
     }
 
