@@ -23,12 +23,14 @@ public sealed class BearerTokenHandler(
 
     /// <summary>
     /// The claim that says how a request proved who it is: <see cref="TokenMethod"/> when it presented the access
-    /// token, <see cref="LoopbackMethod"/> when loopback auto-auth let it in. Checks that must not be satisfied by
-    /// ambient trust (a page on another origin opening a terminal) ask for the token method.
+    /// token, <see cref="LoopbackMethod"/> when loopback auto-auth let it in, <see cref="AgentMethod"/> when it came
+    /// from an agent process under its verified <c>/agent/{token}</c> prefix. Checks that must not be satisfied by
+    /// ambient trust (a page on another origin opening a terminal) ask for the token method, which agents don't get.
     /// </summary>
     public const string MethodClaim = "amr";
     public const string TokenMethod = "token";
     public const string LoopbackMethod = "loopback";
+    public const string AgentMethod = "agent";
 
     /// <summary>The query parameter a browser WebSocket or EventSource carries the token in, since neither can set headers.</summary>
     public const string AccessTokenQueryParameter = "access_token";
@@ -40,8 +42,14 @@ public sealed class BearerTokenHandler(
         // No credential at all: auto-authenticate only when the bind address makes loopback trustworthy.
         if (presented is null)
         {
-            return Task.FromResult(GrantsAutoAuth()
-                ? CreateSuccessResult(LoopbackMethod)
+            if (GrantsAutoAuth())
+                return Task.FromResult(CreateSuccessResult(LoopbackMethod));
+
+            // An agent process under /agent/{token}: the middleware already checked the connection is loopback and
+            // the token belongs to a process Fleet started. That per-process secret is the credential, whatever the
+            // bind address. A request with proxy headers didn't come straight from such a process, so it gets nothing.
+            return Task.FromResult(Context.IsAgentRequest() && !LoopbackAuthPolicy.CameThroughProxy(Request)
+                ? CreateSuccessResult(AgentMethod)
                 : AuthenticateResult.NoResult());
         }
 

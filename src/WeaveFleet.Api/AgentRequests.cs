@@ -6,8 +6,11 @@ namespace WeaveFleet.Api;
 /// <summary>
 /// Calls from a harness process started with messages between sessions on. Its <c>FLEET_URL</c> is
 /// <c>{fleet}/agent/{bridge token}</c>, so everything the agent sends through the Fleet API skill says which process
-/// it came from, without the agent doing anything and without an <c>Authorization</c> header that would change how
-/// Fleet authenticates it. The prefix is stripped before routing, so the calls reach the same endpoints.
+/// it came from, without the agent doing anything and without an <c>Authorization</c> header. The prefix is stripped
+/// before routing, so the calls reach the same endpoints. The verified prefix is also the agent's credential:
+/// <see cref="Auth.BearerTokenHandler"/> authenticates such a request (method <c>agent</c>) even when Fleet binds to a
+/// remote-reachable address or requires the access token, where loopback auto-auth is off. Only this middleware sets
+/// the marker, and only after checking the connection is loopback and the token belongs to a live process.
 /// </summary>
 public static class AgentRequests
 {
