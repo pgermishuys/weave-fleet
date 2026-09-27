@@ -10,123 +10,178 @@ namespace WeaveFleet.Infrastructure.Memory;
 
 /// <summary>
 /// Keeps each user's notes as Markdown files under <c>{data}/memory/{user}/notes/</c>, one per note: a few
-/// <c>key: value</c> lines between <c>---</c> lines, then the note. People can read and edit them; a file Fleet can't
-/// read is skipped, never deleted. What sessions read goes in <c>{data}/memory/{user}/context/</c>, one file per session
-/// folder named by the SHA-256 of the folder's path, with <c>directories.json</c> saying which folder each is for.
-/// Every write goes to a temporary file first and then replaces the old one, under one lock.
+/// <c>key: value</c> lines between <c>---</c> lines, then the note. The machine's notes are in <c>machine/</c>, each
+/// repository's in <c>repositories/{key}/</c> (the key is from the repository's path), so a prompt reads two folders
+/// whatever else there is. People can read and edit the files; a file Fleet can't read is skipped, never deleted.
+/// <para>
+/// Parsed notes are kept in memory, per file, with the file's time and size. Reading a folder looks at its files'
+/// times and sizes and parses only the ones that changed, so a prompt costs a few file lookups, and a note edited by
+/// hand is read again.
+/// </para>
+/// <para>
+/// What sessions read goes in <c>{data}/memory/{user}/context/</c>: one file per session folder named by the SHA-256 of
+/// the folder's path (the rules and the repository's notes), <c>machine.md</c> with the machine's notes that every
+/// folder shares, and <c>folders.json</c> saying which folder and repository each file is for. Every write goes to a
+/// temporary file first and then replaces the old one, under one lock.
+/// </para>
 /// </summary>
 internal sealed partial class FileMemoryStore(FleetOptions options, ILogger<FileMemoryStore> logger) : IMemoryStore, IDisposable
 {
-    private const string DirectoriesFile = "directories.json";
+    private const string FoldersFile = "folders.json";
+
+    /// <summary>The machine's notes, which every session folder's file is read with. Fleet's plugins read it by this name.</summary>
+    internal const string MachineFile = "machine.md";
 
     private readonly SemaphoreSlim _lock = new(1, 1);
 
+    /// <summary>Parsed notes per notes folder, by file path.</summary>
+    private readonly Dictionary<string, Dictionary<string, CachedNote>> _notes = new(StringComparer.Ordinal);
+
+    /// <summary>Each user's context index (hash → folder and repository), once read.</summary>
+    private readonly Dictionary<string, Dictionary<string, MemoryContextFolder>> _contextIndex = new(StringComparer.Ordinal);
+
+    /// <summary>What was last written to each context file, so an unchanged render isn't read back to compare.</summary>
+    private readonly Dictionary<string, string> _contextWritten = new(StringComparer.Ordinal);
+
+    private readonly HashSet<string> _migrated = new(StringComparer.Ordinal);
+
     public void Dispose() => _lock.Dispose();
 
-    public async Task<IReadOnlyList<MemoryNote>> ListAsync(string userId, CancellationToken ct = default)
-    {
-        await _lock.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            return ReadNotes(userId);
-        }
-        finally
-        {
-            _lock.Release();
-        }
-    }
+    public Task<IReadOnlyList<MemoryNote>> ListAsync(string userId, CancellationToken ct = default)
+        => LockedAsync(() => (IReadOnlyList<MemoryNote>)AllFolders(userId).SelectMany(ReadFolder).ToList(), ct);
 
-    public async Task SaveAsync(string userId, MemoryNote note, CancellationToken ct = default)
+    public Task<IReadOnlyList<MemoryNote>> ListForAsync(string userId, string? repository, CancellationToken ct = default)
+        => LockedAsync(() =>
+        {
+            Migrate(userId);
+            List<MemoryNote> notes = [.. ReadFolder(MachineFolder(userId)).Where(note => note.List == MemoryList.Machine)];
+            if (repository is not null)
+            {
+                notes.AddRange(ReadFolder(RepositoryFolder(userId, repository))
+                    .Where(note => note.List == MemoryList.Repository && note.Repository == repository));
+            }
+
+            return (IReadOnlyList<MemoryNote>)notes;
+        }, ct);
+
+    public Task<MemoryNote?> FindAsync(string userId, string id, CancellationToken ct = default)
+        => LockedAsync(() => IsValidId(id) ? AllFolders(userId).SelectMany(ReadFolder).FirstOrDefault(note => note.Id == id) : null, ct);
+
+    public Task SaveAsync(string userId, MemoryNote note, CancellationToken ct = default)
     {
         if (!IsValidId(note.Id))
             throw new ArgumentException($"'{note.Id}' isn't a note id.", nameof(note));
+        if (note.List == MemoryList.Repository && string.IsNullOrWhiteSpace(note.Repository))
+            throw new ArgumentException("A repository note names its repository.", nameof(note));
 
-        await _lock.WaitAsync(ct).ConfigureAwait(false);
-        try
+        return LockedAsync(() =>
         {
-            WriteAtomically(Path.Combine(NotesFolder(userId), note.Id + ".md"), Format(note));
-        }
-        finally
-        {
-            _lock.Release();
-        }
+            Migrate(userId);
+            var folder = note.List == MemoryList.Machine ? MachineFolder(userId) : RepositoryFolder(userId, note.Repository!);
+            var path = Path.Combine(folder, note.Id + ".md");
+            WriteAtomically(path, Format(note));
+            Remember(folder, path, note);
+            return true;
+        }, ct);
     }
 
-    public async Task<int> DeleteAsync(string userId, IReadOnlyCollection<string> ids, CancellationToken ct = default)
-    {
-        await _lock.WaitAsync(ct).ConfigureAwait(false);
-        try
+    public Task<int> DeleteAsync(string userId, IReadOnlyCollection<string> ids, CancellationToken ct = default)
+        => LockedAsync(() =>
         {
+            var doomed = ids.Where(IsValidId).ToHashSet(StringComparer.Ordinal);
             var deleted = 0;
-            foreach (var id in ids.Where(IsValidId).Distinct(StringComparer.Ordinal))
+            foreach (var folder in AllFolders(userId))
             {
-                var path = Path.Combine(NotesFolder(userId), id + ".md");
-                if (!File.Exists(path))
-                    continue;
-                File.Delete(path);
-                deleted++;
+                foreach (var id in doomed)
+                {
+                    var path = Path.Combine(folder, id + ".md");
+                    if (!File.Exists(path))
+                        continue;
+                    File.Delete(path);
+                    if (_notes.TryGetValue(folder, out var cached))
+                        cached.Remove(path);
+                    deleted++;
+                }
             }
 
             return deleted;
-        }
-        finally
-        {
-            _lock.Release();
-        }
-    }
+        }, ct);
 
     public string ContextFolder(string userId) => Path.Combine(UserFolder(userId), "context");
 
-    public async Task WriteContextAsync(string userId, string directory, string content, CancellationToken ct = default)
-    {
-        await _lock.WaitAsync(ct).ConfigureAwait(false);
-        try
+    public Task WriteContextAsync(string userId, string directory, string repository, string content, CancellationToken ct = default)
+        => LockedAsync(() =>
         {
             var folder = ContextFolder(userId);
-            var directories = ReadDirectories(folder);
+            var index = ContextIndex(userId);
+            var changed = false;
             foreach (var name in ContextNames(directory))
             {
                 var path = Path.Combine(folder, name.Hash + ".md");
-                if (!File.Exists(path) || File.ReadAllText(path) != content)
+                if (!(_contextWritten.TryGetValue(path, out var written) && written == content && File.Exists(path)))
+                {
                     WriteAtomically(path, content);
-                directories[name.Hash] = name.Directory;
+                    _contextWritten[path] = content;
+                }
+
+                var entry = new MemoryContextFolder(name.Directory, repository);
+                if (!index.TryGetValue(name.Hash, out var known) || known != entry)
+                {
+                    index[name.Hash] = entry;
+                    changed = true;
+                }
             }
 
-            WriteDirectories(folder, directories);
-        }
-        finally
-        {
-            _lock.Release();
-        }
-    }
+            if (changed)
+                WriteIndex(folder, index);
+            return true;
+        }, ct);
 
-    public async Task<IReadOnlyList<string>> ListContextDirectoriesAsync(string userId, CancellationToken ct = default)
-    {
-        await _lock.WaitAsync(ct).ConfigureAwait(false);
-        try
+    public Task WriteMachineContextAsync(string userId, string content, CancellationToken ct = default)
+        => LockedAsync(() =>
         {
-            return [.. ReadDirectories(ContextFolder(userId)).Values.Distinct(StringComparer.Ordinal)];
-        }
-        finally
-        {
-            _lock.Release();
-        }
-    }
+            var path = Path.Combine(ContextFolder(userId), MachineFile);
+            if (!(_contextWritten.TryGetValue(path, out var written) && written == content && File.Exists(path)))
+            {
+                WriteAtomically(path, content);
+                _contextWritten[path] = content;
+            }
 
-    public async Task ClearContextAsync(string userId, CancellationToken ct = default)
-    {
-        await _lock.WaitAsync(ct).ConfigureAwait(false);
-        try
+            return true;
+        }, ct);
+
+    public Task<IReadOnlyList<MemoryContextFolder>> ListContextFoldersAsync(string userId, CancellationToken ct = default)
+        => LockedAsync(() => (IReadOnlyList<MemoryContextFolder>)ContextIndex(userId).Values.Distinct().ToList(), ct);
+
+    public Task ForgetContextAsync(string userId, string directory, CancellationToken ct = default)
+        => LockedAsync(() =>
+        {
+            var folder = ContextFolder(userId);
+            var index = ContextIndex(userId);
+            foreach (var hash in index.Where(pair => pair.Value.Directory == directory).Select(pair => pair.Key).ToList())
+            {
+                var path = Path.Combine(folder, hash + ".md");
+                if (File.Exists(path))
+                    File.Delete(path);
+                _contextWritten.Remove(path);
+                index.Remove(hash);
+            }
+
+            WriteIndex(folder, index);
+            return true;
+        }, ct);
+
+    public Task ClearContextAsync(string userId, CancellationToken ct = default)
+        => LockedAsync(() =>
         {
             var folder = ContextFolder(userId);
             if (Directory.Exists(folder))
                 Directory.Delete(folder, recursive: true);
-        }
-        finally
-        {
-            _lock.Release();
-        }
-    }
+            _contextIndex.Remove(userId);
+            foreach (var path in _contextWritten.Keys.Where(path => path.StartsWith(folder, StringComparison.Ordinal)).ToList())
+                _contextWritten.Remove(path);
+            return true;
+        }, ct);
 
     /// <summary>
     /// The file name a session folder's notes go under: the SHA-256 of the path, in lowercase hex. Fleet's plugins
@@ -208,57 +263,148 @@ internal sealed partial class FileMemoryStore(FleetOptions options, ILogger<File
             ParseTime(fields.GetValueOrDefault("updated")) ?? created);
     }
 
-    private List<MemoryNote> ReadNotes(string userId)
-    {
-        var folder = NotesFolder(userId);
-        if (!Directory.Exists(folder))
-            return [];
+    /// <summary>How many note files have been parsed: a read of an unchanged folder parses none.</summary>
+    internal int ParseCount { get; private set; }
 
-        List<MemoryNote> notes = [];
-        foreach (var path in Directory.EnumerateFiles(folder, "*.md"))
+    private async Task<T> LockedAsync<T>(Func<T> action, CancellationToken ct)
+    {
+        await _lock.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
-            var id = Path.GetFileNameWithoutExtension(path);
+            return action();
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    /// <summary>The notes in a folder, parsing only the files whose time or size changed since the last read.</summary>
+    private List<MemoryNote> ReadFolder(string folder)
+    {
+        if (!Directory.Exists(folder))
+        {
+            _notes.Remove(folder);
+            return [];
+        }
+
+        _notes.TryGetValue(folder, out var cached);
+        var current = new Dictionary<string, CachedNote>(StringComparer.Ordinal);
+        foreach (var file in new DirectoryInfo(folder).EnumerateFiles("*.md"))
+        {
+            var id = Path.GetFileNameWithoutExtension(file.Name);
             if (!IsValidId(id))
                 continue;
 
+            current[file.FullName] = cached is not null
+                                     && cached.TryGetValue(file.FullName, out var hit)
+                                     && hit.Modified == file.LastWriteTimeUtc
+                                     && hit.Length == file.Length
+                ? hit
+                : new CachedNote(file.LastWriteTimeUtc, file.Length, ReadNote(id, file.FullName));
+        }
+
+        _notes[folder] = current;
+        return [.. current.Values.Select(entry => entry.Note).OfType<MemoryNote>()];
+    }
+
+    private MemoryNote? ReadNote(string id, string path)
+    {
+        ParseCount++;
+        try
+        {
+            var note = Parse(id, File.ReadAllText(path));
+            if (note is null)
+                LogUnreadableNote(logger, path);
+            return note;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            LogNoteReadFailed(logger, path, ex);
+            return null;
+        }
+    }
+
+    /// <summary>Keeps a note Fleet just wrote, so the next read doesn't parse it again.</summary>
+    private void Remember(string folder, string path, MemoryNote note)
+    {
+        if (!_notes.TryGetValue(folder, out var cached))
+            return; // Read in full on first use.
+
+        var file = new FileInfo(path);
+        cached[path] = new CachedNote(file.LastWriteTimeUtc, file.Length, note);
+    }
+
+    /// <summary>The machine's folder, then every repository's.</summary>
+    private IEnumerable<string> AllFolders(string userId)
+    {
+        Migrate(userId);
+        yield return MachineFolder(userId);
+        var repositories = Path.Combine(NotesFolder(userId), "repositories");
+        if (!Directory.Exists(repositories))
+            yield break;
+        foreach (var folder in Directory.EnumerateDirectories(repositories))
+            yield return folder;
+    }
+
+    /// <summary>
+    /// Moves notes kept loose in the notes folder (the first layout) into their list's folder, once per user. A file
+    /// that isn't a note stays where it is.
+    /// </summary>
+    private void Migrate(string userId)
+    {
+        if (!_migrated.Add(userId))
+            return;
+
+        var notes = NotesFolder(userId);
+        if (!Directory.Exists(notes))
+            return;
+
+        foreach (var path in Directory.EnumerateFiles(notes, "*.md"))
+        {
+            var id = Path.GetFileNameWithoutExtension(path);
+            if (!IsValidId(id) || ReadNote(id, path) is not { } note)
+                continue;
+
+            var folder = note.List == MemoryList.Machine ? MachineFolder(userId) : RepositoryFolder(userId, note.Repository!);
+            Directory.CreateDirectory(folder);
+            File.Move(path, Path.Combine(folder, id + ".md"), overwrite: true);
+        }
+    }
+
+    private Dictionary<string, MemoryContextFolder> ContextIndex(string userId)
+    {
+        if (_contextIndex.TryGetValue(userId, out var index))
+            return index;
+
+        index = new Dictionary<string, MemoryContextFolder>(StringComparer.Ordinal);
+
+        // The first layout's index had no repositories; the next prompts write this one.
+        var legacy = Path.Combine(ContextFolder(userId), "directories.json");
+        if (File.Exists(legacy))
+            File.Delete(legacy);
+
+        var path = Path.Combine(ContextFolder(userId), FoldersFile);
+        if (File.Exists(path))
+        {
             try
             {
-                if (Parse(id, File.ReadAllText(path)) is { } note)
-                    notes.Add(note);
-                else
-                    LogUnreadableNote(logger, path);
+                foreach (var (hash, entry) in JsonSerializer.Deserialize(File.ReadAllText(path), MemoryStoreJsonContext.Default.DictionaryStringMemoryContextFolder) ?? [])
+                    index[hash] = entry;
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            catch (JsonException ex)
             {
+                // Written again from the next prompts.
                 LogNoteReadFailed(logger, path, ex);
             }
         }
 
-        return notes;
+        _contextIndex[userId] = index;
+        return index;
     }
 
-    private Dictionary<string, string> ReadDirectories(string folder)
-    {
-        var path = Path.Combine(folder, DirectoriesFile);
-        if (!File.Exists(path))
-            return new Dictionary<string, string>(StringComparer.Ordinal);
-
-        try
-        {
-            var read = JsonSerializer.Deserialize(File.ReadAllText(path), MemoryStoreJsonContext.Default.DictionaryStringString);
-            return read is null
-                ? new Dictionary<string, string>(StringComparer.Ordinal)
-                : new Dictionary<string, string>(read, StringComparer.Ordinal);
-        }
-        catch (JsonException ex)
-        {
-            LogNoteReadFailed(logger, path, ex);
-            return new Dictionary<string, string>(StringComparer.Ordinal);
-        }
-    }
-
-    private static void WriteDirectories(string folder, Dictionary<string, string> directories)
-        => WriteAtomically(Path.Combine(folder, DirectoriesFile), JsonSerializer.Serialize(directories, MemoryStoreJsonContext.Default.DictionaryStringString));
+    private static void WriteIndex(string folder, Dictionary<string, MemoryContextFolder> index)
+        => WriteAtomically(Path.Combine(folder, FoldersFile), JsonSerializer.Serialize(index, MemoryStoreJsonContext.Default.DictionaryStringMemoryContextFolder));
 
     private static void WriteAtomically(string path, string content)
     {
@@ -276,6 +422,11 @@ internal sealed partial class FileMemoryStore(FleetOptions options, ILogger<File
 
     private string NotesFolder(string userId) => Path.Combine(UserFolder(userId), "notes");
 
+    private string MachineFolder(string userId) => Path.Combine(NotesFolder(userId), "machine");
+
+    private string RepositoryFolder(string userId, string repository)
+        => Path.Combine(NotesFolder(userId), "repositories", Hash(repository)[..16]);
+
     /// <summary>Ids are lowercase hex, which keeps them from naming a path outside the notes folder.</summary>
     internal static bool IsValidId(string? id)
         => id is { Length: > 0 and <= 32 } && id.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f');
@@ -287,6 +438,8 @@ internal sealed partial class FileMemoryStore(FleetOptions options, ILogger<File
     private static DateTimeOffset? ParseTime(string? value)
         => DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var time) ? time : null;
 
+    private sealed record CachedNote(DateTime Modified, long Length, MemoryNote? Note);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "Skipped memory note {Path}: it isn't a note Fleet can read")]
     private static partial void LogUnreadableNote(ILogger logger, string path);
 
@@ -294,7 +447,8 @@ internal sealed partial class FileMemoryStore(FleetOptions options, ILogger<File
     private static partial void LogNoteReadFailed(ILogger logger, string path, Exception exception);
 }
 
-[System.Text.Json.Serialization.JsonSerializable(typeof(Dictionary<string, string>))]
+[System.Text.Json.Serialization.JsonSourceGenerationOptions(PropertyNamingPolicy = System.Text.Json.Serialization.JsonKnownNamingPolicy.CamelCase)]
+[System.Text.Json.Serialization.JsonSerializable(typeof(Dictionary<string, MemoryContextFolder>))]
 internal sealed partial class MemoryStoreJsonContext : System.Text.Json.Serialization.JsonSerializerContext
 {
 }

@@ -108,7 +108,7 @@ public sealed partial class AgentMemoryService(
     {
         await preferences.SetAsync(AgentMemory.PreferenceKey, enabled ? "true" : "false").ConfigureAwait(false);
         if (enabled)
-            await RefreshContextAsync(user.UserId, ct).ConfigureAwait(false);
+            await RefreshContextAsync(user.UserId, Touched.Everything, ct).ConfigureAwait(false);
         else
             await store.ClearContextAsync(user.UserId, ct).ConfigureAwait(false);
         return await GetOverviewAsync(ct).ConfigureAwait(false);
@@ -117,8 +117,8 @@ public sealed partial class AgentMemoryService(
     /// <summary>The notes a session in <paramref name="directory"/> reads: its repository's and the machine's.</summary>
     public async Task<MemoryNotesView> ListAsync(string? directory, CancellationToken ct = default)
     {
-        var notes = await store.ListAsync(user.UserId, ct).ConfigureAwait(false);
         var repository = string.IsNullOrWhiteSpace(directory) ? null : AgentMemory.RepositoryOf(directory);
+        var notes = await store.ListForAsync(user.UserId, repository, ct).ConfigureAwait(false);
         var repositoryNotes = repository is null ? [] : RepositoryNotes(notes, repository);
         var machineNotes = MachineNotes(notes);
         var tokens = repository is null
@@ -143,14 +143,14 @@ public sealed partial class AgentMemoryService(
             return FleetError.ValidationError("Memory.Repository", "Say which repository the note is for.");
 
         var repository = parsed == MemoryList.Repository ? AgentMemory.RepositoryOf(directory!) : null;
-        var notes = await store.ListAsync(user.UserId, ct).ConfigureAwait(false);
+        var notes = await store.ListForAsync(user.UserId, repository, ct).ConfigureAwait(false);
         if (IsFull(notes, parsed, repository))
             return FleetError.ValidationError("Memory.Full", FullMessage(parsed));
 
         var now = _time.GetUtcNow();
         var note = new MemoryNote(NewId(), parsed, text!.Trim(), MemoryKinds.Added, repository, null, null, now, now);
         await store.SaveAsync(user.UserId, note, ct).ConfigureAwait(false);
-        await RefreshContextAsync(user.UserId, ct).ConfigureAwait(false);
+        await RefreshContextAsync(user.UserId, Touched.Of(note), ct).ConfigureAwait(false);
         return ToView(note);
     }
 
@@ -159,22 +159,22 @@ public sealed partial class AgentMemoryService(
         if (Validate(text) is { } invalid)
             return invalid;
 
-        var notes = await store.ListAsync(user.UserId, ct).ConfigureAwait(false);
-        if (notes.FirstOrDefault(note => note.Id == id) is not { } existing)
+        if (await store.FindAsync(user.UserId, id, ct).ConfigureAwait(false) is not { } existing)
             return FleetError.NotFoundFor("MemoryNote", id);
 
         var note = existing with { Text = text!.Trim(), Updated = _time.GetUtcNow() };
         await store.SaveAsync(user.UserId, note, ct).ConfigureAwait(false);
-        await RefreshContextAsync(user.UserId, ct).ConfigureAwait(false);
+        await RefreshContextAsync(user.UserId, Touched.Of(note), ct).ConfigureAwait(false);
         return ToView(note);
     }
 
     public async Task<Result<Unit>> ForgetAsync(string id, CancellationToken ct = default)
     {
-        if (await store.DeleteAsync(user.UserId, [id], ct).ConfigureAwait(false) == 0)
+        if (await store.FindAsync(user.UserId, id, ct).ConfigureAwait(false) is not { } note)
             return FleetError.NotFoundFor("MemoryNote", id);
 
-        await RefreshContextAsync(user.UserId, ct).ConfigureAwait(false);
+        await store.DeleteAsync(user.UserId, [id], ct).ConfigureAwait(false);
+        await RefreshContextAsync(user.UserId, Touched.Of(note), ct).ConfigureAwait(false);
         return Unit.Value;
     }
 
@@ -184,25 +184,29 @@ public sealed partial class AgentMemoryService(
     /// </summary>
     public async Task<Result<int>> ClearAsync(string? scope, string? directory, CancellationToken ct = default)
     {
-        var notes = await store.ListAsync(user.UserId, ct).ConfigureAwait(false);
         IEnumerable<MemoryNote> doomed;
+        Touched touched;
         switch (scope)
         {
             case "all":
-                doomed = notes;
+                touched = Touched.Everything;
+                doomed = await store.ListAsync(user.UserId, ct).ConfigureAwait(false);
                 break;
             case "machine":
-                doomed = MachineNotes(notes);
+                touched = Touched.MachineList;
+                doomed = MachineNotes(await store.ListForAsync(user.UserId, null, ct).ConfigureAwait(false));
                 break;
             case "repository" when !string.IsNullOrWhiteSpace(directory):
-                doomed = RepositoryNotes(notes, AgentMemory.RepositoryOf(directory));
+                var repository = AgentMemory.RepositoryOf(directory);
+                touched = new Touched(Machine: false, repository);
+                doomed = RepositoryNotes(await store.ListForAsync(user.UserId, repository, ct).ConfigureAwait(false), repository);
                 break;
             default:
                 return FleetError.ValidationError("Memory.Scope", "\"scope\" is \"all\", \"machine\", or \"repository\" with a \"repository\".");
         }
 
         var deleted = await store.DeleteAsync(user.UserId, [.. doomed.Select(note => note.Id)], ct).ConfigureAwait(false);
-        await RefreshContextAsync(user.UserId, ct).ConfigureAwait(false);
+        await RefreshContextAsync(user.UserId, touched, ct).ConfigureAwait(false);
         return deleted;
     }
 
@@ -226,7 +230,7 @@ public sealed partial class AgentMemoryService(
 
         var userId = session.UserId;
         var repository = AgentMemory.RepositoryOf(session.Directory);
-        var notes = await store.ListAsync(userId, ct).ConfigureAwait(false);
+        var notes = await store.ListForAsync(userId, repository, ct).ConfigureAwait(false);
         var reachable = RepositoryNotes(notes, repository).Concat(MachineNotes(notes)).ToList();
         var trimmed = text!.Trim();
         var now = _time.GetUtcNow();
@@ -249,7 +253,7 @@ public sealed partial class AgentMemoryService(
             // Saying it again confirms it: it stays, dated today.
             var confirmed = same with { Updated = now };
             await store.SaveAsync(userId, confirmed, ct).ConfigureAwait(false);
-            await RefreshContextAsync(userId, ct).ConfigureAwait(false);
+            await RefreshContextAsync(userId, Touched.Of(confirmed), ct).ConfigureAwait(false);
             return new MemorySaveOutcome(confirmed, null, AlreadyKnown: true);
         }
 
@@ -270,7 +274,9 @@ public sealed partial class AgentMemoryService(
         if (replaced is not null && replaced.Id != note.Id)
             await store.DeleteAsync(userId, [replaced.Id], ct).ConfigureAwait(false);
         await store.SaveAsync(userId, note, ct).ConfigureAwait(false);
-        await RefreshContextAsync(userId, ct).ConfigureAwait(false);
+        // A note moved between lists changes both.
+        var touched = replaced is null ? Touched.Of(note) : Touched.Of(note).And(Touched.Of(replaced));
+        await RefreshContextAsync(userId, touched, ct).ConfigureAwait(false);
         await BroadcastSavedAsync(userId, note, replaced, ct).ConfigureAwait(false);
         return new MemorySaveOutcome(note, replaced?.Id, AlreadyKnown: false);
     }
@@ -278,14 +284,14 @@ public sealed partial class AgentMemoryService(
     /// <summary>Forgets a note an agent in <paramref name="session"/> asked to: the machine's or this repository's.</summary>
     public async Task<Result<MemoryNote>> ForgetFromAgentAsync(Session session, string? id, CancellationToken ct = default)
     {
-        var notes = await store.ListAsync(session.UserId, ct).ConfigureAwait(false);
         var repository = AgentMemory.RepositoryOf(session.Directory);
+        var notes = await store.ListForAsync(session.UserId, repository, ct).ConfigureAwait(false);
         var note = RepositoryNotes(notes, repository).Concat(MachineNotes(notes)).FirstOrDefault(note => note.Id == id?.Trim());
         if (note is null)
             return FleetError.NotFoundFor("MemoryNote", id ?? string.Empty);
 
         await store.DeleteAsync(session.UserId, [note.Id], ct).ConfigureAwait(false);
-        await RefreshContextAsync(session.UserId, ct).ConfigureAwait(false);
+        await RefreshContextAsync(session.UserId, Touched.Of(note), ct).ConfigureAwait(false);
         return note;
     }
 
@@ -301,11 +307,13 @@ public sealed partial class AgentMemoryService(
 
         try
         {
-            var notes = await store.ListAsync(userId, ct).ConfigureAwait(false);
             var repository = AgentMemory.RepositoryOf(directory);
+            var notes = await store.ListForAsync(userId, repository, ct).ConfigureAwait(false);
             var repositoryNotes = RepositoryNotes(notes, repository);
             var machineNotes = MachineNotes(notes);
-            await store.WriteContextAsync(userId, directory, AgentMemoryPrompt.Render(repository, repositoryNotes, machineNotes), ct).ConfigureAwait(false);
+            await store.WriteContextAsync(userId, directory, repository, AgentMemoryPrompt.RenderFolder(repository, repositoryNotes), ct)
+                .ConfigureAwait(false);
+            await store.WriteMachineContextAsync(userId, AgentMemoryPrompt.RenderMachine(machineNotes), ct).ConfigureAwait(false);
             return AgentMemoryPrompt.Render(repository, repositoryNotes, machineNotes, canSave);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
@@ -316,20 +324,55 @@ public sealed partial class AgentMemoryService(
         }
     }
 
-    /// <summary>Writes again what every session folder reads, after the notes changed.</summary>
-    private async Task RefreshContextAsync(string userId, CancellationToken ct)
+    /// <summary>
+    /// After the notes changed, writes again what reads them: the machine's file when the machine's list changed, and the
+    /// files of the session folders in the repository that changed (every repository's, for <see cref="Touched.Everything"/>).
+    /// Each repository's notes are read and rendered once, however many of its folders there are. A folder that no longer
+    /// exists is forgotten.
+    /// </summary>
+    private async Task RefreshContextAsync(string userId, Touched touched, CancellationToken ct)
     {
         if (!await IsEnabledAsync().ConfigureAwait(false))
             return;
 
-        var notes = await store.ListAsync(userId, ct).ConfigureAwait(false);
-        var machineNotes = MachineNotes(notes);
-        foreach (var directory in await store.ListContextDirectoriesAsync(userId, ct).ConfigureAwait(false))
+        if (touched.Machine)
         {
-            var repository = AgentMemory.RepositoryOf(directory);
-            await store.WriteContextAsync(userId, directory, AgentMemoryPrompt.Render(repository, RepositoryNotes(notes, repository), machineNotes), ct)
-                .ConfigureAwait(false);
+            var machine = MachineNotes(await store.ListForAsync(userId, null, ct).ConfigureAwait(false));
+            await store.WriteMachineContextAsync(userId, AgentMemoryPrompt.RenderMachine(machine), ct).ConfigureAwait(false);
         }
+
+        // Checking the folders is a lookup each, no writes, so it happens on every change.
+        var folders = await store.ListContextFoldersAsync(userId, ct).ConfigureAwait(false);
+        foreach (var gone in folders.Where(folder => !Directory.Exists(folder.Directory)).Select(folder => folder.Directory).Distinct().ToList())
+            await store.ForgetContextAsync(userId, gone, ct).ConfigureAwait(false);
+
+        if (!touched.AllRepositories && touched.Repository is null)
+            return;
+
+        var affected = folders
+            .Where(folder => Directory.Exists(folder.Directory))
+            .Where(folder => touched.AllRepositories || string.Equals(folder.Repository, touched.Repository, PathComparison))
+            .GroupBy(folder => folder.Repository, PathComparer);
+        foreach (var group in affected)
+        {
+            var notes = await store.ListForAsync(userId, group.Key, ct).ConfigureAwait(false);
+            var content = AgentMemoryPrompt.RenderFolder(group.Key, RepositoryNotes(notes, group.Key));
+            foreach (var folder in group)
+                await store.WriteContextAsync(userId, folder.Directory, folder.Repository, content, ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>What a change touched: the machine's list, one repository's, or everything.</summary>
+    private sealed record Touched(bool Machine, string? Repository, bool AllRepositories = false)
+    {
+        public static readonly Touched Everything = new(Machine: true, Repository: null, AllRepositories: true);
+
+        public static readonly Touched MachineList = new(Machine: true, Repository: null);
+
+        public static Touched Of(MemoryNote note)
+            => note.List == MemoryList.Machine ? MachineList : new Touched(Machine: false, note.Repository);
+
+        public Touched And(Touched other) => new(Machine || other.Machine, Repository ?? other.Repository, AllRepositories || other.AllRepositories);
     }
 
     private async Task BroadcastSavedAsync(string userId, MemoryNote note, MemoryNote? replaced, CancellationToken ct)
