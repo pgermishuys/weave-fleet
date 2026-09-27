@@ -7881,7 +7881,9 @@ export interface operations {
     };
     GetHarnesses: {
         parameters: {
-            query?: never;
+            query?: {
+                fresh?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;

@@ -98,6 +98,9 @@ public sealed record HarnessInfo(
     /// <summary>Its latest version and any update Fleet is running; <see langword="null"/> when Fleet doesn't update harnesses (cloud mode).</summary>
     public HarnessUpdateInfo? Update { get; init; }
 
+    /// <summary>When Fleet last checked the harnesses (see <see cref="HarnessAvailabilityCache"/>); filled in by the endpoint.</summary>
+    public DateTimeOffset? CheckedAt { get; init; }
+
     /// <summary>The harness as its runtime found it; <see cref="UserEnabled"/> is filled in later.</summary>
     public static HarnessInfo From(
         string type,

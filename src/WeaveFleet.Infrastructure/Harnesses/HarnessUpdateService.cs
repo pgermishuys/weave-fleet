@@ -13,7 +13,8 @@ using WeaveFleet.Domain.Harnesses;
 namespace WeaveFleet.Infrastructure.Harnesses;
 
 /// <summary>
-/// Looks up each harness's latest version on npm (cached for an hour) and runs a harness's own updater when the
+/// Looks up each harness's latest version on npm (kept for an hour, and looked up again in the background so the harness
+/// list never waits for npm) and runs a harness's own updater when the
 /// user asks. An update waits until no session is working, runs for at most five minutes, then checks the version
 /// the harness reports. One update per harness at a time; its result stays until the user dismisses it.
 /// </summary>
@@ -34,6 +35,19 @@ internal sealed partial class HarnessUpdateService(
     private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
     private readonly ConcurrentDictionary<string, (string? Version, DateTimeOffset Expires)> _latest = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, UpdateRun> _runs = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Lock _lookupGate = new();
+    // The npm lookups running now, one per package.
+    private readonly Dictionary<string, Task> _lookingUp = new(StringComparer.Ordinal);
+
+    /// <summary>Test seam: the npm lookups running now.</summary>
+    internal Task PendingLookups
+    {
+        get
+        {
+            lock (_lookupGate)
+                return Task.WhenAll(_lookingUp.Values.ToList());
+        }
+    }
 
     /// <summary>How often a waiting update checks the working sessions again. Tests shorten it.</summary>
     internal TimeSpan WaitPoll { get; init; } = TimeSpan.FromSeconds(2);
@@ -46,7 +60,7 @@ internal sealed partial class HarnessUpdateService(
 
     internal sealed record UpdaterResult(int ExitCode, string Output, bool TimedOut);
 
-    public async Task<IReadOnlyDictionary<string, HarnessUpdateInfo>> DescribeAsync(
+    public Task<IReadOnlyDictionary<string, HarnessUpdateInfo>> DescribeAsync(
         IReadOnlyList<HarnessInfo> harnesses,
         bool checkLatest,
         CancellationToken ct)
@@ -57,7 +71,7 @@ internal sealed partial class HarnessUpdateService(
             .ToList();
 
         var latest = checkLatest
-            ? await LatestVersionsAsync(runtimes.Select(pair => pair.Runtime!.LatestVersionPackage), ct).ConfigureAwait(false)
+            ? LatestVersions(runtimes.Select(pair => pair.Runtime!.LatestVersionPackage))
             : new Dictionary<string, string?>();
 
         var result = new Dictionary<string, HarnessUpdateInfo>(StringComparer.OrdinalIgnoreCase);
@@ -81,7 +95,7 @@ internal sealed partial class HarnessUpdateService(
                 Job = _runs.TryGetValue(harness.Type, out var run) ? run.Job : null,
             };
         }
-        return result;
+        return Task.FromResult<IReadOnlyDictionary<string, HarnessUpdateInfo>>(result);
     }
 
     public async Task<Result<HarnessUpdateJob>> StartAsync(string harnessType, CancellationToken ct)
@@ -98,7 +112,7 @@ internal sealed partial class HarnessUpdateService(
         var package = runtime.LatestVersionPackage;
         var latest = package is null
             ? null
-            : (await LatestVersionsAsync([package], ct).ConfigureAwait(false)).GetValueOrDefault(package);
+            : await LatestVersionNowAsync(package).ConfigureAwait(false);
         var command = runtime.GetUpdateCommand(availability, latest);
         if (command is null)
             return FleetError.ValidationError("Harness", $"Fleet can't update {harness.DisplayName}. Update it the way you installed it.");
@@ -204,20 +218,50 @@ internal sealed partial class HarnessUpdateService(
     private static HarnessAvailability AvailabilityOf(HarnessInfo harness) =>
         new(harness.Available, harness.Reason) { State = harness.State, Version = harness.Version, ExecutablePath = harness.ExecutablePath };
 
-    /// <summary>The latest version of each package, from the cache or, when that's stale, npm.</summary>
-    private async Task<Dictionary<string, string?>> LatestVersionsAsync(IEnumerable<string?> packages, CancellationToken ct)
+    /// <summary>
+    /// The latest version of each package as last looked up. One that's never been looked up, or was looked up over an
+    /// hour ago, is looked up on npm in the background: the harness list doesn't wait for npm, and gets the answer next time.
+    /// </summary>
+    private Dictionary<string, string?> LatestVersions(IEnumerable<string?> packages)
     {
         var now = _time.GetUtcNow();
         var wanted = packages.OfType<string>().Distinct(StringComparer.Ordinal).ToList();
         var stale = wanted.Where(package => !_latest.TryGetValue(package, out var cached) || cached.Expires <= now).ToList();
 
-        await Task.WhenAll(stale.Select(async package =>
+        lock (_lookupGate)
         {
-            var version = await LookUpAsync(package, ct).ConfigureAwait(false);
-            _latest[package] = (version, now + (version is null ? FailedLookupTtl : LatestVersionTtl));
-        })).ConfigureAwait(false);
+            // A lookup that finishes removes itself under the lock, so it's never removed before it's added.
+            foreach (var package in stale.Where(package => !_lookingUp.ContainsKey(package)))
+                _lookingUp[package] = Task.Run(() => LookUpInBackgroundAsync(package));
+        }
 
         return wanted.ToDictionary(package => package, package => _latest.TryGetValue(package, out var cached) ? cached.Version : null, StringComparer.Ordinal);
+    }
+
+    /// <summary>The latest version of <paramref name="package"/>, waiting for npm when it's old: an update installs it.</summary>
+    private async Task<string?> LatestVersionNowAsync(string package)
+    {
+        LatestVersions([package]);
+        Task? running;
+        lock (_lookupGate)
+            _lookingUp.TryGetValue(package, out running);
+        if (running is not null)
+            await running.ConfigureAwait(false);
+        return _latest.TryGetValue(package, out var cached) ? cached.Version : null;
+    }
+
+    private async Task LookUpInBackgroundAsync(string package)
+    {
+        try
+        {
+            var version = await LookUpAsync(package, CancellationToken.None).ConfigureAwait(false);
+            _latest[package] = (version, _time.GetUtcNow() + (version is null ? FailedLookupTtl : LatestVersionTtl));
+        }
+        finally
+        {
+            lock (_lookupGate)
+                _lookingUp.Remove(package);
+        }
     }
 
     private async Task<string?> LookUpAsync(string package, CancellationToken ct)

@@ -30,7 +30,7 @@ public sealed class HarnessUpdateServiceTests
     {
         var service = NewService();
 
-        var info = (await service.DescribeAsync([await InfoAsync()], checkLatest: true, CancellationToken.None))["opencode"];
+        var info = await DescribeWithLatestAsync(service);
 
         info.LatestVersion.ShouldBe("1.18.31");
         info.UpdateAvailable.ShouldBeTrue();
@@ -49,8 +49,27 @@ public sealed class HarnessUpdateServiceTests
         _lookups.ShouldBeEmpty();
 
         await service.DescribeAsync([harness], checkLatest: true, CancellationToken.None);
+        await service.PendingLookups;
         await service.DescribeAsync([harness], checkLatest: true, CancellationToken.None);
         _lookups.ShouldBe(["opencode-ai"]);
+    }
+
+    [Fact]
+    public async Task Answers_without_waiting_for_npm_and_has_the_latest_version_next_time()
+    {
+        var npm = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var service = NewService(fetchLatest: _ => npm.Task);
+        var harness = await InfoAsync();
+
+        var first = service.DescribeAsync([harness], checkLatest: true, CancellationToken.None);
+        first.IsCompletedSuccessfully.ShouldBeTrue();
+        (await first)["opencode"].LatestVersion.ShouldBeNull();
+
+        npm.SetResult("1.18.31");
+        await service.PendingLookups;
+        var next = (await service.DescribeAsync([harness], checkLatest: true, CancellationToken.None))["opencode"];
+        next.LatestVersion.ShouldBe("1.18.31");
+        next.UpdateAvailable.ShouldBeTrue();
     }
 
     [Fact]
@@ -58,7 +77,7 @@ public sealed class HarnessUpdateServiceTests
     {
         _runtime.Availability = HarnessAvailability.Ready("1.18.31", "/home/you/.opencode/bin/opencode");
 
-        var info = (await NewService().DescribeAsync([await InfoAsync()], checkLatest: true, CancellationToken.None))["opencode"];
+        var info = await DescribeWithLatestAsync(NewService());
 
         info.UpdateAvailable.ShouldBeFalse();
     }
@@ -163,7 +182,8 @@ public sealed class HarnessUpdateServiceTests
 
     private HarnessUpdateService NewService(
         Func<HarnessCommand, HarnessUpdateService.UpdaterResult>? result = null,
-        Func<HarnessCommand, Task<HarnessUpdateService.UpdaterResult>>? resultAsync = null)
+        Func<HarnessCommand, Task<HarnessUpdateService.UpdaterResult>>? resultAsync = null,
+        Func<string, Task<string?>>? fetchLatest = null)
     {
         var registry = new FakeHarnessRegistry();
         registry.Register(new FakeHarness("opencode", "opencode"));
@@ -174,7 +194,7 @@ public sealed class HarnessUpdateServiceTests
             FetchLatest = (package, _) =>
             {
                 lock (_lookups) _lookups.Add(package);
-                return Task.FromResult<string?>("1.18.31");
+                return fetchLatest?.Invoke(package) ?? Task.FromResult<string?>("1.18.31");
             },
             RunUpdater = async (command, _, _) =>
             {
@@ -183,6 +203,18 @@ public sealed class HarnessUpdateServiceTests
                 return (result ?? (_ => new HarnessUpdateService.UpdaterResult(0, "", TimedOut: false)))(command);
             },
         };
+    }
+
+    /// <summary>
+    /// Describes the harness once npm has answered: the first description starts the lookup and doesn't wait for it
+    /// (whether a lookup that answers at once lands in time for it is a race; the test below holds npm back).
+    /// </summary>
+    private async Task<HarnessUpdateInfo> DescribeWithLatestAsync(HarnessUpdateService service)
+    {
+        var harness = await InfoAsync();
+        await service.DescribeAsync([harness], checkLatest: true, CancellationToken.None);
+        await service.PendingLookups;
+        return (await service.DescribeAsync([harness], checkLatest: true, CancellationToken.None))["opencode"];
     }
 
     private async Task<HarnessInfo> InfoAsync() =>

@@ -113,6 +113,7 @@ if (!isTestHost)
     builder.Services.AddLegacyInstallMigrationStartupService();
     builder.Services.AddBundledSkillsStartupService();
     builder.Services.AddOpenCodeWarmupStartupService();
+    builder.Services.AddHarnessAvailabilityStartupService();
 }
 builder.Services.AddFleetInfrastructure(fleetOptions);
 

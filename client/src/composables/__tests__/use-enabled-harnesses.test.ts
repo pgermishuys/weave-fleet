@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
+import { forgetHarnessLists } from "@/composables/use-harnesses";
 import type { HarnessInfo } from "@/api/client";
 import { usePreferencesStore } from "@/stores/preferences";
 import { mountComposable } from "./test-utils";
@@ -77,6 +78,8 @@ function mockApiResponses(harnesses: HarnessInfo[], preferences: Record<string, 
 describe("useEnabledHarnesses", () => {
   beforeEach(() => {
     apiFetchMock.mockReset();
+    forgetHarnessLists();
+    window.localStorage.clear();
     setActivePinia(createPinia());
   });
 

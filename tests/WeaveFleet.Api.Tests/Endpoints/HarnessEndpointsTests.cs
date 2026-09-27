@@ -119,6 +119,42 @@ public sealed class HarnessEndpointsTests
     }
 
     [Fact]
+    public async Task get_harnesses_answers_from_the_last_check_until_asked_for_a_fresh_one()
+    {
+        var registry = new FakeHarnessRegistry();
+        registry.Register(new FakeHarness("claude-code", "Claude Code"));
+        var runtime = new FakeHarnessRuntime("claude-code")
+        {
+            Availability = HarnessAvailability.NotInstalled("Claude Code isn't installed."),
+        };
+        registry.Register(runtime);
+        await using var factory = new ApiWebApplicationFactory(
+            authEnabled: false,
+            configureTestServices: services =>
+            {
+                var existing = services.FirstOrDefault(d => d.ServiceType == typeof(IHarnessRegistry));
+                if (existing is not null) services.Remove(existing);
+                services.AddSingleton<IHarnessRegistry>(registry);
+            });
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        (string? State, bool HasCheckedAt) Read(string body)
+        {
+            using var document = JsonDocument.Parse(body);
+            var harness = document.RootElement.EnumerateArray().Single(h => h.GetProperty("type").GetString() == "claude-code");
+            return (harness.GetProperty("state").GetString(), harness.TryGetProperty("checkedAt", out var at) && at.ValueKind == JsonValueKind.String);
+        }
+
+        Read(await client.GetStringAsync("/api/harnesses")).ShouldBe(("not-installed", true));
+
+        // Installed from a terminal: the list says what it found last until someone asks it to look again.
+        runtime.Availability = HarnessAvailability.Ready("2.1.283", "/home/you/.local/bin/claude");
+        Read(await client.GetStringAsync("/api/harnesses")).State.ShouldBe("not-installed");
+        Read(await client.GetStringAsync("/api/harnesses?fresh=true")).State.ShouldBe("ready");
+        Read(await client.GetStringAsync("/api/harnesses")).State.ShouldBe("ready");
+    }
+
+    [Fact]
     public async Task get_harnesses_includes_updates_and_skips_the_latest_version_lookup_when_checks_are_off()
     {
         var updates = new FakeHarnessUpdateService();

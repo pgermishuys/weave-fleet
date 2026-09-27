@@ -12,6 +12,7 @@ import { useAppShellStore } from "@/stores/app-shell";
 import { useHarnessSetupStore } from "@/stores/harness-setup";
 import { usePreferencesStore } from "@/stores/preferences";
 import type { HarnessInfo } from "@/api/client";
+import { formatRelativeTime } from "@/lib/format-utils";
 import {
   harnessDisplay,
   harnessLocation,
@@ -56,7 +57,20 @@ const isSavingPooledOpenCodeMode = shallowRef(false);
 const pooledOpenCodeModeError = shallowRef<string | null>(null);
 
 onMounted(async () => {
+  // The list shows what Fleet found last at once; opening Settings checks every harness again behind it.
+  void checkHarnessesAgain();
   await prefsStore.refresh();
+});
+
+/** When Fleet last checked, e.g. "Checked 2m ago". Missing from a Fleet that checks on every request. */
+const now = shallowRef(Date.now());
+const clock = setInterval(() => {
+  now.value = Date.now();
+}, 15_000);
+const checkedLabel = computed(() => {
+  const checkedAt = registeredHarnesses.value[0]?.checkedAt;
+  if (!checkedAt) return null;
+  return `Checked ${formatRelativeTime(checkedAt, now.value)}`;
 });
 
 const defaultHarnessId = computed(() => prefsStore.get("defaultHarnessType", DEFAULT_HARNESS_TYPE));
@@ -96,6 +110,7 @@ watch(isUpdating, (updating) => {
 
 onBeforeUnmount(() => {
   if (updatePoll !== undefined) clearInterval(updatePoll);
+  clearInterval(clock);
 });
 
 async function toggleHarness(harness: HarnessCard): Promise<void> {
@@ -232,7 +247,12 @@ function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus
             />
             Set up a harness
           </button>
-          <!-- Fleet looks for each harness on every check, so one installed a moment ago shows up here. -->
+          <span
+            v-if="checkedLabel"
+            class="self-center text-xs text-muted"
+            data-testid="harnesses-checked-at"
+          >{{ isCheckingHarnesses ? "Checking…" : checkedLabel }}</span>
+          <!-- Check again looks for each harness now, so one installed a moment ago shows up here. -->
           <button
             type="button"
             class="inline-flex shrink-0 items-center gap-1.5 self-start rounded-btn border border-border bg-main-bg px-3 py-1.5 text-xs font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60"

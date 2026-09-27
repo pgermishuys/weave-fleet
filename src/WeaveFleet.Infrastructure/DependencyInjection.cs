@@ -87,6 +87,16 @@ public static class DependencyInjection
     }
 
     /// <summary>
+    /// Checks every harness once at startup, so the first harness list is served from
+    /// <see cref="HarnessAvailabilityCache"/> instead of waiting for each harness to run.
+    /// </summary>
+    public static IServiceCollection AddHarnessAvailabilityStartupService(this IServiceCollection services)
+    {
+        services.AddHostedService<HarnessAvailabilityWarmupHostedService>();
+        return services;
+    }
+
+    /// <summary>
     /// Adds the bundled skills deployment service that ensures bundled skills are registered
     /// in the manifest and synced to harness paths on startup.
     /// In auth-enabled mode the service no-ops immediately; in local mode it deploys bundled
@@ -390,6 +400,7 @@ public static class DependencyInjection
         // HarnessRegistry is Singleton — any IHarness registrations MUST also be
         // Singleton to avoid a captive-dependency runtime failure.
         services.AddSingleton<IHarnessRegistry, HarnessRegistry>();
+        services.AddSingleton<HarnessAvailabilityCache>();
         services.AddSingleton<IHarnessUpdateService>(sp => new HarnessUpdateService(
             sp.GetRequiredService<IHarnessRegistry>(),
             sp.GetRequiredService<SessionActivityTracker>(),
