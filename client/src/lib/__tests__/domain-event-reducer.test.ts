@@ -1057,6 +1057,23 @@ describe("turn.failed", () => {
     expect(failed.messages[1]).toMatchObject({ role: "assistant", sessionId: "session-1", turnError: error })
   })
 
+  it("gives a failure before the reply its own message after the prompt, even when it names an earlier reply", () => {
+    const withTurns = applyEvents(createState(), [
+      { type: "message.created", payload: createMessageLifecyclePayload({ id: "message-1", role: "user", createdAt: 1, text: "Go" }) },
+      { type: "message.created", payload: createMessageLifecyclePayload({ id: "message-2", role: "assistant", createdAt: 2, text: "Done" }) },
+      { type: "message.created", payload: createMessageLifecyclePayload({ id: "message-3", role: "user", createdAt: 3, text: "Again" }) },
+    ])
+
+    const failed = applyDomainEvent(withTurns, {
+      type: "turn.failed",
+      payload: { sessionID: "session-1", messageID: "message-2", error },
+    })
+
+    expect(failed.messages[1].turnError).toBeUndefined()
+    expect(failed.messages).toHaveLength(4)
+    expect(failed.messages[3]).toMatchObject({ role: "assistant", turnError: error })
+  })
+
   it("stops the session looking busy", () => {
     const failed = applyDomainEvent(createState({ explicitStatus: "busy", sessionStatus: "busy" }), {
       type: "turn.failed",

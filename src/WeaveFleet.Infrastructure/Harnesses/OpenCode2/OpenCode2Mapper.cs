@@ -143,7 +143,8 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
             TokensReasoning: reasoning,
             TokensCacheRead: cacheRead,
             TokensCacheWrite: cacheWrite,
-            TokensTotal: input + output + reasoning,
+            // Cached prompt tokens count too, as OpenCode 1's own total does; most of a turn's prompt is cached.
+            TokensTotal: input + output + reasoning + cacheRead + cacheWrite,
             Cost: ReadDouble(evt.Data, "cost") ?? 0,
             EstimatedCost: ModelPricing.EstimateCost(model.ModelId, input, output, reasoning, cacheRead),
             CreatedAt: evt.Created is { } created ? DateTimeOffset.FromUnixTimeMilliseconds(created) : DateTimeOffset.UtcNow,

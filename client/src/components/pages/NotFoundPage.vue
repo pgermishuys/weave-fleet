@@ -13,7 +13,7 @@ function goHome(): void {
   <section class="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
     <div class="space-y-2">
       <h1 class="text-2xl font-semibold tracking-tight text-foreground">
-        Page Not Found
+        Page not found
       </h1>
       <p class="text-sm text-muted-foreground">
         The page you&apos;re looking for doesn&apos;t exist in this workspace.

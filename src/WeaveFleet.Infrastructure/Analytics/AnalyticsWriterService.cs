@@ -1,6 +1,7 @@
 using System.Data.Common;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -8,6 +9,7 @@ using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Diagnostics;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Data;
 
@@ -22,6 +24,9 @@ namespace WeaveFleet.Infrastructure.Analytics;
 public sealed partial class AnalyticsWriterService : BackgroundService
 {
     private const int ProcessedEventIdCapacity = 100_000;
+
+    /// <summary>A session's new token and cost totals, pushed on the <c>sessions</c> topic so its row and status bar keep up.</summary>
+    public const string SessionTokensEventType = "session_tokens";
 
     private readonly AnalyticsCollector _collector;
     private readonly IAnalyticsDbConnectionFactory _analyticsDb;
@@ -240,6 +245,7 @@ public sealed partial class AnalyticsWriterService : BackgroundService
         {
             using var scope = _scopeFactory.CreateScope();
             var sessionRepo = scope.ServiceProvider.GetRequiredService<ISessionRepository>();
+            var broadcaster = scope.ServiceProvider.GetService<IEventBroadcaster>();
 
             foreach (var evt in tokenEvents)
             {
@@ -254,10 +260,20 @@ public sealed partial class AnalyticsWriterService : BackgroundService
                 try
                 {
                     // IncrementTokensAsync takes int tokens — round from double
-                    await sessionRepo.IncrementTokensAsync(
+                    var totals = await sessionRepo.IncrementTokensAsync(
                         evt.SessionId,
                         (int)Math.Round(evt.TokensTotal),
                         evt.Cost).ConfigureAwait(false);
+
+                    // Without this, the page only learned the totals from the session list's next poll.
+                    if (totals is { } updated && broadcaster is not null)
+                    {
+                        var payload = JsonSerializer.SerializeToElement(
+                            new SessionTokensDto(evt.SessionId, updated.TotalTokens, updated.TotalCost),
+                            InfrastructureJsonContext.Default.SessionTokensDto);
+                        await broadcaster.BroadcastAsync("sessions", SessionTokensEventType, payload, evt.UserId, CancellationToken.None)
+                            .ConfigureAwait(false);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -316,3 +332,6 @@ public sealed partial class AnalyticsWriterService : BackgroundService
     private partial void LogMainDbScopeFailed(Exception ex);
 
 }
+
+/// <summary>The payload of <see cref="AnalyticsWriterService.SessionTokensEventType"/>.</summary>
+internal sealed record SessionTokensDto(string SessionId, int TotalTokens, double TotalCost);

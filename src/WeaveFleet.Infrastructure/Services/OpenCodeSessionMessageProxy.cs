@@ -356,6 +356,7 @@ public sealed class OpenCodeSessionMessageProxy(
     /// out as soon as the harness has it; anything older than the harness's newest message is not pending.
     /// The harness can list the prompt before it has stored its text; that copy takes Fleet's text, since
     /// the relay leaves out the harness's own user message events and the text would never arrive.
+    /// Turn failures Fleet kept (<see cref="TurnFailureRecorder"/>) go where they happened.
     /// </summary>
     private async Task<MessagePage> AddPromptsTheHarnessHasNotStoredAsync(string fleetSessionId, MessagePage page)
     {
@@ -367,7 +368,8 @@ public sealed class OpenCodeSessionMessageProxy(
         if (saved.Count == 0)
             return page;
 
-        var savedPrompts = MessagePersistenceService.ToHarnessMessages(saved).Where(m => m.Role == "user").ToList();
+        var savedMessages = MessagePersistenceService.ToHarnessMessages(saved);
+        var savedPrompts = savedMessages.Where(m => m.Role == "user").ToList();
         var savedById = savedPrompts.DistinctBy(m => m.Id, StringComparer.Ordinal).ToDictionary(m => m.Id, StringComparer.Ordinal);
         var messages = page.Messages
             .Select(m => m.Role == "user" && m.Parts.Count == 0 && savedById.TryGetValue(m.Id, out var copy)
@@ -381,8 +383,29 @@ public sealed class OpenCodeSessionMessageProxy(
             .Where(m => !harnessIds.Contains(m.Id) && m.Timestamp > newestInHarness)
             .OrderBy(m => m.Timestamp)
             .ToList();
+        messages.AddRange(pending);
 
-        return page with { Messages = [.. messages, .. pending] };
+        var oldestOnPage = page.Messages.Count > 0 ? page.Messages.Min(m => m.Timestamp) : DateTimeOffset.MinValue;
+        foreach (var failure in savedMessages.Where(m => m.Error is not null && m.Timestamp >= oldestOnPage).OrderBy(m => m.Timestamp))
+            PlaceTurnFailure(messages, failure);
+
+        return page with { Messages = messages };
+    }
+
+    /// <summary>
+    /// Puts a failure Fleet kept after the last message before it. A harness that stored the failure itself (OpenCode
+    /// keeps it on the reply that failed) already shows it on that reply, just before, so it isn't shown twice.
+    /// </summary>
+    private static void PlaceTurnFailure(List<HarnessMessage> messages, HarnessMessage failure)
+    {
+        var index = messages.FindIndex(m => m.Timestamp > failure.Timestamp);
+        if (index < 0)
+            index = messages.Count;
+
+        if (index > 0 && messages[index - 1] is { Role: "assistant", Error: not null })
+            return;
+
+        messages.Insert(index, failure);
     }
 
     private static MessageLifecyclePayload ToMessageLifecyclePayload(HarnessMessage message, string fleetSessionId)

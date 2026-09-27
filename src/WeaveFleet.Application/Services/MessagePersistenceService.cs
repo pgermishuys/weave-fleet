@@ -3,7 +3,9 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Domain.Identity;
 
 namespace WeaveFleet.Application.Services;
 
@@ -38,8 +40,23 @@ public sealed class MessagePersistenceService
             CreatedAt = message.Timestamp.ToString("O"),
             AgentName = message.Agent,
             ModelId = message.ModelId,
+            ErrorJson = message.Error is { } error ? JsonSerializer.Serialize(error, ApplicationJsonContext.Default.TurnError) : null,
         };
     }
+
+    /// <summary>
+    /// The message Fleet keeps for a turn that failed, so the conversation still says why after a reload: an assistant
+    /// message with no parts, carrying the failure. A failure before the model answers leaves nothing in the harness.
+    /// </summary>
+    public static HarnessMessage CreateTurnFailureMessage(TurnError error, DateTimeOffset timestamp) => new()
+    {
+        // Ascending from when it failed, like the harness's own ids: the conversation orders messages by id.
+        Id = AscendingMessageId.NewFromTimestamp(timestamp.ToUnixTimeMilliseconds(), counter: 0),
+        Role = "assistant",
+        Parts = [],
+        Timestamp = timestamp,
+        Error = error,
+    };
 
     /// <summary>
     /// Creates a synthetic user message for durable prompt history.
@@ -123,6 +140,9 @@ public sealed class MessagePersistenceService
                 System.Globalization.DateTimeStyles.RoundtripKind),
             Agent = persisted.AgentName,
             ModelId = persisted.ModelId,
+            Error = persisted.ErrorJson is { } errorJson
+                ? JsonSerializer.Deserialize(errorJson, ApplicationJsonContext.Default.TurnError)
+                : null,
         };
     }
 

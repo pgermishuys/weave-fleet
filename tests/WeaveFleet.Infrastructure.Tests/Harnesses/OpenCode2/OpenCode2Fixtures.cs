@@ -56,12 +56,20 @@ internal static class OpenCode2Fixtures
     }
 
     /// <summary>A client whose event stream is <paramref name="sse"/> and whose other requests go to <paramref name="api"/>.</summary>
-    public static OpenCode2HttpClient ClientServing(string sse, HttpMessageHandler? api = null)
+    /// <remarks>
+    /// A server starts reading its events as soon as it's made, so a test that attaches sessions afterwards can miss the
+    /// first ones; <paramref name="streamWhen"/> holds the stream back until it completes.
+    /// </remarks>
+    public static OpenCode2HttpClient ClientServing(string sse, HttpMessageHandler? api = null, Task? streamWhen = null)
         => new(
             new HttpClient(api ?? new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound))) { BaseAddress = new Uri("http://127.0.0.1:1/") },
-            new HttpClient(new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+            new HttpClient(new StubHandler(_ =>
             {
-                Content = new StringContent(sse, Encoding.UTF8, "text/event-stream"),
+                streamWhen?.Wait(TimeSpan.FromSeconds(5));
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(sse, Encoding.UTF8, "text/event-stream"),
+                };
             })) { BaseAddress = new Uri("http://127.0.0.1:1/") },
             NullLogger<OpenCode2HttpClient>.Instance);
 
@@ -101,10 +109,32 @@ internal static class OpenCode2Fixtures
 /// <summary>Answers every request with <paramref name="respond"/> and keeps what was sent.</summary>
 internal sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
 {
-    public List<(HttpMethod Method, string Path, string? Body)> Requests { get; } = [];
+    private readonly Lock _gate = new();
+    private readonly List<(HttpMethod Method, string Path, string? Body)> _requests = [];
+    private readonly List<string> _uris = [];
 
-    /// <summary>Every request's whole address, query included.</summary>
-    public List<string> Uris { get; } = [];
+    /// <summary>
+    /// The requests so far, copied: the server's event stream keeps reconnecting in the background, so reading the list
+    /// itself while it grew threw "Collection was modified".
+    /// </summary>
+    public IReadOnlyList<(HttpMethod Method, string Path, string? Body)> Requests
+    {
+        get
+        {
+            lock (_gate)
+                return [.. _requests];
+        }
+    }
+
+    /// <summary>Every request's whole address, query included, copied like <see cref="Requests"/>.</summary>
+    public IReadOnlyList<string> Uris
+    {
+        get
+        {
+            lock (_gate)
+                return [.. _uris];
+        }
+    }
 
     /// <summary>Runs for every request after it's recorded, before it's answered: a server's side effects.</summary>
     public Action<HttpRequestMessage>? OnRequest { get; set; }
@@ -112,10 +142,10 @@ internal sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var body = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
-        lock (Requests)
+        lock (_gate)
         {
-            Requests.Add((request.Method, request.RequestUri!.AbsolutePath, body));
-            Uris.Add(request.RequestUri.ToString());
+            _requests.Add((request.Method, request.RequestUri!.AbsolutePath, body));
+            _uris.Add(request.RequestUri.ToString());
         }
         OnRequest?.Invoke(request);
         return respond(request);

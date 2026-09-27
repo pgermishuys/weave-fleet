@@ -253,6 +253,20 @@ public sealed class OpenCode2MapperTests
         usage.Select(u => u.EventId).Distinct().Count().ShouldBe(3);
     }
 
+    // Seen live on OpenCode 2.0.16 with Copilot: a one-word reply is 8 tokens plus 14,521 written to the cache, and the
+    // session said "8 tokens" where the same turn on OpenCode 1 said 14,529.
+    [Fact]
+    public void A_steps_total_counts_its_cached_tokens()
+    {
+        var usage = new OpenCode2Mapper(FleetSession).TryReadStepUsage(
+            Event("session.step.ended", """{"sessionID":"ses_1","tokens":{"input":2,"output":6,"reasoning":0,"cache":{"read":10,"write":14521}},"cost":0.000064}"""),
+            "project-1", "Project", "/work", "local-user");
+
+        usage.ShouldNotBeNull();
+        usage.TokensTotal.ShouldBe(14539);
+        usage.TokensCacheWrite.ShouldBe(14521);
+    }
+
     private static async Task<List<HarnessEvent>> MapSessionAsync(string fixture, string session, int? turns = null)
     {
         var mapper = new OpenCode2Mapper(FleetSession);

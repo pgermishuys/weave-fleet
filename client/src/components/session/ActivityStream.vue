@@ -1245,8 +1245,9 @@ function handleShowCanvas(canvasId: string): void {
           <div class="turn-failure__foot">
             <!-- OpenCode names errors it can't classify "UnknownError", which tells the reader nothing. -->
             <span class="turn-failure__name">{{ message.turnError.name === "UnknownError" ? "" : message.turnError.name }}</span>
+            <!-- Only the latest failure: Retry sends the last prompt again, which an earlier failure didn't answer. -->
             <button
-              v-if="lastUserPrompt"
+              v-if="lastUserPrompt && message.id === messages.at(-1)?.id"
               class="turn-failure__retry"
               type="button"
               data-testid="turn-failure-retry"

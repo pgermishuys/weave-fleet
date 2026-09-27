@@ -11,10 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WorkflowsRouteImport } from './routes/workflows'
 import { Route as WelcomeRouteImport } from './routes/welcome'
-import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as RepositoriesRouteImport } from './routes/repositories'
-import { Route as QueueRouteImport } from './routes/queue'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as GithubRouteImport } from './routes/github'
 import { Route as BoardRouteImport } from './routes/board'
@@ -40,11 +38,6 @@ const WelcomeRoute = WelcomeRouteImport.update({
   path: '/welcome',
   getParentRoute: () => rootRouteImport,
 } as any)
-const TemplatesRoute = TemplatesRouteImport.update({
-  id: '/templates',
-  path: '/templates',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -53,11 +46,6 @@ const SettingsRoute = SettingsRouteImport.update({
 const RepositoriesRoute = RepositoriesRouteImport.update({
   id: '/repositories',
   path: '/repositories',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const QueueRoute = QueueRouteImport.update({
-  id: '/queue',
-  path: '/queue',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -140,10 +128,8 @@ export interface FileRoutesByFullPath {
   '/board': typeof BoardRoute
   '/github': typeof GithubRouteWithChildren
   '/login': typeof LoginRoute
-  '/queue': typeof QueueRoute
   '/repositories': typeof RepositoriesRoute
   '/settings': typeof SettingsRoute
-  '/templates': typeof TemplatesRoute
   '/welcome': typeof WelcomeRoute
   '/workflows': typeof WorkflowsRoute
   '/sessions/$id': typeof SessionsIdRoute
@@ -161,10 +147,8 @@ export interface FileRoutesByTo {
   '/automations': typeof AutomationsRoute
   '/board': typeof BoardRoute
   '/login': typeof LoginRoute
-  '/queue': typeof QueueRoute
   '/repositories': typeof RepositoriesRoute
   '/settings': typeof SettingsRoute
-  '/templates': typeof TemplatesRoute
   '/welcome': typeof WelcomeRoute
   '/workflows': typeof WorkflowsRoute
   '/sessions/$id': typeof SessionsIdRoute
@@ -183,10 +167,8 @@ export interface FileRoutesById {
   '/board': typeof BoardRoute
   '/github': typeof GithubRouteWithChildren
   '/login': typeof LoginRoute
-  '/queue': typeof QueueRoute
   '/repositories': typeof RepositoriesRoute
   '/settings': typeof SettingsRoute
-  '/templates': typeof TemplatesRoute
   '/welcome': typeof WelcomeRoute
   '/workflows': typeof WorkflowsRoute
   '/sessions/$id': typeof SessionsIdRoute
@@ -207,10 +189,8 @@ export interface FileRouteTypes {
     | '/board'
     | '/github'
     | '/login'
-    | '/queue'
     | '/repositories'
     | '/settings'
-    | '/templates'
     | '/welcome'
     | '/workflows'
     | '/sessions/$id'
@@ -228,10 +208,8 @@ export interface FileRouteTypes {
     | '/automations'
     | '/board'
     | '/login'
-    | '/queue'
     | '/repositories'
     | '/settings'
-    | '/templates'
     | '/welcome'
     | '/workflows'
     | '/sessions/$id'
@@ -249,10 +227,8 @@ export interface FileRouteTypes {
     | '/board'
     | '/github'
     | '/login'
-    | '/queue'
     | '/repositories'
     | '/settings'
-    | '/templates'
     | '/welcome'
     | '/workflows'
     | '/sessions/$id'
@@ -272,10 +248,8 @@ export interface RootRouteChildren {
   BoardRoute: typeof BoardRoute
   GithubRoute: typeof GithubRouteWithChildren
   LoginRoute: typeof LoginRoute
-  QueueRoute: typeof QueueRoute
   RepositoriesRoute: typeof RepositoriesRoute
   SettingsRoute: typeof SettingsRoute
-  TemplatesRoute: typeof TemplatesRoute
   WelcomeRoute: typeof WelcomeRoute
   WorkflowsRoute: typeof WorkflowsRoute
   SessionsIdRoute: typeof SessionsIdRoute
@@ -299,13 +273,6 @@ declare module '@tanstack/vue-router' {
       preLoaderRoute: typeof WelcomeRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/templates': {
-      id: '/templates'
-      path: '/templates'
-      fullPath: '/templates'
-      preLoaderRoute: typeof TemplatesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/settings': {
       id: '/settings'
       path: '/settings'
@@ -318,13 +285,6 @@ declare module '@tanstack/vue-router' {
       path: '/repositories'
       fullPath: '/repositories'
       preLoaderRoute: typeof RepositoriesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/queue': {
-      id: '/queue'
-      path: '/queue'
-      fullPath: '/queue'
-      preLoaderRoute: typeof QueueRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -464,10 +424,8 @@ const rootRouteChildren: RootRouteChildren = {
   BoardRoute: BoardRoute,
   GithubRoute: GithubRouteWithChildren,
   LoginRoute: LoginRoute,
-  QueueRoute: QueueRoute,
   RepositoriesRoute: RepositoriesRoute,
   SettingsRoute: SettingsRoute,
-  TemplatesRoute: TemplatesRoute,
   WelcomeRoute: WelcomeRoute,
   WorkflowsRoute: WorkflowsRoute,
   SessionsIdRoute: SessionsIdRoute,
