@@ -349,6 +349,7 @@ public sealed partial class FleetCanvasPluginLiveTests
                 },
                 ct);
 
+            _ = PooledOpenCodeLiveHost.ReadEventsAsync(session, ct);
             await session.SendPromptAsync("Show me the two options.", null, ct);
 
             // Both calls went through: the model's third request carries the file server's refusal.
