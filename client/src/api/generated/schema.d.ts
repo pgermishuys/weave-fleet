@@ -693,6 +693,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{id}/permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListSessionPermissions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/permissions/{requestId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ReplyToPermission"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{id}/queue": {
         parameters: {
             query?: never;
@@ -3657,6 +3689,23 @@ export interface components {
         QuestionAnswerApiRequest: {
             answers: string[][];
         };
+        PermissionAsk: {
+            id: string;
+            sessionId: string;
+            kind: string;
+            tool: string;
+            title?: null | string;
+            detail?: null | string;
+            directory?: null | string;
+            always: string[];
+            callId?: null | string;
+            subagent?: null | string;
+            askedAt: string;
+        };
+        PermissionReplyApiRequest: {
+            reply: string;
+            message?: null | string;
+        };
         ReadSessionFileResponse: {
             path: string;
             content: null | string;
@@ -5710,6 +5759,53 @@ export interface operations {
         responses: {
             /** @description OK */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ListSessionPermissions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PermissionAsk"][];
+                };
+            };
+        };
+    };
+    ReplyToPermission: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                requestId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PermissionReplyApiRequest"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };

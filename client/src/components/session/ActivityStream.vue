@@ -9,6 +9,8 @@ import MessageBubble from "@/components/session/MessageBubble.vue";
 import ReasoningBlock from "@/components/session/ReasoningBlock.vue";
 import ShellCommandBlock from "@/components/session/ShellCommandBlock.vue";
 import WorkingIndicator from "@/components/session/WorkingIndicator.vue";
+import PermissionCard from "@/components/session/PermissionCard.vue";
+import { useSessionPermissions } from "@/composables/use-session-permissions";
 import { useSessionStream } from "@/composables/use-session-stream";
 import { useModels } from "@/composables/use-models";
 import { modelDisplayName } from "@/lib/agent-model-choice";
@@ -106,6 +108,8 @@ const selectedSession = computed(() => {
 });
 
 const stream = useSessionStream(computed(() => props.sessionId));
+// What the agent asks to do that the session's permission level doesn't allow; each waits under the conversation.
+const { asks: permissionAsks, answer: answerPermission } = useSessionPermissions(() => props.sessionId);
 const { delegations, sessionStatus, isLoadingOlder, isPartial, loadOlder } = stream;
 const sessionMessages = computed(() => messagesAfter(stream.messages.value, props.after));
 /** A side conversation's older messages are its session's, which it doesn't show. */
@@ -1297,6 +1301,14 @@ function handleShowCanvas(canvasId: string): void {
         </div>
       </div>
 
+      <PermissionCard
+        v-for="ask in permissionAsks"
+        :key="ask.id"
+        class="activity-permission"
+        :ask="ask"
+        :on-answer="(reply, message) => answerPermission(ask, reply, message)"
+      />
+
       <!-- Streaming indicator -->
       <div
         v-if="isStreaming"
@@ -1596,6 +1608,15 @@ function handleShowCanvas(canvasId: string): void {
 .activity-message--first,
 .activity-message--middle {
   margin-bottom: 6px;
+}
+
+/* An ask waits under the conversation, as wide as a message. */
+.activity-permission {
+  flex-shrink: 0;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto 16px;
+  box-sizing: border-box;
 }
 
 .streaming-indicator {

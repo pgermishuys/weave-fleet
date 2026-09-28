@@ -265,6 +265,8 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(SideSeenApiRequest))]
 [JsonSerializable(typeof(UndoableSideConversationResponse))]
 [JsonSerializable(typeof(QuestionAnswerApiRequest))]
+[JsonSerializable(typeof(PermissionReplyApiRequest))]
+[JsonSerializable(typeof(List<WeaveFleet.Domain.Harnesses.PermissionAsk>))]
 [JsonSerializable(typeof(ModelRef))]
 [JsonSerializable(typeof(UpdateSessionTagsRequest))]
 // Workspace

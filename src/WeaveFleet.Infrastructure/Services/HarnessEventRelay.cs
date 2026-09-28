@@ -14,6 +14,7 @@ using WeaveFleet.Application.Workflows;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Events;
+using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Progress;
 
 namespace WeaveFleet.Infrastructure.Services;
@@ -88,6 +89,7 @@ public sealed class HarnessEventRelay : BackgroundService
     private readonly WorkflowRunner? _workflows;
     private readonly PromptQueueDispatcher? _queue;
     private readonly TurnFailureRecorder? _failures;
+    private readonly PendingPermissionStore? _permissions;
     private CancellationToken _stoppingToken;
 
     /// <summary>
@@ -110,7 +112,8 @@ public sealed class HarnessEventRelay : BackgroundService
         SessionUpdates? updates = null,
         WorkflowRunner? workflows = null,
         PromptQueueDispatcher? queue = null,
-        TurnFailureRecorder? failures = null)
+        TurnFailureRecorder? failures = null,
+        PendingPermissionStore? permissions = null)
     {
         _tracker = tracker;
         _broadcaster = broadcaster;
@@ -126,6 +129,7 @@ public sealed class HarnessEventRelay : BackgroundService
         _workflows = workflows;
         _queue = queue;
         _failures = failures;
+        _permissions = permissions;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -318,6 +322,10 @@ public sealed class HarnessEventRelay : BackgroundService
                 _logger.LogDebug("[Relay:Pump] Received event type={Type} session={Session} instance={Instance}", evt.Type, evt.SessionId, instanceId);
                 var targetFleetSessionId = evt.FleetSessionId ?? fleetSessionId;
 
+                // An ask is shown where the user looks: a subagent's on the session it works for.
+                if (_permissions is not null && evt.Type is EventTypes.PermissionAsked or EventTypes.PermissionReplied)
+                    targetFleetSessionId = await ObservePermissionEventAsync(evt, targetFleetSessionId, sessionUserId).ConfigureAwait(false);
+
                 HarnessEvent eventToPublish = evt;
 
                 // Before echo suppression, so links the user pasted into a prompt are found too.
@@ -450,6 +458,9 @@ public sealed class HarnessEventRelay : BackgroundService
             // A pump that ends is a harness going away, not a turn finishing: forget what the session was
             // doing rather than call its next idle the end of a turn.
             _notifier?.Forget(fleetSessionId);
+
+            // Its asks went with it: nothing can answer them now.
+            await ForgetPermissionAsksAsync(fleetSessionId, sessionUserId).ConfigureAwait(false);
             await _broadcaster.BroadcastAsync(
                 "sessions",
                 "activity_status",
@@ -459,6 +470,69 @@ public sealed class HarnessEventRelay : BackgroundService
         }
 
         return outcome;
+    }
+
+    /// <summary>
+    /// Keeps the pending asks current, and returns the session the permission event is shown on: the top of the chain of
+    /// sessions <paramref name="sessionId"/> is a subagent of, or <paramref name="sessionId"/> itself.
+    /// </summary>
+    private async Task<string> ObservePermissionEventAsync(HarnessEvent evt, string sessionId, string? userId)
+    {
+        var shownOn = await TopSessionAsync(sessionId, userId).ConfigureAwait(false);
+        if (evt.Type == EventTypes.PermissionAsked && PermissionEvents.ReadAsk(evt) is { } ask)
+            _permissions!.Asked(shownOn, ask);
+        else if (evt.Type == EventTypes.PermissionReplied && PermissionEvents.ReadReplied(evt) is { } replied)
+            _permissions!.Replied(replied.Id);
+        return shownOn;
+    }
+
+    private async Task<string> TopSessionAsync(string sessionId, string? userId)
+    {
+        const int maxParents = 8;
+        var current = sessionId;
+        for (var walked = 0; walked < maxParents; walked++)
+        {
+            var parent = _activityTracker.GetParentSessionId(current);
+            if (parent is null)
+            {
+                using var userScope = userId is null ? null : BackgroundUserContext.BeginScope(userId);
+                using var scope = _scopeFactory.CreateScope();
+                var repository = scope.ServiceProvider.GetRequiredService<ISessionRepository>();
+                parent = (await repository.GetByIdAsync(current).ConfigureAwait(false))?.ParentSessionId;
+            }
+
+            if (parent is null)
+                return current;
+            current = parent;
+        }
+
+        return current;
+    }
+
+    /// <summary>Clears the asks session <paramref name="sessionId"/>'s harness left waiting, and tells open clients.</summary>
+    private async Task ForgetPermissionAsksAsync(string sessionId, string? userId)
+    {
+        if (_permissions is null)
+            return;
+
+        foreach (var (shownOn, ask) in _permissions.ForgetAskedBy(sessionId))
+        {
+            try
+            {
+                await _broadcaster.BroadcastAsync(
+                    $"session:{shownOn}",
+                    EventTypes.PermissionReplied,
+                    JsonSerializer.SerializeToElement(
+                        new PermissionReplied { Id = ask.Id, SessionId = ask.SessionId, Reply = PermissionReplies.Gone },
+                        InfrastructureJsonContext.Default.PermissionReplied),
+                    userId,
+                    CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logPublishFailed(_logger, sessionId, ex);
+            }
+        }
     }
 
     private async Task<JsonElement> BuildActivityStatusPayloadAsync(

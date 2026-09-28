@@ -86,6 +86,22 @@ public interface IHarnessSession : IAsyncDisposable
     /// <summary>Reject (dismiss) a pending question request from the agent.</summary>
     Task RejectQuestionAsync(string requestId, CancellationToken ct);
 
+    /// <summary>
+    /// Sets what the agent may do without asking (Settings → Permissions). Fleet calls it before every prompt and when
+    /// the session starts, so a changed setting applies from the session's next message. An ask the policy doesn't
+    /// allow goes to the user as a <see cref="EventTypes.PermissionAsked"/> event. A harness that can't ask ignores it
+    /// and allows everything, as before.
+    /// </summary>
+    Task ApplyPermissionsAsync(PermissionPolicy policy, CancellationToken ct) => Task.CompletedTask;
+
+    /// <summary>
+    /// Answers the pending ask <paramref name="requestId"/> with <paramref name="reply"/> (<see cref="PermissionReplies"/>);
+    /// <paramref name="message"/> goes to the agent with a refusal. Throws <see cref="KeyNotFoundException"/> when no
+    /// such ask waits: it was answered, or its turn ended.
+    /// </summary>
+    Task ReplyToPermissionAsync(string requestId, string reply, string? message, CancellationToken ct)
+        => throw new KeyNotFoundException($"{HarnessType} sessions don't ask for permission.");
+
     /// <summary>Retrieve the message history for this instance.</summary>
     Task<MessagePage> GetMessagesAsync(MessageQuery? query, CancellationToken ct);
 

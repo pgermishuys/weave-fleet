@@ -82,6 +82,9 @@ internal sealed record OpenCode2PermissionRule
 internal sealed record OpenCode2PermissionReply
 {
     public required string Decision { get; init; }
+
+    /// <summary>What the agent is told with a refusal; left out otherwise.</summary>
+    public string? Message { get; init; }
 }
 
 /// <summary>

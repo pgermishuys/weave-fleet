@@ -409,15 +409,19 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
             _sessionActivity[Path.TrimEndingDirectorySeparator(directory)] = Environment.TickCount64;
 
         IOpenCode2EventSink? sink;
+        IOpenCode2EventSink? parentSink = null;
         lock (_routing)
         {
             if (!_sinks.TryGetValue(sessionId, out sink))
             {
+                if (evt.Type == "permission.asked" && _pending.TryGetValue(sessionId, out var child))
+                    _sinks.TryGetValue(child.ParentId, out parentSink);
+
                 if (evt.Type == "session.created" && ParentId(evt) is { } parentId
                     && (_sinks.ContainsKey(parentId) || _pending.ContainsKey(parentId)))
                 {
                     ForgetExpiredChildren();
-                    _pending[sessionId] = new PendingChild(DateTimeOffset.UtcNow);
+                    _pending[sessionId] = new PendingChild(DateTimeOffset.UtcNow, parentId);
                     LogChildHeld(_logger, sessionId, parentId);
                 }
 
@@ -433,6 +437,9 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
 
         if (sink is not null)
             Deliver(sink, evt);
+        // A subagent's child Fleet hasn't attached yet asks through its parent's session, which decides it as the child's would.
+        else if (evt.Type == "permission.asked" && parentSink is not null)
+            Deliver(parentSink, evt);
         else if (evt.Type == "permission.asked")
             AllowOnce(sessionId, evt);
     }
@@ -637,9 +644,8 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     }
 
     /// <summary>
-    /// A permission ask from a session no Fleet session listens to (a subagent's child session, which doesn't get
-    /// Fleet's allow-all rules) would wait forever, and so would the turn that started it. Every session on this
-    /// server is Fleet's, so it's allowed once, like an attached session's.
+    /// A permission ask from a session no Fleet session listens to, nor its parent's, would wait forever, and so would
+    /// the turn that started it. Every session on this server is Fleet's, so it's allowed once.
     /// </summary>
     private void AllowOnce(string sessionId, OpenCode2Event evt)
     {
@@ -756,7 +762,7 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
 
     private static TaskCompletionSource NewConnectedSource() => new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    private sealed record PendingChild(DateTimeOffset Since)
+    private sealed record PendingChild(DateTimeOffset Since, string ParentId)
     {
         public List<OpenCode2Event> Events { get; } = [];
     }

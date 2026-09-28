@@ -17,6 +17,13 @@ internal sealed record ClaudeCodeProcessOptions
 
     public string? Model { get; init; }
     public required string PermissionMode { get; init; }
+
+    /// <summary>
+    /// Claude Code asks Fleet before a tool call its mode doesn't allow (<c>--permission-prompt-tool stdio</c>). The prompt
+    /// then goes on stdin as a stream-json user message, and stdin stays open for the answers until
+    /// <see cref="ClaudeCodeProcessManager.CloseInput"/>.
+    /// </summary>
+    public bool AsksForPermission { get; init; }
     public string[] AllowedTools { get; init; } = [];
     public int? MaxTurns { get; init; }
     public decimal? MaxBudgetUsd { get; init; }
@@ -56,6 +63,8 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
 
     private readonly ILogger<ClaudeCodeProcessManager> _logger;
     private readonly Queue<string> _stderrTail = new();
+    private readonly SemaphoreSlim _inputLock = new(1, 1);
+    private volatile bool _inputClosed;
     private Process? _process;
     private bool _started;
     private bool _disposed;
@@ -127,6 +136,14 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
 
         psi.ArgumentList.Add("--output-format");
         psi.ArgumentList.Add("stream-json");
+
+        if (options.AsksForPermission)
+        {
+            psi.ArgumentList.Add("--input-format");
+            psi.ArgumentList.Add("stream-json");
+            psi.ArgumentList.Add("--permission-prompt-tool");
+            psi.ArgumentList.Add("stdio");
+        }
 
         // Print mode refuses stream-json output without it.
         psi.ArgumentList.Add("--verbose");
@@ -212,19 +229,28 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
 
         LogProcessStarted(_logger, _process.Id, options.WorkingDirectory, null);
 
-        // Closing stdin tells claude the prompt is complete.
-        try
+        if (options.AsksForPermission)
         {
-            await _process.StandardInput.WriteAsync(options.Prompt.AsMemory(), ct).ConfigureAwait(false);
-            await _process.StandardInput.FlushAsync(ct).ConfigureAwait(false);
+            // The prompt is the first line; stdin stays open for the answers to Claude Code's asks.
+            await WriteLineAsync(ClaudeCodeInput.UserMessage(options.Prompt), ct).ConfigureAwait(false);
         }
-        catch (IOException)
+        else
         {
-            // claude exited before reading its prompt; stderr and the exit code say why.
-        }
-        finally
-        {
-            _process.StandardInput.Close();
+            // Closing stdin tells claude the prompt is complete.
+            try
+            {
+                await _process.StandardInput.WriteAsync(options.Prompt.AsMemory(), ct).ConfigureAwait(false);
+                await _process.StandardInput.FlushAsync(ct).ConfigureAwait(false);
+            }
+            catch (IOException)
+            {
+                // claude exited before reading its prompt; stderr and the exit code say why.
+            }
+            finally
+            {
+                _inputClosed = true;
+                _process.StandardInput.Close();
+            }
         }
 
         // Apply process timeout (fire-and-forget kill on timeout)
@@ -244,6 +270,59 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
         }
 
         return _process.StandardOutput;
+    }
+
+    /// <summary>
+    /// Writes one line to stdin: an answer to one of Claude Code's asks. False when stdin is closed or the process gone:
+    /// the ask has nothing waiting on it any more.
+    /// </summary>
+    public async Task<bool> WriteLineAsync(string line, CancellationToken ct)
+    {
+        if (_process is null || _inputClosed)
+            return false;
+
+        await _inputLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (_inputClosed)
+                return false;
+            await _process.StandardInput.WriteLineAsync(line.AsMemory(), ct).ConfigureAwait(false);
+            await _process.StandardInput.FlushAsync(ct).ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidOperationException)
+        {
+            // claude exited; stderr and the exit code say why.
+            return false;
+        }
+        finally
+        {
+            _inputLock.Release();
+        }
+    }
+
+    /// <summary>Closes stdin once the turn's result is in: with stream-json input, claude exits only then.</summary>
+    public void CloseInput()
+    {
+        if (_process is null || _inputClosed)
+            return;
+
+        _inputLock.Wait();
+        try
+        {
+            if (_inputClosed)
+                return;
+            _inputClosed = true;
+            _process.StandardInput.Close();
+        }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidOperationException)
+        {
+            // Already gone.
+        }
+        finally
+        {
+            _inputLock.Release();
+        }
     }
 
     /// <summary>
@@ -306,6 +385,7 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
 
         await StopAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         _process?.Dispose();
+        _inputLock.Dispose();
         _jobObjectHandle?.Dispose();
     }
 }

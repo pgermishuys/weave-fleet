@@ -543,11 +543,12 @@ internal sealed class OpenCodeHttpClient
     public async Task ReplyPermissionAsync(
         string requestId,
         string reply,
+        string? message,
         string directory,
         CancellationToken ct)
     {
         var url = BuildUrl($"/permission/{Uri.EscapeDataString(requestId)}/reply", directory);
-        var body = new OpenCodePermissionReplyRequest { Reply = reply };
+        var body = new OpenCodePermissionReplyRequest { Reply = reply, Message = message };
         await PostVoidAsync(url, body, OpenCodeJsonContext.Default.OpenCodePermissionReplyRequest, ct).ConfigureAwait(false);
     }
 

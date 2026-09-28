@@ -27,7 +27,39 @@ internal static class ClaudeCodeJsonOptions
 [JsonDerivedType(typeof(ClaudeCodeAssistantMessage), "assistant")]
 [JsonDerivedType(typeof(ClaudeCodeUserMessage), "user")]
 [JsonDerivedType(typeof(ClaudeCodeResultMessage), "result")]
+[JsonDerivedType(typeof(ClaudeCodeControlRequest), "control_request")]
+[JsonDerivedType(typeof(ClaudeCodeControlCancelRequest), "control_cancel_request")]
 internal record ClaudeCodeStreamMessage;
+
+/// <summary>
+/// Claude Code asks its host something, with <c>--permission-prompt-tool stdio</c>: <c>can_use_tool</c> asks whether a
+/// tool call may run. The host answers with a <c>control_response</c> line on stdin naming <see cref="RequestId"/>.
+/// </summary>
+internal sealed record ClaudeCodeControlRequest : ClaudeCodeStreamMessage
+{
+    [JsonPropertyName("request_id")] public string? RequestId { get; init; }
+    [JsonPropertyName("request")] public ClaudeCodeControlRequestBody? Request { get; init; }
+}
+
+/// <summary>What a <see cref="ClaudeCodeControlRequest"/> asks.</summary>
+internal sealed record ClaudeCodeControlRequestBody
+{
+    [JsonPropertyName("subtype")] public string? Subtype { get; init; }
+    [JsonPropertyName("tool_name")] public string? ToolName { get; init; }
+    [JsonPropertyName("input")] public JsonElement Input { get; init; }
+    [JsonPropertyName("description")] public string? Description { get; init; }
+
+    /// <summary>The rules Claude Code offers for not asking again, e.g. <c>{ type: addRules, rules: [{ toolName, ruleContent }] }</c>.</summary>
+    [JsonPropertyName("permission_suggestions")] public JsonElement? PermissionSuggestions { get; init; }
+
+    [JsonPropertyName("tool_use_id")] public string? ToolUseId { get; init; }
+}
+
+/// <summary>Claude Code no longer needs the answer to request <see cref="RequestId"/> (the turn was stopped).</summary>
+internal sealed record ClaudeCodeControlCancelRequest : ClaudeCodeStreamMessage
+{
+    [JsonPropertyName("request_id")] public string? RequestId { get; init; }
+}
 
 /// <summary>System message (e.g. init). Contains session metadata.</summary>
 internal sealed record ClaudeCodeSystemMessage : ClaudeCodeStreamMessage

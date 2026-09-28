@@ -763,4 +763,9 @@ internal sealed record OpenCodeQuestionRejectRequest;
 internal sealed record OpenCodePermissionReplyRequest
 {
     [JsonPropertyName("reply")] public required string Reply { get; init; }
+
+    /// <summary>What the agent is told with a refusal; left out otherwise.</summary>
+    [JsonPropertyName("message")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Message { get; init; }
 }

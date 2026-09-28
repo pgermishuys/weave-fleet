@@ -43,6 +43,10 @@ vi.mock("@/composables/use-send-prompt", async () => {
 });
 
 vi.mock("@/composables/use-server-canvases", () => ({ focusServerCanvas: vi.fn() }));
+vi.mock("@/composables/use-session-permissions", async () => {
+  const { shallowRef } = await import("vue");
+  return { useSessionPermissions: () => ({ asks: shallowRef([]), answer: vi.fn() }) };
+});
 
 // Records every render of a bubble by the text it shows.
 vi.mock("@/components/session/MessageBubble.vue", () => ({
