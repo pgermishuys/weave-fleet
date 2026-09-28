@@ -14,7 +14,13 @@ public static class CanvasKinds
     /// <summary>A page of a web app running on this machine, shown through Fleet's preview proxy. Only the agent sets the page.</summary>
     public const string Browser = "browser";
 
-    public static bool IsKnown(string kind) => kind is Diagram or Sequence or Browser;
+    /// <summary>
+    /// An HTML page the agent wrote, which Fleet copied and serves itself (<c>fleet_page_show</c>). Only that tool
+    /// sets the page: not <c>fleet_canvas_open</c> or patch, and not the user.
+    /// </summary>
+    public const string Page = "page";
+
+    public static bool IsKnown(string kind) => kind is Diagram or Sequence or Browser or Page;
 }
 
 public static class CanvasLimits

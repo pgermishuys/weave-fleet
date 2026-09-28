@@ -120,7 +120,7 @@ never lorem ipsum.
 
 ## 6. Look once, then hand it over
 
-When the page is showing in a browser canvas, take one `fleet_browser_screenshot`, plus one with `viewport: "phone"`
+When the page is showing in a page or browser canvas, take one `fleet_browser_screenshot`, plus one with `viewport: "phone"`
 if the layout matters or the page shows a command or code. On the phone shot, look for anything cut off at the right
 edge. Fix what the shots show in one pass, then hand it over. Don't loop on screenshots: the user reviews the live
 page and asks for more polish if they want it.

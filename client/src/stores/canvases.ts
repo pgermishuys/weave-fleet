@@ -4,9 +4,11 @@ import type { CanvasEvent } from "@/lib/domain-events";
 import {
   browserPage,
   serverCanvasPayload,
+  shownPage,
   type BrowserPage,
   type ServerCanvasKind,
   type ServerCanvasSnapshot,
+  type ShownPage,
 } from "@/lib/server-canvas";
 import type { VisualPayload } from "@/lib/visual-payload";
 import { useFileBuffersStore } from "@/stores/file-buffers";
@@ -21,10 +23,10 @@ import { useFileBuffersStore } from "@/stores/file-buffers";
  * changes them, and the user can only close them.
  */
 
-export type CanvasKind = "changes" | "files" | "context" | "progress" | "turns" | "visual" | "browser" | "file";
+export type CanvasKind = "changes" | "files" | "context" | "progress" | "turns" | "visual" | "browser" | "page" | "file";
 
 /** Canvases that exist once per session and open from the + menu or on their own. */
-export type BuiltInCanvasKind = Exclude<CanvasKind, "visual" | "browser" | "file">;
+export type BuiltInCanvasKind = Exclude<CanvasKind, "visual" | "browser" | "page" | "file">;
 
 /**
  * How a file tab shows its file. Code files have Edit and Diff; Markdown and HTML also have
@@ -58,6 +60,8 @@ export interface CanvasInstance {
   server?: ServerCanvasRef;
   /** Present on browser canvases: the page and its tab title. */
   browser?: BrowserPage & { title: string };
+  /** Present on page canvases: the page Fleet serves and its tab title. */
+  page?: ShownPage & { title: string };
   /** Present on file tabs: the file and how it's shown. */
   file?: FileTab;
 }
@@ -130,6 +134,15 @@ function toServerCanvasInstance(canvas: ServerCanvasSnapshot): CanvasInstance | 
       kind: "browser",
       browser: { ...browserPage(canvas.state), title: canvas.title },
       server: { canvasId: canvas.canvasId, kind: "browser", version: canvas.version },
+    };
+  }
+
+  if (canvas.kind === "page") {
+    return {
+      id: serverCanvasTabId(canvas.canvasId),
+      kind: "page",
+      page: { ...shownPage(canvas.state), title: canvas.title },
+      server: { canvasId: canvas.canvasId, kind: "page", version: canvas.version },
     };
   }
 

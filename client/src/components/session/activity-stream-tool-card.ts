@@ -77,8 +77,11 @@ export function isSubagentTool(toolName: string): boolean {
   return SUBAGENT_TOOLS.has(toolName);
 }
 
-/** Fleet's browser tools; their card reads "title · address" once the page answered, or "title · size" for a shot. */
-const BROWSER_TOOLS = new Set(["fleet_app_start", "fleet_browser_open", "fleet_browser_screenshot"]);
+/**
+ * Fleet's browser and page tools; their card reads "title · address" once the page answered, "title · size" for a
+ * shot, or "title · file" for a page.
+ */
+const BROWSER_TOOLS = new Set(["fleet_app_start", "fleet_browser_open", "fleet_browser_screenshot", "fleet_page_show"]);
 
 /** Tools whose card title comes from Fleet's answer: "Messaged Update documentation" for fleet_message. */
 const TITLED_TOOLS = new Set([...BROWSER_TOOLS, "fleet_message"]);

@@ -237,6 +237,29 @@ describe("useCanvasesStore server canvases", () => {
     });
   });
 
+  it("shows a page canvas as a page tab with Fleet's copy and its title", () => {
+    const store = useCanvasesStore();
+    const page = wire<CanvasUpdated>(`{"type":"canvas.updated","eventId":null,"properties":{"sessionId":"${SESSION}","canvasId":"cv_p","kind":"page","title":"Settings options","version":2,"actor":"agent","state":{"pageId":"pg_0123456789abcdef0123456789abcdef","entry":"options.html","source":"/tmp/mockups/options.html","files":3,"bytes":4096,"shownAt":"2026-09-28T10:00:00Z","warnings":["/styles.css won't load"]},"summary":"3 files, 4 KB"}}`);
+
+    store.applyCanvasEvent(page);
+
+    expect(store.sessionCanvases(SESSION).canvases.at(-1)).toEqual({
+      id: serverCanvasTabId("cv_p"),
+      kind: "page",
+      page: {
+        pageId: "pg_0123456789abcdef0123456789abcdef",
+        entry: "options.html",
+        source: "/tmp/mockups/options.html",
+        files: 3,
+        bytes: 4096,
+        shownAt: "2026-09-28T10:00:00Z",
+        warnings: ["/styles.css won't load"],
+        title: "Settings options",
+      },
+      server: { canvasId: "cv_p", kind: "page", version: 2 },
+    });
+  });
+
   it("replaces only the server canvases when a list loads", () => {
     const store = useCanvasesStore();
     store.openVisual(SESSION, flow);

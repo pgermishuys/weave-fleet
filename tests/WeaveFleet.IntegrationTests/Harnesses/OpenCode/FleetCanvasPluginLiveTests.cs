@@ -291,6 +291,96 @@ public sealed partial class FleetCanvasPluginLiveTests
         }
     }
 
+    [OpenCodeFact]
+    public async Task A_pooled_session_shows_a_page_it_wrote_and_is_sent_there_from_a_file_server()
+    {
+        using var cts = new CancellationTokenSource(Timeout);
+        var ct = cts.Token;
+        var root = Path.Combine(Path.GetTempPath(), $"fleet-page-live-{Guid.NewGuid():N}");
+        var workspace = Path.Combine(root, "workspace");
+        var mockups = Path.Combine(root, "mockups");
+        var dbPath = Path.Combine(root, "fleet", "fleet.db");
+        Directory.CreateDirectory(workspace);
+        Directory.CreateDirectory(mockups);
+        Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
+        var page = Path.Combine(mockups, "options.html");
+        await File.WriteAllTextAsync(page, "<!doctype html><title>Options</title><p>Option A or option B?</p>", ct);
+
+        await using var llm = await FakeLlmServerFixture.StartAsync();
+        var processEnvironment = WriteScratchOpenCodeHome(root, llm.BaseUrl);
+        llm.Queue.ToolLessResponse = new ScriptedLlmResponse { Text = "Options" };
+        llm.Queue.Enqueue(new ScriptedLlmResponse
+        {
+            StopReason = "tool_calls",
+            ToolCalls = [new ScriptedToolCall("call_page", "fleet_page_show", JsonSerializer.Serialize(new { path = page, title = "Options" }))],
+        });
+        llm.Queue.Enqueue(new ScriptedLlmResponse
+        {
+            StopReason = "tool_calls",
+            ToolCalls =
+            [
+                new ScriptedToolCall("call_serve", "fleet_app_start", JsonSerializer.Serialize(new
+                {
+                    command = $"python3 -m http.server $PORT --directory {mockups}",
+                    title = "Mockups",
+                })),
+            ],
+        });
+        llm.Queue.Enqueue(new ScriptedLlmResponse { Text = "Done." });
+
+        var factory = new PooledOpenCodeLiveHost.KestrelFleetFactory(dbPath);
+        try
+        {
+            try { _ = factory.Services; }
+            catch (InvalidCastException) { /* expected: the base class expects a TestServer */ }
+
+            var services = factory.LiveServices;
+            SeedSession(services, workspace);
+
+            var runtime = services.GetRequiredService<OpenCodeHarnessRuntime>();
+            await using var session = await runtime.SpawnAsync(
+                new HarnessSpawnOptions
+                {
+                    SessionId = SessionId,
+                    WorkingDirectory = workspace,
+                    OwnerUserId = Owner,
+                    LaunchArtifacts = new OpenCodeLaunchArtifacts(processEnvironment),
+                },
+                ct);
+
+            await session.SendPromptAsync("Show me the two options.", null, ct);
+
+            // Both calls went through: the model's third request carries the file server's refusal.
+            var requests = await WaitForAsync(() => llm.Queue.Requests.ToList(), list => list.Count(r => OfferedToolNames([r]).Count > 0) >= 3, ct);
+            OfferedToolNames(requests).ShouldContain("fleet_page_show");
+            requests[^1].ShouldContain("only serves files, and Fleet serves files itself");
+
+            // The page is in a page canvas, and Fleet serves its copy to anyone with the address.
+            PageState shown;
+            using (var scope = services.CreateScope())
+            using (scope.ServiceProvider.GetRequiredService<IBackgroundUserScope>().Begin(Owner))
+            {
+                var canvas = (await scope.ServiceProvider.GetRequiredService<ICanvasService>().ListAsync(SessionId, ct)).ShouldHaveSingleItem().Canvas;
+                canvas.Kind.ShouldBe(CanvasKinds.Page);
+                canvas.Title.ShouldBe("Options");
+                shown = PageState.Parse(canvas.StateJson);
+                shown.Source.ShouldBe(page);
+            }
+
+            using var http = new HttpClient();
+            var fleet = services.GetRequiredService<ILocalFleetUrl>().TryGet().ShouldNotBeNull();
+            var served = await http.GetAsync($"{fleet}/pages/{shown.PageId}/{shown.Entry}", ct);
+            served.StatusCode.ShouldBe(System.Net.HttpStatusCode.OK);
+            (await served.Content.ReadAsStringAsync(ct)).ShouldContain("Option A or option B?");
+            served.Headers.GetValues("Content-Security-Policy").Single().ShouldStartWith("sandbox allow-scripts");
+        }
+        finally
+        {
+            await factory.DisposeAsync();
+            try { Directory.Delete(root, recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static async Task<bool> HasExitedAsync(int processId, TimeSpan within)
     {
         var deadline = DateTime.UtcNow + within;

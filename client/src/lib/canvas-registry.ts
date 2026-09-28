@@ -9,11 +9,13 @@ import {
   Globe,
   History,
   ListChecks,
+  PanelsTopLeft,
   Paperclip,
   Workflow,
 } from "lucide-vue-next";
 import BrowserCanvas from "@/components/canvas/BrowserCanvas.vue";
 import ChangesCanvas from "@/components/canvas/ChangesCanvas.vue";
+import PageCanvas from "@/components/canvas/PageCanvas.vue";
 import FilesCanvas from "@/components/canvas/FilesCanvas.vue";
 import ProgressCanvas from "@/components/canvas/ProgressCanvas.vue";
 import TurnsCanvas from "@/components/canvas/TurnsCanvas.vue";
@@ -50,6 +52,7 @@ export const CANVAS_TYPES: Record<CanvasKind, CanvasTypeDefinition> = {
   turns: { kind: "turns", label: "Turns", icon: History, component: TurnsCanvas },
   visual: { kind: "visual", label: "Diagram", icon: Workflow, component: VisualCanvas },
   browser: { kind: "browser", label: "Browser", icon: Globe, component: BrowserCanvas },
+  page: { kind: "page", label: "Page", icon: PanelsTopLeft, component: PageCanvas },
   file: { kind: "file", label: "File", icon: File, component: FileCanvas },
 };
 
@@ -83,6 +86,7 @@ export function fileIcon(path: string): Component {
 export function canvasTitle(canvas: CanvasInstance): string {
   if (canvas.file) return fileName(canvas.file.path);
   if (canvas.browser) return canvas.browser.title;
+  if (canvas.page) return canvas.page.title;
   return canvas.payload ? visualCanvasTitle(canvas.payload) : CANVAS_TYPES[canvas.kind].label;
 }
 

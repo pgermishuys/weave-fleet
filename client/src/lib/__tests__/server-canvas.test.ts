@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { diagramFlowContent, serverCanvasPayload } from "@/lib/server-canvas";
+import { diagramFlowContent, pageAddress, serverCanvasPayload, shownPage } from "@/lib/server-canvas";
+
+describe("shownPage", () => {
+  it("reads a page canvas's state and fills what's missing", () => {
+    expect(shownPage({ pageId: "pg_1", entry: "a.html", source: "/tmp/a.html", files: 2, bytes: 10, shownAt: "t", warnings: ["w", 3] }))
+      .toEqual({ pageId: "pg_1", entry: "a.html", source: "/tmp/a.html", files: 2, bytes: 10, shownAt: "t", warnings: ["w"] });
+    expect(shownPage(null)).toEqual({ pageId: "", entry: "", source: "", files: 0, bytes: 0, shownAt: "", warnings: [] });
+  });
+
+  it("addresses the page on Fleet, escaping each part of the file name", () => {
+    expect(pageAddress({ pageId: "pg_1", entry: "options a.html" })).toBe("/pages/pg_1/options%20a.html");
+    expect(pageAddress({ pageId: "pg_1", entry: "sub/b#c.html" })).toBe("/pages/pg_1/sub/b%23c.html");
+  });
+});
 
 // The state from SignalREventContractTests: the agent opened it, the user moved n1.
 const diagramState = {

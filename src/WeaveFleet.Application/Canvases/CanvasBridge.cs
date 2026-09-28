@@ -60,6 +60,9 @@ public sealed class CanvasBridge(
         CancellationToken ct = default)
         => RunAsync(bridgeToken, harnessSessionId, async sessionId =>
         {
+            if (kind == CanvasKinds.Page)
+                return PageToolOnly();
+
             var opened = await canvases.OpenAsync(sessionId, kind ?? string.Empty, title ?? string.Empty, state, ct);
             if (!opened.IsSuccess)
                 return CanvasResult.Fail<CanvasToolOutput>(opened.Error);
@@ -109,6 +112,8 @@ public sealed class CanvasBridge(
         {
             if (string.IsNullOrWhiteSpace(canvasId))
                 return MissingCanvasId();
+            if ((await canvases.GetAsync(sessionId, canvasId, ct))?.Kind == CanvasKinds.Page)
+                return PageToolOnly();
 
             var applied = await canvases.ApplyAsync(sessionId, canvasId, CanvasActor.Agent, ops, ct);
             if (!applied.IsSuccess)
@@ -139,6 +144,12 @@ public sealed class CanvasBridge(
                 canvas.Id,
                 canvas.Version));
         }, ct);
+
+    /// <summary>A page canvas holds a copy Fleet made, so only <c>fleet_page_show</c> changes it.</summary>
+    private static CanvasResult<CanvasToolOutput> PageToolOnly()
+        => CanvasResult.Fail<CanvasToolOutput>(
+            CanvasErrorKind.Invalid,
+            "Page canvases show an HTML file you wrote: call fleet_page_show with the file, and again after each edit.");
 
     private async Task<CanvasResult<CanvasToolOutput>> RunAsync(
         string? bridgeToken,

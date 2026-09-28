@@ -90,6 +90,9 @@ public static class EndpointExtensions
         // Agent bridge: authenticated by a per-process token, not a Fleet user, so it sits outside the auth group.
         app.MapCanvasBridgeEndpoints();
 
+        // Pages agents showed: the address is the credential, since a sandboxed page's own requests carry no sign-in.
+        app.MapPageEndpoints();
+
         return app;
     }
 

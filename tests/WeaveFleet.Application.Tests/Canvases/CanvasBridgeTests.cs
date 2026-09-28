@@ -43,6 +43,32 @@ public sealed class CanvasBridgeTests
         _bridge = new CanvasBridge([_callers], _user, _canvases, new AppRunService(_apps, _runs, new InMemorySessionRepository(), _user));
     }
 
+    [Fact]
+    public async Task The_agent_cannot_open_a_page_canvas_except_through_fleet_page_show()
+    {
+        var opened = await _bridge.OpenAsync(Token, OpenCodeSessionId, CanvasKinds.Page, "Mockup", JsonNode.Parse("""{"pageId":"pg_x"}"""));
+
+        opened.Error!.Kind.ShouldBe(CanvasErrorKind.Invalid);
+        opened.Error.Message.ShouldContain("fleet_page_show");
+        (await _repository.ListBySessionIdAsync(SessionId)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task The_agent_cannot_patch_a_page_canvas()
+    {
+        var state = new PageState
+        {
+            PageId = "pg_" + new string('b', 32), Entry = "index.html", Source = "/tmp/m/index.html", Files = 1, Bytes = 10,
+            ShownAt = "2026-09-28T10:00:00.0000000+00:00",
+        };
+        var page = (await _canvases.OpenAsync(SessionId, CanvasKinds.Page, "Mockup", JsonNode.Parse(state.ToJson()))).Value!.Canvas;
+
+        var patched = await _bridge.PatchAsync(Token, OpenCodeSessionId, page.Id, JsonNode.Parse("""[{"op":"showPage","pageId":"pg_x"}]"""));
+
+        patched.Error!.Message.ShouldContain("fleet_page_show");
+        (await _canvases.GetAsync(SessionId, page.Id))!.Version.ShouldBe(page.Version);
+    }
+
     private async Task<CanvasToolOutput> OpenFlowAsync()
     {
         var opened = await _bridge.OpenAsync(Token, OpenCodeSessionId, "diagram", "Flow", JsonNode.Parse(Flow));

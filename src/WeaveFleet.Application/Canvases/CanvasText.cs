@@ -32,6 +32,16 @@ public static class CanvasText
             return text.ToString();
         }
 
+        if (canvas.Kind == CanvasKinds.Page)
+        {
+            var shown = PageState.Parse(canvas.StateJson);
+            text.Append("\nsource ").Append(shown.Source)
+                .Append("\ncopied ").Append(PageSize(shown.Files, shown.Bytes)).Append(" at ").Append(shown.ShownAt);
+            foreach (var warning in shown.Warnings)
+                text.Append("\nwarning ").Append(warning);
+            return text.ToString();
+        }
+
         if (canvas.Kind == CanvasKinds.Browser)
         {
             var page = BrowserState.Parse(canvas.StateJson);
@@ -97,6 +107,7 @@ public static class CanvasText
         string? direction = null;
         SetSourceOp? source = null;
         SetPageOp? page = null;
+        ShowPageOp? shownPage = null;
 
         foreach (var op in ops)
         {
@@ -115,6 +126,7 @@ public static class CanvasText
                 case SetDirectionOp set: direction = set.Direction; break;
                 case SetSourceOp set: source = set; break;
                 case SetPageOp set: page = set; break;
+                case ShowPageOp show: shownPage = show; break;
             }
         }
 
@@ -139,8 +151,19 @@ public static class CanvasText
             parts.Add(Plural(source.Source.Split('\n').Length, "line"));
         if (page is not null)
             parts.Add(page.Url);
+        if (shownPage is not null)
+            parts.Add(PageSize(shownPage.Page.Files, shownPage.Page.Bytes));
 
         return parts.Count == 0 ? "no changes" : string.Join(", ", parts);
+    }
+
+    /// <summary><c>4 files, 38 KB</c></summary>
+    public static string PageSize(int files, long bytes)
+    {
+        var size = bytes < 1024 ? $"{bytes} bytes"
+            : bytes < 1024 * 1024 ? $"{(bytes + 1023) / 1024} KB"
+            : $"{bytes / (1024.0 * 1024):0.#} MB";
+        return $"{Plural(files, "file")}, {size}";
     }
 
     /// <summary><c>"Session event flow" (cv_01J…)</c></summary>

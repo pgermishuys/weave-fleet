@@ -15,12 +15,26 @@ export interface ServerCanvasSnapshot {
   state: unknown;
 }
 
-export type ServerCanvasKind = "diagram" | "sequence" | "browser";
+export type ServerCanvasKind = "diagram" | "sequence" | "browser" | "page";
 
 /** A browser canvas: a page on this machine, and the app Fleet runs for it, if any. */
 export interface BrowserPage {
   url: string;
   appId?: string;
+}
+
+/**
+ * A page canvas: an HTML file the agent wrote, which Fleet copied and serves at `/pages/{pageId}/{entry}`.
+ * `shownAt` changes every time the agent shows it, so the tab reloads.
+ */
+export interface ShownPage {
+  pageId: string;
+  entry: string;
+  source: string;
+  files: number;
+  bytes: number;
+  shownAt: string;
+  warnings: string[];
 }
 
 type FlowDirection = "TB" | "LR" | "BT" | "RL";
@@ -52,7 +66,27 @@ export type DiagramFlowContent = {
 const DIRECTIONS = new Set<string>(["TB", "LR", "BT", "RL"]);
 
 export function isServerCanvasKind(kind: string): kind is ServerCanvasKind {
-  return kind === "diagram" || kind === "sequence" || kind === "browser";
+  return kind === "diagram" || kind === "sequence" || kind === "browser" || kind === "page";
+}
+
+export function shownPage(state: unknown): ShownPage {
+  const record = asRecord(state);
+  const text = (value: unknown) => (typeof value === "string" ? value : "");
+  const count = (value: unknown) => (isFiniteNumber(value) ? value : 0);
+  return {
+    pageId: text(record.pageId),
+    entry: text(record.entry),
+    source: text(record.source),
+    files: count(record.files),
+    bytes: count(record.bytes),
+    shownAt: text(record.shownAt),
+    warnings: asArray(record.warnings).filter((warning): warning is string => typeof warning === "string"),
+  };
+}
+
+/** Where Fleet serves a page canvas's page. */
+export function pageAddress(page: Pick<ShownPage, "pageId" | "entry">): string {
+  return `/pages/${encodeURIComponent(page.pageId)}/${page.entry.split("/").map(encodeURIComponent).join("/")}`;
 }
 
 export function browserPage(state: unknown): BrowserPage {

@@ -9,6 +9,7 @@ using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Pages;
 using WeaveFleet.Application.Plugins;
 using WeaveFleet.Application.Recaps;
 using WeaveFleet.Application.Sessions;
@@ -30,6 +31,7 @@ using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 using WeaveFleet.Infrastructure.Harnesses.Pi;
+using WeaveFleet.Infrastructure.Pages;
 using WeaveFleet.Infrastructure.Plugins;
 using WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
 using WeaveFleet.Infrastructure.Services;
@@ -244,6 +246,10 @@ public static class DependencyInjection
             sp.GetRequiredService<ILogger<SessionScreenshotStore>>()));
         services.AddSingleton<ISessionScreenshotStore>(sp => sp.GetRequiredService<SessionScreenshotStore>());
         services.AddHostedService<SessionScreenshotCleanupService>();
+        services.AddSingleton<IPageStore>(sp => new PageStore(
+            sp.GetRequiredService<FleetOptions>().ResolvedPageDirectory,
+            sp.GetRequiredService<ILogger<PageStore>>()));
+        services.AddScoped<PageBridge>();
         services.AddHostedService<SideConversationSweeper>();
         services.AddScoped<BrowserPreviews>();
         services.AddScoped<BrowserBridge>();
