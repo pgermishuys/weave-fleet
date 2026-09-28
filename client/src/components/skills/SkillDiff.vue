@@ -53,6 +53,7 @@ const stats = computed(() => {
 
 <style scoped>
 .skill-diff {
+  min-width: 0;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-btn);
@@ -100,11 +101,17 @@ const stats = computed(() => {
 .skill-diff :deep(.diff-view) {
   max-height: 340px;
   overflow: auto;
+  border: 0;
+  border-radius: 0;
 }
 
-/* Skills are prose: wrap long lines instead of scrolling sideways. */
-.skill-diff :deep(.diff-line__content) {
+/* Skills are prose: wrap long lines to the dialog's width instead of scrolling sideways. */
+.skill-diff :deep(.diff-line) {
+  min-width: 0;
   white-space: pre-wrap;
+}
+
+.skill-diff :deep(.diff-line__content) {
   overflow-wrap: anywhere;
 }
 </style>

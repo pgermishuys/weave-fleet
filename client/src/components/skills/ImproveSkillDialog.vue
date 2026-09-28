@@ -261,7 +261,7 @@ function announce(saved: BuiltInSkillDetail, previous: number | null): void {
           </label>
           <p class="improve-sees__total">
             <span>Asked once, on this session's model</span>
-            <span>{{ wholeConversation ? `${formatTokens(totalTokens)} + the session` : formatTokens(totalTokens) }}</span>
+            <span class="whitespace-nowrap">{{ wholeConversation ? `${formatTokens(totalTokens)} + the session` : formatTokens(totalTokens) }}</span>
           </p>
         </fieldset>
 
@@ -442,6 +442,7 @@ function announce(saved: BuiltInSkillDetail, previous: number | null): void {
 .improve-sees__total {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
   gap: 12px;
   margin-top: 4px;
   padding: 8px 8px 0;
