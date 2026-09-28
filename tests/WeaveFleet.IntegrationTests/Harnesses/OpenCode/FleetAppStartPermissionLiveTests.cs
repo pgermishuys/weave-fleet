@@ -100,6 +100,8 @@ public sealed class FleetAppStartPermissionLiveTests
                 },
                 ct);
 
+            _ = PooledOpenCodeLiveHost.ReadEventsAsync(session, ct);
+
             await session.SendPromptAsync("Show me the diff.", new PromptOptions { Agent = agent }, ct);
 
             // The model gets the tool's answer in its next request.

@@ -134,6 +134,10 @@ public sealed class OpenCodeDelegationReplayTests
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            // The session reads the asks waiting before it reads the stream: none here.
+            if (request.RequestUri!.AbsolutePath == "/permission")
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("[]", Encoding.UTF8, "application/json") });
+
             if (Interlocked.Increment(ref _callCount) > 1)
                 throw new OperationCanceledException(cancellationToken);
 

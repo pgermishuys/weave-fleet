@@ -102,9 +102,35 @@ public sealed class OpenCodePermissionTests
             () => session.ReplyToPermissionAsync("per_1", PermissionReplies.Once, null, CancellationToken.None));
     }
 
-    private static (RecordingHandler Http, Channel<OpenCodeSseEvent> Events, OpenCodeHarnessSession Session) Start()
+    [Fact]
+    public async Task An_ask_made_while_nothing_read_the_stream_is_read_when_it_opens_and_decided_once()
     {
-        var http = new RecordingHandler();
+        // The relay's pump restarting, say: OpenCode still holds the ask, and the turn waits on it.
+        var (http, events, session) = Start(waiting: """
+            [{"id":"per_old","sessionID":"oc-1","permission":"bash","patterns":["npm test"],"always":["npm test *"],"metadata":{"command":"npm test"}},
+             {"id":"per_other","sessionID":"oc-someone-else","permission":"bash","patterns":["rm -rf /"],"always":[],"metadata":{}}]
+            """);
+        await using var _ = session;
+        await session.ApplyPermissionsAsync(new PermissionPolicy(PermissionLevels.Ask), CancellationToken.None);
+        var stream = session.SubscribeAsync(CancellationToken.None).GetAsyncEnumerator();
+
+        var asked = await NextAsync(stream);
+        asked.Type.ShouldBe(EventTypes.PermissionAsked);
+        asked.Payload!.Value.GetProperty("title").GetString().ShouldBe("npm test");
+        Status(await NextAsync(stream)).ShouldBe(ActivityStatuses.WaitingInput);
+
+        // Seen again on the stream: still one ask.
+        await events.Writer.WriteAsync(Asked("per_old", "oc-1", "bash", "npm test", "npm test *"));
+        await events.Writer.WriteAsync(Sse("session.idle", """{"sessionID":"oc-1"}"""));
+        var next = await NextAsync(stream);
+        next.Type.ShouldBe(EventTypes.PermissionReplied);
+        next.Payload!.Value.GetProperty("reply").GetString().ShouldBe(PermissionReplies.Gone);
+        http.Bodies("POST /permission/per_other/reply").ShouldBeEmpty();
+    }
+
+    private static (RecordingHandler Http, Channel<OpenCodeSseEvent> Events, OpenCodeHarnessSession Session) Start(string waiting = "[]")
+    {
+        var http = new RecordingHandler(waiting);
         var events = Channel.CreateUnbounded<OpenCodeSseEvent>();
         var httpClient = new HttpClient(http) { BaseAddress = new Uri("http://localhost:1234") };
         var session = new OpenCodeHarnessSession(
@@ -158,7 +184,7 @@ public sealed class OpenCodePermissionTests
     }
 
     /// <summary>Answers every request with <c>true</c> and keeps its body by "METHOD /path".</summary>
-    private sealed class RecordingHandler : HttpMessageHandler
+    private sealed class RecordingHandler(string waiting) : HttpMessageHandler
     {
         private readonly Lock _gate = new();
         private readonly List<KeyValuePair<string, string>> _requests = [];
@@ -172,9 +198,17 @@ public sealed class OpenCodePermissionTests
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var body = request.Content is null ? "" : await request.Content.ReadAsStringAsync(cancellationToken);
+            var key = $"{request.Method} {request.RequestUri!.AbsolutePath}";
             lock (_gate)
-                _requests.Add(new($"{request.Method} {request.RequestUri!.AbsolutePath}", body));
-            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("true", Encoding.UTF8, "application/json") };
+                _requests.Add(new(key, body));
+            // The folder's waiting asks, and a subagent's session that isn't this one's.
+            var answer = key switch
+            {
+                "GET /permission" => waiting,
+                "GET /session/oc-someone-else" => """{"id":"oc-someone-else","parentID":"oc-unrelated"}""",
+                _ => "true",
+            };
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(answer, Encoding.UTF8, "application/json") };
         }
     }
 

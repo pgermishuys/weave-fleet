@@ -73,8 +73,10 @@ public sealed class OpenCodeHarnessSessionLazyPooledSubscriptionTests
         await consumeTask.WaitAsync(TimeSpan.FromSeconds(5));
 
         events.ShouldHaveSingleItem().SessionId.ShouldBe("oc-session-1");
+        // Once bound, the subscription reads the asks already waiting (none) before the stream.
         handler.RequestPaths.ShouldBe([
             "/session?directory=%2Frepo%2Fone",
+            "/permission?directory=%2Frepo%2Fone",
             "/session/oc-session-1/prompt_async?directory=%2Frepo%2Fone"]);
 
         await cts.CancelAsync();

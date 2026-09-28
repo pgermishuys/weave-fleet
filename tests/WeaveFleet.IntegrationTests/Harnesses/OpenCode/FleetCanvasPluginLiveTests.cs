@@ -203,6 +203,7 @@ public sealed partial class FleetCanvasPluginLiveTests
                 },
                 ct);
 
+            _ = PooledOpenCodeLiveHost.ReadEventsAsync(session, ct);
             await session.SendPromptAsync("How is this session doing in Fleet?", null, ct);
 
             // The skill's own text reached the model, then the API's answer about this session, fetched with no token.

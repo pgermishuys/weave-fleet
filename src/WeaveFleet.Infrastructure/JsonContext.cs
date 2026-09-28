@@ -191,6 +191,7 @@ internal sealed partial class HarnessEventJsonContext : JsonSerializerContext
 [JsonSerializable(typeof(OpenCodeQuestionReplyRequest))]
 [JsonSerializable(typeof(OpenCodeQuestionRejectRequest))]
 [JsonSerializable(typeof(OpenCodePermissionReplyRequest))]
+[JsonSerializable(typeof(List<JsonElement>))]
 internal sealed partial class OpenCodeJsonContext : JsonSerializerContext
 {
 }
