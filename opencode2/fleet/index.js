@@ -1,5 +1,5 @@
 /**
- * Fleet's own tools for OpenCode 2 sessions: canvases, the app runner, the browser canvas and its screenshots.
+ * Fleet's own tools for OpenCode 2 sessions: canvases, pages, the app runner, the browser canvas and its screenshots.
  *
  * Fleet embeds this file, writes it into its data folder as fleet/index.js, and loads the folder through the "plugins"
  * list in OPENCODE_CONFIG_CONTENT: OpenCode 2 loads a plugin from a folder, not a file. Edit it here, in the Fleet
@@ -112,6 +112,7 @@ const tools = [
     "fleet_canvas_open",
     [
       "Show the user a diagram (architecture, a flow, dependencies, a sequence) in a canvas beside the chat.",
+      "For a mockup or any HTML page, use fleet_page_show.",
       "Use it only when the user asks for a diagram, or when a diagram is clearly the best way to answer them; then draw it here rather than as text or Mermaid in chat.",
       "Don't open one for your own notes or progress, or when you're working on a task delegated by another agent: your result goes to that agent, not to the user.",
       "Read a canvas before you describe it or change it.",
@@ -141,7 +142,7 @@ const tools = [
 
   fleetTool(
     "fleet_canvas_read",
-    "Read a canvas as compact text: every box and edge by id, the Mermaid source, or a browser canvas's page with its app's status and recent output.",
+    "Read a canvas as compact text: every box and edge by id, the Mermaid source, a browser canvas's page with its app's status and recent output, or the file a page canvas shows.",
     { canvasId },
     (input, tool) => callFleet("read", tool, { canvasId: input.canvasId }),
   ),
@@ -174,10 +175,37 @@ const tools = [
   ),
 
   fleetTool(
+    "fleet_page_show",
+    [
+      "Show the user an HTML page you wrote (a mockup, prototype, before-and-after or explainer) in a page canvas beside the chat.",
+      "Use it when the user asks to see something, or when a page is clearly the best way to answer them.",
+      "Don't open one for your own notes, or when you're working on a task delegated by another agent: your result goes to that agent, not to the user.",
+      "Pass the .html file's absolute path. Fleet copies the file and the web files in its folder (CSS, scripts, images, fonts) and serves the copy itself, so there's no server to start.",
+      "Showing the same file again updates the same tab, and the user's tab reloads, so show it again after every edit you want them to see.",
+      "Use relative links, and keep the page's files in its folder: paths starting with / or ../ don't load. Pages run sandboxed: localStorage isn't available.",
+      "Not for the project's own app, or anything that needs a build or a dev server: use fleet_app_start.",
+      "Not for a page already running at a localhost address: use fleet_browser_open.",
+      "Not for diagrams of boxes and arrows or sequences: use fleet_canvas_open.",
+    ].join(" "),
+    {
+      path: {
+        type: "string",
+        description: "Absolute path of the .html file, e.g. \"/tmp/mockups/settings/options.html\".",
+      },
+      title: {
+        type: "string",
+        description: "Short title for the canvas tab, e.g. \"Settings options\".",
+      },
+    },
+    (input, tool) => callFleet("page-show", tool, { path: input.path, title: input.title }),
+  ),
+
+  fleetTool(
     "fleet_app_start",
     [
       "Start the project's web app as a long-running server and show its page to the user in a browser canvas beside the chat.",
       "Use it only when the user asks to run, host, serve, preview or see the app, whatever it's built with (npm, bun, dotnet, python, cargo...), or to try a change to the app's pages or HTTP behavior in the running app.",
+      "Not for HTML files you wrote: show those with fleet_page_show. Fleet refuses plain file servers (python -m http.server, serve, http-server).",
       "It is not a shell. Commands that finish on their own (git, gh, builds, tests, formatters, scripts, echo) fail here: run them with your shell tool.",
       "If you can't run shell commands, don't use this tool either.",
       "Don't start dev servers with your shell tool: they never exit, and the user can't see them.",
@@ -207,7 +235,8 @@ const tools = [
     "fleet_browser_open",
     [
       "Show a page that's already running on this machine in a browser canvas beside the chat, e.g. a server the user started or one in a container.",
-      "To run the app first, use fleet_app_start instead. Only http and https addresses on this machine work.",
+      "To run the app first, use fleet_app_start instead. For an HTML file you wrote, use fleet_page_show.",
+      "Only http and https addresses on this machine work.",
     ].join(" "),
     {
       url: {
@@ -225,7 +254,7 @@ const tools = [
   fleetTool(
     "fleet_browser_screenshot",
     [
-      "Look at a page in a browser canvas: Fleet takes a screenshot and attaches it to this tool's result, as an image you can see.",
+      "Look at a page in a browser or page canvas: Fleet takes a screenshot and attaches it to this tool's result, as an image you can see.",
       "Use it to check UI work you just did — layout, spacing, colours, whether the thing you changed is even on the screen — instead of assuming the code is enough.",
       "Take one after a change, and again after the fix.",
       "Fleet shoots the page in its own headless browser, so the user's tab doesn't move and nothing is clicked.",
@@ -236,7 +265,7 @@ const tools = [
       canvasId,
       path: {
         type: "string",
-        description: "Empty string for the page the canvas is showing, or a path on the same app to shoot instead, e.g. \"/settings\".",
+        description: "Empty string for the page the canvas is showing, or a path on the same app to shoot instead, e.g. \"/settings\" (for a page canvas, another file in the page's folder, e.g. \"option-b.html\").",
       },
       viewport: {
         type: "string",
