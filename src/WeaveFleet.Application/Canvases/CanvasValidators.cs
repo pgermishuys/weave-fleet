@@ -81,6 +81,15 @@ public static class BrowserStateValidator
             : new CanvasError(CanvasErrorKind.Invalid, LoopbackUrl.Requirement);
 }
 
+public static class PageStateValidator
+{
+    /// <summary>The page has to be one of Fleet's copies: the state only ever comes from <c>fleet_page_show</c>.</summary>
+    public static CanvasError? Validate(PageState state)
+        => WeaveFleet.Application.Pages.PageIds.IsValid(state.PageId) && state.Entry.Length > 0 && state.Source.Length > 0
+            ? null
+            : new CanvasError(CanvasErrorKind.Invalid, "A page canvas shows a page Fleet copied: show one with fleet_page_show.");
+}
+
 /// <summary>
 /// The pages a browser canvas can show: http or https on this machine. Fleet proxies them, so anything
 /// else would let a canvas make Fleet fetch arbitrary hosts.

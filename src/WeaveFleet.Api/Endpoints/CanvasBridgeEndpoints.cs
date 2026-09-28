@@ -2,6 +2,7 @@ using System.Net;
 using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Memory;
+using WeaveFleet.Application.Pages;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Workflows;
 
@@ -62,6 +63,10 @@ public static class CanvasBridgeEndpoints
         group.MapPost("/screenshot", async (CanvasBridgeRequest request, HttpContext http, BrowserBridge bridge, CancellationToken ct)
             => ToResult(await bridge.ScreenshotAsync(BridgeToken(http), request.HarnessSessionId, request.CanvasId, request.Path, request.Viewport, ct)))
             .WithName("CanvasBridgeScreenshot");
+
+        group.MapPost("/page-show", async (CanvasBridgeRequest request, HttpContext http, PageBridge bridge, CancellationToken ct)
+            => ToResult(await bridge.ShowAsync(BridgeToken(http), request.HarnessSessionId, request.Path, request.Title, ct)))
+            .WithName("CanvasBridgePageShow");
 
         // fleet_message: one session's agent messages another. The sender is the session the call resolves to.
         app.MapGroup($"{PathPrefix}/session")

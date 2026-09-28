@@ -1,6 +1,6 @@
 ---
 name: fleet-explain
-description: Show how something works over time as a short animation, 30 seconds at most, in a browser canvas beside the chat. For a flow, a request moving through layers, a change as data moving, a race or a retry. Use when the user asks to see, or be shown, how something works or flows, or asks for an animation. Not for static structure (use the diagram canvas) or reading a diff (fleet-walkthrough).
+description: Show how something works over time as a short animation, 30 seconds at most, in a page canvas beside the chat. For a flow, a request moving through layers, a change as data moving, a race or a retry. Use when the user asks to see, or be shown, how something works or flows, or asks for an animation. Not for static structure (use the diagram canvas) or reading a diff (fleet-walkthrough).
 ---
 
 # Show it with a short animation
@@ -102,8 +102,10 @@ No build step and no animation library; SVG and a little JavaScript are enough.
 
 ## 5. Show it and check it
 
-Serve the folder with **`fleet_app_start`** (`python3 -m http.server $PORT --bind 127.0.0.1 --directory <folder>`).
-Fleet shows it in a browser canvas beside the chat.
+Show it with **`fleet_page_show`** and the page's path. Fleet copies the folder, serves the copy and shows it in a
+page canvas beside the chat; there's no server to start. After you fix the page, show it again: the user's tab
+reloads. Keep links relative and the page's files in its folder. The page runs sandboxed, so it can't use
+`localStorage`.
 
 Take **`fleet_browser_screenshot`** stills with `path: "?step=N"`: two key steps at desktop, and one with
 `viewport: "phone"`. Check what each still says before how it looks. Each must pass all of these:

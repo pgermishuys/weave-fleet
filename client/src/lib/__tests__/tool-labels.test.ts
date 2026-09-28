@@ -42,6 +42,14 @@ describe("getToolLabel", () => {
       .toBe("const files = await glob({ pattern: '*.ts' });");
   });
 
+  it("labels a shown page by its tab and file", () => {
+    expect(getToolLabel("fleet_page_show", { path: "/tmp/mockups/options.html", title: "Options" })).toBe("Options · /tmp/mockups/options.html");
+    expect(getToolLabel("fleet_page_show", { path: "/tmp/mockups/options.html" })).toBe("/tmp/mockups/options.html");
+    expect(getToolLabel("fleet_page_show", null)).toBe("fleet_page_show");
+    expect(getToolDisplayLabel("fleet_page_show")).toBe("Show page");
+    expect(getToolIcon("fleet_page_show")).not.toBe(getToolIcon("unknown-tool"));
+  });
+
   it("falls back to the tool's name when the input says nothing", () => {
     for (const tool of ["websearch", "subagent", "question", "execute"]) {
       expect(getToolLabel(tool, null)).toBe(tool);

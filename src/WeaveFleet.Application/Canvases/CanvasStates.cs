@@ -211,3 +211,56 @@ public sealed class BrowserState
         return Encoding.UTF8.GetString(buffer.WrittenSpan);
     }
 }
+
+/// <summary>
+/// The state of a <see cref="CanvasKinds.Page"/> canvas: the page Fleet serves at <c>/pages/{PageId}/{Entry}</c>, the
+/// file it was copied from, what the copy took, and links in it that won't load. <see cref="ShownAt"/> changes on
+/// every show, so showing the same file again is a new version and the user's tab reloads.
+/// </summary>
+public sealed class PageState
+{
+    public string PageId { get; set; } = string.Empty;
+    public string Entry { get; set; } = string.Empty;
+    public string Source { get; set; } = string.Empty;
+    public int Files { get; set; }
+    public long Bytes { get; set; }
+    public string ShownAt { get; set; } = string.Empty;
+    public List<string> Warnings { get; set; } = [];
+
+    public static PageState Parse(string json)
+    {
+        var root = JsonNode.Parse(json)?.AsObject() ?? throw new FormatException("Page state is not a JSON object.");
+        return new PageState
+        {
+            PageId = (string?)root["pageId"] ?? string.Empty,
+            Entry = (string?)root["entry"] ?? string.Empty,
+            Source = (string?)root["source"] ?? string.Empty,
+            Files = (int?)root["files"] ?? 0,
+            Bytes = (long?)root["bytes"] ?? 0,
+            ShownAt = (string?)root["shownAt"] ?? string.Empty,
+            Warnings = root["warnings"] is JsonArray warnings ? [.. warnings.Select(item => (string?)item).OfType<string>()] : [],
+        };
+    }
+
+    public string ToJson()
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer, CanvasJson.WriterOptions))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("pageId", PageId);
+            writer.WriteString("entry", Entry);
+            writer.WriteString("source", Source);
+            writer.WriteNumber("files", Files);
+            writer.WriteNumber("bytes", Bytes);
+            writer.WriteString("shownAt", ShownAt);
+            writer.WriteStartArray("warnings");
+            foreach (var warning in Warnings)
+                writer.WriteStringValue(warning);
+            writer.WriteEndArray();
+            writer.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
+}

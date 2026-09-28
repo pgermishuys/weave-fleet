@@ -82,6 +82,13 @@ export function getToolLabel(
       return title || toolName;
     }
 
+    case "fleet_page_show": {
+      const title = typeof input?.title === "string" && input.title ? input.title : "";
+      const path = typeof input?.path === "string" && input.path ? shortenPath(input.path) : "";
+      if (path) return title ? `${title} · ${truncate(path, 60)}` : truncate(path, 60);
+      return title || toolName;
+    }
+
     case "fleet_browser_screenshot": {
       const viewport = typeof input?.viewport === "string" && input.viewport ? input.viewport : "desktop";
       const path = typeof input?.path === "string" && input.path ? ` ${truncate(input.path, 40)}` : "";

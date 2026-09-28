@@ -61,6 +61,11 @@ export default defineConfig(({ mode }) => ({
         target: "http://localhost:5001",
         changeOrigin: true,
       },
+      // Pages agents show (fleet_page_show) are served by Fleet itself.
+      "/pages": {
+        target: "http://localhost:5001",
+        changeOrigin: true,
+      },
     },
   },
   build: {

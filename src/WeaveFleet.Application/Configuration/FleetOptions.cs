@@ -116,6 +116,10 @@ public sealed class FleetOptions
     public string ResolvedScreenshotDirectory
         => Path.Combine(Path.GetDirectoryName(Path.GetFullPath(DatabasePath)) ?? ".", "screenshots");
 
+    /// <summary>Where the pages agents show (<c>fleet_page_show</c>) are copied, per session: "pages" next to <see cref="DatabasePath"/>.</summary>
+    public string ResolvedPageDirectory
+        => Path.Combine(Path.GetDirectoryName(Path.GetFullPath(DatabasePath)) ?? ".", "pages");
+
     // ─── Claude Code ─────────────────────────────────────────────────────────
 
     /// <summary>Claude Code harness configuration.</summary>

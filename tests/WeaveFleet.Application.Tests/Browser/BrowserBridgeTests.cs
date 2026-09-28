@@ -1,6 +1,8 @@
 using System.Text.Json.Nodes;
 using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
+using WeaveFleet.Application.Pages;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Tests.Canvases;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Testing.Fakes.Repositories;
@@ -23,6 +25,7 @@ public sealed class BrowserBridgeTests : IDisposable
     private readonly FakeAppRunner _apps = new();
     private readonly FakeScreenshotter _shots = new();
     private readonly FakeScreenshotStore _kept = new();
+    private readonly CanvasService _canvases;
     private readonly BrowserBridge _bridge;
 
     public BrowserBridgeTests()
@@ -31,12 +34,85 @@ public sealed class BrowserBridgeTests : IDisposable
         _runs.AddSession(SessionId);
         _sessions.Seed(new Session { Id = SessionId, Directory = _folder.FullName });
         _callers.Add(Token, OpenCodeSessionId, new HarnessCanvasCaller(SessionId, Owner));
-        var canvases = new CanvasService(_canvasRepository, new FakeEventBroadcaster(), _user);
+        _canvases = new CanvasService(_canvasRepository, new FakeEventBroadcaster(), _user);
         var apps = new AppRunService(_apps, _runs, _sessions, _user);
-        _bridge = new BrowserBridge([_callers], _user, new BrowserPreviews(canvases, apps), apps, canvases, _shots, _kept);
+        _bridge = new BrowserBridge([_callers], _user, new BrowserPreviews(_canvases, apps), apps, _canvases, _shots, _kept, new FixedFleetUrl());
     }
 
     public void Dispose() => _folder.Delete(recursive: true);
+
+    [Theory]
+    [InlineData("python3 -m http.server $PORT --bind 127.0.0.1 --directory /tmp/mockups")]
+    [InlineData("npx serve -l $PORT /tmp/mockups")]
+    [InlineData("http-server . -p $PORT")]
+    public async Task A_plain_file_server_is_refused_and_the_agent_is_sent_to_fleet_page_show(string command)
+    {
+        var started = await _bridge.AppStartAsync(Token, OpenCodeSessionId, command, "Mockups");
+
+        started.Error!.Kind.ShouldBe(CanvasErrorKind.Invalid);
+        started.Error.Message.ShouldStartWith($"`{command}` only serves files, and Fleet serves files itself.");
+        started.Error.Message.ShouldContain("call fleet_page_show with the .html file");
+        _apps.Started.ShouldBeEmpty();
+        (await _canvasRepository.ListBySessionIdAsync(SessionId)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_screenshot_of_a_page_canvas_shoots_Fleet_s_copy_of_the_page()
+    {
+        var canvasId = await ShownPageAsync();
+
+        var shot = await _bridge.ScreenshotAsync(Token, OpenCodeSessionId, canvasId, "", "desktop");
+
+        shot.IsSuccess.ShouldBeTrue(shot.Error?.Message);
+        _shots.Requests.ShouldHaveSingleItem().ShouldBe(new ScreenshotRequest($"{FixedFleetUrl.Url}/pages/{PageId}/options%20a.html", 1280, 800));
+    }
+
+    [Theory]
+    [InlineData("option-b.html", "option-b.html")]
+    [InlineData("/option-b.html", "option-b.html")]
+    [InlineData("?step=4", "options%20a.html?step=4")]
+    public async Task A_path_on_a_page_canvas_shoots_another_file_of_the_same_page(string path, string expected)
+    {
+        var canvasId = await ShownPageAsync();
+
+        await _bridge.ScreenshotAsync(Token, OpenCodeSessionId, canvasId, path, "desktop");
+
+        _shots.Requests.ShouldHaveSingleItem().Url.ShouldBe($"{FixedFleetUrl.Url}/pages/{PageId}/{expected}");
+    }
+
+    [Theory]
+    [InlineData("../pg_00000000000000000000000000000000/index.html")]
+    [InlineData("http://localhost:5173/")]
+    public async Task A_path_that_leaves_the_page_is_refused(string path)
+    {
+        var canvasId = await ShownPageAsync();
+
+        var shot = await _bridge.ScreenshotAsync(Token, OpenCodeSessionId, canvasId, path, "desktop");
+
+        shot.Error!.Message.ShouldContain("isn't a file of this page");
+        _shots.Requests.ShouldBeEmpty();
+    }
+
+    private static readonly string PageId = "pg_" + new string('a', 32);
+
+    private async Task<string> ShownPageAsync()
+    {
+        var state = new PageState
+        {
+            PageId = PageId, Entry = "options a.html", Source = "/tmp/mockups/options a.html", Files = 2, Bytes = 2048,
+            ShownAt = "2026-09-28T10:00:00.0000000+00:00",
+        };
+        var opened = await _canvases.OpenAsync(SessionId, CanvasKinds.Page, "Options", JsonNode.Parse(state.ToJson()));
+        opened.IsSuccess.ShouldBeTrue(opened.Error?.Message);
+        return opened.Value.Canvas.Id;
+    }
+
+    private sealed class FixedFleetUrl : ILocalFleetUrl
+    {
+        public const string Url = "http://127.0.0.1:5123";
+
+        public string? TryGet() => Url;
+    }
 
     [Fact]
     public async Task App_start_runs_the_command_in_the_session_folder_and_shows_the_page_it_found()
@@ -299,7 +375,7 @@ public sealed class BrowserBridgeTests : IDisposable
 
         var shot = await _bridge.ScreenshotAsync(Token, OpenCodeSessionId, diagram.Value!.Canvas.Id, "", "desktop");
 
-        shot.Error!.Message.ShouldBe($"\"Flow\" ({diagram.Value.Canvas.Id}) is a sequence canvas. Screenshots are of pages: use fleet_app_start or fleet_browser_open first.");
+        shot.Error!.Message.ShouldBe($"\"Flow\" ({diagram.Value.Canvas.Id}) is a sequence canvas. Screenshots are of pages: use fleet_page_show, fleet_app_start or fleet_browser_open first.");
     }
 
     [Fact]

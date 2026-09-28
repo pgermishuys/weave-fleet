@@ -58,6 +58,7 @@ public sealed partial class SessionOrchestrator(
     IHarnessProfileRepository? harnessProfiles = null,
     SessionNotifier? sessionNotifier = null,
     ISessionScreenshotStore? sessionScreenshots = null,
+    WeaveFleet.Application.Pages.IPageStore? sessionPages = null,
     WeaveFleet.Application.Memory.AgentMemoryService? agentMemory = null) : ISessionActivator
 {
     private readonly DelegationService _delegationService = delegationService;
@@ -1402,6 +1403,22 @@ public sealed partial class SessionOrchestrator(
         }
     }
 
+    /// <summary>Deletes the pages the session's agents showed. Best effort: it never fails the caller.</summary>
+    private async Task DeletePagesAsync(string sessionId, CancellationToken ct)
+    {
+        if (sessionPages is null)
+            return;
+
+        try
+        {
+            await sessionPages.DeleteSessionAsync(sessionId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogPageCleanupFailed(ex, sessionId);
+        }
+    }
+
     /// <summary>Deletes the screenshots the session's agents took. Best effort: it never fails the caller.</summary>
     private async Task DeleteScreenshotsAsync(string sessionId, CancellationToken ct)
     {
@@ -1610,8 +1627,9 @@ public sealed partial class SessionOrchestrator(
                 ct);
         }
 
-        // Only once the session is gone: an archived one keeps its screenshots, since its conversation comes back.
+        // Only once the session is gone: an archived one keeps its screenshots and pages, since its conversation comes back.
         await DeleteScreenshotsAsync(id, ct);
+        await DeletePagesAsync(id, ct);
 
         // Emit analytics snapshot marking session as stopped
         analyticsCollector.AcceptSessionSnapshot(new SessionSnapshotData(
@@ -2235,6 +2253,9 @@ public sealed partial class SessionOrchestrator(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to delete the screenshots of session {SessionId}")]
     private partial void LogScreenshotCleanupFailed(Exception ex, string sessionId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to delete the pages of session {SessionId}")]
+    private partial void LogPageCleanupFailed(Exception ex, string sessionId);
 
     [LoggerMessage(Level = LogLevel.Error,
         Message = "Failed to retrieve messages for session {SessionId} — returning error result")]

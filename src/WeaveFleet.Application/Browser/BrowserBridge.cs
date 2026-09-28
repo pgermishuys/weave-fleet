@@ -1,5 +1,6 @@
 using System.Text;
 using WeaveFleet.Application.Canvases;
+using WeaveFleet.Application.Pages;
 using WeaveFleet.Application.Services;
 
 namespace WeaveFleet.Application.Browser;
@@ -15,7 +16,8 @@ public sealed class BrowserBridge(
     AppRunService apps,
     ICanvasService canvases,
     IScreenshotter screenshots,
-    ISessionScreenshotStore screenshotStore)
+    ISessionScreenshotStore screenshotStore,
+    ILocalFleetUrl? fleetUrl = null)
 {
     /// <summary>Long enough for a first <c>dotnet run</c> or <c>npm install</c>-then-serve on a cold machine.</summary>
     public static readonly TimeSpan ReadyTimeout = TimeSpan.FromMinutes(3);
@@ -37,6 +39,8 @@ public sealed class BrowserBridge(
             command = command?.Trim();
             if (string.IsNullOrEmpty(command))
                 return Invalid("\"command\" is required, e.g. \"npm run dev\" or \"dotnet watch\".");
+            if (PageRules.IsStaticFileServer(command))
+                return Invalid(StaticFileServerProblem(command));
 
             var name = BrowserPreviews.TitleOr(title, BrowserPreviews.DefaultTitle);
             var preview = await previews.StartAppAsync(sessionId, command, name, restartLive: true, ct);
@@ -105,25 +109,34 @@ public sealed class BrowserBridge(
         => RunAsync(bridgeToken, harnessSessionId, async sessionId =>
         {
             if (string.IsNullOrWhiteSpace(canvasId))
-                return Invalid("\"canvasId\" is required: it's the browser canvas from fleet_app_start, fleet_browser_open or fleet_canvas_list.");
+                return Invalid("\"canvasId\" is required: it's the canvas from fleet_page_show, fleet_app_start, fleet_browser_open or fleet_canvas_list.");
             if (!ScreenshotViewports.TryResolve(viewport, out var width, out var height))
                 return Invalid(ScreenshotViewports.Requirement);
 
             var canvas = await canvases.GetAsync(sessionId, canvasId, ct);
             if (canvas is null)
                 return NotFound($"No canvas {canvasId} in this session.");
-            if (canvas.Kind != CanvasKinds.Browser)
-                return Invalid($"{CanvasText.CanvasName(canvas)} is a {canvas.Kind} canvas. Screenshots are of pages: use fleet_app_start or fleet_browser_open first.");
+            Uri target;
+            if (canvas.Kind == CanvasKinds.Page)
+            {
+                if (!TryResolvePagePath(PageState.Parse(canvas.StateJson), path, out target, out var why))
+                    return Invalid(why);
+            }
+            else if (canvas.Kind == CanvasKinds.Browser)
+            {
+                var page = await PageAsync(sessionId, BrowserState.Parse(canvas.StateJson), ct);
+                if (page.Problem is { } why)
+                    return Invalid(why);
 
-            var state = BrowserState.Parse(canvas.StateJson);
-            var page = await PageAsync(sessionId, state, ct);
-            if (page.Problem is { } why)
-                return Invalid(why);
+                if (!TryResolvePath(page.Url!, path, out target, out var badPath))
+                    return Invalid(badPath);
+            }
+            else
+            {
+                return Invalid($"{CanvasText.CanvasName(canvas)} is a {canvas.Kind} canvas. Screenshots are of pages: use fleet_page_show, fleet_app_start or fleet_browser_open first.");
+            }
 
-            if (!TryResolvePath(page.Url!, path, out var target, out var badPath))
-                return Invalid(badPath);
-
-            var shot = await screenshots.CaptureAsync(new ScreenshotRequest(target.ToString(), width, height), ct);
+            var shot = await screenshots.CaptureAsync(new ScreenshotRequest(target.AbsoluteUri, width, height), ct);
             if (shot.Image is not { } image)
                 return Invalid(shot.Problem ?? "The screenshot failed.");
 
@@ -195,6 +208,34 @@ public sealed class BrowserBridge(
         return true;
     }
 
+    /// <summary>
+    /// The address of a page canvas's page on Fleet itself, or of another file of the same page when
+    /// <paramref name="path"/> names one (<c>"other.html"</c> or <c>"/other.html"</c>), or the page with a query
+    /// (<c>"?step=4"</c>). It never leaves the page.
+    /// </summary>
+    private bool TryResolvePagePath(PageState page, string? path, out Uri target, out string problem)
+    {
+        target = null!;
+        problem = string.Empty;
+        if (fleetUrl?.TryGet() is not { } fleet)
+        {
+            problem = "Fleet doesn't know its own address yet, so it can't open the page. Try again in a moment.";
+            return false;
+        }
+
+        var root = new Uri($"{fleet.TrimEnd('/')}/pages/{page.PageId}/");
+        var entry = new Uri(root, Uri.EscapeDataString(page.Entry));
+        var relative = string.IsNullOrWhiteSpace(path) ? string.Empty : path.Trim().TrimStart('/');
+        if (!Uri.TryCreate(entry, relative, out var resolved) || !resolved.AbsoluteUri.StartsWith(root.AbsoluteUri, StringComparison.Ordinal))
+        {
+            problem = $"\"{path}\" isn't a file of this page. Use \"\" for the page itself, or a file next to it such as \"other.html\".";
+            return false;
+        }
+
+        target = resolved;
+        return true;
+    }
+
     /// <summary>Status and recent output of the app a browser canvas shows, for <c>fleet_canvas_read</c>.</summary>
     public static string RenderApp(AppRunSnapshot app, IReadOnlyList<string> logs)
     {
@@ -212,6 +253,11 @@ public sealed class BrowserBridge(
             text.Append("\nlast output:\n").AppendJoin('\n', logs);
         return text.ToString();
     }
+
+    /// <summary>Why <c>fleet_app_start</c> doesn't run a plain file server: Fleet serves files itself.</summary>
+    internal static string StaticFileServerProblem(string command)
+        => $"`{command}` only serves files, and Fleet serves files itself. For a page you wrote, call fleet_page_show with the .html file. "
+           + "To run the project's app, start its dev server instead (e.g. npm run dev).";
 
     private string FailureText(string appId, string problem)
     {

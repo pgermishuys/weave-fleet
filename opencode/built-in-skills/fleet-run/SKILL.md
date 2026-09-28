@@ -20,6 +20,9 @@ user's real data, production services or accounts. Use test data or a scratch da
 
 ## 2. Run it, by kind of project
 
+An HTML page you wrote yourself (a mockup, a prototype, an explainer) isn't the app: show it with `fleet_page_show`,
+not `fleet_app_start`.
+
 ### Web app or HTTP server
 
 Use **`fleet_app_start`** with the command that serves it, for example `npm run dev` or
@@ -63,7 +66,8 @@ logs, and say what you couldn't see.
 
 ### Generated output
 
-Docs, static sites, reports, code generators: generate the output and read it.
+Docs, static sites, reports, code generators: generate the output and read it. A static site is served by its own
+dev or preview command (`fleet_app_start`), since its pages often expect to be served from the root.
 
 ## 3. Be a good neighbour
 
