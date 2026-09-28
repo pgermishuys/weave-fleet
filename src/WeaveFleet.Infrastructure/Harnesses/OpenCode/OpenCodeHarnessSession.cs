@@ -56,13 +56,17 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(8, "DelegationFailed"),
             "Failed to process delegation event for session {SessionId}");
 
-    private static readonly Action<ILogger, string, string, Exception?> LogPermissionAutoApproved =
-        LoggerMessage.Define<string, string>(LogLevel.Warning, new EventId(9, "PermissionAutoApproved"),
-            "Auto-approved permission request {RequestId} for permission '{Permission}' (headless harness cannot prompt user).");
+    private static readonly Action<ILogger, string, string, Exception?> LogPermissionAnswered =
+        LoggerMessage.Define<string, string>(LogLevel.Debug, new EventId(9, "PermissionAnswered"),
+            "Answered permission request {RequestId} with '{Reply}' for the session's permission level.");
 
-    private static readonly Action<ILogger, string, Exception?> LogPermissionApprovalFailed =
-        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(10, "PermissionApprovalFailed"),
-            "Failed to auto-approve permission request {RequestId}");
+    private static readonly Action<ILogger, string, Exception?> LogPermissionListFailed =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(13, "PermissionListFailed"),
+            "Couldn't read the permission requests waiting for OpenCode session {OpenCodeSessionId}.");
+
+    private static readonly Action<ILogger, string, Exception?> LogPermissionReplyFailed =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(10, "PermissionReplyFailed"),
+            "Answering permission request {RequestId} failed.");
 
     private static readonly Action<ILogger, string, Exception?> LogShellCommandFailed =
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(12, "ShellCommandFailed"),
@@ -96,6 +100,12 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     /// the tool call ID) can reply to the correct OpenCode question endpoint.
     /// </summary>
     private readonly ConcurrentDictionary<string, string> _toolCallToQuestionId = new();
+
+    // The session's permission level, the asks waiting on the user, and what they said not to ask again about.
+    private readonly PermissionGate _permissions = new();
+
+    // The asks Fleet answered itself, so one seen twice (read when the stream opens, then on it) is answered once.
+    private readonly ConcurrentDictionary<string, byte> _answeredAsks = new(StringComparer.Ordinal);
 
     // Tool calls already reported as files.written, so a re-sent completed part isn't reported twice.
     private const int MaxRememberedFileWrites = 10_000;
@@ -679,6 +689,17 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             await EnsurePooledSessionBoundAsync(openCodeSessionId, ct).ConfigureAwait(false);
         }
 
+        // Asks asked while nothing read the stream (the relay's pump restarting, say) wait until someone answers, so
+        // they're read first. One asked meanwhile comes on the stream too; the second sight of an ask is ignored.
+        if (!string.IsNullOrWhiteSpace(openCodeSessionId))
+        {
+            foreach (var waiting in await ReadWaitingPermissionsAsync(openCodeSessionId, ct).ConfigureAwait(false))
+            {
+                foreach (var permissionEvent in HandlePermissionEvent(waiting.Event, waiting.OpenCodeSessionId, waiting.Subagent))
+                    yield return permissionEvent;
+            }
+        }
+
         await foreach (var sseEvt in _instanceHandle
             .SubscribeEvents(openCodeSessionId, ct)
             .ConfigureAwait(false))
@@ -688,6 +709,22 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             var isParentEvent = string.IsNullOrWhiteSpace(currentOpenCodeSessionId)
                 || string.IsNullOrWhiteSpace(resolvedOpenCodeSessionId)
                 || string.Equals(resolvedOpenCodeSessionId, currentOpenCodeSessionId, StringComparison.Ordinal);
+
+            // Asks are decided here, the session's own and its subagents' alike: a subagent's reach this loop until it has
+            // a Fleet session of its own (sometimes never), and it has to be answered either way or its turn waits.
+            if (EventTypes.IsPermissionEvent(sseEvt.Type))
+            {
+                foreach (var permissionEvent in HandlePermissionEvent(sseEvt, isParentEvent ? currentOpenCodeSessionId : resolvedOpenCodeSessionId, subagent: !isParentEvent))
+                    yield return permissionEvent;
+                continue;
+            }
+
+            // A turn that ended (stopped, or failed) takes its asks with it.
+            if (isParentEvent && sseEvt.Type == EventTypes.SessionIdle)
+            {
+                foreach (var forgotten in ForgetPermissionAsks())
+                    yield return forgotten;
+            }
 
             string? routedFleetSessionId = null;
             if (!isParentEvent && !string.IsNullOrWhiteSpace(resolvedOpenCodeSessionId))
@@ -751,12 +788,6 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             // can translate the UI-provided tool call ID into the OpenCode question ID.
             if (harnessEvent.Type == OpenCodeMapper.QuestionAskedEventType)
                 TryCacheQuestionMapping(harnessEvent);
-
-            // Auto-approve permission requests (defense-in-depth: config should prevent these,
-            // but if a sub-task agent with different config asks for permission, auto-approve
-            // since the harness is headless and cannot prompt the user).
-            if (harnessEvent.Type == "permission.asked")
-                _ = TryAutoApprovePermissionAsync(harnessEvent);
 
             yield return harnessEvent;
 
@@ -981,43 +1012,149 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             _toolCallToQuestionId[callId] = questionId;
     }
 
-    /// <summary>
-    /// Auto-approves a permission request from a <c>permission.asked</c> event.
-    /// The event payload is <c>{ id: "perm_...", sessionID: "...", permission: "webfetch", patterns: [...], ... }</c>.
-    /// This is a defense-in-depth measure: the harness sets <c>OPENCODE_CONFIG_CONTENT</c> to auto-allow
-    /// all permissions, but if a sub-task agent with different config asks for permission, we auto-approve
-    /// since the harness is headless and cannot prompt the user.
-    /// </summary>
-    private async Task TryAutoApprovePermissionAsync(HarnessEvent evt)
+    /// <inheritdoc />
+    public Task ApplyPermissionsAsync(PermissionPolicy policy, CancellationToken ct)
     {
-        if (!evt.Payload.HasValue || evt.Payload.Value.ValueKind != JsonValueKind.Object)
-            return;
+        _permissions.Policy = policy;
+        return Task.CompletedTask;
+    }
 
-        var payload = evt.Payload.Value;
+    /// <inheritdoc />
+    /// <remarks>
+    /// "Don't ask again" is Fleet's to keep (<see cref="PermissionGate"/>): OpenCode's own "always" would allow it for every
+    /// session in the folder. OpenCode's <c>permission.replied</c> then settles the ask in the event loop.
+    /// </remarks>
+    public async Task ReplyToPermissionAsync(string requestId, string reply, string? message, CancellationToken ct)
+    {
+        var entry = _permissions.Pending.Get(requestId)
+            ?? throw new KeyNotFoundException($"Permission request '{requestId}' isn't waiting for an answer.");
+        if (reply == PermissionReplies.Always)
+            _permissions.AllowFromNowOn(entry.Ask);
 
-        if (!payload.TryGetProperty("id", out var idEl) || idEl.ValueKind != JsonValueKind.String)
-            return;
+        var rejected = reply == PermissionReplies.Reject;
+        await _instanceHandle.HttpClient.ReplyPermissionAsync(
+            requestId,
+            rejected ? PermissionReplies.Reject : PermissionReplies.Once,
+            rejected && !string.IsNullOrWhiteSpace(message) ? message : null,
+            _workingDirectory,
+            ct).ConfigureAwait(false);
+    }
 
-        var requestId = idEl.GetString();
-        if (string.IsNullOrWhiteSpace(requestId))
-            return;
+    /// <summary>
+    /// Turns OpenCode's permission events into Fleet's. An ask the session's level allows, or one the user said not to ask
+    /// again about, is answered at once and goes no further; any other waits for the user, and the session needs them. The
+    /// payload is <c>{ id, sessionID, permission, patterns, metadata, always, tool: { callID } }</c>; a reply is
+    /// <c>{ sessionID, requestID, reply }</c>.
+    /// </summary>
+    private IReadOnlyList<HarnessEvent> HandlePermissionEvent(OpenCodeSseEvent evt, string? openCodeSessionId, bool subagent)
+    {
+        var properties = evt.Properties;
+        var harnessSessionId = openCodeSessionId ?? _openCodeSessionId ?? string.Empty;
+        if (evt.Type == EventTypes.PermissionReplied)
+        {
+            return PermissionEvents.String(properties, "requestID") is { } repliedId && _permissions.Pending.Remove(repliedId) is { } settled
+                ? SettledPermissionEvents(settled, PermissionEvents.String(properties, "reply") ?? PermissionReplies.Once)
+                : [];
+        }
 
-        // Extract permission name for logging
-        var permissionName = payload.TryGetProperty("permission", out var permEl) && permEl.ValueKind == JsonValueKind.String
-            ? permEl.GetString() ?? "unknown"
-            : "unknown";
+        if (evt.Type != EventTypes.PermissionAsked
+            || PermissionEvents.String(properties, "id") is not { } requestId
+            || PermissionEvents.String(properties, "permission") is not { } tool)
+        {
+            return [];
+        }
 
-        LogPermissionAutoApproved(_logger, requestId, permissionName, null);
+        var patterns = PermissionEvents.Strings(properties, "patterns");
+        if (_permissions.Decide(tool, patterns) is { } decision)
+        {
+            if (_answeredAsks.Count >= MaxRememberedFileWrites)
+                _answeredAsks.Clear();
+            if (_answeredAsks.TryAdd(requestId, 0))
+                _ = AnswerPermissionAsync(requestId, decision);
+            return [];
+        }
 
+        var metadata = properties.TryGetProperty("metadata", out var m) ? m : default;
+        var ask = new PermissionAsk
+        {
+            Id = requestId,
+            SessionId = _fleetSessionId,
+            Kind = PermissionKinds.Classify(tool),
+            Tool = tool,
+            // An edit's patterns are its files relative to the folder, shorter than the metadata's absolute path.
+            Title = PermissionEvents.String(metadata, "command")
+                ?? (PermissionKinds.Classify(tool) == PermissionKinds.Edit && patterns.Count > 0 ? string.Join(", ", patterns) : null)
+                ?? PermissionEvents.String(metadata, "filepath")
+                ?? PermissionEvents.String(metadata, "url")
+                ?? (patterns.Count > 0 ? string.Join(", ", patterns) : null),
+            Detail = PermissionEvents.String(metadata, "diff"),
+            Always = PermissionEvents.Strings(properties, "always"),
+            CallId = properties.TryGetProperty("tool", out var call) ? PermissionEvents.String(call, "callID") : null,
+            Subagent = subagent ? "subagent" : null,
+        };
+
+        return _permissions.Pending.Add(ask, harnessSessionId)
+            ? [PermissionEvents.Asked(ask, harnessSessionId), PermissionEvents.Status(ActivityStatuses.WaitingInput, harnessSessionId)]
+            : [];
+    }
+
+    /// <summary>
+    /// The asks OpenCode holds for this session and its subagents, as <c>permission.asked</c> events. Empty when OpenCode
+    /// can't say: the asks then wait for the user to stop the turn, as they would have.
+    /// </summary>
+    private async Task<IReadOnlyList<(OpenCodeSseEvent Event, string OpenCodeSessionId, bool Subagent)>> ReadWaitingPermissionsAsync(
+        string openCodeSessionId,
+        CancellationToken ct)
+    {
         try
         {
-            await _instanceHandle.HttpClient.ReplyPermissionAsync(requestId, "always", _workingDirectory, CancellationToken.None)
-                .ConfigureAwait(false);
+            var waiting = new List<(OpenCodeSseEvent, string, bool)>();
+            foreach (var request in await _instanceHandle.HttpClient.ListPermissionsAsync(_workingDirectory, ct).ConfigureAwait(false))
+            {
+                if (PermissionEvents.String(request, "sessionID") is not { } askingSession)
+                    continue;
+                var own = askingSession == openCodeSessionId;
+                if (!own && await _instanceHandle.HttpClient.GetSessionParentIdAsync(askingSession, _workingDirectory, ct).ConfigureAwait(false) != openCodeSessionId)
+                    continue;
+                waiting.Add((new OpenCodeSseEvent { Type = EventTypes.PermissionAsked, Properties = request.Clone() }, askingSession, !own));
+            }
+
+            return waiting;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            LogPermissionListFailed(_logger, openCodeSessionId, ex);
+            return [];
+        }
+    }
+
+    /// <summary>The ask is settled; once none waits, the turn is working again.</summary>
+    private IReadOnlyList<HarnessEvent> SettledPermissionEvents(PendingPermissionAsks.Entry settled, string reply)
+        => _permissions.Pending.Any
+            ? [PermissionEvents.Replied(settled.Ask, reply, settled.HarnessSessionId)]
+            : [PermissionEvents.Replied(settled.Ask, reply, settled.HarnessSessionId), PermissionEvents.Status(ActivityStatuses.Busy, settled.HarnessSessionId)];
+
+    /// <summary>The asks still waiting when the turn ended: nothing will answer them now.</summary>
+    private IEnumerable<HarnessEvent> ForgetPermissionAsks()
+        => _permissions.Pending.Clear().Select(entry => PermissionEvents.Replied(entry.Ask, PermissionReplies.Gone, entry.HarnessSessionId));
+
+    /// <summary>Answers an ask Fleet decides itself: the level allows it, or asks are refused in a run nobody watches.</summary>
+    private async Task AnswerPermissionAsync(string requestId, string decision)
+    {
+        LogPermissionAnswered(_logger, requestId, decision, null);
+        try
+        {
+            await _instanceHandle.HttpClient.ReplyPermissionAsync(
+                requestId,
+                decision,
+                decision == PermissionReplies.Reject ? PermissionPolicy.UnattendedRejection : null,
+                _workingDirectory,
+                CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Log but don't throw — we don't want to break the event stream
-            LogPermissionApprovalFailed(_logger, requestId, ex);
+            // The event stream goes on; the turn waits on the ask until it's stopped.
+            LogPermissionReplyFailed(_logger, requestId, ex);
         }
     }
 

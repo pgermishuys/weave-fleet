@@ -214,6 +214,9 @@ public static class DependencyInjection
         services.AddSingleton<PromptQueueDispatcher>();
         // Singleton: the relay hands it every event; it keeps each failed turn's failure so a reload still shows it.
         services.AddSingleton<TurnFailureRecorder>();
+        // The asks waiting on the user, kept by the relay and read when a session opens.
+        services.AddSingleton<PendingPermissionStore>();
+        services.AddSingleton<IPendingPermissions>(sp => sp.GetRequiredService<PendingPermissionStore>());
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowsFeature>();
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowModelRoles>();
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowService>();

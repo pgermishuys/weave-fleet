@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 
@@ -28,6 +29,28 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
     /// </summary>
     internal static readonly OpenCode2PermissionRule DenyStepTool =
         new() { Action = WeaveFleet.Application.Workflows.FleetWorkflows.StepTool, Resource = "*", Effect = "deny" };
+
+    /// <summary>
+    /// The rules for a session at permission <paramref name="level"/>: <see cref="AllowAll"/> at
+    /// <see cref="PermissionLevels.All"/>; otherwise everything asks but reading (and editing, at
+    /// <see cref="PermissionLevels.Edits"/>), and Fleet answers each ask for the session's level. V2 applies the last
+    /// rule that matches, so the ask for everything goes first and the step tool's deny last.
+    /// </summary>
+    internal static IReadOnlyList<OpenCode2PermissionRule> RulesFor(string level, bool hideStepTool)
+    {
+        List<OpenCode2PermissionRule> rules = level == PermissionLevels.All
+            ? [.. AllowAll]
+            : [new OpenCode2PermissionRule { Action = "*", Resource = "*", Effect = "ask" },
+               .. PermissionKinds.AllowedWithoutAsking.Select(Allow),
+               .. (level == PermissionLevels.Edits ? EditActions.Select(Allow) : [])];
+        if (hideStepTool)
+            rules.Add(DenyStepTool);
+        return rules;
+
+        static OpenCode2PermissionRule Allow(string action) => new() { Action = action, Resource = "*", Effect = "allow" };
+    }
+
+    private static readonly string[] EditActions = ["edit", "write", "patch", "apply_patch", "multiedit", "move"];
 
     /// <summary><see cref="AllowAll"/>, then <see cref="DenyStepTool"/>: every session on a server with workflows on that isn't a step.</summary>
     internal static readonly IReadOnlyList<OpenCode2PermissionRule> AllowAllButStepTool = [.. AllowAll, DenyStepTool];
@@ -179,11 +202,11 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
     }
 
     /// <summary>Answers a permission request: <paramref name="decision"/> is <c>once</c>, <c>always</c> or <c>reject</c>.</summary>
-    public async Task ReplyToPermissionAsync(string sessionId, string requestId, string decision, CancellationToken ct)
+    public async Task ReplyToPermissionAsync(string sessionId, string requestId, string decision, CancellationToken ct, string? message = null)
     {
         using var response = await http.PostAsJsonAsync(
             $"api/session/{Uri.EscapeDataString(sessionId)}/permission/{Uri.EscapeDataString(requestId)}/reply",
-            new OpenCode2PermissionReply { Decision = decision },
+            new OpenCode2PermissionReply { Decision = decision, Message = message },
             OpenCode2JsonContext.Default.OpenCode2PermissionReply,
             ct).ConfigureAwait(false);
         await EnsureSuccessAsync(response, "answer the permission request", ct).ConfigureAwait(false);

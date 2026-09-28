@@ -728,6 +728,9 @@ public sealed partial class SessionOrchestrator(
         instanceTracker.Register(harnessInstance.InstanceId, harnessInstance);
         LogSessionCreated(session.Id, session.WorkspaceId, session.InstanceId);
 
+        // A subagent asks as its parent does: Fleet prompts it only through its parent.
+        await ApplyPermissionsAsync(session, harnessInstance, ct).ConfigureAwait(false);
+
         analyticsCollector.AcceptSessionSnapshot(new SessionSnapshotData(
             SessionId: session.Id,
             ParentSessionId: parent.Id,
@@ -842,6 +845,8 @@ public sealed partial class SessionOrchestrator(
         var instanceResult = await GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
         if (instanceResult.IsFailure)
             return instanceResult.Error;
+
+        await ApplyPermissionsAsync(sessionResult.Value, instanceResult.Value, ct).ConfigureAwait(false);
 
         try
         {
@@ -1106,6 +1111,8 @@ public sealed partial class SessionOrchestrator(
         var instanceResult = await GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
         if (instanceResult.IsFailure)
             return instanceResult.Error;
+
+        await ApplyPermissionsAsync(sessionResult.Value, instanceResult.Value, ct).ConfigureAwait(false);
 
         // Shown straight away as "/name arguments", under an id that sorts where it was sent. A harness that takes the
         // id stores the command's message under it; one that doesn't says which id it chose.
@@ -2052,7 +2059,62 @@ public sealed partial class SessionOrchestrator(
         session.StoppedAt = null;
         await BroadcastAutomaticActivationStatusAsync(session, _activityStatusIdle, _lifecycleStatusRunning, ct).ConfigureAwait(false);
 
+        // Before anything reaches it: a woken subagent, or a turn resumed on the harness, asks as the settings say.
+        await ApplyPermissionsAsync(session, harnessInstance, ct).ConfigureAwait(false);
+
         return Result.Success<IHarnessSession>(harnessInstance);
+    }
+
+    /// <summary>
+    /// Tells the session's harness what it may do without asking (Settings → Permissions). Called before every prompt, so
+    /// a changed setting applies from the next message. When the harness can't be told, the prompt still goes: it keeps
+    /// the level it had.
+    /// </summary>
+    private async Task ApplyPermissionsAsync(Session session, IHarnessSession instance, CancellationToken ct)
+    {
+        try
+        {
+            var policy = await SessionPermissions.ResolveAsync(userPreferenceRepository, sessionRepository, session).ConfigureAwait(false);
+            await instance.ApplyPermissionsAsync(policy, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogPermissionsNotApplied(ex, session.Id);
+        }
+    }
+
+    /// <summary>
+    /// Answers the agent's ask <paramref name="requestId"/> in session <paramref name="id"/>, the session whose harness
+    /// asked. Only a running harness has asks: one that isn't running has nothing waiting.
+    /// </summary>
+    public async Task<Result<Unit>> ReplyToPermissionAsync(
+        string id,
+        string requestId,
+        string reply,
+        string? message,
+        CancellationToken ct = default)
+    {
+        using var _ = BeginSessionScope(id);
+        if (!PermissionReplies.IsAnswer(reply))
+            return FleetError.ValidationError("Permission.Reply", "Answer once, always or reject.");
+
+        var sessionResult = await GetSessionAsync(id);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        if (instanceTracker.Get(sessionResult.Value.InstanceId) is not { } instance)
+            return FleetError.NotFoundFor("PermissionRequest", requestId);
+
+        try
+        {
+            await instance.ReplyToPermissionAsync(requestId, reply, message, ct).ConfigureAwait(false);
+        }
+        catch (KeyNotFoundException)
+        {
+            return FleetError.NotFoundFor("PermissionRequest", requestId);
+        }
+
+        return Unit.Value;
     }
 
     private async Task MarkAutomaticActivationErrorAsync(Session session, CancellationToken ct)
@@ -2201,6 +2263,10 @@ public sealed partial class SessionOrchestrator(
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "Failed to fetch messages for session {SessionId} via proxy — returning empty result")]
     private partial void LogProxyMessageFetchFailed(Exception ex, string sessionId);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Couldn't tell session {SessionId}'s harness its permission level; it keeps the one it had")]
+    private partial void LogPermissionsNotApplied(Exception ex, string sessionId);
 
     /// <summary>
     /// Waits for the harness event subscription to be established before proceeding.

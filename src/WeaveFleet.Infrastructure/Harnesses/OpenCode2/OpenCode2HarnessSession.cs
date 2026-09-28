@@ -56,6 +56,11 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
     // The questions waiting on the user, by the tool call that asked: the client answers by call id.
     private readonly ConcurrentDictionary<string, OpenCode2Form> _questions = new(StringComparer.Ordinal);
 
+    // The session's permission level, the asks waiting on the user, and what they said not to ask again about; and the
+    // level V2's session rules were last set for.
+    private readonly PermissionGate _permissions = new();
+    private string? _rulesLevel;
+
     // The prompts sent that V2 hasn't taken into the conversation yet, by the id Fleet gave them. A user message V2
     // takes in that isn't one of them is a command's: V2's command route neither takes an id nor returns one.
     private readonly ConcurrentDictionary<string, byte> _promptsNotTakenIn = new(StringComparer.Ordinal);
@@ -563,6 +568,9 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
                 break;
             case "session.execution.succeeded" or "session.execution.failed" or "session.execution.interrupted":
                 SetStatus(HarnessSessionStatus.Idle);
+                // A turn that ended takes its asks with it.
+                foreach (var entry in _permissions.Pending.Clear())
+                    _events.Writer.TryWrite(PermissionEvents.Replied(entry.Ask, PermissionReplies.Gone, _context.FleetSessionId));
                 break;
             case "form.created" when evt.Data.TryGetProperty("form", out var form) && form.ValueKind == JsonValueKind.Object:
                 if (form.Deserialize(OpenCode2JsonContext.Default.OpenCode2Form) is { } created)
@@ -572,7 +580,10 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
                 Forget(id.GetString()!);
                 break;
             case "permission.asked":
-                AnswerPermission(evt.Data);
+                OnPermissionAsked(evt.Data, subagent: false);
+                break;
+            case "permission.replied" when PermissionEvents.String(evt.Data, "requestID") is { } repliedId:
+                SettlePermission(repliedId, PermissionEvents.String(evt.Data, "reply") ?? PermissionReplies.Once);
                 break;
             // Switched by Fleet, or by anyone else using the session: the next prompt compares with this.
             case "session.agent.selected" when evt.Data.TryGetProperty("agent", out var agent) && agent.ValueKind == JsonValueKind.String:
@@ -830,29 +841,132 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         return reply;
     }
 
-    /// <summary>
-    /// Sessions are created allowing everything, so V2 asks only when something overrides that (a subagent's own
-    /// rules, a plugin). Nobody is there to answer, so it's allowed once and logged, as Fleet does for OpenCode (1.x).
-    /// </summary>
-    private void AnswerPermission(JsonElement data)
+    /// <inheritdoc />
+    /// <remarks>
+    /// V2 keeps the rules on the session, so they're set for the level when it changes; Fleet answers whatever V2 still
+    /// asks (a subagent's child keeps its agent's rules). The workflow step tool stays denied where it was.
+    /// </remarks>
+    public async Task ApplyPermissionsAsync(PermissionPolicy policy, CancellationToken ct)
     {
-        if (data.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String && _server is { } server)
-        {
-            var requestId = id.GetString()!;
-            var action = data.TryGetProperty("action", out var a) && a.ValueKind == JsonValueKind.String ? a.GetString() : null;
-            LogPermissionAllowed(_logger, InstanceId, action ?? "(unknown)", requestId);
-            _ = ReplyAsync();
+        _permissions.Policy = policy;
+        if (_rulesLevel == policy.Level)
+            return;
 
-            async Task ReplyAsync()
+        var server = await AttachedServerAsync(ct).ConfigureAwait(false);
+        var info = await server.Client.GetSessionAsync(ResumeToken, ct).ConfigureAwait(false);
+        if (info is null)
+            return;
+
+        // A subagent's child session keeps the rules its agent gave it; Fleet answers its asks all the same.
+        if (!string.IsNullOrEmpty(info.ParentID))
+        {
+            _rulesLevel = policy.Level;
+            return;
+        }
+
+        var hidesStepTool = (info.Permissions ?? []).Contains(OpenCode2HttpClient.DenyStepTool);
+        await server.Client.SetPermissionsAsync(ResumeToken, OpenCode2HttpClient.RulesFor(policy.Level, hidesStepTool), ct).ConfigureAwait(false);
+        _rulesLevel = policy.Level;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>"Don't ask again" is Fleet's to keep (<see cref="PermissionGate"/>); V2 is answered once.</remarks>
+    public async Task ReplyToPermissionAsync(string requestId, string reply, string? message, CancellationToken ct)
+    {
+        var entry = _permissions.Pending.Get(requestId)
+            ?? throw new KeyNotFoundException($"Permission request '{requestId}' isn't waiting for an answer.");
+        if (reply == PermissionReplies.Always)
+            _permissions.AllowFromNowOn(entry.Ask);
+
+        var rejected = reply == PermissionReplies.Reject;
+        var server = await AttachedServerAsync(ct).ConfigureAwait(false);
+        await server.Client.ReplyToPermissionAsync(
+            entry.HarnessSessionId,
+            requestId,
+            rejected ? PermissionReplies.Reject : PermissionReplies.Once,
+            ct,
+            rejected && !string.IsNullOrWhiteSpace(message) ? message : null).ConfigureAwait(false);
+        SettlePermission(requestId, reply);
+    }
+
+    /// <summary>
+    /// An ask from V2: <c>{ id, sessionID, action, resources, save, metadata, source: { id }, message }</c>. One the level
+    /// allows, or the user said not to ask again about, is answered at once; any other waits for the user, and the session
+    /// needs them. <paramref name="subagent"/>: it's from a subagent's child session Fleet hasn't attached yet, which the
+    /// server hands its parent.
+    /// </summary>
+    internal void OnPermissionAsked(JsonElement data, bool subagent)
+    {
+        if (PermissionEvents.String(data, "id") is not { } requestId || PermissionEvents.String(data, "action") is not { } action)
+            return;
+
+        var harnessSessionId = PermissionEvents.String(data, "sessionID") ?? ResumeToken;
+        var resources = PermissionEvents.Strings(data, "resources");
+        if (_permissions.Decide(action, resources) is { } decision)
+        {
+            AnswerPermission(harnessSessionId, requestId, action, decision);
+            return;
+        }
+
+        var metadata = data.TryGetProperty("metadata", out var m) ? m : default;
+        var ask = new PermissionAsk
+        {
+            Id = requestId,
+            SessionId = _context.FleetSessionId,
+            Kind = PermissionKinds.Classify(action),
+            Tool = action,
+            Title = PermissionEvents.String(metadata, "command")
+                ?? PermissionEvents.String(metadata, "filepath")
+                ?? PermissionEvents.String(metadata, "path")
+                ?? PermissionEvents.String(metadata, "url")
+                ?? (resources.Count > 0 ? string.Join(", ", resources) : PermissionEvents.String(data, "message")),
+            Detail = PermissionEvents.String(metadata, "diff"),
+            Directory = PermissionEvents.String(metadata, "cwd") ?? PermissionEvents.String(metadata, "workdir"),
+            Always = PermissionEvents.Strings(data, "save"),
+            CallId = data.TryGetProperty("source", out var source) ? PermissionEvents.String(source, "id") : null,
+            Subagent = subagent || harnessSessionId != ResumeToken ? "subagent" : null,
+        };
+
+        if (_permissions.Pending.Add(ask, harnessSessionId))
+        {
+            _events.Writer.TryWrite(PermissionEvents.Asked(ask, _context.FleetSessionId));
+            _events.Writer.TryWrite(_mapper.Status(ActivityStatuses.WaitingInput));
+        }
+    }
+
+    /// <summary>The ask no longer waits; once none does, the turn is working again.</summary>
+    private void SettlePermission(string requestId, string reply)
+    {
+        if (_permissions.Pending.Remove(requestId) is not { } settled)
+            return;
+        _events.Writer.TryWrite(PermissionEvents.Replied(settled.Ask, reply, _context.FleetSessionId));
+        if (!_permissions.Pending.Any)
+            _events.Writer.TryWrite(_mapper.Status(ActivityStatuses.Busy));
+    }
+
+    /// <summary>Answers an ask Fleet decides itself: the level allows it, or asks are refused in a run nobody watches.</summary>
+    private void AnswerPermission(string harnessSessionId, string requestId, string action, string decision)
+    {
+        if (_server is not { } server)
+            return;
+
+        LogPermissionAnswered(_logger, InstanceId, action, requestId, decision);
+        _ = ReplyAsync();
+
+        async Task ReplyAsync()
+        {
+            try
             {
-                try
-                {
-                    await server.Client.ReplyToPermissionAsync(ResumeToken, requestId, "once", CancellationToken.None).ConfigureAwait(false);
-                }
-                catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
-                {
-                    LogPermissionReplyFailed(_logger, InstanceId, requestId, ex);
-                }
+                await server.Client.ReplyToPermissionAsync(
+                    harnessSessionId,
+                    requestId,
+                    decision,
+                    CancellationToken.None,
+                    decision == PermissionReplies.Reject ? PermissionPolicy.UnattendedRejection : null).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+            {
+                LogPermissionReplyFailed(_logger, InstanceId, requestId, ex);
             }
         }
     }
@@ -863,8 +977,8 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
             _status = status;
     }
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "OpenCode 2 session {InstanceId} asked permission for {Action} ({RequestId}); allowed once, since nobody can answer it")]
-    private static partial void LogPermissionAllowed(ILogger logger, string instanceId, string action, string requestId);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "OpenCode 2 session {InstanceId} asked permission for {Action} ({RequestId}); answered '{Decision}' for its permission level")]
+    private static partial void LogPermissionAnswered(ILogger logger, string instanceId, string action, string requestId, string decision);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't answer OpenCode 2 permission request {RequestId} for session {InstanceId}")]
     private static partial void LogPermissionReplyFailed(ILogger logger, string instanceId, string requestId, Exception exception);

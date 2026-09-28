@@ -1,3 +1,4 @@
+using System.Text.Json;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode;
@@ -49,16 +50,29 @@ public sealed class OpenCodeFleetPluginTests : IDisposable
     }
 
     [Fact]
-    public void Config_content_without_plugins_only_allows_permissions()
+    public void Config_content_asks_for_everything_but_reading()
     {
-        OpenCodeProcessManager.BuildConfigContent([]).ShouldBe("""{"permission":{"*":"allow"}}""");
+        // Fleet answers each ask for the session's permission level, so a subagent, which gets this config rather than
+        // its parent's session rules, asks as its parent does. OpenCode applies the last rule that matches.
+        using var config = JsonDocument.Parse(OpenCodeProcessManager.BuildConfigContent([]));
+        var rules = config.RootElement.GetProperty("permission").EnumerateObject().Select(rule => (rule.Name, rule.Value.GetString())).ToList();
+
+        rules[0].ShouldBe(("*", "ask"));
+        rules.Skip(1).ShouldAllBe(rule => rule.Item2 == "allow");
+        rules.Select(rule => rule.Name).ShouldContain("read");
+        rules.Select(rule => rule.Name).ShouldContain("fleet_*");
+        rules.Select(rule => rule.Name).ShouldNotContain("bash");
+        rules.Select(rule => rule.Name).ShouldNotContain("edit");
+        config.RootElement.TryGetProperty("plugin", out _).ShouldBeFalse();
     }
 
     [Fact]
     public void Config_content_lists_the_plugins()
     {
-        OpenCodeProcessManager.BuildConfigContent(["file:///home/u/.weave/opencode/fleet-canvas.ts"])
-            .ShouldBe("""{"permission":{"*":"allow"},"plugin":["file:///home/u/.weave/opencode/fleet-canvas.ts"]}""");
+        using var config = JsonDocument.Parse(OpenCodeProcessManager.BuildConfigContent(["file:///home/u/.weave/opencode/fleet-canvas.ts"]));
+
+        config.RootElement.GetProperty("plugin").EnumerateArray().Select(plugin => plugin.GetString())
+            .ShouldBe(["file:///home/u/.weave/opencode/fleet-canvas.ts"]);
     }
 
     private static string RepoPluginPath([System.Runtime.CompilerServices.CallerFilePath] string testFile = "")

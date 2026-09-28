@@ -539,15 +539,23 @@ internal sealed class OpenCodeHttpClient
         await PostVoidAsync(url, body, OpenCodeJsonContext.Default.OpenCodeQuestionRejectRequest, ct).ConfigureAwait(false);
     }
 
+    /// <summary>GET /permission?directory={directory}: the asks waiting in the folder, every session's, as OpenCode sends them.</summary>
+    public async Task<IReadOnlyList<JsonElement>> ListPermissionsAsync(string directory, CancellationToken ct)
+    {
+        var url = BuildUrl("/permission", directory);
+        return await GetAsync(url, OpenCodeJsonContext.Default.ListJsonElement, ct).ConfigureAwait(false) ?? [];
+    }
+
     /// <summary>POST /permission/{requestId}/reply?directory={directory}</summary>
     public async Task ReplyPermissionAsync(
         string requestId,
         string reply,
+        string? message,
         string directory,
         CancellationToken ct)
     {
         var url = BuildUrl($"/permission/{Uri.EscapeDataString(requestId)}/reply", directory);
-        var body = new OpenCodePermissionReplyRequest { Reply = reply };
+        var body = new OpenCodePermissionReplyRequest { Reply = reply, Message = message };
         await PostVoidAsync(url, body, OpenCodeJsonContext.Default.OpenCodePermissionReplyRequest, ct).ConfigureAwait(false);
     }
 

@@ -61,7 +61,8 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         Channel.CreateBounded<HarnessEvent>(new BoundedChannelOptions(1000)
         {
             FullMode = BoundedChannelFullMode.DropOldest,
-            SingleWriter = true,
+            // The pump writes, and so does an answer to an ask.
+            SingleWriter = false,
             SingleReader = false,
         });
 
@@ -73,6 +74,11 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     // ids: Claude's own ("msg_011C…") don't sort by time, and the conversation is ordered by id.
     private readonly Dictionary<string, HarnessMessage> _turnMessages = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _toolCallMessageIds = new(StringComparer.Ordinal);
+
+    // The session's permission level, the asks waiting on the user (with the input each tool call asked with, which the
+    // answer sends back), and what they said not to ask again about.
+    private readonly PermissionGate _permissions = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, System.Text.Json.JsonElement> _askInputs = new(StringComparer.Ordinal);
 
     private string? _claudeSessionId;    // captured from init message, used for --resume
     private string? _modelId;             // captured from init or result messages
@@ -170,7 +176,8 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 Prompt = text,
                 SessionId = _claudeSessionId,  // null for first prompt
                 Model = options?.ModelId ?? _config.DefaultModel,
-                PermissionMode = _config.PermissionMode,
+                PermissionMode = PermissionModeFor(_permissions.Policy),
+                AsksForPermission = _permissions.Policy.Level != PermissionLevels.All,
                 AllowedTools = _config.AllowedTools,
                 MaxTurns = _config.MaxTurns,
                 MaxBudgetUsd = _config.MaxBudgetUsd,
@@ -260,6 +267,99 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         }
 
         _status = HarnessSessionStatus.Idle;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Claude Code reads its mode when a prompt starts its process, so a changed level applies from the next prompt.</remarks>
+    public Task ApplyPermissionsAsync(PermissionPolicy policy, CancellationToken ct)
+    {
+        _permissions.Policy = policy;
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// "Don't ask again" is Fleet's to keep (<see cref="PermissionGate"/>): Claude Code's own session rules end with its
+    /// process, which ends after every prompt.
+    /// </remarks>
+    public async Task ReplyToPermissionAsync(string requestId, string reply, string? message, CancellationToken ct)
+    {
+        var entry = _permissions.Pending.Get(requestId)
+            ?? throw new KeyNotFoundException($"Permission request '{requestId}' isn't waiting for an answer.");
+        if (reply == PermissionReplies.Always)
+            _permissions.AllowFromNowOn(entry.Ask);
+
+        var line = reply == PermissionReplies.Reject
+            ? ClaudeCodeInput.Deny(requestId, string.IsNullOrWhiteSpace(message)
+                ? "The user refused this tool call."
+                : $"The user refused this tool call and said: {message}")
+            : ClaudeCodeInput.Allow(requestId, _askInputs.GetValueOrDefault(requestId));
+
+        if (_activeProcess is not { } process || !await process.WriteLineAsync(line, ct).ConfigureAwait(false))
+        {
+            SettlePermission(requestId, PermissionReplies.Gone);
+            throw new KeyNotFoundException($"Permission request '{requestId}' isn't waiting for an answer: Claude Code has stopped.");
+        }
+
+        SettlePermission(requestId, reply);
+    }
+
+    /// <summary>
+    /// Claude Code's mode for a policy: it allows reading itself, and asks Fleet about the rest. At
+    /// <see cref="PermissionLevels.All"/> it's the configured mode, which bypasses asking.
+    /// </summary>
+    internal string PermissionModeFor(PermissionPolicy policy) => policy.Level switch
+    {
+        PermissionLevels.Ask => "default",
+        PermissionLevels.Edits => "acceptEdits",
+        _ => _config.PermissionMode,
+    };
+
+    /// <summary>
+    /// A <c>can_use_tool</c> ask. One the level allows, or the user said not to ask again about, is answered at once; any
+    /// other waits for the user, and the session needs them.
+    /// </summary>
+    private async Task OnToolPermissionAsync(string requestId, ClaudeCodeControlRequestBody request, ClaudeCodeProcessManager process)
+    {
+        var tool = request.ToolName ?? "tool";
+        var input = request.Input.ValueKind == System.Text.Json.JsonValueKind.Undefined ? default : request.Input.Clone();
+        if (_permissions.Decide(tool, ClaudeCodePermissions.Patterns(tool, input)) is { } decision)
+        {
+            await process.WriteLineAsync(
+                decision == PermissionReplies.Reject
+                    ? ClaudeCodeInput.Deny(requestId, PermissionPolicy.UnattendedRejection)
+                    : ClaudeCodeInput.Allow(requestId, input),
+                CancellationToken.None).ConfigureAwait(false);
+            return;
+        }
+
+        var ask = ClaudeCodePermissions.ToAsk(requestId, _fleetSessionId, request, _workingDirectory);
+        _askInputs[requestId] = input;
+        if (!_permissions.Pending.Add(ask, _fleetSessionId))
+            return;
+
+        await _eventChannel.Writer.WriteAsync(PermissionEvents.Asked(ask, _fleetSessionId), CancellationToken.None).ConfigureAwait(false);
+        await _eventChannel.Writer.WriteAsync(PermissionEvents.Status(ActivityStatuses.WaitingInput, _fleetSessionId), CancellationToken.None)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>The ask no longer waits; once none does, the turn is working again.</summary>
+    private void SettlePermission(string requestId, string reply)
+    {
+        _askInputs.TryRemove(requestId, out _);
+        if (_permissions.Pending.Remove(requestId) is not { } settled)
+            return;
+        _eventChannel.Writer.TryWrite(PermissionEvents.Replied(settled.Ask, reply, _fleetSessionId));
+        if (!_permissions.Pending.Any && reply != PermissionReplies.Gone)
+            _eventChannel.Writer.TryWrite(PermissionEvents.Status(ActivityStatuses.Busy, _fleetSessionId));
+    }
+
+    /// <summary>The asks still waiting when the prompt's process ended: nothing will answer them now.</summary>
+    private void ForgetPermissionAsks()
+    {
+        _askInputs.Clear();
+        foreach (var entry in _permissions.Pending.Clear())
+            _eventChannel.Writer.TryWrite(PermissionEvents.Replied(entry.Ask, PermissionReplies.Gone, _fleetSessionId));
     }
 
     /// <inheritdoc />
@@ -399,9 +499,27 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 {
                     await ApplyToolResultsAsync(userMsg).ConfigureAwait(false);
                 }
+                else if (msg is ClaudeCodeControlRequest { RequestId: { } requestId, Request: { Subtype: "can_use_tool" } toolRequest })
+                {
+                    await OnToolPermissionAsync(requestId, toolRequest, processManager).ConfigureAwait(false);
+                }
+                else if (msg is ClaudeCodeControlRequest { RequestId: { } unknownRequestId, Request: var unknownRequest })
+                {
+                    await processManager.WriteLineAsync(
+                        ClaudeCodeInput.Error(unknownRequestId, $"Fleet doesn't answer '{unknownRequest?.Subtype}' requests."),
+                        CancellationToken.None).ConfigureAwait(false);
+                }
+                else if (msg is ClaudeCodeControlCancelRequest { RequestId: { } cancelledId })
+                {
+                    SettlePermission(cancelledId, PermissionReplies.Gone);
+                }
                 else if (msg is ClaudeCodeResultMessage result)
                 {
                     sawResult = true;
+
+                    // With stream-json input claude waits for more until stdin closes; the turn is over.
+                    processManager.CloseInput();
+                    ForgetPermissionAsks();
 
                     // Extract analytics
                     if (_analyticsCollector is not null)
@@ -458,6 +576,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 }
             }
 
+            ForgetPermissionAsks();
             await processManager.DisposeAsync().ConfigureAwait(false);
 
             if (ReferenceEquals(_activeProcess, processManager))

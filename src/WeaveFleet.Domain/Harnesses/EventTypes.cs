@@ -39,6 +39,16 @@ public static class EventTypes
     /// </summary>
     public const string FilesWritten = "files.written";
 
+    /// <summary>
+    /// The agent asks to do something the session's permission level doesn't allow. Fleet's own event: each adapter
+    /// turns its harness's ask into a <see cref="PermissionAsk"/> payload; the harness's own permission events stay in
+    /// the adapter.
+    /// </summary>
+    public const string PermissionAsked = "permission.asked";
+
+    /// <summary>An ask was answered, or went away with its harness. Fleet's own event, with a <see cref="Harnesses.PermissionReplied"/> payload.</summary>
+    public const string PermissionReplied = "permission.replied";
+
     /// <summary>Returns <c>true</c> if the event type is a permission event (i.e. starts with "permission.").</summary>
     public static bool IsPermissionEvent(string type) =>
         type.StartsWith("permission.", StringComparison.Ordinal);

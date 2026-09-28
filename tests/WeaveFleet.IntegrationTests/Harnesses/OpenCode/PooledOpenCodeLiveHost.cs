@@ -13,6 +13,23 @@ namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode;
 internal static class PooledOpenCodeLiveHost
 {
     /// <summary>
+    /// Reads <paramref name="session"/>'s events until <paramref name="ct"/> ends, as Fleet's relay reads every session's.
+    /// OpenCode asks before a shell command or an edit, and the session answers the ask as it reads it.
+    /// </summary>
+    public static Task ReadEventsAsync(WeaveFleet.Domain.Harnesses.IHarnessSession session, CancellationToken ct)
+        => Task.Run(async () =>
+        {
+            try
+            {
+                await foreach (var _ in session.SubscribeAsync(ct)) { }
+            }
+            catch (OperationCanceledException)
+            {
+                // The test is over.
+            }
+        }, CancellationToken.None);
+
+    /// <summary>
     /// A user config that points OpenCode at the fake model and loads <paramref name="pluginPath"/> as a plugin of
     /// the user's own. Returns the env that points the pooled process at it. A <paramref name="contextLimit"/> gives the
     /// fake model a context window, so OpenCode compacts once a turn reports more tokens than that.

@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Terminals;
+using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode;
@@ -98,8 +99,13 @@ internal sealed class OpenCodeProcessManager : IAsyncDisposable
         using (var json = new Utf8JsonWriter(buffer))
         {
             json.WriteStartObject();
+            // Everything but reading asks, and Fleet answers each ask for the session's permission level: that way a
+            // subagent, which gets this config rather than its parent's session rules, asks as its parent does, and a
+            // changed level applies at once. OpenCode applies the last rule that matches, so "*" goes first.
             json.WriteStartObject("permission");
-            json.WriteString("*", "allow");
+            json.WriteString("*", "ask");
+            foreach (var tool in PermissionKinds.AllowedWithoutAsking)
+                json.WriteString(tool, "allow");
             json.WriteEndObject();
 
             if (plugins.Count > 0)
@@ -146,8 +152,7 @@ internal sealed class OpenCodeProcessManager : IAsyncDisposable
         psi.Environment["OPENCODE_SERVER_PASSWORD"] = options.Password;
         psi.Environment["OPENCODE_SERVER_USERNAME"] = options.Username;
 
-        // Inline config: auto-allow all permissions so the agent never blocks waiting
-        // for approval in a headless Fleet context, plus any Fleet plugins.
+        // Inline config: the permission rules Fleet answers asks by, plus any Fleet plugins.
         psi.Environment["OPENCODE_CONFIG_CONTENT"] = BuildConfigContent(options.Plugins);
 
         // Additional caller-supplied env vars

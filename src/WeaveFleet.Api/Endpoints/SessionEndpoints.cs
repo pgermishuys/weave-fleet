@@ -349,6 +349,26 @@ public static class SessionEndpoints
         })
         .WithName("RejectQuestion");
 
+        // GET /api/sessions/{id}/permissions — the agent's asks waiting on the user in this session, a subagent's
+        // included, oldest first. Live changes come as permission.asked / permission.replied on the session's topic.
+        group.MapGet("/{id}/permissions", (string id, IPendingPermissions permissions) =>
+            Results.Json(permissions.WaitingIn(id).ToList(), ApiJsonContext.Default.ListPermissionAsk))
+        .WithName("ListSessionPermissions");
+
+        // POST /api/sessions/{id}/permissions/{requestId} — answer an ask: once, always (for the rest of the session) or
+        // reject, with words for the agent. {id} is the session whose harness asked (the ask's sessionId).
+        group.MapPost("/{id}/permissions/{requestId}", async (
+            string id,
+            string requestId,
+            PermissionReplyApiRequest request,
+            SessionOrchestrator orchestrator,
+            CancellationToken ct) =>
+        {
+            var result = await orchestrator.ReplyToPermissionAsync(id, requestId, request.Reply, request.Message, ct);
+            return result.Match(_ => Results.NoContent(), err => err.ToSessionApiResult());
+        })
+        .WithName("ReplyToPermission");
+
         // POST /api/sessions/{id}/fork
         group.MapPost("/{id}/fork", async (string id, ForkSessionApiRequest req, SessionOrchestrator orchestrator) =>
         {
@@ -1211,6 +1231,9 @@ internal sealed record UndoableSideConversationResponse(SideConversationResponse
 internal sealed record SideQuestionApiResponse(SideConversationResponse SideConversation, string CorrelationId, string? MessageId);
 
 internal sealed record QuestionAnswerApiRequest(IReadOnlyList<IReadOnlyList<string>> Answers);
+
+/// <summary>An answer to an agent's ask: <c>once</c>, <c>always</c> or <c>reject</c>, with words for the agent when refused.</summary>
+internal sealed record PermissionReplyApiRequest(string Reply, string? Message = null);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record UpdateSessionTagsRequest(List<string> Tags);

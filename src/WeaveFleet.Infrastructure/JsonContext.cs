@@ -191,6 +191,7 @@ internal sealed partial class HarnessEventJsonContext : JsonSerializerContext
 [JsonSerializable(typeof(OpenCodeQuestionReplyRequest))]
 [JsonSerializable(typeof(OpenCodeQuestionRejectRequest))]
 [JsonSerializable(typeof(OpenCodePermissionReplyRequest))]
+[JsonSerializable(typeof(List<JsonElement>))]
 internal sealed partial class OpenCodeJsonContext : JsonSerializerContext
 {
 }
@@ -234,6 +235,9 @@ internal sealed partial class ClaudeCodeJsonContext : JsonSerializerContext
 [JsonSerializable(typeof(TodoEntry))]
 [JsonSerializable(typeof(List<TodoEntry>))]
 [JsonSerializable(typeof(FilesWrittenPayload))]
+[JsonSerializable(typeof(PermissionAsk))]
+[JsonSerializable(typeof(PermissionReplied))]
+[JsonSerializable(typeof(List<PermissionAsk>))]
 [JsonSerializable(typeof(WeaveFleet.Infrastructure.Data.Repositories.SessionProgressDetailJson))]
 [JsonSerializable(typeof(WeaveFleet.Domain.Entities.TrackedPlan))]
 [JsonSerializable(typeof(List<WeaveFleet.Domain.Entities.TrackedPlan>))]

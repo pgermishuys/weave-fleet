@@ -142,9 +142,26 @@ public sealed class OpenCode2SubagentTests
     }
 
     [Fact]
-    public async Task A_held_childs_permission_ask_is_answered_at_once()
+    public async Task A_held_childs_permission_ask_goes_to_its_parents_session()
     {
-        // The child's turn, and the parent's, wait on it.
+        // The parent's session decides it as the child's would, and shows it when the user has to answer.
+        var parent = new Sink();
+        await using var server = Server(new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.NoContent)));
+        server.Attach(Parent, parent);
+        server.Route(ChildCreated(Child, Parent));
+
+        server.Route(Event("permission.asked", $$"""{"id":"per_1","sessionID":"{{Child}}","action":"shell","resources":["ls"]}"""));
+
+        parent.Events.Select(e => e.Type).ShouldBe(["permission.asked"]);
+        var child = new Sink();
+        server.Attach(Child, child);
+        child.Events.Select(e => e.Type).ShouldBe(["session.created"]);
+    }
+
+    [Fact]
+    public async Task A_held_childs_permission_ask_is_answered_at_once_when_no_parent_session_listens()
+    {
+        // A grandchild's parent is itself held: nothing could answer the ask, and the turns above wait on it.
         var replied = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var server = Server(new StubHandler(request =>
         {
@@ -153,13 +170,11 @@ public sealed class OpenCode2SubagentTests
         }));
         server.Attach(Parent, new Sink());
         server.Route(ChildCreated(Child, Parent));
+        server.Route(ChildCreated("ses_grandchild", Child));
 
-        server.Route(Event("permission.asked", $$"""{"id":"per_1","sessionID":"{{Child}}","action":"shell","resources":["ls"]}"""));
+        server.Route(Event("permission.asked", """{"id":"per_1","sessionID":"ses_grandchild","action":"shell","resources":["ls"]}"""));
 
-        (await replied.Task.WaitAsync(TimeSpan.FromSeconds(5))).ShouldBe($"/api/session/{Child}/permission/per_1/reply");
-        var child = new Sink();
-        server.Attach(Child, child);
-        child.Events.Select(e => e.Type).ShouldBe(["session.created"]);
+        (await replied.Task.WaitAsync(TimeSpan.FromSeconds(5))).ShouldBe("/api/session/ses_grandchild/permission/per_1/reply");
     }
 
     [Fact]

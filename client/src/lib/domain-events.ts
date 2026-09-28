@@ -511,6 +511,22 @@ export interface SessionQueueChanged extends EventCursorMetadata {
   };
 }
 
+/**
+ * The agent asks to do something the session's permission level doesn't allow. Sent on the topic of the session it's
+ * shown on (a subagent's on the session it works for). Not persisted; waiting asks load from
+ * `GET /api/sessions/{id}/permissions`.
+ */
+export interface PermissionAsked extends EventCursorMetadata {
+  type: "permission.asked";
+  payload: Record<string, unknown>;
+}
+
+/** An ask was answered, or went away with its turn: `reply` is once, always, reject or gone. */
+export interface PermissionReplied extends EventCursorMetadata {
+  type: "permission.replied";
+  payload: { id: string; sessionId: string; reply: string };
+}
+
 export function isCanvasEvent(event: DomainEvent): event is CanvasEvent {
   return event.type === "canvas.updated" || event.type === "canvas.closed" || event.type === "canvas.focused";
 }
@@ -541,4 +557,6 @@ export type DomainEvent =
   | AppUpdated
   | SessionRecap
   | SessionNotification
-  | SessionQueueChanged;
+  | SessionQueueChanged
+  | PermissionAsked
+  | PermissionReplied;
