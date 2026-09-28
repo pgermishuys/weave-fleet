@@ -1620,10 +1620,25 @@ function handleImproveSkill(skill: string, toolId: string): void {
 }
 
 /* Off-screen messages skip layout and paint, so resizing and scrolling a long conversation only lays out what
-   shows. The containment this brings would clip the model pill below a hovered message, so a message the pointer
-   or focus is in goes without. */
-.activity-message:not(:hover, :focus-within) {
+   shows. The containment this brings clips at the message's edge, and the model pill (with its shadow) hangs up
+   to 46px below it, so the clip is let out that far. It stays on when hovered: dropping it redraws every glyph in
+   the message, and the text visibly jiggles. A hovered message comes forward so its pill lies over the next one. */
+.activity-message {
   content-visibility: auto;
+  overflow-clip-margin: 48px;
+}
+
+.activity-message:hover,
+.activity-message:focus-within {
+  z-index: 1;
+}
+
+/* Without a clip margin (Safari) the pill would be cut off, so there a hovered message goes without containment. */
+@supports not (overflow-clip-margin: 1px) {
+  .activity-message:hover,
+  .activity-message:focus-within {
+    content-visibility: visible;
+  }
 }
 
 .activity-stream--laid-out .activity-message {
