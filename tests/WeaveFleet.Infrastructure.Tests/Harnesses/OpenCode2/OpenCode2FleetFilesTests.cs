@@ -88,6 +88,24 @@ public sealed partial class OpenCode2FleetFilesTests : IDisposable
     }
 
     [Fact]
+    public void An_owners_own_version_of_a_skill_takes_the_place_of_Fleets_and_Fleets_comes_back_without_it()
+    {
+        var names = OpenCode2FleetFiles.BuiltInSkillNames.Order(StringComparer.Ordinal).ToList();
+        var (mine, fleets) = (names[0], names[1]);
+        var version = $"---\nname: {mine}\ndescription: My version.\n---\n\nMy way.\n";
+
+        var folder = OpenCode2FleetFiles.SyncBuiltInSkills(
+            _dataDirectory, "local-user", [mine, fleets], new Dictionary<string, string> { [mine] = version });
+
+        File.ReadAllText(Path.Combine(folder, mine, "SKILL.md")).ShouldBe(version);
+        File.ReadAllText(Path.Combine(folder, fleets, "SKILL.md")).ShouldNotContain("My way.");
+
+        OpenCode2FleetFiles.SyncBuiltInSkills(_dataDirectory, "local-user", [mine, fleets]);
+
+        File.ReadAllText(Path.Combine(folder, mine, "SKILL.md")).ShouldNotContain("My way.");
+    }
+
+    [Fact]
     public void Built_in_skills_left_from_before_owner_folders_are_removed()
     {
         var name = OpenCode2FleetFiles.BuiltInSkillNames.Order(StringComparer.Ordinal).First();

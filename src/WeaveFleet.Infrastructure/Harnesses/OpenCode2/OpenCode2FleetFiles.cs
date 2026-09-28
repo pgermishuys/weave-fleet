@@ -42,9 +42,11 @@ internal static class OpenCode2FleetFiles
     /// <paramref name="enabled"/>, one folder per skill, and returns it. The owner's servers name that folder in their
     /// <c>skills</c> array once, whatever is in it, and V2 watches it: a skill written there reaches the sessions started
     /// afterwards, and one removed leaves them, with no new server. (A new entry in the array is the one thing V2 can't
-    /// pick up while it runs: the array is the server's environment.)
+    /// pick up while it runs: the array is the server's environment.) A skill in <paramref name="yours"/> gets the
+    /// owner's version of its <c>SKILL.md</c> in place of Fleet's.
     /// </summary>
-    public static string SyncBuiltInSkills(string dataDirectory, string ownerUserId, IReadOnlyCollection<string> enabled)
+    public static string SyncBuiltInSkills(
+        string dataDirectory, string ownerUserId, IReadOnlyCollection<string> enabled, IReadOnlyDictionary<string, string>? yours = null)
     {
         var parent = Path.Combine(dataDirectory, "opencode2", "built-in-skills");
         var root = Path.Combine(parent, OwnerFolder(ownerUserId));
@@ -53,11 +55,14 @@ internal static class OpenCode2FleetFiles
         var shipped = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (relativePath, resourceName) in Resources(BuiltInSkillsPrefix))
         {
-            if (!enabled.Contains(relativePath.Split(Path.DirectorySeparatorChar)[0]))
+            var skill = relativePath.Split(Path.DirectorySeparatorChar)[0];
+            if (!enabled.Contains(skill))
                 continue;
 
             var path = Path.GetFullPath(Path.Combine(root, relativePath));
-            WriteIfChanged(path, Read(resourceName));
+            WriteIfChanged(path, yours?.GetValueOrDefault(skill) is { } version && relativePath == Path.Combine(skill, "SKILL.md")
+                ? Encoding.UTF8.GetBytes(version)
+                : Read(resourceName));
             shipped.Add(path);
         }
 

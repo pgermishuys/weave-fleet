@@ -57,22 +57,20 @@ internal static class OpenCodeFleetSkills
     /// The <c>name</c> and <c>description</c> lines of a skill's front matter. Fleet writes its own skills, so a plain
     /// line scan is enough; a test keeps them to single-line values.
     /// </summary>
-    internal static BuiltInSkill? ParseFrontMatter(string content)
+    internal static BuiltInSkill? ParseFrontMatter(string content) => SkillVersions.ParseFrontMatter(content);
+
+    /// <summary>
+    /// The variable with the folders of the owner's own versions of built-in skills, separated like <c>PATH</c>. Each
+    /// folder is one version, so a new version changes the pool key and new sessions get a process that loads it.
+    /// </summary>
+    internal const string YourVersionsVariable = "FLEET_YOUR_SKILLS";
+
+    /// <summary>A built-in skill's <c>SKILL.md</c> as Fleet ships it, or null when Fleet doesn't ship it.</summary>
+    public static string? ContentOf(string name)
     {
-        var lines = content.ReplaceLineEndings("\n").Split('\n');
-        if (lines.Length == 0 || lines[0] != "---")
-            return null;
-
-        string? name = null, description = null;
-        foreach (var line in lines.Skip(1).TakeWhile(line => line != "---"))
-        {
-            if (line.StartsWith("name:", StringComparison.Ordinal))
-                name = line["name:".Length..].Trim();
-            else if (line.StartsWith("description:", StringComparison.Ordinal))
-                description = line["description:".Length..].Trim();
-        }
-
-        return string.IsNullOrEmpty(name) || string.IsNullOrEmpty(description) ? null : new BuiltInSkill(name, description);
+        var resource = Resources(BuiltInResourcePrefix)
+            .FirstOrDefault(resource => resource.RelativePath == Path.Combine(name, "SKILL.md"));
+        return resource.ResourceName is null ? null : System.Text.Encoding.UTF8.GetString(EmbeddedFiles.Read(resource.ResourceName));
     }
 
     private static string Install(string prefix, string root)
@@ -108,4 +106,6 @@ internal static class OpenCodeFleetSkills
 internal sealed class OpenCodeBuiltInSkillCatalog : IBuiltInSkillCatalog
 {
     public IReadOnlyList<BuiltInSkill> Skills => OpenCodeFleetSkills.BuiltIn;
+
+    public string? ContentOf(string name) => OpenCodeFleetSkills.ContentOf(name);
 }
