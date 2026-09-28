@@ -334,6 +334,14 @@
   #app {
     min-height: 100vh;
   }
+
+  /* A select's open list is drawn from its options' colours, not the select's: a transparent select left the list
+     white under the theme's light text. Every select's list takes the theme's raised surface. */
+  select option,
+  select optgroup {
+    background-color: var(--card-bg);
+    color: var(--text);
+  }
 }
 
 /* ─── Mobile / Safe Area Utilities ─────────────────────────────────────── */
