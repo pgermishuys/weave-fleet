@@ -217,6 +217,64 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : IClas
     }
 
     [OpenCode2Fact]
+    public async Task The_agent_shows_a_page_it_wrote_and_is_sent_there_from_a_file_server()
+    {
+        const string prompt = "Show me the two options. (page)";
+        var mockups = fleet.NewFolder("page-mockups");
+        var page = Path.Combine(mockups, "options.html");
+        await File.WriteAllTextAsync(page, "<!doctype html><title>Options</title><p>Option A or option B?</p>");
+        fleet.Answer(request =>
+            LlmRequest.Starts(request, prompt) ? new ScriptedLlmResponse
+            {
+                StopReason = "tool_calls",
+                ToolCalls = [new ScriptedToolCall("call_page", "fleet_page_show", JsonSerializer.Serialize(new { path = page, title = "Options" }))],
+            }
+            : !LlmRequest.Continues(request, prompt) ? null
+            : LlmRequest.LastToolText(request)?.Contains("only serves files", StringComparison.Ordinal) == true ? new ScriptedLlmResponse { Text = "Shown." }
+            : new ScriptedLlmResponse
+            {
+                StopReason = "tool_calls",
+                ToolCalls =
+                [
+                    new ScriptedToolCall("call_serve", "fleet_app_start", JsonSerializer.Serialize(new
+                    {
+                        command = $"python3 -m http.server $PORT --directory {mockups}",
+                        title = "Mockups",
+                    })),
+                ],
+            });
+
+        using var cts = new CancellationTokenSource(Timeout);
+        var id = await fleet.CreateSessionAsync(fleet.NewFolder("page"), "Page", cts.Token);
+        var events = fleet.Watch(cts.Token, id);
+
+        await PromptAsync(id, prompt, options: null, cts.Token);
+        await WaitForAsync(events, () => events.For(id).Any(e => e.Type == "session.idle"), cts.Token);
+
+        // OpenCode 2 offered the tool, and Fleet refused the file server.
+        var requests = fleet.Llm.Queue.Requests.Where(r => LlmRequest.Starts(r, prompt) || LlmRequest.Continues(r, prompt)).ToList();
+        LlmRequest.OfferedToolNames(requests[0]).ShouldContain("fleet_page_show");
+        LlmRequest.LastToolText(requests[^1]).ShouldNotBeNull().ShouldContain("only serves files, and Fleet serves files itself");
+
+        // The page is in a page canvas, and Fleet serves its copy.
+        PageState shown;
+        using (var scope = fleet.Services.CreateScope())
+        using (scope.ServiceProvider.GetRequiredService<IBackgroundUserScope>().Begin(OpenCode2LiveFleet.Owner))
+        {
+            var canvas = (await scope.ServiceProvider.GetRequiredService<ICanvasService>().ListAsync(id, cts.Token)).ShouldHaveSingleItem().Canvas;
+            canvas.Kind.ShouldBe(CanvasKinds.Page);
+            canvas.Title.ShouldBe("Options");
+            shown = PageState.Parse(canvas.StateJson);
+            shown.Source.ShouldBe(page);
+        }
+
+        using var http = new HttpClient();
+        var served = await http.GetAsync($"{fleet.Services.GetRequiredService<ILocalFleetUrl>().TryGet()}/pages/{shown.PageId}/{shown.Entry}", cts.Token);
+        served.StatusCode.ShouldBe(System.Net.HttpStatusCode.OK);
+        (await served.Content.ReadAsStringAsync(cts.Token)).ShouldContain("Option A or option B?");
+    }
+
+    [OpenCode2Fact]
     public async Task A_subagent_runs_as_a_child_session_whose_question_the_user_answers()
     {
         const string prompt = "Hand the database choice to a helper. (subagent)";
