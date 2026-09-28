@@ -38,6 +38,8 @@ interface ToolCardItem {
   canvasId?: string;
   delegation?: ToolCardDelegation;
   screenshot?: ToolCardScreenshot;
+  /** Loaded one of Fleet's built-in skills, which the row offers to improve. */
+  improvable?: boolean;
 }
 
 interface ImageAttachmentDisplay {
@@ -65,6 +67,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   "expand-visual": [payload: VisualPayload];
   "show-canvas": [canvasId: string];
+  /** Improve on a row that loaded one of Fleet's built-in skills. */
+  "improve-skill": [skill: string, toolId: string];
 }>();
 
 const lightboxUrl = ref<string | null>(null);
@@ -250,8 +254,10 @@ function handleExpandVisual(payload: VisualPayload): void {
                 :preview="tool.preview"
                 :is-pattern-tool="tool.isPatternTool"
                 :canvas-id="tool.canvasId"
+                :improvable="tool.improvable"
                 @expand-visual="handleExpandVisual"
                 @show-canvas="emit('show-canvas', $event)"
+                @improve="emit('improve-skill', tool.title, tool.id)"
               />
               <ToolScreenshot
                 v-if="tool.screenshot && !tool.delegation"

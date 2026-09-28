@@ -9,6 +9,34 @@ describe("ToolCard", () => {
     setActivePinia(createPinia());
   });
 
+  it("offers Improve on a finished call that loaded a built-in skill, without opening the row", async () => {
+    const wrapper = mount(ToolCard, {
+      global: { plugins: [createPinia()] },
+      props: { id: "skill-1", title: "fleet-code-review", kind: "skill", status: "Completed", improvable: true, initiallyCollapsed: true },
+    });
+
+    const improve = wrapper.get('[data-testid="tool-card-improve"]');
+    expect(improve.attributes("aria-label")).toBe("Improve fleet-code-review");
+    await improve.trigger("click");
+
+    expect(wrapper.emitted("improve")).toHaveLength(1);
+    expect(wrapper.get('[data-testid="tool-card"]').attributes("open")).toBeUndefined();
+  });
+
+  it("leaves Improve off a skill that isn't Fleet's or hasn't finished loading", () => {
+    const other = mount(ToolCard, {
+      global: { plugins: [createPinia()] },
+      props: { id: "skill-2", title: "my-skill", kind: "skill", status: "Completed" },
+    });
+    const running = mount(ToolCard, {
+      global: { plugins: [createPinia()] },
+      props: { id: "skill-3", title: "fleet-run", kind: "skill", status: "Running", improvable: true },
+    });
+
+    expect(other.find('[data-testid="tool-card-improve"]').exists()).toBe(false);
+    expect(running.find('[data-testid="tool-card-improve"]').exists()).toBe(false);
+  });
+
   it("renders_stable_test_ids_for_summary_output_and_empty_state", async () => {
     const pinia = createPinia();
     const wrapper = mount(ToolCard, {

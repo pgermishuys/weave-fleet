@@ -1,13 +1,11 @@
-import { readonly, shallowRef } from "vue";
+import { computed, readonly, shallowRef } from "vue";
+import { storeToRefs } from "pinia";
 import { apiFetch } from "@/lib/api-client";
 import { extractApiError } from "@/lib/api-error";
+import type { BuiltInSkill } from "@/lib/skill-versions";
+import { useBuiltInSkillsStore } from "@/stores/built-in-skills";
 
-/** A skill that ships with Fleet, and whether the user turned it on for their sessions. */
-export interface BuiltInSkill {
-  name: string;
-  description: string;
-  enabled: boolean;
-}
+export type { BuiltInSkill } from "@/lib/skill-versions";
 
 const BUILT_IN_SKILLS_PATH = "/api/skills/built-in";
 
@@ -25,31 +23,16 @@ async function errorFrom(response: Response, fallback: string): Promise<string> 
  * One change at a time: the server keeps the choice as one preference, so two at once could lose one.
  */
 export function useBuiltInSkills() {
-  const skills = shallowRef<BuiltInSkill[]>([]);
-  const isLoading = shallowRef(true);
-  const error = shallowRef<string | null>(null);
+  const store = useBuiltInSkillsStore();
+  const { skills, isLoading, error: loadError } = storeToRefs(store);
+  const saveError = shallowRef<string | null>(null);
   const savingName = shallowRef<string | null>(null);
-
-  async function load(): Promise<void> {
-    isLoading.value = true;
-    error.value = null;
-    try {
-      const response = await apiFetch(BUILT_IN_SKILLS_PATH);
-      if (!response.ok) throw new Error(await errorFrom(response, "Couldn't load Fleet's built-in skills."));
-      const body: unknown = await response.json();
-      skills.value = Array.isArray(body) ? (body as BuiltInSkill[]) : [];
-    } catch (caught) {
-      error.value = caught instanceof Error ? caught.message : "Couldn't load Fleet's built-in skills.";
-    } finally {
-      isLoading.value = false;
-    }
-  }
 
   async function setEnabled(name: string, enabled: boolean): Promise<void> {
     if (savingName.value) return;
 
     savingName.value = name;
-    error.value = null;
+    saveError.value = null;
     try {
       const response = await apiFetch(`${BUILT_IN_SKILLS_PATH}/${encodeURIComponent(name)}`, {
         method: "PUT",
@@ -57,21 +40,21 @@ export function useBuiltInSkills() {
         body: JSON.stringify({ enabled }),
       });
       if (!response.ok) throw new Error(await errorFrom(response, `Couldn't turn ${name} ${enabled ? "on" : "off"}.`));
-      const updated = (await response.json()) as BuiltInSkill;
-      skills.value = skills.value.map((skill) => (skill.name === updated.name ? updated : skill));
+      store.update((await response.json()) as BuiltInSkill);
     } catch (caught) {
-      error.value = caught instanceof Error ? caught.message : `Couldn't turn ${name} ${enabled ? "on" : "off"}.`;
+      saveError.value = caught instanceof Error ? caught.message : `Couldn't turn ${name} ${enabled ? "on" : "off"}.`;
     } finally {
       savingName.value = null;
     }
   }
 
-  void load();
+  // Settings always shows the server's current list, even when the conversation loaded it earlier.
+  void store.load();
 
   return {
     skills: readonly(skills),
     isLoading: readonly(isLoading),
-    error: readonly(error),
+    error: computed(() => saveError.value ?? loadError.value),
     savingName: readonly(savingName),
     setEnabled,
   };

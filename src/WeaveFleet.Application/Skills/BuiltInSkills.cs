@@ -21,7 +21,9 @@ public interface IBuiltInSkillCatalog
 /// <summary>A built-in skill as the API shows it, with whether the user turned it on.</summary>
 /// <param name="Version">The user's version sessions get; null for Fleet's.</param>
 /// <param name="FleetChanged">Fleet changed its version since the user's was made, or since they last kept theirs.</param>
-public sealed record BuiltInSkillView(string Name, string Description, bool Enabled, int? Version = null, bool FleetChanged = false);
+/// <param name="VersionCount">How many versions the user made, including ones not in use.</param>
+public sealed record BuiltInSkillView(
+    string Name, string Description, bool Enabled, int? Version = null, bool FleetChanged = false, int VersionCount = 0);
 
 /// <summary>One of the user's versions, as the history lists it.</summary>
 public sealed record SkillVersionView(
@@ -123,10 +125,9 @@ public sealed partial class BuiltInSkillService(
         if (changed && versions is not null && history.FleetBaseline is { } baseline)
             before = await versions.ReadFleetAsync(UserId, name, baseline).ConfigureAwait(false);
 
-        var described = yours is not null ? SkillVersions.ParseFrontMatter(yours)?.Description ?? skill.Description : skill.Description;
         return new BuiltInSkillDetail(
             name,
-            described,
+            skill.Description,
             enabled,
             fleetContent,
             yours,
@@ -227,11 +228,12 @@ public sealed partial class BuiltInSkillService(
 
     private BuiltInSkillView ToView(BuiltInSkill skill, bool enabled, SkillVersionHistory? history)
     {
+        var count = history?.Versions.Count ?? 0;
         if (history?.ActiveVersion is null)
-            return new BuiltInSkillView(skill.Name, skill.Description, enabled);
+            return new BuiltInSkillView(skill.Name, skill.Description, enabled, VersionCount: count);
 
         var changed = catalog.ContentOf(skill.Name) is { } fleet && FleetChanged(history, fleet);
-        return new BuiltInSkillView(skill.Name, skill.Description, enabled, history.Active, changed);
+        return new BuiltInSkillView(skill.Name, skill.Description, enabled, history.Active, changed, count);
     }
 
     private static bool FleetChanged(SkillVersionHistory history, string fleetContent)

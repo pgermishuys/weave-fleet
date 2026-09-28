@@ -85,13 +85,12 @@ public sealed class BuiltInSkillServiceTests
         saved.Value.Version.ShouldBe(1);
         saved.Value.YourContent.ShouldBe(Mine("No style nits."));
         saved.Value.FleetContent.ShouldBe(Catalog.Fleet("fleet-code-review"));
-        saved.Value.Description.ShouldBe("Mine.");
         saved.Value.Versions.ShouldHaveSingleItem().ShouldSatisfyAllConditions(
             v => v.Number.ShouldBe(1),
             v => v.Note.ShouldBe("Style isn't a bug."),
             v => v.SessionTitle.ShouldBe("Review auth refactor"),
             v => v.Active.ShouldBeTrue());
-        (await service.ListAsync())[0].ShouldBe(new BuiltInSkillView("fleet-code-review", "Reviews.", Enabled: false, Version: 1));
+        (await service.ListAsync())[0].ShouldBe(new BuiltInSkillView("fleet-code-review", "Reviews.", Enabled: false, Version: 1, VersionCount: 1));
     }
 
     [Fact]

@@ -51,6 +51,8 @@ export interface ToolCardItem {
   /** Set on a sub-agent call once its session exists; the row then opens that session. */
   delegation?: ToolCardDelegation;
   screenshot?: ToolCardScreenshot;
+  /** Loaded one of Fleet's built-in skills, which the row offers to improve. */
+  improvable?: boolean;
 }
 
 /** The kind of sub-agent a call asked for: OpenCode names it `subagent_type`, OpenCode 2 `agent`. */
