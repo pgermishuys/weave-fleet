@@ -390,10 +390,15 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
             return new RuntimePreparation.NotReady(errors);
 
         // The built-in skills the owner turned on go into the environment too, so a new session after a change in
-        // Settings gets a process with the new choice, and sessions already running keep theirs.
+        // Settings gets a process with the new choice, and sessions already running keep theirs. A skill the owner
+        // made a version of is loaded from that version's folder instead of Fleet's copy, never both.
         var builtInSkills = await GetBuiltInSkillsAsync(context.UserId).ConfigureAwait(false);
-        if (builtInSkills.Count > 0)
-            envVars[OpenCodeFleetSkills.BuiltInVariable] = string.Join(',', builtInSkills);
+        var fleetCopies = builtInSkills.Where(skill => skill.Folder is null).Select(skill => skill.Name).ToList();
+        var yourVersions = builtInSkills.Select(skill => skill.Folder).OfType<string>().ToList();
+        if (fleetCopies.Count > 0)
+            envVars[OpenCodeFleetSkills.BuiltInVariable] = string.Join(',', fleetCopies);
+        if (yourVersions.Count > 0)
+            envVars[OpenCodeFleetSkills.YourVersionsVariable] = string.Join(Path.PathSeparator, yourVersions);
 
         // Messages between sessions change the process's tools and its FLEET_URL, so sessions with it on and off
         // never share a process.
@@ -454,16 +459,22 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
             && await feature.IsEnabledAsync().ConfigureAwait(false);
     }
 
-    /// <summary>The built-in skills the user turned on that this Fleet ships, in name order.</summary>
-    private async Task<IReadOnlyList<string>> GetBuiltInSkillsAsync(string userId)
+    /// <summary>
+    /// The built-in skills the user turned on that this Fleet ships, in name order, each with the folder of the user's
+    /// version of it when they made one.
+    /// </summary>
+    private async Task<IReadOnlyList<(string Name, int? Version, string? Folder)>> GetBuiltInSkillsAsync(string userId)
     {
         using var userScope = BackgroundUserContext.BeginScope(userId);
         using var scope = _scopeFactory.CreateScope();
         if (scope.ServiceProvider.GetService<IUserPreferenceRepository>() is not { } preferences)
             return [];
 
-        var enabled = await BuiltInSkillService.GetEnabledAsync(preferences).ConfigureAwait(false);
-        return OpenCodeFleetSkills.BuiltIn.Select(skill => skill.Name).Where(enabled.Contains).ToList();
+        return await BuiltInSkillService.GetSessionSkillsAsync(
+            preferences,
+            scope.ServiceProvider.GetService<ISkillVersionStore>(),
+            userId,
+            OpenCodeFleetSkills.BuiltIn.Select(skill => skill.Name)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1105,12 +1116,17 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         if (GetFleetSkillsPath() is { } fleetSkills)
             folders.Add(fleetSkills);
 
-        if (!environmentVariables.TryGetValue(OpenCodeFleetSkills.BuiltInVariable, out var names)
-            || GetBuiltInSkillsPath() is not { } builtInSkills)
-            return folders;
+        if (environmentVariables.TryGetValue(OpenCodeFleetSkills.BuiltInVariable, out var names)
+            && GetBuiltInSkillsPath() is { } builtInSkills)
+        {
+            var shipped = OpenCodeFleetSkills.BuiltIn.Select(skill => skill.Name).ToHashSet(StringComparer.Ordinal);
+            folders.AddRange(names.Split(',').Where(shipped.Contains).Select(name => Path.Combine(builtInSkills, name)));
+        }
 
-        var shipped = OpenCodeFleetSkills.BuiltIn.Select(skill => skill.Name).ToHashSet(StringComparer.Ordinal);
-        folders.AddRange(names.Split(',').Where(shipped.Contains).Select(name => Path.Combine(builtInSkills, name)));
+        // The user's own versions: one folder each, which Fleet never rewrites.
+        if (environmentVariables.TryGetValue(OpenCodeFleetSkills.YourVersionsVariable, out var yours))
+            folders.AddRange(yours.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries).Where(Directory.Exists));
+
         return folders;
     }
 

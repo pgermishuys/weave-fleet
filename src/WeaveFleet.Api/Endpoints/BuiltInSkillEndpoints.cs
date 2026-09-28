@@ -22,11 +22,53 @@ public static class BuiltInSkillEndpoints
             .WithName("SetBuiltInSkill")
             .Produces<BuiltInSkillView>();
 
+        // ── The user's own versions ──────────────────────────────────────────
+        // A version replaces Fleet's copy of the skill in the sessions started afterwards. Fleet never overwrites it.
+
+        group.MapGet("/{name}", async (string name, BuiltInSkillService skills) => (await skills.GetAsync(name)).ToApiResult())
+            .WithName("GetBuiltInSkill")
+            .Produces<BuiltInSkillDetail>();
+
+        // POST /api/skills/built-in/{name}/versions  { "content": "---\nname: …", "note": "why", "sessionId": "…" }
+        group.MapPost("/{name}/versions", async (string name, SaveSkillVersionRequest req, BuiltInSkillService skills) =>
+            (await skills.SaveVersionAsync(name, req.Content, req.Note, req.SessionId)).ToApiResult())
+            .WithName("SaveBuiltInSkillVersion")
+            .Produces<BuiltInSkillDetail>();
+
+        group.MapGet("/{name}/versions/{version:int}", async (string name, int version, BuiltInSkillService skills) =>
+            (await skills.ReadVersionAsync(name, version)).ToApiResult())
+            .WithName("GetBuiltInSkillVersion")
+            .Produces<SkillVersionContent>();
+
+        // PUT /api/skills/built-in/{name}/active  { "version": 2 } — or null for Fleet's.
+        group.MapPut("/{name}/active", async (string name, UseSkillVersionRequest req, BuiltInSkillService skills) =>
+            (await skills.UseVersionAsync(name, req.Version)).ToApiResult())
+            .WithName("UseBuiltInSkillVersion")
+            .Produces<BuiltInSkillDetail>();
+
+        // After Fleet changed its version: keep the user's, which puts the notice away.
+        group.MapPost("/{name}/keep-mine", async (string name, BuiltInSkillService skills) =>
+            (await skills.KeepMineAsync(name)).ToApiResult())
+            .WithName("KeepBuiltInSkillVersion")
+            .Produces<BuiltInSkillDetail>();
+
+        // Asks the model off the record for a better version. Nothing is saved until POST /versions.
+        group.MapPost("/{name}/improve", async (string name, ImproveSkillRequest req, SkillImprover improver, CancellationToken ct) =>
+            (await improver.ImproveAsync(name, req, ct)).ToApiResult())
+            .WithName("ImproveBuiltInSkill")
+            .Produces<SkillProposal>();
+
         return app;
     }
 }
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record SetBuiltInSkillRequest(bool Enabled);
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record SaveSkillVersionRequest(string Content, string? Note = null, string? SessionId = null);
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record UseSkillVersionRequest(int? Version);
 
 #pragma warning restore IL2026

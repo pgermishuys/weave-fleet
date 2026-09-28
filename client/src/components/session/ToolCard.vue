@@ -29,6 +29,8 @@ const props = withDefaults(
     isPatternTool?: boolean;
     /** A canvas the tool opened or changed: the card offers to show it. */
     canvasId?: string;
+    /** A call that loaded one of Fleet's built-in skills: the card offers to improve the skill. */
+    improvable?: boolean;
   }>(),
   {
     kind: "Tool",
@@ -40,12 +42,14 @@ const props = withDefaults(
     preview: "",
     isPatternTool: false,
     canvasId: undefined,
+    improvable: false,
   },
 );
 
 const emit = defineEmits<{
   "expand-visual": [payload: VisualPayload];
   "show-canvas": [canvasId: string];
+  improve: [];
 }>();
 
 const workspaceUiStore = useWorkspaceUiStore();
@@ -155,6 +159,16 @@ function handleExpandVisual(): void {
         @click.prevent.stop="handleShowCanvas"
       >
         Show
+      </button>
+      <button
+        v-if="improvable && status === 'Completed'"
+        type="button"
+        class="tool-header__show"
+        data-testid="tool-card-improve"
+        :aria-label="`Improve ${title}`"
+        @click.prevent.stop="emit('improve')"
+      >
+        Improve
       </button>
       <span
         v-if="status === 'Running' || status === 'Background' || status === 'Error'"

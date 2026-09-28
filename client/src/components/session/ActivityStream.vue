@@ -34,6 +34,9 @@ import { useProblemReportStore } from "@/stores/problem-report";
 import { toShellCommandView, type ShellCommandView } from "@/lib/shell-commands";
 import { messagesAfter } from "@/lib/side-conversation";
 import { splitTurnErrorMessage } from "@/lib/turn-error";
+import ImproveSkillDialog from "@/components/skills/ImproveSkillDialog.vue";
+import { improveTurn, type ImproveTurn } from "@/lib/skill-versions";
+import { useBuiltInSkillsStore } from "@/stores/built-in-skills";
 
 interface ImageAttachmentDisplay {
   url: string;
@@ -99,6 +102,9 @@ const problemReport = useProblemReportStore();
 const workflowRun = computed(() => workflowsStore.runForSession(props.sessionId));
 const { sessions } = storeToRefs(sessionsStore);
 const canvasesStore = useCanvasesStore();
+/** Fleet's built-in skills: a row that loaded one offers Improve. Loaded once, the first time a session shows. */
+const builtInSkills = useBuiltInSkillsStore();
+builtInSkills.ensureLoaded();
 const { showRightPanel } = useSidebarMobile();
 
 const selectedSession = computed(() => {
@@ -275,6 +281,10 @@ function derivationInputs(message: AccumulatedMessage, finished: ReadonlyMap<str
     inputs.push(finished);
   }
 
+  if (toolParts.some((part) => part.tool === "skill")) {
+    inputs.push(builtInSkills.skills);
+  }
+
   if (toolParts.some((part) => isSubagentTool(part.tool))) {
     inputs.push(delegations.value, sessions.value, props.sessionId);
   }
@@ -314,7 +324,7 @@ function toActivityMessage(message: AccumulatedMessage, finished: ReadonlyMap<st
       .map((part) => ({ url: part.url, filename: part.filename?.trim() || "image" })),
     tools: message.parts
       .filter((part): part is AccumulatedToolPart => part.type === "tool" && !isQuestionPart(part as AccumulatedToolPart))
-      .map((part) => withDelegation(toToolCardItem(part, finished), part)),
+      .map((part) => withImprove(withDelegation(toToolCardItem(part, finished), part), part)),
     questionParts: message.parts
       .filter((part): part is AccumulatedToolPart => part.type === "tool" && isQuestionPart(part as AccumulatedToolPart)),
     reasoningParts: message.parts
@@ -898,6 +908,11 @@ watch(
   },
 );
 
+/** A call that loaded one of Fleet's built-in skills offers Improve on its row. */
+function withImprove(item: ToolCardItem, part: AccumulatedToolPart): ToolCardItem {
+  return part.tool === "skill" && builtInSkills.isBuiltIn(item.title) ? { ...item, improvable: true } : item;
+}
+
 /** Points a sub-agent call's row at the session it started, once that session exists. */
 function withDelegation(item: ToolCardItem, part: AccumulatedToolPart): ToolCardItem {
   if (!isSubagentTool(part.tool)) {
@@ -1084,6 +1099,15 @@ function handleShowCanvas(canvasId: string): void {
   void focusServerCanvas(props.sessionId, canvasId);
   showRightPanel();
 }
+
+/** The skill Improve is open for, and the turn it was used in. */
+const improving = ref<{ skill: string; turn: ImproveTurn } | null>(null);
+
+/** A stable handler, so bubbles don't re-render for a new function: the row's id finds its message. */
+function handleImproveSkill(skill: string, toolId: string): void {
+  const message = messages.value.find((candidate) => candidate.tools?.some((tool) => tool.id === toolId));
+  improving.value = { skill, turn: message ? improveTurn(messages.value, message.id) : { exchange: "", toolCalls: "" } };
+}
 </script>
 
 <template>
@@ -1233,6 +1257,7 @@ function handleShowCanvas(canvasId: string): void {
           :command="message.command"
           @expand-visual="handleExpandVisual"
           @show-canvas="handleShowCanvas"
+          @improve-skill="handleImproveSkill"
         />
         <div
           v-if="message.turnError"
@@ -1308,6 +1333,15 @@ function handleShowCanvas(canvasId: string): void {
         />
       </div>
     </section>
+
+    <ImproveSkillDialog
+      v-if="improving"
+      :name="improving.skill"
+      :session-id="props.sessionId"
+      :turn="improving.turn"
+      :open="improving !== null"
+      @update:open="(value) => { if (!value) improving = null }"
+    />
   </div>
 </template>
 

@@ -197,13 +197,70 @@ public sealed class OpenCodeHarnessPreparationTests
             .ShouldBe([Path.Combine(data.Path, "opencode", "built-in-skills", "fleet-mockups")]);
     }
 
-    private static OpenCodeHarnessRuntime CreateHarness(IUserPreferenceRepository preferences, FleetOptions? options = null)
+    [Fact]
+    public async Task PrepareRuntimeAsync_loads_the_users_own_version_of_a_skill_in_place_of_Fleets_copy()
+    {
+        using var data = new TempDirectory();
+        var preferences = new InMemoryUserPreferenceRepository();
+        preferences.Seed(BuiltInSkillService.PreferenceKey, "fleet-code-review,fleet-run");
+        using var store = new WeaveFleet.Infrastructure.Skills.FileSkillVersionStore(data.Path);
+        await store.AddAsync(
+            "user-1", "fleet-code-review", "---\nname: fleet-code-review\ndescription: Mine.\n---\n\nMy way.\n",
+            new SkillVersionSource(null, null, null), OpenCodeFleetSkills.ContentOf("fleet-code-review")!);
+        var harness = CreateHarness(preferences, store: store);
+
+        var result = await harness.PrepareRuntimeAsync(CreateContextWithNullModel(), CancellationToken.None);
+
+        var environmentVariables = GetEnvironmentVariables(result.ShouldBeOfType<RuntimePreparation.Ready>().Artifacts);
+        environmentVariables[OpenCodeFleetSkills.BuiltInVariable].ShouldBe("fleet-run");
+        environmentVariables[OpenCodeFleetSkills.YourVersionsVariable].ShouldBe(store.FolderFor("user-1", "fleet-code-review", 1));
+    }
+
+    [Fact]
+    public async Task PrepareRuntimeAsync_leaves_the_users_version_out_while_the_skill_is_off()
+    {
+        using var data = new TempDirectory();
+        var preferences = new InMemoryUserPreferenceRepository();
+        using var store = new WeaveFleet.Infrastructure.Skills.FileSkillVersionStore(data.Path);
+        await store.AddAsync(
+            "user-1", "fleet-code-review", "---\nname: fleet-code-review\ndescription: Mine.\n---\n",
+            new SkillVersionSource(null, null, null), OpenCodeFleetSkills.ContentOf("fleet-code-review")!);
+        var harness = CreateHarness(preferences, store: store);
+
+        var result = await harness.PrepareRuntimeAsync(CreateContextWithNullModel(), CancellationToken.None);
+
+        GetEnvironmentVariables(result.ShouldBeOfType<RuntimePreparation.Ready>().Artifacts).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void GetSkillFolders_adds_the_folder_of_each_of_the_users_versions_that_exists()
+    {
+        using var data = new TempDirectory();
+        var harness = CreateHarness(new InMemoryUserPreferenceRepository(), new FleetOptions { DatabasePath = Path.Combine(data.Path, "fleet.db") });
+        var version = Path.Combine(data.Path, "skills", "v1");
+        Directory.CreateDirectory(version);
+
+        var folders = harness.GetSkillFolders(new Dictionary<string, string>
+        {
+            [OpenCodeFleetSkills.YourVersionsVariable] = string.Join(Path.PathSeparator, version, Path.Combine(data.Path, "gone")),
+        });
+
+        folders.ShouldBe([Path.Combine(data.Path, "opencode", "skills"), version]);
+    }
+
+    private static OpenCodeHarnessRuntime CreateHarness(
+        IUserPreferenceRepository preferences, FleetOptions? options = null, ISkillVersionStore? store = null)
     {
         return new OpenCodeHarnessRuntime(
             httpClientFactory: new TestHttpClientFactory(),
             portAllocator: new PortAllocator(10000, 10099),
             options: options ?? new FleetOptions(),
-            scopeFactory: TestServiceScopeFactory.Create(services => services.AddSingleton(preferences)),
+            scopeFactory: TestServiceScopeFactory.Create(services =>
+            {
+                services.AddSingleton(preferences);
+                if (store is not null)
+                    services.AddSingleton(store);
+            }),
             logger: NullLogger<OpenCodeHarnessRuntime>.Instance,
             loggerFactory: NullLoggerFactory.Instance);
     }

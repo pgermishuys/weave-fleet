@@ -632,12 +632,12 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     /// Makes the owner's built-in skills folder hold what they turned on and returns it, or <see langword="null"/> when
     /// it couldn't be written; servers then start without it, and the next request tries again.
     /// </summary>
-    private string? SyncBuiltInSkills(string ownerUserId, IReadOnlyList<string> builtInSkills)
+    private string? SyncBuiltInSkills(string ownerUserId, OwnerSkills builtInSkills)
     {
         try
         {
             lock (_builtInSkillsSync)
-                return OpenCode2FleetFiles.SyncBuiltInSkills(FleetDataDirectory(), ownerUserId, builtInSkills);
+                return OpenCode2FleetFiles.SyncBuiltInSkills(FleetDataDirectory(), ownerUserId, builtInSkills.Names, builtInSkills.Yours);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -650,16 +650,27 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     /// The built-in skills the owner turned on that this Fleet ships, in name order, whether messages between sessions
     /// and workflows are on, and the folder with the owner's memory notes when memory is on.
     /// </summary>
-    private async Task<(IReadOnlyList<string> BuiltInSkills, bool SessionMessages, bool Workflows, string? MemoryFolder)> ReadOwnerSettingsAsync(string ownerUserId)
+    private async Task<(OwnerSkills BuiltInSkills, bool SessionMessages, bool Workflows, string? MemoryFolder)> ReadOwnerSettingsAsync(string ownerUserId)
     {
         using var userScope = BackgroundUserContext.BeginScope(ownerUserId);
         using var scope = _scopeFactory.CreateScope();
 
-        IReadOnlyList<string> builtInSkills = [];
+        var builtInSkills = new OwnerSkills([], new Dictionary<string, string>(StringComparer.Ordinal));
         if (scope.ServiceProvider.GetService<IUserPreferenceRepository>() is { } preferences)
         {
-            var enabled = await BuiltInSkillService.GetEnabledAsync(preferences).ConfigureAwait(false);
-            builtInSkills = enabled.Where(OpenCode2FleetFiles.BuiltInSkillNames.Contains).Order(StringComparer.Ordinal).ToList();
+            var skills = await BuiltInSkillService.GetSessionSkillsAsync(
+                preferences,
+                scope.ServiceProvider.GetService<ISkillVersionStore>(),
+                ownerUserId,
+                OpenCode2FleetFiles.BuiltInSkillNames).ConfigureAwait(false);
+            var yours = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var (name, _, folder) in skills)
+            {
+                if (folder is not null && ReadVersion(folder, name) is { } content)
+                    yours[name] = content;
+            }
+
+            builtInSkills = new OwnerSkills(skills.Select(skill => skill.Name).ToList(), yours);
         }
 
         var sessionMessages = scope.ServiceProvider.GetService<SessionMessagesFeature>() is { } feature
@@ -672,6 +683,23 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             ? memoryStore.ContextFolder(ownerUserId)
             : null;
         return (builtInSkills, sessionMessages, workflows, memoryFolder);
+    }
+
+    /// <summary>The built-in skills the owner turned on, and the text of their own version of any they made one of.</summary>
+    private sealed record OwnerSkills(IReadOnlyList<string> Names, IReadOnlyDictionary<string, string> Yours);
+
+    /// <summary>A version's <c>SKILL.md</c> from its folder; null when it can't be read, so Fleet's copy is used.</summary>
+    private string? ReadVersion(string folder, string name)
+    {
+        try
+        {
+            return File.ReadAllText(Path.Combine(folder, name, "SKILL.md"));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            LogFleetFilesInstallFailed(_logger, ex);
+            return null;
+        }
     }
 
     /// <summary>
