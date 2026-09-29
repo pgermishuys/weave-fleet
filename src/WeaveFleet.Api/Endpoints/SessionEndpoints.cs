@@ -383,6 +383,16 @@ public static class SessionEndpoints
         })
         .WithName("ForkSession");
 
+        // POST /api/sessions/{id}/new-in-folder — a new, empty session in its folder, on the same harness and profile
+        group.MapPost("/{id}/new-in-folder", async (string id, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        {
+            var result = await orchestrator.StartSessionInFolderOfAsync(id, ct);
+            return result.Match(
+                r => Results.Ok(new CreateSessionApiResponse(r.InstanceId, r.WorkspaceId, r.Session, r.Branch)),
+                err => err.ToSessionApiResult());
+        })
+        .WithName("StartSessionInFolder");
+
         // GET /api/sessions/{id}/messages?limit=N&before=CURSOR
         group.MapGet("/{id}/messages", async (string id, int? limit, string? before, SessionOrchestrator orchestrator) =>
         {

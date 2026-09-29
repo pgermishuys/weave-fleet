@@ -176,6 +176,22 @@ public sealed class SessionOrchestratorProfileTests : IDisposable
     }
 
     [Fact]
+    public async Task a_new_session_in_a_sessions_folder_keeps_its_profile_even_when_that_is_none()
+    {
+        SeedProfile("work", isDefault: true);
+        SeedSession("with-profile", profileId: "work");
+        SeedSession("without-profile", profileId: null);
+
+        var startedWith = await _sut.StartSessionInFolderOfAsync("with-profile");
+        var startedWithout = await _sut.StartSessionInFolderOfAsync("without-profile");
+
+        startedWith.IsSuccess.ShouldBeTrue(startedWith.IsFailure ? startedWith.Error.Description : null);
+        startedWith.Value.Session.HarnessProfileId.ShouldBe("work");
+        startedWithout.Value.Session.HarnessProfileId.ShouldBeNull();
+        startedWith.Value.Session.Directory.ShouldBe(WorkspaceRootService.CanonicalizePath(_directory));
+    }
+
+    [Fact]
     public async Task a_delegated_child_attaches_with_the_parents_profile()
     {
         SeedProfile("local");

@@ -5,6 +5,7 @@ import {
   useCreateSession,
   useDeleteProject,
   useForkSession,
+  useNewSessionInFolder,
 } from "@/composables/use-session-actions";
 import type { CreateSessionResponse, ForkSessionResponse, SessionListItem } from "@/api/client";
 import { useSessionsStore } from "@/stores/sessions";
@@ -231,6 +232,39 @@ describe("useSessionActions", () => {
       params: {
         path: { id: "session-1" },
       },
+    });
+  });
+
+  it("starts_an_empty_session_in_the_sessions_folder_and_opens_it", async () => {
+    const sessionsStore = useSessionsStore();
+    sessionsStore.setSessions([createSessionListItem()]);
+
+    const responseBody: CreateSessionResponse = {
+      instanceId: "instance-3",
+      workspaceId: "workspace-3",
+      session: { id: "session-3", title: "Untitled", time: { created: 10, updated: 11 }, tags: [] },
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const deferred = createDeferred<{ data: any; error: any; response: Response }>();
+    apiFetchMock.mockReturnValue(deferred.promise);
+
+    const { result } = await mountComposable(() => useNewSessionInFolder());
+    const started = result.startSessionInFolderOf("session-1");
+    expect(result.startingFromSessionId.value).toBe("session-1");
+
+    deferred.resolve({ data: responseBody, error: undefined, response: createJsonResponse(responseBody) });
+
+    await expect(started).resolves.toEqual(responseBody);
+    expect(result.startingFromSessionId.value).toBeNull();
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/sessions/{id}/new-in-folder", { params: { path: { id: "session-1" } } });
+    expect(sessionsStore.activeSessionId).toBe("session-3");
+    // The same folder as the session it started from, with nothing of its conversation or cost.
+    expect(sessionsStore.sessions.find((item) => item.session.id === "session-3")).toMatchObject({
+      workspaceId: "workspace-3",
+      workspaceDirectory: "/tmp/project",
+      projectId: "project-1",
+      totalTokens: 0,
+      totalCost: 0,
     });
   });
 

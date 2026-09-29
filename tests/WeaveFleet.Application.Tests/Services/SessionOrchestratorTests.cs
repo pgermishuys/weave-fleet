@@ -1391,6 +1391,37 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task StartSessionInFolderOfAsync_StartsAnEmptySessionInTheFolderOnTheSameHarness()
+    {
+        using var tempDirectory = new TempDirectory();
+
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "s-parent",
+            InstanceId = "inst-parent",
+            // A harness that can't fork can still start a session beside one of its own.
+            HarnessType = "claude-code",
+            Title = "Parent",
+            Status = "active",
+            Directory = tempDirectory.Path,
+            ProjectId = null,
+            CreatedAt = "2026-01-01"
+        });
+        var runtime = _builder.RegisterHarness("claude-code", "Claude Code");
+        runtime.DefaultSession = _defaultSession;
+
+        var result = await _sut.StartSessionInFolderOfAsync("s-parent");
+
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : null);
+        var spawn = runtime.SpawnCalls.ShouldHaveSingleItem();
+        spawn.InitialPrompt.ShouldBeNull();
+        runtime.ResumeCalls.ShouldBeEmpty();
+        result.Value.Session.HarnessType.ShouldBe("claude-code");
+        result.Value.Session.Title.ShouldNotStartWith("Fork of");
+        _builder.WorkspaceRepository.InsertedWorkspaces.ShouldContain(w => w.IsolationStrategy == "existing");
+    }
+
+    [Fact]
     public async Task EnsureDelegatedChildSessionAsync_CreatesHiddenChildSession()
     {
         var parent = new Session

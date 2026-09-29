@@ -23,6 +23,7 @@ export const DEFAULT_KEYBINDINGS: KeyBindingsConfig = {
   "copy-session-id":    { paletteHotkey: null, globalShortcut: null },
   "toggle-diff-view":   { paletteHotkey: "d", globalShortcut: { key: "d", platformModifier: true, metaKey: true } },
   "fork-session":       { paletteHotkey: null, globalShortcut: null },
+  "new-session-in-folder": { paletteHotkey: null, globalShortcut: null },
   "export-conversation":{ paletteHotkey: null, globalShortcut: null },
   "scroll-to-top":      { paletteHotkey: null, globalShortcut: null },
   "scroll-to-bottom":   { paletteHotkey: null, globalShortcut: null },

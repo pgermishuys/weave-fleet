@@ -95,6 +95,14 @@ export interface UseForkSessionResult {
   error: Readonly<ShallowRef<string | undefined>>;
 }
 
+export interface UseNewSessionInFolderResult {
+  /** Starts a new, empty session in the session's folder, on the same harness and profile, and returns it. */
+  startSessionInFolderOf: (sessionId: string) => Promise<CreateSessionResponse>;
+  /** The session whose folder a new session is being started in, while it is. */
+  startingFromSessionId: Readonly<ShallowRef<string | null>>;
+  error: Readonly<ShallowRef<string | undefined>>;
+}
+
 export interface UseAbortSessionResult {
   abortSession: (sessionId: string) => Promise<void>;
   isAborting: Readonly<ShallowRef<boolean>>;
@@ -189,9 +197,10 @@ function getSessionsStoreSafely() {
   return pinia ? useSessionsStore(pinia) : null;
 }
 
+/** The list row for a session started from another (a fork, or a new session in its folder), until the list reloads. */
 function buildForkedSessionListItem(
   sourceSession: SessionListItem | undefined,
-  response: ForkSessionResponse,
+  response: Pick<ForkSessionResponse, "instanceId" | "workspaceId" | "session">,
 ): SessionListItem {
   return {
     instanceId: response.instanceId,
@@ -529,6 +538,50 @@ export function useForkSession(): UseForkSessionResult {
     },
     isForking,
     forkingSessionId: readonly(forkingSessionId),
+    error: readonly(error),
+  };
+}
+
+export function useNewSessionInFolder(): UseNewSessionInFolderResult {
+  const error = shallowRef<string | undefined>(undefined);
+  const startingFromSessionId = shallowRef<string | null>(null);
+  const sessionsStore = getSessionsStoreSafely();
+
+  async function startSessionInFolderOf(sessionId: string): Promise<CreateSessionResponse> {
+    startingFromSessionId.value = sessionId;
+    error.value = undefined;
+
+    try {
+      const sourceSession = sessionsStore?.sessions.find((item) => item.session.id === sessionId);
+      const { data, error: apiError, response } = await api.POST("/api/sessions/{id}/new-in-folder", {
+        params: { path: { id: sessionId } },
+      });
+
+      if (apiError || !response.ok) {
+        throw new Error(await readErrorMessage(response, apiError));
+      }
+
+      const payload = data as unknown as CreateSessionResponse;
+      const nextSession = { ...buildForkedSessionListItem(sourceSession, payload), totalTokens: 0, totalCost: 0 };
+
+      sessionsStore?.upsertSession(nextSession);
+      sessionsStore?.setActiveSessionId(payload.session.id);
+      dispatchSessionUpsert(nextSession);
+      trackAction("session.new-in-folder", sessionId);
+
+      return payload;
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : "Couldn't start a session in this folder";
+      error.value = message;
+      throw requestError instanceof Error ? requestError : new Error(message);
+    } finally {
+      startingFromSessionId.value = null;
+    }
+  }
+
+  return {
+    startSessionInFolderOf,
+    startingFromSessionId: readonly(startingFromSessionId),
     error: readonly(error),
   };
 }

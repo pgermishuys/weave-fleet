@@ -9,6 +9,7 @@ import {
   Download,
   Eraser,
   FileSearch,
+  FolderPlus,
   Focus,
   GitBranchPlus,
   LayoutGrid,
@@ -33,7 +34,7 @@ import { clearDraftText } from "@/composables/use-draft-state";
 import type { Command } from "@/lib/command-registry";
 import { dispatchCommandEvent } from "@/lib/command-events";
 import { matchesKeyboardShortcut, useKeyboardShortcut } from "@/composables/use-keyboard-shortcut";
-import { useAbortSession, useForkSession } from "@/composables/use-session-actions";
+import { useAbortSession, useForkSession, useNewSessionInFolder } from "@/composables/use-session-actions";
 import type { SessionListItem } from "@/api/client";
 import { api } from "@/api/client";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
@@ -86,6 +87,7 @@ export function useCommands() {
   const { toggleSidebar, isMobileNav, mobileDrawerOpen, isRightPanelVisible, toggleRightPanel } = useSidebarMobile();
   const { abortSession } = useAbortSession();
   const { forkSession } = useForkSession();
+  const { startSessionInFolderOf } = useNewSessionInFolder();
   const router = useRouter();
   const pathname = useLocation({
     select: (location) => location.pathname,
@@ -190,6 +192,23 @@ export function useCommands() {
     sessionsStore.patchSession(currentSession.session.id, {
       activityStatus: "idle",
       sessionStatus: "idle",
+    });
+  }
+
+  /** A new, empty session in the active session's folder, on its harness and profile. */
+  async function startSessionInCurrentFolder(): Promise<void> {
+    if (!activeSessionId.value) {
+      return;
+    }
+
+    const response = await startSessionInFolderOf(activeSessionId.value);
+
+    sessionsStore.setActiveSessionId(response.session.id);
+    sidebarStore.setActiveRail("sessions");
+    void router.navigate({
+      to: "/sessions/$id",
+      params: { id: response.session.id },
+      search: { instanceId: response.instanceId, parentSessionId: undefined },
     });
   }
 
@@ -488,6 +507,22 @@ export function useCommands() {
         disabled: activeSessionId.value === null || activeForkDisabledReason.value !== null,
         action: () => {
           void forkCurrentSession().catch(() => {});
+        },
+      },
+      {
+        id: "new-session-in-folder",
+        label: "New session in this folder",
+        description: activeSessionId.value
+          ? "An empty session in the active session's folder, on the same harness."
+          : "No active session selected.",
+        icon: FolderPlus,
+        category: "Session",
+        paletteHotkey: bindings.value["new-session-in-folder"]?.paletteHotkey ?? undefined,
+        globalShortcut: bindings.value["new-session-in-folder"]?.globalShortcut ?? undefined,
+        keywords: ["new", "session", "folder", "same", "empty"],
+        disabled: activeSessionId.value === null,
+        action: () => {
+          void startSessionInCurrentFolder().catch(() => {});
         },
       },
       {
