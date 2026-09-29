@@ -32,8 +32,24 @@ function isTurnError(value: unknown): value is TurnError {
 }
 
 
+const COUNTED_ID = /^(.*)_(\d+)$/;
+
 /**
- * Insert a message into the array in stable sorted position by message ID (ascending).
+ * Orders two message IDs. They sort as text, except IDs that share a stem and end in a counter (`msg_<stem>_6`,
+ * `msg_<stem>_17`): a harness's copy of a conversation (a fork) names the copies that way, and as text `_17` would
+ * come before `_6`.
+ */
+export function compareMessageIds(a: string, b: string): number {
+  const left = COUNTED_ID.exec(a);
+  const right = COUNTED_ID.exec(b);
+  if (left && right && left[1] === right[1]) {
+    return Number(left[2]) - Number(right[2]);
+  }
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * Insert a message into the array in stable sorted position by message ID (ascending, see {@link compareMessageIds}).
  * Message IDs with `msg_` prefix contain hex-encoded timestamps that sort lexicographically
  * in chronological order. Uses binary search for O(log n) insertion.
  * Messages without proper `msg_` prefix are appended to the end (defensive fallback).
@@ -63,8 +79,7 @@ function insertMessageSorted(
       continue;
     }
 
-    // Compare IDs lexicographically
-    if (midId < newId) {
+    if (compareMessageIds(midId, newId) < 0) {
       left = mid + 1;
     } else {
       right = mid;
