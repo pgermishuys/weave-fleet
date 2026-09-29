@@ -86,6 +86,22 @@ describe("notices", () => {
     expect(store.pinned).toBe(true);
   });
 
+  it("settles a card that asks something when it's dismissed, keeping its chip so the question can be reopened", () => {
+    const store = useNoticesStore();
+    store.post(update("0.37.0"));
+    store.openNext();
+    store.update("update:app:0.37.0", { title: "2 sessions are working" });
+    expect(store.pinned).toBe(true);
+
+    store.settle();
+    expect(store.open).toBeNull();
+    expect(store.pinned).toBe(false);
+    expect(store.chips.map((notice) => notice.id)).toEqual(["update:app:0.37.0"]);
+
+    store.reopen("update:app:0.37.0");
+    expect(store.open?.title).toBe("2 sessions are working");
+  });
+
   it("drops a notice without a chip when it settles", () => {
     const store = useNoticesStore();
     store.post({ id: "hello", title: "Hello" });

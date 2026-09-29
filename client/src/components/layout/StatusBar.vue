@@ -77,7 +77,6 @@ const tokenCount = computed(() => {
 
 <template>
   <footer class="status-bar">
-    <NoticeChips />
     <!--
       The hints are buttons that run what their shortcut runs. mousedown.prevent keeps the keyboard where it was (the
       composer, the terminal), so the next shortcut still does what it says; Tab still reaches them.
@@ -204,6 +203,9 @@ const tokenCount = computed(() => {
       </template>
     </div>
 
+    <!-- On the right, under the corner a notice card settles from. -->
+    <NoticeChips class="status-bar__notices" />
+
     <!-- Session status lives on the session's row in the sidebar, not here. -->
     <div
       v-if="activeSession"
@@ -245,6 +247,14 @@ const tokenCount = computed(() => {
   margin-left: auto;
   align-items: center;
   gap: 8px;
+}
+
+.status-bar__notices {
+  margin-left: auto;
+}
+
+.status-bar__notices + .status-bar__right {
+  margin-left: 0;
 }
 
 .shortcut-hint {
