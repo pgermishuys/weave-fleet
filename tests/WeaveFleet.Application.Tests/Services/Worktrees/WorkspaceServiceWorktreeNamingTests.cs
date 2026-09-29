@@ -98,7 +98,7 @@ public sealed class WorkspaceServiceWorktreeNamingTests
     }
 
     [Fact]
-    public async Task AMessageWithNoSlugInIt_FallsBackToASessionName()
+    public async Task AMessageWithNoSlugInIt_IsNamedByTheTemplateWithTheSessionId()
     {
         using var repository = new RealGitRepository();
         await SaveUserNamingAsync(new WorktreeNamingOverride { Branch = "{prefix}/{slug}", Prefix = "pg" });
@@ -107,9 +107,22 @@ public sealed class WorkspaceServiceWorktreeNamingTests
             repository.Path, "worktree", branch: null, provenance: null, message: "🚀🚀🚀");
 
         result.IsSuccess.ShouldBeTrue(ErrorOf(result));
-        // Not "pg", which is what the template alone would have collapsed to.
-        result.Value.Branch.ShouldStartWith("weave-session-");
-        Path.GetFileName(result.Value.Directory).ShouldBe(result.Value.Branch);
+        // Not "pg", which is what the template would have collapsed to with an empty slug.
+        result.Value.Branch!.ShouldMatch("^pg/session-[0-9a-f]{8}$");
+        Path.GetFileName(result.Value.Directory).ShouldBe(result.Value.Branch!.Replace('/', '-'));
+    }
+
+    [Fact]
+    public async Task NoMessage_StillHonoursTheTemplate()
+    {
+        using var repository = new RealGitRepository();
+        await SaveUserNamingAsync(new WorktreeNamingOverride { Branch = "{prefix}/{slug}", Prefix = "pg" });
+
+        var result = await Service().CreateWorkspaceAsync(
+            repository.Path, "worktree", branch: null, provenance: null, message: null);
+
+        result.IsSuccess.ShouldBeTrue(ErrorOf(result));
+        result.Value.Branch!.ShouldMatch("^pg/session-[0-9a-f]{8}$");
     }
 
     [Fact]

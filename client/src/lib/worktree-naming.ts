@@ -29,7 +29,10 @@ export interface WorktreeNamingContext {
 }
 
 export interface WorktreeName {
-  /** Null when the template wanted a slug this message couldn't give; the server names it instead. */
+  /**
+   * Null when the template wanted a slug this message couldn't give and there's no short id to
+   * stand in for it (the composer's preview); the server names it `<template>/session-<id>` then.
+   */
   branch: string | null;
   root: string;
   folder: string;
@@ -151,7 +154,10 @@ export function resolveWorktreeName(
     }
   }
 
-  const slug = slugForBranch(slugSource);
+  // A message with no slug in it — or no message — still gets the template's branch, with the
+  // session id standing in ("fleet/session-a1b2c3d4"). Without an id (the composer doesn't know
+  // it yet) the branch stays unnamed rather than collapse to the prefix alone.
+  const slug = slugForBranch(slugSource) || (context.shortId ? `session-${context.shortId}` : "");
   const values = tokenValues(naming, context, captures, slug);
 
   let branch: string | null;

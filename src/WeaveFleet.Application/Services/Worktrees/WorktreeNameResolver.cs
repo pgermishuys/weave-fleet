@@ -29,13 +29,16 @@ public static partial class WorktreeNameResolver
     private static partial Regex TokenPattern();
 
     /// <summary>
-    /// Names a worktree for <paramref name="message"/>. A branch of null means the template wanted
-    /// a slug the message couldn't give, and the caller should fall back to its own name — without
-    /// it, "{prefix}/{slug}" would collapse to the prefix alone and collide with the next one.
+    /// Names a worktree for <paramref name="message"/>. A message with no slug in it — none at all,
+    /// or nothing but emoji — slugs as <c>session-{shortid}</c>, so a session started without a
+    /// message still gets the template's branch ("fleet/session-a1b2c3d4"). A branch of null means
+    /// there was no short id to stand in either (the composer's preview, which doesn't know it) or
+    /// the template resolved to nothing, and the caller names the worktree itself — rather than let
+    /// "{prefix}/{slug}" collapse to the prefix alone and collide with the next one.
     /// </summary>
     /// <param name="branchOverride">
     /// A branch the caller has already settled — a typed override, a source's suggestion, or the
-    /// fallback name for a message that gave no slug. The folder then resolves against it, so
+    /// caller's own name when the templates gave none. The folder then resolves against it, so
     /// <c>{branch}</c> still names the folder after the branch the worktree actually gets.
     /// </param>
     public static WorktreeNameResult Resolve(
@@ -53,6 +56,9 @@ public static partial class WorktreeNameResolver
             slugSource = slugSource.Replace(captured, " ", StringComparison.Ordinal);
 
         var slug = BranchSlug.From(slugSource);
+        if (slug.Length == 0 && context.ShortId.Length > 0)
+            slug = $"session-{context.ShortId}";
+
         var values = TokenValues(naming, context, captures, slug);
 
         string? branch;

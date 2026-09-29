@@ -76,3 +76,12 @@ describe("worktree naming conformance", () => {
     });
   }
 });
+
+describe("worktree naming preview", () => {
+  it("leaves an empty message's branch to the server when there's no short id to stand in", () => {
+    // The composer doesn't know the session id, so it can't promise "fleet/session-<id>".
+    const result = resolveWorktreeName(defaultWorktreeNaming, { ...context, shortId: "" }, "");
+
+    expect(result.branch).toBeNull();
+  });
+});
