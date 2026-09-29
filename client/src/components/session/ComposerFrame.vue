@@ -18,6 +18,7 @@ defineProps<{
   <div
     class="composer-frame"
     :class="{ 'composer-frame--dragging': dragging }"
+    data-notice-avoid
   >
     <slot />
     <div class="composer-frame__toolbar">

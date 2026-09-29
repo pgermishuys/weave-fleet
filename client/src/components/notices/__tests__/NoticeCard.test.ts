@@ -127,11 +127,84 @@ describe("NoticeCard", () => {
     store.post({ ...ready, actions: [{ label: "Later", run: later }] });
     await advance(NOTICE_STARTUP_QUIET_MS + 500);
 
-    await wrapper.find("button").trigger("click");
+    await wrapper.find(".notice__btn").trigger("click");
     expect(later).toHaveBeenCalledOnce();
 
     await wrapper.find('[data-testid="notice-card"]').trigger("keydown", { key: "Escape" });
     expect(store.open).toBeNull();
+  });
+
+  it("settles into its chip when dismissed, and never opens as a card again", async () => {
+    const { wrapper, store } = mountCard();
+    store.post(ready);
+    await advance(NOTICE_STARTUP_QUIET_MS + 500);
+
+    const dismiss = wrapper.find('[data-testid="notice-dismiss"]');
+    expect(dismiss.attributes("aria-label")).toBe("Dismiss");
+    expect(dismiss.attributes("title")).toBe("Dismiss (Esc)");
+    await dismiss.trigger("click");
+    expect(store.open).toBeNull();
+    expect(store.chips.map((notice) => notice.id)).toEqual([ready.id]);
+
+    // A new page load: the dismissed notice comes back as its chip only.
+    wrapper.unmount();
+    setActivePinia(createPinia());
+    const again = mountCard();
+    again.store.post(ready);
+    await advance(NOTICE_STARTUP_QUIET_MS + 2000);
+    expect(again.wrapper.find('[data-testid="notice-card"]').exists()).toBe(false);
+    expect(again.store.chips.map((notice) => notice.id)).toEqual([ready.id]);
+  });
+
+  it("goes away when dismissed if it has no chip, without running its Undo", async () => {
+    const undo = vi.fn();
+    const { wrapper, store } = mountCard();
+    store.post({ id: "memory-saved-1", title: "Remembered for this repository", countdown: true, actions: [{ label: "Undo", run: undo }] });
+    await advance(NOTICE_STARTUP_QUIET_MS + 500);
+
+    await wrapper.find('[data-testid="notice-dismiss"]').trigger("click");
+    expect(store.open).toBeNull();
+    expect(store.has("memory-saved-1")).toBe(false);
+    expect(undo).not.toHaveBeenCalled();
+  });
+
+  it("dismisses a card that asks something on Escape, keeping its chip", async () => {
+    const { wrapper, store } = mountCard();
+    store.post(ready);
+    await advance(NOTICE_STARTUP_QUIET_MS + 500);
+    store.update(ready.id, { title: "2 sessions are working" });
+    await nextTick();
+
+    await wrapper.find('[data-testid="notice-dismiss"]').trigger("keydown", { key: "Escape" });
+    expect(store.open).toBeNull();
+    expect(store.chips.map((notice) => notice.id)).toEqual([ready.id]);
+  });
+
+  it("sits in the bottom-right corner, lifted above a composer it would cover", async () => {
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(1280);
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(800);
+    const composer = document.createElement("div");
+    composer.setAttribute("data-notice-avoid", "");
+    document.body.append(composer);
+    // The right panel is open: the composer ends well left of the card.
+    let composerRect = new DOMRect(400, 640, 500, 120);
+    vi.spyOn(composer, "getBoundingClientRect").mockImplementation(() => composerRect);
+
+    const { wrapper, store } = mountCard();
+    store.post(ready);
+    await advance(NOTICE_STARTUP_QUIET_MS + 500);
+    const card = wrapper.find('[data-testid="notice-card"]').element as HTMLElement;
+    vi.spyOn(card, "getBoundingClientRect").mockReturnValue(new DOMRect(1004, 660, 264, 100));
+    window.dispatchEvent(new Event("resize"));
+    await advance(50);
+    expect(card.style.bottom).toBe("");
+
+    // The right panel closes: the composer now reaches under the card, so the card lifts clear of its top.
+    composerRect = new DOMRect(400, 640, 860, 120);
+    window.dispatchEvent(new Event("resize"));
+    await advance(50);
+    expect(card.style.bottom).toBe(`${800 - 640 + 8}px`);
+    composer.remove();
   });
 
   it("links to the release notes", async () => {
