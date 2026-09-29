@@ -20,7 +20,8 @@ curl -s "$FLEET_URL/openapi/v1.json" | jq '.components.schemas.CreateSessionApiR
 ```
 
 Without `jq`, save the document to a file and search it. Several request bodies reject unknown fields with a 400, so read the schema before you send one. Errors come back as
-JSON with an `error` or `detail` field that says what was wrong.
+JSON with an `error` or `detail` field that says what was wrong, down to the field. Send bodies as JSON encoded as
+UTF-8, with `Content-Type: application/json`.
 
 ## Sessions
 
