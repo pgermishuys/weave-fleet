@@ -85,7 +85,7 @@ public sealed record WorktreeNamingContext(
 /// <summary>A resolved name: the branch, or null when the server should name it instead.</summary>
 public sealed record WorktreeNameResult(string? Branch, string Root, string Folder)
 {
-    /// <summary>True when the template wanted a slug and the message gave none.</summary>
+    /// <summary>True when the templates named no branch, so the caller has to.</summary>
     public bool NeedsServerName => Branch is null;
 }
 

@@ -95,7 +95,7 @@ export function describeNewSession(input: NewSessionPlanInput): PlanPart[] {
     : [{ text: "the default branch" }];
 
   if (!input.newBranch) {
-    return [{ text: "New worktree from " }, ...base, { text: ". The branch is named from your message." }];
+    return [{ text: "New worktree from " }, ...base, { text: ". The branch is named from your message, or the session id without one." }];
   }
 
   return [

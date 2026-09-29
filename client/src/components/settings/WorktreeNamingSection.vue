@@ -80,17 +80,24 @@ const previewTemplates = computed<WorktreeNamingTemplates>(() => ({
   prefix: draft.prefix || defaults.value.prefix,
 }));
 
+const previewShortId = "a1b2c3d4";
+
 const preview = computed(() => resolveWorktreeName(
   previewTemplates.value,
   {
     repositoryPath: "/home/you/source/weave-fleet",
     user: "you",
     date: new Date().toISOString().slice(0, 10),
-    shortId: "a1b2c3d4",
+    shortId: previewShortId,
     home: "/home/you",
   },
   sample.value,
 ));
+
+/** True when the sample gave no slug and the session id stood in for it. */
+const slugIsSessionId = computed(() =>
+  previewTemplates.value.branch.includes("{slug}")
+  && (preview.value.branch ?? "").includes(`session-${previewShortId}`));
 
 async function save(): Promise<void> {
   saved.value = false;
@@ -224,11 +231,11 @@ async function resetToDefaults(): Promise<void> {
         </div>
       </dl>
       <p
-        v-if="!preview.branch"
+        v-if="slugIsSessionId"
         class="mt-2 text-xs text-muted"
       >
-        This message gives no slug, so the server names the worktree instead of collapsing the
-        template to its prefix.
+        This message gives no slug, so the session id stands in for it — the name a session
+        started without a message gets too.
       </p>
     </div>
 

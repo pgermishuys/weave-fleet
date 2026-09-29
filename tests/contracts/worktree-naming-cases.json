@@ -1,5 +1,5 @@
 {
-  "$comment": "Shared cases for worktree naming. The server resolves the real thing and the composer previews it, so both resolvers are asserted against this file: WorktreeNameResolverConformanceTests.cs and client/src/lib/__tests__/worktree-naming.conformance.test.ts. A branch of null means the template wanted a slug the message couldn't give, and the server names the worktree instead.",
+  "$comment": "Shared cases for worktree naming. The server resolves the real thing and the composer previews it, so both resolvers are asserted against this file: WorktreeNameResolverConformanceTests.cs and client/src/lib/__tests__/worktree-naming.conformance.test.ts. A message with no slug in it (or none at all) slugs as session-<shortid>, so the template still names the branch.",
   "context": {
     "repositoryPath": "/home/you/source/weave-fleet",
     "user": "pgermishuys",
@@ -66,27 +66,43 @@
       }
     },
     {
-      "name": "a message with no slug in it hands naming back to the server",
+      "name": "a message with no slug in it slugs as the session id, inside the template",
       "naming": {
         "branch": "{prefix}/{slug}"
       },
       "message": "🚀🚀🚀",
       "expect": {
-        "branch": null,
+        "branch": "pg/session-a1b2c3d4",
         "root": "/home/you/source/weave-fleet-worktrees",
-        "folder": ""
+        "folder": "pg-session-a1b2c3d4"
       }
     },
     {
-      "name": "an empty message hands naming back to the server",
+      "name": "a session started without a message still gets the template's branch",
       "naming": {
         "prefix": "fleet"
       },
       "message": "",
       "expect": {
-        "branch": null,
+        "branch": "fleet/session-a1b2c3d4",
         "root": "/home/you/source/weave-fleet-worktrees",
-        "folder": ""
+        "folder": "fleet-session-a1b2c3d4"
+      }
+    },
+    {
+      "name": "no message keeps the rest of a template, a missing capture collapsing away",
+      "naming": {
+        "branch": "{user}/{ticket}-{slug}",
+        "folder": "{ticket}-{slug}",
+        "capture": {
+          "ticket": "[A-Z]{2,}-\\d+"
+        }
+      },
+      "message": "",
+      "expect": {
+        "branch": "pgermishuys/session-a1b2c3d4",
+        "root": "/home/you/source/weave-fleet-worktrees",
+        "folder": "session-a1b2c3d4"
       }
     },
     {

@@ -58,7 +58,7 @@ describe("describeNewSession", () => {
 
   it("a new worktree before there's a message", () => {
     expect(sentence({ newBranch: undefined }))
-      .toBe("New worktree from the default branch. The branch is named from your message.");
+      .toBe("New worktree from the default branch. The branch is named from your message, or the session id without one.");
   });
 
   it("names the base a new worktree starts from, and says when it won't be fetched", () => {
@@ -69,7 +69,7 @@ describe("describeNewSession", () => {
     expect(sentence({ newBranch: "fleet/fix-login", base: "main", fetchOrigin: false }))
       .toBe("New worktree rocket-worktrees/fleet-fix-login on fleet/fix-login, from main.");
     expect(sentence({ base: "origin/main" }))
-      .toBe("New worktree from origin/main. The branch is named from your message.");
+      .toBe("New worktree from origin/main. The branch is named from your message, or the session id without one.");
   });
 
   it("warns when the current checkout isn't on the default branch", () => {

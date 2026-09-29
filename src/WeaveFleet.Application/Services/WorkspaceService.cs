@@ -319,8 +319,8 @@ public sealed partial class WorkspaceService(
         var context = WorktreeNamingService.BuildContext(sourceDir, shortId);
 
         // A branch chosen by the caller (typed in the composer, suggested by a source) wins; the
-        // templates name the rest. A template that wanted a slug the message couldn't give leaves
-        // the branch unnamed, which is what the session-id fallback is for.
+        // templates name the rest, a session started without a message included ({slug} is then
+        // "session-<shortid>"). The bare session-id name is only for a template that names nothing.
         var names = WorktreeNameResolver.Resolve(templates, context, message, branch);
         var requestedBranch = names.Branch ?? $"weave-session-{shortId}";
         if (names.NeedsServerName)
