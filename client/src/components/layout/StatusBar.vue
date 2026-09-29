@@ -3,20 +3,62 @@ import { computed } from "vue";
 import { storeToRefs } from "pinia";
 import NoticeChips from "@/components/notices/NoticeChips.vue";
 import { useAppShellStore } from "@/stores/app-shell";
+import { useCommandStore } from "@/stores/commands";
 import { useSessionsStore } from "@/stores/sessions";
 import { useTerminalsStore } from "@/stores/terminals";
 
 const sessionsStore = useSessionsStore();
 const { sessions, activeSessionId } = storeToRefs(sessionsStore);
 const appShell = useAppShellStore();
+const commandStore = useCommandStore();
 const { focused: terminalFocused } = storeToRefs(useTerminalsStore());
 
 const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
 const mod = isMac ? "⌘" : "Ctrl";
+/** The shortcut as `aria-keyshortcuts` spells it, e.g. `Control+K`. */
+const modKey = isMac ? "Meta" : "Control";
 
 const activeSession = computed(() =>
   sessions.value.find((session) => session.session.id === activeSessionId.value) ?? null,
 );
+
+/**
+ * Each hint is a button that runs the same command as its shortcut. A command that isn't there (yet) or is disabled
+ * leaves its button disabled, with the command's own reason as the title.
+ */
+function commandHint(id: string, shortcut: string) {
+  return computed(() => {
+    const command = commandStore.getCommand(id);
+    if (!command) return { disabled: true, label: "", title: "Not available yet" };
+    return {
+      disabled: command.disabled === true,
+      label: command.label,
+      title: command.disabled ? (command.description ?? command.label) : `${command.label} (${shortcut})`,
+    };
+  });
+}
+
+const previousSessionHint = commandHint("nav-prev-session", `${mod} [`);
+const nextSessionHint = commandHint("nav-next-session", `${mod} ]`);
+const sidebarHint = commandHint("toggle-sidebar", `${mod} B`);
+const terminalHint = commandHint("toggle-terminal", `${mod} J`);
+
+/** Working the way the composer's Interrupt button reads it: a turn, a delegation or a retry is under way. */
+const activeSessionWorking = computed(() => {
+  const activity = activeSession.value?.activityStatus;
+  return activity === "busy" || activity === "delegating" || activity === "retry";
+});
+
+const interruptHint = computed(() => {
+  const command = commandStore.getCommand("interrupt-session");
+  if (!command || command.disabled || !activeSession.value) {
+    return { disabled: true, title: "Open a session to interrupt it" };
+  }
+  if (!activeSessionWorking.value) {
+    return { disabled: true, title: "Nothing to interrupt: the session isn't working" };
+  }
+  return { disabled: false, title: "Interrupt the session (Esc)" };
+});
 
 const modelBadge = computed(() => {
   const harnessType = activeSession.value?.harnessType;
@@ -36,6 +78,10 @@ const tokenCount = computed(() => {
 <template>
   <footer class="status-bar">
     <NoticeChips />
+    <!--
+      The hints are buttons that run what their shortcut runs. mousedown.prevent keeps the keyboard where it was (the
+      composer, the terminal), so the next shortcut still does what it says; Tab still reaches them.
+    -->
     <div
       v-if="terminalFocused"
       class="status-bar__left"
@@ -47,9 +93,19 @@ const tokenCount = computed(() => {
         <kbd>Esc</kbd> <kbd>{{ mod }} K</kbd> <kbd>{{ mod }} B</kbd> go to the shell
       </span>
       <span class="shortcut-separator">·</span>
-      <span class="shortcut-hint">
+      <button
+        type="button"
+        class="shortcut-hint"
+        data-testid="status-hint-hide-terminal"
+        :disabled="terminalHint.disabled"
+        :title="terminalHint.title"
+        aria-label="Hide terminal"
+        :aria-keyshortcuts="`${modKey}+J`"
+        @mousedown.prevent
+        @click="commandStore.runCommand('toggle-terminal')"
+      >
         <kbd>{{ mod }} J</kbd> Hide terminal
-      </span>
+      </button>
       <span class="shortcut-separator">·</span>
       <span class="shortcut-hint">
         <kbd>{{ isMac ? "⌘ C" : "Ctrl Shift C" }}</kbd> Copy
@@ -59,26 +115,92 @@ const tokenCount = computed(() => {
       v-else
       class="status-bar__left"
     >
-      <span class="shortcut-hint">
+      <button
+        type="button"
+        class="shortcut-hint"
+        data-testid="status-hint-palette"
+        :title="`Command palette (${mod} K)`"
+        aria-label="Command palette"
+        :aria-keyshortcuts="`${modKey}+K`"
+        @mousedown.prevent
+        @click="commandStore.togglePalette()"
+      >
         <kbd>{{ mod }} K</kbd> Command palette
+      </button>
+      <span class="shortcut-separator">·</span>
+      <span class="shortcut-hint shortcut-hint--pair">
+        <kbd>{{ mod }}</kbd>
+        <button
+          type="button"
+          class="shortcut-key"
+          data-testid="status-hint-prev-session"
+          :disabled="previousSessionHint.disabled"
+          :title="previousSessionHint.title"
+          aria-label="Previous session"
+          :aria-keyshortcuts="`${modKey}+[`"
+          @mousedown.prevent
+          @click="commandStore.runCommand('nav-prev-session')"
+        >
+          <kbd>[</kbd>
+        </button>
+        <button
+          type="button"
+          class="shortcut-key"
+          data-testid="status-hint-next-session"
+          :disabled="nextSessionHint.disabled"
+          :title="nextSessionHint.title"
+          aria-label="Next session"
+          :aria-keyshortcuts="`${modKey}+]`"
+          @mousedown.prevent
+          @click="commandStore.runCommand('nav-next-session')"
+        >
+          <kbd>]</kbd>
+        </button>
+        Prev / next session
       </span>
       <span class="shortcut-separator">·</span>
-      <span class="shortcut-hint">
-        <kbd>{{ mod }} [ ]</kbd> Prev / next session
-      </span>
-      <span class="shortcut-separator">·</span>
-      <span class="shortcut-hint">
+      <button
+        type="button"
+        class="shortcut-hint"
+        data-testid="status-hint-sidebar"
+        :disabled="sidebarHint.disabled"
+        :title="sidebarHint.title"
+        :aria-label="sidebarHint.label || 'Sidebar'"
+        :aria-keyshortcuts="`${modKey}+B`"
+        @mousedown.prevent
+        @click="commandStore.runCommand('toggle-sidebar')"
+      >
         <kbd>{{ mod }} B</kbd> Sidebar
-      </span>
+      </button>
       <span class="shortcut-separator">·</span>
-      <span class="shortcut-hint">
+      <button
+        type="button"
+        class="shortcut-hint"
+        data-testid="status-hint-interrupt"
+        :disabled="interruptHint.disabled"
+        :title="interruptHint.title"
+        aria-label="Interrupt"
+        aria-keyshortcuts="Escape"
+        @mousedown.prevent
+        @click="commandStore.runCommand('interrupt-session')"
+      >
         <kbd>Esc</kbd> Interrupt
-      </span>
+      </button>
       <template v-if="appShell.config.terminalEnabled">
         <span class="shortcut-separator">·</span>
-        <span class="shortcut-hint">
+        <button
+          type="button"
+          class="shortcut-hint"
+          data-testid="status-hint-terminal"
+          :disabled="terminalHint.disabled"
+          :title="terminalHint.title"
+          :aria-label="terminalHint.label || 'Terminal'"
+          :aria-keyshortcuts="`${modKey}+J`"
+          @mousedown.prevent
+          @click="commandStore.runCommand('toggle-terminal')"
+        >
           <kbd>{{ mod }} J</kbd> Terminal
-        </span>
+        </button>
       </template>
     </div>
 
@@ -115,7 +237,7 @@ const tokenCount = computed(() => {
 .status-bar__left {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 1px;
 }
 
 .status-bar__right {
@@ -129,7 +251,67 @@ const tokenCount = computed(() => {
   display: flex;
   align-items: center;
   gap: 4px;
+  padding: 2px 5px;
   color: var(--muted);
+}
+
+/* Quiet at rest like the plain hints; the theme's hover and pressed tints only when there's something to press. */
+button.shortcut-hint,
+.shortcut-key {
+  margin: 0;
+  border: 0;
+  border-radius: var(--radius-btn);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  transition: background-color var(--transition), color var(--transition);
+}
+
+/* The app's focus ring (main.css) is faint on the bar, so a focused hint takes the hover tint as well. */
+button.shortcut-hint:hover:not(:disabled),
+button.shortcut-hint:focus-visible {
+  background-color: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
+}
+
+button.shortcut-hint:active:not(:disabled) {
+  background-color: color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+button.shortcut-hint:disabled,
+.shortcut-key:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Prev / next: one hint, with [ and ] as their own small buttons. */
+.shortcut-hint--pair {
+  gap: 2px;
+}
+
+.shortcut-key {
+  display: flex;
+  padding: 1px;
+  color: inherit;
+}
+
+/* [ and ] are too small for a tint around them to show, so the key itself lights up. */
+.shortcut-key:hover:not(:disabled) kbd,
+.shortcut-key:focus-visible kbd {
+  border-color: var(--muted);
+  background: color-mix(in srgb, var(--text) 14%, transparent);
+}
+
+.shortcut-key:active:not(:disabled) kbd {
+  background: color-mix(in srgb, var(--text) 20%, transparent);
+}
+
+.shortcut-hint--pair > kbd + .shortcut-key {
+  margin-left: 1px;
+}
+
+.shortcut-hint--pair > .shortcut-key:last-of-type {
+  margin-right: 2px;
 }
 
 .shortcut-hint kbd {
@@ -150,6 +332,7 @@ const tokenCount = computed(() => {
 }
 
 .terminal-owner {
+  padding: 2px 5px;
   color: var(--accent);
   font-weight: 500;
 }
