@@ -668,9 +668,7 @@ export function useCommands() {
     ];
   });
 
-  useKeyboardShortcut("k", () => {
-    commandStore.setPaletteOpen(!commandStore.paletteOpen);
-  }, {
+  useKeyboardShortcut("k", commandStore.togglePalette, {
     platformModifier: true,
     allowInEditable: true,
   });

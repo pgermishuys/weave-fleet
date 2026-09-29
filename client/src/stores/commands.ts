@@ -65,6 +65,21 @@ export const useCommandStore = defineStore("commands", () => {
     paletteOpen.value = open;
   }
 
+  /** What Ctrl K does: opens the palette, or closes it when it's open. */
+  function togglePalette(): void {
+    paletteOpen.value = !paletteOpen.value;
+  }
+
+  function getCommand(id: string): Command | undefined {
+    return commandMap.value.get(id);
+  }
+
+  /** Runs a registered command the way its shortcut does: nothing happens while it's missing or disabled. */
+  function runCommand(id: string): void {
+    const command = commandMap.value.get(id);
+    if (command && !command.disabled) command.action();
+  }
+
   function registerCommand(command: Command): void {
     const nextCommandMap = new Map(commandMap.value);
     nextCommandMap.set(command.id, command);
@@ -93,6 +108,9 @@ export const useCommandStore = defineStore("commands", () => {
     paletteOpen,
     recentIds,
     setPaletteOpen,
+    togglePalette,
+    getCommand,
+    runCommand,
     registerCommand,
     unregisterCommand,
     recordUsage,
