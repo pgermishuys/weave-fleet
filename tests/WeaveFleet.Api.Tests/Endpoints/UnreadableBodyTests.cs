@@ -41,6 +41,18 @@ public sealed class UnreadableBodyTests : IDisposable
     }
 
     [Fact]
+    public async Task Answer_ReadsPlainlyInRawJson()
+    {
+        using var content = new StringContent("""{"prompt":"x"}""", Encoding.UTF8, "application/json");
+
+        var response = await _client.PostAsync("/api/sessions", content);
+        var text = await response.Content.ReadAsStringAsync();
+
+        // An agent reading curl's output sees the quotes, not \u0022.
+        text.ShouldStartWith("""{"error":"Unknown field \"prompt\". Fields this endpoint takes: """);
+    }
+
+    [Fact]
     public async Task UnknownFieldInsideAnObject_SaysWhichObject()
     {
         var (status, error) = await PostAsync("/api/sessions", """{"onComplete":{"notifySessionId":"a","sessionId":"b"}}""");

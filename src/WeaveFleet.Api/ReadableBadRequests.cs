@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
@@ -21,6 +22,10 @@ namespace WeaveFleet.Api;
 internal static partial class ReadableBadRequests
 {
     private const int MaxEchoedLength = 80;
+
+    // The answer is JSON, never HTML: an agent reading it raw sees "prompt" and isn't, not \u0022prompt\u0022 and isn\u0027t.
+    private static readonly JsonTypeInfo<ErrorResponse> ErrorJson = new ApiJsonContext(
+        new JsonSerializerOptions(ApiJsonContext.Default.Options) { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping }).ErrorResponse;
 
     public static IServiceCollection AddReadableBadRequests(this IServiceCollection services) =>
         services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
@@ -267,7 +272,7 @@ internal static partial class ReadableBadRequests
 
         context.Response.Clear();
         context.Response.StatusCode = statusCode;
-        await context.Response.WriteAsJsonAsync(new ErrorResponse(error), ApiJsonContext.Default.ErrorResponse);
+        await context.Response.WriteAsJsonAsync(new ErrorResponse(error), ErrorJson);
     }
 
     private static string WithoutPosition(string message)
