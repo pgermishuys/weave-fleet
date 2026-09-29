@@ -11,6 +11,7 @@ import {
   FolderOpen,
   GitFork,
   Pencil,
+  Plus,
   Repeat,
   Sparkles,
   Trash2,
@@ -29,6 +30,7 @@ import {
   useDeleteSession,
   useForkSession,
   useMoveSession,
+  useNewSessionInFolder,
   useRenameSession,
 } from "@/composables/use-session-actions";
 import { useProjects } from "@/composables/use-projects";
@@ -97,6 +99,10 @@ const {
   forkingSessionId,
 } = useForkSession();
 const {
+  startSessionInFolderOf,
+  startingFromSessionId,
+} = useNewSessionInFolder();
+const {
   moveSession,
   isMoving,
 } = useMoveSession();
@@ -152,8 +158,14 @@ const canArchive = computed(() => !isArchivedSession.value && (props.session.cap
 const canRestore = computed(() => isArchivedSession.value);
 const isSelected = computed(() => selection.isSelected(sessionId.value));
 const canFork = computed(() => props.session.capabilities?.canFork ?? true);
+/** Fork shows on every session that isn't archived; on a harness that can't copy a conversation it's off, with why. */
+const showFork = computed(() => !isArchivedSession.value);
+const forkDisabledReason = computed(() => canFork.value
+  ? null
+  : props.session.capabilities?.forkDisabledReason ?? "This session can't be forked.");
 const canDelete = computed(() => props.session.capabilities?.canDelete ?? true);
 const isForkingCurrentSession = computed(() => isForking.value && forkingSessionId.value === sessionId.value);
+const isStartingInFolder = computed(() => startingFromSessionId.value === sessionId.value);
 /**
  * Save as workflow… asks the session's harness off the record, as the recap does, so only a harness that can shows
  * it. Decided by the capability, not the harness's name.
@@ -165,6 +177,7 @@ const isAnyActionPending = computed(() =>
   isRestoring.value
   || isDeleting.value
   || isForkingCurrentSession.value
+  || isStartingInFolder.value
   || isMoving.value
   || isRenaming.value
 );
@@ -343,6 +356,23 @@ async function handleFork(): Promise<void> {
 
   try {
     const response = await forkSession(sessionId.value);
+    await router.navigate({
+      to: "/sessions/$id",
+      params: { id: response.session.id },
+      search: {
+        instanceId: response.instanceId,
+        parentSessionId: undefined,
+      },
+    });
+  } catch {
+    // Errors are handled by the mutation composable state.
+  }
+}
+
+/** A new, empty session in this session's folder, on its harness and profile: what Fork did before it copied. */
+async function handleNewSessionInFolder(): Promise<void> {
+  try {
+    const response = await startSessionInFolderOf(sessionId.value);
     await router.navigate({
       to: "/sessions/$id",
       params: { id: response.session.id },
@@ -594,12 +624,32 @@ function removeSessionFromStore(): void {
       </ContextMenuItem>
 
       <ContextMenuItem
-        v-if="canFork"
-        :disabled="isAnyActionPending"
+        v-if="showFork"
+        :disabled="isAnyActionPending || !canFork"
+        data-testid="session-context-fork"
         @select="handleFork"
       >
         <GitFork class="size-3.5" />
-        Fork
+        <span class="flex flex-col">
+          <span>Fork</span>
+          <span
+            class="text-[11px] text-muted-foreground"
+            data-testid="session-context-fork-note"
+          >{{ forkDisabledReason ?? "A new session with a copy of this conversation" }}</span>
+        </span>
+      </ContextMenuItem>
+
+      <ContextMenuItem
+        v-if="!isArchivedSession"
+        :disabled="isAnyActionPending"
+        data-testid="session-context-new-in-folder"
+        @select="handleNewSessionInFolder"
+      >
+        <Plus class="size-3.5" />
+        <span class="flex flex-col">
+          <span>New session in this folder</span>
+          <span class="text-[11px] text-muted-foreground">Same folder and harness, an empty conversation</span>
+        </span>
       </ContextMenuItem>
 
       <ContextMenuItem

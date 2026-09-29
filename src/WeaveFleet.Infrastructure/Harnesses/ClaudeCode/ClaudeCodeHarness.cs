@@ -25,6 +25,8 @@ public sealed class ClaudeCodeHarness : IHarness
         SupportsAgents = false,
         SupportsModelSelection = true,
         SupportsCommands = false,
+        // --fork-session copies the conversation only when the fork's first prompt runs, so it would take in whatever
+        // the session did since. Fleet also keeps Claude Code's history itself, which a fork doesn't copy.
         SupportsForking = false,
         SupportsResume = true,
         SupportsImageAttachments = false,

@@ -8,8 +8,8 @@ using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode2;
 
 /// <summary>
-/// Side conversations (<c>/btw</c>) on OpenCode 2: <c>POST /api/session/{id}/fork</c> with <c>before</c> copies the
-/// history before that message, so the fork is made at the last finished turn; Fleet's notes to the model go in as
+/// Forks (Fork, and side conversations with <c>/btw</c>) on OpenCode 2: <c>POST /api/session/{id}/fork</c> with
+/// <c>before</c> copies the history before that message, so the fork is made at the last finished turn; Fleet's notes to the model go in as
 /// synthetic messages that wait for the prompt (<c>resume: false</c>).
 /// </summary>
 public sealed class OpenCode2SideConversationTests
@@ -58,9 +58,9 @@ public sealed class OpenCode2SideConversationTests
         await using (server)
         await using (session)
         {
-            var fork = await session.ForkSideConversationAsync(CancellationToken.None);
+            var fork = await session.ForkConversationAsync(CancellationToken.None);
 
-            fork.ShouldBe(new SideConversationFork("ses_fork", "msg_2c"));
+            fork.ShouldBe(new ConversationFork("ses_fork", "msg_2c"));
             var request = api.Requests.Single(r => r.Path == $"/api/session/{Session}/fork");
             JsonDocument.Parse(request.Body!).RootElement.GetProperty("before").GetString().ShouldBe("msg_3");
         }
@@ -83,9 +83,9 @@ public sealed class OpenCode2SideConversationTests
         await using (server)
         await using (session)
         {
-            var fork = await session.ForkSideConversationAsync(CancellationToken.None);
+            var fork = await session.ForkConversationAsync(CancellationToken.None);
 
-            fork.ShouldBe(new SideConversationFork("ses_fork", null));
+            fork.ShouldBe(new ConversationFork("ses_fork", null));
             var request = api.Requests.Single(r => r.Path == $"/api/session/{Session}/fork");
             JsonDocument.Parse(request.Body!).RootElement.TryGetProperty("before", out _).ShouldBeFalse();
         }

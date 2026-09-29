@@ -338,8 +338,45 @@ describe("SessionItem", () => {
 
     const text = wrapper.get("[data-testid='context-menu-content']").text();
     expect(text).not.toContain("Archive");
-    expect(text).not.toContain("Fork");
     expect(text).not.toContain("Permanently Delete");
+  });
+
+  it("says_what_fork_does", () => {
+    const wrapper = mountSessionItem(createSession());
+
+    const fork = wrapper.get("[data-testid='session-context-fork']");
+    expect(fork.attributes("disabled")).toBeUndefined();
+    expect(wrapper.get("[data-testid='session-context-fork-note']").text()).toBe("A new session with a copy of this conversation");
+  });
+
+  it("shows_fork_off_with_the_reason_on_a_harness_that_cant_fork", () => {
+    const reason = "Claude Code can't copy a conversation, so its sessions can't be forked.";
+    const wrapper = mountSessionItem(createSession({
+      capabilities: createCapabilities({ canFork: false, forkDisabledReason: reason }),
+    }));
+
+    expect(wrapper.get("[data-testid='session-context-fork']").attributes("disabled")).toBeDefined();
+    expect(wrapper.get("[data-testid='session-context-fork-note']").text()).toBe(reason);
+  });
+
+  it("offers_a_new_session_in_the_folder_even_where_fork_is_off", () => {
+    const wrapper = mountSessionItem(createSession({
+      capabilities: createCapabilities({ canFork: false, forkDisabledReason: "Claude Code can't copy a conversation, so its sessions can't be forked." }),
+    }));
+
+    const item = wrapper.get("[data-testid='session-context-new-in-folder']");
+    expect(item.attributes("disabled")).toBeUndefined();
+    expect(item.text()).toContain("New session in this folder");
+  });
+
+  it("has_no_fork_on_an_archived_session", () => {
+    const wrapper = mountSessionItem(createSession({
+      retentionStatus: "archived",
+      capabilities: createCapabilities({ canFork: false, forkDisabledReason: "Archived sessions are read-only." }),
+    }));
+
+    expect(wrapper.find("[data-testid='session-context-fork']").exists()).toBe(false);
+    expect(wrapper.find("[data-testid='session-context-new-in-folder']").exists()).toBe(false);
   });
 
   it.each(["running", "stopped"] as const)("never_offers_pause_or_resume_for_a_%s_session", (lifecycleStatus) => {

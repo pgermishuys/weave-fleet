@@ -11,7 +11,7 @@ using WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode;
 
 /// <summary>
-/// Side conversations (<c>/btw</c>) on OpenCode (1.x): the session is forked (<c>POST /session/{id}/fork</c> with
+/// Forks (Fork, and side conversations with <c>/btw</c>) on OpenCode (1.x): the session is forked (<c>POST /session/{id}/fork</c> with
 /// <c>messageID</c>, which copies the messages before it) at its last finished turn, never mid-turn, and Fleet's notes
 /// to the model go as synthetic text parts that the conversation doesn't show.
 /// </summary>
@@ -41,9 +41,9 @@ public sealed class OpenCodeSideConversationTests
         var http = Forking(Page(User("msg_1", "first"), Reply("msg_2", "stop"), User("msg_3", "slow please"), Reply("msg_4", null, completed: false)));
         await using var session = CreateSession(http);
 
-        var fork = await session.ForkSideConversationAsync(CancellationToken.None);
+        var fork = await session.ForkConversationAsync(CancellationToken.None);
 
-        fork.ShouldBe(new SideConversationFork("oc-fork", "msg_copy2"));
+        fork.ShouldBe(new ConversationFork("oc-fork", "msg_copy2"));
         using var body = JsonDocument.Parse(http.Body("POST /session/oc-1/fork"));
         body.RootElement.GetProperty("messageID").GetString().ShouldBe("msg_3");
     }
@@ -56,7 +56,7 @@ public sealed class OpenCodeSideConversationTests
             User("msg_3", "use a tool"), Reply("msg_4", "tool-calls"), Reply("msg_5", null, completed: false)));
         await using var session = CreateSession(http);
 
-        await session.ForkSideConversationAsync(CancellationToken.None);
+        await session.ForkConversationAsync(CancellationToken.None);
 
         using var body = JsonDocument.Parse(http.Body("POST /session/oc-1/fork"));
         body.RootElement.GetProperty("messageID").GetString().ShouldBe("msg_3");
@@ -68,7 +68,7 @@ public sealed class OpenCodeSideConversationTests
         var http = Forking(Page(User("msg_1", "first"), Reply("msg_2", "stop")));
         await using var session = CreateSession(http);
 
-        await session.ForkSideConversationAsync(CancellationToken.None);
+        await session.ForkConversationAsync(CancellationToken.None);
 
         using var body = JsonDocument.Parse(http.Body("POST /session/oc-1/fork"));
         body.RootElement.TryGetProperty("messageID", out _).ShouldBeFalse();
@@ -80,7 +80,7 @@ public sealed class OpenCodeSideConversationTests
         var http = Forking(Page(User("msg_1", "first"), Reply("msg_2", null, completed: false)));
         await using var session = CreateSession(http);
 
-        await session.ForkSideConversationAsync(CancellationToken.None);
+        await session.ForkConversationAsync(CancellationToken.None);
 
         using var body = JsonDocument.Parse(http.Body("POST /session/oc-1/fork"));
         body.RootElement.GetProperty("messageID").GetString().ShouldBe("msg_1");

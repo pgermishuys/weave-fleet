@@ -22,6 +22,11 @@ public sealed record HarnessCapabilities
     public bool SupportsAgents { get; init; }
     public bool SupportsModelSelection { get; init; }
     public bool SupportsCommands { get; init; }
+
+    /// <summary>
+    /// A session can be forked: <see cref="IHarnessSession.ForkConversationAsync"/> copies its conversation up to its last
+    /// finished turn into a new harness session, which Fleet resumes as a session of its own. Without it Fork is off.
+    /// </summary>
     public bool SupportsForking { get; init; }
     public bool SupportsResume { get; init; }
     public bool SupportsImageAttachments { get; init; }
@@ -74,10 +79,10 @@ public sealed record HarnessCapabilities
     public bool SupportsShellCommands { get; init; }
 
     /// <summary>
-    /// A session can fork into a side conversation (<c>/btw</c> in the composer):
-    /// <see cref="IHarnessSession.ForkSideConversationAsync"/> copies the conversation up to its last finished turn into
-    /// a new harness session, which Fleet runs as a hidden session of its own beside the first. Prompts to it carry
-    /// <see cref="PromptOptions.ModelNotes"/>, which the harness gives the model without showing them as the user's.
+    /// A session can fork into a side conversation (<c>/btw</c> in the composer): a fork
+    /// (<see cref="IHarnessSession.ForkConversationAsync"/>) Fleet runs as a hidden session of its own beside the first.
+    /// Prompts to it carry <see cref="PromptOptions.ModelNotes"/>, which the harness gives the model without showing them
+    /// as the user's.
     /// </summary>
     public bool SupportsSideConversations { get; init; }
 }
@@ -439,15 +444,15 @@ public enum PromptDelivery
 }
 
 /// <summary>
-/// A side conversation's start (<see cref="IHarnessSession.ForkSideConversationAsync"/>): a harness session holding a
-/// copy of the conversation up to its last finished turn.
+/// A fork (<see cref="IHarnessSession.ForkConversationAsync"/>): a harness session holding a copy of the conversation up
+/// to its last finished turn.
 /// </summary>
-/// <param name="ResumeToken">The new harness session, which Fleet resumes as the side conversation's session.</param>
+/// <param name="ResumeToken">The new harness session, which Fleet resumes as the fork's session.</param>
 /// <param name="BoundaryMessageId">
-/// The newest message the fork copied, under the fork's own id; the side conversation is what comes after it. Null when
+/// The newest message the fork copied, under the fork's own id; a side conversation is what comes after it. Null when
 /// the fork copied nothing.
 /// </param>
-public sealed record SideConversationFork(string ResumeToken, string? BoundaryMessageId);
+public sealed record ConversationFork(string ResumeToken, string? BoundaryMessageId);
 
 /// <summary>A shell command the user runs in the session's folder (see <see cref="HarnessCapabilities.SupportsShellCommands"/>).</summary>
 public sealed record ShellCommandOptions

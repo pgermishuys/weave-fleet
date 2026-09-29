@@ -363,17 +363,17 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
     /// A child session holding this one's history up to its last finished turn: V2 copies what comes before the message
     /// it's given. A turn still running is left out, or the fork would carry on with it.
     /// </summary>
-    public async Task<SideConversationFork?> ForkSideConversationAsync(CancellationToken ct)
+    public async Task<ConversationFork?> ForkConversationAsync(CancellationToken ct)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         var server = await AttachedServerAsync(ct).ConfigureAwait(false);
-        var before = await FindSideForkPointAsync(server, ct).ConfigureAwait(false);
+        var before = await FindForkPointAsync(server, ct).ConfigureAwait(false);
         var fork = await server.Client.ForkSessionAsync(ResumeToken, before, ct).ConfigureAwait(false);
         try
         {
-            // The newest message the fork holds marks where the side conversation starts.
+            // The newest message the fork holds marks where a side conversation starts.
             var newest = await server.Client.GetMessagesAsync(fork.Id!, 1, null, ct).ConfigureAwait(false);
-            return new SideConversationFork(fork.Id!, newest.Data is { Count: > 0 } data ? data[0].Id : null);
+            return new ConversationFork(fork.Id!, newest.Data is { Count: > 0 } data ? data[0].Id : null);
         }
         catch
         {
@@ -382,20 +382,20 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         }
     }
 
-    private const int SideForkPageSize = 50;
-    private const int SideForkMaxPages = 10;
+    private const int ForkPageSize = 50;
+    private const int ForkMaxPages = 10;
 
     /// <summary>
-    /// The message a side conversation's fork stops before: the first one after the last finished turn, or null when
+    /// The message a fork stops before: the first one after the last finished turn, or null when
     /// the session ends with one (copy it all). With no finished turn at all, the oldest message, so nothing is copied.
     /// </summary>
-    private async Task<string?> FindSideForkPointAsync(OpenCode2Server server, CancellationToken ct)
+    private async Task<string?> FindForkPointAsync(OpenCode2Server server, CancellationToken ct)
     {
         string? cursor = null;
         string? firstAfterFinishedTurn = null;
-        for (var page = 0; page < SideForkMaxPages; page++)
+        for (var page = 0; page < ForkMaxPages; page++)
         {
-            var messages = await server.Client.GetMessagesAsync(ResumeToken, SideForkPageSize, cursor, ct).ConfigureAwait(false);
+            var messages = await server.Client.GetMessagesAsync(ResumeToken, ForkPageSize, cursor, ct).ConfigureAwait(false);
             var data = messages.Data ?? [];
             foreach (var message in data)
             {
@@ -405,7 +405,7 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
             }
 
             // V2 sends a next cursor with every page; one that isn't full is the last.
-            if (data.Count < SideForkPageSize || messages.Cursor?.Next is not { } next)
+            if (data.Count < ForkPageSize || messages.Cursor?.Next is not { } next)
                 return firstAfterFinishedTurn;
             cursor = next;
         }

@@ -35,7 +35,8 @@ UTF-8, with `Content-Type: application/json`.
 | GET | `/api/sessions/{id}/diffs` | The changes in its folder |
 | POST | `/api/sessions/{id}/prompt` | Send it a message: `{"text": "…"}`. An idle session wakes up. If you have the `fleet_message` tool, use it instead: Fleet refuses this from agents then |
 | POST | `/api/sessions/{id}/abort` | Stop the turn it's working on |
-| POST | `/api/sessions/{id}/fork` | Copy it into a new session: `{"title": "…"}` |
+| POST | `/api/sessions/{id}/fork` | A new session with a copy of its conversation up to the last finished turn, in the same folder: `{"title": "…"}`. 400 on a harness that can't fork (Claude Code, Pi) |
+| POST | `/api/sessions/{id}/new-in-folder` | A new, empty session in its folder, on the same harness and profile |
 | POST | `/api/sessions/{id}/sources` | Add a GitHub issue or pull request to it as context |
 | PATCH | `/api/sessions/{id}` | Rename it: `{"title": "…"}` |
 | PATCH | `/api/sessions/{id}/tags` | Replace its tags: `{"tags": ["…"]}` |

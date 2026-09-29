@@ -172,16 +172,16 @@ public sealed class FakeHarnessSession : IHarnessSession
     public Task<IOffTheRecordConversation?> StartOffTheRecordAsync(CancellationToken ct)
         => Task.FromResult(OffTheRecordConversation);
 
-    /// <summary>What <see cref="ForkSideConversationAsync"/> returns; null (the default) means "can't".</summary>
-    public SideConversationFork? SideConversationFork { get; set; }
+    /// <summary>What <see cref="ForkConversationAsync"/> returns; null (the default) means "can't".</summary>
+    public ConversationFork? ConversationFork { get; set; }
 
-    /// <summary>How many times <see cref="ForkSideConversationAsync"/> was called.</summary>
-    public int SideConversationForks { get; private set; }
+    /// <summary>How many times <see cref="ForkConversationAsync"/> was called.</summary>
+    public int ConversationForks { get; private set; }
 
-    public Task<SideConversationFork?> ForkSideConversationAsync(CancellationToken ct)
+    public Task<ConversationFork?> ForkConversationAsync(CancellationToken ct)
     {
-        SideConversationForks++;
-        return Task.FromResult(SideConversationFork);
+        ConversationForks++;
+        return Task.FromResult(ConversationFork);
     }
 
     public Task<string?> GetActivityStatusAsync(CancellationToken ct)

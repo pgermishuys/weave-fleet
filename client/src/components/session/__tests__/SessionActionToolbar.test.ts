@@ -53,6 +53,26 @@ describe("SessionActionToolbar", () => {
     expect(wrapper.find("[data-testid='session-delete-button']").exists()).toBe(false);
   });
 
+  it("shows_fork_off_with_its_reason_when_the_harness_cant_fork", () => {
+    const reason = "Claude Code can't copy a conversation, so its sessions can't be forked.";
+    const wrapper = mountToolbar({ canFork: false, forkDisabledReason: reason });
+
+    const button = wrapper.get("[data-testid='session-archived-fork-button']");
+    expect(button.attributes("disabled")).toBeDefined();
+    expect(wrapper.get("[data-testid='session-fork-button-wrapper']").attributes("title")).toBe(reason);
+
+    void button.trigger("click");
+    expect(wrapper.emitted("fork")).toBeUndefined();
+  });
+
+  it("says_what_fork_does_when_it_is_on", () => {
+    const wrapper = mountToolbar({ canFork: true });
+
+    expect(wrapper.get("[data-testid='session-fork-button-wrapper']").attributes("title"))
+      .toBe("Fork: a new session with a copy of this conversation");
+    expect(wrapper.get("[data-testid='session-archived-fork-button']").attributes("disabled")).toBeUndefined();
+  });
+
   it("keeps_archive_and_delete_inside_the_more_menu", () => {
     const wrapper = mountToolbar({ canArchive: true, canDelete: true });
     const menu = wrapper.get("[data-testid='more-menu']");

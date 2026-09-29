@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Diagnostics;
+using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
@@ -173,11 +174,13 @@ internal sealed partial class InProcessFanOutService : BackgroundService
         // Use the parsed activityStatus from the event (not the tracker) to compute capabilities
         // for this specific broadcast. The tracker may not yet reflect this status change.
         var isLive = instanceTracker.Get(session.InstanceId) is not null;
+        var harness = scope.ServiceProvider.GetService<IHarnessRegistry>()?.GetByType(session.HarnessType);
         return SessionCapabilitiesResolver.Resolve(
             session.LifecycleStatus,
             session.RetentionStatus,
             activityStatus ?? "idle",
-            isLive);
+            isLive,
+            SessionCapabilitiesResolver.ForkUnsupportedReason(harness));
     }
 
     private static string? ParseActivityStatus(string eventType, JsonElement? payload)

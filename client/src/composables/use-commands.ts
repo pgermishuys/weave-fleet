@@ -9,6 +9,7 @@ import {
   Download,
   Eraser,
   FileSearch,
+  FolderPlus,
   Focus,
   GitBranchPlus,
   LayoutGrid,
@@ -33,7 +34,7 @@ import { clearDraftText } from "@/composables/use-draft-state";
 import type { Command } from "@/lib/command-registry";
 import { dispatchCommandEvent } from "@/lib/command-events";
 import { matchesKeyboardShortcut, useKeyboardShortcut } from "@/composables/use-keyboard-shortcut";
-import { useAbortSession, useForkSession } from "@/composables/use-session-actions";
+import { useAbortSession, useForkSession, useNewSessionInFolder } from "@/composables/use-session-actions";
 import type { SessionListItem } from "@/api/client";
 import { api } from "@/api/client";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
@@ -86,6 +87,7 @@ export function useCommands() {
   const { toggleSidebar, isMobileNav, mobileDrawerOpen, isRightPanelVisible, toggleRightPanel } = useSidebarMobile();
   const { abortSession } = useAbortSession();
   const { forkSession } = useForkSession();
+  const { startSessionInFolderOf } = useNewSessionInFolder();
   const router = useRouter();
   const pathname = useLocation({
     select: (location) => location.pathname,
@@ -96,6 +98,14 @@ export function useCommands() {
   const { currentTheme } = storeToRefs(themeStore);
 
   const themeCycle: ThemeSelection[] = ["system", "dark", "light"];
+
+  /** Why the active session can't be forked (its harness can't copy a conversation, or it's archived); null when it can. */
+  const activeForkDisabledReason = computed(() => {
+    const active = sessions.value.find((item) => item.session.id === activeSessionId.value);
+    return active?.capabilities?.canFork === false
+      ? active.capabilities.forkDisabledReason ?? "This session can't be forked."
+      : null;
+  });
 
   /** The session whose terminal Ctrl J toggles: the one open on screen, when Fleet has terminals on. */
   const terminalSessionId = computed(() => {
@@ -182,6 +192,23 @@ export function useCommands() {
     sessionsStore.patchSession(currentSession.session.id, {
       activityStatus: "idle",
       sessionStatus: "idle",
+    });
+  }
+
+  /** A new, empty session in the active session's folder, on its harness and profile. */
+  async function startSessionInCurrentFolder(): Promise<void> {
+    if (!activeSessionId.value) {
+      return;
+    }
+
+    const response = await startSessionInFolderOf(activeSessionId.value);
+
+    sessionsStore.setActiveSessionId(response.session.id);
+    sidebarStore.setActiveRail("sessions");
+    void router.navigate({
+      to: "/sessions/$id",
+      params: { id: response.session.id },
+      search: { instanceId: response.instanceId, parentSessionId: undefined },
     });
   }
 
@@ -469,15 +496,33 @@ export function useCommands() {
       {
         id: "fork-session",
         label: "Fork session",
-        description: activeSessionId.value ? "Create a fork from the active session." : "No active session selected.",
+        description: activeSessionId.value
+          ? activeForkDisabledReason.value ?? "A new session with a copy of the active conversation."
+          : "No active session selected.",
         icon: GitBranchPlus,
         category: "Session",
         paletteHotkey: bindings.value["fork-session"]?.paletteHotkey ?? undefined,
         globalShortcut: bindings.value["fork-session"]?.globalShortcut ?? undefined,
-        keywords: ["fork", "branch", "duplicate", "session"],
-        disabled: activeSessionId.value === null,
+        keywords: ["fork", "branch", "duplicate", "copy", "session"],
+        disabled: activeSessionId.value === null || activeForkDisabledReason.value !== null,
         action: () => {
           void forkCurrentSession().catch(() => {});
+        },
+      },
+      {
+        id: "new-session-in-folder",
+        label: "New session in this folder",
+        description: activeSessionId.value
+          ? "An empty session in the active session's folder, on the same harness."
+          : "No active session selected.",
+        icon: FolderPlus,
+        category: "Session",
+        paletteHotkey: bindings.value["new-session-in-folder"]?.paletteHotkey ?? undefined,
+        globalShortcut: bindings.value["new-session-in-folder"]?.globalShortcut ?? undefined,
+        keywords: ["new", "session", "folder", "same", "empty"],
+        disabled: activeSessionId.value === null,
+        action: () => {
+          void startSessionInCurrentFolder().catch(() => {});
         },
       },
       {

@@ -550,8 +550,8 @@ public sealed class OpenCode2AgentsTests
         capabilities.SupportsCommands.ShouldBeTrue();
         capabilities.SupportsDelegation.ShouldBeTrue();
         capabilities.SupportsOffTheRecordPrompt.ShouldBeTrue();
-        // Fleet's fork starts a new session in the same folder for every harness; it doesn't use V2's.
-        capabilities.SupportsForking.ShouldBeFalse();
+        // Fork copies the conversation with V2's own fork.
+        capabilities.SupportsForking.ShouldBeTrue();
         capabilities.SupportsProfiles.ShouldBeTrue();
     }
 

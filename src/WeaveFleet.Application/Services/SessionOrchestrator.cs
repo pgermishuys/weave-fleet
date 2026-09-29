@@ -529,31 +529,6 @@ public sealed partial class SessionOrchestrator(
         return new CreateSessionResult(session, harnessInstance.InstanceId, workspace.Id, workspace.Branch);
     }
 
-    // ── Fork ───────────────────────────────────────────────────────────────────
-
-    public async Task<Result<CreateSessionResult>> ForkSessionAsync(
-        string parentId,
-        string? title = null,
-        CancellationToken ct = default)
-    {
-        var parent = await sessionRepository.GetByIdAsync(parentId);
-        if (parent is null)
-            return FleetError.NotFoundFor(nameof(Session), parentId);
-
-        // Fork reuses same workspace directory (no isolation)
-        return await CreateSessionAsync(new CreateSessionRequest
-        {
-            Directory = parent.Directory,
-            Title = title ?? $"Fork of {parent.Title}",
-            ProjectId = parent.ProjectId,
-            HarnessType = parent.HarnessType,
-            // A fork keeps the parent's profile, including none: without the id it would get the default.
-            HarnessProfileId = parent.HarnessProfileId ?? HarnessProfileService.NoProfile,
-            IsolationStrategy = "existing",
-            IsInternalRequest = true
-        }, ct);
-    }
-
     public async Task<Result<Session>> EnsureDelegatedChildSessionAsync(
         string parentSessionId,
         string childHarnessSessionId,
@@ -2186,7 +2161,8 @@ public sealed partial class SessionOrchestrator(
             lifecycleStatus,
             session.RetentionStatus,
             activityStatus,
-            instanceTracker.Get(session.InstanceId) is not null);
+            instanceTracker.Get(session.InstanceId) is not null,
+            SessionCapabilitiesResolver.ForkUnsupportedReason(harnessRegistry.GetByType(session.HarnessType)));
 
     private async Task<Result<Session>> GetSessionAsync(string sessionId)
     {

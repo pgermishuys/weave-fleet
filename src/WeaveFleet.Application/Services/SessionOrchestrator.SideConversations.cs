@@ -312,84 +312,12 @@ public sealed partial class SessionOrchestrator
     /// </summary>
     private async Task<Result<Session>> StartSideConversationAsync(Session session, string question, CancellationToken ct)
     {
-        var runtime = harnessRegistry.GetRuntimeByType(session.HarnessType);
-        if (runtime is null)
-            return FleetError.NotFoundFor("HarnessRuntime", session.HarnessType);
-
-        var directory = await workspaceService.GetWorkspaceDirectoryAsync(session.WorkspaceId).ConfigureAwait(false);
-        if (directory.IsFailure)
-            return directory.Error;
-
-        var instance = await GetOrActivateInstanceAsync(session, ct).ConfigureAwait(false);
-        if (instance.IsFailure)
-            return instance.Error;
-
-        SideConversationFork? fork;
-        try
-        {
-            fork = await instance.Value.ForkSideConversationAsync(ct).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            LogSideConversationForkFailed(ex, session.Id);
-            return new FleetError("Session.SideQuestionFailed", "Fleet couldn't fork the session for /btw. Fleet's log has the details.");
-        }
-
-        if (fork is null)
-            return FleetError.ValidationError("Session.SideQuestion", $"{HarnessDisplayName(session)} couldn't fork this session.");
-
-        // Prepared as the session is, so the fork runs on the same harness process: a pooled process, or a V2 server,
-        // holds its sessions for the launch it was given.
-        var profile = await ResolveSessionProfileAsync(session.HarnessProfileId).ConfigureAwait(false);
-        if (profile.IsFailure)
-            return profile.Error;
-
-        var credentials = await credentialStore.GetDecryptedCredentialsAsync(session.UserId).ConfigureAwait(false);
-        var preparation = await runtime.PrepareRuntimeAsync(new RuntimePreparationContext
-        {
-            UserId = session.UserId,
-            UserCredentials = credentials,
-            ModelId = null,
-            WorkingDirectory = directory.Value,
-            Profile = profile.Value,
-        }, ct).ConfigureAwait(false);
-        if (preparation is RuntimePreparation.NotReady notReady)
-            return FleetError.ValidationError("Session.NotReady", string.Join(" ", notReady.Errors.Select(e => e.Message)));
-
         var sideId = Guid.NewGuid().ToString();
-        IHarnessSession sideInstance;
-        try
-        {
-            sideInstance = await runtime.ResumeAsync(new HarnessResumeOptions
-            {
-                SessionId = sideId,
-                WorkingDirectory = directory.Value,
-                OwnerUserId = session.UserId,
-                ResumeToken = fork.ResumeToken,
-                ProjectId = session.ProjectId,
-                ProjectName = await ResolveProjectNameAsync(session.ProjectId).ConfigureAwait(false),
-                LaunchArtifacts = ((RuntimePreparation.Ready)preparation).Artifacts,
-                ParentSessionId = session.Id,
-            }, ct).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            LogSideConversationForkFailed(ex, session.Id);
-            return new FleetError("Session.SideQuestionFailed", "Fleet couldn't start the side conversation. Fleet's log has the details.");
-        }
+        var forked = await ForkHarnessSessionAsync(session, sideId, ct).ConfigureAwait(false);
+        if (forked.IsFailure)
+            return forked.Error;
 
-        var registered = await instanceService.RegisterInstanceAsync(
-            id: sideInstance.InstanceId,
-            port: 0,
-            pid: sideInstance.ProcessId,
-            directory: directory.Value,
-            url: string.Empty).ConfigureAwait(false);
-        if (registered.IsFailure)
-        {
-            await SafeDeleteAsync(sideInstance, ct).ConfigureAwait(false);
-            return registered.Error;
-        }
-
+        var (fork, sideInstance, _) = forked.Value;
         var side = new Session
         {
             Id = sideId,
@@ -460,9 +388,6 @@ public sealed partial class SessionOrchestrator
         await sessionRepository.DeleteAsync(side.Id).ConfigureAwait(false);
         LogSideConversationClosed(side.Id, side.SideOfSessionId ?? string.Empty);
     }
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't fork session {SessionId} for a side conversation")]
-    private partial void LogSideConversationForkFailed(Exception ex, string sessionId);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Side conversation {SideSessionId} started on session {SessionId} after message {BoundaryMessageId}")]
     private partial void LogSideConversationStarted(string sideSessionId, string sessionId, string? boundaryMessageId);

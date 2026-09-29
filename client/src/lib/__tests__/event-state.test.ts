@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyPartUpdate, applyTextDelta, mergeMessageUpdate, ensureMessage } from "@/lib/event-state";
+import { applyPartUpdate, applyTextDelta, compareMessageIds, mergeMessageUpdate, ensureMessage } from "@/lib/event-state";
 
 describe("applyPartUpdate", () => {
   it("creates_a_message_for_the_first_tool_part", () => {
@@ -412,6 +412,36 @@ describe("mergeMessageUpdate preserves file parts from snapshot", () => {
 });
 
 describe("message ordering", () => {
+  describe("compareMessageIds", () => {
+    it("orders_a_forks_copies_by_their_counter_not_as_text", () => {
+      // A fork's copies share a stem and count up; as text _17 would come before _6.
+      const ids = ["msg_0ec1ad2f2_18", "msg_0ec1ad2f2_6", "msg_0ec1ad2f2_17", "msg_0ec1ad2f2_7"];
+
+      expect([...ids].sort(compareMessageIds)).toEqual([
+        "msg_0ec1ad2f2_6", "msg_0ec1ad2f2_7", "msg_0ec1ad2f2_17", "msg_0ec1ad2f2_18",
+      ]);
+    });
+
+    it("orders_other_ids_as_text", () => {
+      expect(compareMessageIds("msg_0ec1ad2f2001aaa", "msg_0ec1ae749000bbb")).toBeLessThan(0);
+      expect(compareMessageIds("msg_b", "msg_a")).toBeGreaterThan(0);
+      expect(compareMessageIds("msg_a", "msg_a")).toBe(0);
+      // A new message after a fork's copies: its time part is later than the copies' stem.
+      expect(compareMessageIds("msg_0ec1ad2f2_18", "msg_0ec1ae749000FlcM")).toBeLessThan(0);
+    });
+
+    it("keeps_a_forks_conversation_in_order_as_it_arrives", () => {
+      let messages = ensureMessage([], { id: "msg_0ec1ad2f2_17", role: "user", sessionID: "s" });
+      messages = ensureMessage(messages, { id: "msg_0ec1ad2f2_6", role: "user", sessionID: "s" });
+      messages = ensureMessage(messages, { id: "msg_0ec1ae749000Flc", role: "user", sessionID: "s" });
+      messages = ensureMessage(messages, { id: "msg_0ec1ad2f2_7", role: "assistant", sessionID: "s" });
+
+      expect(messages.map((message) => message.messageId)).toEqual([
+        "msg_0ec1ad2f2_6", "msg_0ec1ad2f2_7", "msg_0ec1ad2f2_17", "msg_0ec1ae749000Flc",
+      ]);
+    });
+  });
+
   describe("ensureMessage", () => {
     it("inserts_messages_in_chronological_order_by_message_id", () => {
       // msg_ IDs with hex timestamps sort lexicographically in chronological order

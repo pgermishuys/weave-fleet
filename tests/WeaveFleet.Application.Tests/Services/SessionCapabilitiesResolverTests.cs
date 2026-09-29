@@ -1,6 +1,7 @@
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.DTOs;
 using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Testing.Fakes;
 
 namespace WeaveFleet.Application.Tests.Services;
@@ -139,6 +140,36 @@ public sealed class SessionCapabilitiesResolverTests
         withoutLiveInstance.AbortDisabledReason.ShouldBe(SessionNotRunningReason);
         withLiveInstance.CanPrompt.ShouldBeTrue();
         withLiveInstance.CanAbort.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void fork_follows_the_harness_and_says_why_it_is_off()
+    {
+        var harnesses = new FakeHarnessRegistry();
+        harnesses.Register(new FakeHarness("opencode2", "OpenCode 2", new HarnessCapabilities { SupportsForking = true }));
+        harnesses.Register(new FakeHarness("claude-code", "Claude Code", new HarnessCapabilities { SupportsForking = false }));
+        var sut = new SessionCapabilitiesResolver(new InstanceTracker(), new SessionActivityTracker(), harnesses);
+
+        var canFork = sut.Resolve(new Session { Id = "a", InstanceId = "i-a", HarnessType = "opencode2" });
+        var cantFork = sut.Resolve(new Session { Id = "b", InstanceId = "i-b", HarnessType = "claude-code" });
+        var archived = sut.Resolve(new Session { Id = "c", InstanceId = "i-c", HarnessType = "claude-code", RetentionStatus = Archived });
+
+        canFork.CanFork.ShouldBeTrue();
+        canFork.ForkDisabledReason.ShouldBeNull();
+        cantFork.CanFork.ShouldBeFalse();
+        cantFork.ForkDisabledReason.ShouldBe("Claude Code can't copy a conversation, so its sessions can't be forked.");
+        // Everything else about the session is as it was.
+        cantFork.CanPrompt.ShouldBeTrue();
+        cantFork.CanArchive.ShouldBeTrue();
+        archived.CanFork.ShouldBeFalse();
+        archived.ForkDisabledReason.ShouldBe(ArchivedReadOnlyReason);
+    }
+
+    [Fact]
+    public void an_unknown_harness_is_not_refused_here()
+    {
+        // Fork itself reports a harness it can't find; the menu isn't the place to guess.
+        SessionCapabilitiesResolver.ForkUnsupportedReason(null).ShouldBeNull();
     }
 
     private static TheoryData<string, string, string, bool> CreateStateCombinations()
