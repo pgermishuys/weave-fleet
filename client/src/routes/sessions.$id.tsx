@@ -497,6 +497,10 @@ const SessionDetailPage = defineComponent({
     const canArchive = computed(() => !isArchived.value && (effectiveActionCapabilities.value?.canArchive ?? fallbackCanArchive.value));
     const canRestore = computed(() => isArchived.value);
     const canFork = computed(() => effectiveActionCapabilities.value?.canFork ?? true);
+    // An archived session has no Fork; on a harness that can't copy a conversation it shows off, with why.
+    const forkDisabledReason = computed(() => isArchived.value || canFork.value
+      ? null
+      : effectiveActionCapabilities.value?.forkDisabledReason ?? "This session can't be forked.");
     const canDelete = computed(() => effectiveActionCapabilities.value?.canDelete ?? true);
     const isAnyActionPending = computed(() => isAborting.value
       || isRestoring.value
@@ -780,6 +784,7 @@ const SessionDetailPage = defineComponent({
                   canRestore={canRestore.value}
                   canRename={!isArchived.value}
                   canFork={canFork.value}
+                  forkDisabledReason={forkDisabledReason.value}
                   canDelete={canDelete.value}
                   isPending={isAnyActionPending.value}
                   isAborting={isAborting.value}

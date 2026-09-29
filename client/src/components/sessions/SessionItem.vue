@@ -152,6 +152,11 @@ const canArchive = computed(() => !isArchivedSession.value && (props.session.cap
 const canRestore = computed(() => isArchivedSession.value);
 const isSelected = computed(() => selection.isSelected(sessionId.value));
 const canFork = computed(() => props.session.capabilities?.canFork ?? true);
+/** Fork shows on every session that isn't archived; on a harness that can't copy a conversation it's off, with why. */
+const showFork = computed(() => !isArchivedSession.value);
+const forkDisabledReason = computed(() => canFork.value
+  ? null
+  : props.session.capabilities?.forkDisabledReason ?? "This session can't be forked.");
 const canDelete = computed(() => props.session.capabilities?.canDelete ?? true);
 const isForkingCurrentSession = computed(() => isForking.value && forkingSessionId.value === sessionId.value);
 /**
@@ -594,12 +599,19 @@ function removeSessionFromStore(): void {
       </ContextMenuItem>
 
       <ContextMenuItem
-        v-if="canFork"
-        :disabled="isAnyActionPending"
+        v-if="showFork"
+        :disabled="isAnyActionPending || !canFork"
+        data-testid="session-context-fork"
         @select="handleFork"
       >
         <GitFork class="size-3.5" />
-        Fork
+        <span class="flex flex-col">
+          <span>Fork</span>
+          <span
+            class="text-[11px] text-muted-foreground"
+            data-testid="session-context-fork-note"
+          >{{ forkDisabledReason ?? "A new session with a copy of this conversation" }}</span>
+        </span>
       </ContextMenuItem>
 
       <ContextMenuItem

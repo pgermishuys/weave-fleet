@@ -377,7 +377,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     /// OpenCode's fork copies the messages before the one it's given. A turn still running is left out: its prompt and
     /// half a reply would be the newest thing the fork reads, and it would carry on with that turn.
     /// </remarks>
-    public async Task<SideConversationFork?> ForkSideConversationAsync(CancellationToken ct)
+    public async Task<ConversationFork?> ForkConversationAsync(CancellationToken ct)
     {
         await EnsureSessionAsync(ct).ConfigureAwait(false);
         var sessionId = _openCodeSessionId;
@@ -385,13 +385,13 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             return null;
 
         var http = _instanceHandle.HttpClient;
-        var forkBefore = await FindSideForkPointAsync(sessionId, ct).ConfigureAwait(false);
+        var forkBefore = await FindForkPointAsync(sessionId, ct).ConfigureAwait(false);
         var fork = await http.ForkSessionAsync(sessionId, new OpenCodeForkRequest { MessageId = forkBefore }, _workingDirectory, ct).ConfigureAwait(false);
         try
         {
-            // The fork's copies have ids of their own: the newest one marks where the side conversation starts.
+            // The fork's copies have ids of their own: the newest one marks where a side conversation starts.
             var newest = await http.GetMessagePageAsync(fork.Id, _workingDirectory, 1, null, ct).ConfigureAwait(false);
-            return new SideConversationFork(fork.Id, newest.Messages.Count > 0 ? newest.Messages[^1].Info.Id : null);
+            return new ConversationFork(fork.Id, newest.Messages.Count > 0 ? newest.Messages[^1].Info.Id : null);
         }
         catch
         {
@@ -401,11 +401,11 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     }
 
     /// <summary>
-    /// The message a side conversation's fork stops before: the first one after the last finished turn, or null when
+    /// The message a fork stops before: the first one after the last finished turn, or null when
     /// the conversation ends with a finished turn (copy it all). With no finished turn at all, the oldest message, so
     /// nothing is copied.
     /// </summary>
-    private async Task<string?> FindSideForkPointAsync(string sessionId, CancellationToken ct)
+    private async Task<string?> FindForkPointAsync(string sessionId, CancellationToken ct)
     {
         string? before = null;
         string? firstAfterFinishedTurn = null;

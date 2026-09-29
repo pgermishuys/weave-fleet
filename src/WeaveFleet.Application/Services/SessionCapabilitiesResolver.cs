@@ -1,9 +1,14 @@
+using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.DTOs;
 using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Application.Services;
 
-public sealed class SessionCapabilitiesResolver(InstanceTracker instanceTracker, SessionActivityTracker activityTracker)
+public sealed class SessionCapabilitiesResolver(
+    InstanceTracker instanceTracker,
+    SessionActivityTracker activityTracker,
+    IHarnessRegistry? harnessRegistry = null)
 {
     public SessionActionCapabilities Resolve(Session session)
     {
@@ -13,14 +18,31 @@ public sealed class SessionCapabilitiesResolver(InstanceTracker instanceTracker,
             session.LifecycleStatus,
             session.RetentionStatus,
             activityTracker.GetEffectiveActivityStatus(session.Id) ?? "idle",
-            instanceTracker.Get(session.InstanceId) is not null);
+            instanceTracker.Get(session.InstanceId) is not null,
+            harnessRegistry is null ? null : ForkUnsupportedReason(harnessRegistry.GetByType(session.HarnessType)));
     }
 
+    /// <summary>
+    /// Why sessions on <paramref name="harness"/> can't be forked, or null when they can: a fork is a copy of the
+    /// conversation in the harness (<see cref="HarnessCapabilities.SupportsForking"/>), and a harness that can't copy one
+    /// has nothing to fork.
+    /// </summary>
+    public static string? ForkUnsupportedReason(IHarness? harness) => harness switch
+    {
+        null => null,
+        { Capabilities.SupportsForking: true } => null,
+        _ => $"{harness.DisplayName} can't copy a conversation, so its sessions can't be forked.",
+    };
+
+    /// <param name="forkUnsupportedReason">
+    /// Why the session's harness can't fork (<see cref="ForkUnsupportedReason"/>); null when it can.
+    /// </param>
     public static SessionActionCapabilities Resolve(
         string? lifecycleStatus,
         string? retentionStatus,
         string? activityStatus,
-        bool isLive)
+        bool isLive,
+        string? forkUnsupportedReason = null)
     {
         var normalizedRetentionStatus = Normalize(retentionStatus, "active");
         var effectiveLifecycleStatus = GetEffectiveLifecycleStatus(lifecycleStatus, isLive);
@@ -34,7 +56,7 @@ public sealed class SessionCapabilitiesResolver(InstanceTracker instanceTracker,
         var canAbort = !isArchived && isRunning && isBusy;
         var canArchive = !isArchived;
         var canUnarchive = isArchived;
-        var canFork = !isArchived;
+        var canFork = !isArchived && forkUnsupportedReason is null;
         const bool canDelete = true;
 
         return new SessionActionCapabilities(
@@ -50,7 +72,7 @@ public sealed class SessionCapabilitiesResolver(InstanceTracker instanceTracker,
             AbortDisabledReason: canAbort ? null : GetAbortDisabledReason(isArchived, isRunning, isBusy),
             ArchiveDisabledReason: canArchive ? null : GetAlreadyArchivedReason(isArchived),
             UnarchiveDisabledReason: canUnarchive ? null : "Session is not archived.",
-            ForkDisabledReason: canFork ? null : GetArchivedReadOnlyReason(isArchived),
+            ForkDisabledReason: canFork ? null : GetArchivedReadOnlyReason(isArchived) ?? forkUnsupportedReason,
             DeleteDisabledReason: null);
     }
 

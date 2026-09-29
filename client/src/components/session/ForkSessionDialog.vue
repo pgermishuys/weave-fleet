@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -32,7 +33,8 @@ const { forkSession, clearError, isForking, error } = useForkSession();
 const resolvedSourceTitle = computed(() => props.sourceTitle.trim() || "Untitled session");
 
 function resetForm(): void {
-  title.value = resolvedSourceTitle.value;
+  // What the server calls a fork given no title.
+  title.value = `Fork of ${resolvedSourceTitle.value}`;
 }
 
 function handleOpenChange(value: boolean): void {
@@ -89,6 +91,10 @@ watch(
         <DialogTitle data-testid="fork-session-dialog-title">
           Fork session
         </DialogTitle>
+        <DialogDescription data-testid="fork-session-dialog-description">
+          A new session with a copy of this conversation, up to the last reply that finished. From there the two
+          conversations go their own ways. Both work in the same folder, so each sees the files the other changes.
+        </DialogDescription>
       </DialogHeader>
 
       <form

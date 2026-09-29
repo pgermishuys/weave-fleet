@@ -15,7 +15,7 @@ namespace WeaveFleet.Application.Tests.Services;
 /// </summary>
 public sealed class SessionOrchestratorProfileTests : IDisposable
 {
-    private static readonly HarnessCapabilities WithProfiles = new() { SupportsProfiles = true, SupportsResume = true };
+    private static readonly HarnessCapabilities WithProfiles = new() { SupportsProfiles = true, SupportsResume = true, SupportsForking = true };
 
     private readonly string _directory = Path.Combine(Path.GetTempPath(), $"fleet-profile-{Guid.NewGuid():N}");
     private readonly SessionOrchestratorBuilder _builder;
@@ -36,7 +36,7 @@ public sealed class SessionOrchestratorProfileTests : IDisposable
             Id = id, Directory = "/tmp", Url = string.Empty, Status = "running", CreatedAt = "2026-01-01",
         });
         _runtime = _builder.RegisterHarness("opencode", "OpenCode", WithProfiles);
-        _runtime.DefaultSession = new FakeHarnessSession("inst-1");
+        _runtime.DefaultSession = new FakeHarnessSession("inst-1") { ConversationFork = new ConversationFork("token-fork", null) };
         _sut = _builder.Build();
     }
 
@@ -165,8 +165,14 @@ public sealed class SessionOrchestratorProfileTests : IDisposable
         var forkedWith = await _sut.ForkSessionAsync("with-profile");
         var forkedWithout = await _sut.ForkSessionAsync("without-profile");
 
+        forkedWith.IsSuccess.ShouldBeTrue(forkedWith.IsFailure ? forkedWith.Error.Description : null);
         forkedWith.Value.Session.HarnessProfileId.ShouldBe("work");
         forkedWithout.Value.Session.HarnessProfileId.ShouldBeNull();
+        // The copy is attached on a process prepared with the parent's profile, where the copy lives.
+        var forkResume = _runtime.ResumeCalls.Single(call => call.SessionId == forkedWith.Value.Session.Id);
+        forkResume.ResumeToken.ShouldBe("token-fork");
+        forkResume.ParentSessionId.ShouldBe("with-profile");
+        _runtime.PrepareCalls.ShouldContain(call => call.Profile != null && call.Profile.Id == "work");
     }
 
     [Fact]

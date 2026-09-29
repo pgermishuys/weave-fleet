@@ -15,6 +15,8 @@ const props = withDefaults(defineProps<{
   canArchive?: boolean;
   canRestore?: boolean;
   canFork?: boolean;
+  /** Why Fork is off; given, the button shows disabled with it instead of going away. */
+  forkDisabledReason?: string | null;
   canDelete?: boolean;
   canRename?: boolean;
   isPending?: boolean;
@@ -27,6 +29,7 @@ const props = withDefaults(defineProps<{
   errors?: readonly string[];
 }>(), {
   canFork: true,
+  forkDisabledReason: null,
   canDelete: true,
   canRename: true,
 });
@@ -68,17 +71,24 @@ const emit = defineEmits<{
 
     <span class="session-action-toolbar__divider" />
 
-    <Button
-      v-if="props.canFork"
-      variant="toolbar-icon"
-      size="toolbar"
-      data-testid="session-archived-fork-button"
-      :disabled="props.isPending || !props.hasSession"
-      title="Fork"
-      @click="emit('fork')"
+    <!-- A disabled button shows no tooltip, so its reason sits on a wrapper. -->
+    <span
+      v-if="props.canFork || props.forkDisabledReason"
+      class="session-action-toolbar__fork"
+      :title="props.canFork ? 'Fork: a new session with a copy of this conversation' : props.forkDisabledReason ?? undefined"
+      data-testid="session-fork-button-wrapper"
     >
-      <GitFork aria-hidden="true" />
-    </Button>
+      <Button
+        variant="toolbar-icon"
+        size="toolbar"
+        data-testid="session-archived-fork-button"
+        :disabled="props.isPending || !props.hasSession || !props.canFork"
+        :aria-label="props.canFork ? 'Fork' : `Fork: ${props.forkDisabledReason}`"
+        @click="emit('fork')"
+      >
+        <GitFork aria-hidden="true" />
+      </Button>
+    </span>
 
     <!-- Actions that are costly to hit by mistake live one click further away. -->
     <DropdownMenu :modal="false">
@@ -175,6 +185,10 @@ const emit = defineEmits<{
   height: 16px;
   margin-inline: 2px;
   background: var(--border);
+}
+
+.session-action-toolbar__fork {
+  display: inline-flex;
 }
 
 .session-action-toolbar__spinner {

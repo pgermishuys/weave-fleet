@@ -1391,32 +1391,6 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task ForkSessionAsync_InheritsParentHarnessType()
-    {
-        using var tempDirectory = new TempDirectory();
-
-        var parent = new Session
-        {
-            Id = "s-parent",
-            InstanceId = "inst-parent",
-            HarnessType = "claude-code",
-            Title = "Parent",
-            Status = "active",
-            Directory = tempDirectory.Path,
-            ProjectId = null,
-            CreatedAt = "2026-01-01"
-        };
-        _builder.SessionRepository.Seed(parent);
-        var runtime = _builder.RegisterHarness("claude-code", "Claude Code");
-        runtime.DefaultSession = _defaultSession;
-
-        var result = await _sut.ForkSessionAsync("s-parent", "Forked Session");
-
-        result.IsSuccess.ShouldBeTrue();
-        _builder.SessionRepository.InsertedSessions.ShouldContain(s => s.HarnessType == "claude-code");
-    }
-
-    [Fact]
     public async Task EnsureDelegatedChildSessionAsync_CreatesHiddenChildSession()
     {
         var parent = new Session

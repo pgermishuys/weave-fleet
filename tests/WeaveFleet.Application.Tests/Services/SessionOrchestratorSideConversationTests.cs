@@ -46,7 +46,7 @@ public sealed class SessionOrchestratorSideConversationTests : IAsyncDisposable
             SelectedModelId = "claude-sonnet",
         });
         _builder.InstanceTracker.Register("inst-1", _session);
-        _session.SideConversationFork = new SideConversationFork("ses_fork", "msg_boundary");
+        _session.ConversationFork = new ConversationFork("ses_fork", "msg_boundary");
     }
 
     [Fact]
@@ -97,7 +97,7 @@ public sealed class SessionOrchestratorSideConversationTests : IAsyncDisposable
         var second = await orchestrator.AskSideQuestionAsync("s1", "two", null, null);
 
         second.Value.SideConversation.Id.ShouldBe(first.Value.SideConversation.Id);
-        _session.SideConversationForks.ShouldBe(1);
+        _session.ConversationForks.ShouldBe(1);
         _side.SendPromptCalls.Select(c => c.Text).ShouldBe(["one", "two"], ignoreOrder: true);
         _side.SendPromptCalls.ShouldAllBe(c => c.Options!.ModelNotes!.Single() == SideConversations.BoundaryInstruction);
     }
@@ -111,7 +111,7 @@ public sealed class SessionOrchestratorSideConversationTests : IAsyncDisposable
 
         result.IsFailure.ShouldBeTrue();
         result.Error.Description.ShouldBe("OpenCode sessions can't fork, so /btw isn't available here.");
-        _session.SideConversationForks.ShouldBe(0);
+        _session.ConversationForks.ShouldBe(0);
     }
 
     [Theory]
@@ -135,7 +135,7 @@ public sealed class SessionOrchestratorSideConversationTests : IAsyncDisposable
         var result = await _builder.Build().AskSideQuestionAsync("s1", "why?", null, null);
 
         result.IsFailure.ShouldBeTrue();
-        _session.SideConversationForks.ShouldBe(0);
+        _session.ConversationForks.ShouldBe(0);
     }
 
     [Fact]
@@ -204,7 +204,7 @@ public sealed class SessionOrchestratorSideConversationTests : IAsyncDisposable
         await orchestrator.CloseSideConversationAsync("s1");
         var secondHarness = new FakeHarnessSession("inst-side-2");
         _runtime.ResumeBehavior = (_, _) => Task.FromResult<IHarnessSession>(secondHarness);
-        _session.SideConversationFork = new SideConversationFork("ses_fork2", "msg_boundary");
+        _session.ConversationFork = new ConversationFork("ses_fork2", "msg_boundary");
 
         var second = await orchestrator.AskSideQuestionAsync("s1", "two", null, null);
 
