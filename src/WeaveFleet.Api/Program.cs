@@ -415,6 +415,8 @@ JsonSerializationSetup.ConfigureHttpJson(builder.Services);
 // Register ProblemDetails service so Results.Problem() serializes correctly
 // with the source-generated context.
 builder.Services.AddProblemDetails();
+// A body an endpoint can't bind is answered with what's wrong with it instead of an empty 400.
+builder.Services.AddReadableBadRequests();
 
 builder.Services.AddOpenApi(options =>
 {
@@ -557,6 +559,7 @@ app.UseCors();
 // keeps the exception page, which WebApplication puts in front of everything.
 if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler();
+app.UseReadableBadRequests();
 
 app.Use(async (context, next) =>
 {
