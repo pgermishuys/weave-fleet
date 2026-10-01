@@ -298,6 +298,13 @@ public sealed partial class WorkspaceService(
     private static readonly TimeSpan _baseFetchTimeout = TimeSpan.FromSeconds(20);
 
     /// <summary>
+    /// The longest any other git command here may take. Checking out a worktree runs the repository's hooks and
+    /// Git LFS downloads, which take minutes in a big repository; a hook or sign-in that never finishes would
+    /// otherwise leave the session starting, and git running, for good.
+    /// </summary>
+    private static readonly TimeSpan GitTimeout = TimeSpan.FromMinutes(10);
+
+    /// <summary>
     /// Creates a worktree next to the repository and returns its directory and branch.
     /// With no <paramref name="baseBranch"/>, a requested branch that exists and isn't checked out
     /// anywhere is checked out as is; otherwise a new branch starts from the repository's default
@@ -549,11 +556,11 @@ public sealed partial class WorkspaceService(
     }
 
     private static Task<string> RunGitAsync(string workingDir, params string[] args) =>
-        GitCommand.RunAsync(workingDir, timeout: null, args);
+        GitCommand.RunAsync(workingDir, GitTimeout, args);
 
     private static async Task<string?> TryRunGitAsync(string workingDir, params string[] args)
     {
-        try { return await GitCommand.RunAsync(workingDir, timeout: null, args); }
+        try { return await GitCommand.RunAsync(workingDir, GitTimeout, args); }
         catch (GitCommandException) { return null; }
     }
 

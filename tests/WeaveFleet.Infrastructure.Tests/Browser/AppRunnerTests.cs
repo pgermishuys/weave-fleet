@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Infrastructure.Browser;
+using WeaveFleet.Infrastructure.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Tests.Browser;
 
@@ -290,6 +291,24 @@ public sealed class AppRunnerTests
 
         runner.Find("app_1")!.Status.ShouldBe(AppRunStatus.Stopped);
         runner.Find("app_2")!.IsLive.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task A_run_is_kept_with_the_harnesses_so_it_cannot_outlive_Fleet()
+    {
+        // Windows puts it in a Job Object instead, which has nothing to list.
+        if (!ProcessIdentity.IsSupported)
+            return;
+
+        using var runner = NewRunner();
+        var app = await StartAsync(runner, "app_1", "ses-1", Path.GetTempPath(), "exec sleep 30");
+        await WaitForAsync(() => runner.Find(app.Id)!.Pid is not null);
+        var pid = runner.Find(app.Id)!.Pid!.Value;
+
+        ProcessGroupHelper.RunningProcesses.ShouldContain(p => p.Pid == pid);
+
+        await runner.StopAsync(app.Id);
+        await WaitForAsync(() => ProcessGroupHelper.RunningProcesses.All(p => p.Pid != pid));
     }
 
     [Fact]
