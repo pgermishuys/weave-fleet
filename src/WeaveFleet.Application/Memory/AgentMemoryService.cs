@@ -19,7 +19,11 @@ public sealed record MemoryOverview(
     int MaxRepositoryNotes,
     int MaxMachineNotes);
 
-/// <summary>A note as the API shows it. <see cref="List"/> is <c>repository</c> or <c>machine</c>.</summary>
+/// <summary>
+/// A note as the API shows it. <see cref="List"/> is <c>repository</c> or <c>machine</c>. <see cref="Lifetime"/> is how
+/// many days of use the note lasts (none: it never expires), <see cref="DaysLeft"/> how many of them are left, and
+/// <see cref="Relearned"/> how many times an agent learned it again after it expired.
+/// </summary>
 public sealed record MemoryNoteView(
     string Id,
     string List,
@@ -29,14 +33,22 @@ public sealed record MemoryNoteView(
     string? SessionId,
     string? SessionTitle,
     DateTimeOffset Created,
-    DateTimeOffset Updated);
+    DateTimeOffset Updated,
+    int? Lifetime = null,
+    int? DaysLeft = null,
+    bool Expired = false,
+    int Relearned = 0);
 
-/// <summary>What a session in <see cref="Repository"/> reads, and roughly what that costs per request.</summary>
+/// <summary>
+/// What a session in <see cref="Repository"/> reads, and roughly what that costs per request. <see cref="ExpiredNotes"/>
+/// are learned notes that had their days: sessions don't read them, and the same lesson learned again brings one back.
+/// </summary>
 public sealed record MemoryNotesView(
     string? Repository,
     IReadOnlyList<MemoryNoteView> RepositoryNotes,
     IReadOnlyList<MemoryNoteView> MachineNotes,
-    int Tokens);
+    int Tokens,
+    IReadOnlyList<MemoryNoteView>? ExpiredNotes = null);
 
 /// <summary>
 /// What Fleet tells the user's windows when an agent saves a note, so they can offer Undo. <see cref="Previous"/> is the
@@ -44,14 +56,22 @@ public sealed record MemoryNotesView(
 /// </summary>
 public sealed record MemorySavedPayload(MemoryNoteView Note, string? RepositoryName, MemoryNoteView? Previous);
 
-/// <summary>The note an agent saved, and the one it replaced.</summary>
-public sealed record MemorySaveOutcome(MemoryNote Note, string? Replaced, bool AlreadyKnown);
+/// <summary>
+/// The note an agent saved, and the one it replaced. <see cref="Relearned"/>: it brought back an expired note that said
+/// much the same, which now lasts longer.
+/// </summary>
+public sealed record MemorySaveOutcome(MemoryNote Note, string? Replaced, bool AlreadyKnown, bool Relearned = false);
 
 /// <summary>
 /// The user's notes: Settings reads and edits them, agents save and forget them (<see cref="AgentMemoryBridge"/>), and
 /// every prompt writes what its session reads (<see cref="PrepareSessionAsync"/>). After any change the files every
 /// session folder reads are written again, for the sessions that start next. A running session keeps the notes it
 /// started with in its instructions, and hears about a change with its next prompt (<see cref="ChangesForAsync"/>).
+/// <para>
+/// A note an agent learned lasts <see cref="AgentMemory.LearnedLifetimeDays"/> days of use, then sessions stop reading
+/// it. Fleet keeps it, hidden: when an agent learns much the same lesson again, the old note comes back with twice the
+/// lifetime, so lessons that keep coming back stay and the ones whose cause is gone drop out.
+/// </para>
 /// </summary>
 public sealed partial class AgentMemoryService(
     IMemoryStore store,
@@ -122,17 +142,21 @@ public sealed partial class AgentMemoryService(
     {
         var repository = string.IsNullOrWhiteSpace(directory) ? null : AgentMemory.RepositoryOf(directory);
         var notes = await store.ListForAsync(user.UserId, repository, ct).ConfigureAwait(false);
-        var repositoryNotes = repository is null ? [] : RepositoryNotes(notes, repository);
-        var machineNotes = MachineNotes(notes);
+        var days = await store.ListDaysUsedAsync(user.UserId, repository, ct).ConfigureAwait(false);
+        var all = (repository is null ? [] : RepositoryNotes(notes, repository)).Concat(MachineNotes(notes)).ToList();
+        var expired = all.Where(note => IsExpired(note, days)).ToList();
+        var repositoryNotes = all.Except(expired).Where(note => note.List == MemoryList.Repository).ToList();
+        var machineNotes = all.Except(expired).Where(note => note.List == MemoryList.Machine).ToList();
         var tokens = repository is null
             ? 0
             : EstimateTokens(AgentMemoryPrompt.Render(repository, repositoryNotes, machineNotes));
 
         return new MemoryNotesView(
             repository,
-            [.. repositoryNotes.OrderByDescending(note => note.Updated).Select(ToView)],
-            [.. machineNotes.OrderByDescending(note => note.Updated).Select(ToView)],
-            tokens);
+            [.. repositoryNotes.OrderByDescending(note => note.Updated).Select(note => ToView(note, days))],
+            [.. machineNotes.OrderByDescending(note => note.Updated).Select(note => ToView(note, days))],
+            tokens,
+            [.. expired.OrderByDescending(note => note.Updated).Select(note => ToView(note, days))]);
     }
 
     /// <summary>A note the user writes in Settings.</summary>
@@ -147,7 +171,8 @@ public sealed partial class AgentMemoryService(
 
         var repository = parsed == MemoryList.Repository ? AgentMemory.RepositoryOf(directory!) : null;
         var notes = await store.ListForAsync(user.UserId, repository, ct).ConfigureAwait(false);
-        if (IsFull(notes, parsed, repository))
+        var days = await store.ListDaysUsedAsync(user.UserId, repository, ct).ConfigureAwait(false);
+        if (IsFull(Active(notes, days), parsed, repository))
             return FleetError.ValidationError("Memory.Full", FullMessage(parsed));
 
         var now = _time.GetUtcNow();
@@ -179,6 +204,23 @@ public sealed partial class AgentMemoryService(
         await store.DeleteAsync(user.UserId, [id], ct).ConfigureAwait(false);
         await RefreshContextAsync(user.UserId, Touched.Of(note), ct).ConfigureAwait(false);
         return Unit.Value;
+    }
+
+    /// <summary>
+    /// Keeps a learned note for good: it no longer expires, and one that had expired comes back. For a lesson the user
+    /// knows will stay true, so it isn't paid for again with a failure.
+    /// </summary>
+    public async Task<Result<MemoryNoteView>> KeepAsync(string id, CancellationToken ct = default)
+    {
+        if (await store.FindAsync(user.UserId, id, ct).ConfigureAwait(false) is not { } existing)
+            return FleetError.NotFoundFor("MemoryNote", id);
+        if (existing.Lifetime is null)
+            return ToView(existing);
+
+        var note = existing with { Lifetime = null };
+        await store.SaveAsync(user.UserId, note, ct).ConfigureAwait(false);
+        await RefreshContextAsync(user.UserId, Touched.Of(note), ct).ConfigureAwait(false);
+        return ToView(note);
     }
 
     /// <summary>
@@ -234,8 +276,11 @@ public sealed partial class AgentMemoryService(
         var userId = session.UserId;
         var repository = AgentMemory.RepositoryOf(session.Directory);
         var notes = await store.ListForAsync(userId, repository, ct).ConfigureAwait(false);
+        var days = await store.ListDaysUsedAsync(userId, repository, ct).ConfigureAwait(false);
         var reachable = RepositoryNotes(notes, repository).Concat(MachineNotes(notes)).ToList();
+        var active = Active(reachable, days);
         var trimmed = text!.Trim();
+        var noteKind = MemoryKinds.IsAgentKind(kind) ? kind! : MemoryKinds.Learned;
         var now = _time.GetUtcNow();
 
         MemoryNote? replaced = null;
@@ -247,42 +292,91 @@ public sealed partial class AgentMemoryService(
         }
 
         var noteRepository = parsed == MemoryList.Repository ? repository : null;
-        var same = reachable.FirstOrDefault(note =>
+        var same = active.FirstOrDefault(note =>
             note.List == parsed
             && note.Id != replaced?.Id
             && string.Equals(note.Text, trimmed, StringComparison.OrdinalIgnoreCase));
         if (same is not null && replaced is null)
         {
-            // Saying it again confirms it: it stays, dated today.
+            // Saying it again confirms it: it stays, dated today, and its days start again.
             var confirmed = same with { Updated = now };
             await store.SaveAsync(userId, confirmed, ct).ConfigureAwait(false);
             await RefreshContextAsync(userId, Touched.Of(confirmed), ct).ConfigureAwait(false);
             return new MemorySaveOutcome(confirmed, null, AlreadyKnown: true);
         }
 
-        if (replaced is null && IsFull(notes, parsed, noteRepository))
+        // The same lesson learned again after it expired: the failure came back, so the old note returns, in the new
+        // words, and lasts twice as long.
+        var relearned = replaced is null && noteKind == MemoryKinds.Learned
+            ? reachable
+                .Where(note => note.List == parsed && note.Kind == MemoryKinds.Learned && IsExpired(note, days))
+                .Select(note => (Note: note, Score: MemoryText.Similarity(note.Text, trimmed)))
+                .Where(match => match.Score >= MemoryText.SameLesson)
+                .OrderByDescending(match => match.Score)
+                .Select(match => match.Note)
+                .FirstOrDefault()
+            : null;
+
+        if (replaced is null && IsFull(active, parsed, noteRepository))
             return FleetError.ValidationError("Memory.Full", FullMessage(parsed));
 
+        var previous = replaced ?? relearned;
         var note = new MemoryNote(
-            replaced?.List == parsed ? replaced.Id : NewId(),
+            previous?.List == parsed ? previous.Id : NewId(),
             parsed,
             trimmed,
-            MemoryKinds.IsAgentKind(kind) ? kind! : MemoryKinds.Learned,
+            noteKind,
             noteRepository,
             session.Id,
             session.Title,
-            replaced?.List == parsed ? replaced.Created : now,
-            now);
+            previous?.List == parsed ? previous.Created : now,
+            now,
+            Lifetime(noteKind, replaced, relearned),
+            (previous?.Relearned ?? 0) + (relearned is null ? 0 : 1));
 
         if (replaced is not null && replaced.Id != note.Id)
             await store.DeleteAsync(userId, [replaced.Id], ct).ConfigureAwait(false);
         await store.SaveAsync(userId, note, ct).ConfigureAwait(false);
+        await PruneExpiredAsync(userId, [.. reachable.Where(other => other.Id != note.Id && other.List == parsed)], days, parsed, ct)
+            .ConfigureAwait(false);
         told?.Saved(session.Id, note, replaced?.Id);
         // A note moved between lists changes both.
         var touched = replaced is null ? Touched.Of(note) : Touched.Of(note).And(Touched.Of(replaced));
         await RefreshContextAsync(userId, touched, ct).ConfigureAwait(false);
         await BroadcastSavedAsync(userId, note, replaced, ct).ConfigureAwait(false);
-        return new MemorySaveOutcome(note, replaced?.Id, AlreadyKnown: false);
+        return new MemorySaveOutcome(note, replaced?.Id, AlreadyKnown: false, Relearned: relearned is not null);
+    }
+
+    /// <summary>
+    /// How long a note an agent saves lasts. A lesson it learned lasts <see cref="AgentMemory.LearnedLifetimeDays"/>
+    /// days of use, twice what it had when it was learned again, and what it had when the agent only corrects it;
+    /// what the user said never expires.
+    /// </summary>
+    private static int? Lifetime(string kind, MemoryNote? replaced, MemoryNote? relearned)
+    {
+        if (kind != MemoryKinds.Learned)
+            return null;
+        if (relearned is not null)
+            return AgentMemory.RelearnedLifetime(relearned.Lifetime);
+        if (replaced is { Kind: MemoryKinds.Learned })
+            return replaced.Lifetime;
+        return AgentMemory.LearnedLifetimeDays;
+    }
+
+    /// <summary>
+    /// Fleet keeps expired notes so a lesson learned again lasts longer, but not without end: past as many as the list
+    /// holds, the ones that expired longest ago go.
+    /// </summary>
+    private async Task PruneExpiredAsync(string userId, IReadOnlyList<MemoryNote> list, MemoryDaysUsed days, MemoryList which, CancellationToken ct)
+    {
+        var doomed = list
+            .Where(note => IsExpired(note, days))
+            .OrderByDescending(note => note.Updated)
+            .Skip(AgentMemory.MaxNotes(which))
+            .Select(note => note.Id)
+            .ToList();
+        if (doomed.Count > 0)
+            await store.DeleteAsync(userId, doomed, ct).ConfigureAwait(false);
     }
 
     /// <summary>Forgets a note an agent in <paramref name="session"/> asked to: the machine's or this repository's.</summary>
@@ -313,9 +407,12 @@ public sealed partial class AgentMemoryService(
         try
         {
             var repository = AgentMemory.RepositoryOf(directory);
+            await store.RecordDayUsedAsync(userId, repository, AgentMemory.Day(_time.GetUtcNow(), _time.LocalTimeZone), ct)
+                .ConfigureAwait(false);
             var notes = await store.ListForAsync(userId, repository, ct).ConfigureAwait(false);
-            var repositoryNotes = RepositoryNotes(notes, repository);
-            var machineNotes = MachineNotes(notes);
+            var days = await store.ListDaysUsedAsync(userId, repository, ct).ConfigureAwait(false);
+            var repositoryNotes = Active(RepositoryNotes(notes, repository), days);
+            var machineNotes = Active(MachineNotes(notes), days);
             await store.WriteContextAsync(userId, directory, repository, AgentMemoryPrompt.RenderFolder(repository, repositoryNotes), ct)
                 .ConfigureAwait(false);
             await store.WriteMachineContextAsync(userId, AgentMemoryPrompt.RenderMachine(machineNotes), ct).ConfigureAwait(false);
@@ -347,8 +444,13 @@ public sealed partial class AgentMemoryService(
         {
             var repository = AgentMemory.RepositoryOf(session.Directory);
             var notes = await store.ListForAsync(session.UserId, repository, ct).ConfigureAwait(false);
+            var days = await store.ListDaysUsedAsync(session.UserId, repository, ct).ConfigureAwait(false);
             var reachable = RepositoryNotes(notes, repository).Concat(MachineNotes(notes)).ToList();
-            return told.Tell(session.Id, reachable) is { } changes ? AgentMemoryPrompt.RenderChanges(changes) : null;
+            // A note that expired isn't wrong, only unconfirmed: the session keeps it rather than hear it's no longer true.
+            var expired = reachable.Where(note => IsExpired(note, days)).Select(note => note.Id).ToHashSet(StringComparer.Ordinal);
+            return told.Tell(session.Id, [.. reachable.Where(note => !expired.Contains(note.Id))], expired) is { } changes
+                ? AgentMemoryPrompt.RenderChanges(changes)
+                : null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
@@ -371,7 +473,8 @@ public sealed partial class AgentMemoryService(
 
         if (touched.Machine)
         {
-            var machine = MachineNotes(await store.ListForAsync(userId, null, ct).ConfigureAwait(false));
+            var days = await store.ListDaysUsedAsync(userId, null, ct).ConfigureAwait(false);
+            var machine = Active(MachineNotes(await store.ListForAsync(userId, null, ct).ConfigureAwait(false)), days);
             await store.WriteMachineContextAsync(userId, AgentMemoryPrompt.RenderMachine(machine), ct).ConfigureAwait(false);
         }
 
@@ -390,7 +493,8 @@ public sealed partial class AgentMemoryService(
         foreach (var group in affected)
         {
             var notes = await store.ListForAsync(userId, group.Key, ct).ConfigureAwait(false);
-            var content = AgentMemoryPrompt.RenderFolder(group.Key, RepositoryNotes(notes, group.Key));
+            var days = await store.ListDaysUsedAsync(userId, group.Key, ct).ConfigureAwait(false);
+            var content = AgentMemoryPrompt.RenderFolder(group.Key, Active(RepositoryNotes(notes, group.Key), days));
             foreach (var folder in group)
                 await store.WriteContextAsync(userId, folder.Directory, folder.Repository, content, ct).ConfigureAwait(false);
         }
@@ -433,6 +537,11 @@ public sealed partial class AgentMemoryService(
     private static List<MemoryNote> MachineNotes(IEnumerable<MemoryNote> notes)
         => [.. notes.Where(note => note.List == MemoryList.Machine)];
 
+    private bool IsExpired(MemoryNote note, MemoryDaysUsed days) => AgentMemory.IsExpired(note, days.For(note), _time.LocalTimeZone);
+
+    /// <summary>The notes sessions read: the ones that haven't expired.</summary>
+    private List<MemoryNote> Active(IEnumerable<MemoryNote> notes, MemoryDaysUsed days) => [.. notes.Where(note => !IsExpired(note, days))];
+
     private static bool IsFull(IReadOnlyList<MemoryNote> notes, MemoryList list, string? repository)
         => (list == MemoryList.Machine ? MachineNotes(notes).Count : RepositoryNotes(notes, repository!).Count) >= AgentMemory.MaxNotes(list);
 
@@ -461,16 +570,25 @@ public sealed partial class AgentMemoryService(
 
     private static string NewId() => Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(4));
 
-    internal static MemoryNoteView ToView(MemoryNote note) => new(
-        note.Id,
-        note.List == MemoryList.Machine ? "machine" : "repository",
-        note.Text,
-        note.Kind,
-        note.Repository,
-        note.SessionId,
-        note.SessionTitle,
-        note.Created,
-        note.Updated);
+    /// <summary>The note as the API shows it, with its days left counted in <paramref name="days"/> (none: it was just saved).</summary>
+    private MemoryNoteView ToView(MemoryNote note, MemoryDaysUsed? days = null)
+    {
+        var used = days is null ? 0 : AgentMemory.DaysUsedSince(note, days.For(note), _time.LocalTimeZone);
+        return new MemoryNoteView(
+            note.Id,
+            note.List == MemoryList.Machine ? "machine" : "repository",
+            note.Text,
+            note.Kind,
+            note.Repository,
+            note.SessionId,
+            note.SessionTitle,
+            note.Created,
+            note.Updated,
+            note.Lifetime,
+            note.Lifetime is { } lifetime ? Math.Max(lifetime - used, 0) : null,
+            note.Lifetime is { } limit && used > limit,
+            note.Relearned);
+    }
 
     private static readonly StringComparer PathComparer =
         OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;

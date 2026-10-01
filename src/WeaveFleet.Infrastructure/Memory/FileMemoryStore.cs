@@ -29,6 +29,15 @@ internal sealed partial class FileMemoryStore(FleetOptions options, ILogger<File
 {
     private const string FoldersFile = "folders.json";
 
+    /// <summary>The days with a prompt, one <c>yyyy-MM-dd</c> per line, in the machine's and each repository's notes folder.</summary>
+    internal const string DaysFile = "days.txt";
+
+    /// <summary>The most days a days file keeps: more than the longest a learned note lasts, with room to spare.</summary>
+    internal const int MaxDays = 400;
+
+    /// <summary>A learned note the user chose to keep, in its <c>lifetime:</c> line.</summary>
+    private const string Never = "never";
+
     /// <summary>The machine's notes, which every session folder's file is read with. Fleet's plugins read it by this name.</summary>
     internal const string MachineFile = "machine.md";
 
@@ -44,6 +53,9 @@ internal sealed partial class FileMemoryStore(FleetOptions options, ILogger<File
     private readonly Dictionary<string, string> _contextWritten = new(StringComparer.Ordinal);
 
     private readonly HashSet<string> _migrated = new(StringComparer.Ordinal);
+
+    /// <summary>Each notes folder's days, once read.</summary>
+    private readonly Dictionary<string, List<DateOnly>> _days = new(StringComparer.Ordinal);
 
     public void Dispose() => _lock.Dispose();
 
@@ -106,6 +118,21 @@ internal sealed partial class FileMemoryStore(FleetOptions options, ILogger<File
 
             return deleted;
         }, ct);
+
+    public Task RecordDayUsedAsync(string userId, string? repository, DateOnly day, CancellationToken ct = default)
+        => LockedAsync(() =>
+        {
+            Migrate(userId);
+            RecordDay(MachineFolder(userId), day);
+            if (repository is not null)
+                RecordDay(RepositoryFolder(userId, repository), day);
+            return true;
+        }, ct);
+
+    public Task<MemoryDaysUsed> ListDaysUsedAsync(string userId, string? repository, CancellationToken ct = default)
+        => LockedAsync(() => new MemoryDaysUsed(
+            [.. ReadDays(MachineFolder(userId))],
+            repository is null ? [] : [.. ReadDays(RepositoryFolder(userId, repository))]), ct);
 
     public string ContextFolder(string userId) => Path.Combine(UserFolder(userId), "context");
 
@@ -213,6 +240,12 @@ internal sealed partial class FileMemoryStore(FleetOptions options, ILogger<File
             text.Append("session-title: ").Append(OneLine(title)).Append('\n');
         text.Append("created: ").Append(note.Created.ToString("O", CultureInfo.InvariantCulture)).Append('\n');
         text.Append("updated: ").Append(note.Updated.ToString("O", CultureInfo.InvariantCulture)).Append('\n');
+        if (note.Lifetime is { } lifetime)
+            text.Append("lifetime: ").Append(lifetime.ToString(CultureInfo.InvariantCulture)).Append('\n');
+        else if (note.Kind == MemoryKinds.Learned)
+            text.Append("lifetime: ").Append(Never).Append('\n');
+        if (note.Relearned > 0)
+            text.Append("relearned: ").Append(note.Relearned.ToString(CultureInfo.InvariantCulture)).Append('\n');
         text.Append("---\n");
         text.Append(note.Text.Trim()).Append('\n');
         return text.ToString();
@@ -251,16 +284,78 @@ internal sealed partial class FileMemoryStore(FleetOptions options, ILogger<File
             return null;
 
         var created = ParseTime(fields.GetValueOrDefault("created")) ?? DateTimeOffset.UnixEpoch;
+        var kind = fields.GetValueOrDefault("kind") is { Length: > 0 } written ? written : MemoryKinds.Added;
         return new MemoryNote(
             id,
             list.Value,
             body,
-            fields.GetValueOrDefault("kind") is { Length: > 0 } kind ? kind : MemoryKinds.Added,
+            kind,
             list == MemoryList.Repository ? fields["repository"] : null,
             NullIfEmpty(fields.GetValueOrDefault("session")),
             NullIfEmpty(fields.GetValueOrDefault("session-title")),
             created,
-            ParseTime(fields.GetValueOrDefault("updated")) ?? created);
+            ParseTime(fields.GetValueOrDefault("updated")) ?? created,
+            ParseLifetime(fields.GetValueOrDefault("lifetime"), kind),
+            int.TryParse(fields.GetValueOrDefault("relearned"), NumberStyles.None, CultureInfo.InvariantCulture, out var relearned) ? relearned : 0);
+    }
+
+    /// <summary>
+    /// A note's <c>lifetime:</c> line: days, or <c>never</c>. A learned note from before notes expired has none, and
+    /// gets the usual lifetime, counted from when Fleet started counting days.
+    /// </summary>
+    private static int? ParseLifetime(string? value, string kind)
+    {
+        if (string.Equals(value, Never, StringComparison.OrdinalIgnoreCase))
+            return null;
+        if (int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var days) && days > 0)
+            return days;
+        return kind == MemoryKinds.Learned ? AgentMemory.LearnedLifetimeDays : null;
+    }
+
+    /// <summary>Adds <paramref name="day"/> to a folder's days, unless it's there.</summary>
+    private void RecordDay(string folder, DateOnly day)
+    {
+        var days = ReadDays(folder);
+        if (days.Contains(day))
+            return;
+
+        days.Add(day);
+        days.Sort();
+        if (days.Count > MaxDays)
+            days.RemoveRange(0, days.Count - MaxDays);
+        WriteAtomically(
+            Path.Combine(folder, DaysFile),
+            string.Concat(days.Select(item => item.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "\n")));
+    }
+
+    /// <summary>A folder's days, read once; lines that aren't a day are skipped.</summary>
+    private List<DateOnly> ReadDays(string folder)
+    {
+        if (_days.TryGetValue(folder, out var days))
+            return days;
+
+        days = [];
+        var path = Path.Combine(folder, DaysFile);
+        if (File.Exists(path))
+        {
+            try
+            {
+                foreach (var line in File.ReadAllLines(path))
+                {
+                    if (DateOnly.TryParseExact(line.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day) && !days.Contains(day))
+                        days.Add(day);
+                }
+
+                days.Sort();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                LogNoteReadFailed(logger, path, ex);
+            }
+        }
+
+        _days[folder] = days;
+        return days;
     }
 
     /// <summary>How many note files have been parsed: a read of an unchanged folder parses none.</summary>

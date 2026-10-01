@@ -17,9 +17,10 @@ public sealed class AgentMemorySessions
     /// <summary>
     /// Records that <paramref name="sessionId"/> now knows <paramref name="notes"/>, and returns what changed since it
     /// was last told. <see langword="null"/> when nothing did, and on the session's first prompt, whose instructions
-    /// already hold the notes.
+    /// already hold the notes. A note it knew that's in <paramref name="expired"/> is dropped without a word: it ran
+    /// out of days, it wasn't found wrong, so the session isn't told it's no longer true.
     /// </summary>
-    public MemoryChanges? Tell(string sessionId, IReadOnlyCollection<MemoryNote> notes)
+    public MemoryChanges? Tell(string sessionId, IReadOnlyCollection<MemoryNote> notes, IReadOnlySet<string>? expired = null)
     {
         var now = notes.ToDictionary(note => note.Id, note => note.Text, StringComparer.Ordinal);
         Dictionary<string, string>? before;
@@ -35,7 +36,10 @@ public sealed class AgentMemorySessions
         var changed = notes
             .Where(note => !before.TryGetValue(note.Id, out var text) || !string.Equals(text, note.Text, StringComparison.Ordinal))
             .ToList();
-        var forgotten = before.Keys.Where(id => !now.ContainsKey(id)).Order(StringComparer.Ordinal).ToList();
+        var forgotten = before.Keys
+            .Where(id => !now.ContainsKey(id) && expired?.Contains(id) != true)
+            .Order(StringComparer.Ordinal)
+            .ToList();
         return changed.Count == 0 && forgotten.Count == 0 ? null : new MemoryChanges(changed, forgotten);
     }
 

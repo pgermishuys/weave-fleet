@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, shallowRef, watch } from "vue";
-import { Cable, Coins, Eye, FileText, FolderGit2, LoaderCircle, Pencil, Plus, Search, Server, TriangleAlert, X } from "lucide-vue-next";
+import { Cable, ChevronRight, Coins, Eye, FileText, FolderGit2, Hourglass, LoaderCircle, Pencil, Pin, Plus, Search, Server, TriangleAlert, X } from "lucide-vue-next";
 import {
   addMemoryNote,
   clearMemory,
   forgetMemoryNote,
   getMemory,
+  keepMemoryNote,
   listMemoryNotes,
   memoryKindLabel,
+  memoryLifeLabel,
   setMemoryEnabled,
   updateMemoryNote,
   type MemoryListName,
@@ -29,6 +31,7 @@ const draft = ref("");
 const editingId = ref<string | null>(null);
 const editText = ref("");
 const confirmingClear = ref(false);
+const showExpired = ref(false);
 
 const enabled = computed(() => overview.value?.enabled ?? false);
 const repositoryName = computed(() => overview.value?.repositories.find((item) => item.path === repository.value)?.name ?? "this repository");
@@ -41,6 +44,7 @@ function matches(note: MemoryNote): boolean {
 
 const repositoryNotes = computed(() => (notes.value?.repositoryNotes ?? []).filter(matches));
 const machineNotes = computed(() => (notes.value?.machineNotes ?? []).filter(matches));
+const expiredNotes = computed(() => (notes.value?.expiredNotes ?? []).filter(matches));
 
 const savedDate = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short" });
 
@@ -118,6 +122,13 @@ function saveEdit(note: MemoryNote): Promise<void> {
   return run(async () => {
     await updateMemoryNote(note.id, editText.value.trim());
     editingId.value = null;
+    await loadNotes();
+  });
+}
+
+function keep(note: MemoryNote): Promise<void> {
+  return run(async () => {
+    await keepMemoryNote(note.id);
     await loadNotes();
   });
 }
@@ -441,9 +452,35 @@ onMounted(load);
                     :class="`memory-kind--${note.kind}`"
                   >{{ memoryKindLabel(note.kind) }}</span>
                   {{ origin(note) }}
+                  <span
+                    v-if="memoryLifeLabel(note)"
+                    class="memory-life"
+                    :data-testid="`memory-life-${note.id}`"
+                  >
+                    <Hourglass
+                      :size="11"
+                      aria-hidden="true"
+                    />
+                    {{ memoryLifeLabel(note) }}
+                  </span>
                 </p>
               </div>
               <div class="flex shrink-0 items-center gap-1">
+                <button
+                  v-if="note.lifetime != null"
+                  type="button"
+                  class="memory-icon-btn"
+                  :aria-label="`Keep note for good: ${note.text}`"
+                  title="Keep for good: it won't expire"
+                  :disabled="isSaving"
+                  :data-testid="`memory-keep-${note.id}`"
+                  @click="keep(note)"
+                >
+                  <Pin
+                    :size="14"
+                    aria-hidden="true"
+                  />
+                </button>
                 <button
                   type="button"
                   class="memory-icon-btn"
@@ -479,6 +516,92 @@ onMounted(load);
               : `No notes for ${repositoryName} yet. Say “remember …” in a session, or add one here.` }}
           </p>
         </template>
+
+        <div
+          v-if="expiredNotes.length"
+          class="mt-5"
+          data-testid="memory-expired"
+        >
+          <button
+            type="button"
+            class="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted hover:text-text"
+            :aria-expanded="showExpired"
+            data-testid="memory-expired-toggle"
+            @click="showExpired = !showExpired"
+          >
+            <ChevronRight
+              :size="13"
+              class="transition-transform"
+              :class="showExpired ? 'rotate-90' : ''"
+              aria-hidden="true"
+            />
+            Expired
+            <span class="font-normal normal-case tracking-normal">{{ expiredNotes.length }}</span>
+          </button>
+          <template v-if="showExpired">
+            <p class="mt-2 text-xs text-muted">
+              Sessions no longer read these. A learned note lasts a week of use, so a lesson whose cause is gone drops
+              out. If the problem comes back, the agent learns it again and the note returns for twice as long. Keep one
+              you know will stay true.
+            </p>
+            <ul class="mt-2 flex flex-col overflow-hidden rounded-card border border-border bg-main-bg">
+              <li
+                v-for="note in expiredNotes"
+                :key="note.id"
+                class="flex items-start justify-between gap-3 border-t border-border p-3 first:border-t-0"
+              >
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm text-muted [overflow-wrap:anywhere]">
+                    {{ note.text }}
+                  </p>
+                  <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted">
+                    <component
+                      :is="note.list === 'machine' ? Server : FolderGit2"
+                      :size="11"
+                      aria-hidden="true"
+                    />
+                    {{ note.list === 'machine' ? 'This machine' : repositoryName }}
+                    <span class="memory-life">
+                      <Hourglass
+                        :size="11"
+                        aria-hidden="true"
+                      />
+                      {{ memoryLifeLabel(note) }}
+                    </span>
+                  </p>
+                </div>
+                <div class="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    class="memory-link"
+                    :disabled="isSaving"
+                    :aria-label="`Bring back and keep: ${note.text}`"
+                    :data-testid="`memory-keep-${note.id}`"
+                    @click="keep(note)"
+                  >
+                    <Pin
+                      :size="13"
+                      aria-hidden="true"
+                    />
+                    Keep
+                  </button>
+                  <button
+                    type="button"
+                    class="memory-icon-btn"
+                    :aria-label="`Forget note: ${note.text}`"
+                    :disabled="isSaving"
+                    @click="forget(note)"
+                  >
+                    <X
+                      :size="14"
+                      aria-hidden="true"
+                    />
+                  </button>
+                </div>
+              </li>
+            </ul>
+          </template>
+        </div>
 
         <div class="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
           <template v-if="!confirmingClear">
@@ -641,6 +764,12 @@ onMounted(load);
   font-weight: 600;
   background: var(--accent-dim);
   color: var(--accent);
+}
+
+.memory-life {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
 }
 
 .memory-kind--from-you {

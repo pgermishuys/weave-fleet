@@ -34,6 +34,26 @@ public sealed class FakeMemoryStore : IMemoryStore
     public Task<int> DeleteAsync(string userId, IReadOnlyCollection<string> ids, CancellationToken ct = default)
         => Task.FromResult(Notes.RemoveAll(note => ids.Contains(note.Id)));
 
+    /// <summary>The days with a prompt: the machine's under the empty key, each repository's under its path.</summary>
+    public Dictionary<string, SortedSet<DateOnly>> DaysUsed { get; } = new(StringComparer.Ordinal);
+
+    public Task RecordDayUsedAsync(string userId, string? repository, DateOnly day, CancellationToken ct = default)
+    {
+        foreach (var key in repository is null ? [string.Empty] : new[] { string.Empty, repository })
+        {
+            if (!DaysUsed.TryGetValue(key, out var days))
+                DaysUsed[key] = days = [];
+            days.Add(day);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<MemoryDaysUsed> ListDaysUsedAsync(string userId, string? repository, CancellationToken ct = default)
+        => Task.FromResult(new MemoryDaysUsed(
+            [.. DaysUsed.GetValueOrDefault(string.Empty) ?? []],
+            repository is null ? [] : [.. DaysUsed.GetValueOrDefault(repository) ?? []]));
+
     public string ContextFolder(string userId) => "/memory/context";
 
     public Task WriteContextAsync(string userId, string directory, string repository, string content, CancellationToken ct = default)

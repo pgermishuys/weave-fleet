@@ -47,7 +47,9 @@ public static class AgentMemoryPrompt
             text.AppendLine("- the user corrects you or states a preference that will matter again. Kind \"from-you\".");
             text.AppendLine(
                 "- a command or tool failed, timed out or was slow, and you found what works. Kind \"learned\". Say what to do, "
-                + "not only what went wrong, so the next session gets it right the first time.");
+                + "not only what went wrong, so the next session gets it right the first time. A learned note lasts "
+                + $"{AgentMemory.LearnedLifetimeDays} days of use, so one whose cause is gone drops out. If its failure comes back "
+                + "after it has gone, save the lesson again: Fleet recognises it and keeps it longer.");
             text.AppendLine(
                 "Don't save what the repository already records (code, docs, git history), details of the task at hand, or "
                 + "secrets.");

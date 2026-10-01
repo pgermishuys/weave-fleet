@@ -33,6 +33,39 @@ public static class AgentMemory
     /// <summary>The longest note, in characters: a fact in a sentence or two, never a document.</summary>
     public const int MaxNoteLength = 400;
 
+    /// <summary>
+    /// How many days of use a note an agent learned lasts: days with a prompt in its repository (or on the machine, for a
+    /// machine note), not calendar days, so a break doesn't empty the list. A lesson whose cause is gone then drops out;
+    /// one still needed is learned again when its failure comes back, and lasts longer each time
+    /// (<see cref="RelearnedLifetime"/>).
+    /// </summary>
+    public const int LearnedLifetimeDays = 7;
+
+    /// <summary>The longest a learned note lasts however often it was learned again, in days of use.</summary>
+    public const int MaxLifetimeDays = 56;
+
+    /// <summary>How many days of use a note learned again lasts: twice what it had, up to <see cref="MaxLifetimeDays"/>.</summary>
+    public static int RelearnedLifetime(int? lifetime)
+        => Math.Min((lifetime ?? LearnedLifetimeDays) * 2, MaxLifetimeDays);
+
+    /// <summary>The day, where Fleet runs, that a time falls on: what days of use are counted in.</summary>
+    public static DateOnly Day(DateTimeOffset time, TimeZoneInfo zone)
+        => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(time, zone).DateTime);
+
+    /// <summary>How many days of use there have been since the day <paramref name="note"/> was saved or last confirmed.</summary>
+    public static int DaysUsedSince(MemoryNote note, IReadOnlyCollection<DateOnly> daysUsed, TimeZoneInfo zone)
+    {
+        var saved = Day(note.Updated, zone);
+        return daysUsed.Count(day => day > saved);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="note"/> has had its days: sessions stop reading it, but Fleet keeps it, hidden, so the same
+    /// lesson learned again lasts longer.
+    /// </summary>
+    public static bool IsExpired(MemoryNote note, IReadOnlyCollection<DateOnly> daysUsed, TimeZoneInfo zone)
+        => note.Lifetime is { } lifetime && DaysUsedSince(note, daysUsed, zone) > lifetime;
+
     public static int MaxNotes(MemoryList list) => list == MemoryList.Machine ? MaxMachineNotes : MaxRepositoryNotes;
 
     /// <summary>The repository a folder's notes belong to: its main checkout, or the folder itself outside git.</summary>
@@ -74,6 +107,11 @@ public static class MemoryKinds
 /// <param name="Repository">The repository a repository note belongs to (<see cref="AgentMemory.RepositoryOf"/>); none for a machine note.</param>
 /// <param name="SessionId">The session that saved it; none when the user added it.</param>
 /// <param name="SessionTitle">That session's title when it saved the note.</param>
+/// <param name="Lifetime">
+/// How many days of use after <paramref name="Updated"/> the note lasts (<see cref="AgentMemory.LearnedLifetimeDays"/>);
+/// <see langword="null"/> when it never expires: notes from the user, and learned notes the user chose to keep.
+/// </param>
+/// <param name="Relearned">How many times an agent learned this note again after it expired.</param>
 public sealed record MemoryNote(
     string Id,
     MemoryList List,
@@ -83,7 +121,9 @@ public sealed record MemoryNote(
     string? SessionId,
     string? SessionTitle,
     DateTimeOffset Created,
-    DateTimeOffset Updated);
+    DateTimeOffset Updated,
+    int? Lifetime = null,
+    int Relearned = 0);
 
 /// <summary>Whether memory is on for the current user.</summary>
 public sealed class AgentMemoryFeature(IUserPreferenceRepository preferences)

@@ -28,14 +28,14 @@ public sealed class FileMemoryStoreTests : IDisposable
     public async Task A_note_is_kept_as_a_readable_markdown_file_and_read_back_as_it_was()
     {
         var note = new MemoryNote("1a2b3c4d", MemoryList.Repository, "Run E2E with --filter.\nThe full suite takes 12 minutes.", MemoryKinds.Learned,
-            "/home/p/source/weave-fleet", "session-1", "Fix the\nflaky test", Saved, Saved.AddHours(1));
+            "/home/p/source/weave-fleet", "session-1", "Fix the\nflaky test", Saved, Saved.AddHours(1), Lifetime: 14, Relearned: 1);
 
         await _store.SaveAsync("local-user", note);
 
         var file = Directory.GetFiles(Path.Combine(_data, "memory"), "1a2b3c4d.md", SearchOption.AllDirectories).Single();
         (await File.ReadAllTextAsync(file)).ShouldBe(
             "---\nlist: repository\nkind: learned\nrepository: /home/p/source/weave-fleet\nsession: session-1\nsession-title: Fix the flaky test\n"
-            + "created: 2026-09-27T08:30:00.0000000+00:00\nupdated: 2026-09-27T09:30:00.0000000+00:00\n---\n"
+            + "created: 2026-09-27T08:30:00.0000000+00:00\nupdated: 2026-09-27T09:30:00.0000000+00:00\nlifetime: 14\nrelearned: 1\n---\n"
             + "Run E2E with --filter.\nThe full suite takes 12 minutes.\n");
         (await _store.ListAsync("local-user")).Single().ShouldBe(note with { SessionTitle = "Fix the flaky test" });
         (await _store.ListAsync("someone-else")).ShouldBeEmpty();
@@ -193,4 +193,49 @@ public sealed class FileMemoryStoreTests : IDisposable
 
     private static MemoryNote RepositoryNote(string id, string repository, string text)
         => new(id, MemoryList.Repository, text, MemoryKinds.Learned, repository, null, null, Saved, Saved);
+
+    [Theory]
+    [InlineData("learned", null, 7)]
+    [InlineData("learned", "never", null)]
+    [InlineData("learned", "21", 21)]
+    [InlineData("from-you", null, null)]
+    [InlineData("added", null, null)]
+    public void A_notes_lifetime_line_is_days_or_never_and_a_learned_note_without_one_lasts_a_week(string kind, string? lifetime, int? expected)
+    {
+        var content = $"---\nlist: machine\nkind: {kind}\ncreated: 2026-09-27T08:30:00Z\n"
+                      + (lifetime is null ? "" : $"lifetime: {lifetime}\n")
+                      + "---\nA note.\n";
+
+        FileMemoryStore.Parse("1a2b3c4d", content).ShouldNotBeNull().Lifetime.ShouldBe(expected);
+    }
+
+    [Fact]
+    public async Task A_learned_note_kept_for_good_says_never()
+    {
+        var note = new MemoryNote("1a2b3c4d", MemoryList.Machine, "Keep me.", MemoryKinds.Learned, null, null, null, Saved, Saved);
+
+        await _store.SaveAsync("local-user", note);
+
+        var file = Directory.GetFiles(Path.Combine(_data, "memory"), "1a2b3c4d.md", SearchOption.AllDirectories).Single();
+        (await File.ReadAllTextAsync(file)).ShouldContain("lifetime: never\n");
+        (await _store.ListAsync("local-user")).Single().Lifetime.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Days_of_use_are_kept_per_repository_and_for_the_machine_once_each_and_survive_a_restart()
+    {
+        var day = new DateOnly(2026, 10, 1);
+        await _store.RecordDayUsedAsync("local-user", "/src/weave-fleet", day);
+        await _store.RecordDayUsedAsync("local-user", "/src/weave-fleet", day);
+        await _store.RecordDayUsedAsync("local-user", "/src/weave-cli", day.AddDays(1));
+        await _store.RecordDayUsedAsync("local-user", null, day.AddDays(2));
+
+        using var restarted = new FileMemoryStore(new FleetOptions { DatabasePath = Path.Combine(_data, "fleet.db") }, NullLogger<FileMemoryStore>.Instance);
+        var days = await restarted.ListDaysUsedAsync("local-user", "/src/weave-fleet");
+
+        days.Repository.ShouldBe([day]);
+        days.Machine.ShouldBe([day, day.AddDays(1), day.AddDays(2)]);
+        (await restarted.ListDaysUsedAsync("local-user", null)).Repository.ShouldBeEmpty();
+        (await restarted.ListAsync("local-user")).ShouldBeEmpty("a days file isn't a note");
+    }
 }
