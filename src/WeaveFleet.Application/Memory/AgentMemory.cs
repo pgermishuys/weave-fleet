@@ -16,8 +16,8 @@ public static class AgentMemory
 
     /// <summary>
     /// Set in a harness process's environment when memory is on: the folder holding each session folder's notes as
-    /// rendered for the model (<see cref="IMemoryStore.ContextFolder"/>). Fleet's plugin reads the file for its folder on
-    /// every model request, and adds the memory tools only when this is set.
+    /// rendered for the model (<see cref="IMemoryStore.ContextFolder"/>). Fleet's plugin reads the file for its folder at
+    /// each session's first model request, and adds the memory tools only when this is set.
     /// </summary>
     public const string EnvironmentVariable = "FLEET_MEMORY_DIR";
 

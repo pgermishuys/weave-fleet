@@ -420,9 +420,10 @@ public sealed record PromptOptions
     public IReadOnlyList<string>? ModelNotes { get; init; }
 
     /// <summary>
-    /// The agent's memory notes for the session's folder, for a harness that takes them with each prompt as part of the
-    /// system prompt (Claude Code). <see langword="null"/> when memory is off. OpenCode reads them from Fleet's file for
-    /// the folder on every model request instead, so it ignores this.
+    /// The agent's memory notes for the session's folder, for a harness that takes them with the prompt as part of the
+    /// system prompt (Claude Code), which keeps the first prompt's notes for the session: a system prompt that changes
+    /// mid-session can't reuse the prompt cache. <see langword="null"/> when memory is off. Fleet's OpenCode plugins read
+    /// them from Fleet's file for the folder at a session's first model request instead, so they ignore this.
     /// </summary>
     public string? MemoryNotes { get; init; }
 

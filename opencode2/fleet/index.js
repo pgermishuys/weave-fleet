@@ -423,13 +423,19 @@ export default {
       for (const tool of tools) editor.add(tool)
     })
 
-    // With memory on, every model request carries the notes for this folder's repository and this machine. V2 runs
-    // setup once per folder, and doesn't wait for an async hook, so the file is read synchronously each time: a note
-    // saved in any session reaches the next request here. A system part is {type: "text", text}; V2 drops a string.
+    // With memory on, every model request carries the notes for this folder's repository and this machine, as they
+    // were at the session's first request: a system prompt that changes mid-session can't reuse the prompt cache. Fleet
+    // tells a running session about a later change with its next prompt. V2 runs setup once per folder and doesn't wait
+    // for an async hook, so the first read is synchronous. A system part is {type: "text", text}; V2 drops a string.
     const folder = ctx.location?.directory
     if (process.env.FLEET_MEMORY_DIR && folder && ctx.session?.hook) {
+      const snapshots = new Map()
       await ctx.session.hook("context", (input) => {
-        const notes = readMemoryNotes(folder)
+        let notes = snapshots.get(input.sessionID)
+        if (notes === undefined) {
+          notes = readMemoryNotes(folder)
+          if (input.sessionID) snapshots.set(input.sessionID, notes)
+        }
         if (notes) input.system.push({ type: "text", text: notes })
       })
     }

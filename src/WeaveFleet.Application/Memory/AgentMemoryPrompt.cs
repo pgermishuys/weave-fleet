@@ -79,6 +79,27 @@ public static class AgentMemoryPrompt
         return text.ToString().TrimEnd() + "\n";
     }
 
+    /// <summary>
+    /// What a session hears with its next prompt when its notes changed after it started: its instructions keep the
+    /// notes it started with, so this says which ones no longer hold.
+    /// </summary>
+    public static string RenderChanges(MemoryChanges changes)
+    {
+        var text = new StringBuilder();
+        text.AppendLine("# Fleet memory changed");
+        text.AppendLine();
+        text.AppendLine("These notes changed since this session started. Where they differ from the notes in your instructions, these are current.");
+        foreach (var note in changes.Changed.OrderBy(note => note.Created))
+            AppendNote(text, note);
+        if (changes.Forgotten.Count > 0)
+            text.Append("Forgotten, so no longer true: ").AppendJoin(", ", changes.Forgotten.Select(id => "[" + id + "]")).AppendLine(".");
+        return text.ToString().TrimEnd() + "\n";
+    }
+
+    /// <summary>What a session hears with its next prompt when memory was turned off after it started.</summary>
+    public const string TurnedOff =
+        "Fleet memory has been turned off. Don't rely on the notes under \"Fleet memory\" in your instructions, and don't save new ones.";
+
     private static void AppendList(StringBuilder text, string heading, IEnumerable<MemoryNote> notes)
     {
         text.AppendLine();
@@ -87,12 +108,17 @@ public static class AgentMemoryPrompt
         foreach (var note in notes.OrderBy(note => note.Created))
         {
             any = true;
-            var date = note.Updated.UtcDateTime.ToString("d MMM yyyy", CultureInfo.InvariantCulture);
-            text.Append("- [").Append(note.Id).Append("] ").Append(OneLine(note.Text)).Append(" (").Append(date).AppendLine(")");
+            AppendNote(text, note);
         }
 
         if (!any)
             text.AppendLine("No notes yet.");
+    }
+
+    private static void AppendNote(StringBuilder text, MemoryNote note)
+    {
+        var date = note.Updated.UtcDateTime.ToString("d MMM yyyy", CultureInfo.InvariantCulture);
+        text.Append("- [").Append(note.Id).Append("] ").Append(OneLine(note.Text)).Append(" (").Append(date).AppendLine(")");
     }
 
     private static string OneLine(string text)

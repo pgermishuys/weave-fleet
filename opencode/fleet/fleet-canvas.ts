@@ -91,6 +91,19 @@ const canvasId = {
 
 type Config = { skills?: { paths?: string[] } }
 
+/** The notes each session read at its first request, so its system prompt stays the same for the whole session. */
+const memorySnapshots = new Map<string, string>()
+
+function memoryNotesFor(sessionID: string | undefined, directory: string | undefined): string {
+  if (!sessionID) return readMemoryNotes(directory)
+  let notes = memorySnapshots.get(sessionID)
+  if (notes === undefined) {
+    notes = readMemoryNotes(directory)
+    memorySnapshots.set(sessionID, notes)
+  }
+  return notes
+}
+
 /**
  * The memory notes for sessions in `directory`, as Fleet wrote them before the prompt: the file named by the
  * SHA-256 of the folder's path in FLEET_MEMORY_DIR (the rules and the repository's notes), then machine.md there
@@ -128,12 +141,13 @@ export const FleetCanvasPlugin = async (input: { directory?: string }) => ({
     config.skills.paths = [...(config.skills.paths ?? []), ...folders]
   },
 
-  // With memory on, every model request carries the notes for this folder's repository and this machine. The file is
-  // read each time, so a note saved in any session reaches the next request here.
+  // With memory on, every model request carries the notes for this folder's repository and this machine, as they were
+  // at the session's first request: a system prompt that changes mid-session can't reuse the prompt cache. Fleet tells
+  // a running session about a later change with its next prompt.
   ...(process.env.FLEET_MEMORY_DIR
     ? {
-        "experimental.chat.system.transform": async (_input: unknown, output: { system: string[] }) => {
-          const notes = readMemoryNotes(input.directory)
+        "experimental.chat.system.transform": async (hookInput: { sessionID?: string }, output: { system: string[] }) => {
+          const notes = memoryNotesFor(hookInput.sessionID, input.directory)
           if (notes) output.system.push(notes)
         },
       }

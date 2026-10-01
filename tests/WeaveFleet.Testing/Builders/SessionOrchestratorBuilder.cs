@@ -3,6 +3,7 @@ using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Memory;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Harnesses;
@@ -53,6 +54,7 @@ public sealed class SessionOrchestratorBuilder
     private GitDiffService? _gitDiffService;
     private ISessionAppCleanup? _sessionApps;
     private ISessionScreenshotStore? _sessionScreenshots;
+    private AgentMemoryService? _agentMemory;
 
     public SessionOrchestratorBuilder WithUserContext(IUserContext userContext)
     {
@@ -81,6 +83,12 @@ public sealed class SessionOrchestratorBuilder
     public SessionOrchestratorBuilder WithSessionScreenshots(ISessionScreenshotStore sessionScreenshots)
     {
         _sessionScreenshots = sessionScreenshots;
+        return this;
+    }
+
+    public SessionOrchestratorBuilder WithAgentMemory(AgentMemoryService agentMemory)
+    {
+        _agentMemory = agentMemory;
         return this;
     }
 
@@ -152,6 +160,7 @@ public sealed class SessionOrchestratorBuilder
             sessionApps: _sessionApps,
             messageRepository: MessageRepository,
             harnessProfiles: HarnessProfileRepository,
-            sessionScreenshots: _sessionScreenshots);
+            sessionScreenshots: _sessionScreenshots,
+            agentMemory: _agentMemory);
     }
 }
