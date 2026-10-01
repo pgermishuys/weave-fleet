@@ -1,0 +1,1 @@
+V1 after adding a reference mid-session: system prompt changed = False ; 'later' listed = False

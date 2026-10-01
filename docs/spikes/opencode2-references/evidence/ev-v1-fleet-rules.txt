@@ -1,0 +1,6 @@
+CALL: ['read che/fleet-oc2-references/run/work/specs/login.md"}']
+TOOL RESULT: <path>/home/pgermishuys/.cache/fleet-oc2-references/run/work/specs/login.md</path> | <type>file</type> | <content> | 1: # Specs\nThe login flow must time out after 15 minutes. |  | (End of file - total 1 lines)
+CALL: ['write c2-references/run/work/specs/v1.md","content":"x"}']
+TOOL RESULT: The user has specified a rule which prevents you from using this specific tool call. Here are some of the relevant rules [{"permission":"*","action":"allow","pattern":"*"},{"permission":"*","pattern":
+CALL: ['write 2-references/run/work/proj/v1ok.md","content":"x"}']
+TOOL RESULT: Wrote file successfully.

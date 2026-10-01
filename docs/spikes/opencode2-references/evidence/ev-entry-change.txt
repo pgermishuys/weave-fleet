@@ -1,0 +1,23 @@
+system prompt unchanged: False
+user : <system-update>
+The context under "fleet-references" changed and supersedes the previous value:
+&lt;context key="fleet-references"&gt;
+Project references provide additional directories that can be accessed when relevant.
+&lt;available_references&gt;
+  &lt;reference&gt;
+    &lt;name&gt;weave&lt;/name&gt;
+    &lt;path&gt;/home/pgermishuys/source/weave&lt;/path&gt;
+    &lt;description&gt;Weave plugin source; Fleet installs it&lt;/description&gt;
+  &lt;/reference&gt;
+  &lt;reference&gt;
+    &lt;name&gt;opencode&lt;/name&gt;
+    &lt;path&gt;/home/pgermishuys/source/opencode&lt;/path&gt;
+    &lt;description&gt;OpenCode source, branch v2&lt;/description&gt;
+  &lt;/reference&gt;
+&lt;/available_references&gt;
+&lt;/context&gt;
+</system-update>
+---
+user : after entry change
+---
+(corrected) agent system prompt unchanged after the entry changed: True

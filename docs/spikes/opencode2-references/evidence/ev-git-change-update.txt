@@ -1,0 +1,19 @@
+assistant : Done from the fake model.
+---
+user : <system-update>
+New project references are available in addition to those previously listed:
+  &lt;reference&gt;
+    &lt;name&gt;patch&lt;/name&gt;
+    &lt;path&gt;/home/pgermishuys/.cache/fleet-oc2-references/run/data/opencode/repos/github.com/octocat/Hello-World@octocat-patch-1&lt;/path&gt;
+    &lt;description&gt;Sample, patch branch&lt;/description&gt;
+  &lt;/reference&gt;
+  &lt;reference&gt;
+    &lt;name&gt;private&lt;/name&gt;
+    &lt;path&gt;/home/pgermishuys/.cache/fleet-oc2-references/run/data/opencode/repos/github.com/pgermishuys/this-repo-does-not-exist-xyz&lt;/path&gt;
+    &lt;description&gt;Private or missing repo&lt;/description&gt;
+  &lt;/reference&gt;
+The following project references are no longer available and must not be used: design, later.
+</system-update>
+---
+user : after git change
+---

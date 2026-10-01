@@ -1,0 +1,29 @@
+system messages: 1 [10457]
+ model named fake-model. The exact model ID is fakellm/fake-model
+Here is some useful information about the environment you are running in:
+<env>
+  Working directory: /home/pgermishuys/.cache/fleet-oc2-references/run/work/proj
+  Workspace root folder: /home/pgermishuys/.cache/fleet-oc2-references/run/work/proj
+  Is directory a git repo: yes
+  Platform: linux
+  Today's date: Thu Oct 01 2026
+</env>
+Project references provide additional directories that can be accessed when relevant.
+<available_references>
+  <reference>
+    <name>patch</name>
+    <path>/home/pgermishuys/.cache/fleet-oc2-references/v1/data/opencode/repos/github.com/octocat/Hello-World@octocat-patch-1</path>
+    <description>Sample, patch branch</description>
+  </reference>
+  <reference>
+    <name>private</name>
+    <path>/home/pgermishuys/.cache/fleet-oc2-references/v1/data/opencode/repos/github.com/pgermishuys/this-repo-does-not-exist-xyz</path>
+    <description>Private or missing repo</description>
+  </reference>
+  <reference>
+    <name>specs</name>
+    <path>/home/pgermishuys/.cache/fleet-oc2-references/run/work/specs</path>
+    <description>Product specs for this app</description>
+  </reference>
+</available_references>
+S

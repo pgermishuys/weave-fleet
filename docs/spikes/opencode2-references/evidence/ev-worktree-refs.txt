@@ -1,0 +1,3 @@
+specs /home/pgermishuys/.cache/fleet-oc2-references/run/work/specs
+patch /home/pgermishuys/.cache/fleet-oc2-references/run/data/opencode/repos/github.com/octocat/Hello-World@octocat-patch-1
+private /home/pgermishuys/.cache/fleet-oc2-references/run/data/opencode/repos/github.com/pgermishuys/this-repo-does-not-exist-xyz

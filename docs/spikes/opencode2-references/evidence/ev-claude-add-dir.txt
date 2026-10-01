@@ -1,0 +1,21 @@
+system chars 5863
+msg-user … d pull request descriptions with:
+\ud83e\udd16 Generated with [Claude Code](https://claude.com/claude-code)
+</system-reminder>
+"}, {"type": "text", "text": "hello
+CALL Read {\"file_path\": \"/home/pgermishuys/.cache/fleet-oc2-references/run/work/specs/login.md\"}
+CALL Write {\"file_path\": \"/home/pgermishuys/.cache/fleet-o
+====
+msg-system … d in the following environment: 
+ - Primary working directory: /home/pgermishuys/.cache/fleet-oc2-references/run/work/proj
+ - Is a git repository: true
+ - Additional working directories:
+  - /home/pgermishuys/.cache/fleet-oc2-references/run/work/specs
+ - Platform: linux
+ - Shell: unknown
+ - OS Version: Linux 7.0.0-34-gene
+====
+system "# Environment\nYou have been invoked in the following environment: \n - Primary working directory: /home/pgermishuys/.cache/fleet-oc2-references/run/work/proj\n - Is a git repository: true\n - Additional working directories:\n  - /home/pgermishuys/.cache/fleet-oc2-references/run/work/specs\n - Plat
+assistant [{"type": "tool_use", "id": "toolu_1790885937032", "name": "Read", "input": {"file_path": "/home/pgermishuys/.cache/fleet-oc2-references/run/work/specs/login.md"}}, {"type": "tool_use", "id": "toolu_1790885937092", "name": "Write", "input": {"file_path": "/home/pgermishuys/.cache/fleet-oc2-reference
+user [{"tool_use_id": "toolu_1790885937032", "type": "tool_result", "content": "1\t# Specs\\nThe login flow must time out after 15 minutes.\n2\t"}, {"type": "tool_result", "content": "Claude requested permissions to write to /home/pgermishuys/.cache/fleet-oc2-references/run/work/specs/cc.md, but you have
+system [{"type": "text", "text": "<total_tokens>14999985 tokens left</total_tokens>\n\n<total_tokens>14999985 tokens left</total_tokens>\n\n<total_tokens>14999985 tokens left</total_tokens>", "cache_control": {"type": "ephemeral"}}]

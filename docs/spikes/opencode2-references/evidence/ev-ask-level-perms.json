@@ -1,0 +1,20 @@
+200 {
+ "data": [
+  {
+   "id": "per_0f91c4c3a001gzHfIEwqSoI284",
+   "sessionID": "ses_f06e3b655ffebgjQoZdbDMid39",
+   "action": "external_directory",
+   "resources": [
+    "/home/pgermishuys/.cache/fleet-oc2-references/run/work/secret/*"
+   ],
+   "save": [
+    "/home/pgermishuys/.cache/fleet-oc2-references/run/work/secret/*"
+   ],
+   "source": {
+    "type": "tool",
+    "messageID": "msg_0f91c4bca001qLRRRR08M0Z7n0",
+    "id": "call_1790885776421"
+   }
+  }
+ ]
+}

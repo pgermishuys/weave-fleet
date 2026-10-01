@@ -1,0 +1,31 @@
+system unchanged vs first request of session A: True
+ROLE user : check the references
+CALL read {"path": "/home/pgermishuys/.cache/fleet-oc2-references/run/work/specs/login.md"}
+CALL grep {"pattern": "accent", "path": "/home/pgermishuys/.cache/fleet-oc2-references/run/work/designsys"}
+CALL glob {"pattern": "*", "path": "/home/pgermishuys/.cache/fleet-oc2-references/run/data/opencode/repos/github.com/octocat/Hello-World"}
+CALL write {"path": "/home/pgermishuys/.cache/fleet-oc2-references/run/work/specs/new.md", "content": "written by agent"}
+
+---
+ROLE tool : Read file /home/pgermishuys/.cache/fleet-oc2-references/run/work/specs/login.md, lines 1-1
+1: # Specs\nThe login flow must time out after 15 minutes.
+---
+ROLE tool : Found 1 matches
+/home/pgermishuys/.cache/fleet-oc2-references/run/work/designsys/tokens.css:
+  Line 1: --accent: #f97316;
+
+---
+ROLE tool : /home/pgermishuys/.cache/fleet-oc2-references/run/data/opencode/repos/github.com/octocat/Hello-World/README
+---
+ROLE tool : Created file successfully: /home/pgermishuys/.cache/fleet-oc2-references/run/work/specs/new.md
+---
+ROLE user : <system-update>
+New project references are available in addition to those previously listed:
+  &lt;reference&gt;
+    &lt;name&gt;later&lt;/name&gt;
+    &lt;path&gt;/home/pgermishuys/.cache/fleet-oc2-references/run/work/later&lt;/path&gt;
+    &lt;description&gt;Added mid-session&lt;/description&gt;
+  &lt;/reference&gt;
+The following project references are no longer available and must not be used: hello.
+</system-update>
+---
+last user message: {"role": "user", "content": "after config change"}
