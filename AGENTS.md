@@ -81,14 +81,15 @@ Never speculate about what's happening on the wire or in state. Build a test tha
 
 ### Layer 2: Client (Frontend)
 
-**Unit tests** (`client/src/composables/__tests__/`):
-- Test composables in isolation with mocked socket/API
+**Unit tests** (`client/src/composables/__tests__/`, `client/src/lib/__tests__/`):
+- Test composables in isolation with mocked socket/API, and the event reducer on its own
 - Run: `bun run test` (from `client/`)
 - Use when: state management, event handling logic, message accumulation bugs
 
 **Key composables:**
 - `use-signalr-socket.ts` — SignalR connection lifecycle, topic dispatch
-- `use-session-events.ts` — Event-to-state reducer, message accumulation, idle fallback
+- `use-session-stream.ts` — Subscribes a session's topic, loads history, batches live events per frame
+- `lib/domain-event-reducer.ts` — `applyDomainEvent`: event-to-state reducer, message accumulation
 - `use-weave-socket.ts` — Re-exports from signalr-socket (the active transport)
 
 **Diagnostic pattern for client issues:**
@@ -121,7 +122,7 @@ Skip rebuild on iteration: `dotnet test tests/WeaveFleet.E2E -p:SkipFrontendBuil
 |---------|-----------|
 | Events not arriving at client | Layer 1: SignalR contract tests |
 | Events arrive but wrong shape | Layer 1: assert `data.GetRawText()` |
-| Events arrive but UI doesn't update | Layer 2: unit test `handleEvent` with real payload |
+| Events arrive but UI doesn't update | Layer 2: unit test `applyDomainEvent` with real payload |
 | Connection drops/reconnect issues | Layer 2: `use-signalr-socket` tests + devtools API |
 | Everything works in tests but not in browser | Layer 3: E2E with headed mode (`$env:HEADED=1`) |
-| Flaky behaviour | Add `diagLog()` + check idle fallback timer (2500ms) |
+| Flaky behaviour | Add `diagLog()` + check the per-frame batching in `use-session-stream.ts` |
