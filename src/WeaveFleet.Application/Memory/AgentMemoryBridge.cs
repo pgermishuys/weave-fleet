@@ -51,8 +51,8 @@ public sealed class AgentMemoryBridge(
 
             // The first line is what the conversation shows under the call: the note itself.
             var output = saved.Value.Replaced is { } replaced && replaced != note.Id
-                ? $"{note.Text}\nSaved as note {note.Id} for {where}, in place of {replaced}. Sessions read it from their next request."
-                : $"{note.Text}\nSaved as note {note.Id} for {where}. Sessions read it from their next request.";
+                ? $"{note.Text}\nSaved as note {note.Id} for {where}, in place of {replaced}. Other sessions get it with their next prompt."
+                : $"{note.Text}\nSaved as note {note.Id} for {where}. Other sessions get it with their next prompt.";
             return CanvasResult.Ok(new CanvasToolOutput($"Remembered for {where}", output));
         }
     }

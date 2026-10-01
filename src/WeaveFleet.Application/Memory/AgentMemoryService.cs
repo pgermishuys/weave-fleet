@@ -50,7 +50,8 @@ public sealed record MemorySaveOutcome(MemoryNote Note, string? Replaced, bool A
 /// <summary>
 /// The user's notes: Settings reads and edits them, agents save and forget them (<see cref="AgentMemoryBridge"/>), and
 /// every prompt writes what its session reads (<see cref="PrepareSessionAsync"/>). After any change the files every
-/// session folder reads are written again, so a running session sees the change on its next model request.
+/// session folder reads are written again, for the sessions that start next. A running session keeps the notes it
+/// started with in its instructions, and hears about a change with its next prompt (<see cref="ChangesForAsync"/>).
 /// </summary>
 public sealed partial class AgentMemoryService(
     IMemoryStore store,
@@ -59,7 +60,8 @@ public sealed partial class AgentMemoryService(
     TimeProvider? time = null,
     IEventBroadcaster? broadcaster = null,
     ISessionRepository? sessions = null,
-    ILogger<AgentMemoryService>? logger = null)
+    ILogger<AgentMemoryService>? logger = null,
+    AgentMemorySessions? told = null)
 {
     private static readonly StringComparison PathComparison =
         OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
@@ -101,8 +103,9 @@ public sealed partial class AgentMemoryService(
     }
 
     /// <summary>
-    /// Turns memory on or off. Off keeps the notes but deletes what sessions read, so running sessions stop getting
-    /// them on their next request; sessions started afterwards run without the memory tools.
+    /// Turns memory on or off. Off keeps the notes but deletes what sessions read, and running sessions are told with
+    /// their next prompt not to rely on the notes they started with; sessions started afterwards run without the
+    /// memory tools.
     /// </summary>
     public async Task<MemoryOverview> SetEnabledAsync(bool enabled, CancellationToken ct = default)
     {
@@ -274,6 +277,7 @@ public sealed partial class AgentMemoryService(
         if (replaced is not null && replaced.Id != note.Id)
             await store.DeleteAsync(userId, [replaced.Id], ct).ConfigureAwait(false);
         await store.SaveAsync(userId, note, ct).ConfigureAwait(false);
+        told?.Saved(session.Id, note, replaced?.Id);
         // A note moved between lists changes both.
         var touched = replaced is null ? Touched.Of(note) : Touched.Of(note).And(Touched.Of(replaced));
         await RefreshContextAsync(userId, touched, ct).ConfigureAwait(false);
@@ -291,6 +295,7 @@ public sealed partial class AgentMemoryService(
             return FleetError.NotFoundFor("MemoryNote", id ?? string.Empty);
 
         await store.DeleteAsync(session.UserId, [note.Id], ct).ConfigureAwait(false);
+        told?.Forgot(session.Id, note.Id);
         await RefreshContextAsync(session.UserId, Touched.Of(note), ct).ConfigureAwait(false);
         return note;
     }
@@ -320,6 +325,35 @@ public sealed partial class AgentMemoryService(
         {
             if (logger is not null)
                 LogPrepareFailed(logger, directory, ex);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Before a prompt to a session whose harness passes Fleet's notes on to the model
+    /// (<see cref="Domain.Harnesses.PromptOptions.ModelNotes"/>): what changed in its notes since it was last told, as
+    /// a note for the model, or <see langword="null"/>. Its instructions keep the notes it started with, so this is how
+    /// it hears about a note saved, reworded or forgotten elsewhere, or memory being turned off. Never throws for a
+    /// file problem: the prompt goes without it.
+    /// </summary>
+    public async Task<string?> ChangesForAsync(Session session, CancellationToken ct = default)
+    {
+        if (told is null || string.IsNullOrWhiteSpace(session.Directory))
+            return null;
+        if (!await IsEnabledAsync().ConfigureAwait(false))
+            return told.TurnedOff(session.Id) ? AgentMemoryPrompt.TurnedOff : null;
+
+        try
+        {
+            var repository = AgentMemory.RepositoryOf(session.Directory);
+            var notes = await store.ListForAsync(session.UserId, repository, ct).ConfigureAwait(false);
+            var reachable = RepositoryNotes(notes, repository).Concat(MachineNotes(notes)).ToList();
+            return told.Tell(session.Id, reachable) is { } changes ? AgentMemoryPrompt.RenderChanges(changes) : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            if (logger is not null)
+                LogPrepareFailed(logger, session.Directory, ex);
             return null;
         }
     }

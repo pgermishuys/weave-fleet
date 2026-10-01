@@ -81,6 +81,9 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, System.Text.Json.JsonElement> _askInputs = new(StringComparer.Ordinal);
 
     private string? _claudeSessionId;    // captured from init message, used for --resume
+    // The memory notes from the session's first prompt, sent with every prompt after it: a system prompt that changes
+    // between --resume runs can't reuse the conversation's prompt cache.
+    private string? _memoryNotes;
     private string? _modelId;             // captured from init or result messages
     private HarnessSessionStatus _status = HarnessSessionStatus.Idle;
     private ClaudeCodeProcessManager? _activeProcess;
@@ -181,7 +184,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 AllowedTools = _config.AllowedTools,
                 MaxTurns = _config.MaxTurns,
                 MaxBudgetUsd = _config.MaxBudgetUsd,
-                AppendSystemPrompt = options?.MemoryNotes,
+                AppendSystemPrompt = _memoryNotes ??= options?.MemoryNotes,
                 ProcessTimeout = _config.ProcessTimeoutSeconds is > 0 and var seconds
                     ? TimeSpan.FromSeconds(seconds)
                     : null,

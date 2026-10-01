@@ -196,6 +196,7 @@ public static class DependencyInjection
         services.AddScoped<SessionMessagesFeature>();
         services.AddSingleton<WeaveFleet.Application.Memory.IMemoryStore, WeaveFleet.Infrastructure.Memory.FileMemoryStore>();
         services.AddScoped<WeaveFleet.Application.Memory.AgentMemoryFeature>();
+        services.AddSingleton<WeaveFleet.Application.Memory.AgentMemorySessions>();
         services.AddScoped<WeaveFleet.Application.Memory.AgentMemoryService>();
         services.AddScoped<WeaveFleet.Application.Memory.AgentMemoryBridge>();
         // Help → Report a problem. The log location comes from AddFleetDiagnosticLogging; without it, no log is attached.

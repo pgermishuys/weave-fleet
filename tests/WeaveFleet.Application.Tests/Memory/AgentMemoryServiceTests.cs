@@ -14,6 +14,7 @@ public sealed class AgentMemoryServiceTests : IDisposable
     private readonly FakeMemoryStore _store = new();
     private readonly FakeEventBroadcaster _broadcaster = new();
     private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 9, 27, 8, 0, 0, TimeSpan.Zero));
+    private readonly AgentMemorySessions _told = new();
     private readonly AgentMemoryService _memory;
     private readonly string _repository;
     private readonly string _worktree;
@@ -21,7 +22,7 @@ public sealed class AgentMemoryServiceTests : IDisposable
 
     public AgentMemoryServiceTests()
     {
-        _memory = new AgentMemoryService(_store, _preferences, new TestUserContext("owner"), _time, _broadcaster);
+        _memory = new AgentMemoryService(_store, _preferences, new TestUserContext("owner"), _time, _broadcaster, told: _told);
         _repository = MakeRepository("weave-fleet");
         _otherRepository = MakeRepository("weave-cli");
         _worktree = Path.Combine(_root, "weave-fleet-worktrees", "feature");
@@ -250,9 +251,80 @@ public sealed class AgentMemoryServiceTests : IDisposable
         _store.Context.Keys.ShouldNotContain(gone);
     }
 
-    private static Session Session(string directory) => new()
+    [Fact]
+    public async Task A_running_session_starts_with_its_notes_and_hears_about_changes_made_elsewhere_once()
     {
-        Id = "session-1",
+        await _memory.SetEnabledAsync(true);
+        var gh = (await _memory.AddAsync("machine", null, "Use gh for GitHub.")).Value;
+        var session = Session(_repository);
+
+        (await _memory.ChangesForAsync(session)).ShouldBeNull("its instructions already hold the notes on the first prompt");
+
+        await _memory.UpdateAsync(gh.Id, "Use gh for GitHub; WebFetch can't read it.");
+        var e2e = (await _memory.AddAsync("repository", _repository, "Run E2E with --filter.")).Value;
+        await _memory.AddAsync("repository", _otherRepository, "Only for weave-cli.");
+        var changes = await _memory.ChangesForAsync(session);
+
+        changes.ShouldNotBeNull();
+        changes.ShouldStartWith("# Fleet memory changed");
+        changes.ShouldContain($"[{gh.Id}] Use gh for GitHub; WebFetch can't read it. (27 Sep 2026)");
+        changes.ShouldContain($"[{e2e.Id}] Run E2E with --filter. (27 Sep 2026)");
+        changes.ShouldNotContain("weave-cli", customMessage: "another repository's notes aren't this session's");
+        (await _memory.ChangesForAsync(session)).ShouldBeNull("each change is told once");
+    }
+
+    [Fact]
+    public async Task A_note_forgotten_elsewhere_is_named_as_no_longer_true()
+    {
+        await _memory.SetEnabledAsync(true);
+        var gh = (await _memory.AddAsync("machine", null, "Use gh for GitHub.")).Value;
+        var session = Session(_repository);
+        await _memory.ChangesForAsync(session);
+
+        await _memory.ForgetAsync(gh.Id);
+
+        (await _memory.ChangesForAsync(session)).ShouldNotBeNull().ShouldContain($"Forgotten, so no longer true: [{gh.Id}].");
+    }
+
+    [Fact]
+    public async Task What_a_sessions_own_agent_saves_or_forgets_isnt_told_back_to_it_but_other_sessions_hear_of_it()
+    {
+        await _memory.SetEnabledAsync(true);
+        var session = Session(_repository);
+        var other = Session(_repository, "session-2");
+        await _memory.ChangesForAsync(session);
+        await _memory.ChangesForAsync(other);
+
+        var saved = (await _memory.SaveFromAgentAsync(session, "machine", "Use gh for GitHub.", "learned", null)).Value.Note;
+        var corrected = (await _memory.SaveFromAgentAsync(session, "machine", "Use gh for GitHub and its API.", "learned", saved.Id)).Value.Note;
+
+        (await _memory.ChangesForAsync(session)).ShouldBeNull("the agent saved it, so it knows");
+        (await _memory.ChangesForAsync(other)).ShouldNotBeNull().ShouldContain($"[{corrected.Id}] Use gh for GitHub and its API.");
+
+        await _memory.ForgetFromAgentAsync(session, corrected.Id);
+
+        (await _memory.ChangesForAsync(session)).ShouldBeNull("the agent forgot it, so it knows");
+        (await _memory.ChangesForAsync(other)).ShouldNotBeNull().ShouldContain($"[{corrected.Id}]");
+    }
+
+    [Fact]
+    public async Task A_running_session_is_told_once_when_memory_is_turned_off()
+    {
+        await _memory.SetEnabledAsync(true);
+        await _memory.AddAsync("machine", null, "Use gh for GitHub.");
+        var session = Session(_repository);
+        await _memory.ChangesForAsync(session);
+
+        await _memory.SetEnabledAsync(false);
+
+        (await _memory.ChangesForAsync(session)).ShouldBe(AgentMemoryPrompt.TurnedOff);
+        (await _memory.ChangesForAsync(session)).ShouldBeNull();
+        (await _memory.ChangesForAsync(Session(_repository, "never-had-notes"))).ShouldBeNull();
+    }
+
+    private static Session Session(string directory, string id = "session-1") => new()
+    {
+        Id = id,
         Title = "Fix the flaky test",
         Directory = directory,
         UserId = "owner",
@@ -264,72 +336,5 @@ public sealed class AgentMemoryServiceTests : IDisposable
         Directory.CreateDirectory(Path.Combine(path, ".git"));
         Directory.CreateDirectory(Path.Combine(path, "src"));
         return path;
-    }
-
-    private sealed class FakeMemoryStore : IMemoryStore
-    {
-        public List<MemoryNote> Notes { get; } = [];
-        public Dictionary<string, string> Context { get; } = new(StringComparer.Ordinal);
-        public Dictionary<string, string> ContextRepository { get; } = new(StringComparer.Ordinal);
-        public List<string> Writes { get; } = [];
-        public string? Machine { get; private set; }
-        public int MachineWrites { get; private set; }
-
-        public Task<IReadOnlyList<MemoryNote>> ListAsync(string userId, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<MemoryNote>>([.. Notes]);
-
-        public Task<IReadOnlyList<MemoryNote>> ListForAsync(string userId, string? repository, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<MemoryNote>>([.. Notes.Where(note => note.List == MemoryList.Machine || (repository is not null && note.Repository == repository))]);
-
-        public Task<MemoryNote?> FindAsync(string userId, string id, CancellationToken ct = default)
-            => Task.FromResult(Notes.FirstOrDefault(note => note.Id == id));
-
-        public Task SaveAsync(string userId, MemoryNote note, CancellationToken ct = default)
-        {
-            var index = Notes.FindIndex(existing => existing.Id == note.Id);
-            if (index >= 0)
-                Notes[index] = note;
-            else
-                Notes.Add(note);
-            return Task.CompletedTask;
-        }
-
-        public Task<int> DeleteAsync(string userId, IReadOnlyCollection<string> ids, CancellationToken ct = default)
-            => Task.FromResult(Notes.RemoveAll(note => ids.Contains(note.Id)));
-
-        public string ContextFolder(string userId) => "/memory/context";
-
-        public Task WriteContextAsync(string userId, string directory, string repository, string content, CancellationToken ct = default)
-        {
-            Context[directory] = content;
-            ContextRepository[directory] = repository;
-            Writes.Add(directory);
-            return Task.CompletedTask;
-        }
-
-        public Task WriteMachineContextAsync(string userId, string content, CancellationToken ct = default)
-        {
-            Machine = content;
-            MachineWrites++;
-            return Task.CompletedTask;
-        }
-
-        public Task<IReadOnlyList<MemoryContextFolder>> ListContextFoldersAsync(string userId, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<MemoryContextFolder>>([.. Context.Keys.Select(directory => new MemoryContextFolder(directory, ContextRepository[directory]))]);
-
-        public Task ForgetContextAsync(string userId, string directory, CancellationToken ct = default)
-        {
-            Context.Remove(directory);
-            ContextRepository.Remove(directory);
-            return Task.CompletedTask;
-        }
-
-        public Task ClearContextAsync(string userId, CancellationToken ct = default)
-        {
-            Machine = null;
-            Context.Clear();
-            ContextRepository.Clear();
-            return Task.CompletedTask;
-        }
     }
 }
