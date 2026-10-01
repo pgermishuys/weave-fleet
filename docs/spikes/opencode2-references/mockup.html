@@ -1,0 +1,1066 @@
+<title>Fleet References</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Fleet's own tokens (client/src/assets/main.css), light first, dark redefined. */
+:root {
+  --main-bg: #F3F2EF; --rail-bg: #FFFFFF; --panel-bg: #FFFFFF; --card-bg: #FFFFFF;
+  --sunken: #ECEAE6; --hover: rgba(26,25,24,.05); --active: rgba(26,25,24,.08);
+  --border: rgba(26,25,24,.09); --border-strong: rgba(26,25,24,.16);
+  --text: #1A1918; --muted: #6E6A65; --faint: #9a958f;
+  --accent: #5B6EC7; --accent-dim: rgba(91,110,199,.12); --on-accent: #fff;
+  --running: #16a34a; --idle: #d97706; --error: #dc2626;
+  --ref-tint: rgba(91,110,199,.14);
+  --shadow: 0 1px 2px rgba(26,25,24,.05), 0 16px 40px -20px rgba(26,25,24,.28);
+  --page-bg: #EAE8E4; --page-ink: #1A1918; --page-muted: #6E6A65; --page-card: #F7F6F3;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --main-bg: #0d0d10; --rail-bg: #0d0d10; --panel-bg: #141418; --card-bg: #1b1b20;
+    --sunken: #111115; --hover: rgba(255,255,255,.04); --active: rgba(255,255,255,.07);
+    --border: rgba(255,255,255,.075); --border-strong: rgba(255,255,255,.14);
+    --text: #e8e8ec; --muted: #8e8e9a; --faint: #5d5d68;
+    --accent: #6366f1; --accent-dim: rgba(99,102,241,.16); --on-accent: #fff;
+    --running: #22c55e; --idle: #f59e0b; --error: #ef4444;
+    --ref-tint: rgba(99,102,241,.22);
+    --shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 20px 50px -24px rgba(0,0,0,.8);
+    --page-bg: #08080a; --page-ink: #e8e8ec; --page-muted: #8e8e9a; --page-card: #111114;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --main-bg: #0d0d10; --rail-bg: #0d0d10; --panel-bg: #141418; --card-bg: #1b1b20;
+  --sunken: #111115; --hover: rgba(255,255,255,.04); --active: rgba(255,255,255,.07);
+  --border: rgba(255,255,255,.075); --border-strong: rgba(255,255,255,.14);
+  --text: #e8e8ec; --muted: #8e8e9a; --faint: #5d5d68;
+  --accent: #6366f1; --accent-dim: rgba(99,102,241,.16); --on-accent: #fff;
+  --running: #22c55e; --idle: #f59e0b; --error: #ef4444;
+  --ref-tint: rgba(99,102,241,.22);
+  --shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 20px 50px -24px rgba(0,0,0,.8);
+  --page-bg: #08080a; --page-ink: #e8e8ec; --page-muted: #8e8e9a; --page-card: #111114;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--page-bg); color: var(--page-ink); font: 14px/1.5 var(--sans); margin: 0; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1320px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 64px; }
+a { color: inherit; }
+button { font: inherit; color: inherit; }
+code, .mono { font-family: var(--mono); font-size: .9em; }
+svg.i { width: 1em; height: 1em; flex-shrink: 0; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vertical-align: -.125em; }
+h1, h2, h3, h4 { text-wrap: balance; }
+
+/* page chrome */
+.eyebrow { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--page-muted); font-weight: 600; }
+h1 { font-size: 30px; line-height: 1.15; letter-spacing: -.02em; margin: 4px 0 8px; }
+.lede { color: var(--page-muted); max-width: 74ch; margin: 0; font-size: 15px; }
+.tabs { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--page-bg); display: flex; gap: 2px; overflow-x: auto; padding-block: 10px; border-bottom: 1px solid var(--border); margin: 18px 0 24px; scrollbar-width: none; }
+.tab { border: 0; background: none; padding: 7px 12px; border-radius: 8px; color: var(--page-muted); font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap; display: inline-flex; gap: 7px; align-items: center; }
+.tab:hover { color: var(--page-ink); background: var(--hover); }
+.tab[aria-selected="true"] { color: var(--page-ink); background: var(--active); }
+.tab .n { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.view[hidden] { display: none !important; }
+.view-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: end; margin-bottom: 16px; }
+.view-head h2 { font-size: 21px; letter-spacing: -.01em; margin: 0 0 4px; }
+.view-head p { margin: 0; color: var(--page-muted); max-width: 76ch; }
+@media (max-width: 800px) { .view-head { grid-template-columns: 1fr; } }
+.seg { display: inline-flex; padding: 3px; border-radius: 9px; background: var(--active); gap: 2px; flex-wrap: wrap; }
+.seg button { border: 0; background: none; padding: 5px 12px; border-radius: 7px; font-size: 12.5px; font-weight: 500; color: var(--page-muted); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--card-bg); color: var(--page-ink); box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.scroller { overflow-x: auto; border-radius: 14px; padding-bottom: 4px; }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 14px; font-size: 13px; margin-top: 16px; align-items: start; }
+.card { background: var(--page-card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.card h3 { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--page-muted); margin: 0 0 8px; font-weight: 600; }
+.card ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+.card li::marker { color: var(--faint); }
+.card p { margin: 0 0 6px; }
+.src { display: inline-block; font-family: var(--mono); font-size: 11px; color: var(--page-muted); background: var(--active); border-radius: 5px; padding: 1px 6px; }
+
+/* provider marks */
+.pv { width: 18px; height: 18px; border-radius: 5px; display: inline-grid; place-items: center; font: 700 10px/1 var(--sans); color: #fff; flex-shrink: 0; letter-spacing: 0; }
+.pv.lg { width: 30px; height: 30px; border-radius: 8px; font-size: 14px; }
+.pv.sm { width: 14px; height: 14px; border-radius: 4px; font-size: 8.5px; }
+.pv.github { background: #24292f; } .pv.linear { background: #5E6AD2; } .pv.notion { background: #2f2f2f; }
+.pv.drive { background: #1a8f55; } .pv.hubspot { background: #e5603e; } .pv.slack { background: #611f69; }
+.pv.sentry { background: #4a3d74; } .pv.atlassian { background: #0c66e4; } .pv.mcp { background: var(--muted); }
+:root[data-theme="dark"] .pv.github, :root[data-theme="dark"] .pv.notion { box-shadow: inset 0 0 0 1px rgba(255,255,255,.18); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pv.github, :root:not([data-theme="light"]) .pv.notion { box-shadow: inset 0 0 0 1px rgba(255,255,255,.18); } }
+
+/* Fleet app frame */
+.app { min-width: 1160px; height: 680px; display: grid; grid-template-columns: 52px 268px minmax(0, 1fr); background: var(--rail-bg); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow); color: var(--text); font-size: 13px; position: relative; }
+.app.no-list { grid-template-columns: 52px minmax(0, 1fr); }
+.app.sess { grid-template-columns: 52px 240px minmax(0, 1fr); }
+.rail { display: flex; flex-direction: column; align-items: center; gap: 4px; padding-block: 12px; background: var(--rail-bg); }
+.rail .logo { width: 24px; height: 14px; margin-bottom: 12px; background: linear-gradient(90deg, #6366f1, #ec4899 60%, #3b82f6); clip-path: polygon(0 0, 18% 0, 32% 70%, 46% 0, 54% 0, 68% 70%, 82% 0, 100% 0, 76% 100%, 60% 100%, 50% 42%, 40% 100%, 24% 100%); }
+.rail .ri { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 9px; color: var(--muted); font-size: 17px; position: relative; }
+.rail .ri.on { background: var(--active); color: var(--text); }
+.rail .ri.new::after { content: ""; position: absolute; top: 6px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--rail-bg); }
+.rail .sp { flex: 1; }
+.list { background: var(--rail-bg); padding: 12px 10px; display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+.main { background: var(--panel-bg); margin: 8px 8px 8px 0; border-radius: 12px; border: 1px solid var(--border); overflow: hidden; display: flex; flex-direction: column; min-width: 0; position: relative; }
+.app.no-list .main { margin-left: 0; }
+.lhead { display: flex; align-items: center; gap: 8px; padding: 2px 6px 10px; }
+.lhead b { font-size: 14px; font-weight: 600; flex: 1; }
+.search { height: 32px; border-radius: 8px; border: 1px solid var(--border); background: var(--sunken); display: flex; align-items: center; gap: 8px; padding: 0 10px; color: var(--faint); font-size: 12.5px; margin-bottom: 8px; }
+.search .sq { color: var(--text); flex: 1; }
+.search .kbd { margin-left: auto; }
+.grp { display: flex; align-items: center; gap: 6px; color: var(--faint); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; font-weight: 600; padding: 12px 8px 4px; }
+.row { display: flex; align-items: center; gap: 9px; min-height: 34px; padding: 0 8px; border-radius: 8px; color: var(--text); cursor: pointer; min-width: 0; border: 0; background: none; width: 100%; text-align: left; font-size: 13px; }
+.row:hover { background: var(--hover); }
+.row.sel { background: var(--active); }
+.row .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .t small { display: block; color: var(--muted); font-size: 11px; line-height: 1.2; }
+.row.dim .t { color: var(--muted); }
+.row .st { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.ok-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--running); flex-shrink: 0; }
+.warn-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--idle); flex-shrink: 0; }
+.kbd { font-family: var(--mono); font-size: 10.5px; padding: 1px 5px; border-radius: 4px; background: var(--active); color: var(--muted); }
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--card-bg); color: var(--text); font-size: 12.5px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+.btn:hover { border-color: var(--border-strong); }
+.btn.primary { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.btn.primary:hover { filter: brightness(1.07); }
+.btn.ghost { background: none; border-color: transparent; color: var(--muted); }
+.btn.ghost:hover { color: var(--text); background: var(--hover); }
+.btn.sm { height: 24px; padding: 0 8px; font-size: 12px; }
+.btn[disabled] { opacity: .55; cursor: default; }
+.ro { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 500; color: var(--muted); background: var(--active); white-space: nowrap; }
+.spin { animation: spin 1s linear infinite; display: inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin, .dots i, .caret { animation: none !important; } }
+.switch { position: relative; width: 28px; height: 16px; border-radius: 999px; border: 0; background: var(--border-strong); padding: 0; cursor: pointer; flex-shrink: 0; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; transition: transform 150ms ease-out; }
+.switch[aria-checked="true"] { background: var(--accent); }
+.switch[aria-checked="true"]::after { transform: translateX(12px); }
+
+/* sources browse */
+.browse { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); height: 100%; min-height: 0; }
+.results { border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+.rhead { padding: 14px 16px 10px; display: grid; gap: 10px; border-bottom: 1px solid var(--border); }
+.rhead h3 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+.fchips { display: flex; gap: 6px; flex-wrap: wrap; }
+.fchip { height: 26px; padding: 0 9px; border-radius: 7px; border: 1px solid var(--border); display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; background: none; cursor: pointer; }
+.fchip[aria-pressed="true"] { background: var(--accent-dim); color: var(--text); border-color: transparent; }
+.fchip .c { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+.rlist { padding: 6px; overflow: auto; display: grid; gap: 1px; align-content: start; }
+.res { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 3px 10px; padding: 9px 10px; border-radius: 9px; cursor: pointer; border: 0; background: none; text-align: left; width: 100%; }
+.res:hover { background: var(--hover); }
+.res.sel { background: var(--active); }
+.res .pv { margin-top: 1px; }
+.res .tt { font-weight: 500; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.res .sn { grid-column: 2; color: var(--muted); font-size: 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.res .mt { grid-column: 2; color: var(--faint); font-size: 11px; font-family: var(--mono); display: flex; gap: 8px; }
+.res mark { background: color-mix(in srgb, var(--accent) 22%, transparent); color: inherit; border-radius: 2px; padding: 0 1px; }
+.preview { display: flex; flex-direction: column; min-height: 0; background: var(--panel-bg); }
+.phead { padding: 14px 18px 12px; border-bottom: 1px solid var(--border); display: grid; gap: 8px; }
+.phead .crumb { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; }
+.phead h3 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -.01em; line-height: 1.3; }
+.phead .acts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.phead .acts .grow { flex: 1; }
+.doc { padding: 16px 22px 24px; overflow: auto; line-height: 1.62; font-size: 13.5px; }
+.doc h4 { font-size: 13.5px; margin: 14px 0 4px; color: var(--accent); font-weight: 600; }
+.doc p { margin: 0 0 10px; max-width: 64ch; }
+.doc ul { margin: 0 0 10px; padding-left: 20px; }
+.doc code { background: var(--sunken); padding: 0 4px; border-radius: 4px; font-size: 12px; }
+.doc .props { display: grid; grid-template-columns: 110px 1fr; gap: 4px 12px; font-size: 12.5px; margin-bottom: 14px; padding: 10px 12px; background: var(--sunken); border-radius: 9px; }
+.doc .props span:nth-child(odd) { color: var(--muted); }
+.attach-menu { position: absolute; z-index: 6; right: 18px; top: 92px; width: 300px; background: var(--card-bg); border: 1px solid var(--border-strong); border-radius: 11px; box-shadow: var(--shadow); padding: 5px; }
+.attach-menu .mh { font-size: 11px; color: var(--faint); padding: 7px 8px 4px; letter-spacing: .05em; text-transform: uppercase; font-weight: 600; }
+.mi { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 7px; cursor: pointer; font-size: 12.5px; border: 0; background: none; width: 100%; text-align: left; }
+.mi:hover { background: var(--hover); }
+.mi .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mi small { color: var(--muted); }
+.dots { display: inline-grid; grid-template-columns: repeat(2, 3px); gap: 2px; }
+.dots i { width: 3px; height: 3px; border-radius: 1px; background: var(--accent); animation: tick 1.2s infinite; }
+.dots i:nth-child(2) { animation-delay: .3s; } .dots i:nth-child(3) { animation-delay: .9s; } .dots i:nth-child(4) { animation-delay: .6s; }
+@keyframes tick { 0%, 100% { opacity: .25 } 50% { opacity: 1 } }
+.toast { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--text); color: var(--panel-bg); padding: 8px 14px; border-radius: 9px; font-size: 12.5px; box-shadow: var(--shadow); z-index: 8; display: flex; gap: 10px; align-items: center; white-space: nowrap; }
+.toast b { font-weight: 600; }
+
+/* connect */
+.cpage { flex: 1; overflow: auto; padding: 28px 34px; display: grid; gap: 22px; align-content: start; }
+.chead { display: flex; gap: 14px; align-items: center; }
+.chead h3 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -.015em; }
+.chead p { margin: 2px 0 0; color: var(--muted); }
+.cgrid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.box { border: 1px solid var(--border); border-radius: 12px; background: var(--card-bg); padding: 16px 18px; display: grid; gap: 12px; }
+.box h4 { margin: 0; font-size: 13px; font-weight: 600; }
+.box .sub { color: var(--muted); font-size: 12.5px; margin: 0; }
+.cap { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 2px 10px; align-items: start; font-size: 12.5px; }
+.cap .ic { color: var(--running); margin-top: 2px; }
+.cap .ic.no { color: var(--faint); }
+.cap small { grid-column: 2; color: var(--muted); }
+.steps { display: grid; gap: 0; }
+.step { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; padding: 8px 0; font-size: 12.5px; color: var(--muted); }
+.step .b { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--border-strong); display: grid; place-items: center; font-size: 10.5px; font-family: var(--mono); }
+.step.done { color: var(--text); }
+.step.done .b { background: var(--running); border-color: transparent; color: #fff; }
+.step.now { color: var(--text); }
+.step.now .b { border-color: var(--accent); color: var(--accent); }
+.field { display: grid; gap: 5px; }
+.field label { font-size: 12px; font-weight: 500; color: var(--muted); }
+.input { height: 30px; border: 1px solid var(--border-strong); background: var(--sunken); color: var(--text); border-radius: 7px; padding: 0 9px; font: 12.5px var(--sans); display: flex; align-items: center; gap: 8px; min-width: 0; }
+.input.mono { font: 12px var(--mono); }
+.input .grow { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.callout { border-radius: 10px; padding: 10px 12px; font-size: 12.5px; background: color-mix(in srgb, var(--idle) 10%, transparent); border: 1px solid color-mix(in srgb, var(--idle) 28%, transparent); }
+.callout.info { background: var(--accent-dim); border-color: color-mix(in srgb, var(--accent) 25%, transparent); }
+.gfile { display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: 8px; font-size: 12.5px; }
+.gfile:hover { background: var(--hover); }
+.gfile .t { flex: 1; }
+.gfile .w { color: var(--faint); font-size: 11px; }
+
+/* session */
+.shead { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); min-height: 54px; position: relative; }
+.shead .ttl { min-width: 0; flex: 1; }
+.shead .ttl b { display: block; font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shead .ttl small { color: var(--muted); font-size: 11.5px; display: flex; gap: 6px; align-items: center; white-space: nowrap; }
+.hchip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 9px; border-radius: 8px; border: 1px solid var(--border); background: var(--card-bg); font-size: 12px; cursor: pointer; white-space: nowrap; }
+.hchip:hover, .hchip[aria-expanded="true"] { border-color: var(--border-strong); }
+.hchip .stack { display: inline-flex; }
+.hchip .stack .pv { margin-left: -4px; box-shadow: 0 0 0 1.5px var(--card-bg); }
+.hchip .stack .pv:first-child { margin-left: 0; }
+.convo { flex: 1; padding: 20px 24px 10px; display: flex; flex-direction: column; gap: 14px; overflow: auto; min-height: 0; }
+.bubble { align-self: flex-end; background: var(--card-bg); border: 1px solid var(--border); padding: 9px 13px; border-radius: 12px; max-width: 76%; display: grid; gap: 7px; }
+.reply { max-width: 92%; color: var(--text); line-height: 1.62; display: grid; gap: 8px; }
+.reply p { margin: 0; }
+.who { font-size: 11.5px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.tcard { border: 1px solid var(--border); border-radius: 10px; background: var(--card-bg); overflow: hidden; max-width: 640px; }
+.tcard > button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 10px; border: 0; background: none; cursor: pointer; text-align: left; font-size: 12.5px; color: var(--muted); }
+.tcard > button b { color: var(--text); font-weight: 500; white-space: nowrap; }
+.tcard > button .tx { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.tcard > button .r { margin-left: auto; white-space: nowrap; flex-shrink: 0; font-size: 11px; font-family: var(--mono); color: var(--faint); display: inline-flex; gap: 8px; align-items: center; }
+.tcard .body { border-top: 1px solid var(--border); padding: 6px; display: grid; gap: 1px; }
+.tcard .body[hidden] { display: none; }
+.tline { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px; font-size: 12.5px; }
+.tline:hover { background: var(--hover); }
+.tline .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tline .ref { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+.cite { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 5px; background: var(--ref-tint); font-size: 12px; vertical-align: 1px; cursor: pointer; border: 0; color: var(--text); }
+.cite:hover { filter: brightness(1.1); }
+.composer { margin: 0 16px 14px; border: 1px solid var(--border-strong); border-radius: 13px; background: var(--card-bg); padding: 10px 12px; display: grid; gap: 10px; position: relative; }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.pills:empty { display: none; }
+.spill { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 4px 0 6px; border-radius: 6px; background: var(--ref-tint); font-size: 12.5px; max-width: 100%; }
+.spill .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 280px; }
+.spill .tk { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+.spill button { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 0 4px; border-radius: 4px; font-size: 14px; line-height: 1; }
+.spill button:hover { color: var(--text); background: var(--hover); }
+.ctext { font-size: 14px; min-height: 22px; line-height: 1.55; outline: none; }
+.ctext .ph { color: var(--faint); }
+.caret { display: inline-block; width: 1.5px; height: 16px; background: var(--accent); vertical-align: -3px; animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0 } }
+.cbar { display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--muted); }
+.cbar .tag { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border-radius: 7px; background: var(--hover); }
+.send { margin-left: auto; width: 28px; height: 28px; border-radius: 50%; background: var(--accent); display: grid; place-items: center; color: #fff; border: 0; cursor: pointer; }
+.picker { position: absolute; left: 10px; bottom: calc(100% + 6px); width: 520px; background: var(--card-bg); border: 1px solid var(--border-strong); border-radius: 12px; box-shadow: var(--shadow); z-index: 6; overflow: hidden; }
+.picker .ptabs { display: flex; gap: 2px; padding: 6px 8px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.picker .ptabs button { border: 0; background: none; height: 26px; padding: 0 9px; border-radius: 7px; font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.picker .ptabs button[aria-pressed="true"] { background: var(--active); color: var(--text); }
+.picker .pq { display: flex; gap: 8px; align-items: center; padding: 8px 12px 4px; font-size: 12px; color: var(--muted); }
+.picker .pq .sq { font-family: var(--mono); color: var(--text); }
+.pick { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 1px 9px; align-items: center; padding: 7px 12px; cursor: pointer; border: 0; background: none; width: 100%; text-align: left; }
+.pick:hover, .pick.on { background: var(--hover); }
+.pick .tt { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pick .sb { grid-column: 2; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pick .x { grid-row: 1 / span 2; grid-column: 3; font-size: 11px; color: var(--faint); font-family: var(--mono); }
+.picker .pf { display: flex; gap: 14px; padding: 7px 12px; border-top: 1px solid var(--border); font-size: 11px; color: var(--faint); }
+.raw { font-size: 12px; }
+.raw summary { cursor: pointer; color: var(--muted); }
+.raw pre { margin: 6px 0 0; white-space: pre-wrap; font: 11.5px/1.5 var(--mono); padding: 8px 10px; background: var(--sunken); border: 1px solid var(--border); border-radius: 8px; color: var(--text); max-height: 220px; overflow: auto; }
+.split2 { display: grid; grid-template-columns: minmax(0, 1fr) 400px; flex: 1; min-height: 0; }
+.cpanel { border-left: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; background: var(--panel-bg); }
+.ctabs { display: flex; gap: 2px; padding: 6px 8px 0; border-bottom: 1px solid var(--border); }
+.ctabs span { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; font-size: 12px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.ctabs span.on { color: var(--text); border-bottom-color: var(--accent); }
+.readby { display: flex; align-items: center; gap: 8px; padding: 8px 14px; font-size: 11.5px; color: var(--muted); background: var(--sunken); border-bottom: 1px solid var(--border); }
+.pop { position: absolute; top: 48px; right: 12px; width: 360px; background: var(--card-bg); border: 1px solid var(--border-strong); border-radius: 12px; box-shadow: var(--shadow); z-index: 7; overflow: hidden; }
+.pop header { padding: 11px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+.pop header b { flex: 1; font-size: 13px; }
+.pop .sec { padding: 8px 10px; border-bottom: 1px solid var(--border); display: grid; gap: 2px; }
+.pop .sec:last-child { border-bottom: 0; }
+.pop .sh { font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; padding: 4px 4px; }
+.prow { display: flex; align-items: center; gap: 8px; padding: 5px 4px; font-size: 12.5px; }
+.prow .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prow small { color: var(--faint); font-family: var(--mono); font-size: 10.5px; }
+.hnote { font-size: 11.5px; color: var(--muted); padding: 4px 4px 2px; }
+
+/* how + evidence */
+.flow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 860px) { .flow { grid-template-columns: 1fr; } }
+.fstep { background: var(--page-card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.fstep .k { font: 600 11px var(--mono); color: var(--accent); }
+.fstep h3 { margin: 0; font-size: 15px; }
+.fstep p { margin: 0; color: var(--page-muted); font-size: 13px; }
+.sectitle { font-size: 17px; margin: 30px 0 10px; font-weight: 600; letter-spacing: -.01em; }
+.sectitle + p.lede { margin-bottom: 12px; font-size: 13.5px; }
+.why { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.why .card h4 { margin: 0 0 4px; font-size: 14px; }
+.why .card p { margin: 0; color: var(--page-muted); font-size: 13px; }
+.tablewrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--page-card); }
+table.t { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 12.5px; }
+table.t th, table.t td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+table.t thead th { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--page-muted); font-weight: 600; }
+table.t tr:last-child td { border-bottom: 0; }
+table.t td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.lvl { display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+.lvl.go { background: color-mix(in srgb, var(--running) 16%, transparent); color: var(--running); }
+.lvl.setup { background: color-mix(in srgb, var(--idle) 16%, transparent); color: var(--idle); }
+.lvl.have { background: var(--accent-dim); color: var(--accent); }
+.lvl.no { background: var(--active); color: var(--page-muted); }
+.chart { display: grid; gap: 10px; padding: 16px 18px; }
+.bar-row { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 12px; align-items: center; font-size: 12.5px; }
+.bar-row .lab { color: var(--page-ink); }
+.bar-row .lab small { display: block; color: var(--page-muted); font-size: 11px; }
+.bar-track { position: relative; height: 18px; }
+.bar { position: absolute; left: 0; top: 2px; height: 14px; border-radius: 0 4px 4px 0; background: var(--muted); min-width: 3px; }
+.bar.fleet { background: var(--accent); }
+.bar-val { position: absolute; top: 0; font: 500 11.5px/18px var(--mono); color: var(--page-ink); white-space: nowrap; padding-left: 8px; font-variant-numeric: tabular-nums; }
+.bar-row:hover .bar { filter: brightness(1.15); }
+@media (max-width: 600px) { .bar-row { grid-template-columns: 1fr; gap: 4px; } }
+.term { background: #0f0f13; color: #d7d7de; border-radius: 12px; padding: 14px 16px; font: 12px/1.6 var(--mono); overflow-x: auto; white-space: pre; border: 1px solid rgba(255,255,255,.08); }
+.term .c { color: #8a8a99; } .term .g { color: #6ee7a0; } .term .y { color: #f5c36b; } .term .b { color: #a5b4fc; }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 900px) { .two { grid-template-columns: 1fr; } }
+.diagram { background: var(--page-card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; overflow-x: auto; }
+.dg { min-width: 900px; display: grid; grid-template-columns: 1fr 1.25fr 1fr; gap: 0; align-items: stretch; }
+.dcol { display: grid; gap: 8px; align-content: center; }
+.dcol h4 { margin: 0 0 2px; font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--page-muted); }
+.dnode { background: var(--panel-bg); border: 1px solid var(--border-strong); border-radius: 10px; padding: 8px 11px; font-size: 12.5px; display: flex; gap: 9px; align-items: center; color: var(--text); }
+.dnode small { display: block; color: var(--muted); font-size: 11px; }
+.dfleet { background: var(--accent-dim); border: 1.5px solid color-mix(in srgb, var(--accent) 45%, transparent); border-radius: 14px; padding: 14px; display: grid; gap: 8px; margin-inline: 34px; position: relative; }
+.dfleet::before, .dfleet::after { content: ""; position: absolute; top: 50%; width: 34px; border-top: 1.5px dashed var(--border-strong); }
+.dfleet::before { left: -35px; } .dfleet::after { right: -35px; }
+.dfleet h4 { margin: 0; font-size: 14px; color: var(--page-ink); text-transform: none; letter-spacing: 0; }
+.dfleet .dnode { background: var(--panel-bg); }
+.plan { display: grid; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--page-card); counter-reset: s; }
+.plan .st { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 12px; padding: 13px 16px; border-bottom: 1px solid var(--border); align-items: start; }
+.plan .st:last-child { border-bottom: 0; }
+.plan .st::before { counter-increment: s; content: counter(s); font-family: var(--mono); font-size: 12px; color: var(--page-muted); border: 1px solid var(--border); border-radius: 7px; width: 26px; height: 26px; display: grid; place-items: center; }
+.plan b { font-weight: 600; }
+.plan p { margin: 3px 0 0; color: var(--page-muted); font-size: 13px; max-width: 90ch; }
+.plan .sz { font-family: var(--mono); font-size: 11px; color: var(--page-muted); white-space: nowrap; padding-top: 3px; }
+.qs { display: grid; gap: 10px; }
+.q { background: var(--page-card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; }
+.q b { display: block; margin-bottom: 3px; }
+.q span { color: var(--page-muted); font-size: 13px; }
+.q .rec { display: block; margin-top: 4px; font-size: 12.5px; color: var(--page-ink); }
+.foot { margin-top: 36px; color: var(--page-muted); font-size: 12px; }
+
+/* References additions on top of the Sources page's Fleet frame */
+.verdict { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: start; background: var(--page-card); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; margin-top: 18px; }
+.verdict .badge { font: 700 11px/1 var(--sans); letter-spacing: .06em; text-transform: uppercase; padding: 6px 9px; border-radius: 6px; background: color-mix(in srgb, var(--running) 16%, transparent); color: var(--running); white-space: nowrap; }
+.verdict p { margin: 0 0 6px; max-width: 92ch; }
+.verdict ol { margin: 4px 0 0; padding-left: 20px; display: grid; gap: 4px; color: var(--page-muted); font-size: 13.5px; }
+.verdict ol b { color: var(--page-ink); }
+@media (max-width: 600px) { .verdict { grid-template-columns: 1fr; } }
+
+.reficon { width: 18px; height: 18px; border-radius: 5px; display: inline-grid; place-items: center; flex-shrink: 0; background: var(--active); color: var(--muted); font-size: 11px; }
+.reficon.git { background: color-mix(in srgb, #f05033 18%, transparent); color: #c2410c; }
+:root[data-theme="dark"] .reficon.git { color: #fb923c; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .reficon.git { color: #fb923c; } }
+.reficon svg.i { width: 12px; height: 12px; }
+
+.refpage { flex: 1; overflow: auto; padding: 22px 28px 28px; display: grid; gap: 16px; align-content: start; }
+.refpage .top { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+.refpage .top .ttl { flex: 1; min-width: 260px; }
+.refpage .top h3 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -.015em; display: flex; align-items: center; gap: 8px; }
+.refpage .top p { margin: 3px 0 0; color: var(--muted); font-size: 12.5px; max-width: 70ch; }
+.repo-pick { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; border-radius: 7px; border: 1px solid var(--border); background: var(--card-bg); font-size: 13px; font-weight: 600; cursor: pointer; }
+.reflist { border: 1px solid var(--border); border-radius: 12px; background: var(--card-bg); overflow: hidden; }
+.refrow { display: grid; grid-template-columns: 22px minmax(0, 1.1fr) minmax(0, 1.6fr) 120px 92px 28px; gap: 12px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+.refrow:last-child { border-bottom: 0; }
+.refrow.head { font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; padding-block: 8px; background: var(--sunken); }
+.refrow .nm { min-width: 0; }
+.refrow .nm b { font-weight: 600; font-family: var(--mono); font-size: 12.5px; }
+.refrow .nm small { display: block; color: var(--muted); font-family: var(--mono); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.refrow .ds { min-width: 0; color: var(--text); }
+.refrow .ds small { display: block; color: var(--faint); font-size: 11px; }
+.refrow .stt { font-size: 11.5px; color: var(--muted); display: flex; gap: 6px; align-items: center; min-width: 0; }
+.refrow .stt span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.refrow .rw { display: flex; gap: 6px; align-items: center; font-size: 11.5px; color: var(--muted); }
+.refrow.added { animation: flash 1.6s ease-out; }
+@keyframes flash { from { background: var(--accent-dim); } to { background: transparent; } }
+.err-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--error); flex-shrink: 0; }
+.iconbtn { width: 26px; height: 26px; border-radius: 7px; border: 0; background: none; color: var(--faint); display: grid; place-items: center; cursor: pointer; }
+.iconbtn:hover { background: var(--hover); color: var(--text); }
+.costbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--muted); padding: 10px 12px; border-radius: 10px; background: var(--sunken); border: 1px solid var(--border); }
+.costbar b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.suggest { border: 1px dashed var(--border-strong); border-radius: 12px; padding: 12px 14px; display: grid; gap: 8px; }
+.suggest h4 { margin: 0; font-size: 12.5px; font-weight: 600; display: flex; gap: 8px; align-items: center; }
+.suggest h4 small { font-weight: 400; color: var(--muted); }
+.sugg { display: flex; gap: 10px; align-items: center; font-size: 12.5px; padding: 4px 0; }
+.sugg .t { flex: 1; min-width: 0; }
+.sugg .t small { color: var(--muted); font-size: 11.5px; margin-left: 6px; }
+.sugg .why { font-size: 11px; color: var(--faint); white-space: nowrap; }
+
+.dialog { position: absolute; inset: 0; background: color-mix(in srgb, var(--text) 22%, transparent); display: grid; place-items: center; z-index: 9; }
+.dialog .dlg { width: 440px; background: var(--card-bg); border: 1px solid var(--border-strong); border-radius: 14px; box-shadow: var(--shadow); padding: 16px 18px; display: grid; gap: 12px; }
+.dialog .dlg h4 { margin: 0; font-size: 15px; }
+.dialog .row2 { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* composer chips (new-session page) */
+.newsess { flex: 1; display: grid; align-content: center; justify-items: center; padding: 30px; gap: 14px; position: relative; }
+.newsess h3 { margin: 0; font-size: 22px; letter-spacing: -.02em; font-weight: 600; }
+.newsess .composer { width: min(680px, 100%); margin: 0; }
+.chipbar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px; border-radius: 8px; border: 1px solid var(--border); background: var(--card-bg); font-size: 12px; cursor: pointer; color: var(--text); white-space: nowrap; }
+.chip:hover, .chip[aria-expanded="true"] { border-color: var(--border-strong); }
+.chip .cnt { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.chip.off { color: var(--faint); border-style: dashed; cursor: default; }
+.refpop { position: absolute; width: 380px; background: var(--card-bg); border: 1px solid var(--border-strong); border-radius: 12px; box-shadow: var(--shadow); z-index: 7; overflow: hidden; }
+.refpop header { padding: 10px 12px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.refpop header b { flex: 1; font-size: 13px; }
+.refpop .opt { display: grid; grid-template-columns: 16px 18px minmax(0, 1fr) auto; gap: 9px; align-items: center; padding: 7px 12px; font-size: 12.5px; cursor: pointer; border: 0; background: none; width: 100%; text-align: left; color: var(--text); }
+.refpop .opt:hover { background: var(--hover); }
+.refpop .opt .t b { font-family: var(--mono); font-weight: 500; }
+.refpop .opt .t small { display: block; color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.refpop .opt .tk { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+.box-check { width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid var(--border-strong); display: grid; place-items: center; color: #fff; }
+.box-check.on { background: var(--accent); border-color: var(--accent); }
+.box-check svg.i { width: 10px; height: 10px; stroke-width: 3; }
+.refpop footer { padding: 8px 12px; border-top: 1px solid var(--border); font-size: 11.5px; color: var(--muted); display: grid; gap: 6px; }
+.harness-note { font-size: 12px; color: var(--muted); max-width: 680px; width: 100%; display: flex; gap: 8px; align-items: flex-start; }
+.harness-note .callout { flex: 1; }
+
+/* conversation */
+.rbadge { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 6px; border-radius: 5px; background: var(--ref-tint); color: var(--text); font: 500 11px var(--mono); white-space: nowrap; }
+.tcard.blocked > button b { color: var(--error); }
+.tcard pre { margin: 0; white-space: pre-wrap; font: 11.5px/1.55 var(--mono); padding: 8px 10px; color: var(--text); background: var(--sunken); max-height: 180px; overflow: auto; }
+.seen { border: 1px dashed var(--border-strong); border-radius: 10px; padding: 8px 10px; font-size: 12px; color: var(--muted); max-width: 640px; }
+.seen summary { cursor: pointer; }
+.seen pre { margin: 6px 0 0; white-space: pre-wrap; font: 11.5px/1.5 var(--mono); color: var(--text); }
+.refpanel { padding: 12px; display: grid; gap: 10px; overflow: auto; align-content: start; }
+.refcard { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; background: var(--card-bg); }
+.refcard .h { display: flex; gap: 8px; align-items: center; font-size: 12.5px; }
+.refcard .h b { font-family: var(--mono); font-weight: 600; flex: 1; }
+.refcard .r { font: 11.5px var(--mono); color: var(--muted); display: flex; gap: 8px; }
+.refcard .r span:first-child { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+
+/* harness table marks */
+.mark { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; white-space: nowrap; }
+.mark .d { width: 8px; height: 8px; border-radius: 50%; }
+.mark.native .d { background: var(--running); }
+.mark.fleet .d { background: var(--accent); }
+.mark.partial .d { background: var(--idle); }
+.mark.none .d { background: var(--faint); }
+.cmp { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 860px) { .cmp { grid-template-columns: 1fr; } }
+.cmp .card h4 { margin: 0 0 6px; font-size: 14px; display: flex; gap: 8px; align-items: center; }
+.cmp .card p { margin: 0 0 6px; font-size: 13px; color: var(--page-muted); }
+.tok { display: grid; gap: 6px; padding: 14px 16px; }
+.tokrow { display: grid; grid-template-columns: 190px minmax(0, 1fr) 70px; gap: 12px; align-items: center; font-size: 12.5px; }
+.tokrow .lab small { display: block; color: var(--page-muted); font-size: 11px; }
+.tokrow .track { height: 12px; background: var(--active); border-radius: 3px; position: relative; overflow: hidden; }
+.tokrow .fill { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 3px; }
+.tokrow .fill.base { background: var(--muted); opacity: .5; }
+.tokrow .v { font: 500 12px var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 600px) { .tokrow { grid-template-columns: 1fr 60px; } .tokrow .track { grid-column: 1 / -1; grid-row: 2; } }
+.ev { display: grid; gap: 14px; }
+.ev h3 { margin: 0 0 6px; font-size: 14px; }
+.ev .card p { font-size: 13px; color: var(--page-muted); }
+.ev .card h3 { text-transform: none; letter-spacing: 0; color: var(--page-ink); font-size: 14px; }
+.ev .term { margin: 0; }
+[hidden] { display: none !important; }
+.refrow { grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1.4fr) 170px 96px 28px; }
+#n-pop { top: calc(100% + 6px); left: 180px; width: min(380px, 100%); }
+@media (max-width: 700px) { #n-pop { left: 0; } }
+.ev .two > * { min-width: 0; }
+.newsess { align-content: start; padding-top: 70px; padding-bottom: 260px; }
+.view-head > .btn, .view-head > .seg { justify-self: start; }
+</style>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Weave Fleet · spike · 1 October 2026 · OpenCode 2.0.18</div>
+    <h1>References: let every session read the folders and repos you work next to</h1>
+    <p class="lede">OpenCode 2 can list named folders and Git repositories to the agent as "references". I ran it, OpenCode 1, Claude Code and the pieces Fleet would need, against a scripted model on scratch homes. This page is the verdict, mockups in Fleet's look, how it would work for each harness, the evidence and a plan. The mockups follow your theme.</p>
+  </header>
+
+  <div class="verdict">
+    <span class="badge">Viable, with conditions</span>
+    <div>
+      <p>It's cheap and every harness Fleet runs can have it: about <b>24 tokens plus 50–70 per reference</b>, in the cached part of the prompt. OpenCode 2 and OpenCode 1 both have it built in, Claude Code has <code>--add-dir</code>, and Pi can be told by Fleet. Three conditions, all proven live:</p>
+      <ol>
+        <li><b>Fleet keeps the list</b> per repository and hands it to each session. OpenCode's own <code>references</code> setting is per server (Fleet shares one server across repositories) or lives in the repo's <code>opencode.json</code>.</li>
+        <li><b>Fleet sets the permissions.</b> On OpenCode 2 a reference grants nothing: reads still ask, and at Fleet's default level the agent wrote into one. Fleet adds a rule per reference: read freely, never edit.</li>
+        <li><b>Fleet clones Git references.</b> OpenCode clones with plain <code>git</code>, a separate copy per harness, and a failed clone is only a log line while the agent is still told the folder exists.</li>
+      </ol>
+    </div>
+  </div>
+
+  <nav class="tabs" role="tablist" aria-label="Spike sections">
+    <button class="tab" role="tab" data-view="overview" aria-selected="true">The idea</button>
+    <button class="tab" role="tab" data-view="repo"><span class="n">1</span>Add references</button>
+    <button class="tab" role="tab" data-view="compose"><span class="n">2</span>New session</button>
+    <button class="tab" role="tab" data-view="agent"><span class="n">3</span>The agent reads</button>
+    <button class="tab" role="tab" data-view="how">How it works</button>
+    <button class="tab" role="tab" data-view="harness">Harnesses</button>
+    <button class="tab" role="tab" data-view="evidence">Evidence</button>
+    <button class="tab" role="tab" data-view="plan">Plan &amp; questions</button>
+  </nav>
+
+  <!-- ───────────── OVERVIEW ───────────── -->
+  <section class="view" id="v-overview">
+    <div class="flow">
+      <div class="fstep"><span class="k">Once per repository</span><h3>Name the folders you work next to</h3><p>For <code>weave-fleet</code>, that's <code>~/source/weave</code> and OpenCode's source. Add them with a short description. Fleet suggests sibling folders, but adds nothing on its own.</p></div>
+      <div class="fstep"><span class="k">Every session in it</span><h3>The agent knows where to look</h3><p>Each session in that repository starts with the list: name, path, description. A chip on the new-session page lets you drop one or add another for this session only.</p></div>
+      <div class="fstep"><span class="k">Read, not write</span><h3>It reads with its own tools</h3><p>Read, grep and glob work in a reference without an "outside folder" ask. Edits there are refused. Every read shows in the conversation with the reference's name on it.</p></div>
+    </div>
+
+    <h2 class="sectitle">Why bother: what happens today</h2>
+    <p class="lede">The agent doesn't know the sibling repository exists. It guesses a path, asks, or you paste one into the message. At Fleet's Ask and Edits levels, every read outside the session's folder raises an "outside folder" question (checked live on OpenCode 2). In this repository's own Claude Code history, <b>28 of 215</b> sessions reached into <code>~/source/opencode</code> and <b>23 of 215</b> into <code>~/source/weave</code>, each time by path typed into a prompt or a note.</p>
+    <div class="why">
+      <div class="card"><h4>A sibling repository the work depends on</h4><p>Fleet installs the Weave adapter. "Does the adapter still default to Loom for subagents?" is a grep in <code>weave</code>, if the agent knows where <code>weave</code> is.</p></div>
+      <div class="card"><h4>An upstream library's source</h4><p>OpenCode 2 changes weekly. A Git reference to <code>anomalyco/opencode</code> on branch <code>v2</code> keeps a fresh copy that every session can read, refreshed daily.</p></div>
+      <div class="card"><h4>A design system or docs repository</h4><p>Tokens, icons and brand rules live in <code>weave-assets</code>. A UI session reads the real values instead of inventing a near match.</p></div>
+      <div class="card"><h4>A folder of specs</h4><p>Product notes in a plain folder, not a repository: a local reference works for any folder.</p></div>
+    </div>
+
+    <h2 class="sectitle">Next to Sources</h2>
+    <p class="lede">The two proposals split the user's goal ("pull context from GitHub, Linear, Google Docs") by where the context lives. They share the rail item and the read-only promise.</p>
+    <div class="cmp">
+      <div class="card"><h4><span class="reficon"><svg class="i" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>References (this spike)</h4>
+        <p><b>Files on this machine</b>: local folders and Git repositories.</p>
+        <p>The agent reads them with the tools it already has (read, grep, glob). Fleet only tells it where they are and sets the permissions.</p>
+        <p>Kept per repository. Costs ~60 tokens per reference, per request, cached.</p></div>
+      <div class="card"><h4><span class="pv linear">L</span>Sources (proposal of 1 October)</h4>
+        <p><b>Hosted services</b>: Linear, Notion, Drive, HubSpot, GitHub issues.</p>
+        <p>Fleet signs in and offers two read-only tools, <code>sources_search</code> and <code>sources_read</code>, or you attach a document.</p>
+        <p>Kept per Fleet. Costs ~170 tokens of tool descriptions.</p></div>
+    </div>
+  </section>
+
+  <!-- ───────────── REPO ───────────── -->
+  <section class="view" id="v-repo" hidden>
+    <div class="view-head">
+      <div>
+        <h2>1 · Add references to a repository</h2>
+        <p>References sit in the Sources rail item, under the repository they belong to, so all context is in one place. Click a suggestion to add it, flip <b>Can change files</b>, or use <b>Add reference</b>. The cost line updates as the list changes.</p>
+      </div>
+      <button type="button" class="btn" id="r-reset">Reset</button>
+    </div>
+    <div class="scroller">
+      <div class="app" id="r-app">
+        <div class="rail" data-rail="sources"></div>
+        <aside class="list">
+          <div class="lhead"><b>Sources</b></div>
+          <div class="grp">Connected</div>
+          <div class="row"><span class="pv linear">L</span><span class="t">Linear</span><span class="ok-dot"></span></div>
+          <div class="row"><span class="pv notion">N</span><span class="t">Notion</span><span class="ok-dot"></span></div>
+          <div class="row"><span class="pv github">G</span><span class="t">GitHub</span><span class="ok-dot"></span></div>
+          <div class="grp">References</div>
+          <div class="row sel"><span class="reficon"><svg class="i" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span><span class="t">weave-fleet</span><span class="st" id="r-count">2</span></div>
+          <div class="row"><span class="reficon"><svg class="i" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span><span class="t">weave</span><span class="st">1</span></div>
+          <div class="row dim"><span class="reficon"><svg class="i" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span><span class="t">weave-website</span><span class="st">none</span></div>
+        </aside>
+        <div class="main">
+          <div class="refpage">
+            <div class="top">
+              <div class="ttl">
+                <h3>References for <span class="repo-pick">weave-fleet <svg class="i" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span></h3>
+                <p>Every new session in <code>weave-fleet</code> and its worktrees is told about these folders and may read them. Sessions already running hear about a change with their next message.</p>
+              </div>
+              <button class="btn primary" type="button" id="r-add"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add reference</button>
+            </div>
+            <div class="reflist" id="r-list"></div>
+            <div class="costbar" id="r-cost"></div>
+            <div class="suggest" id="r-suggest"></div>
+          </div>
+          <div class="dialog" id="r-dialog" hidden>
+            <div class="dlg" role="dialog" aria-label="Add reference">
+              <h4>Add reference</h4>
+              <div class="seg" role="group" aria-label="Kind"><button type="button" aria-pressed="false">Folder</button><button type="button" aria-pressed="true">Git repository</button></div>
+              <div class="field"><label for="d-repo">Repository</label><div class="input mono" id="d-repo"><span class="grow">github.com/weave-io/weave-assets</span></div></div>
+              <div class="field"><label for="d-branch">Branch</label><div class="input mono" id="d-branch"><span class="grow">main</span></div></div>
+              <div class="field"><label for="d-name">Name the agent sees</label><div class="input mono" id="d-name"><span class="grow">weave-assets</span></div></div>
+              <div class="field"><label for="d-desc">Description (the agent reads this to decide when to look)</label><div class="input" id="d-desc"><span class="grow">Logos, icons and brand colours.</span></div></div>
+              <p class="sub" style="margin:0;color:var(--muted);font-size:12px">Fleet clones it with your GitHub sign-in into <code>~/.weave/references</code> and refreshes it once a day. About 55 tokens per request.</p>
+              <div class="row2"><button class="btn ghost" type="button" id="d-cancel">Cancel</button><button class="btn primary" type="button" id="d-ok">Clone and add</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <div class="card"><h3>What Fleet stores</h3><ul>
+        <li>Per repository: name, a folder or a Git repository and branch, a description, and <b>Can change files</b> (off by default).</li>
+        <li>A reference without a description isn't shown to the agent by OpenCode, so Fleet requires one.</li>
+        <li>Worktrees share their repository's list, the way OpenCode 2 itself resolves it (checked live).</li>
+      </ul></div>
+      <div class="card"><h3>Suggestions, never automatic</h3><ul>
+        <li>Fleet looks for folders next to this one under the workspace root, and for repositories named in the README or <code>AGENTS.md</code>.</li>
+        <li>A suggestion is a row you click. Nothing reaches the agent until you add it.</li>
+      </ul></div>
+      <div class="card"><h3>Git references</h3><ul>
+        <li>Fleet clones once per machine with its GitHub sign-in and shows what happened. OpenCode would clone a separate copy per harness, silently.</li>
+        <li><b>Couldn't clone</b> rows are left out of the agent's list. OpenCode 2 still lists them, at a path that doesn't exist.</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- ───────────── COMPOSE ───────────── -->
+  <section class="view" id="v-compose" hidden>
+    <div class="view-head">
+      <div>
+        <h2>2 · Pick for one session</h2>
+        <p>The new-session page gets a <b>References</b> chip next to Folder and Harness. It starts with the repository's list. Untick one to leave it out, or add a folder for this session only. Switch the harness to see what changes.</p>
+      </div>
+      <div class="seg" role="group" aria-label="Harness" id="n-seg">
+        <button type="button" data-h="oc2" aria-pressed="true">OpenCode 2</button>
+        <button type="button" data-h="oc1" aria-pressed="false">OpenCode</button>
+        <button type="button" data-h="cc" aria-pressed="false">Claude Code</button>
+        <button type="button" data-h="pi" aria-pressed="false">Pi</button>
+      </div>
+    </div>
+    <div class="scroller">
+      <div class="app sess" id="n-app">
+        <div class="rail" data-rail="sessions"></div>
+        <aside class="list" data-sessions="1"></aside>
+        <div class="main">
+          <div class="newsess">
+            <h3>What should we work on?</h3>
+            <div class="composer" id="n-composer">
+              <div class="ctext">Check whether the Weave adapter still defaults subagents to Loom, and update our docs if it changed.<span class="caret"></span></div>
+              <div class="chipbar" id="n-chips"></div>
+              <div class="refpop" id="n-pop" hidden></div>
+            </div>
+            <div class="harness-note" id="n-note"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <div class="card"><h3>Not the same as <code>@</code></h3><ul>
+        <li><code>@</code> (PR #205) puts one file or folder into one message.</li>
+        <li>A reference is standing context: the session knows the folder for its whole life, and may read it without asking.</li>
+      </ul></div>
+      <div class="card"><h3>Mid-session changes</h3><ul>
+        <li>OpenCode 2 tells a running session about a change as a short update and keeps its system prompt, so the prompt cache survives (checked live).</li>
+        <li>OpenCode gets the same update through Fleet's note on the next message. Claude Code and Pi pick it up when Fleet next starts their process.</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- ───────────── AGENT ───────────── -->
+  <section class="view" id="v-agent" hidden>
+    <div class="view-head">
+      <div>
+        <h2>3 · The agent reads a reference</h2>
+        <p>Reads in a reference carry its name. An edit there is refused and shows as refused. The <b>References</b> chip in the header lists what was read. Open "What the model sees" for the exact text, then switch harness.</p>
+      </div>
+      <div class="seg" role="group" aria-label="Harness" id="g-seg">
+        <button type="button" data-h="oc2" aria-pressed="true">OpenCode 2</button>
+        <button type="button" data-h="oc1" aria-pressed="false">OpenCode</button>
+        <button type="button" data-h="cc" aria-pressed="false">Claude Code</button>
+        <button type="button" data-h="pi" aria-pressed="false">Pi</button>
+      </div>
+    </div>
+    <div class="scroller">
+      <div class="app sess" id="g-app">
+        <div class="rail" data-rail="sessions"></div>
+        <aside class="list" data-sessions="1"></aside>
+        <div class="main">
+          <div class="shead">
+            <div class="ttl"><b>Check the adapter's subagent default</b><small><span class="ok-dot"></span>weave-fleet · docs/adapter-default · <span id="g-hname">OpenCode 2</span></small></div>
+            <button class="hchip" type="button" id="g-chip" aria-expanded="false"><svg class="i" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>References <span class="cnt" style="font-family:var(--mono);color:var(--muted)">2</span></button>
+            <div class="pop" id="g-pop" hidden></div>
+          </div>
+          <div class="split2">
+            <div class="convo" id="g-convo"></div>
+            <div class="cpanel">
+              <div class="ctabs"><span>Changes</span><span class="on">weave › adapter/config.ts</span></div>
+              <div class="readby"><span class="rbadge">weave</span>read by the agent at 10:42 · can't change files</div>
+              <div class="doc" style="padding:12px 16px"><pre style="margin:0;font:12px/1.6 var(--mono);white-space:pre-wrap" id="g-file"></pre></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <div class="card"><h3>Shown in the conversation</h3><ul id="g-notes"></ul></div>
+      <div class="card"><h3>Read-only, and where it stops</h3><ul>
+        <li>Fleet adds deny rules for edit and write in each reference, at every permission level. Checked live on OpenCode 2, OpenCode and Claude Code.</li>
+        <li>The shell isn't limited by folder in any harness: <code>echo &gt; file</code> into a reference worked under OpenCode 2. Fleet says so in Settings rather than claim more.</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- ───────────── HOW ───────────── -->
+  <section class="view" id="v-how" hidden>
+    <div class="view-head"><div><h2>How it works</h2><p>OpenCode 2's side as it is in 2.0.18, then what Fleet adds. The token figures are counted on the real text.</p></div></div>
+    <div class="cmp">
+      <div class="card"><h4>OpenCode 2's side</h4>
+        <p><b>Config:</b> <code>references</code> maps a name to a path, or to <code>{ repository, branch, description, hidden }</code>.</p>
+        <p><b>Prompt:</b> references with a description go into the system prompt after the skills list, as <code>&lt;available_references&gt;</code>. Without a description they're left out. <code>hidden</code> only hides one from OpenCode's own <code>@</code> menu; the model still sees it.</p>
+        <p><b>Access:</b> nothing extra. Read, grep and glob take absolute paths, and an outside folder asks <code>external_directory</code>, reference or not.</p>
+        <p><b>Git:</b> <code>git clone --depth 100</code> into <code>~/.local/share/opencode/repos/host/owner/repo[@branch]</code>; fetch and hard reset once a day.</p>
+        <p><b>Changes:</b> a running session gets a <code>&lt;system-update&gt;</code> with only what was added or removed; its system prompt doesn't change.</p></div>
+      <div class="card"><h4>Fleet's side</h4>
+        <p><b>Store:</b> references per repository in Fleet's database, plus per-session additions and removals made in the composer.</p>
+        <p><b>Tell the agent:</b> Fleet renders the same block OpenCode 2 uses, and hands it to each harness its own way (see Harnesses). On OpenCode 2 that's a per-session instruction entry, which is cache-safe and sends a diff when it changes.</p>
+        <p><b>Permissions:</b> per-session rules: allow <code>external_directory</code> for <code>&lt;path&gt;/*</code>, deny edit, write, patch and move there.</p>
+        <p><b>Git:</b> Fleet clones with its GitHub sign-in into <code>~/.weave/references</code>, refreshes daily, shows status and errors, and passes a plain folder path to every harness.</p>
+        <p><b>Show it:</b> tool calls whose path is inside a reference get its name in the conversation, and the header chip lists the reads.</p></div>
+    </div>
+
+    <h2 class="sectitle">The exact text the model gets</h2>
+    <p class="lede">Fleet's version for the two references in the mockups. OpenCode 2 and OpenCode 1 render the same shape themselves.</p>
+    <pre class="term" id="h-block"></pre>
+
+    <h2 class="sectitle">Token cost per request</h2>
+    <p class="lede">Counted with the Claude tokenizer on the rendered text. It sits in the system prompt, so after the first request it's read from the prompt cache. For scale: OpenCode 2's whole system prompt in the test was about 5,000 tokens.</p>
+    <div class="tablewrap"><div class="tok" id="h-tok"></div></div>
+  </section>
+
+  <!-- ───────────── HARNESS ───────────── -->
+  <section class="view" id="v-harness" hidden>
+    <div class="view-head"><div><h2>What each harness gets</h2><p>Native first, then Fleet, then off with a reason. Everything here was run live except Pi, which I read from its source because it wouldn't start offline.</p></div></div>
+    <div class="tablewrap">
+      <table class="t">
+        <thead><tr><th>Harness</th><th>Told about the folders</th><th>May read them</th><th>Can't change them</th><th>Change mid-session</th><th>Verdict</th></tr></thead>
+        <tbody id="hx"></tbody>
+      </table>
+    </div>
+    <div class="notes">
+      <div class="card"><h3>Capability</h3><ul>
+        <li>One flag, <code>SupportsReferences</code>, plus <code>ReferencesReadOnly</code>. Pi has the first and not the second, so the UI says "Pi can change files in references" next to the chip.</li>
+        <li>OpenCode 1 and OpenCode 2 each do it in their own adapter; nothing shared, as with every other feature.</li>
+      </ul></div>
+      <div class="card"><h3>Why not OpenCode's own setting</h3><ul>
+        <li>Fleet runs one OpenCode server for many repositories. A <code>references</code> setting in Fleet's server config would apply to all of them.</li>
+        <li>The other place is the repo's <code>opencode.json</code>. Fleet doesn't write into your repository. References you already keep there still work, and Fleet can list them as "from opencode.json".</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- ───────────── EVIDENCE ───────────── -->
+  <section class="view" id="v-evidence" hidden>
+    <div class="view-head"><div><h2>Live evidence</h2><p>OpenCode 2.0.18 and OpenCode 1.18.33 on scratch homes, with a scripted model that logs every request and calls tools on cue. Claude Code 2.1.287 against a scripted Anthropic endpoint. Raw files are on the branch in <code>docs/spikes/opencode2-references/evidence</code>.</p></div></div>
+    <div class="ev" id="ev"></div>
+  </section>
+
+  <!-- ───────────── PLAN ───────────── -->
+  <section class="view" id="v-plan" hidden>
+    <div class="view-head"><div><h2>Plan</h2><p>Sizes: S is a day or less, M two to three days. Stages 1–3 are usable on their own; Git references and suggestions can follow.</p></div></div>
+    <div class="plan">
+      <div class="st"><div><b>References per repository</b><p>Table, API, domain events; the list in the Sources rail with add, edit, remove and "Can change files". Local folders only.</p></div><span class="sz">M</span></div>
+      <div class="st"><div><b>Harness plumbing</b><p><code>SupportsReferences</code> and <code>ReferencesReadOnly</code>. OpenCode 2: instruction entry plus session rules. OpenCode: plugin block at the first request, rules, <code>ModelNotes</code> for changes. Claude Code: <code>--add-dir</code>, <code>--disallowedTools</code>, <code>--append-system-prompt</code>. Pi: <code>--append-system-prompt</code>. Live tests per harness with the scripted model.</p></div><span class="sz">M</span></div>
+      <div class="st"><div><b>Composer chip and conversation marks</b><p>References chip on the new-session page with per-session changes; reference names on tool cards; header chip with what was read.</p></div><span class="sz">M</span></div>
+      <div class="st"><div><b>Git references</b><p>Clone with Fleet's GitHub sign-in into <code>~/.weave/references</code>, daily refresh plus "Update now", status and errors in the list; skip failed ones in the agent's list.</p></div><span class="sz">M</span></div>
+      <div class="st"><div><b>Suggestions</b><p>Sibling folders under the workspace root; repositories named in README and <code>AGENTS.md</code>; references already in <code>opencode.json</code>.</p></div><span class="sz">S</span></div>
+    </div>
+    <h2 class="sectitle">Questions for you</h2>
+    <div class="qs">
+      <div class="q"><b>1. Where does the list live?</b><span>Per repository, with per-session changes in the composer (what the mockups show), or also a machine-wide list for things like <code>~/source/opencode</code> that every repository wants?</span><span class="rec">I'd start per repository; a machine list is easy to add later.</span></div>
+      <div class="q"><b>2. Read-only by default?</b><span>The mockups refuse edits in a reference unless you turn on "Can change files". Or should references be writable like any other folder, as OpenCode does?</span><span class="rec">I'd keep read-only by default; the shell gap is stated plainly.</span></div>
+      <div class="q"><b>3. Who clones Git references?</b><span>Fleet, with its GitHub sign-in and visible status, or leave it to each harness (OpenCode 2 and OpenCode only; Claude Code and Pi can't)?</span><span class="rec">I'd have Fleet clone them.</span></div>
+      <div class="q"><b>4. Pi without read-only</b><span>Offer references in Pi with the "Pi can change files" note, or turn them off for Pi?</span><span class="rec">I'd offer them with the note.</span></div>
+      <div class="q"><b>5. Where in the UI?</b><span>Under the repository in the Sources rail item (mockup 1), or in the repository's own settings, reached from its row in the session list?</span><span class="rec">Sources, so all context is in one place, with a link from the repository row.</span></div>
+    </div>
+    <p class="foot">Branch <code>spike/opencode2-references</code>: findings in <code>docs/spikes/opencode2-references/README.md</code>, evidence and the scripted-model kit beside it. Nothing is built.</p>
+  </section>
+</div>
+<script>
+(function () {
+  "use strict";
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
+  var I = {
+    board: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+    sessions: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    github: '<path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/>',
+    sources: '<path d="m16 6 4 14"/><path d="M12 6v14"/><path d="M8 8v12"/><path d="M4 4v16"/>',
+    plugins: '<path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/>',
+    workflows: '<rect x="3" y="3" width="8" height="8" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect x="13" y="13" width="8" height="8" rx="2"/>',
+    automations: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
+    analytics: '<path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+    settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+    file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>',
+    folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    git: '<circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="8" r="2.5"/><path d="M6 8.5v7M18 10.5c0 4-6 3-11 6"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    x: '<path d="M18 6 6 18M6 6l12 12"/>',
+    chev: '<path d="m6 9 6 6 6-6"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+    trash: '<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/>',
+    refresh: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
+    warn: '<path d="M12 3 2 21h20z"/><path d="M12 10v4M12 17.5v.5"/>',
+    pencil: '<path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>',
+    harness: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h6v6H9z"/>',
+    model: '<path d="M12 2 2 7l10 5 10-5z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>'
+  };
+  function ic(n, extra) { return '<svg class="i' + (extra ? " " + extra : "") + '" viewBox="0 0 24 24">' + I[n] + "</svg>"; }
+  function refic(kind) { return '<span class="reficon' + (kind === "git" ? " git" : "") + '">' + ic(kind === "git" ? "git" : "folder") + "</span>"; }
+
+  /* rails */
+  $$(".rail[data-rail]").forEach(function (r) {
+    var on = r.dataset.rail;
+    var items = [["board"], ["sessions"], ["github"], ["sources"], ["plugins"], ["workflows"], ["automations"], ["analytics"]];
+    var h = '<div class="logo" aria-hidden="true"></div>';
+    items.forEach(function (it) { h += '<span class="ri' + (it[0] === on ? " on" : "") + '" title="' + it[0] + '">' + ic(it[0]) + "</span>"; });
+    h += '<span class="sp"></span><span class="ri">' + ic("settings") + "</span>";
+    r.innerHTML = h;
+  });
+  $$(".list[data-sessions]").forEach(function (l) {
+    l.innerHTML = '<div class="lhead"><b>Sessions</b></div>' +
+      '<div class="search">' + ic("search") + "<span>Filter sessions</span></div>" +
+      '<div class="grp">weave-fleet</div>' +
+      '<div class="row sel"><span class="dots"><i></i><i></i><i></i><i></i></span><span class="t">Check the adapter\'s subagent default</span></div>' +
+      '<div class="row"><span class="ok-dot" style="background:transparent"></span><span class="t">References spike</span><span class="st">2h</span></div>' +
+      '<div class="row"><span class="warn-dot"></span><span class="t">Workflow designer polish</span><span class="st">5h</span></div>' +
+      '<div class="row dim"><span class="ok-dot" style="background:transparent"></span><span class="t">Update notice chip</span><span class="st">1d</span></div>' +
+      '<div class="grp">weave</div>' +
+      '<div class="row dim"><span class="ok-dot" style="background:transparent"></span><span class="t">Adapter loom default</span><span class="st">3d</span></div>';
+  });
+
+  /* tabs */
+  var views = ["overview", "repo", "compose", "agent", "how", "harness", "evidence", "plan"];
+  function show(v) {
+    if (views.indexOf(v) < 0) v = "overview";
+    $$(".view").forEach(function (s) { s.hidden = s.id !== "v-" + v; });
+    $$(".tab").forEach(function (t) { t.setAttribute("aria-selected", t.dataset.view === v ? "true" : "false"); });
+  }
+  $$(".tab").forEach(function (t) { t.addEventListener("click", function () { show(t.dataset.view); try { history.replaceState(null, "", "#" + t.dataset.view); } catch (e) {} }); });
+  show((location.hash || "").replace("#", ""));
+  window.addEventListener("hashchange", function () { show((location.hash || "").replace("#", "")); });
+
+  /* shared reference data */
+  var HOME = "/home/pgermishuys";
+  var BASE_TK = 24;
+  function initialRefs() {
+    return [
+      { name: "opencode", kind: "git", where: "github.com/anomalyco/opencode", branch: "v2", path: HOME + "/.weave/references/github.com/anomalyco/opencode@v2", desc: "OpenCode 2 source (branch v2). Check here how the harness behaves.", status: "ok", st: "Cloned · refreshed 2h ago", rw: false, tk: 72 },
+      { name: "weave", kind: "local", where: "~/source/weave", path: HOME + "/source/weave", desc: "Weave plugin and adapter. Fleet installs it.", status: "ok", st: "Folder found", rw: false, tk: 56 }
+    ];
+  }
+  var SUGG = [
+    { name: "weave-assets", kind: "local", where: "~/source/weave-assets", path: HOME + "/source/weave-assets", desc: "Logos, icons and brand colours.", why: "next to this folder", tk: 55 },
+    { name: "weave-website", kind: "local", where: "~/source/weave-website", path: HOME + "/source/weave-website", desc: "Public site and docs.", why: "next to this folder", tk: 52 },
+    { name: "fleet-releases", kind: "git", where: "github.com/pgermishuys/fleet-releases", branch: "main", path: HOME + "/.weave/references/github.com/pgermishuys/fleet-releases", desc: "Release notes and installers.", why: "named in README", tk: 66 }
+  ];
+  var refs = initialRefs(), added = {}, dialogOpen = false, lastAdded = null;
+
+  function renderBlock(list, wrap) {
+    var lines = ["Project references provide additional directories that can be accessed when relevant.", "<available_references>"];
+    list.slice().sort(function (a, b) { return a.name < b.name ? -1 : 1; }).forEach(function (r) {
+      lines.push("  <reference>", "    <name>" + r.name + "</name>", "    <path>" + r.path + "</path>", "    <description>" + r.desc + "</description>", "  </reference>");
+    });
+    lines.push("</available_references>");
+    var t = lines.join("\n");
+    return wrap ? '<context key="fleet-references">\n' + t + "\n</context>" : t;
+  }
+  function tokens(list) { var shown = list.filter(function (r) { return r.status !== "err"; }); return shown.length ? BASE_TK + shown.reduce(function (a, r) { return a + r.tk; }, 0) : 0; }
+
+  /* ── 1. repository page ── */
+  function renderRepo() {
+    var h = '<div class="refrow head"><span></span><span>Name</span><span>Description</span><span>Status</span><span>Can change files</span><span></span></div>';
+    refs.forEach(function (r, i) {
+      var dot = r.status === "ok" ? '<span class="ok-dot"></span>' : r.status === "busy" ? '<span class="spin">' + ic("refresh") + "</span>" : '<span class="err-dot"></span>';
+      h += '<div class="refrow' + (lastAdded === r.name ? " added" : "") + '">' + refic(r.kind) +
+        '<span class="nm"><b>' + esc(r.name) + "</b><small>" + esc(r.where) + (r.branch ? " · " + esc(r.branch) : "") + "</small></span>" +
+        '<span class="ds">' + esc(r.desc) + "<small>~" + r.tk + " tokens</small></span>" +
+        '<span class="stt">' + dot + "<span>" + esc(r.st) + "</span></span>" +
+        '<span class="rw"><button class="switch" type="button" role="switch" aria-label="Can change files in ' + esc(r.name) + '" aria-checked="' + r.rw + '" data-rw="' + i + '"></button>' + (r.rw ? "Yes" : "No") + "</span>" +
+        '<button class="iconbtn" type="button" title="Remove" aria-label="Remove ' + esc(r.name) + '" data-rm="' + i + '">' + ic("trash") + "</button></div>";
+    });
+    $("#r-list").innerHTML = h;
+    var n = refs.filter(function (r) { return r.status !== "err"; }).length;
+    $("#r-cost").innerHTML = ic("model") + "<span>The agent is told about <b>" + n + "</b> reference" + (n === 1 ? "" : "s") + ": about <b>" + tokens(refs) + " tokens</b> on every request, read from the prompt cache after the first.</span>";
+    $("#r-count").textContent = String(refs.length);
+    var s = SUGG.filter(function (x) { return !added[x.name]; });
+    $("#r-suggest").innerHTML = s.length ? '<h4>' + ic("search") + 'Suggested <small>Fleet looked next to this folder and in the README. Nothing is added until you click.</small></h4>' +
+      s.map(function (x) { return '<div class="sugg">' + refic(x.kind) + '<span class="t"><b class="mono">' + esc(x.name) + "</b><small>" + esc(x.where) + '</small></span><span class="why">' + esc(x.why) + '</span><button class="btn sm" type="button" data-sug="' + esc(x.name) + '">' + ic("plus") + "Add</button></div>"; }).join("")
+      : '<h4>' + ic("check") + "No more suggestions</h4>";
+    $("#r-dialog").hidden = !dialogOpen;
+  }
+  $("#r-app").addEventListener("click", function (e) {
+    var t = e.target.closest("[data-rw],[data-rm],[data-sug],#r-add,#d-cancel,#d-ok");
+    if (!t) return;
+    if (t.dataset.rw !== undefined) { var r = refs[+t.dataset.rw]; r.rw = !r.rw; lastAdded = null; }
+    else if (t.dataset.rm !== undefined) { refs.splice(+t.dataset.rm, 1); lastAdded = null; }
+    else if (t.dataset.sug) {
+      var s = SUGG.filter(function (x) { return x.name === t.dataset.sug; })[0];
+      added[s.name] = true; lastAdded = s.name;
+      refs.push({ name: s.name, kind: s.kind, where: s.where, branch: s.branch, path: s.path, desc: s.desc, status: s.kind === "git" ? "busy" : "ok", st: s.kind === "git" ? "Cloning…" : "Folder found", rw: false, tk: s.tk });
+      if (s.kind === "git") setTimeout(function () { refs.forEach(function (r) { if (r.name === s.name) { r.status = "err"; r.st = "Couldn't clone: sign in to GitHub"; } }); lastAdded = null; renderRepo(); }, 1400);
+    }
+    else if (t.id === "r-add") dialogOpen = true;
+    else if (t.id === "d-cancel") dialogOpen = false;
+    else if (t.id === "d-ok") {
+      dialogOpen = false; lastAdded = "weave-assets";
+      if (!refs.some(function (r) { return r.name === "weave-assets"; })) {
+        added["weave-assets"] = true;
+        refs.push({ name: "weave-assets", kind: "git", where: "github.com/weave-io/weave-assets", branch: "main", path: HOME + "/.weave/references/github.com/weave-io/weave-assets", desc: "Logos, icons and brand colours.", status: "busy", st: "Cloning…", rw: false, tk: 60 });
+        setTimeout(function () { refs.forEach(function (r) { if (r.name === "weave-assets") { r.status = "ok"; r.st = "Cloned · just now"; } }); lastAdded = null; renderRepo(); }, 1400);
+      }
+    }
+    renderRepo();
+  });
+  $("#r-reset").addEventListener("click", function () { refs = initialRefs(); added = {}; dialogOpen = false; lastAdded = null; renderRepo(); });
+  renderRepo();
+
+  /* ── harness facts ── */
+  var H = {
+    oc2: { n: "OpenCode 2", ro: true, note: "", how: "Fleet adds the list as a per-session instruction entry, and rules that allow reading each folder and refuse edits there." },
+    oc1: { n: "OpenCode", ro: true, note: "", how: "Fleet's plugin adds the list at the session's first request, with the same rules as OpenCode 2. Changes go with your next message." },
+    cc: { n: "Claude Code", ro: true, note: "", how: "Fleet starts Claude Code with <code>--add-dir</code> per folder, <code>--disallowedTools Edit(//path/**)</code> and the descriptions through <code>--append-system-prompt</code>." },
+    pi: { n: "Pi", ro: false, note: "Pi has no permission rules, so it can change files in a reference. Fleet tells it about the folders and asks it not to.", how: "Fleet adds the list with <code>--append-system-prompt</code>. Pi reads any path already." }
+  };
+
+  /* ── 2. composer ── */
+  var nH = "oc2", nPop = false, nOff = {}, nExtra = false;
+  var NREFS = initialRefs();
+  function nList() { var l = NREFS.filter(function (r) { return !nOff[r.name]; }); if (nExtra) l.push({ name: "specs", path: HOME + "/notes/fleet-specs", desc: "Product notes for Fleet.", tk: 50, kind: "local", where: "~/notes/fleet-specs" }); return l; }
+  function renderCompose() {
+    var l = nList();
+    $("#n-chips").innerHTML =
+      '<span class="chip">' + ic("folder") + "weave-fleet</span>" +
+      '<span class="chip">' + ic("harness") + H[nH].n + "</span>" +
+      '<span class="chip">' + ic("model") + (nH === "cc" ? "claude-sonnet-5-5" : "claude-sonnet-5") + "</span>" +
+      '<button class="chip" type="button" id="n-chip" aria-expanded="' + nPop + '">' + ic("folder") + 'References <span class="cnt">' + l.length + "</span>" + (H[nH].ro ? "" : ' <span style="color:var(--idle)">' + ic("warn") + "</span>") + "</button>" +
+      '<button class="send" type="button" aria-label="Send" style="margin-left:auto"><svg class="i" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>';
+    var pop = $("#n-pop");
+    pop.hidden = !nPop;
+    if (nPop) {
+      var opts = NREFS.map(function (r) {
+        var on = !nOff[r.name];
+        return '<button class="opt" type="button" data-tog="' + esc(r.name) + '"><span class="box-check' + (on ? " on" : "") + '">' + (on ? ic("check") : "") + "</span>" + refic(r.kind) + '<span class="t"><b>' + esc(r.name) + "</b><small>" + esc(r.desc) + '</small></span><span class="tk">~' + r.tk + "</span></button>";
+      }).join("");
+      if (nExtra) opts += '<button class="opt" type="button" data-extra="1"><span class="box-check on">' + ic("check") + "</span>" + refic("local") + '<span class="t"><b>specs</b><small>This session only · ~/notes/fleet-specs</small></span><span class="tk">~50</span></button>';
+      pop.innerHTML = "<header><b>References for this session</b><span style=\"color:var(--muted)\">from weave-fleet</span></header>" + opts +
+        '<button class="opt" type="button" data-addone="1"' + (nExtra ? " hidden" : "") + '><span></span><span class="reficon">' + ic("plus") + '</span><span class="t">Add a folder for this session…<small>Kept with the session, not the repository</small></span><span></span></button>' +
+        "<footer><span>About <b style=\"color:var(--text)\">" + tokens(l) + " tokens</b> per request, cached. " + (H[nH].ro ? "The agent can read these folders but not change them." : "") + "</span>" + (H[nH].ro ? "" : '<div class="callout">' + H[nH].note + "</div>") + "</footer>";
+
+    }
+    $("#n-note").innerHTML = '<div class="callout ' + (H[nH].ro ? "info" : "") + '">' + (H[nH].ro ? "" : "<b>" + ic("warn") + " " + H[nH].note + "</b><br>") + H[nH].how + "</div>";
+  }
+  $("#n-app").addEventListener("click", function (e) {
+    var t = e.target.closest("#n-chip,[data-tog],[data-addone],[data-extra]");
+    if (!t) { if (nPop && !e.target.closest("#n-pop")) { nPop = false; renderCompose(); } return; }
+    if (t.id === "n-chip") nPop = !nPop;
+    else if (t.dataset.tog) nOff[t.dataset.tog] = !nOff[t.dataset.tog];
+    else if (t.dataset.addone) nExtra = true;
+    else if (t.dataset.extra) nExtra = false;
+    renderCompose();
+  });
+  $("#n-seg").addEventListener("click", function (e) { var b = e.target.closest("button"); if (!b) return; nH = b.dataset.h; $$("#n-seg button").forEach(function (x) { x.setAttribute("aria-pressed", x === b ? "true" : "false"); }); renderCompose(); });
+  nPop = true; renderCompose();
+
+  /* ── 3. agent ── */
+  var gH = "oc2", gPop = false;
+  var TOOLS = {
+    oc2: { grep: "grep", read: "read", edit: "edit", deny: "Permission denied: edit" },
+    oc1: { grep: "grep", read: "read", edit: "edit", deny: "The user has specified a rule which prevents you from using this specific tool call." },
+    cc: { grep: "Grep", read: "Read", edit: "Edit", deny: "File is in a directory that is denied by your permission settings." },
+    pi: { grep: "grep", read: "read", edit: "edit", deny: null }
+  };
+  function seen(h) {
+    var list = initialRefs();
+    if (h === "oc2") return "System prompt, as an instruction entry Fleet set for this session:\n\n" + renderBlock(list, true);
+    if (h === "oc1") return "System prompt, added by Fleet's plugin at the first request:\n\n" + renderBlock(list, false);
+    if (h === "cc") return "System prompt, environment section (from --add-dir):\n\n - Additional working directories:\n  - " + list[0].path + "\n  - " + list[1].path + "\n\nAppended by Fleet (--append-system-prompt):\n\n" + renderBlock(list, false);
+    return "Appended by Fleet (--append-system-prompt):\n\n" + renderBlock(list, false) + "\nThese folders are for reading. Don't change files in them.";
+  }
+  function renderAgent() {
+    var T = TOOLS[gH];
+    var editCard = T.deny
+      ? '<div class="tcard blocked"><button type="button" data-tc="e"><b>' + T.edit + "</b>" + ' <span class="rbadge">weave</span><span class="tx">README.md</span><span class="r">refused ' + ic("lock") + "</span></button>" +
+        '<div class="body" hidden><pre>' + esc(T.deny) + "</pre></div></div>"
+      : '<div class="tcard"><button type="button" data-tc="e"><b>' + T.edit + '</b> <span class="rbadge">weave</span><span class="tx">README.md</span><span class="r" style="color:var(--idle)">' + ic("warn") + " changed a reference</span></button>" +
+        '<div class="body" hidden><pre>Pi has no permission rules. Fleet shows the change and marks it, but can\'t stop it.</pre></div></div>';
+    $("#g-convo").innerHTML =
+      '<div class="bubble">Check whether the Weave adapter still defaults subagents to Loom, and update our docs if it changed.</div>' +
+      '<div class="reply"><div class="who">Loom · claude-sonnet-5 · ' + H[gH].n + "</div>" +
+      "<p>I'll look in the <span class=\"rbadge\">weave</span> reference for the adapter's defaults.</p>" +
+      '<div class="tcard"><button type="button" data-tc="g"><b>' + T.grep + '</b> <span class="rbadge">weave</span><span class="tx">"subagent" in src/adapter</span><span class="r">3 matches</span></button>' +
+      '<div class="body" hidden><div class="tline">' + ic("file") + '<span class="t">src/adapter/config.ts</span><span class="ref">:14</span></div><div class="tline">' + ic("file") + '<span class="t">src/adapter/config.ts</span><span class="ref">:22</span></div><div class="tline">' + ic("file") + '<span class="t">src/adapter/README.md</span><span class="ref">:40</span></div></div></div>' +
+      '<div class="tcard"><button type="button" data-tc="r"><b>' + T.read + '</b> <span class="rbadge">weave</span><span class="tx">src/adapter/config.ts</span><span class="r">48 lines · open ›</span></button></div>' +
+      "<p>It changed: subagents now inherit the parent's model unless the agent names one. The adapter's README still says Loom. That's in <code>weave</code>, so I'll leave it and fix ours.</p>" +
+      editCard +
+      '<div class="tcard"><button type="button" data-tc="o"><b>' + T.edit + '</b><span class="tx">docs/harnesses.md</span><span class="r">+3 −2</span></button></div>' +
+      "<p>Updated <code>docs/harnesses.md</code>. The stale line in Weave's README needs a change in that repository.</p>" +
+      '<details class="seen"><summary>What the model sees (' + H[gH].n + ")</summary><pre>" + esc(seen(gH)) + "</pre></details></div>";
+    $("#g-hname").textContent = H[gH].n;
+    var pop = $("#g-pop"); pop.hidden = !gPop;
+    $("#g-chip").setAttribute("aria-expanded", gPop ? "true" : "false");
+    pop.innerHTML = "<header>" + ic("folder") + "<b>References in this session</b></header>" +
+      '<div class="sec"><div class="sh">Read so far</div>' +
+      '<div class="prow">' + refic("local") + '<span class="t"><b class="mono">weave</b> · 1 search, 1 read</span><small>10:42</small></div>' +
+      '<div class="prow">' + refic("git") + '<span class="t"><b class="mono">opencode</b> · not read</span><small>v2 · 2h</small></div></div>' +
+      '<div class="sec"><div class="hnote">' + (H[gH].ro ? "The agent can read these folders without asking and can't change them." : H[gH].note) + " Add or remove one for this session from the composer.</div></div>";
+  }
+  $("#g-app").addEventListener("click", function (e) {
+    var c = e.target.closest("#g-chip"); if (c) { gPop = !gPop; renderAgent(); return; }
+    var tc = e.target.closest("[data-tc]"); if (tc) { var b = tc.parentElement.querySelector(".body"); if (b) b.hidden = !b.hidden; return; }
+    if (gPop && !e.target.closest("#g-pop")) { gPop = false; renderAgent(); }
+  });
+  $("#g-seg").addEventListener("click", function (e) { var b = e.target.closest("button"); if (!b) return; gH = b.dataset.h; $$("#g-seg button").forEach(function (x) { x.setAttribute("aria-pressed", x === b ? "true" : "false"); }); renderAgent(); renderGNotes(); });
+  $("#g-file").textContent = "// Example content for the mockup\nexport const defaults = {\n  // Subagents run on the parent's model\n  // unless the agent names its own.\n  subagent: { model: \"inherit\" },\n  primary: { agent: \"loom\" },\n}\n";
+  function renderGNotes() {
+    $("#g-notes").innerHTML = [
+      "Tool cards whose path is inside a reference get its name. Fleet knows the paths, so it marks them for every harness the same way.",
+      "Opening a read shows the file in the right panel with \"read by the agent\", as Sources does for documents.",
+      gH === "pi" ? "<b>Pi:</b> the edit went through. The card says so; the chip warns before you start." : "<b>" + H[gH].n + ":</b> the edit in <code>weave</code> was refused by the harness, with the message shown in the card."
+    ].map(function (x) { return "<li>" + x + "</li>"; }).join("");
+  }
+  renderAgent(); renderGNotes();
+
+  /* ── how ── */
+  $("#h-block").textContent = renderBlock(initialRefs(), false);
+  var TK = [
+    ["The two references in the mockups", "opencode + weave", 152, "fleet"],
+    ["Three references", "adds weave-assets", 207, "fleet"],
+    ["Sources' two tools, for comparison", "sources_search + sources_read", 170, "base"],
+    ["OpenCode 2's whole system prompt in the test", "no references", 5010, "base"]
+  ];
+  var max = 5010;
+  $("#h-tok").innerHTML = TK.map(function (t) {
+    return '<div class="tokrow"><span class="lab">' + t[0] + "<small>" + t[1] + '</small></span><span class="track"><span class="fill' + (t[3] === "base" ? " base" : "") + '" style="width:' + Math.max(0.6, t[2] / max * 100) + '%"></span></span><span class="v">' + t[2].toLocaleString("en") + "</span></div>";
+  }).join("");
+
+  /* ── harness table ── */
+  function mk(c, t) { return '<span class="mark ' + c + '"><span class="d"></span>' + t + "</span>"; }
+  var HX = [
+    ["OpenCode 2 <small style='color:var(--page-muted)'>2.0.18</small>", mk("native", "Native") + "<br><small>Fleet sets it as a per-session instruction entry (same text)</small>", mk("fleet", "Fleet") + "<br><small>rule: <code>external_directory</code> allow</small>", mk("fleet", "Fleet") + "<br><small>rules: edit/write deny</small>", mk("native", "Native diff") + "<br><small>cache-safe</small>", "<span class='lvl go'>On</span>"],
+    ["OpenCode <small style='color:var(--page-muted)'>1.18.33</small>", mk("native", "Native") + "<br><small>Fleet's plugin adds it at the first request</small>", mk("native", "Native") + "<br><small>+ Fleet rule when the level asks</small>", mk("fleet", "Fleet") + "<br><small>rule: edit deny</small>", mk("fleet", "Fleet") + "<br><small><code>ModelNotes</code>, next message</small>", "<span class='lvl go'>On</span>"],
+    ["Claude Code <small style='color:var(--page-muted)'>2.1.287</small>", mk("partial", "Path only") + "<br><small><code>--add-dir</code> lists it; descriptions via <code>--append-system-prompt</code></small>", mk("native", "Native") + "<br><small><code>--add-dir</code></small>", mk("native", "Native") + "<br><small><code>--disallowedTools Edit(//path/**)</code></small>", mk("partial", "Next start") + "<br><small>flags are per process</small>", "<span class='lvl go'>On</span>"],
+    ["Pi <small style='color:var(--page-muted)'>0.84.2, not run</small>", mk("fleet", "Fleet") + "<br><small><code>--append-system-prompt</code></small>", mk("native", "Already") + "<br><small>reads any path</small>", mk("none", "Not possible") + "<br><small>no permission rules</small>", mk("partial", "Next start"), "<span class='lvl setup'>On, with a warning</span>"]
+  ];
+  $("#hx").innerHTML = HX.map(function (r) { return "<tr>" + r.map(function (c, i) { return i === 0 ? "<td><b>" + c + "</b></td>" : "<td>" + c + "</td>"; }).join("") + "</tr>"; }).join("");
+
+  /* ── evidence ── */
+  var EV = [
+    ["In 2.0.18, and what the model sees", "Three references in a project's opencode.json, one without a description and one marked hidden. The agent's first request carried this in its system prompt (offset 18,967 of 19,941 characters). The description-less one is missing; the hidden one is there.",
+      "<span class='c'># fakellm.log, request 1, system message</span>\nProject references provide additional directories that can be accessed when relevant.\n&lt;available_references&gt;\n  &lt;reference&gt;\n    &lt;name&gt;<span class='y'>design</span>&lt;/name&gt;   <span class='c'># hidden: true, still listed</span>\n    &lt;path&gt;…/run/work/designsys&lt;/path&gt;\n  …\n    &lt;name&gt;hello&lt;/name&gt;\n    &lt;path&gt;…/data/opencode/repos/github.com/octocat/Hello-World&lt;/path&gt;\n  …\n&lt;/available_references&gt;\n<span class='c'># \"nodesc\": \"../secret\"  → not in the prompt</span>"],
+    ["References grant no access", "Same session, default permissions. Reading a file in a reference raised the same ask as any outside folder.",
+      "<span class='c'># GET /api/session/ses_f06e40c5…/permission</span>\n{ \"action\": <span class='y'>\"external_directory\"</span>,\n  \"resources\": [\"…/run/work/specs/*\"] }"],
+    ["…and under allow-all the agent writes into one", "Fleet's default level (allow everything). The scripted model called read, grep, glob, then write into the specs reference.",
+      "CALL write {\"path\": \"…/work/specs/new.md\", …}\nTOOL RESULT: <span class='y'>Created file successfully</span>: …/work/specs/new.md"],
+    ["Fleet's rules make it read-only (OpenCode 2)", "Session rules: allow everything, then deny edit/write/patch/apply_patch/move for <path>/*.",
+      "read  …/specs/login.md        → <span class='g'>1: # Specs…</span>\nwrite …/specs/evil2.md         → <span class='y'>Permission denied: edit</span>\nedit  …/specs/login.md         → <span class='y'>Permission denied: edit</span>\nshell echo sneaky > …/shell.md → (no output)   <span class='c'># the shell isn't limited</span>"],
+    ["At Fleet's Ask level", "Rules: ask for everything, allow read/grep/glob, allow external_directory for the reference. The reference read ran; another outside folder asked.",
+      "read …/specs/login.md   → <span class='g'>ran</span>\nread …/secret/readme.txt → <span class='y'>asks external_directory …/secret/*</span>"],
+    ["Mid-session change keeps the cache", "Added one reference and removed one while the session was open. The system prompt stayed byte-identical; the next request had this user message. The XML is HTML-escaped, an OpenCode 2 bug.",
+      "&lt;system-update&gt;\nNew project references are available in addition to those previously listed:\n  &amp;lt;reference&amp;gt; … later …\nThe following project references are no longer available and must not be used: hello.\n&lt;/system-update&gt;"],
+    ["Git references and a private repository", "Clone command, branch checkout, and a repository it can't read. The failure is a warning in the log; the agent was still told the reference exists.",
+      "git clone --depth 100 -- https://github.com/octocat/Hello-World.git …/repos/github.com/octocat/Hello-World\n…/repos/github.com/octocat/Hello-World<span class='b'>@octocat-patch-1</span>     <span class='c'># branch: separate checkout</span>\nWARN failed to materialize reference name=private\n  <span class='y'>fatal: could not read Username for 'https://github.com'</span>\n<span class='c'># next request:</span> New project references are available … &lt;name&gt;private&lt;/name&gt; …"],
+    ["Fleet's own route on 2.0.18: an instruction entry", "PUT /api/experimental/session/{id}/instructions/entries/fleet-references with the same text. It landed in the system prompt; changing it sent a diff and left the system prompt unchanged.",
+      "PUT … → <span class='g'>204</span>\n&lt;context key=\"fleet-references\"&gt;\nProject references provide additional directories …\n<span class='c'># after a change:</span>\nThe context under \"fleet-references\" changed and supersedes the previous value: …\n(corrected) agent system prompt unchanged after the entry changed: <span class='g'>True</span>"],
+    ["OpenCode 1 has it too", "1.18.33, no experimental flag. Same block after <env>. Reading the reference ran; another outside folder asked. A config change didn't reach a running session. Fleet's per-session rules made it read-only.",
+      "references in system prompt: <span class='g'>True</span>\nread …/specs/login.md → <span class='g'>ran</span>    read …/secret/readme.txt → <span class='y'>asks</span>\nwrite …/specs/v1.md → <span class='y'>The user has specified a rule which prevents you…</span>\nafter adding a reference mid-session: system prompt changed = <span class='y'>False</span>"],
+    ["Claude Code --add-dir", "2.1.287 against a scripted Anthropic endpoint. The folder is listed without a description; reads run. With --disallowedTools Edit/Write(//path/**) writes are refused even in bypassPermissions.",
+      " - Primary working directory: …/work/proj\n - Additional working directories:\n  - …/work/specs\nRead  …/specs/login.md → <span class='g'>1 # Specs…</span>\nWrite …/specs/cc.md    → <span class='y'>File is in a directory that is denied by your permission settings.</span>\nWrite …/proj/cc.md     → <span class='g'>File created successfully</span>"],
+    ["Pi: not run", "bunx @earendil-works/pi-coding-agent@0.84.2 didn't start offline (no request reached the scripted model in 120 s). From its README: \"No permission popups.\" Its path helper resolves any absolute path. It has --append-system-prompt.",
+      "<span class='c'># dist/core/tools/path-utils.js</span>\nexport function resolveToCwd(filePath, cwd) {\n    return resolvePath(filePath, cwd, { … });\n}"],
+    ["How often this repository's sessions reach next door", "Claude Code transcripts for weave-fleet (including this spike's two sessions).",
+      "transcripts: 215\ntouching ~/source/opencode: <span class='b'>28</span>\ntouching ~/source/weave/:  <span class='b'>23</span>"]
+  ];
+  $("#ev").innerHTML = EV.map(function (e) { return '<div class="two"><div class="card"><h3>' + esc(e[0]) + "</h3><p>" + esc(e[1]) + '</p></div><pre class="term">' + e[2] + "</pre></div>"; }).join("");
+})();
+</script>

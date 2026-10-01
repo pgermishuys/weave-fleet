@@ -1,6 +1,6 @@
 # Spike: OpenCode 2 references (2026-10-01)
 
-Branch `spike/opencode2-references`. Nothing here is built into Fleet. Mockup page: see the link in the final report.
+Branch `spike/opencode2-references`. Nothing here is built into Fleet. Mockup page: https://claude.ai/artifact/RQRbGY2aTLETzTbJafquVF (source: `mockup.html`).
 
 ## Verdict
 
