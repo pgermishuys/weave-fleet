@@ -1,0 +1,1124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Fleet Agent Browser</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Fleet's own tokens (client/src/assets/main.css), light first, dark redefined. */
+:root {
+  --main-bg: #F3F2EF; --rail-bg: #FFFFFF; --panel-bg: #FFFFFF; --card-bg: #FFFFFF;
+  --sunken: #ECEAE6; --hover: rgba(26,25,24,.05); --active: rgba(26,25,24,.08);
+  --border: rgba(26,25,24,.09); --border-strong: rgba(26,25,24,.16);
+  --text: #1A1918; --muted: #6E6A65; --faint: #9a958f;
+  --accent: #5B6EC7; --accent-dim: rgba(91,110,199,.12); --on-accent: #fff;
+  --running: #16a34a; --idle: #d97706; --error: #dc2626;
+  --ref-tint: rgba(91,110,199,.14);
+  --shadow: 0 1px 2px rgba(26,25,24,.05), 0 16px 40px -20px rgba(26,25,24,.28);
+  --page-bg: #EAE8E4; --page-ink: #1A1918; --page-muted: #6E6A65; --page-card: #F7F6F3;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --main-bg: #0d0d10; --rail-bg: #0d0d10; --panel-bg: #141418; --card-bg: #1b1b20;
+    --sunken: #111115; --hover: rgba(255,255,255,.04); --active: rgba(255,255,255,.07);
+    --border: rgba(255,255,255,.075); --border-strong: rgba(255,255,255,.14);
+    --text: #e8e8ec; --muted: #8e8e9a; --faint: #5d5d68;
+    --accent: #6366f1; --accent-dim: rgba(99,102,241,.16); --on-accent: #fff;
+    --running: #22c55e; --idle: #f59e0b; --error: #ef4444;
+    --ref-tint: rgba(99,102,241,.22);
+    --shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 20px 50px -24px rgba(0,0,0,.8);
+    --page-bg: #08080a; --page-ink: #e8e8ec; --page-muted: #8e8e9a; --page-card: #111114;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --main-bg: #0d0d10; --rail-bg: #0d0d10; --panel-bg: #141418; --card-bg: #1b1b20;
+  --sunken: #111115; --hover: rgba(255,255,255,.04); --active: rgba(255,255,255,.07);
+  --border: rgba(255,255,255,.075); --border-strong: rgba(255,255,255,.14);
+  --text: #e8e8ec; --muted: #8e8e9a; --faint: #5d5d68;
+  --accent: #6366f1; --accent-dim: rgba(99,102,241,.16); --on-accent: #fff;
+  --running: #22c55e; --idle: #f59e0b; --error: #ef4444;
+  --ref-tint: rgba(99,102,241,.22);
+  --shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 20px 50px -24px rgba(0,0,0,.8);
+  --page-bg: #08080a; --page-ink: #e8e8ec; --page-muted: #8e8e9a; --page-card: #111114;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--page-bg); color: var(--page-ink); font: 14px/1.5 var(--sans); margin: 0; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1320px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 64px; }
+a { color: inherit; }
+button { font: inherit; color: inherit; }
+code, .mono { font-family: var(--mono); font-size: .9em; }
+svg.i { width: 1em; height: 1em; flex-shrink: 0; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vertical-align: -.125em; }
+h1, h2, h3, h4 { text-wrap: balance; }
+
+/* page chrome */
+.eyebrow { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--page-muted); font-weight: 600; }
+h1 { font-size: 30px; line-height: 1.15; letter-spacing: -.02em; margin: 4px 0 8px; }
+.lede { color: var(--page-muted); max-width: 74ch; margin: 0; font-size: 15px; }
+.tabs { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--page-bg); display: flex; gap: 2px; overflow-x: auto; padding-block: 10px; border-bottom: 1px solid var(--border); margin: 18px 0 24px; scrollbar-width: none; }
+.tab { border: 0; background: none; padding: 7px 12px; border-radius: 8px; color: var(--page-muted); font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap; display: inline-flex; gap: 7px; align-items: center; }
+.tab:hover { color: var(--page-ink); background: var(--hover); }
+.tab[aria-selected="true"] { color: var(--page-ink); background: var(--active); }
+.tab .n { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.view[hidden] { display: none !important; }
+.view-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: end; margin-bottom: 16px; }
+.view-head h2 { font-size: 21px; letter-spacing: -.01em; margin: 0 0 4px; }
+.view-head p { margin: 0; color: var(--page-muted); max-width: 76ch; }
+@media (max-width: 800px) { .view-head { grid-template-columns: 1fr; } }
+.seg { display: inline-flex; padding: 3px; border-radius: 9px; background: var(--active); gap: 2px; flex-wrap: wrap; }
+.seg button { border: 0; background: none; padding: 5px 12px; border-radius: 7px; font-size: 12.5px; font-weight: 500; color: var(--page-muted); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--card-bg); color: var(--page-ink); box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.scroller { overflow-x: auto; border-radius: 14px; padding-bottom: 4px; }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 14px; font-size: 13px; margin-top: 16px; align-items: start; }
+.card { background: var(--page-card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.card h3 { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--page-muted); margin: 0 0 8px; font-weight: 600; }
+.card ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+.card li::marker { color: var(--faint); }
+.card p { margin: 0 0 6px; }
+.src { display: inline-block; font-family: var(--mono); font-size: 11px; color: var(--page-muted); background: var(--active); border-radius: 5px; padding: 1px 6px; }
+
+/* provider marks */
+.pv { width: 18px; height: 18px; border-radius: 5px; display: inline-grid; place-items: center; font: 700 10px/1 var(--sans); color: #fff; flex-shrink: 0; letter-spacing: 0; }
+.pv.lg { width: 30px; height: 30px; border-radius: 8px; font-size: 14px; }
+.pv.sm { width: 14px; height: 14px; border-radius: 4px; font-size: 8.5px; }
+.pv.github { background: #24292f; } .pv.linear { background: #5E6AD2; } .pv.notion { background: #2f2f2f; }
+.pv.drive { background: #1a8f55; } .pv.hubspot { background: #e5603e; } .pv.slack { background: #611f69; }
+.pv.sentry { background: #4a3d74; } .pv.atlassian { background: #0c66e4; } .pv.mcp { background: var(--muted); }
+:root[data-theme="dark"] .pv.github, :root[data-theme="dark"] .pv.notion { box-shadow: inset 0 0 0 1px rgba(255,255,255,.18); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pv.github, :root:not([data-theme="light"]) .pv.notion { box-shadow: inset 0 0 0 1px rgba(255,255,255,.18); } }
+
+/* Fleet app frame */
+.app { min-width: 1160px; height: 680px; display: grid; grid-template-columns: 52px 268px minmax(0, 1fr); background: var(--rail-bg); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow); color: var(--text); font-size: 13px; position: relative; }
+.app.no-list { grid-template-columns: 52px minmax(0, 1fr); }
+.app.sess { grid-template-columns: 52px 240px minmax(0, 1fr); }
+.rail { display: flex; flex-direction: column; align-items: center; gap: 4px; padding-block: 12px; background: var(--rail-bg); }
+.rail .logo { width: 24px; height: 14px; margin-bottom: 12px; background: linear-gradient(90deg, #6366f1, #ec4899 60%, #3b82f6); clip-path: polygon(0 0, 18% 0, 32% 70%, 46% 0, 54% 0, 68% 70%, 82% 0, 100% 0, 76% 100%, 60% 100%, 50% 42%, 40% 100%, 24% 100%); }
+.rail .ri { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 9px; color: var(--muted); font-size: 17px; position: relative; }
+.rail .ri.on { background: var(--active); color: var(--text); }
+.rail .ri.new::after { content: ""; position: absolute; top: 6px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--rail-bg); }
+.rail .sp { flex: 1; }
+.list { background: var(--rail-bg); padding: 12px 10px; display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+.main { background: var(--panel-bg); margin: 8px 8px 8px 0; border-radius: 12px; border: 1px solid var(--border); overflow: hidden; display: flex; flex-direction: column; min-width: 0; position: relative; }
+.app.no-list .main { margin-left: 0; }
+.lhead { display: flex; align-items: center; gap: 8px; padding: 2px 6px 10px; }
+.lhead b { font-size: 14px; font-weight: 600; flex: 1; }
+.search { height: 32px; border-radius: 8px; border: 1px solid var(--border); background: var(--sunken); display: flex; align-items: center; gap: 8px; padding: 0 10px; color: var(--faint); font-size: 12.5px; margin-bottom: 8px; }
+.search .sq { color: var(--text); flex: 1; }
+.search .kbd { margin-left: auto; }
+.grp { display: flex; align-items: center; gap: 6px; color: var(--faint); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; font-weight: 600; padding: 12px 8px 4px; }
+.row { display: flex; align-items: center; gap: 9px; min-height: 34px; padding: 0 8px; border-radius: 8px; color: var(--text); cursor: pointer; min-width: 0; border: 0; background: none; width: 100%; text-align: left; font-size: 13px; }
+.row:hover { background: var(--hover); }
+.row.sel { background: var(--active); }
+.row .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .t small { display: block; color: var(--muted); font-size: 11px; line-height: 1.2; }
+.row.dim .t { color: var(--muted); }
+.row .st { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.ok-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--running); flex-shrink: 0; }
+.warn-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--idle); flex-shrink: 0; }
+.kbd { font-family: var(--mono); font-size: 10.5px; padding: 1px 5px; border-radius: 4px; background: var(--active); color: var(--muted); }
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--card-bg); color: var(--text); font-size: 12.5px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+.btn:hover { border-color: var(--border-strong); }
+.btn.primary { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.btn.primary:hover { filter: brightness(1.07); }
+.btn.ghost { background: none; border-color: transparent; color: var(--muted); }
+.btn.ghost:hover { color: var(--text); background: var(--hover); }
+.btn.sm { height: 24px; padding: 0 8px; font-size: 12px; }
+.btn[disabled] { opacity: .55; cursor: default; }
+.ro { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 500; color: var(--muted); background: var(--active); white-space: nowrap; }
+.spin { animation: spin 1s linear infinite; display: inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin, .dots i, .caret { animation: none !important; } }
+.switch { position: relative; width: 28px; height: 16px; border-radius: 999px; border: 0; background: var(--border-strong); padding: 0; cursor: pointer; flex-shrink: 0; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; transition: transform 150ms ease-out; }
+.switch[aria-checked="true"] { background: var(--accent); }
+.switch[aria-checked="true"]::after { transform: translateX(12px); }
+
+/* sources browse */
+.browse { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); height: 100%; min-height: 0; }
+.results { border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+.rhead { padding: 14px 16px 10px; display: grid; gap: 10px; border-bottom: 1px solid var(--border); }
+.rhead h3 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+.fchips { display: flex; gap: 6px; flex-wrap: wrap; }
+.fchip { height: 26px; padding: 0 9px; border-radius: 7px; border: 1px solid var(--border); display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; background: none; cursor: pointer; }
+.fchip[aria-pressed="true"] { background: var(--accent-dim); color: var(--text); border-color: transparent; }
+.fchip .c { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+.rlist { padding: 6px; overflow: auto; display: grid; gap: 1px; align-content: start; }
+.res { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 3px 10px; padding: 9px 10px; border-radius: 9px; cursor: pointer; border: 0; background: none; text-align: left; width: 100%; }
+.res:hover { background: var(--hover); }
+.res.sel { background: var(--active); }
+.res .pv { margin-top: 1px; }
+.res .tt { font-weight: 500; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.res .sn { grid-column: 2; color: var(--muted); font-size: 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.res .mt { grid-column: 2; color: var(--faint); font-size: 11px; font-family: var(--mono); display: flex; gap: 8px; }
+.res mark { background: color-mix(in srgb, var(--accent) 22%, transparent); color: inherit; border-radius: 2px; padding: 0 1px; }
+.preview { display: flex; flex-direction: column; min-height: 0; background: var(--panel-bg); }
+.phead { padding: 14px 18px 12px; border-bottom: 1px solid var(--border); display: grid; gap: 8px; }
+.phead .crumb { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; }
+.phead h3 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -.01em; line-height: 1.3; }
+.phead .acts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.phead .acts .grow { flex: 1; }
+.doc { padding: 16px 22px 24px; overflow: auto; line-height: 1.62; font-size: 13.5px; }
+.doc h4 { font-size: 13.5px; margin: 14px 0 4px; color: var(--accent); font-weight: 600; }
+.doc p { margin: 0 0 10px; max-width: 64ch; }
+.doc ul { margin: 0 0 10px; padding-left: 20px; }
+.doc code { background: var(--sunken); padding: 0 4px; border-radius: 4px; font-size: 12px; }
+.doc .props { display: grid; grid-template-columns: 110px 1fr; gap: 4px 12px; font-size: 12.5px; margin-bottom: 14px; padding: 10px 12px; background: var(--sunken); border-radius: 9px; }
+.doc .props span:nth-child(odd) { color: var(--muted); }
+.attach-menu { position: absolute; z-index: 6; right: 18px; top: 92px; width: 300px; background: var(--card-bg); border: 1px solid var(--border-strong); border-radius: 11px; box-shadow: var(--shadow); padding: 5px; }
+.attach-menu .mh { font-size: 11px; color: var(--faint); padding: 7px 8px 4px; letter-spacing: .05em; text-transform: uppercase; font-weight: 600; }
+.mi { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 7px; cursor: pointer; font-size: 12.5px; border: 0; background: none; width: 100%; text-align: left; }
+.mi:hover { background: var(--hover); }
+.mi .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mi small { color: var(--muted); }
+.dots { display: inline-grid; grid-template-columns: repeat(2, 3px); gap: 2px; }
+.dots i { width: 3px; height: 3px; border-radius: 1px; background: var(--accent); animation: tick 1.2s infinite; }
+.dots i:nth-child(2) { animation-delay: .3s; } .dots i:nth-child(3) { animation-delay: .9s; } .dots i:nth-child(4) { animation-delay: .6s; }
+@keyframes tick { 0%, 100% { opacity: .25 } 50% { opacity: 1 } }
+.toast { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--text); color: var(--panel-bg); padding: 8px 14px; border-radius: 9px; font-size: 12.5px; box-shadow: var(--shadow); z-index: 8; display: flex; gap: 10px; align-items: center; white-space: nowrap; }
+.toast b { font-weight: 600; }
+
+/* connect */
+.cpage { flex: 1; overflow: auto; padding: 28px 34px; display: grid; gap: 22px; align-content: start; }
+.chead { display: flex; gap: 14px; align-items: center; }
+.chead h3 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -.015em; }
+.chead p { margin: 2px 0 0; color: var(--muted); }
+.cgrid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.box { border: 1px solid var(--border); border-radius: 12px; background: var(--card-bg); padding: 16px 18px; display: grid; gap: 12px; }
+.box h4 { margin: 0; font-size: 13px; font-weight: 600; }
+.box .sub { color: var(--muted); font-size: 12.5px; margin: 0; }
+.cap { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 2px 10px; align-items: start; font-size: 12.5px; }
+.cap .ic { color: var(--running); margin-top: 2px; }
+.cap .ic.no { color: var(--faint); }
+.cap small { grid-column: 2; color: var(--muted); }
+.steps { display: grid; gap: 0; }
+.step { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; padding: 8px 0; font-size: 12.5px; color: var(--muted); }
+.step .b { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--border-strong); display: grid; place-items: center; font-size: 10.5px; font-family: var(--mono); }
+.step.done { color: var(--text); }
+.step.done .b { background: var(--running); border-color: transparent; color: #fff; }
+.step.now { color: var(--text); }
+.step.now .b { border-color: var(--accent); color: var(--accent); }
+.field { display: grid; gap: 5px; }
+.field label { font-size: 12px; font-weight: 500; color: var(--muted); }
+.input { height: 30px; border: 1px solid var(--border-strong); background: var(--sunken); color: var(--text); border-radius: 7px; padding: 0 9px; font: 12.5px var(--sans); display: flex; align-items: center; gap: 8px; min-width: 0; }
+.input.mono { font: 12px var(--mono); }
+.input .grow { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.callout { border-radius: 10px; padding: 10px 12px; font-size: 12.5px; background: color-mix(in srgb, var(--idle) 10%, transparent); border: 1px solid color-mix(in srgb, var(--idle) 28%, transparent); }
+.callout.info { background: var(--accent-dim); border-color: color-mix(in srgb, var(--accent) 25%, transparent); }
+.gfile { display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: 8px; font-size: 12.5px; }
+.gfile:hover { background: var(--hover); }
+.gfile .t { flex: 1; }
+.gfile .w { color: var(--faint); font-size: 11px; }
+
+/* session */
+.shead { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); min-height: 54px; position: relative; }
+.shead .ttl { min-width: 0; flex: 1; }
+.shead .ttl b { display: block; font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shead .ttl small { color: var(--muted); font-size: 11.5px; display: flex; gap: 6px; align-items: center; white-space: nowrap; }
+.hchip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 9px; border-radius: 8px; border: 1px solid var(--border); background: var(--card-bg); font-size: 12px; cursor: pointer; white-space: nowrap; }
+.hchip:hover, .hchip[aria-expanded="true"] { border-color: var(--border-strong); }
+.hchip .stack { display: inline-flex; }
+.hchip .stack .pv { margin-left: -4px; box-shadow: 0 0 0 1.5px var(--card-bg); }
+.hchip .stack .pv:first-child { margin-left: 0; }
+.convo { flex: 1; padding: 20px 24px 10px; display: flex; flex-direction: column; gap: 14px; overflow: auto; min-height: 0; }
+.bubble { align-self: flex-end; background: var(--card-bg); border: 1px solid var(--border); padding: 9px 13px; border-radius: 12px; max-width: 76%; display: grid; gap: 7px; }
+.reply { max-width: 92%; color: var(--text); line-height: 1.62; display: grid; gap: 8px; }
+.reply p { margin: 0; }
+.who { font-size: 11.5px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.tcard { border: 1px solid var(--border); border-radius: 10px; background: var(--card-bg); overflow: hidden; max-width: 640px; }
+.tcard > button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 10px; border: 0; background: none; cursor: pointer; text-align: left; font-size: 12.5px; color: var(--muted); }
+.tcard > button b { color: var(--text); font-weight: 500; white-space: nowrap; }
+.tcard > button .tx { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.tcard > button .r { margin-left: auto; white-space: nowrap; flex-shrink: 0; font-size: 11px; font-family: var(--mono); color: var(--faint); display: inline-flex; gap: 8px; align-items: center; }
+.tcard .body { border-top: 1px solid var(--border); padding: 6px; display: grid; gap: 1px; }
+.tcard .body[hidden] { display: none; }
+.tline { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px; font-size: 12.5px; }
+.tline:hover { background: var(--hover); }
+.tline .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tline .ref { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+.cite { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 5px; background: var(--ref-tint); font-size: 12px; vertical-align: 1px; cursor: pointer; border: 0; color: var(--text); }
+.cite:hover { filter: brightness(1.1); }
+.composer { margin: 0 16px 14px; border: 1px solid var(--border-strong); border-radius: 13px; background: var(--card-bg); padding: 10px 12px; display: grid; gap: 10px; position: relative; }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.pills:empty { display: none; }
+.spill { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 4px 0 6px; border-radius: 6px; background: var(--ref-tint); font-size: 12.5px; max-width: 100%; }
+.spill .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 280px; }
+.spill .tk { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+.spill button { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 0 4px; border-radius: 4px; font-size: 14px; line-height: 1; }
+.spill button:hover { color: var(--text); background: var(--hover); }
+.ctext { font-size: 14px; min-height: 22px; line-height: 1.55; outline: none; }
+.ctext .ph { color: var(--faint); }
+.caret { display: inline-block; width: 1.5px; height: 16px; background: var(--accent); vertical-align: -3px; animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0 } }
+.cbar { display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--muted); }
+.cbar .tag { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border-radius: 7px; background: var(--hover); }
+.send { margin-left: auto; width: 28px; height: 28px; border-radius: 50%; background: var(--accent); display: grid; place-items: center; color: #fff; border: 0; cursor: pointer; }
+.picker { position: absolute; left: 10px; bottom: calc(100% + 6px); width: 520px; background: var(--card-bg); border: 1px solid var(--border-strong); border-radius: 12px; box-shadow: var(--shadow); z-index: 6; overflow: hidden; }
+.picker .ptabs { display: flex; gap: 2px; padding: 6px 8px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.picker .ptabs button { border: 0; background: none; height: 26px; padding: 0 9px; border-radius: 7px; font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.picker .ptabs button[aria-pressed="true"] { background: var(--active); color: var(--text); }
+.picker .pq { display: flex; gap: 8px; align-items: center; padding: 8px 12px 4px; font-size: 12px; color: var(--muted); }
+.picker .pq .sq { font-family: var(--mono); color: var(--text); }
+.pick { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 1px 9px; align-items: center; padding: 7px 12px; cursor: pointer; border: 0; background: none; width: 100%; text-align: left; }
+.pick:hover, .pick.on { background: var(--hover); }
+.pick .tt { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pick .sb { grid-column: 2; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pick .x { grid-row: 1 / span 2; grid-column: 3; font-size: 11px; color: var(--faint); font-family: var(--mono); }
+.picker .pf { display: flex; gap: 14px; padding: 7px 12px; border-top: 1px solid var(--border); font-size: 11px; color: var(--faint); }
+.raw { font-size: 12px; }
+.raw summary { cursor: pointer; color: var(--muted); }
+.raw pre { margin: 6px 0 0; white-space: pre-wrap; font: 11.5px/1.5 var(--mono); padding: 8px 10px; background: var(--sunken); border: 1px solid var(--border); border-radius: 8px; color: var(--text); max-height: 220px; overflow: auto; }
+.split2 { display: grid; grid-template-columns: minmax(0, 1fr) 400px; flex: 1; min-height: 0; }
+.cpanel { border-left: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; background: var(--panel-bg); }
+.ctabs { display: flex; gap: 2px; padding: 6px 8px 0; border-bottom: 1px solid var(--border); }
+.ctabs span { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; font-size: 12px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.ctabs span.on { color: var(--text); border-bottom-color: var(--accent); }
+.readby { display: flex; align-items: center; gap: 8px; padding: 8px 14px; font-size: 11.5px; color: var(--muted); background: var(--sunken); border-bottom: 1px solid var(--border); }
+.pop { position: absolute; top: 48px; right: 12px; width: 360px; background: var(--card-bg); border: 1px solid var(--border-strong); border-radius: 12px; box-shadow: var(--shadow); z-index: 7; overflow: hidden; }
+.pop header { padding: 11px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+.pop header b { flex: 1; font-size: 13px; }
+.pop .sec { padding: 8px 10px; border-bottom: 1px solid var(--border); display: grid; gap: 2px; }
+.pop .sec:last-child { border-bottom: 0; }
+.pop .sh { font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; padding: 4px 4px; }
+.prow { display: flex; align-items: center; gap: 8px; padding: 5px 4px; font-size: 12.5px; }
+.prow .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prow small { color: var(--faint); font-family: var(--mono); font-size: 10.5px; }
+.hnote { font-size: 11.5px; color: var(--muted); padding: 4px 4px 2px; }
+
+/* how + evidence */
+.flow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 860px) { .flow { grid-template-columns: 1fr; } }
+.fstep { background: var(--page-card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.fstep .k { font: 600 11px var(--mono); color: var(--accent); }
+.fstep h3 { margin: 0; font-size: 15px; }
+.fstep p { margin: 0; color: var(--page-muted); font-size: 13px; }
+.sectitle { font-size: 17px; margin: 30px 0 10px; font-weight: 600; letter-spacing: -.01em; }
+.sectitle + p.lede { margin-bottom: 12px; font-size: 13.5px; }
+.why { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.why .card h4 { margin: 0 0 4px; font-size: 14px; }
+.why .card p { margin: 0; color: var(--page-muted); font-size: 13px; }
+.tablewrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--page-card); }
+table.t { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 12.5px; }
+table.t th, table.t td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+table.t thead th { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--page-muted); font-weight: 600; }
+table.t tr:last-child td { border-bottom: 0; }
+table.t td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.lvl { display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+.lvl.go { background: color-mix(in srgb, var(--running) 16%, transparent); color: var(--running); }
+.lvl.setup { background: color-mix(in srgb, var(--idle) 16%, transparent); color: var(--idle); }
+.lvl.have { background: var(--accent-dim); color: var(--accent); }
+.lvl.no { background: var(--active); color: var(--page-muted); }
+.chart { display: grid; gap: 10px; padding: 16px 18px; }
+.bar-row { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 12px; align-items: center; font-size: 12.5px; }
+.bar-row .lab { color: var(--page-ink); }
+.bar-row .lab small { display: block; color: var(--page-muted); font-size: 11px; }
+.bar-track { position: relative; height: 18px; }
+.bar { position: absolute; left: 0; top: 2px; height: 14px; border-radius: 0 4px 4px 0; background: var(--muted); min-width: 3px; }
+.bar.fleet { background: var(--accent); }
+.bar-val { position: absolute; top: 0; font: 500 11.5px/18px var(--mono); color: var(--page-ink); white-space: nowrap; padding-left: 8px; font-variant-numeric: tabular-nums; }
+.bar-row:hover .bar { filter: brightness(1.15); }
+@media (max-width: 600px) { .bar-row { grid-template-columns: 1fr; gap: 4px; } }
+.term { background: #0f0f13; color: #d7d7de; border-radius: 12px; padding: 14px 16px; font: 12px/1.6 var(--mono); overflow-x: auto; white-space: pre; border: 1px solid rgba(255,255,255,.08); }
+.term .c { color: #8a8a99; } .term .g { color: #6ee7a0; } .term .y { color: #f5c36b; } .term .b { color: #a5b4fc; }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 900px) { .two { grid-template-columns: 1fr; } }
+.diagram { background: var(--page-card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; overflow-x: auto; }
+.dg { min-width: 900px; display: grid; grid-template-columns: 1fr 1.25fr 1fr; gap: 0; align-items: stretch; }
+.dcol { display: grid; gap: 8px; align-content: center; }
+.dcol h4 { margin: 0 0 2px; font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--page-muted); }
+.dnode { background: var(--panel-bg); border: 1px solid var(--border-strong); border-radius: 10px; padding: 8px 11px; font-size: 12.5px; display: flex; gap: 9px; align-items: center; color: var(--text); }
+.dnode small { display: block; color: var(--muted); font-size: 11px; }
+.dfleet { background: var(--accent-dim); border: 1.5px solid color-mix(in srgb, var(--accent) 45%, transparent); border-radius: 14px; padding: 14px; display: grid; gap: 8px; margin-inline: 34px; position: relative; }
+.dfleet::before, .dfleet::after { content: ""; position: absolute; top: 50%; width: 34px; border-top: 1.5px dashed var(--border-strong); }
+.dfleet::before { left: -35px; } .dfleet::after { right: -35px; }
+.dfleet h4 { margin: 0; font-size: 14px; color: var(--page-ink); text-transform: none; letter-spacing: 0; }
+.dfleet .dnode { background: var(--panel-bg); }
+.plan { display: grid; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--page-card); counter-reset: s; }
+.plan .st { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 12px; padding: 13px 16px; border-bottom: 1px solid var(--border); align-items: start; }
+.plan .st:last-child { border-bottom: 0; }
+.plan .st::before { counter-increment: s; content: counter(s); font-family: var(--mono); font-size: 12px; color: var(--page-muted); border: 1px solid var(--border); border-radius: 7px; width: 26px; height: 26px; display: grid; place-items: center; }
+.plan b { font-weight: 600; }
+.plan p { margin: 3px 0 0; color: var(--page-muted); font-size: 13px; max-width: 90ch; }
+.plan .sz { font-family: var(--mono); font-size: 11px; color: var(--page-muted); white-space: nowrap; padding-top: 3px; }
+.qs { display: grid; gap: 10px; }
+.q { background: var(--page-card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; }
+.q b { display: block; margin-bottom: 3px; }
+.q span { color: var(--page-muted); font-size: 13px; }
+.q .rec { display: block; margin-top: 4px; font-size: 12.5px; color: var(--page-ink); }
+.foot { margin-top: 36px; color: var(--page-muted); font-size: 12px; }
+
+
+/* ── additions for this page ── */
+[hidden] { display: none !important; }
+.verdict { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px 18px; align-items: start; background: var(--page-card); border: 1px solid var(--border); border-left: 4px solid var(--running); border-radius: 12px; padding: 16px 18px; margin-top: 18px; }
+@media (max-width: 640px) { h1 { font-size: 24px; } }
+.verdict .badge { font: 700 11px var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--running); background: color-mix(in srgb, var(--running) 14%, transparent); padding: 4px 8px; border-radius: 6px; white-space: nowrap; }
+.verdict p { margin: 0 0 6px; }
+.verdict ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; color: var(--page-muted); font-size: 13.5px; }
+.verdict ul b { color: var(--page-ink); font-weight: 600; }
+@media (max-width: 640px) { .verdict { grid-template-columns: 1fr; } }
+.themes { display: inline-flex; gap: 2px; padding: 3px; border-radius: 9px; background: var(--active); margin-top: 12px; }
+.themes button { border: 0; background: none; padding: 4px 10px; border-radius: 7px; font-size: 12px; color: var(--page-muted); cursor: pointer; }
+.themes button[aria-pressed="true"] { background: var(--card-bg); color: var(--page-ink); box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+
+/* session with the content panel */
+.app.wide { min-width: 1240px; height: 720px; grid-template-columns: 52px 220px minmax(0, 1fr); }
+.split3 { display: grid; grid-template-columns: minmax(0, 1fr) 6px minmax(0, 1.05fr); flex: 1; min-height: 0; }
+.gutter { background: transparent; position: relative; }
+.gutter::after { content: ""; position: absolute; inset: 0 2px; border-radius: 2px; background: var(--border); }
+.convo .bubble { font-size: 13px; }
+.steps-card .body { padding: 4px 6px 6px; }
+.bstep { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 5px 6px; border-radius: 6px; font-size: 12.5px; }
+.bstep .ic2 { color: var(--muted); display: grid; place-items: center; }
+.bstep.now .ic2 { color: var(--accent); }
+.bstep.done .ic2 { color: var(--running); }
+.bstep .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bstep .d { font: 11px var(--mono); color: var(--faint); white-space: nowrap; }
+.bstep.wait { opacity: .38; }
+.bstep.now { background: var(--accent-dim); }
+.thumb { margin: 2px 6px 6px 32px; width: 220px; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; background: #f6f5f2; }
+.thumb .mini { transform: scale(.34); transform-origin: 0 0; width: 640px; height: 200px; pointer-events: none; }
+.thumb .tl { font-size: 11px; color: var(--muted); padding: 4px 8px; border-top: 1px solid var(--border); background: var(--card-bg); }
+.script { margin: 0 6px 6px; }
+.script summary { cursor: pointer; color: var(--muted); font-size: 12px; padding: 4px 6px; }
+.script pre { margin: 4px 0 0; font: 11.5px/1.55 var(--mono); background: var(--sunken); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; overflow: auto; color: var(--text); white-space: pre; }
+.tok { color: var(--accent); }
+
+/* browser canvas */
+.canvas { display: flex; flex-direction: column; min-height: 0; background: var(--panel-bg); }
+.ctabs2 { display: flex; align-items: center; gap: 2px; padding: 6px 8px 0; border-bottom: 1px solid var(--border); }
+.ctab { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; font-size: 12px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+.ctab.on { color: var(--text); border-bottom-color: var(--accent); }
+.ctab .live { width: 6px; height: 6px; border-radius: 50%; background: var(--running); }
+.cbar2 { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.url { flex: 1; min-width: 0; height: 28px; border-radius: 7px; background: var(--sunken); border: 1px solid var(--border); display: flex; align-items: center; gap: 7px; padding: 0 9px; font: 12px var(--mono); color: var(--muted); overflow: hidden; white-space: nowrap; }
+.url b { color: var(--text); font-weight: 500; }
+.viewseg { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--active); gap: 2px; flex-shrink: 0; }
+.viewseg button { border: 0; background: none; height: 24px; padding: 0 9px; border-radius: 6px; font-size: 12px; color: var(--muted); cursor: pointer; display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
+.viewseg button[aria-pressed="true"] { background: var(--card-bg); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.18); }
+.viewseg .pip { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.stage { flex: 1; min-height: 0; position: relative; overflow: hidden; background: var(--sunken); }
+.banner { display: flex; align-items: center; gap: 10px; padding: 8px 12px; font-size: 12px; background: var(--accent-dim); border-bottom: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); color: var(--text); }
+.banner .grow { flex: 1; }
+.banner.watch { background: color-mix(in srgb, var(--text) 6%, transparent); border-bottom-color: var(--border); color: var(--muted); }
+.site { background: #f6f5f2; color: #111; font: 15px system-ui, -apple-system, "Segoe UI", sans-serif; padding: 30px 32px; height: 100%; position: relative; }
+.site h1 { font-size: 27px; margin: 0 0 14px; letter-spacing: -.01em; font-weight: 700; color: #111; }
+.site .frm { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.site label { font-size: 14px; }
+.site .inp { width: 190px; height: 24px; border: 1px solid #767676; border-radius: 2px; background: #fff; font: 13px system-ui, sans-serif; padding: 2px 5px; display: flex; align-items: center; color: #111; }
+.site .sbtn { height: 24px; padding: 0 9px; border: 1px solid #767676; border-radius: 3px; background: #efefef; font: 13px system-ui, sans-serif; display: inline-flex; align-items: center; color: #111; }
+.site .msg { margin-top: 14px; color: #2c6e3f; font-weight: 600; min-height: 20px; }
+.ring { position: absolute; border: 2px solid var(--accent); border-radius: 5px; box-shadow: 0 0 0 4px var(--accent-dim); pointer-events: none; transition: all 220ms ease-out; opacity: 0; }
+.ring.on { opacity: 1; }
+.caption { position: absolute; left: 12px; bottom: 12px; display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; background: rgba(20,20,24,.86); color: #f2f2f5; font-size: 12px; box-shadow: var(--shadow); max-width: calc(100% - 24px); }
+.caption .n { font: 11px var(--mono); color: #a5b4fc; }
+.caption[hidden] { display: none; }
+.watchtag { position: absolute; right: 12px; bottom: 12px; font-size: 11px; color: #6b6b74; background: rgba(255,255,255,.8); border: 1px solid rgba(0,0,0,.08); border-radius: 6px; padding: 3px 7px; }
+.playbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.playbar .meter { font: 12px var(--mono); color: var(--page-muted); }
+
+@media (max-width: 700px) {
+  .app .list { display: none; }
+  .app.app.wide { grid-template-columns: 52px minmax(0, 1fr); min-width: 940px; }
+  .app.app.settings { grid-template-columns: 44px minmax(0, 1fr); min-width: 0; height: auto; }
+  .app.app.settings .main, .sdetail.sdetail { overflow: visible; }
+  .app.settings .main { margin-left: 0; }
+  .sdetail.sdetail { padding: 18px 14px; }
+  .srow small { max-width: none; }
+  .hrow.hrow { grid-template-columns: 1fr auto; padding: 10px 14px; }
+  .srow.srow { padding: 12px 14px; }
+  .hrow .how { grid-column: 1 / -1; grid-row: 2; }
+  .phone-hint { display: block !important; }
+}
+.phone-hint { display: none; font-size: 12px; color: var(--page-muted); margin: 0 0 8px; }
+@media (max-width: 600px) {
+  .bar-track { height: auto; }
+  .bar { position: relative; display: block; top: 0; height: 10px; }
+  .bar-val { position: static; display: block; padding: 2px 0 0; left: auto !important; }
+}
+/* settings */
+.app.settings { grid-template-columns: 52px 220px minmax(0, 1fr); height: 960px; }
+.sdetail { flex: 1; overflow: auto; padding: 26px 32px; display: grid; gap: 18px; align-content: start; }
+.sdetail h3 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -.01em; }
+.sdetail .sub { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; max-width: 70ch; }
+.sbox { border: 1px solid var(--border); border-radius: 12px; background: var(--card-bg); }
+.srow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; padding: 13px 16px; border-bottom: 1px solid var(--border); align-items: center; }
+.srow:last-child { border-bottom: 0; }
+.srow b { font-weight: 500; font-size: 13px; }
+.srow small { grid-column: 1; color: var(--muted); font-size: 12px; max-width: 72ch; }
+.srow .ctl { grid-row: 1 / span 2; grid-column: 2; }
+.radio { display: grid; gap: 6px; grid-column: 1 / -1; margin-top: 6px; }
+.radio label { display: flex; gap: 9px; align-items: flex-start; font-size: 12.5px; cursor: pointer; }
+.radio input { accent-color: var(--accent); margin-top: 2px; }
+.radio small { display: block; }
+.hrow { display: grid; grid-template-columns: 130px minmax(0, 1fr) auto; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--border); align-items: center; font-size: 12.5px; }
+.hrow:last-child { border-bottom: 0; }
+.hrow .how { color: var(--muted); }
+.sdetail .muted { color: var(--muted); }
+.srow.off b, .srow.off small { opacity: .7; }
+
+/* tools & skills */
+.offer { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 14px; }
+@media (max-width: 900px) { .offer { grid-template-columns: 1fr; } }
+.tlist { display: flex; flex-wrap: wrap; gap: 6px; }
+.tchip { font: 11.5px var(--mono); padding: 2px 7px; border-radius: 5px; background: var(--active); color: var(--page-ink); }
+.tchip.fleet { background: var(--accent-dim); }
+.tchip.ov { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--idle) 70%, transparent); }
+.cat { font: 11.5px/1.6 var(--mono); background: var(--sunken); border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px; color: var(--page-ink); white-space: pre-wrap; overflow-x: auto; }
+.cat .dim { color: var(--page-muted); }
+.cat .hl { background: color-mix(in srgb, var(--idle) 22%, transparent); border-radius: 3px; }
+.diff { font: 12px/1.6 var(--mono); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--page-card); }
+.diff .fh { padding: 7px 12px; border-bottom: 1px solid var(--border); color: var(--page-muted); font-size: 11.5px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.diff .ln { padding: 1px 12px; white-space: pre-wrap; }
+.diff .add { background: color-mix(in srgb, var(--running) 12%, transparent); }
+.diff .add::before { content: "+ "; color: var(--running); }
+.diff .ctx { color: var(--page-muted); }
+.diff .ctx::before { content: "  "; }
+.diffs { display: grid; gap: 12px; }
+.dec { display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+.dec.keep { background: color-mix(in srgb, var(--running) 16%, transparent); color: var(--running); }
+.dec.route { background: var(--accent-dim); color: var(--accent); }
+.dec.no { background: var(--active); color: var(--page-muted); }
+.dec.warn { background: color-mix(in srgb, var(--idle) 16%, transparent); color: var(--idle); }
+
+/* evidence */
+.ev { display: grid; gap: 14px; }
+.evc { background: var(--page-card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; display: grid; gap: 8px; }
+.evc h3 { margin: 0; font-size: 14.5px; }
+.evc p { margin: 0; color: var(--page-muted); font-size: 13px; max-width: 90ch; }
+.evc .term { font-size: 11.5px; }
+.shots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 760px) { .shots { grid-template-columns: 1fr; } }
+.shot { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--card-bg); }
+.shot .crop { height: 190px; overflow: hidden; background: #f6f5f2; }
+.shot img { display: block; width: 260%; max-width: none; height: auto; }
+.shot figcaption { padding: 7px 10px; font-size: 12px; color: var(--page-muted); border-top: 1px solid var(--border); }
+.shot figcaption b { color: var(--page-ink); font-weight: 600; }
+.couldnt { border-left: 3px solid var(--idle); }
+.dgw { min-width: 980px; display: grid; grid-template-columns: 1fr 1.35fr 1fr; gap: 0; align-items: center; }
+.dgw .dcol { display: grid; gap: 8px; }
+.dgw .dnode code { font-size: 11px; }
+.arrowtxt { font: 11px var(--mono); color: var(--page-muted); text-align: center; padding: 2px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Weave Fleet · spike · 1 October 2026</div>
+    <h1>Let agents use the page they built: OpenCode 2's browser plugin, with Fleet as the browser</h1>
+    <p class="lede">OpenCode 2 ships a browser plugin: an agent can open a tab, read the page, click, fill a form, read the console and take screenshots, all from one Code Mode script. OpenCode's desktop app normally provides the browser. This spike made Fleet provide it instead, with the headless Chrome Fleet already runs for screenshots, and checked what it would take to give the same thing to every harness. The mockups use Fleet's own tokens and follow your theme.</p>
+    <div class="themes" role="group" aria-label="Theme"><button type="button" data-theme-set="system" aria-pressed="true">System</button><button type="button" data-theme-set="light" aria-pressed="false">Light</button><button type="button" data-theme-set="dark" aria-pressed="false">Dark</button></div>
+    <div class="verdict">
+      <span class="badge">Viable, with conditions</span>
+      <div>
+        <p><b>Fleet can be the plugin's browser.</b> A small C# attachment inside a scratch Fleet ran a real agent script end to end: it opened the canvas's page, filled a field, clicked Save, read the result and the console, and sent a screenshot back to the model. Seven steps, one tool call, under a second of browser time.</p>
+        <ul>
+          <li><b>Two browsers.</b> The agent drives Fleet's headless Chrome; you watch an iframe in your own browser. Your view doesn't change when the agent clicks, so Fleet needs an honest "Agent's view".</li>
+          <li><b>No permission asks.</b> OpenCode 2 runs browser actions without asking, even when shell commands ask. Fleet runs every action, so Fleet has to set the limits.</li>
+          <li><b>Fleet already pays for it.</b> Every Fleet OpenCode 2 session carries about 1,000 tokens of browser tools that can't work today. That's worth fixing whatever you decide.</li>
+        </ul>
+      </div>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Proposal sections">
+    <button class="tab" role="tab" data-view="overview" aria-selected="true">The idea</button>
+    <button class="tab" role="tab" data-view="drive"><span class="n">1</span>The agent tries the page</button>
+    <button class="tab" role="tab" data-view="settings"><span class="n">2</span>Settings</button>
+    <button class="tab" role="tab" data-view="skills"><span class="n">3</span>Tools &amp; skills</button>
+    <button class="tab" role="tab" data-view="how">How it works</button>
+    <button class="tab" role="tab" data-view="evidence">Evidence</button>
+    <button class="tab" role="tab" data-view="plan">Plan &amp; questions</button>
+  </nav>
+
+  <!-- ───────────── OVERVIEW ───────────── -->
+  <section class="view" id="v-overview">
+    <div class="flow">
+      <div class="fstep"><span class="k">Today</span><h3>The agent can only look</h3><p><code>fleet_browser_screenshot</code> loads a page fresh and hands back a picture. The agent can't open a menu, submit a form, see a validation message or read a console error. "It works" means "it renders".</p></div>
+      <div class="fstep"><span class="k">With this</span><h3>The agent can use the page</h3><p>It opens its own tab on the app in the browser canvas, reads the page as text with element refs, clicks and types, then checks the result, the console and failed requests. Many steps go in one Code Mode call.</p></div>
+      <div class="fstep"><span class="k">You see it</span><h3>Every step, live</h3><p>Fleet runs each browser action itself, so it can list the steps in the conversation and show a live picture of the agent's tab in the canvas. Your own view of the page stays yours.</p></div>
+    </div>
+
+    <h2 class="sectitle">What Fleet gains</h2>
+    <div class="why">
+      <div class="card"><h4>Checks the flow, not just the look</h4><p>The <code>fleet-run</code> skill tells agents to check what they changed. With a page they can use, "check" includes signing up, saving, paging and the error path, not only a screenshot.</p></div>
+      <div class="card"><h4>Console and network, from the page</h4><p><code>fleet_canvas_read</code> shows the server's output. Browser errors, a 404 on a script or a failed API call only show in the page. The agent reads them directly.</p></div>
+      <div class="card"><h4>Seven steps, one round trip</h4><p>In the live run, open → read → fill → click → read → screenshot → console was one <code>execute</code> call. As separate tools that is seven model round trips, each re-sending the context.</p></div>
+      <div class="card"><h4>A cost Fleet pays for nothing today</h4><p>OpenCode 2.0.18 puts 45 browser tools in every session's catalog (about 1,000 tokens in a Fleet session). Without a browser behind them they only fail. Either turn them off or make them work.</p></div>
+    </div>
+
+    <h2 class="sectitle">What each harness gets</h2>
+    <p class="lede">Native first, then Fleet, then off with a reason. The browser work is Fleet's in every row: one agent-browser service in Fleet, reached two ways.</p>
+    <div class="tablewrap">
+      <table class="t">
+        <thead><tr><th>Harness</th><th>Gets it?</th><th>How</th><th>Cost per request</th><th>What's different</th></tr></thead>
+        <tbody>
+          <tr><td><b>OpenCode 2</b></td><td><span class="lvl go">Native</span></td><td>The plugin's <code>tools.browser.*</code> in Code Mode. Fleet attaches as the plugin's browser and runs each action in its headless Chrome.</td><td class="n">~1,000 tok (2.0.18 catalog), or ~2,200 once per session on 2.0.21+</td><td>Many steps in one script. All 45 operations exist; Fleet answers "not supported" for the ones it hasn't built yet (Lighthouse, heap).</td></tr>
+          <tr><td><b>OpenCode</b></td><td><span class="lvl have">Fleet</span></td><td>Two new Fleet tools in <code>fleet-canvas.ts</code>: <code>fleet_browser_read</code> (page text with refs, console, failed requests) and <code>fleet_browser_act</code> (click, fill, select, check, press, scroll, go to).</td><td class="n">~600–900 tok, every request</td><td>One step per tool call. Same service, same limits, same Agent's view.</td></tr>
+          <tr><td><b>Claude Code</b></td><td><span class="lvl no">Off</span></td><td>Fleet has no way to add its tools to Claude Code yet; it doesn't get <code>fleet_browser_screenshot</code> either. A Fleet MCP server would bring all canvas tools at once.</td><td class="n">—</td><td>Shown as off in Settings, with that reason. Separate decision.</td></tr>
+          <tr><td><b>Pi</b></td><td><span class="lvl no">Off</span></td><td>Same as Claude Code: no Fleet tools reach Pi today.</td><td class="n">—</td><td>Off, with the reason.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ───────────── DRIVE ───────────── -->
+  <section class="view" id="v-drive" hidden>
+    <div class="view-head">
+      <div>
+        <h2>1 · The agent tries the page</h2>
+        <p>You asked for a "Saved" message on the beta signup form. The agent shows the app in a browser canvas, then tries it in its own tab. Press <b>Play the turn</b> and switch the canvas between <b>Your view</b> and <b>Agent's view</b>. The steps, refs and timings are the ones from the live run.</p>
+      </div>
+      <div class="playbar"><button type="button" class="btn primary" id="d-play">Play the turn</button><button type="button" class="btn" id="d-step">Next step</button><button type="button" class="btn ghost" id="d-reset">Reset</button><span class="meter" id="d-meter">0 / 7</span></div>
+    </div>
+    <p class="phone-hint">Scroll the frame sideways to see the browser canvas.</p>
+    <div class="scroller">
+      <div class="app wide" id="d-app">
+        <div class="rail" data-rail="sessions"></div>
+        <aside class="list" data-sessions="1"></aside>
+        <div class="main">
+          <div class="shead">
+            <div class="ttl"><b>Saved message on the beta signup</b><small><span class="ok-dot"></span>signup-demo · main · OpenCode 2</small></div>
+            <span class="hchip" title="Pages the agent has open"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><span id="d-tabs">No agent tabs</span></span>
+          </div>
+          <div class="split3">
+            <div style="display:flex;flex-direction:column;min-height:0">
+              <div class="convo" id="d-convo">
+                <div class="bubble">Add a "Saved, name!" message under the beta signup form, and check it works.</div>
+                <div class="reply">
+                  <div class="who">Loom · claude-sonnet-5</div>
+                  <p>Added the status line to <code>index.html</code> and showed the app beside the chat. Now I'll try the form.</p>
+                  <div class="tcard"><button type="button" tabindex="-1"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg><b>Showed the app</b><span class="tx">Signup · 127.0.0.1:5453</span><span class="r">fleet_browser_open</span></button></div>
+                  <div class="tcard steps-card" id="d-card">
+                    <button type="button" id="d-cardhead" aria-expanded="true"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><b id="d-cardtitle">Used the browser</b><span class="tx" id="d-cardsub">waiting</span><span class="r" id="d-cardr">execute</span></button>
+                    <div class="body" id="d-steps"></div>
+                    <details class="script"><summary>Show the script the agent ran</summary><pre id="d-script"></pre></details>
+                  </div>
+                  <p id="d-final" hidden>It works: after typing "Ada" and pressing Save, the page says <b>Saved, Ada!</b> and the console has one line, <code>saved Ada</code>, with no errors.</p>
+                </div>
+              </div>
+              <div class="composer"><div class="ctext"><span class="ph">Reply, or press Enter to send…</span></div><div class="cbar"><span class="tag">Loom ▾</span><span class="tag">claude-sonnet-5 ▾</span><button class="send" type="button" aria-label="Send" tabindex="-1"><svg class="i" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></div></div>
+            </div>
+            <div class="gutter" aria-hidden="true"></div>
+            <div class="canvas">
+              <div class="ctabs2"><span class="ctab"><svg class="i" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Changes</span><span class="ctab on"><span class="live"></span>Signup</span></div>
+              <div class="cbar2">
+                <div class="url"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><b>127.0.0.1:5453</b>/</div>
+                <div class="viewseg" role="group" aria-label="Whose view"><button type="button" data-v="you" aria-pressed="true">Your view</button><button type="button" data-v="agent" aria-pressed="false"><span class="pip" id="d-pip" hidden></span>Agent's view</button></div>
+              </div>
+              <div class="banner" id="d-banner" hidden><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg><span class="grow">The agent is trying this page in its own browser. What it types and clicks doesn't show here.</span><button type="button" class="btn sm" id="d-toagent">Agent's view</button></div>
+              <div class="banner watch" id="d-watch" hidden><svg class="i" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg><span class="grow">Live picture of the agent's tab. You can watch, not click. Its sign-ins and cookies are its own.</span></div>
+              <div class="stage" id="d-stage">
+                <div class="site" id="d-site">
+                  <h1>Join the beta</h1>
+                  <div class="frm"><label>Your name</label><span class="inp" id="d-inp" data-ref="e1"></span><span class="sbtn" id="d-btn" data-ref="e2">Save</span></div>
+                  <div class="msg" id="d-msg"></div>
+                </div>
+                <div class="ring" id="d-ring"></div>
+                <div class="caption" id="d-caption" hidden><span class="n" id="d-capn">1/7</span><span id="d-capt"></span></div>
+                <span class="watchtag" id="d-tag" hidden>agent's tab · 1280×800</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <div class="card"><h3>In the conversation</h3><ul>
+        <li>One <code>execute</code> call becomes a "Used the browser" card with one line per step, because Fleet ran each step and knows what it was. Fleet doesn't parse the script.</li>
+        <li>A screenshot step shows the picture, as <code>fleet_browser_screenshot</code> does today. The script stays one click away.</li>
+        <li>The same card draws OpenCode's one-step <code>fleet_browser_act</code> calls, so every harness looks alike.</li>
+      </ul></div>
+      <div class="card"><h3>In the canvas</h3><ul>
+        <li><b>Your view</b> is the page in your browser, as today. While the agent has a tab on it, a banner says so.</li>
+        <li><b>Agent's view</b> is a live picture of the agent's tab, from Chrome's screencast. The current element gets a ring and the step a caption. It is read-only.</li>
+        <li>The header chip counts the agent's open tabs. Fleet closes them when the turn has been idle a while.</li>
+      </ul></div>
+      <div class="card"><h3>Why not move your view?</h3><ul>
+        <li>Your iframe runs in your browser, which Fleet can't drive. Replaying the agent's clicks there would submit the form a second time.</li>
+        <li>Fleet's desktop app could later give the agent the very page you see, as OpenCode's own desktop does. Not in v1.</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- ───────────── SETTINGS ───────────── -->
+  <section class="view" id="v-settings" hidden>
+    <div class="view-head">
+      <div>
+        <h2>2 · Settings → Browser</h2>
+        <p>One place for what agents may do in a page. Fleet runs every action, so these limits hold whatever the agent writes. The switches work.</p>
+      </div>
+    </div>
+    <div class="scroller">
+      <div class="app settings">
+        <div class="rail" data-rail="settings"></div>
+        <aside class="list">
+          <div class="lhead"><b>Settings</b></div>
+          <div class="row"><span class="t">General</span></div>
+          <div class="row"><span class="t">Harnesses</span></div>
+          <div class="row"><span class="t">Permissions</span></div>
+          <div class="row sel"><span class="t">Browser</span></div>
+          <div class="row"><span class="t">Memory</span></div>
+          <div class="row"><span class="t">Weave</span></div>
+          <div class="row"><span class="t">Machines</span></div>
+        </aside>
+        <div class="main">
+          <div class="sdetail">
+            <div><h3>Browser</h3><p class="sub">Agents can open their own tab on a page, read it, click and type. They use Fleet's headless browser, not yours, so your view and your sign-ins don't change.</p></div>
+            <div class="sbox">
+              <div class="srow"><b>Agents can use a browser</b><small>Adds browser tools to sessions that can have them (table below). Off: the tools are hidden, and OpenCode 2's are turned off too.</small><span class="ctl"><button type="button" class="switch" role="switch" aria-checked="true" id="s-main" aria-label="Agents can use a browser"></button></span></div>
+              <div class="srow" data-dep>
+                <b>Pages agents can open</b><small>Fleet checks every address before the agent's tab goes there.</small>
+                <div class="radio">
+                  <label><input type="radio" name="scope" checked><span>This session's pages <small class="muted">Apps it started and pages in its canvases, on this machine. Recommended.</small></span></label>
+                  <label><input type="radio" name="scope"><span>Any page on this machine <small class="muted">Any localhost address, such as a server you started yourself.</small></span></label>
+                  <label><input type="radio" name="scope"><span>Any address <small class="muted">Includes the internet. Pages can then send what they read anywhere.</small></span></label>
+                </div>
+              </div>
+              <div class="srow" data-dep><b>Run scripts in pages</b><small>Lets the agent run its own JavaScript in a page. Useful for checks, but a script can read the page's storage and call other local services.</small><span class="ctl"><button type="button" class="switch" role="switch" aria-checked="false" aria-label="Run scripts in pages"></button></span></div>
+              <div class="srow off" data-dep><b>Upload files to pages</b><small>Not in this version. OpenCode 2 reads the file itself and Fleet only sees its name, so Fleet can't keep uploads inside the session's folder.</small><span class="ctl"><button type="button" class="switch" role="switch" aria-checked="false" disabled aria-label="Upload files to pages"></button></span></div>
+              <div class="srow off" data-dep><b>Performance traces and memory snapshots</b><small>Later. OpenCode 2 offers them; Fleet answers "not supported" until they're built.</small><span class="ctl"><span class="ro">Later</span></span></div>
+            </div>
+            <div class="sbox">
+              <div class="hrow" style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:600"><span>Harness</span><span>How it gets the browser</span><span></span></div>
+              <div class="hrow"><b>OpenCode 2</b><span class="how">Its own browser tools, in Code Mode. Fleet is the browser behind them.</span><span class="lvl go" data-h>On</span></div>
+              <div class="hrow"><b>OpenCode</b><span class="how">Fleet's browser tools: read the page, act on it.</span><span class="lvl go" data-h>On</span></div>
+              <div class="hrow"><b>Claude Code</b><span class="how">Off: Fleet can't add tools to Claude Code yet.</span><span class="lvl no">Off</span></div>
+              <div class="hrow"><b>Pi</b><span class="how">Off: Fleet can't add tools to Pi yet.</span><span class="lvl no">Off</span></div>
+            </div>
+            <p class="sub">Memory: the agent's tabs share the browser Fleet uses for screenshots. With one tab open it was 242 MB. It quits two minutes after its last use.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <div class="card"><h3>Why these defaults</h3><ul>
+        <li>OpenCode 2 never asks before a browser action (checked live at Fleet's "Ask" level: the shell call asked, the browser calls didn't). So the limits live in Fleet, where every action passes.</li>
+        <li>"This session's pages" covers the job, trying the app the agent is building, and keeps the agent off your other local services.</li>
+      </ul></div>
+      <div class="card"><h3>No per-session switch</h3><ul>
+        <li>The setting applies to every session. A session that doesn't need the browser never opens a tab, so it costs nothing beyond the tool list.</li>
+        <li>Whether to add a per-session switch is an open question (Plan tab).</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- ───────────── SKILLS ───────────── -->
+  <section class="view" id="v-skills" hidden>
+    <div class="view-head">
+      <div>
+        <h2>3 · Tools &amp; skills: what overlaps, and what changes</h2>
+        <p>With the plugin attached, an OpenCode 2 agent has Fleet's page tools and the plugin's browser tools side by side. Below is what a Fleet session is offered today (captured from the scripted model), then a decision for each overlap and the exact edits.</p>
+      </div>
+    </div>
+    <div class="offer">
+      <div class="card"><h3>Regular tools (live, Fleet session on 2.0.18)</h3>
+        <div class="tlist" style="margin-top:4px">
+          <span class="tchip">edit</span><span class="tchip fleet">fleet_app_start</span><span class="tchip fleet ov">fleet_browser_open</span><span class="tchip fleet ov">fleet_browser_screenshot</span><span class="tchip fleet">fleet_canvas_focus</span><span class="tchip fleet">fleet_canvas_list</span><span class="tchip fleet">fleet_canvas_open</span><span class="tchip fleet">fleet_canvas_patch</span><span class="tchip fleet">fleet_canvas_read</span><span class="tchip fleet ov">fleet_page_show</span><span class="tchip">glob</span><span class="tchip">grep</span><span class="tchip">question</span><span class="tchip">read</span><span class="tchip">shell</span><span class="tchip">skill</span><span class="tchip">subagent</span><span class="tchip">webfetch</span><span class="tchip">websearch</span><span class="tchip">write</span><span class="tchip">execute</span>
+        </div>
+        <p style="margin-top:10px;font-size:12.5px;color:var(--page-muted)">Fleet's nine tools: 9,366 characters (~2,340 tokens). Outlined: the three that overlap.</p>
+      </div>
+      <div class="card"><h3>Code Mode catalog, inside the system prompt</h3>
+<div class="cat"><span class="dim"># Code Mode … The catalog is partial. Inside `execute`, use `search(...)` …</span>
+- <span class="hl">browser (45 tools, 7 shown)</span> // Desktop browser tools. browser.preview shows a file to the user in the <span class="hl">Review pane</span>. Always target an explicit tabID. …
+  - tools.browser.tabs.open({ url?, focus? }) // Open a browser tab, show it in the <span class="hl">Review pane</span>, and select it. …
+  - tools.browser.tabs.list · back · forward · reload · stop · <span class="hl">preview</span>
+- opencode (5 tools) <span class="dim">// session_rename, model search, MCP resources…</span></div>
+        <p style="margin-top:8px;font-size:12.5px;color:var(--page-muted)">~1,000 tokens in a Fleet session, attached or not. Calling one today fails: "Open this session in the desktop app".</p>
+      </div>
+    </div>
+
+    <h2 class="sectitle">Each overlap, decided</h2>
+    <div class="tablewrap">
+      <table class="t">
+        <thead><tr><th>Fleet</th><th>Plugin</th><th>Decision</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td><code>fleet_browser_screenshot</code></td><td><code>browser.screenshot</code></td><td><span class="dec keep">Keep both</span></td><td>Different jobs. Fleet's loads the canvas page fresh at desktop or phone size, works on page canvases and in every harness. The plugin's shoots the agent's tab as it is after clicking. One sentence in Fleet's description draws the line.</td></tr>
+          <tr><td><code>fleet_browser_open</code></td><td><code>browser.tabs.open</code></td><td><span class="dec keep">Keep both</span></td><td>One shows a page to you, the other opens the agent's own tab. When the agent opens its tab with <code>focus</code>, Fleet shows Agent's view in that page's canvas, which is what "show it in the Review pane" means in Fleet.</td></tr>
+          <tr><td><code>fleet_page_show</code></td><td><code>browser.preview</code></td><td><span class="dec route">Route through Fleet</span></td><td>The plugin asks its browser to show a file. Fleet answers by opening a page canvas, exactly as <code>fleet_page_show</code> does. One way to show a file, two ways to ask.</td></tr>
+          <tr><td>—</td><td>"desktop app", "Review pane" wording</td><td><span class="dec warn">Make it true</span></td><td>Fleet can't rewrite another plugin's descriptions (not checked whether V2 allows it). Instead: Fleet turns the plugin off whenever no browser is attached, so the "open the desktop app" error never shows, and maps focus to the canvas.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 class="sectitle">The four options, compared</h2>
+    <div class="tablewrap">
+      <table class="t">
+        <thead><tr><th>Option</th><th>Verdict</th><th>What it needs</th></tr></thead>
+        <tbody>
+          <tr><td>Keep both, with a clear line in both descriptions</td><td><span class="dec keep">Chosen</span></td><td>One sentence in <code>fleet_browser_screenshot</code> (both plugins) and two skill bullets, below.</td></tr>
+          <tr><td>Hide Fleet's tools when the plugin is attached</td><td><span class="dec no">No</span></td><td>Loses the phone-size check and fresh load that <code>fleet-design</code> and <code>fleet-explain</code> rely on, and the page canvas shots.</td></tr>
+          <tr><td>Route Fleet's screenshot through the plugin</td><td><span class="dec no">No</span></td><td>It would shoot the agent's tab, not a fresh page, and only work in OpenCode 2. Only <code>preview</code> goes this way (the other direction).</td></tr>
+          <tr><td>Keep the plugin off</td><td><span class="dec warn">Until built</span></td><td>The right state today, and whenever the setting is off: <code>{"action":"browser","resource":"*","effect":"deny"}</code> in Fleet's session rules (Fleet's "allow everything" rule otherwise re-shows the tools, even on 2.0.21).</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 class="sectitle">The edits</h2>
+    <p class="lede">The built-in skills are shared by every harness, so the new lines name the job ("your browser tools"), not a tool. <code>fleet-design</code>, <code>fleet-explain</code> and <code>fleet-mockups</code> don't change: "take one <code>fleet_browser_screenshot</code>" asks for a fresh look at desktop and phone size, which is still right.</p>
+    <div class="diffs">
+      <div class="diff"><div class="fh"><span>opencode/built-in-skills/fleet-run/SKILL.md</span><span class="dec route">Add</span></div>
+        <div class="ln ctx">- if you changed the UI, **look at it**: `fleet_browser_screenshot` on the app's canvas hands you the page as an</div>
+        <div class="ln ctx">  image. Take one, read it, fix what's wrong, take another. …</div>
+        <div class="ln add">- if you can use the page (browser tools that click, fill and read it), try the flow you changed: do what a</div>
+        <div class="ln add">  user would, read the page after, and read the console. Then take one screenshot of the result.</div>
+      </div>
+      <div class="diff"><div class="fh"><span>opencode/built-in-skills/fleet-debug/SKILL.md · ## 2. Reproduce it</span><span class="dec route">Add</span></div>
+        <div class="ln add">For a bug in a page, reproduce it in the page with your browser tools when you have them, and read the</div>
+        <div class="ln add">console and the failed requests before you guess at a cause.</div>
+      </div>
+      <div class="diff"><div class="fh"><span>fleet_browser_screenshot description · opencode2/fleet/index.js and opencode/fleet/fleet-canvas.ts</span><span class="dec route">Add</span></div>
+        <div class="ln ctx">… Fleet shoots the page in its own headless browser, so the user's tab doesn't move and nothing is clicked.</div>
+        <div class="ln add">It loads the page fresh, so it doesn't show what you clicked or typed; to see that, use your browser tools.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────── HOW ───────────── -->
+  <section class="view" id="v-how" hidden>
+    <div class="view-head"><div><h2>How it works</h2><p>OpenCode 2 owns the tools, the agent's script and the tab list it trusts. Fleet owns the browser, the limits and what you see. They talk over V2's own event stream and plugin RPC; nothing new is installed.</p></div></div>
+    <div class="diagram">
+      <div class="dgw">
+        <div class="dcol">
+          <h4>Harnesses</h4>
+          <div class="dnode"><div>OpenCode 2: the agent's <code>execute</code> script<small>tools.browser.click({tabID, ref})</small></div></div>
+          <div class="dnode"><div>OpenCode 2: browser plugin<small>validates input and output, keeps the tab list</small></div></div>
+          <div class="dnode"><div>OpenCode: Fleet's plugin<small>fleet_browser_read / fleet_browser_act</small></div></div>
+        </div>
+        <div class="dfleet">
+          <h4>Fleet</h4>
+          <div class="dnode"><div>OpenCode 2 attachment<small>reads <code>GET /api/event</code>, holds <code>attach</code> open, answers <code>command</code> with <code>result</code></small></div></div>
+          <div class="dnode"><div>Agent browser service<small>tabs per session · refs · input · screenshots · console · limits</small></div></div>
+          <div class="dnode"><div>Steps + Agent's view<small>a domain event per step · screencast frames over SignalR</small></div></div>
+        </div>
+        <div class="dcol">
+          <h4>This machine</h4>
+          <div class="dnode"><div>Fleet's headless Chrome<small>one per Fleet, over CDP, already used for screenshots</small></div></div>
+          <div class="dnode"><div>The app<small>127.0.0.1:5453, from fleet_app_start</small></div></div>
+          <div class="dnode"><div>Your browser<small>the canvas iframe, via PreviewGateway</small></div></div>
+        </div>
+      </div>
+    </div>
+
+    <h2 class="sectitle">One step on the wire (from the live run)</h2>
+    <div class="term"><span class="c"># 1. Fleet subscribes, then attaches (the call stays open for the attachment's life)</span>
+GET  /api/event                                   <span class="g">server.connected</span>
+POST /api/rpc/experimental.browser/attach?location[directory]=…
+     {"input":{"sessionID":"ses_f066…","connectionID":"a6fb3fe1-…","version":4}}
+<span class="b">event</span> rpc.experimental.browser.control {"type":"attached","connectionID":"a6fb3fe1-…","version":4}
+POST …/state    {"input":{…,"state":{"tabs":[],"focusedTabID":null}}}
+
+<span class="c"># 2. The agent's script calls tools.browser.click — only an id goes on the shared event stream</span>
+<span class="b">event</span> rpc.experimental.browser.control {"type":"command","requestID":"63b99779-…"}
+POST …/command  → {"output":{"action":{"type":"click","tabID":"tab_4a74…","ref":"e2"},"generation":1,"files":[]}}
+<span class="c">#    Fleet: DOM.getBoxModel(e2) → Input.dispatchMouseEvent pressed/released in its Chrome</span>
+POST …/result   {"input":{…,"requestID":"63b99779-…","outcome":{"type":"success","result":{"value":{tab},"files":[]}}}}
+<span class="g">22:31:30.309 result click success</span></div>
+
+    <h2 class="sectitle">What each family needs from Fleet</h2>
+    <div class="tablewrap">
+      <table class="t">
+        <thead><tr><th>Family</th><th>Fleet does it with</th><th>Proved live</th><th>Size</th></tr></thead>
+        <tbody>
+          <tr><td>Tabs, go to, back</td><td>Target.createTarget / attachToTarget, Page.navigate + load event</td><td><span class="lvl go">Yes</span></td><td>S</td></tr>
+          <tr><td>Read the page (snapshot, find)</td><td>Accessibility.getFullAXTree → refs to DOM nodes</td><td><span class="lvl go">Yes</span></td><td>S</td></tr>
+          <tr><td>Click, fill, select, check, press, scroll</td><td>DOM.getBoxModel + Input.dispatchMouseEvent, Input.insertText, key events</td><td><span class="lvl go">Click, fill</span></td><td>M</td></tr>
+          <tr><td>Screenshot</td><td>Page.captureScreenshot</td><td><span class="lvl go">Yes</span></td><td>S</td></tr>
+          <tr><td>Console</td><td>Runtime.consoleAPICalled (the spike used an init script)</td><td><span class="lvl go">Yes</span></td><td>S</td></tr>
+          <tr><td>Run a script</td><td>Runtime.evaluate (behind the setting)</td><td><span class="lvl no">No</span></td><td>S</td></tr>
+          <tr><td>Network list and bodies</td><td>Network.* events, a bounded buffer, getResponseBody</td><td><span class="lvl no">No</span></td><td>M</td></tr>
+          <tr><td>Files, downloads</td><td>DOM.setFileInputFiles, download behaviour</td><td><span class="lvl no">No</span></td><td>M, refused in v1</td></tr>
+          <tr><td>Traces, CPU profiles</td><td>Tracing.*, Profiler.* plus the analysis OpenCode's desktop does</td><td><span class="lvl no">No</span></td><td>M each</td></tr>
+          <tr><td>Heap snapshots</td><td>HeapProfiler + a snapshot parser</td><td><span class="lvl no">No</span></td><td>L</td></tr>
+          <tr><td>Lighthouse</td><td>Needs the <code>lighthouse</code> npm package; no .NET route</td><td><span class="lvl no">No</span></td><td>"Not supported"</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="notes">
+      <div class="card"><h3>OpenCode 2 specifics stop at its adapter</h3><ul>
+        <li>The attachment lives in <code>Harnesses/OpenCode2</code>. The browser service, its limits, the step event and Agent's view are shared, behind a <code>HarnessCapabilities</code> flag.</li>
+        <li>OpenCode gets the same service through two Fleet tools in its own plugin. No shared code between the two adapters.</li>
+      </ul></div>
+      <div class="card"><h3>Version churn</h3><ul>
+        <li>The plugin changed three times in the week after 2.0.18. The RPC id is <code>experimental.browser</code>, protocol <code>version: 4</code>.</li>
+        <li>Fleet answers unknown operations with "not supported" (the desktop does the same), and checks the version on <code>attached</code>.</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- ───────────── EVIDENCE ───────────── -->
+  <section class="view" id="v-evidence" hidden>
+    <div class="view-head"><div><h2>Evidence</h2><p>Every claim was run, on 1 October 2026, against OpenCode 2.0.18 (installed) and 2.0.21, with a scripted model, a scratch HOME and a scratch Fleet built from this branch. Files are in <code>docs/spikes/opencode2-browser-plugin/evidence</code> on <code>spike/opencode2-browser-plugin</code>.</p></div></div>
+    <div class="ev">
+      <div class="evc">
+        <h3>Fleet ran the agent's script in its own Chrome, and the results reached the model</h3>
+        <p>Scratch Fleet, OpenCode 2.0.18. The agent showed the app with <code>fleet_browser_open</code>, Fleet attached, then the scripted model called <code>execute</code> with <code>drive.js</code>. From Fleet's attachment log:</p>
+<div class="term"><span class="g">22:31:29.611</span> control {"type":"attached","version":4}
+<span class="g">22:31:30.062</span> result tabs.open success
+<span class="g">22:31:30.101</span> result snapshot success 783 chars
+<span class="g">22:31:30.132</span> result fill success
+<span class="g">22:31:30.309</span> result click success
+<span class="g">22:31:30.348</span> result snapshot success 969 chars
+<span class="g">22:31:30.455</span> result screenshot success 1 file(s)
+<span class="g">22:31:30.540</span> result console success
+<span class="c"># what the model received next: the tool result, then the image as its own message</span>
+tool  "after": "… @e1 [textbox] \"Your name\" … [StaticText] \"Ada\" … @e2 [button] \"Save\" … [status] … <span class="y">\"Saved, Ada!\"</span>"
+      "console": [<span class="y">"info: saved Ada"</span>]
+user  image_url data:image/png;base64,… (18,198 characters)</div>
+        <div class="shots">
+          <figure class="shot" style="margin:0"><div class="crop"><img alt="The agent's screenshot: the form says Saved, Ada!" src="data:image/png;base64,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AEIQwAAAAIQggAEAAAhBAAMAABCCAAYAACAEAQwAAEAIAhgAAIAQBDAAAAAhCGAAAABCEMAAAACEIIABAAAIQQADAAAQggAGAAAgBAEMAABACAIYAACAEAQwAAAAIQhgAAAAQhDAAAAAhCCAAQAACEEAAwAAEIIABgAAIAQBDAAAQAgCGAAAgBAEMAAAACEIYAAAAEIQwAAAAIQggAEAAAhBAAMAABCCAAYAACAEAQwAAEAIAhgAAIAQBDAAAAAhCGAAAABCEMAAAACEIIABAAAIQQADAAAQggAGAAAgBAEMAABACAIYAACAEAQwAAAAIQhgAAAAQhDAAAAAhCCAAQAACEEAAwAAEIIABgAAIAQBDAAAQAgCGAAAgBAEMAAAACEIYAAAAEIQwAAAAIQggAEAAAhBAAMAABCCAAYAACAEAQwAAEAIAhgAAIAQBDAAAAAhCGAAAABCEMAAAACEIIABAAAIQQADAAAQggAGAAAgBAEMAABACAIYAACAEAQwAAAAIQhgAAAAQhDAAAAAhCCAAQAACEEAAwAAEIIABgAAIAQBDAAAQAgCGAAAgBAEMAAAACEIYAAAAEIQwAAAAIQggAEAAAhBAAMAABCCAAYAACAEAQwAAEAIAhgAAIAQBDAAAAAhCGAAAABCEMAAAACEIIABAAAIQQADAAAQggAGAAAgBAEMAABACAIYAACAEAQwAAAAIQhgAAAAQhDAAAAAhCCAAQAACEEAAwAAEIIABgAAIAQBDAAAQAgCGAAAgBAEMAAAACEIYAAAAEIQwAAAAIQggAEAAAhBAAMAABCCAAYAACAEAQwAAEAIAhgAAIAQBDAAAAAhCGAAAABCEMAAAACEIIABAAAIQQADAAAQggAGAAAgBAEMAABACAIYAACAEAQwAAAAIQhgAAAAQhDAAAAAhCCAAQAACEEAAwAAEIIABgAAIAQBDAAAQAgCGAAAgBAEMAAAACEIYAAAAEIQwAAAAIQggAEAAAhBAAMAABCCAAYAACAEAQwAAEAIAhgAAIAQBDAAAAAhCGAAAABCEMAAAACEIIABAAAIQQADAAAQggAGAAAgBAEMAABACAIYAACAEAQwAAAAIQhgAAAAQhDAAAAAhCCAAQAACEEAAwAAEIIABgAAIAQBDAAAQAgCGAAAgBAEMAAAACEIYAAAAEIQwAAAAIQggAEAAAhBAAMAABCCAAYAACAEAQwAAEAIAhgAAIAQBDAAAAAhCGAAAABCEMAAAACEIIABAAAIQQADAAAQggAGAAAgBAEMAABACAIYAACAEAQwAAAAIQhgAAAAQhDAAAAAhCCAAQAACEEAAwAAEIIABgAAIAQBDAAAQAgCGAAAgBAEMAAAACEIYAAAAEIQwAAAAIQggAEAAAhBAAMAABCCAAYAACAEAQwAAEAIAhgAAIAQBDAAAAAhCGAAAABCEMAAAACEIIABAAAIQQADAAAQggAGAAAgBAEMAABACAIYAACAEAQwAAAAIQhgAAAAQhDAAAAAhCCAAQAACEEAAwAAEIIABgAAIAQBDAAAQAgCGAAAgBAEMAAAACEIYAAAAEIQwAAAAIQggAEAAAhBAAMAABCCAAYAACAEAQwAAEAIAhgAAIAQBDAAAAAhCGAAAABCEMAAAACEIIABAAAIQQADAAAQggAGAAAgBAEMAABACAIYAACAEAQwAAAAIQhgAAAAQhDAAAAAhCCAAQAACEEAAwAAEIIABgAAIAQBDAAAQAgCGAAAgBAEMAAAACEIYAAAAEIQwAAAAIQggAEAAAhBAAMAABCCAAYAACAEAQwAAEAIAhgAAIAQBDAAAAAhCGAAAABCEMAAAACEIIABAAAIQQADAAAQggAGAAAgBAEMAABACAIYAACAEAQwAAAAIQhgAAAAQhDAAAAAhCCAAQAACEEAAwAAEIIABgAAIAQBDAAAQAgCGAAAgBAEMAAAACEIYAAAAEIQwAAAAIQggAEAAAhBAAMAABCCAAYAACAEAQwAAEAIAhgAAIAQBDAAAAAhCGAAAABCEMAAAACEIIABAAAIQQADAAAQggAGAAAgBAEMAABACAIYAACAEAQwAAAAIQhgAAAAQhDAAAAAhCCAAQAACEEAAwAAEIIABgAAIAQBDAAAQAgCGAAAgBAEMAAAACEIYAAAAEIQwAAAAIQggAEAAAhBAAMAABCCAAYAACAEAQwAAEAIAhgAAIAQBDAAAAAhCGAAAABCEMAAAACEIIABAAAIQQADAAAQggAGAAAgBAEMAABACAIYAACAEAQwAAAAIQhgAAAAQhDAAAAAhCCAAQAACEEAAwAAEIIABgAAIAQBDAAAQAgCGAAAgBAEMAAAACEIYAAAAEIQwAAAAIQggAEAAAhBAAMAABCCAAYAACAEAQwAAEAIAhgAAIAQBDAAAAAhCGAAAABCEMAAAACEIIABAAAIQQADAAAQggAGAAAgBAEMAABACAIYAACAEAQwAAAAIQhggAQAgAgEMAAAACEIYAAAAEIQwAAAAIQggAEAAAhBAAMAABCCAAYAACAEAQwAAEAIAhgAAIAQBDAAAAAhCGAAAABCEMAAAACEIIABAAAIQQADAAAQggAGAAAgBAEMAABACAIYAACAEAQwAAAAIQhgAAAAQhDAAAAAhCCAAQAACEEAAwAAEIIABgAAIAQBDAAAQAgCGAAAgBAEMAAAACEIYAAAAEIQwAAAAIQggAEAAAhBAAMAABCCAAYAACAEAQwAAEAIAhgAAIAQBDAAAAAhCGAAAABCEMAAAACEIIABAAAIQQADAAAQggAGAAAgBAEMAABACAIYAACAEAQwAAAAIQhgAAAAQhDAAAAAhCCAAQAACEEAAwAAEIIABgAAIAQBDAAAQAgCGAAAgBAEMAAAACEIYAAAAEIQwAAAAIQggAEAAAhBAAMAABCCAAYAACAEAQwAAEAIAhgAAIAQBDAAAAAhCGAAAABCEMAAAACEIIABAAAIQQADAAAQggAGAAAgBAEMAABACAIYAACAEAQwAAAAIQhgAAAAQhDAAAAAhCCAAQAACEEAAwAAEIIABgAAIAQBDAAAQAgCGAAAgBAEMAAAACEIYAAAAEIQwAAAAIQggAEAAAhBAAMAABCCAAYAACAEAQwAAEAIAhgAAIAQBDAAAAAhCGAAAABCEMAAAACEIIABAAAIQQADAAAQggAGAAAgBAEMAABACAIYAACAEAQwAAAAIQhgAAAAQhDAAAAAhCCAAQAACEEAAwAAEIIABgAAIAQBDAAAQAgCGAAAgBByMm7hAAAE0ElEQVQEMAAAACEIYAAAAEIQwAAAAIQggAEAAAhBAAMAABCCAAYAACAEAQwAAEAIAhgAAIAQBDAAAAAhCGAAAABCEMAAAACEIIABAAAIQQADAAAQggAGAAAgBAEMAABACAIYAACAEAQwAAAAIQhgAAAAQhDAAAAAhCCAAQAACEEAAwAAEIIABgAAIAQBDAAAQAgCGAAAgBAEMAAAACEIYAAAAEIQwAAAAIQggAEAAAhBAAMAABCCAAYAACAEAQwAAEAIAhgAAIAQBDAAAAAhCGAAAABCEMAAAACEIIABAAAIQQADAAAQggAGAAAgBAEMAABACAIYAACAEAQwAAAAIQhgAAAAQhDAAAAAhCCAAQAACEEAAwAAEIIABgAAIAQBDAAAQAgCGAAAgBAEMAAAACEIYAAAAEIQwAAAAIQggAEAAAhBAAMAABCCAAYAACAEAQwAAEAIAhgAAIAQBDAAAAAhCGAAAABCEMAAAACEIIABAAAIQQADAAAQggAGAAAgBAEMAABACAIYAACAEAQwAAAAIQhgAAAAQhDAAAAAhCCAAQAACEEAAwAAEIIABgAAIAQBDAAAQAgCGAAAgBAEMAAAACEIYAAAAEIQwAAAAIQggAEAAAhBAAMAABCCAAYAACAEAQwAAEAIAhgAAIAQBDAAAAAhCGAAAABCEMAAAACEIIABAAAIQQADAAAQggAGAAAgBAEMAABACAIYAACAEAQwAAAAIQhgAAAAQhDAAAAAhCCAAQAACEEAAwAAEIIABgAAIAQBDAAAQAgCGAAAgBAEMAAAACEIYAAAAEIQwAAAAIQggAEAAAhBAAMAABCCAAYAACAEAQwAAEAIAhgAAIAQBDAAAAAhCGAAAABCEMAAAACEIIABAAAIQQADAAAQggAGAAAgBAEMAABACAIYAACAEAQwAAAAIQhgAAAAQhDAAAAAhCCAAQAACEEAAwAAEIIABgAAIAQBDAAAQAgCGAAAgBAEMAAAACEIYAAAAEIQwAAAAIQggAEAAAhBAAMAABCCAAYAACAEAQwAAEAIAhgAAIAQBDAAAAAhCGAAAABCEMAAAACEIIABAAAIQQADAAAQggAGAAAgBAEMAABACAIYAACAEAQwAAAAIQhgAAAAQhDAAAAAhCCAAQAACEEAAwAAEIIABgAAIAQBDAAAQAgCGAAAgBAEMAAAACEIYAAAAEIQwAAAAIQggAEAAAhBAAMAABCCAAYAACAEAQwAAEAIAhgAAIAQBDAAAAAhCGAAAABCEMAAAACEIIABAAAIQQADAAAQggAGAAAgBAEMAABACAIYAACAEAQwAAAAIQhgAAAAQhDAAAAAhCCAAQAACEEAAwAAEIIABgAAIAQBDAAAQAgCGAAAgBAEMAAAACEIYAAAAEIQwAAAAIQggAEAAAhBAAMAABCCAAYAACAEAQwAAEAIAhgAAIAQBDAAAAAhCGAAAABCEMAAAACEIIABAAAIQQADAAAQggAGAAAgBAEMAABACAIYAACAEAQwAAAAIQhgAAAAQhDAAAAAhCCAAQAACEEAAwAAEIIABgAAIAQBDAAAQAgCGAAAgBAEMAAAACEIYAAAAEIQwAAAAIQggAEAAAhBAAMAABCCAAYAACAEAQwAAEAIAhgAAIAQ/g8AAAD//5iq+owAAAAGSURBVAMAvxqB29FbsVIAAAAASUVORK5CYII="></div><figcaption><b>Agent's tab</b>, the screenshot the model got: "Saved, Ada!"</figcaption></figure>
+          <figure class="shot" style="margin:0"><div class="crop"><img alt="The same page through the canvas proxy, in another browser: empty form" src="data:image/png;base64,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FIETOvH6Uo8+WvfWgbd+//vOyNnwuc8lLhx24TXXTIoAAMAQI4ABAAAIginQAAAABEEAAwAAEAQBDAAAQBAEMAAAAEEQwAAAAARBAAMAABAEAQwAAEAQBDAAAABBEMAAAAAEQQADAAAQBAEMAABAEAQwAAAAQRDAAAAABEEAAwAAEAQBDAAAQBAEMAAAAEEQwAAAAARBAAMAABAEAQwAAEAQBDAAAABBEMAAAAAEQQADAAAQBAEMAABAEAQwAAAAQRDAAAAABEEAAwAAEAQBDAAAQBAEMAAAAEEQwAAAAARBAAMAABAEAQwAAEAQBDAAAABBEMAAAAAEQQADAAAQBAEMAABAEAQwAAAAQRDAAAAABEEAAwAAEAQBDAAAQBAEMAAAAEEQwAAAAARBAAMAABAEAQwAAEAQBDAAAABBEMAAAAAEQQADAAAQBAEMAABAEAQwAAAAQRDAAAAABEEAAwAAEAQBDAAAQBAEMAAAAEEQwAAAAARBAAMAABAEAQwAAEAQBDAAAABBEMAAAAAEQQADAAAQBAEMAABAEAQwAAAAQRDAAAAABEEAAwAAEAQBDAAAQBAEMAAAAEEQwAAAAARBAAMAABAEAQwAAEAQBDAAAABBEMAAAAAEQQADAAAQBAEMAABAEAQwAAAAQRDAAAAABEEAAwAAEAQBDAAAQBAEMAAAAEEQwAAAAARBAAMAABAEAQwAAEAQBDAAAABBEMAAAAAEQQADAAAQBAEMAABAEAQwAAAAQRDAAAAABEEAAwAAEAQBDAAAQBAEMAAAAEEQwAAAAARBAAMAABAEAQwAAEAQBDAAAABBEMAAAAAEQQADAAAQBAEMAABAEAQwAAAAQRDAAAAABEEAAwAAEAQBDAAAQBAEMAAAAEEQwAAAAARBAAMAABAEAQwAAEAQBDAAAABBEMAAAAAEQQADAAAQBAEMAABAEAQwAAAAQRDAAAAABEEAAwAAEAQBDAAAQBAEMAAAAEEQwAAAAARBAAMAABAEAQwAAEAQBDAAAABBEMAAAAAEQQADAAAQBAEMAABAEAQwAAAAQRDAAAAABEEAAwAAEAQBDAAAQBAEMAAAAEEQwAAAAARBAAMAABAEAQwAAEAQBDAAAABBEMAAAAAEQQADAAAQBAEMAABAEAQwAAAAQRDAAAAABEEAAwAAEAQBDAAAQBAEMAAAAEEQwAAAAARBAAMAABAEAQwAAEAQBDAAAABBEMAAAAAEQQADAAAQBAEMAABAEAQwAAAAQRDAAAAABEEAAwAAEAQBDAAAQBAEMAAAAEEQwAAAAARBAAMAABAEAQwAAEAQBDAAAABBEMAAAAAEQQADAAAQBAEMAABAEAQwAAAAQRDAAAAABEEAAwAAEAQBDAAAQBAEMAAAAEEQwIKtRE0AAALtSURBVAAAAARBAAMAABAEAQwAAEAQBDAAAABBEMAAAAAEQQADAAAQBAEMAABAEAQwAAAAQRDAAAAABEEAAwAAEAQBDAAAQBAEMAAAAEEQwAAAAARBAAMAABAEAQwAAEAQBDAAAABBEMAAAAAEQQADAAAQBAEMAABAEAQwAAAAQRDAAAAABEEAAwAAEAQBDAAAQBAEMAAAAEEQwAAAAARBAAMAABAEAQwAAEAQBDAAAABBEMAAAAAEQQADAAAQBAEMAABAEAQwAAAAQRDAAAAABEEAAwAAEAQBDAAAQBAEMAAAAEEQwAAAAARBAAMAABAEAQwAAEAQBDAAAABBEMAAAAAEQQADAAAQBAEMAABAEAQwAAAAQRDAAAAABEEAAwAAEAQBDAAAQBAEMAAAAEEQwAAAAARBAAMAABAEAQwAAEAQBDAAAABBEMAAAAAEQQADAAAQBAEMAABAEAQwAAAAQRDAAAAABEEAAwAAEAQBDAAAQBAEMAAAAEEQwAAAAARBAAMAABAEAQwAAEAQBDAAAABBEMAAAAAEQQADAAAQBAEMAABAEAQwAAAAQRDAAAAABEEAAwAAEAQBDAAAQBAEMAAAAEEQwAAAAARBAAMAABAEAQwAAEAQBDAAAABBEMAAAAAEQQADAAAQBAEMAABAEAQwAAAAQRDAAAAABEEAAwAAEAQBDAAAQBAEMAAAAEEQwAAAAARBAAMAABAEAQwAAEAQBDAAAABBEMAAAAAEQQADAAAQBAEMAABAEAQwAAAAQRDAAAAABEEAAwAAEAQBDAAAQBAEMAAAAEEQwAAAAARBAAMAABAEAQwAAEAQBDAAAABBEMAAAAAEQQADAAAQBAEMAABAEAQwAAAAQRDAAAAABEEAAwAAEAQBDAAAQBAEMAAAAEEQwAAAAARBAAMAABAEAQwAAEAQBDAAAABBEMAAAAAEQQADAAAQBAEMAABAEAQwAAAAQRDAAAAABEEAAwAAEAQBDAAAQBD+PwAAAP//YT72JAAAAAZJREFUAwBdq8wnmG0juQAAAABJRU5ErkJggg=="></div><figcaption><b>Your view</b>, the canvas page loaded in another browser right after: empty form, no message.</figcaption></figure>
+        </div>
+      </div>
+      <div class="evc">
+        <h3>2.0.18 shows the browser tools to every session, and they fail</h3>
+        <p>OpenCode 2 alone, scratch HOME. No attachment. The model's system prompt lists <code>browser (45 tools, 7 shown)</code>; a call returns:</p>
+<div class="term">"tabs": { "error": "[browser.disconnected] No desktop browser is connected to this session. <span class="y">Open this session in the desktop app</span> and wait for it to connect. …" }</div>
+      </div>
+      <div class="evc">
+        <h3>2.0.21 hides them, but Fleet's "allow everything" rule brings them back</h3>
+        <p>Same prompt, OpenCode 2.0.21. A session with no rules of its own: <code>Unknown tool 'browser.tabs.list'</code>, no browser namespace. A session created the way Fleet creates them (<code>{"action":"*","resource":"*","effect":"allow"}</code>): <code>browser (45 tools, 7 shown)</code> again, same error. After an attachment, the session gets <code>browser: allow</code> and the catalog arrives as a <code>&lt;system-update&gt;</code> message (8,924 characters), so the system prompt and its cache stay as they were.</p>
+      </div>
+      <div class="evc">
+        <h3>What it costs in tokens</h3>
+        <p>Characters sent to the model, measured from the scripted model's request log (÷4 ≈ tokens).</p>
+        <div class="tablewrap" style="background:var(--panel-bg)"><div class="chart" id="e-chart"></div></div>
+      </div>
+      <div class="evc">
+        <h3>No permission asks for browser actions</h3>
+        <p>Scratch Fleet with the permission level set to "Ask". The seven browser steps ran with no ask: <code>GET /api/sessions/{id}/permissions</code> stayed <code>[]</code>. In the same session, a shell call asked at once:</p>
+<div class="term">[{"kind": "shell", "tool": "shell", "title": "echo from-tool", "always": ["echo *"], …}]</div>
+      </div>
+      <div class="evc">
+        <h3>Memory</h3>
+        <p>Fleet's headless Chrome with one agent tab open: 11 processes, <b>242 MB</b> (PSS). The OpenCode 2 server was 140 MB and Fleet 188 MB. The machine had 2.5 GB free with all three running.</p>
+      </div>
+      <div class="evc couldnt">
+        <h3>What I couldn't check</h3>
+        <p>Not run: <code>evaluate</code>, network, files, traces, heap and Lighthouse through Fleet; the screencast for Agent's view; a real model choosing between the two screenshot tools (the scripted model only does what it's told); whether V2's tool editor lets one plugin rewrite another's descriptions; how a remote Fleet machine would attach; Claude Code's and Pi's routes for Fleet tools.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────── PLAN ───────────── -->
+  <section class="view" id="v-plan" hidden>
+    <div class="view-head"><div><h2>Plan &amp; questions</h2><p>Sizes: S is up to a day, M two to three days, L about a week. Step 1 is worth doing whatever you decide.</p></div></div>
+    <div class="plan">
+      <div class="st"><div><b>Stop paying for the dead catalog</b><p>Add <code>browser: deny</code> to the rules Fleet gives every OpenCode 2 session, until a browser is attached. Saves ~1,000 tokens per session and the misleading "open the desktop app" error. On its own small PR.</p></div><span class="sz">S</span></div>
+      <div class="st"><div><b>Agent browser service</b><p>In Fleet: agent tabs per session in the shared headless Chrome, page text with refs, click/fill/select/check/press/scroll, screenshot, console, failed requests. Limits from Settings → Browser checked on every action. Tabs close when the session goes idle. Tests against a local page.</p></div><span class="sz">L</span></div>
+      <div class="st"><div><b>OpenCode 2 attachment</b><p>One event-stream reader per OpenCode 2 server, an attachment per session while the setting is on, <code>browser: allow</code> only then, a version check, "not supported" for the rest. <code>HarnessCapabilities.AgentBrowser</code>.</p></div><span class="sz">M</span></div>
+      <div class="st"><div><b>Steps in the conversation, Agent's view in the canvas</b><p>A domain event per step from the service; the "Used the browser" card; screencast frames over SignalR only while Agent's view is open; the banner and the tabs chip.</p></div><span class="sz">M</span></div>
+      <div class="st"><div><b>Settings → Browser and the edits</b><p>The page from tab 2, the screenshot description in both plugins, the <code>fleet-run</code> and <code>fleet-debug</code> lines, <code>preview</code> routed to a page canvas.</p></div><span class="sz">S</span></div>
+      <div class="st"><div><b>OpenCode: Fleet's browser tools</b><p><code>fleet_browser_read</code> and <code>fleet_browser_act</code> in <code>fleet-canvas.ts</code>, on the same service.</p></div><span class="sz">M</span></div>
+      <div class="st"><div><b>Later</b><p>Network bodies, traces and CPU profiles, heap snapshots; Claude Code and Pi through a Fleet MCP server for all canvas tools; in the desktop app, let the agent use the very page you see.</p></div><span class="sz">—</span></div>
+    </div>
+
+    <h2 class="sectitle">Questions for you</h2>
+    <div class="qs">
+      <div class="q"><b>1. Build it?</b><span>Steps 2–5 are about two weeks and give OpenCode 2 the browser; step 6 adds OpenCode.</span><span class="rec">My recommendation: yes, OpenCode 2 first.</span></div>
+      <div class="q"><b>2. On or off by default?</b><span>It can click and submit forms in your local apps.</span><span class="rec">My recommendation: on, limited to the session's own pages, with scripts off. Or off until you turn it on, if you'd rather opt in.</span></div>
+      <div class="q"><b>3. Agent's view in the first version?</b><span>It's the part that lets you trust what the agent did; without it you only get the step list.</span><span class="rec">My recommendation: yes, with the step list.</span></div>
+      <div class="q"><b>4. Ship step 1 now, on its own?</b><span>It removes ~1,000 tokens from every OpenCode 2 session today, whatever you decide about the rest.</span><span class="rec">My recommendation: yes.</span></div>
+      <div class="q"><b>5. A per-session switch as well as the setting?</b><span>The mockup has none: a session that doesn't use the browser pays only for the tool list.</span><span class="rec">My recommendation: not in v1.</span></div>
+      <div class="q"><b>6. Claude Code and Pi</b><span>They get no Fleet tools at all today, not even screenshots. A Fleet MCP server would bring every canvas tool to them. That's a separate proposal.</span><span class="rec">My recommendation: decide separately; show them as off with the reason for now.</span></div>
+    </div>
+    <p class="foot">Spike branch <code>spike/opencode2-browser-plugin</code> · notes in <code>docs/spikes/opencode2-browser-plugin/README.md</code> · prototype <code>OpenCode2BrowserSpike.cs</code> (not for main).</p>
+  </section>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
+  /* theme */
+  function setTheme(t) {
+    if (t === "system") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", t);
+    $$("[data-theme-set]").forEach(function (b) { b.setAttribute("aria-pressed", b.dataset.themeSet === t ? "true" : "false"); });
+    try { localStorage.setItem("fleet-agent-browser-theme", t); } catch (e) {}
+  }
+  $$("[data-theme-set]").forEach(function (b) { b.addEventListener("click", function () { setTheme(b.dataset.themeSet); }); });
+  var qt = (location.search.match(/theme=(light|dark)/) || [])[1];
+  var saved = null; try { saved = localStorage.getItem("fleet-agent-browser-theme"); } catch (e) {}
+  if (qt) setTheme(qt); else if (saved) setTheme(saved);
+
+  /* icons */
+  var I = {
+    board: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+    sessions: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    github: '<path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/>',
+    workflows: '<rect x="3" y="3" width="8" height="8" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect x="13" y="13" width="8" height="8" rx="2"/>',
+    automations: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
+    analytics: '<path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+    settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    loader: '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
+    circle: '<circle cx="12" cy="12" r="4"/>'
+  };
+  function ic(n, extra) { return '<svg class="i' + (extra ? " " + extra : "") + '" viewBox="0 0 24 24">' + I[n] + "</svg>"; }
+
+  $$(".rail[data-rail]").forEach(function (r) {
+    var on = r.dataset.rail;
+    var items = ["board", "sessions", "github", "workflows", "automations", "analytics"];
+    var h = '<div class="logo" aria-hidden="true"></div>';
+    items.forEach(function (it) { h += '<span class="ri' + (it === on ? " on" : "") + '" title="' + it + '">' + ic(it) + "</span>"; });
+    h += '<span class="sp"></span><span class="ri' + (on === "settings" ? " on" : "") + '">' + ic("settings") + "</span>";
+    r.innerHTML = h;
+  });
+  $$(".list[data-sessions]").forEach(function (l) {
+    l.innerHTML = '<div class="lhead"><b>Sessions</b></div>' +
+      '<div class="search">' + ic("search") + '<span>Filter sessions</span></div>' +
+      '<div class="grp">signup-demo</div>' +
+      '<div class="row sel"><span class="dots"><i></i><i></i><i></i><i></i></span><span class="t">Saved message on the beta signup</span></div>' +
+      '<div class="row"><span class="ok-dot" style="background:transparent"></span><span class="t">Email check on submit</span><span class="st">3h</span></div>' +
+      '<div class="grp">weave-fleet</div>' +
+      '<div class="row"><span class="warn-dot"></span><span class="t">Workflow designer polish</span><span class="st">5h</span></div>' +
+      '<div class="row dim"><span class="ok-dot" style="background:transparent"></span><span class="t">Update notice chip</span><span class="st">1d</span></div>';
+  });
+
+  /* tabs */
+  var views = ["overview", "drive", "settings", "skills", "how", "evidence", "plan"];
+  function show(v) {
+    if (views.indexOf(v) < 0) v = "overview";
+    $$(".view").forEach(function (s) { s.hidden = s.id !== "v-" + v; });
+    $$(".tab").forEach(function (t) { t.setAttribute("aria-selected", t.dataset.view === v ? "true" : "false"); });
+  }
+  $$(".tab").forEach(function (t) { t.addEventListener("click", function () { show(t.dataset.view); try { history.replaceState(null, "", location.search + "#" + t.dataset.view); } catch (e) {} }); });
+  show((location.hash || "").slice(1));
+  window.addEventListener("hashchange", function () { show((location.hash || "").slice(1)); render && setTimeout(render, 0); });
+
+  /* ── the turn ── */
+  var SCRIPT = 'const tab = await tools.browser.tabs.open({ url: "http://127.0.0.1:5453/" })\n' +
+    'const before = await tools.browser.snapshot({ tabID: tab.id })\n' +
+    'const ref = (role) => before.content.split("\\n").find((l) => l.includes(`[${role}]`)).match(/@(e\\d+)/)[1]\n' +
+    'await tools.browser.fill({ tabID: tab.id, ref: ref("textbox"), text: "Ada" })\n' +
+    'await tools.browser.click({ tabID: tab.id, ref: ref("button") })\n' +
+    'const after = await tools.browser.snapshot({ tabID: tab.id })\n' +
+    'const shot = await tools.browser.screenshot({ tabID: tab.id })\n' +
+    'const logs = await tools.browser.console({ tabID: tab.id })\n' +
+    'return { before: before.content, after: after.content, shot, console: logs.messages }';
+  $("#d-script").textContent = SCRIPT;
+  var STEPS = [
+    { t: "Opened 127.0.0.1:5453 in its own tab", d: "tabs.open · 145 ms" },
+    { t: "Read the page: 1 text box, 1 button", d: "snapshot · 39 ms" },
+    { t: "Typed “Ada” in “Your name”", d: "fill @e1 · 26 ms", target: "inp", name: "Ada" },
+    { t: "Clicked “Save”", d: "click @e2 · 170 ms", target: "btn", msg: "Saved, Ada!" },
+    { t: "Read the page again: “Saved, Ada!”", d: "snapshot · 20 ms", target: "msg" },
+    { t: "Took a screenshot", d: "screenshot · 87 ms", shot: true },
+    { t: "Read the console: 1 line, no errors", d: "console · 7 ms" }
+  ];
+  var at = 0, view = "you", timer = null;
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function siteState(upto) {
+    var s = { name: "", msg: "" };
+    for (var i = 0; i < upto; i++) { if (STEPS[i].name) s.name = STEPS[i].name; if (STEPS[i].msg) s.msg = STEPS[i].msg; }
+    return s;
+  }
+  function render() {
+    // steps card
+    var h = "";
+    STEPS.forEach(function (s, i) {
+      var cls = i < at - 1 ? "done" : i === at - 1 ? (at === STEPS.length ? "done" : "now") : "wait";
+      if (at === 0) cls = "wait";
+      var icon = cls === "done" ? ic("check") : cls === "now" ? ic("loader", "spin") : ic("circle");
+      h += '<div class="bstep ' + cls + '"><span class="ic2">' + icon + '</span><span class="t">' + esc(s.t) + '</span><span class="d">' + esc(s.d) + "</span></div>";
+      if (s.shot && i < at) h += '<div class="thumb"><div class="mini"><div class="site" style="height:200px;padding:30px 32px"><h1>Join the beta</h1><div class="frm"><label>Your name</label><span class="inp">Ada</span><span class="sbtn">Save</span></div><div class="msg">Saved, Ada!</div></div></div><div class="tl">Screenshot · 1280×800 · ~1,400 tokens</div></div>';
+    });
+    $("#d-steps").innerHTML = h;
+    var done = at === STEPS.length;
+    $("#d-cardsub").textContent = at === 0 ? "waiting" : done ? "7 steps · 0.5 s" : "step " + at + " of 7";
+    $("#d-cardtitle").textContent = done ? "Used the browser" : at ? "Using the browser" : "Using the browser";
+    $("#d-final").hidden = !done;
+    $("#d-meter").textContent = at + " / " + STEPS.length;
+    $("#d-tabs").textContent = at === 0 ? "No agent tabs" : "1 agent tab";
+    $("#d-pip").hidden = at === 0;
+
+    // canvas
+    var agent = view === "agent";
+    $$(".viewseg button").forEach(function (b) { b.setAttribute("aria-pressed", b.dataset.v === view ? "true" : "false"); });
+    $("#d-banner").hidden = agent || at === 0;
+    $("#d-watch").hidden = !agent;
+    $("#d-tag").hidden = !agent;
+    var st = agent ? siteState(at) : { name: "", msg: "" };
+    if (agent && at === 0) st = { name: "", msg: "" };
+    $("#d-inp").textContent = st.name;
+    $("#d-msg").textContent = st.msg;
+    var cur = at > 0 ? STEPS[at - 1] : null;
+    var ring = $("#d-ring");
+    if (agent && cur && cur.target && !done) {
+      var el = $("#d-" + cur.target), stage = $("#d-stage").getBoundingClientRect(), r = el.getBoundingClientRect();
+      ring.style.left = (r.left - stage.left - 5) + "px"; ring.style.top = (r.top - stage.top - 5) + "px";
+      ring.style.width = (Math.max(r.width, 60) + 10) + "px"; ring.style.height = (r.height + 10) + "px";
+      ring.classList.add("on");
+    } else ring.classList.remove("on");
+    var cap = $("#d-caption");
+    cap.hidden = !(agent && cur);
+    if (cur) { $("#d-capn").textContent = at + "/" + STEPS.length; $("#d-capt").textContent = cur.t; }
+  }
+  function next() { if (at < STEPS.length) { at++; render(); } if (at >= STEPS.length) stop(); }
+  function stop() { if (timer) { clearInterval(timer); timer = null; } $("#d-play").textContent = at >= STEPS.length ? "Play again" : "Play the turn"; }
+  $("#d-play").addEventListener("click", function () {
+    if (timer) { stop(); return; }
+    if (at >= STEPS.length) at = 0;
+    if (view === "you" && at === 0) { /* stay in the user's view; the banner explains */ }
+    render(); next();
+    timer = setInterval(next, reduce ? 600 : 1100);
+    $("#d-play").textContent = "Pause";
+  });
+  $("#d-step").addEventListener("click", function () { stop(); next(); });
+  $("#d-reset").addEventListener("click", function () { stop(); at = 0; render(); });
+  $$(".viewseg button").forEach(function (b) { b.addEventListener("click", function () { view = b.dataset.v; render(); }); });
+  $("#d-toagent").addEventListener("click", function () { view = "agent"; render(); });
+  var hd = $("#d-cardhead");
+  hd.addEventListener("click", function () { var b = $("#d-steps"); b.hidden = !b.hidden; hd.setAttribute("aria-expanded", b.hidden ? "false" : "true"); });
+  window.addEventListener("resize", render);
+  // deep links for checking: ?step=N&view=agent
+  var qs = location.search;
+  var qStep = (qs.match(/step=(\d)/) || [])[1], qView = (qs.match(/view=(agent|you)/) || [])[1];
+  if (qStep) at = Math.min(STEPS.length, +qStep);
+  if (qView) view = qView;
+  render();
+
+  /* settings switches */
+  $$(".switch:not([disabled])").forEach(function (s) {
+    s.addEventListener("click", function () {
+      var on = s.getAttribute("aria-checked") !== "true";
+      s.setAttribute("aria-checked", on ? "true" : "false");
+      if (s.id === "s-main") {
+        $$("[data-dep]").forEach(function (r) { r.style.opacity = on ? "" : ".45"; r.style.pointerEvents = on ? "" : "none"; });
+        $$("[data-h]").forEach(function (b) { b.className = on ? "lvl go" : "lvl no"; b.textContent = on ? "On" : "Off"; });
+      }
+    });
+  });
+
+  /* token chart */
+  var C = [
+    ["Code Mode section, plugin on", "2.0.18, every session", 17080, false],
+    ["Code Mode section, plugin off", "2.0.18 with -opencode.browser", 12497, false],
+    ["Browser block in a Fleet session", "2.0.18, nothing attached", 3994, true],
+    ["Catalog update after attaching", "2.0.21, once per session", 8924, false],
+    ["Fleet's nine fleet_* tools", "every request, today", 9366, false],
+    ["Two new Fleet browser tools (est.)", "OpenCode, every request", 3000, false]
+  ];
+  var max = 17080, ch = "";
+  C.forEach(function (c) {
+    var pct = c[2] / max * 78;
+    ch += '<div class="bar-row"><div class="lab">' + esc(c[0]) + "<small>" + esc(c[1]) + '</small></div><div class="bar-track"><span class="bar' + (c[3] ? " fleet" : "") + '" style="width:' + pct + '%"></span><span class="bar-val" style="left:' + pct + '%">' + c[2].toLocaleString("en-US") + " ch · ~" + Math.round(c[2] / 4).toLocaleString("en-US") + " tok</span></div></div>";
+  });
+  $("#e-chart").innerHTML = ch;
+})();
+</script>
+</body>
+</html>

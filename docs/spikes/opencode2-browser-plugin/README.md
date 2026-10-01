@@ -1,6 +1,7 @@
 # Spike: OpenCode 2's browser plugin in Fleet (2026-10-01)
 
 Branch `spike/opencode2-browser-plugin`. Spike code only; not for `main`.
+Mockups and verdict page: https://claude.ai/artifact/WTGjVDAVqNUEVkA9iZjRqv (source `mockup/src.html`, built with `mockup/build.py`).
 
 **Verdict: viable, with conditions.** Fleet can be the plugin's "desktop". A C# attachment in Fleet, driving Fleet's
 own headless Chrome over CDP, ran a real agent's Code Mode script end to end: open a tab on the canvas's page, read
@@ -54,7 +55,7 @@ The wire (read from `plugin-browser/src/connection.ts` and `desktop/src/main/bro
 Prototypes:
 
 - `kit/proto/attach.ts` (bun, ~190 lines) against V2 alone, 2.0.18 and 2.0.21. 7 of 7 commands succeeded.
-- `src/WeaveFleet.Infrastructure/Harnesses/OpenCode2/OpenCode2BrowserSpike.cs` (C#, ~440 lines) inside a scratch
+- `src/WeaveFleet.Infrastructure/Harnesses/OpenCode2/OpenCode2BrowserSpike.cs` (C#, ~490 lines) inside a scratch
   Fleet, using **Fleet's own headless Chrome** (`HeadlessChromeScreenshotter.SharedBrowserAsync`, a spike accessor)
   and `CdpConnection`. Endpoint `POST /api/spike/sessions/{id}/browser-attach`. The agent first opened the page in a
   browser canvas with `fleet_browser_open`, then ran `kit/scripts/drive.js` through `execute`: tabs.open, snapshot,
