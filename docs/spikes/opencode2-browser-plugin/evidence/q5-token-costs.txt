@@ -1,0 +1,11 @@
+fleet_app_start 1981
+fleet_browser_open 681
+fleet_browser_screenshot 1492
+fleet_canvas_focus 410
+fleet_canvas_list 279
+fleet_canvas_open 1676
+fleet_canvas_patch 820
+fleet_canvas_read 501
+fleet_page_show 1526
+fleet tools total chars 9366 ~tokens 2341
+browser catalog block in Fleet session system prompt chars 3994 ~tokens 998

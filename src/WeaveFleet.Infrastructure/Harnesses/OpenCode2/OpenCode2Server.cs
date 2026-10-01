@@ -166,6 +166,12 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     /// <summary>Notes that sign-in <paramref name="attemptId"/> has ended (finished, failed or cancelled).</summary>
     public void ReleaseSignIn(string attemptId) => _signIns.TryRemove(attemptId, out _);
 
+    /// <summary>SPIKE (browser plugin): V2's session id and the folder for Fleet session <paramref name="fleetSessionId"/>.</summary>
+    internal (string HarnessSessionId, string Directory)? SessionFor(string fleetSessionId)
+        => _sinks.FirstOrDefault(pair => string.Equals(pair.Value.Context.FleetSessionId, fleetSessionId, StringComparison.Ordinal)) is { Key: { } id, Value: { } sink }
+            ? (id, sink.Context.WorkingDirectory)
+            : null;
+
     /// <summary>Whether Fleet session <paramref name="fleetSessionId"/> listens on this server.</summary>
     public bool Serves(string fleetSessionId)
         => _sinks.Values.Any(sink => string.Equals(sink.Context.FleetSessionId, fleetSessionId, StringComparison.Ordinal));

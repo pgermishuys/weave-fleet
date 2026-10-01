@@ -1,0 +1,1 @@
+tool "{\n  \"found\": [],\n  \"remaining\": 0,\n  \"tabs\": {\n    \"error\": \"Unknown tool 'browser.tabs.list'.\"\n  }\n}"

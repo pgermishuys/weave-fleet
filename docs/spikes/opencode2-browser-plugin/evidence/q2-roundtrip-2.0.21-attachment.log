@@ -1,0 +1,29 @@
+20:19:08.036 chrome ws://127.0.0.1:33943/devtools/browser/efe20a61-83b1-4efd-873d-2f6ff57f9f08
+20:19:08.051 event stream connected; attaching {
+  [0msessionID[2m:[0m [0m[32m[0m[32m"ses_f06e1358bffeyISYTDZj5wmuR3"[0m[0m[0m[2m,[0m
+  [0mconnectionID[2m:[0m [0m[32m[0m[32m"dc110f2f-f52f-4d4e-9dd5-290c001bd894"[0m[0m[0m[2m,[0m
+}
+20:19:08.069 control {"type":"attached","connectionID":"dc110f2f-f52f-4d4e-9dd5-290c001bd894","version":4}
+20:19:08.072 published empty state; ready
+20:19:12.219 control {"type":"command","connectionID":"dc110f2f-f52f-4d4e-9dd5-290c001bd894","requestID":"c2203585-a25e-4c8a-8cb4-1deb170f15e1"}
+20:19:12.222 command {"action":{"type":"tabs.open","url":"http://127.0.0.1:5453/"},"files":[]}
+20:19:12.355 result tabs.open success 171 chars, 0 file(s)
+20:19:12.360 control {"type":"command","connectionID":"dc110f2f-f52f-4d4e-9dd5-290c001bd894","requestID":"5d97bfc0-ef20-4e8d-a479-ab9610fa98b5"}
+20:19:12.362 command {"action":{"type":"snapshot","tabID":"tab_7f30a507-ae2e-43ca-a25f-61636c82d8d6"},"generation":1,"files":[]}
+20:19:12.384 result snapshot success 671 chars, 0 file(s)
+20:19:12.394 control {"type":"command","connectionID":"dc110f2f-f52f-4d4e-9dd5-290c001bd894","requestID":"10222d1d-d640-48df-bae6-8e0a6a2db3b9"}
+20:19:12.396 command {"action":{"type":"fill","tabID":"tab_7f30a507-ae2e-43ca-a25f-61636c82d8d6","ref":"e1","text":"Ada"},"generation":1,"files":[]}
+20:19:12.414 result fill success 171 chars, 0 file(s)
+20:19:12.423 control {"type":"command","connectionID":"dc110f2f-f52f-4d4e-9dd5-290c001bd894","requestID":"56659ba4-7f97-489c-ad3d-22e969a4c0ec"}
+20:19:12.425 command {"action":{"type":"click","tabID":"tab_7f30a507-ae2e-43ca-a25f-61636c82d8d6","ref":"e2"},"generation":1,"files":[]}
+20:19:12.613 result click success 171 chars, 0 file(s)
+20:19:12.617 control {"type":"command","connectionID":"dc110f2f-f52f-4d4e-9dd5-290c001bd894","requestID":"aba36f35-c7ca-4006-a577-17c9cbf2b99d"}
+20:19:12.619 command {"action":{"type":"snapshot","tabID":"tab_7f30a507-ae2e-43ca-a25f-61636c82d8d6"},"generation":1,"files":[]}
+20:19:12.626 result snapshot success 825 chars, 0 file(s)
+20:19:12.630 control {"type":"command","connectionID":"dc110f2f-f52f-4d4e-9dd5-290c001bd894","requestID":"8590ca58-5179-4434-b1ed-04e6c8d910e1"}
+20:19:12.632 command {"action":{"type":"screenshot","tabID":"tab_7f30a507-ae2e-43ca-a25f-61636c82d8d6"},"generation":1,"files":[]}
+20:19:12.696 result screenshot success 179 chars, 1 file(s)
+20:19:12.817 control {"type":"command","connectionID":"dc110f2f-f52f-4d4e-9dd5-290c001bd894","requestID":"082719f2-2f1b-4f67-b3d9-91a555ef93d1"}
+20:19:12.819 command {"action":{"type":"console","tabID":"tab_7f30a507-ae2e-43ca-a25f-61636c82d8d6"},"generation":1,"files":[]}
+20:19:12.830 result console success 317 chars, 0 file(s)
+20:25:09.364 attach failed The operation timed out.

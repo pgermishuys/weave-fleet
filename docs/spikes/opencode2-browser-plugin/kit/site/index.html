@@ -1,0 +1,6 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Signup demo</title>
+<style>body{font:16px system-ui;margin:40px;background:#f6f5f2}form{display:flex;gap:8px}#msg{margin-top:16px;color:#2c6e3f;font-weight:600}</style></head>
+<body><h1>Join the beta</h1>
+<form onsubmit="event.preventDefault();const n=document.getElementById('name').value;document.getElementById('msg').textContent='Saved, '+n+'!';console.log('saved', n);if(!n)console.error('empty name')">
+<label for="name">Your name</label><input id="name" placeholder="Name"><button type="submit">Save</button></form>
+<div id="msg" role="status"></div></body></html>

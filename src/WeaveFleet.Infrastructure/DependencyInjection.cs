@@ -484,6 +484,11 @@ public static class DependencyInjection
             sp.GetRequiredService<ILoggerFactory>(),
             sp.GetService<IAnalyticsCollector>()));
         services.AddSingleton<IHarnessRuntime>(sp => sp.GetRequiredService<OpenCode2HarnessRuntime>());
+        // SPIKE (browser plugin)
+        services.AddSingleton(sp => new OpenCode2BrowserSpike(
+            sp.GetRequiredService<OpenCode2HarnessRuntime>(),
+            sp.GetRequiredService<IScreenshotter>(),
+            sp.GetRequiredService<ILogger<OpenCode2BrowserSpike>>()));
         services.AddSingleton<IHarnessBridgeTokens>(sp => new OpenCode2BridgeTokens(sp.GetRequiredService<OpenCode2HarnessRuntime>()));
         services.AddSingleton<IHarnessCanvasCallerResolver>(sp => new OpenCode2CanvasCallerResolver(
             sp.GetRequiredService<OpenCode2HarnessRuntime>(),

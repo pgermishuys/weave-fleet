@@ -92,6 +92,25 @@ public sealed class HeadlessChromeScreenshotter(FleetOptions options, ILogger<He
         }
     }
 
+    /// <summary>
+    /// SPIKE (OpenCode 2 browser plugin): the same headless browser, for an agent's tabs. Holds off the idle quit for
+    /// 30 minutes; a shot afterwards sets it back to <see cref="IdleTimeout"/>.
+    /// </summary>
+    internal async Task<(CdpConnection? Connection, string? Problem)> SharedBrowserAsync(CancellationToken ct)
+    {
+        await _gate.WaitAsync(ct);
+        try
+        {
+            var browser = await ConnectedAsync(ct);
+            _idle?.Change(TimeSpan.FromMinutes(30), Timeout.InfiniteTimeSpan);
+            return browser;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     private static async Task<ScreenshotOutcome> ShootAsync(CdpConnection cdp, ScreenshotRequest request, CancellationToken ct)
     {
         var created = await cdp.SendAsync("Target.createTarget", write => write.WriteString("url", "about:blank"), ct: ct);

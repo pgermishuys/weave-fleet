@@ -1,0 +1,36 @@
+{
+ "tools": [
+  "edit",
+  "fleet_app_start",
+  "fleet_browser_open",
+  "fleet_browser_screenshot",
+  "fleet_canvas_focus",
+  "fleet_canvas_list",
+  "fleet_canvas_open",
+  "fleet_canvas_patch",
+  "fleet_canvas_read",
+  "fleet_page_show",
+  "glob",
+  "grep",
+  "question",
+  "read",
+  "shell",
+  "skill",
+  "subagent",
+  "webfetch",
+  "websearch",
+  "write",
+  "execute"
+ ],
+ "fleet_tools": {
+  "fleet_app_start": "Start the project's web app as a long-running server and show its page to the user in a browser canvas beside the chat. Use it only when the user asks to run, host, serve, preview or see the app, whatever it's built with (npm, bun, dotnet, python, cargo...), or to try a change to the app's pages or HTTP behavior in the running app. Not for HTML files you wrote: show those with fleet_page_show. Fleet refuses plain file servers (python -m http.server, serve, http-server). It is not a shell. Commands that finish on their own (git, gh, builds, tests, formatters, scripts, echo) fail here: run them with your shell tool. If you can't run shell commands, don't use this tool either. Don't start dev servers with your shell tool: they never exit, and the user can't see them. Fleet runs the command in the session's folder, keeps it running, finds the page it serves and waits until it answers (up to 3 minutes). Fleet sets PORT to a free port; servers that ignore PORT keep their own port, and Fleet finds it. ASP.NET ignores PORT: append `-- --urls http://localhost:$PORT` (%PORT% on Windows) to dotnet run or dotnet watch so two copies of the project don't collide. Prefer a command that reloads on changes (npm run dev, bun --hot, dotnet watch). Calling this again with the same command restarts the app. If it fails, the result has the last lines of output: fix the problem and call it again.",
+  "fleet_browser_open": "Show a page that's already running on this machine in a browser canvas beside the chat, e.g. a server the user started or one in a container. To run the app first, use fleet_app_start instead. For an HTML file you wrote, use fleet_page_show. Only http and https addresses on this machine work.",
+  "fleet_browser_screenshot": "Look at a page in a browser or page canvas: Fleet takes a screenshot and attaches it to this tool's result, as an image you can see. Use it to check UI work you just did \u2014 layout, spacing, colours, whether the thing you changed is even on the screen \u2014 instead of assuming the code is enough. Take one after a change, and again after the fix. Fleet shoots the page in its own headless browser, so the user's tab doesn't move and nothing is clicked. A shot costs roughly width \u00d7 height / 750 tokens of context (about 1,400 for desktop, 500 for phone), so take the ones you'll actually read. The user sees each shot in the conversation, under this call: when they ask to see it, point them there. Don't save it or serve it on a page.",
+  "fleet_canvas_focus": "Bring a canvas to the front of the side panel, reopening it if the user closed it.",
+  "fleet_canvas_list": "List the canvases open in this session's side panel: id, kind, title and version.",
+  "fleet_canvas_open": "Show the user a diagram (architecture, a flow, dependencies, a sequence) in a canvas beside the chat. For a mockup or any HTML page, use fleet_page_show. Use it only when the user asks for a diagram, or when a diagram is clearly the best way to answer them; then draw it here rather than as text or Mermaid in chat. Don't open one for your own notes or progress, or when you're working on a task delegated by another agent: your result goes to that agent, not to the user. Read a canvas before you describe it or change it. Opening a title that already exists updates that canvas to the new state, and reopens it if it was closed. To change part of a canvas, use fleet_canvas_patch.",
+  "fleet_canvas_patch": "Change part of a canvas. Ops apply in order, all or nothing, and name boxes and edges by id. Diagram ops: addNode {id, label, detail?}; updateNode {id, label?, detail?}; removeNode {id} (removes its edges too); addEdge {id, from, to, label?, style?}; updateEdge {id, label?, style?}; removeEdge {id}; setDirection {direction}. Sequence op: setSource {source}.",
+  "fleet_canvas_read": "Read a canvas as compact text: every box and edge by id, the Mermaid source, a browser canvas's page with its app's status and recent output, or the file a page canvas shows.",
+  "fleet_page_show": "Show the user an HTML page you wrote (a mockup, prototype, before-and-after or explainer) in a page canvas beside the chat. Use it when the user asks to see something, or when a page is clearly the best way to answer them. Don't open one for your own notes, or when you're working on a task delegated by another agent: your result goes to that agent, not to the user. Pass the .html file's absolute path. Fleet copies the file and the web files in its folder (CSS, scripts, images, fonts) and serves the copy itself, so there's no server to start. Showing the same file again updates the same tab, and the user's tab reloads, so show it again after every edit you want them to see. Use relative links, and keep the page's files in its folder: paths starting with / or ../ don't load. Pages run sandboxed: localStorage isn't available. Not for the project's own app, or anything that needs a build or a dev server: use fleet_app_start. Not for a page already running at a localhost address: use fleet_browser_open. Not for diagrams of boxes and arrows or sequences: use fleet_canvas_open."
+ }
+}

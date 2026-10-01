@@ -1,0 +1,28 @@
+20:18:19.986 chrome ws://127.0.0.1:40039/devtools/browser/e4863468-70a3-42df-8159-fab333ac8771
+20:18:20.014 event stream connected; attaching {
+  [0msessionID[2m:[0m [0m[32m[0m[32m"ses_f06e2bdb0ffe2hEM7X12tuB0Ul"[0m[0m[0m[2m,[0m
+  [0mconnectionID[2m:[0m [0m[32m[0m[32m"b9298ef8-fc9c-462f-a431-1bac44f4247e"[0m[0m[0m[2m,[0m
+}
+20:18:20.043 control {"type":"attached","connectionID":"b9298ef8-fc9c-462f-a431-1bac44f4247e","version":4}
+20:18:20.052 published empty state; ready
+20:18:26.477 control {"type":"command","connectionID":"b9298ef8-fc9c-462f-a431-1bac44f4247e","requestID":"e4c4fa5b-a6ae-4cd4-aae8-d9c039ee0670"}
+20:18:26.480 command {"action":{"type":"tabs.open","url":"http://127.0.0.1:5453/"},"files":[]}
+20:18:26.710 result tabs.open success 171 chars, 0 file(s)
+20:18:26.715 control {"type":"command","connectionID":"b9298ef8-fc9c-462f-a431-1bac44f4247e","requestID":"2cd3b9a1-f931-4a43-a9fe-df914d2e4237"}
+20:18:26.718 command {"action":{"type":"snapshot","tabID":"tab_5173aa01-534a-4162-98c2-51e7e4fc3df0"},"generation":1,"files":[]}
+20:18:26.751 result snapshot success 671 chars, 0 file(s)
+20:18:26.761 control {"type":"command","connectionID":"b9298ef8-fc9c-462f-a431-1bac44f4247e","requestID":"681122bc-8acd-4673-b571-ca419fc57b64"}
+20:18:26.763 command {"action":{"type":"fill","tabID":"tab_5173aa01-534a-4162-98c2-51e7e4fc3df0","ref":"e1","text":"Ada"},"generation":1,"files":[]}
+20:18:26.802 result fill success 171 chars, 0 file(s)
+20:18:26.808 control {"type":"command","connectionID":"b9298ef8-fc9c-462f-a431-1bac44f4247e","requestID":"326a01c7-5a9a-4ee1-a642-55d13994c49d"}
+20:18:26.811 command {"action":{"type":"click","tabID":"tab_5173aa01-534a-4162-98c2-51e7e4fc3df0","ref":"e2"},"generation":1,"files":[]}
+20:18:26.989 result click success 171 chars, 0 file(s)
+20:18:26.993 control {"type":"command","connectionID":"b9298ef8-fc9c-462f-a431-1bac44f4247e","requestID":"3f1e1eb2-34cd-4c18-b453-9145de0fd6b3"}
+20:18:26.996 command {"action":{"type":"snapshot","tabID":"tab_5173aa01-534a-4162-98c2-51e7e4fc3df0"},"generation":1,"files":[]}
+20:18:27.002 result snapshot success 825 chars, 0 file(s)
+20:18:27.021 control {"type":"command","connectionID":"b9298ef8-fc9c-462f-a431-1bac44f4247e","requestID":"21a1baf8-5536-4928-b3b9-9dbf3940751e"}
+20:18:27.024 command {"action":{"type":"screenshot","tabID":"tab_5173aa01-534a-4162-98c2-51e7e4fc3df0"},"generation":1,"files":[]}
+20:18:27.085 result screenshot success 179 chars, 1 file(s)
+20:18:27.177 control {"type":"command","connectionID":"b9298ef8-fc9c-462f-a431-1bac44f4247e","requestID":"ffb9a1b9-b3bb-4ece-8104-2f72589211fa"}
+20:18:27.187 command {"action":{"type":"console","tabID":"tab_5173aa01-534a-4162-98c2-51e7e4fc3df0"},"generation":1,"files":[]}
+20:18:27.191 result console success 317 chars, 0 file(s)

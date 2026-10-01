@@ -1,0 +1,4 @@
+Fleet headless Chrome, 1 agent tab open (Signup demo): 11 processes, PSS 242 MB
+140 MB PSS /home/pgermishuys/.weave/harnesses/opencode2/.opencode/bin/opencode se
+188 MB PSS dotnet WeaveFleet.Api.dll 
+MemAvailable:    2549824 kB

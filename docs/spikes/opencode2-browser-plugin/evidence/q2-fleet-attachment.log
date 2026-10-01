@@ -1,0 +1,30 @@
+22:31:29.593 event stream connected; attach ses_f066803eaffeGYTrV1CBs0aiLJ as a6fb3fe1-dbba-450e-90f1-3c9944247ab8
+22:31:29.611 control {"type":"attached","connectionID":"a6fb3fe1-dbba-450e-90f1-3c9944247ab8","version":4}
+22:31:29.903 control {"type":"command","connectionID":"a6fb3fe1-dbba-450e-90f1-3c9944247ab8","requestID":"cebbcdfe-82eb-491b-b62c-73a5a87f2735"}
+22:31:29.916 command reply {"output":{"action":{"type":"tabs.open","url":"http://127.0.0.1:5453/"},"files":[]}}
+22:31:29.917 command {"type":"tabs.open","url":"http://127.0.0.1:5453/"}
+22:31:30.062 result tabs.open success 171 chars, 0 file(s)
+22:31:30.068 control {"type":"command","connectionID":"a6fb3fe1-dbba-450e-90f1-3c9944247ab8","requestID":"08097316-237a-4aee-91cb-15b95bee4842"}
+22:31:30.070 command reply {"output":{"action":{"type":"snapshot","tabID":"tab_4a74c0c2-6701-420b-b4b5-34dcdd9d0225"},"generation":1,"files":[]}}
+22:31:30.070 command {"type":"snapshot","tabID":"tab_4a74c0c2-6701-420b-b4b5-34dcdd9d0225"}
+22:31:30.101 result snapshot success 783 chars, 0 file(s)
+22:31:30.105 control {"type":"command","connectionID":"a6fb3fe1-dbba-450e-90f1-3c9944247ab8","requestID":"cd8c49ff-9821-4bfd-8184-a3e80cd4c330"}
+22:31:30.106 command reply {"output":{"action":{"type":"fill","tabID":"tab_4a74c0c2-6701-420b-b4b5-34dcdd9d0225","ref":"e1","text":"Ada"},"generation":1,"files":[]}}
+22:31:30.106 command {"type":"fill","tabID":"tab_4a74c0c2-6701-420b-b4b5-34dcdd9d0225","ref":"e1","text":"Ada"}
+22:31:30.132 result fill success 171 chars, 0 file(s)
+22:31:30.137 control {"type":"command","connectionID":"a6fb3fe1-dbba-450e-90f1-3c9944247ab8","requestID":"63b99779-a779-4df5-84bd-9c84aa3eb3ec"}
+22:31:30.139 command reply {"output":{"action":{"type":"click","tabID":"tab_4a74c0c2-6701-420b-b4b5-34dcdd9d0225","ref":"e2"},"generation":1,"files":[]}}
+22:31:30.139 command {"type":"click","tabID":"tab_4a74c0c2-6701-420b-b4b5-34dcdd9d0225","ref":"e2"}
+22:31:30.309 result click success 171 chars, 0 file(s)
+22:31:30.320 control {"type":"command","connectionID":"a6fb3fe1-dbba-450e-90f1-3c9944247ab8","requestID":"0ce6790b-e49d-448f-aaa6-8433fcf158d1"}
+22:31:30.327 command reply {"output":{"action":{"type":"snapshot","tabID":"tab_4a74c0c2-6701-420b-b4b5-34dcdd9d0225"},"generation":1,"files":[]}}
+22:31:30.328 command {"type":"snapshot","tabID":"tab_4a74c0c2-6701-420b-b4b5-34dcdd9d0225"}
+22:31:30.348 result snapshot success 969 chars, 0 file(s)
+22:31:30.359 control {"type":"command","connectionID":"a6fb3fe1-dbba-450e-90f1-3c9944247ab8","requestID":"0f010ddc-75c1-4667-a3a2-929384432c8c"}
+22:31:30.367 command reply {"output":{"action":{"type":"screenshot","tabID":"tab_4a74c0c2-6701-420b-b4b5-34dcdd9d0225"},"generation":1,"files":[]}}
+22:31:30.368 command {"type":"screenshot","tabID":"tab_4a74c0c2-6701-420b-b4b5-34dcdd9d0225"}
+22:31:30.455 result screenshot success 179 chars, 1 file(s)
+22:31:30.530 control {"type":"command","connectionID":"a6fb3fe1-dbba-450e-90f1-3c9944247ab8","requestID":"9e056d38-a27a-4e09-809e-178890342431"}
+22:31:30.533 command reply {"output":{"action":{"type":"console","tabID":"tab_4a74c0c2-6701-420b-b4b5-34dcdd9d0225"},"generation":1,"files":[]}}
+22:31:30.533 command {"type":"console","tabID":"tab_4a74c0c2-6701-420b-b4b5-34dcdd9d0225"}
+22:31:30.540 result console success 317 chars, 0 file(s)

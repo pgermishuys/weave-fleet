@@ -1,0 +1,17 @@
+[
+ {
+  "id": "per_0f99d6de5001KzsEdkJuBpnkIS",
+  "sessionId": "26c42b63-a7cf-4a24-95ef-b58203297695",
+  "kind": "shell",
+  "tool": "shell",
+  "title": "echo from-tool",
+  "detail": null,
+  "directory": null,
+  "always": [
+   "echo *"
+  ],
+  "callId": "call_1790894239133",
+  "subagent": null,
+  "askedAt": "2026-10-01T22:37:19.2108191+00:00"
+ }
+]

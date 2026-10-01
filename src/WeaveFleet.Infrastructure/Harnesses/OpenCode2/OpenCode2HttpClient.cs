@@ -16,6 +16,12 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 /// <param name="events">For the event stream; no timeout, since the stream stays open.</param>
 internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient events, ILogger<OpenCode2HttpClient> logger) : IDisposable
 {
+    /// <summary>SPIKE (browser plugin): the no-timeout client, for the attachment's event stream and its pending <c>attach</c> call.</summary>
+    internal HttpClient LongLived => events;
+
+    /// <summary>SPIKE (browser plugin): the request client.</summary>
+    internal HttpClient Requests => http;
+
     /// <summary>
     /// Every V2 session Fleet creates allows everything, the way Fleet runs OpenCode (1.x) headless: nobody is
     /// there to answer a permission prompt. The session's rules win over an <c>ask</c> in the user's config.

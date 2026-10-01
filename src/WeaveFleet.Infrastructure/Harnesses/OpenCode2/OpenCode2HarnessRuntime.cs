@@ -56,6 +56,9 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     private readonly IAnalyticsCollector? _analytics;
     private readonly OpenCode2Install _install;
     private readonly OpenCode2Servers _servers;
+
+    /// <summary>SPIKE (browser plugin).</summary>
+    internal OpenCode2Servers Servers => _servers;
     private readonly OpenCode2SignIn _signIn;
     private readonly OpenCode2Weave _weave;
 

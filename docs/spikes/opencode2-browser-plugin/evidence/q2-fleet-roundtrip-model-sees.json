@@ -1,0 +1,32 @@
+[
+ {
+  "role": "assistant",
+  "content": null,
+  "tool_calls": [
+   {
+    "id": "call_1790893889843",
+    "type": "function",
+    "function": {
+     "name": "execute",
+     "arguments": "{\"code\":\"const tab = await tools.browser.tabs.open({ url: \\\"http://127.0.0.1:5453/\\\" })\\nconst before = await tools.browser.snapshot({ tabID: tab.id })\\nconst ref = (role) => before.content.split(\\\"\\\\n\\\").find((l) => l.includes(`[${role}]`)).match(/@(e\\\\d+)/)[1]\\nawait tools.browser.fill({ tabID: tab.id, ref: ref(\\\"textbox\\\"), text: \\\"Ada\\\" })\\nawait tools.browser.click({ tabID: tab.id, ref: ref(\\\"button\\\") })\\nconst after = await tools.browser.snapshot({ tabID: tab.id })\\nconst shot = await tools.browser.screenshot({ tabID: tab.id })\\nconst logs = await tools.browser.console({ tabID: tab.id })\\nreturn { tab: tab.id, before: before.content, after: after.content, shot, console: logs.messages.map((m) => `${m.level}: ${m.text}`) }\\n\"}"
+    }
+   }
+  ]
+ },
+ {
+  "role": "tool",
+  "tool_call_id": "call_1790893889843",
+  "content": "{\n  \"tab\": \"tab_4a74c0c2-6701-420b-b4b5-34dcdd9d0225\",\n  \"before\": \"[RootWebArea] \\\"Signup demo\\\"\\n      [heading] \\\"Join the beta\\\"\\n        [StaticText] \\\"Join the beta\\\"\\n          [InlineTextBox] \\\"Join the beta\\\"\\n      [form] \\\"\\\"\\n        [LabelText] \\\"\\\"\\n          [StaticText] \\\"Your name\\\"\\n            [InlineTextBox] \\\"Your name\\\"\\n        @e1 [textbox] \\\"Your name\\\"\\n          [generic] \\\"\\\"\\n        @e2 [button] \\\"Save\\\"\\n          [StaticText] \\\"Save\\\"\\n            [InlineTextBox] \\\"Save\\\"\\n      [status] \\\"\\\"\",\n  \"after\": \"[RootWebArea] \\\"Signup demo\\\"\\n      [heading] \\\"Join the beta\\\"\\n        [StaticText] \\\"Join the beta\\\"\\n          [InlineTextBox] \\\"Join the beta\\\"\\n      [form] \\\"\\\"\\n        [LabelText] \\\"\\\"\\n          [StaticText] \\\"Your name\\\"\\n            [InlineTextBox] \\\"Your name\\\"\\n        @e1 [textbox] \\\"Your name\\\"\\n          [generic] \\\"\\\"\\n            [StaticText] \\\"Ada\\\"\\n              [InlineTextBox] \\\"Ada\\\"\\n        @e2 [button] \\\"Save\\\"\\n          [StaticText] \\\"Save\\\"\\n            [InlineTextBox] \\\"Save\\\"\\n      [status] \\\"\\\"\\n        [StaticText] \\\"Saved, Ada!\\\"\\n          [InlineTextBox] \\\"Saved, Ada!\\\"\",\n  \"shot\": {\n    \"tab\": {\n      \"id\": \"tab_4a74c0c2-6701-420b-b4b5-34dcdd9d0225\",\n      \"url\": \"http://127.0.0.1:5453/\",\n      \"title\": \"Signup demo\",\n      \"loading\": false,\n      \"canGoBack\": true,\n      \"canGoForward\": false,\n      \"generation\": 1\n    },\n    \"files\": [\n      {\n        \"id\": \"file_da01fc08-4c40-468a-8c65-f649e3ecff52\",\n        \"name\": \"screenshot.png\",\n        \"mime\": \"image/png\",\n        \"bytes\": 13631,\n        \"path\": \"/home/pgermishuys/.cache/oc2b/f/opencode-browser-fvOU6i/0/screenshot.png\"\n      }\n    ]\n  },\n  \"console\": [\n    \"info: saved Ada\"\n  ]\n}"
+ },
+ {
+  "role": "user",
+  "content": [
+   {
+    "type": "image_url",
+    "image_url": {
+     "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABQAAAAMgCAIAAADz+lisAAAQAElEQVR4nO\u2026(truncated)"
+    }
+   }
+  ]
+ }
+]
