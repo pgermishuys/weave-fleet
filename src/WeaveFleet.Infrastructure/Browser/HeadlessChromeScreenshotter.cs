@@ -1,8 +1,10 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Infrastructure.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Browser;
 
@@ -12,6 +14,11 @@ namespace WeaveFleet.Infrastructure.Browser;
 /// running between shots and quits after <see cref="IdleTimeout"/> to give its memory back — this machine may be
 /// running the app being shot as well. Shots are taken one at a time, each in its own tab, so nothing a page does
 /// reaches the next one.
+/// <para>
+/// The browser goes where the harnesses go (<see cref="ProcessGroupHelper"/>), so it doesn't outlive Fleet: a Fleet
+/// that is killed, crashes or restarts to update never gets to quit it, and a headless browser nobody drives stays
+/// running for good. On Windows that's a Job Object, which also takes the processes the browser started.
+/// </para>
 /// </summary>
 public sealed class HeadlessChromeScreenshotter(FleetOptions options, ILogger<HeadlessChromeScreenshotter> logger)
     : IScreenshotter, IAsyncDisposable
@@ -44,6 +51,7 @@ public sealed class HeadlessChromeScreenshotter(FleetOptions options, ILogger<He
 
     private readonly SemaphoreSlim _gate = new(1, 1);
     private Process? _browser;
+    private SafeHandle? _job;
     private CdpConnection? _cdp;
     private string? _profile;
     private Timer? _idle;
@@ -228,6 +236,8 @@ public sealed class HeadlessChromeScreenshotter(FleetOptions options, ILogger<He
         if (_browser is null)
             return (false, $"Fleet couldn't start {path}.", false);
 
+        _job = ProcessGroupHelper.AssignToProcessGroup(_browser, logger);
+
         // Reading the pipes keeps Chrome from blocking on a full buffer once it gets chatty, and the last few
         // lines are what explains a launch that never came up.
         var complaints = new Complaints();
@@ -398,6 +408,13 @@ public sealed class HeadlessChromeScreenshotter(FleetOptions options, ILogger<He
             }
 
             browser.Dispose();
+        }
+
+        // Closing the job kills whatever the browser left running, such as its crash reporter.
+        if (_job is { } job)
+        {
+            _job = null;
+            job.Dispose();
         }
 
         if (_profile is { } profile)

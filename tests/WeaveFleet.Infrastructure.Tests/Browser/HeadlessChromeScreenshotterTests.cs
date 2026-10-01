@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Infrastructure.Browser;
+using WeaveFleet.Infrastructure.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Tests.Browser;
 
@@ -77,6 +78,44 @@ public sealed class HeadlessChromeScreenshotterTests
 
         shot.Image.ShouldBeNull();
         shot.Problem.ShouldNotBeNull();
+    }
+
+    [Fact]
+    public async Task The_browser_is_kept_with_the_harnesses_so_it_cannot_outlive_Fleet()
+    {
+        // Linux reads a process's command line from /proc; Windows uses a Job Object, which has nothing to list.
+        if (!OperatingSystem.IsLinux() || Browser() is not { } options)
+            return;
+
+        using var site = new LocalSite("<body>tracked");
+        var screenshots = new HeadlessChromeScreenshotter(options, NullLogger<HeadlessChromeScreenshotter>.Instance);
+        int[] browsers;
+        try
+        {
+            (await screenshots.CaptureAsync(new ScreenshotRequest(site.Url, 400, 300))).Problem.ShouldBeNull();
+
+            browsers = [.. ProcessGroupHelper.RunningProcesses.Select(p => p.Pid).Where(IsScreenshotBrowser)];
+            browsers.Length.ShouldBe(1);
+        }
+        finally
+        {
+            await screenshots.DisposeAsync();
+        }
+
+        ProcessGroupHelper.RunningProcesses.ShouldNotContain(p => browsers.Contains(p.Pid));
+        IsScreenshotBrowser(browsers[0]).ShouldBeFalse();
+    }
+
+    private static bool IsScreenshotBrowser(int pid)
+    {
+        try
+        {
+            return File.ReadAllText($"/proc/{pid}/cmdline").Contains("fleet-screenshots-", StringComparison.Ordinal);
+        }
+        catch (IOException)
+        {
+            return false;
+        }
     }
 
     [Fact]
