@@ -36,9 +36,10 @@ public sealed partial class SessionRecapService(
     TimeProvider timeProvider,
     ILogger<SessionRecapService> logger)
 {
-    /// <summary>Claude Code's recap prompt, word for word.</summary>
+    /// <summary>Claude Code's recap prompt, with its word cap replaced by what the recap is for.</summary>
     public const string Prompt =
-        "The user stepped away and is coming back. Recap in under 40 words, 1-2 plain sentences, no markdown. " +
+        "The user stepped away and is coming back. Recap in one or two plain sentences they can take in at a glance, " +
+        "no markdown. " +
         "Lead with the overall goal and current task, then the one next action. Skip root-cause narrative, " +
         "fix internals, secondary to-dos, and em-dash tangents.";
 
