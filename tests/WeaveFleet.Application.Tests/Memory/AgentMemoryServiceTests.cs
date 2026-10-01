@@ -322,6 +322,182 @@ public sealed class AgentMemoryServiceTests : IDisposable
         (await _memory.ChangesForAsync(Session(_repository, "never-had-notes"))).ShouldBeNull();
     }
 
+    [Fact]
+    public async Task A_learned_note_lasts_a_week_of_use_not_a_calendar_week()
+    {
+        await _memory.SetEnabledAsync(true);
+        var gh = (await _memory.SaveFromAgentAsync(Session(_repository), "repository", "gh isn't on PATH; read GitHub with WebFetch.", "learned", null)).Value.Note;
+        gh.Lifetime.ShouldBe(AgentMemory.LearnedLifetimeDays);
+
+        _time.Advance(TimeSpan.FromDays(30));
+        (await PromptAsync(_repository)).ShouldContain("gh isn't on PATH", customMessage: "a month away isn't a month of use");
+        await UseDaysAsync(_repository, 6);
+        (await PromptAsync(_repository)).ShouldContain("gh isn't on PATH", customMessage: "its seventh day of use is its last");
+        (await _memory.ListAsync(_repository)).RepositoryNotes.Single().DaysLeft.ShouldBe(0);
+
+        _time.Advance(TimeSpan.FromDays(1));
+        (await PromptAsync(_repository)).ShouldNotContain("gh isn't on PATH");
+        _store.Context[_repository].ShouldNotContain("gh isn't on PATH", customMessage: "the file OpenCode reads drops it too");
+        var view = await _memory.ListAsync(_repository);
+        view.RepositoryNotes.ShouldBeEmpty();
+        view.ExpiredNotes.ShouldNotBeNull().Single().ShouldSatisfyAllConditions(
+            note => note.Id.ShouldBe(gh.Id),
+            note => note.Expired.ShouldBeTrue());
+    }
+
+    [Fact]
+    public async Task Days_in_other_repositories_dont_count_against_a_repository_note_but_count_for_a_machine_note()
+    {
+        await _memory.SetEnabledAsync(true);
+        await _memory.SaveFromAgentAsync(Session(_repository), "repository", "Run E2E with --filter; the full suite takes 12 minutes.", "learned", null);
+        await _memory.SaveFromAgentAsync(Session(_repository), "machine", "/tmp fills up; put temporary files under ~/.cache.", "learned", null);
+
+        await UseDaysAsync(_otherRepository, 8);
+
+        var notes = await PromptAsync(_repository);
+        notes.ShouldContain("Run E2E with --filter", customMessage: "weave-fleet wasn't used");
+        notes.ShouldNotContain("/tmp fills up", customMessage: "the machine was used for eight days");
+    }
+
+    [Fact]
+    public async Task What_the_user_said_or_wrote_never_expires()
+    {
+        await _memory.SetEnabledAsync(true);
+        var fromYou = (await _memory.SaveFromAgentAsync(Session(_repository), "repository", "Rebase onto origin/main; never merge main.", "from-you", null)).Value.Note;
+        await _memory.AddAsync("machine", null, "7 GB of memory: one dotnet app at a time.");
+
+        await UseDaysAsync(_repository, 100);
+
+        fromYou.Lifetime.ShouldBeNull();
+        var notes = await PromptAsync(_repository);
+        notes.ShouldContain("Rebase onto origin/main");
+        notes.ShouldContain("7 GB of memory");
+    }
+
+    [Fact]
+    public async Task A_lesson_learned_again_after_it_expired_brings_its_note_back_for_twice_as_long()
+    {
+        await _memory.SetEnabledAsync(true);
+        var first = (await _memory.SaveFromAgentAsync(Session(_repository), "machine", "gh isn't on PATH here; read GitHub pages with WebFetch.", "learned", null)).Value.Note;
+        await UseDaysAsync(_repository, 8);
+        (await PromptAsync(_repository)).ShouldNotContain("gh isn't on PATH");
+
+        var again = await _memory.SaveFromAgentAsync(Session(_repository, "session-2"), "machine", "The gh CLI isn't on PATH on this machine, so use WebFetch for GitHub.", "learned", null);
+
+        again.Value.Relearned.ShouldBeTrue();
+        again.Value.Note.ShouldSatisfyAllConditions(
+            note => note.Id.ShouldBe(first.Id, "the old note comes back"),
+            note => note.Text.ShouldBe("The gh CLI isn't on PATH on this machine, so use WebFetch for GitHub.", "in the new words"),
+            note => note.Lifetime.ShouldBe(14),
+            note => note.Relearned.ShouldBe(1),
+            note => note.Created.ShouldBe(first.Created));
+        _store.Notes.Count.ShouldBe(1);
+        (await PromptAsync(_repository)).ShouldContain("The gh CLI isn't on PATH");
+
+        await UseDaysAsync(_repository, 14);
+        (await PromptAsync(_repository)).ShouldContain("The gh CLI isn't on PATH", customMessage: "it lasts fourteen days of use now");
+        await UseDaysAsync(_repository, 1);
+        (await PromptAsync(_repository)).ShouldNotContain("The gh CLI isn't on PATH");
+    }
+
+    [Fact]
+    public async Task A_lesson_learned_again_and_again_lasts_at_most_eight_weeks()
+    {
+        await _memory.SetEnabledAsync(true);
+        var lifetimes = new List<int?>();
+        for (var round = 0; round < 5; round++)
+        {
+            var saved = await _memory.SaveFromAgentAsync(Session(_repository), "machine", "dotnet test needs a scratch HOME on this machine.", "learned", null);
+            lifetimes.Add(saved.Value.Note.Lifetime);
+            await UseDaysAsync(_repository, AgentMemory.MaxLifetimeDays + 1);
+        }
+
+        lifetimes.ShouldBe([7, 14, 28, 56, 56]);
+    }
+
+    [Fact]
+    public async Task A_different_lesson_after_one_expired_is_a_new_note()
+    {
+        await _memory.SetEnabledAsync(true);
+        var old = (await _memory.SaveFromAgentAsync(Session(_repository), "machine", "gh isn't on PATH; read GitHub with WebFetch.", "learned", null)).Value.Note;
+        await UseDaysAsync(_repository, 8);
+
+        var saved = await _memory.SaveFromAgentAsync(Session(_repository), "machine", "The disk is nearly full; clear ~/.nuget before restoring.", "learned", null);
+
+        saved.Value.Relearned.ShouldBeFalse();
+        saved.Value.Note.Id.ShouldNotBe(old.Id);
+        saved.Value.Note.Lifetime.ShouldBe(AgentMemory.LearnedLifetimeDays);
+    }
+
+    [Fact]
+    public async Task Keeping_a_learned_note_stops_it_expiring_and_brings_back_one_that_had()
+    {
+        await _memory.SetEnabledAsync(true);
+        var gh = (await _memory.SaveFromAgentAsync(Session(_repository), "machine", "gh isn't on PATH; read GitHub with WebFetch.", "learned", null)).Value.Note;
+        await UseDaysAsync(_repository, 8);
+        (await PromptAsync(_repository)).ShouldNotContain("gh isn't on PATH");
+
+        var kept = await _memory.KeepAsync(gh.Id);
+
+        kept.Value.Lifetime.ShouldBeNull();
+        kept.Value.Expired.ShouldBeFalse();
+        await UseDaysAsync(_repository, 100);
+        (await PromptAsync(_repository)).ShouldContain("gh isn't on PATH");
+    }
+
+    [Fact]
+    public async Task Expired_notes_dont_fill_a_list()
+    {
+        await _memory.SetEnabledAsync(true);
+        for (var i = 0; i < AgentMemory.MaxMachineNotes; i++)
+            await _memory.SaveFromAgentAsync(Session(_repository), "machine", $"Lesson number{i} about tool{i} failing with error{i}.", "learned", null);
+        (await _memory.SaveFromAgentAsync(Session(_repository), "machine", "One too many lessons here today.", "learned", null))
+            .IsFailure.ShouldBeTrue("the list is full");
+
+        await UseDaysAsync(_repository, 8);
+
+        (await _memory.SaveFromAgentAsync(Session(_repository), "machine", "One too many lessons here today.", "learned", null))
+            .IsSuccess.ShouldBeTrue("expired notes don't count");
+    }
+
+    [Fact]
+    public async Task A_running_session_isnt_told_an_expired_note_is_no_longer_true()
+    {
+        await _memory.SetEnabledAsync(true);
+        await _memory.SaveFromAgentAsync(Session(_repository), "machine", "gh isn't on PATH; read GitHub with WebFetch.", "learned", null);
+        var session = Session(_repository, "long-running");
+        await _memory.ChangesForAsync(session);
+
+        await UseDaysAsync(_repository, 8);
+
+        (await _memory.ChangesForAsync(session)).ShouldBeNull("it ran out of days; nobody found it wrong");
+
+        var back = (await _memory.SaveFromAgentAsync(Session(_repository), "machine", "The gh CLI isn't on PATH here; use WebFetch for GitHub.", "learned", null)).Value.Note;
+        (await _memory.ChangesForAsync(session)).ShouldNotBeNull().ShouldContain($"[{back.Id}] The gh CLI isn't on PATH here");
+    }
+
+    [Theory]
+    [InlineData("gh isn't on PATH; read GitHub with WebFetch.", "The gh CLI isn't on PATH on this machine, so use WebFetch for GitHub.", true)]
+    [InlineData("dotnet test times out after 10 minutes; pass --blame-hang-timeout 5m.", "dotnet test timed out at 10 minutes, so pass --blame-hang-timeout 5m.", true)]
+    [InlineData("gh isn't on PATH; read GitHub with WebFetch.", "The disk is nearly full; clear ~/.nuget before restoring.", false)]
+    [InlineData("Use bun, not npm.", "Use npm ci on Node 22.", false)]
+    public void Notes_that_say_the_same_lesson_in_other_words_match(string first, string second, bool same)
+        => (MemoryText.Similarity(first, second) >= MemoryText.SameLesson).ShouldBe(same);
+
+    /// <summary>A prompt in <paramref name="directory"/> today: what its session reads.</summary>
+    private async Task<string> PromptAsync(string directory)
+        => (await _memory.PrepareSessionAsync("owner", directory, canSave: true)).ShouldNotBeNull();
+
+    /// <summary><paramref name="days"/> more days, each with a prompt in <paramref name="directory"/>.</summary>
+    private async Task UseDaysAsync(string directory, int days)
+    {
+        for (var day = 0; day < days; day++)
+        {
+            _time.Advance(TimeSpan.FromDays(1));
+            await PromptAsync(directory);
+        }
+    }
+
     private static Session Session(string directory, string id = "session-1") => new()
     {
         Id = id,

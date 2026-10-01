@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
   addMemoryNote: vi.fn(),
   updateMemoryNote: vi.fn(),
   forgetMemoryNote: vi.fn(),
+  keepMemoryNote: vi.fn(),
   clearMemory: vi.fn(),
 }));
 
@@ -141,5 +142,54 @@ describe("MemorySection", () => {
     await flushPromises();
 
     expect(api.clearMemory).toHaveBeenCalledWith("all");
+  });
+
+  it("says how long a learned note has left and keeps it for good on request", async () => {
+    api.listMemoryNotes.mockResolvedValue({
+      ...notes,
+      machineNotes: [note("bbbb0002", "/tmp fills up here; use ~/.cache.", { lifetime: 14, daysLeft: 3, relearned: 1 })],
+    });
+    api.keepMemoryNote.mockResolvedValue(note("bbbb0002", "/tmp fills up here; use ~/.cache.", { lifetime: null }));
+    const wrapper = await mountSection();
+
+    expect(wrapper.get("[data-testid=memory-life-bbbb0002]").text()).toBe("3 more days of use · learned 2×");
+    expect(wrapper.find("[data-testid=memory-life-aaaa0001]").exists()).toBe(false);
+
+    await wrapper.get("[data-testid=memory-keep-bbbb0002]").trigger("click");
+    await flushPromises();
+
+    expect(api.keepMemoryNote).toHaveBeenCalledWith("bbbb0002");
+  });
+
+  it("says a learned note was kept, and offers no Keep for it", async () => {
+    api.listMemoryNotes.mockResolvedValue({
+      ...notes,
+      machineNotes: [note("bbbb0002", "/tmp fills up here; use ~/.cache.", { lifetime: null, relearned: 1 })],
+    });
+    const wrapper = await mountSection();
+
+    expect(wrapper.get("[data-testid=memory-life-bbbb0002]").text()).toBe("Kept for good · learned 2×");
+    expect(wrapper.find("[data-testid=memory-keep-bbbb0002]").exists()).toBe(false);
+  });
+
+  it("lists expired notes apart, folded, and brings one back with Keep", async () => {
+    api.listMemoryNotes.mockResolvedValue({
+      ...notes,
+      expiredNotes: [note("eeee0005", "gh isn't on PATH; read GitHub with WebFetch.", { lifetime: 7, daysLeft: 0, expired: true })],
+    });
+    api.keepMemoryNote.mockResolvedValue(note("eeee0005", "gh isn't on PATH; read GitHub with WebFetch.", { lifetime: null }));
+    const wrapper = await mountSection();
+
+    expect(wrapper.get("[data-testid=memory-count]").text()).toBe("3 notes · about 640 tokens per request");
+    expect(wrapper.get("[data-testid=memory-expired-toggle]").text()).toContain("Expired");
+    expect(wrapper.text()).not.toContain("gh isn't on PATH");
+
+    await wrapper.get("[data-testid=memory-expired-toggle]").trigger("click");
+    expect(wrapper.get("[data-testid=memory-expired]").text()).toContain("Expired after 7 days of use");
+
+    await wrapper.get("[data-testid=memory-keep-eeee0005]").trigger("click");
+    await flushPromises();
+
+    expect(api.keepMemoryNote).toHaveBeenCalledWith("eeee0005");
   });
 });

@@ -38,6 +38,12 @@ public static class MemoryEndpoints
             .WithName("UpdateMemoryNote")
             .Produces<MemoryNoteView>();
 
+        // A learned note that should never expire, or that expired and should come back for good.
+        group.MapPost("/notes/{id}/keep", async (string id, AgentMemoryService memory, CancellationToken ct)
+                => (await memory.KeepAsync(id, ct)).ToApiResult())
+            .WithName("KeepMemoryNote")
+            .Produces<MemoryNoteView>();
+
         group.MapDelete("/notes/{id}", async (string id, AgentMemoryService memory, CancellationToken ct)
                 => (await memory.ForgetAsync(id, ct)).ToApiResult())
             .WithName("ForgetMemoryNote");

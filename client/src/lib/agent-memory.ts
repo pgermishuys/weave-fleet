@@ -27,6 +27,14 @@ export interface MemoryNote {
   sessionTitle: string | null;
   created: string;
   updated: string;
+  /** Days of use the note lasts; none when it never expires (notes from you, and learned notes you kept). */
+  lifetime?: number | null;
+  /** Days of use left before sessions stop reading it. */
+  daysLeft?: number | null;
+  /** It had its days: sessions don't read it, and the same lesson learned again brings it back. */
+  expired?: boolean;
+  /** How many times an agent learned it again after it expired. */
+  relearned?: number;
 }
 
 export interface MemoryRepository {
@@ -49,6 +57,8 @@ export interface MemoryNotes {
   machineNotes: MemoryNote[];
   /** Roughly what the notes add to each request a session sends. */
   tokens: number;
+  /** Learned notes that expired, both lists. */
+  expiredNotes?: MemoryNote[];
 }
 
 export interface MemorySavedPayload {
@@ -100,6 +110,11 @@ export function updateMemoryNote(id: string, text: string): Promise<MemoryNote> 
   return send(`${MEMORY_PATH}/notes/${encodeURIComponent(id)}`, "Couldn't save the note.", { method: "PUT", body: JSON.stringify({ text }) });
 }
 
+/** A learned note that should never expire, or an expired one brought back for good. */
+export function keepMemoryNote(id: string): Promise<MemoryNote> {
+  return send(`${MEMORY_PATH}/notes/${encodeURIComponent(id)}/keep`, "Couldn't keep the note.", { method: "POST" });
+}
+
 export function forgetMemoryNote(id: string): Promise<void> {
   return send(`${MEMORY_PATH}/notes/${encodeURIComponent(id)}`, "Couldn't forget the note.", { method: "DELETE" });
 }
@@ -111,6 +126,16 @@ export function clearMemory(scope: "all" | "machine" | "repository", repository:
 /** Where a note is kept, as the notice and the conversation say it. */
 export function memoryPlace(note: Pick<MemoryNote, "list">, repositoryName: string | null): string {
   return note.list === "machine" ? "this machine" : (repositoryName ?? "this repository");
+}
+
+/** How long a learned note has left, as Settings says it; null for a note from the user, which never expires. */
+export function memoryLifeLabel(note: Pick<MemoryNote, "kind" | "lifetime" | "daysLeft" | "expired" | "relearned">): string | null {
+  const again = note.relearned ? ` · learned ${note.relearned + 1}×` : "";
+  if (note.lifetime == null) return note.kind === "learned" ? `Kept for good${again}` : null;
+  if (note.expired) return `Expired after ${note.lifetime} days of use${again}`;
+  const left = note.daysLeft ?? note.lifetime;
+  if (left === 0) return `Last day of use${again}`;
+  return `${left} more ${left === 1 ? "day" : "days"} of use${again}`;
 }
 
 /** How Settings labels where a note came from. */

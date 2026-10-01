@@ -50,6 +50,14 @@ public sealed class AgentMemoryBridge(
                 return CanvasResult.Ok(new CanvasToolOutput($"Already remembered for {where}", $"Note {note.Id} already says this; it's now dated today. Nothing new was saved."));
 
             // The first line is what the conversation shows under the call: the note itself.
+            if (saved.Value.Relearned)
+            {
+                return CanvasResult.Ok(new CanvasToolOutput(
+                    $"Remembered for {where}",
+                    $"{note.Text}\nThis lesson was learned before and its note had expired, so note {note.Id} is back for {where}, "
+                    + $"now for {note.Lifetime} days of use. Other sessions get it with their next prompt."));
+            }
+
             var output = saved.Value.Replaced is { } replaced && replaced != note.Id
                 ? $"{note.Text}\nSaved as note {note.Id} for {where}, in place of {replaced}. Other sessions get it with their next prompt."
                 : $"{note.Text}\nSaved as note {note.Id} for {where}. Other sessions get it with their next prompt.";

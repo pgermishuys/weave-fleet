@@ -26,6 +26,16 @@ public interface IMemoryStore
     Task<int> DeleteAsync(string userId, IReadOnlyCollection<string> ids, CancellationToken ct = default);
 
     /// <summary>
+    /// Records that <paramref name="day"/> had a prompt on this machine, and in <paramref name="repository"/> when there
+    /// is one: learned notes last a number of these days (<see cref="AgentMemory.LearnedLifetimeDays"/>). A day already
+    /// recorded isn't written again.
+    /// </summary>
+    Task RecordDayUsedAsync(string userId, string? repository, DateOnly day, CancellationToken ct = default);
+
+    /// <summary>The days recorded for this machine, and for <paramref name="repository"/> when there is one.</summary>
+    Task<MemoryDaysUsed> ListDaysUsedAsync(string userId, string? repository, CancellationToken ct = default);
+
+    /// <summary>
     /// The folder with the user's notes as the model reads them, one file per session folder
     /// (<see cref="WriteContextAsync"/>). Harness processes get it as <see cref="AgentMemory.EnvironmentVariable"/>.
     /// </summary>
@@ -53,6 +63,15 @@ public interface IMemoryStore
 
     /// <summary>Deletes every context file, so no session reads notes: memory is off.</summary>
     Task ClearContextAsync(string userId, CancellationToken ct = default);
+}
+
+/// <summary>The days with a prompt on this machine, and in one repository: what a learned note's lifetime counts.</summary>
+public sealed record MemoryDaysUsed(IReadOnlyList<DateOnly> Machine, IReadOnlyList<DateOnly> Repository)
+{
+    public static readonly MemoryDaysUsed None = new([], []);
+
+    /// <summary>The days that count for <paramref name="note"/>: its repository's, or the machine's for a machine note.</summary>
+    public IReadOnlyList<DateOnly> For(MemoryNote note) => note.List == MemoryList.Machine ? Machine : Repository;
 }
 
 /// <summary>A session folder Fleet writes notes for, and the repository it's in.</summary>
