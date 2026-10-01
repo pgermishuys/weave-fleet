@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
+using System.Runtime.InteropServices;
 using System.Net.Sockets;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
@@ -8,6 +9,7 @@ using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Terminals;
+using WeaveFleet.Infrastructure.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Browser;
 
@@ -16,6 +18,11 @@ namespace WeaveFleet.Infrastructure.Browser;
 /// first from the local addresses they print, then from the ports their process tree listens on. Every run
 /// is killed, with its whole tree, when Fleet shuts down. Starts, restarts and stops take turns, so the caps
 /// in <see cref="BrowserOptions"/> hold.
+/// <para>
+/// A Fleet that is killed, crashes or restarts to update doesn't get to shut them down, so each run also goes where
+/// the harnesses go (<see cref="ProcessGroupHelper"/>): on Windows a Job Object, which the system closes when Fleet
+/// exits, killing the run and every process it started, including servers whose <c>cmd.exe</c> has already exited.
+/// </para>
 /// </summary>
 public sealed partial class AppRunner(FleetOptions options, ILogger<AppRunner> logger) : IAppRunner, ISessionAppCleanup, IDisposable
 {
@@ -269,6 +276,7 @@ public sealed partial class AppRunner(FleetOptions options, ILogger<AppRunner> l
             return;
         }
 
+        run.SetJob(generation, ProcessGroupHelper.AssignToProcessGroup(process, logger));
         run.SetProcess(generation, process.Id, StartTimeOf(process));
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
@@ -598,6 +606,7 @@ public sealed partial class AppRunner(FleetOptions options, ILogger<AppRunner> l
         private readonly HashSet<string> _hintsGiven = [];
         private long _droppedLines;
         private Process? _process;
+        private SafeHandle? _job;
         private int _generation;
         private TreePorts _ports = TreePorts.None;
         private int? _exitCode;
@@ -668,6 +677,21 @@ public sealed partial class AppRunner(FleetOptions options, ILogger<AppRunner> l
         {
             lock (_lock)
                 return _generation == generation;
+        }
+
+        /// <summary>Keeps the current process's Job Object (Windows) until the run is killed.</summary>
+        public void SetJob(int generation, SafeHandle? job)
+        {
+            lock (_lock)
+            {
+                if (_generation != generation)
+                {
+                    job?.Dispose();
+                    return;
+                }
+
+                _job = job;
+            }
         }
 
         public void SetProcess(int generation, int pid, DateTimeOffset? startedAt)
@@ -773,11 +797,19 @@ public sealed partial class AppRunner(FleetOptions options, ILogger<AppRunner> l
         public Process? Kill()
         {
             Process? process;
+            SafeHandle? job;
             lock (_lock)
+            {
                 process = _process;
+                job = _job;
+                _job = null;
+            }
 
             if (process is null)
+            {
+                job?.Dispose();
                 return null;
+            }
 
             try
             {
@@ -789,6 +821,8 @@ public sealed partial class AppRunner(FleetOptions options, ILogger<AppRunner> l
                 // Already gone.
             }
 
+            // Closing the job kills what the tree walk can't reach: processes whose parent has already exited.
+            job?.Dispose();
             return process;
         }
 

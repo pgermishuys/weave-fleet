@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 
@@ -521,37 +520,23 @@ public interface IGitDiffCommandRunner
 
 public sealed class GitDiffProcessCommandRunner : IGitDiffCommandRunner
 {
+    /// <summary>A diff of a big change set takes seconds; a git that takes this long is stuck, and is stopped.</summary>
+    private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(1);
+
     public async Task<GitCommandResult> RunAsync(string workingDirectory, IReadOnlyList<string> arguments, CancellationToken ct)
     {
-        using var process = new Process();
-        process.StartInfo = new ProcessStartInfo("git")
-        {
-            WorkingDirectory = workingDirectory,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false
-        };
-
-        foreach (var argument in arguments)
-            process.StartInfo.ArgumentList.Add(argument);
-
         try
         {
-            process.Start();
+            return await GitCommand.ExecAsync(workingDirectory, arguments, Timeout, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
             return new GitCommandResult(ExitCode: -1, StandardOutput: string.Empty, StandardError: ex.Message);
         }
-
-        var standardOutputTask = process.StandardOutput.ReadToEndAsync(ct);
-        var standardErrorTask = process.StandardError.ReadToEndAsync(ct);
-
-        await process.WaitForExitAsync(ct).ConfigureAwait(false);
-        var standardOutput = await standardOutputTask.ConfigureAwait(false);
-        var standardError = await standardErrorTask.ConfigureAwait(false);
-
-        return new GitCommandResult(process.ExitCode, standardOutput, standardError);
+        catch (GitCommandException ex)
+        {
+            return new GitCommandResult(ExitCode: -1, StandardOutput: string.Empty, StandardError: ex.Message);
+        }
     }
 }
 

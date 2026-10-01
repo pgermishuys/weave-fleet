@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Domain.Common;
@@ -15,6 +14,9 @@ public sealed partial class RepositoryService(
     ILogger<RepositoryService> logger) : IDisposable
 {
     private readonly ConcurrentDictionary<string, RepositoryInfo> _cache = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Each lookup (branch, remote, last commit) is instant; one that isn't is stuck, and is stopped.</summary>
+    private static readonly TimeSpan GitTimeout = TimeSpan.FromSeconds(10);
+
     private volatile bool _scanned;
     private readonly SemaphoreSlim _scanLock = new(1, 1);
 
@@ -358,18 +360,8 @@ public sealed partial class RepositoryService(
     {
         try
         {
-            using var proc = new Process();
-            proc.StartInfo = new ProcessStartInfo("git", args)
-            {
-                WorkingDirectory = workDir,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false
-            };
-            proc.Start();
-            var output = await proc.StandardOutput.ReadToEndAsync(ct).ConfigureAwait(false);
-            await proc.WaitForExitAsync(ct).ConfigureAwait(false);
-            return output;
+            var result = await GitCommand.ExecAsync(workDir, args, GitTimeout, ct).ConfigureAwait(false);
+            return result.StandardOutput;
         }
         catch (Exception ex)
         {

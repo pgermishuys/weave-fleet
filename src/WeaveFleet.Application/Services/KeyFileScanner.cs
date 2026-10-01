@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Diagnostics;
 
 namespace WeaveFleet.Application.Services;
 
@@ -10,6 +9,9 @@ namespace WeaveFleet.Application.Services;
 public sealed class KeyFileScanner
 {
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(5);
+
+    /// <summary>Listing even a very big repository takes a few seconds; past this the files are walked instead.</summary>
+    private static readonly TimeSpan GitTimeout = TimeSpan.FromSeconds(30);
 
     private readonly KeyFileConfig _config;
     private readonly ConcurrentDictionary<string, CacheEntry> _cache = new(StringComparer.OrdinalIgnoreCase);
@@ -123,27 +125,11 @@ public sealed class KeyFileScanner
     {
         try
         {
-            var psi = new ProcessStartInfo("git")
-            {
-                Arguments = "ls-files",
-                WorkingDirectory = directory,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-            };
-
-            using var proc = Process.Start(psi);
-            if (proc is null)
+            var result = await GitCommand.ExecAsync(directory, ["ls-files"], GitTimeout, ct);
+            if (result.ExitCode != 0)
                 return FallbackScan(directory);
 
-            var output = await proc.StandardOutput.ReadToEndAsync(ct);
-            await proc.WaitForExitAsync(ct);
-
-            if (proc.ExitCode != 0)
-                return FallbackScan(directory);
-
-            return output
+            return result.StandardOutput
                 .Split('\n', StringSplitOptions.RemoveEmptyEntries)
                 .Select(l => l.Trim())
                 .Where(l => l.Length > 0)

@@ -1,6 +1,5 @@
-using System.Diagnostics;
-using System.Text;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Skills;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Skills;
@@ -17,6 +16,9 @@ public sealed partial class GitHubSkillFetcher(ILogger<GitHubSkillFetcher> logge
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         ".weave",
         "skills");
+
+    /// <summary>A shallow clone of a skills repository takes seconds; a network that stalls doesn't get forever.</summary>
+    private static readonly TimeSpan GitTimeout = TimeSpan.FromMinutes(5);
 
     /// <inheritdoc />
     public async Task<Result<string>> CloneOrUpdateAsync(
@@ -405,67 +407,22 @@ public sealed partial class GitHubSkillFetcher(ILogger<GitHubSkillFetcher> logge
         string? workingDirectory,
         CancellationToken cancellationToken)
     {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = "git",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            RedirectStandardInput = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-
-        // Prevent git from opening an interactive terminal prompt for credentials.
-        // This ensures the process fails fast with an auth error instead of hanging.
-        startInfo.Environment["GIT_TERMINAL_PROMPT"] = "0";
-        startInfo.Environment["GCM_INTERACTIVE"] = "never";
-
-        foreach (var arg in args)
-        {
-            startInfo.ArgumentList.Add(arg);
-        }
-
-        if (!string.IsNullOrWhiteSpace(workingDirectory))
-        {
-            startInfo.WorkingDirectory = workingDirectory;
-        }
-
-        var outputBuilder = new StringBuilder();
-        var errorBuilder = new StringBuilder();
+        // Credential Manager's sign-in window would wait for someone who isn't there; the fetch fails with an auth
+        // error instead (GIT_TERMINAL_PROMPT is off for every git Fleet runs).
+        var environment = new Dictionary<string, string> { ["GCM_INTERACTIVE"] = "never" };
 
         try
         {
-            using var process = new Process { StartInfo = startInfo };
+            var result = await GitCommand.ExecAsync(workingDirectory ?? Environment.CurrentDirectory, args, GitTimeout,
+                cancellationToken, environment).ConfigureAwait(false);
+            var output = result.StandardOutput;
+            var error = result.StandardError;
+            var exitCode = result.ExitCode;
 
-            process.OutputDataReceived += (_, e) =>
-            {
-                if (e.Data is not null)
-                {
-                    outputBuilder.AppendLine(e.Data);
-                }
-            };
-
-            process.ErrorDataReceived += (_, e) =>
-            {
-                if (e.Data is not null)
-                {
-                    errorBuilder.AppendLine(e.Data);
-                }
-            };
-
-            process.Start();
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-
-            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-
-            var output = outputBuilder.ToString();
-            var error = errorBuilder.ToString();
-
-            if (process.ExitCode != 0)
+            if (exitCode != 0)
             {
                 var errorMessage = !string.IsNullOrWhiteSpace(error) ? error : output;
-                LogGitCommandFailed(process.ExitCode, errorMessage);
+                LogGitCommandFailed(exitCode, errorMessage);
 
                 // Check for common auth failures
                 if (errorMessage.Contains("Authentication failed", StringComparison.OrdinalIgnoreCase) ||
