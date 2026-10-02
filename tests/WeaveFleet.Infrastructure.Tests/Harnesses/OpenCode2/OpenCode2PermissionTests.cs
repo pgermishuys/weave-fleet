@@ -137,7 +137,20 @@ public sealed class OpenCode2PermissionTests
         rules.ShouldContain(("read", "allow"));
         rules.ShouldContain(("edit", "allow"));
         rules.ShouldNotContain(("shell", "allow"));
+        rules[^2].ShouldBe(("browser", "deny"));
         rules[^1].ShouldBe((WeaveFleet.Application.Workflows.FleetWorkflows.StepTool, "deny"));
+    }
+
+    [Theory]
+    [InlineData(PermissionLevels.All)]
+    [InlineData(PermissionLevels.Ask)]
+    [InlineData(PermissionLevels.Edits)]
+    public void Every_level_keeps_the_browser_tools_hidden(string level)
+    {
+        // V2 applies the last rule that matches, so the deny must follow the allow or ask for everything.
+        var rules = OpenCode2HttpClient.RulesFor(level, hideStepTool: false);
+        rules[^1].ShouldBe(OpenCode2HttpClient.DenyBrowser);
+        rules[0].Action.ShouldBe("*");
     }
 
     [Theory]

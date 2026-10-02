@@ -248,24 +248,29 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         var info = await server.Client.GetSessionAsync(options.ResumeToken, ct).ConfigureAwait(false)
             ?? throw new InvalidOperationException($"OpenCode 2 has no session {options.ResumeToken}.");
 
-        // A session made before workflows were on reaches a server with the step tool: deny it here too. Only Fleet's
-        // own sessions, which it made allowing everything; a subagent's child keeps the rules its agent gave it.
-        if (server.Setup.Workflows
-            && !options.WorkflowStep
-            && !options.DelegatedChild
-            && options.ParentSessionId is null
-            && string.IsNullOrEmpty(info.ParentID)
-            && !(info.Permissions ?? []).Contains(OpenCode2HttpClient.DenyStepTool))
+        // A session made before a deny existed comes back without it: the browser tools (any session made before Fleet
+        // hid them), and the step tool when it reaches a server with workflows on. Only Fleet's own sessions, which it
+        // made allowing everything; a subagent's child keeps the rules its agent gave it.
+        if (!options.DelegatedChild && options.ParentSessionId is null && string.IsNullOrEmpty(info.ParentID))
         {
-            try
+            var rules = info.Permissions ?? OpenCode2HttpClient.AllowAll;
+            List<OpenCode2PermissionRule> missing = [];
+            if (!rules.Contains(OpenCode2HttpClient.DenyBrowser))
+                missing.Add(OpenCode2HttpClient.DenyBrowser);
+            if (server.Setup.Workflows && !options.WorkflowStep && !rules.Contains(OpenCode2HttpClient.DenyStepTool))
+                missing.Add(OpenCode2HttpClient.DenyStepTool);
+
+            if (missing.Count > 0)
             {
-                await server.Client.SetPermissionsAsync(
-                    options.ResumeToken, [.. info.Permissions ?? OpenCode2HttpClient.AllowAll, OpenCode2HttpClient.DenyStepTool], ct).ConfigureAwait(false);
-            }
-            catch (HttpRequestException ex)
-            {
-                // The session still works; it can see a tool Fleet refuses to take from it.
-                LogStepToolNotHidden(_logger, options.ResumeToken, ex);
+                try
+                {
+                    await server.Client.SetPermissionsAsync(options.ResumeToken, [.. rules, .. missing], ct).ConfigureAwait(false);
+                }
+                catch (HttpRequestException ex)
+                {
+                    // The session still works; it can see tools Fleet means to take from it.
+                    LogToolsNotHidden(_logger, options.ResumeToken, ex);
+                }
             }
         }
 
@@ -881,6 +886,6 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     [LoggerMessage(Level = LogLevel.Information, Message = "OpenCode 2 session {InstanceId} resumed {HarnessSessionId} on server {ProcessId}")]
     private static partial void LogResumed(ILogger logger, string instanceId, string harnessSessionId, int processId);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not hide the workflow step tool from OpenCode 2 session {HarnessSessionId}")]
-    private static partial void LogStepToolNotHidden(ILogger logger, string harnessSessionId, Exception exception);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not hide the browser or workflow step tools from OpenCode 2 session {HarnessSessionId}")]
+    private static partial void LogToolsNotHidden(ILogger logger, string harnessSessionId, Exception exception);
 }

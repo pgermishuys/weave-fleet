@@ -24,10 +24,21 @@ public sealed class OpenCode2SessionTests
 
         var body = JsonDocument.Parse(api.Requests.ShouldHaveSingleItem().Body!).RootElement;
         body.GetProperty("location").GetProperty("directory").GetString().ShouldBe("/work");
-        var rule = body.GetProperty("permissions").EnumerateArray().ShouldHaveSingleItem();
-        rule.GetProperty("action").GetString().ShouldBe("*");
-        rule.GetProperty("resource").GetString().ShouldBe("*");
-        rule.GetProperty("effect").GetString().ShouldBe("allow");
+        Rules(body).First().ShouldBe(("*", "*", "allow"));
+    }
+
+    [Fact]
+    public async Task A_new_session_has_the_browser_tools_denied_after_allowing_everything()
+    {
+        var api = new StubHandler(_ => Json("""{"data":{"id":"ses_new"}}"""));
+        using var client = OpenCode2Fixtures.ClientServing("", api);
+
+        await client.CreateSessionAsync("/work", CancellationToken.None);
+
+        // Nothing in Fleet is the session's browser, so V2's browser tools would only cost tokens and fail. V2 applies
+        // the last rule that matches, so the deny has to come after the allow.
+        Rules(JsonDocument.Parse(api.Requests.ShouldHaveSingleItem().Body!).RootElement)
+            .ShouldBe([("*", "*", "allow"), ("browser", "*", "deny")]);
     }
 
     [Fact]
@@ -39,11 +50,13 @@ public sealed class OpenCode2SessionTests
         await client.CreateSessionAsync("/work", CancellationToken.None, hideStepTool: true);
 
         // V2 applies the last rule that matches, so the deny has to come after the allow.
-        var body = JsonDocument.Parse(api.Requests.ShouldHaveSingleItem().Body!).RootElement;
-        body.GetProperty("permissions").EnumerateArray()
-            .Select(r => (r.GetProperty("action").GetString(), r.GetProperty("resource").GetString(), r.GetProperty("effect").GetString()))
-            .ShouldBe([("*", "*", "allow"), ("fleet_step_done", "*", "deny")]);
+        Rules(JsonDocument.Parse(api.Requests.ShouldHaveSingleItem().Body!).RootElement)
+            .ShouldBe([("*", "*", "allow"), ("browser", "*", "deny"), ("fleet_step_done", "*", "deny")]);
     }
+
+    private static List<(string?, string?, string?)> Rules(JsonElement body)
+        => [.. body.GetProperty("permissions").EnumerateArray()
+            .Select(r => (r.GetProperty("action").GetString(), r.GetProperty("resource").GetString(), r.GetProperty("effect").GetString()))];
 
     [Fact]
     public async Task Setting_a_sessions_permissions_patches_them()
@@ -56,7 +69,7 @@ public sealed class OpenCode2SessionTests
         var request = api.Requests.ShouldHaveSingleItem();
         request.Method.ShouldBe(HttpMethod.Patch);
         request.Path.ShouldBe("/api/session/ses_old");
-        JsonDocument.Parse(request.Body!).RootElement.GetProperty("permissions").GetArrayLength().ShouldBe(2);
+        JsonDocument.Parse(request.Body!).RootElement.GetProperty("permissions").GetArrayLength().ShouldBe(3);
     }
 
     [Fact]
