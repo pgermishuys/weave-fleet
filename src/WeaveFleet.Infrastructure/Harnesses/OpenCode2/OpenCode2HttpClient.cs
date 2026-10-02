@@ -17,11 +17,22 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient events, ILogger<OpenCode2HttpClient> logger) : IDisposable
 {
     /// <summary>
+    /// Hides V2's built-in browser tools (<c>opencode.browser</c>). They only work while a desktop app is attached as
+    /// the session's browser, and nothing in Fleet attaches, yet 2.0.18 lists them in every session's Code Mode catalog
+    /// (about 1,000 tokens) and a call tells the agent to open the desktop app. Later versions hide them until something
+    /// attaches, but Fleet's allow-everything rule would show them again. V2 drops a tool that's denied for every
+    /// resource from what the model is offered, and a subagent's session follows its parent's rules.
+    /// </summary>
+    internal static readonly OpenCode2PermissionRule DenyBrowser =
+        new() { Action = "browser", Resource = "*", Effect = "deny" };
+
+    /// <summary>
     /// Every V2 session Fleet creates allows everything, the way Fleet runs OpenCode (1.x) headless: nobody is
-    /// there to answer a permission prompt. The session's rules win over an <c>ask</c> in the user's config.
+    /// there to answer a permission prompt. The session's rules win over an <c>ask</c> in the user's config. V2 applies
+    /// the last rule that matches, so <see cref="DenyBrowser"/> goes after the allow.
     /// </summary>
     internal static readonly IReadOnlyList<OpenCode2PermissionRule> AllowAll =
-        [new OpenCode2PermissionRule { Action = "*", Resource = "*", Effect = "allow" }];
+        [new OpenCode2PermissionRule { Action = "*", Resource = "*", Effect = "allow" }, DenyBrowser];
 
     /// <summary>
     /// Hides the workflow step tool. V2 applies the last rule that matches, and drops a tool that's denied for every
@@ -34,7 +45,8 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
     /// The rules for a session at permission <paramref name="level"/>: <see cref="AllowAll"/> at
     /// <see cref="PermissionLevels.All"/>; otherwise everything asks but reading (and editing, at
     /// <see cref="PermissionLevels.Edits"/>), and Fleet answers each ask for the session's level. V2 applies the last
-    /// rule that matches, so the ask for everything goes first and the step tool's deny last.
+    /// rule that matches, so the ask for everything goes first and the denies (<see cref="DenyBrowser"/>, the step
+    /// tool's) last.
     /// </summary>
     internal static IReadOnlyList<OpenCode2PermissionRule> RulesFor(string level, bool hideStepTool)
     {
@@ -42,7 +54,8 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
             ? [.. AllowAll]
             : [new OpenCode2PermissionRule { Action = "*", Resource = "*", Effect = "ask" },
                .. PermissionKinds.AllowedWithoutAsking.Select(Allow),
-               .. (level == PermissionLevels.Edits ? EditActions.Select(Allow) : [])];
+               .. (level == PermissionLevels.Edits ? EditActions.Select(Allow) : []),
+               DenyBrowser];
         if (hideStepTool)
             rules.Add(DenyStepTool);
         return rules;
