@@ -46,7 +46,18 @@ public sealed record AgentBrowserLimits(
     };
 }
 
-/// <summary>Reads <see cref="AgentBrowserLimits"/> for a session. Runs as the session's user.</summary>
+/// <summary>
+/// Tells whoever needs it that a user changed Settings → Browser, e.g. a harness adapter that attaches or detaches
+/// its sessions' browser when it's switched on or off.
+/// </summary>
+public sealed class AgentBrowserSettingsChanges
+{
+    public event Action<string, AgentBrowserSettings>? Changed;
+
+    public void Notify(string userId, AgentBrowserSettings settings) => Changed?.Invoke(userId, settings);
+}
+
+/// <summary>Reads <see cref="AgentBrowserLimits"/> for a session, and the user's Settings → Browser. Runs as the user.</summary>
 public sealed class AgentBrowserAccess(
     IUserPreferenceRepository preferences,
     AppRunService apps,
@@ -55,6 +66,18 @@ public sealed class AgentBrowserAccess(
 {
     public async Task<AgentBrowserSettings> SettingsAsync()
         => AgentBrowserSettings.From(await preferences.GetAllAsync());
+
+    /// <summary>Saves the settings; null leaves a setting as it is. Returns them as saved.</summary>
+    public async Task<AgentBrowserSettings> SaveAsync(bool? enabled, string? pages, bool? scripts)
+    {
+        if (enabled is { } on)
+            await preferences.SetAsync(AgentBrowserSettings.EnabledKey, on ? "true" : "false");
+        if (pages is not null)
+            await preferences.SetAsync(AgentBrowserSettings.PagesKey, pages);
+        if (scripts is { } allowed)
+            await preferences.SetAsync(AgentBrowserSettings.ScriptsKey, allowed ? "true" : "false");
+        return await SettingsAsync();
+    }
 
     public async Task<AgentBrowserLimits> LimitsAsync(string sessionId, CancellationToken ct = default)
     {

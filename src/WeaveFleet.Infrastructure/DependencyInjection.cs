@@ -262,6 +262,8 @@ public static class DependencyInjection
         services.AddHostedService<SideConversationSweeper>();
         services.AddScoped<BrowserPreviews>();
         services.AddScoped<BrowserBridge>();
+        services.AddSingleton<IAgentBrowserSteps, AgentBrowserStepStore>();
+        services.AddSingleton<AgentBrowserSettingsChanges>();
         services.AddScoped<AgentBrowserAccess>();
         services.AddScoped<AgentBrowserCanvas>();
         services.AddSingleton<CdpAgentBrowser>(sp => new CdpAgentBrowser(

@@ -228,6 +228,7 @@ internal sealed partial class ClaudeCodeJsonContext : JsonSerializerContext
 [JsonSerializable(typeof(SessionStartedPayload))]
 [JsonSerializable(typeof(SessionDeletedPayload))]
 [JsonSerializable(typeof(FilesChangedPayload))]
+[JsonSerializable(typeof(BrowserStep))]
 [JsonSerializable(typeof(TurnFailedPayload))]
 [JsonSerializable(typeof(FileChangeEntry))]
 [JsonSerializable(typeof(List<FileChangeEntry>))]
