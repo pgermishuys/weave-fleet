@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Harnesses;
@@ -63,10 +64,46 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
         static OpenCode2PermissionRule Allow(string action) => new() { Action = action, Resource = "*", Effect = "allow" };
     }
 
+    /// <summary>Shows the browser tools again while Fleet is attached as the session's browser; it goes after <see cref="DenyBrowser"/>.</summary>
+    internal static readonly OpenCode2PermissionRule AllowBrowser =
+        new() { Action = "browser", Resource = "*", Effect = "allow" };
+
+    /// <summary>
+    /// <paramref name="rules"/> with the browser's rules where they belong: <see cref="DenyBrowser"/> after everything
+    /// else, then <see cref="AllowBrowser"/> when Fleet is the session's browser (<paramref name="attached"/>). Every
+    /// other rule stays as it is, in order.
+    /// </summary>
+    internal static List<OpenCode2PermissionRule> WithBrowser(IEnumerable<OpenCode2PermissionRule> rules, bool attached)
+    {
+        List<OpenCode2PermissionRule> result = [.. rules.Where(rule => rule != DenyBrowser && rule != AllowBrowser), DenyBrowser];
+        if (attached)
+            result.Add(AllowBrowser);
+        return result;
+    }
+
+    /// <summary>Whether Fleet's browser is attached to a session with <paramref name="rules"/>.</summary>
+    internal static bool BrowserAllowed(IEnumerable<OpenCode2PermissionRule>? rules)
+        => rules?.Contains(AllowBrowser) == true;
+
     private static readonly string[] EditActions = ["edit", "write", "patch", "apply_patch", "multiedit", "move"];
 
     /// <summary><see cref="AllowAll"/>, then <see cref="DenyStepTool"/>: every session on a server with workflows on that isn't a step.</summary>
     internal static readonly IReadOnlyList<OpenCode2PermissionRule> AllowAllButStepTool = [.. AllowAll, DenyStepTool];
+
+    /// <summary>
+    /// Calls <paramref name="method"/> of the browser plugin's RPC (<c>POST /api/rpc/experimental.browser/{method}</c>)
+    /// in <paramref name="directory"/> and returns its output, or null when it has none. <paramref name="longLived"/>
+    /// uses the client without a timeout, for <c>attach</c>, which stays pending for the attachment's life.
+    /// </summary>
+    public async Task<JsonNode?> BrowserRpcAsync(string method, string directory, JsonObject input, bool longLived, CancellationToken ct)
+    {
+        using var content = new StringContent(new JsonObject { ["input"] = input }.ToJsonString(), System.Text.Encoding.UTF8, "application/json");
+        using var response = await (longLived ? events : http).PostAsync(
+            $"api/rpc/{OpenCode2BrowserAttachments.RpcId}/{Uri.EscapeDataString(method)}?{LocationQuery(directory)}", content, ct).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, $"call the browser plugin's {method}", ct).ConfigureAwait(false);
+        var text = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+        return string.IsNullOrWhiteSpace(text) ? null : JsonNode.Parse(text) is JsonObject reply && reply.TryGetPropertyValue("output", out var output) ? output : null;
+    }
 
     public Task<OpenCode2ServerInfo?> GetInfoAsync(CancellationToken ct)
         => http.GetFromJsonAsync("api/info", OpenCode2JsonContext.Default.OpenCode2ServerInfo, ct);
