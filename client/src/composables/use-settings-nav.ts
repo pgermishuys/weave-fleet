@@ -6,6 +6,7 @@ export type SettingsSectionId =
   | "appearance"
   | "skills"
   | "memory"
+  | "browser"
   | "permissions"
   | "tools"
   | "features"

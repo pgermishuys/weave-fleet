@@ -5,6 +5,7 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
@@ -28,14 +29,17 @@ internal sealed partial class InProcessFanOutService : BackgroundService
     private readonly PipelineLatencyMetrics _pipelineMetrics;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<InProcessFanOutService> _logger;
+    private readonly AgentBrowserCalls? _browserCalls;
 
     public InProcessFanOutService(
         InProcessChannels channels,
         IEventBroadcaster broadcaster,
         PipelineLatencyMetrics pipelineMetrics,
         IServiceScopeFactory scopeFactory,
-        ILogger<InProcessFanOutService> logger)
+        ILogger<InProcessFanOutService> logger,
+        AgentBrowserCalls? browserCalls = null)
     {
+        _browserCalls = browserCalls;
         _channels = channels;
         _broadcaster = broadcaster;
         _pipelineMetrics = pipelineMetrics;
@@ -89,6 +93,15 @@ internal sealed partial class InProcessFanOutService : BackgroundService
         {
             _logger.LogDebug("[FanOut] Kept tool-result record from clients type={Type}", eventType);
             return;
+        }
+
+        // Browser steps are filed under the call that took them: note which call can be taking them now.
+        if (_browserCalls is not null && domainEvent is MessagePartUpdated { Payload.Part: ToolMessageEventPart tool } && AgentBrowserCalls.UsesBrowser(tool.ToolName))
+        {
+            if (tool.State is ToolRunningState or ToolPendingState)
+                _browserCalls.Started(sessionId, tool.CallId);
+            else
+                _browserCalls.Ended(sessionId, tool.CallId);
         }
 
         var activityStatus = ParseActivityStatus(evt.Type, evt.Payload);

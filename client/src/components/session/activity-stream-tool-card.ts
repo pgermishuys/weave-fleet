@@ -51,6 +51,8 @@ export interface ToolCardItem {
   /** Set on a sub-agent call once its session exists; the row then opens that session. */
   delegation?: ToolCardDelegation;
   screenshot?: ToolCardScreenshot;
+  /** The harness's id for the call, which browser steps name. */
+  callId?: string;
   /** Loaded one of Fleet's built-in skills, which the row offers to improve. */
   improvable?: boolean;
 }
@@ -200,6 +202,7 @@ export function toToolCardItem(
     isPatternTool: part.tool === "glob" || part.tool === "grep",
     canvasId,
     screenshot: toolScreenshot(part),
+    callId: part.callId,
   };
 }
 

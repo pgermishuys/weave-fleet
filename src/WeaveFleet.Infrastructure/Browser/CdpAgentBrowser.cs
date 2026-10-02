@@ -46,6 +46,7 @@ public sealed partial class CdpAgentBrowser : IAgentBrowser, IAsyncDisposable
     private readonly IBackgroundUserScope _users;
     private readonly IAgentBrowserSteps? _steps;
     private readonly ISessionScreenshotStore? _screenshots;
+    private readonly AgentBrowserCalls? _calls;
     private readonly ILogger<CdpAgentBrowser> _logger;
     private readonly ConcurrentDictionary<string, SessionTabs> _sessions = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _browserGate = new(1, 1);
@@ -61,8 +62,10 @@ public sealed partial class CdpAgentBrowser : IAgentBrowser, IAsyncDisposable
         IBackgroundUserScope users,
         ILogger<CdpAgentBrowser> logger,
         IAgentBrowserSteps? steps = null,
-        ISessionScreenshotStore? screenshots = null)
+        ISessionScreenshotStore? screenshots = null,
+        AgentBrowserCalls? calls = null)
     {
+        _calls = calls;
         _host = host;
         _scopes = scopes;
         _users = users;
@@ -1221,6 +1224,7 @@ public sealed partial class CdpAgentBrowser : IAgentBrowser, IAsyncDisposable
             Detail = AgentBrowserStepText.Detail(action, took),
             Ok = result.Ok,
             Error = result.Failure?.Message,
+            CallId = _calls?.Current(call.SessionId),
             TabId = tab?.Id ?? action.TabId,
             Url = tab?.Url,
             Title = tab?.Title,

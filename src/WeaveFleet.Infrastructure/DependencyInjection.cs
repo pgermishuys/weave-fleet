@@ -264,6 +264,7 @@ public static class DependencyInjection
         services.AddScoped<BrowserBridge>();
         services.AddSingleton<IAgentBrowserSteps, AgentBrowserStepStore>();
         services.AddSingleton<AgentBrowserSettingsChanges>();
+        services.AddSingleton<AgentBrowserCalls>();
         services.AddScoped<AgentBrowserAccess>();
         services.AddScoped<AgentBrowserCanvas>();
         services.AddScoped<AgentBrowserBridge>();
@@ -273,7 +274,8 @@ public static class DependencyInjection
             sp.GetRequiredService<IBackgroundUserScope>(),
             sp.GetRequiredService<ILogger<CdpAgentBrowser>>(),
             sp.GetService<IAgentBrowserSteps>(),
-            sp.GetService<ISessionScreenshotStore>()));
+            sp.GetService<ISessionScreenshotStore>(),
+            sp.GetService<AgentBrowserCalls>()));
         services.AddSingleton<IAgentBrowser>(sp => sp.GetRequiredService<CdpAgentBrowser>());
         services.AddSingleton<IBackgroundUserScope, BackgroundUserScope>();
         services.AddScoped<AutomationService>();

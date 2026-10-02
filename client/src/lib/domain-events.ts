@@ -481,6 +481,41 @@ export function isAppEvent(event: DomainEvent): event is AppUpdated {
   return event.type === "app.updated";
 }
 
+/** One action the agent took in its own browser tab (`BrowserStep` on the server). */
+export interface BrowserStep {
+  sessionId: string;
+  /** Its place in the session's steps, from 1. */
+  seq: number;
+  at: string;
+  /** The operation, e.g. `click` or `tabs.open`. */
+  kind: string;
+  /** What happened in plain words: `Clicked “Save”`. */
+  summary: string;
+  /** The operation and how long it took: `click @e2 · 170 ms`. */
+  detail: string;
+  ok: boolean;
+  error?: string | null;
+  /** The tool call that took it, when Fleet saw one running. */
+  callId?: string | null;
+  tabId?: string | null;
+  url?: string | null;
+  title?: string | null;
+  /** Where the element acted on was on the tab's 1280×800 screen. */
+  box?: { x: number; y: number; width: number; height: number } | null;
+  /** A screenshot the step took, kept under the session. */
+  screenshot?: { id: string; width: number; height: number } | null;
+}
+
+/** The agent took a step in its own browser tab. Kept by Fleet; loaded with `GET /api/sessions/{id}/agent-browser`. */
+export interface BrowserStepped extends EventCursorMetadata {
+  type: "browser.step";
+  payload: BrowserStep;
+}
+
+export function isBrowserStepEvent(event: DomainEvent): event is BrowserStepped {
+  return event.type === "browser.step";
+}
+
 /** A terminal tab was added to the session's drawer. Not persisted. */
 export interface TerminalOpened extends EventCursorMetadata {
   type: "terminal.opened";
@@ -555,6 +590,7 @@ export type DomainEvent =
   | TerminalOpened
   | TerminalClosed
   | AppUpdated
+  | BrowserStepped
   | SessionRecap
   | SessionNotification
   | SessionQueueChanged

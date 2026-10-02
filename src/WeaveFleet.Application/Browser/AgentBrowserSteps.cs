@@ -24,6 +24,10 @@ public sealed record AgentBrowserStep
 
     public bool Ok { get; init; } = true;
     public string? Error { get; init; }
+
+    /// <summary>The harness's id for the tool call that took the step, when Fleet saw one running.</summary>
+    public string? CallId { get; init; }
+
     public string? TabId { get; init; }
     public string? Url { get; init; }
     public string? Title { get; init; }
