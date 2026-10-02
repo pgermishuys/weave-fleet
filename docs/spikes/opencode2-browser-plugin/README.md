@@ -154,3 +154,14 @@ browser driven over CDP, tab bookkeeping, refs, screenshots) is Fleet's either w
 <name>" runs `kit/scripts/<name>.js` through `execute`, "call tool <name> {json}" calls a tool), `v2.py`,
 `proto/attach.ts`, `fleet.sh` (scratch Fleet on 5451), `browser_live.py`, `shot-user.mjs`. Chrome needs a short
 `TMPDIR` (its socket path is limited to ~107 characters).
+
+## Follow-up (2026-10-02)
+
+- **The deny rule works on 2.0.18.** A session with Fleet's rules plus
+  `{"action":"browser","resource":"*","effect":"deny"}` has no browser catalog (Code Mode section 12,497 characters,
+  the same as with the plugin turned off), `browser.tabs.list` is an unknown tool, and the shell still runs
+  (`evidence/deny-rule-2.0.18.txt`). In Fleet it belongs in `OpenCode2HttpClient.RulesFor` / `AllowAll`, the rules
+  for every session at every permission level.
+- **User decisions:** if built, on by default but limited (the session's own pages, page scripts off, uploads
+  refused); Agent's view with the step list in the first version. Still open: whether to build, and whether to ship
+  the deny rule now.
