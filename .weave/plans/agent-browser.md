@@ -39,6 +39,6 @@ Builds on PR #358 (`DenyBrowser` rule); this branch (`feat/agent-browser`) start
 - [x] A3 Steps: domain event, store, API (tabs, steps, frame)
 - [x] B  OpenCode 2 attachment
 - [x] C  OpenCode tools
-- [ ] D  Client: steps card, Agent's view, Settings → Browser
+- [x] D  Client: steps card, Agent's view, Settings → Browser
 - [x] E  Skill + description edits
-- [ ] F  Tests, live checks, screenshots, PR
+- [x] F  Tests, live checks, screenshots, PR
