@@ -8,6 +8,7 @@ import SystemSection from "@/components/settings/SystemSection.vue";
 import CredentialsSection from "@/components/settings/CredentialsSection.vue";
 import SkillsSection from "@/components/settings/SkillsSection.vue";
 import MemorySection from "@/components/settings/MemorySection.vue";
+import BrowserSection from "@/components/settings/BrowserSection.vue";
 import PermissionsSection from "@/components/settings/PermissionsSection.vue";
 import ToolsSection from "@/components/settings/ToolsSection.vue";
 import HarnessesSection from "@/components/settings/HarnessesSection.vue";
@@ -76,6 +77,7 @@ const pluginSections = computed<readonly DecoratedSettingsSection[]>(() => {
     <SkillsSection v-else-if="activeSection === 'skills'" />
 
     <MemorySection v-else-if="activeSection === 'memory'" />
+    <BrowserSection v-else-if="activeSection === 'browser'" />
 
     <PermissionsSection v-else-if="activeSection === 'permissions'" />
 

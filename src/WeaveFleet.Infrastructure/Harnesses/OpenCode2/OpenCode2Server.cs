@@ -180,6 +180,22 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     /// </summary>
     internal Action<OpenCode2Server, string>? CatalogChanged { get; init; }
 
+    /// <summary>Told when a session attaches here, with its V2 id and Fleet context: Fleet's browser attaches to it too.</summary>
+    internal Action<OpenCode2Server, string, OpenCode2SessionContext>? SessionAttached { get; init; }
+
+    /// <summary>Told about the browser plugin's control events (<c>rpc.experimental.browser.control</c>), which name no session.</summary>
+    internal Action<OpenCode2Server, System.Text.Json.JsonElement>? BrowserControl { get; init; }
+
+    /// <summary>The sessions attached here now: V2's id and Fleet's context for each.</summary>
+    internal IReadOnlyList<(string HarnessSessionId, OpenCode2SessionContext Context)> AttachedSessions
+    {
+        get
+        {
+            lock (_routing)
+                return [.. _sinks.Select(pair => (pair.Key, pair.Value.Context))];
+        }
+    }
+
     internal TimeSpan CatalogChangeQuietTime { get; init; } = TimeSpan.FromSeconds(1);
 
     internal TimeSpan LocationSettleTime { get; init; } = TimeSpan.FromSeconds(3);
@@ -375,6 +391,8 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
                     Deliver(sink, evt);
             }
         }
+
+        SessionAttached?.Invoke(this, harnessSessionId, sink.Context);
     }
 
     public void Detach(string harnessSessionId, IOpenCode2EventSink sink)
@@ -396,6 +414,12 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     /// </summary>
     internal void Route(OpenCode2Event evt)
     {
+        if (evt.Type == OpenCode2BrowserAttachments.ControlEvent)
+        {
+            BrowserControl?.Invoke(this, evt.Data);
+            return;
+        }
+
         if (evt.Type == "location.shutdown")
             ForgetLocation(evt);
         else if (!ObserveLocation(evt))

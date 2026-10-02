@@ -5,12 +5,14 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Recaps;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Workflows;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Events;
@@ -90,6 +92,7 @@ public sealed class HarnessEventRelay : BackgroundService
     private readonly PromptQueueDispatcher? _queue;
     private readonly TurnFailureRecorder? _failures;
     private readonly PendingPermissionStore? _permissions;
+    private readonly AgentBrowserCalls? _browserCalls;
     private CancellationToken _stoppingToken;
 
     /// <summary>
@@ -113,8 +116,10 @@ public sealed class HarnessEventRelay : BackgroundService
         WorkflowRunner? workflows = null,
         PromptQueueDispatcher? queue = null,
         TurnFailureRecorder? failures = null,
-        PendingPermissionStore? permissions = null)
+        PendingPermissionStore? permissions = null,
+        AgentBrowserCalls? browserCalls = null)
     {
+        _browserCalls = browserCalls;
         _tracker = tracker;
         _broadcaster = broadcaster;
         _publisher = publisher;
@@ -131,6 +136,25 @@ public sealed class HarnessEventRelay : BackgroundService
         _failures = failures;
         _permissions = permissions;
     }
+
+    /// <summary>
+    /// Notes the call that can be taking browser steps now (Code Mode's <c>execute</c>, Fleet's browser tools), so each
+    /// step is filed under it. Here, before the event goes on, so the call is known before its first command arrives.
+    /// </summary>
+    private void ObserveBrowserCall(string fleetSessionId, DomainEvent? domainEvent)
+    {
+        if (_browserCalls is null || domainEvent is not MessagePartUpdated { Payload.Part: ToolMessageEventPart tool } || !AgentBrowserCalls.UsesBrowser(tool.ToolName))
+            return;
+        if (tool.State is ToolRunningState or ToolPendingState)
+            _browserCalls.Started(fleetSessionId, tool.CallId);
+        else
+            _browserCalls.Ended(fleetSessionId, tool.CallId);
+        LogBrowserCall(_logger, fleetSessionId, tool.ToolName, tool.CallId, tool.State.GetType().Name, null);
+    }
+
+    private static readonly Action<ILogger, string, string, string, string, Exception?> LogBrowserCall =
+        LoggerMessage.Define<string, string, string, string>(LogLevel.Debug, new EventId(90, "BrowserCall"),
+            "[Relay:Browser] session={Session} {Tool} {CallId} {State}");
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -342,6 +366,7 @@ public sealed class HarnessEventRelay : BackgroundService
                 _progressObserver?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
                 _updates?.Observe(targetFleetSessionId, domainEvent);
                 _workflows?.Observe(targetFleetSessionId, domainEvent);
+                ObserveBrowserCall(targetFleetSessionId, domainEvent);
                 _queue?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
                 _failures?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
                 _logger.LogDebug("[Relay:Pump] Translated type={Type} domainEvent={DomainEvent} targetSession={TargetSession}",

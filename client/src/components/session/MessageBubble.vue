@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import { User, Bot, Copy, ChevronRight } from "lucide-vue-next";
 import ToolCard from "@/components/session/ToolCard.vue";
 import ToolScreenshot from "@/components/session/ToolScreenshot.vue";
+import BrowserSteps from "@/components/session/BrowserSteps.vue";
 import ImageLightbox from "@/components/session/ImageLightbox.vue";
 import AgentTaskRow from "@/components/session/AgentTaskRow.vue";
 import type { ToolCardDelegation, ToolCardScreenshot } from "@/components/session/activity-stream-tool-card";
@@ -40,6 +41,8 @@ interface ToolCardItem {
   screenshot?: ToolCardScreenshot;
   /** Loaded one of Fleet's built-in skills, which the row offers to improve. */
   improvable?: boolean;
+  /** The harness's id for the call, which browser steps name. */
+  callId?: string;
 }
 
 interface ImageAttachmentDisplay {
@@ -82,6 +85,11 @@ const showModel = computed(() => props.role === "assistant" && Boolean(props.mod
 
 // ── Question answer handler (only created when there are question parts) ──
 const questionAnswer = props.sessionId ? useQuestionAnswer(props.sessionId) : null;
+
+/** Calls that can take browser steps: OpenCode 2's Code Mode, and Fleet's own browser tools. */
+function usesBrowser(kind: string | undefined): boolean {
+  return kind === "execute" || kind === "fleet_browser_read" || kind === "fleet_browser_act";
+}
 
 function makeSubmitHandler(callId: string) {
   return async (answers: string[][]) => {
@@ -263,6 +271,12 @@ function handleExpandVisual(payload: VisualPayload): void {
                 v-if="tool.screenshot && !tool.delegation"
                 :screenshot="tool.screenshot"
                 :title="tool.title"
+              />
+              <BrowserSteps
+                v-if="sessionId && !tool.delegation && usesBrowser(tool.kind)"
+                :session-id="sessionId"
+                :call-id="tool.callId"
+                :running="tool.status === 'Running'"
               />
             </template>
           </div>

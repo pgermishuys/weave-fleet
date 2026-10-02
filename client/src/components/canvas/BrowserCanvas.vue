@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from "vue";
-import { ArrowLeft, ArrowRight, ExternalLink, Play, RotateCcw, RotateCw, ScrollText, Square } from "lucide-vue-next";
+import { ArrowLeft, ArrowRight, Bot, ExternalLink, Info, Play, RotateCcw, RotateCw, ScrollText, Square } from "lucide-vue-next";
+import AgentTabView from "@/components/canvas/AgentTabView.vue";
 import { apiFetch } from "@/lib/api-client";
 import { fetchServerCanvases } from "@/composables/use-server-canvases";
 import { onReconnect } from "@/composables/use-weave-socket";
 import { appAddress, navMessage, readBridgeMessage, type NavAction, type PreviewHmr } from "@/lib/preview-bridge";
 import { addressForPort, currentRunLines, useAppRunsStore } from "@/stores/app-runs";
 import { serverCanvasTabId, useCanvasesStore } from "@/stores/canvases";
+import { useAgentBrowserStore } from "@/stores/agent-browser";
 
 /**
  * A page of a web app running on Fleet's machine, framed through Fleet's preview gateway. The preview is its own
@@ -58,6 +60,14 @@ let actionErrorTimer: number | undefined;
 const tabId = computed(() => serverCanvasTabId(props.canvasId));
 const sessionPath = computed(() => `/api/sessions/${encodeURIComponent(props.sessionId)}`);
 const app = computed(() => (props.appId ? appRuns.byId[props.appId] ?? null : null));
+
+// The agent's own tab on this app, when it has one: the canvas then offers Agent's view of it beside the user's own.
+const agentBrowser = useAgentBrowserStore();
+const agentTab = computed(() => agentBrowser.tabFor(props.sessionId, target.value?.href ?? (props.url || app.value?.url)));
+const view = ref<"you" | "agent">("you");
+watch(agentTab, (tab) => {
+  if (!tab) view.value = "you";
+});
 const outputLines = computed(() => (props.appId ? appRuns.outputById[props.appId]?.lines ?? [] : []));
 /** The panel's last lines are this run's: an earlier run's crash doesn't belong under "Starting…". */
 const tail = computed(() => currentRunLines(outputLines.value).slice(-TAIL_LINES));
@@ -416,6 +426,34 @@ onBeforeUnmount(() => {
           :{{ port }}
         </option>
       </select>
+      <div
+        v-if="agentTab"
+        class="browser-canvas__views"
+        role="group"
+        aria-label="Whose view"
+      >
+        <button
+          type="button"
+          :aria-pressed="view === 'you'"
+          title="Your view: the page in your browser"
+          @click="view = 'you'"
+        >
+          <span class="browser-canvas__view-long">Your view</span><span class="browser-canvas__view-short">You</span>
+        </button>
+        <button
+          type="button"
+          :aria-pressed="view === 'agent'"
+          title="Agent's view: a live picture of the agent's own tab"
+          data-testid="agent-view-button"
+          @click="view = 'agent'"
+        >
+          <span
+            class="browser-canvas__view-pip"
+            aria-hidden="true"
+          />
+          <span class="browser-canvas__view-long">Agent's view</span><span class="browser-canvas__view-short">Agent</span>
+        </button>
+      </div>
       <button
         type="button"
         class="browser-canvas__icon"
@@ -427,7 +465,42 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
+    <div
+      v-if="agentTab && view === 'you'"
+      class="browser-canvas__banner"
+      data-testid="agent-tab-banner"
+    >
+      <Info
+        :size="14"
+        aria-hidden="true"
+      />
+      <span class="browser-canvas__banner-text">The agent is trying this page in its own browser. What it types and clicks doesn't show here.</span>
+      <button
+        type="button"
+        class="browser-canvas__banner-btn"
+        @click="view = 'agent'"
+      >
+        Agent's view
+      </button>
+    </div>
+    <div
+      v-else-if="agentTab && view === 'agent'"
+      class="browser-canvas__banner browser-canvas__banner--watch"
+    >
+      <Bot
+        :size="14"
+        aria-hidden="true"
+      />
+      <span class="browser-canvas__banner-text">Live picture of the agent's tab. You can watch, not click. Its sign-ins and cookies are its own.</span>
+    </div>
+
     <div class="browser-canvas__page">
+      <AgentTabView
+        v-if="agentTab && view === 'agent'"
+        :session-id="sessionId"
+        :tab-id="agentTab.id"
+        :active="active"
+      />
       <p
         v-if="error"
         class="browser-canvas__error"
@@ -635,6 +708,93 @@ onBeforeUnmount(() => {
   color: var(--text);
   font-family: var(--font-mono-stack);
   font-size: 12px;
+}
+
+.browser-canvas__views {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 2px;
+  margin: 0 4px 0 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+}
+
+.browser-canvas__views button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.browser-canvas__views button[aria-pressed="true"] {
+  background: var(--panel-bg);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.18);
+}
+
+.browser-canvas__view-pip {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.browser-canvas__view-short {
+  display: none;
+}
+
+@container browser-canvas (max-width: 520px) {
+  .browser-canvas__view-long {
+    display: none;
+  }
+
+  .browser-canvas__view-short {
+    display: inline;
+  }
+}
+
+.browser-canvas__banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  padding: 7px 12px;
+  font-size: 12px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.browser-canvas__banner--watch {
+  color: var(--muted);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  border-bottom-color: var(--border);
+}
+
+.browser-canvas__banner-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.browser-canvas__banner-btn {
+  flex-shrink: 0;
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  background: var(--panel-bg);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.browser-canvas__banner-btn:hover {
+  border-color: color-mix(in srgb, var(--text) 30%, transparent);
 }
 
 .browser-canvas__page {

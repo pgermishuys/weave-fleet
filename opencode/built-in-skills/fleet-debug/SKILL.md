@@ -28,6 +28,9 @@ A bug you can trigger is a bug you can prove fixed. In order of preference:
 2. a command, request or short script that shows it
 3. the steps in the app
 
+For a bug in a page, reproduce it in the page with your browser tools when you have them, and read the console and
+the failed requests before you guess at a cause.
+
 Run it and see it fail. If you can't reproduce it, say so and say what you tried, then carry on from the code, and
 treat everything after this as less certain.
 

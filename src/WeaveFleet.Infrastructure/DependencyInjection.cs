@@ -246,7 +246,10 @@ public static class DependencyInjection
         services.AddScoped<AppRunService>();
         services.AddScoped<AppRunRecorder>();
         services.AddHostedService<AppRunRecorderService>();
-        services.AddSingleton<IScreenshotter, HeadlessChromeScreenshotter>();
+        services.AddSingleton<ChromeHost>();
+        services.AddSingleton<IScreenshotter>(sp => new HeadlessChromeScreenshotter(
+            sp.GetRequiredService<ChromeHost>(),
+            sp.GetRequiredService<ILogger<HeadlessChromeScreenshotter>>()));
         services.AddSingleton(sp => new SessionScreenshotStore(
             sp.GetRequiredService<FleetOptions>().ResolvedScreenshotDirectory,
             sp.GetRequiredService<ILogger<SessionScreenshotStore>>()));
@@ -259,6 +262,21 @@ public static class DependencyInjection
         services.AddHostedService<SideConversationSweeper>();
         services.AddScoped<BrowserPreviews>();
         services.AddScoped<BrowserBridge>();
+        services.AddSingleton<IAgentBrowserSteps, AgentBrowserStepStore>();
+        services.AddSingleton<AgentBrowserSettingsChanges>();
+        services.AddSingleton<AgentBrowserCalls>();
+        services.AddScoped<AgentBrowserAccess>();
+        services.AddScoped<AgentBrowserCanvas>();
+        services.AddScoped<AgentBrowserBridge>();
+        services.AddSingleton<CdpAgentBrowser>(sp => new CdpAgentBrowser(
+            sp.GetRequiredService<ChromeHost>(),
+            sp.GetRequiredService<IServiceScopeFactory>(),
+            sp.GetRequiredService<IBackgroundUserScope>(),
+            sp.GetRequiredService<ILogger<CdpAgentBrowser>>(),
+            sp.GetService<IAgentBrowserSteps>(),
+            sp.GetService<ISessionScreenshotStore>(),
+            sp.GetService<AgentBrowserCalls>()));
+        services.AddSingleton<IAgentBrowser>(sp => sp.GetRequiredService<CdpAgentBrowser>());
         services.AddSingleton<IBackgroundUserScope, BackgroundUserScope>();
         services.AddScoped<AutomationService>();
         services.AddScoped<AutomationExecutionService>();

@@ -865,7 +865,11 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         }
 
         var hidesStepTool = (info.Permissions ?? []).Contains(OpenCode2HttpClient.DenyStepTool);
-        await server.Client.SetPermissionsAsync(ResumeToken, OpenCode2HttpClient.RulesFor(policy.Level, hidesStepTool), ct).ConfigureAwait(false);
+        // Fleet's browser, when attached, keeps the session's browser tools shown.
+        var rules = OpenCode2HttpClient.BrowserAllowed(info.Permissions)
+            ? OpenCode2HttpClient.WithBrowser(OpenCode2HttpClient.RulesFor(policy.Level, hidesStepTool), attached: true)
+            : OpenCode2HttpClient.RulesFor(policy.Level, hidesStepTool);
+        await server.Client.SetPermissionsAsync(ResumeToken, rules, ct).ConfigureAwait(false);
         _rulesLevel = policy.Level;
     }
 

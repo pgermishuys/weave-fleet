@@ -58,6 +58,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     private readonly OpenCode2Servers _servers;
     private readonly OpenCode2SignIn _signIn;
     private readonly OpenCode2Weave _weave;
+    private readonly OpenCode2BrowserAttachments _browser;
 
     // Profile version (content hash) → the Fleet profiles with that content, as sessions and composers asked for them,
     // so a change on a profile's server names the profiles the browser knows.
@@ -107,6 +108,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             (key, setup, ct) => StartServerAsync(key.OwnerUserId, setup, logLine: null, OnCatalogChanged, ct),
             TimeSpan.FromSeconds(Math.Max(1, options.Harness.OpenCode2ProfileServerIdleSeconds)),
             logger);
+        _browser = new OpenCode2BrowserAttachments(scopeFactory, () => _servers.All, loggerFactory.CreateLogger<OpenCode2BrowserAttachments>());
         // Sign-ins are in the database every server shares, so they go through the owner's server without a profile.
         _signIn = new OpenCode2SignIn(
             (owner, ct) => GetServerAsync(owner, profile: null, ct),
@@ -254,17 +256,17 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         if (!options.DelegatedChild && options.ParentSessionId is null && string.IsNullOrEmpty(info.ParentID))
         {
             var rules = info.Permissions ?? OpenCode2HttpClient.AllowAll;
-            List<OpenCode2PermissionRule> missing = [];
-            if (!rules.Contains(OpenCode2HttpClient.DenyBrowser))
-                missing.Add(OpenCode2HttpClient.DenyBrowser);
+            var wanted = rules.Contains(OpenCode2HttpClient.DenyBrowser)
+                ? [.. rules]
+                : OpenCode2HttpClient.WithBrowser(rules, OpenCode2HttpClient.BrowserAllowed(rules));
             if (server.Setup.Workflows && !options.WorkflowStep && !rules.Contains(OpenCode2HttpClient.DenyStepTool))
-                missing.Add(OpenCode2HttpClient.DenyStepTool);
+                wanted.Add(OpenCode2HttpClient.DenyStepTool);
 
-            if (missing.Count > 0)
+            if (!wanted.SequenceEqual(rules))
             {
                 try
                 {
-                    await server.Client.SetPermissionsAsync(options.ResumeToken, [.. rules, .. missing], ct).ConfigureAwait(false);
+                    await server.Client.SetPermissionsAsync(options.ResumeToken, wanted, ct).ConfigureAwait(false);
                 }
                 catch (HttpRequestException ex)
                 {
@@ -815,6 +817,8 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             return new OpenCode2Server(ownerUserId, client, bridgeToken, process, _loggerFactory.CreateLogger<OpenCode2Server>(), setup)
             {
                 CatalogChanged = catalogChanged,
+                SessionAttached = _browser.SessionAttached,
+                BrowserControl = _browser.Control,
             };
         }
         catch

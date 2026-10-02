@@ -85,6 +85,14 @@ public sealed record HarnessCapabilities
     /// as the user's.
     /// </summary>
     public bool SupportsSideConversations { get; init; }
+
+    /// <summary>
+    /// The agent can use its own browser tab (Fleet's agent browser, in Fleet's headless
+    /// Chrome) while Settings → Browser is on: natively through the harness's own browser tools with Fleet as the browser
+    /// (OpenCode 2), or through Fleet's <c>fleet_browser_read</c> and <c>fleet_browser_act</c> (OpenCode). Without it the
+    /// harness has no way to reach Fleet's tools, and Settings → Browser says so.
+    /// </summary>
+    public bool SupportsAgentBrowser { get; init; }
 }
 
 /// <summary>What a shell command the user ran from the composer looks like in the conversation.</summary>

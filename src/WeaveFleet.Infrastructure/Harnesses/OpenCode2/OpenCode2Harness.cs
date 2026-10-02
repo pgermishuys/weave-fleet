@@ -49,5 +49,6 @@ public sealed class OpenCode2Harness : IHarness
         // POST /api/session/{id}/fork copies the history before a message into a new session.
         SupportsForking = true,
         SupportsSideConversations = true,
+        SupportsAgentBrowser = true,
     };
 }

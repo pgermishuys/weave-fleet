@@ -29,6 +29,7 @@ import { useSessionsStore } from "@/stores/sessions";
 import { dispatchSessionUpsert } from "@/lib/session-sync";
 import { useCanvasesStore } from "@/stores/canvases";
 import { focusServerCanvas } from "@/composables/use-server-canvases";
+import { useAgentBrowser } from "@/composables/use-agent-browser";
 import { mergeMessagesByTimestamp } from "@/lib/merge-messages";
 import { workflowMessageKey, workflowMessageLabel } from "@/lib/workflows";
 import { useWorkflowsStore } from "@/stores/workflows";
@@ -114,6 +115,8 @@ const selectedSession = computed(() => {
 });
 
 const stream = useSessionStream(computed(() => props.sessionId));
+// The agent's browser steps, listed under the calls that took them.
+useAgentBrowser(() => props.sessionId);
 // What the agent asks to do that the session's permission level doesn't allow; each waits under the conversation.
 const { asks: permissionAsks, answer: answerPermission } = useSessionPermissions(() => props.sessionId);
 const { delegations, sessionStatus, isLoadingOlder, isPartial, loadOlder } = stream;

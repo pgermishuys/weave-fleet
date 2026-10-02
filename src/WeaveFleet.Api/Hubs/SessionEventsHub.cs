@@ -436,6 +436,7 @@ public class SessionEventsHub : Hub
         TerminalOpened          => "terminal.opened",
         TerminalClosed          => "terminal.closed",
         AppUpdated              => "app.updated",
+        BrowserStepped          => "browser.step",
         _ => domainEvent.GetType().Name,
     };
 }

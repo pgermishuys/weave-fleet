@@ -43,6 +43,7 @@ vi.mock("@/composables/use-send-prompt", async () => {
 });
 
 vi.mock("@/composables/use-server-canvases", () => ({ focusServerCanvas: vi.fn() }));
+vi.mock("@/composables/use-agent-browser", () => ({ useAgentBrowser: vi.fn() }));
 vi.mock("@/composables/use-session-permissions", async () => {
   const { shallowRef } = await import("vue");
   return { useSessionPermissions: () => ({ asks: shallowRef([]), answer: vi.fn() }) };

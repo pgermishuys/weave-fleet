@@ -332,6 +332,8 @@ export interface HarnessCapabilities {
   supportsShellCommands?: boolean;
   /** A session can fork into a side conversation at its last finished turn (`/btw` in the composer). */
   supportsSideConversations?: boolean;
+  /** The agent can use its own browser tab while Settings → Browser is on (natively, or through Fleet's tools). */
+  supportsAgentBrowser?: boolean;
 }
 
 /** A field a sign-in method asks for besides the key or browser (`HarnessSignInField` on the server). */

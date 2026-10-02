@@ -95,6 +95,18 @@ export function getToolLabel(
       return `screenshot${path} (${viewport})`;
     }
 
+    case "fleet_browser_read": {
+      const what = typeof input?.what === "string" && input.what ? input.what : "page";
+      const text = typeof input?.text === "string" && input.text ? ` “${truncate(input.text, 40)}”` : "";
+      return `${what}${text}`;
+    }
+
+    case "fleet_browser_act": {
+      const action = typeof input?.action === "string" && input.action ? input.action : "act";
+      const target = [input?.url, input?.ref, input?.text].find((v) => typeof v === "string" && v);
+      return typeof target === "string" ? `${action} ${truncate(target, 60)}` : action;
+    }
+
     // The note itself, beside "Remember".
     case "fleet_memory_save": {
       if (typeof input?.text === "string" && input.text) return truncate(input.text, 80);

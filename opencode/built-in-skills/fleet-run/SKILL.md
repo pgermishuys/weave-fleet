@@ -37,6 +37,8 @@ Then check what you changed, not just that the page loads:
   image. Take one, read it, fix what's wrong, take another. Pass `viewport: "phone"` to check a narrow layout.
   Each shot costs context (roughly 1,400 tokens for desktop, 500 for phone), so shoot the page you changed,
   not every page.
+- if you can use the page (browser tools that click, fill and read it), try the flow you changed: do what a user
+  would, read the page after, and read the console. Then take one screenshot of the result.
 - `fleet_canvas_read` on the app's canvas shows its status and recent output, including errors and stack traces
 - after more changes, call `fleet_app_start` again with the same command to restart it, unless the dev server
   reloads by itself

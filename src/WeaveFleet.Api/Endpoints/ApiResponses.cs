@@ -415,3 +415,15 @@ public sealed record WorkspaceRootsResponse(IReadOnlyList<WorkspaceRootItem> Roo
 public sealed record WorkspaceRootItem(string? Id, string Path, string Source, bool Exists);
 
 public sealed record WorkspaceRootAddedResponse(string Id, string Path);
+
+/// <summary>The agent's own browser in a session: its open tabs, the one it focused, and its steps, oldest first.</summary>
+public sealed record AgentBrowserResponse(
+    IReadOnlyList<WeaveFleet.Application.Browser.AgentTab> Tabs,
+    string? FocusedTabId,
+    IReadOnlyList<WeaveFleet.Domain.Events.BrowserStep> Steps);
+
+/// <summary>Settings → Browser: whether agents can use a browser, which pages (<c>session</c>, <c>machine</c>, <c>any</c>), and page scripts.</summary>
+public sealed record AgentBrowserSettingsResponse(bool Enabled, string Pages, bool Scripts);
+
+/// <summary>A change to Settings → Browser; a null field stays as it is.</summary>
+public sealed record AgentBrowserSettingsRequest(bool? Enabled, string? Pages, bool? Scripts);

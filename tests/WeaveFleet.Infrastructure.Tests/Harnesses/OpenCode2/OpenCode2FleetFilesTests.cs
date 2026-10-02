@@ -171,7 +171,10 @@ public sealed partial class OpenCode2FleetFilesTests : IDisposable
     {
         var v1 = Encoding.UTF8.GetString(OpenCode2FleetFiles.Read("opencode/fleet-canvas.ts"));
 
-        ToolNames(Plugin()).ShouldBe(ToolNames(v1));
+        // OpenCode 2 drives the agent's browser through its own browser plugin (Fleet is its attachment), so only
+        // OpenCode's plugin has Fleet's tools for it.
+        string[] openCodeOnly = ["fleet_browser_act", "fleet_browser_read"];
+        ToolNames(v1).ShouldBe([.. ToolNames(Plugin()).Concat(openCodeOnly).Order(StringComparer.Ordinal)]);
         ToolNames(Plugin()).ShouldContain("fleet_message");
         ToolNames(Plugin()).ShouldContain("fleet_memory_save");
     }

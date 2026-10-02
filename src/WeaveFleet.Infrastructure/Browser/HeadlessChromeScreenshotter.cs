@@ -1,32 +1,21 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Configuration;
-using WeaveFleet.Infrastructure.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Browser;
 
 /// <summary>
-/// Takes pictures of pages with a headless Chrome (or Edge, or Chromium) that is already installed, driven over
-/// the DevTools protocol. One browser serves every session: starting it costs about half a second, so it's kept
-/// running between shots and quits after <see cref="IdleTimeout"/> to give its memory back — this machine may be
-/// running the app being shot as well. Shots are taken one at a time, each in its own tab, so nothing a page does
-/// reaches the next one.
-/// <para>
-/// The browser goes where the harnesses go (<see cref="ProcessGroupHelper"/>), so it doesn't outlive Fleet: a Fleet
-/// that is killed, crashes or restarts to update never gets to quit it, and a headless browser nobody drives stays
-/// running for good. On Windows that's a Job Object, which also takes the processes the browser started.
-/// </para>
+/// Takes pictures of pages with Fleet's headless browser (<see cref="ChromeHost"/>), shared with the tabs agents use.
+/// Shots are taken one at a time, each in its own tab, so nothing a page does reaches the next one; the browser stays
+/// up between shots and quits <see cref="ChromeHost.IdleTimeout"/> after nobody needs it.
 /// </summary>
-public sealed class HeadlessChromeScreenshotter(FleetOptions options, ILogger<HeadlessChromeScreenshotter> logger)
-    : IScreenshotter, IAsyncDisposable
+public sealed class HeadlessChromeScreenshotter : IScreenshotter, IAsyncDisposable
 {
-    /// <summary>How long the browser waits for another shot before quitting.</summary>
-    public static readonly TimeSpan IdleTimeout = TimeSpan.FromMinutes(2);
+    /// <summary>How long the browser waits for another shot (or an agent's tab) before quitting.</summary>
+    public static TimeSpan IdleTimeout => ChromeHost.IdleTimeout;
 
-    private static readonly TimeSpan LaunchTimeout = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan LoadTimeout = TimeSpan.FromSeconds(10);
 
     /// <summary>How long closing a tab may take after a shot; a browser that doesn't answer is quit anyway.</summary>
@@ -35,28 +24,32 @@ public sealed class HeadlessChromeScreenshotter(FleetOptions options, ILogger<He
     /// <summary>After the load event: enough for a framework to paint its first frame, short enough not to drag.</summary>
     private static readonly TimeSpan SettleDelay = TimeSpan.FromMilliseconds(400);
 
-    private static readonly Action<ILogger, string, Exception?> LogBrowser =
-        LoggerMessage.Define<string>(LogLevel.Information, new EventId(1, "ScreenshotBrowser"), "Screenshots use {Path}");
-
     private static readonly Action<ILogger, string, int, int, long, Exception?> LogCaptured =
         LoggerMessage.Define<string, int, int, long>(LogLevel.Information, new EventId(2, "ScreenshotCaptured"),
             "Captured {Url} at {Width}x{Height} in {Elapsed} ms");
-
-    private static readonly Action<ILogger, string, Exception?> LogSandbox =
-        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(4, "ScreenshotNoSandbox"),
-            "{Path} couldn't open its sandbox, so Fleet runs it with --no-sandbox for screenshots");
 
     private static readonly Action<ILogger, string, Exception?> LogFailed =
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(3, "ScreenshotFailed"), "Taking a screenshot failed: {Problem}");
 
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private Process? _browser;
-    private SafeHandle? _job;
-    private CdpConnection? _cdp;
-    private string? _profile;
-    private Timer? _idle;
-    private bool _sandbox = true;
+    private readonly ChromeHost _host;
+    private readonly bool _ownsHost;
+    private readonly ILogger _logger;
     private bool _disposed;
+
+    /// <summary>Shoots with the browser <paramref name="host"/> keeps, shared with the agents' tabs.</summary>
+    public HeadlessChromeScreenshotter(ChromeHost host, ILogger<HeadlessChromeScreenshotter> logger)
+    {
+        _host = host;
+        _logger = logger;
+    }
+
+    /// <summary>Shoots with a browser of its own, quit when this is disposed.</summary>
+    public HeadlessChromeScreenshotter(FleetOptions options, ILogger<HeadlessChromeScreenshotter> logger)
+        : this(new ChromeHost(options, NullLogger<ChromeHost>.Instance), logger)
+    {
+        _ownsHost = true;
+    }
 
     public async Task<ScreenshotOutcome> CaptureAsync(ScreenshotRequest request, CancellationToken ct = default)
     {
@@ -66,28 +59,30 @@ public sealed class HeadlessChromeScreenshotter(FleetOptions options, ILogger<He
             if (_disposed)
                 return ScreenshotOutcome.Fail("Fleet is shutting down.");
 
-            var browser = await ConnectedAsync(ct);
-            if (browser.Problem is { } problem)
-                return ScreenshotOutcome.Fail(problem);
+            using var lease = await _host.AcquireAsync(ct);
+            if (lease.Connection is not { } cdp)
+                return ScreenshotOutcome.Fail(lease.Problem ?? ChromeFinder.NotFound);
 
-            var started = Stopwatch.StartNew();
-            var shot = await ShootAsync(browser.Connection!, request, ct);
-            if (shot.Image is not null)
-                LogCaptured(logger, request.Url, request.Width, request.Height, started.ElapsedMilliseconds, null);
-            else if (shot.Problem is { } failure)
-                LogFailed(logger, failure, null);
-            return shot;
-        }
-        catch (CdpException error)
-        {
-            // A browser that died mid-shot shouldn't poison the next call.
-            await QuitAsync();
-            LogFailed(logger, error.Message, null);
-            return ScreenshotOutcome.Fail(error.Message);
+            try
+            {
+                var started = Stopwatch.StartNew();
+                var shot = await ShootAsync(cdp, request, ct);
+                if (shot.Image is not null)
+                    LogCaptured(_logger, request.Url, request.Width, request.Height, started.ElapsedMilliseconds, null);
+                else if (shot.Problem is { } failure)
+                    LogFailed(_logger, failure, null);
+                return shot;
+            }
+            catch (CdpException error)
+            {
+                // A browser that died mid-shot shouldn't poison the next call.
+                await _host.ResetAsync(cdp);
+                LogFailed(_logger, error.Message, null);
+                return ScreenshotOutcome.Fail(error.Message);
+            }
         }
         finally
         {
-            _idle?.Change(IdleTimeout, Timeout.InfiniteTimeSpan);
             _gate.Release();
         }
     }
@@ -179,276 +174,18 @@ public sealed class HeadlessChromeScreenshotter(FleetOptions options, ILogger<He
         }
     }
 
-    private async Task<(CdpConnection? Connection, string? Problem)> ConnectedAsync(CancellationToken ct)
-    {
-        if (_cdp is { IsOpen: true } open && _browser is { HasExited: false })
-            return (open, null);
-
-        await QuitAsync();
-
-        var path = ChromeFinder.Find(options.Browser.ChromePath);
-        if (path is null)
-            return (null, ChromeFinder.NotFound);
-
-        var launched = await LaunchAsync(path, _sandbox, ct);
-
-        // A Chrome outside a distribution's own package (Playwright's, a tarball) can't open its sandbox where
-        // unprivileged user namespaces are locked down, and nor can a Fleet running as root. Both die before the
-        // DevTools port, saying so; the second try drops the sandbox and every later launch skips straight to it.
-        if (launched.Problem is not null && _sandbox && launched.Sandbox)
-        {
-            LogSandbox(logger, path, null);
-            _sandbox = false;
-            launched = await LaunchAsync(path, sandbox: false, ct);
-        }
-
-        if (launched.Problem is { } problem)
-            return (null, problem);
-
-        _idle ??= new Timer(_ => _ = QuitIdleAsync(), null, Timeout.Infinite, Timeout.Infinite);
-        return (_cdp, null);
-    }
-
-    private async Task<(bool Started, string? Problem, bool Sandbox)> LaunchAsync(string path, bool sandbox, CancellationToken ct)
-    {
-        LogBrowser(logger, path, null);
-        _profile = Path.Combine(Path.GetTempPath(), "fleet-screenshots-" + Guid.NewGuid().ToString("n"));
-        Directory.CreateDirectory(_profile);
-
-        var start = new ProcessStartInfo(path)
-        {
-            RedirectStandardError = true,
-            RedirectStandardOutput = true,
-            UseShellExecute = false,
-        };
-        foreach (var argument in Arguments(_profile, sandbox))
-            start.ArgumentList.Add(argument);
-
-        try
-        {
-            _browser = Process.Start(start);
-        }
-        catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException)
-        {
-            return (false, $"Fleet couldn't start {path}: {error.Message}", false);
-        }
-
-        if (_browser is null)
-            return (false, $"Fleet couldn't start {path}.", false);
-
-        _job = ProcessGroupHelper.AssignToProcessGroup(_browser, logger);
-
-        // Reading the pipes keeps Chrome from blocking on a full buffer once it gets chatty, and the last few
-        // lines are what explains a launch that never came up.
-        var complaints = new Complaints();
-        _browser.OutputDataReceived += (_, line) => complaints.Add(line.Data);
-        _browser.ErrorDataReceived += (_, line) => complaints.Add(line.Data);
-        _browser.BeginOutputReadLine();
-        _browser.BeginErrorReadLine();
-
-        var endpoint = await DevToolsUrlAsync(_profile, _browser, ct);
-        if (endpoint is null)
-        {
-            await QuitAsync();
-            return (false, $"{path} started but never opened its DevTools port, so Fleet can't drive it.{complaints}", complaints.MentionsSandbox);
-        }
-
-        try
-        {
-            _cdp = await CdpConnection.ConnectAsync(endpoint, ct);
-        }
-        catch (Exception error) when (error is not OperationCanceledException)
-        {
-            await QuitAsync();
-            return (false, $"Fleet couldn't connect to the browser it started: {error.Message}", false);
-        }
-
-        return (true, null, false);
-    }
-
-    /// <summary>
-    /// The first lines the browser printed, for a message about a launch that didn't come up. The first ones,
-    /// not the last: a Chrome that dies says why and then dumps a stack trace and its registers.
-    /// </summary>
-    private sealed class Complaints
-    {
-        private const int Keep = 4;
-        private readonly List<string> _lines = [];
-
-        /// <summary>Whether anything it said was about the sandbox it couldn't open.</summary>
-        public bool MentionsSandbox { get; private set; }
-
-        public void Add(string? line)
-        {
-            if (string.IsNullOrWhiteSpace(line))
-                return;
-            lock (_lines)
-            {
-                if (line.Contains("sandbox", StringComparison.OrdinalIgnoreCase)
-                    || line.Contains("namespace", StringComparison.OrdinalIgnoreCase))
-                {
-                    MentionsSandbox = true;
-                }
-
-                if (_lines.Count < Keep)
-                    _lines.Add(line.Trim());
-            }
-        }
-
-        public override string ToString()
-        {
-            lock (_lines)
-            {
-                return _lines.Count == 0 ? string.Empty : "\nIt said:\n" + string.Join('\n', _lines);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Chrome writes "port\npath" to DevToolsActivePort in its profile once the debugger listens. Asking for
-    /// port 0 and reading it back is the only way to get a free port without racing another process for it.
-    /// </summary>
-    private static async Task<Uri?> DevToolsUrlAsync(string profile, Process browser, CancellationToken ct)
-    {
-        var file = Path.Combine(profile, "DevToolsActivePort");
-        var deadline = DateTimeOffset.UtcNow + LaunchTimeout;
-        while (DateTimeOffset.UtcNow < deadline)
-        {
-            if (browser.HasExited)
-                return null;
-
-            if (File.Exists(file))
-            {
-                try
-                {
-                    var lines = await File.ReadAllLinesAsync(file, ct);
-                    if (lines.Length >= 2 && int.TryParse(lines[0], out var port))
-                        return new Uri($"ws://127.0.0.1:{port}{lines[1]}");
-                }
-                catch (IOException)
-                {
-                    // Chrome is still writing it.
-                }
-            }
-
-            await Task.Delay(25, ct);
-        }
-
-        return null;
-    }
-
-    private static IEnumerable<string> Arguments(string profile, bool sandbox)
-    {
-        if (!sandbox)
-            yield return "--no-sandbox";
-
-        yield return "--headless=new";
-        yield return "--remote-debugging-port=0";
-        yield return "--user-data-dir=" + profile;
-        yield return "--no-first-run";
-        yield return "--no-default-browser-check";
-        yield return "--disable-gpu";
-        yield return "--hide-scrollbars";
-        yield return "--mute-audio";
-        yield return "--disable-dev-shm-usage";
-        // Without these the first capture waits several seconds on Chrome talking to Google.
-        yield return "--disable-background-networking";
-        yield return "--disable-sync";
-        yield return "--disable-default-apps";
-        yield return "--disable-extensions";
-        yield return "--disable-component-update";
-        yield return "--metrics-recording-only";
-        yield return "about:blank";
-    }
-
-    private async Task QuitIdleAsync()
-    {
-        if (!await _gate.WaitAsync(TimeSpan.Zero))
-            return;
-        try
-        {
-            await QuitAsync();
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
-
-    /// <summary>Closes the connection and the browser, and forgets both. The caller holds the gate.</summary>
-    private async Task QuitAsync()
-    {
-        if (_cdp is { } cdp)
-        {
-            _cdp = null;
-            try
-            {
-                if (cdp.IsOpen)
-                    (await cdp.SendAsync("Browser.close", ct: CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(2))).Dispose();
-            }
-            catch (Exception error) when (error is CdpException or TimeoutException)
-            {
-                // It's being killed next.
-            }
-
-            await cdp.DisposeAsync();
-        }
-
-        if (_browser is { } browser)
-        {
-            _browser = null;
-            try
-            {
-                if (!browser.WaitForExit(2000))
-                    browser.Kill(entireProcessTree: true);
-            }
-            catch (Exception error) when (error is InvalidOperationException or NotSupportedException or SystemException)
-            {
-                // Already gone.
-            }
-
-            browser.Dispose();
-        }
-
-        // Closing the job kills whatever the browser left running, such as its crash reporter.
-        if (_job is { } job)
-        {
-            _job = null;
-            job.Dispose();
-        }
-
-        if (_profile is { } profile)
-        {
-            _profile = null;
-            try
-            {
-                Directory.Delete(profile, recursive: true);
-            }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-            {
-                // A temp folder Fleet will not use again.
-            }
-        }
-    }
-
     public async ValueTask DisposeAsync()
     {
         await _gate.WaitAsync();
         try
         {
             _disposed = true;
-            if (_idle is { } idle)
-            {
-                _idle = null;
-                await idle.DisposeAsync();
-            }
-
-            await QuitAsync();
+            if (_ownsHost)
+                await _host.DisposeAsync();
         }
         finally
         {
             _gate.Release();
-            _gate.Dispose();
         }
     }
 }
