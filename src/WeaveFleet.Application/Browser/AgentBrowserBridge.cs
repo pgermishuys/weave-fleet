@@ -18,7 +18,8 @@ public sealed record AgentBrowserToolRequest(
     IReadOnlyList<string>? Values = null,
     bool? Checked = null,
     int? DeltaY = null,
-    bool? Read = null);
+    bool? Read = null,
+    string? CallId = null);
 
 /// <summary>
 /// Fleet's own browser tools, for a harness without a browser of its own (OpenCode): <c>fleet_browser_read</c> reads
@@ -38,7 +39,7 @@ public sealed class AgentBrowserBridge(
             var what = request.What?.Trim().ToLowerInvariant() ?? "page";
             if (what == "tabs")
             {
-                var listed = await browser.RunAsync(new AgentBrowserCall(sessionId, userId, new AgentBrowserAction(AgentBrowserKinds.TabsList)), ct);
+                var listed = await browser.RunAsync(new AgentBrowserCall(sessionId, userId, CallId: request.CallId, Action: new AgentBrowserAction(AgentBrowserKinds.TabsList)), ct);
                 return Text("Tabs", AgentBrowserText.Tabs(listed), listed);
             }
 
@@ -59,7 +60,7 @@ public sealed class AgentBrowserBridge(
             if (what == "find" && string.IsNullOrWhiteSpace(request.Text))
                 return Invalid("\"text\" is required for find.");
 
-            var result = await browser.RunAsync(new AgentBrowserCall(sessionId, userId, action), ct);
+            var result = await browser.RunAsync(new AgentBrowserCall(sessionId, userId, CallId: request.CallId, Action: action), ct);
             return what switch
             {
                 "console" => Text("Console", AgentBrowserText.Console(result), result),
@@ -75,8 +76,8 @@ public sealed class AgentBrowserBridge(
             var name = request.Action?.Trim().ToLowerInvariant() ?? string.Empty;
             if (name == "open")
             {
-                var opened = await browser.RunAsync(new AgentBrowserCall(sessionId, userId, new AgentBrowserAction(AgentBrowserKinds.TabsOpen) { Url = request.Url }), ct);
-                return await AfterAsync(sessionId, userId, opened, request.Read != false, ct);
+                var opened = await browser.RunAsync(new AgentBrowserCall(sessionId, userId, CallId: request.CallId, Action: new AgentBrowserAction(AgentBrowserKinds.TabsOpen) { Url = request.Url }), ct);
+                return await AfterAsync(sessionId, userId, request.CallId, opened, request.Read != false, ct);
             }
 
             if (TabOf(sessionId, request.Tab) is not { } tab)
@@ -104,17 +105,17 @@ public sealed class AgentBrowserBridge(
             if (action is null)
                 return Invalid("\"action\" is open, go, back, reload, click, hover, fill, select, check, uncheck, press, scroll_down, scroll_up, wait, accept, dismiss or close.");
 
-            var result = await browser.RunAsync(new AgentBrowserCall(sessionId, userId, action), ct);
+            var result = await browser.RunAsync(new AgentBrowserCall(sessionId, userId, CallId: request.CallId, Action: action), ct);
             var read = request.Read == true && name is not ("close" or "wait");
-            return await AfterAsync(sessionId, userId, result, read, ct);
+            return await AfterAsync(sessionId, userId, request.CallId, result, read, ct);
         }, ct);
 
     /// <summary>What an action left: the tab, and with <paramref name="read"/> the page as it is now (saving the agent a call).</summary>
-    private async Task<CanvasResult<CanvasToolOutput>> AfterAsync(string sessionId, string userId, AgentBrowserResult result, bool read, CancellationToken ct)
+    private async Task<CanvasResult<CanvasToolOutput>> AfterAsync(string sessionId, string userId, string? callId, AgentBrowserResult result, bool read, CancellationToken ct)
     {
         if (!result.Ok || !read || result.Tab is not { } tab)
             return Text("Browser", AgentBrowserText.Acted(result), result);
-        var page = await browser.RunAsync(new AgentBrowserCall(sessionId, userId, new AgentBrowserAction(AgentBrowserKinds.Snapshot) { TabId = tab.Id }), ct);
+        var page = await browser.RunAsync(new AgentBrowserCall(sessionId, userId, CallId: callId, Action: new AgentBrowserAction(AgentBrowserKinds.Snapshot) { TabId = tab.Id }), ct);
         return Text("Browser", AgentBrowserText.Acted(result) + "\n\n" + AgentBrowserText.Page(page), result);
     }
 

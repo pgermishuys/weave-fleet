@@ -24,6 +24,7 @@ public sealed class AgentBrowserStepStoreTests
         var click = await store.RecordAsync(Step(session.Id, "Clicked “Save”") with
         {
             Box = new AgentBox(326, 99, 46, 22),
+            CallId = "call_42",
             Screenshot = new ScreenshotReference(session.Id, "shot1", 1280, 800),
         }, Owner);
 
@@ -31,6 +32,7 @@ public sealed class AgentBrowserStepStoreTests
         var kept = await store.ListAsync(session.Id);
         kept.Select(step => (step.Seq, step.Summary)).ShouldBe([(1L, "Opened localhost:5173 in its own tab"), (2L, "Clicked “Save”")]);
         kept[1].Box.ShouldBe(new AgentBox(326, 99, 46, 22));
+        kept[1].CallId.ShouldBe("call_42");
         kept[1].Screenshot.ShouldBe(new ScreenshotReference(session.Id, "shot1", 1280, 800));
 
         var pushed = events.Broadcasts.Last();

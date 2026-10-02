@@ -179,8 +179,11 @@ public sealed record AgentBrowserResult
     public static AgentBrowserResult Fail(string code, string message) => new() { Failure = new AgentBrowserFailure(code, message) };
 }
 
-/// <summary>One call: whose session, and what to do.</summary>
-public sealed record AgentBrowserCall(string SessionId, string UserId, AgentBrowserAction Action);
+/// <summary>
+/// One call: whose session, and what to do. <paramref name="CallId"/> is the harness's tool call that asked, when the
+/// harness says; otherwise Fleet files the step under the browser-capable call it saw running (<see cref="AgentBrowserCalls"/>).
+/// </summary>
+public sealed record AgentBrowserCall(string SessionId, string UserId, AgentBrowserAction Action, string? CallId = null);
 
 /// <summary>
 /// The agent's own browser: tabs per session in Fleet's headless browser, kept to the pages Settings → Browser allows.

@@ -103,6 +103,26 @@ public static class AgentBrowserStepText
         return facts is { Length: > 0 } ? text + ": " + facts : text;
     }
 
+    /// <summary>What a step that didn't work says: what it tried, not what it would have done.</summary>
+    public static string Failed(AgentBrowserAction action, string? target)
+    {
+        var name = target is { Length: > 0 } ? target : "an element";
+        return action.Kind switch
+        {
+            AgentBrowserKinds.TabsOpen => "Couldn't open " + Place(action.Url),
+            AgentBrowserKinds.Navigate => "Couldn't go to " + Place(action.Url),
+            AgentBrowserKinds.Click => "Couldn't click " + name,
+            AgentBrowserKinds.Hover => "Couldn't point at " + name,
+            AgentBrowserKinds.Fill => "Couldn't type in " + name,
+            AgentBrowserKinds.Select => "Couldn't pick in " + name,
+            AgentBrowserKinds.Check => "Couldn't check " + name,
+            AgentBrowserKinds.Press => "Couldn't press " + (action.Key ?? "the key"),
+            AgentBrowserKinds.Evaluate => "Didn't run a script in the page",
+            AgentBrowserKinds.Wait => "Didn't see " + (action.Condition is "text" or "textGone" ? Quote(action.Text ?? string.Empty) : "the page finish loading"),
+            _ => "Couldn't " + Summary(action, target, null, null).ToLowerInvariant(),
+        };
+    }
+
     /// <summary><c>click @e2 · 170 ms</c>: the operation, its ref or key, and how long it took.</summary>
     public static string Detail(AgentBrowserAction action, TimeSpan took)
     {

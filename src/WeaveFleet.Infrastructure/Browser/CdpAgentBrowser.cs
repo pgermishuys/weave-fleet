@@ -199,6 +199,7 @@ public sealed partial class CdpAgentBrowser : IAgentBrowser, IAsyncDisposable
             return AgentBrowserResult.Fail(AgentBrowserFailures.TabUnavailable, "The browser closed and took this tab with it. Open a new one with tabs.open.");
 
         var page = new Page(cdp, tab);
+        await FrontAsync(page, ct);
         return action.Kind switch
         {
             AgentBrowserKinds.TabsFocus => Focus(session, tab),
@@ -258,6 +259,8 @@ public sealed partial class CdpAgentBrowser : IAgentBrowser, IAsyncDisposable
         foreach (var domain in (string[])["Page.enable", "Runtime.enable", "DOM.enable", "Network.enable", "Log.enable"])
             (await cdp.SendAsync(domain, sessionId: cdpSession, ct: ct)).Dispose();
         (await cdp.SendAsync("Page.setLifecycleEventsEnabled", w => w.WriteBoolean("enabled", true), cdpSession, ct)).Dispose();
+        // The page acts focused even when another tab is in front, as it would for a person using it.
+        (await cdp.SendAsync("Emulation.setFocusEmulationEnabled", w => w.WriteBoolean("enabled", true), cdpSession, ct)).Dispose();
         (await cdp.SendAsync("Emulation.setDeviceMetricsOverride", w =>
         {
             w.WriteNumber("width", Width);
@@ -504,6 +507,14 @@ public sealed partial class CdpAgentBrowser : IAgentBrowser, IAsyncDisposable
             }
         }
     }
+
+    /// <summary>
+    /// Brings the tab to the front of Fleet's browser before acting on it or taking its picture. Headless Chrome stops
+    /// painting a tab behind another, so an input event waits on a frame that doesn't come (a click took 5 s with two
+    /// sessions' tabs open) and a picture shows the page as it was. Every time: screenshots open tabs in the same browser.
+    /// </summary>
+    private static async Task FrontAsync(Page page, CancellationToken ct)
+        => (await page.SendAsync("Page.bringToFront", null, ct)).Dispose();
 
     // ── Navigation ───────────────────────────────────────────────────────────────────────────────────────
 
@@ -1186,6 +1197,14 @@ public sealed partial class CdpAgentBrowser : IAgentBrowser, IAsyncDisposable
         if (!_sessions.TryGetValue(sessionId, out var session) || !TryTab(session, tabId, out var tab) || _cdp is not { IsOpen: true } cdp)
             return null;
         session.LastWatched = Clock();
+        try
+        {
+            await FrontAsync(new Page(cdp, tab), ct);
+        }
+        catch (CdpException)
+        {
+            return tab.Frame;
+        }
         if (tab.Frame is { } cached && Clock() - tab.FrameAt < FrameCache)
             return cached;
 
@@ -1220,11 +1239,11 @@ public sealed partial class CdpAgentBrowser : IAgentBrowser, IAsyncDisposable
             SessionId = call.SessionId,
             At = Clock(),
             Kind = action.Kind,
-            Summary = AgentBrowserStepText.Summary(action, note.Target, result.Ok ? note.Facts : null, tab),
+            Summary = result.Ok ? AgentBrowserStepText.Summary(action, note.Target, note.Facts, tab) : AgentBrowserStepText.Failed(action, note.Target),
             Detail = AgentBrowserStepText.Detail(action, took),
             Ok = result.Ok,
             Error = result.Failure?.Message,
-            CallId = _calls?.Current(call.SessionId),
+            CallId = call.CallId ?? _calls?.Current(call.SessionId),
             TabId = tab?.Id ?? action.TabId,
             Url = tab?.Url,
             Title = tab?.Title,

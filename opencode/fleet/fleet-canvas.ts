@@ -20,7 +20,7 @@ const MESSAGE_PATH = "/api/bridge/session/message"
 const STEP_DONE_PATH = "/api/bridge/workflow/step-done"
 
 type PermissionRequest = { permission: string; patterns: string[]; always: string[]; metadata: Record<string, unknown> }
-type ToolContext = { sessionID: string; ask?: (request: PermissionRequest) => Promise<void> }
+type ToolContext = { sessionID: string; callID?: string; ask?: (request: PermissionRequest) => Promise<void> }
 type Attachment = { type: "file"; mime: string; url: string; filename: string }
 type ToolResult = { title: string; output: string; metadata: Record<string, unknown>; attachments?: Attachment[] }
 
@@ -323,7 +323,7 @@ export const FleetCanvasPlugin = async (input: { directory?: string }) => ({
         },
       },
       execute: (args: { what: string; text: string }, context: ToolContext) =>
-        callFleet("browser-read", context, { what: args.what, text: args.text || null }),
+        callFleet("browser-read", context, { what: args.what, text: args.text || null, callId: context.callID ?? null }),
     },
 
     fleet_browser_act: {
@@ -363,6 +363,8 @@ export const FleetCanvasPlugin = async (input: { directory?: string }) => ({
           text: args.text || null,
           url: args.url || null,
           read: args.read === true,
+          // The step is filed under this call; without it Fleet goes by the call it saw running.
+          callId: context.callID ?? null,
         }),
     },
 

@@ -46,12 +46,20 @@ watch(src, (next) => {
 const step = computed(() => store.lastStepOn(props.sessionId, props.tabId));
 const fresh = computed(() => (step.value ? now.value - Date.parse(step.value.at) < STEP_MS : false));
 
-/** Where the picture sits in the stage (it keeps its shape), so the ring lands on the element. */
+/** Where the picture sits in the stage (it keeps its shape, at the top), so the ring lands on the element. */
 const frame = computed(() => {
   const { width, height } = size.value;
   if (width === 0 || height === 0) return null;
   const scale = Math.min(width / WIDTH, height / HEIGHT);
-  return { scale, left: (width - WIDTH * scale) / 2, top: (height - HEIGHT * scale) / 2 };
+  // Top-aligned, like a page: the space a tall panel leaves goes below it.
+  return { scale, left: (width - WIDTH * scale) / 2, top: 0 };
+});
+
+/** The caption and the size tag sit on the picture's bottom edge, not the panel's. */
+const onPicture = computed(() => {
+  if (!frame.value) return undefined;
+  const below = size.value.height - HEIGHT * frame.value.scale;
+  return { bottom: `${Math.max(0, below) + 12}px` };
 });
 
 const ring = computed(() => {
@@ -122,11 +130,15 @@ onBeforeUnmount(() => {
       v-if="fresh && step"
       class="agent-tab__caption"
       :class="{ 'agent-tab__caption--failed': !step.ok }"
+      :style="onPicture"
       role="status"
     >
       {{ step.summary }}
     </p>
-    <span class="agent-tab__tag">agent's tab · {{ WIDTH }}×{{ HEIGHT }}</span>
+    <span
+      class="agent-tab__tag"
+      :style="onPicture"
+    >agent's tab · {{ WIDTH }}×{{ HEIGHT }}</span>
   </div>
 </template>
 
@@ -145,6 +157,7 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  object-position: top center;
 }
 
 .agent-tab__empty {

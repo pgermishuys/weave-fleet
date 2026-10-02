@@ -182,6 +182,30 @@ public sealed class CdpAgentBrowserTests
     }
 
     [Fact]
+    public async Task A_tab_behind_another_sessions_tab_still_takes_clicks_at_once_and_its_picture_is_current()
+    {
+        if (Chrome() is not { } options)
+            return;
+        using var site = new LocalSite(Signup);
+        await using var browser = Browser(options, new Steps(), Limits(site));
+
+        // Two sessions, a tab each; the second one opened is in front.
+        var mine = (await Run(browser, new AgentBrowserAction(AgentBrowserKinds.TabsOpen) { Url = site.Url })).Tab.ShouldNotBeNull();
+        (await browser.RunAsync(new AgentBrowserCall("session-2", User, new AgentBrowserAction(AgentBrowserKinds.TabsOpen) { Url = site.Url }))).Ok.ShouldBeTrue();
+        var page = (await Run(browser, new AgentBrowserAction(AgentBrowserKinds.Snapshot) { TabId = mine.Id })).Content!;
+        await Run(browser, new AgentBrowserAction(AgentBrowserKinds.Fill) { TabId = mine.Id, Ref = Ref(page, "[textbox] \"Your name\""), Text = "Grace" });
+
+        var clicking = System.Diagnostics.Stopwatch.StartNew();
+        (await Run(browser, new AgentBrowserAction(AgentBrowserKinds.Click) { TabId = mine.Id, Ref = Ref(page, "[button] \"Save\"") })).Ok.ShouldBeTrue();
+        clicking.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(2));
+
+        // Another session's tab goes in front again; the picture of mine still shows what it did.
+        await browser.RunAsync(new AgentBrowserCall("session-2", User, new AgentBrowserAction(AgentBrowserKinds.TabsList)));
+        (await browser.FrameAsync(Session, mine.Id)).ShouldNotBeNull().Length.ShouldBeGreaterThan(1000);
+        (await Run(browser, new AgentBrowserAction(AgentBrowserKinds.Find) { TabId = mine.Id, Text = "Saved" })).Content.ShouldNotBeNull().ShouldContain("Saved, Grace!");
+    }
+
+    [Fact]
     public async Task With_the_browser_off_nothing_runs()
     {
         await using var browser = Browser(new FleetOptions(), new Steps(), _ => new AgentBrowserLimits(new AgentBrowserSettings(Enabled: false), new HashSet<int>(), null, []));
