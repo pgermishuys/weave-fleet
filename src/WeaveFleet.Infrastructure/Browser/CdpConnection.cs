@@ -27,6 +27,8 @@ internal sealed class CdpConnection : IAsyncDisposable
     private readonly TimeSpan _replyTimeout;
     private readonly ConcurrentDictionary<int, TaskCompletionSource<JsonDocument>> _pending = new();
     private readonly ConcurrentDictionary<string, TaskCompletionSource<bool>> _events = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<Subscription, byte> _subscriptions = new();
+    private readonly TaskCompletionSource _closed = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly SemaphoreSlim _send = new(1, 1);
     private readonly CancellationTokenSource _closing = new();
     private readonly Task _reading;
@@ -138,6 +140,28 @@ internal sealed class CdpConnection : IAsyncDisposable
         public void Dispose() => connection._events.TryRemove(key, out _);
     }
 
+    /// <summary>
+    /// Calls <paramref name="handler"/> with every event for <paramref name="sessionId"/> (<see cref="string.Empty"/>:
+    /// the browser's own) until the returned handle is disposed. It runs on the read loop: keep it short, don't throw,
+    /// and <see cref="JsonElement.Clone"/> anything kept, because the message is disposed when it returns.
+    /// </summary>
+    public IDisposable Subscribe(string sessionId, Action<string, JsonElement> handler)
+    {
+        var subscription = new Subscription(this, sessionId, handler);
+        _subscriptions[subscription] = 0;
+        return subscription;
+    }
+
+    /// <summary>Completes when the connection is gone, whatever the reason.</summary>
+    public Task Closed => _closed.Task;
+
+    private sealed class Subscription(CdpConnection connection, string sessionId, Action<string, JsonElement> handler) : IDisposable
+    {
+        public string SessionId { get; } = sessionId;
+        public Action<string, JsonElement> Handler { get; } = handler;
+        public void Dispose() => connection._subscriptions.TryRemove(this, out _);
+    }
+
     private TaskCompletionSource<bool> Register(string key)
     {
         var waiting = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -204,11 +228,29 @@ internal sealed class CdpConnection : IAsyncDisposable
                 return;
             }
 
-            if (root.TryGetProperty("method", out var method)
-                && method.GetString() is { } name
-                && _events.TryRemove(Key(name, SessionOf(root)), out var expected))
+            if (root.TryGetProperty("method", out var method) && method.GetString() is { } name)
             {
-                expected.TrySetResult(true);
+                var session = SessionOf(root);
+                if (_events.TryRemove(Key(name, session), out var expected))
+                    expected.TrySetResult(true);
+
+                if (!_subscriptions.IsEmpty)
+                {
+                    var parameters = root.TryGetProperty("params", out var p) ? p : default;
+                    foreach (var subscription in _subscriptions.Keys)
+                    {
+                        if (!string.Equals(subscription.SessionId, session, StringComparison.Ordinal))
+                            continue;
+                        try
+                        {
+                            subscription.Handler(name, parameters);
+                        }
+                        catch (Exception error) when (error is not OutOfMemoryException)
+                        {
+                            // A listener's bug mustn't stop the read loop that every caller waits on.
+                        }
+                    }
+                }
             }
         }
         finally
@@ -224,6 +266,8 @@ internal sealed class CdpConnection : IAsyncDisposable
 
     private void Fail(string reason)
     {
+        _closed.TrySetResult();
+
         foreach (var id in _pending.Keys)
         {
             if (_pending.TryRemove(id, out var waiting))
