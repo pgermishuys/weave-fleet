@@ -197,6 +197,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(AgentBrowserResponse))]
 [JsonSerializable(typeof(AgentBrowserSettingsResponse))]
 [JsonSerializable(typeof(AgentBrowserSettingsRequest))]
+[JsonSerializable(typeof(WeaveFleet.Application.Browser.AgentBrowserToolRequest))]
 [JsonSerializable(typeof(AppRunResponse))]
 [JsonSerializable(typeof(AppOutputResponse))]
 [JsonSerializable(typeof(SessionAppsResponse))]

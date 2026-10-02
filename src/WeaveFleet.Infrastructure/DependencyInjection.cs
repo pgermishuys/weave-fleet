@@ -266,6 +266,7 @@ public static class DependencyInjection
         services.AddSingleton<AgentBrowserSettingsChanges>();
         services.AddScoped<AgentBrowserAccess>();
         services.AddScoped<AgentBrowserCanvas>();
+        services.AddScoped<AgentBrowserBridge>();
         services.AddSingleton<CdpAgentBrowser>(sp => new CdpAgentBrowser(
             sp.GetRequiredService<ChromeHost>(),
             sp.GetRequiredService<IServiceScopeFactory>(),

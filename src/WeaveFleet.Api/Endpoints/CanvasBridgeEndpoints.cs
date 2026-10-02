@@ -64,6 +64,14 @@ public static class CanvasBridgeEndpoints
             => ToResult(await bridge.ScreenshotAsync(BridgeToken(http), request.HarnessSessionId, request.CanvasId, request.Path, request.Viewport, ct)))
             .WithName("CanvasBridgeScreenshot");
 
+        group.MapPost("/browser-read", async (AgentBrowserToolRequest request, HttpContext http, AgentBrowserBridge bridge, CancellationToken ct)
+            => ToResult(await bridge.ReadAsync(BridgeToken(http), request, ct)))
+            .WithName("CanvasBridgeBrowserRead");
+
+        group.MapPost("/browser-act", async (AgentBrowserToolRequest request, HttpContext http, AgentBrowserBridge bridge, CancellationToken ct)
+            => ToResult(await bridge.ActAsync(BridgeToken(http), request, ct)))
+            .WithName("CanvasBridgeBrowserAct");
+
         group.MapPost("/page-show", async (CanvasBridgeRequest request, HttpContext http, PageBridge bridge, CancellationToken ct)
             => ToResult(await bridge.ShowAsync(BridgeToken(http), request.HarnessSessionId, request.Path, request.Title, ct)))
             .WithName("CanvasBridgePageShow");
