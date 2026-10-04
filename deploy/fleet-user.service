@@ -20,6 +20,9 @@ Type=simple
 ExecStart=%h/.weave/fleet/bin/fleet --host 0.0.0.0 --port 2113
 Restart=always
 RestartSec=5
+# One agent's build or test run can run the machine out of memory. Let the kernel kill that process
+# alone instead of stopping Fleet and every session with it (systemd's default for services is stop).
+OOMPolicy=continue
 WorkingDirectory=%h
 # Agents run your tools; give the service the PATH your shell has, e.g.
 # Environment=PATH=%h/.opencode/bin:%h/.local/bin:%h/.weave/fleet/bin:/usr/local/bin:/usr/bin:/bin
