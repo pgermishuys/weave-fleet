@@ -119,6 +119,26 @@ public sealed class OpenCode2RunningWorkTests
     }
 
     [Fact]
+    public async Task A_shell_fleet_stopped_ends_cancelled_whatever_v2s_notice_says_after()
+    {
+        // V2 ends a removed shell's job with a notice of its own (state "error"), which can beat its answer to the stop.
+        var api = Answering(request => request.Method == HttpMethod.Get ? Recorded("GET /api/shell/{id}") : Recorded("DELETE /api/shell/{id}"));
+        await using var server = Server(api);
+        await using var session = NewSession(server, Session);
+        var recording = await OpenCode2Fixtures.ReadEventsAsync("background-tasks.sse");
+        foreach (var evt in await WithoutNoticesAsync())
+            server.Route(evt);
+
+        (await session.StopWorkAsync(Shell, CancellationToken.None)).ShouldBeTrue();
+        server.Route(recording.First(e => IsNotice(e) && e.SessionId == Session));
+
+        var ended = (await ReadAvailableAsync(session)).Where(e => e.Type == EventTypes.WorkEnded).Select(e => WorkEvents.Read(e)!).ToList();
+        ended.ShouldHaveSingleItem().ShouldSatisfyAllConditions(
+            r => r.WorkId.ShouldBe(Shell),
+            r => r.EndedReason.ShouldBe(WorkEndedReasons.Cancelled));
+    }
+
+    [Fact]
     public async Task Stop_of_a_shell_the_server_no_longer_has_is_false_and_deletes_nothing()
     {
         // V2 answers a DELETE of a shell that's gone with 204 as well; only GET says it's gone.

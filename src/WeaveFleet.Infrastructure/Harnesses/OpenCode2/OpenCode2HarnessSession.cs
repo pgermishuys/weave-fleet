@@ -48,6 +48,9 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
     // The work the agent left running, by its handle (a shell's id, a subagent's call), as last reported: what Stop,
     // Output and the running list go by. Written on the event pump, read on requests.
     private readonly ConcurrentDictionary<string, WorkReport> _work = new(StringComparer.Ordinal);
+
+    // The work Fleet asked V2 to stop: V2's notice then says the removed shell failed, but the user stopped it.
+    private readonly ConcurrentDictionary<string, byte> _stopping = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _attachLock = new(1, 1);
     private readonly Channel<HarnessEvent> _events = Channel.CreateBounded<HarnessEvent>(new BoundedChannelOptions(1000)
     {
@@ -605,7 +608,11 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         if (EventTypes.IsWorkEvent(harnessEvent.Type) && WorkEvents.Read(harnessEvent) is { } report)
         {
             if (harnessEvent.Type == EventTypes.WorkEnded)
+            {
                 _work.TryRemove(report.WorkId, out _);
+                if (_stopping.TryRemove(report.WorkId, out _) && report.EndedReason != WorkEndedReasons.Lost)
+                    harnessEvent = WorkEvents.Ended(report, WorkEndedReasons.Cancelled, harnessEvent.SessionId, harnessEvent.FleetSessionId);
+            }
             else
                 _work.AddOrUpdate(report.WorkId, report, (_, known) => Merge(known, report));
         }
@@ -635,13 +642,28 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         var server = await AttachedServerAsync(ct).ConfigureAwait(false);
         _work.TryGetValue(workId, out var work);
 
-        if (work?.Kind == WorkKinds.Shell || (work is null && workId.StartsWith(ShellIdPrefix, StringComparison.Ordinal)))
-            return await server.Client.RemoveShellAsync(_context.WorkingDirectory, workId, ct).ConfigureAwait(false);
+        // Marked first: V2's notice of the end can arrive before its answer to the request.
+        _stopping[workId] = 0;
+        var stopped = false;
+        try
+        {
+            if (work?.Kind == WorkKinds.Shell || (work is null && workId.StartsWith(ShellIdPrefix, StringComparison.Ordinal)))
+            {
+                stopped = await server.Client.RemoveShellAsync(_context.WorkingDirectory, workId, ct).ConfigureAwait(false);
+            }
+            else if (work?.ChildHarnessSessionId is { } child)
+            {
+                await server.Client.InterruptAsync(child, ct).ConfigureAwait(false);
+                stopped = true;
+            }
 
-        if (work?.ChildHarnessSessionId is not { } child)
-            return false;
-        await server.Client.InterruptAsync(child, ct).ConfigureAwait(false);
-        return true;
+            return stopped;
+        }
+        finally
+        {
+            if (!stopped)
+                _stopping.TryRemove(workId, out _);
+        }
     }
 
     /// <inheritdoc />

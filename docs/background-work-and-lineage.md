@@ -83,6 +83,71 @@ Knowing the calling session needs the caller to identify itself. OpenCode and Op
 harness session id, `IHarnessCanvasCallerResolver`); Claude Code and Pi have no Fleet tools yet, so their
 agent-started sessions get no `spawned_by` until a Fleet MCP server or Pi extension exists. That's a later phase.
 
+## API (built in PR 2)
+
+What the UI PRs (4, 5, 8) and the harness PRs (6, 7) build on.
+
+**A work item** (`RunningWorkItem`), the same shape everywhere below:
+
+```jsonc
+{
+  "id": "5f0c…",              // Fleet's id; stop and output take this
+  "sessionId": "…",           // the session whose agent started it
+  "workId": "sh_1076…",       // the harness's handle (shell id, task id, a subagent's call id)
+  "kind": "shell",            // subagent | shell | monitor | task
+  "title": "shell",           // short name: the agent, or the tool
+  "label": "bun run test:e2e",// what it is: the task, the command
+  "status": "running",        // pending | running | completed | error | cancelled
+  "background": true,         // its call returned while it runs on
+  "childSessionId": "…",      // the Fleet session it runs in (subagents); absent when none
+  "toolCallId": "call_…",     // its card in the conversation
+  "canStop": true, "canReadOutput": true,
+  "startedAt": "…", "endedAt": "…",
+  "endedReason": "completed", // completed | error | cancelled | lost
+  "detail": "exit 0"
+}
+```
+
+**REST**
+- `GET /api/sessions/{id}/work` — running, plus what ended in the last 10 minutes (with its result). `?all=true`
+  for everything the session ever ran (the Agents tab's *Earlier agents*).
+- `POST /api/sessions/{id}/work/{workId}/stop` — `workId` is the item's `id`. 200 with the item, ended `cancelled`
+  (or `lost` when the harness no longer had it); 400 when `canStop` is false; 409 when it already ended or the
+  session isn't running; 404 for an unknown item.
+- `GET /api/sessions/{id}/work/{workId}/output?offset=0` — `{ output, nextOffset, size, truncated }`, byte offsets.
+  Ask again from `nextOffset`; more may come while `nextOffset < size` or the work runs. 400 when `canReadOutput`
+  is false.
+- `GET /api/work/running` — the user's running work in every session, oldest first (the status-bar counter).
+- The session list gets `runningWorkCount`, `forkedFromSessionId`, `spawnedBySessionId`, `spawnKind`;
+  `GET /api/sessions/{id}` gets the lineage fields; the snapshot gets `runningWork` (the same list as
+  `GET …/work`); `session_created` carries the lineage fields. `delegations` in the snapshot and
+  `GET …/delegations` stay subagents only.
+
+**SignalR**: `work.started`, `work.updated`, `work.ended`, each with a work item as `properties`, on
+`session:{id}` and on `sessions` (subscribe with `SubscribeToSessionsTopicAsync`). Subagents also keep their
+`delegation.*` events.
+
+**Harnesses** report work with `WorkEvents.Started/Updated/Ended(WorkReport, …)` (Infrastructure) as harness
+events; the relay hands them to `RunningWorkRecorder`, which makes a Fleet child session from
+`ChildHarnessSessionId` and calls `DelegationService`, the one writer. A report changes only the fields it sets;
+work that ended stays ended. Actions on `IHarnessSession`: `StopWorkAsync(workId)` (false when the harness no longer
+has it), `ReadWorkOutputAsync(workId, offset)`, `GetRunningWorkAsync()` (null when the harness can't say; on attach,
+Fleet ends what isn't in it as `lost`, matching by `workId` or by child session). Capabilities:
+`ReportsBackgroundWork`, `SupportsChildSessions`, `ChildSessionsResumable`.
+
+| | Work items | Stop | Output | Running list |
+|---|---|---|---|---|
+| OpenCode 2 | background shells, subagents | shell: `GET` then `DELETE /api/shell/:id`; subagent: interrupt the child | shells: `GET /api/shell/:id/output` | the server's shells for the session, and its children at work |
+| OpenCode | subagents (`task`) | abort the child | — | — |
+| Claude Code, Pi | none yet (PRs 6, 7) | — | — | — |
+
+**Lineage**: `forked_from_session_id` + `spawn_kind = fork` on Fork and on a kept side conversation;
+`spawned_by_session_id` + `spawn_kind = api` on `POST /api/sessions` from an agent (its `/agent/{token}` prefix)
+that names its own harness session in `X-Fleet-Harness-Session`. Both plugins put that id in the agent's shell as
+`FLEET_HARNESS_SESSION_ID` (OpenCode's `shell.env` hook; OpenCode 2's `tool execute.before` + `shell create.before`),
+and the Fleet API skill sends it. Workflow steps get `spawn_kind = workflow`, automation runs `automation`; neither
+has a starting session. `parent_session_id` still means a hidden delegated child.
+
 ## `@` sessions
 
 The composer's `@` picker (`use-autocomplete.ts`) gets a Sessions group. Attaching a session adds a reference, not a

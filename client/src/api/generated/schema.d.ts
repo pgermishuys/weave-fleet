@@ -373,6 +373,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{id}/work": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetSessionWork"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/work/{workId}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["StopSessionWork"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/work/{workId}/output": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetSessionWorkOutput"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/work/running": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetRunningWork"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{id}/source-preview": {
         parameters: {
             query?: never;
@@ -3754,6 +3818,24 @@ export interface components {
             text: string;
             createdAt: string;
         };
+        RunningWorkItem: {
+            id: string;
+            sessionId: string;
+            workId: string;
+            kind: string;
+            title: string;
+            label?: null | string;
+            status: string;
+            background?: boolean;
+            childSessionId?: null | string;
+            toolCallId?: null | string;
+            canStop?: boolean;
+            canReadOutput?: boolean;
+            startedAt: string;
+            endedAt?: null | string;
+            endedReason?: null | string;
+            detail?: null | string;
+        };
         RunShellCommandApiRequest: {
             command: null | string;
         };
@@ -3888,6 +3970,12 @@ export interface components {
             progress?: null | components["schemas"]["SessionProgressSummaryDto"];
             selectedAgent?: null | string;
             selectedModel?: null | components["schemas"]["SessionModelChoiceDto"];
+            workflowRunId?: null | string;
+            /** Format: int32 */
+            runningWorkCount?: number | string;
+            forkedFromSessionId?: null | string;
+            spawnedBySessionId?: null | string;
+            spawnKind?: null | string;
         };
         SessionMessageBridgeRequest: {
             harnessSessionId: null | string;
@@ -4242,6 +4330,14 @@ export interface components {
         };
         /** @enum {unknown} */
         WeaveFlavor: "weave" | "legacy";
+        WorkOutputResponse: {
+            output: string;
+            /** Format: int64 */
+            nextOffset: number | string;
+            /** Format: int64 */
+            size: number | string;
+            truncated: boolean;
+        };
         WorktreeNamingPreviewRequest: {
             directory: string;
             message: null | string;
@@ -5264,6 +5360,147 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    GetSessionWork: {
+        parameters: {
+            query?: {
+                all?: boolean;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunningWorkItem"][];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    StopSessionWork: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                workId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunningWorkItem"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetSessionWorkOutput: {
+        parameters: {
+            query?: {
+                offset?: number | string;
+            };
+            header?: never;
+            path: {
+                id: string;
+                workId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkOutputResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetRunningWork: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunningWorkItem"][];
+                };
             };
         };
     };
