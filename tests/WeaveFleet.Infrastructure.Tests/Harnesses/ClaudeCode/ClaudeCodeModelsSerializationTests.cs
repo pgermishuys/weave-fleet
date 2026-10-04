@@ -362,4 +362,35 @@ public sealed class ClaudeCodeModelsSerializationTests
 
         result.ShouldBeOfType<ClaudeCodeStreamMessage>();
     }
+
+    [Fact]
+    public void ControlResponse_Deserializes()
+    {
+        // As recorded from claude 2.1.289, answering a set_permission_mode it refused.
+        const string json = """{"type":"control_response","response":{"subtype":"error","request_id":"pm-1","error":"Cannot set permission mode to bypassPermissions because the session was not launched with --dangerously-skip-permissions","error_code":"bypass_not_launched"}}""";
+
+        var response = JsonSerializer.Deserialize<ClaudeCodeStreamMessage>(json, Options)
+            .ShouldBeOfType<ClaudeCodeControlResponse>().Response.ShouldNotBeNull();
+
+        response.Subtype.ShouldBe("error");
+        response.RequestId.ShouldBe("pm-1");
+        response.Error!.ShouldStartWith("Cannot set permission mode");
+    }
+
+    [Fact]
+    public void FleetsRequests_AreControlRequestsNamingTheirId()
+    {
+        var interrupt = JsonDocument.Parse(ClaudeCodeInput.Interrupt("r1")).RootElement;
+        interrupt.GetProperty("type").GetString().ShouldBe("control_request");
+        interrupt.GetProperty("request_id").GetString().ShouldBe("r1");
+        interrupt.GetProperty("request").GetProperty("subtype").GetString().ShouldBe("interrupt");
+
+        var model = JsonDocument.Parse(ClaudeCodeInput.SetModel("r2", "opus")).RootElement.GetProperty("request");
+        model.GetProperty("subtype").GetString().ShouldBe("set_model");
+        model.GetProperty("model").GetString().ShouldBe("opus");
+
+        var mode = JsonDocument.Parse(ClaudeCodeInput.SetPermissionMode("r3", "acceptEdits")).RootElement.GetProperty("request");
+        mode.GetProperty("subtype").GetString().ShouldBe("set_permission_mode");
+        mode.GetProperty("mode").GetString().ShouldBe("acceptEdits");
+    }
 }

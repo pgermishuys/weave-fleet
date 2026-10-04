@@ -82,6 +82,46 @@ public sealed class ClaudeCodeHarnessSessionPumpTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task BackgroundWake_ShowsTheTurnClaudeStartedByItselfLikeAnyOther()
+    {
+        // Recorded: a prompt starts a background command and its turn ends; when the command finishes, Claude Code
+        // goes on with no prompt (a new init, then output); then the host's next prompt.
+        var events = await PumpAsync(Fixture("background-wake.jsonl"));
+
+        AllText().ShouldBe(["STARTED", "The background task completed successfully with output \"bgdone\".", "SECOND"]);
+        var statuses = events
+            .Where(e => e.Type is EventTypes.SessionIdle or EventTypes.SessionStatus)
+            .Select(e => e.Type == EventTypes.SessionIdle ? "idle" : e.Payload!.Value.GetProperty("status").GetProperty("type").GetString())
+            .ToList();
+        statuses.ShouldBe(["busy", "idle", "busy", "idle", "busy", "idle"]);
+        _session.BackgroundWork.ShouldBeEmpty();
+        AllText().ShouldNotContain(t => t.StartsWith("Claude Code", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task BackgroundWorkStarted_IsTrackedUntilClaudeSaysItEnded()
+    {
+        var lines = Fixture("background-wake.jsonl");
+        var pump = new System.IO.Pipelines.Pipe();
+        await using var process = new ClaudeCodeProcessManager(NullLogger<ClaudeCodeProcessManager>.Instance);
+
+        // Up to the first result: the command still runs.
+        await using (var writer = pump.Writer.AsStream())
+        {
+            await writer.WriteAsync(Encoding.UTF8.GetBytes(string.Join("\n", lines.Take(7)) + "\n"));
+            var reading = _session.PumpStdoutAsync(new StreamReader(pump.Reader.AsStream()), process);
+            await WaitForAsync(() => _session.BackgroundWork.Count == 1);
+            _session.BackgroundWork.ShouldBe(["bknxvrqqv"]);
+
+            // Its notification ends it.
+            await writer.WriteAsync(Encoding.UTF8.GetBytes(string.Join("\n", lines.Skip(7).Take(3)) + "\n"));
+            await WaitForAsync(() => _session.BackgroundWork.Count == 0);
+            await pump.Writer.CompleteAsync();
+            await reading;
+        }
+    }
+
+    [Fact]
     public async Task TwoToolRun_GivesMessagesIdsThatSortInTheOrderTheyArrived()
     {
         await PumpAsync(Fixture("two-tools.jsonl"));
@@ -171,6 +211,17 @@ public sealed class ClaudeCodeHarnessSessionPumpTests : IAsyncLifetime
 
         // Nothing else will say the turn is over.
         events.Count(e => e.Type == EventTypes.SessionIdle).ShouldBe(1);
+    }
+
+    private static async Task WaitForAsync(Func<bool> condition)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!condition())
+        {
+            if (DateTime.UtcNow > deadline)
+                throw new TimeoutException("The condition never held.");
+            await Task.Delay(10);
+        }
     }
 
     private static string[] Fixture(string name)

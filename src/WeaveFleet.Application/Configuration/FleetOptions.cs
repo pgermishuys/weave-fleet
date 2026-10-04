@@ -414,8 +414,16 @@ public sealed class ClaudeCodeOptions
     public decimal? MaxBudgetUsd { get; set; }
 
     /// <summary>
-    /// Seconds a prompt may run before its process is killed. Null = no limit (the default), since an
+    /// Seconds a turn may run before its process is killed. Null = no limit (the default), since an
     /// agent's turn can take much longer than a few minutes.
     /// </summary>
     public int? ProcessTimeoutSeconds { get; set; }
+
+    /// <summary>
+    /// Seconds a session's claude process is kept with no turn running and no background work before Fleet stops it.
+    /// The process stays between turns so the work an agent leaves running in the background (shells, monitors,
+    /// subagents) carries on; one with nothing running only holds memory, and the next prompt resumes the conversation
+    /// in a new one in about a second. Default 10 minutes; 0 or less keeps it until the session stops.
+    /// </summary>
+    public int IdleShutdownSeconds { get; set; } = 600;
 }

@@ -38,21 +38,20 @@ public sealed class ClaudeCodeProcessManagerTests : IDisposable
     {
         var output = Path.Combine(_folder, "args.txt");
         var claude = Path.Combine(_folder, "claude");
-        await File.WriteAllTextAsync(claude, $"#!/bin/sh\nprintf '%s\\n' \"$@\" > '{output}'\ncat > /dev/null\n");
+        await File.WriteAllTextAsync(claude, $"#!/bin/sh\nprintf '%s\\n' \"$@\" > '{output}.tmp' && mv '{output}.tmp' '{output}'\ncat > /dev/null\n");
         if (!OperatingSystem.IsWindows())
             File.SetUnixFileMode(claude, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
 
         await using var manager = new ClaudeCodeProcessManager(NullLogger<ClaudeCodeProcessManager>.Instance);
-        var stdout = await manager.StartAsync(new ClaudeCodeProcessOptions
+        await manager.StartAsync(new ClaudeCodeProcessOptions
         {
             BinaryPath = claude,
             WorkingDirectory = _folder,
-            Prompt = "hello",
             PermissionMode = "bypassPermissions",
             AppendSystemPrompt = appendSystemPrompt,
         }, CancellationToken.None);
-        await stdout.ReadToEndAsync();
 
+        // claude keeps running for the next prompt; the arguments are written as it starts.
         for (var i = 0; i < 50 && !File.Exists(output); i++)
             await Task.Delay(100);
         return [.. (await File.ReadAllTextAsync(output)).Split('\n')];

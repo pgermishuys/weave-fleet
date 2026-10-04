@@ -29,6 +29,7 @@ internal static class ClaudeCodeJsonOptions
 [JsonDerivedType(typeof(ClaudeCodeResultMessage), "result")]
 [JsonDerivedType(typeof(ClaudeCodeControlRequest), "control_request")]
 [JsonDerivedType(typeof(ClaudeCodeControlCancelRequest), "control_cancel_request")]
+[JsonDerivedType(typeof(ClaudeCodeControlResponse), "control_response")]
 internal record ClaudeCodeStreamMessage;
 
 /// <summary>
@@ -61,7 +62,25 @@ internal sealed record ClaudeCodeControlCancelRequest : ClaudeCodeStreamMessage
     [JsonPropertyName("request_id")] public string? RequestId { get; init; }
 }
 
-/// <summary>System message (e.g. init). Contains session metadata.</summary>
+/// <summary>Claude Code's answer to a <c>control_request</c> Fleet sent it (an interrupt, a model change).</summary>
+internal sealed record ClaudeCodeControlResponse : ClaudeCodeStreamMessage
+{
+    [JsonPropertyName("response")] public ClaudeCodeControlResponseBody? Response { get; init; }
+}
+
+/// <summary>What a <see cref="ClaudeCodeControlResponse"/> says: <c>success</c>, or <c>error</c> and why.</summary>
+internal sealed record ClaudeCodeControlResponseBody
+{
+    [JsonPropertyName("subtype")] public string? Subtype { get; init; }
+    [JsonPropertyName("request_id")] public string? RequestId { get; init; }
+    [JsonPropertyName("error")] public string? Error { get; init; }
+}
+
+/// <summary>
+/// System message. <c>init</c> opens every turn, including one Claude Code starts by itself, and carries the session
+/// metadata. <c>task_started</c>, <c>task_notification</c> and <c>background_tasks_changed</c> report the work an agent
+/// leaves running: background shells, monitors and subagents.
+/// </summary>
 internal sealed record ClaudeCodeSystemMessage : ClaudeCodeStreamMessage
 {
     [JsonPropertyName("subtype")] public string? Subtype { get; init; }
@@ -69,6 +88,25 @@ internal sealed record ClaudeCodeSystemMessage : ClaudeCodeStreamMessage
     [JsonPropertyName("tools")] public JsonElement? Tools { get; init; }
     [JsonPropertyName("model")] public string? Model { get; init; }
     [JsonPropertyName("mcp_servers")] public JsonElement? McpServers { get; init; }
+
+    /// <summary>The task a <c>task_*</c> message is about.</summary>
+    [JsonPropertyName("task_id")] public string? TaskId { get; init; }
+
+    /// <summary>On <c>task_started</c>: false for a task its tool call waits on, which ends with the turn.</summary>
+    [JsonPropertyName("is_backgrounded")] public bool? IsBackgrounded { get; init; }
+
+    [JsonPropertyName("description")] public string? Description { get; init; }
+
+    /// <summary>On <c>background_tasks_changed</c>: every task still running.</summary>
+    [JsonPropertyName("tasks")] public IReadOnlyList<ClaudeCodeBackgroundTask>? Tasks { get; init; }
+}
+
+/// <summary>A task in a <c>background_tasks_changed</c> list.</summary>
+internal sealed record ClaudeCodeBackgroundTask
+{
+    [JsonPropertyName("task_id")] public string? TaskId { get; init; }
+    [JsonPropertyName("task_type")] public string? TaskType { get; init; }
+    [JsonPropertyName("description")] public string? Description { get; init; }
 }
 
 /// <summary>

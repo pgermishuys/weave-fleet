@@ -16,6 +16,14 @@ namespace WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 /// Wraps a Claude Code CLI session for a single Fleet session.
 /// Implements <see cref="IHarnessSession"/> with full database persistence.
 /// Each instance owns its own message persistence — the relay is not involved.
+/// <para>
+/// One <c>claude</c> process runs the session's prompts one after another, so the work an agent leaves running in the
+/// background (a <c>Bash</c> call with <c>run_in_background</c>, a <c>Monitor</c>, a background subagent) carries on
+/// after its turn. When that work finishes Claude Code starts a turn by itself, which Fleet shows like any other.
+/// The process ends when the session stops, when Fleet shuts down, and once it has been idle for
+/// <see cref="ClaudeCodeOptions.IdleShutdownSeconds"/> with no background work; the next prompt starts another with
+/// <c>--resume</c>.
+/// </para>
 /// </summary>
 internal sealed class ClaudeCodeHarnessSession : IHarnessSession
 {
@@ -43,6 +51,26 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(6, "PumpFailed"),
             "Reading output from ClaudeCode instance {InstanceId} failed.");
 
+    private static readonly Action<ILogger, string, string, int, string, Exception?> LogWorkLost =
+        LoggerMessage.Define<string, string, int, string>(LogLevel.Warning, new EventId(7, "WorkLost"),
+            "Claude Code for session {SessionId} ended ({Reason}) with {Count} background task(s) still running; that work is lost: {Tasks}");
+
+    private static readonly Action<ILogger, string, string, Exception?> LogProcessEnded =
+        LoggerMessage.Define<string, string>(LogLevel.Information, new EventId(8, "ProcessEnded"),
+            "Claude Code for session {SessionId} ended: {Reason}.");
+
+    private static readonly Action<ILogger, string, string, string, Exception?> LogRequestRefused =
+        LoggerMessage.Define<string, string, string>(LogLevel.Warning, new EventId(9, "RequestRefused"),
+            "Claude Code for session {SessionId} didn't do '{Request}': {Error}");
+
+    private static readonly Action<ILogger, string, string, string, Exception?> LogBackgroundWork =
+        LoggerMessage.Define<string, string, string>(LogLevel.Debug, new EventId(10, "BackgroundWork"),
+            "Claude Code for session {SessionId}: {Change}; running in the background: {Tasks}");
+
+    private static readonly Action<ILogger, string, Exception?> LogWakeTurn =
+        LoggerMessage.Define<string>(LogLevel.Information, new EventId(11, "WakeTurn"),
+            "Claude Code for session {SessionId} started a turn by itself.");
+
     private readonly string _workingDirectory;
     private readonly ClaudeCodeOptions _config;
     private readonly IReadOnlyDictionary<string, string> _environmentVariables;
@@ -66,7 +94,11 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             SingleReader = false,
         });
 
+    // Held while a prompt is being sent, and by the idle shutdown, so neither starts or stops the process under the other.
     private readonly SemaphoreSlim _promptLock = new(1, 1);
+
+    // Guards the turn, the process and the background work, which the pump, prompts, Stop and the timers all change.
+    private readonly Lock _gate = new();
 
     // The running prompt's assistant messages by Claude's message id, and the message each tool call is in.
     // Claude Code streams one content block per line and sends tool results as separate user lines,
@@ -80,14 +112,21 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     private readonly PermissionGate _permissions = new();
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, System.Text.Json.JsonElement> _askInputs = new(StringComparer.Ordinal);
 
+    // The work the agent left running, by Claude Code's task id, with what it is. Only enough to know whether the
+    // process may stop when idle, and to say what was lost when it ends anyway.
+    private readonly Dictionary<string, string> _backgroundWork = new(StringComparer.Ordinal);
+
     private string? _claudeSessionId;    // captured from init message, used for --resume
     // The memory notes from the session's first prompt, sent with every prompt after it: a system prompt that changes
     // between --resume runs can't reuse the conversation's prompt cache.
     private string? _memoryNotes;
     private string? _modelId;             // captured from init or result messages
     private HarnessSessionStatus _status = HarnessSessionStatus.Idle;
-    private ClaudeCodeProcessManager? _activeProcess;
-    private Task _activeTurn = Task.CompletedTask;
+    private ClaudeCodeProcessManager? _process;
+    private ProcessSettings? _processSettings;
+    private Task _pump = Task.CompletedTask;
+    private Turn? _turn;
+    private ITimer? _idleTimer;
     private volatile bool _aborting;
     private bool _disposed;
 
@@ -124,11 +163,24 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         _claudeSessionId = claudeSessionId;
     }
 
+    /// <summary>The clock for the idle shutdown and the turn timeout; the system's unless a test says otherwise.</summary>
+    internal TimeProvider Time { get; init; } = TimeProvider.System;
+
+    /// <summary>The background work Claude Code has reported and not yet reported finished, by task id.</summary>
+    internal IReadOnlyCollection<string> BackgroundWork
+    {
+        get
+        {
+            lock (_gate)
+                return [.. _backgroundWork.Keys];
+        }
+    }
+
     /// <inheritdoc />
     public string InstanceId { get; }
 
     /// <inheritdoc />
-    public int? ProcessId => _activeProcess?.ProcessId;
+    public int? ProcessId => _process?.ProcessId;
 
     /// <inheritdoc />
     public string HarnessType => "claude-code";
@@ -153,66 +205,219 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         {
             LogSendPrompt(_logger, InstanceId, null);
 
-            // 1. One claude process per session: a prompt sent mid-turn waits for that turn to end,
-            //    so both don't resume the same Claude session at once.
-            await _activeTurn.WaitAsync(ct).ConfigureAwait(false);
-            _aborting = false;
-            _turnMessages.Clear();
-            _toolCallMessageIds.Clear();
-
-            // The conversation is read back from Fleet's database, so the prompt is saved there, under
-            // the id Fleet already showed it with.
-            await PersistUserPromptAsync(text, options).ConfigureAwait(false);
-
-            // 2. Emit session busy status
-            var busyEvent = ClaudeCodeMapper.CreateSessionStatusEvent(_fleetSessionId, "busy");
-            await _eventChannel.Writer.WriteAsync(busyEvent, ct).ConfigureAwait(false);
-
-            // 3. Spawn claude process
-            var processManager = new ClaudeCodeProcessManager(
-                _loggerFactory.CreateLogger<ClaudeCodeProcessManager>());
-
-            var procOptions = new ClaudeCodeProcessOptions
-            {
-                BinaryPath = _config.BinaryPath,
-                WorkingDirectory = _workingDirectory,
-                Prompt = text,
-                SessionId = _claudeSessionId,  // null for first prompt
-                Model = options?.ModelId ?? _config.DefaultModel,
-                PermissionMode = PermissionModeFor(_permissions.Policy),
-                AsksForPermission = _permissions.Policy.Level != PermissionLevels.All,
-                AllowedTools = _config.AllowedTools,
-                MaxTurns = _config.MaxTurns,
-                MaxBudgetUsd = _config.MaxBudgetUsd,
-                AppendSystemPrompt = _memoryNotes ??= options?.MemoryNotes,
-                ProcessTimeout = _config.ProcessTimeoutSeconds is > 0 and var seconds
-                    ? TimeSpan.FromSeconds(seconds)
-                    : null,
-                EnvironmentVariables = _environmentVariables,
-            };
-
-            StreamReader stdout;
+            // 1. One turn at a time: a prompt sent mid-turn (Fleet's, or one Claude Code started by itself) waits for
+            //    that turn to end.
+            var turn = await BeginPromptedTurnAsync(ct).ConfigureAwait(false);
             try
             {
-                stdout = await processManager.StartAsync(procOptions, ct).ConfigureAwait(false);
+                // The conversation is read back from Fleet's database, so the prompt is saved there, under
+                // the id Fleet already showed it with.
+                await PersistUserPromptAsync(text, options).ConfigureAwait(false);
+
+                // 2. Emit session busy status
+                var busyEvent = ClaudeCodeMapper.CreateSessionStatusEvent(_fleetSessionId, "busy");
+                await _eventChannel.Writer.WriteAsync(busyEvent, ct).ConfigureAwait(false);
+
+                // 3. Send it to the session's claude process, starting one if there's none.
+                _memoryNotes ??= options?.MemoryNotes;
+                var line = ClaudeCodeInput.UserMessage(text);
+                var process = await EnsureProcessAsync(options, ct).ConfigureAwait(false);
+                if (!await SendToAsync(process, turn, line, ct).ConfigureAwait(false))
+                {
+                    // It exited between turns; a new one resumes the conversation.
+                    await StopProcessAsync(process, "it stopped reading its input").ConfigureAwait(false);
+                    process = await EnsureProcessAsync(options, ct).ConfigureAwait(false);
+                    if (!await SendToAsync(process, turn, line, ct).ConfigureAwait(false))
+                        throw new InvalidOperationException("Claude Code exited before it read the prompt.");
+                }
             }
             catch
             {
-                await processManager.DisposeAsync().ConfigureAwait(false);
-                await _eventChannel.Writer.WriteAsync(ClaudeCodeMapper.CreateSessionIdleEvent(_fleetSessionId), CancellationToken.None)
-                    .ConfigureAwait(false);
+                bool ended;
+                lock (_gate)
+                    ended = EndTurn(turn);
+                if (ended)
+                {
+                    await _eventChannel.Writer.WriteAsync(ClaudeCodeMapper.CreateSessionIdleEvent(_fleetSessionId), CancellationToken.None)
+                        .ConfigureAwait(false);
+                }
+
                 throw;
             }
-
-            _activeProcess = processManager;
-            _status = HarnessSessionStatus.Running;
-
-            // 4. Background pump — fire-and-forget (matches OpenCode pattern)
-            _activeTurn = Task.Run(() => PumpStdoutAsync(stdout, processManager), CancellationToken.None);
         }
         finally
         {
             _promptLock.Release();
+        }
+    }
+
+    /// <summary>Waits for a running turn to end, then starts Fleet's.</summary>
+    private async Task<Turn> BeginPromptedTurnAsync(CancellationToken ct)
+    {
+        while (true)
+        {
+            Task running;
+            lock (_gate)
+            {
+                if (_status is HarnessSessionStatus.Stopping or HarnessSessionStatus.Stopped)
+                    throw new ObjectDisposedException(nameof(ClaudeCodeHarnessSession), "The session has stopped.");
+                if (_turn is null)
+                    return BeginTurn(process: null);
+                running = _turn.Done.Task;
+            }
+
+            await running.WaitAsync(ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Writes the prompt to <paramref name="process"/>; from then on the turn is that process's.</summary>
+    private async Task<bool> SendToAsync(ClaudeCodeProcessManager process, Turn turn, string line, CancellationToken ct)
+    {
+        lock (_gate)
+            turn.Process ??= process;
+        if (await process.WriteLineAsync(line, ct).ConfigureAwait(false))
+            return true;
+
+        lock (_gate)
+        {
+            if (ReferenceEquals(turn.Process, process))
+                turn.Process = null;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// The session's claude process, set up for this prompt: a running one switches model and permission mode with
+    /// control requests; one that can't, or that runs without Fleet's permission prompts when they're now needed (or the
+    /// other way round), is replaced. A new one resumes the conversation.
+    /// </summary>
+    private async Task<ClaudeCodeProcessManager> EnsureProcessAsync(PromptOptions? options, CancellationToken ct)
+    {
+        var policy = _permissions.Policy;
+        var wanted = new ProcessSettings(
+            AsksForPermission: policy.Level != PermissionLevels.All,
+            PermissionMode: PermissionModeFor(policy),
+            Model: options?.ModelId ?? _config.DefaultModel);
+
+        ClaudeCodeProcessManager? process;
+        ProcessSettings? current;
+        lock (_gate)
+        {
+            process = _process;
+            current = _processSettings;
+        }
+
+        if (process is { IsRunning: true } && current is not null)
+        {
+            var model = wanted.Model ?? current.Model;
+            if (current.AsksForPermission == wanted.AsksForPermission
+                && await SwitchAsync(process, current.PermissionMode, wanted.PermissionMode,
+                    id => ClaudeCodeInput.SetPermissionMode(id, wanted.PermissionMode), ct).ConfigureAwait(false)
+                && await SwitchAsync(process, current.Model, model,
+                    id => ClaudeCodeInput.SetModel(id, model!), ct).ConfigureAwait(false))
+            {
+                lock (_gate)
+                    _processSettings = wanted with { Model = model };
+                return process;
+            }
+
+            await StopProcessAsync(process, "it couldn't switch to the prompt's model or permission settings").ConfigureAwait(false);
+        }
+        else if (process is not null)
+        {
+            await StopProcessAsync(process, "it had exited").ConfigureAwait(false);
+        }
+
+        return await StartProcessAsync(wanted, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Asks the running process to change a setting; true when it's already that, or it did.</summary>
+    private async Task<bool> SwitchAsync(
+        ClaudeCodeProcessManager process, string? from, string? to, Func<string, string> request, CancellationToken ct)
+    {
+        if (to is null || string.Equals(from, to, StringComparison.Ordinal))
+            return true;
+
+        var requestId = $"fleet-{Guid.NewGuid():N}";
+        var line = request(requestId);
+        var answer = await process.RequestAsync(requestId, line, _shutdownTimeout, ct).ConfigureAwait(false);
+        if (answer?.Subtype == "success")
+            return true;
+
+        LogRequestRefused(_logger, _fleetSessionId, line, answer?.Error ?? "no answer", null);
+        return false;
+    }
+
+    private async Task<ClaudeCodeProcessManager> StartProcessAsync(ProcessSettings settings, CancellationToken ct)
+    {
+        var processManager = new ClaudeCodeProcessManager(
+            _loggerFactory.CreateLogger<ClaudeCodeProcessManager>());
+
+        var procOptions = new ClaudeCodeProcessOptions
+        {
+            BinaryPath = _config.BinaryPath,
+            WorkingDirectory = _workingDirectory,
+            SessionId = _claudeSessionId,  // null for the session's first process
+            Model = settings.Model,
+            PermissionMode = settings.PermissionMode,
+            AsksForPermission = settings.AsksForPermission,
+            AllowedTools = _config.AllowedTools,
+            MaxTurns = _config.MaxTurns,
+            MaxBudgetUsd = _config.MaxBudgetUsd,
+            AppendSystemPrompt = _memoryNotes,
+            EnvironmentVariables = _environmentVariables,
+        };
+
+        StreamReader stdout;
+        try
+        {
+            stdout = await processManager.StartAsync(procOptions, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            await processManager.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+
+        lock (_gate)
+        {
+            _process = processManager;
+            _processSettings = settings;
+            // Background pump — reads every turn this process runs, until it exits.
+            _pump = Task.Run(() => PumpStdoutAsync(stdout, processManager), CancellationToken.None);
+        }
+
+        return processManager;
+    }
+
+    /// <summary>
+    /// Ends <paramref name="process"/> and waits for its output to be read to the end. Background work still running
+    /// in it is lost; the log says so, with <paramref name="reason"/>.
+    /// </summary>
+    private async Task StopProcessAsync(ClaudeCodeProcessManager process, string reason)
+    {
+        Task pump;
+        lock (_gate)
+        {
+            process.StopReason ??= reason;
+            pump = ReferenceEquals(_process, process) ? _pump : Task.CompletedTask;
+        }
+
+        await process.StopAsync(_shutdownTimeout).ConfigureAwait(false);
+        try
+        {
+            await pump.WaitAsync(_shutdownTimeout + TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            // Its output never closed; the process is gone either way.
+        }
+
+        lock (_gate)
+        {
+            if (ReferenceEquals(_process, process))
+                ForgetProcess();
         }
     }
 
@@ -259,21 +464,66 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Stops the running turn with Claude Code's <c>interrupt</c> request, so work the agent left running in the
+    /// background carries on. Only if that doesn't end the turn is the process killed, and that work with it.
+    /// </remarks>
     public async Task AbortAsync(CancellationToken ct)
     {
         LogAbort(_logger, InstanceId, null);
 
-        if (_activeProcess is { IsRunning: true })
+        Turn? turn;
+        ClaudeCodeProcessManager? process;
+        lock (_gate)
         {
-            _aborting = true;
-            await _activeProcess.StopAsync(_shutdownTimeout).ConfigureAwait(false);
+            turn = _turn;
+            process = turn?.Process ?? _process;
         }
 
-        _status = HarnessSessionStatus.Idle;
+        // No turn running: background work isn't the user's to stop here.
+        if (turn is null)
+            return;
+
+        _aborting = true;
+        if (process is { IsRunning: true })
+        {
+            var requestId = $"fleet-{Guid.NewGuid():N}";
+            var answer = await process.RequestAsync(requestId, ClaudeCodeInput.Interrupt(requestId), _shutdownTimeout, ct)
+                .ConfigureAwait(false);
+            if (answer?.Subtype == "success" && await EndsWithinAsync(turn, _shutdownTimeout).ConfigureAwait(false))
+                return;
+
+            LogRequestRefused(_logger, _fleetSessionId, "interrupt", answer?.Error ?? "the turn didn't end", null);
+            await StopProcessAsync(process, "an interrupt didn't stop its turn").ConfigureAwait(false);
+        }
+
+        // Nothing is left to end the turn.
+        bool ended;
+        lock (_gate)
+            ended = EndTurn(turn);
+        if (ended)
+            _eventChannel.Writer.TryWrite(ClaudeCodeMapper.CreateSessionIdleEvent(_fleetSessionId));
+    }
+
+    private static async Task<bool> EndsWithinAsync(Turn turn, TimeSpan timeout)
+    {
+        try
+        {
+            await turn.Done.Task.WaitAsync(timeout).ConfigureAwait(false);
+            return true;
+        }
+        catch (TimeoutException)
+        {
+            return false;
+        }
     }
 
     /// <inheritdoc />
-    /// <remarks>Claude Code reads its mode when a prompt starts its process, so a changed level applies from the next prompt.</remarks>
+    /// <remarks>
+    /// Applies from the next prompt: Fleet switches the running process's permission mode then, or starts another
+    /// (resuming the conversation) when Claude Code can't switch, e.g. into <c>bypassPermissions</c>, or when Fleet's
+    /// permission prompts are needed and the process was started without them.
+    /// </remarks>
     public Task ApplyPermissionsAsync(PermissionPolicy policy, CancellationToken ct)
     {
         _permissions.Policy = policy;
@@ -283,7 +533,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     /// <inheritdoc />
     /// <remarks>
     /// "Don't ask again" is Fleet's to keep (<see cref="PermissionGate"/>): Claude Code's own session rules end with its
-    /// process, which ends after every prompt.
+    /// process, which can be replaced between prompts.
     /// </remarks>
     public async Task ReplyToPermissionAsync(string requestId, string reply, string? message, CancellationToken ct)
     {
@@ -298,7 +548,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 : $"The user refused this tool call and said: {message}")
             : ClaudeCodeInput.Allow(requestId, _askInputs.GetValueOrDefault(requestId));
 
-        if (_activeProcess is not { } process || !await process.WriteLineAsync(line, ct).ConfigureAwait(false))
+        if (_process is not { } process || !await process.WriteLineAsync(line, ct).ConfigureAwait(false))
         {
             SettlePermission(requestId, PermissionReplies.Gone);
             throw new KeyNotFoundException($"Permission request '{requestId}' isn't waiting for an answer: Claude Code has stopped.");
@@ -357,7 +607,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             _eventChannel.Writer.TryWrite(PermissionEvents.Status(ActivityStatuses.Busy, _fleetSessionId));
     }
 
-    /// <summary>The asks still waiting when the prompt's process ended: nothing will answer them now.</summary>
+    /// <summary>The asks still waiting when the turn or its process ended: nothing will answer them now.</summary>
     private void ForgetPermissionAsks()
     {
         _askInputs.Clear();
@@ -376,9 +626,9 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     /// <inheritdoc />
     public Task<HealthCheckResult> CheckHealthAsync(CancellationToken ct)
     {
-        if (_activeProcess?.IsRunning == true)
+        if (_process?.IsRunning == true)
         {
-            return Task.FromResult(new HealthCheckResult(true, "Prompt active."));
+            return Task.FromResult(new HealthCheckResult(true, _turn is null ? "Claude Code is running." : "Prompt active."));
         }
 
         return _status is HarnessSessionStatus.Idle or HarnessSessionStatus.Stopping
@@ -419,14 +669,22 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         => Task.FromResult<IReadOnlyList<ProviderInfo>>([]);
 
     /// <inheritdoc />
+    /// <remarks>Ends the claude process, and with it any work the agent left running in the background.</remarks>
     public async Task StopAsync(CancellationToken ct)
     {
         LogStop(_logger, InstanceId, null);
-        _status = HarnessSessionStatus.Stopping;
 
-        if (_activeProcess is not null)
+        ClaudeCodeProcessManager? process;
+        lock (_gate)
         {
-            await _activeProcess.StopAsync(_shutdownTimeout).ConfigureAwait(false);
+            _status = HarnessSessionStatus.Stopping;
+            DisarmIdleTimer();
+            process = _process;
+        }
+
+        if (process is not null)
+        {
+            await StopProcessAsync(process, "the session stopped").ConfigureAwait(false);
         }
 
         _eventChannel.Writer.TryComplete();
@@ -454,12 +712,209 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             }
         }
 
-        if (_activeProcess is not null)
+        if (_process is { } process)
         {
-            await _activeProcess.DisposeAsync().ConfigureAwait(false);
+            await process.DisposeAsync().ConfigureAwait(false);
         }
 
-        _promptLock.Dispose();
+        lock (_gate)
+            DisarmIdleTimer();
+    }
+
+    // -----------------------------------------------------------------------
+    // Turns, background work and the idle shutdown
+    // -----------------------------------------------------------------------
+
+    /// <summary>Starts a turn: Fleet's prompt (<paramref name="process"/> set once it's sent) or one Claude Code started.</summary>
+    private Turn BeginTurn(ClaudeCodeProcessManager? process)
+    {
+        var turn = new Turn { Process = process };
+        _turn = turn;
+        _aborting = false;
+        _turnMessages.Clear();
+        _toolCallMessageIds.Clear();
+        _status = HarnessSessionStatus.Running;
+        DisarmIdleTimer();
+
+        if (_config.ProcessTimeoutSeconds is > 0 and var seconds)
+        {
+            turn.Timeout = Time.CreateTimer(
+                _ => _ = TimeOutAsync(turn), null, TimeSpan.FromSeconds(seconds), Timeout.InfiniteTimeSpan);
+        }
+
+        return turn;
+    }
+
+    /// <summary>Ends <paramref name="turn"/> if it's still the running one; true when it was.</summary>
+    private bool EndTurn(Turn turn)
+    {
+        if (!ReferenceEquals(_turn, turn))
+            return false;
+
+        _turn = null;
+        turn.Timeout?.Dispose();
+        if (_status is not HarnessSessionStatus.Stopping and not HarnessSessionStatus.Stopped)
+            _status = HarnessSessionStatus.Idle;
+        ArmIdleTimer();
+        turn.Done.TrySetResult();
+        return true;
+    }
+
+    /// <summary>A turn that ran past <see cref="ClaudeCodeOptions.ProcessTimeoutSeconds"/>: its process is killed.</summary>
+    private async Task TimeOutAsync(Turn turn)
+    {
+        ClaudeCodeProcessManager? process;
+        lock (_gate)
+            process = ReferenceEquals(_turn, turn) ? turn.Process : null;
+
+        if (process is null)
+            return;
+
+        process.StopReason ??= $"a turn ran past the {_config.ProcessTimeoutSeconds}-second limit";
+        await process.StopForTimeoutAsync(_shutdownTimeout).ConfigureAwait(false);
+    }
+
+    /// <summary>The process this line came from, and the turn it belongs to; a line with no turn starts one.</summary>
+    private void JoinTurn(ClaudeCodeProcessManager processManager)
+    {
+        bool woke;
+        lock (_gate)
+        {
+            if (_status is HarnessSessionStatus.Stopping or HarnessSessionStatus.Stopped)
+                return;
+
+            woke = _turn is null;
+            if (woke)
+                BeginTurn(processManager);
+            else
+                _turn!.Process ??= processManager;
+        }
+
+        if (woke)
+        {
+            // Claude Code went on by itself, e.g. when background work it was waiting on finished.
+            LogWakeTurn(_logger, _fleetSessionId, null);
+            _eventChannel.Writer.TryWrite(ClaudeCodeMapper.CreateSessionStatusEvent(_fleetSessionId, "busy"));
+        }
+    }
+
+    /// <summary>Keeps track of the work the agent left running, from Claude Code's <c>task_*</c> system messages.</summary>
+    private void TrackBackgroundWork(ClaudeCodeSystemMessage system)
+    {
+        string change;
+        string running;
+        lock (_gate)
+        {
+            switch (system)
+            {
+                // A task its tool call waits on (a foreground subagent, say) ends with the turn.
+                case { Subtype: "task_started", TaskId: { } started, IsBackgrounded: true }:
+                    _backgroundWork[started] = system.Description ?? started;
+                    change = $"{started} started";
+                    break;
+                case { Subtype: "task_notification", TaskId: { } ended }:
+                    if (!_backgroundWork.Remove(ended))
+                        return;
+                    change = $"{ended} ended";
+                    break;
+                // The whole list of what's still running.
+                case { Subtype: "background_tasks_changed", Tasks: { } tasks }:
+                    _backgroundWork.Clear();
+                    foreach (var task in tasks)
+                    {
+                        if (task.TaskId is { } id)
+                            _backgroundWork[id] = task.Description ?? id;
+                    }
+
+                    change = "list changed";
+                    break;
+                default:
+                    return;
+            }
+
+            if (_backgroundWork.Count > 0)
+                DisarmIdleTimer();
+            else if (_turn is null)
+                ArmIdleTimer();
+            running = DescribeBackgroundWork();
+        }
+
+        LogBackgroundWork(_logger, _fleetSessionId, change, running, null);
+    }
+
+    private string DescribeBackgroundWork()
+        => _backgroundWork.Count == 0
+            ? "nothing"
+            : string.Join(", ", _backgroundWork.Select(work => $"{work.Key} ({work.Value})"));
+
+    /// <summary>
+    /// Starts the idle countdown: with no turn running and no background work, the process stops after
+    /// <see cref="ClaudeCodeOptions.IdleShutdownSeconds"/>, so an idle session doesn't keep a claude process for ever.
+    /// </summary>
+    private void ArmIdleTimer()
+    {
+        DisarmIdleTimer();
+        if (_config.IdleShutdownSeconds is not > 0 || _process is null || _turn is not null || _backgroundWork.Count > 0
+            || _status is HarnessSessionStatus.Stopping or HarnessSessionStatus.Stopped)
+        {
+            return;
+        }
+
+        var process = _process;
+        _idleTimer = Time.CreateTimer(
+            _ => _ = StopIfIdleAsync(process), null, TimeSpan.FromSeconds(_config.IdleShutdownSeconds), Timeout.InfiniteTimeSpan);
+    }
+
+    private void DisarmIdleTimer()
+    {
+        _idleTimer?.Dispose();
+        _idleTimer = null;
+    }
+
+    private async Task StopIfIdleAsync(ClaudeCodeProcessManager process)
+    {
+        // A prompt on its way in: it's not idle.
+        if (!await _promptLock.WaitAsync(0).ConfigureAwait(false))
+            return;
+
+        try
+        {
+            lock (_gate)
+            {
+                if (!ReferenceEquals(_process, process) || _turn is not null || _backgroundWork.Count > 0)
+                    return;
+            }
+
+            await StopProcessAsync(process, $"idle for {_config.IdleShutdownSeconds} seconds with no background work")
+                .ConfigureAwait(false);
+        }
+        catch (ObjectDisposedException)
+        {
+            // The session was disposed meanwhile.
+        }
+        finally
+        {
+            try
+            {
+                _promptLock.Release();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Disposed meanwhile.
+            }
+        }
+    }
+
+    /// <summary>
+    /// The process ended: it's no longer the session's, and the work it was running is gone with it.
+    /// Called with <see cref="_gate"/> held.
+    /// </summary>
+    private void ForgetProcess()
+    {
+        _process = null;
+        _processSettings = null;
+        _backgroundWork.Clear();
+        DisarmIdleTimer();
     }
 
     // -----------------------------------------------------------------------
@@ -468,17 +923,19 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
 
     internal async Task PumpStdoutAsync(StreamReader stdout, ClaudeCodeProcessManager processManager)
     {
-        var sawResult = false;
         try
         {
             await foreach (var msg in ClaudeCodeStdioClient
                 .ReadMessagesAsync(stdout, _logger, CancellationToken.None)
                 .ConfigureAwait(false))
             {
-                // Capture session ID from init message
+                // Capture session ID from init message. Every turn opens with one, including one Claude Code starts
+                // by itself.
                 if (msg is ClaudeCodeSystemMessage { Subtype: "init" } init)
                 {
-                    if (init.SessionId is not null)
+                    JoinTurn(processManager);
+
+                    if (init.SessionId is not null && init.SessionId != _claudeSessionId)
                     {
                         _claudeSessionId = init.SessionId;
                         LogSessionId(_logger, init.SessionId, null);
@@ -489,10 +946,15 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                     if (init.Model is not null)
                         _modelId = init.Model;
                 }
+                else if (msg is ClaudeCodeSystemMessage system)
+                {
+                    TrackBackgroundWork(system);
+                }
                 // Lines with a parent_tool_use_id are a sub-agent's own steps; the conversation shows
                 // the call that started the sub-agent, not what it did.
                 else if (msg is ClaudeCodeAssistantMessage { ParentToolUseId: null } assistantMsg)
                 {
+                    JoinTurn(processManager);
                     await AddAssistantBlocksAsync(assistantMsg).ConfigureAwait(false);
 
                     if (assistantMsg.Message?.Model is not null)
@@ -501,6 +963,10 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 else if (msg is ClaudeCodeUserMessage { ParentToolUseId: null } userMsg)
                 {
                     await ApplyToolResultsAsync(userMsg).ConfigureAwait(false);
+                }
+                else if (msg is ClaudeCodeControlResponse { Response: { } response })
+                {
+                    processManager.CompleteRequest(response);
                 }
                 else if (msg is ClaudeCodeControlRequest { RequestId: { } requestId, Request: { Subtype: "can_use_tool" } toolRequest })
                 {
@@ -518,44 +984,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 }
                 else if (msg is ClaudeCodeResultMessage result)
                 {
-                    sawResult = true;
-
-                    // With stream-json input claude waits for more until stdin closes; the turn is over.
-                    processManager.CloseInput();
-                    ForgetPermissionAsks();
-
-                    // Extract analytics
-                    if (_analyticsCollector is not null)
-                    {
-                        var tokenEvent = ClaudeCodeMapper.TryExtractTokenEvent(
-                            result,
-                            _fleetSessionId,
-                            _projectId,
-                            _projectName,
-                            _workingDirectory,
-                            _modelId,
-                            _ownerUserId);
-                        if (tokenEvent is not null)
-                            _analyticsCollector.AcceptTokenEvent(tokenEvent);
-                    }
-
-                    if (result.SessionId is not null && _claudeSessionId is null)
-                    {
-                        _claudeSessionId = result.SessionId;
-                        // Persist resume token captured from result message (fallback)
-                        _ = PersistResumeTokenAsync(result.SessionId);
-                    }
-
-                    // Claude Code writes some failures as an assistant message already, e.g. "Not logged in".
-                    var failure = ClaudeCodeMapper.DescribeFailedResult(result);
-                    if (failure is not null && !TurnEndsWithText(failure))
-                        await PersistNoticeAsync($"Claude Code stopped: {failure}").ConfigureAwait(false);
-
-                    _status = HarnessSessionStatus.Idle;
-
-                    var events = ClaudeCodeMapper.ToFrontendEvents(msg, _fleetSessionId);
-                    foreach (var evt in events)
-                        await _eventChannel.Writer.WriteAsync(evt, CancellationToken.None).ConfigureAwait(false);
+                    await EndTurnAsync(result, processManager).ConfigureAwait(false);
                 }
             }
         }
@@ -565,35 +994,120 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         }
         finally
         {
-            // A run that ends without a result line crashed or was killed. Unless the user stopped it,
-            // say so in the conversation: otherwise the prompt just goes unanswered.
-            var stopping = _status is HarnessSessionStatus.Stopping or HarnessSessionStatus.Stopped;
-            if (!sawResult)
+            await OnProcessEndedAsync(processManager).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>A <c>result</c> line: the turn is over. The process carries on, waiting for the next prompt.</summary>
+    private async Task EndTurnAsync(ClaudeCodeResultMessage result, ClaudeCodeProcessManager processManager)
+    {
+        Turn? turn;
+        lock (_gate)
+            turn = _turn is { } running && (running.Process is null || ReferenceEquals(running.Process, processManager)) ? running : null;
+
+        ForgetPermissionAsks();
+
+        // Extract analytics
+        if (_analyticsCollector is not null)
+        {
+            var tokenEvent = ClaudeCodeMapper.TryExtractTokenEvent(
+                result,
+                _fleetSessionId,
+                _projectId,
+                _projectName,
+                _workingDirectory,
+                _modelId,
+                _ownerUserId);
+            if (tokenEvent is not null)
+                _analyticsCollector.AcceptTokenEvent(tokenEvent);
+        }
+
+        if (result.SessionId is not null && _claudeSessionId is null)
+        {
+            _claudeSessionId = result.SessionId;
+            // Persist resume token captured from result message (fallback)
+            _ = PersistResumeTokenAsync(result.SessionId);
+        }
+
+        if (_aborting)
+        {
+            // An interrupted turn ends in an error result; the user asked for it, so there's nothing to say, but its
+            // tool calls won't finish now.
+            await FailUnfinishedToolsAsync().ConfigureAwait(false);
+        }
+        else if (ClaudeCodeMapper.DescribeFailedResult(result) is { } failure && !TurnEndsWithText(failure))
+        {
+            // Claude Code writes some failures as an assistant message already, e.g. "Not logged in".
+            await PersistNoticeAsync($"Claude Code stopped: {failure}").ConfigureAwait(false);
+        }
+
+        if (turn is null)
+            return;
+
+        lock (_gate)
+        {
+            if (!EndTurn(turn))
+                return;
+        }
+
+        foreach (var evt in ClaudeCodeMapper.ToFrontendEvents(result, _fleetSessionId))
+            await _eventChannel.Writer.WriteAsync(evt, CancellationToken.None).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The process's output ended: it exited, or was stopped. A turn still running on it ends here; unless the user
+    /// stopped it, the conversation says why, since otherwise the prompt just goes unanswered.
+    /// </summary>
+    private async Task OnProcessEndedAsync(ClaudeCodeProcessManager processManager)
+    {
+        Turn? turn;
+        bool current;
+        string lostWork = string.Empty;
+        int lostCount;
+        lock (_gate)
+        {
+            turn = _turn is { } running && ReferenceEquals(running.Process, processManager) ? running : null;
+            current = _process is null || ReferenceEquals(_process, processManager);
+            lostCount = current ? _backgroundWork.Count : 0;
+            if (lostCount > 0)
+                lostWork = DescribeBackgroundWork();
+            if (current && _process is not null)
+                ForgetProcess();
+            else if (current)
+                _backgroundWork.Clear();
+        }
+
+        var stopping = _status is HarnessSessionStatus.Stopping or HarnessSessionStatus.Stopped;
+        var reason = processManager.StopReason ?? "it exited";
+        LogProcessEnded(_logger, _fleetSessionId, reason, null);
+        if (lostCount > 0)
+            LogWorkLost(_logger, _fleetSessionId, reason, lostCount, lostWork, null);
+
+        if (turn is not null)
+        {
+            await FailUnfinishedToolsAsync().ConfigureAwait(false);
+
+            if (!_aborting && !stopping)
             {
-                await FailUnfinishedToolsAsync().ConfigureAwait(false);
-
-                if (!_aborting && !stopping)
-                {
-                    var exitCode = await processManager.WaitForExitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
-                    await PersistNoticeAsync(DescribeEarlyExit(processManager, exitCode)).ConfigureAwait(false);
-                }
-            }
-
-            ForgetPermissionAsks();
-            await processManager.DisposeAsync().ConfigureAwait(false);
-
-            if (ReferenceEquals(_activeProcess, processManager))
-                _activeProcess = null;
-
-            if (!stopping)
-            {
-                _status = HarnessSessionStatus.Idle;
-
-                // Without a result line nothing has said the turn is over.
-                if (!sawResult)
-                    _eventChannel.Writer.TryWrite(ClaudeCodeMapper.CreateSessionIdleEvent(_fleetSessionId));
+                var exitCode = await processManager.WaitForExitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+                await PersistNoticeAsync(DescribeEarlyExit(processManager, exitCode)).ConfigureAwait(false);
             }
         }
+
+        if (current)
+            ForgetPermissionAsks();
+        await processManager.DisposeAsync().ConfigureAwait(false);
+
+        if (turn is null)
+            return;
+
+        bool ended;
+        lock (_gate)
+            ended = EndTurn(turn);
+
+        // Without a result line nothing has said the turn is over.
+        if (ended && !stopping)
+            _eventChannel.Writer.TryWrite(ClaudeCodeMapper.CreateSessionIdleEvent(_fleetSessionId));
     }
 
     /// <summary>Adds an assistant line's content blocks to its message and saves it.</summary>
@@ -817,5 +1331,19 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             CreatedAt = createdAt,
             AvailableAt = createdAt
         };
+    }
+
+    /// <summary>What a claude process was started with, or switched to since.</summary>
+    private sealed record ProcessSettings(bool AsksForPermission, string PermissionMode, string? Model);
+
+    /// <summary>A turn: from Fleet's prompt, or Claude Code's own <c>init</c>, to its <c>result</c>.</summary>
+    private sealed class Turn
+    {
+        public TaskCompletionSource Done { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>The process running it; null until Fleet's prompt is sent.</summary>
+        public ClaudeCodeProcessManager? Process { get; set; }
+
+        public ITimer? Timeout { get; set; }
     }
 }
