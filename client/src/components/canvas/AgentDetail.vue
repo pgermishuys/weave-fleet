@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import { ArrowUpRight, Square } from "lucide-vue-next";
+import { ArrowUpRight, CircleStop } from "lucide-vue-next";
 import { useSessionStream } from "@/composables/use-session-stream";
 import { readWorkOutput, stopWork } from "@/composables/use-running-work";
 import { formatTokens } from "@/lib/format-utils";
@@ -152,7 +152,7 @@ async function stop(): Promise<void> {
         data-testid="agents-stop"
         @click="stop"
       >
-        <Square aria-hidden="true" />
+        <CircleStop aria-hidden="true" />
         {{ stopping ? "Stopping…" : "Stop" }}
       </button>
     </div>

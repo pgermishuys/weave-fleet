@@ -14,12 +14,14 @@ public sealed class SessionCapabilitiesResolver(
     {
         ArgumentNullException.ThrowIfNull(session);
 
+        var harness = harnessRegistry?.GetByType(session.HarnessType);
         return Resolve(
             session.LifecycleStatus,
             session.RetentionStatus,
             activityTracker.GetEffectiveActivityStatus(session.Id) ?? "idle",
             instanceTracker.Get(session.InstanceId) is not null,
-            harnessRegistry is null ? null : ForkUnsupportedReason(harnessRegistry.GetByType(session.HarnessType)));
+            ForkUnsupportedReason(harness),
+            PromptUnsupportedReason(session, harness));
     }
 
     /// <summary>
@@ -34,15 +36,29 @@ public sealed class SessionCapabilitiesResolver(
         _ => $"{harness.DisplayName} can't copy a conversation, so its sessions can't be forked.",
     };
 
+    /// <summary>
+    /// Why <paramref name="session"/> can never take a prompt, or null when it can: a subagent's child session on a
+    /// harness whose children can't be resumed (<see cref="HarnessCapabilities.ChildSessionsResumable"/>, Claude Code)
+    /// belongs to its parent's turn, and a message sent to it would wait in the queue for good.
+    /// </summary>
+    public static string? PromptUnsupportedReason(Session session, IHarness? harness) =>
+        session.ParentSessionId is not null && harness is { Capabilities: { SupportsChildSessions: true, ChildSessionsResumable: false } }
+            ? $"{harness.DisplayName} can't prompt a subagent on its own. Ask the session that started it."
+            : null;
+
     /// <param name="forkUnsupportedReason">
     /// Why the session's harness can't fork (<see cref="ForkUnsupportedReason"/>); null when it can.
+    /// </param>
+    /// <param name="promptUnsupportedReason">
+    /// Why the session can never be prompted (<see cref="PromptUnsupportedReason"/>); null when it can.
     /// </param>
     public static SessionActionCapabilities Resolve(
         string? lifecycleStatus,
         string? retentionStatus,
         string? activityStatus,
         bool isLive,
-        string? forkUnsupportedReason = null)
+        string? forkUnsupportedReason = null,
+        string? promptUnsupportedReason = null)
     {
         var normalizedRetentionStatus = Normalize(retentionStatus, "active");
         var effectiveLifecycleStatus = GetEffectiveLifecycleStatus(lifecycleStatus, isLive);
@@ -51,7 +67,8 @@ public sealed class SessionCapabilitiesResolver(
         // A retrying session, and one stopped on a question, are both still in their turn, so they can be stopped.
         var isBusy = SessionActivityTracker.IsInTurn(activityStatus);
         // A session that isn't running wakes on its next prompt.
-        var canPrompt = !isArchived && (isRunning || IsPromptableTerminal(effectiveLifecycleStatus));
+        var canPrompt = !isArchived && promptUnsupportedReason is null
+            && (isRunning || IsPromptableTerminal(effectiveLifecycleStatus));
         var canRestart = !isArchived;
         var canAbort = !isArchived && isRunning && isBusy;
         var canArchive = !isArchived;
@@ -67,7 +84,7 @@ public sealed class SessionCapabilitiesResolver(
             CanUnarchive: canUnarchive,
             CanFork: canFork,
             CanDelete: canDelete,
-            PromptDisabledReason: canPrompt ? null : GetPromptDisabledReason(isArchived),
+            PromptDisabledReason: canPrompt ? null : GetArchivedReadOnlyReason(isArchived) ?? promptUnsupportedReason ?? "Session is not running.",
             RestartDisabledReason: canRestart ? null : GetArchivedReadOnlyReason(isArchived),
             AbortDisabledReason: canAbort ? null : GetAbortDisabledReason(isArchived, isRunning, isBusy),
             ArchiveDisabledReason: canArchive ? null : GetAlreadyArchivedReason(isArchived),
@@ -95,9 +112,6 @@ public sealed class SessionCapabilitiesResolver(
 
     private static string? GetAlreadyArchivedReason(bool isArchived) =>
         isArchived ? "Session is already archived." : null;
-
-    private static string GetPromptDisabledReason(bool isArchived) =>
-        isArchived ? "Archived sessions are read-only." : "Session is not running.";
 
     private static string? GetAbortDisabledReason(bool isArchived, bool isRunning, bool isBusy)
     {

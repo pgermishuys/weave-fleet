@@ -180,7 +180,8 @@ internal sealed partial class InProcessFanOutService : BackgroundService
             session.RetentionStatus,
             activityStatus ?? "idle",
             isLive,
-            SessionCapabilitiesResolver.ForkUnsupportedReason(harness));
+            SessionCapabilitiesResolver.ForkUnsupportedReason(harness),
+            SessionCapabilitiesResolver.PromptUnsupportedReason(session, harness));
     }
 
     private static string? ParseActivityStatus(string eventType, JsonElement? payload)

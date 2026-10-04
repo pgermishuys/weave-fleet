@@ -2194,12 +2194,16 @@ public sealed partial class SessionOrchestrator(
         Session session,
         string activityStatus,
         string lifecycleStatus)
-        => SessionCapabilitiesResolver.Resolve(
+    {
+        var harness = harnessRegistry.GetByType(session.HarnessType);
+        return SessionCapabilitiesResolver.Resolve(
             lifecycleStatus,
             session.RetentionStatus,
             activityStatus,
             instanceTracker.Get(session.InstanceId) is not null,
-            SessionCapabilitiesResolver.ForkUnsupportedReason(harnessRegistry.GetByType(session.HarnessType)));
+            SessionCapabilitiesResolver.ForkUnsupportedReason(harness),
+            SessionCapabilitiesResolver.PromptUnsupportedReason(session, harness));
+    }
 
     private async Task<Result<Session>> GetSessionAsync(string sessionId)
     {

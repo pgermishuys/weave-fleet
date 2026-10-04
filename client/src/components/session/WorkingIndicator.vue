@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, shallowRef } from "vue";
+import { computed, onBeforeUnmount, shallowRef, watch } from "vue";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
+import { elapsedTickMs, formatElapsed } from "@/lib/running-work";
 
 const props = defineProps<{
   /** When the turn began (your last prompt), in epoch milliseconds; the time is left out without it. */
@@ -9,20 +10,22 @@ const props = defineProps<{
   waiting?: boolean;
 }>();
 
+// Ticks every second in the turn's first minute, then once a minute, as the strip's times do.
 const now = shallowRef(Date.now());
-const timer = setInterval(() => {
+let timer: ReturnType<typeof setTimeout> | undefined;
+function tick(): void {
   now.value = Date.now();
-}, 1000);
-onBeforeUnmount(() => clearInterval(timer));
-
-const elapsed = computed(() => {
-  if (!props.since) return null;
-  const seconds = Math.max(0, Math.floor((now.value - props.since) / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
-  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+  timer = setTimeout(tick, props.since ? elapsedTickMs(now.value - props.since) : 1_000);
+}
+tick();
+// A new turn starts counting seconds again at once.
+watch(() => props.since, () => {
+  clearTimeout(timer);
+  tick();
 });
+onBeforeUnmount(() => clearTimeout(timer));
+
+const elapsed = computed(() => (props.since ? formatElapsed(now.value - props.since) : null));
 </script>
 
 <template>

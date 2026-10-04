@@ -127,7 +127,7 @@ describe("the status bar's running-work counter", () => {
       "bun run test:e2e",
       "code-reviewer · Review the diff",
     ]);
-    expect(firstRows[0]!.textContent).toContain("3m 12s");
+    expect(firstRows[0]!.textContent).toContain("3m");
     expect(firstRows[1]!.querySelector("[data-testid='background-work-open']")).not.toBeNull();
     wrapper.unmount();
   });

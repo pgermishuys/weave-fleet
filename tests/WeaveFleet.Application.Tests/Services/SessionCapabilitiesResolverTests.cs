@@ -166,6 +166,34 @@ public sealed class SessionCapabilitiesResolverTests
     }
 
     [Fact]
+    public void a_subagent_session_takes_no_prompt_when_its_harness_cannot_resume_children()
+    {
+        var harnesses = new FakeHarnessRegistry();
+        harnesses.Register(new FakeHarness("claude-code", "Claude Code",
+            new HarnessCapabilities { SupportsChildSessions = true, ChildSessionsResumable = false }));
+        harnesses.Register(new FakeHarness("opencode2", "OpenCode 2",
+            new HarnessCapabilities { SupportsChildSessions = true, ChildSessionsResumable = true }));
+        var sut = new SessionCapabilitiesResolver(new InstanceTracker(), new SessionActivityTracker(), harnesses);
+
+        var claudeChild = sut.Resolve(new Session { Id = "a", InstanceId = "i-a", HarnessType = "claude-code", ParentSessionId = "p" });
+        var claudeParent = sut.Resolve(new Session { Id = "p", InstanceId = "i-p", HarnessType = "claude-code" });
+        var openCodeChild = sut.Resolve(new Session { Id = "b", InstanceId = "i-b", HarnessType = "opencode2", ParentSessionId = "q" });
+        var archivedChild = sut.Resolve(new Session
+        {
+            Id = "c", InstanceId = "i-c", HarnessType = "claude-code", ParentSessionId = "p", RetentionStatus = Archived,
+        });
+
+        claudeChild.CanPrompt.ShouldBeFalse();
+        claudeChild.PromptDisabledReason.ShouldBe("Claude Code can't prompt a subagent on its own. Ask the session that started it.");
+        // The rest of the session is as it was: it can still be archived, and it isn't busy.
+        claudeChild.CanArchive.ShouldBeTrue();
+        claudeParent.CanPrompt.ShouldBeTrue();
+        claudeParent.PromptDisabledReason.ShouldBeNull();
+        openCodeChild.CanPrompt.ShouldBeTrue();
+        archivedChild.PromptDisabledReason.ShouldBe(ArchivedReadOnlyReason);
+    }
+
+    [Fact]
     public void an_unknown_harness_is_not_refused_here()
     {
         // Fork itself reports a harness it can't find; the menu isn't the place to guess.
