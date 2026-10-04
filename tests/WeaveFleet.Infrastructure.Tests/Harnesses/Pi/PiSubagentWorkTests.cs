@@ -121,7 +121,7 @@ public sealed class PiSubagentWorkTests
         var ended = mapper.Map(new PiAgentEndEvent());
 
         mapper.RunningWork().ShouldBeEmpty();
-        var end = ended.ShouldHaveSingleItem(evt => evt.Type == EventTypes.WorkEnded);
+        var end = ended.Where(evt => evt.Type == EventTypes.WorkEnded).ShouldHaveSingleItem();
         Report(end).EndedReason.ShouldBe(WorkEndedReasons.Cancelled);
         events.ShouldNotContain(evt => evt.Type == EventTypes.WorkEnded);
     }
@@ -189,8 +189,8 @@ public sealed class PiSubagentWorkTests
             if (wrapper.RootElement.GetProperty("stream").GetString() != "stdout")
                 continue;
 
-            var line = PiJsonlClient.NormalizeDiscriminatorsFirst(wrapper.RootElement.GetProperty("line").GetString()!);
-            var evt = JsonSerializer.Deserialize(line, PiJsonContext.Default.PiEvent);
+            var json = PiJsonlClient.NormalizeDiscriminatorsFirst(wrapper.RootElement.GetProperty("line").GetString()!);
+            var evt = JsonSerializer.Deserialize(json, PiJsonContext.Default.PiEvent);
             events.Add(evt.ShouldNotBeNull());
         }
 
