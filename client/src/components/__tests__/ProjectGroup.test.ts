@@ -237,6 +237,27 @@ describe("ProjectGroup", () => {
       expect(order).toEqual(["quiet-fork", "child-2"]);
     });
 
+    it("nests a fork of a started session one step further in, under that session", () => {
+      const wrapper = mountWithLineage({
+        project: {
+          ...createProjectGroup(),
+          sessions: [
+            listItem("parent", "What can we learn from t3code?"),
+            listItem("capture", "Capture Claude Code subagents", { spawnedBySessionId: "parent", spawnKind: "api", sessionStatus: "active" }),
+            listItem("fork", "Fork: emit jobs over SignalR", { forkedFromSessionId: "capture", spawnKind: "fork" }),
+          ],
+        },
+        runningSubagents: new Map([["capture", [{ ...subagent, sessionId: "capture" }]]]),
+      });
+
+      const rows = wrapper.get("[data-testid='session-children']").findAll(".session-child")
+        .map((row) => {
+          const stub = row.find(".session-stub");
+          return [row.attributes("data-depth"), stub.exists() ? stub.attributes("data-id") : "subagent"];
+        });
+      expect(rows).toEqual([["1", "capture"], ["2", "subagent"], ["2", "fork"]]);
+    });
+
     it("a running subagent's row opens its session under its parent", async () => {
       const wrapper = mountWithLineage();
       await wrapper.get("[data-testid='subagent-session-row']").trigger("click");

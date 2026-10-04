@@ -4,6 +4,7 @@ import type { AccumulatedMessage } from "@/lib/client-types";
 import { toRunningWorkItem, type RunningWorkItem } from "@/lib/running-work";
 import {
   buildAgentsLineage,
+  lineageDescendants,
   lineageOf,
   nestLineage,
   runningSubagentsBySession,
@@ -68,20 +69,33 @@ describe("nestLineage", () => {
     expect(childrenOf.size).toBe(0);
   });
 
-  it("puts a fork of a fork under the top ancestor, one level deep, and survives a cycle", () => {
+  it("nests a fork of a started session under that session, and lists descendants depth first", () => {
     const deep = nestLineage([
       session("p"),
-      session("f1", { forkedFromSessionId: "p", spawnKind: "fork" }),
-      session("f2", { forkedFromSessionId: "f1", spawnKind: "fork" }),
+      session("s1", { spawnedBySessionId: "p", spawnKind: "api" }),
+      session("f1", { forkedFromSessionId: "s1", spawnKind: "fork" }),
+      session("s2", { spawnedBySessionId: "p", spawnKind: "api" }),
     ]);
-    expect(deep.roots.map((item) => item.session.id)).toEqual(["p"]);
-    expect(deep.childrenOf.get("p")?.map(({ item }) => item.session.id)).toEqual(["f1", "f2"]);
 
+    expect(deep.roots.map((item) => item.session.id)).toEqual(["p"]);
+    expect(deep.childrenOf.get("p")?.map(({ item }) => item.session.id)).toEqual(["s1", "s2"]);
+    expect(deep.childrenOf.get("s1")?.map(({ item, kind }) => [item.session.id, kind])).toEqual([["f1", "fork"]]);
+    expect(lineageDescendants(deep.roots[0]!, deep.childrenOf).map(({ item, depth }) => [item.session.id, depth])).toEqual([
+      ["s1", 1],
+      ["f1", 2],
+      ["s2", 1],
+    ]);
+  });
+
+  it("keeps every session in a loop of parents at the top", () => {
     const cycle = nestLineage([
       session("a", { forkedFromSessionId: "b", spawnKind: "fork" }),
       session("b", { forkedFromSessionId: "a", spawnKind: "fork" }),
+      session("c", { forkedFromSessionId: "a", spawnKind: "fork" }),
     ]);
-    expect(cycle.roots.length + [...cycle.childrenOf.values()].flat().length).toBe(2);
+
+    expect(cycle.roots.map((item) => item.session.id)).toEqual(["a", "b"]);
+    expect(cycle.childrenOf.get("a")?.map(({ item }) => item.session.id)).toEqual(["c"]);
   });
 });
 

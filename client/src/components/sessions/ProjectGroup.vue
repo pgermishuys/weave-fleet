@@ -27,7 +27,7 @@ import { groupRunSessions } from "@/lib/workflows";
 import { useWorkflowsStore } from "@/stores/workflows";
 import { heightEnter, heightLeave } from "@/lib/height-transition";
 import type { RunningWorkItem } from "@/lib/running-work";
-import { lineageKindLabel, nestLineage, sessionAgentState } from "@/lib/session-lineage";
+import { lineageDescendants, lineageKindLabel, nestLineage, sessionAgentState } from "@/lib/session-lineage";
 
 interface ProjectGroupModel {
   id: string;
@@ -87,17 +87,21 @@ function subagentsOf(session: SessionListItem): readonly RunningWorkItem[] {
 }
 
 type ChildRow =
-  | { kind: "subagent"; key: string; work: RunningWorkItem }
-  | { kind: "session"; key: string; item: SessionListItem; label: string };
+  | { kind: "subagent"; key: string; depth: number; work: RunningWorkItem }
+  | { kind: "session"; key: string; depth: number; item: SessionListItem; label: string };
 
-/** What shows under a session: its running subagents, then each session it started, followed by that one's subagents. */
+/**
+ * What shows under a session: its running subagents, then the sessions it forked or started, each followed by its own
+ * running subagents and children, one step further in.
+ */
 function childRowsOf(session: SessionListItem): ChildRow[] {
-  const subagent = (work: RunningWorkItem): ChildRow => ({ kind: "subagent", key: `work:${work.id}`, work });
+  const subagents = (item: SessionListItem, depth: number): ChildRow[] =>
+    subagentsOf(item).map((work) => ({ kind: "subagent", key: `work:${work.id}`, depth, work }));
   return [
-    ...subagentsOf(session).map(subagent),
-    ...(lineage.value.childrenOf.get(session.session.id) ?? []).flatMap(({ item, kind }): ChildRow[] => [
-      { kind: "session", key: rowKey(item), item, label: lineageKindLabel(kind) },
-      ...subagentsOf(item).map(subagent),
+    ...subagents(session, 1),
+    ...lineageDescendants(session, lineage.value.childrenOf).flatMap(({ item, kind, depth }): ChildRow[] => [
+      { kind: "session", key: rowKey(item), depth, item, label: lineageKindLabel(kind) },
+      ...subagents(item, depth + 1),
     ]),
   ];
 }
@@ -528,9 +532,12 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
               :aria-label="`Started from ${entry.session.session.title || 'this session'}`"
               data-testid="session-children"
             >
-              <template
+              <div
                 v-for="child in childRowsOf(entry.session)"
                 :key="child.key"
+                class="session-child"
+                :data-depth="child.depth"
+                :style="child.depth > 1 ? { paddingLeft: `${(child.depth - 1) * 12}px` } : undefined"
               >
                 <SubagentSessionRow
                   v-if="child.kind === 'subagent'"
@@ -547,7 +554,7 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
                   @drag-session-start="handleSessionDragStart"
                   @drag-session-end="handleSessionDragEnd"
                 />
-              </template>
+              </div>
             </div>
           </template>
         </div>

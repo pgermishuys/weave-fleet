@@ -34,7 +34,11 @@ const stateText = computed(() => {
     case "waiting": return "needs you";
     case "failed": return row.work?.endedReason === "lost" ? "lost" : "failed";
     case "stopped": return "stopped";
-    case "done": return row.work ? formatElapsed(workElapsedMs(row.work, props.now)) : "done";
+    case "done": {
+      // How long it ran; "done" for one that answered at once.
+      const ran = row.work ? workElapsedMs(row.work, props.now) : 0;
+      return ran >= 1000 ? formatElapsed(ran) : "done";
+    }
     default: return "idle";
   }
 });
@@ -234,7 +238,6 @@ const label = computed(() => [props.row.name, props.row.task, props.parent ? nul
 .agent-row__sub {
   grid-column: 2 / 4;
   display: flex;
-  gap: 6px;
   min-width: 0;
   overflow: hidden;
   color: var(--muted);
@@ -244,6 +247,7 @@ const label = computed(() => [props.row.name, props.row.task, props.parent ? nul
 
 .agent-row__kind {
   flex-shrink: 0;
+  margin-right: 6px;
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -260,6 +264,10 @@ const label = computed(() => [props.row.name, props.row.task, props.parent ? nul
 
 .agent-row__note {
   flex-shrink: 0;
+}
+
+.agent-row__runs-on + .agent-row__note {
+  margin-left: 4px;
 }
 
 @keyframes agent-row-pulse {

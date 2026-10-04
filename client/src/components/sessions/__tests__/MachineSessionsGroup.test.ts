@@ -55,16 +55,18 @@ describe("MachineSessionsGroup", () => {
         item("fork", "Fork of the mapper", { forkedFromSessionId: "parent", spawnKind: "fork" }),
         item("parent", "Capture subagents", { runningWorkCount: 2 }),
         item("other", "Something else"),
+        item("fork-of-fork", "Fork of the fork", { forkedFromSessionId: "fork", spawnKind: "fork" }),
       ],
     };
 
     const view = mount(MachineSessionsGroup, { props: { machine: macbook, state, query: "" } });
     const rows = view.findAll("[data-testid='machine-session-row']");
 
-    expect(rows.map((row) => row.attributes("data-session-id"))).toEqual(["parent", "fork", "other"]);
+    expect(rows.map((row) => row.attributes("data-session-id"))).toEqual(["parent", "fork", "fork-of-fork", "other"]);
     expect(rows[0]!.get(".machine-row__running").text()).toBe("2");
     expect(rows[1]!.classes()).toContain("machine-row--child");
     expect(rows[1]!.get(".machine-row__kind").text()).toBe("fork");
-    expect(rows[2]!.classes()).not.toContain("machine-row--child");
+    expect(rows[2]!.attributes("style")).toContain("padding-left: 22px");
+    expect(rows[3]!.classes()).not.toContain("machine-row--child");
   });
 });

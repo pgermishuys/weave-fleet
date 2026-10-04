@@ -6,7 +6,7 @@ import MachineHeader from "@/components/sessions/MachineHeader.vue";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { useRelativeTime } from "@/composables/use-relative-time";
 import { formatCompactAge, isSessionLive, sessionRowDim, sessionRowStatus } from "@/lib/session-row-status";
-import { lineageKindLabel, nestLineage, type LineageKind } from "@/lib/session-lineage";
+import { lineageDescendants, lineageKindLabel, nestLineage, type LineageKind } from "@/lib/session-lineage";
 import type { MachineEntry, MachineSessions } from "@/stores/machines";
 import type { NewSessionDraftRow } from "@/stores/workspace-ui";
 import { machineGroupKey, useSidebarStore } from "@/stores/sidebar";
@@ -43,8 +43,8 @@ const sessions = computed(() => {
 const rows = computed(() => {
   const { roots, childrenOf } = nestLineage(sessions.value);
   return roots.flatMap((item) => [
-    { item, kind: null as LineageKind | null },
-    ...(childrenOf.get(item.session.id) ?? []),
+    { item, kind: null as LineageKind | null, depth: 0 },
+    ...lineageDescendants(item, childrenOf),
   ]);
 });
 
@@ -97,10 +97,11 @@ function age(item: SessionListItem): string {
         {{ state.error }}
       </p>
       <button
-        v-for="{ item, kind } in rows"
+        v-for="{ item, kind, depth } in rows"
         :key="item.session.id"
         type="button"
         class="machine-row"
+        :style="depth > 1 ? { paddingLeft: `${10 + (depth - 1) * 12}px` } : undefined"
         :class="[
           { 'machine-row--stale': unreachable, 'machine-row--child': kind },
           sessionRowDim(item, now) > 0 ? `machine-row--dim-${sessionRowDim(item, now)}` : '',

@@ -67,44 +67,61 @@ export interface LineageChild<T> {
 export interface NestedLineage<T> {
   /** The sessions that show at the top level, in the order they came. */
   roots: T[];
-  /** Each root's children, by its id, in the order they came. */
+  /** Each session's children, by its id, in the order they came. */
   childrenOf: Map<string, LineageChild<T>[]>;
 }
 
 /**
- * Nests forks and started sessions under the session they came from, when it's in the same list. A child whose parent
- * isn't there (archived, filtered out, in another project) stays at the top level. The tree is one level deep: a fork
- * of a fork sits under the first ancestor that is a root, with its own kind.
+ * Nests forks and started sessions under the session they came from, when it's in the same list: a tree, so a fork of a
+ * session another one started sits under that one. A child whose parent isn't there (archived, filtered out, in another
+ * project) stays at the top level, as does every session in a loop of parents.
  */
 export function nestLineage<T extends LineageFields & { session: { id: string } }>(items: readonly T[]): NestedLineage<T> {
   const byId = new Map(items.map((item) => [item.session.id, item]));
+  const parentIn = (item: T) => {
+    const link = lineageOf(item);
+    return link && byId.has(link.parentId) ? link : null;
+  };
 
-  function rootOf(item: T): string | null {
-    const seen = new Set<string>([item.session.id]);
-    let link = lineageOf(item);
-    let root: string | null = null;
-    while (link && byId.has(link.parentId) && !seen.has(link.parentId)) {
-      root = link.parentId;
-      seen.add(root);
-      link = lineageOf(byId.get(root)!);
+  function inLoop(item: T): boolean {
+    const seen = new Set<string>();
+    for (let link = parentIn(item); link; link = parentIn(byId.get(link.parentId)!)) {
+      if (link.parentId === item.session.id) return true;
+      if (seen.has(link.parentId)) return false;
+      seen.add(link.parentId);
     }
-    return root;
+    return false;
   }
 
   const roots: T[] = [];
   const childrenOf = new Map<string, LineageChild<T>[]>();
   for (const item of items) {
-    const root = rootOf(item);
-    const kind = lineageOf(item)?.kind;
-    if (!root || !kind) {
+    const link = parentIn(item);
+    if (!link || inLoop(item)) {
       roots.push(item);
       continue;
     }
-    const children = childrenOf.get(root);
-    if (children) children.push({ item, kind });
-    else childrenOf.set(root, [{ item, kind }]);
+    const children = childrenOf.get(link.parentId);
+    if (children) children.push({ item, kind: link.kind });
+    else childrenOf.set(link.parentId, [{ item, kind: link.kind }]);
   }
   return { roots, childrenOf };
+}
+
+/** A session's descendants in the tree, depth first, each with how deep it sits (1 for a child). */
+export function lineageDescendants<T extends { session: { id: string } }>(
+  root: T,
+  childrenOf: ReadonlyMap<string, readonly LineageChild<T>[]>,
+): Array<LineageChild<T> & { depth: number }> {
+  const found: Array<LineageChild<T> & { depth: number }> = [];
+  const walk = (id: string, depth: number) => {
+    for (const child of childrenOf.get(id) ?? []) {
+      found.push({ ...child, depth });
+      walk(child.item.session.id, depth + 1);
+    }
+  };
+  walk(root.session.id, 1);
+  return found;
 }
 
 /**
