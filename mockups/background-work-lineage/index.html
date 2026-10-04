@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Running work and lineage</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<style>
+/* Tokens copied from client/src/assets/main.css (dark default, light under data-theme). */
+:root {
+  --rail-bg: #0d0d10; --panel-bg: #141418; --card-bg: #1b1b20; --main-bg: #0d0d10;
+  --border: rgba(255,255,255,0.075); --text: #e8e8ec; --muted: #8e8e9a;
+  --coral: #D95A3A; --accent: #6366f1; --accent-dim: rgba(99,102,241,0.15);
+  --running: #22c55e; --idle: #f59e0b; --complete: #3b82f6; --error: #ef4444; --queued: #8b5cf6;
+  --radius-card: 10px; --radius-btn: 8px; --radius-panel: 12px;
+  --sheet-shadow: none; --code-bg: #0f0f12;
+  --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --rail-bg: #FFFFFF; --panel-bg: #FFFFFF; --card-bg: #ffffff; --main-bg: #F3F2EF;
+  --border: rgba(26,25,24,0.09); --text: #1A1918; --muted: #6E6A65;
+  --accent: #5B6EC7; --accent-dim: rgba(91,110,199,0.12);
+  --running: #16a34a; --idle: #d97706; --complete: #2563eb; --error: #dc2626; --queued: #7c3aed;
+  --sheet-shadow: 0 1px 2px rgba(26,25,24,0.04), 0 12px 32px -18px rgba(26,25,24,0.18);
+  --code-bg: #F3F2EF;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--main-bg); color: var(--text); font: 14px/1.5 var(--font-sans); -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; }
+svg.lucide { width: 16px; height: 16px; stroke-width: 1.75; flex-shrink: 0; }
+.mono { font-family: var(--font-mono); }
+.muted { color: var(--muted); }
+
+/* ── Shell ─────────────────────────────────────────── */
+.app { overflow: hidden; display: grid; grid-template-columns: 64px 300px minmax(0,1fr) 400px; grid-template-rows: minmax(0,1fr) 34px; height: 100vh; gap: 0 8px; padding: 8px 8px 0 0; }
+.rail { grid-row: 1 / 3; background: var(--rail-bg); display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0 14px; }
+.rail .logo { font-weight: 700; color: var(--accent); font-size: 20px; letter-spacing: -1px; margin-bottom: 14px; }
+.rail-btn { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 10px; color: var(--muted); border: 0; background: transparent; }
+.rail-btn.on { background: var(--card-bg); color: var(--text); }
+.rail .spacer { flex: 1; }
+
+.sidebar { display: flex; flex-direction: column; gap: 10px; min-height: 0; padding-top: 4px; }
+.new-btn { display: flex; align-items: center; justify-content: center; gap: 8px; height: 40px; border: 1px solid var(--border); border-radius: var(--radius-btn); background: var(--card-bg); font-weight: 500; }
+.filter { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; border-radius: var(--radius-btn); background: var(--card-bg); color: var(--muted); }
+.group-h { display: flex; align-items: center; gap: 6px; padding: 6px 8px 4px; color: var(--muted); font-size: 13px; font-weight: 500; }
+.group-h .count { margin-left: auto; font-size: 12px; }
+.rows { display: flex; flex-direction: column; gap: 1px; }
+.row { display: flex; align-items: center; gap: 9px; min-height: 32px; padding: 0 10px; border-radius: var(--radius-btn); color: color-mix(in srgb, var(--text) 86%, transparent); position: relative; }
+.row.active { background: var(--card-bg); color: var(--text); }
+.row .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .meta { font-size: 12px; color: var(--muted); flex-shrink: 0; }
+.row .caret { width: 14px; height: 14px; color: var(--muted); margin-left: -4px; }
+.glyph-slot { width: 8px; flex-shrink: 0; display: grid; place-items: center; }
+.dot { width: 8px; height: 8px; border-radius: 50%; }
+.dot.run { background: var(--running); animation: pulse 2s infinite; }
+.dot.ring { border: 1.5px solid var(--muted); }
+.dot.wait { background: var(--idle); }
+.dot.done { background: var(--complete); }
+.quad { width: 8px; height: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; }
+.quad i { width: 3.5px; height: 3.5px; border-radius: 50%; background: var(--running); animation: quad 0.8s infinite; }
+.quad i:nth-child(2){animation-delay:.2s}.quad i:nth-child(4){animation-delay:.4s}.quad i:nth-child(3){animation-delay:.6s}
+@keyframes quad { 0%,100%{opacity:1} 50%{opacity:.15} }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.45} }
+@media (prefers-reduced-motion: reduce) { .dot.run, .quad i { animation: none; } }
+
+/* New: background count chip on a session row */
+.bg-chip { display: inline-flex; align-items: center; gap: 3px; height: 18px; padding: 0 6px; border-radius: 999px; background: color-mix(in srgb, var(--running) 14%, transparent); color: var(--running); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.bg-chip svg.lucide { width: 11px; height: 11px; stroke-width: 2.25; }
+/* New: nested children */
+.children { display: flex; flex-direction: column; gap: 1px; margin-left: 13px; padding-left: 10px; border-left: 1px solid var(--border); }
+.children .row { min-height: 28px; font-size: 13px; }
+.kind { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); flex-shrink: 0; }
+.archived { margin-top: auto; display: flex; align-items: center; gap: 8px; padding: 12px 10px; border-top: 1px solid var(--border); color: var(--muted); }
+
+/* ── Conversation sheet ────────────────────────────── */
+.sheet { background: var(--panel-bg); border-radius: var(--radius-panel) var(--radius-panel) 0 0; box-shadow: var(--sheet-shadow); display: flex; flex-direction: column; min-height: 0; min-width: 0; border: 1px solid var(--border); border-bottom: 0; }
+.sheet-h { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
+.sheet-h .t { font-weight: 600; font-size: 15px; }
+.sheet-h .sub { color: var(--muted); font-size: 13px; display: flex; gap: 6px; min-width: 0; white-space: nowrap; overflow: hidden; }
+.sheet-h .tools { margin-left: auto; display: flex; gap: 14px; color: var(--muted); }
+.from-link { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; white-space: nowrap; }
+.from-link b { color: var(--text); font-weight: 500; }
+.stream { flex: 1; min-height: 0; overflow: auto; padding: 24px 36px 12px; display: flex; flex-direction: column; gap: 16px; }
+.stream > * { max-width: 760px; width: 100%; margin: 0 auto; }
+.bubble { align-self: flex-end; max-width: 560px; margin-right: 0; padding: 10px 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--card-bg); width: auto; }
+.bubble-wrap { display: flex; justify-content: flex-end; }
+.say { margin: 0; }
+.tools-card { border: 1px solid var(--border); border-radius: var(--radius-card); padding: 4px; display: flex; flex-direction: column; gap: 2px; }
+.tool { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 7px; min-width: 0; }
+.tool .name { font-weight: 600; }
+.tool .arg { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+.tool .right { margin-left: auto; color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.pill { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+.thinking { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+
+/* ── New: running-work strip, built from the queued-messages row style ── */
+.dock { padding: 0 36px 16px; display: flex; flex-direction: column; gap: 6px; }
+.dock > * { max-width: 760px; width: 100%; margin: 0 auto; }
+.running { border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--card-bg); overflow: hidden; }
+.running-h { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px 6px 12px; border: 0; background: transparent; text-align: left; cursor: pointer; font-size: 12px; }
+.running-h .lbl { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.running-h .sum { color: var(--text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.running-h svg.lucide { color: var(--muted); width: 14px; height: 14px; }
+.running ol { list-style: none; margin: 0; padding: 0 4px 4px; display: flex; flex-direction: column; gap: 2px; }
+.job { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 3px 4px 3px 8px; border-radius: 7px; font-size: 12px; }
+.job:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+.job svg.lucide { width: 14px; height: 14px; color: var(--muted); }
+.job .k { flex-shrink: 0; width: 58px; color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.job .what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.job .what code { font-family: var(--font-mono); font-size: 11.5px; }
+.job .model { color: var(--muted); }
+.job .time { color: var(--muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.job.done .what, .job.done .time { color: var(--muted); }
+.job.done .ok { color: var(--running); }
+.ghost { height: 24px; padding: 0 8px; display: inline-flex; align-items: center; gap: 4px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; flex-shrink: 0; }
+.ghost:hover, .ghost:focus-visible { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); }
+.ghost svg.lucide { width: 13px; height: 13px; }
+.queued-item { display: flex; align-items: center; gap: 8px; padding: 3px 4px 3px 12px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--card-bg); font-size: 12px; }
+.queued-item .lbl { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.queued-item .txt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.composer { position: relative; border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--border)); border-radius: 14px; background: var(--card-bg); padding: 12px 14px 10px; display: flex; flex-direction: column; gap: 10px; }
+.composer .input { min-height: 24px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.composer .input.typed { color: var(--text); }
+.composer .bar { display: flex; align-items: center; gap: 14px; color: var(--muted); font-size: 13px; }
+.composer .send { margin-left: auto; width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; }
+.sess-chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px 0 6px; border-radius: 6px; background: var(--accent-dim); color: var(--text); font-size: 12.5px; font-weight: 500; }
+.sess-chip svg.lucide { width: 13px; height: 13px; color: var(--accent); }
+.caret-blink { display: inline-block; width: 1px; height: 16px; background: var(--text); vertical-align: middle; }
+
+/* New: sessions in the @ picker */
+.popup { position: absolute; left: 0; right: 0; bottom: calc(100% + 6px); border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--card-bg); box-shadow: 0 16px 40px -12px rgba(0,0,0,.45); padding: 6px; display: none; flex-direction: column; gap: 2px; }
+.show-picker .popup { display: flex; }
+.popup .gh { padding: 6px 8px 2px; color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; display: flex; }
+.popup .gh span:last-child { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 400; }
+.opt { display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: 7px; min-width: 0; }
+.opt.sel { background: var(--accent-dim); }
+.opt .ot { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.opt .ot mark { background: none; color: var(--accent); font-weight: 600; }
+.opt .od { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+.opt .ok { color: var(--muted); font-size: 12px; flex-shrink: 0; }
+.popup .foot { border-top: 1px solid var(--border); margin-top: 4px; padding: 7px 8px 3px; color: var(--muted); font-size: 12px; }
+.popup .foot code { font-family: var(--font-mono); font-size: 11.5px; color: var(--text); }
+.app:not(.show-picker) .picker-only, .show-picker .normal-only { display: none !important; }
+
+/* ── Content panel: new Agents tab ─────────────────── */
+.content { background: var(--panel-bg); border-radius: var(--radius-panel) var(--radius-panel) 0 0; border: 1px solid var(--border); border-bottom: 0; display: flex; flex-direction: column; min-height: 0; box-shadow: var(--sheet-shadow); }
+.tabs { display: flex; align-items: center; gap: 2px; padding: 10px 10px; min-width: 0; overflow: hidden; border-bottom: 1px solid var(--border); }
+.tab { flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 8px; color: var(--muted); font-weight: 500; font-size: 13.5px; }
+.tab.on { background: var(--card-bg); color: var(--text); }
+.tab .n { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tabs .r { margin-left: auto; display: flex; gap: 10px; padding-right: 4px; flex-shrink: 0; color: var(--muted); }
+.lineage { overflow: auto; padding: 14px 14px 20px; display: flex; flex-direction: column; gap: 16px; }
+.lin-h { display: flex; align-items: baseline; gap: 8px; }
+.lin-h h2 { margin: 0; font-size: 13px; font-weight: 600; }
+.lin-h .muted { font-size: 12px; }
+.sect { display: flex; flex-direction: column; gap: 2px; }
+.sect-h { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; padding: 0 6px 4px; }
+.sect-h .c { margin-left: auto; font-weight: 500; letter-spacing: 0; }
+.ag { display: grid; grid-template-columns: 8px minmax(0,1fr) auto; column-gap: 10px; align-items: center; padding: 7px 8px; border-radius: 8px; }
+.ag:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+.ag.sel { background: var(--card-bg); }
+.ag .l1 { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+.ag .nm { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ag .l2 { grid-column: 2 / 4; color: var(--muted); font-size: 12px; display: flex; gap: 6px; min-width: 0; white-space: nowrap; overflow: hidden; }
+.ag .st { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ag .st.go { color: var(--running); } .ag .st.wait { color: var(--idle); }
+.detail { margin: 2px 0 6px 18px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--card-bg); display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 12.5px; }
+.detail dt { color: var(--muted); } .detail dd { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail .last { grid-column: 1 / 3; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); background: var(--code-bg); border-radius: 6px; padding: 6px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.detail .acts { grid-column: 1 / 3; display: flex; gap: 6px; margin-top: 4px; }
+.btn { height: 28px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--border); background: transparent; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; cursor: pointer; }
+.btn svg.lucide { width: 13px; height: 13px; }
+.collapsed-h { display: flex; align-items: center; gap: 6px; padding: 6px; color: var(--muted); font-size: 12.5px; border: 0; background: transparent; cursor: pointer; }
+
+.statusbar { grid-column: 2 / 5; display: flex; align-items: center; gap: 14px; color: var(--muted); font-size: 12.5px; padding: 0 4px; }
+.statusbar kbd { font: 600 11px var(--font-sans); color: var(--text); border: 1px solid var(--border); border-radius: 5px; padding: 1px 5px; background: var(--card-bg); margin-right: 4px; }
+.statusbar .r { margin-left: auto; display: flex; gap: 16px; }
+.statusbar .bg-chip { height: 20px; }
+
+/* ── Callouts: mark what is new ─────────────────────── */
+.co { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--coral); color: #fff; font: 700 10.5px var(--font-sans); flex-shrink: 0; box-shadow: 0 0 0 2px var(--panel-bg); }
+.hide-callouts .co { display: none; }
+.ctl { position: fixed; left: 80px; bottom: 96px; z-index: 10; width: 292px; padding: 12px 14px; border-radius: 12px; background: var(--card-bg); border: 1px solid var(--border); box-shadow: 0 20px 50px -14px rgba(0,0,0,.5); display: flex; flex-direction: column; gap: 10px; font-size: 12.5px; }
+.ctl h3 { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.ctl .seg { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.ctl .seg span { width: 74px; color: var(--muted); }
+.ctl .seg button { height: 26px; padding: 0 9px; border: 1px solid var(--border); border-radius: 6px; background: transparent; cursor: pointer; font-size: 12px; }
+.ctl .seg button[aria-pressed="true"] { background: var(--accent-dim); border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+.ctl ol { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.ctl li { display: flex; gap: 8px; align-items: flex-start; line-height: 1.4; }
+.hide-legend .ctl ol { display: none; }
+
+/* ── Options: A dock + Agents tab, B sidebar tree, C status bar + header menu ── */
+body.opt-a .only-b, body.opt-a .only-c, body.opt-a .only-bc,
+body.opt-b .only-a, body.opt-b .only-c, body.opt-b .only-ac,
+body.opt-c .only-a, body.opt-c .only-b, body.opt-c .only-ab { display: none !important; }
+.ctl ol[data-opt] { display: none; }
+body.opt-a .ctl ol[data-opt="a"], body.opt-b .ctl ol[data-opt="b"], body.opt-c .ctl ol[data-opt="c"] { display: flex; }
+.hide-legend .ctl ol[data-opt] { display: none !important; }
+.ctl .opt-name { font-size: 13px; font-weight: 600; color: var(--text); }
+
+/* B: the session's tree in the sidebar holds its jobs as well as its child sessions */
+.tree-h { display: flex; align-items: center; gap: 6px; padding: 4px 10px 2px; color: var(--muted); font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.row.jobrow { font-size: 12.5px; min-height: 26px; }
+.row.jobrow svg.lucide { width: 13px; height: 13px; color: var(--muted); }
+.row.jobrow .title code { font-family: var(--font-mono); font-size: 11.5px; }
+.row.jobrow .meta { font-variant-numeric: tabular-nums; }
+.row.jobrow.done .title, .row.jobrow.done .meta { color: var(--muted); }
+
+/* C: lineage breadcrumb and Agents menu in the header; running work in the status bar */
+.crumb { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; min-width: 0; white-space: nowrap; }
+.crumb a { color: var(--muted); text-decoration: none; overflow: hidden; text-overflow: ellipsis; }
+.crumb svg.lucide { width: 12px; height: 12px; }
+.hdr-btn { white-space: nowrap; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--card-bg); color: var(--text); font-size: 12.5px; font-weight: 500; }
+.hdr-btn svg.lucide { width: 14px; height: 14px; color: var(--muted); }
+.hdr-btn .n { color: var(--running); font-variant-numeric: tabular-nums; }
+.menu { position: absolute; z-index: 5; width: 380px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--card-bg); box-shadow: 0 18px 48px -12px rgba(0,0,0,.5); padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+.menu .sect-h { padding-top: 4px; }
+.sheet { position: relative; }
+.agents-menu { top: 52px; right: 16px; }
+.sb-run { cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 6px; border: 1px solid color-mix(in srgb, var(--running) 35%, transparent); background: color-mix(in srgb, var(--running) 10%, transparent); color: var(--text); font-size: 12px; position: relative; }
+.sb-run .dot { width: 6px; height: 6px; }
+.run-pop { bottom: 30px; right: 0; width: 460px; }
+.run-pop .sess { display: flex; align-items: center; gap: 8px; padding: 6px 8px 2px; font-size: 12.5px; font-weight: 600; }
+.run-pop .sess .muted { font-weight: 400; font-size: 12px; }
+.run-pop .job .k { width: 52px; }
+body:not(.menu-agents) .agents-menu, body:not(.menu-running) .run-pop { display: none !important; }
+body[data-harness="cc"] [data-h]:not([data-h~="cc"]) { display: none !important; }
+body[data-harness="oc1"] [data-h]:not([data-h~="oc1"]) { display: none !important; }
+body[data-harness="oc2"] [data-h]:not([data-h~="oc2"]) { display: none !important; }
+body[data-harness="pi"] [data-h]:not([data-h~="pi"]) { display: none !important; }
+.hnote { color: var(--muted); line-height: 1.45; }
+.hnote b { color: var(--text); font-weight: 600; }
+.changes { padding: 14px; display: flex; flex-direction: column; gap: 2px; }
+.chg { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 7px; font-family: var(--font-mono); font-size: 12px; }
+.chg .p { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 760px) {
+  .app { grid-template-columns: minmax(0,1fr); padding: 0; gap: 0; }
+  .rail, .sidebar, .content, .statusbar { display: none; }
+  .sheet { border-radius: 0; border: 0; }
+  .stream { padding: 16px 16px 8px; } .dock { padding: 0 16px 16px; }
+  .sheet-h { padding: 10px 16px; flex-wrap: wrap; } .sheet-h .tools { display: none; }
+  .job .k { display: none; }
+  .sheet-h > div > div:first-child { flex-wrap: wrap; row-gap: 4px; }
+  .from-link { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .hide-legend .ctl { display: none; }
+  .ctl { left: 16px; right: 16px; width: auto; bottom: 16px; }
+}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+
+  <nav class="rail" aria-label="Main">
+    <div class="logo">W</div>
+    <button class="rail-btn on" aria-label="Sessions"><i data-lucide="message-square"></i></button>
+    <button class="rail-btn" aria-label="GitHub"><i data-lucide="github"></i></button>
+    <div class="spacer"></div>
+    <button class="rail-btn" aria-label="Workflows"><i data-lucide="puzzle"></i></button>
+    <button class="rail-btn" aria-label="Automations"><i data-lucide="zap"></i></button>
+    <button class="rail-btn" aria-label="Usage"><i data-lucide="bar-chart-3"></i></button>
+    <button class="rail-btn" aria-label="Settings"><i data-lucide="settings"></i></button>
+  </nav>
+
+  <!-- Session list: child sessions nest under their parent; a chip counts running background work -->
+  <aside class="sidebar" aria-label="Sessions">
+    <div style="display:flex;gap:8px"><div class="new-btn" style="flex:1"><i data-lucide="plus"></i>New session</div><div class="rail-btn" style="width:40px;height:40px"><i data-lucide="folder-plus"></i></div></div>
+    <div class="filter"><i data-lucide="search"></i>Filter sessions</div>
+
+    <div>
+      <div class="group-h"><i data-lucide="chevron-down" style="width:14px;height:14px"></i>weave-fleet<span class="count">4</span></div>
+      <div class="rows">
+        <div class="row active">
+          <span class="glyph-slot"><span class="quad"><i></i><i></i><i></i><i></i></span></span>
+          <span class="title">Capture Claude Code subagents</span>
+          <span class="co">1</span>
+          <span class="bg-chip" data-h="cc"><i data-lucide="loader"></i>3</span><span class="bg-chip" data-h="oc2"><i data-lucide="loader"></i>2</span><span class="bg-chip" data-h="oc1 pi"><i data-lucide="loader"></i>1</span>
+        </div>
+        <div class="children only-a" aria-label="Started from this session">
+          <div class="row" data-h="cc oc1 oc2">
+            <span class="glyph-slot"><span class="dot run"></span></span>
+            <span class="title">Review the diff</span>
+            <span class="kind">subagent</span>
+          </div>
+          <div class="row">
+            <span class="glyph-slot"><span class="dot wait"></span></span>
+            <span class="title">Fork: emit jobs over SignalR</span>
+            <span class="kind">fork</span>
+          </div>
+          <div class="row">
+            <span class="glyph-slot"><span class="dot ring"></span></span>
+            <span class="title">Fix Pi model switch</span>
+            <span class="kind">started</span>
+          </div>
+        </div>
+        <!-- B: the open session's tree holds both its child sessions and its background jobs -->
+        <div class="children only-b" aria-label="This session's agents and jobs">
+          <div class="tree-h">Sessions<span class="co" style="margin-left:auto">5</span></div>
+          <div class="row">
+            <span class="glyph-slot"><span class="dot run"></span></span>
+            <span class="title">code-reviewer · Review the diff</span>
+            <span class="meta" style="color:var(--running)">1m 40s</span>
+          </div>
+          <div class="row">
+            <span class="glyph-slot"><span class="dot wait"></span></span>
+            <span class="title">Fork: emit jobs over SignalR</span>
+            <span class="kind">fork</span>
+          </div>
+          <div class="row">
+            <span class="glyph-slot"><span class="dot ring"></span></span>
+            <span class="title">Fix Pi model switch</span>
+            <span class="kind">started</span>
+          </div>
+          <div class="row" style="color:var(--muted)">
+            <span class="glyph-slot"></span>
+            <i data-lucide="chevron-right" class="caret"></i>
+            <span class="title">2 earlier subagents</span>
+          </div>
+          <div class="tree-h">Background<span class="co" style="margin-left:auto">3</span></div>
+          <div class="row jobrow">
+            <i data-lucide="terminal"></i>
+            <span class="title"><code>bun run test:e2e</code></span>
+            <span class="meta">3m 12s</span>
+          </div>
+          <div class="row jobrow">
+            <i data-lucide="activity"></i>
+            <span class="title">Watch fleet.log for errors</span>
+            <span class="meta">58s</span>
+          </div>
+          <div class="row jobrow done">
+            <i data-lucide="check" style="color:var(--running)"></i>
+            <span class="title"><code>bun run lint</code> · exit 0</span>
+            <span class="meta">20s ago</span>
+          </div>
+        </div>
+        <div class="row">
+          <span class="glyph-slot"><span class="dot ring"></span></span>
+          <i data-lucide="chevron-right" class="caret"></i>
+          <span class="title">Running-work strip in the composer</span>
+          <span class="meta">12m</span>
+        </div>
+        <div class="row">
+          <span class="glyph-slot"></span>
+          <span class="title">Fleet MCP server spike</span>
+          <span class="meta">2h</span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="group-h"><i data-lucide="chevron-down" style="width:14px;height:14px"></i>tidytempo<span class="count">2</span></div>
+      <div class="rows">
+        <div class="row">
+          <span class="glyph-slot"><span class="dot ring"></span></span>
+          <i data-lucide="chevron-right" class="caret"></i>
+          <span class="title">What can we learn from t3code?</span>
+          <span class="meta">1h</span>
+        </div>
+        <div class="row">
+          <span class="glyph-slot"></span>
+          <span class="title">Onboarding time zone fixes</span>
+          <span class="meta">1d</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="archived"><i data-lucide="archive"></i>Archived</div>
+  </aside>
+
+  <!-- Conversation -->
+  <main class="sheet" id="sheet">
+    <header class="sheet-h">
+      <div style="min-width:0;display:flex;flex-direction:column;gap:2px">
+        <!-- C: the lineage reads as a breadcrumb above the title -->
+        <div class="crumb only-c"><a href="#">tidytempo</a><i data-lucide="chevron-right"></i><a href="#">What can we learn from t3code?</a><i data-lucide="chevron-right"></i><span>this session</span><span class="co">2</span></div>
+        <div style="display:flex;align-items:center;gap:10px;min-width:0">
+          <span class="t">Capture Claude Code subagents</span>
+          <span class="from-link only-ab" title="This session was started by another Fleet session"><i data-lucide="corner-left-up" style="width:12px;height:12px"></i>Started by <b>What can we learn from t3code?</b></span>
+          <span class="co only-ab">2</span>
+        </div>
+        <div class="sub"><span>weave-fleet</span>·<span data-h="cc">Claude Code · Opus 5.5</span><span data-h="oc1">OpenCode · Sonnet 5.5</span><span data-h="oc2">OpenCode 2 · GPT-5.5</span><span data-h="pi">Pi · Kimi K2.5</span>·<span class="mono" style="font-size:12px">~/source/weave-fleet-worktrees/claude-subagents</span></div>
+      </div>
+      <div class="tools" style="align-items:center">
+        <span class="hdr-btn only-c" id="agents-btn" role="button" tabindex="0"><i data-lucide="network"></i>Agents<span class="n">2 running</span><i data-lucide="chevron-down"></i></span>
+        <span class="co only-c">5</span>
+        <i data-lucide="terminal-square"></i><i data-lucide="git-fork"></i><i data-lucide="more-horizontal"></i>
+      </div>
+    </header>
+
+    <!-- C: the Agents menu, open -->
+    <div class="menu agents-menu only-c" role="menu" aria-label="Agents">
+      <div class="sect">
+        <div class="sect-h">Running now<span class="c">2</span></div>
+        <div class="ag sel">
+          <span class="dot run"></span>
+          <span class="l1"><span class="nm">code-reviewer</span><span class="muted" style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Review the diff</span></span>
+          <span class="st go">1m 40s</span>
+          <span class="l2"><span class="kind">subagent</span> Claude Code · Sonnet 5.5 · 14 tool calls</span>
+        </div>
+        <div class="ag">
+          <span class="dot wait"></span>
+          <span class="l1"><span class="nm">Fork: emit jobs over SignalR</span></span>
+          <span class="st wait">needs you</span>
+          <span class="l2"><span class="kind">fork</span> OpenCode 2 · GPT-5.5 · asked a question</span>
+        </div>
+      </div>
+      <div class="sect">
+        <div class="sect-h">Started by this session<span class="c">1</span></div>
+        <div class="ag">
+          <span class="dot ring"></span>
+          <span class="l1"><span class="nm">Fix Pi model switch</span></span>
+          <span class="st">done</span>
+          <span class="l2"><span class="kind">started</span> Pi · Kimi K2.5 · opened PR #362</span>
+        </div>
+      </div>
+      <button class="collapsed-h"><i data-lucide="chevron-right" style="width:14px;height:14px"></i>Earlier agents · 2</button>
+    </div>
+
+    <div class="stream">
+      <div class="bubble-wrap"><div class="bubble">Run the e2e suite in the background, get a subagent to review the diff, and keep going on the mapper.</div></div>
+      <p class="say">I've started the suite in the background, asked a reviewer to look at the diff, and set a watch on the server log. Carrying on with the mapper.</p>
+      <div class="tools-card">
+        <div class="tool" data-h="cc oc2"><i data-lucide="terminal" class="muted"></i><span class="name">Bash</span><span class="arg">bun run test:e2e</span><span class="right"><span class="pill">Background</span><span class="dot run"></span></span></div>
+        <div class="tool"><i data-lucide="bot" class="muted"></i><span class="name">code-reviewer</span><span class="arg" style="font-family:var(--font-sans);font-size:13.5px;color:var(--text)">Review the diff</span><span class="right">Running<i data-lucide="chevron-right"></i></span></div>
+        <div class="tool" data-h="cc"><i data-lucide="activity" class="muted"></i><span class="name">Monitor</span><span class="arg">tail -f var/log/fleet.log | grep -E "ERROR|Unhandled"</span><span class="right"><span class="pill">Background</span><span class="dot run"></span></span></div>
+      </div>
+      <p class="say">Lines with a <code class="mono" style="font-size:12.5px">parent_tool_use_id</code> now go to <code class="mono" style="font-size:12.5px">DelegationService</code> instead of being dropped, so each subagent gets its own child session.</p>
+      <div class="tools-card">
+        <div class="tool"><i data-lucide="file-pen" class="muted"></i><span class="name">Edit</span><span class="arg">ClaudeCode/ClaudeCodeHarnessSession.cs</span><span class="right"><span style="color:var(--running)">+42</span><span style="color:var(--error)">−7</span></span></div>
+        <div class="tool"><i data-lucide="file-pen" class="muted"></i><span class="name">Edit</span><span class="arg">ClaudeCode/ClaudeCodeMapper.cs</span><span class="right"><span style="color:var(--running)">+118</span><span style="color:var(--error)">−3</span></span></div>
+      </div>
+      <div class="thinking"><span class="quad"><i></i><i></i><i></i><i></i></span>Writing contract fixtures for nested subagents…</div>
+    </div>
+
+    <div class="dock">
+      <!-- New: what is running in the background for this session -->
+      <section class="running only-a" aria-label="Running in the background">
+        <button class="running-h" aria-expanded="true">
+          <span class="lbl">Background</span>
+          <span class="sum" data-h="cc">3 running · 1 finished</span><span class="sum" data-h="oc2">2 running · 1 finished</span><span class="sum" data-h="oc1 pi">1 running</span>
+          <span class="co">3</span>
+          <i data-lucide="chevron-down"></i>
+        </button>
+        <ol>
+          <li class="job" data-h="cc oc2">
+            <i data-lucide="terminal"></i><span class="k">Shell</span>
+            <span class="what"><code>bun run test:e2e</code></span>
+            <span class="time">3m 12s</span>
+            <button class="ghost" title="Show the output so far"><i data-lucide="scroll-text"></i>Output</button>
+            <button class="ghost" aria-label="Stop bun run test:e2e" title="Stop"><i data-lucide="square"></i></button>
+          </li>
+          <li class="job" data-h="pi">
+            <i data-lucide="bot"></i><span class="k">Agent</span>
+            <span class="what">reviewer · Review the diff <span class="model">· step 1 of 2 · via the subagent extension</span></span>
+            <span class="time">1m 40s</span>
+            <button class="ghost" title="Pi subagents run inside the tool call, so there is no session to open"><i data-lucide="chevron-down"></i>Details</button>
+            <span style="width:28px"></span>
+          </li>
+          <li class="job" data-h="cc oc1 oc2">
+            <i data-lucide="bot"></i><span class="k">Agent</span>
+            <span class="what">code-reviewer · Review the diff <span class="model">· Sonnet 5.5</span></span>
+            <span class="time">1m 40s</span>
+            <button class="ghost" title="Open the subagent's session"><i data-lucide="arrow-up-right"></i>Open</button>
+            <button class="ghost" aria-label="Stop code-reviewer" title="Stop"><i data-lucide="square"></i></button>
+          </li>
+          <li class="job" data-h="cc">
+            <i data-lucide="activity"></i><span class="k">Monitor</span>
+            <span class="what">Watch fleet.log for errors <span class="model">· 2 events</span></span>
+            <span class="time">58s</span>
+            <button class="ghost" title="Jump to its events in the conversation"><i data-lucide="arrow-down"></i>Events</button>
+            <button class="ghost" aria-label="Stop the monitor" title="Stop"><i data-lucide="square"></i></button>
+          </li>
+          <li class="job done" data-h="cc oc2">
+            <i data-lucide="check" class="ok"></i><span class="k">Shell</span>
+            <span class="what"><code>bun run lint</code> <span class="model">· exit 0</span></span>
+            <span class="time">20s ago</span>
+            <button class="ghost" title="Show the output"><i data-lucide="scroll-text"></i>Output</button>
+            <span style="width:28px"></span>
+          </li>
+        </ol>
+      </section>
+
+      <div class="queued-item"><span class="lbl">Next</span><span class="txt">When the reviewer is done, fix anything it flags before opening the PR.</span><button class="ghost"><i data-lucide="corner-down-right"></i>Send now</button><button class="ghost" aria-label="Remove queued message"><i data-lucide="x"></i></button></div>
+
+      <div class="composer">
+        <!-- New: sessions in the @ picker -->
+        <div class="popup" role="listbox" aria-label="Mention">
+          <div class="gh"><span>Sessions</span><span>Tab to attach</span></div>
+          <div class="opt sel"><span class="glyph-slot"><span class="dot ring"></span></span><span class="ot"><mark>t3c</mark>ode: what can we learn?</span><span class="od">tidytempo · Claude Code</span><span class="ok">1h</span></div>
+          <div class="opt"><span class="glyph-slot"><span class="dot done"></span></span><span class="ot">Survey <mark>t3c</mark>ode features</span><span class="od">subagent of t3code: what can we learn?</span><span class="ok">1h</span></div>
+          <div class="opt"><span class="glyph-slot"></span><span class="ot">Port <mark>t3c</mark>ode's limit recovery</span><span class="od">weave-fleet · OpenCode 2 · archived</span><span class="ok">3d</span></div>
+          <div class="gh"><span>Files</span><span></span></div>
+          <div class="opt"><i data-lucide="file" class="muted" style="width:14px;height:14px"></i><span class="ot">docs/<mark>t3c</mark>ode-notes.md</span><span class="od"></span></div>
+          <div class="foot">The agent gets a link to the session, not a copy, and reads what it needs with <code>fleet_session_read</code>.</div>
+        </div>
+
+        <div class="input normal-only">Message Capture Claude Code subagents…</div>
+        <div class="input typed picker-only">Use the subagent mapping from <span style="color:var(--accent)">@t3c</span><span class="caret-blink"></span></div>
+        <div class="bar">
+          <i data-lucide="paperclip"></i>
+          <span>Opus 5.5 <i data-lucide="chevron-down" style="width:13px;height:13px;vertical-align:-2px"></i></span>
+          <span>High <i data-lucide="chevron-down" style="width:13px;height:13px;vertical-align:-2px"></i></span>
+          <span class="co picker-only">4</span>
+          <span class="send"><i data-lucide="arrow-up"></i></span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Content panel: new Agents tab with the lineage -->
+  <aside class="content" aria-label="Content">
+    <div class="tabs only-a">
+      <span class="tab"><i data-lucide="list-checks"></i>Progress</span>
+      <span class="tab"><i data-lucide="git-compare"></i>Changes</span>
+      <span class="tab on"><i data-lucide="network"></i>Agents<span class="n">3</span></span>
+      <span class="co">5</span>
+      <div class="r"><i data-lucide="plus"></i><i data-lucide="panel-right"></i></div>
+    </div>
+    <!-- B and C leave the panel as it is today -->
+    <div class="tabs only-bc">
+      <span class="tab"><i data-lucide="list-checks"></i>Progress<span class="n">2/5</span></span>
+      <span class="tab on"><i data-lucide="git-compare"></i>Changes<span class="n">2</span></span>
+      <div class="r"><i data-lucide="plus"></i><i data-lucide="panel-right"></i></div>
+    </div>
+    <div class="changes only-bc">
+      <div class="chg"><i data-lucide="file-pen" style="width:14px;height:14px;color:var(--muted)"></i><span class="p">src/…/ClaudeCode/ClaudeCodeHarnessSession.cs</span><span style="color:var(--running)">+42</span><span style="color:var(--error)">−7</span></div>
+      <div class="chg"><i data-lucide="file-pen" style="width:14px;height:14px;color:var(--muted)"></i><span class="p">src/…/ClaudeCode/ClaudeCodeMapper.cs</span><span style="color:var(--running)">+118</span><span style="color:var(--error)">−3</span></div>
+    </div>
+    <div class="lineage only-a">
+      <div class="lin-h"><h2>Lineage</h2><span class="muted">2 running · 1 waiting for you</span></div>
+
+      <div class="sect">
+        <div class="sect-h">Parent</div>
+        <div class="ag">
+          <span class="dot ring"></span>
+          <span class="l1"><span class="nm">What can we learn from t3code?</span></span>
+          <span class="st">idle</span>
+          <span class="l2">tidytempo · Claude Code · Opus 5.5 · started this session</span>
+        </div>
+      </div>
+
+      <div class="sect">
+        <div class="sect-h">Running now<span class="c">2</span></div>
+        <div class="ag sel">
+          <span class="dot run"></span>
+          <span class="l1"><span class="nm">code-reviewer</span><span class="muted" style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Review the diff</span></span>
+          <span class="st go">1m 40s</span>
+          <span class="l2" data-h="cc"><span class="kind">subagent</span> Claude Code · Sonnet 5.5</span>
+          <span class="l2" data-h="oc1"><span class="kind">subagent</span> OpenCode · Sonnet 5.5</span>
+          <span class="l2" data-h="oc2"><span class="kind">subagent</span> OpenCode 2 · Sonnet 5.5</span>
+          <span class="l2" data-h="pi"><span class="kind">subagent</span> Pi extension · Kimi K2.5 · no session of its own</span>
+        </div>
+        <dl class="detail">
+          <dt>Asked to</dt><dd>Review the diff for the subagent mapper</dd>
+          <dt>Tools</dt><dd>14 calls · Read, Grep, Bash</dd>
+          <dt>Tokens</dt><dd>38.2k in · 1.9k out</dd>
+          <div class="last">Reading OpenCode2Delegations.cs to compare status handling…</div>
+          <div class="acts" data-h="cc oc1 oc2"><button class="btn"><i data-lucide="arrow-up-right"></i>Open session</button><button class="btn"><i data-lucide="square"></i>Stop</button></div><div class="acts muted" data-h="pi" style="font-size:12px">Runs inside the tool call. Interrupt the turn to stop it.</div>
+        </dl>
+        <div class="ag">
+          <span class="dot wait"></span>
+          <span class="l1"><span class="nm">Fork: emit jobs over SignalR</span></span>
+          <span class="st wait">needs you</span>
+          <span class="l2"><span class="kind">fork</span> OpenCode 2 · GPT-5.5 · asked a question</span>
+        </div>
+      </div>
+
+      <div class="sect">
+        <div class="sect-h">Started by this session<span class="c">1</span></div>
+        <div class="ag">
+          <span class="dot ring"></span>
+          <span class="l1"><span class="nm">Fix Pi model switch</span></span>
+          <span class="st">done</span>
+          <span class="l2"><span class="kind">started</span> Pi · Kimi K2.5 · opened PR #362</span>
+        </div>
+      </div>
+
+      <div class="sect">
+        <button class="collapsed-h" aria-expanded="true"><i data-lucide="chevron-down" style="width:14px;height:14px"></i>Earlier agents · 2</button>
+        <div class="ag">
+          <i data-lucide="check" style="width:12px;height:12px;color:var(--running)"></i>
+          <span class="l1"><span class="nm">Explore</span><span class="muted" style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Find where subagent lines are dropped</span></span>
+          <span class="st">38s</span>
+          <span class="l2"><span class="kind">subagent</span> Claude Code · Haiku 4.5</span>
+        </div>
+        <div class="ag">
+          <i data-lucide="check" style="width:12px;height:12px;color:var(--running)"></i>
+          <span class="l1"><span class="nm">general-purpose</span><span class="muted" style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Map the OpenCode delegation path</span></span>
+          <span class="st">4m 46s</span>
+          <span class="l2"><span class="kind">subagent</span> Claude Code · Opus 5.5</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <footer class="statusbar">
+    <span><kbd>Ctrl K</kbd>Command palette</span>
+    <span><kbd>Ctrl [ ]</kbd>Prev / next session</span>
+    <span><kbd>Ctrl B</kbd>Sidebar</span>
+    <span><kbd>Esc</kbd>Interrupt</span>
+    <span><kbd>Ctrl J</kbd>Terminal</span>
+    <span class="r">
+      <!-- C: everything running, across sessions, one click away -->
+      <span class="sb-run only-c" id="run-btn" role="button" tabindex="0"><span class="dot run"></span>5 running in 2 sessions<span class="co">3</span>
+        <div class="menu run-pop" role="dialog" aria-label="Running in the background">
+          <div class="sess"><span class="quad"><i></i><i></i><i></i><i></i></span>Capture Claude Code subagents<span class="muted">· this session</span></div>
+          <ol style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px">
+            <li class="job"><i data-lucide="terminal"></i><span class="k">Shell</span><span class="what"><code>bun run test:e2e</code></span><span class="time">3m 12s</span><button class="ghost"><i data-lucide="scroll-text"></i>Output</button><button class="ghost" aria-label="Stop"><i data-lucide="square"></i></button></li>
+            <li class="job"><i data-lucide="bot"></i><span class="k">Agent</span><span class="what">code-reviewer · Review the diff</span><span class="time">1m 40s</span><button class="ghost"><i data-lucide="arrow-up-right"></i>Open</button><button class="ghost" aria-label="Stop"><i data-lucide="square"></i></button></li>
+            <li class="job"><i data-lucide="activity"></i><span class="k">Monitor</span><span class="what">Watch fleet.log for errors</span><span class="time">58s</span><button class="ghost"><i data-lucide="arrow-down"></i>Events</button><button class="ghost" aria-label="Stop"><i data-lucide="square"></i></button></li>
+          </ol>
+          <div class="sess"><span class="dot ring"></span>Running-work strip in the composer<span class="muted">· weave-fleet</span></div>
+          <ol style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px">
+            <li class="job"><i data-lucide="terminal"></i><span class="k">Shell</span><span class="what"><code>bun run dev --port 5174</code></span><span class="time">41m</span><button class="ghost"><i data-lucide="scroll-text"></i>Output</button><button class="ghost" aria-label="Stop"><i data-lucide="square"></i></button></li>
+            <li class="job"><i data-lucide="terminal"></i><span class="k">Shell</span><span class="what"><code>bunx vitest --watch</code></span><span class="time">39m</span><button class="ghost"><i data-lucide="scroll-text"></i>Output</button><button class="ghost" aria-label="Stop"><i data-lucide="square"></i></button></li>
+          </ol>
+        </div>
+      </span>
+      <span data-h="cc">claude-code</span><span data-h="oc1">opencode</span><span data-h="oc2">opencode2</span><span data-h="pi">pi</span><span>41.6k tokens</span></span>
+  </footer>
+</div>
+
+<!-- Mockup controls -->
+<aside class="ctl" aria-label="Mockup controls">
+  <h3>Mockup</h3>
+  <div class="seg"><span>Option</span><button data-set="opt" data-v="a" aria-pressed="true">A</button><button data-set="opt" data-v="b" aria-pressed="false">B</button><button data-set="opt" data-v="c" aria-pressed="false">C</button></div>
+  <div class="seg"><span>Theme</span><button data-set="theme" data-v="dark" aria-pressed="true">Dark</button><button data-set="theme" data-v="light" aria-pressed="false">Light</button></div>
+  <div class="seg"><span>Composer</span><button data-set="picker" data-v="off" aria-pressed="true">Normal</button><button data-set="picker" data-v="on" aria-pressed="false">@ a session</button></div>
+  <div class="seg"><span>Harness</span><button data-set="harness" data-v="cc" aria-pressed="false">Claude Code</button><button data-set="harness" data-v="oc1" aria-pressed="false">OpenCode</button><button data-set="harness" data-v="oc2" aria-pressed="false">OpenCode 2</button><button data-set="harness" data-v="pi" aria-pressed="false">Pi</button></div>
+  <p class="hnote" data-h="cc" style="margin:0"><b>Claude Code:</b> shells, monitors and subagents. Needs Fleet to keep the process alive between turns.</p>
+  <p class="hnote" data-h="oc1" style="margin:0"><b>OpenCode:</b> no background shells, so only subagents show.</p>
+  <p class="hnote" data-h="oc2" style="margin:0"><b>OpenCode 2:</b> shells and subagents, both stoppable. No monitors.</p>
+  <p class="hnote" data-h="pi" style="margin:0"><b>Pi:</b> no background shells. Subagents come from an extension and have no session to open.</p>
+  <div class="seg"><span>Callouts</span><button data-set="co" data-v="on" aria-pressed="true">Show</button><button data-set="co" data-v="off" aria-pressed="false">Hide</button></div>
+  <ol data-opt="a">
+    <li><span class="opt-name">A · Dock and Agents tab</span></li>
+    <li><span class="co">1</span><span>Child sessions nest under their parent in the sidebar. The chip counts work still running.</span></li>
+    <li><span class="co">2</span><span>A session started by another one links back to it.</span></li>
+    <li><span class="co">3</span><span>Background strip above the queue, with elapsed time, Output/Open and Stop.</span></li>
+    <li><span class="co">4</span><span><code class="mono">@</code> offers sessions before files and attaches a link.</span></li>
+    <li><span class="co">5</span><span>Agents tab in the right panel shows the lineage; select a row for details.</span></li>
+  </ol>
+  <ol data-opt="b">
+    <li><span class="opt-name">B · Everything in the sidebar</span></li>
+    <li><span class="co">1</span><span>The open session expands into a tree. The chip counts work still running.</span></li>
+    <li><span class="co">2</span><span>A session started by another one links back to it.</span></li>
+    <li><span class="co">3</span><span>Background jobs are rows in the tree. Hover a row for Output and Stop.</span></li>
+    <li><span class="co">4</span><span><code class="mono">@</code> offers sessions before files and attaches a link.</span></li>
+    <li><span class="co">5</span><span>Child sessions in the tree are the lineage. No new panel, no strip.</span></li>
+  </ol>
+  <ol data-opt="c">
+    <li><span class="opt-name">C · Status bar and header menu</span></li>
+    <li><span class="co">1</span><span>No nesting in the sidebar, only the running-work chip.</span></li>
+    <li><span class="co">2</span><span>A breadcrumb above the title shows where this session came from.</span></li>
+    <li><span class="co">3</span><span>The status bar counts work running in every session; click for the list, grouped by session.</span></li>
+    <li><span class="co">4</span><span><code class="mono">@</code> offers sessions before files and attaches a link.</span></li>
+    <li><span class="co">5</span><span>An Agents menu in the header lists the lineage.</span></li>
+  </ol>
+</aside>
+
+<script>
+  lucide.createIcons();
+  const root = document.documentElement, app = document.getElementById('app');
+  const prefersLight = matchMedia('(prefers-color-scheme: light)').matches;
+  const params = new URLSearchParams(location.search);
+  const state = { theme: params.get('theme') ?? (prefersLight ? 'light' : 'dark'), picker: params.get('picker') ?? 'off', co: params.get('co') ?? 'on', opt: params.get('opt') ?? 'a', harness: params.get('harness') ?? 'cc', menu: params.get('menu') ?? 'running' };
+  function apply() {
+    root.dataset.theme = state.theme;
+    document.body.dataset.harness = state.harness;
+    document.body.classList.toggle('menu-agents', state.menu === 'agents'); document.body.classList.toggle('menu-running', state.menu === 'running');
+    document.body.classList.remove('opt-a','opt-b','opt-c'); document.body.classList.add('opt-' + state.opt);
+    app.classList.toggle('show-picker', state.picker === 'on');
+    document.body.classList.toggle('hide-callouts', state.co === 'off');
+    document.querySelectorAll('.ctl button[data-set]').forEach(b => b.setAttribute('aria-pressed', String(state[b.dataset.set] === b.dataset.v)));
+  }
+  document.querySelectorAll('.ctl button[data-set]').forEach(b => b.addEventListener('click', () => { state[b.dataset.set] = b.dataset.v; apply(); }));
+  for (const [id, m] of [['agents-btn','agents'],['run-btn','running']]) document.getElementById(id).addEventListener('click', e => { if (e.target.closest('.menu')) return; state.menu = state.menu === m ? 'none' : m; apply(); });
+  if (params.get('legend') === 'off') document.body.classList.add('hide-legend');
+  apply();
+</script>
+</body>
+</html>
