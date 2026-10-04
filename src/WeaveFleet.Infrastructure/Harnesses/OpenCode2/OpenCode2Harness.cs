@@ -49,6 +49,8 @@ public sealed class OpenCode2Harness : IHarness
         // POST /api/session/{id}/fork copies the history before a message into a new session.
         SupportsForking = true,
         SupportsSideConversations = true,
+        // Synthetic text parts ahead of the prompt.
+        TakesModelNotes = true,
         SupportsAgentBrowser = true,
         // Fleet's plugin gives the agent its tools, fleet_session_read among them.
         SupportsFleetTools = true,

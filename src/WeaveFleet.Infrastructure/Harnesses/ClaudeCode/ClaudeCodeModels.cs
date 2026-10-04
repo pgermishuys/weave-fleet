@@ -74,12 +74,15 @@ internal sealed record ClaudeCodeControlResponseBody
     [JsonPropertyName("subtype")] public string? Subtype { get; init; }
     [JsonPropertyName("request_id")] public string? RequestId { get; init; }
     [JsonPropertyName("error")] public string? Error { get; init; }
+
+    /// <summary>What a request that asks for something got, e.g. <c>get_task_output</c>'s <c>{ output, total_bytes, truncated }</c>.</summary>
+    [JsonPropertyName("response")] public JsonElement? Response { get; init; }
 }
 
 /// <summary>
 /// System message. <c>init</c> opens every turn, including one Claude Code starts by itself, and carries the session
-/// metadata. <c>task_started</c>, <c>task_notification</c> and <c>background_tasks_changed</c> report the work an agent
-/// leaves running: background shells, monitors and subagents.
+/// metadata. <c>task_started</c>, <c>task_progress</c>, <c>task_updated</c>, <c>task_notification</c> and
+/// <c>background_tasks_changed</c> report the work an agent leaves running: background shells, monitors and subagents.
 /// </summary>
 internal sealed record ClaudeCodeSystemMessage : ClaudeCodeStreamMessage
 {
@@ -92,13 +95,50 @@ internal sealed record ClaudeCodeSystemMessage : ClaudeCodeStreamMessage
     /// <summary>The task a <c>task_*</c> message is about.</summary>
     [JsonPropertyName("task_id")] public string? TaskId { get; init; }
 
+    /// <summary>
+    /// What runs the task: <c>local_bash</c> (a <c>Bash</c> command or a <c>Monitor</c>), <c>local_agent</c> (a subagent),
+    /// or another kind.
+    /// </summary>
+    [JsonPropertyName("task_type")] public string? TaskType { get; init; }
+
+    /// <summary>The tool call that started the task.</summary>
+    [JsonPropertyName("tool_use_id")] public string? ToolUseId { get; init; }
+
     /// <summary>On <c>task_started</c>: false for a task its tool call waits on, which ends with the turn.</summary>
     [JsonPropertyName("is_backgrounded")] public bool? IsBackgrounded { get; init; }
 
+    /// <summary>What the task is (<c>task_started</c>), or what it's doing now (<c>task_progress</c>).</summary>
     [JsonPropertyName("description")] public string? Description { get; init; }
+
+    /// <summary>On a subagent's <c>task_started</c>: its agent, e.g. <c>general-purpose</c>.</summary>
+    [JsonPropertyName("subagent_type")] public string? SubagentType { get; init; }
+
+    /// <summary>
+    /// On a subagent's <c>task_started</c>: what it was asked. A background subagent's conversation doesn't start with it
+    /// as a user line, as a foreground one's does.
+    /// </summary>
+    [JsonPropertyName("prompt")] public string? Prompt { get; init; }
+
+    /// <summary>On <c>task_notification</c>: <c>completed</c>, <c>failed</c> or <c>stopped</c>.</summary>
+    [JsonPropertyName("status")] public string? Status { get; init; }
+
+    /// <summary>On <c>task_notification</c>: the file the task's output went to.</summary>
+    [JsonPropertyName("output_file")] public string? OutputFile { get; init; }
+
+    /// <summary>On <c>task_notification</c>: how it ended, e.g. <c>… completed (exit code 0)</c>, or a subagent's reply.</summary>
+    [JsonPropertyName("summary")] public string? Summary { get; init; }
+
+    /// <summary>On <c>task_updated</c>: what changed, e.g. <c>{ status: killed }</c>.</summary>
+    [JsonPropertyName("patch")] public ClaudeCodeTaskPatch? Patch { get; init; }
 
     /// <summary>On <c>background_tasks_changed</c>: every task still running.</summary>
     [JsonPropertyName("tasks")] public IReadOnlyList<ClaudeCodeBackgroundTask>? Tasks { get; init; }
+}
+
+/// <summary>What a <c>task_updated</c> message changed.</summary>
+internal sealed record ClaudeCodeTaskPatch
+{
+    [JsonPropertyName("status")] public string? Status { get; init; }
 }
 
 /// <summary>A task in a <c>background_tasks_changed</c> list.</summary>
@@ -155,7 +195,10 @@ internal sealed record ClaudeCodeResultMessage : ClaudeCodeStreamMessage
 internal sealed record ClaudeCodeApiMessage
 {
     [JsonPropertyName("id")] public string? Id { get; init; }
-    [JsonPropertyName("content")] public IReadOnlyList<ClaudeCodeContentBlock>? Content { get; init; }
+
+    [JsonPropertyName("content")]
+    [JsonConverter(typeof(ClaudeCodeContentConverter))]
+    public IReadOnlyList<ClaudeCodeContentBlock>? Content { get; init; }
     [JsonPropertyName("stop_reason")] public string? StopReason { get; init; }
     [JsonPropertyName("usage")] public ClaudeCodeUsage? Usage { get; init; }
     [JsonPropertyName("model")] public string? Model { get; init; }
@@ -203,6 +246,51 @@ internal sealed record ClaudeCodeToolResultBlock : ClaudeCodeContentBlock
     public string? Content { get; init; }
 
     [JsonPropertyName("is_error")] public bool? IsError { get; init; }
+}
+
+/// <summary>
+/// Reads a message's <c>content</c>: a list of content blocks, or a string, which is one text block. A subagent's prompt
+/// can come as either.
+/// </summary>
+internal sealed class ClaudeCodeContentConverter : JsonConverter<IReadOnlyList<ClaudeCodeContentBlock>?>
+{
+    public override IReadOnlyList<ClaudeCodeContentBlock>? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        switch (reader.TokenType)
+        {
+            case JsonTokenType.Null:
+                return null;
+            case JsonTokenType.String:
+                return [new ClaudeCodeTextBlock { Text = reader.GetString() }];
+        }
+
+        var blocks = new List<ClaudeCodeContentBlock>();
+        if (reader.TokenType != JsonTokenType.StartArray)
+            throw new JsonException("A message's content is a string or a list of blocks.");
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+        {
+            var block = JsonSerializer.Deserialize(ref reader, ClaudeCodeJsonContext.Default.ClaudeCodeContentBlock);
+            if (block is not null)
+                blocks.Add(block);
+        }
+
+        return blocks;
+    }
+
+    public override void Write(Utf8JsonWriter writer, IReadOnlyList<ClaudeCodeContentBlock>? value, JsonSerializerOptions options)
+    {
+        if (value is null)
+        {
+            writer.WriteNullValue();
+            return;
+        }
+
+        writer.WriteStartArray();
+        foreach (var block in value)
+            JsonSerializer.Serialize(writer, block, ClaudeCodeJsonContext.Default.ClaudeCodeContentBlock);
+        writer.WriteEndArray();
+    }
 }
 
 /// <summary>

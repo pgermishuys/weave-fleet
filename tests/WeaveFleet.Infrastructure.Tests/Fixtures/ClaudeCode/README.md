@@ -14,3 +14,8 @@ replaced with `<WORKDIR>`.
   it (`background_tasks_changed`, `task_notification`) and starts a turn by itself with a new `init`; then a second
   prompt from the host. Thinking-only assistant lines and `thinking_tokens` lines were dropped too, and the task
   output folder replaced with `<TASKS>`.
+- `background-shell-and-monitor.jsonl`, `subagents.jsonl`, `stop-task.jsonl` (Claude Code 2.1.289, 2026-10-04): a
+  background `Bash` command and a `Monitor`; a foreground subagent starting a nested one plus a background subagent
+  with a background shell of its own; a background command stopped with `stop_task` while the turn ran a foreground
+  one. Thinking, usage and `task_updated` lines dropped, the task folder replaced with `<TASKS>`. The running work
+  each gives is in `tests/contracts/claudecode-work-events.json`.

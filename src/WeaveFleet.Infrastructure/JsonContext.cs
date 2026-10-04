@@ -205,6 +205,7 @@ internal sealed partial class OpenCodeJsonContext : JsonSerializerContext
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     AllowOutOfOrderMetadataProperties = true)]
 [JsonSerializable(typeof(ClaudeCodeStreamMessage))]
+[JsonSerializable(typeof(ClaudeCodeContentBlock))]
 internal sealed partial class ClaudeCodeJsonContext : JsonSerializerContext
 {
 }

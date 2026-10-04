@@ -38,5 +38,14 @@ public interface IDelegationRepository
     /// work from the previous run can still be going. Returns how many were ended.
     /// </summary>
     Task<int> CancelAllUnfinishedAsync(string completedAt);
+
+    /// <summary>
+    /// Session <paramref name="parentSessionId"/>'s work that ended lost (<see cref="WeaveFleet.Domain.Harnesses.WorkEndedReasons.Lost"/>)
+    /// that its agent hasn't been told about yet, oldest first.
+    /// </summary>
+    Task<IReadOnlyList<Delegation>> GetUnreportedLostAsync(string parentSessionId);
+
+    /// <summary>Records that the agent was told work <paramref name="ids"/> was lost, so it isn't told again.</summary>
+    Task MarkLostReportedAsync(IReadOnlyCollection<string> ids, string reportedAt);
     Task DeleteByParentSessionIdAsync(IDbConnection connection, IDbTransaction? transaction, string parentSessionId);
 }

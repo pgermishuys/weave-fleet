@@ -537,6 +537,20 @@ public sealed class DelegationService(
     }
 
     /// <summary>
+    /// The work of session <paramref name="parentSessionId"/> that was lost and its agent hasn't been told about, oldest
+    /// first. One query on an index of only such rows, so a session with none pays nothing for it.
+    /// </summary>
+    public Task<IReadOnlyList<Delegation>> GetUnreportedLostWorkAsync(string parentSessionId)
+    {
+        ValidateRequired(parentSessionId, nameof(parentSessionId));
+        return delegationRepository.GetUnreportedLostAsync(parentSessionId);
+    }
+
+    /// <summary>Records that the agent was told <paramref name="lost"/> ended lost (<see cref="LostWorkNote"/>), so it isn't told again.</summary>
+    public Task MarkLostWorkReportedAsync(IReadOnlyList<Delegation> lost)
+        => delegationRepository.MarkLostReportedAsync([.. lost.Select(work => work.Id)], DateTime.UtcNow.ToString("O"));
+
+    /// <summary>
     /// The session's running work, and the work that ended in the last <see cref="RecentlyEndedFor"/> with its result;
     /// every piece it ever ran with <paramref name="all"/>. Oldest first.
     /// </summary>

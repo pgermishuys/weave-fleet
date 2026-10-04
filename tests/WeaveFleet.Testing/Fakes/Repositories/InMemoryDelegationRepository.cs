@@ -136,6 +136,21 @@ public sealed class InMemoryDelegationRepository : IDelegationRepository
         return Task.FromResult(unfinished.Count);
     }
 
+    private readonly Dictionary<string, string> _lostReportedAt = new(StringComparer.Ordinal);
+
+    public Task<IReadOnlyList<Delegation>> GetUnreportedLostAsync(string parentSessionId)
+        => Task.FromResult<IReadOnlyList<Delegation>>(_store.Values
+            .Where(d => d.ParentSessionId == parentSessionId && d.EndedReason == "lost" && !_lostReportedAt.ContainsKey(d.Id))
+            .OrderBy(d => d.CreatedAt, StringComparer.Ordinal)
+            .ToList());
+
+    public Task MarkLostReportedAsync(IReadOnlyCollection<string> ids, string reportedAt)
+    {
+        foreach (var id in ids)
+            _lostReportedAt[id] = reportedAt;
+        return Task.CompletedTask;
+    }
+
     public Task UpdateChildSessionIdAsync(string id, string? childSessionId, string updatedAt)
     {
         UpdateChildSessionIdCalls.Add((id, childSessionId, updatedAt));

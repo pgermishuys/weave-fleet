@@ -873,12 +873,22 @@ public sealed partial class SessionOrchestrator(
                 && await agentMemory.ChangesForAsync(sessionResult.Value, ct).ConfigureAwait(false) is { } memoryChanges)
                 modelNotes = [.. modelNotes ?? [], memoryChanges];
 
+            // Work the agent left running that was lost (Fleet or its harness process restarted) won't report back: the
+            // first prompt after says which, once, to a harness that passes Fleet's notes on.
+            var lostWork = harnessRegistry.GetByType(sessionResult.Value.HarnessType)?.Capabilities.TakesModelNotes == true
+                ? await _delegationService.GetUnreportedLostWorkAsync(id).ConfigureAwait(false)
+                : [];
+            if (LostWorkNote.For(lostWork) is { } lostWorkNote)
+                modelNotes = [.. modelNotes ?? [], lostWorkNote];
+
             // Pass the generated message ID through to the harness, with any notes the session's prompts carry.
             var promptOptionsWithMessageId = options is null
                 ? new PromptOptions { MessageId = generatedMessageId, ModelNotes = modelNotes, MemoryNotes = memoryNotes }
                 : options with { MessageId = generatedMessageId, ModelNotes = modelNotes, MemoryNotes = memoryNotes };
 
             await instanceResult.Value.SendPromptAsync(text, promptOptionsWithMessageId, ct);
+            if (lostWork.Count > 0)
+                await _delegationService.MarkLostWorkReportedAsync(lostWork).ConfigureAwait(false);
 
             // Your reply is what a recap waits for: it clears the current one and counts toward the next. A side
             // conversation gets none: it's only ever seen beside its session.

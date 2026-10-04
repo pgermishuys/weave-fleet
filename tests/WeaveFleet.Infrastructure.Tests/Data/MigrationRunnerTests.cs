@@ -416,6 +416,42 @@ public sealed class MigrationRunnerTests
     }
 
     [Fact]
+    public async Task Migration_049_counts_work_lost_before_it_as_told()
+    {
+        using var conn = CreateInMemoryConnection();
+        var factory = new SingleConnectionFactory(conn);
+        var runner = CreateRunner(factory);
+
+        var scriptsThrough048 = MigrationRunner.LoadScripts("Migrations")
+            .TakeWhile(script => string.CompareOrdinal(MigrationRunner.ExtractMigrationName(script.Name), "049") < 0)
+            .ToList();
+        foreach (var script in scriptsThrough048)
+            await conn.ExecuteAsync(script.Contents);
+        await SeedDbUpJournalAsync(conn, scriptsThrough048);
+
+        await conn.ExecuteAsync(
+            "INSERT INTO workspaces (id, directory, isolation_strategy, created_at, user_id) VALUES ('ws-1', '/tmp/proj', 'existing', '2026-01-01', 'local-user')");
+        await conn.ExecuteAsync(
+            "INSERT INTO instances (id, port, directory, url, status, created_at, user_id) VALUES ('inst-1', 0, '/tmp/proj', 'http://127.0.0.1:0', 'running', '2026-01-01', 'local-user')");
+        await conn.ExecuteAsync(
+            """
+            INSERT INTO sessions (id, workspace_id, instance_id, opencode_session_id, title, status, directory, created_at, user_id)
+            VALUES ('parent', 'ws-1', 'inst-1', 'oc-1', 'Parent', 'active', '/tmp/proj', '2026-01-01', 'local-user')
+            """);
+        await conn.ExecuteAsync(
+            """
+            INSERT INTO delegations (id, parent_session_id, title, status, created_at, updated_at, completed_at, kind, work_id, ended_reason)
+            VALUES ('lost', 'parent', 'shell', 'cancelled', '2026-10-01', '2026-10-02', '2026-10-02', 'shell', 'sh-1', 'lost'),
+                   ('done', 'parent', 'shell', 'completed', '2026-10-01', '2026-10-02', '2026-10-02', 'shell', 'sh-2', 'completed')
+            """);
+
+        await runner.ApplyMigrationsAsync(conn);
+
+        var rows = (await conn.QueryAsync<(string Id, string? Reported)>("SELECT id, lost_reported_at FROM delegations ORDER BY id")).ToList();
+        rows.ShouldBe([("done", null), ("lost", "2026-10-02")]);
+    }
+
+    [Fact]
     public async Task ApplyMigrationsAsync_SkipsAlreadyAppliedMigrations()
     {
         using var conn = CreateInMemoryConnection();
