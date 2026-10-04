@@ -1,149 +1,136 @@
 using Microsoft.Extensions.Logging;
-using WeaveFleet.Application.Harnesses;
-using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
-using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Services;
 
 /// <summary>
-/// Manages session completion callbacks — notifying a parent/conductor session when a child session finishes.
-/// Mirrors the TypeScript callback-service.ts + callback-monitor.ts logic.
+/// Session completion callbacks (<c>onComplete</c> on <c>POST /api/sessions</c>): when the source session finishes,
+/// the target session is prompted that it did. <see cref="SessionCallbackDispatcher"/> calls it as the relay sees
+/// sessions work and go idle, and every <see cref="SessionCallbackPoller.Interval"/>.
 /// </summary>
+/// <remarks>
+/// <para>
+/// A callback is consumed only once its prompt was delivered. Until then it stays in the database and the next idle
+/// event or poll tries again, so a Fleet restart, a target that's mid-turn or a prompt that fails loses nothing.
+/// </para>
+/// <para>
+/// The prompt goes to the target <em>session</em> the way any prompt does: to its live instance, or, when it has
+/// none, by resuming it. The instance id stored with the callback isn't used: instance ids change when Fleet restarts
+/// or the session is resumed, and the session always knows its current one.
+/// </para>
+/// </remarks>
 public sealed partial class SessionCallbackService(
     ISessionCallbackRepository callbackRepository,
     ISessionRepository sessionRepository,
-    IMessageRepository messageRepository,
-    InstanceTracker instanceTracker,
+    SessionOrchestrator orchestrator,
+    SessionActivityTracker activity,
     ILogger<SessionCallbackService> logger)
 {
-    /// <summary>
-    /// Registers a callback: when <paramref name="sourceSessionId"/> completes,
-    /// prompt the target instance.
-    /// </summary>
-    public async Task<SessionCallback> RegisterCallbackAsync(
-        string sourceSessionId,
-        string targetSessionId,
-        string targetInstanceId)
-    {
-        var callback = new SessionCallback
-        {
-            Id = Guid.NewGuid().ToString(),
-            SourceSessionId = sourceSessionId,
-            TargetSessionId = targetSessionId,
-            TargetInstanceId = targetInstanceId,
-            Status = "pending",
-            CreatedAt = DateTime.UtcNow.ToString("O")
-        };
+    /// <summary>How long one delivery may take, resuming the target included, before it's left for the next try.</summary>
+    internal static readonly TimeSpan DeliveryTimeout = TimeSpan.FromMinutes(2);
 
-        await callbackRepository.InsertAsync(callback);
-        return callback;
-    }
+    /// <summary>The source session's agent has started working: its callbacks fire once it's no longer in a turn.</summary>
+    public Task<int> MarkSourceStartedAsync(string sourceSessionId)
+        => callbackRepository.MarkSourceStartedAsync(sourceSessionId);
 
     /// <summary>
-    /// Called when <paramref name="sourceSessionId"/> completes.
-    /// Fires all pending callbacks for that source session.
-    /// Returns the number of callbacks fired.
+    /// A session's turn ended. Fires the callbacks it was the source of, and those waiting for it as their target to
+    /// be free. Its idle event is the signal, so the activity tracker isn't asked about it: it may not have caught up.
     /// </summary>
-    public async Task<int> TryFireCallbacksAsync(string sourceSessionId, CancellationToken ct = default)
+    public Task<int> OnSessionIdledAsync(string sessionId, CancellationToken ct = default)
+        => FireReadyAsync(sessionId, ct);
+
+    /// <summary>
+    /// The poll: fires every started callback whose source isn't in a turn. That covers a source whose turn ended
+    /// while Fleet was down (a restart ends every turn, and no idle event comes for it), a target that was busy, and a
+    /// delivery that failed before.
+    /// </summary>
+    public Task<int> ProcessPendingCallbacksAsync(CancellationToken ct = default)
+        => FireReadyAsync(idledSessionId: null, ct);
+
+    private async Task<int> FireReadyAsync(string? idledSessionId, CancellationToken ct)
     {
-        var pending = await callbackRepository.GetPendingForSessionAsync(sourceSessionId);
-        if (pending.Count == 0)
-            return 0;
-
-        var source = await sessionRepository.GetByIdAsync(sourceSessionId);
-        var completionSummary = source is not null
-            ? $"Session '{source.Title}' completed."
-            : "A background session completed.";
-
+        var started = await callbackRepository.GetStartedAsync().ConfigureAwait(false);
         var fired = 0;
-        foreach (var cb in pending)
+        foreach (var cb in started)
         {
-            // Ownership guard: target session must belong to the same user as the source session
-            if (source is not null)
-            {
-                // Fetch target session without user-scope (system-level check for cross-user guard)
-                // GetAnyForInstanceAsync is not applicable here; we use GetByIdAsync which is user-scoped.
-                // Since the repository is user-scoped, if target returns null it is either missing or
-                // cross-user — either way, skip.
-                var targetSession = await sessionRepository.GetByIdAsync(cb.TargetSessionId);
-                if (targetSession is null || !string.Equals(targetSession.UserId, source.UserId, StringComparison.Ordinal))
-                {
-                    LogOwnershipGuardRejected(cb.Id, cb.TargetSessionId);
-                    continue;
-                }
-            }
+            ct.ThrowIfCancellationRequested();
 
-            // Try to claim the callback atomically to avoid duplicate firing
-            var claimed = await callbackRepository.ClaimPendingAsync(cb.Id);
-            if (!claimed)
+            if (cb.SourceSessionId != idledSessionId && InTurn(activity.GetEffectiveActivityStatus(cb.SourceSessionId)))
                 continue;
 
-            var targetInstance = instanceTracker.Get(cb.TargetInstanceId);
-            if (targetInstance is null)
+            // User-scoped: a source that isn't this user's comes back null.
+            var source = await sessionRepository.GetByIdAsync(cb.SourceSessionId).ConfigureAwait(false);
+            if (source is null)
+                continue;
+
+            // Ownership guard: the target must be the source owner's session. The repository is user-scoped, so a
+            // target that's missing or someone else's comes back null.
+            var target = await sessionRepository.GetByIdAsync(cb.TargetSessionId).ConfigureAwait(false);
+            if (target is null || !string.Equals(target.UserId, source.UserId, StringComparison.Ordinal))
             {
-                LogTargetNotFound(cb.Id, cb.TargetInstanceId);
+                LogOwnershipGuardRejected(cb.Id, cb.TargetSessionId);
                 continue;
             }
 
-            try
-            {
-                var userMsg = MessagePersistenceService.CreateUserPromptMessage(completionSummary, DateTimeOffset.UtcNow);
-                var persisted = MessagePersistenceService.ToPersistedMessage(cb.TargetSessionId, userMsg);
-                await messageRepository.UpsertAsync(persisted);
+            // An archived session can't be prompted; it hears once it's restored.
+            if (string.Equals(target.RetentionStatus, "archived", StringComparison.Ordinal))
+                continue;
 
-                await targetInstance.SendPromptAsync(completionSummary, null, ct);
-                await callbackRepository.MarkFiredAsync(cb.Id);
+            // A prompt to a busy session goes into the turn it's running, which would change what it's doing. It
+            // hears when that turn ends.
+            if (cb.TargetSessionId != idledSessionId && InTurn(activity.Get(cb.TargetSessionId)?.ActivityStatus))
+                continue;
+
+            if (await DeliverAsync(cb, source, ct).ConfigureAwait(false))
                 fired++;
-                LogCallbackFired(cb.Id, cb.TargetSessionId);
-            }
-            catch (Exception ex)
-            {
-                LogCallbackFailed(ex, cb.Id);
-            }
         }
 
         return fired;
     }
 
-    /// <summary>
-    /// Poll-based safety net: fires any pending callbacks where the target instance is live.
-    /// Useful to recover callbacks that were registered but never triggered.
-    /// </summary>
-    public async Task<int> ProcessPendingCallbacksAsync(CancellationToken ct = default)
+    private async Task<bool> DeliverAsync(SessionCallback cb, Session source, CancellationToken ct)
     {
-        var allPending = await callbackRepository.GetAllPendingAsync();
-        if (allPending.Count == 0)
-            return 0;
+        var text = $"Session '{source.Title}' ({source.Id}) completed.";
 
-        var fired = 0;
-        foreach (var cb in allPending)
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(DeliveryTimeout);
+        try
         {
-            // Check whether source session is in a terminal state
-            var source = await sessionRepository.GetByIdAsync(cb.SourceSessionId);
-            if (source is null || source.Status is not ("stopped" or "completed"))
-                continue;
-
-            fired += await TryFireCallbacksAsync(cb.SourceSessionId, ct);
+            var sent = await orchestrator.PromptSessionOnceAsync(cb.TargetSessionId, text, options: null, timeout.Token).ConfigureAwait(false);
+            if (sent.IsFailure)
+            {
+                LogDeliveryFailed(cb.Id, cb.TargetSessionId, sent.Error.Description);
+                return false;
+            }
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            LogCallbackFailed(ex, cb.Id);
+            return false;
         }
 
-        return fired;
+        await callbackRepository.MarkFiredAsync(cb.Id).ConfigureAwait(false);
+        LogCallbackFired(cb.Id, cb.TargetSessionId);
+        return true;
     }
+
+    private static bool InTurn(string? activityStatus) => SessionActivityTracker.IsInTurn(activityStatus);
 
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "Callback {CallbackId}: target session {TargetSessionId} ownership guard rejected (cross-user reference).")]
     private partial void LogOwnershipGuardRejected(string callbackId, string targetSessionId);
 
-    [LoggerMessage(Level = LogLevel.Warning,
-        Message = "Callback {CallbackId}: target instance {InstanceId} is not live; skipping.")]
-    private partial void LogTargetNotFound(string callbackId, string instanceId);
-
     [LoggerMessage(Level = LogLevel.Information,
         Message = "Callback {CallbackId} fired → target session {TargetSessionId}.")]
     private partial void LogCallbackFired(string callbackId, string targetSessionId);
 
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Callback {CallbackId} wasn't delivered to session {TargetSessionId}; it stays pending: {Reason}")]
+    private partial void LogDeliveryFailed(string callbackId, string targetSessionId, string reason);
+
     [LoggerMessage(Level = LogLevel.Error,
-        Message = "Callback {CallbackId} failed to send prompt.")]
+        Message = "Callback {CallbackId} failed to send prompt; it stays pending.")]
     private partial void LogCallbackFailed(Exception ex, string callbackId);
 }

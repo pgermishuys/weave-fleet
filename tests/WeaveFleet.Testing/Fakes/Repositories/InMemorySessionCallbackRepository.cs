@@ -23,35 +23,39 @@ public sealed class InMemorySessionCallbackRepository : ISessionCallbackReposito
         return Task.CompletedTask;
     }
 
-    public Task<IReadOnlyList<SessionCallback>> GetPendingForSessionAsync(string sourceSessionId)
+    public Task<int> MarkSourceStartedAsync(string sourceSessionId)
     {
-        IReadOnlyList<SessionCallback> result = [.. _store.Values.Where(c => c.SourceSessionId == sourceSessionId && c.Status == "pending")];
+        var moved = 0;
+        foreach (var callback in _store.Values.Where(c => c.SourceSessionId == sourceSessionId && c.Status == SessionCallbackStatuses.Pending))
+        {
+            callback.Status = SessionCallbackStatuses.Started;
+            moved++;
+        }
+        return Task.FromResult(moved);
+    }
+
+    public Task<IReadOnlyList<SessionCallback>> GetStartedAsync()
+    {
+        IReadOnlyList<SessionCallback> result = [.. _store.Values.Where(c => c.Status == SessionCallbackStatuses.Started).OrderBy(c => c.CreatedAt, StringComparer.Ordinal)];
         return Task.FromResult(result);
     }
 
-    public Task MarkFiredAsync(string id)
+    public Task<bool> MarkFiredAsync(string id)
     {
-        if (_store.TryGetValue(id, out var callback))
-        {
-            callback.Status = "fired";
-            callback.FiredAt = DateTimeOffset.UtcNow.ToString("O");
-        }
-        return Task.CompletedTask;
+        if (!_store.TryGetValue(id, out var callback) || callback.Status != SessionCallbackStatuses.Started)
+            return Task.FromResult(false);
+
+        callback.Status = SessionCallbackStatuses.Fired;
+        callback.FiredAt = DateTimeOffset.UtcNow.ToString("O");
+        return Task.FromResult(true);
     }
 
-    public Task<bool> ClaimPendingAsync(string id)
-    {
-        if (_store.TryGetValue(id, out var callback) && callback.Status == "pending")
-        {
-            callback.Status = "claimed";
-            return Task.FromResult(true);
-        }
-        return Task.FromResult(false);
-    }
+    /// <summary>The owners the poll should act for. The fake doesn't know sessions' owners, so tests set them.</summary>
+    public List<string> Owners { get; } = [];
 
-    public Task<IReadOnlyList<SessionCallback>> GetAllPendingAsync()
+    public Task<IReadOnlyList<string>> GetOwnersWithStartedCallbacksAsync()
     {
-        IReadOnlyList<SessionCallback> result = [.. _store.Values.Where(c => c.Status == "pending")];
+        IReadOnlyList<string> result = [.. Owners];
         return Task.FromResult(result);
     }
 

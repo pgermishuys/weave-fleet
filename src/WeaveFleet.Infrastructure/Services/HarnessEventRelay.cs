@@ -94,6 +94,7 @@ public sealed class HarnessEventRelay : BackgroundService
     private readonly PendingPermissionStore? _permissions;
     private readonly AgentBrowserCalls? _browserCalls;
     private readonly RunningWorkRecorder? _work;
+    private readonly SessionCallbackDispatcher? _callbacks;
     private CancellationToken _stoppingToken;
 
     /// <summary>
@@ -119,8 +120,10 @@ public sealed class HarnessEventRelay : BackgroundService
         TurnFailureRecorder? failures = null,
         PendingPermissionStore? permissions = null,
         AgentBrowserCalls? browserCalls = null,
-        RunningWorkRecorder? work = null)
+        RunningWorkRecorder? work = null,
+        SessionCallbackDispatcher? callbacks = null)
     {
+        _callbacks = callbacks;
         _browserCalls = browserCalls;
         _work = work;
         _tracker = tracker;
@@ -381,6 +384,7 @@ public sealed class HarnessEventRelay : BackgroundService
                 _workflows?.Observe(targetFleetSessionId, domainEvent);
                 ObserveBrowserCall(targetFleetSessionId, domainEvent);
                 _queue?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
+                _callbacks?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
                 _failures?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
                 _logger.LogDebug("[Relay:Pump] Translated type={Type} domainEvent={DomainEvent} targetSession={TargetSession}",
                     evt.Type, domainEvent?.GetType().Name ?? "null", targetFleetSessionId);

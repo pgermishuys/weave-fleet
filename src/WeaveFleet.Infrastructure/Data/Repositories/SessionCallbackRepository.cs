@@ -47,35 +47,15 @@ public sealed class SessionCallbackRepository : ISessionCallbackRepository
             });
     }
 
-    public async Task<IReadOnlyList<SessionCallback>> GetPendingForSessionAsync(string sourceSessionId)
+    public async Task<int> MarkSourceStartedAsync(string sourceSessionId)
     {
         using var conn = _connectionFactory.CreateConnection();
-        return await conn.QueryAsync(
-            """
-            SELECT sc.*
-            FROM session_callbacks sc
-            INNER JOIN sessions source_session ON source_session.id = sc.source_session_id
-            WHERE sc.source_session_id = @SourceSessionId
-              AND sc.status = 'pending'
-              AND source_session.user_id = @UserId
-            """,
-            cmd =>
-            {
-                cmd.AddParameter("SourceSessionId", sourceSessionId);
-                cmd.AddParameter("UserId", _userContext.UserId);
-            },
-            ReadSessionCallback);
-    }
-
-    public async Task MarkFiredAsync(string id)
-    {
-        using var conn = _connectionFactory.CreateConnection();
-        await conn.ExecuteNonQueryAsync(
+        return await conn.ExecuteNonQueryAsync(
             """
             UPDATE session_callbacks
-            SET status = 'fired',
-                fired_at = datetime('now')
-            WHERE id = @Id
+            SET status = 'started'
+            WHERE source_session_id = @SourceSessionId
+              AND status = 'pending'
               AND EXISTS (
                   SELECT 1
                   FROM sessions source_session
@@ -83,20 +63,36 @@ public sealed class SessionCallbackRepository : ISessionCallbackRepository
             """,
             cmd =>
             {
-                cmd.AddParameter("Id", id);
+                cmd.AddParameter("SourceSessionId", sourceSessionId);
                 cmd.AddParameter("UserId", _userContext.UserId);
             });
     }
 
-    public async Task<bool> ClaimPendingAsync(string id)
+    public async Task<IReadOnlyList<SessionCallback>> GetStartedAsync()
+    {
+        using var conn = _connectionFactory.CreateConnection();
+        return await conn.QueryAsync(
+            """
+            SELECT sc.*
+            FROM session_callbacks sc
+            INNER JOIN sessions source_session ON source_session.id = sc.source_session_id
+            WHERE sc.status = 'started' AND source_session.user_id = @UserId
+            ORDER BY sc.created_at ASC
+            """,
+            cmd => { cmd.AddParameter("UserId", _userContext.UserId); },
+            ReadSessionCallback);
+    }
+
+    public async Task<bool> MarkFiredAsync(string id)
     {
         using var conn = _connectionFactory.CreateConnection();
         var rows = await conn.ExecuteNonQueryAsync(
             """
             UPDATE session_callbacks
-            SET status = 'claimed'
+            SET status = 'fired',
+                fired_at = datetime('now')
             WHERE id = @Id
-              AND status = 'pending'
+              AND status = 'started'
               AND EXISTS (
                   SELECT 1
                   FROM sessions source_session
@@ -110,19 +106,17 @@ public sealed class SessionCallbackRepository : ISessionCallbackRepository
         return rows > 0;
     }
 
-    public async Task<IReadOnlyList<SessionCallback>> GetAllPendingAsync()
+    public async Task<IReadOnlyList<string>> GetOwnersWithStartedCallbacksAsync()
     {
         using var conn = _connectionFactory.CreateConnection();
         return await conn.QueryAsync(
             """
-            SELECT sc.*
+            SELECT DISTINCT source_session.user_id
             FROM session_callbacks sc
             INNER JOIN sessions source_session ON source_session.id = sc.source_session_id
-            WHERE sc.status = 'pending' AND source_session.user_id = @UserId
-            ORDER BY sc.created_at ASC
+            WHERE sc.status = 'started'
             """,
-            cmd => { cmd.AddParameter("UserId", _userContext.UserId); },
-            ReadSessionCallback);
+            static r => r.GetString(0));
     }
 
     public async Task<int> DeleteForSessionAsync(string sessionId)

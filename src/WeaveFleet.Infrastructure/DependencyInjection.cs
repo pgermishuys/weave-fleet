@@ -215,6 +215,9 @@ public static class DependencyInjection
         services.AddScoped<PromptQueueService>();
         // Singleton: the relay hands it every event; it sends a session's next queued message when its turn ends.
         services.AddSingleton<PromptQueueDispatcher>();
+        // Singleton: the relay hands it every event; it fires completion callbacks (onComplete) when their source is done.
+        services.AddSingleton<SessionCallbackDispatcher>();
+        services.AddHostedService<SessionCallbackPoller>();
         // Singleton: the relay hands it every event; it keeps each failed turn's failure so a reload still shows it.
         services.AddSingleton<TurnFailureRecorder>();
         // The asks waiting on the user, kept by the relay and read when a session opens.

@@ -463,6 +463,7 @@ public sealed partial class SessionOrchestrator(
         LogSessionCreated(session.Id, workspace.Id, harnessInstance.InstanceId);
 
         // 5. Deliver the first message.
+        var initialPromptSent = initialPrompt is not null;
         if (sendInitialPromptAfterSpawn)
         {
             // The page for this session subscribes only after create returns, too late for the
@@ -480,7 +481,10 @@ public sealed partial class SessionOrchestrator(
 
             // The session exists either way; the user sees it without the message and can resend.
             if (promptResult.IsFailure)
+            {
+                initialPromptSent = false;
                 LogInitialPromptFailed(sessionId, promptResult.Error.Description);
+            }
         }
         else if (initialPrompt is not null)
         {
@@ -526,7 +530,8 @@ public sealed partial class SessionOrchestrator(
                 SourceSessionId = session.Id,
                 TargetSessionId = request.OnCompleteTargetSessionId,
                 TargetInstanceId = request.OnCompleteTargetInstanceId,
-                Status = "pending",
+                // Working already when it has its first message: the reply may have begun before this row existed.
+                Status = initialPromptSent ? SessionCallbackStatuses.Started : SessionCallbackStatuses.Pending,
                 CreatedAt = DateTime.UtcNow.ToString("O")
             };
             await sessionCallbackRepository.InsertAsync(callback);

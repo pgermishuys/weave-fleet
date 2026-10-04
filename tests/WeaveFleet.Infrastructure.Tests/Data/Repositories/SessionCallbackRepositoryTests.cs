@@ -13,37 +13,8 @@ public sealed class SessionCallbackRepositoryTests
         return (keeper, repo, factory);
     }
 
-    [Fact]
-    public async Task GetPendingForSessionAsync_DoesNotReturnOtherUsersCallbacks()
+    private static async Task<SessionCallback> InsertOwnersCallbackAsync(WeaveFleet.Application.Data.IDbConnectionFactory factory, string status = "pending")
     {
-        var (conn, _, factory) = await CreateAsync();
-        using var _ = conn;
-
-        var ownerGraph = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "owner-user");
-        var ownerTarget = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "owner-user", directory: "/tmp/target");
-        var ownerRepo = new SessionCallbackRepository(factory, new TestUserContext("owner-user"));
-        await ownerRepo.InsertAsync(new SessionCallback
-        {
-            Id = Guid.NewGuid().ToString(),
-            SourceSessionId = ownerGraph.Session.Id,
-            TargetSessionId = ownerTarget.Session.Id,
-            TargetInstanceId = ownerTarget.Instance.Id,
-            Status = "pending",
-            CreatedAt = DateTime.UtcNow.ToString("O")
-        });
-
-        var repo = new SessionCallbackRepository(factory, new TestUserContext());
-        var callbacks = await repo.GetPendingForSessionAsync(ownerGraph.Session.Id);
-
-        callbacks.ShouldBeEmpty();
-    }
-
-    [Fact]
-    public async Task ClaimPendingAsync_ReturnsFalseForOtherUsersCallback()
-    {
-        var (conn, _, factory) = await CreateAsync();
-        using var _ = conn;
-
         var ownerGraph = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "owner-user");
         var ownerTarget = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "owner-user", directory: "/tmp/target");
         var ownerRepo = new SessionCallbackRepository(factory, new TestUserContext("owner-user"));
@@ -53,14 +24,75 @@ public sealed class SessionCallbackRepositoryTests
             SourceSessionId = ownerGraph.Session.Id,
             TargetSessionId = ownerTarget.Session.Id,
             TargetInstanceId = ownerTarget.Instance.Id,
-            Status = "pending",
+            Status = status,
             CreatedAt = DateTime.UtcNow.ToString("O")
         };
         await ownerRepo.InsertAsync(callback);
+        return callback;
+    }
 
-        var repo = new SessionCallbackRepository(factory, new TestUserContext());
-        var claimed = await repo.ClaimPendingAsync(callback.Id);
+    [Fact]
+    public async Task A_callback_moves_from_pending_to_started_to_fired_once()
+    {
+        var (conn, _, factory) = await CreateAsync();
+        using var _ = conn;
+        var callback = await InsertOwnersCallbackAsync(factory);
+        var repo = new SessionCallbackRepository(factory, new TestUserContext("owner-user"));
 
-        claimed.ShouldBeFalse();
+        (await repo.GetStartedAsync()).ShouldBeEmpty();
+        (await repo.MarkFiredAsync(callback.Id)).ShouldBeFalse();
+
+        (await repo.MarkSourceStartedAsync(callback.SourceSessionId)).ShouldBe(1);
+        (await repo.MarkSourceStartedAsync(callback.SourceSessionId)).ShouldBe(0);
+        var started = (await repo.GetStartedAsync()).ShouldHaveSingleItem();
+        started.Id.ShouldBe(callback.Id);
+        started.Status.ShouldBe(SessionCallbackStatuses.Started);
+        (await repo.GetOwnersWithStartedCallbacksAsync()).ShouldBe(["owner-user"]);
+
+        (await repo.MarkFiredAsync(callback.Id)).ShouldBeTrue();
+        (await repo.MarkFiredAsync(callback.Id)).ShouldBeFalse();
+        (await repo.GetStartedAsync()).ShouldBeEmpty();
+        (await repo.GetOwnersWithStartedCallbacksAsync()).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task GetStartedAsync_DoesNotReturnOtherUsersCallbacks()
+    {
+        var (conn, repo, factory) = await CreateAsync();
+        using var _ = conn;
+        await InsertOwnersCallbackAsync(factory, SessionCallbackStatuses.Started);
+
+        (await repo.GetStartedAsync()).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task MarkSourceStartedAsync_DoesNotMoveOtherUsersCallbacks()
+    {
+        var (conn, repo, factory) = await CreateAsync();
+        using var _ = conn;
+        var callback = await InsertOwnersCallbackAsync(factory);
+
+        (await repo.MarkSourceStartedAsync(callback.SourceSessionId)).ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task MarkFiredAsync_ReturnsFalseForOtherUsersCallback()
+    {
+        var (conn, repo, factory) = await CreateAsync();
+        using var _ = conn;
+        var callback = await InsertOwnersCallbackAsync(factory, SessionCallbackStatuses.Started);
+
+        (await repo.MarkFiredAsync(callback.Id)).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task GetOwnersWithStartedCallbacksAsync_FindsEveryUsersCallbacks()
+    {
+        var (conn, repo, factory) = await CreateAsync();
+        using var _ = conn;
+        await InsertOwnersCallbackAsync(factory, SessionCallbackStatuses.Started);
+
+        // The poll has no user of its own; it asks for everyone's.
+        (await repo.GetOwnersWithStartedCallbacksAsync()).ShouldBe(["owner-user"]);
     }
 }
