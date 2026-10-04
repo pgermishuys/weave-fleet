@@ -885,6 +885,22 @@ export interface paths {
         patch: operations["MoveSessionToProject"];
         trace?: never;
     };
+    "/api/sessions/{id}/lineage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["UpdateSessionLineage"];
+        trace?: never;
+    };
     "/api/sessions/{id}/tags": {
         parameters: {
             query?: never;
@@ -3707,6 +3723,9 @@ export interface components {
         MoveSessionRequest: {
             projectId: null | string;
         };
+        UpdateSessionLineageRequest: {
+            detached: boolean;
+        };
         OnCompleteInfo: {
             notifySessionId: string;
             notifyInstanceId: string;
@@ -3982,6 +4001,7 @@ export interface components {
             forkedFromSessionId?: null | string;
             spawnedBySessionId?: null | string;
             spawnKind?: null | string;
+            lineageDetachedAt?: null | string;
         };
         SessionMessageBridgeRequest: {
             harnessSessionId: null | string;
@@ -6227,6 +6247,48 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    UpdateSessionLineage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSessionLineageRequest"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
             };
         };
     };

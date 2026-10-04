@@ -27,7 +27,7 @@ import { groupRunSessions } from "@/lib/workflows";
 import { useWorkflowsStore } from "@/stores/workflows";
 import { heightEnter, heightLeave } from "@/lib/height-transition";
 import type { RunningWorkItem } from "@/lib/running-work";
-import { lineageDescendants, lineageKindLabel, nestLineage, sessionAgentState } from "@/lib/session-lineage";
+import { lineageDescendants, lineageKindLabel, movableOutOf, nestLineage, sessionAgentState } from "@/lib/session-lineage";
 
 interface ProjectGroupModel {
   id: string;
@@ -66,6 +66,8 @@ interface Emits {
   projectChanged: [];
   sessionChanged: [];
   moveSession: [sessionId: string, targetProjectId: string | null];
+  /** A fork or a started session dragged out of its parent, onto its project: it stands on its own. */
+  moveOutOfParent: [sessionId: string];
   dragSessionStart: [sessionId: string, projectId: string | null];
   dragSessionEnd: [];
   openDraft: [];
@@ -82,26 +84,33 @@ const lineage = computed(() => nestLineage(props.project.sessions));
 /** A workflow run's step sessions group under one row; everything else is a row of its own. */
 const entries = computed(() => groupRunSessions(lineage.value.roots, workflows.runForSession));
 
-function subagentsOf(session: SessionListItem): readonly RunningWorkItem[] {
-  return props.runningSubagents?.get(session.session.id) ?? [];
-}
-
 type ChildRow =
-  | { kind: "subagent"; key: string; depth: number; work: RunningWorkItem }
-  | { kind: "session"; key: string; depth: number; item: SessionListItem; label: string };
+  | { kind: "subagent"; key: string; work: RunningWorkItem }
+  | { kind: "session"; key: string; item: SessionListItem; label: string };
 
 /**
- * What shows under a session: its running subagents, then the sessions it forked or started, each followed by its own
- * running subagents and children, one step further in.
+ * A session's running subagents, each followed by the subagents it runs itself (Claude Code's nested subagents run in
+ * the subagent's own session).
+ */
+function subagentRowsOf(sessionId: string, seen = new Set<string>([sessionId])): ChildRow[] {
+  return (props.runningSubagents?.get(sessionId) ?? []).flatMap((work): ChildRow[] => {
+    const child = work.childSessionId;
+    const nested = child && !seen.has(child) ? subagentRowsOf(child, seen.add(child)) : [];
+    return [{ kind: "subagent", key: `work:${work.id}`, work }, ...nested];
+  });
+}
+
+/**
+ * What shows under a top-level session: everything that came from it, however deep, one indent in and in tree order.
+ * Its running subagents first, then each session it forked or started followed by that one's own subagents and
+ * children. The kind label says how each came; the session's own header names its exact parent.
  */
 function childRowsOf(session: SessionListItem): ChildRow[] {
-  const subagents = (item: SessionListItem, depth: number): ChildRow[] =>
-    subagentsOf(item).map((work) => ({ kind: "subagent", key: `work:${work.id}`, depth, work }));
   return [
-    ...subagents(session, 1),
-    ...lineageDescendants(session, lineage.value.childrenOf).flatMap(({ item, kind, depth }): ChildRow[] => [
-      { kind: "session", key: rowKey(item), depth, item, label: lineageKindLabel(kind) },
-      ...subagents(item, depth + 1),
+    ...subagentRowsOf(session.session.id),
+    ...lineageDescendants(session, lineage.value.childrenOf).flatMap(({ item, kind }): ChildRow[] => [
+      { kind: "session", key: rowKey(item), item, label: lineageKindLabel(kind) },
+      ...subagentRowsOf(item.session.id),
     ]),
   ];
 }
@@ -151,7 +160,37 @@ const isAnyActionPending = computed(() => isUpdating.value || isReordering.value
 
 // Drag-and-drop drop target state
 const dragEnterCount = shallowRef(0);
-const isDropTarget = computed(() => dragEnterCount.value > 0);
+
+/** The nested fork or started session being dragged, when it's one of this project's: dropping it here moves it out. */
+const draggedOutOfParent = computed(() => {
+  const id = props.activeDragSessionId;
+  if (!id || props.activeDragProjectId !== props.project.projectId) return null;
+  const item = props.project.sessions.find((candidate) => candidate.session.id === id);
+  return item && movableOutOf(item) && !lineage.value.roots.includes(item) ? item : null;
+});
+
+/** Whether the dragged session would land somewhere new: another project's session, or one moving out of its parent. */
+const acceptsDrag = computed(() => Boolean(props.activeDragSessionId)
+  && (props.activeDragProjectId !== props.project.projectId || draggedOutOfParent.value !== null));
+
+/** Over the family the dragged session is already in (its top-level session and everything under it): no drop there. */
+const isOverOwnFamily = shallowRef(false);
+const isDropTarget = computed(() => dragEnterCount.value > 0 && acceptsDrag.value && !isOverOwnFamily.value);
+
+function inFamily(root: SessionListItem): boolean {
+  const id = props.activeDragSessionId;
+  return Boolean(id) && childRowsOf(root).some((row) => row.kind === "session" && row.item.session.id === id);
+}
+
+/** Dragging over its own family does nothing: the session is already there. */
+function handleFamilyDragOver(event: DragEvent, root: SessionListItem): void {
+  if (!draggedOutOfParent.value || !inFamily(root)) {
+    isOverOwnFamily.value = false;
+    return;
+  }
+  isOverOwnFamily.value = true;
+  event.stopPropagation();
+}
 
 function handleSessionDragStart(sessionId: string, projectId: string | null): void {
   emit("dragSessionStart", sessionId, projectId);
@@ -162,8 +201,9 @@ function handleSessionDragEnd(): void {
 }
 
 function handleDragOver(event: DragEvent): void {
+  isOverOwnFamily.value = false;
   // Must prevent default to allow drop
-  if (props.activeDragSessionId) {
+  if (acceptsDrag.value) {
     event.preventDefault();
     if (event.dataTransfer) {
       event.dataTransfer.dropEffect = "move";
@@ -185,8 +225,17 @@ function handleDragLeave(): void {
 
 function handleDrop(event: DragEvent): void {
   dragEnterCount.value = 0;
+  isOverOwnFamily.value = false;
 
   if (!props.activeDragSessionId) {
+    return;
+  }
+
+  // A fork or a started session dropped on its own project, outside its family, moves out of its parent.
+  const movingOut = draggedOutOfParent.value;
+  if (movingOut) {
+    event.preventDefault();
+    emit("moveOutOfParent", movingOut.session.id);
     return;
   }
 
@@ -503,6 +552,7 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
           v-for="entry in entries"
           :key="entry.kind === 'run' ? `run:${entry.runId}` : rowKey(entry.session)"
           class="project-row"
+          @dragover="entry.kind === 'run' ? undefined : handleFamilyDragOver($event, entry.session)"
         >
           <WorkflowRunGroup
             v-if="entry.kind === 'run'"
@@ -536,8 +586,6 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
                 v-for="child in childRowsOf(entry.session)"
                 :key="child.key"
                 class="session-child"
-                :data-depth="child.depth"
-                :style="child.depth > 1 ? { paddingLeft: `${(child.depth - 1) * 12}px` } : undefined"
               >
                 <SubagentSessionRow
                   v-if="child.kind === 'subagent'"

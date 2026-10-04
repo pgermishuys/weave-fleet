@@ -10,6 +10,8 @@ import {
   ChevronRight,
   LoaderCircle,
   Copy,
+  CornerDownRight,
+  CornerLeftUp,
   FolderOpen,
   GitFork,
   Pencil,
@@ -48,6 +50,8 @@ import { isSessionLive, sessionRowDim, sessionRowStatus } from "@/lib/session-ro
 import { useRelativeTime } from "@/composables/use-relative-time";
 import { useSessionsStore } from "@/stores/sessions";
 import { useArchiveQueueStore } from "@/stores/archive-queue";
+import { useLineageMovesStore } from "@/stores/lineage-moves";
+import { movableBackUnder, movableOutOf } from "@/lib/session-lineage";
 import { useSessionSelectionStore } from "@/stores/session-selection";
 import OpenToolContextSubmenu from "@/components/sessions/OpenToolContextSubmenu.vue";
 import PrBadge from "@/components/github/PrBadge.vue";
@@ -83,6 +87,7 @@ const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
 const sessionsStore = useSessionsStore();
 const archiveQueue = useArchiveQueueStore();
+const lineageMoves = useLineageMovesStore();
 const selection = useSessionSelectionStore();
 const router = useRouter();
 const { startCreateFromSession } = useAutomationsNav();
@@ -174,6 +179,26 @@ const forkDisabledReason = computed(() => canFork.value
   ? null
   : props.session.capabilities?.forkDisabledReason ?? "This session can't be forked.");
 const canDelete = computed(() => props.session.capabilities?.canDelete ?? true);
+/**
+ * A fork or a session another session started can be moved out of the session it came from (and back, once out). A
+ * subagent's session can't: it belongs to its parent's turn. The menu names the parent it really came from, which may not
+ * be the row it sits under (the list shows everything one indent under the top-level session).
+ */
+function parentTitle(parentId: string): string | null {
+  return sessionsStore.sessions.find((item) => item.session.id === parentId)?.session.title?.trim() || null;
+}
+const moveOutLabel = computed(() => {
+  const link = isArchivedSession.value ? null : movableOutOf(props.session);
+  if (!link) return null;
+  const title = parentTitle(link.parentId);
+  return title ? `Move out of "${title}"` : "Move out of its parent";
+});
+const moveBackLabel = computed(() => {
+  const link = isArchivedSession.value ? null : movableBackUnder(props.session);
+  if (!link) return null;
+  const title = parentTitle(link.parentId);
+  return title ? `Move back under "${title}"` : "Move back under its parent";
+});
 const isForkingCurrentSession = computed(() => isForking.value && forkingSessionId.value === sessionId.value);
 const isStartingInFolder = computed(() => startingFromSessionId.value === sessionId.value);
 /**
@@ -274,6 +299,16 @@ const runningChipLabel = computed(() => {
 function handleArchive(): void {
   isContextMenuOpen.value = false;
   archiveQueue.archive([sessionId.value]);
+}
+
+function handleMoveOut(): void {
+  isContextMenuOpen.value = false;
+  void lineageMoves.moveOut(sessionId.value);
+}
+
+function handleMoveBack(): void {
+  isContextMenuOpen.value = false;
+  void lineageMoves.moveBack(sessionId.value);
 }
 
 async function handleRestore(): Promise<void> {
@@ -673,6 +708,26 @@ function removeSessionFromStore(): void {
       >
         <ArchiveRestore class="size-3.5" />
         Restore
+      </ContextMenuItem>
+
+      <ContextMenuItem
+        v-if="moveOutLabel"
+        :disabled="isAnyActionPending"
+        data-testid="session-context-move-out"
+        @select="handleMoveOut"
+      >
+        <CornerLeftUp class="size-3.5" />
+        <span class="truncate">{{ moveOutLabel }}</span>
+      </ContextMenuItem>
+
+      <ContextMenuItem
+        v-if="moveBackLabel"
+        :disabled="isAnyActionPending"
+        data-testid="session-context-move-back"
+        @select="handleMoveBack"
+      >
+        <CornerDownRight class="size-3.5" />
+        <span class="truncate">{{ moveBackLabel }}</span>
       </ContextMenuItem>
 
       <ContextMenuItem

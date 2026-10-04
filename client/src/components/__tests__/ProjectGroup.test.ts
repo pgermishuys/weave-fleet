@@ -237,7 +237,7 @@ describe("ProjectGroup", () => {
       expect(order).toEqual(["quiet-fork", "child-2"]);
     });
 
-    it("nests a fork of a started session one step further in, under that session", () => {
+    it("keeps everything under the top-level session one indent in, in tree order, however deep", () => {
       const wrapper = mountWithLineage({
         project: {
           ...createProjectGroup(),
@@ -250,12 +250,79 @@ describe("ProjectGroup", () => {
         runningSubagents: new Map([["capture", [{ ...subagent, sessionId: "capture" }]]]),
       });
 
-      const rows = wrapper.get("[data-testid='session-children']").findAll(".session-child")
-        .map((row) => {
-          const stub = row.find(".session-stub");
-          return [row.attributes("data-depth"), stub.exists() ? stub.attributes("data-id") : "subagent"];
-        });
-      expect(rows).toEqual([["1", "capture"], ["2", "subagent"], ["2", "fork"]]);
+      const children = wrapper.get("[data-testid='session-children']");
+      const rows = children.findAll(".session-child").map((row) => {
+        const stub = row.find(".session-stub");
+        return [stub.exists() ? stub.attributes("data-id") : "subagent", stub.exists() ? stub.attributes("data-kind") : null];
+      });
+      expect(rows).toEqual([["capture", "started"], ["subagent", null], ["fork", "fork"]]);
+      // No staircase: no row steps further in than the others.
+      expect(children.findAll(".session-child").every((row) => !row.attributes("style"))).toBe(true);
+      expect(wrapper.findAll("[data-testid='session-children']")).toHaveLength(1);
+    });
+
+    it("nests a subagent's own running subagents (Claude Code nesting) under the same top-level session", () => {
+      const nested = { ...subagent, id: "w-3", sessionId: "child-1", childSessionId: "child-3", label: "Read the mapper" };
+      const wrapper = mountWithLineage({ runningSubagents: new Map([["parent", [subagent]], ["child-1", [nested]]]) });
+
+      const children = wrapper.findAll("[data-testid='session-children']")[0]!;
+      expect(children.findAll("[data-testid='subagent-session-row']").map((row) => row.attributes("data-child-session-id")))
+        .toEqual(["child-1", "child-3"]);
+    });
+
+    describe("dragging a session out of its parent", () => {
+      function mountDragging(sessionId: string, projectId = "project-2") {
+        return mountWithLineage({ activeDragSessionId: sessionId, activeDragProjectId: projectId });
+      }
+
+      /** Whether the browser would let the session drop here: the handler cancels dragover. */
+      async function dragOver(target: { element: Element }): Promise<boolean> {
+        const event = new Event("dragover", { bubbles: true, cancelable: true });
+        target.element.dispatchEvent(event);
+        await flushPromises();
+        return event.defaultPrevented;
+      }
+
+      it("moves a nested fork out when it's dropped on its project, and shows the project as the place to drop", async () => {
+        const wrapper = mountDragging("fork");
+
+        await wrapper.get("section").trigger("dragenter");
+        expect(await dragOver(wrapper.get("section"))).toBe(true);
+        expect(wrapper.get(".project-header").classes()).toContain("project-header--drop-target");
+
+        await wrapper.get("section").trigger("drop", { preventDefault: () => {} });
+        expect(wrapper.emitted("moveOutOfParent")).toEqual([["fork"]]);
+        expect(wrapper.emitted("moveSession")).toBeUndefined();
+      });
+
+      it("does nothing over its own family", async () => {
+        const wrapper = mountDragging("fork");
+
+        await wrapper.get("section").trigger("dragenter");
+
+        expect(await dragOver(wrapper.get(".session-stub[data-id='parent']"))).toBe(false);
+        expect(wrapper.get(".project-header").classes()).not.toContain("project-header--drop-target");
+      });
+
+      it("doesn't offer a drop for a top-level session in its own project", async () => {
+        const wrapper = mountDragging("quiet");
+
+        await wrapper.get("section").trigger("dragenter");
+        expect(await dragOver(wrapper.get("section"))).toBe(false);
+        await wrapper.get("section").trigger("drop", { preventDefault: () => {} });
+
+        expect(wrapper.get(".project-header").classes()).not.toContain("project-header--drop-target");
+        expect(wrapper.emitted("moveOutOfParent")).toBeUndefined();
+      });
+
+      it("moves a nested session to another project as before, without moving it out", async () => {
+        const wrapper = mountDragging("fork", "project-1");
+
+        await wrapper.get("section").trigger("drop", { preventDefault: () => {} });
+
+        expect(wrapper.emitted("moveSession")).toEqual([["fork", "project-2"]]);
+        expect(wrapper.emitted("moveOutOfParent")).toBeUndefined();
+      });
     });
 
     it("a running subagent's row opens its session under its parent", async () => {

@@ -39,11 +39,11 @@ const sessions = computed(() => {
     : all;
 });
 
-/** Its rows: forks and started sessions right under the session they came from, with their kind. */
+/** Its rows: forks and started sessions under the top-level session they came from, one indent in, with their kind. */
 const rows = computed(() => {
   const { roots, childrenOf } = nestLineage(sessions.value);
   return roots.flatMap((item) => [
-    { item, kind: null as LineageKind | null, depth: 0 },
+    { item, kind: null as LineageKind | null },
     ...lineageDescendants(item, childrenOf),
   ]);
 });
@@ -97,11 +97,10 @@ function age(item: SessionListItem): string {
         {{ state.error }}
       </p>
       <button
-        v-for="{ item, kind, depth } in rows"
+        v-for="{ item, kind } in rows"
         :key="item.session.id"
         type="button"
         class="machine-row"
-        :style="depth > 1 ? { paddingLeft: `${10 + (depth - 1) * 12}px` } : undefined"
         :class="[
           { 'machine-row--stale': unreachable, 'machine-row--child': kind },
           sessionRowDim(item, now) > 0 ? `machine-row--dim-${sessionRowDim(item, now)}` : '',

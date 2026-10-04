@@ -835,6 +835,8 @@ export interface SessionListItem {
   spawnedBySessionId?: string | null;
   /** How the session came to be: `fork`, `api`, `message`, `automation` or `workflow`; null when the user started it. */
   spawnKind?: string | null;
+  /** When the user moved it out of the session it came from; it stands on its own since. */
+  lineageDetachedAt?: string | null;
 }
 
 export interface AnalyticsSummary {

@@ -442,6 +442,20 @@ export function useMoveSession(): UseMoveSessionResult {
   };
 }
 
+/** Moves a fork or a started session out of the session it came from (`detached`), or back under it. */
+export async function updateSessionLineage(sessionId: string, detached: boolean): Promise<void> {
+  const { error, response } = await api.PATCH("/api/sessions/{id}/lineage", {
+    params: {
+      path: { id: sessionId },
+    },
+    body: { detached },
+  });
+
+  if (error || !response.ok) {
+    throw new Error(await readErrorMessage(response, error));
+  }
+}
+
 function createRetentionMutation(targetStatus: "archived" | "active", actionName: string, fallbackMessage: string) {
   const state = createMutationState();
 

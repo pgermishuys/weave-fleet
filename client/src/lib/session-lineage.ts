@@ -5,6 +5,9 @@
  *
  * The session list nests a session's children under it, the Agents tab lists them, and the header links back to the
  * session that started this one. Everything here is pure, so the list, the tab and the header read lineage the same way.
+ *
+ * The user can move a fork or a started session out of its parent (`lineageDetachedAt`): it keeps where it came from, but
+ * stands on its own, as if the user had started it. A subagent's session can't be moved out: it's part of its parent's turn.
  */
 import type { SessionListItem } from "@/api/client";
 import type { AccumulatedMessage } from "@/lib/client-types";
@@ -14,7 +17,10 @@ import { isWorkRunning, workFailed, type RunningWorkItem } from "@/lib/running-w
 export type LineageKind = "subagent" | "fork" | "started";
 
 /** The lineage fields a list item carries. */
-export type LineageFields = Pick<SessionListItem, "forkedFromSessionId" | "spawnedBySessionId" | "spawnKind" | "parentSessionId">;
+export type LineageFields = Pick<
+  SessionListItem,
+  "forkedFromSessionId" | "spawnedBySessionId" | "spawnKind" | "parentSessionId" | "lineageDetachedAt"
+>;
 
 export interface LineageLink {
   parentId: string;
@@ -23,13 +29,31 @@ export interface LineageLink {
 
 /**
  * Where a session came from, or null when the user started it. A hidden delegated child names its parent as a subagent;
- * a session can be both a fork and started by an agent (an agent forking), and then its `spawnKind` decides.
+ * a session can be both a fork and started by an agent (an agent forking), and then its `spawnKind` decides. Null too for
+ * a session the user moved out of its parent: it stands on its own.
  */
 export function lineageOf(item: LineageFields): LineageLink | null {
+  const origin = lineageOriginOf(item);
+  return origin && origin.kind !== "subagent" && item.lineageDetachedAt ? null : origin;
+}
+
+/** Where a session came from, whether or not the user has moved it out since. */
+export function lineageOriginOf(item: LineageFields): LineageLink | null {
   if (item.parentSessionId) return { parentId: item.parentSessionId, kind: "subagent" };
   const fork = item.forkedFromSessionId ? { parentId: item.forkedFromSessionId, kind: "fork" as const } : null;
   const started = item.spawnedBySessionId ? { parentId: item.spawnedBySessionId, kind: "started" as const } : null;
   return item.spawnKind === "fork" ? fork ?? started : started ?? fork;
+}
+
+/** The parent a fork or a started session can be moved out of now; null for a subagent's session or one on its own. */
+export function movableOutOf(item: LineageFields): LineageLink | null {
+  const link = lineageOf(item);
+  return link && link.kind !== "subagent" ? link : null;
+}
+
+/** The parent a session the user moved out can go back under; null when it isn't out. */
+export function movableBackUnder(item: LineageFields): LineageLink | null {
+  return item.lineageDetachedAt ? lineageOriginOf(item) : null;
 }
 
 /** What a child's row calls its kind. */
@@ -108,7 +132,10 @@ export function nestLineage<T extends LineageFields & { session: { id: string } 
   return { roots, childrenOf };
 }
 
-/** A session's descendants in the tree, depth first, each with how deep it sits (1 for a child). */
+/**
+ * A session's descendants in the tree, depth first, each with how deep it sits (1 for a child). The session list shows
+ * them all one indent under the top-level session, in this order: no staircase, however deep.
+ */
 export function lineageDescendants<T extends { session: { id: string } }>(
   root: T,
   childrenOf: ReadonlyMap<string, readonly LineageChild<T>[]>,
