@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick } from "vue";
 import { AlertCircle, Bot, ChevronRight, FileText, Folder, LoaderCircle, Terminal } from "lucide-vue-next";
+import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import type { AutocompleteItem } from "@/composables/use-autocomplete";
+import { useRelativeTime } from "@/composables/use-relative-time";
+import { formatCompactAge } from "@/lib/session-row-status";
 
 defineOptions({
   name: "AutocompletePopup",
@@ -16,13 +19,22 @@ interface AutocompletePopupProps {
   onSelect: (value: string) => void;
   /** Lists a folder's contents instead of referencing the folder. */
   onOpenFolder?: (value: string) => void;
+  /** What's typed after the `@`, marked in session titles. */
+  query?: string;
+  /** What the agent gets for a session, shown under the list while a session is selected. */
+  sessionNote?: string;
 }
 
 interface ItemGroup {
   key: AutocompleteItem["group"];
   label: string;
+  /** Said on the right of the group's heading. */
+  hint?: string;
   items: AutocompleteItem[];
 }
+
+/** Statuses that get a glyph on a session's row, as in the session list. */
+const LIVE_STATUSES = new Set(["active", "waiting_input", "error"]);
 
 const props = defineProps<AutocompletePopupProps>();
 
@@ -37,8 +49,9 @@ watch(() => props.selectedValue, (val) => {
   });
 });
 
-const groupDefinitions: ReadonlyArray<{ key: AutocompleteItem["group"]; label: string }> = [
+const groupDefinitions: ReadonlyArray<{ key: AutocompleteItem["group"]; label: string; hint?: string }> = [
   { key: "command", label: "Commands" },
+  { key: "session", label: "Sessions", hint: "Tab to attach" },
   { key: "file", label: "Files & folders" },
   { key: "agent", label: "Agents" },
 ];
@@ -48,10 +61,22 @@ const groupedItems = computed<ItemGroup[]>(() => {
     .map((groupDefinition) => ({
       key: groupDefinition.key,
       label: groupDefinition.label,
+      hint: groupDefinition.hint,
       items: props.items.filter((item) => item.group === groupDefinition.key),
     }))
     .filter((group) => group.items.length > 0);
 });
+
+const now = useRelativeTime();
+
+/** A session title split around the first match of what's typed, so the match can be marked. */
+function titleParts(title: string): { before: string; match: string; after: string } {
+  const query = props.query?.trim() ?? "";
+  const at = query ? title.toLowerCase().indexOf(query.toLowerCase()) : -1;
+  return at < 0
+    ? { before: title, match: "", after: "" }
+    : { before: title.slice(0, at), match: title.slice(at, at + query.length), after: title.slice(at + query.length) };
+}
 
 const selectedItem = computed(() => props.items.find((item) => item.value === props.selectedValue) ?? null);
 
@@ -88,7 +113,11 @@ function handleSelect(value: string): void {
         class="autocomplete-popup__group"
       >
         <div class="autocomplete-popup__group-label">
-          {{ group.label }}
+          <span>{{ group.label }}</span>
+          <span
+            v-if="group.hint"
+            class="autocomplete-popup__group-hint"
+          >{{ group.hint }}</span>
         </div>
 
         <div
@@ -111,6 +140,14 @@ function handleSelect(value: string): void {
                 class="autocomplete-popup__icon"
                 aria-hidden="true"
               />
+
+              <template v-else-if="item.session">
+                <StatusGlyph
+                  v-if="LIVE_STATUSES.has(item.session.status)"
+                  :status="item.session.status"
+                  :activity="item.session.activity"
+                />
+              </template>
 
               <span
                 v-else-if="item.group === 'agent'"
@@ -142,12 +179,24 @@ function handleSelect(value: string): void {
             </span>
 
             <span class="autocomplete-popup__content">
-              <span class="autocomplete-popup__label">{{ item.label }}</span>
+              <span
+                v-if="item.session"
+                class="autocomplete-popup__label"
+                data-testid="autocomplete-session-title"
+              >{{ titleParts(item.label).before }}<mark>{{ titleParts(item.label).match }}</mark>{{ titleParts(item.label).after }}</span>
+              <span
+                v-else
+                class="autocomplete-popup__label"
+              >{{ item.label }}</span>
               <span
                 v-if="item.description"
                 class="autocomplete-popup__description"
               >{{ item.description }}</span>
             </span>
+            <span
+              v-if="item.session"
+              class="autocomplete-popup__age"
+            >{{ formatCompactAge(item.session.updatedAt, now) }}</span>
           </button>
 
           <button
@@ -199,6 +248,14 @@ function handleSelect(value: string): void {
     </div>
 
     <div
+      v-if="selectedItem?.group === 'session' && sessionNote"
+      class="autocomplete-popup__hint autocomplete-popup__hint--note"
+      data-testid="autocomplete-session-note"
+    >
+      {{ sessionNote }}
+    </div>
+
+    <div
       v-if="selectedItem?.group === 'file'"
       class="autocomplete-popup__hint"
     >
@@ -216,53 +273,64 @@ function handleSelect(value: string): void {
 .autocomplete-popup {
   position: absolute;
   right: 0;
-  bottom: calc(100% + 8px);
+  bottom: calc(100% + 6px);
   left: 0;
-  max-height: 300px;
+  max-height: 340px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-gutter: stable;
+  padding: 6px;
   border: 1px solid var(--border);
-  border-radius: 0;
+  border-radius: var(--radius-card);
   background: var(--card-bg);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.45);
   z-index: 250;
 }
 
 .autocomplete-popup__group + .autocomplete-popup__group {
-  border-top: 1px solid var(--border);
+  margin-top: 2px;
 }
 
 .autocomplete-popup__group-label {
   position: sticky;
-  top: 0;
-  padding: 8px 12px 6px;
+  top: -6px;
+  z-index: 1;
+  display: flex;
+  padding: 6px 8px 2px;
   background: var(--card-bg);
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
+.autocomplete-popup__group-hint {
+  margin-left: auto;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 .autocomplete-popup__row {
   display: flex;
   align-items: stretch;
+  border-radius: 7px;
 }
 
 .autocomplete-popup__row:hover,
 .autocomplete-popup__row--selected {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  background: var(--accent-dim);
 }
 
 .autocomplete-popup__item {
   display: flex;
   min-width: 0;
   flex: 1;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 9px 12px;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
   border: 0;
+  border-radius: 7px;
   background: transparent;
   color: inherit;
   cursor: pointer;
@@ -279,16 +347,17 @@ function handleSelect(value: string): void {
   display: inline-grid;
   flex-shrink: 0;
   place-items: center;
-  width: 36px;
+  width: 32px;
   padding: 0;
   border: 0;
+  border-radius: 7px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
 }
 
 .autocomplete-popup__open:hover {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  background: var(--accent-dim);
   color: var(--text);
 }
 
@@ -299,12 +368,13 @@ function handleSelect(value: string): void {
 
 .autocomplete-popup__hint {
   position: sticky;
-  bottom: 0;
-  padding: 6px 12px;
+  bottom: -6px;
+  margin: 4px -6px -6px;
+  padding: 7px 14px 8px;
   border-top: 1px solid var(--border);
   background: var(--card-bg);
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .autocomplete-popup__hint kbd {
@@ -312,7 +382,7 @@ function handleSelect(value: string): void {
   border: 1px solid var(--border);
   border-radius: 3px;
   font-family: inherit;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .autocomplete-popup__icon-wrap,
@@ -322,14 +392,13 @@ function handleSelect(value: string): void {
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  margin-top: 1px;
+  width: 16px;
+  height: 16px;
 }
 
 .autocomplete-popup__icon {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   color: var(--muted);
 }
 
@@ -344,30 +413,51 @@ function handleSelect(value: string): void {
   width: 7px;
   height: 7px;
   border: 1px solid var(--card-bg);
-  border-radius: 0;
+  border-radius: 50%;
 }
 
+/* One line: the name, then what it is in muted text, as the mockup's rows. */
 .autocomplete-popup__content {
   display: flex;
   min-width: 0;
   flex: 1;
-  flex-direction: column;
-  gap: 2px;
+  align-items: baseline;
+  gap: 9px;
 }
 
 .autocomplete-popup__label {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
   color: var(--text);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 13.5px;
   line-height: 1.4;
-  word-break: break-word;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.autocomplete-popup__label mark {
+  background: none;
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .autocomplete-popup__description {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.4;
-  word-break: break-word;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.autocomplete-popup__age {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .autocomplete-popup__state {
@@ -377,7 +467,7 @@ function handleSelect(value: string): void {
   gap: 8px;
   padding: 14px 16px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   text-align: center;
 }
 

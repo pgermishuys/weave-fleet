@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { ArrowUpRight, Bot, Bug, CornerDownRight, RotateCw, TerminalSquare, TriangleAlert, Workflow } from "lucide-vue-next";
 import { parsePeerMessage, parsePeerUpdate, type PeerOutcome, type PeerSender } from "@/lib/session-messages";
+import { parseSessionReferences, type SessionReference } from "@/lib/session-references";
 import { finishedBackgroundWork, parseBackgroundNotice, type BackgroundNotice, type BackgroundState } from "@/lib/background-work";
 import { useRouter } from "@tanstack/vue-router";
 import { storeToRefs } from "pinia";
@@ -76,6 +77,8 @@ interface ActivityMessage {
   workflowStep?: string;
   /** Set on a prompt the user sent into a running turn (steered): the agent read it at its next step. */
   steered?: boolean;
+  /** Sessions the user referenced with `@` in this message: their tokens show as chips. */
+  sessionReferences?: SessionReference[];
   /** Set on a shell command the user ran from the composer: the command and what it printed. */
   shell?: ShellCommandView;
   /** The slash command a message of yours came from; its body is then what the harness made of the command. */
@@ -312,6 +315,8 @@ function toActivityMessage(message: AccumulatedMessage, finished: ReadonlyMap<st
   const peerMessage = message.role === "user" && !background ? parsePeerMessage(rawBody) : null;
   const peerUpdate = message.role === "user" && !peerMessage && !background ? parsePeerUpdate(rawBody) : null;
   const fromPeer = peerMessage ?? peerUpdate;
+  // A message with @ sessions carries Fleet's block for the agent after what the user typed.
+  const referenced = message.role === "user" && !fromPeer && !background ? parseSessionReferences(rawBody) : null;
 
   return {
     id: message.messageId,
@@ -320,7 +325,8 @@ function toActivityMessage(message: AccumulatedMessage, finished: ReadonlyMap<st
     senderKey: getSenderKey(message.role, message.agent),
     role: message.role,
     createdAt: message.createdAt,
-    body: background ? background.text : fromPeer ? fromPeer.text : rawBody,
+    body: background ? background.text : fromPeer ? fromPeer.text : referenced ? referenced.text : rawBody,
+    sessionReferences: referenced?.references.length ? referenced.references : undefined,
     peer: fromPeer?.peer,
     peerOutcome: peerUpdate?.outcome,
     background: background ?? undefined,
@@ -419,6 +425,7 @@ const optimisticMessages = computed<ActivityMessage[]>(() => {
     clusterPosition: "single",
     showIdentity: true,
     steered: prompt.steered,
+    sessionReferences: prompt.sessionReferences,
   }));
 });
 
@@ -654,6 +661,11 @@ function scrollToBottom(): void {
 
 function handleJumpToLatest(): void {
   scrollToBottom();
+}
+
+/** A session chip in a message of yours: opens the session it names. */
+function openReferencedSession(sessionId: string): void {
+  void router.navigate({ to: "/sessions/$id", params: { id: sessionId }, search: { instanceId: undefined, parentSessionId: undefined } });
 }
 
 function handlePeerLinkClick(event: MouseEvent, peer: PeerSender): void {
@@ -1266,6 +1278,8 @@ function handleImproveSkill(skill: string, toolId: string): void {
           :show-identity="message.showIdentity"
           :cluster-position="message.clusterPosition"
           :command="message.command"
+          :session-references="message.sessionReferences"
+          @open-session="openReferencedSession"
           @expand-visual="handleExpandVisual"
           @show-canvas="handleShowCanvas"
           @improve-skill="handleImproveSkill"
