@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UX review: background work — decisions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<style>
+/* Tokens copied from client/src/assets/main.css (dark default, light under data-theme), as in mockups/background-work-lineage. */
+:root {
+  --rail-bg: #0d0d10; --panel-bg: #141418; --card-bg: #1b1b20; --main-bg: #0d0d10;
+  --border: rgba(255,255,255,0.075); --text: #e8e8ec; --muted: #8e8e9a;
+  --coral: #D95A3A; --accent: #6366f1; --accent-dim: rgba(99,102,241,0.15);
+  --running: #22c55e; --idle: #f59e0b; --complete: #3b82f6; --error: #ef4444;
+  --radius-card: 10px; --radius-btn: 8px; --radius-panel: 12px; --code-bg: #0f0f12;
+  --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --rail-bg: #FFFFFF; --panel-bg: #FFFFFF; --card-bg: #ffffff; --main-bg: #F3F2EF;
+  --border: rgba(26,25,24,0.09); --text: #1A1918; --muted: #6E6A65;
+  --accent: #5B6EC7; --accent-dim: rgba(91,110,199,0.12);
+  --running: #16a34a; --idle: #d97706; --complete: #2563eb; --error: #dc2626;
+  --code-bg: #F3F2EF;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--main-bg); color: var(--text); font: 14px/1.5 var(--font-sans); -webkit-font-smoothing: antialiased; padding: 28px 32px 48px; }
+button { font: inherit; color: inherit; }
+svg.lucide { width: 14px; height: 14px; stroke-width: 1.9; flex-shrink: 0; }
+code { font-family: var(--font-mono); font-size: 0.92em; }
+h1 { font-size: 20px; margin: 0 0 4px; }
+.lead { color: var(--muted); margin: 0 0 8px; max-width: 980px; }
+.theme { position: fixed; top: 16px; right: 20px; height: 30px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--card-bg); cursor: pointer; }
+
+section.decision { margin-top: 30px; }
+section.decision > h2 { font-size: 16px; margin: 0 0 2px; }
+section.decision > p { color: var(--muted); margin: 0 0 12px; max-width: 1060px; }
+.opts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.opt-h { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13.5px; margin-bottom: 6px; }
+.tag { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+.tag.pick { color: var(--running); border-color: color-mix(in srgb, var(--running) 45%, transparent); background: color-mix(in srgb, var(--running) 10%, transparent); }
+.frame { border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--panel-bg); padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.cap { color: var(--muted); font-size: 12.5px; line-height: 1.45; margin-top: 8px; }
+.cap b { color: var(--text); font-weight: 500; }
+.lbl-sm { color: var(--muted); font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; margin-bottom: -4px; }
+.mute { color: var(--muted); }
+
+/* Session list */
+.rows { display: flex; flex-direction: column; gap: 1px; width: 264px; max-width: 100%; } /* the real sidebar list width */
+.group-h { display: flex; align-items: center; gap: 6px; padding: 2px 8px 2px; color: var(--muted); font-size: 12.5px; font-weight: 500; }
+.group-h .count { margin-left: auto; font-size: 12px; }
+.row { display: flex; align-items: center; gap: 9px; min-height: 30px; padding: 0 10px; border-radius: var(--radius-btn); color: color-mix(in srgb, var(--text) 86%, transparent); font-size: 13.5px; }
+.row.active { background: var(--card-bg); color: var(--text); }
+.row .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .meta { font-size: 12px; color: var(--muted); flex-shrink: 0; }
+.row .caret { width: 13px; height: 13px; color: var(--muted); margin-left: -4px; }
+.children { display: flex; flex-direction: column; gap: 1px; margin-left: 13px; padding-left: 10px; border-left: 1px solid var(--border); }
+.children .row { min-height: 27px; font-size: 13px; }
+.kind { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); flex-shrink: 0; }
+.kind-soft { font-size: 12px; color: var(--muted); flex-shrink: 0; }
+.dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.dot.run { background: var(--running); }
+.slot { width: 8px; flex-shrink: 0; display: grid; place-items: center; }
+.quad { width: 8px; height: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; }
+.quad i { width: 3.5px; height: 3.5px; border-radius: 50%; background: var(--running); }
+.quad i:nth-child(2), .quad i:nth-child(3) { opacity: .3; }
+.bg-chip { display: inline-flex; align-items: center; gap: 3px; height: 18px; padding: 0 6px; border-radius: 999px; background: color-mix(in srgb, var(--running) 14%, transparent); color: var(--running); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.bg-chip svg.lucide { width: 11px; height: 11px; stroke-width: 2.25; }
+.glyph { width: 13px; height: 13px; color: var(--muted); }
+
+/* Strip */
+.strip { border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--card-bg); overflow: hidden; }
+.strip-h { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; font-size: 12px; }
+.strip-h .lbl { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.strip-h .sum { flex: 1; }
+.strip-h svg.lucide { color: var(--muted); }
+.strip ol { list-style: none; margin: 0; padding: 0 4px 4px; display: flex; flex-direction: column; gap: 2px; }
+.job { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 3px 4px 3px 8px; border-radius: 7px; font-size: 12px; }
+.job svg.lucide { color: var(--muted); }
+.job .k { flex-shrink: 0; width: 62px; color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.job .what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.job .what code { font-size: 11.5px; }
+.job .time { color: var(--muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.job.done .what, .job.done .time { color: var(--muted); }
+.job .ok { color: var(--running) !important; }
+.ghost { height: 22px; padding: 0 6px; display: inline-flex; align-items: center; gap: 4px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 12px; flex-shrink: 0; }
+.ghost.stop-sq svg.lucide { width: 13px; height: 13px; }
+
+/* Status bar + popover */
+.sbar { display: flex; align-items: center; justify-content: flex-end; gap: 12px; color: var(--muted); font-size: 12px; padding: 2px 2px 0; position: relative; }
+.pop { border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--card-bg); box-shadow: 0 16px 40px -14px rgba(0,0,0,.45); padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+.pop .sess { display: flex; align-items: center; gap: 7px; padding: 4px 6px 2px; font-size: 12px; font-weight: 600; }
+.pop .sess .mute { font-weight: 400; }
+.pop .srow { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 7px; font-size: 12.5px; }
+.pop .srow:first-of-type { background: color-mix(in srgb, var(--text) 5%, transparent); }
+.pop .srow .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pop .srow .d { color: var(--muted); font-size: 12px; flex-shrink: 0; }
+
+/* Conversation bits */
+.convo { border: 1px solid var(--border); border-radius: var(--radius-card); padding: 8px 10px; display: flex; flex-direction: column; gap: 8px; background: var(--panel-bg); }
+.tool { display: flex; align-items: center; gap: 8px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 9px; font-size: 12.5px; }
+.tool .n { font-weight: 600; }
+.tool .a { color: var(--muted); font-family: var(--font-mono); font-size: 11.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool .bgl { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; color: var(--running); text-transform: uppercase; }
+.say { font-size: 12.5px; }
+.composer { border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--border)); border-radius: 12px; background: var(--card-bg); padding: 9px 12px; color: var(--muted); font-size: 12.5px; }
+.timeline { display: grid; grid-template-columns: repeat(3, 300px); gap: 14px; }
+.opts.one { grid-template-columns: minmax(0, 1fr); max-width: 1000px; gap: 18px; }
+.tl { display: flex; flex-direction: column; gap: 6px; }
+.tl .when { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.shift { color: var(--coral); font-size: 11.5px; display: flex; align-items: center; gap: 4px; }
+.shift svg.lucide { color: var(--coral); width: 12px; height: 12px; }
+.gone { border: 1px dashed var(--border); border-radius: var(--radius-card); color: var(--muted); font-size: 11.5px; padding: 6px 8px; text-align: center; }
+
+/* Tabs + banner */
+.tabs { display: flex; align-items: center; gap: 2px; padding: 0 0 8px; border-bottom: 1px solid var(--border); }
+.tab { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 9px; border-radius: 8px; color: var(--muted); font-weight: 500; font-size: 13px; }
+.tab.on { background: var(--card-bg); color: var(--text); }
+.tab .n { font-size: 12px; color: var(--muted); }
+.lin-h { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
+.lin-h b { font-weight: 600; }
+.sect-h { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.ag { display: grid; grid-template-columns: 8px minmax(0,1fr) auto; column-gap: 10px; align-items: center; padding: 4px 6px; }
+.ag .nm { font-weight: 500; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ag .nm span { color: var(--muted); font-weight: 400; }
+.ag .l2 { grid-column: 2 / 4; color: var(--muted); font-size: 11.5px; }
+.ag .st { font-size: 12px; color: var(--running); }
+.banner { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 9px; background: color-mix(in srgb, var(--text) 6%, transparent); font-size: 12.5px; }
+.banner .eyebrow { color: var(--muted); font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
+.banner .back { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border: 1px solid var(--border); border-radius: 7px; font-size: 12px; background: var(--card-bg); }
+.note-ro { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; font-size: 12.5px; color: var(--muted); background: var(--card-bg); }
+.note-ro .back { margin-left: auto; color: var(--text); display: inline-flex; align-items: center; gap: 4px; }
+</style>
+</head>
+<body>
+<button class="theme" type="button" onclick="document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'">Theme</button>
+<h1>UX review of the background-work batch: what needs your call</h1>
+<p class="lead">Four design questions from <code>docs/reviews/ux-review-background-work.md</code>. Each shows today (A) and quieter options, built from the real Fleet tokens. The data is the review's scratch Fleet: two sessions with background work, a fork, a started session, a Claude Code subagent. Recommended options are marked.</p>
+
+<!-- ───────────────────────── D1 ───────────────────────── -->
+<section class="decision" id="d1">
+  <h2>D1 · Where running work shows</h2>
+  <p>One running subagent is drawn in five places today: its tool card, the strip, a sidebar row under its parent (plus the parent's chip), the Agents tab's <i>Running now</i>, and the status-bar popover. Each place has its own controls. Pick one home per scope instead.</p>
+  <div class="opts">
+    <div>
+      <div class="opt-h">A · Today <span class="tag">before</span></div>
+      <div class="frame">
+        <div class="lbl-sm">Session list</div>
+        <div class="rows">
+          <div class="row active"><i data-lucide="chevron-down" class="caret"></i><span class="title">Capture Claude Code subagents</span><span class="bg-chip"><i data-lucide="loader-circle"></i>3</span><span class="meta">1m</span></div>
+          <div class="children">
+            <div class="row"><span class="slot"><span class="dot run"></span></span><span class="title">Review the diff</span><span class="kind">subagent</span></div>
+            <div class="row"><span class="slot"><span class="quad"><i></i><i></i><i></i><i></i></span></span><span class="title">Fork: emit jobs over SignalR</span><span class="kind">fork</span></div>
+            <div class="row"><span class="slot"></span><span class="title">Fix Pi model switch</span><span class="kind">started</span></div>
+          </div>
+          <div class="row"><i data-lucide="chevron-down" class="caret"></i><span class="title">Claude Code: background work</span><span class="bg-chip"><i data-lucide="loader-circle"></i>3</span><span class="meta">1m</span></div>
+          <div class="children">
+            <div class="row"><span class="slot"><span class="dot run"></span></span><span class="title">Review the scripts</span><span class="kind">subagent</span></div>
+          </div>
+        </div>
+        <div class="lbl-sm">Strip (this session)</div>
+        <div class="strip">
+          <div class="strip-h"><span class="lbl">Background</span><span class="sum">3 running</span><i data-lucide="chevron-down"></i></div>
+          <ol>
+            <li class="job"><i data-lucide="terminal"></i><span class="k">Shell</span><span class="what"><code>sh scripts/test-e2e.sh</code></span><span class="time">1m 31s</span><span class="ghost"><i data-lucide="scroll-text"></i>Output</span><span class="ghost stop-sq"><i data-lucide="square"></i></span></li>
+            <li class="job"><i data-lucide="bot"></i><span class="k">Agent</span><span class="what">general · Review the diff</span><span class="time">1m 16s</span><span class="ghost"><i data-lucide="arrow-up-right"></i>Open</span><span class="ghost stop-sq"><i data-lucide="square"></i></span></li>
+          </ol>
+        </div>
+        <div class="lbl-sm">Status bar popover (every session)</div>
+        <div class="pop">
+          <div class="sess"><span class="dot run"></span>Capture Claude Code subagents <span class="mute">· this session</span></div>
+          <div class="job"><i data-lucide="terminal"></i><span class="k">Shell</span><span class="what"><code>sh scripts/test-e2e.sh</code></span><span class="time">1m 38s</span><span class="ghost"><i data-lucide="scroll-text"></i>Output</span><span class="ghost stop-sq"><i data-lucide="square"></i></span></div>
+          <div class="job"><i data-lucide="bot"></i><span class="k">Agent</span><span class="what">general · Review the diff</span><span class="time">1m 23s</span><span class="ghost"><i data-lucide="arrow-up-right"></i>Open</span><span class="ghost stop-sq"><i data-lucide="square"></i></span></div>
+          <div class="sess"><span class="dot run"></span>Claude Code: background work</div>
+          <div class="job"><i data-lucide="activity"></i><span class="k">Monitor</span><span class="what"><code>bash scripts/dev.sh</code></span><span class="time">1m 14s</span><span class="ghost"><i data-lucide="arrow-down"></i>Events</span><span class="ghost stop-sq"><i data-lucide="square"></i></span></div>
+          <div class="mute" style="font-size:11.5px;padding:2px 8px">… 3 more rows</div>
+        </div>
+        <div class="sbar"><span class="bg-chip"><span class="dot run" style="width:6px;height:6px"></span>6 running in 2 sessions</span><span>opencode2</span><span>0 tokens</span></div>
+      </div>
+      <div class="cap">Plus the tool card in the conversation and the Agents tab. Sidebar rows come and go as subagents start and end, so every row under them moves.</div>
+    </div>
+
+    <div>
+      <div class="opt-h">B · One home per scope <span class="tag pick">recommended</span></div>
+      <div class="frame">
+        <div class="lbl-sm">Session list: sessions only</div>
+        <div class="rows">
+          <div class="row active"><i data-lucide="chevron-down" class="caret"></i><span class="title">Capture Claude Code subagents</span><span class="bg-chip"><i data-lucide="loader-circle"></i>3</span></div>
+          <div class="children">
+            <div class="row"><span class="slot"><span class="quad"><i></i><i></i><i></i><i></i></span></span><span class="title">Fork: emit jobs over SignalR</span><span class="kind">fork</span></div>
+            <div class="row"><span class="slot"></span><span class="title">Fix Pi model switch</span><span class="kind">started</span></div>
+          </div>
+          <div class="row"><span class="caret" style="width:9px"></span><span class="title">Claude Code: background work</span><span class="bg-chip"><i data-lucide="loader-circle"></i>3</span></div>
+        </div>
+        <div class="lbl-sm">Strip (this session): the one place with controls</div>
+        <div class="strip">
+          <div class="strip-h"><span class="lbl">Background</span><span class="sum">3 running</span><i data-lucide="chevron-down"></i></div>
+          <ol>
+            <li class="job"><i data-lucide="terminal"></i><span class="k">Shell</span><span class="what"><code>sh scripts/test-e2e.sh</code></span><span class="time">1m</span><span class="ghost"><i data-lucide="scroll-text"></i>Output</span><span class="ghost"><i data-lucide="circle-stop"></i>Stop</span></li>
+            <li class="job"><i data-lucide="bot"></i><span class="k">Subagent</span><span class="what">Review the diff</span><span class="time">1m</span><span class="ghost"><i data-lucide="arrow-up-right"></i>Open</span><span class="ghost"><i data-lucide="circle-stop"></i>Stop</span></li>
+          </ol>
+        </div>
+        <div class="lbl-sm">Status bar popover: where, not what</div>
+        <div class="pop">
+          <div class="srow"><span class="dot run"></span><span class="t">Capture Claude Code subagents</span><span class="d">2 shells, 1 subagent</span></div>
+          <div class="srow"><span class="dot run"></span><span class="t">Claude Code: background work</span><span class="d">shell, monitor, subagent</span></div>
+        </div>
+        <div class="sbar"><span class="bg-chip"><span class="dot run" style="width:6px;height:6px"></span>6 running in 2 sessions</span><span>opencode2</span><span>0 tokens</span></div>
+      </div>
+      <div class="cap"><b>Strip</b> = this session's work and its controls. <b>Status bar</b> = which other sessions have work; a row opens that session. <b>Sidebar</b> = sessions (forks, started sessions); the chip takes the time's place while work runs. Subagents live in the strip and the Agents tab, not as sidebar rows.</div>
+    </div>
+
+    <div>
+      <div class="opt-h">C · Strip and status bar only</div>
+      <div class="frame">
+        <div class="lbl-sm">Session list: unchanged from before the batch, plus nesting</div>
+        <div class="rows">
+          <div class="row active"><i data-lucide="chevron-down" class="caret"></i><span class="title">Capture Claude Code subagents</span><span class="meta">1m</span></div>
+          <div class="children">
+            <div class="row"><span class="slot"><span class="quad"><i></i><i></i><i></i><i></i></span></span><span class="title">Fork: emit jobs over SignalR</span><span class="kind">fork</span></div>
+            <div class="row"><span class="slot"></span><span class="title">Fix Pi model switch</span><span class="kind">started</span></div>
+          </div>
+          <div class="row"><span class="caret" style="width:9px"></span><span class="title">Claude Code: background work</span><span class="meta">1m</span></div>
+        </div>
+        <div class="lbl-sm">Strip (this session)</div>
+        <div class="strip">
+          <div class="strip-h"><span class="lbl">Background</span><span class="sum">3 running</span><i data-lucide="chevron-down"></i></div>
+          <ol>
+            <li class="job"><i data-lucide="terminal"></i><span class="k">Shell</span><span class="what"><code>sh scripts/test-e2e.sh</code></span><span class="time">1m</span><span class="ghost"><i data-lucide="scroll-text"></i>Output</span><span class="ghost"><i data-lucide="circle-stop"></i>Stop</span></li>
+            <li class="job"><i data-lucide="bot"></i><span class="k">Subagent</span><span class="what">Review the diff</span><span class="time">1m</span><span class="ghost"><i data-lucide="arrow-up-right"></i>Open</span><span class="ghost"><i data-lucide="circle-stop"></i>Stop</span></li>
+          </ol>
+        </div>
+        <div class="lbl-sm">Status bar popover: where, not what</div>
+        <div class="pop">
+          <div class="srow"><span class="dot run"></span><span class="t">Capture Claude Code subagents</span><span class="d">2 shells, 1 subagent</span></div>
+          <div class="srow"><span class="dot run"></span><span class="t">Claude Code: background work</span><span class="d">shell, monitor, subagent</span></div>
+        </div>
+        <div class="sbar"><span class="bg-chip"><span class="dot run" style="width:6px;height:6px"></span>6 running in 2 sessions</span><span>opencode2</span><span>0 tokens</span></div>
+      </div>
+      <div class="cap">Quietest list. But an idle session with a dev server still running looks just like a finished one in the list; you'd only learn it from the status bar.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── D2 ───────────────────────── -->
+<section class="decision" id="d2">
+  <h2>D2 · A nested row's label</h2>
+  <p>The session list had no badges before this batch. Now a busy parent carries a caret, a chip and a time, and each child an uppercase word (SUBAGENT, FORK, STARTED). The lineage-detach PR keeps the kind on the row and one level of nesting; this is only about how loud the kind is. "Started" on its own also reads like a status.</p>
+  <div class="opts">
+    <div>
+      <div class="opt-h">A · Today <span class="tag">before</span></div>
+      <div class="frame">
+        <div class="rows">
+          <div class="row active"><i data-lucide="chevron-down" class="caret"></i><span class="title">Capture Claude Code subagents</span><span class="bg-chip"><i data-lucide="loader-circle"></i>3</span><span class="meta">1m</span></div>
+          <div class="children">
+            <div class="row"><span class="slot"><span class="dot run"></span></span><span class="title">Review the diff</span><span class="kind">subagent</span></div>
+            <div class="row"><span class="slot"><span class="quad"><i></i><i></i><i></i><i></i></span></span><span class="title">Fork: emit jobs over SignalR</span><span class="kind">fork</span></div>
+            <div class="row"><span class="slot"></span><span class="title">Fix Pi model switch</span><span class="kind">started</span></div>
+          </div>
+          <div class="row"><span class="caret" style="width:9px"></span><span class="title">Explain the event reducer</span><span class="meta">2m</span></div>
+        </div>
+      </div>
+      <div class="cap">The parent's title gets about 130 px at the default sidebar width ("Capture Claude Co…"). Uppercase words are the loudest text in the list.</div>
+    </div>
+    <div>
+      <div class="opt-h">B · Same words, quieter <span class="tag pick">recommended</span></div>
+      <div class="frame">
+        <div class="rows">
+          <div class="row active"><i data-lucide="chevron-down" class="caret"></i><span class="title">Capture Claude Code subagents</span><span class="bg-chip"><i data-lucide="loader-circle"></i>3</span></div>
+          <div class="children">
+            <div class="row"><span class="slot"><span class="quad"><i></i><i></i><i></i><i></i></span></span><span class="title">Fork: emit jobs over SignalR</span><span class="kind-soft">fork</span></div>
+            <div class="row"><span class="slot"></span><span class="title">Fix Pi model switch</span><span class="kind-soft">started here</span></div>
+          </div>
+          <div class="row"><span class="caret" style="width:9px"></span><span class="title">Explain the event reducer</span><span class="meta">2m</span></div>
+        </div>
+      </div>
+      <div class="cap">The kind stays (as lineage-detach wants) in the muted 12 px the time uses, lower case. While work runs the chip stands where the time was, so the title keeps its room. With D1-B there are no subagent rows.</div>
+    </div>
+    <div>
+      <div class="opt-h">C · A glyph, the word on hover</div>
+      <div class="frame">
+        <div class="rows">
+          <div class="row active"><i data-lucide="chevron-down" class="caret"></i><span class="title">Capture Claude Code subagents</span><span class="bg-chip"><i data-lucide="loader-circle"></i>3</span></div>
+          <div class="children">
+            <div class="row"><span class="slot"><span class="quad"><i></i><i></i><i></i><i></i></span></span><span class="title">Fork: emit jobs over SignalR</span><i data-lucide="git-fork" class="glyph"></i></div>
+            <div class="row"><span class="slot"></span><span class="title">Fix Pi model switch</span><i data-lucide="corner-down-right" class="glyph"></i></div>
+          </div>
+          <div class="row"><span class="caret" style="width:9px"></span><span class="title">Explain the event reducer</span><span class="meta">2m</span></div>
+        </div>
+      </div>
+      <div class="cap">Quietest, but a glyph needs learning and hover doesn't exist on a phone. The header pill already says "Forked from …" / "Started by …".</div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── D3 ───────────────────────── -->
+<section class="decision" id="d3">
+  <h2>D3 · Finished work in the strip</h2>
+  <p>A finished item stays in the strip for 30 seconds with its result. On OpenCode 2 the same result is already in the conversation as a card, so it's said twice; and when the strip goes 30 seconds later, the conversation moves (measured: 28 px) while you may be reading.</p>
+  <div class="opts one">
+    <div>
+      <div class="opt-h">A · Today: 30 s for every finished item <span class="tag">before</span></div>
+      <div class="frame">
+        <div class="timeline">
+          <div class="tl"><span class="when">Running</span>
+            <div class="strip"><div class="strip-h"><span class="lbl">Background</span><span class="sum">1 running</span></div><ol><li class="job"><i data-lucide="terminal"></i><span class="what"><code>lint.sh</code></span><span class="time">3s</span></li></ol></div>
+          </div>
+          <div class="tl"><span class="when">Ended</span>
+            <div class="tool"><i data-lucide="square-terminal"></i><span class="n">lint.sh</span><span class="a">completed</span></div>
+            <div class="strip"><div class="strip-h"><span class="lbl">Background</span><span class="sum">1 finished</span></div><ol><li class="job done"><i data-lucide="check" class="ok"></i><span class="what"><code>lint.sh</code> · exit 0</span><span class="time">0s ago</span></li></ol></div>
+          </div>
+          <div class="tl"><span class="when">+30 s</span>
+            <div class="gone">strip gone</div>
+            <div class="shift"><i data-lucide="move-vertical"></i>conversation moves</div>
+          </div>
+        </div>
+      </div>
+      <div class="cap">The result shows twice, then the page moves on its own half a minute later.</div>
+    </div>
+    <div>
+      <div class="opt-h">B · Drop it when it ends</div>
+      <div class="frame">
+        <div class="timeline">
+          <div class="tl"><span class="when">Running</span>
+            <div class="strip"><div class="strip-h"><span class="lbl">Background</span><span class="sum">1 running</span></div><ol><li class="job"><i data-lucide="terminal"></i><span class="what"><code>lint.sh</code></span><span class="time">3s</span></li></ol></div>
+          </div>
+          <div class="tl"><span class="when">Ended</span>
+            <div class="tool"><i data-lucide="square-terminal"></i><span class="n">lint.sh</span><span class="a">completed</span></div>
+            <div class="gone">strip gone</div>
+          </div>
+          <div class="tl"><span class="when">+30 s</span><div class="mute" style="font-size:12px">nothing moves</div></div>
+        </div>
+      </div>
+      <div class="cap">Simplest. The move happens when the work ends, which is when you'd look. But a shell that ends while other work runs vanishes from a list you may be reading, and Claude Code and Pi show no completion card.</div>
+    </div>
+    <div>
+      <div class="opt-h">C · Keep it only while the strip is up anyway <span class="tag pick">recommended</span></div>
+      <div class="frame">
+        <div class="timeline">
+          <div class="tl"><span class="when">Two running</span>
+            <div class="strip"><div class="strip-h"><span class="lbl">Background</span><span class="sum">2 running</span></div><ol><li class="job"><i data-lucide="terminal"></i><span class="what"><code>test-e2e.sh</code></span><span class="time">2m</span></li><li class="job"><i data-lucide="terminal"></i><span class="what"><code>lint.sh</code></span><span class="time">3s</span></li></ol></div>
+          </div>
+          <div class="tl"><span class="when">Lint ends</span>
+            <div class="strip"><div class="strip-h"><span class="lbl">Background</span><span class="sum">1 running · 1 finished</span></div><ol><li class="job"><i data-lucide="terminal"></i><span class="what"><code>test-e2e.sh</code></span><span class="time">2m</span></li><li class="job done"><i data-lucide="check" class="ok"></i><span class="what"><code>lint.sh</code> · exit 0</span><span class="time">just now</span></li></ol></div>
+          </div>
+          <div class="tl"><span class="when">Last one ends</span>
+            <div class="gone">strip gone at once</div>
+          </div>
+        </div>
+      </div>
+      <div class="cap">The strip appears when work starts and leaves when the last of it ends, never on its own later. A finished row stays only beside running ones, so nothing in the list vanishes under you. "0s ago" reads "just now".</div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── D4 ───────────────────────── -->
+<section class="decision" id="d4">
+  <h2>D4 · One word per thing</h2>
+  <p>The same subagent is an <b>Agent</b> in the strip, a <b>Subagent</b> in the list and the Agents tab, a <b>Delegated subagent session</b> on its own page, and <b>general</b>/<b>general-purpose</b> (the harness's agent type) where its name goes. The tab is <b>Agents</b>, its heading <b>Lineage</b>, and it lists forks and started sessions too.</p>
+  <div class="opts">
+    <div>
+      <div class="opt-h">A · Today <span class="tag">before</span></div>
+      <div class="frame">
+        <div class="tabs"><span class="tab on"><i data-lucide="network"></i>Agents <span class="n">2</span></span><span class="tab"><i data-lucide="git-compare"></i>Changes</span><span class="tab">Fil…</span></div>
+        <div class="lin-h"><b>Lineage</b><span class="mute">2 running</span></div>
+        <div class="sect-h">Running now</div>
+        <div class="ag"><span class="dot run"></span><span class="nm">general <span>Review the diff</span></span><span class="st">1m 25s</span><span class="l2"><span class="kind">subagent</span> OpenCode 2 · Fake</span></div>
+        <div class="strip"><ol style="padding-top:4px"><li class="job"><i data-lucide="bot"></i><span class="k">Agent</span><span class="what">general-purpose · Review the scripts · Running Sleep for 900…</span></li></ol></div>
+        <div class="banner"><i data-lucide="bot"></i><div><div class="eyebrow">Delegated subagent session</div>From Claude Code: background work</div><span class="back"><i data-lucide="arrow-left"></i>Back to parent</span></div>
+      </div>
+    </div>
+    <div>
+      <div class="opt-h">B · "Subagent" everywhere, the task as its name <span class="tag pick">recommended</span></div>
+      <div class="frame">
+        <div class="tabs"><span class="tab on"><i data-lucide="network"></i>Agents <span class="n">2</span></span><span class="tab"><i data-lucide="git-compare"></i>Changes</span><span class="tab"><i data-lucide="folder-tree"></i>Files</span></div>
+        <div class="lin-h"><span class="mute">2 running</span></div>
+        <div class="sect-h">Running now</div>
+        <div class="ag"><span class="dot run"></span><span class="nm">Review the diff</span><span class="st">1m</span><span class="l2"><span class="kind">subagent</span> OpenCode 2 · Fake</span></div>
+        <div class="strip"><ol style="padding-top:4px"><li class="job"><i data-lucide="bot"></i><span class="k">Subagent</span><span class="what">Review the scripts <span class="mute">· Sleep for 900 seconds</span></span></li></ol></div>
+        <div class="banner"><i data-lucide="bot"></i><div><div class="eyebrow">Subagent</div>Of Claude Code: background work</div><span class="back"><i data-lucide="arrow-left"></i>Back to parent</span></div>
+      </div>
+      <div class="cap">Kind word: <b>Subagent</b> wherever a subagent shows. Its name is what it was asked (the agent type goes to the tooltip). The tab name stays; the heading under it says only the count.</div>
+    </div>
+    <div>
+      <div class="opt-h">C · Rename the tab to what it holds</div>
+      <div class="frame">
+        <div class="tabs"><span class="tab on"><i data-lucide="network"></i>Related <span class="n">2</span></span><span class="tab"><i data-lucide="git-compare"></i>Changes</span><span class="tab"><i data-lucide="folder-tree"></i>Files</span></div>
+        <div class="lin-h"><span class="mute">2 running</span></div>
+        <div class="sect-h">Running now</div>
+        <div class="ag"><span class="dot run"></span><span class="nm">Review the diff</span><span class="st">1m</span><span class="l2"><span class="kind">subagent</span> OpenCode 2 · Fake</span></div>
+        <div class="strip"><ol style="padding-top:4px"><li class="job"><i data-lucide="bot"></i><span class="k">Subagent</span><span class="what">Review the scripts <span class="mute">· Sleep for 900 seconds</span></span></li></ol></div>
+        <div class="banner"><i data-lucide="bot"></i><div><div class="eyebrow">Subagent</div>Of Claude Code: background work</div><span class="back"><i data-lucide="arrow-left"></i>Back to parent</span></div>
+      </div>
+      <div class="cap">As B, and the tab says what it holds (parent, subagents, forks, sessions it started). More accurate, but "Agents" is the word you chose and the one people will look for.</div>
+    </div>
+  </div>
+</section>
+
+<script>lucide.createIcons();</script>
+</body>
+</html>
