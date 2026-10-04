@@ -295,6 +295,43 @@ public sealed class PiHarnessSessionTests
     }
 
     [Fact]
+    public async Task running_work_is_the_subagents_the_running_call_reported_and_none_once_it_ends()
+    {
+        await using var harness = CreateHarness();
+        await using var session = harness.CreateSession();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var details = JsonDocument.Parse(
+            """{"mode":"single","results":[{"agent":"scout","task":"Find the note","exitCode":0,"model":"fakellm/fake-b","messages":[]}]}""");
+
+        (await session.GetRunningWorkAsync(cts.Token)).ShouldNotBeNull().ShouldBeEmpty();
+
+        var started = ReadEventsAsync(session, 2, cts.Token);
+        await harness.WriteEventAsync(new PiToolExecutionUpdateEvent
+        {
+            ToolCallId = "call_1",
+            ToolName = "subagent",
+            PartialResult = new PiToolResult { Details = details.RootElement.Clone() },
+        }, cts.Token);
+        (await started)[1].Type.ShouldBe(EventTypes.WorkStarted);
+
+        var running = (await session.GetRunningWorkAsync(cts.Token)).ShouldNotBeNull().ShouldHaveSingleItem();
+        running.WorkId.ShouldBe("call_1:0");
+        running.Title.ShouldBe("scout");
+
+        var ended = ReadEventsAsync(session, 3, cts.Token);
+        await harness.WriteEventAsync(new PiToolExecutionEndEvent
+        {
+            ToolCallId = "call_1",
+            ToolName = "subagent",
+            IsError = true,
+            Result = new PiToolResult { Content = [new PiTextContent { Text = "Subagent was aborted" }] },
+        }, cts.Token);
+        (await ended)[2].Type.ShouldBe(EventTypes.WorkEnded);
+
+        (await session.GetRunningWorkAsync(cts.Token)).ShouldNotBeNull().ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task prompt_naming_a_model_pi_cannot_switch_to_fails_clearly_and_is_not_sent()
     {
         await using var harness = CreateHarness();
