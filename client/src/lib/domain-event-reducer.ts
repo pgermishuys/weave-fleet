@@ -3,6 +3,7 @@ import { confirmSentPrompt } from "@/composables/use-send-prompt"
 import { applyDelegationCreated, applyDelegationUpdated } from "@/lib/delegation-state"
 import type { DelegationCompleted, DelegationCreated, DelegationUpdated, DomainEvent, MessageLifecyclePayload, TurnFailedPayload } from "@/lib/domain-events"
 import { applyPartUpdate, applyTextDelta, ensureMessage, mergeMessageUpdate } from "@/lib/event-state"
+import { applyWorkItem, toRunningWorkItem, toRunningWorkItems, type RunningWorkItem } from "@/lib/running-work"
 import type { SessionSnapshot, SessionSnapshotDelegation } from "@/lib/session-snapshot"
 
 export type SessionStreamExplicitStatus = "idle" | "busy" | "retry"
@@ -16,6 +17,11 @@ export type SessionStreamStatus = SessionStreamExplicitStatus | "delegating" | "
 export interface SessionStreamState {
   messages: AccumulatedMessage[]
   delegations: DelegationDto[]
+  /**
+   * The work the agent left running, and what ended recently: the snapshot's `runningWork`, kept current by the
+   * `work.*` events. Background work isn't the session's own, so it doesn't change `sessionStatus`.
+   */
+  runningWork: RunningWorkItem[]
   explicitStatus: SessionStreamExplicitStatus
   /**
    * Derived reducer/composable status. This may be tri-state even while
@@ -47,6 +53,7 @@ export function createSessionStreamState(snapshot: SessionSnapshot): SessionStre
   const baseState: SessionStreamState = {
     messages: [],
     delegations,
+    runningWork: toRunningWorkItems(snapshot.runningWork),
     explicitStatus,
     sessionStatus: deriveSnapshotSessionStatus(explicitStatus, delegations),
     lastEventId: snapshot.lastEventId ?? snapshot.lastSequenceNumber ?? null,
@@ -126,6 +133,11 @@ export function applyDomainEvent(state: SessionStreamState, event: DomainEvent):
     case "delegation.updated":
     case "delegation.completed":
       return withDelegations(state, upsertDelegation(state.delegations, mapDelegationEvent(event)))
+
+    case "work.started":
+    case "work.updated":
+    case "work.ended":
+      return withWorkItem(state, event.payload)
 
     case "session.idled":
       return withExplicitStatus(state, "idle")
@@ -280,6 +292,17 @@ function withChildActivity(state: SessionStreamState, sessionId: string | undefi
   })
 
   return changed ? withDelegations(state, delegations) : state
+}
+
+/** The state with the work item a `work.*` event carries; a payload that isn't one leaves it as it was. */
+function withWorkItem(state: SessionStreamState, payload: unknown): SessionStreamState {
+  const item = toRunningWorkItem(payload)
+  if (!item) {
+    return state
+  }
+
+  const runningWork = applyWorkItem(state.runningWork, item)
+  return runningWork === state.runningWork ? state : { ...state, runningWork }
 }
 
 /** The state with its status taken from the session list's activity status, which the sessions topic keeps current. */

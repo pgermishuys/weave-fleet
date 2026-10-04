@@ -834,13 +834,17 @@ onMounted(() => {
     scrollToBottom();
   })));
   cleanupCallbacks.push(registerWindowCommandListener("weave:command-show-message", ((event: Event) => {
-    const customEvent = event as CustomEvent<{ sessionId?: string; messageId?: string }>;
+    const customEvent = event as CustomEvent<{ sessionId?: string; messageId?: string; toolCallId?: string }>;
+    const toolCallId = customEvent.detail?.toolCallId;
+    const messageId = customEvent.detail?.messageId ?? (toolCallId
+      ? stream.messages.value.find((message) => message.parts.some((part) => part.type === "tool" && part.callId === toolCallId))?.messageId
+      : undefined);
 
-    if (customEvent.detail?.sessionId !== props.sessionId || !customEvent.detail?.messageId) {
+    if (customEvent.detail?.sessionId !== props.sessionId || !messageId) {
       return;
     }
 
-    void nextTick(() => showMessage(customEvent.detail!.messageId!));
+    void nextTick(() => showMessage(messageId));
   })));
   cleanupCallbacks.push(registerWindowCommandListener("weave:command-focus-prompt", handleFocusPromptCommand));
   cleanupCallbacks.push(registerWindowCommandListener("weave:command-copy-session-id", handleCopySessionIdCommand));

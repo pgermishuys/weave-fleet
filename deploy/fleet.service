@@ -25,9 +25,6 @@ EnvironmentFile=-/opt/fleet/data/fleet.env
 # ── Restart policy ────────────────────────────────────────────────────────────
 Restart=on-failure
 RestartSec=5s
-# One agent's build or test run can run the machine out of memory. Let the kernel kill that process
-# alone instead of stopping Fleet and every session with it (systemd's default for services is stop).
-OOMPolicy=continue
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 StandardOutput=journal

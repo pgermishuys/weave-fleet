@@ -71,6 +71,7 @@ function createState(overrides: Partial<SessionStreamState> = {}): SessionStream
   return {
     messages: [],
     delegations: [],
+    runningWork: [],
     explicitStatus: "idle",
     sessionStatus: "idle",
     lastEventId: null,
