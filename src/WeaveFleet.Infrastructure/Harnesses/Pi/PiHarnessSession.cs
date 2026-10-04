@@ -251,6 +251,13 @@ internal sealed class PiHarnessSession : IHarnessSession
     public Task<IReadOnlyList<CommandInfo>> GetCommandsAsync(CancellationToken ct)
         => Task.FromResult<IReadOnlyList<CommandInfo>>([]);
 
+    /// <summary>
+    /// The subagents of the call running now. They run inside this Pi process, so a new process (after Fleet or Pi
+    /// restarted) has none: what Fleet still had running ended with the old one.
+    /// </summary>
+    public Task<IReadOnlyList<WorkReport>?> GetRunningWorkAsync(CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<WorkReport>?>(_mapper.RunningWork());
+
     /// <summary>The models Pi can switch to (its own and those in its <c>models.json</c>), by provider, in Pi's order.</summary>
     public async Task<IReadOnlyList<ProviderInfo>> GetProvidersAsync(CancellationToken ct)
     {

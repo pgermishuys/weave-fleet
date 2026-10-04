@@ -7,6 +7,7 @@ import {
   ArrowUpRight,
   Bot,
   Check,
+  ChevronDown,
   CircleAlert,
   ListTodo,
   ScrollText,
@@ -36,7 +37,8 @@ defineOptions({
 /**
  * One piece of work in the background strip (and the status bar's list): kind, what it is, how long it has run, and
  * what can be done with it. Only what the harness offers shows: Output when its output can be read, Open when it runs
- * in a session of its own, Events for a monitor, Stop when it can be stopped on its own.
+ * in a session of its own, Events for a monitor, Stop when it can be stopped on its own. A subagent with no session of
+ * its own (Pi's subagent extension runs them inside the tool call) has Details instead of Open.
  */
 const props = defineProps<{
   item: RunningWorkItem;
@@ -52,6 +54,7 @@ const router = useRouter();
 const sessionsStore = useSessionsStore();
 
 const outputOpen = shallowRef(false);
+const detailsOpen = shallowRef(false);
 const stopError = shallowRef<string | null>(null);
 
 const running = computed(() => isWorkRunning(props.item));
@@ -79,6 +82,10 @@ const timeTitle = computed(() => {
     : `Ran for ${formatElapsed(workElapsedMs(props.item, props.now))}, from ${started}`;
 });
 const name = computed(() => props.item.label ?? props.item.title);
+/** What the harness says about it while it runs (a chain's step, its model); once it ended, that's its result. */
+const runningDetail = computed(() => (running.value ? props.item.detail ?? null : null));
+/** A subagent with no session to open: what Fleet knows of it is all there is, so it shows here. */
+const hasDetails = computed(() => props.item.kind === "subagent" && !props.item.childSessionId);
 
 const childHref = computed(() => {
   const childId = props.item.childSessionId;
@@ -179,6 +186,11 @@ async function stop(): Promise<void> {
           data-testid="background-work-model"
         > · {{ model }}</span>
         <span
+          v-if="runningDetail"
+          class="work-row__meta"
+          data-testid="background-work-detail"
+        > · {{ runningDetail }}</span>
+        <span
           v-if="result"
           class="work-row__meta"
           data-testid="background-work-result"
@@ -221,6 +233,23 @@ async function stop(): Promise<void> {
           aria-hidden="true"
         />
         Open
+      </Button>
+      <Button
+        v-if="hasDetails"
+        variant="ghost"
+        size="sm"
+        class="work-row__action"
+        data-testid="background-work-details"
+        :aria-expanded="detailsOpen"
+        title="What it was asked, and how it is doing"
+        @click="detailsOpen = !detailsOpen"
+      >
+        <ChevronDown
+          class="size-3.5 work-row__chevron"
+          :class="{ 'work-row__chevron--open': detailsOpen }"
+          aria-hidden="true"
+        />
+        Details
       </Button>
       <Button
         v-if="item.kind === 'monitor' && item.toolCallId"
@@ -266,6 +295,23 @@ async function stop(): Promise<void> {
     >
       {{ stopError }}
     </p>
+    <dl
+      v-if="detailsOpen && hasDetails"
+      class="work-row__details"
+      data-testid="background-work-details-panel"
+    >
+      <template v-if="item.label">
+        <dt>Asked to</dt>
+        <dd>{{ item.label }}</dd>
+      </template>
+      <template v-if="item.detail">
+        <dt>{{ running ? "Now" : "Ended" }}</dt>
+        <dd>{{ item.detail }}</dd>
+      </template>
+      <p v-if="running && !item.canStop">
+        Runs inside the tool call. Interrupt the turn to stop it.
+      </p>
+    </dl>
     <WorkOutput
       v-if="outputOpen && item.canReadOutput"
       :item="item"
@@ -373,6 +419,42 @@ async function stop(): Promise<void> {
 .work-row__stop-slot {
   flex-shrink: 0;
   width: 28px;
+}
+
+.work-row__chevron {
+  transition: transform 120ms ease;
+}
+
+.work-row__chevron--open {
+  transform: rotate(180deg);
+}
+
+.work-row__details {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 12px;
+  margin: 2px 4px 6px 30px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 12px;
+}
+
+.work-row__details dt {
+  color: var(--muted);
+}
+
+.work-row__details dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+}
+
+.work-row__details p {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+  color: var(--muted);
 }
 
 .work-row__error {

@@ -144,7 +144,7 @@ Fleet ends what isn't in it as `lost`, matching by `workId` or by child session)
 | OpenCode 2 | background shells, subagents | shell: `GET` then `DELETE /api/shell/:id`; subagent: interrupt the child | shells: `GET /api/shell/:id/output` | the server's shells for the session, and its children at work |
 | OpenCode | subagents (`task`) | abort the child | — | — |
 | Claude Code | background shells (`local_bash`), monitors (`local_bash` started by a `Monitor` call), subagents (every `local_agent`, foreground too) with a read-only child session each; nested subagents nest | background work: control request `stop_task` | shells, monitors: tail `<tmp>/claude-<uid>/<cwd>/<session>/tasks/<task>.output` (learned from the `Bash` result or `task_notification`), else `get_task_output` (last 8 KiB) | what the session's claude process still runs; nothing when it has none |
-| Pi | none yet (PR 7) | — | — | — |
+| Pi | the example `subagent` extension's agents, one per entry in the call's `details.results` (`{call id}:{index}`), no child session | — (interrupt the turn) | — | the agents of the call running now; a new Pi process has none |
 
 **Lineage**: `forked_from_session_id` + `spawn_kind = fork` on Fork and on a kept side conversation;
 `spawned_by_session_id` + `spawn_kind = api` on `POST /api/sessions` from an agent (its `/agent/{token}` prefix)

@@ -398,7 +398,12 @@ public sealed class DelegationService(
         {
             var kind = WorkKinds.IsKnown(report.Kind) ? report.Kind! : WorkKinds.Task;
             var title = string.IsNullOrWhiteSpace(report.Title) ? kind : report.Title;
-            if (kind == WorkKinds.Subagent && report.ToolCallId is { Length: > 0 } callId)
+            // A subagent that is its call's own work (named by the call, or running in a child session) is the call's
+            // delegation. One the harness names apart from its call, with no session of its own (Pi's subagent
+            // extension runs several in one call), is a record of its own: a delegation is one per call.
+            if (kind == WorkKinds.Subagent
+                && report.ToolCallId is { Length: > 0 } callId
+                && (report.WorkId == callId || report.ChildHarnessSessionId is not null))
             {
                 await HandleDelegationDetectedAsync(parentSessionId, callId, title, report.Label, report.WorkId).ConfigureAwait(false);
                 work = await delegationRepository.GetByWorkIdAsync(parentSessionId, report.WorkId).ConfigureAwait(false)

@@ -189,6 +189,47 @@ public sealed class RunningWorkTests
     }
 
     [Fact]
+    public async Task Subagents_that_share_a_call_without_sessions_of_their_own_are_each_their_own_running_work()
+    {
+        // Pi's subagent extension runs several agents in one call, inside it, with no session to open.
+        WorkReport PiSubagent(int index, string agent, string task) => new()
+        {
+            WorkId = $"call_pi:{index}",
+            Kind = WorkKinds.Subagent,
+            Title = agent,
+            Label = task,
+            ToolCallId = "call_pi",
+            CanStop = false,
+            CanReadOutput = false,
+            Detail = "claude-haiku-4.5",
+        };
+
+        var scout = await _sut.HandleWorkReportedAsync(Parent, PiSubagent(0, "scout", "Find the models"));
+        var reviewer = await _sut.HandleWorkReportedAsync(Parent, PiSubagent(1, "reviewer", "Review the diff"));
+
+        scout.Id.ShouldNotBe(reviewer.Id);
+        foreach (var item in new[] { scout, reviewer })
+        {
+            item.Kind.ShouldBe(WorkKinds.Subagent);
+            item.Status.ShouldBe("running");
+            item.ToolCallId.ShouldBe("call_pi");
+            item.ChildSessionId.ShouldBeNull();
+            item.CanStop.ShouldBeFalse();
+            item.CanReadOutput.ShouldBeFalse();
+        }
+
+        (await _sut.HandleWorkEndedAsync(Parent, "call_pi:1", WorkEndedReasons.Error, "exit 1: Unknown agent")).ShouldNotBeNull().Status.ShouldBe("error");
+
+        var work = await _sut.GetWorkAsync(Parent);
+        work.Select(w => (w.Title, w.Label, w.Status, w.Detail)).ShouldBe(
+        [
+            ("scout", "Find the models", "running", "claude-haiku-4.5"),
+            ("reviewer", "Review the diff", "error", "exit 1: Unknown agent"),
+        ]);
+        (await _sut.GetDelegationsAsync(Parent)).Select(d => d.Title).ShouldBe(["scout", "reviewer"], ignoreOrder: true);
+    }
+
+    [Fact]
     public async Task Work_whose_harness_no_longer_runs_it_ends_lost_and_work_it_still_runs_is_left_alone()
     {
         await _sut.HandleWorkReportedAsync(Parent, Shell("sh_gone"));
