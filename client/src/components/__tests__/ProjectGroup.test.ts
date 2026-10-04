@@ -225,6 +225,18 @@ describe("ProjectGroup", () => {
       expect(wrapper.get(".session-stub[data-id='quiet']").attributes("data-expanded")).toBe("true");
     });
 
+    it("shows a nested session's own running subagents right after it", () => {
+      const forkSubagent = { ...subagent, id: "w-2", sessionId: "quiet-fork", childSessionId: "child-2", label: "Check the fork" };
+      const wrapper = mountWithLineage({ runningSubagents: new Map([["quiet-fork", [forkSubagent]]]) });
+
+      // A subagent under it works, so the quiet parent opens by itself.
+      expect(wrapper.get(".session-stub[data-id='quiet']").attributes("data-expanded")).toBe("true");
+      const children = wrapper.findAll("[data-testid='session-children']").at(-1)!;
+      const order = children.findAll(".session-stub, [data-testid='subagent-session-row']")
+        .map((row) => row.attributes("data-id") ?? row.attributes("data-child-session-id"));
+      expect(order).toEqual(["quiet-fork", "child-2"]);
+    });
+
     it("a running subagent's row opens its session under its parent", async () => {
       const wrapper = mountWithLineage();
       await wrapper.get("[data-testid='subagent-session-row']").trigger("click");

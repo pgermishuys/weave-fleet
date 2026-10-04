@@ -82,16 +82,28 @@ const lineage = computed(() => nestLineage(props.project.sessions));
 /** A workflow run's step sessions group under one row; everything else is a row of its own. */
 const entries = computed(() => groupRunSessions(lineage.value.roots, workflows.runForSession));
 
-function childrenOf(session: SessionListItem) {
-  return lineage.value.childrenOf.get(session.session.id) ?? [];
-}
-
 function subagentsOf(session: SessionListItem): readonly RunningWorkItem[] {
   return props.runningSubagents?.get(session.session.id) ?? [];
 }
 
+type ChildRow =
+  | { kind: "subagent"; key: string; work: RunningWorkItem }
+  | { kind: "session"; key: string; item: SessionListItem; label: string };
+
+/** What shows under a session: its running subagents, then each session it started, followed by that one's subagents. */
+function childRowsOf(session: SessionListItem): ChildRow[] {
+  const subagent = (work: RunningWorkItem): ChildRow => ({ kind: "subagent", key: `work:${work.id}`, work });
+  return [
+    ...subagentsOf(session).map(subagent),
+    ...(lineage.value.childrenOf.get(session.session.id) ?? []).flatMap(({ item, kind }): ChildRow[] => [
+      { kind: "session", key: rowKey(item), item, label: lineageKindLabel(kind) },
+      ...subagentsOf(item).map(subagent),
+    ]),
+  ];
+}
+
 function hasChildren(session: SessionListItem): boolean {
-  return childrenOf(session).length > 0 || subagentsOf(session).length > 0;
+  return childRowsOf(session).length > 0;
 }
 
 /** Children the user opened or closed, by parent id; the rest follow {@link opensByItself}. */
@@ -100,9 +112,9 @@ const childrenOverride = shallowRef<Record<string, boolean>>({});
 /** A parent shows its children while it or one of them is open, or while one of them works or waits on you. */
 function opensByItself(session: SessionListItem): boolean {
   if (session.session.id === props.activeSessionId) return true;
-  if (subagentsOf(session).length > 0) return true;
-  return childrenOf(session).some(({ item }) =>
-    item.session.id === props.activeSessionId || ["running", "waiting"].includes(sessionAgentState(item)));
+  return childRowsOf(session).some((row) => row.kind === "subagent"
+    || row.item.session.id === props.activeSessionId
+    || ["running", "waiting"].includes(sessionAgentState(row.item)));
 }
 
 function childrenExpanded(session: SessionListItem): boolean {
@@ -516,23 +528,26 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
               :aria-label="`Started from ${entry.session.session.title || 'this session'}`"
               data-testid="session-children"
             >
-              <SubagentSessionRow
-                v-for="item in subagentsOf(entry.session)"
-                :key="item.id"
-                :item="item"
-                :active="item.childSessionId === activeSessionId"
-              />
-              <SessionItem
-                v-for="child in childrenOf(entry.session)"
-                :key="rowKey(child.item)"
-                :session="child.item"
-                :kind-label="lineageKindLabel(child.kind)"
-                :active="child.item.session.id === activeSessionId"
-                :running-count="runningCounts?.get(child.item.session.id)"
-                @select="handleSessionSelect"
-                @drag-session-start="handleSessionDragStart"
-                @drag-session-end="handleSessionDragEnd"
-              />
+              <template
+                v-for="child in childRowsOf(entry.session)"
+                :key="child.key"
+              >
+                <SubagentSessionRow
+                  v-if="child.kind === 'subagent'"
+                  :item="child.work"
+                  :active="child.work.childSessionId === activeSessionId"
+                />
+                <SessionItem
+                  v-else
+                  :session="child.item"
+                  :kind-label="child.label"
+                  :active="child.item.session.id === activeSessionId"
+                  :running-count="runningCounts?.get(child.item.session.id)"
+                  @select="handleSessionSelect"
+                  @drag-session-start="handleSessionDragStart"
+                  @drag-session-end="handleSessionDragEnd"
+                />
+              </template>
             </div>
           </template>
         </div>
