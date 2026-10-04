@@ -21,10 +21,13 @@ import ConfirmDeleteProjectDialog from "./ConfirmDeleteProjectDialog.vue";
 import DraftSessionRow from "./DraftSessionRow.vue";
 import InlineEdit from "./InlineEdit.vue";
 import SessionItem from "./SessionItem.vue";
+import SubagentSessionRow from "./SubagentSessionRow.vue";
 import WorkflowRunGroup from "@/components/workflows/WorkflowRunGroup.vue";
 import { groupRunSessions } from "@/lib/workflows";
 import { useWorkflowsStore } from "@/stores/workflows";
 import { heightEnter, heightLeave } from "@/lib/height-transition";
+import type { RunningWorkItem } from "@/lib/running-work";
+import { lineageKindLabel, nestLineage, sessionAgentState } from "@/lib/session-lineage";
 
 interface ProjectGroupModel {
   id: string;
@@ -50,6 +53,10 @@ interface Props {
   draftActive?: boolean;
   /** Session id → row key, for sessions that took over the draft row. */
   rowKeys?: Readonly<Record<string, string>>;
+  /** Session id → how much work its agent has running: the chip on its row. */
+  runningCounts?: ReadonlyMap<string, number>;
+  /** Session id → its running subagents that have a session of their own, nested under it. */
+  runningSubagents?: ReadonlyMap<string, readonly RunningWorkItem[]>;
 }
 
 interface Emits {
@@ -69,8 +76,42 @@ const emit = defineEmits<Emits>();
 
 const workflows = useWorkflowsStore();
 
+/** Forks and sessions another session started nest under it; running subagents join them from the running work. */
+const lineage = computed(() => nestLineage(props.project.sessions));
+
 /** A workflow run's step sessions group under one row; everything else is a row of its own. */
-const entries = computed(() => groupRunSessions(props.project.sessions, workflows.runForSession));
+const entries = computed(() => groupRunSessions(lineage.value.roots, workflows.runForSession));
+
+function childrenOf(session: SessionListItem) {
+  return lineage.value.childrenOf.get(session.session.id) ?? [];
+}
+
+function subagentsOf(session: SessionListItem): readonly RunningWorkItem[] {
+  return props.runningSubagents?.get(session.session.id) ?? [];
+}
+
+function hasChildren(session: SessionListItem): boolean {
+  return childrenOf(session).length > 0 || subagentsOf(session).length > 0;
+}
+
+/** Children the user opened or closed, by parent id; the rest follow {@link opensByItself}. */
+const childrenOverride = shallowRef<Record<string, boolean>>({});
+
+/** A parent shows its children while it or one of them is open, or while one of them works or waits on you. */
+function opensByItself(session: SessionListItem): boolean {
+  if (session.session.id === props.activeSessionId) return true;
+  if (subagentsOf(session).length > 0) return true;
+  return childrenOf(session).some(({ item }) =>
+    item.session.id === props.activeSessionId || ["running", "waiting"].includes(sessionAgentState(item)));
+}
+
+function childrenExpanded(session: SessionListItem): boolean {
+  return childrenOverride.value[session.session.id] ?? opensByItself(session);
+}
+
+function toggleChildren(session: SessionListItem): void {
+  childrenOverride.value = { ...childrenOverride.value, [session.session.id]: !childrenExpanded(session) };
+}
 
 const isContextMenuOpen = shallowRef(false);
 const isInlineEditing = shallowRef(false);
@@ -456,14 +497,44 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
             @drag-session-start="handleSessionDragStart"
             @drag-session-end="handleSessionDragEnd"
           />
-          <SessionItem
-            v-else
-            :session="entry.session"
-            :active="entry.session.session.id === activeSessionId"
-            @select="handleSessionSelect"
-            @drag-session-start="handleSessionDragStart"
-            @drag-session-end="handleSessionDragEnd"
-          />
+          <template v-else>
+            <SessionItem
+              :session="entry.session"
+              :active="entry.session.session.id === activeSessionId"
+              :running-count="runningCounts?.get(entry.session.session.id)"
+              :has-children="hasChildren(entry.session)"
+              :children-expanded="childrenExpanded(entry.session)"
+              @select="handleSessionSelect"
+              @toggle-children="toggleChildren(entry.session)"
+              @drag-session-start="handleSessionDragStart"
+              @drag-session-end="handleSessionDragEnd"
+            />
+            <div
+              v-if="hasChildren(entry.session) && childrenExpanded(entry.session)"
+              class="session-children"
+              role="group"
+              :aria-label="`Started from ${entry.session.session.title || 'this session'}`"
+              data-testid="session-children"
+            >
+              <SubagentSessionRow
+                v-for="item in subagentsOf(entry.session)"
+                :key="item.id"
+                :item="item"
+                :active="item.childSessionId === activeSessionId"
+              />
+              <SessionItem
+                v-for="child in childrenOf(entry.session)"
+                :key="rowKey(child.item)"
+                :session="child.item"
+                :kind-label="lineageKindLabel(child.kind)"
+                :active="child.item.session.id === activeSessionId"
+                :running-count="runningCounts?.get(child.item.session.id)"
+                @select="handleSessionSelect"
+                @drag-session-start="handleSessionDragStart"
+                @drag-session-end="handleSessionDragEnd"
+              />
+            </div>
+          </template>
         </div>
       </TransitionGroup>
     </Transition>
@@ -566,6 +637,20 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
 
 .project-spacer {
   flex: 1;
+}
+
+/* What a session started, under it: running subagents, forks, sessions its agent started. */
+.session-children {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 1px 0 2px 13px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+}
+
+.session-children :deep(.session-item) {
+  min-height: 28px;
 }
 
 .project-content {

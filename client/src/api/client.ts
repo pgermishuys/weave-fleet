@@ -825,6 +825,14 @@ export interface SessionListItem {
   selectedModel?: ModelReference | null;
   /** Client-only: the model that answered last, from the open stream — what the header names when nothing is chosen. */
   lastAssistantModelId?: string | null;
+  /** How much work the session's agent left running (subagents, background shells, monitors), when the list was loaded. */
+  runningWorkCount?: number;
+  /** The session this one is a fork of. */
+  forkedFromSessionId?: string | null;
+  /** The session whose agent started this one. */
+  spawnedBySessionId?: string | null;
+  /** How the session came to be: `fork`, `api`, `message`, `automation` or `workflow`; null when the user started it. */
+  spawnKind?: string | null;
 }
 
 export interface AnalyticsSummary {

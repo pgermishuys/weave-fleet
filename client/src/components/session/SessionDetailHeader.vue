@@ -13,7 +13,10 @@ import { useSessionsStore } from "@/stores/sessions";
 import { useMachinesStore } from "@/stores/machines";
 import { apiFetch } from "@/lib/api-client";
 import { useSidebarStore } from "@/stores/sidebar";
-import { ArchiveRestore, GitBranch, Layers, Loader2, X, Plus } from "lucide-vue-next";
+import { useSessionTitle } from "@/composables/use-session-lineage";
+import { lineageLinkLabel, type LineageKind } from "@/lib/session-lineage";
+import { useRouter } from "@tanstack/vue-router";
+import { ArchiveRestore, CornerLeftUp, GitBranch, Layers, Loader2, X, Plus } from "lucide-vue-next";
 
 interface Props {
   id: string;
@@ -35,6 +38,9 @@ interface Props {
   directory?: string | null;
   branch?: string | null;
   tags?: readonly string[];
+  /** The session this one was forked from or started by: "Started by …" next to the title links to it. */
+  lineageParentId?: string | null;
+  lineageKind?: LineageKind | null;
   /** Whether the title is an input; the ⋯ menu's Rename sets it, as does double-clicking the title. */
   editingTitle?: boolean;
   renameDisabled?: boolean;
@@ -67,6 +73,34 @@ const isAddingTag = ref(false);
 const newTagInput = ref("");
 
 const sessionTitle = computed(() => props.title?.trim() || "Untitled session");
+
+// "Started by …": the session another session forked or started links back to it.
+const router = useRouter();
+const lineageParentTitle = useSessionTitle(() => props.lineageParentId);
+const lineageLink = computed(() => {
+  const parentId = props.lineageParentId;
+  if (!parentId || !props.lineageKind) return null;
+  const parent = sessions.value.find((item) => item.session.id === parentId);
+  const instanceId = parent?.instanceId;
+  return {
+    parentId,
+    instanceId,
+    label: lineageLinkLabel(props.lineageKind),
+    title: lineageParentTitle.value ?? "another session",
+    href: `/sessions/${encodeURIComponent(parentId)}${instanceId ? `?instanceId=${encodeURIComponent(instanceId)}` : ""}`,
+  };
+});
+
+function openLineageParent(event: MouseEvent): void {
+  const link = lineageLink.value;
+  if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+  event.preventDefault();
+  void router.navigate({
+    to: "/sessions/$id",
+    params: { id: link.parentId },
+    search: { instanceId: link.instanceId, parentSessionId: undefined },
+  });
+}
 
 const titleDraft = shallowRef("");
 const titleInput = useTemplateRef<HTMLInputElement>("titleInput");
@@ -364,6 +398,21 @@ onUnmounted(() => {
           >
             {{ sessionTitle }}
           </h2>
+          <a
+            v-if="lineageLink && !props.editingTitle"
+            class="session-detail-header__from"
+            :href="lineageLink.href"
+            :title="`This session was ${lineageLink.label.toLowerCase()} ${lineageLink.title}`"
+            data-testid="session-lineage-link"
+            @click="openLineageParent"
+          >
+            <CornerLeftUp
+              :size="12"
+              aria-hidden="true"
+            />
+            <span class="session-detail-header__from-label">{{ lineageLink.label }}</span>
+            <b class="session-detail-header__from-title">{{ lineageLink.title }}</b>
+          </a>
           <span
             v-if="retryNote"
             data-testid="session-retry-note"
@@ -729,6 +778,51 @@ onUnmounted(() => {
   letter-spacing: -0.005em;
   line-height: 1.3;
   color: var(--text);
+}
+
+/* "Started by …": a quiet pill after the title that links to the session this one came from. */
+.session-detail-header__from {
+  display: inline-flex;
+  flex-shrink: 1;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 50%;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.3;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background var(--transition), color var(--transition);
+}
+
+.session-detail-header__from:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text);
+}
+
+.session-detail-header__from:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.session-detail-header__from svg {
+  flex-shrink: 0;
+}
+
+.session-detail-header__from-label {
+  flex-shrink: 0;
+}
+
+.session-detail-header__from-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 500;
+  text-overflow: ellipsis;
 }
 
 .session-detail-header__meta-row {

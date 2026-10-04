@@ -6,6 +6,8 @@ import { storeToRefs } from "pinia";
 import type { SessionListItem } from "@/api/client";
 import { useProjects } from "@/composables/use-projects";
 import { useSessions } from "@/composables/use-sessions";
+import { useRunningWorkAcrossSessions } from "@/composables/use-running-work";
+import { runningSubagentsBySession } from "@/lib/session-lineage";
 import { useMoveSession } from "@/composables/use-session-actions";
 import { useArchiveQueueStore } from "@/stores/archive-queue";
 import { useSessionSelectionStore } from "@/stores/session-selection";
@@ -110,6 +112,11 @@ const sessions = computed(() => {
 });
 
 const isArchivedView = computed(() => retentionStatus.value === "archived");
+
+// What every session's agent has running: a chip on its row, and its running subagents nested under it.
+const { running: runningWork, groups: runningWorkGroups } = useRunningWorkAcrossSessions();
+const runningCounts = computed(() => new Map(runningWorkGroups.value.map((group) => [group.sessionId, group.items.length])));
+const runningSubagents = computed(() => runningSubagentsBySession(runningWork.value));
 
 // Other machines: every machine is listed, the live one first and in full, the rest as their last polled list.
 const machines = useMachinesStore();
@@ -784,6 +791,8 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
           :draft="project.id === draftGroupId ? newSessionDraftRow : null"
           :draft-active="isNewSessionOpen"
           :row-keys="sessionRowKeys"
+          :running-counts="runningCounts"
+          :running-subagents="runningSubagents"
           @new-session="handleProjectSessionCreate"
           @open-draft="handleOpenDraft"
           @project-changed="handleProjectChanged"

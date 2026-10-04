@@ -7,6 +7,8 @@ import {
   Archive,
   ArchiveRestore,
   Check,
+  ChevronRight,
+  LoaderCircle,
   Copy,
   FolderOpen,
   GitFork,
@@ -61,10 +63,18 @@ interface Props {
   label?: string;
   /** Shown instead of the row's status: "With you" on a workflow step the user finishes, while it's open. */
   stepNote?: string;
+  /** Under its parent: how it came from it ("fork", "started"), shown instead of the row's status. */
+  kindLabel?: string;
+  /** How much work its agent has running: the green chip. */
+  runningCount?: number;
+  /** Whether it has children nested under it, and whether they show. */
+  hasChildren?: boolean;
+  childrenExpanded?: boolean;
 }
 
 interface Emits {
   select: [session: SessionListItem];
+  toggleChildren: [];
   dragSessionStart: [sessionId: string, projectId: string | null];
   dragSessionEnd: [];
 }
@@ -245,8 +255,21 @@ function handleRowKeydown(event: KeyboardEvent): void {
   if (event.key === "F2") {
     event.preventDefault();
     startRename();
+    return;
+  }
+  // A row with children opens and closes like a tree item.
+  if (props.hasChildren && (event.key === "ArrowRight" || event.key === "ArrowLeft")) {
+    const open = event.key === "ArrowRight";
+    if (open === Boolean(props.childrenExpanded)) return;
+    event.preventDefault();
+    emit("toggleChildren");
   }
 }
+
+const runningChipLabel = computed(() => {
+  const count = props.runningCount ?? 0;
+  return count === 1 ? "1 thing running in the background" : `${count} things running in the background`;
+});
 
 function handleArchive(): void {
   isContextMenuOpen.value = false;
@@ -471,6 +494,7 @@ function removeSessionFromStore(): void {
             }"
             :aria-current="active ? 'true' : undefined"
             :aria-pressed="selection.isSelecting ? isSelected : undefined"
+            :aria-expanded="hasChildren ? Boolean(childrenExpanded) : undefined"
             title="Double-click to rename"
             data-testid="session-row"
             @click="handleSelect"
@@ -497,8 +521,31 @@ function removeSessionFromStore(): void {
               aria-hidden="true"
             />
 
+            <span
+              v-if="hasChildren"
+              class="session-caret"
+              :class="{ 'session-caret--open': childrenExpanded }"
+              :title="childrenExpanded ? 'Hide what it started' : 'Show what it started'"
+              aria-hidden="true"
+              data-testid="session-children-toggle"
+              @click.stop="emit('toggleChildren')"
+            >
+              <ChevronRight />
+            </span>
+
             <span class="session-copy">
               <span class="session-title">{{ displayTitle }}</span>
+            </span>
+
+            <span
+              v-if="runningCount"
+              class="session-running-chip"
+              :title="runningChipLabel"
+              data-testid="session-running-chip"
+            >
+              <LoaderCircle aria-hidden="true" />
+              {{ runningCount }}
+              <span class="sr-only">{{ runningChipLabel }}</span>
             </span>
 
             <PrBadge
@@ -528,6 +575,11 @@ function removeSessionFromStore(): void {
               class="session-meta session-meta--with"
               data-testid="session-step-note"
             >{{ stepNote }}</span>
+            <span
+              v-else-if="kindLabel"
+              class="session-kind"
+              data-testid="session-kind"
+            >{{ kindLabel }}</span>
             <span
               v-else-if="rowStatus.label && !showProgressCount"
               class="session-meta"
@@ -921,6 +973,63 @@ function removeSessionFromStore(): void {
   color: color-mix(in srgb, var(--muted) 80%, transparent);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/* Under its parent: how the session came from it. */
+.session-kind {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* What the session's agent has running: subagents, background shells, monitors. */
+.session-running-chip {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 3px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--running) 14%, transparent);
+  color: var(--running);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-running-chip svg {
+  width: 11px;
+  height: 11px;
+  stroke-width: 2.25;
+}
+
+.session-caret {
+  display: inline-grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  margin-left: -4px;
+  border-radius: 4px;
+  color: var(--muted);
+}
+
+.session-caret:hover {
+  color: var(--text);
+}
+
+.session-caret svg {
+  width: 14px;
+  height: 14px;
+  transition: transform var(--transition);
+}
+
+.session-caret--open svg {
+  transform: rotate(90deg);
 }
 
 .session-meta--retry {

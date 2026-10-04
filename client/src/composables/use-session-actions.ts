@@ -514,7 +514,11 @@ export function useForkSession(): UseForkSessionResult {
 
       // Response body is not typed in schema, use data from openapi-fetch
       const payload = data as unknown as ForkSessionResponse;
-      const nextSession = buildForkedSessionListItem(sourceSession, payload);
+      const nextSession: SessionListItem = {
+        ...buildForkedSessionListItem(sourceSession, payload),
+        forkedFromSessionId: payload.forkedFromSessionId ?? sessionId,
+        spawnKind: "fork",
+      };
 
       sessionsStore?.upsertSession(nextSession);
       sessionsStore?.setActiveSessionId(payload.session.id);

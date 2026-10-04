@@ -6,6 +6,7 @@ import MachineHeader from "@/components/sessions/MachineHeader.vue";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { useRelativeTime } from "@/composables/use-relative-time";
 import { formatCompactAge, isSessionLive, sessionRowDim, sessionRowStatus } from "@/lib/session-row-status";
+import { lineageKindLabel, nestLineage, type LineageKind } from "@/lib/session-lineage";
 import type { MachineEntry, MachineSessions } from "@/stores/machines";
 import type { NewSessionDraftRow } from "@/stores/workspace-ui";
 import { machineGroupKey, useSidebarStore } from "@/stores/sidebar";
@@ -36,6 +37,15 @@ const sessions = computed(() => {
   return props.query
     ? all.filter((item) => (item.session.title ?? "").toLowerCase().includes(props.query))
     : all;
+});
+
+/** Its rows: forks and started sessions right under the session they came from, with their kind. */
+const rows = computed(() => {
+  const { roots, childrenOf } = nestLineage(sessions.value);
+  return roots.flatMap((item) => [
+    { item, kind: null as LineageKind | null },
+    ...(childrenOf.get(item.session.id) ?? []),
+  ]);
 });
 
 const unreachable = computed(() => Boolean(props.state?.error));
@@ -87,12 +97,12 @@ function age(item: SessionListItem): string {
         {{ state.error }}
       </p>
       <button
-        v-for="item in sessions"
+        v-for="{ item, kind } in rows"
         :key="item.session.id"
         type="button"
         class="machine-row"
         :class="[
-          { 'machine-row--stale': unreachable },
+          { 'machine-row--stale': unreachable, 'machine-row--child': kind },
           sessionRowDim(item, now) > 0 ? `machine-row--dim-${sessionRowDim(item, now)}` : '',
         ]"
         :title="`Open on ${machine.name}`"
@@ -113,6 +123,16 @@ function age(item: SessionListItem): string {
         />
         <span class="machine-row__title">{{ title(item) }}</span>
         <span
+          v-if="item.runningWorkCount"
+          class="machine-row__running"
+          :title="`${item.runningWorkCount} running in the background`"
+        >{{ item.runningWorkCount }}</span>
+        <span
+          v-if="kind"
+          class="machine-row__kind"
+        >{{ lineageKindLabel(kind) }}</span>
+        <span
+          v-else
           class="machine-row__meta"
           :class="`machine-row__meta--${sessionRowStatus(item, now).tone}`"
         >{{ sessionRowStatus(item, now).label || age(item) }}</span>
@@ -203,6 +223,37 @@ function age(item: SessionListItem): string {
   flex-shrink: 0;
   font-size: 11px;
   color: color-mix(in srgb, var(--muted) 80%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A fork or a started session, under the session it came from. */
+.machine-row--child {
+  width: calc(100% - 13px);
+  margin-left: 13px;
+  min-height: 28px;
+  border-left: 1px solid var(--border);
+  border-radius: 0 var(--radius-btn) var(--radius-btn) 0;
+}
+
+.machine-row__kind {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.machine-row__running {
+  flex-shrink: 0;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--running) 14%, transparent);
+  color: var(--running);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
   font-variant-numeric: tabular-nums;
 }
 
