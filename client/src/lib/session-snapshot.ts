@@ -24,6 +24,8 @@ export interface SessionSnapshot {
   session: SessionSnapshotSession;
   messages: MessageLifecyclePayload[];
   delegations: SessionSnapshotDelegation[];
+  /** The work the agent left running, and what ended in the last few minutes (see `@/lib/running-work`). */
+  runningWork?: unknown[] | null;
   activityStatus: string;
   lastEventId: number | null;
   /** Deprecated compatibility alias for lastEventId during the migration. */

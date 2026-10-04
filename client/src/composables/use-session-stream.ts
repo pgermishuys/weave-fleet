@@ -24,11 +24,15 @@ import { reuseUnchangedMessages } from "@/lib/reuse-unchanged-messages"
 import type { SessionHistoryPage } from "@/lib/session-snapshot"
 import { loadSessionHistory, useWeaveSocket, type Unsubscribe } from "@/composables/use-weave-socket"
 import { onGlobalEvent } from "@/composables/use-signalr-socket"
+import { publishRunningWork } from "@/composables/use-running-work"
+import type { RunningWorkItem } from "@/lib/running-work"
 import { useSessionsStore } from "@/stores/sessions"
 
 export interface UseSessionStreamResult {
   messages: ComputedRef<readonly AccumulatedMessage[]>
   delegations: ComputedRef<readonly DelegationDto[]>
+  /** The work the agent left running, and what ended recently; `useRunningWork` serves the same to the rest of the UI. */
+  runningWork: ComputedRef<readonly RunningWorkItem[]>
   sessionStatus: ComputedRef<SessionStreamStatus>
   isLoading: Readonly<ShallowRef<boolean>>
   hasMore: Readonly<ShallowRef<boolean>>
@@ -74,6 +78,7 @@ function createEmptyState(): SessionStreamState {
   return {
     messages: [],
     delegations: [],
+    runningWork: [],
     explicitStatus: "idle",
     sessionStatus: "idle",
     lastEventId: null,
@@ -142,6 +147,18 @@ export function useSessionStream(
   const messages = computed<readonly AccumulatedMessage[]>(() => streamState.value.messages)
   const delegations = computed<readonly DelegationDto[]>(() => streamState.value.delegations)
   const sessionStatus = computed<SessionStreamStatus>(() => streamState.value.sessionStatus)
+  const runningWork = computed<readonly RunningWorkItem[]>(() => streamState.value.runningWork)
+
+  // The strip and the Agents tab read the session's work from use-running-work; the stream is its freshest source.
+  // Only once the snapshot is in: the empty state while it loads would wipe what's known.
+  watch(
+    () => [snapshotSessionId === currentSessionId.value && !isLoading.value, streamState.value.runningWork] as const,
+    ([loaded, items]) => {
+      if (loaded) {
+        publishRunningWork(currentSessionId.value, items)
+      }
+    },
+  )
 
   /** Keeps the state of the session being left, if it came from a snapshot. */
   function keepCurrentStream(): void {
@@ -386,6 +403,7 @@ export function useSessionStream(
   return {
     messages,
     delegations,
+    runningWork,
     sessionStatus,
     isLoading: readonly(isLoading),
     hasMore: readonly(hasMore),

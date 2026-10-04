@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { storeToRefs } from "pinia";
 import NoticeChips from "@/components/notices/NoticeChips.vue";
+import RunningWorkCounter from "@/components/layout/RunningWorkCounter.vue";
 import { useAppShellStore } from "@/stores/app-shell";
 import { useCommandStore } from "@/stores/commands";
 import { useSessionsStore } from "@/stores/sessions";
@@ -203,20 +204,25 @@ const tokenCount = computed(() => {
       </template>
     </div>
 
-    <!-- On the right, under the corner a notice card settles from. -->
-    <NoticeChips class="status-bar__notices" />
+    <div class="status-bar__end">
+      <!-- Work left running in the background, in every session. -->
+      <RunningWorkCounter />
 
-    <!-- Session status lives on the session's row in the sidebar, not here. -->
-    <div
-      v-if="activeSession"
-      class="status-bar__right"
-      data-testid="status-bar-session"
-    >
-      <span class="model-badge">{{ modelBadge }}</span>
+      <!-- On the right, under the corner a notice card settles from. -->
+      <NoticeChips />
 
-      <span class="status-separator">|</span>
+      <!-- Session status lives on the session's row in the sidebar, not here. -->
+      <div
+        v-if="activeSession"
+        class="status-bar__right"
+        data-testid="status-bar-session"
+      >
+        <span class="model-badge">{{ modelBadge }}</span>
 
-      <span class="token-count">{{ tokenCount }}</span>
+        <span class="status-separator">|</span>
+
+        <span class="token-count">{{ tokenCount }}</span>
+      </div>
     </div>
   </footer>
 </template>
@@ -242,19 +248,18 @@ const tokenCount = computed(() => {
   gap: 1px;
 }
 
-.status-bar__right {
+.status-bar__end {
   display: flex;
+  min-width: 0;
   margin-left: auto;
   align-items: center;
+  gap: 10px;
+}
+
+.status-bar__right {
+  display: flex;
+  align-items: center;
   gap: 8px;
-}
-
-.status-bar__notices {
-  margin-left: auto;
-}
-
-.status-bar__notices + .status-bar__right {
-  margin-left: 0;
 }
 
 .shortcut-hint {

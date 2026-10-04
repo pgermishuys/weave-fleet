@@ -259,6 +259,9 @@ export interface DelegationCompletedPayload {
   background?: boolean;
 }
 
+/** A running-work item as the server sends it: nulls and false left out. Read it with `toRunningWorkItem`. */
+export type RunningWorkItemPayload = Record<string, unknown> & { id: string; sessionId: string };
+
 export interface SessionActionCapabilities {
   canSend: boolean;
   canAbort: boolean;
@@ -399,6 +402,31 @@ export interface DelegationUpdated extends EventCursorMetadata {
 export interface DelegationCompleted extends EventCursorMetadata {
   type: "delegation.completed";
   payload: DelegationCompletedPayload;
+}
+
+/**
+ * Work a session's agent left running started, changed or ended. The payload is the whole item as it is now (see
+ * `@/lib/running-work`); it arrives on the session's topic and on `sessions`, so every client can count it.
+ */
+export interface WorkStarted extends EventCursorMetadata {
+  type: "work.started";
+  payload: RunningWorkItemPayload;
+}
+
+export interface WorkUpdated extends EventCursorMetadata {
+  type: "work.updated";
+  payload: RunningWorkItemPayload;
+}
+
+export interface WorkEnded extends EventCursorMetadata {
+  type: "work.ended";
+  payload: RunningWorkItemPayload;
+}
+
+export type WorkEvent = WorkStarted | WorkUpdated | WorkEnded;
+
+export function isWorkEvent(event: DomainEvent): event is WorkEvent {
+  return event.type === "work.started" || event.type === "work.updated" || event.type === "work.ended";
 }
 
 export interface ActivityStatus extends EventCursorMetadata {
@@ -582,6 +610,9 @@ export type DomainEvent =
   | DelegationCreated
   | DelegationUpdated
   | DelegationCompleted
+  | WorkStarted
+  | WorkUpdated
+  | WorkEnded
   | ActivityStatus
   | FilesChanged
   | CanvasUpdated

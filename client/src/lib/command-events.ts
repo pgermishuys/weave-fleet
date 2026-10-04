@@ -4,7 +4,10 @@ export type CommandEventName =
   | "weave:command-scroll-bottom"
   | "weave:command-copy-session-id"
   | "weave:command-export-conversation"
-  /** Scroll the conversation to a message and mark it briefly: detail is { sessionId, messageId }. */
+  /**
+   * Scroll the conversation to a message and mark it briefly: detail is { sessionId, messageId }, or
+   * { sessionId, toolCallId } for the message holding that tool call.
+   */
   | "weave:command-show-message";
 
 export function dispatchCommandEvent(name: CommandEventName, detail?: unknown): void {

@@ -8,6 +8,9 @@ import { useCommandStore } from "@/stores/commands";
 import { useSessionsStore } from "@/stores/sessions";
 import { useTerminalsStore } from "@/stores/terminals";
 
+// The running-work counter asks Fleet what runs; nothing does here (RunningWorkCounter.test.ts covers it).
+vi.mock("@/api/client", () => ({ api: { GET: vi.fn(async () => ({ data: [], response: { ok: true, status: 200 } })) } }));
+
 /** Stands in for the command useCommands registers, which is what the keyboard shortcut runs too. */
 function registerCommand(id: string, overrides: Partial<Command> = {}): Command {
   const command: Command = { id, label: id, category: "View", action: vi.fn(), ...overrides };
