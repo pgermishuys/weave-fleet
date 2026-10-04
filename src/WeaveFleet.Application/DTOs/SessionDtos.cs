@@ -56,6 +56,9 @@ public sealed record SessionListResponse(
 
     /// <summary>How the session came to be: <c>fork</c>, <c>api</c>, <c>message</c>, <c>automation</c> or <c>workflow</c>; null when the user started it.</summary>
     public string? SpawnKind { get; init; }
+
+    /// <summary>When the user moved it out of the session it came from, or null; it no longer nests under that one.</summary>
+    public string? LineageDetachedAt { get; init; }
 }
 
 /// <summary>A model as the harness names one.</summary>
@@ -89,6 +92,9 @@ public sealed record SessionTime(long Created, long Updated);
 
 /// <summary>Request DTO for moving a session to a different project.</summary>
 public sealed record MoveSessionRequest(string? ProjectId);
+
+/// <summary>Moves a fork or a session an agent started out of the session it came from (true), or back under it (false).</summary>
+public sealed record UpdateSessionLineageRequest(bool Detached);
 
 /// <summary>Request DTO for renaming a session.</summary>
 public sealed record UpdateSessionTitleRequest(string Title);

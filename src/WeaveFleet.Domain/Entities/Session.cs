@@ -102,6 +102,13 @@ public sealed class Session
     /// <summary>How the session came to be, when something other than the user started it: one of <see cref="SpawnKinds"/>.</summary>
     public string? SpawnKind { get; set; }
 
+    /// <summary>
+    /// When the user moved this session out of the session it came from (<see cref="ForkedFromSessionId"/> or
+    /// <see cref="SpawnedBySessionId"/>), or null. The provenance stays; the session just doesn't nest under it any more,
+    /// and counts as one the user started.
+    /// </summary>
+    public string? LineageDetachedAt { get; set; }
+
     public List<string> Tags { get; set; } = [];
 }
 

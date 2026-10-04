@@ -204,6 +204,14 @@ public sealed partial class SessionOrchestrator(
                 "Arbitrary directory paths are not allowed in cloud mode. Managed workspaces are created automatically.");
         }
 
+        // An agent starting a session: not past the depth Fleet allows (a runaway of agents starting agents).
+        if (request.SpawnedBySessionId is { } spawnedBy
+            && await SessionLineage.AgentSpawnDepthAsync(sessionRepository, spawnedBy) is var depth
+            && depth >= SessionLineage.MaxAgentSpawnDepth)
+        {
+            return SessionLineage.TooDeep(depth);
+        }
+
         var sourceResolutionResult = await sessionSourceResolutionService.ResolveCreateRequestAsync(request, ct);
         if (sourceResolutionResult.IsFailure)
             return sourceResolutionResult.Error;

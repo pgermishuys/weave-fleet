@@ -384,6 +384,13 @@ public sealed class InMemorySessionRepository : ISessionRepository
         return Task.CompletedTask;
     }
 
+    public Task UpdateLineageDetachedAsync(string id, string? detachedAt)
+    {
+        if (_store.TryGetValue(id, out var session))
+            session.LineageDetachedAt = detachedAt;
+        return Task.CompletedTask;
+    }
+
     public Task UpdateSelectedModelAsync(string id, string providerId, string modelId)
     {
         if (_store.TryGetValue(id, out var session))
