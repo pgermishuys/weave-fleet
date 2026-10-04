@@ -6,11 +6,34 @@ using WeaveFleet.Domain.Harnesses;
 namespace WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 
 /// <summary>
-/// The lines Fleet writes to a <c>claude</c> process's stdin with <c>--input-format stream-json</c>: the prompt, and the
-/// answers to its <c>can_use_tool</c> asks.
+/// The lines Fleet writes to a <c>claude</c> process's stdin with <c>--input-format stream-json</c>: the prompts, the
+/// answers to its <c>can_use_tool</c> asks, and Fleet's own requests (stop the turn, change the model or mode).
 /// </summary>
 internal static class ClaudeCodeInput
 {
+    /// <summary>Stops the running turn. Work the agent left running in the background carries on.</summary>
+    internal static string Interrupt(string requestId) => Request(requestId, "interrupt", _ => { });
+
+    /// <summary>Runs the following turns on <paramref name="model"/>.</summary>
+    internal static string SetModel(string requestId, string model)
+        => Request(requestId, "set_model", json => json.WriteString("model", model));
+
+    /// <summary>
+    /// Changes the permission mode. Claude Code refuses <c>bypassPermissions</c> unless the process started in it.
+    /// </summary>
+    internal static string SetPermissionMode(string requestId, string mode)
+        => Request(requestId, "set_permission_mode", json => json.WriteString("mode", mode));
+
+    private static string Request(string requestId, string subtype, Action<Utf8JsonWriter> fields) => Line(json =>
+    {
+        json.WriteString("type", "control_request");
+        json.WriteString("request_id", requestId);
+        json.WriteStartObject("request");
+        json.WriteString("subtype", subtype);
+        fields(json);
+        json.WriteEndObject();
+    });
+
     /// <summary>The prompt, as a user message.</summary>
     internal static string UserMessage(string text) => Line(json =>
     {

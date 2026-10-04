@@ -127,7 +127,10 @@ public sealed class ClaudeCodePermissionTests : IDisposable
         var args = await File.ReadAllLinesAsync(arguments);
         args.ShouldNotContain("--permission-prompt-tool");
         args.SkipWhile(a => a != "--permission-mode").Skip(1).First().ShouldBe("bypassPermissions");
-        (await File.ReadAllTextAsync(answers)).ShouldBe("Push it");
+        // The prompt still goes on stdin as a stream-json message, which stays open for the next one.
+        args.SkipWhile(a => a != "--input-format").Skip(1).First().ShouldBe("stream-json");
+        var prompt = JsonDocument.Parse((await File.ReadAllLinesAsync(answers)).ShouldHaveSingleItem()).RootElement;
+        prompt.GetProperty("message").GetProperty("content").GetString().ShouldBe("Push it");
     }
 
     /// <summary>
@@ -153,9 +156,11 @@ public sealed class ClaudeCodePermissionTests : IDisposable
             : $$$"""
                 #!/bin/sh
                 printf '%s\n' "$@" > '{{{arguments}}}'
-                cat > '{{{answers}}}'
+                IFS= read -r prompt
+                printf '%s\n' "$prompt" > '{{{answers}}}'
                 echo '{"type":"system","subtype":"init","session_id":"cc-1"}'
                 echo '{"type":"result","subtype":"success","is_error":false,"result":"ok","session_id":"cc-1"}'
+                cat > /dev/null
                 """;
         File.WriteAllText(claude, script.ReplaceLineEndings("\n"));
         if (!OperatingSystem.IsWindows())

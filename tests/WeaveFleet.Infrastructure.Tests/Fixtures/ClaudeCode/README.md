@@ -9,3 +9,8 @@ replaced with `<WORKDIR>`.
 - `max-turns.jsonl`: the same kind of prompt run with `--max-turns 1`; ends in an `error_max_turns` result.
 - `not-logged-in.jsonl`: a run that can't use the login (`--bare` with a claude.ai subscription);
   Claude Code writes "Not logged in · Please run /login" as the assistant's reply.
+- `background-wake.jsonl`: one process with stream-json input (Claude Code 2.1.289). The first prompt starts
+  `sleep 20 && echo bgdone` with `run_in_background` and the turn ends; when the command finishes, Claude Code reports
+  it (`background_tasks_changed`, `task_notification`) and starts a turn by itself with a new `init`; then a second
+  prompt from the host. Thinking-only assistant lines and `thinking_tokens` lines were dropped too, and the task
+  output folder replaced with `<TASKS>`.
