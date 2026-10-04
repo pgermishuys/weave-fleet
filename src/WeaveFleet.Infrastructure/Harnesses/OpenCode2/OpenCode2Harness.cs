@@ -50,6 +50,8 @@ public sealed class OpenCode2Harness : IHarness
         SupportsForking = true,
         SupportsSideConversations = true,
         SupportsAgentBrowser = true,
+        // Fleet's plugin gives the agent its tools, fleet_session_read among them.
+        SupportsFleetTools = true,
         // Background shells and subagents are running work; Fleet stops a shell or interrupts a child, and reads a shell's output.
         ReportsBackgroundWork = true,
         SupportsChildSessions = true,

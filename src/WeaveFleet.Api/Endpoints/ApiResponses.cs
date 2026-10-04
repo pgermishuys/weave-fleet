@@ -328,6 +328,12 @@ public sealed record MemoryBridgeRequest(
 public sealed record SessionMessageBridgeRequest(string? HarnessSessionId, string? SessionId = null, string? Text = null, bool NotifyWhenDone = false);
 
 /// <summary>
+/// <c>fleet_session_read</c> from the harness process: the session to read, and for an older page the <c>before</c> the
+/// last page named (empty for the latest messages).
+/// </summary>
+public sealed record SessionReadBridgeRequest(string? HarnessSessionId, string? SessionId = null, string? Before = null, int? Limit = null);
+
+/// <summary>
 /// What the tool returns to the harness as-is: a tool-card title, the text the model reads, metadata, and any
 /// file that goes with it (a screenshot), base64 for the harness to attach however it carries images.
 /// </summary>

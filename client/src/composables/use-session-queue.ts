@@ -1,6 +1,7 @@
 import { computed, onBeforeUnmount, reactive, readonly, shallowRef } from "vue";
 import { api, type ModelReference } from "@/api/client";
 import { onReconnect, useWeaveSocket } from "@/composables/use-weave-socket";
+import { stripSessionReferences, type SessionReference } from "@/lib/session-references";
 
 /** How a queued item goes out: a message, a slash command, or a shell command (`!git status`). */
 export type QueuedMessageKind = "prompt" | "command" | "shell";
@@ -20,6 +21,8 @@ export interface QueueOptions {
   agent?: string;
   model?: ModelReference;
   effort?: string;
+  /** For a message: the sessions picked from the `@` list whose tokens are in its text. */
+  sessionReferences?: readonly SessionReference[];
 }
 
 /** The `session.queue` event: a session's whole queue, sent whenever it changes. */
@@ -32,7 +35,8 @@ function toQueuedMessage(value: unknown): QueuedMessage | null {
   if (!value || typeof value !== "object") return null;
   const { id, text, kind } = value as Record<string, unknown>;
   if (typeof id !== "string" || typeof text !== "string") return null;
-  return { id, text, kind: kind === "command" || kind === "shell" ? kind : "prompt" };
+  // A message's @ sessions are written into it as a block for the agent; the queue shows what was typed.
+  return { id, text: stripSessionReferences(text), kind: kind === "command" || kind === "shell" ? kind : "prompt" };
 }
 
 function toQueue(values: unknown): QueuedMessage[] {
@@ -109,6 +113,9 @@ export function useSessionQueue(sessionId: string) {
           agent: options.agent ?? null,
           model: options.model ?? null,
           effort: options.effort ?? null,
+          ...(options.sessionReferences?.length
+            ? { sessionReferences: options.sessionReferences.map(({ token, sessionId }) => ({ token, sessionId })) }
+            : {}),
         },
       });
       if (!response.ok) {

@@ -307,7 +307,7 @@ public static class SessionEndpoints
         .WithName("AddSessionSource");
 
         // POST /api/sessions/{id}/prompt
-        group.MapPost("/{id}/prompt", async (string id, SendPromptApiRequest req, SessionOrchestrator orchestrator, SessionService sessionService, InstanceTracker tracker, HttpContext http, SessionMessagesFeature sessionMessages, CancellationToken ct) =>
+        group.MapPost("/{id}/prompt", async (string id, SendPromptApiRequest req, SessionOrchestrator orchestrator, SessionService sessionService, InstanceTracker tracker, HttpContext http, SessionMessagesFeature sessionMessages, SessionReferenceExpander references, CancellationToken ct) =>
         {
             // With messages on, agents message sessions through fleet_message, which says who sent it; this path
             // would make the text look like the user's.
@@ -321,9 +321,14 @@ public static class SessionEndpoints
             if (!TryReadDelivery(req.Delivery, out var delivery))
                 return Results.BadRequest(new ErrorResponse("delivery must be \"queue\" or \"steer\"."));
 
+            // Sessions picked from the @ list go to the agent as a block after the text (SessionReferences).
+            var text = await references.ExpandAsync(id, req.Text, ToSessionReferences(req.SessionReferences), ct);
+            if (text.IsFailure)
+                return text.Error.ToSessionApiResult();
+
             var attachments = req.Attachments?.Select(a => new HarnessAttachment(a.Mime, a.Filename ?? "image.png", a.Data)).ToList();
             var options = new PromptOptions { Agent = req.Agent, ProviderId = modelResolution.ProviderId, ModelId = modelResolution.ModelId, Attachments = attachments, Effort = req.Effort, Delivery = delivery };
-            var result = await orchestrator.PromptSessionWithReceiptAsync(id, req.Text, options, req.UserMessageId, req.CorrelationId, ct);
+            var result = await orchestrator.PromptSessionWithReceiptAsync(id, text.Value, options, req.UserMessageId, req.CorrelationId, ct);
             return result.Match(r => Results.Ok(new SendPromptApiResponse(r.EventId, r.CorrelationId)), err => err.ToSessionApiResult());
         })
         .WithName("PromptSession");
@@ -341,7 +346,7 @@ public static class SessionEndpoints
         // POST /api/sessions/{id}/queue — queue a message, a slash command or a shell command. Fleet sends it when the
         // turn ends (at once, when the session turns out to be idle); the queue is Fleet's, so leaving the session or
         // closing the browser doesn't lose it. Gated as a prompt is.
-        group.MapPost("/{id}/queue", async (string id, QueuePromptApiRequest req, PromptQueueService queue, SessionService sessionService, InstanceTracker tracker, HttpContext http, CancellationToken ct) =>
+        group.MapPost("/{id}/queue", async (string id, QueuePromptApiRequest req, PromptQueueService queue, SessionService sessionService, InstanceTracker tracker, HttpContext http, SessionReferenceExpander references, CancellationToken ct) =>
         {
             // The queue is the user's composer; agents message sessions with their own tool.
             if (http.IsAgentRequest())
@@ -351,9 +356,19 @@ public static class SessionEndpoints
             if (modelResolution.ErrorResult is not null)
                 return modelResolution.ErrorResult;
 
+            // A queued message keeps its references as the block it goes with, written now (SessionReferences).
+            var text = req.Text;
+            if (req.Kind is null or "prompt")
+            {
+                var expanded = await references.ExpandAsync(id, req.Text, ToSessionReferences(req.SessionReferences), ct);
+                if (expanded.IsFailure)
+                    return expanded.Error.ToSessionApiResult();
+                text = expanded.Value;
+            }
+
             var result = await queue.EnqueueAsync(
                 id,
-                new QueuePromptRequest(req.Text, req.Kind, req.Command, req.Arguments, req.Agent, modelResolution.ProviderId, modelResolution.ModelId, req.Effort),
+                new QueuePromptRequest(text, req.Kind, req.Command, req.Arguments, req.Agent, modelResolution.ProviderId, modelResolution.ModelId, req.Effort),
                 ct);
             return result.Match(
                 item => Results.Json(QueuedPromptView.From(item), ApiJsonContext.Default.QueuedPromptView, statusCode: StatusCodes.Status201Created),
@@ -1191,6 +1206,9 @@ public static class SessionEndpoints
         };
     }
 
+    private static List<SessionReference>? ToSessionReferences(SessionReferenceDto[]? references)
+        => references?.Select(reference => new SessionReference(reference?.Token ?? "", reference?.SessionId ?? "")).ToList();
+
     /// <summary>A prompt the user sends says how it goes in: a request that leaves it out is queued, as before.</summary>
     internal static bool TryReadDelivery(string? value, out PromptDelivery delivery)
     {
@@ -1270,7 +1288,12 @@ internal sealed record SendPromptApiRequest(
     string? CorrelationId,
     string? Effort,
     // "queue" (the default: Fleet sends it once the session is idle) or "steer" (into the running turn).
-    string? Delivery = null);
+    string? Delivery = null,
+    // Sessions picked from the composer's @ list, by the token each left in the text.
+    SessionReferenceDto[]? SessionReferences = null);
+
+/// <summary>A session picked from the composer's <c>@</c> list: the token it left in the text (<c>@t3code-notes</c>), and its id.</summary>
+internal sealed record SessionReferenceDto(string Token, string SessionId);
 
 internal sealed record SendPromptApiResponse(long? EventId, string CorrelationId);
 
@@ -1282,7 +1305,8 @@ internal sealed record QueuePromptApiRequest(
     string? Arguments = null,
     string? Agent = null,
     ModelRef? Model = null,
-    string? Effort = null);
+    string? Effort = null,
+    SessionReferenceDto[]? SessionReferences = null);
 
 internal sealed record ImageAttachmentDto(string Mime, string? Filename, string Data);
 

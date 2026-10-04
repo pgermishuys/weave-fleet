@@ -40,6 +40,8 @@ public sealed class OpenCodeHarness : IHarness
         SupportsShellCommands = true,
         SupportsSideConversations = true,
         SupportsAgentBrowser = true,
+        // Fleet's plugin gives the agent its tools, fleet_session_read among them.
+        SupportsFleetTools = true,
         // Subagents are running work in child sessions; OpenCode has no background shells.
         SupportsChildSessions = true,
         ChildSessionsResumable = true,

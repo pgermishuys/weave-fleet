@@ -172,6 +172,9 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(List<CanvasResponse>))]
 [JsonSerializable(typeof(CanvasBridgeRequest))]
 [JsonSerializable(typeof(SessionMessageBridgeRequest))]
+[JsonSerializable(typeof(SessionReadBridgeRequest))]
+[JsonSerializable(typeof(SessionReferenceDto))]
+[JsonSerializable(typeof(SessionReferenceDto[]))]
 [JsonSerializable(typeof(WorkflowStepBridgeRequest))]
 [JsonSerializable(typeof(MemoryBridgeRequest))]
 // Workflows

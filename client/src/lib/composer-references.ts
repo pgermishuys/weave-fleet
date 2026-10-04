@@ -1,10 +1,11 @@
 /**
- * `@` references in a draft: `@src/app.ts`, `@src/components/`, `@shuttle`. They're plain text in
- * the message (the agent reads the path); the composer only draws them differently.
+ * `@` references in a draft: `@src/app.ts`, `@src/components/`, `@shuttle`, and sessions picked from the `@` list
+ * (`@t3code-notes`, see `session-references.ts`). They're plain text in the message (the agent reads the path); the
+ * composer only draws them differently.
  */
 export interface DraftSegment {
   text: string;
-  reference?: "file" | "folder";
+  reference?: "file" | "folder" | "session";
 }
 
 // "@" at the start or after whitespace, then everything up to the next whitespace.
@@ -17,7 +18,11 @@ const TRAILING_PUNCTUATION = /[.,;:!?)\]}'"]+$/;
  * still being typed, so it stays plain until you move past it; picking from the `@` popup adds a
  * space after the reference, which does that.
  */
-export function splitDraftReferences(text: string, caret: number | null = null): DraftSegment[] {
+export function splitDraftReferences(
+  text: string,
+  caret: number | null = null,
+  sessionTokens: ReadonlySet<string> = new Set(),
+): DraftSegment[] {
   const segments: DraftSegment[] = [];
   let plainStart = 0;
 
@@ -34,7 +39,7 @@ export function splitDraftReferences(text: string, caret: number | null = null):
     if (start > plainStart) {
       segments.push({ text: text.slice(plainStart, start) });
     }
-    segments.push({ text: token, reference: token.endsWith("/") ? "folder" : "file" });
+    segments.push({ text: token, reference: sessionTokens.has(token) ? "session" : token.endsWith("/") ? "folder" : "file" });
     plainStart = end;
   }
 

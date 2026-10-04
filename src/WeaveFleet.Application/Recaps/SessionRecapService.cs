@@ -43,6 +43,18 @@ public sealed partial class SessionRecapService(
         "Lead with the overall goal and current task, then the one next action. Skip root-cause narrative, " +
         "fix internals, secondary to-dos, and em-dash tangents.";
 
+    /// <summary>
+    /// What a session is asked for when the user <c>@</c>-references it in another session whose agent has no Fleet tools
+    /// to read it with: where it stands, for an agent that has never seen it.
+    /// </summary>
+    public const string ReferencePrompt =
+        "Another agent the user is working with needs to know about this session. In three or four plain sentences, " +
+        "no markdown: what it set out to do, what it did and decided, and where it stands now, with the file names " +
+        "and facts that agent would need.";
+
+    /// <summary>How long a reference waits for the harness to write one, since the prompt it goes with waits too.</summary>
+    public static readonly TimeSpan ReferenceTimeout = TimeSpan.FromSeconds(10);
+
     /// <summary>How long after a turn ends the recap is written (Claude Code: 3 minutes).</summary>
     public static readonly TimeSpan Delay = TimeSpan.FromMinutes(3);
 
@@ -56,6 +68,7 @@ public sealed partial class SessionRecapService(
     public static readonly TimeSpan MinimumAway = TimeSpan.FromSeconds(2);
 
     private const int MaxLength = 400;
+    private const int MaxReferenceLength = 1200;
     private const int MaxFailuresPerTurn = 3;
     private const int PromptsBeforeFirstRecap = 3;
     private const int PromptsBetweenRecaps = 2;
@@ -146,6 +159,42 @@ public sealed partial class SessionRecapService(
 
         if (cleared)
             await BroadcastAsync(sessionId, userId, new SessionRecapPayload { SessionId = sessionId }, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// A recap of a session for an agent the user pointed at it with <c>@</c>: the one Fleet wrote, while it's current;
+    /// otherwise one written now, when the session's harness is running, idle and can answer off the record. A
+    /// harness isn't woken for it, and the recap preference doesn't apply: the user asked for this one. Null when
+    /// neither is to be had.
+    /// </summary>
+    public async Task<string?> RecapForReferenceAsync(string sessionId, CancellationToken ct)
+    {
+        if (Get(sessionId) is { Text: { } written } && !string.IsNullOrWhiteSpace(written))
+            return written;
+
+        using var scope = scopeFactory.CreateScope();
+        var sessions = scope.ServiceProvider.GetRequiredService<ISessionRepository>();
+        var session = await sessions.GetByIdAsync(sessionId).ConfigureAwait(false);
+        if (session is null
+            || harnessRegistry.GetByType(session.HarnessType)?.Capabilities.SupportsOffTheRecordPrompt != true
+            || instanceTracker.Get(session.InstanceId) is not { } harness
+            || !string.Equals(activityTracker.GetEffectiveActivityStatus(sessionId) ?? "idle", "idle", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(ReferenceTimeout);
+        try
+        {
+            var text = await harness.AskOffTheRecordAsync(ReferencePrompt, timeout.Token).ConfigureAwait(false);
+            return string.IsNullOrWhiteSpace(text) ? null : Truncate(text.Trim(), MaxReferenceLength);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            LogReferenceRecapFailed(ex, sessionId);
+            return null;
+        }
     }
 
     /// <summary>Drops everything held for a deleted session.</summary>
@@ -305,14 +354,17 @@ public sealed partial class SessionRecapService(
         WrittenAt = recap.WrittenAt.ToString("O", CultureInfo.InvariantCulture),
     };
 
-    private static string Truncate(string text)
-        => text.Length <= MaxLength ? text : string.Concat(text.AsSpan(0, MaxLength - 1).TrimEnd(), "…");
+    private static string Truncate(string text, int maxLength = MaxLength)
+        => text.Length <= maxLength ? text : string.Concat(text.AsSpan(0, maxLength - 1).TrimEnd(), "…");
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Wrote a recap for session {SessionId}")]
     private partial void LogRecapWritten(string sessionId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Could not write a recap for session {SessionId}")]
     private partial void LogRecapFailed(Exception ex, string sessionId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not write a recap of session {SessionId} for a reference to it")]
+    private partial void LogReferenceRecapFailed(Exception ex, string sessionId);
 
     private sealed record SessionRecap(string Text, DateTimeOffset WrittenAt);
 

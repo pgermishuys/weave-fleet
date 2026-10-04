@@ -1,18 +1,31 @@
 import { computed, readonly, ref, shallowRef, toValue, watch, type ComputedRef, type MaybeRefOrGetter, type Ref, type ShallowRef } from "vue";
 import { useFindFiles } from "@/composables/use-find-files";
 import { api } from "@/api/client";
-import type { AutocompleteAgent, AutocompleteCommand } from "@/api/client";
+import type { AutocompleteAgent, AutocompleteCommand, SessionListItem } from "@/api/client";
 import { loadSessionAgentList } from "@/composables/use-agents";
 import { sessionCatalogChanges } from "@/lib/harness-catalog-changes";
+import {
+  matchReferableSessions,
+  rememberSessionReference,
+  sessionReferenceToken,
+  type ReferableSession,
+} from "@/lib/session-references";
 
 export interface AutocompleteItem {
   id: string;
   label: string;
   description?: string;
-  group: "command" | "agent" | "file";
+  group: "command" | "agent" | "file" | "session";
   value: string;
   meta?: string;
+  /** For a session: what its row shows besides the title. */
+  session?: ReferableSession;
 }
+
+/** How many sessions the `@` list offers: a few for a bare `@`, which is mostly for files, more once you type. */
+const SESSIONS_FOR_BARE_MENTION = 3;
+const SESSIONS_FOR_QUERY = 5;
+const SESSION_VALUE_PREFIX = "session:";
 
 export interface UseAutocompleteParams {
   value: Ref<string>;
@@ -22,11 +35,19 @@ export interface UseAutocompleteParams {
   cursorPosition: Ref<number>;
   /** Fleet's own commands (`/btw`), listed before the harness's; a harness command of the same name is left out. */
   fleetCommands?: MaybeRefOrGetter<readonly AutocompleteCommand[]>;
+  /** Sessions the `@` list can offer (see `useReferableSessions`); the session written to is left out. */
+  sessions?: MaybeRefOrGetter<readonly SessionListItem[]>;
+  /** A harness's name for the sessions' rows. */
+  harnessName?: (type: string) => string | undefined;
 }
 
 export interface UseAutocompleteResult {
   isOpen: ComputedRef<boolean>;
+  /** Whether the `@` list is open: what's typed after `@` names a file, an agent or a session. */
+  isMentionOpen: ComputedRef<boolean>;
   items: ComputedRef<AutocompleteItem[]>;
+  /** What's typed after the `@` or `/`, for the popup to mark in the rows. */
+  query: ComputedRef<string>;
   isLoading: ComputedRef<boolean>;
   error: ComputedRef<string | undefined>;
   selectedValue: ComputedRef<string | null>;
@@ -160,6 +181,8 @@ export function useAutocomplete({
   inputRef,
   cursorPosition,
   fleetCommands = [],
+  sessions = [],
+  harnessName,
 }: UseAutocompleteParams): UseAutocompleteResult {
   const selectedIndex = ref(0);
   const suppressedValue = ref<string | null>(null);
@@ -263,8 +286,21 @@ export function useAutocomplete({
       };
     });
 
-    // Files and folders first: they're what @ is mostly for.
-    return [...fileItems, ...agentItems];
+    const sessionItems: AutocompleteItem[] = matchReferableSessions(toValue(sessions), filterText.value, {
+      excludeId: toValue(sessionId),
+      limit: filter === "" ? SESSIONS_FOR_BARE_MENTION : SESSIONS_FOR_QUERY,
+      harnessName,
+    }).map((session) => ({
+      id: `session:${session.id}`,
+      label: session.title,
+      description: session.description,
+      group: "session",
+      value: `${SESSION_VALUE_PREFIX}${session.id}`,
+      session,
+    }));
+
+    // Sessions, then files and folders: a session is the rarer pick, so the few that match go on top.
+    return [...sessionItems, ...fileItems, ...agentItems];
   });
 
   const clampedIndex = computed(() => items.value.length === 0
@@ -277,10 +313,23 @@ export function useAutocomplete({
     onSelect(itemValue.trimEnd());
   }
 
-  function onSelect(itemValue: string): void {
+  function onSelect(selected: string): void {
     const trigger = computedTrigger.value;
     if (!trigger) {
       return;
+    }
+
+    let itemValue = selected;
+    if (selected.startsWith(SESSION_VALUE_PREFIX)) {
+      // A session goes in as a token made from its title; the composer remembers which session the token names.
+      const session = items.value.find((item) => item.value === selected)?.session;
+      const draftSessionId = toValue(sessionId);
+      if (!session || !draftSessionId) {
+        return;
+      }
+      const token = sessionReferenceToken(draftSessionId, session);
+      rememberSessionReference(draftSessionId, { token, sessionId: session.id, title: session.title });
+      itemValue = `${token} `;
     }
 
     let newValue: string;
@@ -379,7 +428,9 @@ export function useAutocomplete({
 
   return {
     isOpen,
+    isMentionOpen: computed(() => isOpen.value && computedTrigger.value?.type === "mention"),
     items,
+    query: filterText,
     isLoading,
     error,
     selectedValue,

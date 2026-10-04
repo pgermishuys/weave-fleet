@@ -95,6 +95,13 @@ public sealed record HarnessCapabilities
     public bool SupportsAgentBrowser { get; init; }
 
     /// <summary>
+    /// The harness process loads Fleet's own tools (<c>fleet_canvas_*</c>, <c>fleet_session_read</c>, …) through Fleet's
+    /// plugin, so its agent can call back into Fleet. A session the user <c>@</c>-references then goes to the agent as a
+    /// link it reads with <c>fleet_session_read</c>; without the tools it goes as a recap.
+    /// </summary>
+    public bool SupportsFleetTools { get; init; }
+
+    /// <summary>
     /// The harness reports work that carries on after the call that started it returned (background shells, background
     /// subagents) as <see cref="EventTypes.WorkStarted"/> / <see cref="EventTypes.WorkEnded"/> events, so Fleet can show
     /// it while it runs.

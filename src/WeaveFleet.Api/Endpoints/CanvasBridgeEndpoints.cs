@@ -76,17 +76,23 @@ public static class CanvasBridgeEndpoints
             => ToResult(await bridge.ShowAsync(BridgeToken(http), request.HarnessSessionId, request.Path, request.Title, ct)))
             .WithName("CanvasBridgePageShow");
 
-        // fleet_message: one session's agent messages another. The sender is the session the call resolves to.
-        app.MapGroup($"{PathPrefix}/session")
+        var session = app.MapGroup($"{PathPrefix}/session")
             .AllowAnonymous()
             .WithTags("SessionMessageBridge")
             .AddEndpointFilter(async (context, next) =>
                 IsLoopback(context.HttpContext.Connection.RemoteIpAddress)
                     ? await next(context)
-                    : UnknownCaller())
-            .MapPost("/message", async (SessionMessageBridgeRequest request, HttpContext http, SessionMessageBridge bridge, CancellationToken ct)
+                    : UnknownCaller());
+
+        // fleet_message: one session's agent messages another. The sender is the session the call resolves to.
+        session.MapPost("/message", async (SessionMessageBridgeRequest request, HttpContext http, SessionMessageBridge bridge, CancellationToken ct)
                 => ToResult(await bridge.SendAsync(BridgeToken(http), request.HarnessSessionId, request.SessionId, request.Text, request.NotifyWhenDone, ct)))
             .WithName("SessionMessageBridgeSend");
+
+        // fleet_session_read: a page of a session the user @-referenced, for the agent the reference went to.
+        session.MapPost("/read", async (SessionReadBridgeRequest request, HttpContext http, SessionReadBridge bridge, CancellationToken ct)
+                => ToResult(await bridge.ReadAsync(BridgeToken(http), request.HarnessSessionId, request.SessionId, request.Before, request.Limit, ct)))
+            .WithName("SessionReadBridgeRead");
 
         // fleet_step_done: a workflow step's session finishes the step. Only the step's own session can.
         app.MapGroup($"{PathPrefix}/workflow")

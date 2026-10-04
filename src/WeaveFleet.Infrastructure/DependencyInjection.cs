@@ -208,6 +208,9 @@ public static class DependencyInjection
             client.DefaultRequestHeaders.UserAgent.ParseAdd("fleet-reports/1.0");
         });
         services.AddScoped<SessionMessageBridge>();
+        // @ sessions in the composer: the block a message's references become, and fleet_session_read.
+        services.AddScoped<SessionReferenceExpander>();
+        services.AddScoped<SessionReadBridge>();
         services.AddScoped<ISessionUpdateSender, SessionUpdateSender>();
         // Singleton: holds which messages a session asked to hear back about, until the turn handling them ends.
         services.AddSingleton<SessionUpdates>();
