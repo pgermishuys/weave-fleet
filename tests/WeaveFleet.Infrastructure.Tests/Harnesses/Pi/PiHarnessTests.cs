@@ -21,4 +21,11 @@ public sealed class PiHarnessTests
         capabilities.ChildSessionsResumable.ShouldBeFalse();
         capabilities.ReportsBackgroundWork.ShouldBeFalse();
     }
+
+    [Fact]
+    public void Pi_takes_no_notes_for_the_model()
+    {
+        // A note would have to go into the user's message, which Pi keeps and Fleet shows.
+        new PiHarness().Capabilities.TakesModelNotes.ShouldBeFalse();
+    }
 }

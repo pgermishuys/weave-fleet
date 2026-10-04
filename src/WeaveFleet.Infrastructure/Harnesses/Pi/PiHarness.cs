@@ -35,5 +35,8 @@ public sealed class PiHarness : IHarness
         ReportsBackgroundWork = false,
         SupportsChildSessions = false,
         ChildSessionsResumable = false,
+        // Pi's RPC prompt is one user message, which Pi keeps in the history Fleet shows: there's no way to give the model
+        // words of Fleet's own without a Fleet extension for Pi. So Pi isn't told about lost work yet.
+        TakesModelNotes = false,
     };
 }
