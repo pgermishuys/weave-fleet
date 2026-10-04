@@ -437,4 +437,46 @@ describe("SessionItem", () => {
 
     expect(wrapper.find("input[aria-label='Session name']").exists()).toBe(true);
   });
+
+  describe("lineage", () => {
+    function mountWith(props: Record<string, unknown>) {
+      return mount(SessionItem, {
+        props: { active: false, session: createSession({ sessionStatus: "idle", activityStatus: "idle" }), ...props },
+        global: { stubs: contextMenuStubs },
+      });
+    }
+
+    it("shows a green chip counting the work its agent has running", () => {
+      const wrapper = mountWith({ runningCount: 3 });
+      const chip = wrapper.get("[data-testid='session-running-chip']");
+
+      expect(chip.text()).toContain("3");
+      expect(chip.attributes("title")).toBe("3 things running in the background");
+      expect(mountWith({ runningCount: 0 }).find("[data-testid='session-running-chip']").exists()).toBe(false);
+    });
+
+    it("under its parent, says how it came from it instead of its status", () => {
+      const wrapper = mountWith({ kindLabel: "fork" });
+
+      expect(wrapper.get("[data-testid='session-kind']").text()).toBe("fork");
+      expect(wrapper.find(".session-meta").exists()).toBe(false);
+    });
+
+    it("a parent opens and closes its children with the caret or the arrow keys, without opening the session", async () => {
+      const wrapper = mountWith({ hasChildren: true, childrenExpanded: false });
+      const row = wrapper.get("[data-testid='session-row']");
+
+      expect(row.attributes("aria-expanded")).toBe("false");
+      await wrapper.get("[data-testid='session-children-toggle']").trigger("click");
+      expect(wrapper.emitted("toggleChildren")).toHaveLength(1);
+      expect(wrapper.emitted("select")).toBeUndefined();
+
+      await row.trigger("keydown", { key: "ArrowLeft" });
+      expect(wrapper.emitted("toggleChildren")).toHaveLength(1);
+      await row.trigger("keydown", { key: "ArrowRight" });
+      expect(wrapper.emitted("toggleChildren")).toHaveLength(2);
+
+      expect(mountWith({}).get("[data-testid='session-row']").attributes("aria-expanded")).toBeUndefined();
+    });
+  });
 });

@@ -28,6 +28,7 @@ import { useSentPrompts } from "@/composables/use-send-prompt";
 import { provideSessionDiffsContext } from "@/composables/use-session-diffs-context";
 import { useSessionRecap } from "@/composables/use-session-recap";
 import { useSessionTerminals } from "@/composables/use-session-terminals";
+import { lineageOf } from "@/lib/session-lineage";
 import { apiFetch } from "@/lib/api-client";
 import type { SessionActionCapabilities, SessionListItem, SessionOrigin } from "@/api/client";
 import type { SessionActivityStatus } from "@/lib/types";
@@ -65,6 +66,9 @@ interface SessionDetailResponse {
   /** The profile the session started with, if it has one. */
   harnessProfileName?: string | null;
   tags?: string[];
+  forkedFromSessionId?: string | null;
+  spawnedBySessionId?: string | null;
+  spawnKind?: string | null;
 }
 
 type ComposerInstance = ComponentPublicInstance & {
@@ -115,6 +119,9 @@ function normalizeSessionDetailResponse(payload: unknown): SessionDetailResponse
     id: getStringField(value, "id", "Id"),
     instanceId: getStringField(value, "instanceId", "InstanceId"),
     parentSessionId: getStringField(value, "parentSessionId", "ParentSessionId"),
+    forkedFromSessionId: getStringField(value, "forkedFromSessionId", "ForkedFromSessionId"),
+    spawnedBySessionId: getStringField(value, "spawnedBySessionId", "SpawnedBySessionId"),
+    spawnKind: getStringField(value, "spawnKind", "SpawnKind"),
     workspaceId: getStringField(value, "workspaceId", "WorkspaceId"),
     workspaceDirectory: getStringField(value, "workspaceDirectory", "WorkspaceDirectory"),
     workspaceDisplayName: getStringField(value, "workspaceDisplayName", "WorkspaceDisplayName"),
@@ -305,6 +312,9 @@ const SessionDetailPage = defineComponent({
             },
             instanceStatus: selectedSession.value?.instanceStatus ?? "running",
             parentSessionId: nextRemoteSession.parentSessionId ?? selectedSession.value?.parentSessionId ?? null,
+            forkedFromSessionId: nextRemoteSession.forkedFromSessionId ?? selectedSession.value?.forkedFromSessionId ?? null,
+            spawnedBySessionId: nextRemoteSession.spawnedBySessionId ?? selectedSession.value?.spawnedBySessionId ?? null,
+            spawnKind: nextRemoteSession.spawnKind ?? selectedSession.value?.spawnKind ?? null,
             sourceDirectory: nextRemoteSession.sourceDirectory ?? selectedSession.value?.sourceDirectory ?? null,
             branch: nextRemoteSession.branch ?? selectedSession.value?.branch ?? null,
             activityStatus: normalizedActivityStatus,
@@ -441,6 +451,17 @@ const SessionDetailPage = defineComponent({
 
     const isDelegatedSession = computed(() => {
       return Boolean(search.value.parentSessionId || selectedSession.value?.parentSessionId);
+    });
+
+    // "Started by …" in the header: a fork or a session another session's agent started (a subagent has its banner).
+    const startedBy = computed(() => {
+      const link = lineageOf({
+        parentSessionId: null,
+        forkedFromSessionId: selectedSession.value?.forkedFromSessionId ?? remoteSession.value?.forkedFromSessionId ?? null,
+        spawnedBySessionId: selectedSession.value?.spawnedBySessionId ?? remoteSession.value?.spawnedBySessionId ?? null,
+        spawnKind: selectedSession.value?.spawnKind ?? remoteSession.value?.spawnKind ?? null,
+      });
+      return isDelegatedSession.value ? null : link;
     });
 
     const parentSessionLabel = computed(() => {
@@ -764,6 +785,8 @@ const SessionDetailPage = defineComponent({
             totalTokens={selectedSession.value?.totalTokens ?? remoteSession.value?.totalTokens ?? null}
             totalCost={selectedSession.value?.totalCost ?? remoteSession.value?.totalCost ?? null}
             tags={selectedSession.value?.tags ?? []}
+            lineageParentId={startedBy.value?.parentId ?? null}
+            lineageKind={startedBy.value?.kind ?? null}
             editingTitle={isEditingTitle.value}
             renameDisabled={isArchived.value}
             canRestore={canRestore.value}

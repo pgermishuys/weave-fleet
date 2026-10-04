@@ -9,11 +9,13 @@ import {
   Globe,
   History,
   ListChecks,
+  Network,
   PanelsTopLeft,
   Paperclip,
   Workflow,
 } from "lucide-vue-next";
 import BrowserCanvas from "@/components/canvas/BrowserCanvas.vue";
+import AgentsCanvas from "@/components/canvas/AgentsCanvas.vue";
 import ChangesCanvas from "@/components/canvas/ChangesCanvas.vue";
 import PageCanvas from "@/components/canvas/PageCanvas.vue";
 import FilesCanvas from "@/components/canvas/FilesCanvas.vue";
@@ -50,6 +52,7 @@ export const CANVAS_TYPES: Record<CanvasKind, CanvasTypeDefinition> = {
   context: { kind: "context", label: "Context", icon: Paperclip, component: SessionContextCanvas },
   progress: { kind: "progress", label: "Progress", icon: ListChecks, component: ProgressCanvas },
   turns: { kind: "turns", label: "Turns", icon: History, component: TurnsCanvas },
+  agents: { kind: "agents", label: "Agents", icon: Network, component: AgentsCanvas },
   visual: { kind: "visual", label: "Diagram", icon: Workflow, component: VisualCanvas },
   browser: { kind: "browser", label: "Browser", icon: Globe, component: BrowserCanvas },
   page: { kind: "page", label: "Page", icon: PanelsTopLeft, component: PageCanvas },
@@ -57,7 +60,7 @@ export const CANVAS_TYPES: Record<CanvasKind, CanvasTypeDefinition> = {
 };
 
 /** Built-in canvases a person can open from the + menu. */
-export const PICKABLE_CANVAS_KINDS = ["context", "progress", "changes", "files", "turns"] as const;
+export const PICKABLE_CANVAS_KINDS = ["context", "progress", "changes", "files", "turns", "agents"] as const;
 
 const VISUAL_ICONS: Record<VisualPayload["$type"], Component> = {
   "visual/flow": Workflow,

@@ -38,6 +38,9 @@ export function sessionsChanged(
       a.isHidden !== b.isHidden ||
       a.instanceStatus !== b.instanceStatus ||
       a.session.title !== b.session.title ||
+      (a.runningWorkCount ?? 0) !== (b.runningWorkCount ?? 0) ||
+      (a.forkedFromSessionId ?? null) !== (b.forkedFromSessionId ?? null) ||
+      (a.spawnedBySessionId ?? null) !== (b.spawnedBySessionId ?? null) ||
       !sameProgressSummary(a.progress, b.progress)
     ) return true;
   }

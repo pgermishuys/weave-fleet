@@ -16,6 +16,7 @@ import { provideCanvasAnnotate } from "@/composables/use-canvas-annotation";
 import { useDiffs } from "@/composables/use-diffs";
 import { useFileLiveUpdates } from "@/composables/use-file-live-updates";
 import { useServerCanvases } from "@/composables/use-server-canvases";
+import { useSessionLineage } from "@/composables/use-session-lineage";
 import { useCanvasesStore } from "@/stores/canvases";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSidebarStore } from "@/stores/sidebar";
@@ -108,6 +109,18 @@ watch(
   { immediate: true },
 );
 
+// --- Agents tab: added (without focus) the first time the session's agent starts a subagent or another session ---
+const { agents, activeCount: activeAgentCount } = useSessionLineage(activeSessionId);
+const hasAgents = computed(() => agents.value.running.length + agents.value.started.length + agents.value.earlier.length > 0);
+
+watch(
+  [activeSessionId, hasAgents],
+  ([sessionId, has]) => {
+    if (sessionId && has) canvasesStore.introduce(sessionId, "agents");
+  },
+  { immediate: true },
+);
+
 const tabBadges = computed<Record<string, CanvasTabBadge>>(() => {
   const attention = contextLinks.value.some(needsAttention);
   const count = contextLinks.value.length;
@@ -122,6 +135,10 @@ const tabBadges = computed<Record<string, CanvasTabBadge>>(() => {
     progress: {
       count: total > 0 ? `${done}/${total}` : undefined,
       label: `${done} of ${total} done`,
+    },
+    agents: {
+      count: activeAgentCount.value > 0 ? activeAgentCount.value : undefined,
+      label: `${activeAgentCount.value} running or waiting`,
     },
   };
 });
