@@ -1,0 +1,39 @@
+{
+  "$comment": "OpenCode 2's shell routes as Fleet uses them for running work: Stop and Output on a background shell. Recorded from a real opencode 2.0.18 server (opencode serve, a shell started with POST /api/shell, no model) on 2026-10-04; paths anonymised. Note that DELETE answers 204 for a shell that's gone too, so Fleet asks GET /api/shell/{id} first. Read by OpenCode2RunningWorkTests.",
+  "version": "2.0.18",
+  "directory": "/work/proj",
+  "shellId": "sh_1076c170e001nt51kyVpKkCys1",
+  "sessionId": "ses_recorded",
+  "routes": {
+    "GET /api/shell": {
+      "status": 200,
+      "body": {"location":{"directory":"/work/proj"},"data":[{"id":"sh_1076c170e001nt51kyVpKkCys1","status":"running","command":"echo first-line; sleep 30; echo never","cwd":"/work/proj","shell":"/bin/bash","file":"/home/you/.local/share/opencode/shell/de39908d00fc1ec4cc8962af6db1bf432f97f13e/sh_1076c170e001nt51kyVpKkCys1.out","pid":2664673,"metadata":{"sessionID":"ses_recorded"},"time":{"started":1791125886734}}]}
+    },
+    "GET /api/shell/{id}": {
+      "status": 200,
+      "body": {"location":{"directory":"/work/proj"},"data":{"id":"sh_1076c170e001nt51kyVpKkCys1","status":"running","command":"echo first-line; sleep 30; echo never","cwd":"/work/proj","shell":"/bin/bash","file":"/home/you/.local/share/opencode/shell/de39908d00fc1ec4cc8962af6db1bf432f97f13e/sh_1076c170e001nt51kyVpKkCys1.out","pid":2664673,"metadata":{"sessionID":"ses_recorded"},"time":{"started":1791125886734}}}
+    },
+    "GET /api/shell/{id}/output?cursor=0": {
+      "status": 200,
+      "body": {"location":{"directory":"/work/proj"},"data":{"output":"first-line\n","cursor":11,"size":11,"truncated":false}}
+    },
+    "GET /api/shell/{id}/output?cursor=6": {
+      "status": 200,
+      "body": {"location":{"directory":"/work/proj"},"data":{"output":"line\n","cursor":11,"size":11,"truncated":false}}
+    },
+    "DELETE /api/shell/{id}": {
+      "status": 204
+    },
+    "DELETE /api/shell/{id} (gone)": {
+      "status": 204
+    },
+    "GET /api/shell/{id} (gone)": {
+      "status": 404,
+      "body": {"_tag":"ShellNotFoundError","id":"sh_1076c170e001nt51kyVpKkCys1","message":"Shell command not found: sh_1076c170e001nt51kyVpKkCys1"}
+    },
+    "GET /api/shell/{id}/output (gone)": {
+      "status": 404,
+      "body": {"_tag":"ShellNotFoundError","id":"sh_1076c170e001nt51kyVpKkCys1","message":"Shell command not found: sh_1076c170e001nt51kyVpKkCys1"}
+    }
+  }
+}

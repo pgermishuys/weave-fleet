@@ -120,6 +120,7 @@ public sealed partial class AutomationExecutionService(
             // Where it runs comes from the automation source (AutomationSessionSourceProvider).
             Source = BuildSessionSource(automation, eventType),
             SourceReference = $"automation:{automation.Id}",
+            SpawnKind = SpawnKinds.Automation,
             Agent = automation.Agent,
             ProviderId = SplitModel(automation.Model).ProviderId,
             ModelId = SplitModel(automation.Model).ModelId,

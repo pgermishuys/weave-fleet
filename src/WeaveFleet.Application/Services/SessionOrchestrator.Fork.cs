@@ -82,6 +82,8 @@ public sealed partial class SessionOrchestrator
             SelectedAgent = parent.SelectedAgent,
             SelectedProviderId = parent.SelectedProviderId,
             SelectedModelId = parent.SelectedModelId,
+            ForkedFromSessionId = parent.Id,
+            SpawnKind = SpawnKinds.Fork,
         };
 
         try
@@ -107,6 +109,8 @@ public sealed partial class SessionOrchestrator
                 WorkspaceId = session.WorkspaceId,
                 Title = session.Title,
                 ProjectId = session.ProjectId,
+                ForkedFromSessionId = session.ForkedFromSessionId,
+                SpawnKind = session.SpawnKind,
             }, ApplicationJsonContext.Default.SessionCreatedOutboxPayload),
             session.UserId, ct).ConfigureAwait(false);
 

@@ -184,6 +184,33 @@ public sealed class FakeHarnessSession : IHarnessSession
         return Task.FromResult(ConversationFork);
     }
 
+    /// <summary>What <see cref="StopWorkAsync"/> answers for a work id; unset, the harness can't stop work.</summary>
+    public Func<string, bool>? StopWorkBehavior { get; set; }
+
+    /// <summary>The work ids <see cref="StopWorkAsync"/> was asked to stop.</summary>
+    public List<string> StopWorkCalls { get; } = [];
+
+    public Task<bool> StopWorkAsync(string workId, CancellationToken ct)
+    {
+        if (StopWorkBehavior is null)
+            throw new NotSupportedException("This harness can't stop running work on its own.");
+        StopWorkCalls.Add(workId);
+        return Task.FromResult(StopWorkBehavior(workId));
+    }
+
+    /// <summary>What <see cref="ReadWorkOutputAsync"/> answers for a work id and offset; unset, the harness can't read output.</summary>
+    public Func<string, long, WorkOutput?>? WorkOutputBehavior { get; set; }
+
+    public Task<WorkOutput?> ReadWorkOutputAsync(string workId, long offset, CancellationToken ct)
+        => WorkOutputBehavior is { } read
+            ? Task.FromResult(read(workId, offset))
+            : throw new NotSupportedException("This harness can't read running work's output.");
+
+    /// <summary>What <see cref="GetRunningWorkAsync"/> answers; null (the default) means the harness can't say.</summary>
+    public IReadOnlyList<WorkReport>? RunningWork { get; set; }
+
+    public Task<IReadOnlyList<WorkReport>?> GetRunningWorkAsync(CancellationToken ct) => Task.FromResult(RunningWork);
+
     public Task<string?> GetActivityStatusAsync(CancellationToken ct)
         => GetActivityStatusBehavior?.Invoke(ct) ?? Task.FromResult<string?>("idle");
 

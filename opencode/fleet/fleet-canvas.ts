@@ -153,6 +153,12 @@ export const FleetCanvasPlugin = async (input: { directory?: string }) => ({
       }
     : {}),
 
+  // Every shell the agent runs knows which session it's in, so a call to Fleet's API from it can say so (the Fleet API
+  // skill sends it as X-Fleet-Harness-Session): a session the agent starts then knows which session started it.
+  "shell.env": async (hookInput: { sessionID?: string }, output: { env: Record<string, string> }) => {
+    if (hookInput.sessionID) output.env.FLEET_HARNESS_SESSION_ID = hookInput.sessionID
+  },
+
   tool: {
     fleet_canvas_list: {
       description: "List the canvases open in this session's side panel: id, kind, title and version.",

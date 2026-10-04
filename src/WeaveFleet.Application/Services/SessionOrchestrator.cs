@@ -365,6 +365,8 @@ public sealed partial class SessionOrchestrator(
             SelectedModelId = HasModel(request.ProviderId, request.ModelId) ? request.ModelId!.Trim() : null,
             WorkflowRunId = request.WorkflowRunId,
             WorkflowUserFinishes = request.WorkflowRunId is not null && request.WorkflowUserFinishes,
+            SpawnedBySessionId = request.SpawnedBySessionId,
+            SpawnKind = request.SpawnKind ?? (request.WorkflowRunId is not null ? SpawnKinds.Workflow : request.SpawnedBySessionId is not null ? SpawnKinds.Api : null),
         };
 
         var createdAt = DateTime.UtcNow.ToString("O");
@@ -397,7 +399,9 @@ public sealed partial class SessionOrchestrator(
                     InstanceId = harnessInstance.InstanceId,
                     WorkspaceId = workspace.Id,
                     Title = session.Title,
-                    ProjectId = session.ProjectId
+                    ProjectId = session.ProjectId,
+                    SpawnedBySessionId = session.SpawnedBySessionId,
+                    SpawnKind = session.SpawnKind,
                 }, ApplicationJsonContext.Default.SessionCreatedOutboxPayload),
                 userContext.UserId, ct);
         }
@@ -419,7 +423,9 @@ public sealed partial class SessionOrchestrator(
                                     InstanceId = harnessInstance.InstanceId,
                                     WorkspaceId = workspace.Id,
                                     Title = session.Title,
-                                    ProjectId = session.ProjectId
+                                    ProjectId = session.ProjectId,
+                                    SpawnedBySessionId = session.SpawnedBySessionId,
+                                    SpawnKind = session.SpawnKind,
                                 }, ApplicationJsonContext.Default.SessionCreatedOutboxPayload),
                                 createdAt,
                                 userContext.UserId)
@@ -2431,6 +2437,16 @@ public sealed record CreateSessionRequest
     internal bool WorkflowUserFinishes { get; init; }
     /// <summary>What a new worktree's branch is named from, when it isn't <see cref="InitialPrompt"/>.</summary>
     internal string? BranchNamingText { get; init; }
+    /// <summary>
+    /// The session whose agent asked for this one (<see cref="Session.SpawnedBySessionId"/>). Set only once Fleet knows
+    /// who called, never from a request's body.
+    /// </summary>
+    public string? SpawnedBySessionId { get; init; }
+    /// <summary>
+    /// How the session came to be (<see cref="SpawnKinds"/>). Defaults to <see cref="SpawnKinds.Workflow"/> for a
+    /// workflow step and <see cref="SpawnKinds.Api"/> when <see cref="SpawnedBySessionId"/> is set.
+    /// </summary>
+    public string? SpawnKind { get; init; }
 }
 
 /// <summary>Result of a successful <see cref="SessionOrchestrator.CreateSessionAsync"/> call.</summary>

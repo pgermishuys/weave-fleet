@@ -357,7 +357,6 @@ public sealed class OpenCode2RuntimeTests
             server.WithFolderLoaded("/work"),
             servers,
             analytics: null,
-            delegations: null,
             NullLogger.Instance);
 
     private static HttpResponseMessage Json(string json) => new(HttpStatusCode.OK)

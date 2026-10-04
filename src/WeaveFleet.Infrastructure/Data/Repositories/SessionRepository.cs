@@ -36,13 +36,15 @@ public sealed class SessionRepository(
                 lifecycle_status, retention_status, archived_at, is_hidden, total_tokens, total_cost,
                 harness_type, runtime_mode, harness_profile_id, harness_resume_token, git_baseline_ref, git_repo_root, user_id,
                 source_reference, tags, selected_agent, selected_provider_id, selected_model_id, workflow_run_id, workflow_user_finishes,
-                side_of_session_id, side_boundary_message_id, kept_from_side, side_minimized, side_discarded_at, side_seen_answer_id)
+                side_of_session_id, side_boundary_message_id, kept_from_side, side_minimized, side_discarded_at, side_seen_answer_id,
+                forked_from_session_id, spawned_by_session_id, spawn_kind)
             SELECT @Id, @WorkspaceId, @InstanceId, @ProjectId, @OpencodeSessionId, @Title,
                 @Status, @Directory, @CreatedAt, @StoppedAt, @ParentSessionId,
                 @LifecycleStatus, @RetentionStatus, @ArchivedAt, @IsHidden, @TotalTokens, @TotalCost,
                 @HarnessType, @RuntimeMode, @HarnessProfileId, @HarnessResumeToken, @GitBaselineRef, @GitRepoRoot, @UserId,
                 @SourceReference, @Tags, @SelectedAgent, @SelectedProviderId, @SelectedModelId, @WorkflowRunId, @WorkflowUserFinishes,
-                @SideOfSessionId, @SideBoundaryMessageId, @KeptFromSide, @SideMinimized, @SideDiscardedAt, @SideSeenAnswerId
+                @SideOfSessionId, @SideBoundaryMessageId, @KeptFromSide, @SideMinimized, @SideDiscardedAt, @SideSeenAnswerId,
+                @ForkedFromSessionId, @SpawnedBySessionId, @SpawnKind
             FROM workspaces workspace_row
             WHERE workspace_row.id = @WorkspaceId
               AND workspace_row.user_id = @UserId
@@ -94,6 +96,9 @@ public sealed class SessionRepository(
                 cmd.AddParameter("SideMinimized", session.SideMinimized ? 1 : 0);
                 cmd.AddParameter("SideDiscardedAt", session.SideDiscardedAt);
                 cmd.AddParameter("SideSeenAnswerId", session.SideSeenAnswerId);
+                cmd.AddParameter("ForkedFromSessionId", session.ForkedFromSessionId);
+                cmd.AddParameter("SpawnedBySessionId", session.SpawnedBySessionId);
+                cmd.AddParameter("SpawnKind", session.SpawnKind);
             },
             transaction);
     }
@@ -200,7 +205,8 @@ public sealed class SessionRepository(
         using var conn = connectionFactory.CreateConnection();
         await conn.ExecuteNonQueryAsync(
             """
-            UPDATE sessions SET side_of_session_id = NULL, is_hidden = 0, kept_from_side = 1, workspace_id = @WorkspaceId
+            UPDATE sessions SET side_of_session_id = NULL, is_hidden = 0, kept_from_side = 1, workspace_id = @WorkspaceId,
+                forked_from_session_id = COALESCE(forked_from_session_id, side_of_session_id), spawn_kind = COALESCE(spawn_kind, 'fork')
             WHERE id = @Id AND user_id = @UserId
             """,
             cmd =>
@@ -801,6 +807,9 @@ public sealed class SessionRepository(
             SideMinimized = r.GetInt64(r.GetOrdinal("side_minimized")) != 0,
             SideDiscardedAt = r.GetNullableString(r.GetOrdinal("side_discarded_at")),
             SideSeenAnswerId = r.GetNullableString(r.GetOrdinal("side_seen_answer_id")),
+            ForkedFromSessionId = r.GetNullableString(r.GetOrdinal("forked_from_session_id")),
+            SpawnedBySessionId = r.GetNullableString(r.GetOrdinal("spawned_by_session_id")),
+            SpawnKind = r.GetNullableString(r.GetOrdinal("spawn_kind")),
             Tags = tags,
         };
     }

@@ -275,7 +275,7 @@ public sealed class OpenCodeSessionMessageProxy(
                 Status = session.Status,
             },
             Messages = messages,
-            Delegations = delegations.Select(d => new SessionSnapshotDelegation
+            Delegations = delegations.Where(d => d.Kind == WorkKinds.Subagent).Select(d => new SessionSnapshotDelegation
             {
                 DelegationId = d.Id,
                 ParentToolCallId = d.ParentToolCallId,
@@ -290,6 +290,7 @@ public sealed class OpenCodeSessionMessageProxy(
                     ? true
                     : null,
             }).ToList(),
+            RunningWork = DelegationService.RunningWorkOf(delegations),
             ActivityStatus = activityStatus,
             LastEventId = null, // Live harness doesn't use event IDs
             HasMore = messagePage.HasMore,

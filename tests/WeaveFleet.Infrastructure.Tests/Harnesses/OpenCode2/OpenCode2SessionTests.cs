@@ -378,7 +378,6 @@ public sealed class OpenCode2SessionTests
             server,
             _ => Task.FromResult(server),
             analytics: null,
-            delegations: null,
             NullLogger.Instance);
 
     private static OpenCode2Event Event(string type, string data) => new()

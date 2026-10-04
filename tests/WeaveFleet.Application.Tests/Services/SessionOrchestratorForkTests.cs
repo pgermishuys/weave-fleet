@@ -108,6 +108,24 @@ public sealed class SessionOrchestratorForkTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task the_fork_remembers_the_session_it_was_forked_from()
+    {
+        Seed();
+        var orchestrator = _builder.Build();
+
+        var fork = (await orchestrator.ForkSessionAsync("s1")).Value.Session;
+
+        fork.ForkedFromSessionId.ShouldBe("s1");
+        fork.SpawnKind.ShouldBe(SpawnKinds.Fork);
+        // The user forked it; no session's agent started it.
+        fork.SpawnedBySessionId.ShouldBeNull();
+        _builder.SessionRepository.InsertedSessions.Single(s => s.Id == fork.Id).ForkedFromSessionId.ShouldBe("s1");
+        var created = _builder.EventBroadcaster.Broadcasts.Single(b => b.Type == "session_created");
+        created.Payload.GetProperty("forkedFromSessionId").GetString().ShouldBe("s1");
+        created.Payload.GetProperty("spawnKind").GetString().ShouldBe("fork");
+    }
+
+    [Fact]
     public async Task a_given_title_names_the_fork()
     {
         Seed();

@@ -441,13 +441,32 @@ export default {
       })
     }
 
+    // Every shell the agent runs knows which session it's in (FLEET_HARNESS_SESSION_ID), so a call to Fleet's API from it
+    // can say so (the Fleet API skill sends it as X-Fleet-Harness-Session): a session the agent starts then knows which
+    // session started it. The shell's own hook doesn't name the session, so the shell tool's call is remembered by its
+    // command until its shell starts, which V2 does next.
+    const shellSessions = new Map()
+    if (ctx.tool?.hook) {
+      await ctx.tool.hook("execute.before", (event) => {
+        const command = event.tool === "shell" && typeof event.input?.command === "string" ? event.input.command : undefined
+        if (!command || !event.sessionID) return
+        if (shellSessions.size >= 100) shellSessions.delete(shellSessions.keys().next().value)
+        shellSessions.set(command, event.sessionID)
+      })
+    }
+
     const changes = shellEnvironment()
-    if (changes && ctx.shell?.hook) {
+    if (ctx.shell?.hook) {
       await ctx.shell.hook("create.before", (event) => {
         if (!event.env) return
-        for (const [name, value] of Object.entries(changes)) {
+        for (const [name, value] of Object.entries(changes ?? {})) {
           if (value === null) delete event.env[name]
           else event.env[name] = String(value)
+        }
+        const sessionID = shellSessions.get(event.command)
+        if (sessionID) {
+          shellSessions.delete(event.command)
+          event.env.FLEET_HARNESS_SESSION_ID = sessionID
         }
       })
     }

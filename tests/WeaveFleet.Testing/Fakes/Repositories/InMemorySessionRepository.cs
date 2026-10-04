@@ -118,6 +118,8 @@ public sealed class InMemorySessionRepository : ISessionRepository
         if (_store.TryGetValue(id, out var session))
         {
             session.WorkspaceId = workspaceId;
+            session.ForkedFromSessionId ??= session.SideOfSessionId;
+            session.SpawnKind ??= SpawnKinds.Fork;
             session.SideOfSessionId = null;
             session.IsHidden = false;
             session.KeptFromSide = true;

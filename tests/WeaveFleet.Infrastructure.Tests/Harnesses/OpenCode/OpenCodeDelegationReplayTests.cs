@@ -46,6 +46,17 @@ public sealed class OpenCodeDelegationReplayTests
     private static (OpenCodeHarnessSession Instance, InMemoryDelegationRepository DelegationRepo, FakeEventBroadcaster EventBroadcaster)
         BuildInstance(string fleetSessionId, IEnumerable<string> sseLines)
     {
+        var (instance, delegationRepo, eventBroadcaster, _) = BuildInstanceWithRecorder(fleetSessionId, sseLines);
+        return (instance, delegationRepo, eventBroadcaster);
+    }
+
+    /// <summary>
+    /// The same, with the <see cref="RunningWorkRecorder"/> the relay hands the session's work events to: OpenCode's
+    /// subagents reach Fleet's record as <c>work.*</c> events (<see cref="RecordWorkAsync"/>).
+    /// </summary>
+    private static (OpenCodeHarnessSession Instance, InMemoryDelegationRepository DelegationRepo, FakeEventBroadcaster EventBroadcaster, RunningWorkRecorder Recorder)
+        BuildInstanceWithRecorder(string fleetSessionId, IEnumerable<string> sseLines)
+    {
         var messageRepo = new InMemoryMessageRepository();
         var delegationRepo = new InMemoryDelegationRepository();
         var eventBroadcaster = new FakeEventBroadcaster();
@@ -98,7 +109,15 @@ public sealed class OpenCodeDelegationReplayTests
             logger: NullLogger<OpenCodeHarnessSession>.Instance,
             ownerUserId: "user-1");
 
-        return (instance, delegationRepo, eventBroadcaster);
+        return (instance, delegationRepo, eventBroadcaster, new RunningWorkRecorder(scopeFactory, NullLogger<RunningWorkRecorder>.Instance));
+    }
+
+    /// <summary>Hands the work events among <paramref name="events"/> to <paramref name="recorder"/>, as the relay does, and waits for them.</summary>
+    private static async Task RecordWorkAsync(RunningWorkRecorder recorder, string fleetSessionId, IEnumerable<HarnessEvent> events)
+    {
+        foreach (var evt in events.Where(e => EventTypes.IsWorkEvent(e.Type)))
+            recorder.Observe(evt.FleetSessionId ?? fleetSessionId, "user-1", evt);
+        await recorder.Idle(fleetSessionId).WaitAsync(TimeSpan.FromSeconds(10));
     }
 
     private static async Task<List<HarnessEvent>> ConsumeAsync(OpenCodeHarnessSession instance, CancellationToken ct)
@@ -213,14 +232,11 @@ public sealed class OpenCodeDelegationReplayTests
     [Fact]
     public async Task DelegationReplay_DelegationLifecycle_PendingRunningCompleted()
     {
-        var (instance, delegationRepo, eventBroadcaster) =
-            BuildInstance("fleet-lifecycle-1", DelegationReplayFixture.GetSseLines());
+        var (instance, delegationRepo, eventBroadcaster, recorder) =
+            BuildInstanceWithRecorder("fleet-lifecycle-1", DelegationReplayFixture.GetSseLines());
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await ConsumeWithCancelAsync(instance);
-
-        // Give fire-and-forget delegation handlers time to complete
-        await Task.Delay(500);
+        var events = await ConsumeWithCancelAsync(instance);
+        await RecordWorkAsync(recorder, "fleet-lifecycle-1", events);
 
         // Should have at least a pending delegation created with the correct tool call ID
         delegationRepo.InsertedDelegations.ShouldNotBeEmpty("Delegation should be inserted when task tool fires");
@@ -267,7 +283,7 @@ public sealed class OpenCodeDelegationReplayTests
             },
         });
 
-        var (instance, delegationRepo, _) = BuildInstance("fleet-ordered-1", [TaskPart("running"), TaskPart("completed")]);
+        var (instance, delegationRepo, _, recorder) = BuildInstanceWithRecorder("fleet-ordered-1", [TaskPart("running"), TaskPart("completed")]);
         var lookups = 0;
         delegationRepo.GetByParentToolCallIdBehavior = async (parentSessionId, toolCallId) =>
         {
@@ -277,13 +293,13 @@ public sealed class OpenCodeDelegationReplayTests
             return found;
         };
 
-        await ConsumeWithCancelAsync(instance);
-        var deadline = DateTime.UtcNow.AddSeconds(5);
-        while (!delegationRepo.All.Any(d => d.Status == "completed") && DateTime.UtcNow < deadline)
-            await Task.Delay(50);
-        await Task.Delay(500);
+        var events = await ConsumeWithCancelAsync(instance);
+        events.Where(e => EventTypes.IsWorkEvent(e.Type)).Select(e => e.Type).ShouldBe([EventTypes.WorkUpdated, EventTypes.WorkEnded]);
+        await RecordWorkAsync(recorder, "fleet-ordered-1", events);
 
-        delegationRepo.All.ShouldHaveSingleItem().Status.ShouldBe("completed");
+        var work = delegationRepo.All.ShouldHaveSingleItem();
+        work.Status.ShouldBe("completed");
+        work.EndedReason.ShouldBe(WorkEndedReasons.Completed);
 
         await instance.DisposeAsync();
     }

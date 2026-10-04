@@ -94,6 +94,64 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task A_session_another_sessions_agent_started_remembers_it()
+    {
+        ConfigureHarnessAndScratchProject();
+        using var tempDirectory = new TempDirectory();
+
+        var result = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path,
+            Title = "Fix Pi model switch",
+            SpawnedBySessionId = "caller-1",
+        });
+
+        result.IsSuccess.ShouldBeTrue();
+        var inserted = _builder.SessionRepository.InsertedSessions.Single(s => s.Title == "Fix Pi model switch");
+        inserted.SpawnedBySessionId.ShouldBe("caller-1");
+        inserted.SpawnKind.ShouldBe(SpawnKinds.Api);
+        inserted.ForkedFromSessionId.ShouldBeNull();
+        // Hidden only for a delegated child: a session an agent started is in the list like any other.
+        inserted.ParentSessionId.ShouldBeNull();
+        var created = _builder.EventBroadcaster.Broadcasts.Single(b => b.Type == "session_created");
+        created.Payload.GetProperty("spawnedBySessionId").GetString().ShouldBe("caller-1");
+    }
+
+    [Theory]
+    [InlineData("run-1", null, SpawnKinds.Workflow)]
+    [InlineData(null, SpawnKinds.Automation, SpawnKinds.Automation)]
+    public async Task A_session_a_workflow_or_an_automation_started_says_so(string? workflowRunId, string? spawnKind, string expected)
+    {
+        ConfigureHarnessAndScratchProject();
+        using var tempDirectory = new TempDirectory();
+
+        await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path,
+            Title = "Started for me",
+            WorkflowRunId = workflowRunId,
+            SpawnKind = spawnKind,
+        });
+
+        var inserted = _builder.SessionRepository.InsertedSessions.Single(s => s.Title == "Started for me");
+        inserted.SpawnKind.ShouldBe(expected);
+        inserted.SpawnedBySessionId.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task A_session_the_user_started_has_no_lineage()
+    {
+        ConfigureHarnessAndScratchProject();
+        using var tempDirectory = new TempDirectory();
+
+        await _sut.CreateSessionAsync(new CreateSessionRequest { Directory = tempDirectory.Path, Title = "Mine" });
+
+        var inserted = _builder.SessionRepository.InsertedSessions.Single(s => s.Title == "Mine");
+        inserted.SpawnedBySessionId.ShouldBeNull();
+        inserted.SpawnKind.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task create_session_async_persists_harness_resume_token_from_session_at_insert()
     {
         // Arrange: the harness returns a session with a non-null ResumeToken (simulating a

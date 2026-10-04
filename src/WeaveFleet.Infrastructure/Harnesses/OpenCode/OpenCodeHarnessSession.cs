@@ -111,9 +111,8 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     private const int MaxRememberedFileWrites = 10_000;
     private readonly ConcurrentDictionary<string, byte> _reportedFileWrites = new(StringComparer.Ordinal);
 
-    // Delegation handling runs off the event loop, one event at a time in the order OpenCode sent them.
-    private readonly object _delegationSync = new();
-    private Task _delegationTail = Task.CompletedTask;
+    // The child session of each running task call, by call: what Stop aborts.
+    private readonly ConcurrentDictionary<string, string> _workChildren = new(StringComparer.Ordinal);
 
     private sealed record OpenCodeAgentModelInfo(string? ProviderId, string? ModelId);
 
@@ -778,18 +777,16 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
                 _analyticsCollector!.AcceptTokenEvent(tokenEvent);
             }
 
-            // Delegation detection for message.part.updated events, off the event loop.
-            // This must remain in the session because it needs access to the raw SSE event
-            // and the fleet session context for child session orchestration.
-            if (harnessEvent.Type == EventTypes.MessagePartUpdated)
-                QueueDelegation(sseEvt);
-
             // Track tool-call-ID → question-ID so AnswerQuestionAsync / RejectQuestionAsync
             // can translate the UI-provided tool call ID into the OpenCode question ID.
             if (harnessEvent.Type == OpenCodeMapper.QuestionAskedEventType)
                 TryCacheQuestionMapping(harnessEvent);
 
             yield return harnessEvent;
+
+            // A task call is running work in a child session: Fleet records it, and makes the child a session of its own.
+            if (harnessEvent.Type == EventTypes.MessagePartUpdated && OpenCodeMapper.TryExtractDelegation(sseEvt, _fleetSessionId) is { } delegation)
+                yield return SubagentWorkEvent(delegation, harnessEvent.SessionId);
 
             // A pending question is the one thing in a turn only the user can move on: report it as activity,
             // so the session reads as needing them rather than working.
@@ -1501,71 +1498,44 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     }
 
     /// <summary>
-    /// Queues delegation handling behind the previous event's. One task call sends its updates milliseconds apart
-    /// (pending, running, running, completed), and linking the child session can take seconds. Handled
-    /// concurrently, a "running" update that finished last put a completed subagent back to running for good.
+    /// A task call as a running-work event: started with the call, ended with it. Its child session is named once
+    /// OpenCode made it, and Stop aborts that child. Always the parent's work, as OpenCode's own subagents are.
     /// </summary>
-    private void QueueDelegation(OpenCodeSseEvent sseEvt)
+    private HarnessEvent SubagentWorkEvent(OpenCodeMapper.DelegationExtraction delegation, string harnessSessionId)
     {
-        lock (_delegationSync)
+        var report = new WorkReport
         {
-            _delegationTail = _delegationTail
-                .ContinueWith(_ => TryEmitDelegationAsync(sseEvt), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default)
-                .Unwrap();
+            WorkId = delegation.ToolCallId,
+            Kind = WorkKinds.Subagent,
+            Title = delegation.Title,
+            Label = delegation.Description,
+            ToolCallId = delegation.ToolCallId,
+            ChildHarnessSessionId = string.IsNullOrWhiteSpace(delegation.ChildSessionId) ? null : delegation.ChildSessionId,
+            CanStop = string.IsNullOrWhiteSpace(delegation.ChildSessionId) ? null : true,
+        };
+
+        if (delegation.Status is "completed" or "error" or "cancelled")
+        {
+            _workChildren.TryRemove(delegation.ToolCallId, out _);
+            return WorkEvents.Ended(report, delegation.Status, harnessSessionId, delegation.ParentSessionId);
         }
+
+        if (report.ChildHarnessSessionId is { } child)
+            _workChildren[delegation.ToolCallId] = child;
+        return delegation.Status == "pending"
+            ? WorkEvents.Started(report, harnessSessionId, delegation.ParentSessionId)
+            : WorkEvents.Updated(report, harnessSessionId, delegation.ParentSessionId);
     }
 
-    private async Task<bool> TryEmitDelegationAsync(OpenCodeSseEvent sseEvt)
+    /// <inheritdoc />
+    /// <remarks>A subagent is stopped by aborting its child session; the task call then ends, and with it the work.</remarks>
+    public async Task<bool> StopWorkAsync(string workId, CancellationToken ct)
     {
-        try
-        {
-            var extraction = OpenCodeMapper.TryExtractDelegation(sseEvt, _fleetSessionId);
-            if (extraction is null)
-                return false;
-
-            using var userScope = BackgroundUserContext.BeginScope(_ownerUserId);
-            using var scope = _scopeFactory.CreateScope();
-            var delegationService = scope.ServiceProvider.GetRequiredService<DelegationService>();
-
-            var delegation = await delegationService.HandleDelegationDetectedAsync(
-                extraction.ParentSessionId,
-                extraction.ToolCallId,
-                extraction.Title,
-                extraction.Description).ConfigureAwait(false);
-
-            if (!string.IsNullOrWhiteSpace(extraction.ChildSessionId))
-            {
-                var sessionOrchestrator = scope.ServiceProvider.GetRequiredService<SessionOrchestrator>();
-                var childSessionResult = await sessionOrchestrator.EnsureDelegatedChildSessionAsync(
-                    extraction.ParentSessionId,
-                    extraction.ChildSessionId,
-                    extraction.Title).ConfigureAwait(false);
-
-                if (childSessionResult.IsFailure)
-                    return true;
-
-                delegation = await delegationService.HandleChildLinkedAsync(
-                        extraction.ParentSessionId,
-                        extraction.ToolCallId,
-                        childSessionResult.Value.Id)
-                    .ConfigureAwait(false)
-                    ?? delegation;
-            }
-
-            if (extraction.Status is "completed" or "error" or "cancelled")
-            {
-                await delegationService.HandleDelegationFinishedAsync(
-                    delegation.DelegationId,
-                    extraction.Status).ConfigureAwait(false);
-            }
-
-            return true;
-        }
-        catch (Exception ex)
-        {
-            LogDelegationFailed(_logger, _fleetSessionId, ex);
+        if (!_workChildren.TryGetValue(workId, out var child))
             return false;
-        }
+
+        await _instanceHandle.HttpClient.AbortAsync(child, _workingDirectory, ct).ConfigureAwait(false);
+        return true;
     }
 
     /// <summary>

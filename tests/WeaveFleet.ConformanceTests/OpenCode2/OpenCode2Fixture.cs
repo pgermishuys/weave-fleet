@@ -134,7 +134,6 @@ public sealed class OpenCode2Fixture(OpenCode2Host host) : IHarnessSessionFixtur
             server,
             _ => Task.FromResult(server),
             analytics: null,
-            delegations: null,
             NullLoggerFactory.Instance.CreateLogger<OpenCode2HarnessSession>());
         return _session;
     }

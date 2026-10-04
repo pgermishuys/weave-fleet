@@ -192,6 +192,74 @@ public sealed class SessionRepositoryTests
     }
 
     [Fact]
+    public async Task A_session_keeps_which_session_it_was_forked_from_or_started_by()
+    {
+        var (conn, repo, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var (ws, inst) = await InsertDependenciesAsync(factory);
+        Session New(string id) => new()
+        {
+            Id = id,
+            WorkspaceId = ws.Id,
+            InstanceId = inst.Id,
+            OpencodeSessionId = $"oc-{id}",
+            Title = id,
+            Status = "active",
+            Directory = "/tmp/ws",
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId,
+        };
+        await repo.InsertAsync(New("forked"));
+        await repo.InsertAsync(Apply(New("fork"), s => { s.ForkedFromSessionId = "forked"; s.SpawnKind = SpawnKinds.Fork; }));
+        await repo.InsertAsync(Apply(New("started"), s => { s.SpawnedBySessionId = "forked"; s.SpawnKind = SpawnKinds.Api; }));
+
+        var fork = (await repo.GetByIdAsync("fork")).ShouldNotBeNull();
+        (fork.ForkedFromSessionId, fork.SpawnedBySessionId, fork.SpawnKind).ShouldBe(("forked", null, "fork"));
+        var started = (await repo.GetByIdAsync("started")).ShouldNotBeNull();
+        (started.ForkedFromSessionId, started.SpawnedBySessionId, started.SpawnKind).ShouldBe((null, "forked", "api"));
+        var plain = (await repo.GetByIdAsync("forked")).ShouldNotBeNull();
+        (plain.ForkedFromSessionId, plain.SpawnedBySessionId, plain.SpawnKind).ShouldBe((null, null, null));
+    }
+
+    [Fact]
+    public async Task A_side_conversation_kept_as_a_session_is_a_fork_of_the_one_it_was_beside()
+    {
+        var (conn, repo, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var (ws, inst) = await InsertDependenciesAsync(factory);
+        var side = new Session
+        {
+            Id = "side",
+            WorkspaceId = ws.Id,
+            InstanceId = inst.Id,
+            OpencodeSessionId = "oc-side",
+            Title = "btw",
+            Status = "active",
+            Directory = "/tmp/ws",
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId,
+            SideOfSessionId = "main",
+            IsHidden = true,
+        };
+        await repo.InsertAsync(side);
+
+        await repo.KeepSideConversationAsync("side", ws.Id);
+
+        var kept = (await repo.GetByIdAsync("side")).ShouldNotBeNull();
+        kept.SideOfSessionId.ShouldBeNull();
+        kept.ForkedFromSessionId.ShouldBe("main");
+        kept.SpawnKind.ShouldBe(SpawnKinds.Fork);
+    }
+
+    private static Session Apply(Session session, Action<Session> change)
+    {
+        change(session);
+        return session;
+    }
+
+    [Fact]
     public async Task ListAsync_ReturnsAllSessions()
     {
         var (conn, repo, factory) = await CreateAsync();

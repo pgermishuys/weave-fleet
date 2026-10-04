@@ -90,5 +90,36 @@ public sealed class Session
     /// </summary>
     public string? SideSeenAnswerId { get; set; }
 
+    /// <summary>The session this one is a fork of (Fork copied its conversation), or null.</summary>
+    public string? ForkedFromSessionId { get; set; }
+
+    /// <summary>
+    /// The session whose agent started this one (through Fleet's API), or null. Unlike <see cref="ParentSessionId"/>
+    /// the session isn't hidden: it's a session of its own that remembers where it came from.
+    /// </summary>
+    public string? SpawnedBySessionId { get; set; }
+
+    /// <summary>How the session came to be, when something other than the user started it: one of <see cref="SpawnKinds"/>.</summary>
+    public string? SpawnKind { get; set; }
+
     public List<string> Tags { get; set; } = [];
+}
+
+/// <summary>How a session came to be (<see cref="Session.SpawnKind"/>), when the user didn't start it from scratch.</summary>
+public static class SpawnKinds
+{
+    /// <summary>Fork copied another session's conversation (<see cref="Session.ForkedFromSessionId"/>).</summary>
+    public const string Fork = "fork";
+
+    /// <summary>Another session's agent started it through Fleet's API (<see cref="Session.SpawnedBySessionId"/>).</summary>
+    public const string Api = "api";
+
+    /// <summary>Started by a message from another session.</summary>
+    public const string Message = "message";
+
+    /// <summary>An automation's run started it.</summary>
+    public const string Automation = "automation";
+
+    /// <summary>A workflow run started it as one of its steps.</summary>
+    public const string Workflow = "workflow";
 }

@@ -159,6 +159,9 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(IReadOnlyList<SessionOriginRecordDto>))]
 [JsonSerializable(typeof(WeaveFleet.Application.DTOs.DelegationDto))]
 [JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Application.DTOs.DelegationDto>))]
+[JsonSerializable(typeof(WeaveFleet.Domain.Events.RunningWorkItem))]
+[JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Domain.Events.RunningWorkItem>))]
+[JsonSerializable(typeof(WeaveFleet.Api.Endpoints.WorkOutputResponse))]
 // Terminals
 [JsonSerializable(typeof(TerminalResponse))]
 [JsonSerializable(typeof(List<TerminalResponse>))]

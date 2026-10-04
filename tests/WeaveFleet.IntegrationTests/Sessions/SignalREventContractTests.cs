@@ -64,8 +64,11 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
 
         _hub.On<string, long, JsonElement>("Event", (topic, eventId, data) =>
         {
-            _receivedEvents.Add(new ReceivedEvent(topic, eventId, data));
-            _rawEvents.Add(data.GetRawText());
+            lock (_receivedEvents)
+            {
+                _receivedEvents.Add(new ReceivedEvent(topic, eventId, data));
+                _rawEvents.Add(data.GetRawText());
+            }
             _eventReceived.Release();
         });
 
@@ -160,6 +163,65 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
         propertiesProperty.TryGetProperty("info", out var info).ShouldBeTrue(
             $"Properties missing 'info'. Actual properties: {propertiesProperty.GetRawText()}");
         info.GetProperty("id").GetString().ShouldBe("msg-test-1");
+    }
+
+    [Fact]
+    public async Task A_harnesses_running_work_reaches_the_session_and_the_status_bar_as_work_events()
+    {
+        var sessionId = await CreateSessionAsync();
+        await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
+        await _hub.InvokeAsync("SubscribeToSessionsTopicAsync");
+        await WaitForBroadcasterSubscriberAsync();
+
+        // What an adapter sends for a shell it moved to the background, then for its end: Fleet's own work.* events.
+        var harness = await HarnessOfAsync(sessionId);
+        await harness.PushEventAsync(Work(EventTypes.WorkStarted, sessionId, """
+            {"workId":"sh_contract","kind":"shell","title":"shell","label":"bun run test:e2e","toolCallId":"call_bg",
+             "background":true,"canStop":true,"canReadOutput":true}
+            """));
+        var started = await WaitForWorkEventAsync("work.started", $"session:{sessionId}");
+        var startedOnSessions = await WaitForWorkEventAsync("work.started", "sessions");
+
+        await harness.PushEventAsync(Work(EventTypes.WorkEnded, sessionId, """
+            {"workId":"sh_contract","endedReason":"completed","detail":"exit 0"}
+            """));
+        var ended = await WaitForWorkEventAsync("work.ended", $"session:{sessionId}");
+
+        // The exact shape the client's running-work list reads: RunningWorkItem, camelCase, nulls left out.
+        var item = started.Data.GetProperty("properties");
+        item.GetProperty("id").GetString().ShouldNotBeNullOrEmpty();
+        item.GetProperty("sessionId").GetString().ShouldBe(sessionId);
+        item.GetProperty("workId").GetString().ShouldBe("sh_contract");
+        item.GetProperty("kind").GetString().ShouldBe("shell");
+        item.GetProperty("title").GetString().ShouldBe("shell");
+        item.GetProperty("label").GetString().ShouldBe("bun run test:e2e");
+        item.GetProperty("status").GetString().ShouldBe("running");
+        item.GetProperty("background").GetBoolean().ShouldBeTrue();
+        item.GetProperty("toolCallId").GetString().ShouldBe("call_bg");
+        item.GetProperty("canStop").GetBoolean().ShouldBeTrue();
+        item.GetProperty("canReadOutput").GetBoolean().ShouldBeTrue();
+        item.GetProperty("startedAt").GetString().ShouldNotBeNullOrEmpty();
+        item.TryGetProperty("endedAt", out _).ShouldBeFalse(item.GetRawText());
+        item.TryGetProperty("childSessionId", out _).ShouldBeFalse(item.GetRawText());
+        startedOnSessions.Data.GetProperty("properties").GetProperty("id").GetString().ShouldBe(item.GetProperty("id").GetString());
+
+        var end = ended.Data.GetProperty("properties");
+        end.GetProperty("id").GetString().ShouldBe(item.GetProperty("id").GetString());
+        end.GetProperty("status").GetString().ShouldBe("completed");
+        end.GetProperty("endedReason").GetString().ShouldBe("completed");
+        end.GetProperty("detail").GetString().ShouldBe("exit 0");
+        end.GetProperty("endedAt").GetString().ShouldNotBeNullOrEmpty();
+
+        // The harness's own events never reach the conversation as anything else.
+        Received().Select(e => e.Data.GetProperty("type").GetString())
+            .ShouldAllBe(type => type == "work.started" || type == "work.ended");
+
+        // A session opened now gets the work in its snapshot, with its result, while it's recent.
+        var snapshot = await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
+        var work = snapshot.GetProperty("runningWork").EnumerateArray().ShouldHaveSingleItem();
+        work.GetProperty("workId").GetString().ShouldBe("sh_contract");
+        work.GetProperty("endedReason").GetString().ShouldBe("completed");
+        snapshot.GetProperty("delegations").EnumerateArray().ShouldBeEmpty();
     }
 
     [Fact]
@@ -1293,6 +1355,46 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
         }
 
         throw new InvalidOperationException($"Could not extract session ID from response: {body}");
+    }
+
+    /// <summary>The harness behind <paramref name="sessionId"/>, which can push events as a real adapter would.</summary>
+    private async Task<WeaveFleet.TestHarness.TestHarnessSession> HarnessOfAsync(string sessionId)
+    {
+        using var scope = _server.Services.CreateScope();
+        var session = await scope.ServiceProvider.GetRequiredService<ISessionRepository>().GetByIdAsync(sessionId);
+        var instance = _server.Services.GetRequiredService<InstanceTracker>().Get(session.ShouldNotBeNull().InstanceId);
+        return instance.ShouldBeOfType<WeaveFleet.TestHarness.TestHarnessSession>();
+    }
+
+    private static HarnessEvent Work(string type, string sessionId, string report) => new()
+    {
+        Type = type,
+        SessionId = sessionId,
+        Timestamp = DateTimeOffset.UtcNow,
+        Payload = JsonDocument.Parse(report).RootElement.Clone(),
+    };
+
+    /// <summary>Waits for a <paramref name="type"/> event on <paramref name="topic"/>; work is recorded off the relay, so others may come first.</summary>
+    private async Task<ReceivedEvent> WaitForWorkEventAsync(string type, string topic)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < deadline)
+        {
+            var found = Received().FirstOrDefault(e => e.Topic == topic && e.Data.GetProperty("type").GetString() == type);
+            if (found is not null)
+                return found;
+            await _eventReceived.WaitAsync(TimeSpan.FromMilliseconds(200));
+        }
+
+        lock (_receivedEvents)
+            throw new ShouldAssertException($"No {type} on {topic}. Received: {string.Join("; ", _rawEvents)}");
+    }
+
+    /// <summary>The events received so far, copied: the client adds to the list on its own thread.</summary>
+    private List<ReceivedEvent> Received()
+    {
+        lock (_receivedEvents)
+            return [.. _receivedEvents];
     }
 
     private async Task<ReceivedEvent?> WaitForEventAsync(TimeSpan timeout)

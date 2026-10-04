@@ -44,6 +44,18 @@ public sealed record SessionListResponse(
 
     /// <summary>The workflow run this session is a step of; the session list nests it under the run.</summary>
     public string? WorkflowRunId { get; init; }
+
+    /// <summary>How much work the session's agent left running (subagents, background shells, monitors): the list's chip.</summary>
+    public int RunningWorkCount { get; init; }
+
+    /// <summary>The session this one is a fork of, or null.</summary>
+    public string? ForkedFromSessionId { get; init; }
+
+    /// <summary>The session whose agent started this one, or null.</summary>
+    public string? SpawnedBySessionId { get; init; }
+
+    /// <summary>How the session came to be: <c>fork</c>, <c>api</c>, <c>message</c>, <c>automation</c> or <c>workflow</c>; null when the user started it.</summary>
+    public string? SpawnKind { get; init; }
 }
 
 /// <summary>A model as the harness names one.</summary>
