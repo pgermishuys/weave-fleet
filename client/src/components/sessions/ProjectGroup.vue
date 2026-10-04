@@ -173,24 +173,20 @@ const draggedOutOfParent = computed(() => {
 const acceptsDrag = computed(() => Boolean(props.activeDragSessionId)
   && (props.activeDragProjectId !== props.project.projectId || draggedOutOfParent.value !== null));
 
-/** Over the family the dragged session is already in (its top-level session and everything under it): no drop there. */
+/**
+ * Whether the drag is over the family the dragged session is already in (its top-level session and everything under
+ * it): dropping there does nothing, since that's where it is.
+ */
+function overOwnFamily(event: DragEvent): boolean {
+  const dragged = draggedOutOfParent.value;
+  if (!dragged) return false;
+  const rootId = (event.target as Element | null)?.closest?.("[data-family]")?.getAttribute("data-family");
+  const root = rootId ? props.project.sessions.find((item) => item.session.id === rootId) : null;
+  return Boolean(root) && childRowsOf(root!).some((row) => row.kind === "session" && row.item.session.id === dragged.session.id);
+}
+
 const isOverOwnFamily = shallowRef(false);
 const isDropTarget = computed(() => dragEnterCount.value > 0 && acceptsDrag.value && !isOverOwnFamily.value);
-
-function inFamily(root: SessionListItem): boolean {
-  const id = props.activeDragSessionId;
-  return Boolean(id) && childRowsOf(root).some((row) => row.kind === "session" && row.item.session.id === id);
-}
-
-/** Dragging over its own family does nothing: the session is already there. */
-function handleFamilyDragOver(event: DragEvent, root: SessionListItem): void {
-  if (!draggedOutOfParent.value || !inFamily(root)) {
-    isOverOwnFamily.value = false;
-    return;
-  }
-  isOverOwnFamily.value = true;
-  event.stopPropagation();
-}
 
 function handleSessionDragStart(sessionId: string, projectId: string | null): void {
   emit("dragSessionStart", sessionId, projectId);
@@ -201,9 +197,9 @@ function handleSessionDragEnd(): void {
 }
 
 function handleDragOver(event: DragEvent): void {
-  isOverOwnFamily.value = false;
+  isOverOwnFamily.value = overOwnFamily(event);
   // Must prevent default to allow drop
-  if (acceptsDrag.value) {
+  if (acceptsDrag.value && !isOverOwnFamily.value) {
     event.preventDefault();
     if (event.dataTransfer) {
       event.dataTransfer.dropEffect = "move";
@@ -211,9 +207,10 @@ function handleDragOver(event: DragEvent): void {
   }
 }
 
-function handleDragEnter(): void {
+function handleDragEnter(event: DragEvent): void {
   if (props.activeDragSessionId) {
     dragEnterCount.value++;
+    isOverOwnFamily.value = overOwnFamily(event);
   }
 }
 
@@ -235,7 +232,7 @@ function handleDrop(event: DragEvent): void {
   const movingOut = draggedOutOfParent.value;
   if (movingOut) {
     event.preventDefault();
-    emit("moveOutOfParent", movingOut.session.id);
+    if (!overOwnFamily(event)) emit("moveOutOfParent", movingOut.session.id);
     return;
   }
 
@@ -552,7 +549,7 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
           v-for="entry in entries"
           :key="entry.kind === 'run' ? `run:${entry.runId}` : rowKey(entry.session)"
           class="project-row"
-          @dragover="entry.kind === 'run' ? undefined : handleFamilyDragOver($event, entry.session)"
+          :data-family="entry.kind === 'run' ? undefined : entry.session.session.id"
         >
           <WorkflowRunGroup
             v-if="entry.kind === 'run'"
