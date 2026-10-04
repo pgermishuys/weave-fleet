@@ -50,6 +50,11 @@ describe("getToolLabel", () => {
     expect(getToolIcon("fleet_page_show")).not.toBe(getToolIcon("unknown-tool"));
   });
 
+  it("names reading an @-referenced session", () => {
+    expect(getToolDisplayLabel("fleet_session_read")).toBe("Read session");
+    expect(getToolIcon("fleet_session_read")).not.toBe(getToolIcon("unknown-tool"));
+  });
+
   it("falls back to the tool's name when the input says nothing", () => {
     for (const tool of ["websearch", "subagent", "question", "execute"]) {
       expect(getToolLabel(tool, null)).toBe(tool);
