@@ -29,5 +29,11 @@ public sealed class PiHarness : IHarness
         SupportsImageAttachments = false,
         SupportsStreaming = true,
         SupportsDelegation = false,
+        // Subagents come from Pi extensions (the example subagent extension), which run them inside the tool call: they
+        // are reported as running work while the call runs, with no session of their own to open, and the call doesn't
+        // return before they finish.
+        ReportsBackgroundWork = false,
+        SupportsChildSessions = false,
+        ChildSessionsResumable = false,
     };
 }

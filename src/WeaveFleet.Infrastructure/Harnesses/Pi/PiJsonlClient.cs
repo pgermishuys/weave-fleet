@@ -389,7 +389,7 @@ internal sealed class PiJsonlClient : IAsyncDisposable
         await _events.Writer.WriteAsync(errorEvent, _readerCts.Token).ConfigureAwait(false);
     }
 
-    private static string NormalizeDiscriminatorsFirst(string line)
+    internal static string NormalizeDiscriminatorsFirst(string line)
     {
         using var document = JsonDocument.Parse(line);
         if (document.RootElement.ValueKind != JsonValueKind.Object)

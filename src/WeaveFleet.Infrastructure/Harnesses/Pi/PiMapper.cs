@@ -21,6 +21,7 @@ internal sealed class PiMapper
     private readonly Dictionary<int, string> _contentPartText = [];
     private readonly Dictionary<int, string> _contentPartReasoning = [];
     private readonly Dictionary<string, PiToolPartState> _toolsByCallId = [];
+    private readonly PiSubagentWork _subagents;
 
     private int _messageSequence;
     private int _turnIndex;
@@ -39,11 +40,15 @@ internal sealed class PiMapper
     {
         _sessionId = sessionId;
         _agent = agent;
+        _subagents = new PiSubagentWork(sessionId);
     }
 
     /// <summary>Stateless convenience mapper for tests and one-off events.</summary>
     internal static IReadOnlyList<HarnessEvent> ToHarnessEvents(PiEvent evt, string sessionId)
         => new PiMapper(sessionId).Map(evt);
+
+    /// <summary>The subagents running now (<see cref="PiSubagentWork"/>).</summary>
+    internal IReadOnlyList<WorkReport> RunningWork() => _subagents.Running();
 
     /// <summary>Maps one Pi event into zero or more Fleet harness events.</summary>
     internal IReadOnlyList<HarnessEvent> Map(PiEvent evt)
@@ -87,6 +92,7 @@ internal sealed class PiMapper
             events.Add(CreateMessageLifecycleEvent(EventTypes.MessageUpdated, message, completed: true));
         }
 
+        events.AddRange(_subagents.AgentEnded());
         events.Add(CreateStatusEvent("idle"));
         return events;
     }
@@ -217,7 +223,10 @@ internal sealed class PiMapper
         var state = UpsertToolState(evt.ToolCallId, evt.ToolName, evt.Args);
         var output = ToolResultToJson(evt.PartialResult);
         _toolsByCallId[evt.ToolCallId] = state with { Output = output };
-        return [CreateToolPartUpdatedEvent(state, new ToolRunningState { Input = state.Input })];
+        var toolEvent = CreateToolPartUpdatedEvent(state, new ToolRunningState { Input = state.Input });
+        return state.ToolName == PiSubagentWork.ToolName
+            ? [toolEvent, .. _subagents.Update(evt.ToolCallId, state.Input, evt.PartialResult)]
+            : [toolEvent];
     }
 
     private IReadOnlyList<HarnessEvent> MapToolExecutionEnd(PiToolExecutionEndEvent evt)
@@ -244,7 +253,9 @@ internal sealed class PiMapper
 
         var toolResultEvent = CreateEvent(EventTypes.MessagePartUpdated, toolResultPayload);
 
-        return [toolStateEvent, toolResultEvent];
+        return finalState.ToolName == PiSubagentWork.ToolName
+            ? [toolStateEvent, toolResultEvent, .. _subagents.End(evt.ToolCallId, finalState.Input, evt.Result, evt.IsError)]
+            : [toolStateEvent, toolResultEvent];
     }
 
     private IReadOnlyList<HarnessEvent> MapResponse(PiResponseEvent evt)
