@@ -302,7 +302,72 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
         AssistantText().Last().ShouldBe("Reply 1");
     }
 
+    [Fact]
+    public async Task Stop_ends_one_background_task_and_leaves_the_process_running()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var session = Start();
+        await PromptAsync("start lasting background");
+        var pid = session.ProcessId;
+        Work(EventTypes.WorkStarted).Select(r => (r.WorkId, r.Kind, r.CanStop, r.CanReadOutput)).ShouldBe([("task-1", "shell", true, true)]);
+
+        (await session.StopWorkAsync("task-1", CancellationToken.None)).ShouldBeTrue();
+
+        StdinLines().ShouldContain(line => line.Contains("\"subtype\":\"stop_task\"") && line.Contains("\"task_id\":\"task-1\""));
+        await WaitForAsync(() => Work(EventTypes.WorkEnded).Count == 1);
+        Work(EventTypes.WorkEnded).Single().ShouldSatisfyAllConditions(
+            r => r.EndedReason.ShouldBe(WorkEndedReasons.Cancelled),
+            r => r.Detail.ShouldBe("stopped"));
+        session.ProcessId.ShouldBe(pid);
+        session.BackgroundWork.ShouldBeEmpty();
+
+        // Gone now: there's nothing to stop.
+        (await session.StopWorkAsync("task-1", CancellationToken.None)).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Work_a_dead_process_was_running_is_lost_and_nothing_runs_after_it()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var session = Start();
+        await PromptAsync("start lasting background");
+        (await session.GetRunningWorkAsync(CancellationToken.None))!.Select(r => r.WorkId).ShouldBe(["task-1"]);
+
+        System.Diagnostics.Process.GetProcessById(session.ProcessId!.Value).Kill();
+        await WaitForAsync(() => Work(EventTypes.WorkEnded).Count == 1);
+
+        Work(EventTypes.WorkEnded).Single().ShouldSatisfyAllConditions(
+            r => r.WorkId.ShouldBe("task-1"),
+            r => r.EndedReason.ShouldBe(WorkEndedReasons.Lost));
+        (await session.GetRunningWorkAsync(CancellationToken.None)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Fleets_notes_to_the_model_go_ahead_of_the_prompt()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        Start();
+        await PromptAsync("one", new PromptOptions { ModelNotes = ["Note from Fleet: lost work."] });
+
+        var content = JsonDocument.Parse(StdinLines().Single()).RootElement.GetProperty("message").GetProperty("content");
+        content.EnumerateArray().Select(block => block.GetProperty("text").GetString()).ShouldBe(["Note from Fleet: lost work.", "one"]);
+
+        // The conversation keeps what the user wrote.
+        _messages.All.Single(m => m.Role == "user").PartsJson.ShouldNotContain("lost work");
+    }
+
     // -----------------------------------------------------------------------
+
+    private List<WorkReport> Work(string type)
+        => _events.Where(e => e.Type == type)
+            .Select(e => JsonSerializer.Deserialize(e.Payload!.Value, WeaveFleet.Infrastructure.InfrastructureJsonContext.Default.WorkReport)!)
+            .ToList();
 
     private ClaudeCodeHarnessSession Start(bool honoursInterrupt = true, bool switchesModel = true, string? claudeSessionId = null)
     {
@@ -469,6 +534,12 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
                   ;;
                 *'"subtype":"set_model"'*)
             {{{setModel}}}
+                  ;;
+                *'"subtype":"stop_task"'*)
+                  task=$(printf '%s' "$line" | sed -n 's/.*"task_id":"\([^"]*\)".*/\1/p')
+                  echo '{"type":"system","subtype":"background_tasks_changed","tasks":[],"session_id":"cc-1"}'
+                  echo '{"type":"system","subtype":"task_notification","task_id":"'"$task"'","status":"stopped","summary":"sleep 600","session_id":"cc-1"}'
+                  echo '{"type":"control_response","response":{"subtype":"success","request_id":"'"$rid"'"}}'
                   ;;
                 *'"subtype":"set_permission_mode"'*'"bypassPermissions"'*)
                   echo '{"type":"control_response","response":{"subtype":"error","request_id":"'"$rid"'","error":"Cannot set permission mode to bypassPermissions because the session was not launched with --dangerously-skip-permissions"}}'

@@ -113,6 +113,13 @@ public sealed record HarnessCapabilities
 
     /// <summary>A child session can be opened and prompted like any session once its subagent has finished.</summary>
     public bool ChildSessionsResumable { get; init; }
+
+    /// <summary>
+    /// The harness passes <see cref="PromptOptions.ModelNotes"/> on to the model with the prompt, as Fleet's words rather
+    /// than the user's, and the conversation doesn't show them. Fleet only puts a note there for a harness that does,
+    /// such as the one about work that was lost and won't report back.
+    /// </summary>
+    public bool TakesModelNotes { get; init; }
 }
 
 /// <summary>What a shell command the user ran from the composer looks like in the conversation.</summary>
@@ -443,7 +450,7 @@ public sealed record PromptOptions
     /// <summary>
     /// Text Fleet sends with the prompt for the model alone: the harness passes it on as its own words, not the
     /// user's, and the conversation doesn't show it. Only for a harness with
-    /// <see cref="HarnessCapabilities.SupportsSideConversations"/>; others ignore it.
+    /// <see cref="HarnessCapabilities.TakesModelNotes"/>; others ignore it.
     /// </summary>
     public IReadOnlyList<string>? ModelNotes { get; init; }
 

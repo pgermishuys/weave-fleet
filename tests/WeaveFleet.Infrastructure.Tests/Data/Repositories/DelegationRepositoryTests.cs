@@ -183,6 +183,32 @@ public sealed class DelegationRepositoryTests
         lost.WorkId.ShouldBe(left.Id);
     }
 
+    [Fact]
+    public async Task Lost_work_is_listed_until_the_agent_was_told_and_only_for_its_owner()
+    {
+        var (conn, _, factory) = await CreateAsync();
+        using var _ = conn;
+        var alice = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "alice");
+        await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "bob");
+        var aliceRepo = new DelegationRepository(factory, new TestUserContext("alice"));
+        var bobRepo = new DelegationRepository(factory, new TestUserContext("bob"));
+        var lost = await InsertDelegationAsync(aliceRepo, alice.Session.Id, "running");
+        var finished = await InsertDelegationAsync(aliceRepo, alice.Session.Id, "running");
+        var running = await InsertDelegationAsync(aliceRepo, alice.Session.Id, "running");
+        await aliceRepo.EndAsync(lost.Id, "cancelled", WorkEndedReasons.Lost, null, DateTime.UtcNow.ToString("O"));
+        await aliceRepo.EndAsync(finished.Id, "completed", WorkEndedReasons.Completed, "exit 0", DateTime.UtcNow.ToString("O"));
+
+        (await aliceRepo.GetUnreportedLostAsync(alice.Session.Id)).Select(d => d.Id).ShouldBe([lost.Id]);
+        (await bobRepo.GetUnreportedLostAsync(alice.Session.Id)).ShouldBeEmpty();
+
+        // Another user can't mark it; its owner can, once.
+        await bobRepo.MarkLostReportedAsync([lost.Id], DateTime.UtcNow.ToString("O"));
+        (await aliceRepo.GetUnreportedLostAsync(alice.Session.Id)).ShouldHaveSingleItem();
+        await aliceRepo.MarkLostReportedAsync([lost.Id], DateTime.UtcNow.ToString("O"));
+        (await aliceRepo.GetUnreportedLostAsync(alice.Session.Id)).ShouldBeEmpty();
+        (await aliceRepo.GetByIdAsync(running.Id))!.IsRunning.ShouldBeTrue();
+    }
+
     private static async Task<WeaveFleet.Domain.Entities.Delegation> InsertDelegationAsync(
         DelegationRepository repo,
         string parentSessionId,

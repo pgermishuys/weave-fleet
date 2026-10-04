@@ -293,6 +293,54 @@ public sealed class DelegationRepository : IDelegationRepository
             cmd => { cmd.AddParameter("CompletedAt", completedAt); });
     }
 
+    public async Task<IReadOnlyList<Delegation>> GetUnreportedLostAsync(string parentSessionId)
+    {
+        using var conn = _connectionFactory.CreateConnection();
+        return await conn.QueryAsync(
+            """
+            SELECT d.*
+            FROM delegations d
+            INNER JOIN sessions parent_session ON parent_session.id = d.parent_session_id
+            WHERE d.parent_session_id = @ParentSessionId
+              AND d.ended_reason = 'lost' AND d.lost_reported_at IS NULL
+              AND parent_session.user_id = @UserId
+            ORDER BY d.created_at ASC, d.id ASC
+            """,
+            cmd =>
+            {
+                cmd.AddParameter("ParentSessionId", parentSessionId);
+                cmd.AddParameter("UserId", _userContext.UserId);
+            },
+            ReadDelegation);
+    }
+
+    public async Task MarkLostReportedAsync(IReadOnlyCollection<string> ids, string reportedAt)
+    {
+        if (ids.Count == 0)
+            return;
+
+        using var conn = _connectionFactory.CreateConnection();
+        foreach (var id in ids)
+        {
+            await conn.ExecuteNonQueryAsync(
+                """
+                UPDATE delegations
+                SET lost_reported_at = @ReportedAt
+                WHERE id = @Id
+                  AND EXISTS (
+                      SELECT 1
+                      FROM sessions parent_session
+                      WHERE parent_session.id = delegations.parent_session_id AND parent_session.user_id = @UserId)
+                """,
+                cmd =>
+                {
+                    cmd.AddParameter("Id", id);
+                    cmd.AddParameter("ReportedAt", reportedAt);
+                    cmd.AddParameter("UserId", _userContext.UserId);
+                });
+        }
+    }
+
     public async Task UpdateStatusAsync(string id, string status, string updatedAt, string? completedAt)
     {
         using var conn = _connectionFactory.CreateConnection();

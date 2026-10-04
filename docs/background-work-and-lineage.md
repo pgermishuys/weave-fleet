@@ -63,13 +63,17 @@ looks at harness specifics.
   nest children and show the chip without loading each session.
 - **Actions** on `IHarnessSession`, with defaults that say "not supported":
   - `StopWorkAsync(workId)`: OpenCode 2 `DELETE /api/shell/:id` or interrupt the child session; OpenCode aborts
-    the child; Claude Code has no per-task stop yet (unverified), so it isn't offered.
+    the child; Claude Code sends its `stop_task` control request (checked against the real CLI, see below).
   - `ReadWorkOutputAsync(workId, offset)`: OpenCode 2 `GET /api/shell/:id/output`; Claude Code tails the task's
     output file.
   - `GetRunningWorkAsync()`: the harness's own roster, to catch up after Fleet or the harness restarts.
 - **Capabilities**: `ReportsBackgroundWork`, `SupportsChildSessions`, `ChildSessionsResumable`.
 - **Restart**: Fleet settles work it lost (generalising `OpenCode2History.SettleLostBackgroundWork`) as
   `ended_reason = lost`, and tells the agent on its next turn which work was cancelled and won't report back.
+  Built in PR 6 for every harness that passes Fleet's notes on (`TakesModelNotes`: OpenCode, OpenCode 2, Claude Code):
+  `LostWorkNote` goes in `PromptOptions.ModelNotes` on the first prompt after, and `delegations.lost_reported_at`
+  (migration `049`) records that the agent was told, so it's told once. A session with nothing lost pays one indexed
+  query per prompt.
 
 ## Lineage
 
@@ -139,7 +143,8 @@ Fleet ends what isn't in it as `lost`, matching by `workId` or by child session)
 |---|---|---|---|---|
 | OpenCode 2 | background shells, subagents | shell: `GET` then `DELETE /api/shell/:id`; subagent: interrupt the child | shells: `GET /api/shell/:id/output` | the server's shells for the session, and its children at work |
 | OpenCode | subagents (`task`) | abort the child | — | — |
-| Claude Code, Pi | none yet (PRs 6, 7) | — | — | — |
+| Claude Code | background shells (`local_bash`), monitors (`local_bash` started by a `Monitor` call), subagents (every `local_agent`, foreground too) with a read-only child session each; nested subagents nest | background work: control request `stop_task` | shells, monitors: tail `<tmp>/claude-<uid>/<cwd>/<session>/tasks/<task>.output` (learned from the `Bash` result or `task_notification`), else `get_task_output` (last 8 KiB) | what the session's claude process still runs; nothing when it has none |
+| Pi | none yet (PR 7) | — | — | — |
 
 **Lineage**: `forked_from_session_id` + `spawn_kind = fork` on Fork and on a kept side conversation;
 `spawned_by_session_id` + `spawn_kind = api` on `POST /api/sessions` from an agent (its `/agent/{token}` prefix)
@@ -172,8 +177,24 @@ changes the UI. Migration numbers: `048` belongs to PR 2; later PRs take the nex
 | 7 | Pi: subagent extension results into the model (no child session) | 2, 3 | M |
 | 8 | `@` sessions in the composer, `fleet_session_read`, recap fallback | 2 | M |
 
+## Claude Code, as checked against the real CLI (2.1.289, PR 6)
+
+- `task_started` comes for every task: `task_type` `local_bash` (a `Bash` command or a `Monitor`; only the tool call
+  tells them apart), `local_agent` (a subagent, with `subagent_type`, `prompt`, `spawn_depth`), `is_backgrounded`. A
+  long *foreground* `Bash` command gets one too (`is_backgrounded: false`); Fleet only shows it if it moves to the
+  background. `task_progress` says what a subagent does now; `task_notification` ends a task (`completed`, `failed`,
+  `stopped`) with a summary (`… (exit code 0)`, or the subagent's reply) and `output_file`.
+- `background_tasks_changed` (not in the documented schema, but sent every time) is the whole list of background
+  tasks, just before the `task_started`/`task_notification` that changed it.
+- Control request `stop_task {task_id}` stops one background shell or subagent while the turn carries on: the task
+  ends `stopped`, the turn finishes normally.
+- A background subagent's own lines carry its call's `parent_tool_use_id`, also after the parent's turn ended; its
+  prompt comes only in `task_started.prompt` (a foreground one's also as its first user line). A nested subagent's
+  call is made on a line of its caller's. A subagent woken by its own background work starts again under the same
+  task id.
+- A subagent's output file is a link to its transcript (`~/.claude/projects/<cwd>/<session>/subagents/agent-<id>.jsonl`);
+  Fleet doesn't read it: it keeps the child's messages as they stream.
+
 ## Not verified yet
 
-- A host-side way to stop one Claude Code task without ending the turn.
-- Whether `claude --resume` reports tasks lost in a restart.
-- Whether Claude Code's `background_tasks_changed` event is stable; it isn't in the documented schema.
+- Whether `claude --resume` reports tasks lost in a restart (Fleet tells the agent itself now).

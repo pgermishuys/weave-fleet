@@ -32,5 +32,13 @@ public sealed class ClaudeCodeHarness : IHarness
         SupportsImageAttachments = false,
         SupportsStreaming = true,
         SupportsDelegation = false,
+        // Background shells, monitors and subagents (task_* messages); stop_task stops one, and a command's output file
+        // can be read.
+        ReportsBackgroundWork = true,
+        // A subagent's steps go to a hidden child session, which Claude Code can't prompt on its own.
+        SupportsChildSessions = true,
+        ChildSessionsResumable = false,
+        // Fleet's notes to the model go ahead of the prompt as text blocks of their own.
+        TakesModelNotes = true,
     };
 }

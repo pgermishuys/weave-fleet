@@ -176,7 +176,9 @@ public sealed class ClaudeCodeHarnessRuntime : IHarnessRuntime
             analyticsCollector: _analyticsCollector,
             projectId: options.ProjectId,
             projectName: options.ProjectName,
-            claudeSessionId: options.ResumeToken);
+            claudeSessionId: options.ResumeToken,
+            // A subagent's child session: what its parent's process saved, which Claude Code can't prompt on its own.
+            readOnlyChild: options.DelegatedChild);
 
         LogSpawned(_logger, instanceId, null);
         return Task.FromResult<IHarnessSession>(instance);

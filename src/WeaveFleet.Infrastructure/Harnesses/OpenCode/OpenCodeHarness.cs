@@ -39,6 +39,8 @@ public sealed class OpenCodeHarness : IHarness
         // POST /session/{id}/shell, between turns (OpenCode refuses one while a turn runs).
         SupportsShellCommands = true,
         SupportsSideConversations = true,
+        // Synthetic text parts ahead of the prompt.
+        TakesModelNotes = true,
         SupportsAgentBrowser = true,
         // Fleet's plugin gives the agent its tools, fleet_session_read among them.
         SupportsFleetTools = true,
