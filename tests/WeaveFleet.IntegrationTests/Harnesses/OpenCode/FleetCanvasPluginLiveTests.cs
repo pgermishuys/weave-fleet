@@ -113,6 +113,7 @@ public sealed partial class FleetCanvasPluginLiveTests
             offered.ShouldContain("fleet_canvas_read");
             offered.ShouldContain("fleet_canvas_patch");
             offered.ShouldContain("fleet_canvas_focus");
+            offered.ShouldContain("fleet_session_read");
             offered.ShouldContain("user_probe");
 
             // The plugin added Fleet's skills without dropping the user's own skill path.

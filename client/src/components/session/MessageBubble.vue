@@ -15,6 +15,7 @@ import { useQuestionAnswer } from "@/composables/use-question-answer";
 import { useRelativeTime } from "@/composables/use-relative-time";
 import { formatRelativeTime, formatAbsoluteTimestamp } from "@/lib/format-utils";
 import { sharedMarkdownRenderer } from "@/lib/markdown-renderer";
+import { withSessionReferenceChips, type SessionReference } from "@/lib/session-references";
 import { formatSlashCommand } from "@/lib/slash-command-utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -65,6 +66,8 @@ const props = defineProps<{
   clusterPosition: "single" | "first" | "middle" | "last";
   /** The slash command a message of yours came from: it shows as the command, with what it expanded to kept behind it. */
   command?: SlashCommand;
+  /** Sessions referenced with `@` in a message of yours: each token shows as a chip with the session's title. */
+  sessionReferences?: SessionReference[];
 }>();
 
 const emit = defineEmits<{
@@ -72,6 +75,8 @@ const emit = defineEmits<{
   "show-canvas": [canvasId: string];
   /** Improve on a row that loaded one of Fleet's built-in skills. */
   "improve-skill": [skill: string, toolId: string];
+  /** A session chip was clicked. */
+  "open-session": [sessionId: string];
 }>();
 
 const lightboxUrl = ref<string | null>(null);
@@ -107,7 +112,18 @@ function makeDismissHandler(callId: string) {
 
 const markdownRenderer = sharedMarkdownRenderer();
 
-const bodyHtml = computed(() => markdownRenderer.render(props.body));
+const bodyHtml = computed(() => {
+  const html = markdownRenderer.render(props.body);
+  return props.sessionReferences?.length ? withSessionReferenceChips(html, props.sessionReferences) : html;
+});
+
+/** A click on a session chip opens the session in the app, not as a page load. */
+function handleBodyClick(event: MouseEvent): void {
+  const chip = (event.target as Element | null)?.closest?.("[data-session-ref]");
+  if (!chip || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+  event.preventDefault();
+  emit("open-session", chip.getAttribute("data-session-ref") ?? "");
+}
 
 const commandLine = computed(() => props.command ? formatSlashCommand(props.command) : "");
 // What the harness made of the command, when that's more than the command itself (OpenCode's expanded template).
@@ -209,6 +225,7 @@ function handleExpandVisual(payload: VisualPayload): void {
           <div
             v-else-if="body"
             class="msg-body__content md-content"
+            @click="handleBodyClick"
             v-html="bodyHtml"
           />
 
@@ -436,6 +453,41 @@ function handleExpandVisual(payload: VisualPayload): void {
 
 .message--user .msg-body__content {
   text-align: left;
+}
+
+/* A session you referenced with @: its title as a chip, linking to it. */
+.msg-body__content :deep(.session-ref-chip) {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  height: 22px;
+  padding: 0 8px 0 6px;
+  border-radius: 6px;
+  background: var(--accent-dim);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1;
+  text-decoration: none;
+  vertical-align: 1px;
+}
+
+.msg-body__content :deep(.session-ref-chip:hover) {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.msg-body__content :deep(.session-ref-chip__icon) {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.msg-body__content :deep(.session-ref-chip__title) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* A slash command shows as you sent it; what it expanded to stays behind "Show prompt". */

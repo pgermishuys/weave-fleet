@@ -8,6 +8,7 @@ import { api } from "@/api/client";
 import type { AccumulatedMessage, ImageAttachment } from "@/lib/client-types";
 import { modelFromKey } from "@/lib/agent-model-choice";
 import { diagLog } from "@/lib/message-diagnostics";
+import { sessionReferencesIn, stripSessionReferences, type SessionReference } from "@/lib/session-references";
 import { useSessionsStore } from "@/stores/sessions";
 
 export interface SentPromptImage {
@@ -31,6 +32,8 @@ export interface SentPromptMessage {
   images: SentPromptImage[];
   /** Sent into a running turn (steered) rather than after it. */
   steered?: boolean;
+  /** Sessions picked from the `@` list whose tokens are in the body: shown as chips. */
+  sessionReferences?: SessionReference[];
 }
 
 const sentPromptRegistry = reactive<Record<string, SentPromptMessage[]>>({});
@@ -176,10 +179,11 @@ function buildDeliveredPromptCounts(messages: readonly AccumulatedMessage[]): Ma
       continue;
     }
 
-    const text = message.parts
+    // A message with @ sessions came back with Fleet's block for the agent after what was typed.
+    const text = stripSessionReferences(message.parts
       .filter((part): part is Extract<AccumulatedMessage["parts"][number], { type: "text" }> => part.type === "text")
       .map((part) => part.text)
-      .join("\n\n")
+      .join("\n\n"))
       .trim();
 
     if (!text) {
@@ -408,6 +412,8 @@ interface BackendSendPromptRequest {
   effort?: string;
   /** "steer": into the running turn, at the agent's next step. Left out, the prompt is a turn of its own. */
   delivery?: "steer";
+  /** Sessions picked from the `@` list, by the token each left in the text. */
+  sessionReferences?: { token: string; sessionId: string }[];
 }
 
 export interface SendPromptOptions {
@@ -539,6 +545,7 @@ export function useSendPrompt(sessionId: string) {
     const resolvedAgentId = draft.agentId || agent?.id || defaultAgentId.value;
     const resolvedModelId = model?.id ?? pickedModel?.modelID ?? "";
     const usesDefaultAgent = !draft.agentId;
+    const sessionReferences = sessionReferencesIn(sessionId, body);
 
     ensureSentPrompts(sessionId).push({
       id: promptId,
@@ -558,6 +565,7 @@ export function useSendPrompt(sessionId: string) {
           }))
         : [],
       ...(options?.steer ? { steered: true } : {}),
+      ...(sessionReferences.length > 0 ? { sessionReferences } : {}),
     });
     incrementPendingPrompts(sessionId);
     schedulePromptConfirmationTimeout(sessionId, correlationId);
@@ -604,6 +612,10 @@ export function useSendPrompt(sessionId: string) {
 
     if (options?.steer) {
       request.delivery = "steer";
+    }
+
+    if (sessionReferences.length > 0) {
+      request.sessionReferences = sessionReferences.map(({ token, sessionId: referencedId }) => ({ token, sessionId: referencedId }));
     }
 
     void postPrompt(promptId, request);

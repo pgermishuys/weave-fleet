@@ -334,6 +334,8 @@ export interface HarnessCapabilities {
   supportsSideConversations?: boolean;
   /** The agent can use its own browser tab while Settings → Browser is on (natively, or through Fleet's tools). */
   supportsAgentBrowser?: boolean;
+  /** The agent has Fleet's tools: an `@`-referenced session goes as a link it reads with `fleet_session_read`, not a recap. */
+  supportsFleetTools?: boolean;
 }
 
 /** A field a sign-in method asks for besides the key or browser (`HarnessSignInField` on the server). */

@@ -3811,6 +3811,7 @@ export interface components {
             agent?: null | string;
             model?: null | components["schemas"]["ModelRef"];
             effort?: null | string;
+            sessionReferences?: null | components["schemas"]["SessionReferenceDto"][];
         };
         QueuedPromptView: {
             id: string;
@@ -3896,6 +3897,11 @@ export interface components {
             correlationId: null | string;
             effort: null | string;
             delivery?: null | string;
+            sessionReferences?: null | components["schemas"]["SessionReferenceDto"][];
+        };
+        SessionReferenceDto: {
+            token: string;
+            sessionId: string;
         };
         SessionActionCapabilities: {
             canPrompt: boolean;

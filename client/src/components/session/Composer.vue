@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { useAgents } from "@/composables/use-agents";
 import { useAbortSession } from "@/composables/use-session-actions";
 import { useAutocomplete } from "@/composables/use-autocomplete";
+import { useReferableSessions } from "@/composables/use-referable-sessions";
 import { useDraftState } from "@/composables/use-draft-state";
 import { useInputHistory } from "@/composables/use-input-history";
 import { useSessionQueue, type QueuedMessage, type QueueOptions } from "@/composables/use-session-queue";
@@ -28,6 +29,7 @@ import { useDraftTerminalContext } from "@/composables/use-draft-terminal-contex
 import { describeSessionDefaults, modelFromKey } from "@/lib/agent-model-choice";
 import { formatTerminalContext, terminalLineRange } from "@/lib/format-terminal-context";
 import { splitDraftReferences } from "@/lib/composer-references";
+import { rememberedSessionTokens, sessionReferencesIn } from "@/lib/session-references";
 import { useSendPrompt } from "@/composables/use-send-prompt";
 import { parseSlashCommand } from "@/lib/slash-command-utils";
 import { isShellDraft, shellDraftCommand } from "@/lib/shell-commands";
@@ -211,6 +213,12 @@ const supportsShellCommands = computed(() => {
 });
 
 /** The session's harness can fork it for a side conversation (`/btw`); the `/` popup offers it only then. */
+/** The agent reads an @-referenced session with fleet_session_read; without Fleet's tools it gets a recap instead. */
+const supportsFleetTools = computed(() => {
+  const harnessType = selectedSession.value?.harnessType ?? "opencode";
+  return harnesses.value.find((harness) => harness.type === harnessType)?.capabilities.supportsFleetTools === true;
+});
+
 const supportsSideConversations = computed(() => {
   const harnessType = selectedSession.value?.harnessType ?? "opencode";
   return harnesses.value.find((harness) => harness.type === harnessType)?.capabilities.supportsSideConversations === true;
@@ -418,6 +426,10 @@ function queueChoices(): Pick<QueueOptions, "agent" | "model" | "effort"> {
 
 /** Queues what was typed. The draft clears at once and comes back if Fleet refuses it, unless something new was typed. */
 function queueDraft(typed: string, text: string, options: QueueOptions): void {
+  if (options.kind === "prompt") {
+    const references = sessionReferencesIn(props.sessionId, text);
+    if (references.length > 0) options = { ...options, sessionReferences: references };
+  }
   setText("");
   void enqueue(text, options).then((queued) => {
     if (!queued && draft.text.length === 0) setText(typed);
@@ -485,6 +497,9 @@ defineExpose({
 
 const cursorPosition = shallowRef(0);
 const hasValidSessionId = computed(() => Boolean(props.sessionId?.trim()));
+// The @ list's sessions: archived ones are fetched the first time it opens.
+const mentionOpen = shallowRef(false);
+const referableSessions = useReferableSessions(mentionOpen);
 const autocomplete = useAutocomplete({
   // A shell command is sent as typed: no @ references or / commands in it.
   value: computed(() => isShellMode.value ? "" : draft.text),
@@ -493,10 +508,15 @@ const autocomplete = useAutocomplete({
   inputRef: textareaRef,
   cursorPosition,
   fleetCommands: computed(() => supportsSideConversations.value ? [SIDE_QUESTION_COMMAND] : []),
+  sessions: referableSessions,
+  harnessName: (type) => harnesses.value.find((harness) => harness.type === type)?.displayName,
+});
+watch(() => autocomplete.isMentionOpen.value, (open) => {
+  mentionOpen.value = open;
 });
 const draftSegments = computed(() => isShellMode.value
   ? [{ text: draft.text }]
-  : splitDraftReferences(draft.text, cursorPosition.value));
+  : splitDraftReferences(draft.text, cursorPosition.value, rememberedSessionTokens(props.sessionId)));
 
 const selectedAgentId = computed({
   get: () => draft.agentId,
@@ -940,6 +960,10 @@ function handleKeydown(event: KeyboardEvent): void {
         :error="hasValidSessionId ? autocomplete.error.value : undefined"
         :on-select="autocomplete.onSelect"
         :on-open-folder="autocomplete.onOpenFolder"
+        :query="autocomplete.query.value"
+        :session-note="supportsFleetTools
+          ? 'The agent gets a link to the session, not a copy, and reads what it needs with fleet_session_read.'
+          : 'The agent gets the session\'s title and a recap of where it stands, not a copy.'"
       />
 
       <div
@@ -984,6 +1008,7 @@ function handleKeydown(event: KeyboardEvent): void {
         ><span
           v-if="segment.reference"
           class="composer-reference"
+          :class="{ 'composer-reference--session': segment.reference === 'session' }"
         >{{ segment.text }}</span><template v-else>{{ segment.text }}</template></template>{{ " " }}</div>
         <!-- eslint-enable vue/multiline-html-element-content-newline, vue/singleline-html-element-content-newline -->
         <textarea
@@ -1307,6 +1332,11 @@ function handleKeydown(event: KeyboardEvent): void {
   box-shadow: -3px 0 0 var(--reference-tint), 3px 0 0 var(--reference-tint);
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
+}
+
+/* A session picked from the @ list: the accent, as the chip it becomes in the sent message. */
+.composer-reference--session {
+  --reference-tint: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .input-history {

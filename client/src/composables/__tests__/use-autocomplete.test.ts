@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { shallowRef, type Ref } from "vue";
+import type { SessionListItem } from "@/api/client";
 import { useAutocomplete } from "@/composables/use-autocomplete";
+import { resetSessionReferences, sessionReferencesIn } from "@/lib/session-references";
 import { flushAll, mountComposable } from "./test-utils";
 
 const { mockApi } = vi.hoisted(() => ({
@@ -127,7 +129,12 @@ function findFilesQuery(q: string) {
   return expect.objectContaining({ params: expect.objectContaining({ query: { q } }) });
 }
 
-async function mountAutocomplete(initialValue: string, cursor: number, sessionId: Ref<string> | string = "instance-1") {
+async function mountAutocomplete(
+  initialValue: string,
+  cursor: number,
+  sessionId: Ref<string> | string = "instance-1",
+  sessions: SessionListItem[] = [],
+) {
   const value = shallowRef(initialValue);
   const cursorPosition = shallowRef(cursor);
   const input = document.createElement("textarea");
@@ -143,6 +150,7 @@ async function mountAutocomplete(initialValue: string, cursor: number, sessionId
     sessionId,
     inputRef,
     cursorPosition,
+    sessions,
   }));
 
   return {
@@ -344,5 +352,87 @@ describe("useAutocomplete", () => {
     expect(mockApi.GET).toHaveBeenCalledWith("/api/sessions/{id}/agents", expect.objectContaining({
       params: { path: { id: "instance-2" } },
     }));
+  });
+
+  describe("sessions", () => {
+    function session(id: string, title: string, hoursAgo: number, overrides: Partial<SessionListItem> = {}): SessionListItem {
+      const updated = Date.now() - hoursAgo * 60 * 60_000;
+      return {
+        instanceId: "inst",
+        workspaceId: "ws",
+        workspaceDirectory: "/work/tidytempo",
+        workspaceDisplayName: null,
+        isolationStrategy: "existing",
+        sessionStatus: "idle",
+        session: { id, title, time: { created: updated, updated } },
+        instanceStatus: "running",
+        lifecycleStatus: "running",
+        retentionStatus: "active",
+        typedInstanceStatus: "running",
+        isHidden: false,
+        harnessType: "claude-code",
+        tags: [],
+        ...overrides,
+      } as SessionListItem;
+    }
+
+    const sessions = [
+      session("instance-1", "t3code in this session", 0),
+      session("ses-a", "t3code: what can we learn?", 1),
+      session("ses-b", "Survey t3code features", 2),
+      session("ses-c", "Fleet MCP server spike", 3),
+      session("ses-d", "Onboarding time zone fixes", 4),
+    ];
+
+    beforeEach(() => {
+      localStorage.clear();
+      resetSessionReferences();
+    });
+
+    it("offers matching sessions before files, never the session being written to", async () => {
+      vi.useFakeTimers();
+
+      const { result } = await mountAutocomplete("Use @t3c", 8, "instance-1", sessions);
+      await vi.advanceTimersByTimeAsync(300);
+      await flushAll();
+
+      expect(result.items.value.map((item) => item.group)).toEqual(["session", "session", "file", "file"]);
+      expect(result.items.value.slice(0, 2).map((item) => [item.label, item.description])).toEqual([
+        ["t3code: what can we learn?", "tidytempo · Claude Code"],
+        ["Survey t3code features", "tidytempo · Claude Code"],
+      ]);
+      expect(result.query.value).toBe("t3c");
+      expect(result.isMentionOpen.value).toBe(true);
+    });
+
+    it("offers only the three newest for a bare @, which is mostly for files", async () => {
+      vi.useFakeTimers();
+
+      const { result } = await mountAutocomplete("look at @", 9, "instance-1", sessions);
+      await vi.advanceTimersByTimeAsync(0);
+      await flushAll();
+
+      expect(result.items.value.filter((item) => item.group === "session").map((item) => item.id))
+        .toEqual(["session:ses-a", "session:ses-b", "session:ses-c"]);
+    });
+
+    it("attaches a session on Tab as a token from its title, which goes with the message", async () => {
+      vi.useFakeTimers();
+
+      const { result, value } = await mountAutocomplete("Use the mapping from @t3c", 25, "instance-1", sessions);
+      await vi.advanceTimersByTimeAsync(300);
+      await flushAll();
+
+      const tab = createKeyboardEvent("Tab");
+      result.onKeyDown(tab);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(tab.defaultPrevented).toBe(true);
+      expect(value.value).toBe("Use the mapping from @t3code-what-can-we-learn ");
+      expect(result.isOpen.value).toBe(false);
+      expect(sessionReferencesIn("instance-1", value.value)).toEqual([
+        { token: "@t3code-what-can-we-learn", sessionId: "ses-a", title: "t3code: what can we learn?" },
+      ]);
+    });
   });
 });

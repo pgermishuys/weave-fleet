@@ -10,6 +10,7 @@ import {
   useSentPrompts,
 } from "@/composables/use-send-prompt"
 import type { AccumulatedMessage } from "@/lib/client-types"
+import { rememberSessionReference } from "@/lib/session-references"
 
 vi.mock("@/api/client", () => ({
   api: {
@@ -308,5 +309,58 @@ describe("use-send-prompt steering", () => {
 
     expect(sentBody().delivery).toBeUndefined()
     expect(useSentPrompts(sessionId).sentPrompts.value[0]?.steered).toBeUndefined()
+  })
+})
+
+describe("use-send-prompt @ sessions", () => {
+  function sentBody(): { text: string; sessionReferences?: { token: string; sessionId: string }[] } {
+    const promptCall = (mockApi.POST.mock.calls as unknown[][]).find(([url]) => url === "/api/sessions/{id}/prompt")
+    return (promptCall?.[1] as { body: { text: string; sessionReferences?: { token: string; sessionId: string }[] } }).body
+  }
+
+  it("sends the sessions picked from the @ list whose tokens are still in the text, and shows them on the sent message", async () => {
+    const sessionId = "session-at-sessions"
+    rememberSessionReference(sessionId, { token: "@t3code-notes", sessionId: "ses-a", title: "t3code notes" })
+    rememberSessionReference(sessionId, { token: "@removed", sessionId: "ses-b", title: "Removed" })
+    useDraftState(sessionId, { agentId: "", modelId: "" }).setText("Use the mapping from @t3code-notes")
+
+    mockApi.POST.mockReturnValueOnce(new Promise(() => {}))
+    useSendPrompt(sessionId).sendPrompt()
+    await nextTick()
+
+    expect(sentBody()).toMatchObject({
+      text: "Use the mapping from @t3code-notes",
+      sessionReferences: [{ token: "@t3code-notes", sessionId: "ses-a" }],
+    })
+    expect(useSentPrompts(sessionId).sentPrompts.value[0]?.sessionReferences).toEqual([
+      { token: "@t3code-notes", sessionId: "ses-a", title: "t3code notes" },
+    ])
+  })
+
+  it("sends no references for a message without any", async () => {
+    const sessionId = "session-at-sessions-none"
+    useDraftState(sessionId, { agentId: "", modelId: "" }).setText("Just a message")
+
+    mockApi.POST.mockReturnValueOnce(new Promise(() => {}))
+    useSendPrompt(sessionId).sendPrompt()
+    await nextTick()
+
+    expect(sentBody().sessionReferences).toBeUndefined()
+  })
+
+  it("gives way to the history's copy, which carries Fleet's block for the agent after the text", () => {
+    const sessionId = "session-at-sessions-reconciled"
+    const { sentPrompts } = useSentPrompts(sessionId)
+    seedSentPrompt(sessionId, "Use the mapping from @t3code-notes")
+
+    reconcileSentPrompts(sessionId, [
+      deliveredUserMessage(
+        sessionId,
+        "msg_server",
+        "Use the mapping from @t3code-notes\n\n<fleet-session-references>\nNote\n<session ref=\"@t3code-notes\" id=\"ses-a\" title=\"t3code notes\" />\n</fleet-session-references>",
+      ),
+    ])
+
+    expect(sentPrompts.value).toHaveLength(0)
   })
 })

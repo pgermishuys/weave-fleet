@@ -48,3 +48,15 @@ describe("splitDraftReferences", () => {
     ]);
   });
 });
+
+describe("splitDraftReferences with sessions", () => {
+  it("marks a token picked as a session from the @ list as a session", () => {
+    expect(splitDraftReferences("from @t3code-notes and @src/a.ts ", null, new Set(["@t3code-notes"]))).toEqual([
+      { text: "from " },
+      { text: "@t3code-notes", reference: "session" },
+      { text: " and " },
+      { text: "@src/a.ts", reference: "file" },
+      { text: " " },
+    ]);
+  });
+});
