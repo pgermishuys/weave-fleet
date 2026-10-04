@@ -1,8 +1,10 @@
-import { mount } from "@vue/test-utils";
-import { describe, expect, it, vi } from "vitest";
+import { flushPromises, mount } from "@vue/test-utils";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ref, type DefineComponent } from "vue";
 import SessionDetailHeaderComponent from "@/components/session/SessionDetailHeader.vue";
 import { useSidebarStore } from "@/stores/sidebar";
+import { useSessionsStore } from "@/stores/sessions";
+import type { SessionListItem } from "@/api/client";
 
 interface HeaderProps {
   id: string;
@@ -13,10 +15,16 @@ interface HeaderProps {
   retentionStatus?: string | null;
   editingTitle?: boolean;
   canRestore?: boolean;
+  lineageParentId?: string | null;
+  lineageKind?: "fork" | "started" | "subagent" | null;
 }
 
 // The named "actions" slot trips the mount() typings in @vue/test-utils 2.2.7.
 const SessionDetailHeader = SessionDetailHeaderComponent as unknown as DefineComponent<HeaderProps>;
+
+const { navigate, apiFetch } = vi.hoisted(() => ({ navigate: vi.fn(), apiFetch: vi.fn() }));
+vi.mock("@tanstack/vue-router", () => ({ useRouter: () => ({ navigate }) }));
+vi.mock("@/lib/api-client", () => ({ apiFetch }));
 
 vi.mock("@/composables/use-harnesses", () => ({
   useHarnesses: () => ({ harnesses: ref([]) }),
@@ -135,5 +143,44 @@ describe("SessionDetailHeader rename and restore", () => {
     await wrapper.get("[data-testid='session-restore-button']").trigger("click");
 
     expect(wrapper.emitted("restore")).toHaveLength(1);
+  });
+});
+
+describe("SessionDetailHeader lineage", () => {
+  beforeEach(() => {
+    navigate.mockReset();
+    apiFetch.mockReset();
+  });
+
+  it("links a session another session started back to it, by its title", async () => {
+    useSessionsStore().setSessions([{
+      instanceId: "i-parent", workspaceId: "w", workspaceDirectory: "/repo", workspaceDisplayName: null, isolationStrategy: "existing",
+      sessionStatus: "idle", session: { id: "parent", title: "What can we learn from t3code?" } as SessionListItem["session"],
+      instanceStatus: "running", lifecycleStatus: "running", retentionStatus: "active", typedInstanceStatus: "running",
+      isHidden: false, tags: [],
+    }]);
+    const wrapper = mountHeader({ lineageParentId: "parent", lineageKind: "started" });
+    const link = wrapper.get("[data-testid='session-lineage-link']");
+
+    expect(link.text()).toBe("Started by What can we learn from t3code?");
+    expect(link.attributes("href")).toBe("/sessions/parent?instanceId=i-parent");
+    await link.trigger("click", { button: 0 });
+    expect(navigate).toHaveBeenCalledWith({
+      to: "/sessions/$id", params: { id: "parent" }, search: { instanceId: "i-parent", parentSessionId: undefined },
+    });
+    expect(apiFetch).not.toHaveBeenCalled();
+  });
+
+  it("says Forked from, fetching the title of a parent the list doesn't hold", async () => {
+    apiFetch.mockResolvedValue({ ok: true, json: async () => ({ title: "An archived session" }) });
+    const wrapper = mountHeader({ lineageParentId: "archived-parent", lineageKind: "fork" });
+    await flushPromises();
+
+    expect(apiFetch).toHaveBeenCalledWith("/api/sessions/archived-parent");
+    expect(wrapper.get("[data-testid='session-lineage-link']").text()).toBe("Forked from An archived session");
+  });
+
+  it("has no link for a session the user started", () => {
+    expect(mountHeader().find("[data-testid='session-lineage-link']").exists()).toBe(false);
   });
 });

@@ -410,8 +410,7 @@ onUnmounted(() => {
               :size="12"
               aria-hidden="true"
             />
-            <span class="session-detail-header__from-label">{{ lineageLink.label }}</span>
-            <b class="session-detail-header__from-title">{{ lineageLink.title }}</b>
+            <span class="session-detail-header__from-label">{{ lineageLink.label }}</span>{{ " " }}<b class="session-detail-header__from-title">{{ lineageLink.title }}</b>
           </a>
           <span
             v-if="retryNote"
