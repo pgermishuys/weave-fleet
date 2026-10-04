@@ -589,6 +589,7 @@ internal sealed class PiJsonlClient : IAsyncDisposable
             PiGetStateCommand => "get_state",
             PiGetMessagesCommand => "get_messages",
             PiSetModelCommand => "set_model",
+            PiGetAvailableModelsCommand => "get_available_models",
             PiSetThinkingLevelCommand => "set_thinking_level",
             PiCompactCommand => "compact",
             PiBashCommand => "bash",
@@ -623,6 +624,8 @@ internal sealed record PiProtocolErrorEvent : PiEvent
 [JsonSerializable(typeof(PiEvent))]
 [JsonSerializable(typeof(PiState))]
 [JsonSerializable(typeof(PiGetMessagesResponse))]
+[JsonSerializable(typeof(PiAvailableModelsResponse))]
+[JsonSerializable(typeof(PiModelInfo))]
 [JsonSerializable(typeof(PiMessage[]))]
 [JsonSerializable(typeof(PiResumeToken))]
 [JsonSerializable(typeof(string))]

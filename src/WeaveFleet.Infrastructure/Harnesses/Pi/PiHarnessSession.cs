@@ -35,6 +35,10 @@ internal sealed class PiHarnessSession : IHarnessSession
         LoggerMessage.Define<string>(LogLevel.Debug, new EventId(6, "SessionDeleteFailed"),
             "Failed to delete Pi session file {SessionFile}.");
 
+    private static readonly Action<ILogger, string, string, string, Exception?> LogSetModel =
+        LoggerMessage.Define<string, string, string>(LogLevel.Information, new EventId(7, "SetModel"),
+            "Switching Pi instance {InstanceId} to model {Provider}/{Model}.");
+
     private readonly IPiProcessManager _processManager;
     private readonly PiJsonlClient _client;
     private readonly PiMapper _mapper;
@@ -52,6 +56,7 @@ internal sealed class PiHarnessSession : IHarnessSession
     private readonly Task _pumpTask;
     private string? _sessionFile;
     private string? _sessionId;
+    private PiModelRef? _model;
     private HarnessSessionStatus _status = HarnessSessionStatus.Idle;
     private bool _disposed;
 
@@ -98,6 +103,8 @@ internal sealed class PiHarnessSession : IHarnessSession
     internal void UpdateState(PiState state)
     {
         UpdateResumeState(state.SessionFile, state.SessionId);
+        if (PiModelRef.From(state.Model) is { } model)
+            _model = model;
 
         if (_status is HarnessSessionStatus.Stopping or HarnessSessionStatus.Stopped or HarnessSessionStatus.Error)
             return;
@@ -124,6 +131,8 @@ internal sealed class PiHarnessSession : IHarnessSession
 
         if (options?.Attachments is { Count: > 0 })
             throw new NotSupportedException("The Pi harness does not support prompt attachments yet.");
+
+        await SwitchModelAsync(options?.ProviderId, options?.ModelId, ct).ConfigureAwait(false);
 
         LogSendPrompt(_logger, InstanceId, null);
         var response = await _client.SendRequestAsync(new PiPromptCommand { Id = NewRequestId(), Message = text }, ct)
@@ -242,8 +251,33 @@ internal sealed class PiHarnessSession : IHarnessSession
     public Task<IReadOnlyList<CommandInfo>> GetCommandsAsync(CancellationToken ct)
         => Task.FromResult<IReadOnlyList<CommandInfo>>([]);
 
-    public Task<IReadOnlyList<ProviderInfo>> GetProvidersAsync(CancellationToken ct)
-        => Task.FromResult<IReadOnlyList<ProviderInfo>>([]);
+    /// <summary>The models Pi can switch to (its own and those in its <c>models.json</c>), by provider, in Pi's order.</summary>
+    public async Task<IReadOnlyList<ProviderInfo>> GetProvidersAsync(CancellationToken ct)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        var response = await _client.SendRequestAsync(new PiGetAvailableModelsCommand { Id = NewRequestId() }, ct)
+            .ConfigureAwait(false);
+        EnsureSuccess(response);
+
+        var models = response.Data is { ValueKind: JsonValueKind.Object } data
+            ? JsonSerializer.Deserialize(data, PiJsonContext.Default.PiAvailableModelsResponse)?.Models ?? []
+            : [];
+
+        return models
+            .Where(static model => !string.IsNullOrWhiteSpace(model.Provider) && !string.IsNullOrWhiteSpace(model.Id))
+            .GroupBy(static model => model.Provider!, StringComparer.Ordinal)
+            .Select(static group => new ProviderInfo
+            {
+                Id = group.Key,
+                Name = group.Key,
+                Models = group
+                    .DistinctBy(static model => model.Id, StringComparer.Ordinal)
+                    .Select(static model => new ModelInfo { Id = model.Id, Name = model.Name ?? model.Id })
+                    .ToList(),
+            })
+            .ToList();
+    }
 
     public async ValueTask DisposeAsync()
     {
@@ -361,6 +395,38 @@ internal sealed class PiHarnessSession : IHarnessSession
                 SetIdleIfActive();
                 break;
         }
+    }
+
+    /// <summary>
+    /// Pi takes its model when it starts, and keeps it until told otherwise: a prompt that names another one switches
+    /// Pi over first. When Pi can't switch, the prompt isn't sent, so it can't quietly run on the old model.
+    /// </summary>
+    private async Task SwitchModelAsync(string? providerId, string? modelId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(providerId) || string.IsNullOrWhiteSpace(modelId))
+            return;
+
+        var requested = new PiModelRef(providerId, modelId);
+        if (_model == requested)
+            return;
+
+        LogSetModel(_logger, InstanceId, providerId, modelId, null);
+        var response = await _client.SendRequestAsync(
+                new PiSetModelCommand { Id = NewRequestId(), Provider = providerId, ModelId = modelId },
+                ct)
+            .ConfigureAwait(false);
+
+        if (!response.Success)
+        {
+            var current = _model is { } model ? $" It is still on {model}." : string.Empty;
+            throw new InvalidOperationException(
+                $"Pi couldn't switch to {requested}, so the message wasn't sent: {(response.Error ?? "Pi gave no reason").TrimEnd('.')}.{current}");
+        }
+
+        _model = response.Data is { ValueKind: JsonValueKind.Object } data
+            && PiModelRef.From(JsonSerializer.Deserialize(data, PiJsonContext.Default.PiModelInfo)) is { } switched
+                ? switched
+                : requested;
     }
 
     private void SetRunningIfActive()
@@ -569,4 +635,13 @@ internal sealed class PiHarnessSession : IHarnessSession
     }
 
     private static string NewRequestId() => Guid.NewGuid().ToString("N");
+
+    /// <summary>A model as Pi names it: the provider and the model's id within it.</summary>
+    private sealed record PiModelRef(string Provider, string ModelId)
+    {
+        public static PiModelRef? From(PiModelInfo? model)
+            => model is { Provider: { Length: > 0 } provider, Id: { Length: > 0 } id } ? new(provider, id) : null;
+
+        public override string ToString() => $"{Provider}/{ModelId}";
+    }
 }
