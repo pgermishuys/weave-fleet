@@ -29,6 +29,7 @@ internal static class PiJsonOptions
 [JsonDerivedType(typeof(PiGetStateCommand), "get_state")]
 [JsonDerivedType(typeof(PiGetMessagesCommand), "get_messages")]
 [JsonDerivedType(typeof(PiSetModelCommand), "set_model")]
+[JsonDerivedType(typeof(PiGetAvailableModelsCommand), "get_available_models")]
 [JsonDerivedType(typeof(PiSetThinkingLevelCommand), "set_thinking_level")]
 [JsonDerivedType(typeof(PiCompactCommand), "compact")]
 [JsonDerivedType(typeof(PiBashCommand), "bash")]
@@ -83,11 +84,20 @@ internal sealed record PiResumeToken
     [JsonPropertyName("sessionId")] public string? SessionId { get; init; }
 }
 
-/// <summary>Change the active model.</summary>
+/// <summary>Change the active model. Pi answers with the model it now runs, or fails when it has no such model.</summary>
 internal sealed record PiSetModelCommand : PiCommand
 {
-    [JsonPropertyName("provider")] public string? Provider { get; init; }
-    [JsonPropertyName("model")] public required string Model { get; init; }
+    [JsonPropertyName("provider")] public required string Provider { get; init; }
+    [JsonPropertyName("modelId")] public required string ModelId { get; init; }
+}
+
+/// <summary>List the models Pi can switch to.</summary>
+internal sealed record PiGetAvailableModelsCommand : PiCommand;
+
+/// <summary>Response payload returned by <c>get_available_models</c>.</summary>
+internal sealed record PiAvailableModelsResponse
+{
+    [JsonPropertyName("models")] public IReadOnlyList<PiModelInfo> Models { get; init; } = [];
 }
 
 /// <summary>Change the active reasoning/thinking level.</summary>

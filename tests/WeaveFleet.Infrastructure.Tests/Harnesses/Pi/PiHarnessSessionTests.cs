@@ -242,6 +242,117 @@ public sealed class PiHarnessSessionTests
     }
 
     [Fact]
+    public async Task prompt_naming_another_model_switches_pi_first_and_the_prompt_runs_on_it()
+    {
+        await using var harness = CreateHarness();
+        await using var session = harness.CreateSession();
+        session.UpdateState(new PiState { Model = new PiModelInfo { Provider = "github-copilot", Id = "claude-haiku-4.5" } });
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var options = new PromptOptions { ProviderId = "anthropic", ModelId = "claude-sonnet-4-5" };
+
+        var promptTask = session.SendPromptAsync("use sonnet", options, cts.Token);
+
+        var setModel = await harness.ReadCommandAsync(cts.Token);
+        setModel.GetProperty("type").GetString().ShouldBe("set_model");
+        setModel.GetProperty("provider").GetString().ShouldBe("anthropic");
+        setModel.GetProperty("modelId").GetString().ShouldBe("claude-sonnet-4-5");
+        await harness.WriteResponseAsync(setModel.GetProperty("id").GetString(), "set_model", true,
+            new { id = "claude-sonnet-4-5", name = "Claude Sonnet 4.5", provider = "anthropic" }, cts.Token);
+
+        // Only once Pi has switched does the prompt go: the turn it starts runs on the new model.
+        var prompt = await harness.ReadCommandAsync(cts.Token);
+        prompt.GetProperty("type").GetString().ShouldBe("prompt");
+        prompt.GetProperty("message").GetString().ShouldBe("use sonnet");
+        await harness.WriteResponseAsync(prompt.GetProperty("id").GetString(), "prompt", true, null, cts.Token);
+        await promptTask;
+
+        // Pi stays on the model, so the next prompt naming it goes straight in.
+        await harness.WriteEventAsync(new PiIdleEvent(), cts.Token);
+        var nextTask = session.SendPromptAsync("again", options, cts.Token);
+        var next = await harness.ReadCommandAsync(cts.Token);
+        next.GetProperty("type").GetString().ShouldBe("prompt");
+        await harness.WriteResponseAsync(next.GetProperty("id").GetString(), "prompt", true, null, cts.Token);
+        await nextTask;
+    }
+
+    [Fact]
+    public async Task prompt_naming_the_model_pi_already_runs_does_not_switch()
+    {
+        await using var harness = CreateHarness();
+        await using var session = harness.CreateSession();
+        session.UpdateState(new PiState { Model = new PiModelInfo { Provider = "anthropic", Id = "claude-sonnet-4-5" } });
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        var promptTask = session.SendPromptAsync(
+            "hello",
+            new PromptOptions { ProviderId = "anthropic", ModelId = "claude-sonnet-4-5" },
+            cts.Token);
+
+        var prompt = await harness.ReadCommandAsync(cts.Token);
+        prompt.GetProperty("type").GetString().ShouldBe("prompt");
+        await harness.WriteResponseAsync(prompt.GetProperty("id").GetString(), "prompt", true, null, cts.Token);
+        await promptTask;
+    }
+
+    [Fact]
+    public async Task prompt_naming_a_model_pi_cannot_switch_to_fails_clearly_and_is_not_sent()
+    {
+        await using var harness = CreateHarness();
+        await using var session = harness.CreateSession();
+        session.UpdateState(new PiState { Model = new PiModelInfo { Provider = "github-copilot", Id = "claude-haiku-4.5" } });
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var options = new PromptOptions { ProviderId = "invalid", ModelId = "model" };
+
+        var promptTask = session.SendPromptAsync("hello", options, cts.Token);
+        var setModel = await harness.ReadCommandAsync(cts.Token);
+        setModel.GetProperty("type").GetString().ShouldBe("set_model");
+        await harness.WriteResponseAsync(setModel.GetProperty("id").GetString(), "set_model", false, null,
+            "Model not found: invalid/model", cts.Token);
+
+        var exception = await Should.ThrowAsync<InvalidOperationException>(() => promptTask);
+        exception.Message.ShouldBe(
+            "Pi couldn't switch to invalid/model, so the message wasn't sent: Model not found: invalid/model. "
+            + "It is still on github-copilot/claude-haiku-4.5.");
+        session.Status.ShouldBe(HarnessSessionStatus.Idle);
+        harness.HasPendingCommand().ShouldBeFalse();
+
+        // Pi is still on its old model, so asking for the new one again tries the switch again.
+        var retryTask = session.SendPromptAsync("hello", options, cts.Token);
+        var retry = await harness.ReadCommandAsync(cts.Token);
+        retry.GetProperty("type").GetString().ShouldBe("set_model");
+        await harness.WriteResponseAsync(retry.GetProperty("id").GetString(), "set_model", false, null, "still no", cts.Token);
+        await Should.ThrowAsync<InvalidOperationException>(() => retryTask);
+    }
+
+    [Fact]
+    public async Task get_providers_lists_pi_models_by_provider()
+    {
+        await using var harness = CreateHarness();
+        await using var session = harness.CreateSession();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        var providersTask = session.GetProvidersAsync(cts.Token);
+        var command = await harness.ReadCommandAsync(cts.Token);
+        command.GetProperty("type").GetString().ShouldBe("get_available_models");
+        await harness.WriteResponseAsync(command.GetProperty("id").GetString(), "get_available_models", true, new
+        {
+            models = new object[]
+            {
+                new { id = "claude-sonnet-4-5", name = "Claude Sonnet 4.5", provider = "anthropic" },
+                new { id = "gpt-5", provider = "openai" },
+                new { id = "claude-opus-4-1", name = "Claude Opus 4.1", provider = "anthropic" },
+            },
+        }, cts.Token);
+
+        var providers = await providersTask;
+
+        providers.Select(provider => provider.Id).ShouldBe(["anthropic", "openai"]);
+        providers[0].Models.Select(model => (model.Id, model.Name)).ShouldBe(
+            [("claude-sonnet-4-5", "Claude Sonnet 4.5"), ("claude-opus-4-1", "Claude Opus 4.1")]);
+        providers[1].Models.Single().Name.ShouldBe("gpt-5");
+    }
+
+    [Fact]
     public async Task dispose_completes_subscription_stream_and_stops_process_once()
     {
         await using var harness = CreateHarness();
@@ -355,6 +466,8 @@ public sealed class PiHarnessSessionTests
 
         public async Task<PiEvent> ReadClientEventAsync(CancellationToken ct)
             => await _client.Events.ReadAsync(ct).ConfigureAwait(false);
+
+        public bool HasPendingCommand() => TryReadLine(out _);
 
         public async Task<JsonElement> ReadCommandAsync(CancellationToken ct)
         {
