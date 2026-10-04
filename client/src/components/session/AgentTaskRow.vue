@@ -22,7 +22,7 @@ const statusWord = computed(() => {
   switch (props.delegation.status) {
     case "completed": return "Done";
     case "error": return "Failed";
-    case "cancelled": return "Cancelled";
+    case "cancelled": return "Stopped";
     case "pending": return "Starting";
     default: return "Working";
   }
@@ -137,19 +137,25 @@ function handleClick(event: MouseEvent): void {
 }
 
 .agent-task__task {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* On a narrow card (a phone) the status word gives way, never the glyph: everything stays inside the border. */
 .agent-task__end {
   display: flex;
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 0;
   align-items: center;
   gap: 8px;
   margin-left: auto;
+}
+
+.agent-task__end > :not(.agent-task__status) {
+  flex-shrink: 0;
 }
 
 .agent-task__open {
@@ -174,8 +180,19 @@ function handleClick(event: MouseEvent): void {
 }
 
 .agent-task__status {
+  min-width: 0;
+  overflow: hidden;
   color: var(--muted);
   font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* No hover on a touch screen: the whole row opens the session, so Open's room goes to the words. */
+@media (hover: none) {
+  .agent-task__open {
+    display: none;
+  }
 }
 
 .agent-task--needs-input .agent-task__status {

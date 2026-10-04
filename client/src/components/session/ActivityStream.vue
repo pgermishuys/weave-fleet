@@ -1,9 +1,17 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
 import { ArrowUpRight, Bot, Bug, CornerDownRight, RotateCw, TerminalSquare, TriangleAlert, Workflow } from "lucide-vue-next";
 import { parsePeerMessage, parsePeerUpdate, type PeerOutcome, type PeerSender } from "@/lib/session-messages";
 import { parseSessionReferences, type SessionReference } from "@/lib/session-references";
-import { finishedBackgroundWork, parseBackgroundNotice, type BackgroundNotice, type BackgroundState } from "@/lib/background-work";
+import { api } from "@/api/client";
+import {
+  backgroundWorkId,
+  finishedBackgroundWork,
+  parseBackgroundNotice,
+  type BackgroundNotice,
+  type BackgroundState,
+} from "@/lib/background-work";
+import { toRunningWorkItems, type RunningWorkItem } from "@/lib/running-work";
 import { useRouter } from "@tanstack/vue-router";
 import { storeToRefs } from "pinia";
 import MessageBubble from "@/components/session/MessageBubble.vue";
@@ -260,13 +268,73 @@ function messageBody(message: AccumulatedMessage): string {
 }
 
 /**
- * How work an agent moved into the background ended, by handle. A backgrounded call's own card can't say: OpenCode 2
- * leaves the call finished and running, and only the notice later in the conversation says the work is done.
+ * The session's work (`@/lib/running-work`) by the call that started it: what the stream says (running, and what ended
+ * lately), and older work, loaded when a notice needs it. A call's card reads its state from here for every harness.
  */
-const finishedBackground = computed<Map<string, BackgroundState>>((previous) => {
+const olderWork = shallowRef<readonly RunningWorkItem[]>([]);
+const workByCall = computed<ReadonlyMap<string, RunningWorkItem>>((previous) => {
+  const byCall = new Map<string, RunningWorkItem>();
+  for (const item of [...olderWork.value, ...stream.runningWork.value]) {
+    if (item.toolCallId) byCall.set(item.toolCallId, item);
+  }
+  return previous && sameEntries(previous, byCall) ? previous : byCall;
+});
+
+/** The call each piece of OpenCode 2's background work came from, by its handle (the shell id, the child session). */
+const backgroundCalls = computed<ReadonlyMap<string, string>>((previous) => {
+  const calls = new Map<string, string>();
+  for (const message of sessionMessages.value) {
+    for (const part of message.parts) {
+      const handle = part.type === "tool" ? backgroundWorkId(part.state) : null;
+      if (handle && part.type === "tool" && part.callId) calls.set(handle, part.callId);
+    }
+  }
+  return previous && sameEntries(previous, calls) ? previous : calls;
+});
+
+/** How the background work ended by its notices alone, by handle. */
+const backgroundNotices = computed<Map<string, BackgroundState>>((previous) => {
   const next = finishedBackgroundWork(sessionMessages.value.map(messageBody));
   return previous && sameEntries(previous, next) ? previous : next;
 });
+
+/**
+ * How work an agent moved into the background ended, by handle. A backgrounded call's own card can't say: OpenCode 2
+ * leaves the call finished and running, and only the notice later in the conversation says the work is done. Work
+ * Fleet stopped ended stopped, whatever the notice says: OpenCode 2 reports a shell it was told to remove as an error
+ * (`Shell.NotFoundError`).
+ */
+const finishedBackground = computed<Map<string, BackgroundState>>((previous) => {
+  const next = new Map(backgroundNotices.value);
+  for (const [handle, callId] of backgroundCalls.value) {
+    if (workByCall.value.get(callId)?.endedReason === "cancelled") next.set(handle, "cancelled");
+  }
+  return previous && sameEntries(previous, next) ? previous : next;
+});
+
+// Ended work drops out of the stream after a while. A notice that says its work failed is checked against all of the
+// session's work once, so work Fleet stopped still reads stopped when the conversation is opened later.
+let olderWorkLoadedFor: string | null = null;
+watch(
+  () => [...backgroundNotices.value].some(([handle, state]) => {
+    const callId = backgroundCalls.value.get(handle);
+    return state === "error" && callId !== undefined && !workByCall.value.has(callId);
+  }),
+  async (needed) => {
+    const sessionId = props.sessionId;
+    if (!needed || olderWorkLoadedFor === sessionId) return;
+    olderWorkLoadedFor = sessionId;
+    try {
+      const { data, response } = await api.GET("/api/sessions/{id}/work", {
+        params: { path: { id: sessionId }, query: { all: true } },
+      });
+      if (response.ok && sessionId === props.sessionId) olderWork.value = toRunningWorkItems(data);
+    } catch (loadError) {
+      console.warn(`Failed to load the work of session ${sessionId}:`, loadError);
+    }
+  },
+  { immediate: true },
+);
 
 interface DerivedMessage {
   /** Everything besides the message itself that the derived message was built from. */
@@ -288,6 +356,13 @@ function derivationInputs(message: AccumulatedMessage, finished: ReadonlyMap<str
 
   const toolParts = message.parts.filter((part): part is AccumulatedToolPart => part.type === "tool");
   if (toolParts.length > 0) {
+    inputs.push(finished);
+    for (const part of toolParts) inputs.push(workByCall.value.get(part.callId) ?? null);
+  }
+
+  // A notice of background work: how it ended can change after it arrives (Fleet stopped it).
+  const body = messageBody(message);
+  if (body.startsWith("<shell ") || body.startsWith("<subagent ")) {
     inputs.push(finished);
   }
 
@@ -311,7 +386,7 @@ function toActivityMessage(message: AccumulatedMessage, finished: ReadonlyMap<st
   const rawBody = messageBody(message);
   // A notice comes from the harness, not the user or the agent: Fleet gives it its own role, which the client
   // reads as an assistant-side message.
-  const background = parseBackgroundNotice(rawBody);
+  const background = withEnd(parseBackgroundNotice(rawBody), finished);
   const peerMessage = message.role === "user" && !background ? parsePeerMessage(rawBody) : null;
   const peerUpdate = message.role === "user" && !peerMessage && !background ? parsePeerUpdate(rawBody) : null;
   const fromPeer = peerMessage ?? peerUpdate;
@@ -337,7 +412,7 @@ function toActivityMessage(message: AccumulatedMessage, finished: ReadonlyMap<st
       .map((part) => ({ url: part.url, filename: part.filename?.trim() || "image" })),
     tools: message.parts
       .filter((part): part is AccumulatedToolPart => part.type === "tool" && !isQuestionPart(part as AccumulatedToolPart))
-      .map((part) => withImprove(withDelegation(toToolCardItem(part, finished), part), part)),
+      .map((part) => withImprove(withDelegation(toToolCardItem(part, finished, workByCall.value.get(part.callId)), part), part)),
     questionParts: message.parts
       .filter((part): part is AccumulatedToolPart => part.type === "tool" && isQuestionPart(part as AccumulatedToolPart)),
     reasoningParts: message.parts
@@ -347,6 +422,16 @@ function toActivityMessage(message: AccumulatedMessage, finished: ReadonlyMap<st
     turnError: message.turnError,
     command: message.role === "user" ? message.command : undefined,
   } satisfies ActivityMessage;
+}
+
+/**
+ * A notice with how its work really ended. Work Fleet stopped reads stopped; the error the harness reported for it is
+ * the stop's doing (a removed shell is "not found"), not the work's, so it isn't shown.
+ */
+function withEnd(notice: BackgroundNotice | null, finished: ReadonlyMap<string, BackgroundState>): BackgroundNotice | null {
+  const state = notice ? finished.get(notice.id) : undefined;
+  if (!notice || !state || state === notice.state) return notice;
+  return { ...notice, state, text: notice.state === "error" ? "" : notice.text };
 }
 
 /** A shell command the user ran: its own block, on the user's side, not a bubble or a tool card of the agent's. */
@@ -1036,6 +1121,7 @@ function hasVisibleMessageContent(message: ActivityMessage): boolean {
     || (message.tools?.length ?? 0) > 0
     || (message.questionParts?.length ?? 0) > 0
     || message.shell != null
+    || message.background != null
     // A turn can fail before it produces anything; the failure is the content.
     || message.turnError != null;
 }
@@ -1209,7 +1295,7 @@ function handleImproveSkill(skill: string, toolId: string): void {
           />
           <span class="background-note__label">{{ message.background.kind === "subagent" ? "Background helper" : "Background command" }}</span>
           <span class="background-note__task">{{ message.background.label }}</span>
-          <span class="background-note__state">{{ message.background.state }}</span>
+          <span class="background-note__state">{{ message.background.state === "cancelled" ? "stopped" : message.background.state }}</span>
         </div>
         <span
           v-if="message.workflowStep"
@@ -1735,9 +1821,13 @@ function handleImproveSkill(skill: string, toolId: string): void {
   color: var(--complete);
 }
 
-.background-note--error .background-note__state,
-.background-note--cancelled .background-note__state {
+.background-note--error .background-note__state {
   color: var(--error);
+}
+
+/* Stopped is something you did, not a failure. */
+.background-note--cancelled .background-note__state {
+  color: var(--muted);
 }
 
 .peer-from {

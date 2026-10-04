@@ -143,8 +143,10 @@ public sealed class SessionService(
         var activeCount = 0;
         var idleCount = 0;
 
-        // A side conversation (/btw) is only ever seen beside its session: it isn't one of the fleet's.
-        foreach (var session in activeSessions.Where(s => s.SideOfSessionId is null))
+        // The sessions the home page lists. A side conversation (/btw) is only ever seen beside its session, and a
+        // subagent's child session under its parent: neither is one of the fleet's. Background work is counted by the
+        // status bar, not here.
+        foreach (var session in activeSessions.Where(s => s.SideOfSessionId is null && s.ParentSessionId is null && !s.IsHidden))
         {
             var effectiveStatus = activityTracker.GetEffectiveActivityStatus(session.Id) ?? "idle";
             // A session stopped on a question is mid-turn, not idle.

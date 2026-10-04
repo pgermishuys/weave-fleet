@@ -1,6 +1,7 @@
 import type { AccumulatedToolPart } from "@/lib/client-types";
 import { apiUrl } from "@/lib/api-client";
 import { backgroundWorkId, type BackgroundState } from "@/lib/background-work";
+import { isWorkRunning, type RunningWorkItem } from "@/lib/running-work";
 import { getToolLabel } from "@/lib/tool-labels";
 
 export interface DiffLine {
@@ -177,11 +178,13 @@ export function toolDiffText(part: AccumulatedToolPart): string | undefined {
 
 /**
  * A tool call as its card. `finishedBackgroundWork` says how work the call moved into the background ended, by handle:
- * a backgrounded call is still running as far as the call itself goes, and only its notice says it's done.
+ * a backgrounded call is still running as far as the call itself goes, and only its notice says it's done. `work` is
+ * the running-work item the call started, when Fleet has one: it says the same for every harness.
  */
 export function toToolCardItem(
   part: AccumulatedToolPart,
   finishedBackgroundWork?: ReadonlyMap<string, BackgroundState>,
+  work?: RunningWorkItem | null,
 ): ToolCardItem {
   const state = asRecord(part.state);
   const input = asRecord(state?.input);
@@ -190,7 +193,7 @@ export function toToolCardItem(
   const shownTitle = TITLED_TOOLS.has(part.tool) ? getStringValue(state?.title) : undefined;
   const title = shownTitle ?? (getToolLabel(part.tool, input) || part.tool);
   const canvasId = getStringValue(asRecord(state?.metadata)?.canvasId);
-  const status = backgroundStatus(part, finishedBackgroundWork) ?? formatToolStatus(state?.status);
+  const status = workStatus(work) ?? backgroundStatus(part, finishedBackgroundWork) ?? formatToolStatus(state?.status);
 
   return {
     id: part.partId,
@@ -212,8 +215,20 @@ export function toToolCardItem(
 const BACKGROUND_STATE_TO_STATUS: Record<BackgroundState, string> = {
   completed: "Completed",
   error: "Error",
-  cancelled: "Cancelled",
+  // One Stop, one word: the strip and the Agents tab say "stopped" too.
+  cancelled: "Stopped",
 };
+
+/**
+ * What a call shows from the work it started: "Background" while that work runs on after the call returned (a
+ * Claude Code call reports itself done at once, so without this it would read done while the strip says running),
+ * "Stopped" once Fleet stopped it. Otherwise the call's own state says it.
+ */
+function workStatus(work: RunningWorkItem | null | undefined): string | undefined {
+  if (!work) return undefined;
+  if (isWorkRunning(work)) return work.background ? "Background" : undefined;
+  return work.endedReason === "cancelled" ? "Stopped" : undefined;
+}
 
 /** What a call that went to the background shows: "Background" while its work runs, then how the work ended. */
 function backgroundStatus(

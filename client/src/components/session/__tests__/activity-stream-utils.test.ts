@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { AccumulatedToolPart } from "@/lib/client-types";
 import { isSubagentTool, toToolCardItem } from "@/components/session/activity-stream-tool-card";
+import { toRunningWorkItem, type RunningWorkItem } from "@/lib/running-work";
+
+function work(extra: Record<string, unknown>): RunningWorkItem {
+  return toRunningWorkItem({
+    id: "w1", sessionId: "s1", workId: "b7x", kind: "shell", title: "Bash", label: "sh scripts/dev.sh", status: "running",
+    background: true, toolCallId: "call-1", canStop: true, startedAt: "2026-10-04T10:00:00Z", ...extra,
+  })!;
+}
 
 function create_tool_part(state: unknown, tool = "bash"): AccumulatedToolPart {
   return {
@@ -13,6 +21,29 @@ function create_tool_part(state: unknown, tool = "bash"): AccumulatedToolPart {
 }
 
 describe("toToolCardItem", () => {
+  // Claude Code reports a call that started background work done at once; the work says it still runs.
+  it("draws a call whose work runs on in the background as Background, whatever the call says", () => {
+    const part = create_tool_part({ status: "completed", input: { command: "sh scripts/dev.sh", run_in_background: true } }, "Bash");
+
+    expect(toToolCardItem(part).status).toBe("Completed");
+    expect(toToolCardItem(part, undefined, work({})).status).toBe("Background");
+    // Foreground work (a subagent the call waits on) is the call's own running.
+    expect(toToolCardItem(part, undefined, work({ background: false })).status).toBe("Completed");
+    // Finished on its own: the call's own state says it.
+    expect(toToolCardItem(part, undefined, work({ status: "completed", endedAt: "2026-10-04T10:05:00Z", endedReason: "completed" })).status)
+      .toBe("Completed");
+  });
+
+  it("says Stopped for work Fleet stopped, on every harness", () => {
+    const claudeCall = create_tool_part({ status: "completed", input: { command: "sh scripts/dev.sh" } }, "Bash");
+    const stopped = work({ status: "cancelled", endedAt: "2026-10-04T10:05:00Z", endedReason: "cancelled" });
+    // OpenCode 2's call stays running with the handle; its notice says how it ended.
+    const openCodeCall = create_tool_part({ status: "running", background: true, metadata: { shellID: "sh_1" } }, "shell");
+
+    expect(toToolCardItem(claudeCall, undefined, stopped).status).toBe("Stopped");
+    expect(toToolCardItem(openCodeCall, new Map([["sh_1", "cancelled"]])).status).toBe("Stopped");
+  });
+
   it("shows a browser tool's title and address, and the canvas it opened", () => {
     const done = toToolCardItem(create_tool_part({
       status: "completed",

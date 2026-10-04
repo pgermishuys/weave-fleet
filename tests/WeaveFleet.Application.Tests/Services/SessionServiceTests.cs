@@ -217,6 +217,32 @@ public sealed class SessionServiceTests
         result.Value.TotalCost.ShouldBe(0.50, 0.00001);
     }
 
+    [Fact]
+    public async Task GetFleetSummaryAsync_counts_the_sessions_home_lists_not_their_subagents()
+    {
+        // A busy parent with two busy subagent child sessions (hidden, under it), and a busy fork (a session of its own).
+        _builder.SessionRepository.Seed(MakeSession("parent"));
+        foreach (var child in new[] { "child-oc2", "child-claude" })
+        {
+            var session = MakeSession(child);
+            session.ParentSessionId = "parent";
+            session.IsHidden = true;
+            _builder.SessionRepository.Seed(session);
+        }
+        var fork = MakeSession("fork");
+        fork.ForkedFromSessionId = "parent";
+        fork.SpawnKind = SpawnKinds.Fork;
+        _builder.SessionRepository.Seed(fork);
+        foreach (var id in new[] { "parent", "child-oc2", "child-claude", "fork" })
+            _builder.ActivityTracker.Update(id, "busy", "user-1");
+
+        var result = await _sut.GetFleetSummaryAsync();
+
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.ActiveSessions.ShouldBe(2);
+        result.Value.IdleSessions.ShouldBe(0);
+    }
+
     private static Session MakeSession(string id) => new()
     {
         Id = id,

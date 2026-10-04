@@ -43,6 +43,32 @@ public sealed class EndpointGuardTests
     }
 
     [Fact]
+    public async Task get_session_says_a_claude_code_subagent_session_takes_no_prompt()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        using var client = factory.CreateClient();
+        await InsertSessionAsync(factory, "cc-parent", "instance-cc-parent", "stopped", "stopped", "manual", "claude-code");
+        await InsertSessionAsync(factory, "cc-child", "instance-cc-child", "stopped", "stopped", "manual", "claude-code",
+            parentSessionId: "cc-parent");
+
+        var child = await GetCapabilitiesAsync(client, "cc-child");
+        var parent = await GetCapabilitiesAsync(client, "cc-parent");
+
+        child.GetProperty("canPrompt").GetBoolean().ShouldBeFalse();
+        child.GetProperty("promptDisabledReason").GetString()
+            .ShouldBe("Claude Code can't prompt a subagent on its own. Ask the session that started it.");
+        parent.GetProperty("canPrompt").GetBoolean().ShouldBeTrue();
+    }
+
+    private static async Task<JsonElement> GetCapabilitiesAsync(HttpClient client, string sessionId)
+    {
+        var response = await client.GetAsync($"/api/sessions/{sessionId}");
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(JsonSerializerOptions.Web);
+        return json.GetProperty("capabilities");
+    }
+
+    [Fact]
     public async Task get_session_returns_its_project_name()
     {
         await using var factory = new ApiWebApplicationFactory(authEnabled: false);
@@ -81,7 +107,8 @@ public sealed class EndpointGuardTests
         string status,
         string runtimeMode,
         string harnessType,
-        string? projectId = null)
+        string? projectId = null,
+        string? parentSessionId = null)
     {
         using var scope = factory.Services.CreateScope();
         var connectionFactory = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>();
@@ -107,7 +134,7 @@ public sealed class EndpointGuardTests
                 Directory = directory,
                 CreatedAt = createdAt,
                 StoppedAt = createdAt,
-                ParentSessionId = (string?)null,
+                ParentSessionId = parentSessionId,
                 ActivityStatus = "idle",
                 LifecycleStatus = lifecycleStatus,
                 TotalTokens = 0,
@@ -115,7 +142,7 @@ public sealed class EndpointGuardTests
                 HarnessType = harnessType,
                 RuntimeMode = runtimeMode,
                 HarnessResumeToken = $"resume-{sessionId}",
-                IsHidden = false,
+                IsHidden = parentSessionId is not null,
                 RetentionStatus = "active",
                 ArchivedAt = (string?)null,
                 UserId = _userId
