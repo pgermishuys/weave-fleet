@@ -137,7 +137,6 @@ public sealed class OpenCode2ShellCommandTests
             server,
             _ => Task.FromResult(server),
             analytics: null,
-            delegations: null,
             NullLogger.Instance);
 
         await session.RunShellCommandAsync(new ShellCommandOptions { Command = "git status", MessageId = "msg_fleet0001" }, CancellationToken.None);

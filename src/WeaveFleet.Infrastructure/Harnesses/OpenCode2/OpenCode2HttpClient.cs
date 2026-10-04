@@ -464,6 +464,42 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
             ct).ConfigureAwait(false))?.Data ?? [];
 
     /// <summary>
+    /// Terminates and removes shell <paramref name="shellId"/> (<c>DELETE /api/shell/{id}</c>), backgrounded or not, with
+    /// the output V2 kept for it. False when V2 has no such shell (it was removed already): V2 answers a delete of one
+    /// that's gone with 204 too, so this asks <c>GET /api/shell/{id}</c> first.
+    /// </summary>
+    public async Task<bool> RemoveShellAsync(string directory, string shellId, CancellationToken ct)
+    {
+        var path = $"api/shell/{Uri.EscapeDataString(shellId)}?{LocationQuery(directory)}";
+        using (var known = await http.GetAsync(path, ct).ConfigureAwait(false))
+        {
+            if (known.StatusCode == HttpStatusCode.NotFound)
+                return false;
+            await EnsureSuccessAsync(known, "find the shell", ct).ConfigureAwait(false);
+        }
+
+        using var response = await http.DeleteAsync(path, ct).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, "stop the shell", ct).ConfigureAwait(false);
+        return true;
+    }
+
+    /// <summary>
+    /// A page of shell <paramref name="shellId"/>'s combined output from byte <paramref name="cursor"/>
+    /// (<c>GET /api/shell/{id}/output</c>), or null when V2 has no such shell.
+    /// </summary>
+    public async Task<OpenCode2ShellOutputPage?> GetShellOutputAsync(string directory, string shellId, long cursor, CancellationToken ct)
+    {
+        using var response = await http.GetAsync(
+            $"api/shell/{Uri.EscapeDataString(shellId)}/output?{LocationQuery(directory)}&cursor={cursor.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+            ct).ConfigureAwait(false);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            return null;
+        await EnsureSuccessAsync(response, "read the shell's output", ct).ConfigureAwait(false);
+        var body = await response.Content.ReadFromJsonAsync(OpenCode2JsonContext.Default.OpenCode2EnvelopeOpenCode2ShellOutputPage, ct).ConfigureAwait(false);
+        return body?.Data;
+    }
+
+    /// <summary>
     /// Every provider V2 can sign in to in <paramref name="directory"/>, with its sign-in methods and the sign-ins it
     /// has. Integrations, and the browser sign-ins under way, belong to a location; load it first.
     /// </summary>

@@ -219,6 +219,7 @@ public static class DependencyInjection
         services.AddSingleton<TurnFailureRecorder>();
         // The asks waiting on the user, kept by the relay and read when a session opens.
         services.AddSingleton<PendingPermissionStore>();
+        services.AddSingleton<RunningWorkRecorder>();
         services.AddSingleton<IPendingPermissions>(sp => sp.GetRequiredService<PendingPermissionStore>());
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowsFeature>();
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowModelRoles>();

@@ -49,6 +49,21 @@ public static class EventTypes
     /// <summary>An ask was answered, or went away with its harness. Fleet's own event, with a <see cref="Harnesses.PermissionReplied"/> payload.</summary>
     public const string PermissionReplied = "permission.replied";
 
+    /// <summary>
+    /// The agent left work running: a subagent, a background shell, a monitor. Fleet's own event, with a
+    /// <see cref="WorkReport"/> payload. The relay hands it to Fleet's running-work record rather than the conversation.
+    /// </summary>
+    public const string WorkStarted = "work.started";
+
+    /// <summary>Something about running work changed (its child session, it went to the background). A <see cref="WorkReport"/> with what changed.</summary>
+    public const string WorkUpdated = "work.updated";
+
+    /// <summary>Running work ended. A <see cref="WorkReport"/> with <see cref="WorkReport.EndedReason"/>.</summary>
+    public const string WorkEnded = "work.ended";
+
+    /// <summary>Returns <c>true</c> for <see cref="WorkStarted"/>, <see cref="WorkUpdated"/> and <see cref="WorkEnded"/>.</summary>
+    public static bool IsWorkEvent(string type) => type is WorkStarted or WorkUpdated or WorkEnded;
+
     /// <summary>Returns <c>true</c> if the event type is a permission event (i.e. starts with "permission.").</summary>
     public static bool IsPermissionEvent(string type) =>
         type.StartsWith("permission.", StringComparison.Ordinal);

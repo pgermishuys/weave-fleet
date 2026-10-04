@@ -40,5 +40,8 @@ public sealed class OpenCodeHarness : IHarness
         SupportsShellCommands = true,
         SupportsSideConversations = true,
         SupportsAgentBrowser = true,
+        // Subagents are running work in child sessions; OpenCode has no background shells.
+        SupportsChildSessions = true,
+        ChildSessionsResumable = true,
     };
 }

@@ -237,6 +237,8 @@ internal sealed partial class ClaudeCodeJsonContext : JsonSerializerContext
 [JsonSerializable(typeof(List<TodoEntry>))]
 [JsonSerializable(typeof(FilesWrittenPayload))]
 [JsonSerializable(typeof(PermissionAsk))]
+[JsonSerializable(typeof(WorkReport))]
+[JsonSerializable(typeof(List<WorkReport>))]
 [JsonSerializable(typeof(PermissionReplied))]
 [JsonSerializable(typeof(List<PermissionAsk>))]
 [JsonSerializable(typeof(WeaveFleet.Infrastructure.Data.Repositories.SessionProgressDetailJson))]

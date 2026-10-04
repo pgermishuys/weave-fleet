@@ -4,10 +4,18 @@ using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Progress;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
+using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Services;
 
+/// <summary>
+/// The one writer of a session's running work: subagents (delegations to a child session), background shells,
+/// monitors and other tasks. Harnesses report work as <see cref="EventTypes.WorkStarted"/>,
+/// <see cref="EventTypes.WorkUpdated"/> and <see cref="EventTypes.WorkEnded"/> events, which the relay hands here; this
+/// saves them and tells clients with <c>work.*</c> events (and, for subagents, the <c>delegation.*</c> events the
+/// conversation's tool cards read).
+/// </summary>
 public sealed class DelegationService(
     IDelegationRepository delegationRepository,
     IEventBroadcaster eventBroadcaster,
@@ -57,12 +65,14 @@ public sealed class DelegationService(
     {
     }
 
-    /// <param name="description">What the subagent was asked to do, when the harness says; only passed on to progress.</param>
+    /// <param name="description">What the subagent was asked to do, when the harness says: its label, and passed on to progress.</param>
+    /// <param name="workId">The harness's handle for the subagent, when it isn't the call's id.</param>
     public async Task<DelegationDto> HandleDelegationDetectedAsync(
         string parentSessionId,
         string parentToolCallId,
         string title,
-        string? description = null)
+        string? description = null,
+        string? workId = null)
     {
         ValidateRequired(parentSessionId, nameof(parentSessionId));
         ValidateRequired(parentToolCallId, nameof(parentToolCallId));
@@ -81,7 +91,10 @@ public sealed class DelegationService(
             Title = title,
             Status = "pending",
             CreatedAt = now,
-            UpdatedAt = now
+            UpdatedAt = now,
+            Kind = WorkKinds.Subagent,
+            WorkId = workId ?? parentToolCallId,
+            Label = description,
         };
 
         if (sessionActivityWriteService is null)
@@ -356,7 +369,270 @@ public sealed class DelegationService(
         ValidateRequired(parentSessionId, nameof(parentSessionId));
 
         var delegations = await delegationRepository.GetByParentSessionIdAsync(parentSessionId);
-        return delegations.Select(ToDto).ToList();
+        return delegations.Where(d => d.Kind == WorkKinds.Subagent).Select(ToDto).ToList();
+    }
+
+    /// <summary>How long work that ended still shows with the running work, with its result.</summary>
+    public static readonly TimeSpan RecentlyEndedFor = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// Records what a harness said about a piece of running work (<see cref="EventTypes.WorkStarted"/> or
+    /// <see cref="EventTypes.WorkUpdated"/>): the first report of a <see cref="WorkReport.WorkId"/> starts it, a later one
+    /// changes only what it sets. A subagent is a delegation as well, so its tool card links to its child session and
+    /// its parent counts it as working until it goes to the background. Work that ended stays as it ended.
+    /// </summary>
+    /// <param name="childSessionId">The Fleet session the work runs in, made from <see cref="WorkReport.ChildHarnessSessionId"/>.</param>
+    /// <returns>The work as Fleet shows it now.</returns>
+    public async Task<RunningWorkItem> HandleWorkReportedAsync(string parentSessionId, WorkReport report, string? childSessionId = null)
+    {
+        ValidateRequired(parentSessionId, nameof(parentSessionId));
+        ArgumentNullException.ThrowIfNull(report);
+        ValidateRequired(report.WorkId, nameof(report));
+
+        var work = await delegationRepository.GetByWorkIdAsync(parentSessionId, report.WorkId).ConfigureAwait(false);
+        if (work is { IsRunning: false })
+            return ToItem(work);
+
+        var started = work is null;
+        if (work is null)
+        {
+            var kind = WorkKinds.IsKnown(report.Kind) ? report.Kind! : WorkKinds.Task;
+            var title = string.IsNullOrWhiteSpace(report.Title) ? kind : report.Title;
+            if (kind == WorkKinds.Subagent && report.ToolCallId is { Length: > 0 } callId)
+            {
+                await HandleDelegationDetectedAsync(parentSessionId, callId, title, report.Label, report.WorkId).ConfigureAwait(false);
+                work = await delegationRepository.GetByWorkIdAsync(parentSessionId, report.WorkId).ConfigureAwait(false)
+                    ?? await delegationRepository.GetByParentToolCallIdAsync(parentSessionId, callId).ConfigureAwait(false)
+                    ?? throw new InvalidOperationException($"Session '{parentSessionId}' has no subagent call '{callId}'.");
+            }
+            else
+            {
+                var now = DateTime.UtcNow.ToString("O");
+                work = new Delegation
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    ParentSessionId = parentSessionId,
+                    ParentToolCallId = report.ToolCallId,
+                    Title = title,
+                    Status = "running",
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                    Kind = kind,
+                    WorkId = report.WorkId,
+                    Label = report.Label,
+                };
+                await delegationRepository.InsertAsync(work).ConfigureAwait(false);
+            }
+        }
+
+        var changed = Merge(work, report);
+
+        if (childSessionId is not null && !string.Equals(work.ChildSessionId, childSessionId, StringComparison.Ordinal))
+        {
+            if (work.Kind == WorkKinds.Subagent && work.ParentToolCallId is { } callId)
+            {
+                await HandleChildLinkedAsync(parentSessionId, callId, childSessionId).ConfigureAwait(false);
+            }
+            else
+            {
+                var now = DateTime.UtcNow.ToString("O");
+                await delegationRepository.UpdateChildSessionIdAsync(work.Id, childSessionId, now).ConfigureAwait(false);
+                if (work.Status != "running")
+                    await delegationRepository.UpdateStatusAsync(work.Id, "running", now, null).ConfigureAwait(false);
+            }
+
+            work.ChildSessionId = childSessionId;
+            work.Status = "running";
+            changed = true;
+        }
+
+        // The call returned while its child works on: the parent is free, and the child's work isn't its own.
+        if (work.Background && work.Kind == WorkKinds.Subagent && work.ChildSessionId is not null && work.ParentToolCallId is { } backgroundCallId)
+            await HandleDelegationMovedToBackgroundAsync(parentSessionId, backgroundCallId).ConfigureAwait(false);
+
+        if (changed || started)
+        {
+            work.UpdatedAt = DateTime.UtcNow.ToString("O");
+            await delegationRepository.UpdateWorkAsync(work).ConfigureAwait(false);
+            await BroadcastWorkAsync(started ? EventTypes.WorkStarted : EventTypes.WorkUpdated, work).ConfigureAwait(false);
+        }
+
+        return ToItem(work);
+    }
+
+    /// <summary>
+    /// Records that a piece of running work ended (<see cref="EventTypes.WorkEnded"/>), with how
+    /// (<see cref="WorkEndedReasons"/>; completed when the harness doesn't say). Work that ended already stays as it
+    /// ended: a stop Fleet recorded at once isn't undone by the harness's own report coming after.
+    /// </summary>
+    /// <returns>The work as Fleet shows it now, or <c>null</c> when Fleet has no such work.</returns>
+    public async Task<RunningWorkItem?> HandleWorkEndedAsync(string parentSessionId, string workId, string? endedReason, string? detail = null)
+    {
+        ValidateRequired(parentSessionId, nameof(parentSessionId));
+        ValidateRequired(workId, nameof(workId));
+
+        var work = await delegationRepository.GetByWorkIdAsync(parentSessionId, workId).ConfigureAwait(false);
+        if (work is null)
+            return null;
+        if (!work.IsRunning)
+            return ToItem(work);
+
+        var reason = WorkEndedReasons.IsKnown(endedReason) ? endedReason! : WorkEndedReasons.Completed;
+        var status = reason == WorkEndedReasons.Lost ? WorkEndedReasons.Cancelled : reason;
+
+        // A subagent's delegation ends the way it always has: its card, its child's activity and progress hear of it.
+        if (work.Kind == WorkKinds.Subagent)
+            await HandleDelegationFinishedAsync(work.Id, status).ConfigureAwait(false);
+
+        var now = DateTime.UtcNow.ToString("O");
+        await delegationRepository.EndAsync(work.Id, status, reason, detail, now).ConfigureAwait(false);
+        work.Status = status;
+        work.EndedReason = reason;
+        work.Detail = detail ?? work.Detail;
+        work.UpdatedAt = now;
+        work.CompletedAt = now;
+
+        await BroadcastWorkAsync(EventTypes.WorkEnded, work).ConfigureAwait(false);
+        return ToItem(work);
+    }
+
+    /// <summary>
+    /// Catches up with what the harness itself says is running in the session (<see cref="IHarnessSession.GetRunningWorkAsync"/>):
+    /// work Fleet still has running that isn't in <paramref name="running"/> ended with the harness, so it ends lost
+    /// (<see cref="WorkEndedReasons.Lost"/>). A report matches by <see cref="WorkReport.WorkId"/>, or by the child
+    /// session the work runs in (<see cref="WorkReport.ChildHarnessSessionId"/>), for a harness that can say which
+    /// children run but no longer knows which call started them.
+    /// </summary>
+    /// <returns>How much work ended as lost.</returns>
+    public async Task<int> SettleLostWorkAsync(string parentSessionId, IReadOnlyList<WorkReport> running)
+    {
+        ValidateRequired(parentSessionId, nameof(parentSessionId));
+        ArgumentNullException.ThrowIfNull(running);
+
+        var workIds = running.Select(r => r.WorkId).ToHashSet(StringComparer.Ordinal);
+        var children = running.Select(r => r.ChildHarnessSessionId).OfType<string>().ToHashSet(StringComparer.Ordinal);
+        var lost = 0;
+        foreach (var work in await delegationRepository.GetByParentSessionIdAsync(parentSessionId).ConfigureAwait(false))
+        {
+            if (!work.IsRunning || workIds.Contains(work.WorkId) || await RunsInAsync(work, children).ConfigureAwait(false))
+                continue;
+
+            await HandleWorkEndedAsync(parentSessionId, work.WorkId, WorkEndedReasons.Lost).ConfigureAwait(false);
+            lost++;
+        }
+
+        return lost;
+    }
+
+    /// <summary>Whether <paramref name="work"/>'s child session is one of the harness's <paramref name="childHarnessSessionIds"/>.</summary>
+    private async Task<bool> RunsInAsync(Delegation work, HashSet<string> childHarnessSessionIds)
+    {
+        if (childHarnessSessionIds.Count == 0 || work.ChildSessionId is not { } childSessionId || sessionRepository is null)
+            return false;
+
+        var child = await sessionRepository.GetByIdAsync(childSessionId).ConfigureAwait(false);
+        return child is not null
+            && (childHarnessSessionIds.Contains(child.OpencodeSessionId)
+                || (child.HarnessResumeToken is { } token && childHarnessSessionIds.Contains(token)));
+    }
+
+    /// <summary>
+    /// The session's running work, and the work that ended in the last <see cref="RecentlyEndedFor"/> with its result;
+    /// every piece it ever ran with <paramref name="all"/>. Oldest first.
+    /// </summary>
+    public async Task<IReadOnlyList<RunningWorkItem>> GetWorkAsync(string parentSessionId, bool all = false)
+    {
+        ValidateRequired(parentSessionId, nameof(parentSessionId));
+
+        var work = await delegationRepository.GetByParentSessionIdAsync(parentSessionId).ConfigureAwait(false);
+        return all ? work.Select(ToItem).ToList() : RunningWorkOf(work);
+    }
+
+    /// <summary>
+    /// Of a session's work, what shows as its running work: what still runs, and what ended in the last
+    /// <see cref="RecentlyEndedFor"/>, oldest first. The session snapshot's <c>runningWork</c>.
+    /// </summary>
+    public static IReadOnlyList<RunningWorkItem> RunningWorkOf(IEnumerable<Delegation> work)
+    {
+        var since = DateTime.UtcNow - RecentlyEndedFor;
+        return work
+            .Where(item => item.IsRunning || EndedSince(item, since))
+            .OrderBy(item => item.CreatedAt, StringComparer.Ordinal)
+            .Select(ToItem)
+            .ToList();
+    }
+
+    /// <summary>The current user's running work in every session, oldest first: what the status bar counts.</summary>
+    public async Task<IReadOnlyList<RunningWorkItem>> GetAllRunningWorkAsync()
+    {
+        var work = await delegationRepository.ListRunningAsync().ConfigureAwait(false);
+        return work.Select(ToItem).ToList();
+    }
+
+    /// <summary>A running work item of session <paramref name="parentSessionId"/> by Fleet's id, or <c>null</c>.</summary>
+    public async Task<Delegation?> FindWorkAsync(string parentSessionId, string id)
+    {
+        var work = await delegationRepository.GetByIdAsync(id).ConfigureAwait(false);
+        return work is not null && string.Equals(work.ParentSessionId, parentSessionId, StringComparison.Ordinal) ? work : null;
+    }
+
+    /// <summary>Fleet's record of a piece of work as clients see it.</summary>
+    public static RunningWorkItem ToItem(Delegation work) => new()
+    {
+        Id = work.Id,
+        SessionId = work.ParentSessionId,
+        WorkId = string.IsNullOrEmpty(work.WorkId) ? work.ParentToolCallId ?? work.Id : work.WorkId,
+        Kind = work.Kind,
+        Title = work.Title,
+        Label = work.Label,
+        Status = work.Status,
+        Background = work.Background,
+        ChildSessionId = work.ChildSessionId,
+        ToolCallId = work.ParentToolCallId,
+        CanStop = work.CanStop,
+        CanReadOutput = work.CanReadOutput,
+        StartedAt = work.CreatedAt,
+        EndedAt = work.IsRunning ? null : work.CompletedAt ?? work.UpdatedAt,
+        EndedReason = work.IsRunning ? null : work.EndedReason ?? work.Status,
+        Detail = work.Detail,
+    };
+
+    private static bool EndedSince(Delegation work, DateTime since)
+        => DateTime.TryParse(work.CompletedAt ?? work.UpdatedAt, null, System.Globalization.DateTimeStyles.RoundtripKind, out var ended)
+            && ended.ToUniversalTime() >= since;
+
+    /// <summary>Applies what <paramref name="report"/> sets to <paramref name="work"/>; true when anything changed.</summary>
+    private static bool Merge(Delegation work, WorkReport report)
+    {
+        var changed = false;
+        if (!string.IsNullOrWhiteSpace(report.Title) && report.Title != work.Title)
+            (work.Title, changed) = (report.Title, true);
+        if (!string.IsNullOrWhiteSpace(report.Label) && report.Label != work.Label)
+            (work.Label, changed) = (report.Label, true);
+        if (!string.IsNullOrWhiteSpace(report.ToolCallId) && work.ParentToolCallId is null)
+            (work.ParentToolCallId, changed) = (report.ToolCallId, true);
+        if (report.Background is { } background && background != work.Background)
+            (work.Background, changed) = (background, true);
+        if (report.CanStop is { } canStop && canStop != work.CanStop)
+            (work.CanStop, changed) = (canStop, true);
+        if (report.CanReadOutput is { } canReadOutput && canReadOutput != work.CanReadOutput)
+            (work.CanReadOutput, changed) = (canReadOutput, true);
+        if (!string.IsNullOrWhiteSpace(report.Detail) && report.Detail != work.Detail)
+            (work.Detail, changed) = (report.Detail, true);
+        return changed;
+    }
+
+    /// <summary>
+    /// Tells the session's open conversation, and every client's session list and status bar (the <c>sessions</c>
+    /// topic), what the work is now.
+    /// </summary>
+    private async Task BroadcastWorkAsync(string eventType, Delegation work)
+    {
+        var payload = JsonSerializer.SerializeToElement(ToItem(work), ApplicationJsonContext.Default.RunningWorkItem);
+        await eventBroadcaster.BroadcastAsync($"session:{work.ParentSessionId}", eventType, payload, userContext.UserId, CancellationToken.None)
+            .ConfigureAwait(false);
+        await eventBroadcaster.BroadcastAsync("sessions", eventType, payload, userContext.UserId, CancellationToken.None)
+            .ConfigureAwait(false);
     }
 
     private static void ValidateRequired(string value, string paramName)

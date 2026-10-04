@@ -29,7 +29,6 @@ public sealed class OpenCode2SideConversationTests
             server.WithFolderLoaded("/work"),
             _ => Task.FromResult(server),
             analytics: null,
-            delegations: null,
             NullLogger.Instance);
         return (server, session);
     }

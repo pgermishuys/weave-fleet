@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Data.Repositories;
 
 namespace WeaveFleet.Infrastructure.Tests.Data.Repositories;
@@ -89,6 +90,97 @@ public sealed class DelegationRepositoryTests
         runningAfter!.Status.ShouldBe("cancelled");
         runningAfter.CompletedAt.ShouldBe("2026-09-15T08:00:00.0000000Z");
         (await aliceRepo.GetByIdAsync(completed.Id))!.Status.ShouldBe("completed");
+    }
+
+    [Fact]
+    public async Task Running_work_round_trips_with_what_the_harness_said_about_it()
+    {
+        var (conn, _, factory) = await CreateAsync();
+        using var _ = conn;
+        var alice = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "alice");
+        var repo = new DelegationRepository(factory, new TestUserContext("alice"));
+        var started = "2026-10-04T10:00:00.0000000Z";
+        await repo.InsertAsync(new WeaveFleet.Domain.Entities.Delegation
+        {
+            Id = "w-1",
+            ParentSessionId = alice.Session.Id,
+            ParentToolCallId = "call_shell",
+            Title = "shell",
+            Status = "running",
+            CreatedAt = started,
+            UpdatedAt = started,
+            Kind = WorkKinds.Shell,
+            WorkId = "sh_1",
+            Label = "bun run test:e2e",
+            Background = true,
+            CanStop = true,
+            CanReadOutput = true,
+        });
+
+        var work = (await repo.GetByWorkIdAsync(alice.Session.Id, "sh_1")).ShouldNotBeNull();
+        work.Kind.ShouldBe(WorkKinds.Shell);
+        work.Label.ShouldBe("bun run test:e2e");
+        work.Background.ShouldBeTrue();
+        work.CanStop.ShouldBeTrue();
+        work.CanReadOutput.ShouldBeTrue();
+        (await repo.CountRunningAsync([alice.Session.Id, "other"])).ShouldBe(new Dictionary<string, int> { [alice.Session.Id] = 1 });
+
+        work.Label = "bun run test:e2e --watch";
+        work.CanReadOutput = false;
+        work.Detail = "2 events";
+        await repo.UpdateWorkAsync(work);
+        var updated = (await repo.GetByIdAsync("w-1")).ShouldNotBeNull();
+        updated.Label.ShouldBe("bun run test:e2e --watch");
+        updated.CanReadOutput.ShouldBeFalse();
+        updated.Detail.ShouldBe("2 events");
+
+        await repo.EndAsync("w-1", "completed", WorkEndedReasons.Completed, "exit 0", "2026-10-04T10:05:00.0000000Z");
+        var ended = (await repo.GetByIdAsync("w-1")).ShouldNotBeNull();
+        ended.Status.ShouldBe("completed");
+        ended.EndedReason.ShouldBe(WorkEndedReasons.Completed);
+        ended.Detail.ShouldBe("exit 0");
+        ended.CompletedAt.ShouldBe("2026-10-04T10:05:00.0000000Z");
+        (await repo.ListRunningAsync()).ShouldBeEmpty();
+        (await repo.CountRunningAsync([alice.Session.Id])).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task The_running_list_is_the_current_users_own()
+    {
+        var (conn, _, factory) = await CreateAsync();
+        using var _ = conn;
+        var alice = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "alice");
+        var bob = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "bob");
+        var aliceRepo = new DelegationRepository(factory, new TestUserContext("alice"));
+        var bobRepo = new DelegationRepository(factory, new TestUserContext("bob"));
+        var mine = await InsertDelegationAsync(aliceRepo, alice.Session.Id, "running");
+        await InsertDelegationAsync(bobRepo, bob.Session.Id, "running");
+
+        (await aliceRepo.ListRunningAsync()).Select(d => d.Id).ShouldBe([mine.Id]);
+        (await aliceRepo.CountRunningAsync([alice.Session.Id, bob.Session.Id])).Keys.ShouldBe([alice.Session.Id]);
+        (await aliceRepo.GetByWorkIdAsync(bob.Session.Id, mine.Id)).ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task A_subagent_that_finishes_ends_the_way_its_status_says_and_one_cancelled_at_startup_was_lost()
+    {
+        var (conn, _, factory) = await CreateAsync();
+        using var _ = conn;
+        var alice = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "alice");
+        var repo = new DelegationRepository(factory, new TestUserContext("alice"));
+        var finished = await InsertDelegationAsync(repo, alice.Session.Id, "running");
+        var left = await InsertDelegationAsync(repo, alice.Session.Id, "running");
+
+        await repo.UpdateStatusAsync(finished.Id, "error", DateTime.UtcNow.ToString("O"), DateTime.UtcNow.ToString("O"));
+        await repo.CancelAllUnfinishedAsync(DateTime.UtcNow.ToString("O"));
+
+        (await repo.GetByIdAsync(finished.Id))!.EndedReason.ShouldBe(WorkEndedReasons.Error);
+        var lost = (await repo.GetByIdAsync(left.Id))!;
+        lost.Status.ShouldBe("cancelled");
+        lost.EndedReason.ShouldBe(WorkEndedReasons.Lost);
+        // A delegation inserted the old way is a subagent known by its own id when it has no call.
+        lost.Kind.ShouldBe(WorkKinds.Subagent);
+        lost.WorkId.ShouldBe(left.Id);
     }
 
     private static async Task<WeaveFleet.Domain.Entities.Delegation> InsertDelegationAsync(

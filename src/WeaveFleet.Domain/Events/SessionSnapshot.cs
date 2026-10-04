@@ -16,9 +16,16 @@ public sealed record SessionSnapshot
     public IReadOnlyList<MessageLifecyclePayload> Messages { get; init; } = [];
 
     /// <summary>
-    /// Gets the current materialized delegations for the session.
+    /// Gets the current materialized delegations for the session: its subagents.
     /// </summary>
     public IReadOnlyList<SessionSnapshotDelegation> Delegations { get; init; } = [];
+
+    /// <summary>
+    /// Gets the work the session's agent left running (subagents, background shells, monitors, tasks), and what of it
+    /// ended in the last few minutes, with its result. Live changes arrive as <c>work.started</c>, <c>work.updated</c>
+    /// and <c>work.ended</c>.
+    /// </summary>
+    public IReadOnlyList<RunningWorkItem> RunningWork { get; init; } = [];
 
     /// <summary>
     /// Gets the effective current activity status for the session.

@@ -180,7 +180,6 @@ public sealed class OpenCode2PermissionTests
             server,
             _ => Task.FromResult(server),
             analytics: null,
-            delegations: null,
             NullLogger.Instance);
         return (api, server, session);
     }

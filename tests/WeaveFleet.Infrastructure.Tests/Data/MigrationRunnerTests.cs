@@ -3,6 +3,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Infrastructure.Data;
+using WeaveFleet.Infrastructure.Data.Repositories;
 
 namespace WeaveFleet.Infrastructure.Tests.Data;
 
@@ -355,6 +356,63 @@ public sealed class MigrationRunnerTests
         await conn.ExecuteAsync("DELETE FROM sessions WHERE id = 'sess-1'");
         (await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM canvases")).ShouldBe(0);
         (await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM canvas_revisions")).ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Migration_048_keeps_existing_delegations_as_subagent_work()
+    {
+        using var conn = CreateInMemoryConnection();
+        var factory = new SingleConnectionFactory(conn);
+        var runner = CreateRunner(factory);
+
+        var scriptsThrough047 = MigrationRunner.LoadScripts("Migrations")
+            .TakeWhile(script => string.CompareOrdinal(MigrationRunner.ExtractMigrationName(script.Name), "048") < 0)
+            .ToList();
+        scriptsThrough047.Select(script => MigrationRunner.ExtractMigrationName(script.Name)).ShouldContain("047_add_agent_browser_steps.sql");
+        foreach (var script in scriptsThrough047)
+            await conn.ExecuteAsync(script.Contents);
+        await SeedDbUpJournalAsync(conn, scriptsThrough047);
+
+        await conn.ExecuteAsync(
+            "INSERT INTO workspaces (id, directory, isolation_strategy, created_at, user_id) VALUES ('ws-1', '/tmp/proj', 'existing', '2026-01-01', 'local-user')");
+        await conn.ExecuteAsync(
+            "INSERT INTO instances (id, port, directory, url, status, created_at, user_id) VALUES ('inst-1', 0, '/tmp/proj', 'http://127.0.0.1:0', 'running', '2026-01-01', 'local-user')");
+        await conn.ExecuteAsync(
+            """
+            INSERT INTO sessions (id, workspace_id, instance_id, opencode_session_id, title, status, directory, created_at, user_id)
+            VALUES ('parent', 'ws-1', 'inst-1', 'oc-1', 'Parent', 'active', '/tmp/proj', '2026-01-01', 'local-user'),
+                   ('child', 'ws-1', 'inst-1', 'oc-2', 'Child', 'active', '/tmp/proj', '2026-01-01', 'local-user')
+            """);
+        await conn.ExecuteAsync(
+            """
+            INSERT INTO delegations (id, parent_session_id, child_session_id, parent_tool_call_id, title, status, created_at, updated_at, completed_at)
+            VALUES ('done', 'parent', 'child', 'call_done', 'general', 'completed', '2026-09-01', '2026-09-02', '2026-09-02'),
+                   ('running', 'parent', NULL, 'call_running', 'explore', 'running', '2026-09-03', '2026-09-03', NULL),
+                   ('no-call', 'parent', NULL, NULL, 'subtask', 'error', '2026-09-04', '2026-09-04', '2026-09-04')
+            """);
+
+        await runner.ApplyMigrationsAsync(conn);
+
+        var rows = (await conn.QueryAsync<(string Id, string Kind, string WorkId, string? Label, long Background, long CanStop, long CanReadOutput, string? EndedReason)>(
+            "SELECT id, kind, work_id, label, background, can_stop, can_read_output, ended_reason FROM delegations ORDER BY created_at")).ToList();
+        rows.ShouldBe(
+        [
+            ("done", "subagent", "call_done", null, 0, 0, 0, "completed"),
+            ("running", "subagent", "call_running", null, 0, 0, 0, null),
+            ("no-call", "subagent", "no-call", null, 0, 0, 0, "error"),
+        ]);
+
+        // Sessions keep everything they had and have no lineage until something sets it.
+        var lineage = await conn.QuerySingleAsync<(string? ForkedFrom, string? SpawnedBy, string? SpawnKind)>(
+            "SELECT forked_from_session_id, spawned_by_session_id, spawn_kind FROM sessions WHERE id = 'parent'");
+        lineage.ShouldBe((null, null, null));
+
+        // And the repository reads them as before, with their work fields (last: it closes this test's one connection).
+        var repo = new DelegationRepository(factory, new TestUserContext("local-user"));
+        (await repo.ListRunningAsync()).ShouldHaveSingleItem().ShouldSatisfyAllConditions(
+            running => running.Id.ShouldBe("running"),
+            running => running.WorkId.ShouldBe("call_running"),
+            running => running.Kind.ShouldBe("subagent"));
     }
 
     [Fact]

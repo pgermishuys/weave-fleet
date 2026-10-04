@@ -499,7 +499,6 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             // Back to a server like the one it's on (the same profile version) when that one stops.
             ct => GetServerAsync(context.OwnerUserId, server.Profile, ct),
             _analytics,
-            new OpenCode2Delegations(_scopeFactory, context.OwnerUserId, context.FleetSessionId, _loggerFactory.CreateLogger<OpenCode2Delegations>()),
             _loggerFactory.CreateLogger<OpenCode2HarnessSession>());
 
     /// <summary>

@@ -43,8 +43,14 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
     private readonly Func<CancellationToken, Task<OpenCode2Server>> _servers;
     private readonly OpenCode2Mapper _mapper;
     private readonly IAnalyticsCollector? _analytics;
-    private readonly OpenCode2Delegations? _delegations;
     private readonly ILogger _logger;
+
+    // The work the agent left running, by its handle (a shell's id, a subagent's call), as last reported: what Stop,
+    // Output and the running list go by. Written on the event pump, read on requests.
+    private readonly ConcurrentDictionary<string, WorkReport> _work = new(StringComparer.Ordinal);
+
+    // The work Fleet asked V2 to stop: V2's notice then says the removed shell failed, but the user stopped it.
+    private readonly ConcurrentDictionary<string, byte> _stopping = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _attachLock = new(1, 1);
     private readonly Channel<HarnessEvent> _events = Channel.CreateBounded<HarnessEvent>(new BoundedChannelOptions(1000)
     {
@@ -77,7 +83,6 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
 
     /// <param name="info">The V2 session as the server last described it (its agent and model).</param>
     /// <param name="servers">The running server for the owner and the session's profile, started when there's none.</param>
-    /// <param name="delegations">Records the session's subagent calls; none in tests that don't need them.</param>
     internal OpenCode2HarnessSession(
         string instanceId,
         OpenCode2SessionInfo info,
@@ -85,7 +90,6 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         OpenCode2Server server,
         Func<CancellationToken, Task<OpenCode2Server>> servers,
         IAnalyticsCollector? analytics,
-        OpenCode2Delegations? delegations,
         ILogger logger)
     {
         InstanceId = instanceId;
@@ -93,7 +97,6 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         _context = context;
         _servers = servers;
         _analytics = analytics;
-        _delegations = delegations;
         _logger = logger;
         _agent = info.Agent;
         _model = info.Model;
@@ -554,9 +557,10 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
             _analytics.AcceptTokenEvent(usage);
         }
 
-        // Read before mapping too: the mapper forgets a tool call once it ends.
-        if (_delegations is not null && _mapper.TryReadDelegation(evt) is { } delegation)
-            _delegations.Queue(delegation);
+        // Read before mapping too: the mapper forgets a tool call once it ends. A subagent call is running work, which Fleet
+        // records with its child session.
+        if (_mapper.TryReadDelegation(evt) is { } delegation)
+            Write(_mapper.WorkEvent(delegation, called: evt.Type == "session.tool.called"));
 
         if (OpenCode2Mapper.ReadUserMessageTakenIn(evt) is { } userMessageId && !_promptsNotTakenIn.TryRemove(userMessageId, out _))
             _commandMessage?.TrySetResult(userMessageId);
@@ -595,8 +599,139 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         }
 
         foreach (var harnessEvent in _mapper.Map(evt))
-            _events.Writer.TryWrite(harnessEvent);
+            Write(harnessEvent);
     }
+
+    /// <summary>Passes an event on, keeping <see cref="_work"/> up to date with the work events among them.</summary>
+    private void Write(HarnessEvent harnessEvent)
+    {
+        if (EventTypes.IsWorkEvent(harnessEvent.Type) && WorkEvents.Read(harnessEvent) is { } report)
+        {
+            if (harnessEvent.Type == EventTypes.WorkEnded)
+            {
+                _work.TryRemove(report.WorkId, out _);
+                if (_stopping.TryRemove(report.WorkId, out _) && report.EndedReason != WorkEndedReasons.Lost)
+                    harnessEvent = WorkEvents.Ended(report, WorkEndedReasons.Cancelled, harnessEvent.SessionId, harnessEvent.FleetSessionId);
+            }
+            else
+                _work.AddOrUpdate(report.WorkId, report, (_, known) => Merge(known, report));
+        }
+
+        _events.Writer.TryWrite(harnessEvent);
+    }
+
+    private static WorkReport Merge(WorkReport known, WorkReport update) => known with
+    {
+        Title = update.Title ?? known.Title,
+        Label = update.Label ?? known.Label,
+        ToolCallId = update.ToolCallId ?? known.ToolCallId,
+        ChildHarnessSessionId = update.ChildHarnessSessionId ?? known.ChildHarnessSessionId,
+        Background = update.Background ?? known.Background,
+        CanStop = update.CanStop ?? known.CanStop,
+        CanReadOutput = update.CanReadOutput ?? known.CanReadOutput,
+    };
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// A shell is removed (<c>DELETE /api/shell/{id}</c>), which ends its process; a subagent's child session is
+    /// interrupted. V2's notice that the work ended follows.
+    /// </remarks>
+    public async Task<bool> StopWorkAsync(string workId, CancellationToken ct)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var server = await AttachedServerAsync(ct).ConfigureAwait(false);
+        _work.TryGetValue(workId, out var work);
+
+        // Marked first: V2's notice of the end can arrive before its answer to the request.
+        _stopping[workId] = 0;
+        var stopped = false;
+        try
+        {
+            if (work?.Kind == WorkKinds.Shell || (work is null && workId.StartsWith(ShellIdPrefix, StringComparison.Ordinal)))
+            {
+                stopped = await server.Client.RemoveShellAsync(_context.WorkingDirectory, workId, ct).ConfigureAwait(false);
+            }
+            else if (work?.ChildHarnessSessionId is { } child)
+            {
+                await server.Client.InterruptAsync(child, ct).ConfigureAwait(false);
+                stopped = true;
+            }
+
+            return stopped;
+        }
+        finally
+        {
+            if (!stopped)
+                _stopping.TryRemove(workId, out _);
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Only a shell has output of its own; a subagent's is its child session's conversation.</remarks>
+    public async Task<WorkOutput?> ReadWorkOutputAsync(string workId, long offset, CancellationToken ct)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_work.TryGetValue(workId, out var work) ? work.Kind != WorkKinds.Shell : !workId.StartsWith(ShellIdPrefix, StringComparison.Ordinal))
+            throw new NotSupportedException("A subagent's output is its session's conversation: open its session.");
+
+        var server = await AttachedServerAsync(ct).ConfigureAwait(false);
+        var output = await server.Client.GetShellOutputAsync(_context.WorkingDirectory, workId, offset, ct).ConfigureAwait(false);
+        return output is null ? null : new WorkOutput(output.Output ?? string.Empty, output.Cursor, output.Size, output.Truncated);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Asked of the server, which may have run the work while no Fleet session listened: the shells it runs for this
+    /// session, and the child sessions of this one it has working. A server that stopped took all of it with it.
+    /// </remarks>
+    public async Task<IReadOnlyList<WorkReport>?> GetRunningWorkAsync(CancellationToken ct)
+    {
+        if (_server is not { IsRunning: true } server)
+            return [];
+
+        try
+        {
+            var running = new List<WorkReport>();
+            var shells = await server.Client.GetRunningShellsAsync(_context.WorkingDirectory, ct).ConfigureAwait(false);
+            running.AddRange(shells
+                .Where(shell => shell is { Id: not null, Status: "running" }
+                    && shell.Metadata.ValueKind == JsonValueKind.Object
+                    && shell.Metadata.TryGetProperty("sessionID", out var owner)
+                    && owner.ValueKind == JsonValueKind.String
+                    && owner.GetString() == ResumeToken)
+                .Select(shell => _work.GetValueOrDefault(shell.Id!) ?? new WorkReport
+                {
+                    WorkId = shell.Id!,
+                    Kind = WorkKinds.Shell,
+                    Title = OpenCode2Mapper.ShellTool,
+                    Label = shell.Command,
+                    Background = true,
+                    CanStop = true,
+                    CanReadOutput = true,
+                }));
+
+            // A child is known by its session: the call that started it may be one this session object never saw.
+            var active = await server.Client.GetActiveSessionIdsAsync(ct).ConfigureAwait(false);
+            foreach (var id in active.Where(id => id != ResumeToken))
+            {
+                if ((await server.Client.GetSessionAsync(id, ct).ConfigureAwait(false))?.ParentID != ResumeToken)
+                    continue;
+                running.Add(_work.Values.FirstOrDefault(w => w.ChildHarnessSessionId == id)
+                    ?? new WorkReport { WorkId = id, Kind = WorkKinds.Subagent, ChildHarnessSessionId = id });
+            }
+
+            return running;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            // Unsure what runs: better to leave Fleet's list as it is than end work that may still be going.
+            LogBackgroundCheckFailed(_logger, InstanceId, ex);
+            return null;
+        }
+    }
+
+    /// <summary>The start of V2's shell ids (<c>sh_…</c>).</summary>
+    private const string ShellIdPrefix = "sh_";
 
     /// <inheritdoc />
     /// <remarks>
@@ -649,9 +784,13 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
     {
         // V2 keeps background work in the server process: it stopped too, and no notice will say so.
         foreach (var delegation in _mapper.BackgroundDelegationsLost())
-            _delegations?.Queue(delegation);
+            Write(WorkEvents.Ended(OpenCode2Mapper.SubagentWork(delegation), WorkEndedReasons.Lost, _context.FleetSessionId));
         foreach (var harnessEvent in _mapper.BackgroundWorkEnded())
-            _events.Writer.TryWrite(harnessEvent);
+            Write(harnessEvent);
+
+        // And whatever else was running: a subagent still working in the turn that just failed.
+        foreach (var work in _work.Values.ToList())
+            Write(WorkEvents.Ended(work, WorkEndedReasons.Lost, _context.FleetSessionId));
 
         if (_status is HarnessSessionStatus.Running)
         {

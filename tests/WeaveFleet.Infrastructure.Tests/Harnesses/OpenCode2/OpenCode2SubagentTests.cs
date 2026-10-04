@@ -195,7 +195,6 @@ public sealed class OpenCode2SubagentTests
             server,
             _ => Task.FromResult(server),
             analytics: null,
-            delegations: null,
             NullLogger.Instance);
 
         (await ReadAvailableAsync(child)).Where(e => e.Type == EventTypes.SessionStatus)

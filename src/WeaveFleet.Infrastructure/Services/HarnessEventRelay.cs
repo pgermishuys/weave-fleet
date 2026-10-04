@@ -93,6 +93,7 @@ public sealed class HarnessEventRelay : BackgroundService
     private readonly TurnFailureRecorder? _failures;
     private readonly PendingPermissionStore? _permissions;
     private readonly AgentBrowserCalls? _browserCalls;
+    private readonly RunningWorkRecorder? _work;
     private CancellationToken _stoppingToken;
 
     /// <summary>
@@ -117,9 +118,11 @@ public sealed class HarnessEventRelay : BackgroundService
         PromptQueueDispatcher? queue = null,
         TurnFailureRecorder? failures = null,
         PendingPermissionStore? permissions = null,
-        AgentBrowserCalls? browserCalls = null)
+        AgentBrowserCalls? browserCalls = null,
+        RunningWorkRecorder? work = null)
     {
         _browserCalls = browserCalls;
+        _work = work;
         _tracker = tracker;
         _broadcaster = broadcaster;
         _publisher = publisher;
@@ -338,6 +341,9 @@ public sealed class HarnessEventRelay : BackgroundService
         // Query the harness's current status and seed the tracker + broadcast if different.
         await ResyncActivityStatusAsync(instance, fleetSessionId, sessionUserId, ct).ConfigureAwait(false);
 
+        // Work the harness ran while nobody listened may have ended with it (a restart): catch up with its own list.
+        _work?.Reconcile(fleetSessionId, sessionUserId, instance, ct);
+
         var outcome = PumpOutcome.Ended;
         try
         {
@@ -345,6 +351,13 @@ public sealed class HarnessEventRelay : BackgroundService
             {
                 _logger.LogDebug("[Relay:Pump] Received event type={Type} session={Session} instance={Instance}", evt.Type, evt.SessionId, instanceId);
                 var targetFleetSessionId = evt.FleetSessionId ?? fleetSessionId;
+
+                // Running work goes to Fleet's record of it, which tells clients itself; it isn't part of the conversation.
+                if (EventTypes.IsWorkEvent(evt.Type))
+                {
+                    _work?.Observe(targetFleetSessionId, sessionUserId, evt);
+                    continue;
+                }
 
                 // An ask is shown where the user looks: a subagent's on the session it works for.
                 if (_permissions is not null && evt.Type is EventTypes.PermissionAsked or EventTypes.PermissionReplied)

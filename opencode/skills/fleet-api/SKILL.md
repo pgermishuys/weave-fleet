@@ -38,6 +38,9 @@ UTF-8, with `Content-Type: application/json`.
 | POST | `/api/sessions/{id}/fork` | A new session with a copy of its conversation up to the last finished turn, in the same folder: `{"title": "…"}`. 400 on a harness that can't fork (Claude Code, Pi) |
 | POST | `/api/sessions/{id}/new-in-folder` | A new, empty session in its folder, on the same harness and profile |
 | POST | `/api/sessions/{id}/sources` | Add a GitHub issue or pull request to it as context |
+| GET | `/api/sessions/{id}/work` | The work its agent left running (subagents, background shells) and what just finished. `all=true` for everything |
+| POST | `/api/sessions/{id}/work/{workId}/stop` | Stop one piece of it (`workId` is the item's `id`), when its `canStop` is true |
+| GET | `/api/sessions/{id}/work/{workId}/output` | A page of its output from byte `offset`, when its `canReadOutput` is true |
 | PATCH | `/api/sessions/{id}` | Rename it: `{"title": "…"}` |
 | PATCH | `/api/sessions/{id}/tags` | Replace its tags: `{"tags": ["…"]}` |
 | PATCH | `/api/sessions/{id}/project` | Move it to a project |
@@ -46,7 +49,7 @@ UTF-8, with `Content-Type: application/json`.
 ### Start a session in a folder
 
 ```bash
-curl -s -X POST "$FLEET_URL/api/sessions" -H 'content-type: application/json' -d '{
+curl -s -X POST "$FLEET_URL/api/sessions" -H 'content-type: application/json' -H "X-Fleet-Harness-Session: $FLEET_HARNESS_SESSION_ID" -d '{
   "directory": "/path/to/repo",
   "title": "Fix the flaky login test",
   "isolationStrategy": "worktree",
@@ -55,6 +58,7 @@ curl -s -X POST "$FLEET_URL/api/sessions" -H 'content-type: application/json' -d
 ```
 
 `isolationStrategy` is `existing` (work in the folder as it is), `worktree` (a new git worktree) or `clone`.
+The `X-Fleet-Harness-Session` header tells Fleet this session started the new one; keep it.
 `branch`, `projectId` and `tags` are optional. If you have the `fleet_message` tool, leave out `initialPrompt`
 (Fleet refuses it from agents then) and give the new session its task with the tool.
 
@@ -63,7 +67,7 @@ curl -s -X POST "$FLEET_URL/api/sessions" -H 'content-type: application/json' -d
 The source brings the issue or pull request in as context. Use `github-issue` or `github-pull-request`:
 
 ```bash
-curl -s -X POST "$FLEET_URL/api/sessions" -H 'content-type: application/json' -d '{
+curl -s -X POST "$FLEET_URL/api/sessions" -H 'content-type: application/json' -H "X-Fleet-Harness-Session: $FLEET_HARNESS_SESSION_ID" -d '{
   "title": "Review PR #42",
   "initialPrompt": "Review this pull request.",
   "source": {

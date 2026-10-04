@@ -9,6 +9,7 @@ using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Data;
+using WeaveFleet.Infrastructure.Data.Repositories;
 
 namespace WeaveFleet.Infrastructure.Events;
 
@@ -112,7 +113,7 @@ public sealed class SessionSnapshotBuilder(
 
         var delegationRows = await connection.QueryAsync(
             """
-            SELECT d.id, d.parent_tool_call_id, d.child_session_id, d.title, d.status, d.created_at
+            SELECT d.*
             FROM delegations d
             INNER JOIN sessions s ON s.id = d.parent_session_id
             WHERE d.parent_session_id = @SessionId AND s.user_id = @UserId
@@ -123,7 +124,7 @@ public sealed class SessionSnapshotBuilder(
                 cmd.AddParameter("SessionId", sessionId);
                 cmd.AddParameter("UserId", userContext.UserId);
             },
-            ReadDelegationRow,
+            DelegationRepository.ReadDelegation,
             transaction).ConfigureAwait(false);
 
         var lastEventId = await connection.ExecuteScalarAsync<long?>(
@@ -151,7 +152,7 @@ public sealed class SessionSnapshotBuilder(
                 Status = session.Status,
             },
             Messages = messageRows.Select(ToMessageLifecyclePayload).ToArray(),
-            Delegations = delegationRows.Select(row => new SessionSnapshotDelegation
+            Delegations = delegationRows.Where(row => row.Kind == WorkKinds.Subagent).Select(row => new SessionSnapshotDelegation
             {
                 DelegationId = row.Id,
                 ParentToolCallId = row.ParentToolCallId,
@@ -166,6 +167,7 @@ public sealed class SessionSnapshotBuilder(
                     ? true
                     : null,
             }).ToArray(),
+            RunningWork = DelegationService.RunningWorkOf(delegationRows),
             ActivityStatus = NormalizeActivityStatus(activityTracker.GetEffectiveActivityStatus(sessionId)),
             LastEventId = lastEventId,
             HasMore = hasMore,
@@ -401,13 +403,6 @@ public sealed class SessionSnapshotBuilder(
         reader.GetNullableString(reader.GetOrdinal("agent_name")),
         reader.GetNullableString(reader.GetOrdinal("model_id")));
 
-    private static DelegationRow ReadDelegationRow(System.Data.Common.DbDataReader reader) => new(
-        reader.GetString(reader.GetOrdinal("id")),
-        reader.GetNullableString(reader.GetOrdinal("parent_tool_call_id")),
-        reader.GetNullableString(reader.GetOrdinal("child_session_id")),
-        reader.GetString(reader.GetOrdinal("title")),
-        reader.GetString(reader.GetOrdinal("status")),
-        reader.GetString(reader.GetOrdinal("created_at")));
 
     private sealed record SessionRow(string Id, string Title, string Status);
 
@@ -421,11 +416,4 @@ public sealed class SessionSnapshotBuilder(
         string? AgentName,
         string? ModelId);
 
-    private sealed record DelegationRow(
-        string Id,
-        string? ParentToolCallId,
-        string? ChildSessionId,
-        string Title,
-        string Status,
-        string CreatedAt);
 }

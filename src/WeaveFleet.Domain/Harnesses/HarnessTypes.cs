@@ -93,6 +93,19 @@ public sealed record HarnessCapabilities
     /// harness has no way to reach Fleet's tools, and Settings → Browser says so.
     /// </summary>
     public bool SupportsAgentBrowser { get; init; }
+
+    /// <summary>
+    /// The harness reports work that carries on after the call that started it returned (background shells, background
+    /// subagents) as <see cref="EventTypes.WorkStarted"/> / <see cref="EventTypes.WorkEnded"/> events, so Fleet can show
+    /// it while it runs.
+    /// </summary>
+    public bool ReportsBackgroundWork { get; init; }
+
+    /// <summary>A subagent runs in a child session of its own, which Fleet keeps as a hidden session under the parent.</summary>
+    public bool SupportsChildSessions { get; init; }
+
+    /// <summary>A child session can be opened and prompted like any session once its subagent has finished.</summary>
+    public bool ChildSessionsResumable { get; init; }
 }
 
 /// <summary>What a shell command the user ran from the composer looks like in the conversation.</summary>

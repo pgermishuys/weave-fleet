@@ -53,6 +53,22 @@ internal sealed record OpenCode2ShellInfo
 {
     public string? Id { get; init; }
     public string? Status { get; init; }
+    public string? Command { get; init; }
+
+    /// <summary>Tags the caller gave the shell; V2's shell tool sets <c>sessionID</c> to the session that ran it.</summary>
+    public JsonElement Metadata { get; init; }
+}
+
+/// <summary>
+/// A page of a shell's output (<c>GET /api/shell/{id}/output</c>): the text, the byte cursor after it, and how many
+/// bytes there are so far. <c>Truncated</c> says V2 kept only the end of a long output.
+/// </summary>
+internal sealed record OpenCode2ShellOutputPage
+{
+    public string? Output { get; init; }
+    public long Cursor { get; init; }
+    public long Size { get; init; }
+    public bool Truncated { get; init; }
 }
 
 /// <summary><c>POST /api/session</c>.</summary>
@@ -808,6 +824,7 @@ internal sealed record OpenCode2ErrorBody
 [JsonSerializable(typeof(OpenCode2Envelope<List<OpenCode2CommandInfo>>))]
 [JsonSerializable(typeof(OpenCode2Envelope<OpenCode2GenerateResult>))]
 [JsonSerializable(typeof(OpenCode2Envelope<List<OpenCode2ShellInfo>>))]
+[JsonSerializable(typeof(OpenCode2Envelope<OpenCode2ShellOutputPage>))]
 [JsonSerializable(typeof(List<OpenCode2Location>))]
 [JsonSerializable(typeof(List<OpenCode2ConfigSource>))]
 [JsonSerializable(typeof(OpenCode2SwitchAgentRequest))]

@@ -194,7 +194,23 @@ public sealed record GetSessionResponse(
     SessionOriginDto? Origin,
     SessionActionCapabilities Capabilities,
     string? HarnessProfileId = null,
-    string? HarnessProfileName = null);
+    string? HarnessProfileName = null)
+{
+    /// <summary>The session this one is a fork of, or null.</summary>
+    public string? ForkedFromSessionId { get; init; }
+
+    /// <summary>The session whose agent started this one ("Started by …"), or null.</summary>
+    public string? SpawnedBySessionId { get; init; }
+
+    /// <summary>How the session came to be: <c>fork</c>, <c>api</c>, <c>message</c>, <c>automation</c> or <c>workflow</c>; null when the user started it.</summary>
+    public string? SpawnKind { get; init; }
+}
+
+/// <summary>
+/// A page of running work's output: the text from the offset asked for, <c>nextOffset</c> to ask for next, and the
+/// <c>size</c> so far (bytes). More is there while <c>nextOffset</c> &lt; <c>size</c>, or the work still runs.
+/// </summary>
+public sealed record WorkOutputResponse(string Output, long NextOffset, long Size, bool Truncated);
 
 public sealed record CreateSessionApiResponse(string InstanceId, string WorkspaceId, Session Session, string? Branch);
 

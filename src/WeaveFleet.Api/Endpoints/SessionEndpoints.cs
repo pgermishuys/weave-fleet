@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using WeaveFleet.Api;
 using WeaveFleet.Application.Browser;
+using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Progress;
 using WeaveFleet.Application.Services;
@@ -32,6 +33,7 @@ public static class SessionEndpoints
             SessionActivityTracker activityTracker,
             SessionCapabilitiesResolver capabilitiesResolver,
             SessionProgressReader progressReader,
+            IDelegationRepository delegationRepository,
             CancellationToken ct,
             int limit = 100,
             int offset = 0,
@@ -81,9 +83,13 @@ public static class SessionEndpoints
                     var progressBySessionId = await progressReader.GetSummariesAsync(
                         sessions.Select(session => session.Id).ToArray(), ct);
 
+                    var runningWorkBySessionId = await delegationRepository.CountRunningAsync(
+                        sessions.Select(session => session.Id).ToArray());
+
                     return Results.Ok(sessions.Select(session => ToListResponse(session, parentIdsWithBusyChildren, projectNamesById, originsBySessionId, activityTracker, capabilitiesResolver, workspacesById) with
                     {
                         Progress = progressBySessionId.GetValueOrDefault(session.Id),
+                        RunningWorkCount = runningWorkBySessionId.GetValueOrDefault(session.Id),
                     }).ToList());
                 },
                 error => Task.FromResult(Results.Problem(error.Description) as IResult));
@@ -137,7 +143,12 @@ public static class SessionEndpoints
                         Origin: primaryOrigin is not null ? ToOriginDto(primaryOrigin) : null,
                         Capabilities: capabilitiesResolver.Resolve(session),
                         HarnessProfileId: session.HarnessProfileId,
-                        HarnessProfileName: profile?.Name));
+                        HarnessProfileName: profile?.Name)
+                    {
+                        ForkedFromSessionId = session.ForkedFromSessionId,
+                        SpawnedBySessionId = session.SpawnedBySessionId,
+                        SpawnKind = session.SpawnKind,
+                    });
                 },
                 error => Task.FromResult(error.ToSessionApiResult()));
         })
@@ -182,8 +193,56 @@ public static class SessionEndpoints
         .Produces(404)
         .WithName("GetSessionDelegations");
 
+        // GET /api/sessions/{id}/work?all= — the work the session's agent left running, and what ended in the last few
+        // minutes with its result; everything it ever ran with all=true.
+        group.MapGet("/{id}/work", async (
+            string id,
+            SessionService sessionService,
+            DelegationService work,
+            bool all = false) =>
+        {
+            var sessionResult = await sessionService.GetSessionAsync(id);
+            return await sessionResult.Match<Task<IResult>>(
+                async _ => Results.Ok(await work.GetWorkAsync(id, all)),
+                error => Task.FromResult(error.ToSessionApiResult()));
+        })
+        .Produces<IReadOnlyList<WeaveFleet.Domain.Events.RunningWorkItem>>(200)
+        .Produces(404)
+        .WithName("GetSessionWork");
+
+        // POST /api/sessions/{id}/work/{workId}/stop — stops one piece of running work; workId is the item's id.
+        group.MapPost("/{id}/work/{workId}/stop", async (string id, string workId, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        {
+            var result = await orchestrator.StopWorkAsync(id, workId, ct);
+            return result.Match(Results.Ok, error => error.ToSessionApiResult());
+        })
+        .Produces<WeaveFleet.Domain.Events.RunningWorkItem>(200)
+        .Produces(400)
+        .Produces(404)
+        .Produces(409)
+        .WithName("StopSessionWork");
+
+        // GET /api/sessions/{id}/work/{workId}/output?offset= — a page of its output from byte offset.
+        group.MapGet("/{id}/work/{workId}/output", async (string id, string workId, SessionOrchestrator orchestrator, CancellationToken ct, long offset = 0) =>
+        {
+            var result = await orchestrator.ReadWorkOutputAsync(id, workId, offset, ct);
+            return result.Match(
+                output => Results.Ok(new WorkOutputResponse(output.Text, output.NextOffset, output.Size, output.Truncated)),
+                error => error.ToSessionApiResult());
+        })
+        .Produces<WorkOutputResponse>(200)
+        .Produces(400)
+        .Produces(404)
+        .Produces(409)
+        .WithName("GetSessionWorkOutput");
+
         // POST /api/sessions — create session via orchestrator
-        group.MapPost("/", async (CreateSessionApiRequest req, SessionOrchestrator orchestrator, HttpContext http, SessionMessagesFeature sessionMessages) =>
+        group.MapPost("/", async (
+            CreateSessionApiRequest req,
+            SessionOrchestrator orchestrator,
+            HttpContext http,
+            SessionMessagesFeature sessionMessages,
+            IUserContext userContext) =>
         {
             // With messages on, an agent gives a new session its task through fleet_message, which says who sent it.
             if (!string.IsNullOrWhiteSpace(req.InitialPrompt) && http.IsAgentRequest() && await sessionMessages.IsEnabledAsync())
@@ -214,6 +273,7 @@ public static class SessionEndpoints
                 Agent = req.Agent,
                 ProviderId = req.Model?.ProviderId,
                 ModelId = req.Model?.ModelId,
+                SpawnedBySessionId = await CallingSessionAsync(http, userContext),
             });
             return result.Match(
                 r => Results.Ok(new CreateSessionApiResponse(
@@ -831,6 +891,26 @@ public static class SessionEndpoints
     }
 
     /// <summary>
+    /// The Fleet session an agent's request came from: its process's bridge token (the <c>/agent/{token}</c> prefix) and
+    /// the harness session it names in <see cref="AgentRequests.HarnessSessionHeader"/>, which must be one that process
+    /// runs for this user. Null for anyone else's request, or one that names no such session.
+    /// </summary>
+    /// <remarks>The resolvers are asked for only then: a harness's resolver needs its runtime, which a Fleet running
+    /// another harness (the test harness) doesn't have.</remarks>
+    internal static async Task<string?> CallingSessionAsync(HttpContext http, IUserContext userContext)
+    {
+        if (http.AgentBridgeToken() is not { } bridgeToken
+            || http.Request.Headers[AgentRequests.HarnessSessionHeader].ToString().Trim() is not { Length: > 0 } harnessSessionId)
+        {
+            return null;
+        }
+
+        var callers = http.RequestServices.GetServices<IHarnessCanvasCallerResolver>();
+        var caller = await callers.ResolveAsync(bridgeToken, harnessSessionId, http.RequestAborted);
+        return caller is not null && string.Equals(caller.UserId, userContext.UserId, StringComparison.Ordinal) ? caller.FleetSessionId : null;
+    }
+
+    /// <summary>
     /// Maps a domain <see cref="Session"/> to a <see cref="SessionListResponse"/> DTO.
     /// Workspace fields (branch, isolation, source directory) come from <paramref name="workspacesById"/> when
     /// given; instance details are still placeholders.
@@ -896,6 +976,9 @@ public static class SessionEndpoints
             SelectedAgent = s.SelectedAgent,
             WorkflowRunId = s.WorkflowRunId,
             SelectedModel = SessionModelChoiceDto.Of(s.SelectedProviderId, s.SelectedModelId),
+            ForkedFromSessionId = s.ForkedFromSessionId,
+            SpawnedBySessionId = s.SpawnedBySessionId,
+            SpawnKind = s.SpawnKind,
         };
     }
 
@@ -1102,6 +1185,9 @@ public static class SessionEndpoints
             SelectedAgent = s.SelectedAgent,
             WorkflowRunId = s.WorkflowRunId,
             SelectedModel = SessionModelChoiceDto.Of(s.SelectedProviderId, s.SelectedModelId),
+            ForkedFromSessionId = s.ForkedFromSessionId,
+            SpawnedBySessionId = s.SpawnedBySessionId,
+            SpawnKind = s.SpawnKind,
         };
     }
 

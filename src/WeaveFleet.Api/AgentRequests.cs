@@ -16,8 +16,18 @@ public static class AgentRequests
 {
     private static readonly object Key = new();
 
+    /// <summary>
+    /// The header an agent's call names its own session with: the harness's id for it. Fleet's plugins put it in the
+    /// agent's shell as <c>FLEET_HARNESS_SESSION_ID</c>, and the Fleet API skill sends it when starting a session, so
+    /// the new session knows which one started it.
+    /// </summary>
+    public const string HarnessSessionHeader = "X-Fleet-Harness-Session";
+
     /// <summary>Whether this request came from an agent process through its <c>/agent/{token}</c> prefix.</summary>
     public static bool IsAgentRequest(this HttpContext http) => http.Items.ContainsKey(Key);
+
+    /// <summary>The bridge token of the agent process this request came from, or null when it isn't an agent's.</summary>
+    public static string? AgentBridgeToken(this HttpContext http) => http.Items.TryGetValue(Key, out var token) ? token as string : null;
 
     /// <summary>Recognizes and strips the prefix. Must run before routing.</summary>
     public static IApplicationBuilder UseAgentRequests(this IApplicationBuilder app) => app.Use(async (context, next) =>
@@ -41,7 +51,7 @@ public static class AgentRequests
             return;
         }
 
-        context.Items[Key] = true;
+        context.Items[Key] = token;
         context.Request.PathBase = context.Request.PathBase.Add($"{SessionMessages.AgentPathPrefix}/{token}");
         context.Request.Path = end < 0 ? PathString.Empty : new PathString(value[end..]);
         await next();

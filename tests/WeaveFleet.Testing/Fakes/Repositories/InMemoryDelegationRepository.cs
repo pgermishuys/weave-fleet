@@ -41,6 +41,8 @@ public sealed class InMemoryDelegationRepository : IDelegationRepository
 
     public Task InsertAsync(Delegation delegation)
     {
+        if (string.IsNullOrEmpty(delegation.WorkId))
+            delegation.WorkId = delegation.ParentToolCallId ?? delegation.Id;
         _store[delegation.Id] = delegation;
         InsertedDelegations.Add(delegation);
         return Task.CompletedTask;
@@ -68,6 +70,43 @@ public sealed class InMemoryDelegationRepository : IDelegationRepository
         return Task.FromResult(_store.Values.FirstOrDefault(d => d.ParentSessionId == parentSessionId && d.ParentToolCallId == toolCallId));
     }
 
+    public Task<Delegation?> GetByWorkIdAsync(string parentSessionId, string workId)
+        => Task.FromResult(_store.Values.LastOrDefault(d => d.ParentSessionId == parentSessionId && d.WorkId == workId));
+
+    public Task<IReadOnlyList<Delegation>> ListRunningAsync()
+    {
+        IReadOnlyList<Delegation> result = [.. _store.Values.Where(d => d.IsRunning).OrderBy(d => d.CreatedAt, StringComparer.Ordinal)];
+        return Task.FromResult(result);
+    }
+
+    public Task<IReadOnlyDictionary<string, int>> CountRunningAsync(IReadOnlyCollection<string> parentSessionIds)
+    {
+        IReadOnlyDictionary<string, int> result = _store.Values
+            .Where(d => d.IsRunning && parentSessionIds.Contains(d.ParentSessionId))
+            .GroupBy(d => d.ParentSessionId, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
+        return Task.FromResult(result);
+    }
+
+    public Task UpdateWorkAsync(Delegation delegation)
+    {
+        _store[delegation.Id] = delegation;
+        return Task.CompletedTask;
+    }
+
+    public Task EndAsync(string id, string status, string endedReason, string? detail, string endedAt)
+    {
+        if (_store.TryGetValue(id, out var delegation))
+        {
+            delegation.Status = status;
+            delegation.EndedReason = endedReason;
+            delegation.Detail = detail ?? delegation.Detail;
+            delegation.UpdatedAt = endedAt;
+            delegation.CompletedAt = endedAt;
+        }
+        return Task.CompletedTask;
+    }
+
     public Task UpdateStatusAsync(string id, string status, string updatedAt, string? completedAt)
     {
         UpdateStatusCalls.Add((id, status, updatedAt, completedAt));
@@ -76,6 +115,7 @@ public sealed class InMemoryDelegationRepository : IDelegationRepository
             delegation.Status = status;
             delegation.UpdatedAt = updatedAt;
             delegation.CompletedAt = completedAt;
+            delegation.EndedReason = status is "completed" or "error" or "cancelled" ? delegation.EndedReason ?? status : null;
         }
         return Task.CompletedTask;
     }
@@ -89,6 +129,7 @@ public sealed class InMemoryDelegationRepository : IDelegationRepository
         foreach (var delegation in unfinished)
         {
             delegation.Status = "cancelled";
+            delegation.EndedReason = "lost";
             delegation.UpdatedAt = completedAt;
             delegation.CompletedAt = completedAt;
         }

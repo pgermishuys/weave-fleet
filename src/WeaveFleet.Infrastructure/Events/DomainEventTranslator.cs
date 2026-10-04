@@ -77,6 +77,9 @@ internal sealed class DomainEventTranslator
             // error/server.* are transport/control signals and are intentionally not surfaced as domain events.
             EventTypes.Error or EventTypes.ServerHeartbeat or EventTypes.ServerConnected => null,
 
+            // work.* events go to Fleet's running-work record, which tells clients itself.
+            _ when EventTypes.IsWorkEvent(evt.Type) => null,
+
             // permission.* events are UI interaction signals rather than domain events.
             _ when EventTypes.IsPermissionEvent(evt.Type) => null,
 

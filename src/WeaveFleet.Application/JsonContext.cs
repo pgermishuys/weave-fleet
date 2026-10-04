@@ -64,6 +64,9 @@ internal sealed record SessionCreatedOutboxPayload
     public string? ProjectId { get; init; }
     public string? ParentSessionId { get; init; }
     public bool? IsHidden { get; init; }
+    public string? ForkedFromSessionId { get; init; }
+    public string? SpawnedBySessionId { get; init; }
+    public string? SpawnKind { get; init; }
 }
 
 internal sealed record SessionArchivedOutboxPayload(string SessionId, string ArchivedAt);
@@ -112,6 +115,7 @@ internal sealed record QuickChatSourceInput;
 [JsonSerializable(typeof(MessagePart[]))]
 [JsonSerializable(typeof(List<MessagePart>))]
 [JsonSerializable(typeof(DelegationEventDto))]
+[JsonSerializable(typeof(WeaveFleet.Domain.Events.RunningWorkItem))]
 [JsonSerializable(typeof(CommittedMessage))]
 [JsonSerializable(typeof(SessionQueueChanged))]
 [JsonSerializable(typeof(CommittedUserPromptMessage))]

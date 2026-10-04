@@ -132,6 +132,31 @@ public interface IHarnessSession : IAsyncDisposable
     Task<IReadOnlyList<Events.TodoEntry>?> GetTodosAsync(CancellationToken ct)
         => Task.FromResult<IReadOnlyList<Events.TodoEntry>?>(null);
 
+    /// <summary>
+    /// Stops one piece of running work the session reported (<see cref="WorkReport.WorkId"/>), leaving the session and
+    /// its other work running. Returns false when the harness doesn't know that work (it ended already). The harness
+    /// reports the end as a <see cref="EventTypes.WorkEnded"/> event. Throws <see cref="NotSupportedException"/> when
+    /// the harness can't stop work on its own; such work is reported without <see cref="WorkReport.CanStop"/>.
+    /// </summary>
+    Task<bool> StopWorkAsync(string workId, CancellationToken ct)
+        => throw new NotSupportedException($"{HarnessType} sessions can't stop running work on its own.");
+
+    /// <summary>
+    /// Reads running work's output from byte <paramref name="offset"/>: a page, and the offset to read from next. Null
+    /// when the harness doesn't know that work. Throws <see cref="NotSupportedException"/> when the harness can't read
+    /// output; such work is reported without <see cref="WorkReport.CanReadOutput"/>.
+    /// </summary>
+    Task<WorkOutput?> ReadWorkOutputAsync(string workId, long offset, CancellationToken ct)
+        => throw new NotSupportedException($"{HarnessType} sessions can't read running work's output.");
+
+    /// <summary>
+    /// The work the harness itself says is running for this session now, so Fleet can catch up after it or the harness
+    /// restarted: work Fleet still has running that isn't here ended with it (<see cref="WorkEndedReasons.Lost"/>).
+    /// Null when the harness can't say.
+    /// </summary>
+    Task<IReadOnlyList<WorkReport>?> GetRunningWorkAsync(CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<WorkReport>?>(null);
+
     /// <summary>List available agents for this instance.</summary>
     Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct);
 

@@ -121,6 +121,5 @@ public sealed class OpenCode2CanvasCallerResolverTests
             server,
             _ => Task.FromResult(server),
             analytics: null,
-            delegations: null,
             NullLogger<OpenCode2HarnessSession>.Instance);
 }

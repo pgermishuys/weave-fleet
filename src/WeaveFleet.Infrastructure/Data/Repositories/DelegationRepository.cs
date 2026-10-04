@@ -28,8 +28,11 @@ public sealed class DelegationRepository : IDelegationRepository
     {
         await connection.ExecuteNonQueryAsync(
             """
-            INSERT INTO delegations (id, parent_session_id, child_session_id, parent_tool_call_id, title, status, created_at, updated_at, completed_at)
-            SELECT @Id, @ParentSessionId, @ChildSessionId, @ParentToolCallId, @Title, @Status, @CreatedAt, @UpdatedAt, @CompletedAt
+            INSERT INTO delegations (
+                id, parent_session_id, child_session_id, parent_tool_call_id, title, status, created_at, updated_at, completed_at,
+                kind, work_id, label, background, can_stop, can_read_output, ended_reason, detail)
+            SELECT @Id, @ParentSessionId, @ChildSessionId, @ParentToolCallId, @Title, @Status, @CreatedAt, @UpdatedAt, @CompletedAt,
+                @Kind, @WorkId, @Label, @Background, @CanStop, @CanReadOutput, @EndedReason, @Detail
             FROM sessions parent_session
             WHERE parent_session.id = @ParentSessionId
               AND parent_session.user_id = @UserId
@@ -50,6 +53,15 @@ public sealed class DelegationRepository : IDelegationRepository
                 cmd.AddParameter("CreatedAt", delegation.CreatedAt);
                 cmd.AddParameter("UpdatedAt", delegation.UpdatedAt);
                 cmd.AddParameter("CompletedAt", delegation.CompletedAt);
+                cmd.AddParameter("Kind", delegation.Kind);
+                // A subagent is known by the call that started it, unless the harness gave it a handle of its own.
+                cmd.AddParameter("WorkId", string.IsNullOrEmpty(delegation.WorkId) ? delegation.ParentToolCallId ?? delegation.Id : delegation.WorkId);
+                cmd.AddParameter("Label", delegation.Label);
+                cmd.AddParameter("Background", delegation.Background ? 1 : 0);
+                cmd.AddParameter("CanStop", delegation.CanStop ? 1 : 0);
+                cmd.AddParameter("CanReadOutput", delegation.CanReadOutput ? 1 : 0);
+                cmd.AddParameter("EndedReason", delegation.EndedReason);
+                cmd.AddParameter("Detail", delegation.Detail);
                 cmd.AddParameter("UserId", _userContext.UserId);
             },
             transaction);
@@ -133,6 +145,138 @@ public sealed class DelegationRepository : IDelegationRepository
             ReadDelegation);
     }
 
+    public async Task<Delegation?> GetByWorkIdAsync(string parentSessionId, string workId)
+    {
+        using var conn = _connectionFactory.CreateConnection();
+        return await conn.QueryFirstOrDefaultAsync(
+            """
+            SELECT d.*
+            FROM delegations d
+            INNER JOIN sessions parent_session ON parent_session.id = d.parent_session_id
+            WHERE d.parent_session_id = @ParentSessionId
+              AND d.work_id = @WorkId
+              AND parent_session.user_id = @UserId
+            ORDER BY d.created_at DESC
+            LIMIT 1
+            """,
+            cmd =>
+            {
+                cmd.AddParameter("ParentSessionId", parentSessionId);
+                cmd.AddParameter("WorkId", workId);
+                cmd.AddParameter("UserId", _userContext.UserId);
+            },
+            ReadDelegation);
+    }
+
+    public async Task<IReadOnlyList<Delegation>> ListRunningAsync()
+    {
+        using var conn = _connectionFactory.CreateConnection();
+        return await conn.QueryAsync(
+            """
+            SELECT d.*
+            FROM delegations d
+            INNER JOIN sessions parent_session ON parent_session.id = d.parent_session_id
+            WHERE d.status IN ('pending', 'running') AND parent_session.user_id = @UserId
+            ORDER BY d.created_at ASC, d.id ASC
+            """,
+            cmd => cmd.AddParameter("UserId", _userContext.UserId),
+            ReadDelegation);
+    }
+
+    public async Task<IReadOnlyDictionary<string, int>> CountRunningAsync(IReadOnlyCollection<string> parentSessionIds)
+    {
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        if (parentSessionIds.Count == 0)
+            return counts;
+
+        using var conn = _connectionFactory.CreateConnection();
+        var rows = await conn.QueryAsync(
+            """
+            SELECT d.parent_session_id, COUNT(*) AS running
+            FROM delegations d
+            INNER JOIN sessions parent_session ON parent_session.id = d.parent_session_id
+            WHERE d.status IN ('pending', 'running') AND parent_session.user_id = @UserId
+            GROUP BY d.parent_session_id
+            """,
+            cmd => cmd.AddParameter("UserId", _userContext.UserId),
+            r => (SessionId: r.GetString(0), Running: (int)r.GetInt64(1)));
+
+        // One query for the user's running work: there's little of it, and a list of ids would need one parameter each.
+        var wanted = parentSessionIds as IReadOnlySet<string> ?? parentSessionIds.ToHashSet(StringComparer.Ordinal);
+        foreach (var (sessionId, running) in rows)
+        {
+            if (wanted.Contains(sessionId))
+                counts[sessionId] = running;
+        }
+
+        return counts;
+    }
+
+    public async Task UpdateWorkAsync(Delegation delegation)
+    {
+        using var conn = _connectionFactory.CreateConnection();
+        await conn.ExecuteNonQueryAsync(
+            """
+            UPDATE delegations
+            SET kind = @Kind,
+                title = @Title,
+                label = @Label,
+                parent_tool_call_id = @ParentToolCallId,
+                background = @Background,
+                can_stop = @CanStop,
+                can_read_output = @CanReadOutput,
+                detail = @Detail,
+                updated_at = @UpdatedAt
+            WHERE id = @Id
+              AND EXISTS (
+                  SELECT 1
+                  FROM sessions parent_session
+                  WHERE parent_session.id = delegations.parent_session_id AND parent_session.user_id = @UserId)
+            """,
+            cmd =>
+            {
+                cmd.AddParameter("Id", delegation.Id);
+                cmd.AddParameter("Kind", delegation.Kind);
+                cmd.AddParameter("Title", delegation.Title);
+                cmd.AddParameter("Label", delegation.Label);
+                cmd.AddParameter("ParentToolCallId", delegation.ParentToolCallId);
+                cmd.AddParameter("Background", delegation.Background ? 1 : 0);
+                cmd.AddParameter("CanStop", delegation.CanStop ? 1 : 0);
+                cmd.AddParameter("CanReadOutput", delegation.CanReadOutput ? 1 : 0);
+                cmd.AddParameter("Detail", delegation.Detail);
+                cmd.AddParameter("UpdatedAt", delegation.UpdatedAt);
+                cmd.AddParameter("UserId", _userContext.UserId);
+            });
+    }
+
+    public async Task EndAsync(string id, string status, string endedReason, string? detail, string endedAt)
+    {
+        using var conn = _connectionFactory.CreateConnection();
+        await conn.ExecuteNonQueryAsync(
+            """
+            UPDATE delegations
+            SET status = @Status,
+                ended_reason = @EndedReason,
+                detail = COALESCE(@Detail, detail),
+                updated_at = @EndedAt,
+                completed_at = @EndedAt
+            WHERE id = @Id
+              AND EXISTS (
+                  SELECT 1
+                  FROM sessions parent_session
+                  WHERE parent_session.id = delegations.parent_session_id AND parent_session.user_id = @UserId)
+            """,
+            cmd =>
+            {
+                cmd.AddParameter("Id", id);
+                cmd.AddParameter("Status", status);
+                cmd.AddParameter("EndedReason", endedReason);
+                cmd.AddParameter("Detail", detail);
+                cmd.AddParameter("EndedAt", endedAt);
+                cmd.AddParameter("UserId", _userContext.UserId);
+            });
+    }
+
     public async Task<int> CancelAllUnfinishedAsync(string completedAt)
     {
         // System-level recovery operation — no user filter
@@ -141,6 +285,7 @@ public sealed class DelegationRepository : IDelegationRepository
             """
             UPDATE delegations
             SET status = 'cancelled',
+                ended_reason = 'lost',
                 updated_at = @CompletedAt,
                 completed_at = @CompletedAt
             WHERE status IN ('pending', 'running')
@@ -161,7 +306,8 @@ public sealed class DelegationRepository : IDelegationRepository
             UPDATE delegations
             SET status = @Status,
                 updated_at = @UpdatedAt,
-                completed_at = @CompletedAt
+                completed_at = @CompletedAt,
+                ended_reason = CASE WHEN @Status IN ('completed', 'error', 'cancelled') THEN COALESCE(ended_reason, @Status) END
             WHERE id = @Id
               AND EXISTS (
                   SELECT 1
@@ -239,7 +385,7 @@ public sealed class DelegationRepository : IDelegationRepository
             transaction);
     }
 
-    private static Delegation ReadDelegation(DbDataReader r) => new()
+    internal static Delegation ReadDelegation(DbDataReader r) => new()
     {
         Id = r.GetString(r.GetOrdinal("id")),
         ParentSessionId = r.GetString(r.GetOrdinal("parent_session_id")),
@@ -250,5 +396,13 @@ public sealed class DelegationRepository : IDelegationRepository
         CreatedAt = r.GetString(r.GetOrdinal("created_at")),
         UpdatedAt = r.GetString(r.GetOrdinal("updated_at")),
         CompletedAt = r.GetNullableString(r.GetOrdinal("completed_at")),
+        Kind = r.GetString(r.GetOrdinal("kind")),
+        WorkId = r.GetNullableString(r.GetOrdinal("work_id")) ?? string.Empty,
+        Label = r.GetNullableString(r.GetOrdinal("label")),
+        Background = r.GetInt64(r.GetOrdinal("background")) != 0,
+        CanStop = r.GetInt64(r.GetOrdinal("can_stop")) != 0,
+        CanReadOutput = r.GetInt64(r.GetOrdinal("can_read_output")) != 0,
+        EndedReason = r.GetNullableString(r.GetOrdinal("ended_reason")),
+        Detail = r.GetNullableString(r.GetOrdinal("detail")),
     };
 }

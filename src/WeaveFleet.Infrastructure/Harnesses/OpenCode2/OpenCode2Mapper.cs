@@ -25,6 +25,9 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
     /// <summary>V2's tool that runs an agent in a child session (OpenCode's is <c>task</c>).</summary>
     internal const string SubagentTool = "subagent";
 
+    /// <summary>V2's shell tool; with <c>background: true</c> its call returns at once with the shell's id.</summary>
+    internal const string ShellTool = "shell";
+
     /// <summary>
     /// The role of a message the harness put in the conversation itself. Not <c>user</c>: Fleet shows the user's own
     /// messages from its send, and drops a harness's echo of them. Not <c>assistant</c> either: it's nobody's turn.
@@ -268,6 +271,11 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
                 Metadata = call.Metadata,
             }))
             .ToList();
+
+        // The shells went with the server; the subagents end with their delegations (BackgroundDelegationsLost).
+        events.AddRange(_backgroundCalls
+            .Where(entry => entry.Value.Name == ShellTool)
+            .Select(entry => WorkEvents.Ended(ShellWork(entry.Key, entry.Value.CallId, entry.Value.Input), WorkEndedReasons.Lost, fleetSessionId)));
         _backgroundCalls.Clear();
         return events;
     }
@@ -282,11 +290,64 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
             ? ReadString(metadata, "shellID") ?? ReadString(metadata, "childID")
             : null;
 
-    /// <summary>Remembers a call whose work went to the background, until its notice or the server stopping ends it.</summary>
-    private void TrackBackground(string messageId, string callId, string name, JsonElement? input, JsonElement? metadata)
+    /// <summary>
+    /// Remembers a call whose work went to the background, until its notice or the server stopping ends it. A shell's
+    /// is running work of its own (<see cref="EventTypes.WorkStarted"/>), which Fleet can stop and read; a subagent's is
+    /// reported with its delegation (<see cref="TryReadDelegation"/>).
+    /// </summary>
+    /// <returns>The <see cref="EventTypes.WorkStarted"/> event for a shell newly in the background, or null.</returns>
+    private HarnessEvent? TrackBackground(string messageId, string callId, string name, JsonElement? input, JsonElement? metadata)
     {
-        if (BackgroundHandle(metadata ?? default) is { } handle)
-            _backgroundCalls[handle] = new BackgroundCall(messageId, callId, name, input, metadata);
+        if (BackgroundHandle(metadata ?? default) is not { } handle)
+            return null;
+
+        var known = _backgroundCalls.ContainsKey(handle);
+        _backgroundCalls[handle] = new BackgroundCall(messageId, callId, name, input, metadata);
+        return !known && name == ShellTool && ReadString(metadata!.Value, "shellID") is { } shellId
+            ? WorkEvents.Started(ShellWork(shellId, callId, input), fleetSessionId)
+            : null;
+    }
+
+    /// <summary>A backgrounded shell call as running work: the shell's id is its handle, and V2 can stop it and page its output.</summary>
+    internal static WorkReport ShellWork(string shellId, string? callId, JsonElement? input) => new()
+    {
+        WorkId = shellId,
+        Kind = WorkKinds.Shell,
+        Title = ShellTool,
+        Label = input is { ValueKind: JsonValueKind.Object } i ? ReadString(i, "command") ?? ReadString(i, "description") : null,
+        ToolCallId = callId,
+        Background = true,
+        CanStop = true,
+        CanReadOutput = true,
+    };
+
+    /// <summary>
+    /// A subagent call as running work. Its handle is the call; once V2 made its child session, Fleet can stop it by
+    /// interrupting the child. Its output is the child's conversation, which its session shows.
+    /// </summary>
+    internal static WorkReport SubagentWork(OpenCode2Delegation delegation) => new()
+    {
+        WorkId = delegation.ToolCallId,
+        Kind = WorkKinds.Subagent,
+        Title = delegation.Agent,
+        Label = delegation.Description,
+        ToolCallId = delegation.ToolCallId,
+        ChildHarnessSessionId = delegation.ChildSessionId,
+        Background = delegation.Background ? true : null,
+        CanStop = delegation.ChildSessionId is not null ? true : null,
+    };
+
+    /// <summary>A subagent call's update as a running-work event: started when the call is made, ended with the call or its notice.</summary>
+    internal HarnessEvent WorkEvent(OpenCode2Delegation delegation, bool called)
+    {
+        var report = SubagentWork(delegation);
+        return delegation.Status switch
+        {
+            "completed" => WorkEvents.Ended(report, WorkEndedReasons.Completed, fleetSessionId),
+            "error" => WorkEvents.Ended(report, WorkEndedReasons.Error, fleetSessionId),
+            "cancelled" => WorkEvents.Ended(report, WorkEndedReasons.Cancelled, fleetSessionId),
+            _ => called ? WorkEvents.Started(report, fleetSessionId) : WorkEvents.Updated(report, fleetSessionId),
+        };
     }
 
     /// <summary>
@@ -379,15 +440,17 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
         if (metadata.ValueKind != JsonValueKind.Object || ReadString(metadata, "source") is not ("shell" or SubagentTool))
             return [];
 
-        if (NoticeHandle(metadata) is { } handle)
-            _backgroundCalls.Remove(handle);
+        HarnessEvent? ended = null;
+        if (NoticeHandle(metadata) is { } handle && _backgroundCalls.Remove(handle, out var call) && call.Name == ShellTool)
+            ended = WorkEvents.Ended(ShellWork(handle, call.CallId, call.Input) with { Detail = NoticeDetail(metadata) }, NoticeReason(metadata), fleetSessionId);
 
         // The user's own command shows as its own message; this is only V2 passing it to the model.
         if (IsUserShellNotice(text, metadata) || (ReadString(metadata, "shellID") is { } shellId && _userShells.ContainsKey(shellId)))
-            return [];
+            return ended is null ? [] : [ended];
 
         return
         [
+            .. ended is null ? [] : new[] { ended },
             Event(EventTypes.MessageUpdated, JsonSerializer.SerializeToElement(
                 new OpenCode2MessageUpdatedPayload
                 {
@@ -403,6 +466,20 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
             PartUpdated(TextPart((messageId, PartId(messageId, "text", 0)), "text", text)),
         ];
     }
+
+    /// <summary>How a completion notice says the work ended (<c>metadata.state</c>), as one of <see cref="WorkEndedReasons"/>.</summary>
+    private static string NoticeReason(JsonElement metadata) => ReadString(metadata, "state") switch
+    {
+        "error" => WorkEndedReasons.Error,
+        "cancelled" => WorkEndedReasons.Cancelled,
+        _ => WorkEndedReasons.Completed,
+    };
+
+    /// <summary>A shell's exit code from its notice (<c>exit 0</c>), or its signal; null when the notice has neither.</summary>
+    private static string? NoticeDetail(JsonElement metadata)
+        => metadata.TryGetProperty("exit", out var exit) && exit.ValueKind == JsonValueKind.Number
+            ? $"exit {exit.GetRawText()}"
+            : ReadString(metadata, "signal") is { } signal ? $"signal {signal}" : null;
 
     /// <summary>
     /// The text V2 starts its notice of a user's shell command with (<c>POST /api/session/{id}/shell</c>). The notice
@@ -583,8 +660,9 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
                     // one is already done as a call, so it isn't waited on; its notice, or the server stopping, ends it.
                     if (stored is "pending" or "running")
                         _tools[callId] = new ToolCall(messageId, name, input);
-                    else if (status == "running")
-                        TrackBackground(messageId, callId, name, input, state.Metadata.ValueKind == JsonValueKind.Object ? state.Metadata.Clone() : null);
+                    else if (status == "running"
+                        && TrackBackground(messageId, callId, name, input, state.Metadata.ValueKind == JsonValueKind.Object ? state.Metadata.Clone() : null) is { } work)
+                        events.Add(work);
                     break;
             }
         }
@@ -821,8 +899,8 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
         events.AddRange(ToolFiles(call.MessageId, call.CallId, content));
         if (!failed)
             events.AddRange(FileWritten(call.MessageId, tool, evt.Location?.Directory));
-        if (background)
-            TrackBackground(call.MessageId, call.CallId, tool.Name, tool.Input, metadata);
+        if (background && TrackBackground(call.MessageId, call.CallId, tool.Name, tool.Input, metadata) is { } work)
+            events.Add(work);
         return events;
     }
 
