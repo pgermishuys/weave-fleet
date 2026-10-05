@@ -109,9 +109,11 @@ watch(
   { immediate: true },
 );
 
-// --- Agents tab: added (without focus) the first time the session's agent starts a subagent or another session ---
-const { agents, activeCount: activeAgentCount } = useSessionLineage(activeSessionId);
-const hasAgents = computed(() => agents.value.running.length + agents.value.started.length + agents.value.earlier.length > 0);
+// --- Agents tab: added (without focus) the first time something in it is running or waiting on you. Lineage that is
+// only history doesn't add it (nothing shown at zero): the tab stays one click away under +, and the header's pill
+// links the parent. ---
+const { activeCount: activeAgentCount } = useSessionLineage(activeSessionId);
+const hasAgents = computed(() => activeAgentCount.value > 0);
 
 watch(
   [activeSessionId, hasAgents],

@@ -1,6 +1,7 @@
 import { computed, reactive, toValue, watch, type ComputedRef, type MaybeRefOrGetter } from "vue";
 import type { SessionListItem } from "@/api/client";
 import { useRunningWork, type UseRunningWorkResult } from "@/composables/use-running-work";
+import { useSessions } from "@/composables/use-sessions";
 import { apiFetch } from "@/lib/api-client";
 import { applyWorkItem, type RunningWorkItem } from "@/lib/running-work";
 import { buildAgentsLineage, lineageOf, type AgentsLineage, type LineageLink } from "@/lib/session-lineage";
@@ -76,6 +77,13 @@ export function useSessionLineage(sessionId: MaybeRefOrGetter<string | null | un
   const sessionsStore = useSessionsStore();
   const id = computed(() => toValue(sessionId) ?? "");
   const work = useRunningWork(id);
+  // Forks and started sessions come from the session list. The sidebar loads it, but on a phone the sidebar isn't
+  // there until its drawer opens, so the list is loaded here when nothing has loaded it yet (once; the sidebar polls).
+  useSessions({
+    retentionStatus: () => sessionsStore.retentionStatus,
+    pollIntervalMs: 0,
+    enabled: () => !sessionsStore.listLoaded,
+  });
 
   watch(work.items, (items) => {
     if (id.value) remember(id.value, items);

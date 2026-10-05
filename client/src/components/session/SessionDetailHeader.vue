@@ -403,6 +403,7 @@ onUnmounted(() => {
             class="session-detail-header__from"
             :href="lineageLink.href"
             :title="`This session was ${lineageLink.label.toLowerCase()} ${lineageLink.title}`"
+            :aria-label="`This session was ${lineageLink.label.toLowerCase()} ${lineageLink.title}`"
             data-testid="session-lineage-link"
             @click="openLineageParent"
           >
@@ -993,6 +994,17 @@ onUnmounted(() => {
 @media (max-width: 716px) {
   .session-detail-header {
     padding-left: 44px;
+  }
+
+  /* A phone has no room for both: the title keeps it, and the pill is its icon (its label names the parent). */
+  .session-detail-header__from {
+    flex-shrink: 0;
+    padding: 3px 5px;
+  }
+
+  .session-detail-header__from-label,
+  .session-detail-header__from-title {
+    display: none;
   }
 }
 

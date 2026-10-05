@@ -163,6 +163,8 @@ describe("SessionDetailHeader lineage", () => {
     const link = wrapper.get("[data-testid='session-lineage-link']");
 
     expect(link.text()).toBe("Started by What can we learn from t3code?");
+    // On a phone the pill shows only its icon; its label still names the parent.
+    expect(link.attributes("aria-label")).toBe("This session was started by What can we learn from t3code?");
     expect(link.attributes("href")).toBe("/sessions/parent?instanceId=i-parent");
     await link.trigger("click", { button: 0 });
     expect(navigate).toHaveBeenCalledWith({
