@@ -28,6 +28,8 @@ export interface MachineInfo {
   authMode: string;
   remoteReachable: boolean;
   requiresToken: boolean;
+  /** The address phones should use for this machine, when someone saved one. */
+  publicUrl?: string | null;
 }
 
 /** What `GET /api/machine/access` says: how other devices reach the home machine. */
@@ -276,9 +278,11 @@ export const useMachinesStore = defineStore("machines", () => {
   }
 
   /** How other devices reach the home machine. */
-  async function loadHomeAccess(): Promise<MachineAccess | null> {
+  /** How other devices reach home. Null on an older Fleet, or "device" when this browser is a paired device, which may not manage access. */
+  async function loadHomeAccess(): Promise<MachineAccess | "device" | null> {
     const response = await fetchOnMachine(null, "/api/machine/access");
     if (response.status === 404) return null;
+    if (response.status === 403) return "device";
     if (!response.ok) throw new Error(await readError(response, "Couldn't read this machine's access."));
     return await response.json() as MachineAccess;
   }
