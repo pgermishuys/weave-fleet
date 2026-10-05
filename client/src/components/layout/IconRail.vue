@@ -4,7 +4,8 @@ import type { SidebarRail } from "@/stores/sidebar";
 import type { PluginConnectionStatus, FleetPluginStatus } from "@/plugins/types";
 import { computed, onMounted, onUnmounted, watch } from "vue";
 import { useLocation, useRouter } from "@tanstack/vue-router";
-import { BarChart3, Bug, CircleHelp, ExternalLink, LayoutGrid, MessageSquare, Puzzle, Settings, Workflow, Zap } from "lucide-vue-next";
+import { BarChart3, Bug, CircleHelp, ExternalLink, LayoutGrid, MessageSquare, Puzzle, Settings, Smartphone, Workflow, Zap } from "lucide-vue-next";
+import { useIsMobileNav } from "@/composables/use-media-query";
 import { storeToRefs } from "pinia";
 import weaveLogo from "@/assets/weave_logo.png";
 import { api } from "@/api/client";
@@ -58,6 +59,8 @@ const { isBoardFeatureEnabled } = useBoardFeature();
 const { isWorkflowsEnabled } = useWorkflowsFeature();
 const workflowsStore = useWorkflowsStore();
 const problemReport = useProblemReportStore();
+// On a phone, the phone view: what needs you on every machine.
+const isMobileNav = useIsMobileNav();
 const pathname = useLocation({
   select: (location) => location.pathname,
 });
@@ -285,6 +288,21 @@ function handleSelect(item: RailItem): void {
         >
           <component
             :is="item.icon"
+            :size="18"
+            aria-hidden="true"
+          />
+        </button>
+
+        <button
+          v-if="isMobileNav"
+          type="button"
+          class="rail-item"
+          data-tooltip="Phone view"
+          aria-label="Phone view"
+          data-testid="rail-phone-view"
+          @click="router.navigate({ to: '/phone' })"
+        >
+          <Smartphone
             :size="18"
             aria-hidden="true"
           />

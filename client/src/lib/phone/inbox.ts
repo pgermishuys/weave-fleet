@@ -71,7 +71,7 @@ function item(machine: InboxMachineState, session: SessionListItem): InboxItem {
 const newestFirst = (a: InboxItem, b: InboxItem) => b.updatedAt - a.updatedAt;
 
 /** Groups every machine's sessions into the inbox's three sections, newest first. */
-export function buildInbox(machines: readonly InboxMachineState[], now: number): Inbox {
+export function buildInbox(machines: readonly InboxMachineState[], now: number, finishedFor = FINISHED_FOR_MS): Inbox {
   const needsYou: InboxItem[] = [];
   const working: InboxItem[] = [];
   const finished: InboxItem[] = [];
@@ -88,7 +88,7 @@ export function buildInbox(machines: readonly InboxMachineState[], now: number):
           working.push(entry);
           break;
         default:
-          if (now - entry.updatedAt <= FINISHED_FOR_MS) finished.push(entry);
+          if (now - entry.updatedAt <= finishedFor) finished.push(entry);
       }
     }
   }

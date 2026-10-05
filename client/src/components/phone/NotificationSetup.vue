@@ -46,8 +46,7 @@ async function test(): Promise<void> {
 }
 
 function done(): void {
-  // The phone inbox (/phone) arrives with Phase 4; until then, the app.
-  void router.navigate({ to: "/" });
+  void router.navigate({ to: "/phone" });
 }
 
 onMounted(() => {

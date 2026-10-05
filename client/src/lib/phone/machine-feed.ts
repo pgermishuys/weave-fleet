@@ -95,8 +95,9 @@ export class MachineFeed {
     return this.snapshot;
   }
 
+  /** Bound: the browser refuses `fetch` called as a method of anything but `window`. */
   private get fetcher(): typeof fetch {
-    return this.options.fetcher ?? fetch;
+    return this.options.fetcher ?? globalThis.fetch.bind(globalThis);
   }
 
   private now(): number {
@@ -153,7 +154,7 @@ export class MachineFeed {
 
   private startPolling(): void {
     if (this.pollTimer || this.stopped) return;
-    if (this.snapshot.status === "live") this.update({ status: "polling" });
+    if (this.snapshot.status !== "unreachable") this.update({ status: "polling" });
     this.pollTimer = setInterval(() => void this.refresh(), POLL_INTERVAL_MS);
   }
 

@@ -119,6 +119,7 @@ describe("MachineFeed", () => {
     await f.start();
     const reads = () => calls.filter((c) => c.url.includes("/api/sessions?")).length;
     expect(reads()).toBe(1);
+    expect(f.state.status).toBe("polling");
 
     await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
 

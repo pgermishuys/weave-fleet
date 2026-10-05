@@ -179,6 +179,17 @@ export const HOME_MACHINE_KEY = "home";
  */
 export function restoreActiveMachine(pathname: string = typeof window === "undefined" ? "/" : window.location.pathname): MachineConnection | null {
   const machines = loadMachines();
+
+  // The phone pages say their machine in the path: a session on another machine at /phone/s/<machine>/<session>,
+  // everything else (the inbox, setup) on home.
+  if (pathname === "/phone" || pathname.startsWith("/phone/")) {
+    const machineId = /^\/phone\/s\/([^/]+)\//.exec(pathname)?.[1];
+    const phoneMachine = machineId ? machines.find((candidate) => candidate.id === decodeURIComponent(machineId)) ?? null : null;
+    saveActiveMachineId(phoneMachine?.id ?? null);
+    setActiveMachine(phoneMachine);
+    return phoneMachine;
+  }
+
   const sessionId = /^\/sessions\/([^/]+)$/.exec(pathname)?.[1];
   const owner = sessionId && sessionId !== "new" ? loadSessionMachines()[decodeURIComponent(sessionId)] : undefined;
 
@@ -195,6 +206,19 @@ export function restoreActiveMachine(pathname: string = typeof window === "undef
   saveActiveMachineId(machine?.id ?? null);
   setActiveMachine(machine);
   return machine;
+}
+
+/**
+ * Adds a machine the phone holds a key for (a device grant) to this browser's list, so a page opened on it at
+ * `/phone/s/<machine>/…` finds it. A machine already listed keeps its entry.
+ */
+export function rememberPhoneMachine(machine: MachineConnection): void {
+  const machines = loadMachines();
+  const existing = machines.find((candidate) => candidate.id === machine.id);
+  if (existing && existing.token === machine.token) return;
+  saveMachines(existing
+    ? machines.map((candidate) => candidate.id === machine.id ? { ...candidate, baseUrl: machine.baseUrl, token: machine.token } : candidate)
+    : [...machines, machine]);
 }
 
 /**
