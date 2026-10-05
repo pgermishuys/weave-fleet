@@ -12,6 +12,7 @@ export {
   isWeaveSocketConnected,
   onReconnect,
   onDisconnect,
+  onConnectionLost,
   setSessionFocus,
   setPresence,
   loadSessionHistory,

@@ -21,6 +21,8 @@ import DockedQuestion from "@/components/phone/session/DockedQuestion.vue";
 import PhoneComposer from "@/components/phone/session/PhoneComposer.vue";
 import { harnessCapabilities } from "@/composables/use-composer-actions";
 import { useDeskPresence } from "@/composables/use-desk-presence";
+import { useMachineReachability } from "@/composables/phone/use-machine-reachability";
+import UnreachableBanner from "@/components/phone/session/UnreachableBanner.vue";
 import { useDiffs } from "@/composables/use-diffs";
 import { useHarnesses } from "@/composables/use-harnesses";
 import { useRunShellCommand } from "@/composables/use-run-shell-command";
@@ -78,6 +80,10 @@ const updatedAt = computed(() => {
   return typeof value === "number" ? value : value ? Date.parse(value) : null;
 });
 
+// The machine dropping out: the conversation stays as last heard; what you type is held until it's back.
+const reachability = useMachineReachability(() => undefined);
+watch(() => stream.messages.value, () => reachability.heard());
+
 const status = computed(() => headerStatus({
   sessionStatus: session.value?.sessionStatus ?? null,
   streamStatus: stream.isLoading.value ? null : stream.sessionStatus.value,
@@ -85,9 +91,13 @@ const status = computed(() => headerStatus({
   updatedAt: updatedAt.value,
   lastMessageAt: lastMessageAt.value,
   hasMessages: stream.messages.value.length > 0,
-  unreachableSince: null,
+  unreachableSince: reachability.reachable.value ? null : reachability.lastHeardAt.value,
   now: now.value,
 }));
+const lastStatus = shallowRef(status.value);
+watch(status, (next) => {
+  if (next.tone !== "unreachable") lastStatus.value = next;
+});
 
 // "Since you looked": read once on arrival; written when you leave or the app goes off screen.
 const seenAt = shallowRef<number | null>(lastSeenAt(machineId.value, sessionId.value));
@@ -267,6 +277,12 @@ onUnmounted(() => {
       @back="back"
       @menu="sheet = 'menu'"
     />
+    <UnreachableBanner
+      v-if="!reachability.reachable.value"
+      :machine-name="machineName"
+      :retry-in="reachability.retryIn.value"
+      @retry="reachability.retry"
+    />
     <PhonePlanBar
       v-if="progress && progress.total > 0"
       :progress="progress"
@@ -398,6 +414,12 @@ onUnmounted(() => {
           aria-hidden="true"
         />{{ status.state }} · {{ status.detail }}
       </p>
+      <p
+        v-else-if="status.tone === 'unreachable' && lastStatus.tone === 'working'"
+        class="ps__working"
+      >
+        Working when last heard
+      </p>
     </main>
 
     <p
@@ -444,7 +466,9 @@ onUnmounted(() => {
       v-else
       :key="sessionId"
       :session-id="sessionId"
+      :machine-id="machineId"
       :machine-name="machineName"
+      :reachable="reachability.reachable.value"
       @side="sheet = 'side'"
     />
 

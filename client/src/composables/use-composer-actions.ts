@@ -207,6 +207,20 @@ export function useComposerActions(sessionId: string) {
     return route;
   }
 
+  /**
+   * Sends `text` as a message without touching the draft (a held message, now that the machine is back): into the
+   * queue while a turn runs, else straight away. Returns why it didn't go, or null.
+   */
+  async function sendText(text: string): Promise<string | null> {
+    if (disabled.value) return "This session can't take messages.";
+    if (status.value === "busy") {
+      return (await enqueue(text, { kind: "prompt", ...choices() })) ? null : (queueError.value ?? "Couldn't queue it.");
+    }
+    if (!sendPrompt(undefined, text)) return promptError.value ?? "Couldn't send it.";
+    markBusy();
+    return null;
+  }
+
   async function stop(): Promise<void> {
     if (status.value !== "busy" || isAborting.value) return;
     try {
@@ -235,6 +249,7 @@ export function useComposerActions(sessionId: string) {
     sendQueued,
     canSendQueued: (item: QueuedMessage) => canSendQueuedNow(item, status.value, caps.value),
     submit,
+    sendText,
     stop,
     isStopping: isAborting,
     side,

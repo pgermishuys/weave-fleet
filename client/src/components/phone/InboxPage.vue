@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted, onUnmounted } from "vue";
 import { useRouter, useSearch } from "@tanstack/vue-router";
 import { Bell, LayoutDashboard, LoaderCircle } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import InboxAskRow from "@/components/phone/InboxAskRow.vue";
 import InboxSessionRow from "@/components/phone/InboxSessionRow.vue";
 import PhoneTabBar, { type PhoneTab } from "@/components/phone/PhoneTabBar.vue";
 import { useInbox } from "@/composables/phone/use-inbox";
+import { usePushSubscription } from "@/composables/phone/use-push-subscription";
 import { readCredentialsSync } from "@/lib/device-credentials";
 import { rememberPhoneMachine } from "@/lib/machines";
 import { buildInbox, type InboxItem } from "@/lib/phone/inbox";
@@ -20,6 +21,18 @@ import type { AnswerOutcome, PermissionReply } from "@/lib/push/answer";
 const router = useRouter();
 const search = useSearch({ from: "/phone/" });
 const { inbox, machines, loading, now, answerPermission, answerQuestion, targetFor } = useInbox();
+
+// Browsers rotate and drop push subscriptions: check on open and whenever the app comes back on screen. A dropped one
+// is quietly made again; permission taken away gets a banner.
+const push = usePushSubscription();
+function checkPush(): void {
+  if (document.visibilityState === "visible") void push.refresh();
+}
+onMounted(() => {
+  void push.refresh();
+  document.addEventListener("visibilitychange", checkPush);
+});
+onUnmounted(() => document.removeEventListener("visibilitychange", checkPush));
 
 const tab = computed<PhoneTab>(() => search.value.tab ?? "needs-you");
 const machineCount = computed(() => machines.value.length);
@@ -96,6 +109,15 @@ const homeName = computed(() => readCredentialsSync()?.homeMachineName ?? machin
       </div>
 
       <template v-else-if="tab === 'needs-you'">
+        <button
+          v-if="push.permissionRevoked.value"
+          type="button"
+          class="inbox__away inbox__away--warn"
+          data-testid="push-revoked"
+          @click="router.navigate({ to: '/phone/setup' })"
+        >
+          Notifications are off for this phone. Turn them back on ›
+        </button>
         <p
           v-for="machine in unreachable"
           :key="machine.id"
@@ -316,6 +338,15 @@ const homeName = computed(() => readCredentialsSync()?.homeMachineName ?? machin
   background: var(--accent-dim);
   font-size: 12px;
   color: var(--muted);
+}
+
+.inbox__away--warn {
+  border: 0;
+  background: color-mix(in srgb, var(--idle) 14%, transparent);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
 }
 
 .inbox__empty {

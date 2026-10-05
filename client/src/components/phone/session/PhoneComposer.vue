@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from "vue";
 import { ArrowUp, CornerDownRight, Plus, Square, X } from "lucide-vue-next";
 import PhoneChipSheet, { type ChipOption } from "@/components/phone/session/PhoneChipSheet.vue";
 import PhoneFilePickSheet from "@/components/phone/session/PhoneFilePickSheet.vue";
@@ -10,6 +10,7 @@ import { useDraftState } from "@/composables/use-draft-state";
 import { useModels } from "@/composables/use-models";
 import type { ImageAttachment } from "@/lib/client-types";
 import { ALLOWED_IMAGE_MIMES, MAX_IMAGE_BYTES } from "@/lib/image-validation";
+import { flushHeld, heldFor, hold, removeHeld, type HeldMessage } from "@/lib/phone/outbox";
 
 /**
  * The phone's composer, per the session rules: one round button — Send when idle, Queue while the agent works, Stop
@@ -17,7 +18,7 @@ import { ALLOWED_IMAGE_MIMES, MAX_IMAGE_BYTES } from "@/lib/image-validation";
  * it marked "Next". Agent, model and effort are chips while you type, each a sheet; + adds a photo, the camera, a file,
  * a command or a side question. Typing `@`, `!` or `/btw` still works.
  */
-const props = defineProps<{ sessionId: string; machineName: string }>();
+const props = withDefaults(defineProps<{ sessionId: string; machineId: string; machineName: string; reachable?: boolean }>(), { reachable: true });
 const emit = defineEmits<{ (event: "sent"): void; (event: "side"): void }>();
 
 const MAX_PHOTOS = 5;
@@ -38,10 +39,14 @@ const chip = shallowRef<"agent" | "model" | "effort" | null>(null);
 const photos = shallowRef<(ImageAttachment & { url: string })[]>([]);
 const photoError = shallowRef<string | null>(null);
 const keyboardInset = shallowRef(0);
+// Typed while the machine was away: held on the phone, sent in order when it answers again.
+const held = shallowRef<HeldMessage[]>(heldFor(props.machineId, props.sessionId));
+let flushing = false;
 
 const hasContent = computed(() => draft.text.trim().length > 0 || photos.value.length > 0);
-const primary = computed(() => primaryAction(actions.status.value, hasContent.value));
-const offerSendNow = computed(() => actions.caps.value.canSteer && actions.status.value === "busy" && hasContent.value);
+// While the machine is away the button holds what's typed: there's nothing to stop or steer.
+const primary = computed(() => props.reachable ? primaryAction(actions.status.value, hasContent.value) : "send");
+const offerSendNow = computed(() => props.reachable && actions.caps.value.canSteer && actions.status.value === "busy" && hasContent.value);
 
 const agentId = computed(() => draft.agentId || defaultAgentId.value || "");
 const modelKey = computed(() => draft.modelId || defaultModelKey.value || "");
@@ -68,6 +73,15 @@ function onInput(event: Event): void {
 }
 
 function submit(steer = false): void {
+  if (!props.reachable) {
+    const text = draft.text.trim();
+    if (!text) return;
+    hold(props.machineId, props.sessionId, text);
+    held.value = heldFor(props.machineId, props.sessionId);
+    setText("");
+    void nextTick(resize);
+    return;
+  }
   if (primary.value === "stop" && !steer) {
     void actions.stop();
     return;
@@ -140,6 +154,23 @@ function onPlus(choice: PlusChoice): void {
   }
 }
 
+/** Sends what's held, oldest first; what doesn't go stays, with the reason. */
+async function flush(): Promise<void> {
+  if (flushing || !held.value.length) return;
+  flushing = true;
+  try {
+    held.value = await flushHeld(props.machineId, props.sessionId, (text) => actions.sendText(text));
+  } finally {
+    flushing = false;
+  }
+}
+
+function editHeld(item: HeldMessage): void {
+  removeHeld(props.machineId, props.sessionId, item.id);
+  held.value = heldFor(props.machineId, props.sessionId);
+  insert(item.text);
+}
+
 function pick(id: string): void {
   if (chip.value === "agent") setAgentId(id);
   else if (chip.value === "model") setModelId(id);
@@ -157,6 +188,7 @@ onMounted(() => {
   window.visualViewport?.addEventListener("resize", onViewport);
   window.visualViewport?.addEventListener("scroll", onViewport);
   void nextTick(resize);
+  if (props.reachable) void flush();
 });
 
 onUnmounted(() => {
@@ -164,7 +196,11 @@ onUnmounted(() => {
   window.visualViewport?.removeEventListener("scroll", onViewport);
 });
 
-defineExpose({ insert, focus: () => textareaRef.value?.focus() });
+watch(() => props.reachable, (reachable) => {
+  if (reachable) void flush();
+});
+
+defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
 </script>
 
 <template>
@@ -204,6 +240,38 @@ defineExpose({ insert, focus: () => textareaRef.value?.focus() });
             :size="14"
             aria-hidden="true"
           />
+        </button>
+      </li>
+    </ol>
+
+    <ol
+      v-if="held.length"
+      class="pc__queue"
+      aria-label="Held"
+    >
+      <li
+        v-for="item in held"
+        :key="item.id"
+        class="pc__queued pc__queued--held"
+        data-testid="phone-held"
+      >
+        <span class="pc__next pc__next--held">Held</span>
+        <span class="pc__queued-text">{{ item.text }}</span>
+        <button
+          v-if="item.error && reachable"
+          type="button"
+          class="pc__mini"
+          :title="item.error"
+          @click="flush"
+        >
+          Retry
+        </button>
+        <button
+          type="button"
+          class="pc__mini"
+          @click="editHeld(item)"
+        >
+          Edit
         </button>
       </li>
     </ol>
@@ -335,6 +403,14 @@ defineExpose({ insert, focus: () => textareaRef.value?.focus() });
       </button>
     </form>
 
+    <p
+      v-if="!reachable"
+      class="pc__away"
+      data-testid="composer-held-note"
+    >
+      Sends when {{ machineName }} answers again.
+    </p>
+
     <input
       ref="photoInput"
       type="file"
@@ -432,6 +508,20 @@ defineExpose({ insert, focus: () => textareaRef.value?.focus() });
   color: var(--muted);
   font: inherit;
   font-size: 12px;
+}
+
+.pc__queued--held {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.pc__next--held {
+  color: var(--muted);
+}
+
+.pc__away {
+  font-size: 12px;
+  text-align: center;
+  color: var(--muted);
 }
 
 .pc__chips {
