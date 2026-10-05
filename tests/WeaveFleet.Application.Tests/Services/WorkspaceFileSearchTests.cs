@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Testing.Fixtures;
@@ -98,6 +99,45 @@ public sealed class WorkspaceFileSearchTests
         var entries = await WorkspaceFileSearch.FindAsync(repository.Path, "note-", limit: 5);
 
         entries.Count.ShouldBe(5);
+    }
+
+    [Fact]
+    public async Task OldListing_AnswersAtOnce_WhileANewOneIsMade()
+    {
+        using var repository = new RealGitRepository();
+        Write(repository.Path, "src/app.ts");
+        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        Task<IReadOnlyList<string>> Find() => WorkspaceFileSearch.FindAsync(repository.Path, "added", limit: 50, clock);
+
+        (await Find()).ShouldBeEmpty();
+        Write(repository.Path, "src/added.ts");
+
+        clock.Advance(TimeSpan.FromSeconds(5));
+        (await Find()).ShouldBeEmpty();
+
+        // Old now: this ask still gets the old listing, and starts the new one.
+        clock.Advance(TimeSpan.FromSeconds(10));
+        (await Find()).ShouldBeEmpty();
+
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while ((await Find()).Count == 0 && DateTime.UtcNow < deadline)
+            await Task.Delay(20);
+        (await Find()).ShouldBe(["src/added.ts"]);
+    }
+
+    [Fact]
+    public async Task ListingNotAskedForAWhile_IsDropped_AndTheNextAskWaitsForANewOne()
+    {
+        using var repository = new RealGitRepository();
+        Write(repository.Path, "src/app.ts");
+        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        Task<IReadOnlyList<string>> Find() => WorkspaceFileSearch.FindAsync(repository.Path, "added", limit: 50, clock);
+
+        (await Find()).ShouldBeEmpty();
+        Write(repository.Path, "src/added.ts");
+
+        clock.Advance(TimeSpan.FromMinutes(11));
+        (await Find()).ShouldBe(["src/added.ts"]);
     }
 
     private static void Write(string root, params string[] relativePaths)

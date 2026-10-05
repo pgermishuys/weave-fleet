@@ -4,9 +4,11 @@ import { api } from "@/api/client";
 import type { AutocompleteAgent, AutocompleteCommand, SessionListItem } from "@/api/client";
 import { loadSessionAgentList } from "@/composables/use-agents";
 import { sessionCatalogChanges } from "@/lib/harness-catalog-changes";
+import { pickedFileTokens, rememberFileReference } from "@/lib/composer-references";
 import {
   matchReferableSessions,
   rememberSessionReference,
+  rememberedSessionTokens,
   sessionReferenceToken,
   type ReferableSession,
 } from "@/lib/session-references";
@@ -186,6 +188,8 @@ export function useAutocomplete({
 }: UseAutocompleteParams): UseAutocompleteResult {
   const selectedIndex = ref(0);
   const suppressedValue = ref<string | null>(null);
+  // Enter or Tab pressed before anything matched what's typed: the draft then, and the key, to pick the first match.
+  const pendingPick = shallowRef<{ draft: string; key: string } | null>(null);
 
   const computedTrigger = computed<Trigger | null>(() => {
     if (!value.value) {
@@ -214,6 +218,13 @@ export function useAutocomplete({
 
     const textBetween = textBeforeCursor.slice(atIndex + 1);
     if (textBetween.includes(" ")) {
+      return null;
+    }
+
+    // The caret at the end of a reference picked from this list: it's done, not being typed.
+    const draftSessionId = toValue(sessionId);
+    const token = `@${textBetween}`;
+    if (draftSessionId && (pickedFileTokens(draftSessionId).has(token) || rememberedSessionTokens(draftSessionId).has(token))) {
       return null;
     }
 
@@ -330,6 +341,13 @@ export function useAutocomplete({
       const token = sessionReferenceToken(draftSessionId, session);
       rememberSessionReference(draftSessionId, { token, sessionId: session.id, title: session.title });
       itemValue = `${token} `;
+    } else {
+      // A file or folder picked (not a folder opened to look inside): the composer edits it as one piece.
+      const draftSessionId = toValue(sessionId);
+      const picked = items.value.find((item) => item.value === selected);
+      if (picked?.group === "file" && draftSessionId) {
+        rememberFileReference(draftSessionId, selected.trimEnd());
+      }
     }
 
     let newValue: string;
@@ -388,11 +406,10 @@ export function useAutocomplete({
         const item = items.value[clampedIndex.value];
         if (item) {
           event.preventDefault();
-          if (event.key === "Tab" && item.meta === "dir") {
-            onOpenFolder(item.value);
-          } else {
-            onSelect(item.value);
-          }
+          pick(item, event.key);
+        } else if (isLoading.value) {
+          event.preventDefault();
+          pendingPick.value = { draft: value.value, key: event.key };
         }
         break;
       }
@@ -407,6 +424,14 @@ export function useAutocomplete({
           suppressedValue.value = null;
         }
         break;
+    }
+  }
+
+  function pick(item: AutocompleteItem, key: string): void {
+    if (key === "Tab" && item.meta === "dir") {
+      onOpenFolder(item.value);
+    } else {
+      onSelect(item.value);
     }
   }
 
@@ -425,6 +450,26 @@ export function useAutocomplete({
         ? agentsError.value ?? filesError.value
         : undefined
   ));
+
+  // The answer came: pick its first match, unless the draft changed or the list closed meanwhile.
+  watch([items, isLoading], () => {
+    const pending = pendingPick.value;
+    if (!pending) {
+      return;
+    }
+    if (value.value !== pending.draft || !isOpen.value) {
+      pendingPick.value = null;
+      return;
+    }
+    if (isLoading.value) {
+      return;
+    }
+    pendingPick.value = null;
+    const item = items.value[0];
+    if (item) {
+      pick(item, pending.key);
+    }
+  });
 
   return {
     isOpen,

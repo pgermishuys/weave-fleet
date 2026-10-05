@@ -8,11 +8,14 @@ namespace WeaveFleet.Application.Services;
 /// Finds files and folders in a session's directory for the composer's <c>@</c> references. It lists
 /// what git would (tracked and untracked, minus ignored), so build output and dependencies stay out;
 /// outside a git repository it walks the tree and skips the usual noise folders. Paths use <c>/</c>
-/// and folders end in <c>/</c>. Listings are cached briefly because the composer asks as you type.
+/// and folders end in <c>/</c>. Listings are cached because the composer asks as you type: a listing
+/// older than <see cref="FreshFor"/> still answers at once while a new one is made in the background,
+/// so only the first ask for a folder waits on git.
 /// </summary>
 public static class WorkspaceFileSearch
 {
-    private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan FreshFor = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan KeptFor = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan GitTimeout = TimeSpan.FromSeconds(10);
     private const int MaxWalkEntries = 50_000;
 
@@ -31,9 +34,12 @@ public static class WorkspaceFileSearch
     /// in order in the name, then in the path (so "fcanv" finds FileCanvas.vue); then shallower
     /// paths, then alphabetical.
     /// </summary>
-    public static async Task<IReadOnlyList<string>> FindAsync(string directory, string query, int limit, CancellationToken ct = default)
+    public static Task<IReadOnlyList<string>> FindAsync(string directory, string query, int limit, CancellationToken ct = default) =>
+        FindAsync(directory, query, limit, TimeProvider.System, ct);
+
+    internal static async Task<IReadOnlyList<string>> FindAsync(string directory, string query, int limit, TimeProvider clock, CancellationToken ct = default)
     {
-        var entries = await ListAsync(Path.GetFullPath(directory), ct).ConfigureAwait(false);
+        var entries = await ListAsync(Path.GetFullPath(directory), clock, ct).ConfigureAwait(false);
         var normalized = query.Trim().Replace('\\', '/').TrimStart('/');
 
         return normalized.Length == 0 || normalized.EndsWith('/')
@@ -102,22 +108,58 @@ public static class WorkspaceFileSearch
 
     private static int Depth(string entry) => entry.TrimEnd('/').Count(c => c == '/');
 
-    private static async Task<IReadOnlyList<string>> ListAsync(string root, CancellationToken ct)
+    private static async Task<IReadOnlyList<string>> ListAsync(string root, TimeProvider clock, CancellationToken ct)
     {
-        var now = DateTime.UtcNow;
-        foreach (var (key, stale) in Cache)
+        var now = clock.GetUtcNow();
+        foreach (var entry in Cache)
         {
-            if (now - stale.CreatedAt >= CacheTtl)
-                Cache.TryRemove(key, out _);
+            if (now - entry.Value.UsedAt >= KeptFor)
+                Cache.TryRemove(entry);
         }
 
-        if (Cache.TryGetValue(root, out var cached))
-            return cached.Entries;
+        var listing = Cache.GetOrAdd(root, static (folder, madeAt) => new Listing(folder, madeAt), now);
+        listing.UsedAt = now;
 
-        var files = await ListWithGitAsync(root, ct).ConfigureAwait(false);
-        var entries = files is null ? Walk(root) : WithFolders(files);
-        Cache[root] = new Listing(entries, now);
-        return entries;
+        Task<IReadOnlyList<string>> entries = listing.Entries;
+        try
+        {
+            var result = await entries.WaitAsync(ct).ConfigureAwait(false);
+            if (now - listing.MadeAt >= FreshFor)
+                Remake(root, listing, clock);
+            return result;
+        }
+        catch (Exception) when (entries.IsFaulted)
+        {
+            Cache.TryRemove(KeyValuePair.Create(root, listing));
+            throw;
+        }
+    }
+
+    /// <summary>Makes a new listing for <paramref name="root"/> in the background; the old one answers until it's done.</summary>
+    private static void Remake(string root, Listing stale, TimeProvider clock)
+    {
+        if (Interlocked.Exchange(ref stale.Remaking, 1) == 1)
+            return;
+
+        var next = new Listing(root, clock.GetUtcNow()) { UsedAt = stale.UsedAt };
+        _ = next.Entries.ContinueWith(
+            made =>
+            {
+                if (made.IsCompletedSuccessfully)
+                    Cache.TryUpdate(root, next, stale);
+                else
+                    Volatile.Write(ref stale.Remaking, 0);
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+    }
+
+    /// <summary>What git lists, or the walked tree outside git; made off the request so a cancelled one doesn't stop it.</summary>
+    private static async Task<IReadOnlyList<string>> MakeListingAsync(string root)
+    {
+        var files = await ListWithGitAsync(root, CancellationToken.None).ConfigureAwait(false);
+        return files is null ? Walk(root) : WithFolders(files);
     }
 
     /// <summary>Files git knows about or would add, relative to <paramref name="root"/>; null when git can't say.</summary>
@@ -223,5 +265,14 @@ public static class WorkspaceFileSearch
         }
     }
 
-    private sealed record Listing(IReadOnlyList<string> Entries, DateTime CreatedAt);
+    /// <summary>A folder's listing: started when made, shared by every request while it's being made.</summary>
+    private sealed class Listing(string root, DateTimeOffset madeAt)
+    {
+        private readonly Lazy<Task<IReadOnlyList<string>>> _entries = new(() => Task.Run(() => MakeListingAsync(root)));
+
+        public Task<IReadOnlyList<string>> Entries => _entries.Value;
+        public DateTimeOffset MadeAt { get; } = madeAt;
+        public DateTimeOffset UsedAt { get; set; } = madeAt;
+        public int Remaking;
+    }
 }
