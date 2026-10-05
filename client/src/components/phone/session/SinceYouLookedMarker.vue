@@ -7,30 +7,10 @@ defineProps<{ at: number }>();
 
 <template>
   <div
-    class="syl"
+    class="ph-since"
     role="separator"
     data-testid="since-you-looked"
   >
     <span>Since you looked at {{ clock(at) }}</span>
   </div>
 </template>
-
-<style scoped>
-.syl {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 4px 0;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--accent);
-}
-
-.syl::before,
-.syl::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: color-mix(in srgb, var(--accent) 40%, transparent);
-}
-</style>

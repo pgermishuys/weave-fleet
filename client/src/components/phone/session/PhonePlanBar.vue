@@ -20,7 +20,7 @@ const share = computed(() => props.progress.total ? Math.round((props.progress.d
 <template>
   <button
     type="button"
-    class="ppb"
+    class="ph-step ppb"
     data-testid="phone-plan-bar"
     @click="emit('open')"
   >
@@ -31,41 +31,25 @@ const share = computed(() => props.progress.total ? Math.round((props.progress.d
       class="ppb__fill"
       :style="{ width: `${share}%` }"
     /></span>
-    <span class="ppb__text">{{ next ? `Next: ${next}` : "Plan done" }}</span>
+    <span class="ph-step__t ppb__text">{{ next ? `Next: ${next}` : "Plan done" }}</span>
     <span class="ppb__count">{{ progress.done }}/{{ progress.total }}</span>
     <ChevronRight
-      :size="14"
+      class="ph-row__chev"
+      :size="16"
+      :stroke-width="3"
       aria-hidden="true"
     />
   </button>
 </template>
 
 <style scoped>
-.ppb {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: 8px;
-  min-height: 40px;
-  margin: 6px 12px 0;
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  background: var(--card-bg);
-  color: var(--text);
-  font: inherit;
-  font-size: 12px;
-  text-align: left;
-  cursor: pointer;
-}
-
 .ppb__track {
-  width: 28px;
-  height: 4px;
+  width: 32px;
+  height: 5px;
   flex: none;
   overflow: hidden;
-  border-radius: 999px;
-  background: var(--border);
+  border-radius: 3px;
+  background: var(--ph-fill-strong);
 }
 
 .ppb__fill {
@@ -75,11 +59,7 @@ const share = computed(() => props.progress.total ? Math.round((props.progress.d
 }
 
 .ppb__text {
-  flex: 1;
-  overflow: hidden;
   color: var(--muted);
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 
 .ppb__count {

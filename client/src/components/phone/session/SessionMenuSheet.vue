@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { shallowRef, watch } from "vue";
-import { Archive, FileDiff, FolderOpen, GitFork, Laptop, MessageCircleQuestionMark, Pencil, Square, SquareTerminal } from "lucide-vue-next";
+import { nextTick, shallowRef, useTemplateRef, watch } from "vue";
+import { Archive, FileDiff, FileText, GitFork, Laptop, MessageCircle, Pencil, Square, SquareTerminal } from "lucide-vue-next";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
-import { Button } from "@/components/ui/button";
 
-/** The session's ⋯ menu: what the desktop's side panels and header actions do, as sheets and rows. */
+/** The session's ⋯ menu, a floating sheet: what the desktop's side panels and header actions do, as grouped rows. */
 export type MenuAction = "changes" | "files" | "side" | "fork" | "rename" | "computer" | "terminal" | "archive" | "stop";
 
 const props = defineProps<{
@@ -14,20 +13,25 @@ const props = defineProps<{
   changedFiles: number;
   working: boolean;
   supportsSide: boolean;
+  supportsShell?: boolean;
   canFork: boolean;
 }>();
 const emit = defineEmits<{ (event: "pick", action: MenuAction): void; (event: "rename", title: string): void; (event: "close"): void }>();
 
 const renaming = shallowRef(false);
 const newTitle = shallowRef("");
+const input = useTemplateRef<HTMLInputElement>("input");
 watch(() => props.open, (open) => {
   renaming.value = false;
   if (open) newTitle.value = props.title;
 });
 
-function pick(action: MenuAction): void {
+async function pick(action: MenuAction): Promise<void> {
   if (action === "rename") {
     renaming.value = true;
+    await nextTick();
+    input.value?.focus();
+    input.value?.select();
     return;
   }
   emit("pick", action);
@@ -38,6 +42,7 @@ function pick(action: MenuAction): void {
   <BottomSheet
     :open="open"
     label="Session menu"
+    floating
     @close="emit('close')"
   >
     <form
@@ -45,188 +50,180 @@ function pick(action: MenuAction): void {
       class="msm__rename"
       @submit.prevent="emit('rename', newTitle.trim())"
     >
-      <label
-        class="msm__label"
-        for="phone-rename"
-      >Rename</label>
-      <input
-        id="phone-rename"
-        v-model="newTitle"
-        class="msm__input"
-        maxlength="200"
-        data-testid="phone-rename-input"
-      >
-      <div class="msm__actions">
-        <Button
-          type="button"
-          variant="ghost"
-          @click="renaming = false"
+      <div class="ph-group-h msm__label">
+        Rename
+      </div>
+      <div class="ph-sheet__pad">
+        <input
+          id="phone-rename"
+          ref="input"
+          v-model="newTitle"
+          class="ph-field msm__input"
+          maxlength="200"
+          aria-label="New title"
+          enterkeyhint="done"
+          data-testid="phone-rename-input"
         >
-          Cancel
-        </Button>
-        <Button
-          type="submit"
-          :disabled="!newTitle.trim()"
-        >
-          Save
-        </Button>
+        <div class="ph-btns">
+          <button
+            type="button"
+            class="ph-btn ph-btn--plain"
+            @click="renaming = false"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            class="ph-btn ph-btn--primary"
+            :disabled="!newTitle.trim()"
+          >
+            Save
+          </button>
+        </div>
       </div>
     </form>
     <template v-else>
-      <button
-        v-if="working"
-        type="button"
-        class="msm__row"
-        @click="pick('stop')"
-      >
-        <Square
-          :size="16"
-          aria-hidden="true"
-        />Stop the agent
-      </button>
-      <button
-        type="button"
-        class="msm__row"
-        data-testid="menu-changes"
-        @click="pick('changes')"
-      >
-        <FileDiff
-          :size="16"
-          aria-hidden="true"
-        />Changes <span class="msm__hint">{{ changedFiles }} file{{ changedFiles === 1 ? "" : "s" }}</span>
-      </button>
-      <button
-        type="button"
-        class="msm__row"
-        data-testid="menu-files"
-        @click="pick('files')"
-      >
-        <FolderOpen
-          :size="16"
-          aria-hidden="true"
-        />Files
-      </button>
-      <button
-        v-if="supportsSide"
-        type="button"
-        class="msm__row"
-        data-testid="menu-side"
-        @click="pick('side')"
-      >
-        <MessageCircleQuestionMark
-          :size="16"
-          aria-hidden="true"
-        />Side question <span class="msm__hint">/btw</span>
-      </button>
-      <button
-        type="button"
-        class="msm__row"
-        data-testid="menu-terminal"
-        @click="pick('terminal')"
-      >
-        <SquareTerminal
-          :size="16"
-          aria-hidden="true"
-        />Terminal
-      </button>
-      <button
-        v-if="canFork"
-        type="button"
-        class="msm__row"
-        @click="pick('fork')"
-      >
-        <GitFork
-          :size="16"
-          aria-hidden="true"
-        />Fork from here
-      </button>
-      <button
-        type="button"
-        class="msm__row"
-        data-testid="menu-rename"
-        @click="pick('rename')"
-      >
-        <Pencil
-          :size="16"
-          aria-hidden="true"
-        />Rename
-      </button>
-      <button
-        type="button"
-        class="msm__row"
-        @click="pick('computer')"
-      >
-        <Laptop
-          :size="16"
-          aria-hidden="true"
-        />Open on my computer
-      </button>
-      <button
-        type="button"
-        class="msm__row msm__row--danger"
-        data-testid="menu-archive"
-        @click="pick('archive')"
-      >
-        <Archive
-          :size="16"
-          aria-hidden="true"
-        />Archive
-      </button>
+      <div class="ph-group">
+        <button
+          type="button"
+          class="ph-row"
+          style="--ph-sep-left: 56px"
+          data-testid="menu-changes"
+          @click="pick('changes')"
+        >
+          <span class="ph-row__icon ph-row__icon--plain"><FileDiff
+            :size="24"
+            aria-hidden="true"
+          /></span>
+          <span class="ph-row__main"><span class="ph-row__title">Changes</span></span>
+          <span class="ph-row__value">{{ changedFiles }} file{{ changedFiles === 1 ? "" : "s" }}</span>
+        </button>
+        <button
+          type="button"
+          class="ph-row"
+          style="--ph-sep-left: 56px"
+          data-testid="menu-files"
+          @click="pick('files')"
+        >
+          <span class="ph-row__icon ph-row__icon--plain"><FileText
+            :size="24"
+            aria-hidden="true"
+          /></span>
+          <span class="ph-row__main"><span class="ph-row__title">Files</span></span>
+        </button>
+        <button
+          v-if="supportsSide"
+          type="button"
+          class="ph-row"
+          style="--ph-sep-left: 56px"
+          data-testid="menu-side"
+          @click="pick('side')"
+        >
+          <span class="ph-row__icon ph-row__icon--plain"><MessageCircle
+            :size="24"
+            aria-hidden="true"
+          /></span>
+          <span class="ph-row__main"><span class="ph-row__title">Side question</span></span>
+          <span class="ph-row__value">/btw</span>
+        </button>
+        <button
+          type="button"
+          class="ph-row"
+          style="--ph-sep-left: 56px"
+          data-testid="menu-terminal"
+          @click="pick('terminal')"
+        >
+          <span class="ph-row__icon ph-row__icon--plain"><SquareTerminal
+            :size="24"
+            aria-hidden="true"
+          /></span>
+          <span class="ph-row__main"><span class="ph-row__title">Run a command</span></span>
+        </button>
+      </div>
+      <div class="ph-group">
+        <button
+          v-if="canFork"
+          type="button"
+          class="ph-row"
+          style="--ph-sep-left: 56px"
+          @click="pick('fork')"
+        >
+          <span class="ph-row__icon ph-row__icon--plain"><GitFork
+            :size="24"
+            aria-hidden="true"
+          /></span>
+          <span class="ph-row__main"><span class="ph-row__title">Fork from here</span></span>
+        </button>
+        <button
+          type="button"
+          class="ph-row"
+          style="--ph-sep-left: 56px"
+          data-testid="menu-rename"
+          @click="pick('rename')"
+        >
+          <span class="ph-row__icon ph-row__icon--plain"><Pencil
+            :size="24"
+            aria-hidden="true"
+          /></span>
+          <span class="ph-row__main"><span class="ph-row__title">Rename</span></span>
+        </button>
+        <button
+          type="button"
+          class="ph-row"
+          style="--ph-sep-left: 56px"
+          data-testid="menu-computer"
+          @click="pick('computer')"
+        >
+          <span class="ph-row__icon ph-row__icon--plain"><Laptop
+            :size="24"
+            aria-hidden="true"
+          /></span>
+          <span class="ph-row__main"><span class="ph-row__title">Open on my computer</span></span>
+        </button>
+      </div>
+      <div class="ph-group">
+        <button
+          v-if="working"
+          type="button"
+          class="ph-row"
+          style="--ph-sep-left: 56px"
+          data-testid="menu-stop"
+          @click="pick('stop')"
+        >
+          <span class="ph-row__icon ph-row__icon--plain"><Square
+            :size="20"
+            aria-hidden="true"
+          /></span>
+          <span class="ph-row__main"><span class="ph-row__title">Stop the agent</span></span>
+        </button>
+        <button
+          type="button"
+          class="ph-row ph-row--danger"
+          style="--ph-sep-left: 56px"
+          data-testid="menu-archive"
+          @click="pick('archive')"
+        >
+          <span class="ph-row__icon ph-row__icon--plain"><Archive
+            :size="24"
+            aria-hidden="true"
+          /></span>
+          <span class="ph-row__main"><span class="ph-row__title">Archive</span></span>
+        </button>
+      </div>
     </template>
   </BottomSheet>
 </template>
 
 <style scoped>
-.msm__row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  min-height: 48px;
-  padding: 4px;
-  border: 0;
-  border-bottom: 1px solid var(--border);
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  font-size: 15px;
-  text-align: left;
-}
-
-.msm__row--danger {
-  color: var(--error);
-}
-
-.msm__hint {
-  margin-left: auto;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.msm__rename {
-  display: grid;
-  gap: 8px;
+.ph-group:first-child {
+  margin-top: 4px;
 }
 
 .msm__label {
-  font-size: 13px;
-  color: var(--muted);
+  margin-top: 4px;
 }
 
 .msm__input {
-  min-height: 44px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: var(--main-bg);
-  color: var(--text);
-  font: inherit;
-  font-size: 16px;
-}
-
-.msm__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
+  margin-bottom: 4px;
 }
 </style>

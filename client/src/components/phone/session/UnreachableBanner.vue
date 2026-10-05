@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** "Can't reach hangar. Trying again in 4 s." while the machine is away. */
+/** "Can't reach hangar. Trying again in 4 s." while the machine is away. Tapping tries now. */
 defineProps<{ machineName: string; retryIn: number }>();
 const emit = defineEmits<{ (event: "retry"): void }>();
 </script>
@@ -7,7 +7,7 @@ const emit = defineEmits<{ (event: "retry"): void }>();
 <template>
   <button
     type="button"
-    class="ub"
+    class="ph-banner ub"
     role="alert"
     data-testid="unreachable-banner"
     @click="emit('retry')"
@@ -24,16 +24,10 @@ const emit = defineEmits<{ (event: "retry"): void }>();
 
 <style scoped>
 .ub {
-  flex: none;
-  width: 100%;
-  min-height: 36px;
-  padding: 8px 14px;
-  border: 0;
-  background: color-mix(in srgb, var(--error) 12%, transparent);
+  width: auto;
+  margin: 0;
+  background: color-mix(in srgb, var(--error) 12%, var(--ph-grouped-bg));
   color: var(--error);
-  font: inherit;
-  font-size: 13px;
   font-weight: 500;
-  text-align: left;
 }
 </style>

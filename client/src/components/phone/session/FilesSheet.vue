@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { shallowRef, watch } from "vue";
-import { ChevronLeft, FileText, Folder, LoaderCircle } from "lucide-vue-next";
+import { computed } from "vue";
+import { ArrowLeft, ChevronLeft, ChevronRight, FileText, Folder, LoaderCircle } from "lucide-vue-next";
+import { phoneLook } from "@/composables/phone/use-phone-env";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
 import { browseSessionDirectory, readSessionFile } from "@/api/session-files";
 
@@ -56,6 +58,13 @@ function up(): void {
   void browse(parts.join("/"));
 }
 
+const heading = computed(() => (file.value ? file.value.path.split("/").pop() ?? file.value.path : path.value ? path.value.split("/").pop() ?? path.value : "Files"));
+const canGoBack = computed(() => Boolean(file.value) || Boolean(path.value));
+function goBack(): void {
+  if (file.value) file.value = null;
+  else up();
+}
+
 watch(() => props.open, (open) => {
   file.value = null;
   if (open) void browse("");
@@ -66,164 +75,132 @@ watch(() => props.open, (open) => {
   <BottomSheet
     :open="open"
     label="Files"
-    full
+    :detents="['large']"
     @close="emit('close')"
   >
-    <template v-if="file">
+    <template #head>
       <button
+        v-if="canGoBack"
         type="button"
-        class="fls__back"
-        @click="file = null"
+        class="ph-navbtn ph-glass"
+        aria-label="Back"
+        @click="goBack"
       >
-        <ChevronLeft
-          :size="16"
+        <ArrowLeft
+          v-if="phoneLook === 'android'"
+          :size="24"
           aria-hidden="true"
-        /> {{ path || "Files" }}
+        />
+        <ChevronLeft
+          v-else
+          :size="24"
+          :stroke-width="2.4"
+          aria-hidden="true"
+        />
       </button>
-      <h2 class="fls__file">
+      <h2>{{ heading }}</h2>
+      <span class="ph-navbar__spacer" />
+      <LoaderCircle
+        v-if="loading"
+        class="ph-spinner fls__spin"
+        :size="18"
+      />
+    </template>
+
+    <p
+      v-if="error"
+      class="ph-note ph-note--error"
+      role="alert"
+    >
+      {{ error }}
+    </p>
+    <div
+      v-if="file"
+      class="ph-sheet__pad"
+    >
+      <p class="fls__path">
         {{ file.path }}
-      </h2>
+      </p>
       <p
         v-if="file.note"
-        class="fls__note"
+        class="ph-note fls__note"
       >
         {{ file.note }}
       </p>
       <pre
         v-if="file.text !== null"
-        class="fls__pre"
+        class="ph-code fls__pre"
         data-testid="phone-file-text"
       >{{ file.text }}</pre>
-    </template>
-    <template v-else>
-      <div class="fls__head">
-        <button
-          v-if="path"
-          type="button"
-          class="fls__back"
-          @click="up"
-        >
-          <ChevronLeft
-            :size="16"
-            aria-hidden="true"
-          /> Up
-        </button>
-        <h2 class="fls__title">
-          {{ path || "Files" }}
-        </h2>
-        <LoaderCircle
-          v-if="loading"
-          class="animate-spin text-muted"
-          :size="14"
-        />
-      </div>
-      <p
-        v-if="error"
-        class="fls__note"
-        role="alert"
-      >
-        {{ error }}
-      </p>
+    </div>
+    <div
+      v-else-if="entries.length"
+      class="ph-group"
+    >
       <button
         v-for="entry in entries"
         :key="entry.relativePath"
         type="button"
-        class="fls__row"
+        class="ph-row"
+        style="--ph-sep-left: 52px"
         data-testid="phone-file"
         @click="entry.isDirectory ? browse(entry.relativePath) : read(entry)"
       >
         <Folder
           v-if="entry.isDirectory"
-          :size="15"
-          class="text-accent"
+          class="fls__icon fls__icon--dir"
+          :size="22"
           aria-hidden="true"
         />
         <FileText
           v-else
-          :size="15"
-          class="text-muted"
+          class="fls__icon"
+          :size="22"
           aria-hidden="true"
         />
-        <span class="fls__name">{{ entry.name }}</span>
+        <span class="ph-row__main"><span class="ph-row__title">{{ entry.name }}</span></span>
+        <ChevronRight
+          v-if="entry.isDirectory"
+          class="ph-row__chev"
+          :size="16"
+          :stroke-width="3"
+          aria-hidden="true"
+        />
       </button>
-    </template>
+    </div>
   </BottomSheet>
 </template>
 
 <style scoped>
-.fls__head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
+.fls__spin {
+  margin-right: 12px;
 }
 
-.fls__title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  font-family: var(--font-mono-stack);
-  font-size: 13px;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.fls__back {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 36px;
-  border: 0;
-  background: transparent;
-  color: var(--accent);
-  font: inherit;
-  font-size: 13px;
-}
-
-.fls__row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 44px;
-  border: 0;
-  border-bottom: 1px solid var(--border);
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  font-size: 14px;
-  text-align: left;
-}
-
-.fls__name {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.fls__file {
-  margin: 4px 0 8px;
-  font-family: var(--font-mono-stack);
-  font-size: 12px;
+.fls__path {
+  margin: 0 0 10px;
+  font-family: var(--ph-mono);
+  font-size: 0.8rem;
+  color: var(--muted);
   overflow-wrap: anywhere;
 }
 
 .fls__note {
-  font-size: 13px;
-  color: var(--muted);
+  margin: 0 0 10px;
 }
 
 .fls__pre {
-  margin: 0;
   overflow-x: auto;
-  padding: 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: var(--main-bg);
-  font-family: var(--font-mono-stack);
-  font-size: 11.5px;
-  line-height: 1.5;
+  font-size: 0.72rem;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.fls__icon {
+  flex: none;
+  color: var(--muted);
+}
+
+.fls__icon--dir {
+  color: var(--accent);
 }
 </style>

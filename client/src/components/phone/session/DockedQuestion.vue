@@ -1,95 +1,137 @@
 <script setup lang="ts">
-import { shallowRef } from "vue";
+import { computed, shallowRef, useTemplateRef } from "vue";
+import { Check } from "lucide-vue-next";
+import BottomSheet from "@/components/phone/BottomSheet.vue";
 import QuestionChoices from "@/components/phone/QuestionChoices.vue";
 import type { PendingQuestion } from "@/lib/phone/dock-state";
 
-/** The agent's question in the composer's place: radio rows, Something else…, Send answer, and Skip or Later. */
+/**
+ * The agent's question docked above the composer, compact: the question, its first two options as buttons (a tap
+ * answers) and More… (every option, your own words, Skip, in a sheet). Later folds it into a pill.
+ */
 const props = defineProps<{
   pending: PendingQuestion;
   answer: (requestId: string, answers: string[][]) => Promise<void>;
   reject: (requestId: string) => Promise<void>;
+  machineName: string;
+  sessionTitle: string;
 }>();
 const emit = defineEmits<{ (event: "later"): void }>();
 
-const busy = shallowRef(false);
+const sheetRef = useTemplateRef<InstanceType<typeof BottomSheet>>("sheet");
+const more = shallowRef(false);
+const sent = shallowRef<string | null>(null);
 const error = shallowRef<string | null>(null);
+const quick = computed(() => (props.pending.question.multiple ? [] : props.pending.question.options.slice(0, 2)));
 
-async function run(action: () => Promise<void>): Promise<void> {
-  busy.value = true;
+async function run(label: string, action: () => Promise<void>): Promise<void> {
+  more.value = false;
+  sent.value = label;
   error.value = null;
   try {
     await action();
   } catch (failure) {
+    sent.value = null;
     error.value = failure instanceof Error ? failure.message : String(failure);
-  } finally {
-    busy.value = false;
   }
+}
+
+function answerWith(labels: string[]): void {
+  void run(labels.join(", "), () => props.answer(props.pending.requestId, [labels]));
 }
 </script>
 
 <template>
   <div
-    class="dock-q"
+    class="ph-docked-ask"
     data-testid="docked-question"
   >
-    <p class="dock-q__head">
-      Question
+    <div class="ph-docked-ask__h">
+      <span
+        class="ph-dot ph-dot--waiting"
+        aria-hidden="true"
+      />Asked you
+      <button
+        type="button"
+        class="ph-docked-ask__later ph-press"
+        data-testid="docked-later"
+        @click="emit('later')"
+      >
+        Later
+      </button>
+    </div>
+    <p class="ph-docked-ask__q">
+      {{ pending.question.question }}
     </p>
-    <QuestionChoices
-      :question="pending.question"
-      :more="pending.more"
-      :busy="busy"
-      @answer="(labels) => run(() => props.answer(pending.requestId, [labels]))"
-      @skip="run(() => props.reject(pending.requestId))"
-    />
     <p
       v-if="error"
-      class="dock-q__error"
+      class="ph-docked-ask__note dq__error"
       role="alert"
     >
       {{ error }}
     </p>
-    <button
-      type="button"
-      class="dock-q__later"
-      @click="emit('later')"
+    <div
+      class="ph-btns"
+      :class="quick.length === 2 ? 'ph-btns--q' : quick.length === 1 ? 'ph-btns--q-one' : 'ph-btns--q-none'"
     >
-      Later
-    </button>
+      <button
+        v-for="option in quick"
+        :key="option.label"
+        type="button"
+        class="ph-btn"
+        :class="{ 'ph-btn--done': sent === option.label }"
+        :disabled="sent !== null"
+        @click="answerWith([option.label])"
+      >
+        <Check
+          v-if="sent === option.label"
+          :size="20"
+          :stroke-width="2.6"
+          aria-hidden="true"
+        />
+        <span>{{ option.label }}</span>
+      </button>
+      <button
+        type="button"
+        class="ph-btn"
+        :disabled="sent !== null"
+        data-testid="docked-more"
+        @click="more = true"
+      >
+        <span>{{ quick.length ? "More…" : "Answer…" }}</span>
+      </button>
+    </div>
+
+    <BottomSheet
+      ref="sheet"
+      :open="more"
+      label="Question"
+      title="Question"
+      :detents="['medium', 'large']"
+      initial="medium"
+      @close="more = false"
+    >
+      <QuestionChoices
+        :question="pending.question"
+        :more="pending.more"
+        :busy="sent !== null"
+        :machine-name="machineName"
+        :session-title="sessionTitle"
+        skippable
+        @answer="answerWith"
+        @skip="run('Skipped', () => props.reject(pending.requestId))"
+        @expand="sheetRef?.expand()"
+      />
+    </BottomSheet>
   </div>
 </template>
 
 <style scoped>
-.dock-q {
-  display: grid;
-  flex: none;
-  gap: 6px;
-  max-height: 70dvh;
-  overflow-y: auto;
-  padding: 8px 12px calc(env(safe-area-inset-bottom) + 8px);
-  border-top: 1px solid var(--border);
-  background: var(--main-bg);
+.ph-docked-ask__q {
+  margin: 0;
 }
 
-.dock-q__head {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--idle);
-}
-
-.dock-q__error {
-  font-size: 12px;
+.dq__error {
   color: var(--error);
-}
-
-.dock-q__later {
-  min-height: 40px;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  font-size: 13px;
 }
 </style>

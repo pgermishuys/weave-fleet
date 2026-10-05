@@ -133,8 +133,8 @@ html[data-phone] .ph-navbtn {
   touch-action: manipulation;
 }
 
-html[data-phone] input,
-html[data-phone] textarea {
+:where(html[data-phone]) input,
+:where(html[data-phone]) textarea {
   font: inherit;
   color: inherit;
 }
@@ -567,6 +567,7 @@ html[data-phone] textarea {
 }
 
 .ph-row__title {
+  display: block;
   overflow: hidden;
   font-size: var(--ph-t-body);
   line-height: 1.25;
@@ -580,6 +581,7 @@ html[data-phone] textarea {
 }
 
 .ph-row__sub {
+  display: block;
   margin-top: 2px;
   overflow: hidden;
   font-size: var(--ph-t-sub);
@@ -2066,4 +2068,35 @@ html[data-phone="android"] .ph-row-wrap > .ph-row.is-pressed {
   html[data-phone] .ph-dot--running {
     animation: none;
   }
+}
+
+/* The docked ask folds away (answered, or put off with Later) and comes back. */
+.ph-dock-enter-active,
+.ph-dock-leave-active {
+  overflow: hidden;
+  transition: max-height 0.35s var(--ph-ease), opacity 0.25s, transform 0.35s var(--ph-ease), margin 0.35s var(--ph-ease), padding 0.35s var(--ph-ease);
+}
+
+.ph-dock-enter-from,
+.ph-dock-leave-to {
+  max-height: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  opacity: 0;
+  transform: translateY(16px) scale(0.98);
+}
+
+.ph-pill-enter-active {
+  transition: opacity 0.28s var(--ph-ease-out) 0.25s, transform 0.28s var(--ph-ease-out) 0.25s;
+}
+
+.ph-pill-leave-active {
+  transition: opacity 0.15s;
+}
+
+.ph-pill-enter-from,
+.ph-pill-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
 }

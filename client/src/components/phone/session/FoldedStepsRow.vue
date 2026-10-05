@@ -9,60 +9,25 @@ const emit = defineEmits<{ (event: "open"): void }>();
 <template>
   <button
     type="button"
-    class="fsr"
+    class="ph-step"
     data-testid="phone-steps-row"
     @click="emit('open')"
   >
     <LoaderCircle
       v-if="running"
-      class="animate-spin"
-      :size="13"
+      class="ph-spinner"
+      :size="18"
       aria-hidden="true"
     />
-    <span class="fsr__text">{{ summary }}</span>
-    <span
+    <span class="ph-step__t">{{ summary }}<span
       v-if="failed"
-      class="fsr__failed"
-    >· {{ failed }} failed</span>
+      class="ph-step__failed"
+    > · {{ failed }} failed</span></span>
     <ChevronRight
-      class="fsr__chev"
-      :size="14"
+      class="ph-row__chev"
+      :size="16"
+      :stroke-width="3"
       aria-hidden="true"
     />
   </button>
 </template>
-
-<style scoped>
-.fsr {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  min-height: 44px;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  background: var(--card-bg);
-  color: var(--text);
-  font: inherit;
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.fsr__text {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.fsr__failed {
-  color: var(--error);
-}
-
-.fsr__chev {
-  color: var(--muted);
-}
-</style>

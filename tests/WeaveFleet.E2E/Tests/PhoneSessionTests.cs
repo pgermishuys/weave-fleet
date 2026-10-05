@@ -4,7 +4,7 @@ using WeaveFleet.E2E.Infrastructure;
 
 namespace WeaveFleet.E2E.Tests;
 
-/// <summary>A session on the phone: queueing while the agent works, Stop, and answering a docked question.</summary>
+/// <summary>A session on the phone: queueing while the agent works, Stop, and answering a question docked above the composer.</summary>
 [Trait("Category", "E2E")]
 public sealed class PhoneSessionTests(PhoneFleetWebApplicationFactory factory, PlaywrightFixture playwright)
     : PhoneE2ETestBase(factory, playwright), IClassFixture<PhoneFleetWebApplicationFactory>, IClassFixture<PlaywrightFixture>
@@ -30,7 +30,7 @@ public sealed class PhoneSessionTests(PhoneFleetWebApplicationFactory factory, P
     }
 
     [Fact]
-    public async Task A_question_docks_in_place_of_the_composer_and_is_answered()
+    public async Task A_question_docks_above_the_composer_and_is_answered()
     {
         var phone = await PhoneAsync();
         await PairAsync(phone);
@@ -66,7 +66,8 @@ public sealed class PhoneSessionTests(PhoneFleetWebApplicationFactory factory, P
         await phone.GotoAsync($"/phone/s/{MachineId}/{sessionId}");
         var dock = phone.GetByTestId("docked-question");
         await dock.WaitForAsync(new LocatorWaitForOptions { Timeout = 15_000 });
-        (await phone.GetByTestId("phone-composer").CountAsync()).ShouldBe(0, "the ask takes the composer's place");
+        // Compact, above the composer, which stays.
+        await phone.GetByTestId("phone-composer").WaitForAsync();
 
         // One of the first options answers with a tap.
         await dock.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Plain 401" }).ClickAsync();
@@ -83,7 +84,7 @@ public sealed class PhoneSessionTests(PhoneFleetWebApplicationFactory factory, P
                 state = new { status = "completed", input = questionInput, metadata = new { answers = harness.LastAnswers } },
             },
         }));
-        await phone.GetByTestId("phone-composer").WaitForAsync(new LocatorWaitForOptions { Timeout = 15_000 });
+        await dock.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Detached, Timeout = 15_000 });
     }
 
     [Fact]

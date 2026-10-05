@@ -12,54 +12,65 @@ const emit = defineEmits<{ (event: "close"): void }>();
   <BottomSheet
     :open="open"
     label="Plan"
+    :title="progress?.plan?.title ?? 'Plan'"
+    :detents="['medium', 'large']"
+    initial="medium"
     @close="emit('close')"
   >
     <template v-if="progress">
-      <h2 class="pls__title">
-        {{ progress.plan?.title ?? "Plan" }} <span class="pls__count">{{ progress.done }} of {{ progress.total }}</span>
-      </h2>
+      <p class="ph-group-f pls__count">
+        {{ progress.done }} of {{ progress.total }} done
+      </p>
       <template v-if="progress.plan">
-        <section
+        <template
           v-for="(group, index) in progress.plan.groups"
           :key="index"
-          class="pls__group"
         >
-          <h3
+          <div
             v-if="group.title"
-            class="pls__group-title"
+            class="ph-group-h"
           >
             {{ group.title }}
-          </h3>
-          <p
-            v-for="step in group.steps"
-            :key="step.key"
-            class="pls__row"
-            :class="{ 'pls__row--done': step.checked }"
-          >
-            <Check
-              v-if="step.checked"
-              :size="14"
-              aria-hidden="true"
-            />
-            <span
-              v-else
-              class="pls__box"
-              aria-hidden="true"
-            />
-            <span>{{ step.number ? `${step.number} ` : "" }}{{ step.title }}</span>
-          </p>
-        </section>
+          </div>
+          <div class="ph-group pls__group">
+            <div
+              v-for="step in group.steps"
+              :key="step.key"
+              class="ph-row ph-row--static"
+              :class="{ 'pls__row--done': step.checked }"
+            >
+              <Check
+                v-if="step.checked"
+                class="pls__check"
+                :size="20"
+                :stroke-width="2.6"
+                aria-hidden="true"
+              />
+              <span
+                v-else
+                class="pls__box"
+                aria-hidden="true"
+              />
+              <span class="ph-row__main"><span class="ph-row__title ph-row__title--wrap">{{ step.number ? `${step.number} ` : "" }}{{ step.title }}</span></span>
+            </div>
+          </div>
+        </template>
       </template>
-      <template v-else>
-        <p
+      <div
+        v-else
+        class="ph-group pls__group"
+      >
+        <div
           v-for="(todo, index) in progress.todos"
           :key="index"
-          class="pls__row"
+          class="ph-row ph-row--static"
           :class="{ 'pls__row--done': todo.status === 'completed' }"
         >
           <Check
             v-if="todo.status === 'completed'"
-            :size="14"
+            class="pls__check"
+            :size="20"
+            :stroke-width="2.6"
             aria-hidden="true"
           />
           <span
@@ -67,56 +78,37 @@ const emit = defineEmits<{ (event: "close"): void }>();
             class="pls__box"
             aria-hidden="true"
           />
-          <span>{{ todo.content }}</span>
-        </p>
-      </template>
+          <span class="ph-row__main"><span class="ph-row__title ph-row__title--wrap">{{ todo.content }}</span></span>
+        </div>
+      </div>
     </template>
   </BottomSheet>
 </template>
 
 <style scoped>
-.pls__title {
-  margin-bottom: 8px;
-  font-size: 15px;
-  font-weight: 600;
-}
-
 .pls__count {
-  font-weight: 400;
+  margin: 0 32px 10px;
+}
+
+.pls__group + .ph-group-h {
+  margin-top: 18px;
+}
+
+.pls__row--done .ph-row__title {
   color: var(--muted);
 }
 
-.pls__group-title {
-  margin: 10px 0 4px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
-}
-
-.pls__row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  min-height: 32px;
-  padding: 6px 0;
-  font-size: 14px;
-}
-
-.pls__row--done {
-  color: var(--muted);
-}
-
-.pls__row :deep(svg) {
-  margin-top: 3px;
+.pls__check {
+  flex: none;
   color: var(--running);
 }
 
 .pls__box {
-  width: 13px;
-  height: 13px;
+  width: 18px;
+  height: 18px;
   flex: none;
-  margin-top: 3px;
-  border: 1.5px solid var(--muted);
-  border-radius: 3px;
+  margin: 0 1px;
+  border: 2px solid var(--muted);
+  border-radius: 5px;
 }
 </style>

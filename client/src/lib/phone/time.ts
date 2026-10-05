@@ -25,5 +25,5 @@ export function duration(fromTimestamp: number | null | undefined, now: number):
 
 /** "14:07", the clock time, for "Since you looked at 14:07" and "last heard 14:07". */
 export function clock(timestamp: number): string {
-  return new Date(timestamp).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  return new Date(timestamp).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }

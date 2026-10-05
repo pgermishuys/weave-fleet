@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { Camera, FileText, Image, MessageCircleQuestionMark, SquareTerminal } from "lucide-vue-next";
+import { Camera, FileText, Image, MessageCircle, SquareTerminal } from "lucide-vue-next";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
 
-/** What + offers: a photo or screenshot, the camera, a file from the machine, a command, a side question. */
+/** What + offers, as a floating sheet: a photo or screenshot, the camera, a file from the machine, a command, a side question. */
 export type PlusChoice = "photo" | "camera" | "file" | "command" | "side";
 
 defineProps<{ open: boolean; machineName: string; supportsShell: boolean; supportsSide: boolean }>();
@@ -13,87 +13,90 @@ const emit = defineEmits<{ (event: "pick", choice: PlusChoice): void; (event: "c
   <BottomSheet
     :open="open"
     label="Add to the message"
+    floating
     @close="emit('close')"
   >
-    <button
-      type="button"
-      class="pps__row"
-      data-testid="plus-photo"
-      @click="emit('pick', 'photo')"
+    <div class="ph-group pps__first">
+      <button
+        type="button"
+        class="ph-row"
+        style="--ph-sep-left: 56px"
+        data-testid="plus-photo"
+        @click="emit('pick', 'photo')"
+      >
+        <span class="ph-row__icon ph-row__icon--plain"><Image
+          :size="24"
+          aria-hidden="true"
+        /></span>
+        <span class="ph-row__main"><span class="ph-row__title">Photo or screenshot</span></span>
+        <span class="ph-row__value">up to 5</span>
+      </button>
+      <button
+        type="button"
+        class="ph-row"
+        style="--ph-sep-left: 56px"
+        @click="emit('pick', 'camera')"
+      >
+        <span class="ph-row__icon ph-row__icon--plain"><Camera
+          :size="24"
+          aria-hidden="true"
+        /></span>
+        <span class="ph-row__main"><span class="ph-row__title">Camera</span></span>
+      </button>
+      <button
+        type="button"
+        class="ph-row"
+        style="--ph-sep-left: 56px"
+        data-testid="plus-file"
+        @click="emit('pick', 'file')"
+      >
+        <span class="ph-row__icon ph-row__icon--plain"><FileText
+          :size="24"
+          aria-hidden="true"
+        /></span>
+        <span class="ph-row__main"><span class="ph-row__title">A file from {{ machineName }}</span></span>
+      </button>
+    </div>
+    <div
+      v-if="supportsShell || supportsSide"
+      class="ph-group"
     >
-      <Image
-        :size="18"
-        aria-hidden="true"
-      /><span>Photo or screenshot <span class="pps__hint">up to 5</span></span>
-    </button>
-    <button
-      type="button"
-      class="pps__row"
-      @click="emit('pick', 'camera')"
-    >
-      <Camera
-        :size="18"
-        aria-hidden="true"
-      /><span>Camera</span>
-    </button>
-    <button
-      type="button"
-      class="pps__row"
-      data-testid="plus-file"
-      @click="emit('pick', 'file')"
-    >
-      <FileText
-        :size="18"
-        aria-hidden="true"
-      /><span>A file from {{ machineName }}</span>
-    </button>
-    <button
-      v-if="supportsShell"
-      type="button"
-      class="pps__row"
-      data-testid="plus-command"
-      @click="emit('pick', 'command')"
-    >
-      <SquareTerminal
-        :size="18"
-        aria-hidden="true"
-      /><span>Run a command <span class="pps__hint">no model turn</span></span>
-    </button>
-    <button
-      v-if="supportsSide"
-      type="button"
-      class="pps__row"
-      data-testid="plus-side"
-      @click="emit('pick', 'side')"
-    >
-      <MessageCircleQuestionMark
-        :size="18"
-        aria-hidden="true"
-      /><span>Side question <span class="pps__hint">/btw, doesn't touch this session</span></span>
-    </button>
+      <button
+        v-if="supportsShell"
+        type="button"
+        class="ph-row"
+        style="--ph-sep-left: 56px"
+        data-testid="plus-command"
+        @click="emit('pick', 'command')"
+      >
+        <span class="ph-row__icon ph-row__icon--plain"><SquareTerminal
+          :size="24"
+          aria-hidden="true"
+        /></span>
+        <span class="ph-row__main"><span class="ph-row__title">Run a command</span></span>
+        <span class="ph-row__value">!</span>
+      </button>
+      <button
+        v-if="supportsSide"
+        type="button"
+        class="ph-row"
+        style="--ph-sep-left: 56px"
+        data-testid="plus-side"
+        @click="emit('pick', 'side')"
+      >
+        <span class="ph-row__icon ph-row__icon--plain"><MessageCircle
+          :size="24"
+          aria-hidden="true"
+        /></span>
+        <span class="ph-row__main"><span class="ph-row__title">Side question</span></span>
+        <span class="ph-row__value">/btw</span>
+      </button>
+    </div>
   </BottomSheet>
 </template>
 
 <style scoped>
-.pps__row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  min-height: 52px;
-  padding: 6px 4px;
-  border: 0;
-  border-bottom: 1px solid var(--border);
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  font-size: 15px;
-  text-align: left;
-}
-
-.pps__hint {
-  margin-left: 4px;
-  font-size: 12px;
-  color: var(--muted);
+.pps__first {
+  margin-top: 4px;
 }
 </style>

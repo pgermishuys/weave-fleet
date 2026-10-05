@@ -4,7 +4,7 @@ import { X } from "lucide-vue-next";
 import { cssPx, reducedMotion } from "@/lib/phone/animate";
 import { addSample, clamp, detentOffsets, rubber, sheetRelease, velocity, type Detent, type Sample } from "@/lib/phone/gestures";
 import { keyboardHeight, pageRecessed, phoneLook } from "@/composables/phone/use-phone-env";
-import { popSheetEntry, pushSheetEntry, topSheetEntry } from "@/lib/phone/sheet-history";
+import { popSheetEntry, pushSheetEntry, sheetHistorySettled, topSheetEntry } from "@/lib/phone/sheet-history";
 
 /**
  * A sheet from the bottom of the phone screen, as the phones draw them (ported from the mockups' kit.js): a grabber,
@@ -129,7 +129,10 @@ async function show(): Promise<void> {
   layout();
   paint(dismissAt());
   void sheetRef.value.offsetWidth;
-  if (props.history && !entry) entry = pushSheetEntry();
+  // A sheet that just closed may still be going back past its entry: let it, then take ours.
+  if (props.history && !entry) void sheetHistorySettled().then(() => {
+    if (mine === generation && !entry) entry = pushSheetEntry();
+  });
   await snap(offsets[props.initial ?? activeDetents.value[0]] ?? 0, 480);
 }
 

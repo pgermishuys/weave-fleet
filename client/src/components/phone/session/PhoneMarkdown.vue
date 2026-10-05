@@ -19,13 +19,13 @@ const html = computed(() => renderer.render(props.text));
 
 <style scoped>
 .pmd {
-  font-size: 15px;
-  line-height: 1.55;
+  font-size: var(--ph-t-body);
+  line-height: 1.45;
   overflow-wrap: anywhere;
 }
 
 .pmd :deep(p) {
-  margin: 0 0 8px;
+  margin: 0 0 10px;
 }
 
 .pmd :deep(p:last-child) {
@@ -34,20 +34,20 @@ const html = computed(() => renderer.render(props.text));
 
 .pmd :deep(pre) {
   overflow-x: auto;
-  padding: 8px 10px;
-  border-radius: var(--radius-btn);
-  background: var(--main-bg);
-  font-size: 12px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--ph-code-bg);
+  font-size: 0.8rem;
 }
 
 .pmd :deep(code) {
-  font-family: var(--font-mono-stack);
-  font-size: 0.9em;
+  font-family: var(--ph-mono);
+  font-size: 0.85em;
 }
 
 .pmd :deep(ul),
 .pmd :deep(ol) {
-  margin: 0 0 8px;
-  padding-left: 20px;
+  margin: 0 0 10px;
+  padding-left: 22px;
 }
 </style>

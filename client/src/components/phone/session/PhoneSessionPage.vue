@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from "vue";
+import { showToast } from "@/composables/phone/use-phone-toast";
+import { haptic } from "@/lib/phone/haptics";
+import { holdKeyboard } from "@/lib/phone/keyboard";
+import { shareLink } from "@/lib/phone/share";
+import { ago } from "@/lib/phone/time";
 import { storeToRefs } from "pinia";
-import { Check, CornerDownRight, ImageIcon, LoaderCircle } from "lucide-vue-next";
+import { Check, ChevronRight, CornerDownRight, ImageIcon, LoaderCircle } from "lucide-vue-next";
 import ShellCommandBlock from "@/components/session/ShellCommandBlock.vue";
 import FoldedStepsRow from "@/components/phone/session/FoldedStepsRow.vue";
 import PhoneMarkdown from "@/components/phone/session/PhoneMarkdown.vue";
@@ -42,9 +47,10 @@ import { useSessionsStore } from "@/stores/sessions";
 import { usePhoneNav } from "@/composables/phone/use-phone-nav";
 
 /**
- * A session on the phone (`/phone/s/<machine>/<session>`), per mockups/phone-app/session.html: the header is the
- * status, a plan bar when there's a plan, the conversation with each run of tool calls folded into one row, and the
- * dock at the bottom (the composer, or whatever the agent is waiting on).
+ * A session on the phone (`/phone/s/<machine>/<session>`, pushed over the inbox by PhoneStack): the bar is the status,
+ * a plan row when there's a plan, the conversation with each run of tool calls folded into one row, and the dock at
+ * the bottom — whatever the agent waits on, compact (Allow once and More…), above the composer — which stays above
+ * the keyboard. The conversation always clears the dock, whatever its height.
  */
 const props = defineProps<{ machineId: string; sessionId: string; ask?: string }>();
 const nav = usePhoneNav();
@@ -112,7 +118,28 @@ function onVisibility(): void {
 }
 
 const scrollRef = useTemplateRef<HTMLElement>("scroll");
+const dockRef = useTemplateRef<HTMLElement>("dock");
+const scrolled = shallowRef(false);
 let scrolledOnArrival = false;
+
+function onScroll(): void {
+  scrolled.value = (scrollRef.value?.scrollTop ?? 0) > 4;
+}
+
+// The conversation always clears the dock (a docked ask, a five-line message, the keyboard), staying at the bottom.
+let dockObserver: ResizeObserver | null = null;
+function watchDock(): void {
+  const dock = dockRef.value;
+  if (!dock || typeof ResizeObserver === "undefined") return;
+  dockObserver = new ResizeObserver(() => {
+    const el = scrollRef.value;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    el.style.paddingBottom = `${dock.offsetHeight + 16}px`;
+    if (atBottom) el.scrollTop = el.scrollHeight;
+  });
+  dockObserver.observe(dock);
+}
 
 /** On arrival: to what's new when there is a marker (and no ask to jump to), else to the bottom. */
 watch(() => [stream.isLoading.value, blocks.value.length] as const, async ([loading]) => {
@@ -145,8 +172,6 @@ const dock = computed(() => chooseDock({
   later: later.value,
   focus: search.value.ask ?? null,
 }));
-const answered = shallowRef<string | null>(null);
-const askGone = shallowRef(false);
 
 function putOff(id: string): void {
   later.value = new Set([...later.value, id]);
@@ -157,10 +182,7 @@ function bringBack(): void {
 }
 
 function onAnswered(text: string): void {
-  answered.value = text;
-  setTimeout(() => {
-    if (answered.value === text) answered.value = null;
-  }, 4000);
+  showToast(text);
 }
 
 // Opened from a notification for an ask that's no longer waiting: say so instead of looking for it. The asks load on
@@ -173,10 +195,7 @@ watch(() => stream.isLoading.value, (loading) => {
   setTimeout(() => {
     const waiting = asks.value.some((ask) => ask.id === target) || pendingQuestion(stream.messages.value)?.requestId === target;
     if (waiting) return;
-    askGone.value = true;
-    setTimeout(() => {
-      askGone.value = false;
-    }, 4000);
+    showToast("Already answered.");
   }, 1500);
 }, { immediate: true });
 
@@ -201,22 +220,36 @@ async function onMenu(action: MenuAction): Promise<void> {
       sheet.value = "changes";
       void fetchDiffs();
       break;
-    case "files":
-    case "side":
     case "terminal":
+      // Inside the tap, so iOS brings the keyboard up with the Run a command sheet.
+      if (caps.value.supportsShell) holdKeyboard();
       sheet.value = action;
       break;
-    case "computer":
-      sheet.value = "terminal";
+    case "files":
+    case "side":
+      sheet.value = action;
       break;
+    case "computer": {
+      sheet.value = null;
+      const outcome = await shareLink(`${title.value} on ${machineName.value}`, computerLink.value);
+      if (outcome === "copied") showToast("Link copied. Open it on the computer.");
+      else if (outcome === "failed") showToast("Couldn't share the link.");
+      break;
+    }
     case "stop":
       sheet.value = null;
       await abortSession(sessionId.value).catch(() => undefined);
       break;
     case "archive":
       sheet.value = null;
-      await archiveSession(sessionId.value).catch(() => undefined);
-      back();
+      haptic("success");
+      try {
+        await archiveSession(sessionId.value);
+        showToast("Archived");
+        back();
+      } catch (failure) {
+        showToast(failure instanceof Error ? failure.message : "Couldn't archive it.");
+      }
       break;
     case "fork": {
       sheet.value = null;
@@ -250,13 +283,32 @@ function openChild(childId: string): void {
   void nav.openSession(machineId.value, childId);
 }
 
+/** An ask waiting (docked, or put off) means the session needs you, whatever its last status said. */
+const shown = computed(() => (dock.value.kind !== "composer" || dock.value.later > 0) && status.value.tone !== "unreachable"
+  ? { tone: "needs-you" as const, state: "Needs you", detail: "" }
+  : status.value);
+
+/** What the bar says the session is doing, after the machine's name. */
+const statusText = computed(() => {
+  const value = shown.value;
+  switch (value.tone) {
+    case "working": return value.detail ? `${value.state} · ${value.detail}` : value.state;
+    case "needs-you": return "Needs you";
+    case "finished": return lastMessageAt.value ? `Finished ${ago(lastMessageAt.value, now.value)}` : "Finished";
+    case "unreachable": return `Can't reach it · last heard ${value.detail}`;
+    default: return value.state;
+  }
+});
+
 onMounted(() => {
   sessionsStore.setActiveSessionId(sessionId.value);
   document.addEventListener("visibilitychange", onVisibility);
+  watchDock();
 });
 
 onUnmounted(() => {
   rememberSeen();
+  dockObserver?.disconnect();
   document.removeEventListener("visibilitychange", onVisibility);
 });
 </script>
@@ -269,206 +321,221 @@ onUnmounted(() => {
     <PhoneSessionHeader
       :title="title"
       :machine-name="machineName"
-      :tone="status.tone"
-      :state="status.state"
-      :detail="status.detail"
+      :tone="shown.tone"
+      :status="statusText"
+      :scrolled="scrolled"
       @back="back"
       @menu="sheet = 'menu'"
-    />
-    <UnreachableBanner
-      v-if="!reachability.reachable.value"
-      :machine-name="machineName"
-      :retry-in="reachability.retryIn.value"
-      @retry="reachability.retry"
-    />
-    <PhonePlanBar
-      v-if="progress && progress.total > 0"
-      :progress="progress"
-      @open="planOpen = true"
     />
 
     <main
       ref="scroll"
-      class="ps__scroll"
+      class="ph-scroller ps__scroll"
+      @scroll.passive="onScroll"
     >
-      <button
-        v-if="stream.hasMore.value"
-        type="button"
-        class="ps__older"
-        :disabled="stream.isLoadingOlder.value"
-        @click="stream.loadOlder"
-      >
-        {{ stream.isLoadingOlder.value ? "Loading…" : "Earlier messages" }}
-      </button>
-      <div
-        v-if="stream.isLoading.value && blocks.length === 0"
-        class="ps__loading"
-        role="status"
-      >
-        <LoaderCircle
-          class="animate-spin"
-          :size="20"
-          aria-hidden="true"
+      <div class="ph-convo">
+        <UnreachableBanner
+          v-if="!reachability.reachable.value"
+          :machine-name="machineName"
+          :retry-in="reachability.retryIn.value"
+          @retry="reachability.retry"
         />
-      </div>
-
-      <template
-        v-for="(block, index) in blocks"
-        :key="block.key"
-      >
-        <SinceYouLookedMarker
-          v-if="index === markerIndex && seenAt"
-          :at="seenAt"
-        />
-        <div
-          v-if="block.kind === 'user'"
-          class="ps__you"
-          data-testid="phone-user-message"
-        >
-          <span
-            v-if="block.steered"
-            class="ps__steered"
-          ><CornerDownRight
-            :size="12"
-            aria-hidden="true"
-          /> sent into the turn</span>
-          <span
-            v-if="block.images"
-            class="ps__images"
-          ><ImageIcon
-            :size="12"
-            aria-hidden="true"
-          /> {{ block.images }} image{{ block.images === 1 ? "" : "s" }}</span>
-          <p class="ps__you-text">
-            {{ block.text }}
-          </p>
-        </div>
-        <PhoneMarkdown
-          v-else-if="block.kind === 'text'"
-          :text="block.text"
-          class="ps__agent"
-        />
-        <FoldedStepsRow
-          v-else-if="block.kind === 'steps'"
-          :summary="block.summary"
-          :running="block.running"
-          :failed="block.failed"
-          :count="block.steps.length"
-          @open="stepsOpen = block.steps"
+        <PhonePlanBar
+          v-if="progress && progress.total > 0"
+          :progress="progress"
+          @open="planOpen = true"
         />
         <button
-          v-else-if="block.kind === 'subagent'"
+          v-if="stream.hasMore.value"
           type="button"
-          class="ps__subagent"
-          :disabled="!block.childSessionId"
-          data-testid="phone-subagent"
-          @click="block.childSessionId && openChild(block.childSessionId)"
+          class="ph-btn ph-btn--plain ps__older"
+          :disabled="stream.isLoadingOlder.value"
+          @click="stream.loadOlder"
         >
-          <span class="ps__agent-name">{{ block.agent }}</span>
-          <span class="ps__subagent-title">{{ block.title }}</span>
+          {{ stream.isLoadingOlder.value ? "Loading…" : "Earlier messages" }}
+        </button>
+        <div
+          v-if="stream.isLoading.value && blocks.length === 0"
+          class="ps__loading"
+          role="status"
+        >
           <LoaderCircle
-            v-if="block.running"
-            class="animate-spin text-muted"
-            :size="13"
+            class="ph-spinner"
+            :size="22"
             aria-hidden="true"
           />
-          <span
-            v-else
-            class="ps__done"
-          >Done</span>
-        </button>
-        <p
-          v-else-if="block.kind === 'question' && !block.pending"
-          class="ps__asked"
+        </div>
+
+        <template
+          v-for="(block, index) in blocks"
+          :key="block.key"
         >
-          Asked · {{ block.question }} <template v-if="block.answer">
-            → {{ block.answer }} <Check
-              :size="12"
-              class="inline text-running"
+          <SinceYouLookedMarker
+            v-if="index === markerIndex && seenAt"
+            :at="seenAt"
+          />
+          <template v-if="block.kind === 'user'">
+            <p
+              class="ph-bubble"
+              data-testid="phone-user-message"
+            >
+              {{ block.text }}
+            </p>
+            <span
+              v-if="block.steered || block.images"
+              class="ph-bubble-meta"
+            >
+              <template v-if="block.steered"><CornerDownRight
+                :size="12"
+                aria-hidden="true"
+              /> sent into the turn</template>
+              <template v-if="block.images"><ImageIcon
+                :size="12"
+                aria-hidden="true"
+              /> {{ block.images }} image{{ block.images === 1 ? "" : "s" }}</template>
+            </span>
+          </template>
+          <PhoneMarkdown
+            v-else-if="block.kind === 'text'"
+            :text="block.text"
+            class="ph-agent"
+          />
+          <FoldedStepsRow
+            v-else-if="block.kind === 'steps'"
+            :summary="block.summary"
+            :running="block.running"
+            :failed="block.failed"
+            :count="block.steps.length"
+            @open="stepsOpen = block.steps"
+          />
+          <button
+            v-else-if="block.kind === 'subagent'"
+            type="button"
+            class="ph-step"
+            :disabled="!block.childSessionId"
+            data-testid="phone-subagent"
+            @click="block.childSessionId && openChild(block.childSessionId)"
+          >
+            <span class="ph-step__who">{{ block.agent }}</span>
+            <span class="ph-step__t">{{ block.title }}</span>
+            <LoaderCircle
+              v-if="block.running"
+              class="ph-spinner"
+              :size="18"
               aria-hidden="true"
             />
-          </template>
-        </p>
-        <ShellCommandBlock
-          v-else-if="block.kind === 'shell'"
-          :command="block.view"
-        />
-        <p
-          v-else-if="block.kind === 'error'"
-          class="ps__error"
-          role="alert"
-        >
-          {{ block.text }}
-        </p>
-      </template>
+            <span
+              v-else
+              class="ph-step__done"
+            >Done</span>
+            <ChevronRight
+              v-if="!block.running && block.childSessionId"
+              class="ph-row__chev"
+              :size="16"
+              :stroke-width="3"
+              aria-hidden="true"
+            />
+          </button>
+          <p
+            v-else-if="block.kind === 'question' && !block.pending"
+            class="ps__asked"
+          >
+            Asked · {{ block.question }} <template v-if="block.answer">
+              → {{ block.answer }} <Check
+                :size="14"
+                class="ps__answered"
+                aria-hidden="true"
+              />
+            </template>
+          </p>
+          <ShellCommandBlock
+            v-else-if="block.kind === 'shell'"
+            :command="block.view"
+            class="ps__shell"
+          />
+          <p
+            v-else-if="block.kind === 'error'"
+            class="ps__error"
+            role="alert"
+          >
+            {{ block.text }}
+          </p>
+        </template>
 
-      <p
-        v-if="status.tone === 'working'"
-        class="ps__working"
-        data-testid="phone-working"
-      >
-        <span
-          class="ps__pulse"
-          aria-hidden="true"
-        />{{ status.state }} · {{ status.detail }}
-      </p>
-      <p
-        v-else-if="status.tone === 'unreachable' && lastStatus.tone === 'working'"
-        class="ps__working"
-      >
-        Working when last heard
-      </p>
+        <p
+          v-if="shown.tone === 'working'"
+          class="ph-working"
+          data-testid="phone-working"
+        >
+          <span
+            class="ph-typing"
+            aria-hidden="true"
+          ><i /><i /><i /></span>{{ status.state }} · {{ status.detail }}
+        </p>
+        <p
+          v-else-if="shown.tone === 'needs-you'"
+          class="ph-working ph-working--waiting"
+        >
+          Waiting for you
+        </p>
+        <p
+          v-else-if="status.tone === 'unreachable' && lastStatus.tone === 'working'"
+          class="ph-working"
+        >
+          Working when last heard
+        </p>
+      </div>
     </main>
 
-    <p
-      v-if="askGone"
-      class="ps__toast"
-      role="status"
-      data-testid="already-answered"
+    <div
+      ref="dock"
+      class="ph-dock"
     >
-      Already answered.
-    </p>
-    <p
-      v-if="answered"
-      class="ps__toast"
-      role="status"
-    >
-      {{ answered }}.
-    </p>
-    <button
-      v-if="dock.later > 0 && dock.kind === 'composer'"
-      type="button"
-      class="ps__pill"
-      data-testid="later-pill"
-      @click="bringBack"
-    >
-      {{ dock.later }} waiting on you · Answer
-    </button>
-    <DockedPermission
-      v-if="dock.kind === 'permission'"
-      :key="dock.ask.id"
-      :ask="dock.ask"
-      :answer="answerPermission"
-      @later="putOff(dock.ask.id)"
-      @answered="onAnswered"
-    />
-    <DockedQuestion
-      v-else-if="dock.kind === 'question'"
-      :key="dock.pending.requestId"
-      :pending="dock.pending"
-      :answer="questions.answerQuestion"
-      :reject="questions.rejectQuestion"
-      @later="putOff(dock.pending.requestId)"
-    />
-    <PhoneComposer
-      v-else
-      :key="sessionId"
-      :session-id="sessionId"
-      :machine-id="machineId"
-      :machine-name="machineName"
-      :reachable="reachability.reachable.value"
-      @side="sheet = 'side'"
-    />
+      <Transition name="ph-pill">
+        <button
+          v-if="dock.later > 0 && dock.kind === 'composer'"
+          type="button"
+          class="ph-waiting-pill ph-glass ph-press"
+          data-testid="later-pill"
+          @click="bringBack"
+        >
+          <span
+            class="ph-dot ph-dot--waiting"
+            aria-hidden="true"
+          />{{ dock.later }} waiting · Review
+        </button>
+      </Transition>
+      <Transition name="ph-dock">
+        <DockedPermission
+          v-if="dock.kind === 'permission'"
+          :key="dock.ask.id"
+          :ask="dock.ask"
+          :answer="answerPermission"
+          :machine-name="machineName"
+          :session-title="title"
+          @later="putOff(dock.ask.id)"
+          @answered="onAnswered"
+        />
+        <DockedQuestion
+          v-else-if="dock.kind === 'question'"
+          :key="dock.pending.requestId"
+          :pending="dock.pending"
+          :answer="questions.answerQuestion"
+          :reject="questions.rejectQuestion"
+          :machine-name="machineName"
+          :session-title="title"
+          @later="putOff(dock.pending.requestId)"
+        />
+      </Transition>
+      <PhoneComposer
+        :key="sessionId"
+        :session-id="sessionId"
+        :machine-id="machineId"
+        :machine-name="machineName"
+        :reachable="reachability.reachable.value"
+        @side="sheet = 'side'"
+      />
+    </div>
 
     <SessionMenuSheet
       :open="sheet === 'menu'"
@@ -477,6 +544,7 @@ onUnmounted(() => {
       :changed-files="diffs.length"
       :working="status.tone === 'working'"
       :supports-side="caps.supportsSide"
+      :supports-shell="caps.supportsShell"
       :can-fork="session?.capabilities?.canFork ?? true"
       @pick="onMenu"
       @rename="onRename"
@@ -502,7 +570,7 @@ onUnmounted(() => {
     />
     <OpenOnComputerCard
       :open="sheet === 'terminal'"
-      title="Terminal"
+      title="Run a command"
       :machine-name="machineName"
       :link="computerLink"
       :supports-shell="caps.supportsShell"
@@ -527,161 +595,50 @@ onUnmounted(() => {
 .ps {
   position: absolute;
   inset: 0;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
+  background: var(--main-bg);
 }
 
 .ps__scroll {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 10px;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 12px 14px 16px;
-  overscroll-behavior: contain;
+  padding-bottom: 120px;
 }
 
 .ps__loading {
   display: grid;
-  flex: 1;
+  min-height: 40vh;
   place-items: center;
-  color: var(--muted);
 }
 
 .ps__older {
   align-self: center;
-  min-height: 36px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--card-bg);
-  color: var(--muted);
-  font: inherit;
-  font-size: 12px;
-}
-
-.ps__you {
-  display: grid;
-  gap: 4px;
-  align-self: flex-end;
-  max-width: 86%;
-  padding: 8px 12px;
-  border-radius: var(--radius-panel);
-  background: var(--accent-dim);
-}
-
-.ps__you-text {
-  font-size: 15px;
-  line-height: 1.45;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.ps__steered,
-.ps__images {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: var(--muted);
-}
-
-.ps__agent {
-  color: var(--text);
-}
-
-.ps__subagent {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  background: var(--card-bg);
-  color: var(--text);
-  font: inherit;
-  font-size: 13px;
-  text-align: left;
-}
-
-.ps__agent-name {
-  font-family: var(--font-mono-stack);
-  font-size: 11px;
-  color: var(--accent);
-}
-
-.ps__subagent-title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.ps__done {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--accent);
+  height: 36px;
+  font-size: var(--ph-t-foot);
 }
 
 .ps__asked {
-  font-size: 12px;
+  margin: 0;
+  font-size: var(--ph-t-foot);
   color: var(--muted);
+}
+
+.ps__answered {
+  display: inline;
+  color: var(--running);
+}
+
+.ps__shell {
+  font-size: 0.8rem;
 }
 
 .ps__error {
-  padding: 8px 12px;
-  border-radius: var(--radius-btn);
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
   background: color-mix(in srgb, var(--error) 10%, transparent);
-  font-size: 13px;
+  font-size: var(--ph-t-sub);
   color: var(--error);
 }
 
-.ps__toast {
-  align-self: center;
-  margin: 0 0 6px;
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: var(--text);
-  color: var(--main-bg);
-  font-size: 12px;
-}
-
-.ps__pill {
-  align-self: center;
-  min-height: 36px;
-  margin-bottom: 6px;
-  padding: 0 14px;
-  border: 1px solid color-mix(in srgb, var(--idle) 45%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--idle) 12%, transparent);
-  color: var(--text);
-  font: inherit;
-  font-size: 13px;
-}
-
-.ps__working {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.ps__pulse {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--running);
-  animation: ps-pulse var(--transition-pulse) ease-in-out infinite;
-}
-
-@keyframes ps-pulse {
-  50% {
-    opacity: 0.35;
-  }
+.ph-bubble {
+  margin: 0;
 }
 </style>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from "vue";
+import { computed, nextTick, onMounted, shallowRef, useTemplateRef, watch } from "vue";
 import { ArrowUp, CornerDownRight, Plus, Square, X } from "lucide-vue-next";
 import PhoneChipSheet, { type ChipOption } from "@/components/phone/session/PhoneChipSheet.vue";
 import PhoneFilePickSheet from "@/components/phone/session/PhoneFilePickSheet.vue";
@@ -14,9 +14,10 @@ import { flushHeld, heldFor, hold, removeHeld, type HeldMessage } from "@/lib/ph
 
 /**
  * The phone's composer, per the session rules: one round button — Send when idle, Queue while the agent works, Stop
- * while it works and nothing is typed — with Send now beside it when the harness can steer. Queued messages wait above
- * it marked "Next". Agent, model and effort are chips while you type, each a sheet; + adds a photo, the camera, a file,
- * a command or a side question. Typing `@`, `!` or `/btw` still works.
+ * while it works and nothing is typed — with Send now beside it when the harness can steer. Return makes a new line
+ * (the arrow sends), as messaging apps do. Queued messages wait above it marked "Next". Agent, model and effort are
+ * chips while you type, each a sheet; + adds a photo, the camera, a file, a command or a side question. Typing `@`,
+ * `!` or `/btw` still works. It sits in the session's dock, which stays above the keyboard.
  */
 const props = withDefaults(defineProps<{ sessionId: string; machineId: string; machineName: string; reachable?: boolean }>(), { reachable: true });
 const emit = defineEmits<{ (event: "sent"): void; (event: "side"): void }>();
@@ -38,7 +39,6 @@ const filesOpen = shallowRef(false);
 const chip = shallowRef<"agent" | "model" | "effort" | null>(null);
 const photos = shallowRef<(ImageAttachment & { url: string })[]>([]);
 const photoError = shallowRef<string | null>(null);
-const keyboardInset = shallowRef(0);
 // Typed while the machine was away: held on the phone, sent in order when it answers again.
 const held = shallowRef<HeldMessage[]>(heldFor(props.machineId, props.sessionId));
 let flushing = false;
@@ -58,11 +58,12 @@ const agentLabel = computed(() => agents.value.find((agent) => agent.id === agen
 const modelLabel = computed(() => models.value.find((model) => model.selectionKey === modelKey.value)?.name ?? "Model");
 const effortLabel = computed(() => (draft.effort || "medium").replace(/^./, (c) => c.toUpperCase()));
 
+/** Grows with what's typed, up to five lines, then scrolls. */
 function resize(): void {
   const el = textareaRef.value;
   if (!el) return;
   el.style.height = "auto";
-  el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  el.style.height = `${Math.min(el.scrollHeight, 22 * 5 + 18)}px`;
 }
 
 function onInput(event: Event): void {
@@ -177,23 +178,9 @@ function pick(id: string): void {
   else if (chip.value === "effort") setEffort(id);
 }
 
-/** Keeps the dock above the iOS keyboard, which doesn't resize the layout viewport. */
-function onViewport(): void {
-  const viewport = window.visualViewport;
-  if (!viewport) return;
-  keyboardInset.value = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
-}
-
 onMounted(() => {
-  window.visualViewport?.addEventListener("resize", onViewport);
-  window.visualViewport?.addEventListener("scroll", onViewport);
   void nextTick(resize);
   if (props.reachable) void flush();
-});
-
-onUnmounted(() => {
-  window.visualViewport?.removeEventListener("resize", onViewport);
-  window.visualViewport?.removeEventListener("scroll", onViewport);
 });
 
 watch(() => props.reachable, (reachable) => {
@@ -206,7 +193,6 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
 <template>
   <div
     class="pc"
-    :style="{ paddingBottom: `calc(${keyboardInset}px + env(safe-area-inset-bottom) + 8px)` }"
     data-testid="phone-composer"
   >
     <ol
@@ -217,7 +203,7 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
       <li
         v-for="(item, index) in actions.queue.value"
         :key="item.id"
-        class="pc__queued"
+        class="pc__queued ph-glass"
         data-testid="phone-queued"
       >
         <span class="pc__next">{{ index === 0 ? "Next" : "Then" }}</span>
@@ -225,19 +211,19 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
         <button
           v-if="actions.canSendQueued(item)"
           type="button"
-          class="pc__mini"
+          class="pc__mini ph-press"
           @click="actions.sendQueued(item)"
         >
           Send now
         </button>
         <button
           type="button"
-          class="pc__mini"
+          class="pc__mini ph-press"
           :aria-label="`Remove ${item.text}`"
           @click="actions.removeQueued(item)"
         >
           <X
-            :size="14"
+            :size="16"
             aria-hidden="true"
           />
         </button>
@@ -252,7 +238,7 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
       <li
         v-for="item in held"
         :key="item.id"
-        class="pc__queued pc__queued--held"
+        class="pc__queued ph-glass"
         data-testid="phone-held"
       >
         <span class="pc__next pc__next--held">Held</span>
@@ -260,7 +246,7 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
         <button
           v-if="item.error && reachable"
           type="button"
-          class="pc__mini"
+          class="pc__mini ph-press"
           :title="item.error"
           @click="flush"
         >
@@ -268,7 +254,7 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
         </button>
         <button
           type="button"
-          class="pc__mini"
+          class="pc__mini ph-press"
           @click="editHeld(item)"
         >
           Edit
@@ -282,7 +268,7 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
     >
       <button
         type="button"
-        class="pc__chip"
+        class="pc__chip ph-glass ph-press"
         data-testid="chip-agent"
         @mousedown.prevent
         @click="chip = 'agent'"
@@ -291,7 +277,7 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
       </button>
       <button
         type="button"
-        class="pc__chip"
+        class="pc__chip ph-glass ph-press"
         data-testid="chip-model"
         @mousedown.prevent
         @click="chip = 'model'"
@@ -300,7 +286,7 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
       </button>
       <button
         type="button"
-        class="pc__chip"
+        class="pc__chip ph-glass ph-press"
         @mousedown.prevent
         @click="chip = 'effort'"
       >
@@ -338,67 +324,71 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
     </p>
 
     <form
-      class="pc__box"
+      class="ph-composer ph-glass"
       @submit.prevent="submit(false)"
     >
       <button
         type="button"
-        class="pc__plus"
+        class="ph-composer__plus"
         aria-label="Add"
         data-testid="composer-plus"
         @click="plusOpen = true"
       >
-        <Plus :size="18" />
+        <Plus
+          :size="24"
+          aria-hidden="true"
+        />
       </button>
       <textarea
         ref="textarea"
         :value="draft.text"
-        class="pc__input phone-composer-input"
+        class="phone-composer-input"
         rows="1"
-        :placeholder="actions.disabled.value ? 'This session is archived' : 'Type a message…'"
+        :placeholder="actions.disabled.value ? 'This session is archived' : 'Message'"
         :disabled="actions.disabled.value"
         aria-label="Message"
         data-testid="phone-composer-input"
-        enterkeyhint="send"
+        enterkeyhint="enter"
         @input="onInput"
         @focus="focused = true"
         @blur="focused = false"
-        @keydown.enter.exact.prevent="submit(false)"
+        @keydown.enter.meta.prevent="submit(false)"
+        @keydown.enter.ctrl.prevent="submit(false)"
       />
       <button
         v-if="offerSendNow"
         type="button"
-        class="pc__now"
+        class="pc__now ph-press"
         aria-label="Send now, into the running turn"
         title="Send now, into the running turn"
         data-testid="composer-send-now"
         @click="submit(true)"
       >
         <CornerDownRight
-          :size="14"
+          :size="16"
           aria-hidden="true"
-        />Send now
+        />Now
       </button>
       <button
         type="submit"
-        class="pc__send"
-        :class="`pc__send--${primary}`"
+        class="ph-send"
+        :class="{ 'ph-send--stop': primary === 'stop', 'ph-send--queue': primary === 'queue' }"
         :disabled="actions.disabled.value || (primary === 'send' && !hasContent)"
         :aria-label="primary === 'stop' ? 'Stop' : primary === 'queue' ? 'Queue' : 'Send'"
         :data-testid="`composer-${primary}`"
       >
         <Square
           v-if="primary === 'stop'"
-          :size="12"
+          :size="14"
           fill="currentColor"
+          aria-hidden="true"
         />
-        <span
-          v-else-if="primary === 'queue'"
-          class="pc__queue-label"
-        >Queue</span>
+        <span v-else-if="primary === 'queue'">Queue</span>
         <ArrowUp
           v-else
-          :size="18"
+          :size="22"
+          :stroke-width="2.6"
+          aria-hidden="true"
         />
       </button>
     </form>
@@ -456,37 +446,38 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
 <style scoped>
 .pc {
   display: grid;
-  flex: none;
   grid-template-columns: minmax(0, 1fr);
-  gap: 6px;
-  padding: 6px 10px 8px;
-  border-top: 1px solid var(--border);
-  background: var(--main-bg);
+  gap: 8px;
 }
 
 .pc__queue {
   display: grid;
-  gap: 4px;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .pc__queued {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 40px;
-  padding: 4px 4px 4px 10px;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-btn);
-  background: var(--card-bg);
-  font-size: 13px;
+  min-height: 44px;
+  padding: 4px 4px 4px 14px;
+  border-radius: 22px;
+  font-size: var(--ph-t-sub);
 }
 
 .pc__next {
-  font-size: 10px;
+  font-size: var(--ph-t-cap2);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--accent);
+}
+
+.pc__next--held {
+  color: var(--muted);
 }
 
 .pc__queued-text {
@@ -500,26 +491,20 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
 .pc__mini {
   display: inline-flex;
   align-items: center;
-  min-height: 32px;
-  padding: 0 8px;
+  min-height: 36px;
+  padding: 0 10px;
   border: 0;
-  border-radius: var(--radius-btn);
+  border-radius: 18px;
   background: transparent;
   color: var(--muted);
   font: inherit;
-  font-size: 12px;
-}
-
-.pc__queued--held {
-  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-}
-
-.pc__next--held {
-  color: var(--muted);
+  font-size: var(--ph-t-foot);
+  font-weight: 600;
 }
 
 .pc__away {
-  font-size: 12px;
+  margin: 0;
+  font-size: var(--ph-t-foot);
   text-align: center;
   color: var(--muted);
 }
@@ -528,17 +513,18 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
   display: flex;
   gap: 6px;
   overflow-x: auto;
+  scrollbar-width: none;
 }
 
 .pc__chip {
-  min-height: 32px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--card-bg);
+  min-height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 17px;
   color: var(--text);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--ph-t-foot);
+  font-weight: 500;
   white-space: nowrap;
 }
 
@@ -552,9 +538,9 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
 }
 
 .pc__photo img {
-  width: 52px;
-  height: 52px;
-  border-radius: var(--radius-btn);
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
   object-fit: cover;
 }
 
@@ -563,8 +549,8 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
   top: -4px;
   right: -4px;
   display: grid;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   place-items: center;
   border: 0;
   border-radius: 50%;
@@ -573,80 +559,9 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
 }
 
 .pc__error {
-  font-size: 12px;
+  margin: 0 8px;
+  font-size: var(--ph-t-foot);
   color: var(--error);
-}
-
-.pc__box {
-  display: flex;
-  min-width: 0;
-  align-items: flex-end;
-  gap: 6px;
-  padding: 4px;
-  border: 1px solid var(--border);
-  border-radius: 22px;
-  background: var(--card-bg);
-}
-
-.pc__plus,
-.pc__send {
-  display: grid;
-  width: 36px;
-  height: 36px;
-  flex: none;
-  place-items: center;
-  border: 0;
-  border-radius: 50%;
-}
-
-.pc__plus {
-  background: transparent;
-  color: var(--muted);
-}
-
-.pc__input {
-  flex: 1;
-  min-width: 0;
-  min-height: 36px;
-  max-height: 160px;
-  padding: 7px 4px;
-  border: 0;
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  font-size: 16px;
-  line-height: 1.4;
-  resize: none;
-  outline: none;
-}
-
-.pc__box:focus-within {
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
-}
-
-.pc__send {
-  background: var(--accent);
-  color: #fff;
-}
-
-.pc__send:disabled {
-  opacity: 0.45;
-}
-
-.pc__send--stop {
-  background: var(--text);
-  color: var(--main-bg);
-}
-
-.pc__send--queue {
-  width: auto;
-  padding: 0 12px;
-  border-radius: 18px;
-}
-
-.pc__queue-label {
-  font-size: 13px;
-  font-weight: 600;
 }
 
 .pc__now {
@@ -654,14 +569,15 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
   flex: none;
   align-items: center;
   gap: 4px;
-  height: 36px;
-  padding: 0 8px;
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  background: var(--main-bg);
+  height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 20px;
+  background: var(--ph-fill);
   color: var(--text);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--ph-t-sub);
+  font-weight: 600;
   white-space: nowrap;
 }
 </style>

@@ -1,89 +1,101 @@
 <script setup lang="ts">
-import { ChevronLeft, MoreHorizontal } from "lucide-vue-next";
-import { Button } from "@/components/ui/button";
+import { ArrowLeft, ChevronLeft, Ellipsis } from "lucide-vue-next";
+import { phoneLook } from "@/composables/phone/use-phone-env";
 
 /**
- * The header is the status: back, the session's title, and under it the machine, its state and how long — "Working ·
- * 1m 12s", "Needs you · 2m" (amber), "Finished · 14:44" — or when the machine was last heard from.
+ * The session's bar, and its status: back, the title, and under it a dot, the machine and what it's doing —
+ * "hangar · Working · 1m 12s", "hangar · Needs you" (amber), "hangar · Finished 22 min ago". Glass buttons on
+ * iPhone; a back arrow and plain icons on Android. Content blurs under it once scrolled.
  */
 defineProps<{
   title: string;
   machineName: string;
   tone: "working" | "needs-you" | "finished" | "error" | "unreachable" | "idle";
-  state: string;
-  detail: string;
+  status: string;
+  scrolled: boolean;
 }>();
 const emit = defineEmits<{ (event: "back"): void; (event: "menu"): void }>();
 </script>
 
 <template>
   <header
-    class="psh"
+    class="ph-navbar"
+    :class="{ 'ph-navbar--scrolled': scrolled }"
     data-testid="phone-session-header"
   >
-    <Button
-      variant="toolbar-icon"
-      size="icon"
+    <button
+      type="button"
+      class="ph-navbtn ph-glass"
       aria-label="Back"
       data-testid="phone-session-back"
       @click="emit('back')"
     >
-      <ChevronLeft :size="22" />
-    </Button>
-    <div class="psh__body">
+      <ArrowLeft
+        v-if="phoneLook === 'android'"
+        :size="24"
+        aria-hidden="true"
+      />
+      <ChevronLeft
+        v-else
+        :size="26"
+        :stroke-width="2.4"
+        aria-hidden="true"
+      />
+    </button>
+    <div class="psh">
       <h1 class="psh__title">
         {{ title }}
       </h1>
       <p class="psh__line">
+        <span
+          class="ph-dot psh__dot"
+          :class="{
+            'ph-dot--running': tone === 'working',
+            'ph-dot--waiting': tone === 'needs-you',
+            'ph-dot--done': tone === 'finished',
+            'ph-dot--error': tone === 'error' || tone === 'unreachable',
+          }"
+          aria-hidden="true"
+        />
         <span class="psh__machine">{{ machineName }}</span>
         <span
           class="psh__state"
-          :class="`psh__state--${tone}`"
           data-testid="phone-session-state"
-        ><span
-          class="psh__dot"
-          aria-hidden="true"
-        />{{ state }}</span>
-        <span
-          v-if="detail"
-          class="psh__detail"
-        >· {{ detail }}</span>
+        >· {{ status }}</span>
       </p>
     </div>
-    <Button
-      variant="toolbar-icon"
-      size="icon"
+    <button
+      type="button"
+      class="ph-navbtn ph-glass"
       aria-label="More"
       data-testid="phone-session-menu"
       @click="emit('menu')"
     >
-      <MoreHorizontal :size="20" />
-    </Button>
+      <Ellipsis
+        :size="24"
+        :stroke-width="2.6"
+        aria-hidden="true"
+      />
+    </button>
   </header>
 </template>
 
 <style scoped>
 .psh {
   display: flex;
-  flex: none;
-  align-items: center;
-  gap: 4px;
-  min-height: 56px;
-  padding: 4px 4px 6px;
-  border-bottom: 1px solid var(--border);
-  background: var(--main-bg);
-}
-
-.psh__body {
-  display: grid;
   flex: 1;
+  flex-direction: column;
+  justify-content: center;
   min-width: 0;
+  padding: 0 6px;
 }
 
 .psh__title {
+  margin: 0;
   overflow: hidden;
-  font-size: 15px;
+  font-size: var(--ph-t-body);
   font-weight: 600;
+  line-height: 1.25;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -91,57 +103,21 @@ const emit = defineEmits<{ (event: "back"): void; (event: "menu"): void }>();
 .psh__line {
   display: flex;
   align-items: center;
-  gap: 6px;
-  min-width: 0;
-  font-size: 12px;
+  gap: 5px;
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--ph-t-foot);
   color: var(--muted);
-}
-
-.psh__machine {
-  padding: 0 5px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--card-bg);
-  font-size: 11px;
-  color: var(--text);
-}
-
-.psh__state {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-weight: 500;
+  white-space: nowrap;
 }
 
 .psh__dot {
   width: 7px;
   height: 7px;
-  border-radius: 50%;
-  background: currentColor;
 }
 
-.psh__state--working {
-  color: var(--running);
-}
-
-.psh__state--needs-you {
-  color: var(--idle);
-}
-
-.psh__state--finished {
-  color: var(--complete);
-}
-
-.psh__state--error,
-.psh__state--unreachable {
-  color: var(--error);
-}
-
-.psh__state--idle {
-  color: var(--muted);
-}
-
-.psh__detail {
-  white-space: nowrap;
+.psh__state {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>

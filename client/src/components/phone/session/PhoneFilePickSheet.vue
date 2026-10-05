@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { shallowRef, watch } from "vue";
-import { FileText } from "lucide-vue-next";
+import { FileText, Search } from "lucide-vue-next";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
 import { useFindFiles } from "@/composables/use-find-files";
 
@@ -19,81 +19,71 @@ watch(() => props.open, (open) => {
   <BottomSheet
     :open="open"
     label="Add a file"
-    full
+    title="Add a file"
+    :detents="['large']"
     @close="emit('close')"
   >
-    <input
-      v-model="query"
-      class="pfs__input"
-      type="search"
-      placeholder="Find a file"
-      aria-label="Find a file"
-      autocapitalize="off"
-      autocomplete="off"
-      spellcheck="false"
-    >
+    <div class="ph-sheet__pad pfs__search">
+      <label class="ph-search">
+        <Search
+          :size="18"
+          aria-hidden="true"
+        />
+        <input
+          v-model="query"
+          type="search"
+          placeholder="Find a file"
+          aria-label="Find a file"
+          autocapitalize="off"
+          autocomplete="off"
+          spellcheck="false"
+        >
+      </label>
+    </div>
     <p
       v-if="isLoading && files.length === 0"
-      class="pfs__empty"
+      class="ph-group-f"
     >
       Looking…
     </p>
-    <button
-      v-for="file in files.slice(0, 50)"
-      :key="file"
-      type="button"
-      class="pfs__row"
-      @click="emit('pick', file); emit('close')"
+    <div
+      v-if="files.length"
+      class="ph-group"
     >
-      <FileText
-        :size="15"
-        aria-hidden="true"
-      /><span class="pfs__path">{{ file }}</span>
-    </button>
+      <button
+        v-for="file in files.slice(0, 50)"
+        :key="file"
+        type="button"
+        class="ph-row"
+        style="--ph-sep-left: 52px"
+        @click="emit('pick', file); emit('close')"
+      >
+        <FileText
+          class="pfs__icon"
+          :size="22"
+          aria-hidden="true"
+        />
+        <span class="ph-row__main">
+          <span class="ph-row__title pfs__name">{{ file.split("/").pop() }}</span>
+          <span class="ph-row__sub">{{ file.split("/").slice(0, -1).join("/") || "." }}</span>
+        </span>
+      </button>
+    </div>
   </BottomSheet>
 </template>
 
 <style scoped>
-.pfs__input {
-  width: 100%;
-  min-height: 44px;
-  margin-bottom: 8px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: var(--main-bg);
-  color: var(--text);
-  font: inherit;
-  font-size: 16px;
+.pfs__search {
+  margin-bottom: 14px;
 }
 
-.pfs__empty {
-  font-size: 13px;
+.pfs__icon {
+  flex: none;
   color: var(--muted);
 }
 
-.pfs__row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-height: 44px;
-  border: 0;
-  border-bottom: 1px solid var(--border);
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  font-size: 13px;
-  text-align: left;
-}
-
-.pfs__path {
-  overflow: hidden;
-  font-family: var(--font-mono-stack);
-  font-size: 12px;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  direction: rtl;
-  text-align: left;
+.pfs__name {
+  font-family: var(--ph-mono);
+  font-size: 0.85rem;
 }
 </style>

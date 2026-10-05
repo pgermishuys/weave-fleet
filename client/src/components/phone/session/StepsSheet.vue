@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import { Check, ChevronLeft, ChevronRight, LoaderCircle, X } from "lucide-vue-next";
+import { ArrowLeft, ChevronLeft, LoaderCircle } from "lucide-vue-next";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
 import type { FoldedStep } from "@/lib/phone/fold-steps";
+import { phoneLook } from "@/composables/phone/use-phone-env";
 
 /** The steps of a folded row, then one step's diff or output. Read-only. */
 const props = defineProps<{ open: boolean; steps: readonly FoldedStep[] }>();
@@ -15,6 +16,15 @@ watch(() => props.open, (open) => {
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+const VERBS: Record<FoldedStep["category"], string> = { read: "Read", edit: "Edited", run: "Ran", search: "Searched", other: "Used" };
+/** "Read", "Ran · running", "Edited · failed": the line over each step. */
+function stepLine(step: FoldedStep): string {
+  const verb = step.category === "other" ? `Used ${step.tool}` : VERBS[step.category];
+  if (step.status === "running" || step.status === "pending") return `${verb} · running`;
+  if (step.status === "error") return `${verb} · failed`;
+  return verb;
 }
 
 /** An edit as -/+ lines; anything else as its output. */
@@ -43,69 +53,72 @@ const detail = computed(() => {
   <BottomSheet
     :open="open"
     :label="picked ? picked.label : 'Steps'"
+    :detents="['medium', 'large']"
+    initial="medium"
+    :title="picked ? undefined : 'Steps'"
     @close="emit('close')"
   >
-    <template v-if="!picked">
-      <h2 class="ss__title">
-        Steps
-      </h2>
-      <ul class="ss__list">
-        <li
-          v-for="step in steps"
-          :key="step.id"
-        >
-          <button
-            type="button"
-            class="ss__row"
-            data-testid="phone-step"
-            @click="picked = step"
-          >
-            <LoaderCircle
-              v-if="step.status === 'running' || step.status === 'pending'"
-              class="animate-spin text-muted"
-              :size="14"
-              aria-hidden="true"
-            />
-            <X
-              v-else-if="step.status === 'error'"
-              class="text-error"
-              :size="14"
-              aria-hidden="true"
-            />
-            <Check
-              v-else
-              class="text-running"
-              :size="14"
-              aria-hidden="true"
-            />
-            <span class="ss__tool">{{ step.tool }}</span>
-            <span class="ss__label">{{ step.label }}</span>
-            <ChevronRight
-              :size="14"
-              class="text-muted"
-              aria-hidden="true"
-            />
-          </button>
-        </li>
-      </ul>
-    </template>
-    <template v-else>
+    <template
+      v-if="picked"
+      #head
+    >
       <button
         type="button"
-        class="ss__back"
+        class="ph-navbtn ph-glass"
+        aria-label="Back to the steps"
         @click="picked = null"
       >
-        <ChevronLeft
-          :size="16"
+        <ArrowLeft
+          v-if="phoneLook === 'android'"
+          :size="24"
           aria-hidden="true"
-        /> Steps
+        />
+        <ChevronLeft
+          v-else
+          :size="24"
+          :stroke-width="2.4"
+          aria-hidden="true"
+        />
       </button>
-      <h2 class="ss__title">
-        <span class="ss__tool">{{ picked.tool }}</span> {{ picked.label }}
-      </h2>
+      <h2>{{ stepLine(picked) }}</h2>
+    </template>
+
+    <div
+      v-if="!picked"
+      class="ph-group"
+    >
+      <button
+        v-for="step in steps"
+        :key="step.id"
+        type="button"
+        class="ph-row"
+        data-testid="phone-step"
+        @click="picked = step"
+      >
+        <span class="ph-row__main">
+          <span
+            class="ph-row__sub ss__verb"
+            :class="{ 'ss__verb--bad': step.status === 'error' }"
+          >{{ stepLine(step) }}</span>
+          <span class="ph-row__title ss__label">{{ step.label }}</span>
+        </span>
+        <LoaderCircle
+          v-if="step.status === 'running' || step.status === 'pending'"
+          class="ph-spinner"
+          :size="18"
+          aria-hidden="true"
+        />
+      </button>
+    </div>
+    <div
+      v-else
+      class="ph-sheet__pad"
+    >
+      <p class="ss__title">
+        {{ picked.label }}
+      </p>
       <pre
-        class="ss__pre"
-        :class="{ 'ss__pre--diff': detail.kind === 'diff' }"
+        class="ph-code ss__pre"
         data-testid="phone-step-detail"
       ><template v-if="detail.kind === 'diff'"><span
         v-for="(line, index) in detail.text.split('\n')"
@@ -113,77 +126,35 @@ const detail = computed(() => {
         :class="line.startsWith('+') ? 'ss__add' : 'ss__del'"
       >{{ line }}
 </span></template><template v-else>{{ detail.text }}</template></pre>
-    </template>
+    </div>
   </BottomSheet>
 </template>
 
 <style scoped>
-.ss__title {
-  margin-bottom: 8px;
-  font-size: 15px;
-  font-weight: 600;
-  overflow-wrap: anywhere;
+.ss__verb {
+  margin: 0 0 2px;
+  font-size: var(--ph-t-foot);
 }
 
-.ss__list {
-  display: grid;
-}
-
-.ss__row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-height: 44px;
-  padding: 6px 2px;
-  border: 0;
-  border-bottom: 1px solid var(--border);
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.ss__tool {
-  font-family: var(--font-mono-stack);
-  font-size: 11px;
-  color: var(--muted);
+.ss__verb--bad {
+  color: var(--error);
 }
 
 .ss__label {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  font-family: var(--ph-mono);
+  font-size: 0.85rem;
 }
 
-.ss__back {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 36px;
-  margin-bottom: 4px;
-  border: 0;
-  background: transparent;
-  color: var(--accent);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
+.ss__title {
+  margin: 0 0 10px;
+  font-family: var(--ph-mono);
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
 }
 
 .ss__pre {
   overflow-x: auto;
-  margin: 0;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: var(--main-bg);
-  font-family: var(--font-mono-stack);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 0.75rem;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }

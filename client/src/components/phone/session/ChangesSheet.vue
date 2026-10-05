@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import { ChevronLeft, ChevronRight, LoaderCircle } from "lucide-vue-next";
+import { ArrowLeft, ChevronLeft, ChevronRight, LoaderCircle } from "lucide-vue-next";
+import { phoneLook } from "@/composables/phone/use-phone-env";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
 import type { FileDiffItem } from "@/api/client";
 import { apiFetch } from "@/lib/api-client";
@@ -29,6 +30,9 @@ const shown = computed(() => {
   return all.map((line, index) => ({ line, index, gap: keep.has(index) && index > 0 && !keep.has(index - 1) })).filter((entry) => keep.has(entry.index));
 });
 
+const fileName = (path: string): string => path.split(/[\\/]/).pop() ?? path;
+const folderOf = (path: string): string => path.split(/[\\/]/).slice(0, -1).join("/");
+
 async function openFile(item: FileDiffItem): Promise<void> {
   picked.value = item;
   lines.value = null;
@@ -52,78 +56,112 @@ async function openFile(item: FileDiffItem): Promise<void> {
   <BottomSheet
     :open="open"
     label="Changes"
-    full
+    :title="picked ? undefined : 'Changes'"
+    :detents="['medium', 'large']"
+    initial="medium"
     @close="emit('close')"
   >
+    <template
+      v-if="picked"
+      #head
+    >
+      <button
+        type="button"
+        class="ph-navbtn ph-glass"
+        aria-label="Back to the changes"
+        @click="picked = null"
+      >
+        <ArrowLeft
+          v-if="phoneLook === 'android'"
+          :size="24"
+          aria-hidden="true"
+        />
+        <ChevronLeft
+          v-else
+          :size="24"
+          :stroke-width="2.4"
+          aria-hidden="true"
+        />
+      </button>
+      <h2>{{ fileName(picked.file) }}</h2>
+    </template>
+
     <template v-if="!picked">
-      <h2 class="chs__title">
-        Changes <span class="chs__count">{{ diffs.length }} file{{ diffs.length === 1 ? "" : "s" }}</span>
-      </h2>
       <p
         v-if="loading && diffs.length === 0"
-        class="chs__note"
+        class="ph-group-f chs__note"
       >
         <LoaderCircle
-          class="inline animate-spin"
+          class="ph-spinner chs__spin"
           :size="14"
         /> Reading the changes…
       </p>
       <p
         v-else-if="diffs.length === 0"
-        class="chs__note"
+        class="ph-group-f chs__note"
       >
         Nothing changed yet.
       </p>
-      <button
-        v-for="item in diffs"
-        :key="item.file"
-        type="button"
-        class="chs__row"
-        data-testid="phone-change"
-        @click="openFile(item)"
+      <div
+        v-else
+        class="ph-group"
       >
-        <span class="chs__path">{{ item.file }}</span>
-        <span class="chs__add">+{{ item.additions }}</span>
-        <span class="chs__del">−{{ item.deletions }}</span>
-        <ChevronRight
-          :size="14"
-          class="text-muted"
-          aria-hidden="true"
-        />
-      </button>
+        <button
+          v-for="item in diffs"
+          :key="item.file"
+          type="button"
+          class="ph-row"
+          data-testid="phone-change"
+          @click="openFile(item)"
+        >
+          <span class="ph-row__main">
+            <span class="ph-row__title chs__name">{{ fileName(item.file) }}</span>
+            <span
+              v-if="folderOf(item.file)"
+              class="ph-row__sub"
+            >{{ folderOf(item.file) }}</span>
+          </span>
+          <span class="chs__counts"><span class="chs__add">+{{ item.additions }}</span> <span class="chs__del">−{{ item.deletions }}</span></span>
+          <ChevronRight
+            class="ph-row__chev"
+            :size="16"
+            :stroke-width="3"
+            aria-hidden="true"
+          />
+        </button>
+      </div>
+      <p
+        v-if="diffs.length"
+        class="ph-group-f"
+      >
+        {{ diffs.length }} file{{ diffs.length === 1 ? "" : "s" }} changed in this session's folder.
+      </p>
     </template>
-    <template v-else>
-      <button
-        type="button"
-        class="chs__back"
-        @click="picked = null"
-      >
-        <ChevronLeft
-          :size="16"
-          aria-hidden="true"
-        /> Changes
-      </button>
-      <h2 class="chs__file">
+    <div
+      v-else
+      class="ph-sheet__pad"
+    >
+      <p class="chs__path">
         {{ picked.file }}
-      </h2>
+      </p>
       <p
         v-if="failed"
-        class="chs__note"
+        class="ph-note chs__note"
       >
         {{ failed }}
       </p>
       <p
         v-else-if="!lines"
-        class="chs__note"
+        class="chs__loading"
       >
         <LoaderCircle
-          class="inline animate-spin"
-          :size="14"
+          class="ph-spinner"
+          :size="20"
         />
       </p>
       <pre
         v-else
-        class="chs__diff"
+        class="ph-code chs__diff"
         data-testid="phone-diff"
       ><template
         v-for="entry in shown"
@@ -134,105 +172,64 @@ async function openFile(item: FileDiffItem): Promise<void> {
       >⋯
 </span><span :class="`chs__line chs__line--${entry.line.type}`">{{ entry.line.type === "add" ? "+" : entry.line.type === "remove" ? "−" : " " }} {{ entry.line.content }}
 </span></template></pre>
-    </template>
+    </div>
   </BottomSheet>
 </template>
 
 <style scoped>
-.chs__title {
-  margin-bottom: 8px;
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.chs__count,
 .chs__note {
-  font-size: 13px;
-  font-weight: 400;
-  color: var(--muted);
-}
-
-.chs__row {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
-  min-height: 44px;
-  border: 0;
-  border-bottom: 1px solid var(--border);
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  text-align: left;
 }
 
-.chs__path {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  font-family: var(--font-mono-stack);
-  font-size: 12px;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  direction: rtl;
-  text-align: left;
+.chs__spin {
+  display: inline;
 }
 
-.chs__add {
-  font-size: 12px;
-  color: var(--diff-add);
+.chs__name {
+  font-family: var(--ph-mono);
+  font-size: 0.85rem;
 }
 
-.chs__del {
-  font-size: 12px;
-  color: var(--diff-del);
+.chs__counts {
+  flex: none;
+  font-family: var(--ph-mono);
+  font-size: 0.8rem;
 }
 
-.chs__back {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 36px;
-  border: 0;
-  background: transparent;
-  color: var(--accent);
-  font: inherit;
-  font-size: 13px;
-}
-
-.chs__file {
-  margin: 4px 0 8px;
-  font-family: var(--font-mono-stack);
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}
-
-.chs__diff {
-  margin: 0;
-  overflow-x: auto;
-  padding: 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: var(--main-bg);
-  font-family: var(--font-mono-stack);
-  font-size: 11.5px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
+.chs__add,
 .chs__line--add {
   color: var(--diff-add);
 }
 
+.chs__del,
 .chs__line--remove {
   color: var(--diff-del);
 }
 
-.chs__line--context {
+.chs__path {
+  margin: 0 0 10px;
+  font-family: var(--ph-mono);
+  font-size: 0.8rem;
   color: var(--muted);
+  overflow-wrap: anywhere;
 }
 
+.chs__loading {
+  display: grid;
+  min-height: 120px;
+  place-items: center;
+}
+
+.chs__diff {
+  overflow-x: auto;
+  font-size: 0.72rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chs__line--context,
 .chs__gap {
   color: var(--muted);
 }

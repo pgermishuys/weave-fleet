@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { shallowRef } from "vue";
-import { ArrowUp } from "lucide-vue-next";
+import { nextTick, shallowRef, useTemplateRef, watch } from "vue";
+import { ArrowUp, ChevronRight } from "lucide-vue-next";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
+import { showToast } from "@/composables/phone/use-phone-toast";
+import { takeKeyboard } from "@/lib/phone/keyboard";
+import { shareLink } from "@/lib/phone/share";
 
 /**
- * What a phone can't do well (a terminal, the editor, an app preview) says so and offers the closest thing that works:
- * a one-off `!` command, or a link to open the session on the computer.
+ * Run a command: what a phone can't do well (a terminal) offers the closest thing that works — a one-off `!`
+ * command that runs on Return, its output in the conversation — and a link to open a terminal on the computer.
+ * The send button stays plain until there's something to run.
  */
 const props = defineProps<{
   open: boolean;
@@ -18,7 +22,14 @@ const props = defineProps<{
 const emit = defineEmits<{ (event: "run", command: string): void; (event: "close"): void }>();
 
 const command = shallowRef("");
-const shared = shallowRef<string | null>(null);
+const field = useTemplateRef<HTMLTextAreaElement>("field");
+
+watch(() => props.open, async (open) => {
+  if (!open) return;
+  // The menu tap that opened this is holding the keyboard: hand it over.
+  await nextTick();
+  setTimeout(() => takeKeyboard(field.value), 0);
+});
 
 function run(): void {
   const text = command.value.trim().replace(/^!\s*/, "");
@@ -28,17 +39,9 @@ function run(): void {
 }
 
 async function share(): Promise<void> {
-  try {
-    if (navigator.share) {
-      await navigator.share({ title: `Fleet on ${props.machineName}`, url: props.link });
-      shared.value = "Sent.";
-      return;
-    }
-    await navigator.clipboard.writeText(props.link);
-    shared.value = "Link copied. Open it on the computer.";
-  } catch {
-    shared.value = props.link;
-  }
+  const outcome = await shareLink(`Fleet on ${props.machineName}`, props.link);
+  if (outcome === "copied") showToast("Link copied. Open it on the computer.");
+  else if (outcome === "failed") showToast("Couldn't share the link.");
 }
 </script>
 
@@ -46,141 +49,87 @@ async function share(): Promise<void> {
   <BottomSheet
     :open="open"
     :label="title"
+    :title="title"
     @close="emit('close')"
   >
-    <h2 class="ooc__title">
-      {{ title }}
-    </h2>
-    <p class="ooc__text">
-      Terminals need a keyboard and a wide screen, so they open on the computer. On the phone you can run a one-off
-      command and see its output in the conversation.
-    </p>
-    <form
+    <div
       v-if="supportsShell"
-      class="ooc__box"
-      @submit.prevent="run"
+      class="ph-sheet__pad"
     >
-      <span
-        class="ooc__bang"
-        aria-hidden="true"
-      >!</span>
-      <input
-        v-model="command"
-        class="ooc__input phone-composer-input"
-        placeholder="git log --oneline -3"
-        aria-label="Command"
-        autocapitalize="off"
-        autocomplete="off"
-        spellcheck="false"
-        data-testid="ooc-command"
+      <form
+        class="ph-composer ph-glass-field ph-term"
+        @submit.prevent="run"
       >
+        <span
+          class="ph-term__bang"
+          aria-hidden="true"
+        >!</span>
+        <textarea
+          ref="field"
+          v-model="command"
+          class="phone-composer-input"
+          rows="1"
+          placeholder="git log --oneline -3"
+          aria-label="Command"
+          autocapitalize="off"
+          autocomplete="off"
+          autocorrect="off"
+          spellcheck="false"
+          enterkeyhint="go"
+          data-testid="ooc-command"
+          @keydown.enter.prevent="run"
+        />
+        <button
+          type="submit"
+          class="ph-send ph-send--quiet"
+          aria-label="Run"
+          :disabled="!command.trim()"
+        >
+          <ArrowUp
+            :size="22"
+            :stroke-width="2.6"
+            aria-hidden="true"
+          />
+        </button>
+      </form>
+      <p class="ph-group-f ooc__hint">
+        Runs in the session's folder, with no model turn. The output shows in the conversation.
+      </p>
+    </div>
+    <p
+      v-else
+      class="ph-group-f ooc__hint"
+    >
+      This harness can't run one-off commands. Terminals open on the computer.
+    </p>
+    <div class="ph-group ooc__group">
       <button
-        type="submit"
-        class="ooc__send"
-        aria-label="Run"
-        :disabled="!command.trim()"
+        type="button"
+        class="ph-row"
+        data-testid="ooc-share"
+        @click="share"
       >
-        <ArrowUp :size="16" />
+        <span class="ph-row__main">
+          <span class="ph-row__title">Open a terminal on {{ machineName }}</span>
+          <span class="ph-row__sub">Sends a link to the computer</span>
+        </span>
+        <ChevronRight
+          class="ph-row__chev"
+          :size="16"
+          :stroke-width="3"
+          aria-hidden="true"
+        />
       </button>
-    </form>
-    <p
-      v-if="supportsShell"
-      class="ooc__hint"
-    >
-      Runs in the session's folder, no model turn.
-    </p>
-    <button
-      type="button"
-      class="ooc__row"
-      @click="share"
-    >
-      Open {{ machineName }} on my computer <span class="ooc__hint">sends a link</span>
-    </button>
-    <p
-      v-if="shared"
-      class="ooc__hint"
-      role="status"
-    >
-      {{ shared }}
-    </p>
+    </div>
   </BottomSheet>
 </template>
 
 <style scoped>
-.ooc__title {
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.ooc__text {
-  margin: 6px 0 12px;
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--muted);
-}
-
-.ooc__box {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 4px 4px 12px;
-  border: 1px solid var(--border);
-  border-radius: 22px;
-  background: var(--card-bg);
-}
-
-.ooc__bang {
-  font-family: var(--font-mono-stack);
-  color: var(--muted);
-}
-
-.ooc__input {
-  flex: 1;
-  min-width: 0;
-  min-height: 36px;
-  border: 0;
-  background: transparent;
-  color: var(--text);
-  font-family: var(--font-mono-stack);
-  font-size: 15px;
-  outline: none;
-}
-
-.ooc__send {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  border: 0;
-  border-radius: 50%;
-  background: var(--accent);
-  color: #fff;
-}
-
-.ooc__send:disabled {
-  opacity: 0.45;
-}
-
 .ooc__hint {
-  margin: 6px 0;
-  font-size: 12px;
-  color: var(--muted);
-  overflow-wrap: anywhere;
+  margin: 8px 4px 0;
 }
 
-.ooc__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  min-height: 48px;
-  margin-top: 8px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  background: var(--card-bg);
-  color: var(--text);
-  font: inherit;
-  font-size: 14px;
+.ooc__group {
+  margin-top: 18px;
 }
 </style>
