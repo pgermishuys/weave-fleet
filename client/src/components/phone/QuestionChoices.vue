@@ -111,6 +111,7 @@ function sendCustom(): void {
         >
           <textarea
             v-model="custom"
+            class="phone-composer-input"
             rows="1"
             placeholder="Your answer"
             aria-label="Your answer"

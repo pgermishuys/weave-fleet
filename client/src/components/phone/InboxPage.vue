@@ -440,6 +440,7 @@ function onScroll(event: Event): void {
               />
               <input
                 v-model="query"
+                class="phone-composer-input"
                 type="search"
                 placeholder="Search sessions"
                 aria-label="Search sessions"

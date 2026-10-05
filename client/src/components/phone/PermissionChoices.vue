@@ -114,15 +114,15 @@ function deny(): void {
         >
           <textarea
             v-model="instead"
+            class="phone-composer-input pc__instead"
             rows="2"
             placeholder="Optional: what to do instead"
             aria-label="What the agent should do instead"
             data-testid="permission-deny-text"
-            class="pc__instead"
           />
           <button
             type="submit"
-            class="ph-send ph-btn--danger"
+            class="ph-send"
             :disabled="busy"
             aria-label="Deny"
             data-testid="permission-deny-send"

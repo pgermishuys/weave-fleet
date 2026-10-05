@@ -265,6 +265,7 @@ onMounted(() => {
           <textarea
             ref="prompt"
             v-model="message"
+            class="phone-composer-input"
             rows="4"
             placeholder="What should the agent do?"
             aria-label="What should the agent do?"
@@ -498,6 +499,7 @@ onMounted(() => {
             />
             <input
               v-model="folderQuery"
+              class="phone-composer-input"
               type="search"
               :placeholder="`Search folders on ${machine.name}`"
               aria-label="Search folders"

@@ -31,6 +31,7 @@ watch(() => props.open, (open) => {
         />
         <input
           v-model="query"
+          class="phone-composer-input"
           type="search"
           placeholder="Find a file"
           aria-label="Find a file"

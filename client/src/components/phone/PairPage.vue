@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, shallowRef } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import { LoaderCircle } from "lucide-vue-next";
-import { Button } from "@/components/ui/button";
+import { LoaderCircle, Monitor } from "lucide-vue-next";
 import {
   PairingCodeGoneError,
   previewPairing,
@@ -32,8 +31,6 @@ const deviceName = shallowRef(guessDeviceName(navigator.userAgent, navigator.max
 const typedCode = shallowRef("");
 const error = shallowRef<string | null>(null);
 const grants = useMachineGrants();
-
-const inputClass = "w-full rounded-btn border border-border bg-card-bg px-3 text-base text-text outline-none transition-colors placeholder:text-muted focus:border-accent";
 
 const rightPlace = computed(() => {
   if (!payload.value) return null;
@@ -133,16 +130,17 @@ function enterCode(): void {
 
 <template>
   <main
-    class="pair"
+    class="ph-page pair"
     data-testid="pair-page"
   >
     <div
       v-if="step === 'loading'"
-      class="pair__center text-muted"
+      class="pair__center"
+      role="status"
     >
       <LoaderCircle
-        class="animate-spin"
-        :size="20"
+        class="ph-spinner"
+        :size="24"
         aria-hidden="true"
       />
       <span class="sr-only">Checking the code…</span>
@@ -153,53 +151,69 @@ function enterCode(): void {
       class="pair__body"
       @submit.prevent="connect"
     >
-      <span
-        class="pair__pill"
-        data-testid="pair-machine"
-      >{{ preview?.machineName }} · {{ preview?.os }}</span>
-      <h1 class="pair__title">
-        Connect this phone to {{ preview?.machineName }}?
-      </h1>
-      <p class="pair__text">
-        This phone gets its own key to {{ preview?.machineName }}. It can start sessions, answer agents and read
-        their work. Remove it any time in Settings › Machines.
-      </p>
+      <div class="ph-sheet__pad ph-hero">
+        <img
+          src="/icons/apple-touch-icon.png"
+          alt=""
+          width="72"
+          height="72"
+        >
+        <p class="pair__machine">
+          <span
+            class="ph-machine"
+            data-testid="pair-machine"
+          ><Monitor
+            :size="14"
+            aria-hidden="true"
+          />{{ preview?.machineName }} · {{ preview?.os }}</span>
+        </p>
+        <h3>Connect this phone to {{ preview?.machineName }}?</h3>
+        <p>
+          This phone gets its own key to {{ preview?.machineName }}. It can start sessions, answer agents and read
+          their work. Remove it any time in Settings › Machines.
+        </p>
+      </div>
       <label
-        class="pair__label"
+        class="ph-group-h pair__label"
         for="pair-device-name"
       >Name this phone</label>
-      <input
-        id="pair-device-name"
-        v-model="deviceName"
-        :class="inputClass"
-        class="h-11"
-        maxlength="60"
-        autocomplete="off"
-        data-testid="pair-device-name"
-      >
+      <div class="ph-group">
+        <input
+          id="pair-device-name"
+          v-model="deviceName"
+          class="phone-composer-input ph-field"
+          maxlength="60"
+          autocomplete="off"
+          enterkeyhint="go"
+          data-testid="pair-device-name"
+        >
+      </div>
       <p
         v-if="error"
-        class="mt-2 text-sm text-error"
+        class="ph-group-f ph-note--error"
         role="alert"
       >
         {{ error }}
       </p>
-      <Button
-        type="submit"
-        class="mt-5 h-11 w-full"
-        :disabled="step === 'connecting'"
-        data-testid="pair-connect"
-      >
-        <LoaderCircle
-          v-if="step === 'connecting'"
-          class="animate-spin"
-          aria-hidden="true"
-        />
-        Connect
-      </Button>
-      <p class="mt-4 text-center text-xs text-muted">
-        Not you? Close this page.
-      </p>
+      <div class="ph-sheet__pad pair__actions">
+        <button
+          type="submit"
+          class="ph-btn ph-btn--primary ph-btn--big"
+          :disabled="step === 'connecting'"
+          data-testid="pair-connect"
+        >
+          <LoaderCircle
+            v-if="step === 'connecting'"
+            class="ph-spinner"
+            :size="20"
+            aria-hidden="true"
+          />
+          <span>{{ step === "connecting" ? "Connecting…" : "Connect" }}</span>
+        </button>
+        <p class="pair__fine">
+          Not you? Close this page.
+        </p>
+      </div>
     </form>
 
     <form
@@ -207,43 +221,53 @@ function enterCode(): void {
       class="pair__body"
       @submit.prevent="submitCode"
     >
-      <h1 class="pair__title">
-        Enter the code from your computer
-      </h1>
-      <p class="pair__text">
-        On the computer, open Settings › Machines › Add a phone. Opened Fleet from the Home Screen? Enter the code
-        shown there; the camera link may not reach the Home Screen app.
-      </p>
+      <div class="ph-sheet__pad ph-hero">
+        <img
+          src="/icons/apple-touch-icon.png"
+          alt=""
+          width="72"
+          height="72"
+        >
+        <h3>Enter the code from your computer</h3>
+        <p>
+          On the computer, open Settings › Machines › Add a phone. Opened Fleet from the Home Screen? Enter the code
+          shown there; the camera link may not reach the Home Screen app.
+        </p>
+      </div>
       <label
-        class="pair__label"
+        class="ph-group-h pair__label"
         for="pair-code"
       >Code</label>
-      <input
-        id="pair-code"
-        v-model="typedCode"
-        :class="inputClass"
-        class="h-11 font-mono uppercase tracking-widest"
-        placeholder="XXXX-XXXX"
-        autocomplete="one-time-code"
-        autocapitalize="characters"
-        spellcheck="false"
-        maxlength="12"
-        data-testid="pair-code"
-      >
+      <div class="ph-group">
+        <input
+          id="pair-code"
+          v-model="typedCode"
+          class="phone-composer-input ph-field pair__code"
+          placeholder="XXXX-XXXX"
+          autocomplete="one-time-code"
+          autocapitalize="characters"
+          spellcheck="false"
+          maxlength="12"
+          enterkeyhint="go"
+          data-testid="pair-code"
+        >
+      </div>
       <p
         v-if="error"
-        class="mt-2 text-sm text-error"
+        class="ph-group-f ph-note--error"
         role="alert"
       >
         {{ error }}
       </p>
-      <Button
-        type="submit"
-        class="mt-5 h-11 w-full"
-        data-testid="pair-code-continue"
-      >
-        Continue
-      </Button>
+      <div class="ph-sheet__pad pair__actions">
+        <button
+          type="submit"
+          class="ph-btn ph-btn--primary ph-btn--big"
+          data-testid="pair-code-continue"
+        >
+          <span>Continue</span>
+        </button>
+      </div>
     </form>
 
     <div
@@ -251,19 +275,21 @@ function enterCode(): void {
       class="pair__body"
       data-testid="pair-gone"
     >
-      <h1 class="pair__title">
-        This code has expired or was already used
-      </h1>
-      <p class="pair__text">
-        Ask for a new code on the computer: Settings › Machines › Add a phone. Each code works once, for 10 minutes.
-      </p>
-      <Button
-        variant="outline"
-        class="mt-5 h-11 w-full"
-        @click="enterCode"
-      >
-        Type a code instead
-      </Button>
+      <div class="ph-sheet__pad ph-hero">
+        <h3>This code has expired or was already used</h3>
+        <p>
+          Ask for a new code on the computer: Settings › Machines › Add a phone. Each code works once, for 10 minutes.
+        </p>
+      </div>
+      <div class="ph-sheet__pad pair__actions">
+        <button
+          type="button"
+          class="ph-btn ph-btn--big"
+          @click="enterCode"
+        >
+          <span>Type a code instead</span>
+        </button>
+      </div>
     </div>
 
     <div
@@ -271,40 +297,37 @@ function enterCode(): void {
       class="pair__body"
       data-testid="pair-wrong-machine"
     >
-      <h1 class="pair__title">
-        This code is for {{ payload?.machineName }}
-      </h1>
-      <p class="pair__text">
-        It has to be opened at {{ payload?.machineName }}'s own address, not this one.
-      </p>
-      <Button
-        as="a"
-        class="mt-5 h-11 w-full"
-        :href="rightPlaceLink ?? undefined"
-      >
-        Open {{ rightPlace }}
-      </Button>
+      <div class="ph-sheet__pad ph-hero">
+        <h3>This code is for {{ payload?.machineName }}</h3>
+        <p>It has to be opened at {{ payload?.machineName }}'s own address, not this one.</p>
+      </div>
+      <div class="ph-sheet__pad pair__actions">
+        <a
+          class="ph-btn ph-btn--primary ph-btn--big pair__link"
+          :href="rightPlaceLink ?? undefined"
+        ><span>Open {{ rightPlace }}</span></a>
+      </div>
     </div>
 
     <div
       v-else
       class="pair__body"
     >
-      <h1 class="pair__title">
-        Couldn't reach Fleet
-      </h1>
-      <p
-        class="pair__text"
-        role="alert"
-      >
-        {{ error }}
-      </p>
-      <Button
-        class="mt-5 h-11 w-full"
-        @click="look"
-      >
-        Try again
-      </Button>
+      <div class="ph-sheet__pad ph-hero">
+        <h3>Couldn't reach Fleet</h3>
+        <p role="alert">
+          {{ error }}
+        </p>
+      </div>
+      <div class="ph-sheet__pad pair__actions">
+        <button
+          type="button"
+          class="ph-btn ph-btn--primary ph-btn--big"
+          @click="look"
+        >
+          <span>Try again</span>
+        </button>
+      </div>
     </div>
   </main>
 </template>
@@ -312,51 +335,53 @@ function enterCode(): void {
 <style scoped>
 .pair {
   display: flex;
-  flex: 1;
   flex-direction: column;
   justify-content: center;
-  padding: 24px 20px 40px;
 }
 
 .pair__center {
-  display: flex;
-  justify-content: center;
+  display: grid;
+  flex: 1;
+  place-items: center;
 }
 
 .pair__body {
   width: 100%;
-  max-width: 420px;
+  max-width: 480px;
   margin: 0 auto;
+  padding-bottom: 24px;
 }
 
-.pair__pill {
-  display: inline-block;
-  padding: 2px 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: var(--card-bg);
-  font-size: 12px;
-  color: var(--text);
+.pair__machine {
+  margin: 14px 0 0;
 }
 
-.pair__title {
-  margin-top: 12px;
-  font-size: 24px;
-  font-weight: 600;
-  line-height: 1.25;
-}
-
-.pair__text {
-  margin-top: 10px;
-  font-size: 15px;
-  line-height: 1.5;
-  color: var(--muted);
+.ph-hero .pair__machine + h3 {
+  margin-top: 6px;
 }
 
 .pair__label {
   display: block;
-  margin: 20px 0 6px;
-  font-size: 13px;
+}
+
+.pair__code {
+  font-family: var(--ph-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.pair__actions {
+  margin-top: 24px;
+}
+
+.pair__fine {
+  margin: 14px 0 0;
+  font-size: var(--ph-t-foot);
+  text-align: center;
   color: var(--muted);
+}
+
+.pair__link {
+  text-decoration: none;
 }
 </style>

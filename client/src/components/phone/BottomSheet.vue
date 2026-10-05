@@ -159,12 +159,27 @@ defineExpose({ expand });
 
 watch(() => props.open, (open) => void (open ? show() : hide()), { immediate: true });
 
-// The keyboard changes the room the sheet has: lay it out again at the same detent.
-watch(keyboardHeight, () => {
-  if (!rendered.value || dragging) return;
+// The keyboard (or turning the phone) changes the room the sheet has: lay it out again at the same detent.
+function relayout(): void {
+  if (!rendered.value || dragging || !sheetRef.value) return;
   const at = (Object.keys(offsets) as Detent[]).find((key) => offsets[key] === current) ?? activeDetents.value[0];
   layout();
   paint(offsets[at] ?? 0);
+}
+watch(keyboardHeight, relayout);
+let frameObserver: ResizeObserver | null = null;
+let frameHeight = 0;
+watch(layerRef, (layer) => {
+  frameObserver?.disconnect();
+  frameObserver = null;
+  if (!layer || typeof ResizeObserver === "undefined") return;
+  frameHeight = layer.clientHeight;
+  frameObserver = new ResizeObserver(() => {
+    if (layer.clientHeight === frameHeight) return;
+    frameHeight = layer.clientHeight;
+    relayout();
+  });
+  frameObserver.observe(layer);
 });
 
 // Drag: the grabber and head always; the body once it's scrolled to the top and the finger goes down.
@@ -234,6 +249,7 @@ function onPop(): void {
 window.addEventListener("popstate", onPop);
 document.addEventListener("keydown", onKey);
 onUnmounted(() => {
+  frameObserver?.disconnect();
   window.removeEventListener("popstate", onPop);
   document.removeEventListener("keydown", onKey);
   if (entry) popSheetEntry(entry);

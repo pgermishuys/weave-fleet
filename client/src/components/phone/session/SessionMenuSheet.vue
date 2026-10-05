@@ -58,7 +58,7 @@ async function pick(action: MenuAction): Promise<void> {
           id="phone-rename"
           ref="input"
           v-model="newTitle"
-          class="ph-field msm__input"
+          class="phone-composer-input ph-field msm__input"
           maxlength="200"
           aria-label="New title"
           enterkeyhint="done"

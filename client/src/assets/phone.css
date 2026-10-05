@@ -139,6 +139,9 @@ html[data-phone] .ph-navbtn {
   color: inherit;
 }
 
+/* Fields inside their own rounded shapes (composer, prompt card, search, grouped field) take main.css's
+   .phone-composer-input, which drops the focus box round the bare field: the caret shows focus. */
+
 /* The app follows the visual viewport, so nothing hides under the keyboard. */
 .ph-app {
   position: fixed;
@@ -575,8 +578,8 @@ html[data-phone] .ph-navbtn {
   text-overflow: ellipsis;
 }
 
-.ph-row__title--wrap,
-.ph-row__sub--wrap {
+.ph-row__title.ph-row__title--wrap,
+.ph-row__sub.ph-row__sub--wrap {
   white-space: normal;
 }
 
