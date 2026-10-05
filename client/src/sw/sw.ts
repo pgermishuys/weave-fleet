@@ -7,7 +7,8 @@
  * It never imports Vue or touches `window`.
  */
 import { readCredentials } from "@/lib/device-credentials";
-import { notificationFor, type NotificationData } from "@/lib/push/notification-options";
+import { answerFromNotification } from "@/lib/push/notification-action";
+import { answeredNotification, notificationFor, type NotificationData } from "@/lib/push/notification-options";
 import { parsePushPayload } from "@/lib/push/payload";
 
 const sw = self as unknown as ServiceWorkerGlobalScope;
@@ -42,8 +43,23 @@ async function showPush(event: PushEvent): Promise<void> {
 sw.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const data = event.notification.data as NotificationData | undefined;
+  if (event.action && data) {
+    event.waitUntil(answer(event.action, data));
+    return;
+  }
   event.waitUntil(openUrl(data?.url ?? "/phone"));
 });
+
+/** Allow once or Deny pressed on the notification (Android): answer without opening Fleet, then say so. */
+async function answer(action: string, data: NotificationData): Promise<void> {
+  const result = await answerFromNotification(action, data, await readCredentials(), sw.location.origin, (input, init) => fetch(input, init));
+  if (result.kind === "open") {
+    await openUrl(result.url);
+    return;
+  }
+  const { title, options } = answeredNotification(data, data.machineName ?? "", result.allowed);
+  await sw.registration.showNotification(title, options as NotificationOptions);
+}
 
 /** Focuses a Fleet window already open on this origin and sends it to `url`, or opens one. */
 async function openUrl(url: string): Promise<void> {

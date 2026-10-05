@@ -55,7 +55,7 @@ describe("notificationFor", () => {
     expect(title).toBe(valid.title);
     expect(options.body).toBe("hangar · Wants to run dotnet test");
     expect(options.tag).toBe("hangar-id:s1");
-    expect(options.data).toEqual({ url: valid.url, machineId: "hangar-id", sessionId: "s1", kind: "permission", requestId: "perm-1" });
+    expect(options.data).toEqual({ url: valid.url, machineId: "hangar-id", machineName: "hangar", sessionId: "s1", kind: "permission", requestId: "perm-1" });
     expect(options.requireInteraction).toBe(true);
     expect(JSON.stringify(options)).not.toContain("fdt_");
   });

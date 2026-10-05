@@ -7,6 +7,7 @@ import type { PushPayloadV1 } from "@/lib/push/payload";
 export interface NotificationData {
   url: string;
   machineId: string;
+  machineName?: string;
   sessionId: string;
   kind: PushPayloadV1["kind"];
   requestId?: string;
@@ -30,11 +31,39 @@ export interface FleetNotificationOptions {
   actions?: NotificationAction[];
 }
 
-/** Buttons for a notification. Filled in for permission asks where the platform shows them (Android). */
+export const ALLOW_ONCE_ACTION = "allow-once";
+export const DENY_ACTION = "deny";
+
+/**
+ * Buttons for a notification: Allow once and Deny on a permission ask, where the platform shows buttons (Android;
+ * iOS shows none, and a tap opens the ask instead). The service worker answers them with the phone's own key.
+ */
 export function actionsFor(payload: PushPayloadV1, maxActions: number): NotificationAction[] {
-  void payload;
-  void maxActions;
-  return [];
+  if (payload.kind !== "permission" || !payload.requestId || maxActions < 2) return [];
+  return [
+    { action: ALLOW_ONCE_ACTION, title: "Allow once" },
+    { action: DENY_ACTION, title: "Deny" },
+  ];
+}
+
+/** The notification that replaces an answered ask, under the same tag. Tapping it opens the Answered page. */
+export function answeredNotification(data: NotificationData, machineName: string, allowed: boolean): { title: string; options: FleetNotificationOptions } {
+  const where = machineName || "The machine";
+  return {
+    title: allowed ? `Allowed — ${where} carries on` : `Denied — ${where} was told`,
+    options: {
+      body: allowed ? "Allowed once." : "The agent was told no.",
+      tag: `${data.machineId}:${data.sessionId}`,
+      data: {
+        ...data,
+        url: `/phone/answered?machine=${encodeURIComponent(data.machineId)}&session=${encodeURIComponent(data.sessionId)}&reply=${allowed ? "once" : "reject"}`,
+      },
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      renotify: false,
+      requireInteraction: false,
+    },
+  };
 }
 
 /** The title and options for `payload`. `maxActions` is `Notification.maxActions` (0 on iOS). */
@@ -50,6 +79,7 @@ export function notificationFor(payload: PushPayloadV1, maxActions = 0): { title
       data: {
         url: payload.url,
         machineId: payload.machineId,
+        machineName: payload.machineName,
         sessionId: payload.sessionId,
         kind: payload.kind,
         ...(payload.requestId ? { requestId: payload.requestId } : {}),
