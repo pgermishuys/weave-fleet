@@ -90,6 +90,38 @@ public static class SessionNotificationReasons
 
     /// <summary>The turn ended.</summary>
     public const string Finished = "finished";
+
+    /// <summary>The session stopped with an error.</summary>
+    public const string Failed = "failed";
+}
+
+/// <summary>
+/// What exactly a notification is about, finer than <see cref="SessionNotificationReasons"/>: phones choose which
+/// kinds they want pushed.
+/// </summary>
+public static class SessionNotificationKinds
+{
+    /// <summary>The agent waits for permission to do something (run a command, edit a file).</summary>
+    public const string Permission = "permission";
+
+    /// <summary>The agent asked a question.</summary>
+    public const string Question = "question";
+
+    /// <summary>The turn ended.</summary>
+    public const string Finished = "finished";
+
+    /// <summary>The session stopped with an error.</summary>
+    public const string Failed = "failed";
+
+    /// <summary>A workflow step waits for the user.</summary>
+    public const string Workflow = "workflow";
+
+    public static readonly IReadOnlyList<string> All = [Permission, Question, Finished, Failed, Workflow];
+
+    /// <summary>What a phone gets unless it chooses otherwise: every kind.</summary>
+    public static readonly IReadOnlyList<string> Default = All;
+
+    public static bool IsKnown(string? kind) => kind is not null && All.Contains(kind);
 }
 
 /// <summary>

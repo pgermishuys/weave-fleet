@@ -322,6 +322,12 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(WeaveFleet.Application.Devices.DeviceSummary))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.CreateDeviceRequest))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.CreateDeviceResponse))]
+// Push
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.VapidKeyResponse))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.SavePushSubscriptionRequest))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.PushEndpointRequest))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.PushSubscriptionResponse))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.PushTestResponse))]
 // Open Directory
 [JsonSerializable(typeof(OpenDirectoryRequest))]
 [JsonSerializable(typeof(OpenFileRequest))]

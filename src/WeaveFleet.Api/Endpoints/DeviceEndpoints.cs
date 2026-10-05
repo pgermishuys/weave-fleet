@@ -67,10 +67,15 @@ public static class DeviceEndpoints
         .Produces<DeviceListResponse>(200)
         .WithName("ListDevices");
 
-        machine.MapDelete("/devices/{id}", async (string id, DeviceTokenService devices) =>
-            await devices.RevokeAsync(id)
-                ? Results.NoContent()
-                : Results.NotFound(new ErrorResponse("No such device.")))
+        machine.MapDelete("/devices/{id}", async (string id, DeviceTokenService devices, WeaveFleet.Domain.Repositories.IPushSubscriptionRepository subscriptions) =>
+        {
+            if (!await devices.RevokeAsync(id))
+                return Results.NotFound(new ErrorResponse("No such device."));
+
+            // A removed phone gets no more notifications either.
+            await subscriptions.DeleteByDeviceAsync(id);
+            return Results.NoContent();
+        })
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
         .WithName("RemoveDevice");
 
