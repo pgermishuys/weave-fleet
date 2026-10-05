@@ -346,7 +346,7 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
 
 ### Phase 3 — Server-side machine list and home-machine fan-out
 
-- [ ] 13. Machines table and `/api/machines` endpoints
+- [x] 13. Machines table and `/api/machines` endpoints
   - **What**: Move the machine list (URL + token) server-side.
   - **Files**: `src/WeaveFleet.Infrastructure/Migrations/050_add_machines.sql` (machines + device_grants), `src/WeaveFleet.Domain/Entities/RemoteMachine.cs`, `src/WeaveFleet.Domain/Repositories/IRemoteMachineRepository.cs`, `src/WeaveFleet.Infrastructure/Data/Repositories/RemoteMachineRepository.cs`, `src/WeaveFleet.Application/Machines/RemoteMachineService.cs`, `src/WeaveFleet.Api/Endpoints/MachinesEndpoints.cs`, `src/WeaveFleet.Api/Contracts/MachinesContracts.cs`, `src/WeaveFleet.Api/JsonContext.cs`, `src/WeaveFleet.Infrastructure/DependencyInjection.cs`, `tests/WeaveFleet.Api.Tests/Endpoints/MachinesEndpointTests.cs`
   - **Depends on**: Task 3
@@ -362,7 +362,7 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
     - Tests: add/import/delete, token redaction for device callers, 403 for device mutations, identify failure → 400 with message.
     - `dotnet test tests/WeaveFleet.Api.Tests --filter "FullyQualifiedName~MachinesEndpoint"` passes.
 
-- [ ] 14. Client: machine list from the server, one-time migration from localStorage
+- [x] 14. Client: machine list from the server, one-time migration from localStorage
   - **What**: The desktop client reads/writes the machine list via `/api/machines`; existing `weave:machines` lists are imported once.
   - **Files**: `client/src/lib/machines.ts`, `client/src/stores/machines.ts`, `client/src/components/settings/MachinesSection.vue`, `client/src/lib/__tests__/machines.test.ts`, `client/src/stores/__tests__/machines.test.ts`
   - **Depends on**: Task 13
@@ -377,7 +377,7 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
     - Store tests: import once, no double import, 404 fallback, 403 device path.
     - `bun run test`, `bunx vue-tsc --noEmit` pass; existing machine tests unchanged and green.
 
-- [ ] 15. `RemoteMachineWatcher`: subscribe to other machines and forward notifications
+- [x] 15. `RemoteMachineWatcher`: subscribe to other machines and forward notifications
   - **What**: Home server listens to every listed machine's `sessions` topic and pushes on its behalf.
   - **Files**: `src/WeaveFleet.Infrastructure/WeaveFleet.Infrastructure.csproj` (add `Microsoft.AspNetCore.SignalR.Client`), `src/WeaveFleet.Infrastructure/Machines/RemoteMachineWatcher.cs`, `src/WeaveFleet.Infrastructure/Machines/RemoteMachineConnection.cs`, `src/WeaveFleet.Application/Machines/RemoteMachineService.cs` (status + change notifications), `src/WeaveFleet.Infrastructure/DependencyInjection.cs`, `tests/WeaveFleet.IntegrationTests/Machines/RemoteMachineWatcherTests.cs`
   - **Depends on**: Tasks 11, 13
@@ -395,7 +395,7 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
     - Unreachable B ⇒ status `unreachable` within one backoff cycle.
     - `dotnet test tests/WeaveFleet.IntegrationTests -c Debug --filter "FullyQualifiedName~RemoteMachineWatcher"` passes.
 
-- [ ] 16. Device grants: the phone gets its own token on other machines
+- [x] 16. Device grants: the phone gets its own token on other machines
   - **What**: Let a phone paired with home talk directly to other machines without ever seeing their machine tokens.
   - **Files**: `src/WeaveFleet.Application/Machines/DeviceGrantService.cs`, `src/WeaveFleet.Api/Endpoints/MachinesEndpoints.cs`, `src/WeaveFleet.Api/Endpoints/DeviceEndpoints.cs` (cascade on delete), `client/src/lib/device-credentials.ts`, `client/src/composables/phone/use-machine-grants.ts`, tests `tests/WeaveFleet.Api.Tests/Endpoints/DeviceGrantTests.cs`, `client/src/composables/__tests__/use-machine-grants.test.ts`
   - **Depends on**: Tasks 4, 13, 15
@@ -646,6 +646,28 @@ Differences from the plan:
 - `/phone*` use their own `PhoneAuthGate` instead of the desktop `AuthGate` (no onboarding wizard on a phone); it signs
   in again with the stored device token if the cookie is gone, otherwise sends the phone to `/pair`.
 - `/phone/setup`'s Done goes to `/` until the `/phone` inbox exists (Phase 4).
+- Deferred: nothing.
+
+### Phase 3 — done (2026-10-05)
+Shipped: `machines` + `device_grants` (migration **053**), `RemoteMachineService` and `/api/machines`, the client store
+reading home's list with a one-time import, `RemoteMachineWatcher`, and device grants (server + client). Covered by
+two-Fleet tests: `MachinesEndpointTests`, `DeviceGrantTests` (grant works on the other machine; removal there,
+including a delayed removal retried when it answers) and `RemoteMachineWatcherTests` (a notification on falcon is
+pushed by hangar tagged as falcon's; unreachable and unauthorized statuses).
+
+Differences from the plan:
+- Machine tokens are encrypted with their own Data Protection purpose (`MachineTokens`) from a singleton, not the
+  scoped `ICredentialProtector` (purpose `UserCredentials`).
+- The desktop client still identifies a machine itself before adding it (its own reachability and contract checks),
+  then writes it to home with `POST /api/machines/import`, which makes no outbound call. `POST /api/machines` (where
+  home checks the machine itself) is there for other clients. So a machine the browser can reach but home can't is
+  still added, and shows as unreachable in home's status.
+- The watcher watches every listed machine, whether or not this machine has push subscriptions.
+- Watcher tests run on TestServer: the hub connection uses long polling through the other host's test handler.
+- `POST /api/machines/{id}/device-grant` always mints a new token (revoking the previous grant there): home never
+  stores the remote device token, so it can't tell whether the phone still holds a working one. The phone only asks
+  when it lacks one or got a 401.
+- Not yet live-checked with two real Fleets and a real phone push from the second machine; that's part of Task 28.
 - Deferred: nothing.
 
 ## Risks and unknowns
