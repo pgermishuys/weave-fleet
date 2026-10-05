@@ -447,7 +447,7 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
 
 ### Phase 5 — Phone session view with steering
 
-- [ ] 19. Session route, header status, plan bar, folded steps, "since you looked"
+- [x] 19. Session route, header status, plan bar, folded steps, "since you looked"
   - **What**: The reading half of `mockups/phone-app/session.html`.
   - **Files**: `client/src/routes/phone.s.$machineId.$sessionId.tsx`, `client/src/components/phone/session/PhoneSessionPage.vue`, `PhoneSessionHeader.vue`, `PhonePlanBar.vue`, `FoldedStepsRow.vue`, `StepsSheet.vue`, `SinceYouLookedMarker.vue`, `client/src/lib/phone/fold-steps.ts`, `client/src/lib/phone/__tests__/fold-steps.test.ts`, `client/src/lib/phone/last-seen.ts`, `client/src/lib/phone/__tests__/last-seen.test.ts`
   - **Depends on**: Task 18
@@ -465,7 +465,7 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
     - Screenshot at 390×844 against `session.html` steps 1 and 6.
     - `bun run test`, `bunx vue-tsc --noEmit` pass.
 
-- [ ] 20. Phone dock composer: Send / Queue / Send now / Stop, chips, + menu
+- [x] 20. Phone dock composer: Send / Queue / Send now / Stop, chips, + menu
   - **What**: The writing half: composer per the session rules.
   - **Files**: `client/src/composables/use-composer-actions.ts` (new; extracted from `Composer.vue`), `client/src/components/session/Composer.vue` (use the composable; no behaviour change), `client/src/components/phone/session/PhoneComposer.vue`, `PhoneChipSheet.vue` (agent/model/effort), `PhonePlusSheet.vue`, `client/src/composables/__tests__/use-composer-actions.test.ts`
   - **Depends on**: Task 19
@@ -482,7 +482,7 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
     - Composable tests for queue vs send vs steer decisions per harness type, `!` and `/btw` routing.
     - `bun run test`, `bunx vue-tsc --noEmit` pass; `dotnet test tests/WeaveFleet.E2E --filter "FullyQualifiedName~GoldenPathTests"` still passes.
 
-- [ ] 21. Docked ask: permission and question in place of the composer
+- [x] 21. Docked ask: permission and question in place of the composer
   - **What**: When the agent asks, the ask replaces the composer at the bottom.
   - **Files**: `client/src/components/phone/session/DockedPermission.vue`, `DockedQuestion.vue`, `client/src/components/phone/session/PhoneSessionPage.vue`, `client/src/lib/phone/dock-state.ts`, `client/src/lib/phone/__tests__/dock-state.test.ts`
   - **Depends on**: Task 20
@@ -498,7 +498,7 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
     - E2E (Task 26) with `QuestionToolTests`-style fake harness answers a question on the phone.
     - `bun run test`, `bunx vue-tsc --noEmit` pass.
 
-- [ ] 22. ⋯ menu, read-only sheets, /btw sheet and "open on computer"
+- [x] 22. ⋯ menu, read-only sheets, /btw sheet and "open on computer"
   - **What**: Everything else from the mapping table.
   - **Files**: `client/src/components/phone/session/SessionMenuSheet.vue`, `ChangesSheet.vue`, `FilesSheet.vue`, `PlanSheet.vue`, `SideConversationSheet.vue`, `OpenOnComputerCard.vue`
   - **Depends on**: Task 21
@@ -689,6 +689,31 @@ Differences from the plan:
   opening a session on another machine is a full page load there and back.
 - The "More…" sheet doesn't show the agent's last sentence above the ask (the mockup does); the session view does.
 - The "Phone view" link is in the mobile icon rail (`TopBar.vue` isn't used anywhere).
+- Deferred: nothing.
+
+### Phase 5 — done (2026-10-05)
+Shipped: the phone session view (header status, plan bar and sheet, folded steps and steps sheet, subagent rows,
+answered-question lines, "since you looked"), `use-composer-actions` + `PhoneComposer` (Send / Queue / Send now / Stop,
+queued "Next" list, agent/model/effort chip sheets, + sheet with photos, camera, file, command, side question), the
+docked permission and question, and the ⋯ menu with Changes, Files, /btw, Terminal, Fork, Rename, Open on my computer,
+Archive. Checked at 390×844 in Vite mock mode with a faked hub (working, typing, queued, permission, finished,
+menu, diff, terminal); screenshots in `mockups/phone-app/shots/`. That found the composer row overflowing the screen
+and the global focus ring on the field; both fixed.
+
+Differences from the plan:
+- `use-composer-actions` holds the shared *decisions* (status, harness capabilities, where a draft goes, the phone's
+  one button) and a composable built on the same send/queue/shell/side/abort composables. The desktop `Composer.vue`
+  now takes its status and capabilities from it, but keeps its own send flow (`handleSend`) as it was: moving that
+  wholesale was the risky part and buys the phone nothing. Its 237 tests are unchanged and green.
+- Within one message, the agent's text shows above its folded tool row: the reducer groups a snapshot message's parts
+  by type (text, files, reasoning, tools), and the desktop shows body-then-tools the same way. The phone doesn't
+  re-order (presentation only, per the plan).
+- After answering a permission the phone shows a short "Allowed once." toast; the quiet "Asked · … → answer ✓" line
+  is for questions (it comes from the question tool's own part).
+- "Fork from here" forks at the latest message (the desktop's Fork) and opens the fork.
+- The @ file picker is a search sheet (`useFindFiles`) that inserts `@path`; the desktop's inline `@` popup isn't on
+  the phone, though typing `@path` still works.
+- Not yet checked against a real harness turn from the phone; that's Task 26's E2E.
 - Deferred: nothing.
 
 ## Risks and unknowns
