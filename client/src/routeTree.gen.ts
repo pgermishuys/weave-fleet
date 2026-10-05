@@ -23,6 +23,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as GithubIndexRouteImport } from './routes/github.index'
 import { Route as SessionsNewRouteImport } from './routes/sessions.new'
 import { Route as SessionsIdRouteImport } from './routes/sessions.$id'
+import { Route as PhoneSetupRouteImport } from './routes/phone.setup'
 import { Route as SettingsPluginsPluginIdRouteImport } from './routes/settings_.plugins.$pluginId'
 import { Route as GithubOwnerRepoRouteImport } from './routes/github.$owner.$repo'
 import { Route as GithubOwnerRepoIndexRouteImport } from './routes/github.$owner.$repo.index'
@@ -99,6 +100,11 @@ const SessionsIdRoute = SessionsIdRouteImport.update({
   path: '/sessions/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PhoneSetupRoute = PhoneSetupRouteImport.update({
+  id: '/phone/setup',
+  path: '/phone/setup',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsPluginsPluginIdRoute = SettingsPluginsPluginIdRouteImport.update({
   id: '/settings_/plugins/$pluginId',
   path: '/settings/plugins/$pluginId',
@@ -139,6 +145,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/welcome': typeof WelcomeRoute
   '/workflows': typeof WorkflowsRoute
+  '/phone/setup': typeof PhoneSetupRoute
   '/sessions/$id': typeof SessionsIdRoute
   '/sessions/new': typeof SessionsNewRoute
   '/github/': typeof GithubIndexRoute
@@ -159,6 +166,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/welcome': typeof WelcomeRoute
   '/workflows': typeof WorkflowsRoute
+  '/phone/setup': typeof PhoneSetupRoute
   '/sessions/$id': typeof SessionsIdRoute
   '/sessions/new': typeof SessionsNewRoute
   '/github': typeof GithubIndexRoute
@@ -180,6 +188,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/welcome': typeof WelcomeRoute
   '/workflows': typeof WorkflowsRoute
+  '/phone/setup': typeof PhoneSetupRoute
   '/sessions/$id': typeof SessionsIdRoute
   '/sessions/new': typeof SessionsNewRoute
   '/github/': typeof GithubIndexRoute
@@ -203,6 +212,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/welcome'
     | '/workflows'
+    | '/phone/setup'
     | '/sessions/$id'
     | '/sessions/new'
     | '/github/'
@@ -223,6 +233,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/welcome'
     | '/workflows'
+    | '/phone/setup'
     | '/sessions/$id'
     | '/sessions/new'
     | '/github'
@@ -243,6 +254,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/welcome'
     | '/workflows'
+    | '/phone/setup'
     | '/sessions/$id'
     | '/sessions/new'
     | '/github/'
@@ -265,6 +277,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   WelcomeRoute: typeof WelcomeRoute
   WorkflowsRoute: typeof WorkflowsRoute
+  PhoneSetupRoute: typeof PhoneSetupRoute
   SessionsIdRoute: typeof SessionsIdRoute
   SessionsNewRoute: typeof SessionsNewRoute
   SettingsPluginsPluginIdRoute: typeof SettingsPluginsPluginIdRoute
@@ -370,6 +383,13 @@ declare module '@tanstack/vue-router' {
       preLoaderRoute: typeof SessionsIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/phone/setup': {
+      id: '/phone/setup'
+      path: '/phone/setup'
+      fullPath: '/phone/setup'
+      preLoaderRoute: typeof PhoneSetupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings_/plugins/$pluginId': {
       id: '/settings_/plugins/$pluginId'
       path: '/settings/plugins/$pluginId'
@@ -449,6 +469,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   WelcomeRoute: WelcomeRoute,
   WorkflowsRoute: WorkflowsRoute,
+  PhoneSetupRoute: PhoneSetupRoute,
   SessionsIdRoute: SessionsIdRoute,
   SessionsNewRoute: SessionsNewRoute,
   SettingsPluginsPluginIdRoute: SettingsPluginsPluginIdRoute,

@@ -106,7 +106,7 @@ async function connect(): Promise<void> {
       grants: [],
       pairedAt: new Date().toISOString(),
     });
-    await router.navigate({ to: "/" });
+    await router.navigate({ to: "/phone/setup" });
   } catch (failure) {
     if (failure instanceof PairingCodeGoneError) {
       step.value = "gone";
