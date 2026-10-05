@@ -484,7 +484,14 @@ export function isSessionRecapEvent(event: DomainEvent): event is SessionRecap {
  */
 export interface SessionNotificationPayload {
   sessionId: string;
-  reason: "needs_you" | "finished";
+  reason: "needs_you" | "finished" | "failed";
+  /** What exactly it's about. Older Fleets send none. */
+  kind?: "permission" | "question" | "finished" | "failed" | "workflow";
+  /** The permission the agent waits on, for a `permission`. */
+  requestId?: string | null;
+  /** The machine the session is on. */
+  machineId?: string | null;
+  machineName?: string | null;
   title: string;
   body: string;
 }

@@ -2154,6 +2154,7 @@ public sealed partial class SessionOrchestrator(
         session.LifecycleStatus = _lifecycleStatusError;
         session.ActivityStatus = _activityStatusIdle;
         await BroadcastAutomaticActivationStatusAsync(session, _lifecycleStatusError, _lifecycleStatusError, ct).ConfigureAwait(false);
+        sessionNotifier?.OnSessionFailed(session.Id, "It couldn't start.");
     }
 
     private async Task BroadcastAutomaticActivationStatusAsync(

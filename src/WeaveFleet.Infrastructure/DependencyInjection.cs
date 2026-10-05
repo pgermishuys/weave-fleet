@@ -396,8 +396,12 @@ public static class DependencyInjection
         services.AddSingleton<IRecapPreference, RecapPreference>();
         services.AddSingleton<SessionRecapService>();
 
-        // SessionNotifier is singleton — remembers each session's last activity status between events.
-        services.AddSingleton<INotificationPreference, NotificationPreference>();
+        // SessionNotifier is singleton — remembers each session's last activity status between events. It hands what
+        // it decides to send to every sink: the open tabs, and phones through the push dispatcher.
+        services.AddSingleton<DeskPresenceTracker>();
+        services.AddSingleton<ISessionNotificationSink, BroadcastNotificationSink>();
+        services.AddSingleton<WeaveFleet.Application.Push.PushNotificationDispatcher>();
+        services.AddSingleton<ISessionNotificationSink>(sp => sp.GetRequiredService<WeaveFleet.Application.Push.PushNotificationDispatcher>());
         services.AddSingleton<SessionNotifier>();
 
         // EventBroadcaster is singleton — pub/sub hub shared across all requests

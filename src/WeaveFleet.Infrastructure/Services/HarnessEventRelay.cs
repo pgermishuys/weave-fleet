@@ -386,6 +386,8 @@ public sealed class HarnessEventRelay : BackgroundService
                 _queue?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
                 _callbacks?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
                 _failures?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
+                if (domainEvent is TurnFailed turnFailed)
+                    _notifier?.OnSessionFailed(targetFleetSessionId, turnFailed.Payload.Error.Message);
                 _logger.LogDebug("[Relay:Pump] Translated type={Type} domainEvent={DomainEvent} targetSession={TargetSession}",
                     evt.Type, domainEvent?.GetType().Name ?? "null", targetFleetSessionId);
 

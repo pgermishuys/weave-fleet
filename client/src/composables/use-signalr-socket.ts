@@ -542,6 +542,17 @@ export function setSessionFocus(sessionId: string, focused: boolean): void {
   })
 }
 
+/**
+ * Tells Fleet whether this window is on screen and whether it's a computer or a phone, so phones that asked to be
+ * quiet at the desk skip pushes while a computer shows Fleet. Sent every 30 s; the server forgets a window after 90 s.
+ */
+export function setPresence(visible: boolean, formFactor: "desktop" | "phone"): void {
+  if (connection?.state !== HubConnectionState.Connected) return
+  void connection.invoke("SetPresenceAsync", visible, formFactor).catch(() => {
+    // An older Fleet has no presence; nothing to do.
+  })
+}
+
 export function onReconnect(callback: () => void): () => void {
   const id = String(reconnectCallbackNextId++)
   reconnectCallbacks.set(id, callback)

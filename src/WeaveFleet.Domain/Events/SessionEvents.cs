@@ -149,6 +149,21 @@ public sealed record SessionNotificationPayload
     /// Gets the one line under the heading.
     /// </summary>
     public required string Body { get; init; }
+
+    /// <summary>
+    /// Gets what exactly it's about (<see cref="SessionNotificationKinds"/>). Older Fleets sent none; read
+    /// <see cref="Reason"/> then.
+    /// </summary>
+    public string? Kind { get; init; }
+
+    /// <summary>Gets the permission the agent waits on, when <see cref="Kind"/> is <c>permission</c>.</summary>
+    public string? RequestId { get; init; }
+
+    /// <summary>Gets the machine the session is on, so a phone that follows several machines knows which.</summary>
+    public string? MachineId { get; init; }
+
+    /// <summary>Gets that machine's name.</summary>
+    public string? MachineName { get; init; }
 }
 
 /// <summary>

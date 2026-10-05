@@ -13,6 +13,7 @@ export {
   onReconnect,
   onDisconnect,
   setSessionFocus,
+  setPresence,
   loadSessionHistory,
   _resetForTesting,
   _getSubscriberCount,
