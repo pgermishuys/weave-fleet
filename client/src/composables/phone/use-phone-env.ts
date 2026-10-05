@@ -30,7 +30,7 @@ export function safariSwipedBack(): boolean {
   return iosWebKit && !standalone && performance.now() - lastEdgeTouch < 1200;
 }
 
-const PRESSABLE = ".ph-btn,.ph-navbtn,.ph-tab,.ph-row,.ph-step,.ph-send,.ph-composer__plus,.ph-link-btn,.ph-ask__open,.ph-fab,.ph-press";
+const PRESSABLE = ".ph-btn,.ph-navbtn,.ph-tab,.ph-row:not(.ph-row--static),.ph-step,.ph-send,.ph-composer__plus,.ph-link-btn,.ph-ask__open,.ph-fab,.ph-press";
 const DELAYED = ".ph-row,.ph-step,.ph-ask__open";
 
 function readLook(): PhoneLook {
@@ -159,11 +159,22 @@ function installViewport(root: HTMLElement): () => void {
     // The layout can't scroll the page itself; undo any page scroll iOS makes to show a field.
     if (window.scrollY) window.scrollTo(0, 0);
   };
+  // Focusing a field scrolls even overflow-hidden frames to show it, which would shift the whole app: put them back.
+  const FRAMES = ".ph-app,.ph-stage,.ph-overlays,.ph-screen,.ph-sheet-layer,.ph-sheet,.ph-sheet-pages,.ph-sheet-page";
+  const onScroll = (event: Event): void => {
+    const target = event.target;
+    if (target instanceof HTMLElement && target.matches(FRAMES) && (target.scrollTop || target.scrollLeft)) {
+      target.scrollTop = 0;
+      target.scrollLeft = 0;
+    }
+  };
+  document.addEventListener("scroll", onScroll, true);
   viewport?.addEventListener("resize", update);
   viewport?.addEventListener("scroll", update);
   window.addEventListener("resize", update);
   update();
   return () => {
+    document.removeEventListener("scroll", onScroll, true);
     viewport?.removeEventListener("resize", update);
     viewport?.removeEventListener("scroll", update);
     window.removeEventListener("resize", update);

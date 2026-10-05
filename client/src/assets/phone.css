@@ -556,7 +556,8 @@ html[data-phone] textarea {
   transition: none;
 }
 
-.ph-row:disabled {
+.ph-row:disabled,
+.ph-row--static {
   cursor: default;
 }
 
@@ -805,7 +806,10 @@ html[data-phone] textarea {
   white-space: pre;
 }
 
+/* Whole words move to the next line; only a word wider than the line breaks inside. */
 .ph-code--wrap .ph-word {
+  display: inline-block;
+  max-width: 100%;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -851,6 +855,11 @@ html[data-phone] textarea {
 
 .ph-btns--q-none {
   grid-template-columns: minmax(0, 1fr);
+}
+
+/* Three across: the labels get the room the padding would take. */
+.ph-btns--q .ph-btn {
+  padding: 0 8px;
 }
 
 .ph-ask__what + .ph-btns {

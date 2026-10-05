@@ -126,3 +126,34 @@ export function rowInfo(entry: InboxItem, age: string): string {
   }
   return `${entry.machineName} · ${age} ago`;
 }
+
+/** "hangar", "hangar and falcon", "hangar, falcon and shuttle". */
+export function listNames(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/**
+ * The status line under the inbox's large title: which machines answer ("hangar and falcon online"), which don't,
+ * and a tone for its dot (all well, some away, none reachable).
+ */
+export function machinesLine(machines: readonly Pick<InboxMachineState, "name" | "status">[]): { text: string; tone: "online" | "partial" | "offline" | "connecting" } {
+  const online = machines.filter((m) => m.status === "live" || m.status === "polling").map((m) => m.name);
+  const away = machines.filter((m) => m.status === "unreachable").map((m) => m.name);
+  const connecting = machines.filter((m) => m.status === "connecting");
+  if (machines.length === 0 || (online.length === 0 && away.length === 0)) return { text: "Connecting…", tone: "connecting" };
+  const parts: string[] = [];
+  if (online.length) parts.push(`${listNames(online)} online`);
+  if (away.length) parts.push(`${listNames(away)} unreachable`);
+  if (connecting.length && online.length + away.length > 0) parts.push(`${connecting.length} connecting`);
+  const tone = away.length === 0 ? (connecting.length ? "connecting" : "online") : online.length ? "partial" : "offline";
+  return { text: parts.join(" · "), tone: tone === "connecting" && online.length ? "online" : tone };
+}
+
+/** The line under a session row: "falcon · Working · 6m", "hangar · Needs you · 3 min ago", "hangar · 22 min ago". */
+export function sessionLine(entry: InboxItem, words: { duration: string; ago: string }): string {
+  if (entry.status === "active") return rowInfo(entry, words.duration);
+  if (entry.status === "waiting_input") return [entry.machineName, "Needs you", words.ago].filter(Boolean).join(" · ");
+  if (entry.status === "error") return [entry.machineName, "Stopped with an error", words.ago].filter(Boolean).join(" · ");
+  return [entry.machineName, words.ago].filter(Boolean).join(" · ");
+}

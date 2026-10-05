@@ -1,25 +1,41 @@
 <script setup lang="ts">
-import { computed, onMounted, shallowRef } from "vue";
-import { useRouter } from "@tanstack/vue-router";
-import { Check, LoaderCircle } from "lucide-vue-next";
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
+import { computed, shallowRef, watch } from "vue";
+import { Check, LoaderCircle, Plus, Share } from "lucide-vue-next";
+import BottomSheet from "@/components/phone/BottomSheet.vue";
+import { phoneLook } from "@/composables/phone/use-phone-env";
+import { showToast } from "@/composables/phone/use-phone-toast";
 import { usePushSubscription } from "@/composables/phone/use-push-subscription";
+import { haptic } from "@/lib/phone/haptics";
 import { readPushEnvironment } from "@/lib/push/capabilities";
 import { CHOICE_GROUPS, groupsFor, kindsFor } from "@/lib/push/subscribe";
 
 /**
- * Turning on notifications (`/phone/setup`), step 3 of pairing in the mockup: on iPhone, add Fleet to the Home
- * Screen first; pick which notifications to get and whether to stay quiet while Fleet is open on a computer; then
- * Turn on notifications, which asks for permission (it has to be this click: iOS ignores a request that isn't).
+ * Turning on notifications (`/phone/setup`, a sheet over the inbox; step 3 of pairing): what they're for, on iPhone
+ * the Home Screen steps first, then Turn on notifications, which asks for permission (it has to be this tap: iOS
+ * ignores a request that isn't). Once on: which ones, quiet at the desk, and a test. One Done closes it.
  */
-const router = useRouter();
+const props = defineProps<{ open: boolean }>();
+const emit = defineEmits<{ (event: "close"): void }>();
+
 const push = usePushSubscription();
 const environment = readPushEnvironment();
 const testOutcome = shallowRef<string | null>(null);
 const testing = shallowRef(false);
 
 const groups = computed(() => groupsFor(push.choices.value.kinds));
+const needsHomeScreen = computed(() => push.state.value === "ios-needs-install");
+const deviceLine = computed(() => {
+  if (environment.isIos) return environment.isStandalone ? "iPhone · Home Screen app" : "iPhone · Safari";
+  return phoneLook.value === "android" ? "Android · Chrome" : "This browser";
+});
+
+/** The phone's words for each kind of notification. */
+const WORDS: Record<string, { label: string; detail: string }> = {
+  "needs-you": { label: "Something needs me", detail: "A command or edit waits for my approval" },
+  questions: { label: "An agent asks", detail: "A question I need to answer" },
+  finished: { label: "A session finishes", detail: "Its turn ended" },
+  failed: { label: "A session fails", detail: "It stopped with an error" },
+};
 
 function setGroup(id: string, on: boolean): void {
   const next = on ? [...new Set([...groups.value, id])] : groups.value.filter((group) => group !== id);
@@ -31,7 +47,14 @@ function setQuiet(on: boolean): void {
 }
 
 async function turnOn(): Promise<void> {
+  if (!push.canTurnOn.value) {
+    if (needsHomeScreen.value) showToast("Add Fleet to your Home Screen first");
+    else if (push.state.value === "denied") showToast("Allow notifications for this site in the browser's settings");
+    else showToast("This browser can't get notifications");
+    return;
+  }
   await push.turnOn();
+  if (push.subscribed.value) haptic("success");
 }
 
 async function test(): Promise<void> {
@@ -45,275 +68,263 @@ async function test(): Promise<void> {
       : outcome ? "The push service didn't take it. Try again in a minute." : null;
 }
 
-function done(): void {
-  void router.navigate({ to: "/phone" });
-}
+watch(() => props.open, (open) => {
+  if (open) void push.refresh();
+}, { immediate: true });
 
-onMounted(() => {
-  void push.refresh();
+watch(() => push.subscribed.value, () => {
+  testOutcome.value = null;
 });
 </script>
 
 <template>
-  <main
-    class="setup"
-    data-testid="notification-setup"
+  <BottomSheet
+    :open="open"
+    label="Notifications"
+    :detents="['large']"
+    recess
+    :history="false"
+    @close="emit('close')"
   >
-    <header class="setup__head">
-      <h1 class="setup__title">
-        Notifications
-      </h1>
-      <Button
-        variant="ghost"
-        size="sm"
-        @click="done"
-      >
-        {{ push.subscribed.value ? "Done" : "Skip" }}
-      </Button>
-    </header>
-
-    <section
-      v-if="push.state.value === 'insecure'"
-      class="setup__card"
-      data-testid="setup-insecure"
-    >
-      <b class="setup__card-title">Notifications need HTTPS</b>
-      <p class="setup__text">
-        Install and notifications need HTTPS through <code>tailscale serve</code>. This page still works in the
-        browser. On the computer, see docs/phone.md, then pair again from the https:// address.
-      </p>
-    </section>
-
-    <section
-      v-if="environment.isIos"
-      class="setup__card"
-      data-testid="setup-home-screen"
-    >
-      <b class="setup__card-title">Add Fleet to your Home Screen</b>
-      <p class="setup__text">
-        iPhone only sends web notifications to apps on the Home Screen. Tap <b>Share</b>, then
-        <b>Add to Home Screen</b>.
-      </p>
-      <p
-        v-if="environment.isStandalone"
-        class="setup__done"
-      >
-        <Check
-          :size="14"
-          aria-hidden="true"
-        /> Added. Opened from the Home Screen.
-      </p>
-      <p
-        v-else
-        class="setup__text mt-2"
-      >
-        Then open Fleet from its Home Screen icon to finish here. If it asks to pair again, enter the code shown on
-        your computer.
-      </p>
-    </section>
-
-    <section
-      v-if="push.state.value === 'denied'"
-      class="setup__card"
-      role="alert"
-      data-testid="setup-denied"
-    >
-      <b class="setup__card-title">Notifications are blocked</b>
-      <p class="setup__text">
-        This browser was told not to show Fleet's notifications. Allow them in its settings for this site, then come
-        back.
-      </p>
-    </section>
-
-    <section
-      v-if="push.state.value === 'unsupported'"
-      class="setup__card"
-    >
-      <b class="setup__card-title">This browser can't get notifications</b>
-      <p class="setup__text">
-        Use Chrome on Android, or Safari on an iPhone with Fleet added to the Home Screen.
-      </p>
-    </section>
-
-    <section class="setup__list">
-      <label
-        v-for="group in CHOICE_GROUPS"
-        :key="group.id"
-        class="setup__row"
-      >
-        <span class="setup__row-body">
-          <span class="setup__name">{{ group.label }}</span>
-          <span class="setup__info">{{ group.detail }}</span>
-        </span>
-        <Switch
-          :model-value="groups.includes(group.id)"
-          :data-testid="`setup-kind-${group.id}`"
-          @update:model-value="(on: boolean) => setGroup(group.id, on)"
-        />
-      </label>
-      <label class="setup__row">
-        <span class="setup__row-body">
-          <span class="setup__name">Quiet while I'm at the desk</span>
-          <span class="setup__info">Skip the phone when Fleet is open on a computer</span>
-        </span>
-        <Switch
-          :model-value="push.choices.value.quietWhenDesk"
-          data-testid="setup-quiet"
-          @update:model-value="setQuiet"
-        />
-      </label>
-    </section>
-
-    <p
-      v-if="push.error.value"
-      class="mt-3 text-sm text-error"
-      role="alert"
-    >
-      {{ push.error.value }}
-    </p>
-
-    <template v-if="push.subscribed.value">
-      <p
-        class="setup__on"
-        data-testid="setup-on"
-      >
-        <Check
-          :size="16"
-          aria-hidden="true"
-        /> Notifications are on for this phone.
-      </p>
-      <Button
-        variant="outline"
-        class="mt-3 h-11 w-full"
-        :disabled="testing"
-        data-testid="setup-test"
-        @click="test"
-      >
-        <LoaderCircle
-          v-if="testing"
-          class="animate-spin"
-          aria-hidden="true"
-        />
-        Send a test notification
-      </Button>
-      <p
-        v-if="testOutcome"
-        class="mt-2 text-sm text-muted"
-        role="status"
-      >
-        {{ testOutcome }}
-      </p>
-      <Button
-        class="mt-3 h-11 w-full"
-        @click="done"
+    <template #head>
+      <h2>Notifications</h2>
+      <span class="ph-navbar__spacer" />
+      <button
+        type="button"
+        class="ph-navbtn ph-glass ph-navbtn--text ph-navbtn--accent"
+        data-testid="setup-done"
+        @click="emit('close')"
       >
         Done
-      </Button>
+      </button>
     </template>
-    <Button
-      v-else
-      class="mt-4 h-11 w-full"
-      :disabled="!push.canTurnOn.value || push.busy.value"
-      data-testid="setup-turn-on"
-      @click="turnOn"
-    >
-      <LoaderCircle
-        v-if="push.busy.value"
-        class="animate-spin"
-        aria-hidden="true"
-      />
-      Turn on notifications
-    </Button>
-  </main>
+
+    <div data-testid="notification-setup">
+      <template v-if="!push.subscribed.value">
+        <div class="ph-sheet__pad ph-hero">
+          <img
+            src="/icons/apple-touch-icon.png"
+            alt=""
+            width="72"
+            height="72"
+          >
+          <h3>Know when an agent needs you</h3>
+          <p>Fleet taps you on the shoulder when a command waits for your approval, an agent asks a question, or a session finishes.</p>
+        </div>
+
+        <template v-if="needsHomeScreen">
+          <div class="ph-group-h">
+            On iPhone, first add Fleet to your Home Screen
+          </div>
+          <div
+            class="ph-group"
+            data-testid="setup-home-screen"
+          >
+            <div
+              class="ph-row ph-row--static"
+              style="--ph-sep-left: 56px"
+            >
+              <span class="ph-row__icon ph-row__icon--plain"><Share
+                :size="22"
+                aria-hidden="true"
+              /></span>
+              <span class="ph-row__main"><span class="ph-row__title ph-row__title--wrap">Tap Share in Safari</span></span>
+            </div>
+            <div
+              class="ph-row ph-row--static"
+              style="--ph-sep-left: 56px"
+            >
+              <span class="ph-row__icon ph-row__icon--plain"><Plus
+                :size="22"
+                aria-hidden="true"
+              /></span>
+              <span class="ph-row__main"><span class="ph-row__title ph-row__title--wrap">Choose Add to Home Screen</span></span>
+            </div>
+            <div
+              class="ph-row ph-row--static"
+              style="--ph-sep-left: 56px"
+            >
+              <span class="ph-row__icon ph-row__icon--plain"><img
+                src="/icons/apple-touch-icon.png"
+                alt=""
+                width="24"
+                height="24"
+                class="setup__mini-icon"
+              ></span>
+              <span class="ph-row__main"><span class="ph-row__title ph-row__title--wrap">Open Fleet from the Home Screen</span></span>
+            </div>
+          </div>
+          <p class="ph-group-f">
+            iOS only lets web apps send notifications once they're on the Home Screen. If it asks to pair again there,
+            enter the code shown on your computer.
+          </p>
+        </template>
+
+        <p
+          v-if="push.state.value === 'insecure'"
+          class="ph-note ph-note--warn setup__note"
+          data-testid="setup-insecure"
+        >
+          Notifications need HTTPS, through <code>tailscale serve</code>. This page still works in the browser. On the
+          computer, see docs/phone.md, then pair again from the https:// address.
+        </p>
+        <p
+          v-else-if="push.state.value === 'denied'"
+          class="ph-note ph-note--warn setup__note"
+          role="alert"
+          data-testid="setup-denied"
+        >
+          This browser was told not to show Fleet's notifications. Allow them in its settings for this site, then come
+          back.
+        </p>
+        <p
+          v-else-if="push.state.value === 'unsupported'"
+          class="ph-note setup__note"
+        >
+          This browser can't get notifications. Use Chrome on Android, or Safari on an iPhone with Fleet on the Home
+          Screen.
+        </p>
+
+        <div class="ph-sheet__pad setup__turn-on">
+          <button
+            type="button"
+            class="ph-btn ph-btn--primary ph-btn--big"
+            :disabled="push.busy.value"
+            data-testid="setup-turn-on"
+            @click="turnOn"
+          >
+            <LoaderCircle
+              v-if="push.busy.value"
+              class="ph-spinner"
+              :size="20"
+              aria-hidden="true"
+            />
+            <span>{{ push.busy.value ? "Asking…" : "Turn on notifications" }}</span>
+          </button>
+        </div>
+      </template>
+
+      <template v-else>
+        <div class="ph-group ph-fade-in">
+          <div
+            class="ph-row ph-row--static"
+            data-testid="setup-on"
+          >
+            <span class="ph-row__icon setup__on-icon"><Check
+              :size="22"
+              :stroke-width="2.6"
+              aria-hidden="true"
+            /></span>
+            <span class="ph-row__main">
+              <span class="ph-row__title">On for this phone</span>
+              <span class="ph-row__sub">{{ deviceLine }}</span>
+            </span>
+          </div>
+        </div>
+        <div class="ph-group-h">
+          Tell me when
+        </div>
+        <div class="ph-group ph-fade-in">
+          <button
+            v-for="group in CHOICE_GROUPS"
+            :key="group.id"
+            type="button"
+            class="ph-row"
+            role="switch"
+            :aria-checked="groups.includes(group.id)"
+            :data-testid="`setup-kind-${group.id}`"
+            @click="setGroup(group.id, !groups.includes(group.id))"
+          >
+            <span class="ph-row__main">
+              <span class="ph-row__title">{{ WORDS[group.id]?.label ?? group.label }}</span>
+              <span class="ph-row__sub ph-row__sub--wrap">{{ WORDS[group.id]?.detail ?? group.detail }}</span>
+            </span>
+            <span
+              class="ph-switch"
+              :class="{ 'ph-switch--on': groups.includes(group.id) }"
+              aria-hidden="true"
+            />
+          </button>
+        </div>
+        <div class="ph-group ph-fade-in setup__gap">
+          <button
+            type="button"
+            class="ph-row"
+            role="switch"
+            :aria-checked="push.choices.value.quietWhenDesk"
+            data-testid="setup-quiet"
+            @click="setQuiet(!push.choices.value.quietWhenDesk)"
+          >
+            <span class="ph-row__main">
+              <span class="ph-row__title">Quiet at my desk</span>
+              <span class="ph-row__sub ph-row__sub--wrap">Skip the phone while Fleet is open on a computer</span>
+            </span>
+            <span
+              class="ph-switch"
+              :class="{ 'ph-switch--on': push.choices.value.quietWhenDesk }"
+              aria-hidden="true"
+            />
+          </button>
+        </div>
+        <div class="ph-group setup__gap">
+          <button
+            type="button"
+            class="ph-row ph-row--accent"
+            :disabled="testing"
+            data-testid="setup-test"
+            @click="test"
+          >
+            <span class="ph-row__main"><span class="ph-row__title">Send a test notification</span></span>
+            <LoaderCircle
+              v-if="testing"
+              class="ph-spinner"
+              :size="18"
+              aria-hidden="true"
+            />
+          </button>
+        </div>
+        <p
+          class="ph-group-f"
+          role="status"
+        >
+          {{ testOutcome ?? "It arrives like a real one, so you can see how it looks." }}
+        </p>
+      </template>
+
+      <p
+        v-if="push.error.value"
+        class="ph-note ph-note--error setup__note"
+        role="alert"
+      >
+        {{ push.error.value }}
+      </p>
+    </div>
+  </BottomSheet>
 </template>
 
 <style scoped>
-.setup {
-  width: 100%;
-  max-width: 480px;
-  margin: 0 auto;
-  padding: 12px 16px 32px;
+.ph-row__title,
+.ph-row__sub {
+  display: block;
 }
 
-.setup__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 44px;
+.setup__mini-icon {
+  border-radius: 6px;
 }
 
-.setup__title {
-  font-size: 20px;
-  font-weight: 600;
+.setup__note {
+  margin: 18px 32px 0;
 }
 
-.setup__card,
-.setup__list {
-  margin-top: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  background: var(--card-bg);
+.setup__turn-on {
+  margin-top: 24px;
 }
 
-.setup__card {
-  padding: 12px 14px;
+.setup__on-icon {
+  background: var(--running);
 }
 
-.setup__card-title {
-  font-size: 14px;
-}
-
-.setup__text {
-  margin-top: 4px;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--muted);
-}
-
-.setup__done {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--running);
-}
-
-.setup__row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 56px;
-  padding: 8px 14px;
-  cursor: pointer;
-}
-
-.setup__row + .setup__row {
-  border-top: 1px solid var(--border);
-}
-
-.setup__row-body {
-  display: grid;
-  flex: 1;
-  min-width: 0;
-}
-
-.setup__name {
-  font-size: 15px;
-}
-
-.setup__info {
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.setup__on {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 16px;
-  font-size: 14px;
-  color: var(--running);
+.setup__gap {
+  margin-top: 22px;
 }
 </style>

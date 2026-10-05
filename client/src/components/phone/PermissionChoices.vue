@@ -1,29 +1,31 @@
 <script setup lang="ts">
-import { computed, shallowRef } from "vue";
-import { Button } from "@/components/ui/button";
+import { computed, nextTick, shallowRef, useTemplateRef } from "vue";
+import { ArrowUp, ChevronRight, Monitor } from "lucide-vue-next";
+import CommandText from "@/components/phone/CommandText.vue";
 import type { PermissionAsk } from "@/composables/use-session-permissions";
+import { alwaysCovers } from "@/lib/phone/asks";
 import type { PermissionReply } from "@/lib/push/answer";
 
 /**
- * The answers to an agent's permission ask, as 44px rows: Allow once; Don't ask again for <pattern> this session;
- * Deny, which opens a field to tell the agent what to do instead. The same choices as the desktop PermissionCard.
+ * Every answer to an agent's permission ask, as the More… sheet shows it: where and what (the command wrapped only
+ * between words), Allow once, Always allow in this session (what that covers), and Deny, which opens a box to tell
+ * the agent what to do instead. The same choices as the desktop PermissionCard.
  */
-const props = defineProps<{ ask: PermissionAsk; busy?: boolean; compact?: boolean }>();
-const emit = defineEmits<{ (event: "answer", reply: PermissionReply, message?: string): void }>();
+const props = defineProps<{ ask: PermissionAsk; busy?: boolean; machineName?: string; sessionTitle?: string }>();
+const emit = defineEmits<{ (event: "answer", reply: PermissionReply, message?: string): void; (event: "expand"): void }>();
 
 const denying = shallowRef(false);
 const instead = shallowRef("");
+const denyBox = useTemplateRef<HTMLElement>("denyBox");
+const covers = computed(() => alwaysCovers(props.ask));
 
-const lead = computed(() => {
-  switch (props.ask.kind) {
-    case "shell": return "Run a command";
-    case "edit": return "Edit a file";
-    case "read": return "Read a file";
-    case "web": return "Open a web page";
-    default: return `Use ${props.ask.tool}`;
-  }
-});
-const always = computed(() => props.ask.always[0] ?? props.ask.tool);
+async function openDeny(): Promise<void> {
+  denying.value = true;
+  emit("expand");
+  await nextTick();
+  denyBox.value?.querySelector("textarea")?.focus({ preventScroll: true });
+  setTimeout(() => denyBox.value?.scrollIntoView({ block: "nearest", behavior: "smooth" }), 350);
+}
 
 function deny(): void {
   emit("answer", "reject", instead.value.trim() || undefined);
@@ -31,222 +33,136 @@ function deny(): void {
 </script>
 
 <template>
-  <div
-    class="pc"
-    data-testid="permission-choices"
-  >
-    <div class="pc__lead">
-      <span
-        class="pc__dot"
-        aria-hidden="true"
-      />{{ lead }}
-      <span
-        v-if="ask.subagent"
-        class="pc__sub"
-      >· {{ ask.subagent }}</span>
-    </div>
-    <pre
-      v-if="ask.title"
-      class="pc__cmd"
-    ><span
-      v-if="ask.directory"
-      class="pc__dim"
-    >{{ ask.directory }} $ </span>{{ ask.title }}</pre>
-    <pre
-      v-if="ask.detail && !compact"
-      class="pc__cmd pc__detail"
-    >{{ ask.detail }}</pre>
-
-    <button
-      type="button"
-      class="pc__choice"
-      :disabled="busy"
-      data-testid="permission-once"
-      @click="emit('answer', 'once')"
-    >
-      <span class="pc__key">1</span>Allow once
-    </button>
-    <button
-      type="button"
-      class="pc__choice"
-      :disabled="busy"
-      data-testid="permission-always"
-      @click="emit('answer', 'always')"
-    >
-      <span class="pc__key">2</span>
-      <span class="pc__label">Don't ask again for <code>{{ always }}</code></span>
-      <span class="pc__scope">this session</span>
-    </button>
-    <button
-      v-if="!denying"
-      type="button"
-      class="pc__choice"
-      :disabled="busy"
-      data-testid="permission-deny"
-      @click="denying = true"
-    >
-      <span class="pc__key">3</span>Deny, and tell the agent what to do instead…
-    </button>
-    <form
-      v-else
-      class="pc__deny"
-      @submit.prevent="deny"
-    >
-      <textarea
-        v-model="instead"
-        class="pc__input"
-        rows="2"
-        placeholder="Tell the agent what to do instead (optional)"
-        aria-label="What the agent should do instead"
-        data-testid="permission-deny-text"
-      />
-      <div class="pc__deny-actions">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          @click="denying = false"
-        >
-          Back
-        </Button>
-        <Button
-          type="submit"
-          size="sm"
-          variant="destructive"
-          :disabled="busy"
-          data-testid="permission-deny-send"
-        >
-          Deny
-        </Button>
+  <div data-testid="permission-choices">
+    <div class="ph-sheet__pad">
+      <div
+        v-if="machineName || sessionTitle || ask.subagent"
+        class="ph-ask__meta"
+      >
+        <span
+          v-if="machineName"
+          class="ph-machine"
+        ><Monitor
+          :size="14"
+          aria-hidden="true"
+        />{{ machineName }}</span>
+        <span>{{ [sessionTitle, ask.subagent ? `asked by ${ask.subagent}` : ""].filter(Boolean).map((part) => `· ${part}`).join(" ") }}</span>
       </div>
-    </form>
+      <CommandText
+        v-if="ask.title"
+        :command="ask.title"
+        :directory="ask.directory"
+        class="pc__cmd"
+      />
+      <pre
+        v-if="ask.detail"
+        class="ph-code pc__detail"
+      >{{ ask.detail }}</pre>
+      <button
+        type="button"
+        class="ph-btn ph-btn--primary ph-btn--big"
+        :disabled="busy"
+        data-testid="permission-once"
+        @click="emit('answer', 'once')"
+      >
+        Allow once
+      </button>
+    </div>
+    <div class="ph-group pc__group">
+      <button
+        type="button"
+        class="ph-row"
+        :disabled="busy"
+        data-testid="permission-always"
+        @click="emit('answer', 'always')"
+      >
+        <span class="ph-row__main">
+          <span class="ph-row__title">Always allow in this session</span>
+          <span class="ph-row__sub ph-row__sub--wrap">{{ covers.lead }} <code class="ph-chip-code">{{ covers.code }}</code></span>
+        </span>
+      </button>
+      <button
+        type="button"
+        class="ph-row ph-row--danger"
+        :disabled="busy"
+        data-testid="permission-deny"
+        @click="openDeny"
+      >
+        <span class="ph-row__main">
+          <span class="ph-row__title">Deny</span>
+          <span class="ph-row__sub">and tell the agent what to do instead</span>
+        </span>
+        <ChevronRight
+          class="ph-row__chev"
+          :size="16"
+          :stroke-width="3"
+          aria-hidden="true"
+        />
+      </button>
+    </div>
+    <div
+      v-if="denying"
+      ref="denyBox"
+    >
+      <div class="ph-group-h">
+        Tell the agent what to do instead
+      </div>
+      <div class="ph-sheet__pad">
+        <form
+          class="ph-composer ph-glass-field"
+          @submit.prevent="deny"
+        >
+          <textarea
+            v-model="instead"
+            rows="2"
+            placeholder="Optional: what to do instead"
+            aria-label="What the agent should do instead"
+            data-testid="permission-deny-text"
+            class="pc__instead"
+          />
+          <button
+            type="submit"
+            class="ph-send ph-btn--danger"
+            :disabled="busy"
+            aria-label="Deny"
+            data-testid="permission-deny-send"
+          >
+            <ArrowUp
+              :size="22"
+              :stroke-width="2.6"
+              aria-hidden="true"
+            />
+          </button>
+        </form>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.pc {
-  display: grid;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--idle) 45%, transparent);
-  border-radius: var(--radius-card);
-  background: var(--card-bg);
-}
-
-.pc__lead {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.pc__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--idle);
-}
-
-.pc__sub {
-  font-weight: 400;
-  color: var(--muted);
-}
-
 .pc__cmd {
-  margin: 0;
-  padding: 8px 10px;
+  margin: 10px 0 16px;
+}
+
+.pc__detail {
   max-height: 160px;
+  margin: -6px 0 16px;
   overflow: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: var(--main-bg);
-  font-family: var(--font-mono-stack);
-  font-size: 12px;
-  line-height: 1.45;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-.pc__detail {
-  max-height: 120px;
+.pc__group {
+  margin-top: 16px;
 }
 
-.pc__dim {
-  color: var(--muted);
+.ph-row__title,
+.ph-row__sub {
+  display: block;
 }
 
-.pc__choice {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 44px;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: var(--card-bg);
-  color: var(--text);
-  font: inherit;
-  font-size: 14px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.pc__choice:active {
-  background: var(--accent-dim);
-}
-
-.pc__choice:disabled {
-  opacity: 0.6;
-}
-
-.pc__key {
-  display: grid;
-  width: 20px;
-  height: 20px;
-  flex: none;
-  place-items: center;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: 11px;
-  color: var(--muted);
-}
-
-.pc__label {
-  flex: 1;
-  min-width: 0;
-}
-
-.pc__label code {
-  font-family: var(--font-mono-stack);
-  font-size: 12px;
-}
-
-.pc__scope {
-  font-size: 11px;
-  color: var(--muted);
-}
-
-.pc__deny {
-  display: grid;
-  gap: 8px;
-}
-
-.pc__input {
-  width: 100%;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: var(--main-bg);
-  color: var(--text);
-  font: inherit;
-  font-size: 15px;
-  resize: vertical;
-}
-
-.pc__deny-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
+.ph-composer .pc__instead {
+  height: auto;
+  min-height: 62px;
 }
 </style>

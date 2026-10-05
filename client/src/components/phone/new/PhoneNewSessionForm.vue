@@ -1,43 +1,45 @@
 <script setup lang="ts">
-import { computed, shallowRef, watch } from "vue";
-import { useRouter } from "@tanstack/vue-router";
-import { ArrowUp, ChevronLeft, ChevronRight, LoaderCircle } from "lucide-vue-next";
-import { Button } from "@/components/ui/button";
-import PhoneChipSheet, { type ChipOption } from "@/components/phone/session/PhoneChipSheet.vue";
+import { computed, nextTick, onMounted, shallowRef, useTemplateRef, watch } from "vue";
+import { ArrowLeft, ArrowUp, Check, ChevronLeft, ChevronRight, LoaderCircle, Search } from "lucide-vue-next";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { useHarnessCatalog } from "@/composables/use-harness-catalog";
 import { useNewSessionDefaults } from "@/composables/use-new-session-defaults";
 import { useRepositories } from "@/composables/use-repositories";
 import { useCreateSession } from "@/composables/use-session-actions";
+import { phoneLook } from "@/composables/phone/use-phone-env";
 import { keepOffered, modelFor, modelFromKey, modelName } from "@/lib/agent-model-choice";
-import { rememberPhoneMachine } from "@/lib/machines";
+import { animateTo, EASE_OUT } from "@/lib/phone/animate";
+import { haptic } from "@/lib/phone/haptics";
+import { takeKeyboard } from "@/lib/phone/keyboard";
 import { buildCreateSessionRequest, type NewSessionFolder, type NewSessionWorkspace } from "@/lib/new-session-request";
 import { folderFromId, folderId, folderName, folderOptions, type PhoneMachine } from "@/lib/phone/new-session";
 
 /**
- * The New session form for one machine (the page provides it, and builds this again when the machine changes). What
- * to do comes first; under it the choices, each a row that opens a sheet: machine, folder, where in a repository
- * (a new worktree or the folder itself), harness, agent and model. They start where this phone last left them on
- * that machine, like the desktop's. Start creates the session with the message as its first prompt and opens it.
+ * The New session sheet's pages for one machine (the sheet provides the machine, and builds this again when it
+ * changes). What to do comes first, with the keyboard up; under it the choices as grouped rows (machine, folder,
+ * where in a repository, harness, agent and model), each opening a picker page that slides in inside the sheet.
+ * Agent and model shimmer in place while the harness lists them. Start, kept above the keyboard, creates the session
+ * with the message as its first prompt and opens it.
  */
 const props = defineProps<{ machine: PhoneMachine; machines: readonly PhoneMachine[] }>();
-const emit = defineEmits<{ (event: "machine", id: string): void }>();
+const message = defineModel<string>("message", { required: true });
+const emit = defineEmits<{ (event: "machine", id: string): void; (event: "cancel"): void; (event: "started", sessionId: string): void }>();
 
-type Sheet = "machine" | "folder" | "where" | "harness" | "agent" | "model";
+type Picker = "machine" | "folder" | "where" | "harness" | "agent" | "model";
+interface Option { id: string; label: string; detail?: string }
 
-const router = useRouter();
 const defaults = useNewSessionDefaults();
 const { repositories, isLoading: loadingFolders } = useRepositories();
 const { enabledHarnesses, defaultHarnessType, noHarnessReason } = useEnabledHarnesses();
 const { createSession, isLoading: starting } = useCreateSession();
 
-const message = shallowRef("");
 const folder = shallowRef<NewSessionFolder | null>(null);
 const workspace = shallowRef<NewSessionWorkspace>({ kind: "new" });
 const harnessType = shallowRef("");
 const agent = shallowRef("");
 const model = shallowRef("");
-const sheet = shallowRef<Sheet | null>(null);
+const picker = shallowRef<Picker | null>(null);
+const folderQuery = shallowRef("");
 const error = shallowRef<string | null>(null);
 
 // The last folder used on this machine, once the machine's repositories are known.
@@ -55,7 +57,10 @@ watch([enabledHarnesses, defaultHarnessType], ([enabled, preferred]) => {
 }, { immediate: true });
 
 const catalogDirectory = computed(() => (folder.value && folder.value.kind !== "none" ? folder.value.path : null));
-const { catalog, agents, models, isSupported } = useHarnessCatalog(harnessType, catalogDirectory);
+const { catalog, agents, models, isSupported, isCurrent, isLoading: loadingCatalog } = useHarnessCatalog(harnessType, catalogDirectory);
+/** Agent and model rows stay in place, shimmering, while the harness lists them (nothing pops in later). */
+const catalogLoading = computed(() => Boolean(harnessType.value) && (!isCurrent.value || (loadingCatalog.value && !catalog.value)));
+const showAgentModel = computed(() => isSupported.value || catalogLoading.value);
 
 // Agent and model start as they were last time in this folder on this harness, as long as the harness still offers them.
 watch([folder, harnessType, catalog], ([nextFolder, type, nextCatalog], previous) => {
@@ -72,11 +77,11 @@ function pickFolder(next: NewSessionFolder): void {
   workspace.value = next.kind === "repository" ? defaults.workspaceFor(next.path, null) : { kind: "current" };
 }
 
-const folderLabel = computed(() => (folder.value ? folderName(folder.value, repositories.value) : loadingFolders.value ? "Loading…" : "Choose"));
+const folderLabel = computed(() => (folder.value ? folderName(folder.value, repositories.value) : loadingFolders.value ? "" : "Choose"));
 const whereLabel = computed(() => {
   const chosen = workspace.value;
   if (chosen.kind === "new") return "New worktree";
-  if (chosen.kind === "current") return "The folder itself";
+  if (chosen.kind === "current") return "This folder";
   return chosen.path.split(/[\\/]/).filter(Boolean).pop() ?? chosen.path;
 });
 const harnessLabel = computed(() => enabledHarnesses.value.find((harness) => harness.type === harnessType.value)?.displayName ?? "None");
@@ -88,16 +93,20 @@ const modelLabel = computed(() => {
   return "Default";
 });
 
-const options = computed<ChipOption[]>(() => {
-  switch (sheet.value) {
+const options = computed<Option[]>(() => {
+  switch (picker.value) {
     case "machine":
-      return props.machines.map((machine) => ({ id: machine.id, label: machine.name, ...(machine.connection ? {} : { detail: "Home" }) }));
-    case "folder":
-      return folderOptions(repositories.value, defaults.recentFolders(repositories.value));
+      return props.machines.map((machine) => ({ id: machine.id, label: machine.name, ...(machine.connection ? {} : { detail: "Home: this phone's own machine" }) }));
+    case "folder": {
+      const words = folderQuery.value.trim().toLowerCase();
+      return folderOptions(repositories.value, defaults.recentFolders(repositories.value))
+        .filter((option) => !words || option.label.toLowerCase().includes(words) || option.detail?.toLowerCase().includes(words));
+    }
     case "where": {
-      const list: ChipOption[] = [
-        { id: "new", label: "New worktree", detail: "Its own branch and folder; your checkout stays as it is" },
-        { id: "current", label: "The folder itself", detail: "Works in your checkout, on its current branch" },
+      const name = folder.value ? folderName(folder.value, repositories.value) : "the folder";
+      const list: Option[] = [
+        { id: "new", label: "New worktree", detail: "Its own branch and folder, so it can't trip over other sessions" },
+        { id: "current", label: "This folder", detail: `Works straight in ${name}, on its current branch` },
       ];
       if (workspace.value.kind === "existing") list.push({ id: `existing:${workspace.value.path}`, label: whereLabel.value, detail: workspace.value.path });
       return list;
@@ -106,7 +115,7 @@ const options = computed<ChipOption[]>(() => {
       return enabledHarnesses.value.map((harness) => ({ id: harness.type, label: harness.displayName }));
     case "agent":
       return [
-        { id: "", label: "Default", ...(catalog.value?.defaultAgent ? { detail: catalog.value.defaultAgent } : {}) },
+        { id: "", label: "Default", ...(catalog.value?.defaultAgent ? { detail: `The harness's own: ${catalog.value.defaultAgent}` } : {}) },
         ...agents.value.map((option) => ({ id: option.id, label: option.name, ...(option.description ? { detail: option.description } : {}) })),
       ];
     case "model":
@@ -120,36 +129,47 @@ const options = computed<ChipOption[]>(() => {
 });
 
 const selectedOption = computed(() => {
-  switch (sheet.value) {
-    case "machine":
-      return props.machine.id;
-    case "folder":
-      return folder.value ? folderId(folder.value) : "";
-    case "where":
-      return workspace.value.kind === "existing" ? `existing:${workspace.value.path}` : workspace.value.kind;
-    case "harness":
-      return harnessType.value;
-    case "agent":
-      return agent.value;
-    case "model":
-      return model.value;
-    default:
-      return "";
+  switch (picker.value) {
+    case "machine": return props.machine.id;
+    case "folder": return folder.value ? folderId(folder.value) : "";
+    case "where": return workspace.value.kind === "existing" ? `existing:${workspace.value.path}` : workspace.value.kind;
+    case "harness": return harnessType.value;
+    case "agent": return agent.value;
+    case "model": return model.value;
+    default: return "";
   }
 });
 
-const sheetTitle: Record<Sheet, string> = {
-  machine: "Machine",
-  folder: "Folder",
-  where: "Where",
-  harness: "Harness",
-  agent: "Agent",
-  model: "Model",
-};
+const pickerTitle: Record<Picker, string> = { machine: "Machine", folder: "Folder", where: "Where", harness: "Harness", agent: "Agent", model: "Model" };
+
+// Picker pages slide in from the right over the form, which slides a little left and dims, and back.
+const mainRef = useTemplateRef<HTMLElement>("main");
+function openPicker(next: Picker): void {
+  error.value = null;
+  folderQuery.value = "";
+  (document.activeElement as HTMLElement | null)?.blur?.();
+  picker.value = next;
+}
+function closePicker(): void {
+  picker.value = null;
+}
+async function onPickerEnter(el: Element, done: () => void): Promise<void> {
+  const page = el as HTMLElement;
+  page.style.transform = "translateX(100%)";
+  const moves = [animateTo(page, { transform: "translateX(0)" }, 400)];
+  if (mainRef.value) moves.push(animateTo(mainRef.value, { transform: "translateX(-30%)", opacity: "0.6" }, 400));
+  await Promise.all(moves);
+  done();
+}
+async function onPickerLeave(el: Element, done: () => void): Promise<void> {
+  const moves = [animateTo(el as HTMLElement, { transform: "translateX(100%)" }, 340, EASE_OUT)];
+  if (mainRef.value) moves.push(animateTo(mainRef.value, { transform: "translateX(0)", opacity: "1" }, 340, EASE_OUT));
+  await Promise.all(moves);
+  done();
+}
 
 function pick(id: string): void {
-  error.value = null;
-  switch (sheet.value) {
+  switch (picker.value) {
     case "machine":
       if (id !== props.machine.id) emit("machine", id);
       break;
@@ -169,6 +189,7 @@ function pick(id: string): void {
       model.value = id;
       break;
   }
+  setTimeout(closePicker, 180);
 }
 
 const canStart = computed(() => message.value.trim().length > 0 && !!harnessType.value && !starting.value);
@@ -176,7 +197,7 @@ const canStart = computed(() => message.value.trim().length > 0 && !!harnessType
 async function start(): Promise<void> {
   error.value = null;
   if (!folder.value) {
-    sheet.value = "folder";
+    openPicker("folder");
     return;
   }
   if (!canStart.value) return;
@@ -194,311 +215,367 @@ async function start(): Promise<void> {
     return;
   }
 
+  haptic("success");
   try {
     const created = await createSession(built.directory, built.options);
     defaults.remember(folder.value, workspace.value, { harnessType: harnessType.value, agent: agent.value, model: model.value });
-    open(created.session.id);
+    emit("started", created.session.id);
   } catch (startError) {
     error.value = startError instanceof Error ? startError.message : String(startError);
   }
 }
 
-function open(sessionId: string): void {
-  const { machine } = props;
-  if (!machine.connection) {
-    void router.navigate({ to: "/phone/s/$machineId/$sessionId", params: { machineId: machine.id, sessionId } });
-    return;
-  }
-  // Another machine: the page reloads to work there, as opening one from the inbox does.
-  rememberPhoneMachine(machine.connection);
-  window.location.assign(`/phone/s/${encodeURIComponent(machine.id)}/${encodeURIComponent(sessionId)}`);
+// The message box grows with what's typed, from four lines.
+const promptRef = useTemplateRef<HTMLTextAreaElement>("prompt");
+function fit(): void {
+  const el = promptRef.value;
+  if (!el) return;
+  el.style.height = "auto";
+  el.style.height = `${Math.max(el.scrollHeight, 22 * 4)}px`;
 }
-
-function back(): void {
-  if (window.history.length > 1) window.history.back();
-  else void router.navigate({ to: "/phone" });
-}
+watch(message, () => void nextTick(fit));
+onMounted(() => {
+  fit();
+  // The tap that opened the sheet is holding the keyboard: hand it to the message box.
+  takeKeyboard(promptRef.value);
+});
 </script>
 
 <template>
   <div
-    class="pns"
+    ref="main"
+    class="ph-sheet-page"
     data-testid="phone-new-session"
   >
-    <header class="pns__head">
-      <Button
-        variant="toolbar-icon"
-        size="icon"
-        aria-label="Back"
-        @click="back"
+    <div class="ph-sheet__head">
+      <button
+        type="button"
+        class="ph-navbtn ph-glass ph-navbtn--text"
+        data-testid="phone-new-cancel"
+        @click="emit('cancel')"
       >
-        <ChevronLeft :size="22" />
-      </Button>
-      <h1 class="pns__title">
-        New session
-      </h1>
-    </header>
+        Cancel
+      </button>
+      <h2>New session</h2>
+      <span class="ph-navbar__spacer" />
+    </div>
+    <div class="ph-sheet__body">
+      <div class="ph-sheet__pad">
+        <div class="ph-prompt-card">
+          <textarea
+            ref="prompt"
+            v-model="message"
+            rows="4"
+            placeholder="What should the agent do?"
+            aria-label="What should the agent do?"
+            enterkeyhint="enter"
+            data-testid="phone-new-message"
+          />
+        </div>
+      </div>
 
-    <main class="pns__scroll">
-      <textarea
-        v-model="message"
-        class="pns__message phone-composer-input"
-        rows="5"
-        placeholder="What should the agent do?"
-        aria-label="What should the agent do?"
-        enterkeyhint="enter"
-        data-testid="phone-new-message"
-      />
-
-      <div class="pns__card">
+      <div class="ph-group-h">
+        Where it runs
+      </div>
+      <div class="ph-group">
         <button
-          v-if="machines.length > 1"
           type="button"
-          class="pns__row"
+          class="ph-row"
+          :class="{ 'ph-row--static': machines.length < 2 }"
+          :disabled="machines.length < 2"
           data-testid="phone-new-machine"
-          @click="sheet = 'machine'"
+          @click="openPicker('machine')"
         >
-          <span class="pns__label">Machine</span>
-          <span class="pns__value">{{ machine.name }}</span>
+          <span class="ph-row__main"><span class="ph-row__title">Machine</span></span>
+          <span class="ph-row__value">{{ machine.name }}</span>
           <ChevronRight
+            v-if="machines.length > 1"
+            class="ph-row__chev"
             :size="16"
+            :stroke-width="3"
             aria-hidden="true"
           />
         </button>
         <button
           type="button"
-          class="pns__row"
+          class="ph-row"
           data-testid="phone-new-folder"
-          @click="sheet = 'folder'"
+          @click="openPicker('folder')"
         >
-          <span class="pns__label">Folder</span>
+          <span class="ph-row__main"><span class="ph-row__title">Folder</span></span>
           <span
-            class="pns__value"
-            :class="{ 'pns__value--empty': !folder }"
+            v-if="folderLabel"
+            class="ph-row__value"
+            :class="{ 'pns__choose': !folder }"
           >{{ folderLabel }}</span>
+          <span
+            v-else
+            class="ph-sk pns__sk"
+          />
           <ChevronRight
+            class="ph-row__chev"
             :size="16"
+            :stroke-width="3"
             aria-hidden="true"
           />
         </button>
         <button
           v-if="folder?.kind === 'repository'"
           type="button"
-          class="pns__row"
+          class="ph-row"
           data-testid="phone-new-where"
-          @click="sheet = 'where'"
+          @click="openPicker('where')"
         >
-          <span class="pns__label">Where</span>
-          <span class="pns__value">{{ whereLabel }}</span>
+          <span class="ph-row__main"><span class="ph-row__title">Where</span></span>
+          <span class="ph-row__value">{{ whereLabel }}</span>
           <ChevronRight
+            class="ph-row__chev"
             :size="16"
+            :stroke-width="3"
             aria-hidden="true"
           />
         </button>
+      </div>
+
+      <div class="ph-group-h">
+        Who does it
+      </div>
+      <div class="ph-group">
         <button
-          v-if="enabledHarnesses.length > 1"
           type="button"
-          class="pns__row"
+          class="ph-row"
+          :class="{ 'ph-row--static': enabledHarnesses.length < 2 }"
+          :disabled="enabledHarnesses.length < 2"
           data-testid="phone-new-harness"
-          @click="sheet = 'harness'"
+          @click="openPicker('harness')"
         >
-          <span class="pns__label">Harness</span>
-          <span class="pns__value">{{ harnessLabel }}</span>
+          <span class="ph-row__main"><span class="ph-row__title">Harness</span></span>
+          <span class="ph-row__value">{{ harnessLabel }}</span>
           <ChevronRight
+            v-if="enabledHarnesses.length > 1"
+            class="ph-row__chev"
             :size="16"
+            :stroke-width="3"
             aria-hidden="true"
           />
         </button>
-        <template v-if="isSupported">
+        <template v-if="showAgentModel">
           <button
             type="button"
-            class="pns__row"
+            class="ph-row"
+            :disabled="catalogLoading"
             data-testid="phone-new-agent"
-            @click="sheet = 'agent'"
+            @click="openPicker('agent')"
           >
-            <span class="pns__label">Agent</span>
-            <span class="pns__value">{{ agentLabel }}</span>
+            <span class="ph-row__main"><span class="ph-row__title">Agent</span></span>
+            <span
+              v-if="catalogLoading"
+              class="ph-sk pns__sk"
+            />
+            <span
+              v-else
+              class="ph-row__value ph-fade-in"
+            >{{ agentLabel }}</span>
             <ChevronRight
+              class="ph-row__chev"
               :size="16"
+              :stroke-width="3"
               aria-hidden="true"
             />
           </button>
           <button
             type="button"
-            class="pns__row"
+            class="ph-row"
+            :disabled="catalogLoading"
             data-testid="phone-new-model"
-            @click="sheet = 'model'"
+            @click="openPicker('model')"
           >
-            <span class="pns__label">Model</span>
-            <span class="pns__value">{{ modelLabel }}</span>
+            <span class="ph-row__main"><span class="ph-row__title">Model</span></span>
+            <span
+              v-if="catalogLoading"
+              class="ph-sk pns__sk"
+            />
+            <span
+              v-else
+              class="ph-row__value ph-fade-in"
+            >{{ modelLabel }}</span>
             <ChevronRight
+              class="ph-row__chev"
               :size="16"
+              :stroke-width="3"
               aria-hidden="true"
             />
           </button>
         </template>
       </div>
-
       <p
         v-if="noHarnessReason"
-        class="pns__note"
+        class="ph-group-f"
       >
         {{ noHarnessReason }} Turn a harness on in Settings › Harnesses on a computer.
       </p>
       <p
+        v-else-if="showAgentModel"
+        class="ph-group-f"
+      >
+        Agent and model come from {{ harnessLabel }} on {{ machine.name }}.
+      </p>
+      <p
         v-if="error"
-        class="pns__error"
+        class="ph-note ph-note--error pns__error"
         role="alert"
         data-testid="phone-new-error"
       >
         {{ error }}
       </p>
-    </main>
-
-    <footer class="pns__foot">
-      <Button
-        class="h-12 w-full"
+    </div>
+    <div class="ph-sheet__foot">
+      <button
+        type="button"
+        class="ph-btn ph-btn--primary ph-btn--big"
         :disabled="!canStart"
         data-testid="phone-new-start"
         @click="start"
       >
         <LoaderCircle
           v-if="starting"
-          class="animate-spin"
+          class="ph-spinner"
+          :size="20"
           aria-hidden="true"
         />
         <ArrowUp
           v-else
+          :size="22"
+          :stroke-width="2.6"
           aria-hidden="true"
         />
-        Start on {{ machine.name }}
-      </Button>
-    </footer>
-
-    <PhoneChipSheet
-      :open="sheet !== null"
-      :title="sheet ? sheetTitle[sheet] : ''"
-      :options="options"
-      :selected="selectedOption"
-      @pick="pick"
-      @close="sheet = null"
-    />
+        <span>{{ starting ? "Starting…" : `Start on ${machine.name}` }}</span>
+      </button>
+    </div>
   </div>
+
+  <Transition
+    :css="false"
+    @enter="onPickerEnter"
+    @leave="onPickerLeave"
+  >
+    <div
+      v-if="picker"
+      :key="picker"
+      class="ph-sheet-page"
+      data-testid="phone-new-picker"
+    >
+      <div class="ph-sheet__head">
+        <button
+          type="button"
+          class="ph-navbtn ph-glass"
+          aria-label="Back"
+          @click="closePicker"
+        >
+          <ArrowLeft
+            v-if="phoneLook === 'android'"
+            :size="24"
+            aria-hidden="true"
+          />
+          <ChevronLeft
+            v-else
+            :size="24"
+            :stroke-width="2.4"
+            aria-hidden="true"
+          />
+        </button>
+        <h2>{{ pickerTitle[picker] }}</h2>
+      </div>
+      <div class="ph-sheet__body">
+        <div
+          v-if="picker === 'folder'"
+          class="ph-sheet__pad pns__search"
+        >
+          <label class="ph-search">
+            <Search
+              :size="18"
+              aria-hidden="true"
+            />
+            <input
+              v-model="folderQuery"
+              type="search"
+              :placeholder="`Search folders on ${machine.name}`"
+              aria-label="Search folders"
+              autocapitalize="off"
+              autocomplete="off"
+              spellcheck="false"
+            >
+          </label>
+        </div>
+        <div class="ph-group">
+          <button
+            v-for="option in options"
+            :key="option.id"
+            type="button"
+            class="ph-row"
+            :aria-pressed="option.id === selectedOption"
+            @click="pick(option.id)"
+          >
+            <span class="ph-row__main">
+              <span class="ph-row__title">{{ option.label }}</span>
+              <span
+                v-if="option.detail"
+                class="ph-row__sub ph-row__sub--wrap"
+              >{{ option.detail }}</span>
+            </span>
+            <Check
+              v-if="option.id === selectedOption"
+              class="ph-row__check"
+              :size="22"
+              :stroke-width="2.6"
+              aria-hidden="true"
+            />
+            <span
+              v-else
+              class="pns__no-check"
+            />
+          </button>
+        </div>
+        <p
+          v-if="picker === 'folder' && loadingFolders && options.length <= 1"
+          class="ph-group-f"
+        >
+          Looking for folders on {{ machine.name }}…
+        </p>
+      </div>
+    </div>
+  </Transition>
 </template>
 
 <style scoped>
-.pns {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-  height: 100dvh;
+.ph-row__title,
+.ph-row__sub {
+  display: block;
 }
 
-.pns__head {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: 4px;
-  min-height: 52px;
-  padding: 4px 16px 4px 4px;
-  border-bottom: 1px solid var(--border);
+.ph-prompt-card textarea {
+  min-height: calc(22px * 4);
+  max-height: 40vh;
 }
 
-.pns__title {
-  font-size: 17px;
-  font-weight: 600;
+.pns__sk {
+  width: 64px;
 }
 
-.pns__scroll {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 12px;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 12px;
-}
-
-.pns__message {
-  width: 100%;
-  min-height: 132px;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-panel);
-  background: var(--card-bg);
-  color: var(--text);
-  font: inherit;
-  font-size: 16px;
-  line-height: 1.45;
-  resize: vertical;
-  outline: none;
-}
-
-.pns__message:focus {
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
-}
-
-.pns__card {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-panel);
-  background: var(--card-bg);
-}
-
-.pns__row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-height: 48px;
-  padding: 0 12px 0 14px;
-  border: 0;
-  border-top: 1px solid var(--border);
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  font-size: 15px;
-  text-align: left;
-}
-
-.pns__row:first-child {
-  border-top: 0;
-}
-
-.pns__label {
-  flex: none;
-  color: var(--text);
-}
-
-.pns__value {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-align: right;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.pns__value--empty {
+.pns__choose {
   color: var(--accent);
 }
 
-.pns__note {
-  padding: 0 2px;
-  font-size: 13px;
-  color: var(--muted);
+.pns__no-check {
+  width: 22px;
+  flex: none;
+}
+
+.pns__search {
+  margin-bottom: 14px;
 }
 
 .pns__error {
-  padding: 0 2px;
-  font-size: 13px;
-  color: var(--error);
-}
-
-.pns__foot {
-  flex: none;
-  padding: 8px 12px calc(env(safe-area-inset-bottom) + 10px);
-  border-top: 1px solid var(--border);
-  background: var(--main-bg);
+  margin: 12px 32px 0;
 }
 </style>

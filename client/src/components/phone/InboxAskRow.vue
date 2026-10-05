@@ -1,18 +1,23 @@
 <script setup lang="ts">
-import { computed, shallowRef } from "vue";
-import { Check } from "lucide-vue-next";
-import { Button } from "@/components/ui/button";
+import { computed, shallowRef, useTemplateRef } from "vue";
+import { Check, Monitor } from "lucide-vue-next";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
+import CommandText from "@/components/phone/CommandText.vue";
 import PermissionChoices from "@/components/phone/PermissionChoices.vue";
 import QuestionChoices from "@/components/phone/QuestionChoices.vue";
+import { showToast } from "@/composables/phone/use-phone-toast";
+import { collapse } from "@/lib/phone/animate";
+import { permissionTitle } from "@/lib/phone/asks";
+import { haptic } from "@/lib/phone/haptics";
 import { askPreview, type InboxItem } from "@/lib/phone/inbox";
-import type { AnswerOutcome, PermissionReply } from "@/lib/push/answer";
 import { ago } from "@/lib/phone/time";
+import type { AnswerOutcome, PermissionReply } from "@/lib/push/answer";
 
 /**
- * A session that needs you, as a card: machine and age, title, what it wants, and quick answers. A permission
- * gets Allow once and More… (every choice, in a sheet); a question its first two options and More…. Tapping the
- * card opens the session.
+ * A session that needs you, as a card: machine and age, title, what it wants, and quick answers — Allow once and
+ * More… (every choice, in a sheet) for a permission; a question's first two options and More…. Answers are
+ * optimistic: the button flips at once and the card folds away; if the machine says no, it comes back with why.
+ * Tapping the card opens the session.
  */
 const props = defineProps<{ item: InboxItem; now: number }>();
 const emit = defineEmits<{
@@ -21,254 +26,226 @@ const emit = defineEmits<{
   (event: "question", item: InboxItem, answers: string[][], done: (outcome: AnswerOutcome) => void): void;
 }>();
 
+const cardRef = useTemplateRef<HTMLElement>("card");
+const sheetRef = useTemplateRef<InstanceType<typeof BottomSheet>>("sheet");
 const preview = computed(() => askPreview(props.item));
 const sheet = shallowRef(false);
-const busy = shallowRef(false);
+/** The quick answer just sent ("once", or the option's label), shown as done while the card folds. */
+const sent = shallowRef<string | null>(null);
 const result = shallowRef<{ ok: boolean; text: string } | null>(null);
+let collapsed = false;
 
-const permission = computed(() => props.item.ask?.kind === "permission" ? props.item.ask.ask : null);
-const question = computed(() => props.item.ask?.kind === "question" ? props.item.ask : null);
-const quickOptions = computed(() => question.value?.question.options.slice(0, 2) ?? []);
+const permission = computed(() => (props.item.ask?.kind === "permission" ? props.item.ask.ask : null));
+const question = computed(() => (props.item.ask?.kind === "question" ? props.item.ask : null));
+const quickOptions = computed(() => (question.value && !question.value.question.multiple ? question.value.question.options.slice(0, 2) : []));
+const busy = computed(() => sent.value !== null);
 
-function finish(outcome: AnswerOutcome, success: string): void {
-  busy.value = false;
-  sheet.value = false;
-  result.value = outcome.ok
-    ? { ok: true, text: success }
-    : { ok: false, text: outcome.gone ? "Already answered." : outcome.error ?? "That didn't go through." };
+function fold(): void {
+  setTimeout(() => {
+    if (!sent.value || !cardRef.value) return;
+    collapsed = true;
+    void collapse(cardRef.value);
+  }, 450);
+}
+
+function unfold(): void {
+  const el = cardRef.value;
+  if (!el || !collapsed) return;
+  collapsed = false;
+  for (const key of ["height", "opacity", "margin-top", "margin-bottom", "padding-top", "padding-bottom", "overflow", "transition"]) el.style.removeProperty(key);
+}
+
+function finish(outcome: AnswerOutcome): void {
+  if (outcome.ok || outcome.gone) {
+    if (outcome.gone) showToast("Already answered.");
+    return;
+  }
+  sent.value = null;
+  unfold();
+  result.value = { ok: false, text: outcome.error ?? "That didn't go through." };
 }
 
 function answerPermission(reply: PermissionReply, message?: string): void {
-  busy.value = true;
-  const success = reply === "reject" ? "Denied." : reply === "always" ? "Allowed for this session." : "Allowed once.";
-  emit("permission", props.item, reply, message, (outcome) => finish(outcome, success));
+  sheet.value = false;
+  result.value = null;
+  sent.value = reply;
+  if (reply === "once") haptic("success");
+  if (reply === "always") showToast(`Won't ask again for ${permission.value?.always[0] ?? permission.value?.tool ?? "this"} in this session`);
+  if (reply === "reject") showToast("Denied. The agent was told.");
+  emit("permission", props.item, reply, message, finish);
+  fold();
 }
 
 function answerQuestion(labels: string[]): void {
-  busy.value = true;
-  emit("question", props.item, [labels], (outcome) => finish(outcome, `Answered: ${labels.join(", ")}`));
+  sheet.value = false;
+  result.value = null;
+  sent.value = labels.join(", ");
+  emit("question", props.item, [labels], finish);
+  fold();
+}
+
+function openFromSheet(): void {
+  sheet.value = false;
+  emit("open", props.item);
 }
 </script>
 
 <template>
   <article
-    class="ask"
-    :class="{ 'ask--stale': item.stale, 'ask--error': item.status === 'error' }"
+    ref="card"
+    class="ph-ask"
+    :class="{ 'ph-ask--stale': item.stale, 'ph-ask--error': item.status === 'error' }"
     data-testid="inbox-ask"
   >
     <button
       type="button"
-      class="ask__open"
+      class="ph-ask__open"
       :aria-label="`Open ${item.title} on ${item.machineName}`"
       @click="emit('open', item)"
     >
-      <span class="ask__meta">
-        <span class="ask__machine">{{ item.machineName }}</span>
+      <span class="ph-ask__meta">
+        <span class="ph-machine"><Monitor
+          :size="14"
+          aria-hidden="true"
+        />{{ item.machineName }}</span>
         <span>· {{ ago(item.updatedAt, now) }}</span>
       </span>
-      <span class="ask__title">{{ item.title }}</span>
-      <span class="ask__what">
+      <span class="ph-ask__title">{{ item.title }}</span>
+      <span class="ph-ask__what">
         <b v-if="preview.lead === 'Asked:'">Asked:</b>
         <template v-else>{{ preview.lead }}</template>
-        <template v-if="preview.detail && !preview.code">{{ `\u00a0${preview.detail}` }}</template>
+        <template v-if="preview.detail && !preview.code">{{ ` ${preview.detail}` }}</template>
       </span>
-      <span
-        v-if="preview.detail && preview.code"
-        class="ask__cmd"
-      >{{ preview.detail }}</span>
     </button>
+    <CommandText
+      v-if="preview.detail && preview.code"
+      :command="preview.detail"
+      one-line
+    />
 
     <p
       v-if="result"
-      class="ask__result"
-      :class="{ 'ask__result--bad': !result.ok }"
-      role="status"
+      class="ph-ask__result"
+      :class="{ 'ph-ask__result--bad': !result.ok }"
+      role="alert"
     >
-      <Check
-        v-if="result.ok"
-        :size="14"
-        aria-hidden="true"
-      />{{ result.text }}
+      {{ result.text }}
     </p>
     <div
-      v-else-if="permission && !item.stale"
-      class="ask__btns"
+      v-if="permission && !item.stale"
+      class="ph-btns"
     >
-      <Button
-        size="sm"
-        class="h-11 flex-1"
+      <button
+        type="button"
+        class="ph-btn ph-btn--primary"
+        :class="{ 'ph-btn--done': sent }"
         :disabled="busy"
         data-testid="inbox-allow-once"
         @click="answerPermission('once')"
       >
-        Allow once
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        class="h-11 flex-1"
-        :disabled="busy"
+        <Check
+          v-if="sent"
+          :size="20"
+          :stroke-width="2.6"
+          aria-hidden="true"
+        />
+        <span>{{ sent === "once" ? "Allowed" : sent === "always" ? "Always allowed" : sent === "reject" ? "Denied" : "Allow once" }}</span>
+      </button>
+      <button
+        v-if="!sent"
+        type="button"
+        class="ph-btn"
+        data-testid="inbox-more"
         @click="sheet = true"
       >
-        More…
-      </Button>
+        <span>More…</span>
+      </button>
     </div>
     <div
       v-else-if="question && !item.stale"
-      class="ask__btns"
+      class="ph-btns"
+      :class="quickOptions.length === 2 ? 'ph-btns--q' : quickOptions.length === 1 ? 'ph-btns--q-one' : 'ph-btns--q-none'"
     >
-      <Button
+      <button
         v-for="option in quickOptions"
         :key="option.label"
-        variant="outline"
-        size="sm"
-        class="h-11 flex-1 truncate"
+        type="button"
+        class="ph-btn"
+        :class="{ 'ph-btn--done': sent === option.label }"
         :disabled="busy"
         @click="answerQuestion([option.label])"
       >
-        {{ option.label }}
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        class="h-11"
+        <Check
+          v-if="sent === option.label"
+          :size="20"
+          :stroke-width="2.6"
+          aria-hidden="true"
+        />
+        <span>{{ option.label }}</span>
+      </button>
+      <button
+        type="button"
+        class="ph-btn"
         :disabled="busy"
+        data-testid="inbox-more"
         @click="sheet = true"
       >
-        More…
-      </Button>
+        <span>{{ quickOptions.length ? "More…" : "Answer…" }}</span>
+      </button>
     </div>
 
     <BottomSheet
+      ref="sheet"
       :open="sheet"
       :label="`Answer ${item.title}`"
+      :title="permission ? permissionTitle(permission) : 'Question'"
+      :detents="['medium', 'large']"
+      initial="medium"
       @close="sheet = false"
     >
-      <div class="ask__sheet-meta">
-        <span class="ask__machine">{{ item.machineName }}</span>
-        <span class="truncate">{{ item.title }}</span>
-      </div>
       <PermissionChoices
         v-if="permission"
         :ask="permission"
         :busy="busy"
+        :machine-name="item.machineName"
+        :session-title="item.title"
         @answer="answerPermission"
+        @expand="sheetRef?.expand()"
       />
       <QuestionChoices
         v-else-if="question"
         :question="question.question"
         :more="question.more"
         :busy="busy"
+        :machine-name="item.machineName"
+        :session-title="item.title"
         @answer="answerQuestion"
-        @skip="sheet = false"
+        @expand="sheetRef?.expand()"
       />
-      <Button
-        variant="ghost"
-        class="mt-2 h-11 w-full"
-        @click="sheet = false; emit('open', item)"
+      <button
+        type="button"
+        class="ph-link-btn ask__open-session"
+        @click="openFromSheet"
       >
         Open the session
-      </Button>
+      </button>
     </BottomSheet>
   </article>
 </template>
 
 <style scoped>
-.ask {
-  display: grid;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--idle) 45%, transparent);
-  border-radius: var(--radius-panel);
-  background: var(--card-bg);
-}
-
-.ask--error {
-  border-color: color-mix(in srgb, var(--error) 45%, transparent);
-}
-
-.ask--stale {
-  opacity: 0.6;
-}
-
-.ask__open {
-  display: grid;
-  gap: 4px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.ask__meta,
-.ask__sheet-meta {
+.ph-ask__meta,
+.ph-ask__title,
+.ph-ask__what {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  font-size: 12px;
-  color: var(--muted);
 }
 
-.ask__sheet-meta {
-  margin-bottom: 10px;
+.ph-ask__title,
+.ph-ask__what {
+  display: block;
 }
 
-.ask__machine {
-  padding: 0 6px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--main-bg);
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text);
-}
-
-.ask__title {
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.3;
-}
-
-.ask__what {
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.ask__what b {
-  font-weight: 500;
-  color: var(--text);
-}
-
-.ask__cmd {
-  overflow: hidden;
-  padding: 6px 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: var(--main-bg);
-  font-family: var(--font-mono-stack);
-  font-size: 12px;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.ask__btns {
-  display: flex;
-  gap: 8px;
-}
-
-.ask__result {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--running);
-}
-
-.ask__result--bad {
-  color: var(--error);
+.ask__open-session {
+  margin-top: 12px;
 }
 </style>

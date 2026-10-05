@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from "vue";
-import { useParams, useRouter, useSearch } from "@tanstack/vue-router";
 import { storeToRefs } from "pinia";
 import { Check, CornerDownRight, ImageIcon, LoaderCircle } from "lucide-vue-next";
 import ShellCommandBlock from "@/components/session/ShellCommandBlock.vue";
@@ -40,20 +39,21 @@ import { foldMessages, type FoldedStep } from "@/lib/phone/fold-steps";
 import { lastSeenAt, markSeen, sinceYouLookedIndex } from "@/lib/phone/last-seen";
 import { headerStatus } from "@/lib/phone/session-status";
 import { useSessionsStore } from "@/stores/sessions";
+import { usePhoneNav } from "@/composables/phone/use-phone-nav";
 
 /**
  * A session on the phone (`/phone/s/<machine>/<session>`), per mockups/phone-app/session.html: the header is the
  * status, a plan bar when there's a plan, the conversation with each run of tool calls folded into one row, and the
  * dock at the bottom (the composer, or whatever the agent is waiting on).
  */
-const params = useParams({ from: "/phone/s/$machineId/$sessionId" });
-const search = useSearch({ from: "/phone/s/$machineId/$sessionId" });
-const router = useRouter();
+const props = defineProps<{ machineId: string; sessionId: string; ask?: string }>();
+const nav = usePhoneNav();
+const search = computed(() => ({ ask: props.ask }));
 const now = useRelativeTime();
 useDeskPresence("phone");
 
-const machineId = computed(() => params.value.machineId);
-const sessionId = computed(() => params.value.sessionId);
+const machineId = computed(() => props.machineId);
+const sessionId = computed(() => props.sessionId);
 
 useSessions({ retentionStatus: "all" });
 const sessionsStore = useSessionsStore();
@@ -221,7 +221,7 @@ async function onMenu(action: MenuAction): Promise<void> {
     case "fork": {
       sheet.value = null;
       const forked = await forkSession(sessionId.value).catch(() => null);
-      if (forked) void router.navigate({ to: "/phone/s/$machineId/$sessionId", params: { machineId: machineId.value, sessionId: forked.session.id } });
+      if (forked) void nav.openSession(machineId.value, forked.session.id);
       break;
     }
   }
@@ -242,14 +242,12 @@ const planOpen = shallowRef(false);
 
 function back(): void {
   rememberSeen();
-  // A session on another machine was opened with a page load there; going back loads home again.
-  if (getActiveMachine()) window.location.assign("/phone");
-  else void router.navigate({ to: "/phone" });
+  void nav.back();
 }
 
 function openChild(childId: string): void {
   rememberSeen();
-  void router.navigate({ to: "/phone/s/$machineId/$sessionId", params: { machineId: machineId.value, sessionId: childId } });
+  void nav.openSession(machineId.value, childId);
 }
 
 onMounted(() => {
@@ -527,9 +525,10 @@ onUnmounted(() => {
 
 <style scoped>
 .ps {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
-  height: 100dvh;
   min-height: 0;
 }
 

@@ -68,8 +68,8 @@ public sealed class PhoneSessionTests(PhoneFleetWebApplicationFactory factory, P
         await dock.WaitForAsync(new LocatorWaitForOptions { Timeout = 15_000 });
         (await phone.GetByTestId("phone-composer").CountAsync()).ShouldBe(0, "the ask takes the composer's place");
 
+        // One of the first options answers with a tap.
         await dock.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Plain 401" }).ClickAsync();
-        await dock.GetByTestId("question-send").ClickAsync();
 
         await EventuallyAsync(() => harness.LastAnswers is { Count: 1 } answers && answers[0].Contains("Plain 401"));
 

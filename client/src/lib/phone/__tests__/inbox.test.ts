@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SessionListItem } from "@/api/client";
-import { askPreview, buildInbox, rowInfo, type InboxMachineState } from "../inbox";
+import { askPreview, buildInbox, machinesLine, rowInfo, sessionLine, type InboxMachineState } from "../inbox";
 
 const NOW = Date.parse("2026-10-05T14:07:00Z");
 
@@ -82,5 +82,22 @@ describe("previews", () => {
     expect(rowInfo(inbox.finished[0], "22m")).toBe("falcon · 22m ago");
     const stale = buildInbox([machine("falcon", [session("c", "active", 6)], { status: "unreachable" })], NOW);
     expect(rowInfo(stale.working[0], "6m")).toBe("falcon · Working when last heard · 6m");
+  });
+});
+
+describe("the inbox's machines line", () => {
+  it("names the machines that answer, and the ones that don't", () => {
+    expect(machinesLine([{ name: "hangar", status: "live" }, { name: "falcon", status: "polling" }])).toEqual({ text: "hangar and falcon online", tone: "online" });
+    expect(machinesLine([{ name: "hangar", status: "live" }, { name: "falcon", status: "unreachable" }])).toEqual({ text: "hangar online · falcon unreachable", tone: "partial" });
+    expect(machinesLine([{ name: "hangar", status: "unreachable" }])).toEqual({ text: "hangar unreachable", tone: "offline" });
+    expect(machinesLine([{ name: "hangar", status: "connecting" }])).toEqual({ text: "Connecting…", tone: "connecting" });
+    expect(machinesLine([{ name: "a", status: "live" }, { name: "b", status: "live" }, { name: "c", status: "live" }]).text).toBe("a, b and c online");
+  });
+
+  it("says what a session row is doing", () => {
+    const base = { key: "k", machineId: "m", machineName: "hangar", sessionId: "s", title: "T", updatedAt: 0, activity: null, ask: null, stale: false };
+    expect(sessionLine({ ...base, status: "active" }, { duration: "6m", ago: "3 min ago" })).toBe("hangar · Working · 6m");
+    expect(sessionLine({ ...base, status: "waiting_input" }, { duration: "6m", ago: "3 min ago" })).toBe("hangar · Needs you · 3 min ago");
+    expect(sessionLine({ ...base, status: "idle" }, { duration: "6m", ago: "22 min ago" })).toBe("hangar · 22 min ago");
   });
 });
