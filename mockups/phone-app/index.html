@@ -1,0 +1,679 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fleet on your phone</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Fleet's own tokens (client/src/assets/main.css): light theme first, the default dark theme below. */
+:root {
+  --page: #E9E7E2;
+  --main-bg: #F3F2EF;
+  --panel-bg: #FFFFFF;
+  --card-bg: #FFFFFF;
+  --sunk: #F3F2EF;
+  --border: rgba(26, 25, 24, 0.09);
+  --text: #1A1918;
+  --muted: #6E6A65;
+  --accent: #5B6EC7;
+  --accent-dim: rgba(91, 110, 199, 0.12);
+  --running: #16a34a;
+  --waiting: #d97706;
+  --waiting-dim: rgba(217, 119, 6, 0.12);
+  --complete: #2563eb;
+  --error: #dc2626;
+  --queued: #7c3aed;
+  --frame: #1A1918;
+  --lock-a: #3b4a7a;
+  --lock-b: #1c2238;
+  --shadow: 0 1px 2px rgba(26,25,24,.05), 0 18px 40px -22px rgba(26,25,24,.35);
+  --sans: "Inter", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: #08080a;
+    --main-bg: #0d0d10;
+    --panel-bg: #141418;
+    --card-bg: #1b1b20;
+    --sunk: #0d0d10;
+    --border: rgba(255, 255, 255, 0.075);
+    --text: #e8e8ec;
+    --muted: #8e8e9a;
+    --accent: #6366f1;
+    --accent-dim: rgba(99, 102, 241, 0.15);
+    --running: #22c55e;
+    --waiting: #f59e0b;
+    --waiting-dim: rgba(245, 158, 11, 0.13);
+    --complete: #3b82f6;
+    --error: #ef4444;
+    --queued: #8b5cf6;
+    --frame: #2a2a31;
+    --shadow: 0 18px 40px -24px rgba(0,0,0,.8);
+  }
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--page); color: var(--text);
+  font: 14px/1.5 var(--sans); padding: 0 16px 64px;
+}
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: minmax(0,1fr); gap: 40px; }
+header.top { padding-top: 32px; display: grid; gap: 8px; max-width: 70ch; }
+h1 { font-size: 26px; line-height: 1.2; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h2 { font-size: 18px; margin: 0; text-wrap: balance; }
+h3 { font-size: 15px; margin: 0; }
+p { margin: 0; }
+.lede { color: var(--muted); font-size: 15px; }
+.eyebrow { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+section { display: grid; grid-template-columns: minmax(0,1fr); gap: 16px; }
+.option.on { grid-template-columns: minmax(0,1fr); }
+.section-head { display: grid; gap: 4px; max-width: 72ch; }
+.section-head p { color: var(--muted); }
+code, .mono { font-family: var(--mono); font-size: .92em; }
+
+/* Option switcher */
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.tab {
+  font: inherit; font-weight: 500; color: var(--muted); background: transparent;
+  border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; cursor: pointer;
+}
+.tab[aria-selected="true"] { background: var(--text); color: var(--page); border-color: var(--text); }
+.tab:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.option { display: none; gap: 20px; }
+.option.on { display: grid; }
+.option-intro { display: grid; gap: 6px; max-width: 75ch; }
+.option-intro p { color: var(--muted); }
+
+/* Frames row */
+.frames { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; }
+.shot { display: grid; gap: 10px; width: 292px; max-width: 100%; }
+.cap { display: grid; gap: 2px; padding: 0 4px; }
+.cap b { font-size: 13px; }
+.cap span { font-size: 12.5px; color: var(--muted); }
+
+/* Phone */
+.phone {
+  width: 292px; max-width: 100%; height: 600px; border-radius: 40px; padding: 9px;
+  background: var(--frame); box-shadow: var(--shadow);
+}
+.screen {
+  height: 100%; border-radius: 32px; overflow: hidden; background: var(--main-bg);
+  display: flex; flex-direction: column; position: relative;
+}
+.sb { display: flex; justify-content: space-between; padding: 10px 22px 4px; font-size: 12px; font-weight: 600; flex: none; }
+.sb i { font-style: normal; letter-spacing: 1px; }
+.scroll { flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 10px; padding: 6px 12px 12px; min-height: 0; }
+
+/* App bits */
+.apphead { display: flex; align-items: center; gap: 8px; padding: 6px 14px 8px; flex: none; }
+.apphead .title { font-weight: 600; font-size: 16px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.apphead .sub { font-size: 11.5px; color: var(--muted); }
+.iconbtn { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: var(--muted); border: 0; background: transparent; flex: none; }
+.iconbtn svg { width: 18px; height: 18px; }
+.group-label { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 4px 2px 0; }
+.count { font-variant-numeric: tabular-nums; background: var(--waiting-dim); color: var(--waiting); border-radius: 999px; padding: 0 6px; letter-spacing: 0; }
+.count.plain { background: var(--accent-dim); color: var(--muted); }
+
+.card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 10px 11px; display: grid; gap: 7px; }
+.card.ask { border-color: color-mix(in srgb, var(--waiting) 45%, transparent); }
+.meta { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); min-width: 0; }
+.machine { display: inline-flex; align-items: center; gap: 4px; font-weight: 500; color: var(--text); background: var(--sunk); border: 1px solid var(--border); border-radius: 6px; padding: 0 5px; font-size: 10.5px; }
+.machine svg { width: 10px; height: 10px; }
+.stitle { font-weight: 600; font-size: 13px; line-height: 1.3; }
+.what { font-size: 12.5px; color: var(--muted); }
+.what b { color: var(--text); font-weight: 500; }
+.cmd { font-family: var(--mono); font-size: 11px; background: var(--sunk); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; }
+.cmd .dim { color: var(--muted); }
+.cmd.one { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.btns { display: flex; gap: 6px; }
+.btn { font: inherit; font-size: 12px; font-weight: 600; border-radius: 8px; padding: 6px 10px; border: 1px solid var(--border); background: var(--card-bg); color: var(--text); cursor: pointer; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.grow { flex: 1; }
+.btn.ghost { background: transparent; }
+.done-note { font-size: 12px; color: var(--running); font-weight: 600; }
+
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; }
+.dot.run { background: var(--running); box-shadow: 0 0 0 3px color-mix(in srgb, var(--running) 22%, transparent); }
+.dot.wait { background: var(--waiting); }
+.dot.done { background: var(--complete); }
+.dot.idle { background: transparent; border: 1.5px solid var(--muted); }
+.dot.err { background: var(--error); }
+.row { display: flex; align-items: center; gap: 9px; padding: 8px 4px; border-bottom: 1px solid var(--border); min-width: 0; }
+.row:last-child { border-bottom: 0; }
+.row .body { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.row .name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .info { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip { font-size: 10.5px; font-weight: 600; border-radius: 6px; padding: 1px 6px; white-space: nowrap; }
+.chip.pr { color: var(--running); background: color-mix(in srgb, var(--running) 13%, transparent); }
+.chip.wait { color: var(--waiting); background: var(--waiting-dim); }
+
+.tabbar { flex: none; display: flex; justify-content: space-around; border-top: 1px solid var(--border); background: var(--panel-bg); padding: 7px 4px 16px; }
+.tabbar div { display: grid; justify-items: center; gap: 2px; font-size: 10px; color: var(--muted); position: relative; }
+.tabbar div.on { color: var(--accent); }
+.tabbar svg { width: 20px; height: 20px; }
+.tabbar .badge { position: absolute; top: -3px; right: 2px; background: var(--waiting); color: #fff; font-size: 9px; font-weight: 700; border-radius: 999px; padding: 0 4px; font-variant-numeric: tabular-nums; }
+
+/* Conversation */
+.msg { font-size: 12.5px; line-height: 1.5; }
+.msg.user { align-self: flex-end; background: var(--accent-dim); border-radius: 12px 12px 4px 12px; padding: 7px 10px; max-width: 85%; }
+.steps { font-size: 11.5px; color: var(--muted); display: grid; gap: 3px; border-left: 2px solid var(--border); padding-left: 9px; }
+.steps span::before { content: "✓ "; color: var(--running); }
+.composer { flex: none; margin: 0 10px 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--card-bg); padding: 9px 11px; font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.composer > span:first-child { flex: 1; }
+.send { width: 26px; height: 26px; border-radius: 8px; background: var(--accent); display: grid; place-items: center; color: #fff; }
+.send svg { width: 14px; height: 14px; }
+
+/* PermissionCard, as the app draws it */
+.pcard { border: 1px solid color-mix(in srgb, var(--waiting) 50%, transparent); background: var(--card-bg); border-radius: 12px; padding: 10px; display: grid; gap: 8px; }
+.pcard .lead { font-size: 12px; font-weight: 600; display: flex; gap: 6px; align-items: center; }
+.choice { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; font-size: 12px; background: var(--card-bg); color: var(--text); font-family: inherit; text-align: left; cursor: pointer; width: 100%; }
+.choice .k { font-family: var(--mono); font-size: 10px; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
+.choice .lbl { flex: 1; min-width: 0; }
+.choice .scope { margin-left: auto; font-size: 10.5px; color: var(--muted); }
+.choice.deny { color: var(--muted); cursor: text; }
+.choice:hover { border-color: var(--accent); }
+
+/* Bottom sheet */
+.scrim { position: absolute; inset: 0; background: rgba(0,0,0,.42); }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--panel-bg); border-radius: 20px 20px 0 0; padding: 8px 14px 22px; display: grid; gap: 10px; }
+.grab { width: 36px; height: 4px; border-radius: 4px; background: var(--border); justify-self: center; margin-bottom: 2px; background: color-mix(in srgb, var(--muted) 45%, transparent); }
+.diff { font-family: var(--mono); font-size: 10.5px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.diff div { padding: 1px 8px; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.diff .h { background: var(--sunk); color: var(--muted); padding: 5px 8px; display: flex; gap: 6px; }
+.diff .a { background: color-mix(in srgb, var(--running) 13%, transparent); }
+.diff .d { background: color-mix(in srgb, var(--error) 12%, transparent); }
+.seg { display: flex; gap: 4px; background: var(--sunk); border-radius: 9px; padding: 3px; font-size: 11.5px; }
+.seg span { flex: 1; text-align: center; padding: 4px 0; border-radius: 7px; color: var(--muted); }
+.seg span.on { background: var(--card-bg); color: var(--text); font-weight: 600; }
+
+/* Drawer */
+.drawer { position: absolute; top: 0; bottom: 0; left: 0; width: 84%; background: var(--panel-bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+.mhead { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 10px 4px 4px; }
+.mhead .host { color: var(--muted); font-weight: 400; font-size: 11px; margin-left: auto; }
+.mhead.off { color: var(--muted); }
+.live-pill { font-size: 9.5px; font-weight: 700; color: var(--running); background: color-mix(in srgb, var(--running) 14%, transparent); padding: 0 5px; border-radius: 4px; letter-spacing: .04em; }
+.dim { opacity: .5; }
+
+/* Lock screen */
+.lock { background: linear-gradient(170deg, var(--lock-a), var(--lock-b)); color: #fff; }
+.lock .sb { color: #fff; }
+.clock { text-align: center; padding: 14px 0 10px; display: grid; gap: 0; }
+.clock small { font-size: 13px; opacity: .85; }
+.clock b { font-size: 58px; font-weight: 600; line-height: 1.05; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.notif { background: rgba(255,255,255,.16); backdrop-filter: blur(14px); border-radius: 16px; padding: 9px 11px; display: grid; gap: 3px; color: #fff; }
+.notif .nh { display: flex; align-items: center; gap: 6px; font-size: 10.5px; opacity: .85; }
+.notif .nh .app { width: 16px; height: 16px; border-radius: 4px; background: var(--accent); display: grid; place-items: center; font-size: 9px; font-weight: 700; }
+.notif .nh .t { margin-left: auto; }
+.notif b { font-size: 12.5px; }
+.notif p { font-size: 12px; line-height: 1.35; opacity: .95; }
+.notif .acts { display: flex; gap: 6px; margin-top: 5px; }
+.notif .acts button { flex: 1; font: inherit; font-size: 11.5px; font-weight: 600; color: #fff; background: rgba(255,255,255,.2); border: 0; border-radius: 9px; padding: 6px 0; cursor: pointer; }
+.notif.stacked { opacity: .75; transform: scale(.97); }
+
+/* Pairing desktop card */
+.desk { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); width: 420px; max-width: 100%; overflow: hidden; display: grid; }
+.desk .bar { display: flex; gap: 6px; padding: 9px 12px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); align-items: center; }
+.desk .bar i { width: 9px; height: 9px; border-radius: 50%; background: var(--border); display: inline-block; }
+.desk .inner { padding: 16px; display: grid; gap: 12px; }
+.qrrow { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.qr { width: 128px; height: 128px; background: #fff; border-radius: 8px; padding: 8px; flex: none; }
+.qr canvas { width: 100%; height: 100%; image-rendering: pixelated; display: block; }
+.devlist { display: grid; border: 1px solid var(--border); border-radius: 10px; }
+.devlist .row { padding: 8px 10px; }
+.small { font-size: 12px; color: var(--muted); }
+.desk, .desk .inner, .devlist, .scroll { grid-template-columns: minmax(0,1fr); }
+.shot { min-width: 0; grid-template-columns: minmax(0,1fr); }
+.link { color: var(--accent); font-weight: 500; }
+
+.toggle { width: 30px; height: 18px; border-radius: 999px; background: var(--running); position: relative; flex: none; }
+.toggle::after { content: ""; position: absolute; top: 2px; right: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; }
+.toggle.off { background: color-mix(in srgb, var(--muted) 40%, transparent); }
+.toggle.off::after { right: auto; left: 2px; }
+
+/* Flow strip */
+.flow { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; }
+.flow > div { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; padding: 12px; display: grid; gap: 4px; align-content: start; }
+.flow .n { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.flow p { font-size: 12.5px; color: var(--muted); }
+@media (max-width: 860px) { .flow { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+@media (max-width: 420px) { .flow { grid-template-columns: 1fr; } }
+
+/* Compare */
+.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--panel-bg); }
+table { border-collapse: collapse; width: 100%; min-width: 720px; font-size: 13px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+tr:last-child td { border-bottom: 0; }
+td:first-child { font-weight: 600; white-space: nowrap; }
+.pros-cons { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 920px; }
+.pros-cons > div { display: grid; gap: 6px; align-content: start; }
+.pros-cons ul { margin: 0; padding-left: 18px; color: var(--muted); display: grid; gap: 4px; font-size: 13px; }
+.pros-cons h3 { font-size: 13px; }
+@media (max-width: 640px) { .pros-cons { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <span class="eyebrow">Mockup · Fleet as a phone app (PWA) · <a href="session.html" style="color:var(--accent)">how a session works on the phone ›</a></span>
+  <h1>Fleet on your phone</h1>
+  <p class="lede">Three ways the phone app could work, all showing the same afternoon: two machines, four sessions, one waiting to run a command and one with a question. Getting the phone connected is the same for all three, so it's shown first.</p>
+</header>
+
+<!-- ───────────────────────── Pairing ───────────────────────── -->
+<section>
+  <div class="section-head">
+    <span class="eyebrow">Same for every option</span>
+    <h2>Getting Fleet onto a phone</h2>
+    <p>No URL or token to paste. The desktop shows a QR code, the phone gets its own key, and you add Fleet to the Home Screen so it can send notifications.</p>
+  </div>
+
+  <div class="frames">
+    <div class="shot" style="width:420px">
+      <div class="desk">
+        <div class="bar"><i></i><i></i><i></i>&nbsp; Settings › Machines › This machine</div>
+        <div class="inner">
+          <div class="qrrow">
+            <div class="qr"><canvas id="qr" width="29" height="29" aria-label="QR code"></canvas></div>
+            <div style="display:grid;gap:6px;min-width:0;flex:1">
+              <h3>Add a phone</h3>
+              <p class="small">Scan with the phone's camera. The code works once and expires in 10 minutes.</p>
+              <p class="small mono" style="overflow-wrap:anywhere">hangar.tail4c2e.ts.net</p>
+            </div>
+          </div>
+          <div style="display:grid;gap:6px">
+            <span class="eyebrow">Devices with access</span>
+            <div class="devlist">
+              <div class="row"><div class="body"><span class="name">This computer</span><span class="info">Signed in on loopback</span></div></div>
+              <div class="row"><div class="body"><span class="name">Pieter's iPhone</span><span class="info">Added 2 Oct · last seen 4 min ago</span></div><button class="btn ghost">Remove</button></div>
+              <div class="row"><div class="body"><span class="name">Pixel 9</span><span class="info">Added 28 Sep · last seen 3 days ago</span></div><button class="btn ghost">Remove</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="cap"><b>1 · On the desktop</b><span>Each phone gets its own key, so removing one doesn't sign out the others. Today every device shares one token.</span></div>
+    </div>
+
+    <div class="shot">
+      <div class="phone"><div class="screen">
+        <div class="sb"><span>9:41</span><i>●●● ▮</i></div>
+        <div class="scroll" style="justify-content:center;gap:16px;padding:20px">
+          <div style="display:grid;gap:6px;justify-items:start">
+            <span class="machine" style="font-size:12px;padding:2px 8px">hangar · linux</span>
+            <h2 style="font-size:20px">Connect this phone to hangar?</h2>
+            <p class="what">This phone gets its own key to hangar. It can start sessions, answer agents and read their work. Remove it any time in Settings › Machines.</p>
+          </div>
+          <label class="small" style="display:grid;gap:4px">Name this phone
+            <span class="cmd" style="font-family:var(--sans);font-size:13px;color:var(--text)">Pieter's iPhone</span>
+          </label>
+          <button class="btn primary" style="padding:10px">Connect</button>
+          <p class="small" style="text-align:center">Not you? Close this page.</p>
+        </div>
+      </div></div>
+      <div class="cap"><b>2 · Phone scans the code</b><span>The one-time secret sits in the link after <code>#</code>, so it never reaches a server log.</span></div>
+    </div>
+
+    <div class="shot">
+      <div class="phone"><div class="screen">
+        <div class="sb"><span>9:42</span><i>●●● ▮</i></div>
+        <div class="apphead"><span class="title">Notifications</span></div>
+        <div class="scroll" style="gap:12px">
+          <div class="card" style="gap:8px">
+            <b style="font-size:13px">Add Fleet to your Home Screen</b>
+            <p class="what">iPhone only sends web notifications to apps on the Home Screen. Tap <b>Share</b>, then <b>Add to Home Screen</b>.</p>
+            <span class="done-note">✓ Added. Opened from the Home Screen.</span>
+          </div>
+          <div class="card" style="gap:0;padding:2px 11px">
+            <div class="row"><div class="body"><span class="name">Needs you</span><span class="info">A command or edit waits for approval</span></div><span class="toggle"></span></div>
+            <div class="row"><div class="body"><span class="name">Questions</span><span class="info">An agent asked you something</span></div><span class="toggle"></span></div>
+            <div class="row"><div class="body"><span class="name">Finished</span><span class="info">A session's turn ended</span></div><span class="toggle"></span></div>
+            <div class="row"><div class="body"><span class="name">Failed</span><span class="info">A session stopped with an error</span></div><span class="toggle"></span></div>
+            <div class="row"><div class="body"><span class="name">Quiet while I'm at the desk</span><span class="info">Skip the phone when Fleet is open on a computer</span></div><span class="toggle"></span></div>
+          </div>
+          <button class="btn primary" style="padding:9px">Turn on notifications</button>
+        </div>
+      </div></div>
+      <div class="cap"><b>3 · Turn on notifications</b><span>Fleet sends them through the browser's push service. No Fleet relay needed. Android doesn't need the Home Screen step.</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── Options ───────────────────────── -->
+<section>
+  <div class="section-head">
+    <span class="eyebrow">Three options</span>
+    <h2>What you see when you open it</h2>
+  </div>
+  <div class="tabs" role="tablist" aria-label="Options">
+    <button class="tab" role="tab" aria-selected="true" data-opt="a">A · Needs-you inbox</button>
+    <button class="tab" role="tab" aria-selected="false" data-opt="b">B · Fleet, folded down</button>
+    <button class="tab" role="tab" aria-selected="false" data-opt="c">C · Notifications only</button>
+  </div>
+
+  <!-- ───── Option A ───── -->
+  <div class="option on" id="opt-a" role="tabpanel">
+    <div class="option-intro">
+      <h3>A · Needs-you inbox</h3>
+      <p>A phone-first home: everything waiting on you across every machine, then what's running, then what finished. You answer from the list, and open a session only when you want to read or reply. It's built for checking in, not for starting big work.</p>
+    </div>
+    <div class="frames">
+      <div class="shot">
+        <div class="phone"><div class="screen">
+          <div class="sb"><span>14:07</span><i>●●● ▮</i></div>
+          <div class="apphead"><span class="title">Fleet</span><span class="sub">2 machines</span></div>
+          <div class="scroll">
+            <div class="group-label">Needs you <span class="count">2</span></div>
+            <div class="card ask" id="a-ask">
+              <div class="meta"><span class="machine">hangar</span><span>· 3 min ago</span></div>
+              <div class="stitle">Fix flaky SignalR reconnect test</div>
+              <div class="what">Wants to run</div>
+              <div class="cmd one">dotnet test tests/WeaveFleet.IntegrationTests --filter SignalREventContractTests</div>
+              <div class="btns" id="a-btns"><button class="btn primary grow" data-allow>Allow once</button><button class="btn grow">More…</button></div>
+            </div>
+            <div class="card ask">
+              <div class="meta"><span class="machine">falcon</span><span>· 11 min ago</span></div>
+              <div class="stitle">Per-device tokens for machines</div>
+              <div class="what"><b>Asked:</b> When a removed phone calls in, should it get a plain 401 or a page that says it was removed?</div>
+              <div class="btns"><button class="btn grow">Plain 401</button><button class="btn grow">Explain</button></div>
+            </div>
+            <div class="group-label">Working <span class="count plain">1</span></div>
+            <div class="card" style="padding:2px 11px;gap:0">
+              <div class="row"><span class="dot run"></span><div class="body"><span class="name">Composer references refactor</span><span class="info">falcon · editing ReferencePicker.vue · 6m</span></div></div>
+            </div>
+            <div class="group-label">Finished <span class="count plain">1</span></div>
+            <div class="card" style="padding:2px 11px;gap:0">
+              <div class="row"><span class="dot done"></span><div class="body"><span class="name">Bump OpenCode to 1.14</span><span class="info">hangar · 22 min ago</span></div><span class="chip pr">PR #251 ✓</span></div>
+            </div>
+          </div>
+          <div class="tabbar">
+            <div class="on"><span class="badge">2</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5h13L22 12v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z"/></svg>Needs you</div>
+            <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Sessions</div>
+            <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Machines</div>
+          </div>
+        </div></div>
+        <div class="cap"><b>Home: what needs you, on every machine</b><span>Fleet already has a "Needs you" list on the dashboard. This takes it across machines. Try <b>Allow once</b>.</span></div>
+      </div>
+
+      <div class="shot">
+        <div class="phone"><div class="screen">
+          <div class="sb"><span>14:07</span><i>●●● ▮</i></div>
+          <div class="apphead"><span class="title">Fleet</span></div>
+          <div class="scroll" style="opacity:.6">
+            <div class="group-label">Needs you <span class="count">2</span></div>
+            <div class="card ask"><div class="stitle">Fix flaky SignalR reconnect test</div></div>
+          </div>
+          <div class="scrim"></div>
+          <div class="sheet">
+            <div class="grab"></div>
+            <div class="meta"><span class="machine">hangar</span><span>Fix flaky SignalR reconnect test</span></div>
+            <p class="msg" style="color:var(--muted)">"I raised the reconnect timeout to 5 s in the test harness. Running the contract tests to check it holds."</p>
+            <div class="pcard">
+              <div class="lead"><span class="dot wait"></span>Run a command</div>
+              <div class="cmd"><span class="dim">~/src/weave-fleet $ </span>dotnet test tests/WeaveFleet.IntegrationTests --filter SignalREventContractTests</div>
+              <button class="choice"><span class="k">1</span>Allow once</button>
+              <button class="choice"><span class="k">2</span><span class="lbl">Always allow <code>dotnet test</code></span><span class="scope">this session</span></button>
+              <div class="choice deny"><span class="k">3</span>Deny, and tell the agent what to do instead…</div>
+            </div>
+          </div>
+        </div></div>
+        <div class="cap"><b>More… opens the full prompt</b><span>The same Allow once, Always allow and Deny choices as Fleet's PermissionCard, with the agent's last sentence for context.</span></div>
+      </div>
+
+      <div class="shot">
+        <div class="phone"><div class="screen">
+          <div class="sb"><span>14:09</span><i>●●● ▮</i></div>
+          <div class="apphead">
+            <button class="iconbtn" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
+            <div style="min-width:0;flex:1;display:grid">
+              <span class="title" style="font-size:14px">Fix flaky SignalR reconnect test</span>
+              <span class="sub"><span class="dot run" style="width:6px;height:6px"></span>&nbsp;hangar · running</span>
+            </div>
+          </div>
+          <div class="scroll" style="justify-content:flex-end">
+            <div class="msg user">The reconnect test fails about 1 in 10 runs on CI. Find out why and fix it.</div>
+            <div class="steps"><span>Read SignalRTransportTests.cs</span><span>Read use-signalr-socket.ts</span><span>Edited TestHarness.cs <span style="color:var(--running)">+4</span> <span style="color:var(--error)">−1</span></span><span>Ran dotnet test (you allowed it) · 41 passed</span></div>
+            <div class="msg">The test waited 2 s for a reconnect, but CI's first retry is scheduled at 2 s, so it lost the race about one run in ten. I raised the harness timeout to 5 s. 41 tests pass, 20 runs in a row.</div>
+            <div class="msg" style="color:var(--muted);font-size:11.5px">Want me to open a pull request?</div>
+          </div>
+          <div class="composer"><span>Reply to the agent…</span><span class="send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5M5 12l7-7 7 7"/></svg></span></div>
+        </div></div>
+        <div class="cap"><b>Open a session to read and reply</b><span>Tool steps fold into one list. Diffs, terminals and app previews stay on the desktop. Open those on the computer.</span></div>
+      </div>
+    </div>
+    <div class="pros-cons">
+      <div><h3>Good</h3><ul><li>Built around the job you'd do on a phone: answer, nudge, read the result.</li><li>Every machine in one list, with no page reload to switch machines.</li><li>Small surface to make really good.</li></ul></div>
+      <div><h3>Costs</h3><ul><li>A new phone route, plus a client that keeps a live view of several machines at once (today only one machine streams).</li><li>Starting a new session from the phone is a secondary path.</li></ul></div>
+    </div>
+  </div>
+
+  <!-- ───── Option B ───── -->
+  <div class="option" id="opt-b" role="tabpanel">
+    <div class="option-intro">
+      <h3>B · Fleet, folded down</h3>
+      <p>The app you have, made to fit a phone: the session list becomes a drawer grouped by machine, the conversation fills the screen, and the right panel becomes a sheet. Most of the pieces exist (the 716px drawer, the panel as a sheet). The work is polish, the installable app and push.</p>
+    </div>
+    <div class="frames">
+      <div class="shot">
+        <div class="phone"><div class="screen">
+          <div class="sb"><span>14:07</span><i>●●● ▮</i></div>
+          <div class="apphead"><span class="title">Fix flaky SignalR…</span></div>
+          <div class="scroll" style="opacity:.5"></div>
+          <div class="scrim"></div>
+          <div class="drawer">
+            <div class="sb"><span>14:07</span><i></i></div>
+            <div class="apphead"><span class="title">Sessions</span><button class="btn primary" style="padding:4px 9px">New</button></div>
+            <div class="scroll" style="gap:2px">
+              <div class="mhead"><span class="live-pill">LIVE</span>hangar<span class="host">linux</span></div>
+              <div class="row"><span class="dot wait"></span><div class="body"><span class="name">Fix flaky SignalR reconnect test</span><span class="info">Needs you · run a command</span></div></div>
+              <div class="row"><span class="dot done"></span><div class="body"><span class="name">Bump OpenCode to 1.14</span><span class="info">PR #251 · checks passed</span></div></div>
+              <div class="row"><span class="dot idle"></span><div class="body"><span class="name">Mermaid dark theme</span><span class="info">Yesterday</span></div></div>
+              <div class="mhead">falcon<span class="host">macOS · refreshed 15 s ago</span></div>
+              <div class="row"><span class="dot wait"></span><div class="body"><span class="name">Per-device tokens for machines</span><span class="info">Asked you a question</span></div></div>
+              <div class="row"><span class="dot run"></span><div class="body"><span class="name">Composer references refactor</span><span class="info">Running · 6m</span></div></div>
+              <div class="mhead off">kestrel<span class="host">unreachable since 13:20</span></div>
+              <div class="row dim"><span class="dot idle"></span><div class="body"><span class="name">Nightly test triage</span><span class="info">Last seen 13:18</span></div></div>
+            </div>
+          </div>
+        </div></div>
+        <div class="cap"><b>Session drawer, grouped by machine</b><span>The sidebar you have today. Tapping a falcon session makes falcon live, which reloads the page.</span></div>
+      </div>
+
+      <div class="shot">
+        <div class="phone"><div class="screen">
+          <div class="sb"><span>14:07</span><i>●●● ▮</i></div>
+          <div class="apphead">
+            <button class="iconbtn" aria-label="Sessions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+            <div style="min-width:0;flex:1;display:grid"><span class="title" style="font-size:14px">Fix flaky SignalR reconnect test</span><span class="sub">hangar · Needs you</span></div>
+            <button class="iconbtn" aria-label="Changes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M3 12h18"/></svg></button>
+          </div>
+          <div class="scroll" style="justify-content:flex-end">
+            <div class="msg user">The reconnect test fails about 1 in 10 runs on CI. Find out why and fix it.</div>
+            <div class="steps"><span>Read SignalRTransportTests.cs</span><span>Edited TestHarness.cs <span style="color:var(--running)">+4</span> <span style="color:var(--error)">−1</span></span></div>
+            <div class="msg">I raised the reconnect timeout to 5 s in the test harness. Running the contract tests to check it holds.</div>
+            <div class="pcard">
+              <div class="lead"><span class="dot wait"></span>Run a command</div>
+              <div class="cmd">dotnet test tests/WeaveFleet.IntegrationTests --filter SignalREventContractTests</div>
+              <button class="choice"><span class="k">1</span>Allow once</button>
+              <button class="choice"><span class="k">2</span><span class="lbl">Always allow <code>dotnet test</code></span><span class="scope">this session</span></button>
+              <div class="choice deny"><span class="k">3</span>Deny, and tell the agent…</div>
+            </div>
+          </div>
+          <div class="composer"><span>Message hangar…</span><span class="send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5M5 12l7-7 7 7"/></svg></span></div>
+        </div></div>
+        <div class="cap"><b>The conversation, full screen</b><span>The PermissionCard sits where it does on the desktop, above the composer.</span></div>
+      </div>
+
+      <div class="shot">
+        <div class="phone"><div class="screen">
+          <div class="sb"><span>14:08</span><i>●●● ▮</i></div>
+          <div class="apphead"><span class="title" style="font-size:14px">Fix flaky SignalR reconnect test</span></div>
+          <div class="scroll" style="opacity:.5"></div>
+          <div class="scrim"></div>
+          <div class="sheet" style="top:70px;align-content:start">
+            <div class="grab"></div>
+            <div class="seg"><span class="on">Changes</span><span>Files</span><span>Terminal</span></div>
+            <div class="diff">
+              <div class="h"><span style="flex:1;overflow:hidden;text-overflow:ellipsis">tests/…/TestHarness.cs</span><span style="color:var(--running)">+4</span><span style="color:var(--error)">−1</span></div>
+              <div>  public async Task WaitForReconnect(</div>
+              <div class="d">-     var timeout = TimeSpan.FromSeconds(2);</div>
+              <div class="a">+     // CI's first retry lands at 2 s; give</div>
+              <div class="a">+     // it room so the test doesn't race it.</div>
+              <div class="a">+     var timeout = TimeSpan.FromSeconds(5);</div>
+              <div class="a">+     _log.LogDebug("reconnect wait {T}", timeout);</div>
+              <div>      await _hub.WaitForStateAsync(</div>
+            </div>
+            <p class="small">1 file changed. Swipe down to go back to the conversation.</p>
+          </div>
+        </div></div>
+        <div class="cap"><b>Right panel as a sheet</b><span>Changes, files and the terminal are all there. They're cramped at this size, but you can check a diff before you allow a commit.</span></div>
+      </div>
+    </div>
+    <div class="pros-cons">
+      <div><h3>Good</h3><ul><li>Least new code: one client, one set of components to maintain.</li><li>Everything the desktop can do is on the phone, terminal included.</li></ul></div>
+      <div><h3>Costs</h3><ul><li>A desktop layout squeezed down. On a phone you hunt for what's waiting.</li><li>One machine at a time, with a page reload to switch.</li><li>Every desktop feature has to keep working at 375px from now on.</li></ul></div>
+    </div>
+  </div>
+
+  <!-- ───── Option C ───── -->
+  <div class="option" id="opt-c" role="tabpanel">
+    <div class="option-intro">
+      <h3>C · Notifications only</h3>
+      <p>A companion app rather than a phone app. Fleet sends a notification when a session needs you, and you answer from the notification or from a single-purpose page it opens. Anything bigger opens the normal app.</p>
+    </div>
+    <div class="frames">
+      <div class="shot">
+        <div class="phone"><div class="screen lock">
+          <div class="sb"><span></span><i>●●● ▮</i></div>
+          <div class="clock"><small>Sunday 4 October</small><b>14:07</b></div>
+          <div class="scroll" style="justify-content:flex-end;gap:7px">
+            <div class="notif" id="c-notif">
+              <div class="nh"><span class="app">F</span>FLEET · hangar<span class="t">now</span></div>
+              <b>Fix flaky SignalR reconnect test</b>
+              <p>Wants to run: dotnet test tests/WeaveFleet.Integration…</p>
+              <div class="acts" id="c-acts"><button data-allow>Allow once</button><button>Deny</button></div>
+            </div>
+            <div class="notif">
+              <div class="nh"><span class="app">F</span>FLEET · falcon<span class="t">11m</span></div>
+              <b>Per-device tokens for machines</b>
+              <p>Asked: should a removed phone get a plain 401 or a page that says it was removed?</p>
+            </div>
+            <div class="notif stacked">
+              <div class="nh"><span class="app">F</span>FLEET · hangar<span class="t">22m</span></div>
+              <b>Bump OpenCode to 1.14 finished</b>
+              <p>Opened PR #251. Checks passed.</p>
+            </div>
+          </div>
+        </div></div>
+        <div class="cap"><b>Answer from the lock screen (Android)</b><span>Android Chrome shows the action buttons. iPhone shows the notification but not the buttons, so a tap opens the page next door. Try <b>Allow once</b>.</span></div>
+      </div>
+
+      <div class="shot">
+        <div class="phone"><div class="screen">
+          <div class="sb"><span>14:08</span><i>●●● ▮</i></div>
+          <div class="scroll" style="justify-content:center;gap:14px;padding:16px">
+            <div class="meta"><span class="machine">falcon</span><span>Per-device tokens for machines</span></div>
+            <p class="msg" style="color:var(--muted)">"Removing a device deletes its key. The next request from that phone fails auth."</p>
+            <div class="pcard" style="border-color:var(--border)">
+              <div class="lead">When a removed phone calls in, what should it get?</div>
+              <button class="choice"><span class="k">1</span>A plain 401, like a wrong token</button>
+              <button class="choice"><span class="k">2</span>A page: "This phone was removed from falcon"</button>
+              <div class="choice deny"><span class="k">3</span>Something else…</div>
+            </div>
+            <a class="small link" href="#" onclick="return false">Open the whole session</a>
+          </div>
+        </div></div>
+        <div class="cap"><b>Tapping a question opens just the question</b><span>A small page for one answer. No sidebar, no panels.</span></div>
+      </div>
+
+      <div class="shot">
+        <div class="phone"><div class="screen">
+          <div class="sb"><span>14:08</span><i>●●● ▮</i></div>
+          <div class="scroll" style="justify-content:center;gap:12px;padding:20px">
+            <span class="done-note" style="font-size:15px">✓ Answered</span>
+            <h2 style="font-size:19px">falcon carries on with your answer</h2>
+            <p class="what">You'll get a notification when it finishes or needs you again.</p>
+            <div class="card" style="padding:2px 11px;gap:0">
+              <div class="row"><span class="dot wait"></span><div class="body"><span class="name">Fix flaky SignalR reconnect test</span><span class="info">hangar · still waiting on you</span></div></div>
+            </div>
+            <button class="btn" style="padding:9px">Open Fleet</button>
+          </div>
+        </div></div>
+        <div class="cap"><b>Done, and what else is waiting</b><span>"Open Fleet" opens the normal web app, as it is today.</span></div>
+      </div>
+    </div>
+    <div class="pros-cons">
+      <div><h3>Good</h3><ul><li>Smallest thing worth shipping: push plus two small pages.</li><li>Fixes the real gap: today nothing tells you a session is waiting.</li><li>Option A or B can still come later on top of it.</li></ul></div>
+      <div><h3>Costs</h3><ul><li>Answering from the notification only works on Android. On iPhone you always open a page.</li><li>No way to look around or steer a session without falling back to the full app.</li></ul></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── How it works ───────────────────────── -->
+<section>
+  <div class="section-head">
+    <span class="eyebrow">How it works underneath</span>
+    <h2>The same four pieces for every option</h2>
+  </div>
+  <div class="flow">
+    <div><span class="n">01</span><h3>Reach the machine</h3><p>The phone talks to the Fleet you already run, over <code>tailscale serve</code> HTTPS. A relay for phones without Tailscale is a separate step later.</p></div>
+    <div><span class="n">02</span><h3>Pair once</h3><p>The QR code holds a one-time secret. Redeeming it gives the phone its own key, which you can remove. The shared machine token stays for desktops.</p></div>
+    <div><span class="n">03</span><h3>Install</h3><p>A manifest and a service worker make Fleet installable. The service worker shows notifications and opens the right session when you tap one.</p></div>
+    <div><span class="n">04</span><h3>Notify</h3><p>When an agent asks (<code>permission.asked</code>), asks a question, finishes or fails, Fleet sends a Web Push. Skipped while Fleet is open on a screen.</p></div>
+  </div>
+</section>
+
+<section>
+  <div class="section-head">
+    <span class="eyebrow">Side by side</span>
+    <h2>Comparing the three</h2>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Option</th><th>On the phone you mostly…</th><th>New work beyond pairing and push</th><th>Biggest limit</th></tr></thead>
+      <tbody>
+        <tr><td>A · Needs-you inbox</td><td>Triage across machines, answer, read results</td><td>A phone route, and a live view of several machines at once</td><td>Deep work (diffs, terminal) goes back to the computer</td></tr>
+        <tr><td>B · Fleet, folded down</td><td>Use the full app, one machine at a time</td><td>Polish of the existing phone layout</td><td>Cramped, and switching machines reloads the page</td></tr>
+        <tr><td>C · Notifications only</td><td>Answer when Fleet calls you</td><td>Two small pages: one prompt, one question</td><td>No answer buttons in iPhone notifications</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+</div>
+
+<script>
+// Option tabs
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+  document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-selected', x === t));
+  document.querySelectorAll('.option').forEach(o => o.classList.toggle('on', o.id === 'opt-' + t.dataset.opt));
+}));
+
+// "Allow once" in option A and C
+document.querySelector('#a-btns [data-allow]').addEventListener('click', () => {
+  document.getElementById('a-btns').outerHTML = '<span class="done-note">✓ Allowed once. hangar carries on.</span>';
+  const c = document.querySelector('#opt-a .count'); c.textContent = '1';
+  document.querySelector('#opt-a .tabbar .badge').textContent = '1';
+  document.getElementById('a-ask').classList.remove('ask');
+});
+document.querySelector('#c-acts [data-allow]').addEventListener('click', () => {
+  document.getElementById('c-acts').outerHTML = '<p style="font-weight:600;margin-top:4px">✓ Allowed once</p>';
+});
+
+// A plausible-looking QR (decorative): finder squares plus seeded noise.
+(function () {
+  const c = document.getElementById('qr'), x = c.getContext('2d'), n = 29;
+  x.fillStyle = '#fff'; x.fillRect(0, 0, n, n); x.fillStyle = '#111';
+  let s = 7; const r = () => (s = (s * 9301 + 49297) % 233280) / 233280;
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (r() > .52) x.fillRect(i, j, 1, 1);
+  const finder = (a, b) => { x.fillStyle = '#fff'; x.fillRect(a - 1, b - 1, 9, 9); x.fillStyle = '#111'; x.fillRect(a, b, 7, 7); x.fillStyle = '#fff'; x.fillRect(a + 1, b + 1, 5, 5); x.fillStyle = '#111'; x.fillRect(a + 2, b + 2, 3, 3); };
+  finder(0, 0); finder(n - 7, 0); finder(0, n - 7);
+})();
+</script>
+</body>
+</html>
