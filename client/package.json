@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --port 3002",
     "dev:mock": "vite --port 3002 --mode mock",
-    "build": "vite build",
+    "build": "vite build && vite build -c vite.sw.config.ts",
     "preview": "vite preview",
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest run --passWithNoTests",
