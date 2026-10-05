@@ -11,7 +11,13 @@ import PhoneSessionHeader from "@/components/phone/session/PhoneSessionHeader.vu
 import PlanSheet from "@/components/phone/session/PlanSheet.vue";
 import SinceYouLookedMarker from "@/components/phone/session/SinceYouLookedMarker.vue";
 import StepsSheet from "@/components/phone/session/StepsSheet.vue";
+import DockedPermission from "@/components/phone/session/DockedPermission.vue";
+import DockedQuestion from "@/components/phone/session/DockedQuestion.vue";
+import PhoneComposer from "@/components/phone/session/PhoneComposer.vue";
 import { useDeskPresence } from "@/composables/use-desk-presence";
+import { useQuestionAnswer } from "@/composables/use-question-answer";
+import { useSessionPermissions } from "@/composables/use-session-permissions";
+import { chooseDock, pendingQuestion } from "@/lib/phone/dock-state";
 import { useRelativeTime } from "@/composables/use-relative-time";
 import { useSessionProgress } from "@/composables/use-session-progress";
 import { useSessionStream } from "@/composables/use-session-stream";
@@ -108,6 +114,51 @@ watch(() => blocks.value.length, async () => {
   await nextTick();
   if (nearBottom) el.scrollTop = el.scrollHeight;
 });
+
+// The bottom is for whatever needs you: the ask in the composer's place, until it's answered or put off.
+const { asks, answer: answerPermission } = useSessionPermissions(sessionId);
+const questions = useQuestionAnswer(sessionId.value);
+const later = shallowRef<ReadonlySet<string>>(new Set());
+const dock = computed(() => chooseDock({
+  permissions: asks.value,
+  question: pendingQuestion(stream.messages.value),
+  later: later.value,
+  focus: search.value.ask ?? null,
+}));
+const answered = shallowRef<string | null>(null);
+const askGone = shallowRef(false);
+
+function putOff(id: string): void {
+  later.value = new Set([...later.value, id]);
+}
+
+function bringBack(): void {
+  later.value = new Set();
+}
+
+function onAnswered(text: string): void {
+  answered.value = text;
+  setTimeout(() => {
+    if (answered.value === text) answered.value = null;
+  }, 4000);
+}
+
+// Opened from a notification for an ask that's no longer waiting: say so instead of looking for it. The asks load on
+// their own, so look a moment after the conversation is in.
+let askChecked = false;
+watch(() => stream.isLoading.value, (loading) => {
+  const target = search.value.ask;
+  if (!target || loading || askChecked) return;
+  askChecked = true;
+  setTimeout(() => {
+    const waiting = asks.value.some((ask) => ask.id === target) || pendingQuestion(stream.messages.value)?.requestId === target;
+    if (waiting) return;
+    askGone.value = true;
+    setTimeout(() => {
+      askGone.value = false;
+    }, 4000);
+  }, 1500);
+}, { immediate: true });
 
 const stepsOpen = shallowRef<readonly FoldedStep[] | null>(null);
 const planOpen = shallowRef(false);
@@ -282,7 +333,52 @@ onUnmounted(() => {
       </p>
     </main>
 
-    <slot name="dock" />
+    <p
+      v-if="askGone"
+      class="ps__toast"
+      role="status"
+      data-testid="already-answered"
+    >
+      Already answered.
+    </p>
+    <p
+      v-if="answered"
+      class="ps__toast"
+      role="status"
+    >
+      {{ answered }}.
+    </p>
+    <button
+      v-if="dock.later > 0 && dock.kind === 'composer'"
+      type="button"
+      class="ps__pill"
+      data-testid="later-pill"
+      @click="bringBack"
+    >
+      {{ dock.later }} waiting on you · Answer
+    </button>
+    <DockedPermission
+      v-if="dock.kind === 'permission'"
+      :key="dock.ask.id"
+      :ask="dock.ask"
+      :answer="answerPermission"
+      @later="putOff(dock.ask.id)"
+      @answered="onAnswered"
+    />
+    <DockedQuestion
+      v-else-if="dock.kind === 'question'"
+      :key="dock.pending.requestId"
+      :pending="dock.pending"
+      :answer="questions.answerQuestion"
+      :reject="questions.rejectQuestion"
+      @later="putOff(dock.pending.requestId)"
+    />
+    <PhoneComposer
+      v-else
+      :key="sessionId"
+      :session-id="sessionId"
+      :machine-name="machineName"
+    />
 
     <StepsSheet
       :open="stepsOpen !== null"
@@ -411,6 +507,29 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--error) 10%, transparent);
   font-size: 13px;
   color: var(--error);
+}
+
+.ps__toast {
+  align-self: center;
+  margin: 0 0 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--main-bg);
+  font-size: 12px;
+}
+
+.ps__pill {
+  align-self: center;
+  min-height: 36px;
+  margin-bottom: 6px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--idle) 45%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--idle) 12%, transparent);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
 }
 
 .ps__working {
