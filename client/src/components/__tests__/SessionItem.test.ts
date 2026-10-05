@@ -1,6 +1,8 @@
 import { mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { useArchiveQueueStore } from "@/stores/archive-queue";
+import { useLineageMovesStore } from "@/stores/lineage-moves";
+import { useSessionsStore } from "@/stores/sessions";
 import { useSessionSelectionStore } from "@/stores/session-selection";
 import SessionItem from "@/components/sessions/SessionItem.vue";
 import type { SessionListItem } from "@/api/client";
@@ -460,6 +462,44 @@ describe("SessionItem", () => {
 
       expect(wrapper.get("[data-testid='session-kind']").text()).toBe("fork");
       expect(wrapper.find(".session-meta").exists()).toBe(false);
+    });
+
+    describe("moving it out of its parent", () => {
+      function menuText(session: SessionListItem): string {
+        return mountWith({ session }).get("[data-testid='context-menu-content']").text();
+      }
+
+      it("names the session it really came from, which may not be the row it sits under", async () => {
+        useSessionsStore().setSessions([createSession({ session: { id: "capture", title: "Capture subagents", time: { created: 1, updated: 1 }, tags: [] } })]);
+        const fork = createSession({ forkedFromSessionId: "capture", spawnKind: "fork" });
+        const wrapper = mountWith({ session: fork, kindLabel: "fork" });
+        const moveOut = vi.spyOn(useLineageMovesStore(), "moveOut").mockResolvedValue();
+
+        const item = wrapper.get("[data-testid='session-context-move-out']");
+        expect(item.text()).toBe('Move out of "Capture subagents"');
+        await item.trigger("click");
+
+        expect(moveOut).toHaveBeenCalledWith("session-1");
+        expect(wrapper.find("[data-testid='session-context-move-back']").exists()).toBe(false);
+      });
+
+      it("is there for a session an agent started, not for a subagent's session or one the user started", () => {
+        expect(menuText(createSession({ spawnedBySessionId: "elsewhere", spawnKind: "api" }))).toContain("Move out of its parent");
+        expect(menuText(createSession({ parentSessionId: "parent" }))).not.toContain("Move out");
+        expect(menuText(createSession())).not.toContain("Move out");
+        expect(menuText(createSession({ retentionStatus: "archived", forkedFromSessionId: "a", spawnKind: "fork" }))).not.toContain("Move out");
+      });
+
+      it("offers to move a session that's out back under its parent", async () => {
+        const out = createSession({ forkedFromSessionId: "elsewhere", spawnKind: "fork", lineageDetachedAt: "2026-10-04T12:00:00Z" });
+        const wrapper = mountWith({ session: out });
+        const moveBack = vi.spyOn(useLineageMovesStore(), "moveBack").mockResolvedValue();
+
+        expect(wrapper.find("[data-testid='session-context-move-out']").exists()).toBe(false);
+        await wrapper.get("[data-testid='session-context-move-back']").trigger("click");
+
+        expect(moveBack).toHaveBeenCalledWith("session-1");
+      });
     });
 
     it("a parent opens and closes its children with the caret or the arrow keys, without opening the session", async () => {

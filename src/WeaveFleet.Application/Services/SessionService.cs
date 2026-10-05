@@ -108,6 +108,31 @@ public sealed class SessionService(
         return Unit.Value;
     }
 
+    /// <summary>
+    /// Moves a fork or a session an agent started out of the session it came from, so it stands on its own
+    /// (<paramref name="detached"/>), or back under it. Where it came from is kept either way. A subagent's session
+    /// belongs to its parent's turn and can't be moved out.
+    /// </summary>
+    public async Task<Result<Unit>> SetLineageDetachedAsync(string sessionId, bool detached)
+    {
+        SetSessionTag(sessionId);
+        var session = await sessionRepository.GetByIdAsync(sessionId);
+        if (session is null)
+            return FleetError.NotFoundFor(nameof(Session), sessionId);
+
+        if (session.ParentSessionId is not null)
+            return FleetError.ValidationError("Lineage", "A subagent's session belongs to its parent's turn; it can't be moved out.");
+        if (!SessionLineage.CanDetach(session))
+            return FleetError.ValidationError("Lineage", "This session didn't come from another session.");
+
+        // Moving it out again keeps when it first was.
+        if (detached == session.LineageDetachedAt is not null)
+            return Unit.Value;
+
+        await sessionRepository.UpdateLineageDetachedAsync(sessionId, detached ? DateTime.UtcNow.ToString("O") : null);
+        return Unit.Value;
+    }
+
     private static void SetSessionTag(string sessionId)
         => Activity.Current?.SetTag(FleetInstrumentation.SessionIdTag, sessionId);
 

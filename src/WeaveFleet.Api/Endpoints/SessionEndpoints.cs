@@ -148,6 +148,7 @@ public static class SessionEndpoints
                         ForkedFromSessionId = session.ForkedFromSessionId,
                         SpawnedBySessionId = session.SpawnedBySessionId,
                         SpawnKind = session.SpawnKind,
+                        LineageDetachedAt = session.LineageDetachedAt,
                     });
                 },
                 error => Task.FromResult(error.ToSessionApiResult()));
@@ -780,6 +781,17 @@ public static class SessionEndpoints
         })
         .WithName("MoveSessionToProject");
 
+        // PATCH /api/sessions/{id}/lineage — move a fork or a started session out of the session it came from, or back
+        group.MapPatch("/{id}/lineage", async (string id, UpdateSessionLineageRequest req, SessionService sessionService) =>
+        {
+            var result = await sessionService.SetLineageDetachedAsync(id, req.Detached);
+            return result.ToNoContentResult();
+        })
+        .Produces(204)
+        .Produces<ApiErrorResponse>(400)
+        .Produces<ApiErrorResponse>(404)
+        .WithName("UpdateSessionLineage");
+
         // PATCH /api/sessions/{id}/tags — replace session tags
         group.MapPatch("/{id}/tags", async (string id, UpdateSessionTagsRequest req, SessionService sessionService) =>
         {
@@ -994,6 +1006,7 @@ public static class SessionEndpoints
             ForkedFromSessionId = s.ForkedFromSessionId,
             SpawnedBySessionId = s.SpawnedBySessionId,
             SpawnKind = s.SpawnKind,
+            LineageDetachedAt = s.LineageDetachedAt,
         };
     }
 
@@ -1203,6 +1216,7 @@ public static class SessionEndpoints
             ForkedFromSessionId = s.ForkedFromSessionId,
             SpawnedBySessionId = s.SpawnedBySessionId,
             SpawnKind = s.SpawnKind,
+            LineageDetachedAt = s.LineageDetachedAt,
         };
     }
 

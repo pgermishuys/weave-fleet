@@ -43,7 +43,7 @@ describe("MachineSessionsGroup", () => {
     expect(view.text()).toContain("No sessions");
   });
 
-  it("puts forks and started sessions under the session they came from, and counts what runs", () => {
+  it("puts forks and started sessions under the top-level session they came from, one indent in, and counts what runs", () => {
     const item = (id: string, title: string, extra: Record<string, unknown> = {}) => ({
       instanceId: id, workspaceId: "w", workspaceDirectory: "/repo", workspaceDisplayName: null, isolationStrategy: "existing",
       sessionStatus: "idle", session: { id, title, time: { created: 1, updated: 1 }, tags: [] }, instanceStatus: "running",
@@ -66,7 +66,9 @@ describe("MachineSessionsGroup", () => {
     expect(rows[0]!.get(".machine-row__running").text()).toBe("2");
     expect(rows[1]!.classes()).toContain("machine-row--child");
     expect(rows[1]!.get(".machine-row__kind").text()).toBe("fork");
-    expect(rows[2]!.attributes("style")).toContain("padding-left: 22px");
+    // A fork of a fork sits in line with its parent: no staircase.
+    expect(rows[2]!.classes()).toContain("machine-row--child");
+    expect(rows[2]!.attributes("style")).toBeUndefined();
     expect(rows[3]!.classes()).not.toContain("machine-row--child");
   });
 });

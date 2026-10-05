@@ -69,6 +69,7 @@ interface SessionDetailResponse {
   forkedFromSessionId?: string | null;
   spawnedBySessionId?: string | null;
   spawnKind?: string | null;
+  lineageDetachedAt?: string | null;
 }
 
 type ComposerInstance = ComponentPublicInstance & {
@@ -460,6 +461,9 @@ const SessionDetailPage = defineComponent({
         forkedFromSessionId: selectedSession.value?.forkedFromSessionId ?? remoteSession.value?.forkedFromSessionId ?? null,
         spawnedBySessionId: selectedSession.value?.spawnedBySessionId ?? remoteSession.value?.spawnedBySessionId ?? null,
         spawnKind: selectedSession.value?.spawnKind ?? remoteSession.value?.spawnKind ?? null,
+        lineageDetachedAt: selectedSession.value
+          ? selectedSession.value.lineageDetachedAt ?? null
+          : remoteSession.value?.lineageDetachedAt ?? null,
       });
       return isDelegatedSession.value ? null : link;
     });

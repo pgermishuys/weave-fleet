@@ -153,6 +153,29 @@ that names its own harness session in `X-Fleet-Harness-Session`. Both plugins pu
 and the Fleet API skill sends it. Workflow steps get `spawn_kind = workflow`, automation runs `automation`; neither
 has a starting session. `parent_session_id` still means a hidden delegated child.
 
+## Moving out, and depth
+
+Built in PR 12 (mockup `mockups/lineage-detach-depth/`).
+
+- **Moving a session out of its parent.** A fork or a session an agent started can stand on its own: drag its row
+  out of its family onto its project (the heading or any row outside the family), or *Move out of "…"* in its
+  context menu, which names the session it really came from. Undo is in the archive toast, and *Move back under "…"*
+  is in the menu of a session that's out. `sessions.lineage_detached_at` (migration `050`) marks it; the provenance
+  columns stay as what happened. A session that's out doesn't nest, isn't in its parent's Agents tab, and has no
+  "Started by / Forked from" pill. `PATCH /api/sessions/{id}/lineage` `{ "detached": true | false }` answers 204; 400
+  for a subagent's session (it belongs to its parent's turn) or one that came from no session. The list and
+  `GET /api/sessions/{id}` carry `lineageDetachedAt`. The list is polled, as moving to a project is, so other tabs
+  catch up within 15 seconds.
+- **One indent, however deep.** The session list puts everything that came from a top-level session under it, one
+  indent in, in tree order: forks of forks, sessions started by started sessions, running subagents of nested
+  sessions and Claude Code's nested subagents. The kind label stays on each row; the session's own header names its
+  exact parent. The Agents tab lists direct relations only (its parent, its own children).
+- **Runaway guard.** `POST /api/sessions` from an agent answers 409 when the calling session is already
+  `SessionLineage.MaxAgentSpawnDepth` (3) agent-starts below a session the user started: *"This session is 3 levels
+  down from a session the user started; Fleet doesn't let agents start sessions deeper than that. Ask the user, or do
+  the work here."* A subagent's hidden session sits at its parent's depth; a session the user moved out, and a fork,
+  count as the user's own. Subagents inside a harness are the harness's business and don't count.
+
 ## `@` sessions
 
 The composer's `@` picker (`use-autocomplete.ts`) gets a Sessions group. Attaching a session adds a reference, not a

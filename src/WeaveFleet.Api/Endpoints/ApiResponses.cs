@@ -204,6 +204,9 @@ public sealed record GetSessionResponse(
 
     /// <summary>How the session came to be: <c>fork</c>, <c>api</c>, <c>message</c>, <c>automation</c> or <c>workflow</c>; null when the user started it.</summary>
     public string? SpawnKind { get; init; }
+
+    /// <summary>When the user moved it out of the session it came from, or null; it no longer nests under that one.</summary>
+    public string? LineageDetachedAt { get; init; }
 }
 
 /// <summary>

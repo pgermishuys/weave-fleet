@@ -6,6 +6,8 @@ import {
   buildAgentsLineage,
   lineageDescendants,
   lineageOf,
+  movableBackUnder,
+  movableOutOf,
   nestLineage,
   runningSubagentsBySession,
   summarizeAgentActivity,
@@ -44,6 +46,42 @@ describe("lineageOf", () => {
   it("lets spawnKind decide when a session is both a fork and started by an agent", () => {
     expect(lineageOf({ forkedFromSessionId: "a", spawnedBySessionId: "b", spawnKind: "fork" })?.parentId).toBe("a");
     expect(lineageOf({ forkedFromSessionId: "a", spawnedBySessionId: "b", spawnKind: "api" })?.parentId).toBe("b");
+  });
+});
+
+describe("moving a session out of its parent", () => {
+  const detachedAt = "2026-10-04T12:00:00Z";
+
+  it("gives a session the user moved out no parent, though it keeps where it came from", () => {
+    const fork = { forkedFromSessionId: "a", spawnKind: "fork", lineageDetachedAt: detachedAt };
+
+    expect(lineageOf(fork)).toBeNull();
+    expect(movableOutOf(fork)).toBeNull();
+    expect(movableBackUnder(fork)).toEqual({ parentId: "a", kind: "fork" });
+  });
+
+  it("moves forks and started sessions out, never a subagent's session", () => {
+    expect(movableOutOf({ forkedFromSessionId: "a", spawnKind: "fork" })).toEqual({ parentId: "a", kind: "fork" });
+    expect(movableOutOf({ spawnedBySessionId: "b", spawnKind: "api" })).toEqual({ parentId: "b", kind: "started" });
+    expect(movableOutOf({ parentSessionId: "c" })).toBeNull();
+    expect(movableOutOf({})).toBeNull();
+    expect(movableBackUnder({ spawnedBySessionId: "b", spawnKind: "api" })).toBeNull();
+    // A subagent's session stays its parent's, whatever the mark says.
+    expect(lineageOf({ parentSessionId: "c", lineageDetachedAt: detachedAt })).toEqual({ parentId: "c", kind: "subagent" });
+  });
+
+  it("puts a session moved out at the top of the list, and out of its parent's Agents tab", () => {
+    const sessions = [
+      session("parent"),
+      session("out", { spawnedBySessionId: "parent", spawnKind: "api", lineageDetachedAt: detachedAt }),
+      session("under", { spawnedBySessionId: "out", spawnKind: "api" }),
+    ];
+
+    const { roots, childrenOf } = nestLineage(sessions);
+
+    expect(roots.map((item) => item.session.id)).toEqual(["parent", "out"]);
+    expect(childrenOf.get("out")?.map((child) => child.item.session.id)).toEqual(["under"]);
+    expect(buildAgentsLineage("parent", sessions, []).started).toEqual([]);
   });
 });
 
@@ -141,6 +179,17 @@ describe("buildAgentsLineage", () => {
       ["work:failed", "failed"],
       ["work:older", "done"],
     ]);
+  });
+
+  it("lists only its own children: a child's children are in that child's tab", () => {
+    const sessions = [
+      session("parent"),
+      session("child", { spawnedBySessionId: "parent", spawnKind: "api" }),
+      session("grandchild", { forkedFromSessionId: "child", spawnKind: "fork" }),
+    ];
+
+    expect(buildAgentsLineage("parent", sessions, []).started.map((row) => row.key)).toEqual(["session:child"]);
+    expect(buildAgentsLineage("child", sessions, []).started.map((row) => row.key)).toEqual(["session:grandchild"]);
   });
 
   it("lists a subagent's session once, through its work", () => {

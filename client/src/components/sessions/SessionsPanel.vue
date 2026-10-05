@@ -10,6 +10,7 @@ import { useRunningWorkAcrossSessions } from "@/composables/use-running-work";
 import { runningSubagentsBySession } from "@/lib/session-lineage";
 import { useMoveSession } from "@/composables/use-session-actions";
 import { useArchiveQueueStore } from "@/stores/archive-queue";
+import { useLineageMovesStore } from "@/stores/lineage-moves";
 import { useSessionSelectionStore } from "@/stores/session-selection";
 import { useSessionsStore } from "@/stores/sessions";
 import { machineGroupKey, projectGroupKey, useSidebarStore } from "@/stores/sidebar";
@@ -49,6 +50,7 @@ interface ActiveSessionDrag {
 
 const sessionsStore = useSessionsStore();
 const archiveQueue = useArchiveQueueStore();
+const lineageMoves = useLineageMovesStore();
 const selection = useSessionSelectionStore();
 const sidebarStore = useSidebarStore();
 const { newSessionDraftRow, newSessionMachine, sessionRowKeys } = storeToRefs(useWorkspaceUiStore());
@@ -525,6 +527,13 @@ function handleSessionDragStart(sessionId: string, projectId: string | null): vo
   activeSessionDrag.value = { sessionId, projectId };
 }
 
+/** A fork or a started session dragged out of its parent: it stands on its own (Undo in the toast). */
+function handleMoveOutOfParent(sessionId: string): void {
+  activeSessionDrag.value = null;
+  if (normalizedQuery.value) return;
+  void lineageMoves.moveOut(sessionId);
+}
+
 function handleSessionDragEnd(): void {
   activeSessionDrag.value = null;
 }
@@ -802,6 +811,7 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
           @drag-session-start="handleSessionDragStart"
           @drag-session-end="handleSessionDragEnd"
           @move-session="handleMoveSession"
+          @move-out-of-parent="handleMoveOutOfParent"
         />
 
         <div

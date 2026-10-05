@@ -722,6 +722,19 @@ public sealed class SessionRepository(
             });
     }
 
+    public async Task UpdateLineageDetachedAsync(string id, string? detachedAt)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        await conn.ExecuteNonQueryAsync(
+            "UPDATE sessions SET lineage_detached_at = @DetachedAt WHERE id = @Id AND user_id = @UserId",
+            cmd =>
+            {
+                cmd.AddParameter("Id", id);
+                cmd.AddParameter("DetachedAt", detachedAt);
+                cmd.AddParameter("UserId", userContext.UserId);
+            });
+    }
+
     public async Task UpdateSelectedModelAsync(string id, string providerId, string modelId)
     {
         using var conn = connectionFactory.CreateConnection();
@@ -810,6 +823,7 @@ public sealed class SessionRepository(
             ForkedFromSessionId = r.GetNullableString(r.GetOrdinal("forked_from_session_id")),
             SpawnedBySessionId = r.GetNullableString(r.GetOrdinal("spawned_by_session_id")),
             SpawnKind = r.GetNullableString(r.GetOrdinal("spawn_kind")),
+            LineageDetachedAt = r.GetNullableString(r.GetOrdinal("lineage_detached_at")),
             Tags = tags,
         };
     }

@@ -1,20 +1,39 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { storeToRefs } from "pinia";
 import { Undo2, X } from "lucide-vue-next";
 import { ARCHIVE_UNDO_MS, useArchiveQueueStore } from "@/stores/archive-queue";
+import { LINEAGE_UNDO_MS, useLineageMovesStore } from "@/stores/lineage-moves";
 
+// One toast for what the session list lets you undo: archiving, and moving a session out of its parent (or back).
 const archiveQueue = useArchiveQueueStore();
-const { pending, error } = storeToRefs(archiveQueue);
+const lineageMoves = useLineageMovesStore();
 
-const drainStyle = computed(() => ({ animationDuration: `${ARCHIVE_UNDO_MS}ms` }));
+const pending = computed(() => {
+  if (archiveQueue.pending) {
+    const { message, ids } = archiveQueue.pending;
+    return { key: `archive:${message}${ids.join()}`, message, duration: ARCHIVE_UNDO_MS, undo: () => archiveQueue.undo() };
+  }
+  if (lineageMoves.pending) {
+    const { message, sessionId, detached } = lineageMoves.pending;
+    return { key: `lineage:${sessionId}:${detached}`, message, duration: LINEAGE_UNDO_MS, undo: () => void lineageMoves.undo() };
+  }
+  return null;
+});
+const error = computed(() => archiveQueue.error ?? lineageMoves.error);
+
+function dismissError(): void {
+  archiveQueue.dismissError();
+  lineageMoves.dismissError();
+}
+
+const drainStyle = computed(() => ({ animationDuration: `${pending.value?.duration ?? ARCHIVE_UNDO_MS}ms` }));
 </script>
 
 <template>
   <Transition name="archive-toast">
     <div
       v-if="pending"
-      :key="pending.message + pending.ids.join()"
+      :key="pending.key"
       class="archive-toast"
       role="status"
       data-testid="archive-undo-toast"
@@ -25,7 +44,7 @@ const drainStyle = computed(() => ({ animationDuration: `${ARCHIVE_UNDO_MS}ms` }
           type="button"
           class="archive-toast__action"
           data-testid="archive-undo-button"
-          @click="archiveQueue.undo()"
+          @click="pending.undo()"
         >
           <Undo2 aria-hidden="true" />
           Undo
@@ -47,7 +66,7 @@ const drainStyle = computed(() => ({ animationDuration: `${ARCHIVE_UNDO_MS}ms` }
           type="button"
           class="archive-toast__action"
           aria-label="Dismiss"
-          @click="archiveQueue.dismissError()"
+          @click="dismissError"
         >
           <X aria-hidden="true" />
         </button>

@@ -375,6 +375,7 @@ internal sealed class FakeSessionRepository : ISessionRepository
     public Task<(int TotalTokens, double TotalCost)> GetFleetTokenTotalsAsync() => throw new NotImplementedException();
     public Task<int> MarkAllNonTerminalStoppedAsync(string stoppedAt) => throw new NotImplementedException();
     public Task UpdateProjectAsync(string id, string? projectId) => throw new NotImplementedException();
+    public Task UpdateLineageDetachedAsync(string id, string? detachedAt) => throw new NotImplementedException();
     public Task UpdateSelectedModelAsync(string id, string providerId, string modelId) => throw new NotImplementedException();
     public Task UpdateSelectedAgentAsync(string id, string agent) => throw new NotImplementedException();
 }

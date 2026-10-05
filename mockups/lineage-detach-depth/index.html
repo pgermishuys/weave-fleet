@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lineage: detach and depth</title>
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<style>
+/* Tokens copied from client/src/assets/main.css (dark default, light under data-theme), as in background-work-lineage. */
+:root {
+  --rail-bg: #0d0d10; --panel-bg: #141418; --card-bg: #1b1b20; --main-bg: #0d0d10;
+  --border: rgba(255,255,255,0.075); --text: #e8e8ec; --muted: #8e8e9a;
+  --accent: #6366f1; --accent-dim: rgba(99,102,241,0.15);
+  --running: #22c55e; --idle: #f59e0b; --complete: #3b82f6; --error: #ef4444;
+  --radius-card: 10px; --radius-btn: 8px; --radius-panel: 12px;
+  --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --rail-bg: #FFFFFF; --panel-bg: #FFFFFF; --card-bg: #ffffff; --main-bg: #F3F2EF;
+  --border: rgba(26,25,24,0.09); --text: #1A1918; --muted: #6E6A65;
+  --accent: #5B6EC7; --accent-dim: rgba(91,110,199,0.12);
+  --running: #16a34a; --idle: #d97706; --complete: #2563eb; --error: #dc2626;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--main-bg); color: var(--text); font: 13px/1.5 var(--font-sans); -webkit-font-smoothing: antialiased; padding: 20px 28px 40px; }
+button { font: inherit; color: inherit; }
+svg.lucide { width: 14px; height: 14px; stroke-width: 1.75; flex-shrink: 0; }
+h1 { font-size: 18px; margin: 0 0 4px; }
+h2 { font-size: 14px; margin: 28px 0 4px; }
+p.lead { color: var(--muted); margin: 0 0 12px; max-width: 900px; }
+.controls { position: fixed; top: 14px; right: 18px; display: flex; gap: 6px; }
+.controls button { border: 1px solid var(--border); background: var(--card-bg); border-radius: 999px; padding: 3px 12px; cursor: pointer; }
+.grid { display: grid; grid-template-columns: repeat(4, 280px); gap: 18px; align-items: start; }
+.opt { display: flex; flex-direction: column; gap: 8px; }
+.opt-h { display: flex; align-items: baseline; gap: 8px; }
+.opt-h b { font-size: 13px; }
+.tag { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+.tag.pick { color: var(--running); border-color: color-mix(in srgb, var(--running) 45%, transparent); }
+.note { color: var(--muted); font-size: 12px; margin: 0; }
+.panel { background: var(--rail-bg); border: 1px solid var(--border); border-radius: var(--radius-panel); padding: 8px; position: relative; min-height: 250px; }
+h2 + .grid ~ h2 + .grid .panel { min-height: 300px; }
+
+.group-h { display: flex; align-items: center; gap: 6px; padding: 2px 6px 4px; color: var(--muted); font-size: 12px; font-weight: 600; }
+.group-h .count { margin-left: auto; font-weight: 500; }
+.group-h.drop { outline: 2px dashed var(--accent); outline-offset: -2px; border-radius: var(--radius-btn); background: var(--accent-dim); }
+.rows { display: flex; flex-direction: column; gap: 1px; }
+.row { display: flex; align-items: center; gap: 9px; min-height: 30px; padding: 0 10px; border-radius: var(--radius-btn); color: color-mix(in srgb, var(--text) 86%, transparent); }
+.row.active { background: var(--card-bg); color: var(--text); }
+.row .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .meta { font-size: 12px; color: var(--muted); flex-shrink: 0; }
+.row .caret { width: 13px; height: 13px; color: var(--muted); margin-left: -4px; transform: rotate(90deg); }
+.row.ghosted { opacity: .35; }
+.row.dragging { position: absolute; left: 60px; top: 112px; width: 220px; background: var(--card-bg); box-shadow: 0 12px 28px -10px rgba(0,0,0,.5); border: 1px solid var(--border); transform: rotate(-1.5deg); }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dot.run { background: var(--running); }
+.dot.wait { background: var(--idle); }
+.slot { width: 8px; flex-shrink: 0; }
+.chip { display: inline-flex; align-items: center; gap: 3px; height: 18px; padding: 0 6px; border-radius: 999px; background: color-mix(in srgb, var(--running) 14%, transparent); color: var(--running); font-size: 11px; font-weight: 600; }
+.chip svg.lucide { width: 11px; height: 11px; stroke-width: 2.25; }
+.children { display: flex; flex-direction: column; gap: 1px; margin: 1px 0 2px 13px; padding-left: 10px; border-left: 1px solid var(--border); }
+.children .row { min-height: 28px; }
+.kind { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); flex-shrink: 0; }
+.more { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.hoverbtn { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 6px; color: var(--muted); background: color-mix(in srgb, var(--text) 8%, transparent); flex-shrink: 0; }
+
+.menu { position: absolute; left: 48px; top: 96px; width: 228px; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: 0 16px 40px -12px rgba(0,0,0,.45); padding: 4px; z-index: 2; }
+.menu .mi { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 6px; font-size: 12.5px; }
+.menu .mi.on { background: color-mix(in srgb, var(--text) 7%, transparent); }
+.menu .sep { height: 1px; background: var(--border); margin: 4px 0; }
+.toast { margin-top: 10px; border-radius: var(--radius-card); background: var(--text); color: var(--main-bg); overflow: hidden; }
+.toast .r { display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 12px; }
+.toast .m { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toast .u { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px; background: color-mix(in srgb, var(--main-bg) 16%, transparent); font-weight: 600; }
+.toast .d { height: 2px; background: color-mix(in srgb, var(--main-bg) 45%, transparent); width: 62%; }
+.pillrow { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--panel-bg); }
+.pillrow .t { font-weight: 600; white-space: nowrap; }
+.from { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; padding: 1px 4px 1px 8px; border: 1px solid var(--border); border-radius: 999px; white-space: nowrap; }
+.from b { color: var(--text); font-weight: 500; }
+.from .x { width: 16px; height: 16px; display: grid; place-items: center; border-radius: 50%; background: color-mix(in srgb, var(--text) 8%, transparent); }
+.from .x svg.lucide { width: 10px; height: 10px; }
+.agent-err { font-family: var(--font-mono); font-size: 11.5px; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 10px 12px; white-space: pre-wrap; color: var(--muted); max-width: 900px; }
+.agent-err b { color: var(--text); font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="controls"><button onclick="document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'">Theme</button></div>
+
+<h1>Lineage: moving a session out of its parent, and deep nesting</h1>
+<p class="lead">"Capture subagents" was started by an agent in "Learn from t3code". It started "Fix Pi model switch", which started
+"Check Pi RPC docs"; "Capture subagents" was also forked once. Below: how deep lineage shows in the list, then how a session is moved
+out of its parent. Picks are marked.</p>
+
+<h2>1 · Deep nesting in the session list</h2>
+<div class="grid">
+  <div class="opt">
+    <div class="opt-h"><b>Today</b><span class="tag">before</span></div>
+    <div class="panel"><div class="group-h">weave-fleet <span class="count">5</span></div><div class="rows">
+      <div class="row"><span class="slot"></span><i data-lucide="chevron-right" class="caret"></i><span class="title">Learn from t3code</span><span class="chip"><i data-lucide="loader-circle"></i>1</span></div>
+      <div class="children">
+        <div class="row active"><span class="dot run"></span><span class="title">Capture subagents</span><span class="kind">started</span></div>
+        <div class="row" style="padding-left:22px"><span class="dot run"></span><span class="title">Review the diff</span><span class="kind">subagent</span></div>
+        <div class="row" style="padding-left:22px"><span class="slot"></span><span class="title">Fork: emit jobs</span><span class="kind">fork</span></div>
+        <div class="row" style="padding-left:22px"><span class="dot wait"></span><span class="title">Fix Pi model switch</span><span class="kind">started</span></div>
+        <div class="row" style="padding-left:34px"><span class="slot"></span><span class="title">Check Pi RPC docs</span><span class="kind">started</span></div>
+      </div>
+    </div></div>
+    <p class="note">A staircase: every level steps in 12 px, so a few levels squeeze the titles out.</p>
+  </div>
+  <div class="opt">
+    <div class="opt-h"><b>A · One indent</b><span class="tag pick">pick</span></div>
+    <div class="panel"><div class="group-h">weave-fleet <span class="count">5</span></div><div class="rows">
+      <div class="row"><span class="slot"></span><i data-lucide="chevron-right" class="caret"></i><span class="title">Learn from t3code</span><span class="chip"><i data-lucide="loader-circle"></i>1</span></div>
+      <div class="children">
+        <div class="row active"><span class="dot run"></span><span class="title">Capture subagents</span><span class="kind">started</span></div>
+        <div class="row"><span class="dot run"></span><span class="title">Review the diff</span><span class="kind">subagent</span></div>
+        <div class="row"><span class="slot"></span><span class="title">Fork: emit jobs</span><span class="kind">fork</span></div>
+        <div class="row"><span class="dot wait"></span><span class="title">Fix Pi model switch</span><span class="kind">started</span></div>
+        <div class="row"><span class="slot"></span><span class="title">Check Pi RPC docs</span><span class="kind">started</span></div>
+      </div>
+    </div></div>
+    <p class="note">Everything under its top-level session, one indent, in tree order. The kind stays; the exact parent is the pill in the session's header. Nothing new to read.</p>
+  </div>
+  <div class="opt">
+    <div class="opt-h"><b>B · Two levels, then flat</b></div>
+    <div class="panel"><div class="group-h">weave-fleet <span class="count">5</span></div><div class="rows">
+      <div class="row"><span class="slot"></span><i data-lucide="chevron-right" class="caret"></i><span class="title">Learn from t3code</span><span class="chip"><i data-lucide="loader-circle"></i>1</span></div>
+      <div class="children">
+        <div class="row active"><span class="dot run"></span><span class="title">Capture subagents</span><span class="kind">started</span></div>
+        <div class="children" style="margin-left:4px">
+          <div class="row"><span class="dot run"></span><span class="title">Review the diff</span><span class="kind">subagent</span></div>
+          <div class="row"><span class="slot"></span><span class="title">Fork: emit jobs</span><span class="kind">fork</span></div>
+          <div class="row"><span class="dot wait"></span><span class="title">Fix Pi model switch</span><span class="kind">started</span></div>
+          <div class="row"><span class="slot"></span><span class="title">Check Pi RPC docs</span><span class="kind">started</span></div>
+        </div>
+      </div>
+    </div></div>
+    <p class="note">Shows one more step of who-started-whom, but a second rule and a narrower title for every grandchild, and it's still wrong past two.</p>
+  </div>
+  <div class="opt">
+    <div class="opt-h"><b>C · Children only, "+N"</b></div>
+    <div class="panel"><div class="group-h">weave-fleet <span class="count">5</span></div><div class="rows">
+      <div class="row"><span class="slot"></span><i data-lucide="chevron-right" class="caret"></i><span class="title">Learn from t3code</span><span class="chip"><i data-lucide="loader-circle"></i>1</span></div>
+      <div class="children">
+        <div class="row active"><span class="dot run"></span><span class="title">Capture subagents</span><span class="more">+4</span><span class="kind">started</span></div>
+      </div>
+    </div></div>
+    <p class="note">Quietest, but a grandchild that waits on you is hidden behind a number, and you'd have to open the child to find it.</p>
+  </div>
+</div>
+
+<h2>2 · Moving a fork or a started session out of its parent</h2>
+<div class="grid">
+  <div class="opt">
+    <div class="opt-h"><b>A · Drag it out</b><span class="tag pick">pick</span></div>
+    <div class="panel"><div class="group-h drop">weave-fleet <span class="count">5</span></div><div class="rows">
+      <div class="row"><span class="slot"></span><i data-lucide="chevron-right" class="caret"></i><span class="title">Learn from t3code</span></div>
+      <div class="children">
+        <div class="row"><span class="dot run"></span><span class="title">Capture subagents</span><span class="kind">started</span></div>
+        <div class="row ghosted"><span class="slot"></span><span class="title">Fork: emit jobs</span><span class="kind">fork</span></div>
+      </div>
+      <div class="row dragging"><span class="slot"></span><span class="title">Fork: emit jobs</span><span class="kind">fork</span></div>
+    </div></div>
+    <p class="note">The project heading (or any spot in the project outside the nest) is the drop target, as moving between projects is today. No new chrome.</p>
+  </div>
+  <div class="opt">
+    <div class="opt-h"><b>A · …or from the menu</b><span class="tag pick">pick</span></div>
+    <div class="panel"><div class="group-h">weave-fleet <span class="count">5</span></div><div class="rows">
+      <div class="row"><span class="slot"></span><i data-lucide="chevron-right" class="caret"></i><span class="title">Learn from t3code</span></div>
+      <div class="children">
+        <div class="row"><span class="dot run"></span><span class="title">Capture subagents</span><span class="kind">started</span></div>
+        <div class="row active"><span class="slot"></span><span class="title">Fork: emit jobs</span><span class="kind">fork</span></div>
+      </div>
+    </div>
+    <div class="menu">
+      <div class="mi"><i data-lucide="pencil"></i>Rename</div>
+      <div class="mi"><i data-lucide="archive"></i>Archive</div>
+      <div class="mi on"><i data-lucide="corner-left-up"></i>Move out of "Capture subagents"</div>
+      <div class="mi"><i data-lucide="git-fork"></i>Fork</div>
+      <div class="sep"></div>
+      <div class="mi"><i data-lucide="folder-open"></i>Move to Project</div>
+    </div></div>
+    <p class="note">It names the session it really came from, which may not be the row it sits under. Only on a fork or a started session. A subagent's row has no menu item and can't be dragged out: it belongs to its parent's turn.</p>
+  </div>
+  <div class="opt">
+    <div class="opt-h"><b>A · Then: Undo</b><span class="tag pick">pick</span></div>
+    <div class="panel"><div class="group-h">weave-fleet <span class="count">5</span></div><div class="rows">
+      <div class="row active"><span class="slot"></span><span class="title">Fork: emit jobs</span><span class="meta">2m</span></div>
+      <div class="row"><span class="slot"></span><i data-lucide="chevron-right" class="caret"></i><span class="title">Learn from t3code</span></div>
+      <div class="children">
+        <div class="row"><span class="dot run"></span><span class="title">Capture subagents</span><span class="kind">started</span></div>
+      </div>
+    </div>
+    <div class="toast"><div class="r"><span class="m">Moved "Fork: emit jobs" out of "Capture subagents"</span><span class="u"><i data-lucide="undo-2"></i>Undo</span></div><div class="d"></div></div></div>
+    <p class="note">The archive toast, reused. The row stands on its own (its age comes back, no kind), its header loses the "Forked from" pill, the parent's Agents tab stops listing it.</p>
+  </div>
+  <div class="opt">
+    <div class="opt-h"><b>B · Hover button / C · × on the pill</b></div>
+    <div class="panel"><div class="group-h">weave-fleet <span class="count">5</span></div><div class="rows">
+      <div class="row"><span class="slot"></span><i data-lucide="chevron-right" class="caret"></i><span class="title">Learn from t3code</span></div>
+      <div class="children">
+        <div class="row"><span class="dot run"></span><span class="title">Capture subagents</span><span class="kind">started</span></div>
+        <div class="row active"><span class="slot"></span><span class="title">Fork: emit jobs</span><span class="hoverbtn"><i data-lucide="corner-left-up"></i></span></div>
+      </div>
+    </div>
+    <div class="pillrow" style="margin-top:12px"><span class="t">Fork: emit jobs</span><span class="from">Forked from <b>Capture subagents</b><span class="x"><i data-lucide="x"></i></span></span></div></div>
+    <p class="note">B adds a second hover button to every child row next to Archive. C hides a structural move behind a tiny ×, away from the list it changes. Both add chrome; neither is dragging.</p>
+  </div>
+</div>
+
+<h2>3 · An agent that goes too deep (what it reads)</h2>
+<p class="lead">Fleet refuses <code>POST /api/sessions</code> from an agent whose session is already 3 agent-starts below a session the user started (a
+session the user moved out counts as the user's). Subagents inside a harness are the harness's business; they don't count.</p>
+<div class="agent-err">$ curl -s -X POST "$FLEET_URL/api/sessions" -H "X-Fleet-Harness-Session: $FLEET_HARNESS_SESSION_ID" -d '{…}'
+<b>HTTP 409</b> {"error":"<b>This session is 3 levels down from a session the user started; Fleet doesn't let agents start sessions deeper than that. Ask the user, or do the work here.</b>"}</div>
+
+<script>lucide.createIcons();</script>
+</body>
+</html>

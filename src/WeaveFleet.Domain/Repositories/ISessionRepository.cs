@@ -66,6 +66,9 @@ public interface ISessionRepository
     Task<(int TotalTokens, double TotalCost)> GetFleetTokenTotalsAsync();
     Task<int> MarkAllNonTerminalStoppedAsync(string stoppedAt);
     Task UpdateProjectAsync(string id, string? projectId);
+
+    /// <summary>Moves the session out of the session it came from (a time), or back under it (null).</summary>
+    Task UpdateLineageDetachedAsync(string id, string? detachedAt);
     /// <summary>
     /// Persist the most-recent model selection used on this session, so a SPA refresh
     /// (which loses local state) can fall back to it on the next prompt.
