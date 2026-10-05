@@ -207,7 +207,15 @@ export const useMachinesStore = defineStore("machines", () => {
       return;
     }
 
-    let listed = ((await response.json()) as { machines: ServerMachine[] }).machines;
+    let listed: ServerMachine[];
+    try {
+      const body = await response.json() as { machines?: unknown };
+      if (!Array.isArray(body?.machines)) throw new Error("not a machine list");
+      listed = body.machines as ServerMachine[];
+    } catch {
+      source.value = "local";
+      return;
+    }
     const owner = listed.every((machine) => machine.token !== null);
     if (!owner) {
       source.value = "device";
@@ -270,7 +278,9 @@ export const useMachinesStore = defineStore("machines", () => {
     }
   }
 
-  const ready = syncFromServer();
+  const ready = syncFromServer().catch(() => {
+    source.value = "local";
+  });
 
   /** Whether the client knows any machine besides home. Everything machine-shaped hides until it does. */
   const hasMachines = computed(() => connections.value.length > 0);
