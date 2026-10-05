@@ -29,6 +29,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="WeaveFleet.Api.Tests" />
     <InternalsVisibleTo Include="WeaveFleet.Infrastructure.Tests" />
     <InternalsVisibleTo Include="WeaveFleet.IntegrationTests" />
     <InternalsVisibleTo Include="WeaveFleet.ConformanceTests" />

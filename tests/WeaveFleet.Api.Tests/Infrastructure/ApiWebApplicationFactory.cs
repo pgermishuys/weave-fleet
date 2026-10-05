@@ -11,6 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Infrastructure.Machines;
 using WeaveFleet.Testing.Fakes;
 
 namespace WeaveFleet.Api.Tests.Infrastructure;
@@ -84,6 +85,15 @@ public sealed class ApiWebApplicationFactory(
         // Harness updates look versions up on npm; tests don't reach the network. A test can register its own.
         builder.ConfigureTestServices(services => services.AddSingleton<IHarnessUpdateService>(new FakeHarnessUpdateService()));
 
+        // Nor does the machine watcher: a listed machine's address can be real (a tailnet IP, even this computer's own
+        // Fleet). Its connections never answer, so a machine's status stays what the endpoints made it.
+        builder.ConfigureTestServices(services => services.AddSingleton(sp =>
+        {
+            var watcher = ActivatorUtilities.CreateInstance<RemoteMachineWatcher>(sp);
+            watcher.Handler = new SilentHandler();
+            return watcher;
+        }));
+
         if (configureTestServices is not null)
         {
             builder.ConfigureTestServices(configureTestServices);
@@ -115,6 +125,15 @@ public sealed class ApiWebApplicationFactory(
         Directory.CreateDirectory(_webRootPath);
         File.WriteAllText(Path.Combine(_webRootPath, "index.html"), "<html><body><div id=\"app\">Weave Fleet</div><script src=\"/app.js\"></script></body></html>");
         File.WriteAllText(Path.Combine(_webRootPath, "app.js"), "window.__fleetTest = true;");
+    }
+
+    private sealed class SilentHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            throw new OperationCanceledException(cancellationToken);
+        }
     }
 
     private static void TryDelete(string path)
