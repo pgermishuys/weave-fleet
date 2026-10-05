@@ -65,3 +65,45 @@ export async function savePublicUrl(publicUrl: string): Promise<void> {
   });
   if (!response.ok) throw new Error(await readError(response, "Couldn't save the phone address."));
 }
+
+/** A pairing code, by its QR secret or its typed form. */
+export type PairingCodeRef = { secret: string } | { manualCode: string };
+
+/** The machine a pairing code would connect to. */
+export interface PairingPreview {
+  machineId: string;
+  machineName: string;
+  os: string;
+  expiresAt: string;
+}
+
+/** What redeeming a code returns: the phone's own token for this machine, and who the machine is. */
+export interface PairingRedeemed {
+  deviceId: string;
+  token: string;
+  machine: { id: string; name: string; os: string; publicUrl?: string | null };
+}
+
+/** Thrown when the code is unknown, used or expired (404). */
+export class PairingCodeGoneError extends Error {}
+
+async function postPairing<T>(path: string, body: unknown): Promise<T> {
+  // Same origin, so the redeem's device cookie lands in this browser.
+  const response = await fetch(path, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (response.status === 404) throw new PairingCodeGoneError(await readError(response, "This code has expired or was already used."));
+  if (!response.ok) throw new Error(await readError(response, `Pairing failed (${response.status}).`));
+  return await response.json() as T;
+}
+
+export function previewPairing(code: PairingCodeRef): Promise<PairingPreview> {
+  return postPairing("/api/pairing/preview", code);
+}
+
+export function redeemPairing(code: PairingCodeRef, deviceName: string, platform: string): Promise<PairingRedeemed> {
+  return postPairing("/api/pairing/redeem", { ...code, deviceName, platform });
+}

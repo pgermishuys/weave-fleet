@@ -51,6 +51,11 @@ const countdown = computed(() => `${Math.floor(secondsLeft.value / 60)}:${String
 const insecure = computed(() => !!code.value && !supportsInstall(code.value.payload.url));
 
 async function start(baseUrl = phoneUrl.value || suggestedUrl.value || ""): Promise<void> {
+  if (!baseUrl) {
+    // Nothing a phone could open is known yet (a loopback page, no saved address): ask for it first.
+    editingUrl.value = true;
+    return;
+  }
   busy.value = true;
   error.value = null;
   connected.value = null;
@@ -124,7 +129,49 @@ onUnmounted(stopTimer);
     class="add-phone"
     data-testid="add-phone"
   >
-    <template v-if="!code">
+    <div
+      v-if="!code && editingUrl"
+      class="add-phone__card"
+    >
+      <h4 class="text-sm font-semibold text-text">
+        Which address will the phone open?
+      </h4>
+      <p class="mt-1 max-w-prose text-sm text-muted">
+        This page is on this computer only. Give the address a phone reaches {{ machineName }} at — with
+        <code>tailscale serve</code> that's its https://….ts.net address.
+      </p>
+      <form
+        class="mt-3 flex flex-wrap items-center gap-2"
+        @submit.prevent="saveUrl"
+      >
+        <input
+          v-model="phoneUrl"
+          :class="inputClass"
+          class="max-w-md"
+          type="url"
+          placeholder="https://hangar.tail9c2e.ts.net"
+          aria-label="Address the phone opens"
+          data-testid="add-phone-url"
+        >
+        <Button
+          type="submit"
+          size="sm"
+          :disabled="busy || !phoneUrl.trim()"
+        >
+          Show the code
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          type="button"
+          @click="editingUrl = false"
+        >
+          Cancel
+        </Button>
+      </form>
+    </div>
+
+    <template v-else-if="!code">
       <div class="flex flex-wrap items-center gap-3">
         <Button
           variant="outline"

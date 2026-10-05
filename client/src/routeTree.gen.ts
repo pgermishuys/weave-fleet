@@ -13,6 +13,7 @@ import { Route as WorkflowsRouteImport } from './routes/workflows'
 import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as RepositoriesRouteImport } from './routes/repositories'
+import { Route as PairRouteImport } from './routes/pair'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as GithubRouteImport } from './routes/github'
 import { Route as BoardRouteImport } from './routes/board'
@@ -46,6 +47,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const RepositoriesRoute = RepositoriesRouteImport.update({
   id: '/repositories',
   path: '/repositories',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PairRoute = PairRouteImport.update({
+  id: '/pair',
+  path: '/pair',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -128,6 +134,7 @@ export interface FileRoutesByFullPath {
   '/board': typeof BoardRoute
   '/github': typeof GithubRouteWithChildren
   '/login': typeof LoginRoute
+  '/pair': typeof PairRoute
   '/repositories': typeof RepositoriesRoute
   '/settings': typeof SettingsRoute
   '/welcome': typeof WelcomeRoute
@@ -147,6 +154,7 @@ export interface FileRoutesByTo {
   '/automations': typeof AutomationsRoute
   '/board': typeof BoardRoute
   '/login': typeof LoginRoute
+  '/pair': typeof PairRoute
   '/repositories': typeof RepositoriesRoute
   '/settings': typeof SettingsRoute
   '/welcome': typeof WelcomeRoute
@@ -167,6 +175,7 @@ export interface FileRoutesById {
   '/board': typeof BoardRoute
   '/github': typeof GithubRouteWithChildren
   '/login': typeof LoginRoute
+  '/pair': typeof PairRoute
   '/repositories': typeof RepositoriesRoute
   '/settings': typeof SettingsRoute
   '/welcome': typeof WelcomeRoute
@@ -189,6 +198,7 @@ export interface FileRouteTypes {
     | '/board'
     | '/github'
     | '/login'
+    | '/pair'
     | '/repositories'
     | '/settings'
     | '/welcome'
@@ -208,6 +218,7 @@ export interface FileRouteTypes {
     | '/automations'
     | '/board'
     | '/login'
+    | '/pair'
     | '/repositories'
     | '/settings'
     | '/welcome'
@@ -227,6 +238,7 @@ export interface FileRouteTypes {
     | '/board'
     | '/github'
     | '/login'
+    | '/pair'
     | '/repositories'
     | '/settings'
     | '/welcome'
@@ -248,6 +260,7 @@ export interface RootRouteChildren {
   BoardRoute: typeof BoardRoute
   GithubRoute: typeof GithubRouteWithChildren
   LoginRoute: typeof LoginRoute
+  PairRoute: typeof PairRoute
   RepositoriesRoute: typeof RepositoriesRoute
   SettingsRoute: typeof SettingsRoute
   WelcomeRoute: typeof WelcomeRoute
@@ -285,6 +298,13 @@ declare module '@tanstack/vue-router' {
       path: '/repositories'
       fullPath: '/repositories'
       preLoaderRoute: typeof RepositoriesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pair': {
+      id: '/pair'
+      path: '/pair'
+      fullPath: '/pair'
+      preLoaderRoute: typeof PairRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -424,6 +444,7 @@ const rootRouteChildren: RootRouteChildren = {
   BoardRoute: BoardRoute,
   GithubRoute: GithubRouteWithChildren,
   LoginRoute: LoginRoute,
+  PairRoute: PairRoute,
   RepositoriesRoute: RepositoriesRoute,
   SettingsRoute: SettingsRoute,
   WelcomeRoute: WelcomeRoute,

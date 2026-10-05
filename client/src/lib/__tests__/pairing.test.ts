@@ -3,6 +3,8 @@ import {
   choosePhoneBaseUrl,
   decodePairingFragment,
   encodePairingPayload,
+  guessDeviceName,
+  guessPlatform,
   isLoopbackHost,
   normalizeManualCode,
   pairingUrl,
@@ -90,5 +92,27 @@ describe("helpers", () => {
     expect(normalizeManualCode("oil0-1234")).toBe("0110-1234");
     expect(normalizeManualCode("ABCD-EFG")).toBeNull();
     expect(normalizeManualCode("ABCD-EFGU")).toBeNull();
+  });
+});
+
+describe("guessing the device", () => {
+  const iphone = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+  const pixel = "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Mobile Safari/537.36";
+  const reduced = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Mobile Safari/537.36";
+  const ipad = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15";
+
+  it("names the phone", () => {
+    expect(guessDeviceName(iphone)).toBe("iPhone");
+    expect(guessDeviceName(pixel)).toBe("Pixel 9");
+    expect(guessDeviceName(reduced)).toBe("Android phone");
+    expect(guessDeviceName(ipad, 5)).toBe("iPad");
+    expect(guessDeviceName(ipad, 0)).toBe("Phone");
+  });
+
+  it("knows the platform", () => {
+    expect(guessPlatform(iphone)).toBe("ios");
+    expect(guessPlatform(ipad, 5)).toBe("ios");
+    expect(guessPlatform(pixel)).toBe("android");
+    expect(guessPlatform(ipad)).toBe("other");
   });
 });

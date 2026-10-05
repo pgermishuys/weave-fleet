@@ -109,3 +109,25 @@ export function normalizeManualCode(typed: string): string | null {
   if (!/^[0-9A-HJKMNP-TV-Z]{8}$/.test(compact)) return null;
   return `${compact.slice(0, 4)}-${compact.slice(4)}`;
 }
+
+/** `ios`, `android` or `other`, from a user agent. iPadOS reports itself as a Mac but has touch. */
+export function guessPlatform(userAgent: string, maxTouchPoints = 0): "ios" | "android" | "other" {
+  if (/iPhone|iPad|iPod/.test(userAgent)) return "ios";
+  if (/Macintosh/.test(userAgent) && maxTouchPoints > 1) return "ios";
+  if (/Android/.test(userAgent)) return "android";
+  return "other";
+}
+
+/** A first guess at what to call this phone: its model where the user agent says (Android), else its kind. */
+export function guessDeviceName(userAgent: string, maxTouchPoints = 0): string {
+  if (/iPad/.test(userAgent) || (/Macintosh/.test(userAgent) && maxTouchPoints > 1)) return "iPad";
+  if (/iPhone/.test(userAgent)) return "iPhone";
+  const android = /Android [\d.]+; ([^;)]+?)(?: Build\/[^;)]*)?\)/.exec(userAgent);
+  if (android) {
+    const model = android[1].trim();
+    // Chrome's reduced user agent hides the model behind "K".
+    return model && model !== "K" ? model : "Android phone";
+  }
+  if (/Android/.test(userAgent)) return "Android phone";
+  return "Phone";
+}
