@@ -12,6 +12,7 @@ const mockHubConnection = {
   invoke: vi.fn(),
   on: vi.fn(),
   onreconnected: vi.fn(),
+  onreconnecting: vi.fn(),
   onclose: vi.fn(),
 }
 
