@@ -7,6 +7,7 @@ import { createModelSelectionKey } from "@/composables/use-models";
 import { addDraftTerminalContext, clearDraftTerminalContext } from "@/composables/use-draft-terminal-context";
 import { _resetSideConversationsForTesting, useSideConversation } from "@/composables/use-side-conversation";
 import { readStoredDraft } from "@/lib/draft-storage";
+import { pickedFileTokens, resetFileReferences } from "@/lib/composer-references";
 import { forgetHarnessLists } from "@/composables/use-harnesses";
 
 vi.mock("@/api/client", () => ({
@@ -528,6 +529,54 @@ describe("Composer", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const promptCall = (mockApi.POST.mock.calls as any[]).find(([url]) => url === "/api/sessions/{id}/prompt");
     expect((promptCall?.[1]?.body as { text?: string }).text).toBe("look at @src/app.ts and @docs/ please");
+  });
+
+  it("edits a file picked from the @ list as one piece: Backspace takes it out whole, the arrows step over it", async () => {
+    resetFileReferences();
+    localStorage.clear();
+    const answerOthers = mockApi.GET.getMockImplementation() as (url: string, init: unknown) => unknown;
+    mockApi.GET.mockImplementation(async (url: string, init: unknown) => url === "/api/sessions/{id}/find/files"
+      ? { data: { sessionId: "session-1", files: ["src/main.ts"] }, error: undefined, response: new Response() } as never
+      : answerOthers(url, init) as never);
+    const wrapper = mountComposer();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+    const element = textarea.element as HTMLTextAreaElement;
+    const press = (key: string) => {
+      const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+      element.dispatchEvent(event);
+      return event;
+    };
+
+    await textarea.setValue("look at @main");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await flushPromises();
+    press("Enter");
+    await flushPromises();
+    expect(element.value).toBe("look at @src/main.ts ");
+    expect(pickedFileTokens("session-1")).toEqual(new Set(["@src/main.ts"]));
+
+    // The first Backspace takes the space; the reference stays one, the caret at its end.
+    await textarea.setValue("look at @src/main.ts");
+    expect(wrapper.findAll(".composer-reference").map((reference) => reference.text())).toEqual(["@src/main.ts"]);
+
+    const backspace = press("Backspace");
+    expect(backspace.defaultPrevented).toBe(false);
+    expect([element.selectionStart, element.selectionEnd]).toEqual([8, 20]);
+
+    element.setSelectionRange(20, 20);
+    expect(press("ArrowLeft").defaultPrevented).toBe(true);
+    expect(element.selectionStart).toBe(8);
+    expect(press("ArrowRight").defaultPrevented).toBe(true);
+    expect(element.selectionStart).toBe(20);
+
+    // A click inside lands on the nearer edge.
+    element.setSelectionRange(11, 11);
+    await textarea.trigger("click");
+    expect(element.selectionStart).toBe(8);
+
+    // Once it's gone, typing the same path again is plain typing.
+    await textarea.setValue("look at ");
+    expect(pickedFileTokens("session-1")).toEqual(new Set());
   });
 
   it("does not intercept Shift+Enter and does not render autocomplete when sessionId is blank", async () => {

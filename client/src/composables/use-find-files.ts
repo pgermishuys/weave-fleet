@@ -1,5 +1,6 @@
 import { computed, onUnmounted, readonly, ref, shallowRef, toValue, watch, type MaybeRefOrGetter, type Ref, type ShallowRef } from "vue";
 import { api } from "@/api/client";
+import { narrowFileMatches } from "@/lib/file-matches";
 
 interface FindFilesResponse {
   sessionId: string;
@@ -12,19 +13,29 @@ export interface UseFindFilesResult {
   error: Readonly<ShallowRef<string | undefined>>;
 }
 
-const SEARCH_DEBOUNCE_MS = 300;
+/** Short: the list already follows each key from the last answer, so this only spares the server a burst of typing. */
+const SEARCH_DEBOUNCE_MS = 80;
 
 /**
  * Files and folders in the session's directory; folders end in "/". A null query asks for nothing.
  * An empty query, or one ending in "/", lists that folder straight away; anything else is a search,
- * debounced while typing.
+ * debounced while typing. Until the answer comes, the last one is narrowed to what still matches the query.
  */
 export function useFindFiles(sessionId: MaybeRefOrGetter<string | null | undefined>, query: MaybeRefOrGetter<string | null>): UseFindFilesResult {
-  const files = ref<string[]>([]);
+  // The server's last answer, and the query it answers.
+  const answer = ref<{ query: string; files: string[] }>({ query: "", files: [] });
   const isLoading = shallowRef(false);
   const error = shallowRef<string | undefined>(undefined);
   const currentSessionId = computed(() => toValue(sessionId)?.trim() ?? "");
   const currentQuery = computed(() => toValue(query));
+  const files = computed<readonly string[]>(() => {
+    const typed = currentQuery.value?.trim();
+    if (typed === undefined) {
+      return [];
+    }
+
+    return typed === answer.value.query ? answer.value.files : narrowFileMatches(answer.value.files, typed);
+  });
 
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   let controller: AbortController | undefined;
@@ -53,16 +64,20 @@ export function useFindFiles(sessionId: MaybeRefOrGetter<string | null | undefin
     }
 
     const responseData = data as unknown as FindFilesResponse;
-    files.value = Array.isArray(responseData.files) ? responseData.files : [];
+    answer.value = { query: trimmedQuery, files: Array.isArray(responseData.files) ? responseData.files : [] };
   }
 
   watch(
     [currentSessionId, currentQuery],
-    ([activeSessionId, nextQuery]) => {
+    ([activeSessionId, nextQuery], previous) => {
       cleanupPending();
+      // Another session's files say nothing about this one's.
+      if (previous && previous[0] !== activeSessionId) {
+        answer.value = { query: "", files: [] };
+      }
 
       if (!activeSessionId || nextQuery === null) {
-        files.value = [];
+        answer.value = { query: "", files: [] };
         isLoading.value = false;
         error.value = undefined;
         return;
@@ -104,7 +119,7 @@ export function useFindFiles(sessionId: MaybeRefOrGetter<string | null | undefin
   });
 
   return {
-    files: readonly(files),
+    files,
     isLoading: readonly(isLoading),
     error: readonly(error),
   };

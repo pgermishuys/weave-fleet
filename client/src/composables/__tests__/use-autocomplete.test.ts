@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { shallowRef, type Ref } from "vue";
 import type { SessionListItem } from "@/api/client";
 import { useAutocomplete } from "@/composables/use-autocomplete";
 import { resetSessionReferences, sessionReferencesIn } from "@/lib/session-references";
+import { pickedFileTokens, resetFileReferences } from "@/lib/composer-references";
 import { flushAll, mountComposable } from "./test-utils";
 
 const { mockApi } = vi.hoisted(() => ({
@@ -129,6 +130,9 @@ function findFilesQuery(q: string) {
   return expect.objectContaining({ params: expect.objectContaining({ query: { q } }) });
 }
 
+// Unmounted after each test: one left mounted would answer to the next test's changes (picked files, say).
+const unmounts: (() => void)[] = [];
+
 async function mountAutocomplete(
   initialValue: string,
   cursor: number,
@@ -152,6 +156,7 @@ async function mountAutocomplete(
     cursorPosition,
     sessions,
   }));
+  unmounts.push(() => mounted.wrapper.unmount());
 
   return {
     ...mounted,
@@ -162,11 +167,17 @@ async function mountAutocomplete(
 }
 
 describe("useAutocomplete", () => {
+  afterEach(() => {
+    unmounts.splice(0).forEach((unmount) => unmount());
+  });
+
   beforeEach(() => {
     apiFetchMock.mockReset();
     mockApi.GET.mockReset();
     configureApiFetch();
     globalHandlers.clear();
+    resetFileReferences();
+    window.localStorage.clear();
   });
 
   it("shows slash commands, filters them, and replaces the input on Enter", async () => {
@@ -228,7 +239,7 @@ describe("useAutocomplete", () => {
 
     expect(mockApi.GET).not.toHaveBeenCalledWith("/api/sessions/{id}/find/files", findFilesQuery("al"));
 
-    await vi.advanceTimersByTimeAsync(299);
+    await vi.advanceTimersByTimeAsync(79);
     expect(mockApi.GET).not.toHaveBeenCalledWith("/api/sessions/{id}/find/files", findFilesQuery("al"));
 
     await vi.advanceTimersByTimeAsync(1);
@@ -273,6 +284,8 @@ describe("useAutocomplete", () => {
 
     expect(tabEvent.defaultPrevented).toBe(true);
     expect(value.value).toBe("look at @src/components/");
+    // Opened to look inside, not picked.
+    expect(pickedFileTokens("instance-1")).toEqual(new Set());
     expect(cursorPosition.value).toBe(value.value.length);
     expect(result.isOpen.value).toBe(true);
     expect(mockApi.GET).toHaveBeenCalledWith("/api/sessions/{id}/find/files", findFilesQuery("src/components/"));
@@ -283,6 +296,60 @@ describe("useAutocomplete", () => {
 
     expect(value.value).toBe("look at @src/components/ ");
     expect(result.isOpen.value).toBe(false);
+    expect(pickedFileTokens("instance-1")).toEqual(new Set(["@src/components/"]));
+
+    // Backspace over the space after it: the reference is done, so the list stays shut.
+    value.value = "look at @src/components/";
+    cursorPosition.value = value.value.length;
+    await flushAll();
+    expect(result.isOpen.value).toBe(false);
+  });
+
+  it("holds Enter pressed before anything matches, and picks the first match when the answer comes", async () => {
+    vi.useFakeTimers();
+
+    const { result, value, cursorPosition } = await mountAutocomplete("look at @", 9);
+    await vi.advanceTimersByTimeAsync(0);
+    await flushAll();
+
+    value.value = "look at @zeta";
+    cursorPosition.value = value.value.length;
+    await flushAll();
+    expect(result.items.value).toEqual([]);
+
+    const enter = createKeyboardEvent("Enter");
+    result.onKeyDown(enter);
+    expect(enter.defaultPrevented).toBe(true);
+    expect(value.value).toBe("look at @zeta");
+
+    await vi.advanceTimersByTimeAsync(80);
+    await flushAll();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(value.value).toBe("look at @src/alpha.ts ");
+  });
+
+  it("narrows the last answer as you type, so the list and Enter follow each key before the server answers", async () => {
+    vi.useFakeTimers();
+
+    const { result, value, cursorPosition } = await mountAutocomplete("look at @", 9);
+    await vi.advanceTimersByTimeAsync(0);
+    await flushAll();
+    expect(result.items.value.filter((item) => item.group === "file").map((item) => item.label)).toEqual(["alpha.ts", "components/"]);
+
+    value.value = "look at @comp";
+    cursorPosition.value = value.value.length;
+    await flushAll();
+
+    expect(mockApi.GET).not.toHaveBeenCalledWith("/api/sessions/{id}/find/files", findFilesQuery("comp"));
+    expect(result.isLoading.value).toBe(true);
+    expect(result.items.value.map((item) => item.label)).toEqual(["components/"]);
+
+    result.onKeyDown(createKeyboardEvent("Enter"));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(value.value).toBe("look at @src/components/ ");
+    expect(pickedFileTokens("instance-1")).toEqual(new Set(["@src/components/"]));
   });
 
   it("doesn't search files while typing a slash command", async () => {

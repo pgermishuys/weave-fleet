@@ -28,7 +28,14 @@ import { useDraftAttachments } from "@/composables/use-draft-attachments";
 import { useDraftTerminalContext } from "@/composables/use-draft-terminal-context";
 import { describeSessionDefaults, modelFromKey } from "@/lib/agent-model-choice";
 import { formatTerminalContext, terminalLineRange } from "@/lib/format-terminal-context";
-import { splitDraftReferences } from "@/lib/composer-references";
+import {
+  caretOutsideReferences,
+  forgetFileReferencesNotIn,
+  pickedFileTokens,
+  pickedReferenceRanges,
+  referenceKeyAction,
+  splitDraftReferences,
+} from "@/lib/composer-references";
 import { rememberedSessionTokens, sessionReferencesIn } from "@/lib/session-references";
 import { useSendPrompt } from "@/composables/use-send-prompt";
 import { parseSlashCommand } from "@/lib/slash-command-utils";
@@ -516,7 +523,14 @@ watch(() => autocomplete.isMentionOpen.value, (open) => {
 });
 const draftSegments = computed(() => isShellMode.value
   ? [{ text: draft.text }]
-  : splitDraftReferences(draft.text, cursorPosition.value, rememberedSessionTokens(props.sessionId)));
+  : splitDraftReferences(draft.text, cursorPosition.value, rememberedSessionTokens(props.sessionId), pickedFileTokens(props.sessionId)));
+// References picked from the @ list are edited as one piece (see handleReferenceKey).
+const pickedRanges = computed(() => isShellMode.value
+  ? []
+  : pickedReferenceRanges(draft.text, rememberedSessionTokens(props.sessionId), pickedFileTokens(props.sessionId)));
+watch(() => draft.text, (text) => {
+  forgetFileReferencesNotIn(props.sessionId, text);
+}, { immediate: true });
 
 const selectedAgentId = computed({
   get: () => draft.agentId,
@@ -673,7 +687,43 @@ function handleInput(event: Event): void {
 
 function handleCursorPositionChange(event: Event): void {
   const target = event.target as HTMLTextAreaElement;
+  // A click (or a word jump) never leaves the caret inside a picked reference.
+  if (target.selectionStart === target.selectionEnd) {
+    const caret = caretOutsideReferences(target.selectionStart, pickedRanges.value);
+    if (caret !== target.selectionStart) {
+      target.setSelectionRange(caret, caret);
+    }
+  }
   cursorPosition.value = target.selectionStart ?? target.value.length;
+}
+
+/**
+ * Backspace and Delete next to a reference picked from the @ list select all of it and let the browser delete the
+ * selection, so it goes in one piece and Undo brings it back; the left and right arrows step over it. True when the
+ * key was about a reference.
+ */
+function handleReferenceKey(event: KeyboardEvent): boolean {
+  const isDelete = event.key === "Backspace" || event.key === "Delete";
+  // Shift+arrows select, and Cmd+Backspace deletes the whole line: those stay the browser's.
+  if (event.isComposing || event.metaKey || (!isDelete && (event.shiftKey || event.altKey || event.ctrlKey))) {
+    return false;
+  }
+
+  const target = event.target as HTMLTextAreaElement;
+  if (target.selectionStart !== target.selectionEnd) {
+    return false;
+  }
+
+  const action = referenceKeyAction(event.key, target.selectionStart, pickedRanges.value);
+  if (!action) {
+    return false;
+  }
+
+  if (action.preventDefault) {
+    event.preventDefault();
+  }
+  target.setSelectionRange(action.selectionStart, action.selectionEnd);
+  return true;
 }
 
 /**
@@ -887,6 +937,10 @@ function handleKeydown(event: KeyboardEvent): void {
   if (event.key === "Escape" && isShellMode.value) {
     event.preventDefault();
     setText(draft.text.slice(1));
+    return;
+  }
+
+  if (handleReferenceKey(event)) {
     return;
   }
 
