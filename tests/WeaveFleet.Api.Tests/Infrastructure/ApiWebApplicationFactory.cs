@@ -29,6 +29,9 @@ public sealed class ApiWebApplicationFactory(
     private readonly string _analyticsDbPath = Path.Combine(Path.GetTempPath(), $"fleet-api-tests-analytics-{Guid.NewGuid():N}.db");
     private readonly string _webRootPath = Path.Combine(Path.GetTempPath(), $"fleet-api-tests-wwwroot-{Guid.NewGuid():N}");
 
+    /// <summary>The temporary web root the app serves static files from.</summary>
+    public string WebRootPath => _webRootPath;
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         EnsureWebRootExists();

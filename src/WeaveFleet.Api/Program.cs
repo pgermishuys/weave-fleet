@@ -707,8 +707,13 @@ app.UseDefaultFiles(); // Serves index.html for "/"
 
 // Hashed assets (e.g. /assets/index-abc123.js) get immutable long-lived cache.
 // Everything else (index.html) gets no-cache so browsers always fetch the latest entry point.
+// The web app manifest needs its own type for browsers to offer to install Fleet. The service worker (/sw.js) is
+// unhashed and must never be cached stale, so it falls under no-cache; it may control the whole origin.
+var staticContentTypes = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
+staticContentTypes.Mappings[".webmanifest"] = "application/manifest+json";
 app.UseStaticFiles(new StaticFileOptions
 {
+    ContentTypeProvider = staticContentTypes,
     OnPrepareResponse = ctx =>
     {
         var path = ctx.Context.Request.Path.Value ?? string.Empty;
@@ -720,6 +725,9 @@ app.UseStaticFiles(new StaticFileOptions
         {
             ctx.Context.Response.Headers.CacheControl = "no-cache";
         }
+
+        if (string.Equals(path, "/sw.js", StringComparison.OrdinalIgnoreCase))
+            ctx.Context.Response.Headers["Service-Worker-Allowed"] = "/";
     },
 });
 
