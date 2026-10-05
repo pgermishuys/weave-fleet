@@ -766,6 +766,19 @@ Differences from the plan:
 - Findings and fixes are recorded here rather than in a PR description (the PR is the user's to open).
 - Task 28's real-device smoke tests (iPhone, Android, two machines over `tailscale serve`) need the user's devices.
 
+### After review: starting a session from the phone (2026-10-05)
+The plan left starting a session to the full Fleet (the mockups called it "a secondary path"). That would have been
+odd in a phone app, so it's in: `/phone/new`, reached from **+** in the inbox header and **New session** under
+Sessions. It's built from the desktop's own pieces pointed at the chosen machine (`provideMachineTarget`):
+`buildCreateSessionRequest`, `useCreateSession`, `useRepositories`, `useEnabledHarnesses`, `useHarnessCatalog` and
+`useNewSessionDefaults`, so a session started on the phone is the same request the desktop sends (the message is the
+first prompt) and picks up the phone's last choices for each machine. A session on another machine opens the way the
+inbox opens one there (page reload with the phone's key). No server change: devices could already create sessions.
+
+Also fixed: the phone's link to the full Fleet went to `/`, which sends the installed app straight back to `/phone`;
+it's `/?view=full` now. Not on the phone page: GitHub issues as a source, an existing worktree you haven't used from the
+phone before, harness profiles, attachments on the first message, a typed branch name.
+
 ## Risks and unknowns
 - **iOS**: no notification action buttons (tap → deep link only); push only for Home Screen apps on iOS 16.4+; permission request must be on a user gesture; Safari and Home Screen app storage may be separate → manual pairing code fallback (Task 6). Focus modes can silence pushes.
 - **Home machine single point of failure**: if home is down, no notifications for any machine; inbox shows remotes as unreachable. Documented; a push gateway is the future fix.

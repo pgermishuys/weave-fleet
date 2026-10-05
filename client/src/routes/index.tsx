@@ -11,6 +11,8 @@ export const Route = createFileRoute("/")({
  * isn't installed keeps the dashboard; the top bar links to the phone view.
  */
 export function opensAsPhoneApp(search: string, matches: (query: string) => boolean): boolean {
+  // The phone's "Open the full Fleet" asks for the dashboard itself.
+  if (new URLSearchParams(search).get("view") === "full") return false;
   const installed = matches("(display-mode: standalone)") || new URLSearchParams(search).get("source") === "pwa";
   return installed && matches("(max-width: 716px)");
 }

@@ -1,3 +1,4 @@
+using System.Net.Http.Json;
 using System.Text.Json;
 using WeaveFleet.E2E.Infrastructure;
 
@@ -83,5 +84,28 @@ public sealed class PhoneSessionTests(PhoneFleetWebApplicationFactory factory, P
             },
         }));
         await phone.GetByTestId("phone-composer").WaitForAsync(new LocatorWaitForOptions { Timeout = 15_000 });
+    }
+
+    [Fact]
+    public async Task A_new_session_starts_from_the_phone_and_opens()
+    {
+        var phone = await PhoneAsync();
+        await PairAsync(phone);
+
+        await phone.GotoAsync("/phone");
+        await phone.GetByTestId("phone-new-session-button").ClickAsync();
+        await phone.GetByTestId("phone-new-message").FillAsync("Find out why the reconnect test is flaky");
+        await phone.GetByTestId("phone-new-folder").ClickAsync();
+        await phone.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "No folder" }).ClickAsync();
+        await phone.GetByTestId("phone-new-start").ClickAsync();
+
+        await phone.WaitForURLAsync(new System.Text.RegularExpressions.Regex($"/phone/s/{MachineId}/[^/?]+$"), new PageWaitForURLOptions { Timeout = 15_000 });
+        await phone.GetByTestId("phone-session-header").Filter(new LocatorFilterOptions { HasText = "Find out why the reconnect test is flaky" })
+            .WaitForAsync(new LocatorWaitForOptions { Timeout = 15_000 });
+
+        var sessionId = phone.Url.Split('/').Last();
+        using var owner = OwnerClient();
+        var session = await owner.GetFromJsonAsync<JsonElement>($"/api/sessions/{sessionId}");
+        session.GetRawText().ShouldContain("Find out why the reconnect test is flaky");
     }
 }

@@ -26,6 +26,7 @@ import { Route as GithubIndexRouteImport } from './routes/github.index'
 import { Route as SessionsNewRouteImport } from './routes/sessions.new'
 import { Route as SessionsIdRouteImport } from './routes/sessions.$id'
 import { Route as PhoneSetupRouteImport } from './routes/phone.setup'
+import { Route as PhoneNewRouteImport } from './routes/phone.new'
 import { Route as PhoneAnsweredRouteImport } from './routes/phone.answered'
 import { Route as SettingsPluginsPluginIdRouteImport } from './routes/settings_.plugins.$pluginId'
 import { Route as GithubOwnerRepoRouteImport } from './routes/github.$owner.$repo'
@@ -119,6 +120,11 @@ const PhoneSetupRoute = PhoneSetupRouteImport.update({
   path: '/setup',
   getParentRoute: () => PhoneRoute,
 } as any)
+const PhoneNewRoute = PhoneNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => PhoneRoute,
+} as any)
 const PhoneAnsweredRoute = PhoneAnsweredRouteImport.update({
   id: '/answered',
   path: '/answered',
@@ -172,6 +178,7 @@ export interface FileRoutesByFullPath {
   '/welcome': typeof WelcomeRoute
   '/workflows': typeof WorkflowsRoute
   '/phone/answered': typeof PhoneAnsweredRoute
+  '/phone/new': typeof PhoneNewRoute
   '/phone/setup': typeof PhoneSetupRoute
   '/sessions/$id': typeof SessionsIdRoute
   '/sessions/new': typeof SessionsNewRoute
@@ -196,6 +203,7 @@ export interface FileRoutesByTo {
   '/welcome': typeof WelcomeRoute
   '/workflows': typeof WorkflowsRoute
   '/phone/answered': typeof PhoneAnsweredRoute
+  '/phone/new': typeof PhoneNewRoute
   '/phone/setup': typeof PhoneSetupRoute
   '/sessions/$id': typeof SessionsIdRoute
   '/sessions/new': typeof SessionsNewRoute
@@ -222,6 +230,7 @@ export interface FileRoutesById {
   '/welcome': typeof WelcomeRoute
   '/workflows': typeof WorkflowsRoute
   '/phone/answered': typeof PhoneAnsweredRoute
+  '/phone/new': typeof PhoneNewRoute
   '/phone/setup': typeof PhoneSetupRoute
   '/sessions/$id': typeof SessionsIdRoute
   '/sessions/new': typeof SessionsNewRoute
@@ -250,6 +259,7 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/workflows'
     | '/phone/answered'
+    | '/phone/new'
     | '/phone/setup'
     | '/sessions/$id'
     | '/sessions/new'
@@ -274,6 +284,7 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/workflows'
     | '/phone/answered'
+    | '/phone/new'
     | '/phone/setup'
     | '/sessions/$id'
     | '/sessions/new'
@@ -299,6 +310,7 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/workflows'
     | '/phone/answered'
+    | '/phone/new'
     | '/phone/setup'
     | '/sessions/$id'
     | '/sessions/new'
@@ -451,6 +463,13 @@ declare module '@tanstack/vue-router' {
       preLoaderRoute: typeof PhoneSetupRouteImport
       parentRoute: typeof PhoneRoute
     }
+    '/phone/new': {
+      id: '/phone/new'
+      path: '/new'
+      fullPath: '/phone/new'
+      preLoaderRoute: typeof PhoneNewRouteImport
+      parentRoute: typeof PhoneRoute
+    }
     '/phone/answered': {
       id: '/phone/answered'
       path: '/answered'
@@ -534,6 +553,7 @@ const GithubRouteWithChildren =
 
 interface PhoneRouteChildren {
   PhoneAnsweredRoute: typeof PhoneAnsweredRoute
+  PhoneNewRoute: typeof PhoneNewRoute
   PhoneSetupRoute: typeof PhoneSetupRoute
   PhoneIndexRoute: typeof PhoneIndexRoute
   PhoneSMachineIdSessionIdRoute: typeof PhoneSMachineIdSessionIdRoute
@@ -541,6 +561,7 @@ interface PhoneRouteChildren {
 
 const PhoneRouteChildren: PhoneRouteChildren = {
   PhoneAnsweredRoute: PhoneAnsweredRoute,
+  PhoneNewRoute: PhoneNewRoute,
   PhoneSetupRoute: PhoneSetupRoute,
   PhoneIndexRoute: PhoneIndexRoute,
   PhoneSMachineIdSessionIdRoute: PhoneSMachineIdSessionIdRoute,

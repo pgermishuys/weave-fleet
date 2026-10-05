@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from "vue";
 import { useRouter, useSearch } from "@tanstack/vue-router";
-import { Bell, LayoutDashboard, LoaderCircle } from "lucide-vue-next";
+import { Bell, LayoutDashboard, LoaderCircle, Plus } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import InboxAskRow from "@/components/phone/InboxAskRow.vue";
 import InboxSessionRow from "@/components/phone/InboxSessionRow.vue";
@@ -85,6 +85,15 @@ const homeName = computed(() => readCredentialsSync()?.homeMachineName ?? machin
         Fleet
       </h1>
       <span class="inbox__sub">{{ machineCount }} machine{{ machineCount === 1 ? "" : "s" }}</span>
+      <Button
+        variant="toolbar-icon"
+        size="icon"
+        aria-label="New session"
+        data-testid="phone-new-session-button"
+        @click="router.navigate({ to: '/phone/new' })"
+      >
+        <Plus :size="20" />
+      </Button>
       <Button
         variant="toolbar-icon"
         size="icon"
@@ -202,13 +211,21 @@ const homeName = computed(() => readCredentialsSync()?.homeMachineName ?? machin
           No sessions in the last month.
         </p>
         <Button
-          as="a"
-          href="/"
-          variant="outline"
           class="mt-2 h-11 w-full"
+          data-testid="phone-sessions-new"
+          @click="router.navigate({ to: '/phone/new' })"
+        >
+          <Plus aria-hidden="true" />
+          New session
+        </Button>
+        <Button
+          as="a"
+          href="/?view=full"
+          variant="outline"
+          class="h-11 w-full"
         >
           <LayoutDashboard aria-hidden="true" />
-          Open the full Fleet to start a session
+          Open the full Fleet
         </Button>
       </template>
 

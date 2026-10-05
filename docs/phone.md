@@ -74,7 +74,11 @@ If home is off or unreachable, notifications stop for every machine, and the inb
 
 - **Needs you**: everything waiting on you on every machine, newest first. Allow once or answer a question from the
   list, or **More…** for every choice. Then what's working and what finished today.
-- **Sessions**: everything from the last month. Starting a session is for the full Fleet (the link at the bottom).
+- **Sessions**: everything from the last month, and **Open the full Fleet** for anything the phone view doesn't do.
+- **New session** (**+** at the top, or the button under Sessions): say what the agent should do, then pick the
+  machine (home or any machine the phone has a key for), the folder (recent ones first, then the machine's
+  repositories, or no folder), where in a repository (a new worktree or the folder itself), the harness, agent and
+  model. They start where you left them last time on that machine. **Start** opens the session.
 - **Machines**: which machines the phone reaches, and why not when it can't.
 - **A session**: the header says the machine and what it's doing. Each run of tool calls is one row ("Read 4 files ·
   edited 1"); tap it for the steps and a step for its diff or output. When the agent asks, the ask replaces the
