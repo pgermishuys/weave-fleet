@@ -8,6 +8,7 @@ import { MachineFeed, type FeedSnapshot } from "@/lib/phone/machine-feed";
 import {
   permissionAnswerRequest,
   questionAnswerRequest,
+  retentionRequest,
   sendAnswer,
   type AnswerOutcome,
   type AnswerTarget,
@@ -135,6 +136,20 @@ export function useInbox() {
     return outcome;
   }
 
+  /** Archives a session on its own machine (swiped away), or brings it back (Undo). */
+  async function setArchived(machineId: string, sessionId: string, archived: boolean): Promise<AnswerOutcome> {
+    const target = targetFor(machineId);
+    if (!target) return { ok: false, gone: false, error: "This phone has no key for that machine." };
+    const outcome = await sendAnswer(retentionRequest(target, sessionId, archived));
+    void refreshMachine(machineId);
+    return outcome;
+  }
+
+  /** Asks every machine again (pull to refresh). */
+  async function refreshAll(): Promise<void> {
+    await Promise.all(entries.value.map((entry) => entry.feed?.refresh()));
+  }
+
   function onVisibility(): void {
     if (document.visibilityState === "hidden") {
       hiddenSince = Date.now();
@@ -160,5 +175,5 @@ export function useInbox() {
     void close();
   });
 
-  return { inbox, machines, loading, now, open, answerPermission, answerQuestion, targetFor, refreshMachine };
+  return { inbox, machines, loading, now, open, answerPermission, answerQuestion, setArchived, refreshAll, targetFor, refreshMachine };
 }

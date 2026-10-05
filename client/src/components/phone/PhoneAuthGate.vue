@@ -49,13 +49,13 @@ onMounted(async () => {
   <slot v-if="state === 'ready'" />
   <div
     v-else
-    class="phone-gate"
+    class="ph-page phone-gate"
     :role="state === 'error' ? 'alert' : 'status'"
   >
     <LoaderCircle
       v-if="state === 'checking'"
-      class="animate-spin"
-      :size="20"
+      class="ph-spinner"
+      :size="22"
       aria-hidden="true"
     />
     <span v-else>{{ message }}</span>
@@ -65,10 +65,9 @@ onMounted(async () => {
 <style scoped>
 .phone-gate {
   display: grid;
-  flex: 1;
   place-items: center;
-  padding: 24px;
   color: var(--muted);
+  font-size: var(--ph-t-body);
   text-align: center;
 }
 </style>

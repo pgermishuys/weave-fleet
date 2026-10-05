@@ -1,0 +1,2060 @@
+/*
+ * Fleet on your phone: the native layer. Ported from the approved mockups (mockups/phone-native/native.css) and
+ * built on Fleet's tokens (main.css). Everything is scoped to html[data-phone] — set only while a phone page is on
+ * screen — so the desktop app never sees any of it. data-phone is the look ("ios" or "android"); data-phone-scheme
+ * is whether the Fleet theme is light or dark, for the few values tokens don't carry (glass, pressed, fills).
+ */
+
+/* ── Native layer tokens, derived from Fleet's ─────────────────────────── */
+html[data-phone] {
+  --ph-sheet-bg: var(--card-bg);
+  --ph-grouped-bg: var(--card-bg);
+  --ph-grouped-in-sheet: color-mix(in srgb, var(--text) 6%, var(--card-bg));
+  --ph-pressed: rgba(255, 255, 255, 0.08);
+  --ph-fill: rgba(255, 255, 255, 0.08);
+  --ph-fill-strong: rgba(255, 255, 255, 0.14);
+  --ph-code-bg: rgba(255, 255, 255, 0.06);
+  --ph-separator: var(--border);
+  --ph-glass-bg: color-mix(in srgb, var(--card-bg) 88%, transparent);
+  --ph-glass-edge: rgba(255, 255, 255, 0.14);
+  --ph-glass-shine: rgba(255, 255, 255, 0.1);
+  --ph-glass-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  --ph-scrim: rgba(0, 0, 0, 0.5);
+  --ph-chrome-behind: #000;
+  --ph-switch-off: rgba(120, 120, 128, 0.36);
+  --ph-btn-fg: color-mix(in srgb, var(--accent) 55%, #fff);
+  --ph-btn-bg: color-mix(in srgb, var(--accent) 22%, transparent);
+  --ph-press-filter: brightness(1.2);
+  --ph-kb-bg: #2c2c2e;
+
+  /* Type: iOS text styles in rem of a 17px body, so the phone's text size scales all of it */
+  --ph-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", Roboto, "Inter Variable", "Inter", "Segoe UI", system-ui, sans-serif;
+  --ph-mono: ui-monospace, "SF Mono", "JetBrains Mono Variable", "JetBrains Mono", "Roboto Mono", Menlo, monospace;
+  --ph-t-large: 2rem; /* 34 */
+  --ph-t-title2: 1.294rem; /* 22 */
+  --ph-t-title3: 1.176rem; /* 20 */
+  --ph-t-body: 1rem; /* 17 */
+  --ph-t-callout: 0.941rem; /* 16 */
+  --ph-t-sub: 0.882rem; /* 15 */
+  --ph-t-foot: 0.765rem; /* 13 */
+  --ph-t-cap: 0.706rem; /* 12 */
+  --ph-t-cap2: 0.647rem; /* 11 */
+
+  /* Motion: the iOS sheet/push curve and a quick settle */
+  --ph-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --ph-ease-out: cubic-bezier(0.2, 0.9, 0.3, 1);
+
+  /* Metrics */
+  --ph-safe-top: env(safe-area-inset-top, 0px);
+  --ph-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --ph-safe-left: env(safe-area-inset-left, 0px);
+  --ph-safe-right: env(safe-area-inset-right, 0px);
+  --ph-nav-h: 52px;
+  --ph-tab-h: 64px;
+  --ph-kb: 0px;
+
+  /* Radii: rounder than the desktop's, as the phones draw them */
+  --ph-r-card: 14px;
+  --ph-r-ask: 18px;
+  --ph-r-dock: 22px;
+  --ph-r-sheet: 28px;
+  --ph-r-floating: 34px;
+  --ph-r-pill: 999px;
+}
+
+html[data-phone][data-phone-scheme="light"] {
+  --ph-sheet-bg: var(--main-bg);
+  --ph-grouped-bg: var(--card-bg);
+  --ph-grouped-in-sheet: var(--card-bg);
+  --ph-pressed: rgba(26, 25, 24, 0.07);
+  --ph-fill: rgba(26, 25, 24, 0.06);
+  --ph-fill-strong: rgba(26, 25, 24, 0.1);
+  --ph-code-bg: rgba(26, 25, 24, 0.05);
+  --ph-separator: rgba(26, 25, 24, 0.12);
+  --ph-glass-bg: color-mix(in srgb, var(--card-bg) 92%, transparent);
+  --ph-glass-edge: rgba(255, 255, 255, 0.9);
+  --ph-glass-shine: rgba(255, 255, 255, 0.7);
+  --ph-glass-shadow: 0 8px 28px rgba(26, 25, 24, 0.14), 0 0 0 0.5px rgba(26, 25, 24, 0.08);
+  --ph-scrim: rgba(0, 0, 0, 0.32);
+  --ph-switch-off: rgba(120, 120, 128, 0.2);
+  --ph-btn-fg: var(--accent);
+  --ph-btn-bg: var(--accent-dim);
+  --ph-press-filter: brightness(0.92);
+  --ph-kb-bg: #d1d3d9;
+}
+
+html[data-phone="android"] {
+  --ph-nav-h: 64px;
+  --ph-tab-h: 80px;
+  --ph-font: Roboto, "Google Sans", "Inter Variable", "Inter", system-ui, sans-serif;
+}
+
+/* ── Page frame ─────────────────────────────────────────────────────────── */
+html[data-phone] {
+  font-size: 17px;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* iPhone: the body text style follows the phone's text size (Dynamic Type), and everything is rem of it. */
+@supports (font: -apple-system-body) {
+  html[data-phone] {
+    font: -apple-system-body;
+  }
+}
+
+html[data-phone],
+html[data-phone] body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: var(--ph-chrome-behind);
+}
+
+html[data-phone] body {
+  font-family: var(--ph-font);
+  line-height: 1.3;
+  -webkit-font-smoothing: antialiased;
+}
+
+html[data-phone] * {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html[data-phone] button,
+html[data-phone] .ph-press,
+html[data-phone] .ph-row,
+html[data-phone] .ph-tab,
+html[data-phone] .ph-navbtn {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+}
+
+html[data-phone] input,
+html[data-phone] textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* The app follows the visual viewport, so nothing hides under the keyboard. */
+.ph-app {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: var(--ph-vvh, 100%);
+  overflow: hidden;
+  transform: translateY(var(--ph-vvtop, 0px));
+  color: var(--text);
+  font-family: var(--ph-font);
+}
+
+.ph-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--main-bg);
+  transform-origin: 50% 0;
+  will-change: transform;
+}
+
+.ph-overlays {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+}
+
+.ph-overlays > * {
+  pointer-events: auto;
+}
+
+/* A plain page (pairing, answered): scrolls by itself inside the safe areas. */
+.ph-page {
+  position: absolute;
+  inset: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  padding: calc(var(--ph-safe-top) + 12px) calc(var(--ph-safe-right) + 0px) calc(var(--ph-safe-bottom) + 24px) calc(var(--ph-safe-left) + 0px);
+  background: var(--main-bg);
+}
+
+/* ── Screens: the navigation stack ──────────────────────────────────────── */
+.ph-screen {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--main-bg);
+  contain: layout paint;
+}
+
+.ph-screen--pushed {
+  box-shadow: -0.5px 0 0 var(--border), -10px 0 30px rgba(0, 0, 0, 0.12);
+}
+
+.ph-screen--hidden {
+  visibility: hidden;
+}
+
+.ph-screen__dim {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ph-scroller {
+  position: absolute;
+  inset: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  padding-top: calc(var(--ph-safe-top) + var(--ph-nav-h));
+  padding-bottom: calc(var(--ph-tab-h) + var(--ph-safe-bottom) + 28px);
+  scrollbar-width: none;
+}
+
+.ph-scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.ph-scroller__inner {
+  will-change: transform;
+}
+
+/* ── Nav bar ────────────────────────────────────────────────────────────── */
+.ph-navbar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: calc(var(--ph-safe-top) + var(--ph-nav-h));
+  padding: var(--ph-safe-top) 8px 0;
+  pointer-events: none;
+}
+
+.ph-navbar > * {
+  pointer-events: auto;
+}
+
+/* iOS 26 "scroll edge": content softly blurs and fades under the bar instead of a hairline. */
+.ph-navbar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: -18px;
+  left: 0;
+  z-index: -1;
+  background: linear-gradient(to bottom, var(--main-bg) 0%, var(--main-bg) 80%, transparent 100%);
+  opacity: 0;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  -webkit-mask-image: linear-gradient(to bottom, #000 82%, transparent);
+  mask-image: linear-gradient(to bottom, #000 82%, transparent);
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+
+.ph-navbar--scrolled::before,
+.ph-navbar--solid::before {
+  opacity: 1;
+}
+
+.ph-navbar__title {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: var(--ph-nav-h);
+  padding: 0 110px;
+  font-size: var(--ph-t-body);
+  font-weight: 600;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s;
+}
+
+.ph-navbar__title span {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ph-navbar--scrolled .ph-navbar__title,
+.ph-navbar--titled .ph-navbar__title {
+  opacity: 1;
+}
+
+.ph-navbar__spacer {
+  flex: 1;
+}
+
+/* Glass circle buttons (iOS 26) */
+.ph-navbtn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 22px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.25s var(--ph-ease-out), background 0.2s;
+}
+
+.ph-glass {
+  background: var(--ph-glass-bg);
+  -webkit-backdrop-filter: blur(24px) saturate(190%);
+  backdrop-filter: blur(24px) saturate(190%);
+  box-shadow: inset 0 0 0 0.5px var(--ph-glass-edge), inset 0 1px 0 var(--ph-glass-shine), var(--ph-glass-shadow);
+}
+
+.ph-navbtn.ph-glass {
+  box-shadow: inset 0 0 0 0.5px var(--ph-glass-edge), inset 0 1px 0 var(--ph-glass-shine), 0 2px 10px rgba(0, 0, 0, 0.08);
+}
+
+.ph-navbtn-group {
+  display: inline-flex;
+  border-radius: 22px;
+}
+
+.ph-navbtn-group .ph-navbtn {
+  background: none;
+  box-shadow: none;
+}
+
+.ph-navbtn.is-pressed {
+  background: var(--ph-fill-strong);
+  transform: scale(0.9);
+}
+
+.ph-navbtn--text {
+  padding: 0 16px;
+  font-size: var(--ph-t-body);
+  font-weight: 600;
+}
+
+.ph-navbtn--accent {
+  color: var(--accent);
+}
+
+.ph-navbtn--primary {
+  background: var(--accent);
+  box-shadow: none;
+  color: #fff;
+}
+
+.ph-navbtn:disabled {
+  opacity: 0.45;
+}
+
+/* Large title */
+.ph-large-title {
+  padding: 2px 20px 10px;
+  transform-origin: 0 50%;
+  will-change: transform;
+}
+
+.ph-large-title h1 {
+  margin: 0;
+  font-size: var(--ph-t-large);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+}
+
+.ph-large-title p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 3px 0 0;
+  font-size: var(--ph-t-sub);
+  color: var(--muted);
+}
+
+/* ── Tab bar ────────────────────────────────────────────────────────────── */
+.ph-tabbar {
+  position: absolute;
+  right: 20px;
+  bottom: calc(max(var(--ph-safe-bottom), 10px) + 4px);
+  left: 20px;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  height: var(--ph-tab-h);
+  padding: 4px;
+  border-radius: 32px;
+  transition: transform 0.35s var(--ph-ease), opacity 0.2s;
+}
+
+.ph-tab {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 0;
+  border: 0;
+  border-radius: 28px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--ph-t-cap2);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: transform 0.25s var(--ph-ease-out), background 0.2s, color 0.2s;
+}
+
+.ph-tab svg {
+  width: 26px;
+  height: 26px;
+}
+
+.ph-tab__ic {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.ph-tab--on {
+  background: var(--ph-fill);
+  color: var(--accent);
+}
+
+.ph-tab.is-pressed {
+  transform: scale(0.92);
+}
+
+.ph-tab .ph-badge {
+  position: absolute;
+  top: -8px;
+  left: calc(50% + 6px);
+}
+
+.ph-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--error);
+  box-shadow: 0 0 0 2px var(--main-bg);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+
+.ph-badge--amber {
+  background: var(--idle);
+}
+
+/* ── Sections and grouped lists ─────────────────────────────────────────── */
+.ph-section-h {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 14px 20px 8px;
+  font-size: var(--ph-t-title3);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.ph-section-h small {
+  font-size: var(--ph-t-sub);
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.ph-group-h {
+  margin: 22px 32px 7px;
+  font-size: var(--ph-t-foot);
+  color: var(--muted);
+}
+
+.ph-group-f {
+  margin: 7px 32px 0;
+  font-size: var(--ph-t-foot);
+  line-height: 1.38;
+  color: var(--muted);
+}
+
+.ph-group {
+  position: relative;
+  margin: 0 16px;
+  overflow: hidden;
+  border-radius: var(--ph-r-card);
+  background: var(--ph-grouped-bg);
+}
+
+.ph-sheet .ph-group {
+  background: var(--ph-grouped-in-sheet);
+}
+
+.ph-group + .ph-group,
+.ph-group-f + .ph-group,
+.ph-group + .ph-group-h {
+  margin-top: 22px;
+}
+
+.ph-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 11px 16px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.ph-row + .ph-row::before,
+.ph-row-wrap + .ph-row-wrap .ph-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: var(--ph-sep-left, 16px);
+  height: 0.5px;
+  background: var(--ph-separator);
+}
+
+.ph-row.is-pressed {
+  background: var(--ph-pressed);
+  transition: none;
+}
+
+.ph-row:disabled {
+  cursor: default;
+}
+
+.ph-row__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.ph-row__title {
+  overflow: hidden;
+  font-size: var(--ph-t-body);
+  line-height: 1.25;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ph-row__title--wrap,
+.ph-row__sub--wrap {
+  white-space: normal;
+}
+
+.ph-row__sub {
+  margin-top: 2px;
+  overflow: hidden;
+  font-size: var(--ph-t-sub);
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ph-row__value {
+  max-width: 55%;
+  overflow: hidden;
+  font-size: var(--ph-t-body);
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ph-row__chev {
+  flex: none;
+  margin-right: -4px;
+  color: color-mix(in srgb, var(--muted) 70%, transparent);
+}
+
+.ph-row__check {
+  flex: none;
+  color: var(--accent);
+}
+
+.ph-row--accent .ph-row__title {
+  color: var(--accent);
+}
+
+.ph-row--danger .ph-row__title {
+  color: var(--error);
+}
+
+.ph-row__icon {
+  display: grid;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 8px;
+  color: #fff;
+}
+
+.ph-row__icon--plain {
+  background: none;
+  color: var(--accent);
+}
+
+/* Status glyphs: colour only where attention is needed, as on the desktop. */
+.ph-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.ph-dot--sm {
+  width: 8px;
+  height: 8px;
+}
+
+.ph-dot--running {
+  background: var(--running);
+  animation: ph-pulse 2s infinite;
+}
+
+.ph-dot--waiting {
+  background: var(--idle);
+}
+
+.ph-dot--done {
+  background: var(--complete);
+}
+
+.ph-dot--error {
+  background: var(--error);
+}
+
+.ph-dot--live {
+  background: var(--running);
+}
+
+@keyframes ph-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--running) 45%, transparent);
+  }
+
+  70% {
+    box-shadow: 0 0 0 7px transparent;
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.ph-machine {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--ph-t-foot);
+  font-weight: 500;
+  color: var(--muted);
+}
+
+/* ── Ask cards ──────────────────────────────────────────────────────────── */
+.ph-ask {
+  position: relative;
+  margin: 0 16px 12px;
+  padding: 14px 16px 16px;
+  overflow: hidden;
+  border-radius: var(--ph-r-ask);
+  background: var(--ph-grouped-bg);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--idle) 40%, transparent);
+  transition: transform 0.25s var(--ph-ease-out), opacity 0.25s;
+}
+
+.ph-ask--error {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--error) 40%, transparent);
+}
+
+.ph-ask--stale {
+  opacity: 0.6;
+}
+
+.ph-ask__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--ph-t-foot);
+  color: var(--muted);
+}
+
+.ph-ask__meta > span:last-child {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ph-ask__title {
+  display: block;
+  margin: 6px 0 2px;
+  font-size: var(--ph-t-body);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.ph-ask__what {
+  display: block;
+  margin-bottom: 10px;
+  font-size: var(--ph-t-sub);
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.ph-ask__what b {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ph-ask__open {
+  display: block;
+  width: calc(100% + 12px);
+  margin: -4px -6px 0;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.ph-ask__open.is-pressed {
+  background: var(--ph-pressed);
+  transition: none;
+}
+
+.ph-ask__result {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: var(--ph-t-sub);
+  font-weight: 500;
+  color: var(--running);
+}
+
+.ph-ask__result--bad {
+  color: var(--error);
+}
+
+.ph-code {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--ph-code-bg);
+  color: var(--text);
+  font-family: var(--ph-mono);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.ph-code--one {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ph-code--wrap {
+  white-space: normal;
+  overflow-wrap: normal;
+}
+
+/* A command wraps only between its words; a word longer than the line may still break. */
+.ph-word {
+  white-space: pre;
+}
+
+.ph-code--wrap .ph-word {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ph-code .ph-prompt {
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.ph-clamp3 {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.ph-chip-code {
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--ph-code-bg);
+  font-family: var(--ph-mono);
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+/* ── Buttons: capsules, tinted secondary (no outlined boxes) ────────────── */
+.ph-btns {
+  display: grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ph-btns--q {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-auto-columns: auto;
+}
+
+.ph-btns--q-one {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.ph-btns--q-none {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.ph-ask__what + .ph-btns {
+  margin-top: 4px;
+}
+
+.ph-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  height: 46px;
+  padding: 0 18px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 23px;
+  background: var(--ph-btn-bg);
+  color: var(--ph-btn-fg);
+  font: inherit;
+  font-size: var(--ph-t-body);
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: transform 0.25s var(--ph-ease-out), filter 0.2s, background 0.25s, color 0.25s;
+}
+
+.ph-btn > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ph-btn--primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.ph-btn--plain {
+  background: var(--ph-fill);
+  color: var(--text);
+}
+
+.ph-btn--danger {
+  background: color-mix(in srgb, var(--error) 14%, transparent);
+  color: var(--error);
+}
+
+.ph-btn--big {
+  width: 100%;
+  height: 52px;
+  border-radius: 26px;
+}
+
+.ph-btn.is-pressed {
+  filter: var(--ph-press-filter);
+  transform: scale(0.96);
+  transition: transform 0.08s, filter 0.08s;
+}
+
+.ph-btn--done {
+  background: color-mix(in srgb, var(--running) 16%, transparent);
+  color: var(--running);
+}
+
+.ph-btn:disabled {
+  background: var(--ph-fill);
+  color: var(--muted);
+  cursor: default;
+}
+
+.ph-btn--done:disabled {
+  background: color-mix(in srgb, var(--running) 16%, transparent);
+  color: var(--running);
+}
+
+.ph-link-btn {
+  display: block;
+  width: 100%;
+  padding: 14px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--ph-t-body);
+  font-weight: 500;
+  text-align: center;
+  cursor: pointer;
+}
+
+.ph-link-btn.is-pressed {
+  background: var(--ph-pressed);
+}
+
+/* ── Swipe actions ──────────────────────────────────────────────────────── */
+.ph-row-wrap {
+  position: relative;
+  overflow: hidden;
+}
+
+.ph-row-wrap > .ph-row {
+  z-index: 1;
+  background: var(--ph-grouped-bg);
+  will-change: transform;
+}
+
+.ph-row-wrap > .ph-row.is-pressed {
+  background: color-mix(in srgb, var(--text) 7%, var(--ph-grouped-bg));
+}
+
+.ph-swipe-actions {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: flex-end;
+  opacity: 0;
+}
+
+.ph-swipe-act {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 88px;
+  height: 100%;
+  padding: 0 20px;
+  border: 0;
+  background: var(--queued);
+  color: #fff;
+  font: inherit;
+  font-size: var(--ph-t-sub);
+  font-weight: 600;
+}
+
+/* ── Sheets ─────────────────────────────────────────────────────────────── */
+.ph-sheet-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+}
+
+.ph-sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--ph-scrim);
+  opacity: 0;
+}
+
+.ph-sheet {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--ph-r-sheet) var(--ph-r-sheet) 0 0;
+  background: var(--ph-sheet-bg);
+  box-shadow: 0 -1px 0 var(--border), 0 -12px 40px rgba(0, 0, 0, 0.18);
+  color: var(--text);
+  touch-action: none;
+  will-change: transform;
+}
+
+.ph-sheet--floating {
+  right: 8px;
+  bottom: max(var(--ph-safe-bottom), 8px);
+  left: 8px;
+  border-radius: var(--ph-r-floating);
+}
+
+.ph-sheet__grabber {
+  display: grid;
+  flex: none;
+  height: 22px;
+  place-items: center;
+  cursor: grab;
+}
+
+.ph-sheet__grabber::before {
+  content: "";
+  width: 36px;
+  height: 5px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--muted) 45%, transparent);
+}
+
+.ph-sheet__head {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 0 12px 6px;
+}
+
+.ph-sheet__head h2 {
+  position: absolute;
+  right: 90px;
+  left: 90px;
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--ph-t-body);
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+.ph-sheet__body {
+  flex: 1;
+  min-height: 0;
+  padding-bottom: calc(var(--ph-safe-bottom) + 20px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  touch-action: pan-y;
+}
+
+.ph-sheet__body::-webkit-scrollbar {
+  display: none;
+}
+
+.ph-sheet--below-top .ph-sheet__body {
+  overflow-y: hidden;
+  touch-action: none;
+}
+
+.ph-sheet--floating .ph-sheet__body,
+.ph-sheet--has-foot .ph-sheet__body {
+  padding-bottom: 14px;
+}
+
+.ph-sheet__pad {
+  padding: 0 20px;
+}
+
+.ph-sheet__foot {
+  flex: none;
+  padding: 10px 16px max(var(--ph-safe-bottom), 12px);
+  background: var(--ph-sheet-bg);
+}
+
+html[data-phone].ph-kb-open .ph-sheet__foot {
+  padding-bottom: 10px;
+}
+
+/* nested pages inside a sheet (pickers) */
+.ph-sheet-pages {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ph-sheet-page {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--ph-sheet-bg);
+  will-change: transform;
+}
+
+/* ── Conversation ───────────────────────────────────────────────────────── */
+.ph-convo {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 16px 12px;
+}
+
+.ph-bubble {
+  align-self: flex-end;
+  max-width: 82%;
+  padding: 9px 14px;
+  border-radius: 20px;
+  background: var(--accent);
+  color: #fff;
+  font-size: var(--ph-t-body);
+  line-height: 1.38;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ph-bubble-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-end;
+  margin-top: -8px;
+  font-size: var(--ph-t-cap);
+  color: var(--muted);
+}
+
+.ph-agent {
+  font-size: var(--ph-t-body);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.ph-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: var(--ph-r-card);
+  background: var(--ph-grouped-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--ph-t-sub);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.ph-step.is-pressed {
+  background: color-mix(in srgb, var(--text) 7%, var(--ph-grouped-bg));
+  transition: none;
+}
+
+.ph-step__t {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ph-step__who {
+  font-family: var(--ph-mono);
+  font-size: 0.82rem;
+  color: var(--accent);
+}
+
+.ph-step__done {
+  font-weight: 600;
+  color: var(--complete);
+}
+
+.ph-step__failed {
+  color: var(--error);
+}
+
+.ph-working {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--ph-t-sub);
+  color: var(--muted);
+}
+
+.ph-working--waiting {
+  color: var(--idle);
+}
+
+.ph-typing {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.ph-typing i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  animation: ph-typing 1.2s infinite;
+}
+
+.ph-typing i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.ph-typing i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes ph-typing {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+.ph-since {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--ph-t-foot);
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.ph-since::before,
+.ph-since::after {
+  content: "";
+  flex: 1;
+  height: 0.5px;
+  background: color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+/* The session's bottom: a docked ask and the composer, above the keyboard. */
+.ph-dock {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 25;
+  padding: 0 10px max(var(--ph-safe-bottom), 10px);
+  transition: padding 0.25s;
+}
+
+.ph-dock::before {
+  content: "";
+  position: absolute;
+  inset: -24px 0 0;
+  z-index: -1;
+  background: linear-gradient(to top, var(--main-bg) 55%, color-mix(in srgb, var(--main-bg) 80%, transparent) 75%, transparent);
+  pointer-events: none;
+}
+
+html[data-phone].ph-kb-open .ph-dock {
+  padding-bottom: 8px;
+}
+
+.ph-docked-ask {
+  max-height: 340px;
+  margin: 0 0 10px;
+  padding: 12px 14px 14px;
+  overflow: hidden;
+  border-radius: var(--ph-r-dock);
+  background: var(--ph-grouped-bg);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--idle) 40%, transparent), 0 6px 24px rgba(0, 0, 0, 0.08);
+  transition: transform 0.35s var(--ph-ease), opacity 0.25s, margin 0.35s var(--ph-ease), max-height 0.35s var(--ph-ease), padding 0.35s var(--ph-ease);
+}
+
+.ph-docked-ask--gone {
+  max-height: 0;
+  margin: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  opacity: 0;
+  transform: translateY(16px) scale(0.98);
+}
+
+.ph-docked-ask__h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: var(--ph-t-sub);
+  font-weight: 600;
+}
+
+.ph-docked-ask__later {
+  margin-left: auto;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--ph-t-sub);
+  font-weight: 500;
+}
+
+.ph-docked-ask__q {
+  font-size: var(--ph-t-body);
+  line-height: 1.38;
+}
+
+.ph-docked-ask__note {
+  margin-top: 8px;
+  font-size: var(--ph-t-foot);
+  color: var(--muted);
+}
+
+.ph-waiting-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: 100%;
+  margin: 0 auto 10px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 20px;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--ph-t-sub);
+  font-weight: 600;
+}
+
+.ph-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 5px;
+  border-radius: 26px;
+}
+
+.ph-composer__plus {
+  display: grid;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 0;
+  border-radius: 20px;
+  background: var(--ph-fill);
+  color: var(--text);
+  transition: transform 0.2s var(--ph-ease-out);
+}
+
+.ph-composer__plus.is-pressed {
+  transform: scale(0.88);
+}
+
+.ph-composer textarea,
+.ph-composer input {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  max-height: calc(22px * 5 + 18px);
+  padding: 9px 4px;
+  overflow-y: auto;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-size: max(16px, var(--ph-t-body));
+  line-height: 22px;
+  resize: none;
+}
+
+.ph-composer textarea::placeholder,
+.ph-composer input::placeholder {
+  color: var(--muted);
+}
+
+.ph-sheet .ph-composer textarea {
+  padding-left: 12px;
+}
+
+.ph-send {
+  display: grid;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 0;
+  border-radius: 20px;
+  background: var(--accent);
+  color: #fff;
+  transition: transform 0.2s var(--ph-ease-out), background 0.2s, color 0.2s;
+}
+
+.ph-send:disabled {
+  background: var(--ph-fill-strong);
+  color: color-mix(in srgb, var(--muted) 85%, transparent);
+}
+
+/* Plain until there's something to send (the Terminal sheet). */
+.ph-send--quiet:disabled {
+  background: transparent;
+}
+
+.ph-send--stop {
+  background: var(--text);
+  color: var(--main-bg);
+}
+
+.ph-send--queue {
+  width: auto;
+  padding: 0 14px;
+  font-size: var(--ph-t-sub);
+  font-weight: 600;
+}
+
+.ph-send.is-pressed {
+  transform: scale(0.88);
+}
+
+.ph-glass-field {
+  border-radius: 22px;
+  background: var(--ph-fill);
+}
+
+.ph-sheet .ph-glass-field {
+  background: var(--ph-grouped-in-sheet);
+}
+
+.ph-term__bang {
+  align-self: flex-end;
+  padding: 0 0 10px 12px;
+  font-family: var(--ph-mono);
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.ph-term input,
+.ph-term textarea {
+  padding-left: 2px;
+  font-family: var(--ph-mono);
+  font-size: max(16px, 0.94rem);
+}
+
+/* ── Pull to refresh ────────────────────────────────────────────────────── */
+.ph-ptr {
+  position: absolute;
+  top: calc(var(--ph-safe-top) + var(--ph-nav-h));
+  right: 0;
+  left: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  height: 0;
+  pointer-events: none;
+}
+
+.ph-ptr__ios {
+  width: 28px;
+  height: 28px;
+  margin-top: 14px;
+  opacity: 0;
+  color: var(--muted);
+}
+
+.ph-ptr__ios line {
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 2.6;
+}
+
+.ph-ptr__ios.is-spinning {
+  animation: ph-spokes 0.8s steps(8) infinite;
+}
+
+@keyframes ph-spokes {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ph-ptr__android {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  margin-top: -48px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ph-grouped-bg);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  color: var(--accent);
+  opacity: 0;
+}
+
+.ph-ptr__android.is-spinning svg {
+  animation: ph-spin 0.9s linear infinite;
+}
+
+@keyframes ph-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ph-spinner {
+  flex: none;
+  color: var(--muted);
+  animation: ph-spin 0.8s linear infinite;
+}
+
+.ph-btn .ph-spinner {
+  color: currentColor;
+}
+
+/* ── Skeletons and fades ────────────────────────────────────────────────── */
+.ph-sk {
+  display: inline-block;
+  height: 0.9em;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--ph-fill) 25%, var(--ph-fill-strong) 50%, var(--ph-fill) 75%);
+  background-size: 300% 100%;
+  vertical-align: middle;
+  animation: ph-shimmer 1.3s ease-in-out infinite;
+}
+
+@keyframes ph-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+
+  to {
+    background-position: -50% 0;
+  }
+}
+
+.ph-fade-in {
+  animation: ph-fadein 0.28s var(--ph-ease-out) both;
+}
+
+@keyframes ph-fadein {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* ── Switches: iOS by default, Material 3 on Android ────────────────────── */
+.ph-switch {
+  position: relative;
+  flex: none;
+  width: 51px;
+  height: 31px;
+  border-radius: 16px;
+  background: var(--ph-switch-off);
+  transition: background 0.25s;
+}
+
+.ph-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15), 0 1px 1px rgba(0, 0, 0, 0.16);
+  transition: transform 0.3s var(--ph-ease-out), width 0.2s;
+}
+
+.ph-switch--on {
+  background: var(--running);
+}
+
+.ph-switch--on::after {
+  transform: translateX(20px);
+}
+
+.ph-row.is-pressed .ph-switch::after {
+  width: 33px;
+}
+
+.ph-row.is-pressed .ph-switch--on::after {
+  transform: translateX(14px);
+}
+
+/* ── Toast ──────────────────────────────────────────────────────────────── */
+.ph-toast {
+  position: absolute;
+  bottom: calc(var(--ph-tab-h) + max(var(--ph-safe-bottom), 10px) + 18px);
+  left: 50%;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: calc(100% - 32px);
+  padding: 10px 10px 10px 18px;
+  border-radius: 26px;
+  font-size: var(--ph-t-sub);
+  font-weight: 500;
+  white-space: nowrap;
+  transform: translate(-50%, 0);
+}
+
+.ph-toast--plain {
+  padding-right: 18px;
+}
+
+.ph-toast button {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 16px;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+}
+
+.ph-toast-enter-active,
+.ph-toast-leave-active {
+  transition: transform 0.35s var(--ph-ease), opacity 0.25s;
+}
+
+.ph-toast-enter-from,
+.ph-toast-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 20px);
+}
+
+/* Android: the floating "New session" button */
+.ph-fab {
+  position: absolute;
+  right: 16px;
+  bottom: calc(var(--ph-tab-h) + var(--ph-safe-bottom) + 18px);
+  z-index: 29;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 56px;
+  padding: 0 20px 0 16px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--accent) 22%, var(--ph-grouped-bg));
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.18);
+  color: color-mix(in srgb, var(--accent) 70%, var(--text));
+  font: inherit;
+  font-size: var(--ph-t-sub);
+  font-weight: 600;
+  transition: padding 0.25s var(--ph-ease), transform 0.2s;
+}
+
+.ph-fab span {
+  max-width: 140px;
+  white-space: nowrap;
+  transition: opacity 0.2s, max-width 0.25s var(--ph-ease);
+}
+
+.ph-fab--small {
+  padding: 0 16px;
+}
+
+.ph-fab--small span {
+  max-width: 0;
+  opacity: 0;
+}
+
+.ph-fab.is-pressed {
+  transform: scale(0.95);
+}
+
+/* ── Forms on the phone ─────────────────────────────────────────────────── */
+.ph-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 20px;
+  background: var(--ph-fill);
+  color: var(--muted);
+}
+
+.ph-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--text);
+  font-size: max(16px, var(--ph-t-body));
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.ph-search input::placeholder {
+  color: var(--muted);
+}
+
+.ph-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.ph-sheet .ph-search {
+  background: var(--ph-grouped-in-sheet);
+}
+
+.ph-prompt-card {
+  padding: 12px 16px;
+  border-radius: 18px;
+  background: var(--ph-grouped-in-sheet);
+}
+
+.ph-prompt-card textarea {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  font-size: max(16px, var(--ph-t-body));
+  line-height: 22px;
+  resize: none;
+}
+
+.ph-prompt-card textarea::placeholder {
+  color: var(--muted);
+}
+
+.ph-field {
+  display: block;
+  width: 100%;
+  height: 48px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--ph-r-card);
+  outline: 0;
+  background: var(--ph-grouped-bg);
+  color: var(--text);
+  font-size: max(16px, var(--ph-t-body));
+}
+
+.ph-field::placeholder {
+  color: var(--muted);
+}
+
+.ph-hero {
+  padding-top: 18px;
+  text-align: center;
+}
+
+.ph-hero img {
+  margin: 0 auto;
+  border-radius: 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.ph-hero h3 {
+  margin: 16px 0 8px;
+  font-size: var(--ph-t-title2);
+  font-weight: 700;
+}
+
+.ph-hero p {
+  margin: 0 6px;
+  font-size: var(--ph-t-body);
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.ph-note {
+  margin: 8px 20px;
+  font-size: var(--ph-t-sub);
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.ph-note--warn {
+  color: var(--idle);
+}
+
+.ph-note--error {
+  color: var(--error);
+}
+
+.ph-banner {
+  display: block;
+  margin: 0 16px 12px;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: var(--ph-r-card);
+  background: color-mix(in srgb, var(--idle) 14%, var(--ph-grouped-bg));
+  color: var(--text);
+  font: inherit;
+  font-size: var(--ph-t-sub);
+  line-height: 1.35;
+  text-align: left;
+}
+
+.ph-banner--muted {
+  background: var(--ph-grouped-bg);
+  color: var(--muted);
+}
+
+/* screenshots only: a stand-in keyboard where a real phone shows its own */
+.ph-fake-kb {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 100;
+  display: grid;
+  height: var(--ph-fake-kb, 0px);
+  place-items: center;
+  background: var(--ph-kb-bg);
+  color: #888;
+  font: 600 14px var(--ph-font);
+  letter-spacing: 0.08em;
+}
+
+/* ── Material 3 (Android) ───────────────────────────────────────────────── */
+html[data-phone="android"] .ph-tabbar {
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: calc(var(--ph-tab-h) + var(--ph-safe-bottom));
+  padding: 12px 0 calc(16px + var(--ph-safe-bottom));
+  border-radius: 0;
+  background: color-mix(in srgb, var(--accent) 7%, var(--ph-grouped-bg));
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+html[data-phone="android"] .ph-tab {
+  gap: 4px;
+  background: none;
+  color: var(--muted);
+  font-size: var(--ph-t-cap);
+  font-weight: 500;
+}
+
+html[data-phone="android"] .ph-tab svg {
+  width: 24px;
+  height: 24px;
+}
+
+html[data-phone="android"] .ph-tab__ic {
+  width: 64px;
+  height: 32px;
+  border-radius: 16px;
+  transition: background 0.25s;
+}
+
+html[data-phone="android"] .ph-tab--on {
+  color: var(--text);
+}
+
+html[data-phone="android"] .ph-tab--on .ph-tab__ic {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+html[data-phone="android"] .ph-tab .ph-badge {
+  top: -2px;
+  left: calc(50% + 4px);
+}
+
+html[data-phone="android"] .ph-navbar {
+  padding-right: 4px;
+  padding-left: 4px;
+}
+
+html[data-phone="android"] .ph-navbar::before {
+  bottom: 0;
+  background: color-mix(in srgb, var(--accent) 7%, var(--main-bg));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+html[data-phone="android"] .ph-navbar__title {
+  align-items: flex-start;
+  padding-left: 64px;
+  font-size: var(--ph-t-title3);
+  font-weight: 400;
+}
+
+html[data-phone="android"] .ph-navbtn.ph-glass,
+html[data-phone="android"] .ph-navbtn-group.ph-glass {
+  background: none;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+html[data-phone="android"] .ph-navbtn.ph-glass {
+  width: 48px;
+  height: 48px;
+  border-radius: 24px;
+}
+
+html[data-phone="android"] .ph-navbtn--text.ph-glass {
+  width: auto;
+}
+
+html[data-phone="android"] .ph-large-title h1 {
+  font-size: 1.65rem;
+  font-weight: 400;
+}
+
+html[data-phone="android"] .ph-section-h {
+  font-size: var(--ph-t-body);
+  font-weight: 600;
+}
+
+html[data-phone="android"] .ph-btn {
+  font-weight: 500;
+}
+
+html[data-phone="android"] .ph-switch {
+  width: 52px;
+  height: 32px;
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--muted);
+}
+
+html[data-phone="android"] .ph-switch::after {
+  top: 8px;
+  left: 8px;
+  width: 16px;
+  height: 16px;
+  background: var(--muted);
+  box-shadow: none;
+  transition: transform 0.25s var(--ph-ease-out), width 0.2s, height 0.2s, top 0.2s, left 0.2s;
+}
+
+html[data-phone="android"] .ph-switch--on {
+  background: var(--accent);
+  box-shadow: none;
+}
+
+html[data-phone="android"] .ph-switch--on::after {
+  top: 4px;
+  left: 4px;
+  width: 24px;
+  height: 24px;
+  background: #fff;
+  transform: translateX(20px);
+}
+
+html[data-phone="android"] .ph-row.is-pressed .ph-switch::after {
+  top: 2px;
+  left: 2px;
+  width: 28px;
+  height: 28px;
+}
+
+html[data-phone="android"] .ph-row.is-pressed .ph-switch--on::after {
+  transform: translateX(20px);
+}
+
+html[data-phone="android"] .ph-sheet--floating {
+  right: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: var(--ph-r-sheet) var(--ph-r-sheet) 0 0;
+}
+
+html[data-phone="android"] .ph-toast {
+  border-radius: 8px;
+  background: #313033;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.25);
+  color: #f4eff4;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+html[data-phone="android"] .ph-row.is-pressed,
+html[data-phone="android"] .ph-step.is-pressed {
+  background: transparent;
+}
+
+html[data-phone="android"] .ph-row-wrap > .ph-row.is-pressed {
+  background: var(--ph-grouped-bg);
+}
+
+.ph-ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.12;
+  pointer-events: none;
+  transform: scale(0);
+  animation: ph-ripple 0.45s var(--ph-ease-out) forwards;
+}
+
+.ph-ripple--out {
+  animation: ph-ripple 0.45s var(--ph-ease-out) forwards, ph-ripout 0.3s 0.1s forwards;
+}
+
+@keyframes ph-ripple {
+  to {
+    transform: scale(1);
+  }
+}
+
+@keyframes ph-ripout {
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-phone] *,
+  html[data-phone] *::before,
+  html[data-phone] *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  html[data-phone] .ph-dot--running {
+    animation: none;
+  }
+}

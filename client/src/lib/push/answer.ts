@@ -63,6 +63,19 @@ export function questionRejectRequest(target: AnswerTarget, sessionId: string, r
   };
 }
 
+/** `PATCH /api/sessions/{id}/retention`: archive a session (swiped away on the phone), or bring it back (Undo). */
+export function retentionRequest(target: AnswerTarget, sessionId: string, archived: boolean): AnswerRequest {
+  return {
+    url: `${target.baseUrl}/api/sessions/${encodeURIComponent(sessionId)}/retention`,
+    init: {
+      method: "PATCH",
+      headers: headers(target.token),
+      credentials: credentialsFor(target),
+      body: JSON.stringify({ retentionStatus: archived ? "archived" : "active" }),
+    },
+  };
+}
+
 /** Why an answer didn't go through, in words; `gone` when the ask was already answered or isn't there. */
 export interface AnswerOutcome {
   ok: boolean;

@@ -1,28 +1,30 @@
 <script setup lang="ts">
+import "@/assets/phone.css";
+import PhoneToastHost from "@/components/phone/PhoneToastHost.vue";
+import { usePhoneEnv } from "@/composables/phone/use-phone-env";
+
 /**
- * The frame for Fleet's phone pages (`/pair`, `/phone…`): full height, inside the notch and home-indicator safe
- * areas, without the desktop shell's rail and panels.
+ * The frame for Fleet's phone pages (`/pair`, `/phone…`), without the desktop shell's rail and panels. It switches on
+ * the native layer (phone.css, the iOS or Android look, the phone's text size, the keyboard and pressed states) and
+ * holds the app frame, which follows the visual viewport so nothing hides under the keyboard: the stage the pages
+ * draw on, and the overlays sheets and toasts open in.
  */
+usePhoneEnv();
 </script>
 
 <template>
   <div
-    class="phone-shell"
+    class="phone-shell ph-app"
     data-testid="phone-shell"
   >
-    <slot />
+    <div class="ph-stage">
+      <slot />
+    </div>
+    <div
+      id="ph-overlays"
+      class="ph-overlays"
+    >
+      <PhoneToastHost />
+    </div>
   </div>
 </template>
-
-<style scoped>
-.phone-shell {
-  display: flex;
-  flex-direction: column;
-  min-height: 100dvh;
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-  background: var(--main-bg);
-  color: var(--text);
-  font-family: var(--font-sans-stack);
-  -webkit-text-size-adjust: 100%;
-}
-</style>
