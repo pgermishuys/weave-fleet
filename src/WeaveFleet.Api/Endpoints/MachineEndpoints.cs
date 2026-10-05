@@ -57,6 +57,7 @@ public static class MachineEndpoints
         group.MapGet("/access", (ILocalTokenAuthService tokens, LoopbackAuthPolicy policy) =>
             Results.Ok(ToAccessResponse(tokens, fleetOptions, policy)))
             .Produces<MachineAccessResponse>(200)
+            .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
             .WithName("GetMachineAccess");
 
         group.MapPost("/access/token", (ILocalTokenAuthService tokens, LoopbackAuthPolicy policy) =>
@@ -68,6 +69,7 @@ public static class MachineEndpoints
             return Results.Ok(ToAccessResponse(tokens, fleetOptions, policy));
         })
         .Produces<MachineAccessResponse>(200)
+        .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
         .WithName("ReplaceMachineToken");
 
         return app;

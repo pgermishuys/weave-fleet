@@ -4,6 +4,7 @@ using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 using Microsoft.Net.Http.Headers;
+using WeaveFleet.Application.Devices;
 using WeaveFleet.Application.Services;
 
 namespace WeaveFleet.Api.Auth;
@@ -16,6 +17,7 @@ public sealed class BearerTokenHandler(
     ILoggerFactory logger,
     UrlEncoder encoder,
     ILocalTokenAuthService localTokenAuthService,
+    DeviceTokenService deviceTokens,
     LoopbackAuthPolicy loopbackAuthPolicy)
     : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
@@ -35,7 +37,7 @@ public sealed class BearerTokenHandler(
     /// <summary>The query parameter a browser WebSocket or EventSource carries the token in, since neither can set headers.</summary>
     public const string AccessTokenQueryParameter = "access_token";
 
-    protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+    protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         var presented = FindPresentedToken(Request);
 
@@ -43,23 +45,33 @@ public sealed class BearerTokenHandler(
         if (presented is null)
         {
             if (GrantsAutoAuth())
-                return Task.FromResult(CreateSuccessResult(LoopbackMethod));
+                return CreateSuccessResult(LoopbackMethod);
 
             // An agent process under /agent/{token}: the middleware already checked the connection is loopback and
             // the token belongs to a process Fleet started. That per-process secret is the credential, whatever the
             // bind address. A request with proxy headers didn't come straight from such a process, so it gets nothing.
-            return Task.FromResult(Context.IsAgentRequest() && !LoopbackAuthPolicy.CameThroughProxy(Request)
+            return Context.IsAgentRequest() && !LoopbackAuthPolicy.CameThroughProxy(Request)
                 ? CreateSuccessResult(AgentMethod)
-                : AuthenticateResult.NoResult());
+                : AuthenticateResult.NoResult();
         }
 
         // A credential was presented, so it has to be right. A wrong one never falls back to auto-auth.
-        if (presented.Length == 0 || !localTokenAuthService.ValidateToken(presented))
+        if (presented.Length == 0)
+            return AuthenticateResult.NoResult();
+
+        // A paired device's own token. Anything else is checked as the machine token.
+        if (DeviceToken.HasPrefix(presented))
         {
-            return Task.FromResult(AuthenticateResult.NoResult());
+            var device = await deviceTokens.ValidateAsync(presented);
+            return device is null
+                ? AuthenticateResult.NoResult()
+                : CreateSuccessResult(TokenMethod, FleetClaims.ForDevice(device.DeviceId));
         }
 
-        return Task.FromResult(CreateSuccessResult(TokenMethod));
+        if (!localTokenAuthService.ValidateToken(presented))
+            return AuthenticateResult.NoResult();
+
+        return CreateSuccessResult(TokenMethod, [new Claim(FleetClaims.Scope, FleetClaims.Owner)]);
     }
 
     /// <summary>True when the request carries a bearer credential, in the header or where a socket may carry it.</summary>
@@ -121,15 +133,16 @@ public sealed class BearerTokenHandler(
 
     private bool GrantsAutoAuth() => loopbackAuthPolicy.GrantsAutoAuth(Context);
 
-    private AuthenticateResult CreateSuccessResult(string method)
+    private AuthenticateResult CreateSuccessResult(string method, IEnumerable<Claim>? scope = null)
     {
-        var claims = new[]
-        {
+        List<Claim> claims =
+        [
             new Claim(ClaimTypes.Name, "local"),
             new Claim(ClaimTypes.NameIdentifier, "local"),
             new Claim("sub", "local"),
             new Claim(MethodClaim, method),
-        };
+            .. scope ?? [],
+        ];
 
         var identity = new ClaimsIdentity(claims, SchemeName);
         var principal = new ClaimsPrincipal(identity);

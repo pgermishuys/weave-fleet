@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Http;
 using WeaveFleet.Api.Auth;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Devices;
 using WeaveFleet.Application.Services;
 
 namespace WeaveFleet.Api.Endpoints;
@@ -73,27 +74,27 @@ public static class AuthEndpoints
             app.MapPost("/auth/token-login", async Task<IResult> (
                 HttpContext httpContext,
                 TokenLoginRequest request,
-                ILocalTokenAuthService localTokenAuthService) =>
+                ILocalTokenAuthService localTokenAuthService,
+                DeviceTokenService deviceTokens) =>
             {
-                if (string.IsNullOrWhiteSpace(request.Token) || !localTokenAuthService.ValidateToken(request.Token))
+                if (string.IsNullOrWhiteSpace(request.Token))
                     return Results.Unauthorized();
 
-                var claims = new[]
+                // A paired device's own token signs the browser in as that device, with what a device may do.
+                if (DeviceToken.HasPrefix(request.Token))
                 {
-                    new Claim(ClaimTypes.Name, "local"),
-                    new Claim(ClaimTypes.NameIdentifier, "local"),
-                    new Claim("sub", "local")
-                };
+                    var device = await deviceTokens.ValidateAsync(request.Token);
+                    if (device is null)
+                        return Results.Unauthorized();
 
-                var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-                var principal = new ClaimsPrincipal(identity);
+                    await LocalSignIn.DeviceAsync(httpContext, device.DeviceId);
+                    return Results.Ok();
+                }
 
-                // Persistent, so the cookie outlives the browser session: the token is pasted once per browser, not
-                // on every visit. Sliding expiry renews it while Fleet is in use.
-                await httpContext.SignInAsync(
-                    CookieAuthenticationDefaults.AuthenticationScheme,
-                    principal,
-                    new AuthenticationProperties { IsPersistent = true });
+                if (!localTokenAuthService.ValidateToken(request.Token))
+                    return Results.Unauthorized();
+
+                await LocalSignIn.OwnerAsync(httpContext);
                 return Results.Ok();
             })
             .AllowAnonymous()

@@ -293,6 +293,8 @@ if (fleetOptions.Auth.Enabled)
     {
         options.AddPolicy("FleetUser", policy =>
             policy.RequireAuthenticatedUser());
+        options.AddPolicy(FleetClaims.MachineOwnerPolicy, policy =>
+            policy.RequireAuthenticatedUser().RequireAssertion(context => FleetClaims.IsOwner(context.User)));
     });
 
     // Cloud mode: IUserContext reads from HTTP claims
@@ -362,6 +364,20 @@ else
                 return Task.CompletedTask;
             };
 
+            // A paired device's cookie lasts only as long as the device: removed or expired, the next request fails.
+            options.Events.OnValidatePrincipal = async context =>
+            {
+                if (context.Principal is null || FleetClaims.DeviceIdOf(context.Principal) is not { } deviceId)
+                    return;
+
+                var deviceTokens = context.HttpContext.RequestServices.GetRequiredService<WeaveFleet.Application.Devices.DeviceTokenService>();
+                if (await deviceTokens.ValidateDeviceAsync(deviceId) is not null)
+                    return;
+
+                context.RejectPrincipal();
+                await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            };
+
             if (fleetOptions.Auth.TokenAuthEnabled)
             {
                 options.ForwardDefaultSelector = context =>
@@ -389,6 +405,19 @@ else
                     BearerTokenHandler.SchemeName);
 
             policy.RequireAuthenticatedUser();
+        });
+
+        // Managing access (the machine token, paired devices, the machine list) is for the owner: not a paired
+        // device, and not an agent.
+        options.AddPolicy(FleetClaims.MachineOwnerPolicy, policy =>
+        {
+            if (fleetOptions.Auth.TokenAuthEnabled)
+                policy.AddAuthenticationSchemes(
+                    CookieAuthenticationDefaults.AuthenticationScheme,
+                    BearerTokenHandler.SchemeName);
+
+            policy.RequireAuthenticatedUser();
+            policy.RequireAssertion(context => FleetClaims.IsOwner(context.User));
         });
     });
 
