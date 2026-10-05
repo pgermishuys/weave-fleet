@@ -239,7 +239,7 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
 
 ### Phase 2 — Installable PWA and Web Push for the local machine
 
-- [ ] 7. Manifest, icons and Kestrel headers
+- [x] 7. Manifest, icons and Kestrel headers
   - **What**: Make the app installable.
   - **Files**: `client/public/manifest.webmanifest`, `client/public/icons/icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon.png` (180), `client/index.html`, `src/WeaveFleet.Api/Program.cs`, `tests/WeaveFleet.Api.Tests/Endpoints/PwaStaticFilesTests.cs`
   - **Depends on**: None (can run in parallel with Phase 1)
@@ -255,7 +255,7 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
     - Test boots the API with a temp `wwwroot` containing `sw.js`/`manifest.webmanifest` and asserts content types + cache headers.
     - Chrome DevTools/Lighthouse "installable" passes on `https://<machine>.ts.net` (manual) and on `http://localhost` in Playwright (`page.evaluate` checks `navigator.serviceWorker` + manifest fetch 200).
 
-- [ ] 8. Hand-written service worker, build and registration
+- [x] 8. Hand-written service worker, build and registration
   - **What**: SW that shows pushes, opens deep links, and re-subscribes on `pushsubscriptionchange`. No API caching.
   - **Files**: `client/src/sw/sw.ts`, `client/vite.sw.config.ts`, `client/package.json` (`build`: `vite build && vite build -c vite.sw.config.ts`), `client/src/lib/push/payload.ts`, `client/src/lib/push/notification-options.ts`, `client/src/lib/push/__tests__/payload.test.ts`, `client/src/composables/use-service-worker.ts`, `client/src/main.ts`, `client/tsconfig*.json` (WebWorker lib for `src/sw`)
   - **Depends on**: Task 7
@@ -273,7 +273,7 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
     - `bun run test` covers payload parsing (valid, wrong version, oversized fields truncated).
     - In Playwright Chromium against the built app, `navigator.serviceWorker.ready` resolves and `registration.showNotification` from the page works.
 
-- [ ] 9. VAPID keys, push subscription storage and `IPushSender`
+- [x] 9. VAPID keys, push subscription storage and `IPushSender`
   - **What**: Server-side push foundation.
   - **Files**: `Directory.Packages.props` (add `WebPush`), `src/WeaveFleet.Infrastructure/WeaveFleet.Infrastructure.csproj`, `src/WeaveFleet.Application/Push/IPushSender.cs`, `src/WeaveFleet.Application/Push/PushModels.cs` (`PushMessage`, `PushSendResult`, `PushSubscriptionRecord`, `NotificationKinds`), `src/WeaveFleet.Application/Configuration/VapidKeyStore.cs`, `src/WeaveFleet.Infrastructure/Push/WebPushSender.cs`, `src/WeaveFleet.Infrastructure/Migrations/049_add_push_subscriptions.sql`, `src/WeaveFleet.Domain/Repositories/IPushSubscriptionRepository.cs`, `src/WeaveFleet.Infrastructure/Data/Repositories/PushSubscriptionRepository.cs`, `src/WeaveFleet.Application/Configuration/FleetOptions.cs` (`Push.Subject`), `src/WeaveFleet.Infrastructure/DependencyInjection.cs`, tests in `tests/WeaveFleet.Infrastructure.Tests/Push/` and `tests/WeaveFleet.Application.Tests/Configuration/VapidKeyStoreTests.cs`
   - **Depends on**: Task 1
@@ -290,7 +290,7 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
     - VAPID keys persist across store instances.
     - `dotnet test tests/WeaveFleet.Infrastructure.Tests --filter "FullyQualifiedName~Push"` passes.
 
-- [ ] 10. Push subscription endpoints
+- [x] 10. Push subscription endpoints
   - **What**: Let a browser register, update preferences, test and remove its subscription.
   - **Files**: `src/WeaveFleet.Api/Endpoints/PushEndpoints.cs`, `src/WeaveFleet.Api/Endpoints/FleetEndpoints.cs`, `src/WeaveFleet.Api/Contracts/PushContracts.cs`, `src/WeaveFleet.Api/JsonContext.cs`, `tests/WeaveFleet.Api.Tests/Endpoints/PushEndpointTests.cs`
   - **Depends on**: Task 9, Task 3
@@ -307,7 +307,7 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
     - Tests for upsert, prefs update, delete, device isolation, cascade on device removal.
     - `dotnet test tests/WeaveFleet.Api.Tests --filter "FullyQualifiedName~PushEndpoint"` passes.
 
-- [ ] 11. Notification kinds, sinks, push dispatcher and desk presence
+- [x] 11. Notification kinds, sinks, push dispatcher and desk presence
   - **What**: Turn session notifications into pushes with kinds, preferences and quiet-at-desk.
   - **Files**: `src/WeaveFleet.Domain/Events/SessionEvents.cs`, `src/WeaveFleet.Application/Sessions/SessionNotifier.cs`, `src/WeaveFleet.Application/Sessions/ISessionNotificationSink.cs`, `src/WeaveFleet.Application/Sessions/BroadcastNotificationSink.cs`, `src/WeaveFleet.Application/Push/PushNotificationDispatcher.cs`, `src/WeaveFleet.Application/Sessions/DeskPresenceTracker.cs`, `src/WeaveFleet.Api/Hubs/*` (the session-events hub class: add `SetPresenceAsync`, remove presence on disconnect), `src/WeaveFleet.Infrastructure/Services/HarnessEventRelay.cs` (only if a hook for `failed` is needed), `src/WeaveFleet.Application/Services/SessionOrchestrator.cs` (where lifecycle status becomes `error`, `_lifecycleStatusError`), `src/WeaveFleet.Infrastructure/DependencyInjection.cs`, `client/src/lib/domain-events.ts`, `client/src/composables/use-session-notifications.ts`, tests `tests/WeaveFleet.Application.Tests/Sessions/SessionNotifierTests.cs` (extend or create), `tests/WeaveFleet.Application.Tests/Push/PushNotificationDispatcherTests.cs`, `tests/WeaveFleet.IntegrationTests/Sessions/SignalREventContractTests.cs`
   - **Depends on**: Tasks 9, 10
@@ -327,7 +327,7 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
     - SignalR contract test asserts the new payload fields on `session_notification`.
     - `dotnet test tests/WeaveFleet.Application.Tests --filter "FullyQualifiedName~SessionNotifier|FullyQualifiedName~PushNotificationDispatcher"` and `dotnet test tests/WeaveFleet.IntegrationTests -c Debug --filter "FullyQualifiedName~SignalREventContractTests"` pass; `bun run test` passes.
 
-- [ ] 12. Phone notification onboarding `/phone/setup` and push client
+- [x] 12. Phone notification onboarding `/phone/setup` and push client
   - **What**: Screen 3 of the pairing flow in `index.html`: Add to Home Screen (iOS), per-kind toggles, "Quiet while I'm at the desk", "Turn on notifications".
   - **Files**: `client/src/routes/phone.setup.tsx`, `client/src/components/phone/NotificationSetup.vue`, `client/src/lib/push/capabilities.ts` (secure context, `PushManager`, standalone, iOS/Android detection), `client/src/lib/push/subscribe.ts`, `client/src/lib/push/__tests__/capabilities.test.ts`, `client/src/composables/phone/use-push-subscription.ts`
   - **Depends on**: Tasks 8, 10, 11, 6
@@ -620,6 +620,32 @@ Differences from the plan (code won, or a detail the plan left open):
 - The typed-code limit (5/min) is a `ManualCodeAttempts` singleton checked in the endpoint, beside the
   `AddRateLimiter` policy (10/min) on `/api/pairing/*`; the limiter can't see the body to tell the two apart.
 - "Add a phone" asks for the phone's address first when the page is on loopback and no `publicUrl` is saved.
+- Deferred: nothing.
+
+### Phase 2 — done (2026-10-05)
+Shipped: manifest + icons + static headers, the hand-written service worker and its build, VAPID keys, the
+`push_subscriptions` table (migration **052**), `/api/push/*`, notification kinds and sinks, `PushNotificationDispatcher`,
+quiet-at-desk presence, and `/phone/setup`. Live-checked with real Web Push: a headed 390×844 Chromium (persistent
+profile; Playwright's default contexts are incognito, where Chrome has no Push API) paired, subscribed through FCM in
+~26 s, and the test push arrived through the service worker 2 s later.
+
+Differences from the plan:
+- **No `WebPush` NuGet package.** Its latest version (1.0.13) only encrypts with the old `aesgcm` draft, which Apple's
+  push service refuses. `WebPushSender` implements RFC 8291 (`aes128gcm`) and RFC 8292 (VAPID) with .NET's own ECDH,
+  HKDF, AES-GCM and ECDSA (no BouncyCastle, AOT-safe), pinned by the RFC 8291 worked example in
+  `WebPushEncryptionTests`. The sender's integration test uses a fake `HttpMessageHandler` push service rather than a
+  local Kestrel/HttpListener (the sender only posts to `https://` endpoints).
+- `PUT /api/push/subscriptions` takes an optional `previousEndpoint`: a rotated subscription (service worker
+  `pushsubscriptionchange`, or the page noticing on open) carries the old one's kinds and quiet setting over, and the old
+  row is deleted.
+- Questions carry no `requestId`: Fleet keeps no server-side list of pending questions (they live in each harness's
+  message stream). Permission asks do carry theirs.
+- "Needs you" on the setup screen switches both `permission` and `workflow`.
+- The server-side `INotificationPreference` gate is gone (decision: always broadcast; the browser applies the desktop
+  setting). Desktop notifications now go through the service worker when one is registered (Android needs that).
+- `/phone*` use their own `PhoneAuthGate` instead of the desktop `AuthGate` (no onboarding wizard on a phone); it signs
+  in again with the stored device token if the cookie is gone, otherwise sends the phone to `/pair`.
+- `/phone/setup`'s Done goes to `/` until the `/phone` inbox exists (Phase 4).
 - Deferred: nothing.
 
 ## Risks and unknowns
