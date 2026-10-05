@@ -9,11 +9,12 @@ const html = computed(() => renderer.render(props.text));
 </script>
 
 <template>
-  <!-- eslint-disable-next-line vue/no-v-html -->
+  <!-- eslint-disable vue/no-v-html -- Markdown rendered with raw HTML off, as in MessageBubble. -->
   <div
     class="pmd prose-chat"
     v-html="html"
   />
+  <!-- eslint-enable vue/no-v-html -->
 </template>
 
 <style scoped>
