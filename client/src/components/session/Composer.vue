@@ -13,6 +13,7 @@ import BackgroundStrip from "@/components/session/BackgroundStrip.vue";
 import { Button } from "@/components/ui/button";
 import { useAgents } from "@/composables/use-agents";
 import { useAbortSession } from "@/composables/use-session-actions";
+import { composerStatus, harnessCapabilities } from "@/composables/use-composer-actions";
 import { useAutocomplete } from "@/composables/use-autocomplete";
 import { useReferableSessions } from "@/composables/use-referable-sessions";
 import { useDraftState } from "@/composables/use-draft-state";
@@ -214,10 +215,8 @@ const selectedSession = computed(() => {
 });
 
 /** The session's harness can run a shell command from the composer; elsewhere `!` is just text. */
-const supportsShellCommands = computed(() => {
-  const harnessType = selectedSession.value?.harnessType ?? "opencode";
-  return harnesses.value.find((harness) => harness.type === harnessType)?.capabilities.supportsShellCommands === true;
-});
+const capabilities = computed(() => harnessCapabilities(selectedSession.value?.harnessType, harnesses.value));
+const supportsShellCommands = computed(() => capabilities.value.supportsShell);
 
 /** The session's harness can fork it for a side conversation (`/btw`); the `/` popup offers it only then. */
 /** The agent reads an @-referenced session with fleet_session_read; without Fleet's tools it gets a recap instead. */
@@ -226,10 +225,7 @@ const supportsFleetTools = computed(() => {
   return harnesses.value.find((harness) => harness.type === harnessType)?.capabilities.supportsFleetTools === true;
 });
 
-const supportsSideConversations = computed(() => {
-  const harnessType = selectedSession.value?.harnessType ?? "opencode";
-  return harnesses.value.find((harness) => harness.type === harnessType)?.capabilities.supportsSideConversations === true;
-});
+const supportsSideConversations = computed(() => capabilities.value.supportsSide);
 
 /**
  * The side conversation (`/btw`) is open above the composer: what's typed goes to it, not to the session, which carries
@@ -281,18 +277,7 @@ const isDisabled = computed(() => {
     || !canSend.value;
 });
 
-const sessionStatus = computed<"idle" | "busy" | "waiting_input">(() => {
-  if (optimisticBusy.value) {
-    return "busy";
-  }
-
-  const activity = effectiveActivityStatus.value;
-  if (activity === "busy") return "busy";
-  if (activity === "delegating") return "busy";
-  if (activity === "retry") return "busy";
-  if (activity === "waiting_input") return "waiting_input";
-  return "idle";
-});
+const sessionStatus = computed(() => composerStatus(effectiveActivityStatus.value, optimisticBusy.value));
 
 const canInterrupt = computed(() => sessionStatus.value === "busy" && !isAborting.value);
 
@@ -300,10 +285,7 @@ const canInterrupt = computed(() => sessionStatus.value === "busy" && !isAbortin
  * The session's harness can take a message into a running turn (steer), which the agent reads at its next step. Without
  * it, a message sent while the agent works only waits in the queue, and nothing offers to send it now.
  */
-const canSteer = computed(() => {
-  const harnessType = selectedSession.value?.harnessType ?? "opencode";
-  return harnesses.value.find((harness) => harness.type === harnessType)?.capabilities.supportsSteering === true;
-});
+const canSteer = computed(() => capabilities.value.canSteer);
 
 /** While a turn runs: Send now (Ctrl+Enter) steers the draft in; Send (Enter) queues it for when the turn ends. */
 const showSendNow = computed(() => canSteer.value && sessionStatus.value === "busy");
@@ -312,7 +294,7 @@ const showSendNow = computed(() => canSteer.value && sessionStatus.value === "bu
  * OpenCode 2 steers by default: Enter sends into the running turn and Ctrl+Enter (or Queue) waits for it to end. Other
  * harnesses that can steer keep Enter for the queue.
  */
-const steersByDefault = computed(() => canSteer.value && selectedSession.value?.harnessType === "opencode2");
+const steersByDefault = computed(() => capabilities.value.steersByDefault);
 
 /** The Send now button: only for a message to the session's agent, not a shell command or a side question (/btw). */
 const offerSendNowButton = computed(() =>
