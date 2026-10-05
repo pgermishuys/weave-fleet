@@ -413,7 +413,7 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
 
 ### Phase 4 — Cross-machine "Needs you" inbox
 
-- [ ] 17. Inbox model and per-machine feeds
+- [x] 17. Inbox model and per-machine feeds
   - **What**: Pure grouping logic + live feeds for every machine at once.
   - **Files**: `client/src/lib/phone/inbox.ts`, `client/src/lib/phone/__tests__/inbox.test.ts`, `client/src/lib/phone/machine-feed.ts` (framework-free: SignalR connection + poll fallback per machine), `client/src/composables/phone/use-inbox.ts`, `client/src/composables/__tests__/use-inbox.test.ts`
   - **Depends on**: Task 16
@@ -427,7 +427,7 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
     - Unit tests for grouping/sorting, unreachable handling, and feed fallback (mocked hub).
     - `bun run test` passes.
 
-- [ ] 18. Phone shell, inbox route and standalone entry
+- [x] 18. Phone shell, inbox route and standalone entry
   - **What**: Option A home screen per `mockups/phone-app/index.html`.
   - **Files**: `client/src/routes/phone.tsx`, `client/src/routes/phone.index.tsx`, `client/src/components/phone/PhoneShell.vue`, `client/src/components/phone/InboxPage.vue`, `client/src/components/phone/InboxAskRow.vue`, `client/src/components/phone/InboxSessionRow.vue`, `client/src/components/phone/BottomSheet.vue`, `client/src/components/phone/PhoneTabBar.vue`, `client/src/routes/__root.tsx`, `client/src/routes/index.tsx`
   - **Depends on**: Task 17, Task 6
@@ -668,6 +668,27 @@ Differences from the plan:
   stores the remote device token, so it can't tell whether the phone still holds a working one. The phone only asks
   when it lacks one or got a 401.
 - Not yet live-checked with two real Fleets and a real phone push from the second machine; that's part of Task 28.
+- Deferred: nothing.
+
+### Phase 4 — done (2026-10-05)
+Shipped: `lib/needs-you.ts` (shared with the dashboard), `lib/phone/inbox.ts`, `lib/phone/machine-feed.ts`,
+`lib/push/answer.ts`, `use-inbox`, and `/phone` (Needs you / Sessions / Machines) with the bottom sheet and the
+permission and question choice lists. Checked at 390×844 (light and dark) in Vite mock mode with two machines, a
+permission ask and a question; Allow once posted the answer and the card left Needs you. That check found two bugs the
+unit tests couldn't (the feed calling `fetch` unbound, and "Connecting…" forever when the hub never connects).
+Screenshots in `mockups/phone-app/shots/`.
+
+Differences from the plan:
+- Pending questions are found from each waiting session's last 6 messages (`GET /api/sessions/{id}/messages`): Fleet
+  has no pending-question list. Only the first question of a multi-question ask is answerable from the inbox; the
+  rest say "answer them in the session".
+- Workflow waits aren't in the phone inbox (the dashboard reads them from the workflows store, which is per machine);
+  their sessions still show under Working/Finished, and the push still says "Needs you".
+- Tabs are `/phone`, `/phone?tab=sessions` and `/phone?tab=machines` rather than three routes.
+- `restoreActiveMachine` reads the machine from `/phone/s/<machine>/…` (all other `/phone` pages are home), so
+  opening a session on another machine is a full page load there and back.
+- The "More…" sheet doesn't show the agent's last sentence above the ask (the mockup does); the session view does.
+- The "Phone view" link is in the mobile icon rail (`TopBar.vue` isn't used anywhere).
 - Deferred: nothing.
 
 ## Risks and unknowns
