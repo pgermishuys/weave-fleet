@@ -8,6 +8,7 @@ import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { useRelativeTime } from "@/composables/use-relative-time";
 import { useSessions } from "@/composables/use-sessions";
 import type { SessionListItem } from "@/api/client";
+import { sessionBucket, sessionUpdatedAt } from "@/lib/needs-you";
 import { useAppShellStore } from "@/stores/app-shell";
 import { useHarnessSetupStore } from "@/stores/harness-setup";
 import { useSessionsStore } from "@/stores/sessions";
@@ -42,13 +43,7 @@ const sessions = computed(() =>
     return retentionStatus.value === "all" || session.retentionStatus === retentionStatus.value;
   }));
 
-function updatedAt(session: SessionListItem): number {
-  const time = session.session.time;
-  const value = time?.updated ?? time?.created ?? 0;
-  return typeof value === "number" ? value : Date.parse(value) || 0;
-}
-
-const byRecent = computed(() => [...sessions.value].sort((a, b) => updatedAt(b) - updatedAt(a)));
+const byRecent = computed(() => [...sessions.value].sort((a, b) => sessionUpdatedAt(b) - sessionUpdatedAt(a)));
 
 const workflows = useWorkflowsStore();
 
@@ -57,16 +52,13 @@ const workflows = useWorkflowsStore();
  * through the step session its card is in; that's the run's state, not the session's.
  */
 const needsYou = computed(() =>
-  byRecent.value.filter((session) => session.sessionStatus === "waiting_input"
-    || session.sessionStatus === "error"
-    || workflows.waitingSessionIds.has(session.session.id)));
+  byRecent.value.filter((session) => sessionBucket(session, workflows.waitingSessionIds) === "needs-you"));
 
-const working = computed(() => byRecent.value.filter((session) =>
-  session.sessionStatus === "active" && !workflows.waitingSessionIds.has(session.session.id)));
+const working = computed(() =>
+  byRecent.value.filter((session) => sessionBucket(session, workflows.waitingSessionIds) === "working"));
 
 const recent = computed(() =>
-  byRecent.value.filter((session) => !["waiting_input", "error", "active"].includes(session.sessionStatus)
-    && !workflows.waitingSessionIds.has(session.session.id)));
+  byRecent.value.filter((session) => sessionBucket(session, workflows.waitingSessionIds) === "recent"));
 
 const showAllRecent = shallowRef(false);
 const visibleRecent = computed(() => (showAllRecent.value ? recent.value : recent.value.slice(0, RECENT_LIMIT)));
