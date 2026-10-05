@@ -57,6 +57,31 @@ public static class MachinesEndpoints
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
         .WithName("RemoveRemoteMachine");
 
+        // A paired phone asks home for its own token on another machine in the list.
+        group.MapPost("/{id}/device-grant", async (
+            HttpContext http,
+            string id,
+            WeaveFleet.Application.Devices.DeviceTokenService devices,
+            DeviceGrantService grants,
+            CancellationToken cancellationToken) =>
+        {
+            if (FleetClaims.DeviceIdOf(http.User) is not { } deviceId)
+                return Results.BadRequest(new ErrorResponse("Only a paired device asks for a device grant; a computer uses the machine token."));
+            var device = await devices.ValidateDeviceAsync(deviceId);
+            if (device is null)
+                return Results.Unauthorized();
+            var platform = (await devices.ListAsync()).FirstOrDefault(d => d.Id == deviceId)?.Platform;
+
+            var result = await grants.GrantAsync(deviceId, device.Name, platform, id, cancellationToken);
+            return result.Grant is { } grant
+                ? Results.Ok(new DeviceGrantResponse(grant.MachineId, grant.BaseUrl, grant.Token))
+                : result.Failure == GrantFailure.NoSuchMachine
+                    ? Results.NotFound(new ErrorResponse(result.Error!))
+                    : Results.Json(new ErrorResponse(result.Error!), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status502BadGateway);
+        })
+        .Produces<DeviceGrantResponse>(200)
+        .WithName("CreateDeviceGrant");
+
         group.MapPost("/import", async (ImportMachinesRequest request, RemoteMachineService machines) =>
         {
             var imported = (request.Machines ?? [])

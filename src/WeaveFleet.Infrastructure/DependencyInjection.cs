@@ -229,6 +229,7 @@ public static class DependencyInjection
         services.AddSingleton<WeaveFleet.Application.Machines.RemoteMachineService>();
         services.AddHttpClient(WeaveFleet.Application.Machines.RemoteMachineService.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(5))
             .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.SocketsHttpHandler { AllowAutoRedirect = false });
+        services.AddSingleton<WeaveFleet.Application.Machines.DeviceGrantService>();
         services.AddSingleton<WeaveFleet.Infrastructure.Machines.RemoteMachineWatcher>();
         services.AddHostedService(sp => sp.GetRequiredService<WeaveFleet.Infrastructure.Machines.RemoteMachineWatcher>());
         services.AddScoped<PromptQueueService>();

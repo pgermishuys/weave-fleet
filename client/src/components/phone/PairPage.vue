@@ -11,6 +11,8 @@ import {
   type PairingPreview,
 } from "@/lib/devices-api";
 import { saveCredentials } from "@/lib/device-credentials";
+import { fetchMachineList } from "@/lib/phone/grants";
+import { useMachineGrants } from "@/composables/phone/use-machine-grants";
 import { decodePairingFragment, guessDeviceName, guessPlatform, normalizeManualCode, pairingUrl, type PairingPayloadV1 } from "@/lib/pairing";
 
 /**
@@ -29,6 +31,7 @@ const preview = shallowRef<PairingPreview | null>(null);
 const deviceName = shallowRef(guessDeviceName(navigator.userAgent, navigator.maxTouchPoints));
 const typedCode = shallowRef("");
 const error = shallowRef<string | null>(null);
+const grants = useMachineGrants();
 
 const inputClass = "w-full rounded-btn border border-border bg-card-bg px-3 text-base text-text outline-none transition-colors placeholder:text-muted focus:border-accent";
 
@@ -106,6 +109,8 @@ async function connect(): Promise<void> {
       grants: [],
       pairedAt: new Date().toISOString(),
     });
+    // Keys to the other machines in home's list come in the background; the inbox asks again for any missing.
+    void fetchMachineList(redeemed.token).then((machines) => grants.ensureGrants(machines)).catch(() => undefined);
     await router.navigate({ to: "/phone/setup" });
   } catch (failure) {
     if (failure instanceof PairingCodeGoneError) {

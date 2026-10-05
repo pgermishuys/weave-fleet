@@ -21,14 +21,17 @@ public sealed partial class RemoteMachineWatcher(
     PushNotificationDispatcher dispatcher,
     MachineIdentityStore identity,
     FleetOptions options,
-    ILoggerFactory loggerFactory) : IHostedService, IAsyncDisposable
+    ILoggerFactory loggerFactory,
+    DeviceGrantService? grants = null) : IHostedService, IAsyncDisposable
 {
     private readonly ILogger _logger = loggerFactory.CreateLogger<RemoteMachineWatcher>();
     private readonly ConcurrentDictionary<string, RemoteMachineConnection> _connections = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     /// <summary>Called each time a machine answers again: work that waited for it (removing a phone there) can go.</summary>
-    public Func<string, Task>? MachineConnected { get; set; }
+    public Func<string, Task>? MachineConnected { get; set; } = grants is null
+        ? null
+        : machineId => grants.RetryRevocationsAsync(machineId, CancellationToken.None);
 
     /// <summary>For tests: how requests to other machines are sent (a test server's handler).</summary>
     internal HttpMessageHandler? Handler { get; set; }

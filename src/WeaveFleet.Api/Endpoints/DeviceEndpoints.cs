@@ -67,13 +67,19 @@ public static class DeviceEndpoints
         .Produces<DeviceListResponse>(200)
         .WithName("ListDevices");
 
-        machine.MapDelete("/devices/{id}", async (string id, DeviceTokenService devices, WeaveFleet.Domain.Repositories.IPushSubscriptionRepository subscriptions) =>
+        machine.MapDelete("/devices/{id}", async (
+            string id,
+            DeviceTokenService devices,
+            WeaveFleet.Domain.Repositories.IPushSubscriptionRepository subscriptions,
+            WeaveFleet.Application.Machines.DeviceGrantService grants,
+            CancellationToken cancellationToken) =>
         {
             if (!await devices.RevokeAsync(id))
                 return Results.NotFound(new ErrorResponse("No such device."));
 
-            // A removed phone gets no more notifications either.
+            // A removed phone gets no more notifications, and loses the tokens home got it on other machines.
             await subscriptions.DeleteByDeviceAsync(id);
+            await grants.RevokeAllAsync(id, cancellationToken);
             return Results.NoContent();
         })
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)

@@ -25,3 +25,6 @@ public sealed record UpdateRemoteMachineRequest(string? BaseUrl, string? Token, 
 public sealed record ImportMachineEntry(string? Id, string? Name, string? BaseUrl, string? Token, string? Os, DateTimeOffset? AddedAt);
 
 public sealed record ImportMachinesRequest(IReadOnlyList<ImportMachineEntry>? Machines);
+
+/// <summary>The phone's own token on another machine. Kept by the phone; home keeps only the other machine's id for it.</summary>
+public sealed record DeviceGrantResponse(string MachineId, string BaseUrl, string Token);

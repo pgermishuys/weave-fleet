@@ -329,6 +329,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.UpdateRemoteMachineRequest))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.ImportMachinesRequest))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.ImportMachineEntry))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.DeviceGrantResponse))]
 // Push
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.VapidKeyResponse))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.SavePushSubscriptionRequest))]
