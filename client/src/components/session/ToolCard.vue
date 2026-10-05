@@ -91,6 +91,7 @@ const TOOL_STATUS_TO_GLYPH: Record<string, string> = {
   Background: "running",
   Completed: "completed",
   Cancelled: "idle",
+  Stopped: "idle",
   Error: "error",
 };
 
@@ -102,6 +103,7 @@ const STATUS_COLOR: Record<string, string> = {
   Background: "var(--running)",
   Completed: "var(--complete)",
   Cancelled: "var(--muted)",
+  Stopped: "var(--muted)",
   Error: "var(--error)",
 };
 
@@ -182,6 +184,13 @@ function handleExpandVisual(): void {
         >Background</span>
         <StatusGlyph :status="glyphStatus" />
       </span>
+      <!-- Work the call started that Fleet stopped: said as the strip says it, not as a failure. -->
+      <span
+        v-else-if="status === 'Stopped'"
+        class="tool-header__status tool-header__background"
+        :style="{ color: statusColor }"
+        data-testid="tool-card-stopped"
+      >Stopped</span>
       <span
         v-else-if="diffStats"
         class="tool-header__result"

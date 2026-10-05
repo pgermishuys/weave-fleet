@@ -1016,7 +1016,7 @@ function handleKeydown(event: KeyboardEvent): void {
         :on-open-folder="autocomplete.onOpenFolder"
         :query="autocomplete.query.value"
         :session-note="supportsFleetTools
-          ? 'The agent gets a link to the session, not a copy, and reads what it needs with fleet_session_read.'
+          ? 'The agent gets a link to the session, not a copy, and reads what it needs.'
           : 'The agent gets the session\'s title and a recap of where it stands, not a copy.'"
       />
 

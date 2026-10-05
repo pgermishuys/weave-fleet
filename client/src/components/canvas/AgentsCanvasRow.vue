@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Check, Square, X } from "lucide-vue-next";
+import { Ban, Check, X } from "lucide-vue-next";
 import { formatElapsed, workElapsedMs } from "@/lib/running-work";
 import { lineageKindLabel, type AgentRow } from "@/lib/session-lineage";
 
@@ -79,7 +79,7 @@ const label = computed(() => [props.row.name, props.row.task, props.parent ? nul
         v-else-if="row.state === 'failed'"
         class="agent-row__icon agent-row__icon--failed"
       />
-      <Square
+      <Ban
         v-else-if="row.state === 'stopped'"
         class="agent-row__icon"
       />

@@ -7,6 +7,7 @@ import ActivityStream from "@/components/session/ActivityStream.vue";
 import Composer from "@/components/session/Composer.vue";
 import RecapLine from "@/components/session/RecapLine.vue";
 import SideConversationPanel from "@/components/session/SideConversationPanel.vue";
+import SubagentPromptLine from "@/components/session/SubagentPromptLine.vue";
 import DiffsTray from "@/components/session/DiffsTray.vue";
 import FilesChangedView from "@/components/session/FilesChangedView.vue";
 import ForkSessionDialog from "@/components/session/ForkSessionDialog.vue";
@@ -429,7 +430,7 @@ const SessionDetailPage = defineComponent({
     );
 
     const parentSession = computed(() => {
-      const parentSessionId = search.value.parentSessionId ?? selectedSession.value?.parentSessionId ?? null;
+      const parentSessionId = search.value.parentSessionId ?? selectedSession.value?.parentSessionId ?? remoteSession.value?.parentSessionId ?? null;
       if (!parentSessionId) {
         return null;
       }
@@ -438,7 +439,7 @@ const SessionDetailPage = defineComponent({
     });
 
     const parentSessionHref = computed(() => {
-      const parentSessionId = search.value.parentSessionId ?? selectedSession.value?.parentSessionId ?? null;
+      const parentSessionId = search.value.parentSessionId ?? selectedSession.value?.parentSessionId ?? remoteSession.value?.parentSessionId ?? null;
       if (!parentSessionId) {
         return null;
       }
@@ -451,7 +452,7 @@ const SessionDetailPage = defineComponent({
     });
 
     const isDelegatedSession = computed(() => {
-      return Boolean(search.value.parentSessionId || selectedSession.value?.parentSessionId);
+      return Boolean(search.value.parentSessionId || selectedSession.value?.parentSessionId || remoteSession.value?.parentSessionId);
     });
 
     // "Started by …" in the header: a fork or a session another session's agent started (a subagent has its banner).
@@ -473,7 +474,7 @@ const SessionDetailPage = defineComponent({
     });
 
     async function handleBackToParent(): Promise<void> {
-      const parentSessionId = search.value.parentSessionId ?? selectedSession.value?.parentSessionId ?? null;
+      const parentSessionId = search.value.parentSessionId ?? selectedSession.value?.parentSessionId ?? remoteSession.value?.parentSessionId ?? null;
       if (!parentSessionId) {
         return;
       }
@@ -512,6 +513,13 @@ const SessionDetailPage = defineComponent({
 
       // A session that isn't running wakes on its next prompt.
       return capabilities ? !capabilities.canPrompt : effectiveLifecycleStatus.value === "error";
+    });
+
+    // A subagent's session its harness can't prompt (Claude Code) gets a line pointing at the parent, not a composer.
+    const isReadOnlySubagent = computed(() => {
+      return isDelegatedSession.value
+        && !isArchived.value
+        && effectiveActionCapabilities.value?.canPrompt === false;
     });
 
     const fallbackCanAbort = computed(() => effectiveLifecycleStatus.value === "running" && isActiveActivityStatus(effectiveActivityStatus.value));
@@ -922,7 +930,7 @@ const SessionDetailPage = defineComponent({
                 </div>
               </div>
 
-              {search.value.parentSessionId || selectedSession.value?.parentSessionId ? (
+              {isDelegatedSession.value ? (
                 <button
                   type="button"
                   class="inline-flex h-8 items-center justify-center gap-2 border bg-background px-3 text-sm font-medium shadow-xs transition-all hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50"
@@ -942,13 +950,22 @@ const SessionDetailPage = defineComponent({
             <WorkflowFinishBar sessionId={params.value.id} />
             <RecapLine recap={recap.value} />
             <SideConversationPanel sessionId={params.value.id} />
-            <Composer
-              ref={composerRef}
-              sessionId={params.value.id}
-              instanceId={instanceId.value}
-              disabled={isComposerDisabled.value}
-              onPromptSent={handlePromptSent}
-            />
+            {isReadOnlySubagent.value ? (
+              <SubagentPromptLine
+                sessionId={params.value.id}
+                parentTitle={parentSession.value?.session.title?.trim() || null}
+                reason={effectiveActionCapabilities.value?.promptDisabledReason ?? null}
+                onBack={() => void handleBackToParent()}
+              />
+            ) : (
+              <Composer
+                ref={composerRef}
+                sessionId={params.value.id}
+                instanceId={instanceId.value}
+                disabled={isComposerDisabled.value}
+                onPromptSent={handlePromptSent}
+              />
+            )}
           </>
         ) : (
           <FilesChangedView

@@ -5,13 +5,14 @@ import {
   Activity,
   ArrowDown,
   ArrowUpRight,
+  Ban,
   Bot,
   Check,
   ChevronDown,
   CircleAlert,
+  CircleStop,
   ListTodo,
   ScrollText,
-  Square,
   Terminal,
   X,
 } from "lucide-vue-next";
@@ -20,6 +21,7 @@ import WorkOutput from "@/components/session/WorkOutput.vue";
 import { stopWork } from "@/composables/use-running-work";
 import { dispatchCommandEvent } from "@/lib/command-events";
 import {
+  formatAgo,
   formatElapsed,
   isWorkRunning,
   workElapsedMs,
@@ -73,7 +75,7 @@ const what = computed(() => {
 const time = computed(() => {
   if (running.value) return formatElapsed(workElapsedMs(props.item, props.now));
   const ended = props.item.endedAt ? Date.parse(props.item.endedAt) : Number.NaN;
-  return Number.isNaN(ended) ? "" : `${formatElapsed(Math.max(0, props.now - ended))} ago`;
+  return Number.isNaN(ended) ? "" : formatAgo(Math.max(0, props.now - ended));
 });
 const timeTitle = computed(() => {
   const started = new Date(props.item.startedAt).toLocaleTimeString();
@@ -162,7 +164,7 @@ async function stop(): Promise<void> {
         class="work-row__icon work-row__icon--lost"
         aria-hidden="true"
       />
-      <Square
+      <Ban
         v-else-if="item.status === 'cancelled'"
         class="work-row__icon"
         aria-hidden="true"
@@ -268,19 +270,20 @@ async function stop(): Promise<void> {
       </Button>
       <Button
         v-if="running && item.canStop"
-        variant="toolbar-icon"
-        size="toolbar"
-        class="work-row__stop"
+        variant="ghost"
+        size="sm"
+        class="work-row__action work-row__stop"
         data-testid="background-work-stop"
         :disabled="stopping"
         :aria-label="`Stop ${name}`"
         :title="stopping ? 'Stopping…' : 'Stop'"
         @click="stop"
       >
-        <Square
+        <CircleStop
           class="size-3.5"
           aria-hidden="true"
         />
+        <span class="work-row__stop-word">Stop</span>
       </Button>
       <span
         v-else
@@ -361,7 +364,7 @@ async function stop(): Promise<void> {
 
 .work-row__kind {
   flex-shrink: 0;
-  width: 58px;
+  width: 66px;
   color: var(--muted);
   font-size: 11px;
   font-weight: 600;
@@ -412,13 +415,13 @@ async function stop(): Promise<void> {
 }
 
 .work-row__stop {
-  flex-shrink: 0;
+  width: 58px;
 }
 
 /* Rows line up whether or not they offer Stop. */
 .work-row__stop-slot {
   flex-shrink: 0;
-  width: 28px;
+  width: 58px;
 }
 
 .work-row__chevron {
@@ -471,6 +474,16 @@ async function stop(): Promise<void> {
 
   .work-row__action {
     padding: 0 6px;
+  }
+
+  /* Stop keeps its icon and its tooltip; the word goes with the kind's. */
+  .work-row__stop-word {
+    display: none;
+  }
+
+  .work-row__stop,
+  .work-row__stop-slot {
+    width: 28px;
   }
 }
 </style>

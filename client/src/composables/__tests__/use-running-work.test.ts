@@ -139,13 +139,22 @@ describe("useRunningWork", () => {
     expect(result.visible.value).toEqual([]);
   });
 
-  it("ticks elapsed time every second while something runs", async () => {
-    publishRunningWork("s1", items(shell()));
+  it("ticks every second in a time's first minute, then once a minute", async () => {
+    // Started 30 s ago: its seconds show, so the clock ticks every second.
+    publishRunningWork("s1", items(shell("s1", "w-shell", { startedAt: "2026-10-04T10:04:30Z" })));
     const { result } = await mountComposable(() => useRunningWork("s1"));
     const before = result.now.value;
 
     vi.advanceTimersByTime(3_000);
     expect(result.now.value - before).toBe(3_000);
+
+    // Past its first minute only the minutes show: the clock moves once a minute.
+    await vi.advanceTimersByTimeAsync(27_000);
+    const atMinute = result.now.value;
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(result.now.value).toBe(atMinute);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(result.now.value - atMinute).toBe(60_000);
   });
 
   it("stops an item through Fleet and shows it ended at once", async () => {

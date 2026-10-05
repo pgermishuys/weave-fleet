@@ -15,6 +15,7 @@ vi.mock("@/composables/use-session-stream", async () => {
     useSessionStream: () => ({
       messages: computed(() => stream.messages.value),
       delegations: computed(() => []),
+      runningWork: computed(() => []),
       sessionStatus: computed(() => "busy"),
       isLoading: ref(false),
       hasMore: ref(false),

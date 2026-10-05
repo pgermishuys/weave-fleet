@@ -9,6 +9,8 @@ export const useSessionsStore = defineStore("sessions", () => {
   const activeSessionId = shallowRef<string | null>(null);
   const retentionStatus = shallowRef<"active" | "archived" | "all">("active");
   const sessionStateOverrides = ref<Record<string, SessionStateOverride>>({});
+  /** Whether the list has been loaded from Fleet at least once (sessions upserted one by one don't make a list). */
+  const listLoaded = shallowRef(false);
 
   function setActiveSessionId(sessionId: string | null): void {
     activeSessionId.value = sessionId;
@@ -20,6 +22,7 @@ export const useSessionsStore = defineStore("sessions", () => {
 
   function setSessions(nextSessions: readonly SessionListItem[]): void {
     sessions.value = [...nextSessions];
+    listLoaded.value = true;
   }
 
   function patchSession(
@@ -89,6 +92,7 @@ export const useSessionsStore = defineStore("sessions", () => {
     activeSessionId,
     retentionStatus,
     sessionStateOverrides,
+    listLoaded,
     setActiveSessionId,
     setRetentionStatus,
     patchSession,

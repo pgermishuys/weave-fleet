@@ -109,6 +109,32 @@ describe("AgentsCanvas", () => {
     vi.useRealTimers();
   });
 
+  // On a phone the sidebar (which loads the list) isn't there until its drawer opens; forks and started sessions are in it.
+  it("loads the session list itself when nothing has, so forks and started sessions show", async () => {
+    publishRunningWork("s1", items(reviewer));
+    const listed = [
+      session("s1", "Capture Claude Code subagents"),
+      session("fork-1", "Fork: emit jobs over SignalR", { forkedFromSessionId: "s1", spawnKind: "fork" }),
+      session("started-1", "Fix Pi model switch", { spawnedBySessionId: "s1", spawnKind: "api" }),
+    ];
+    apiGet.mockImplementation(async (path: string) => (path === "/api/sessions"
+      ? { data: listed, error: undefined, response: { ok: true, status: 200 } }
+      : { data: [reviewer], response: { ok: true, status: 200 } }));
+
+    const wrapper = mountCanvas();
+    await flushPromises();
+
+    expect(apiGet).toHaveBeenCalledWith("/api/sessions", expect.anything());
+    expect(rows(wrapper, "started").map((row) => row.text()).join()).toContain("Fix Pi model switch");
+    expect(rows(wrapper, "started").map((row) => row.text()).join()).toContain("Fork: emit jobs over SignalR");
+
+    // Loaded once: the sidebar keeps it current from here.
+    apiGet.mockClear();
+    mountCanvas();
+    await flushPromises();
+    expect(apiGet).not.toHaveBeenCalledWith("/api/sessions", expect.anything());
+  });
+
   it("shows the parent, what runs now, the sessions it started, and earlier agents folded", async () => {
     seedSessions();
     publishRunningWork("s1", items(reviewer, shell));
@@ -132,7 +158,7 @@ describe("AgentsCanvas", () => {
     expect(running.map((row) => row.attributes("data-kind"))).toEqual(["subagent", "fork"]);
     expect(running[0]!.text()).toContain("code-reviewer");
     expect(running[0]!.text()).toContain("Review the diff");
-    expect(running[0]!.text()).toContain("1m 40s");
+    expect(running[0]!.text()).toContain("1m");
     expect(running[1]!.text()).toContain("needs you");
     expect(running[1]!.get(".agent-row__runs-on").text()).toBe("OpenCode 2 · GPT-5.5");
     expect(running[1]!.get(".agent-row__note").text()).toBe("· asked a question");

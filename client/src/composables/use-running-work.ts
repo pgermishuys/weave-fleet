@@ -16,10 +16,12 @@ import { onGlobalEvent, onReconnect } from "@/composables/use-signalr-socket";
 import { isWorkEvent } from "@/lib/domain-events";
 import {
   applyWorkItem,
+  elapsedTickMs,
   isWorkRunning,
   toRunningWorkItem,
   toRunningWorkItems,
   type RunningWorkItem,
+  workElapsedMs,
   type WorkOutputPage,
 } from "@/lib/running-work";
 
@@ -39,9 +41,6 @@ import {
 
 /** How long a finished item stays in the strip with its result before it drops off. */
 export const FINISHED_VISIBLE_MS = 30_000;
-
-/** How often elapsed times tick. */
-const TICK_MS = 1_000;
 
 /** Each session's work as Fleet last said it, so the strip shows at once when you come back to a session. */
 const workBySession = reactive<Record<string, RunningWorkItem[]>>({});
@@ -193,40 +192,50 @@ export function isRecentlyEnded(item: RunningWorkItem, now: number): boolean {
 }
 
 /**
- * One clock for every elapsed time, so the strip and the status bar's list read the same second. It ticks every
- * second while any component needs it, and rests otherwise.
+ * One clock for every elapsed time, so the strip and the status bar's list read the same second. It ticks as often as
+ * its most demanding user asks (every second while a time is in its first minute or a finished row waits to drop off,
+ * else every minute), and rests while nothing shows.
  */
 const clock = shallowRef(Date.now());
-let clockUsers = 0;
+const tickRequests = new Map<symbol, number>();
 let clockTimer: ReturnType<typeof setInterval> | null = null;
+let clockTickMs: number | null = null;
 
 /** Sets the clock to now, so items that just arrived are measured against the time they came. */
 function touchClock(): void {
   clock.value = Date.now();
 }
 
-/** Keeps the clock ticking while `active` says so; stops with the component that asked. */
-function useTicker(active: () => boolean): void {
-  let using = false;
+function retimeClock(): void {
+  const next = tickRequests.size > 0 ? Math.min(...tickRequests.values()) : null;
+  if (next === clockTickMs) return;
+  if (clockTimer !== null) clearInterval(clockTimer);
+  clockTimer = next === null ? null : setInterval(touchClock, next);
+  clockTickMs = next;
+}
+
+/** How often the clock needs to tick for `items` at `now`: by the youngest of them; null when there are none. */
+function tickFor(items: readonly RunningWorkItem[], now: number): number | null {
+  if (items.length === 0) return null;
+  return Math.min(...items.map((item) => elapsedTickMs(workElapsedMs(item, now))));
+}
+
+/** Keeps the clock ticking every `interval()` ms (null: not at all); stops with the component that asked. */
+function useTicker(interval: () => number | null): void {
+  const key = Symbol("ticker");
 
   function release(): void {
-    if (!using) return;
-    using = false;
-    clockUsers -= 1;
-    if (clockUsers === 0 && clockTimer !== null) {
-      clearInterval(clockTimer);
-      clockTimer = null;
-    }
+    if (tickRequests.delete(key)) retimeClock();
   }
 
-  const stopWatch = watch(active, (isActive) => {
-    if (isActive && !using) {
-      using = true;
-      clockUsers += 1;
-      touchClock();
-      clockTimer ??= setInterval(touchClock, TICK_MS);
+  const stopWatch = watch(interval, (ms) => {
+    if (ms === null) {
+      release();
+      return;
     }
-    if (!isActive) release();
+    if (!tickRequests.has(key)) touchClock();
+    tickRequests.set(key, ms);
+    retimeClock();
   }, { immediate: true });
 
   if (getCurrentInstance()) {
@@ -246,7 +255,7 @@ export interface UseRunningWorkResult {
   finished: ComputedRef<readonly RunningWorkItem[]>;
   /** What the strip shows: running, then recently finished. */
   visible: ComputedRef<readonly RunningWorkItem[]>;
-  /** The time elapsed times count to; ticks every second while something runs or shows its result. */
+  /** The time elapsed times count to; ticks while something runs or shows its result (see {@link useTicker}). */
   now: Readonly<Ref<number>>;
   /** Whether a Stop for the item is on its way. */
   isStopping: (itemId: string) => boolean;
@@ -298,7 +307,8 @@ export function useRunningWork(sessionId: MaybeRefOrGetter<string | null | undef
   watch(items, touchClock, { flush: "sync" });
   const finished = computed(() => items.value.filter((item) => isRecentlyEnded(item, clock.value)));
   const visible = computed(() => [...running.value, ...finished.value]);
-  useTicker(() => running.value.length > 0 || finished.value.length > 0);
+  // A finished row drops off on time, and says "just now" until then.
+  useTicker(() => (finished.value.length > 0 ? 1_000 : tickFor(running.value, clock.value)));
 
   return {
     items,
@@ -364,7 +374,7 @@ export function useRunningWorkAcrossSessions(): UseRunningWorkAcrossSessionsResu
   });
   const sessionCount = computed(() => groups.value.length);
   watch(running, touchClock, { flush: "sync" });
-  useTicker(() => running.value.length > 0);
+  useTicker(() => tickFor(running.value, clock.value));
 
   return { running, groups, sessionCount, now: readonly(clock), isStopping: (itemId) => stopping.has(itemId), refresh: loadAcross };
 }
@@ -378,7 +388,8 @@ export function _resetRunningWorkForTesting(): void {
   globalListenerInstalled = false;
   if (clockTimer !== null) clearInterval(clockTimer);
   clockTimer = null;
-  clockUsers = 0;
+  clockTickMs = null;
+  tickRequests.clear();
   touchClock();
   acrossLoadId = 0;
 }

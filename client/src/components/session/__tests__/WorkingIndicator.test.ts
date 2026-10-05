@@ -18,12 +18,19 @@ describe("WorkingIndicator", () => {
 
     expect(wrapper.get(".working__elapsed").text()).toBe("· 14s");
 
-    await vi.advanceTimersByTimeAsync(61_000);
-    expect(wrapper.get(".working__elapsed").text()).toBe("· 1m 15s");
+    await vi.advanceTimersByTimeAsync(46_000);
+    expect(wrapper.get(".working__elapsed").text()).toBe("· 1m");
+
+    // After the first minute only the minutes change, once a minute.
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(wrapper.get(".working__elapsed").text()).toBe("· 1m");
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(wrapper.get(".working__elapsed").text()).toBe("· 2m");
 
     await wrapper.setProps({ since: Date.parse("2026-09-19T08:30:00Z") });
-    expect(wrapper.get(".working__elapsed").text()).toBe("· 1h 31m");
+    expect(wrapper.get(".working__elapsed").text()).toBe("· 1h 32m");
     wrapper.unmount();
+    vi.useRealTimers();
   });
 
   // A question (a sub-agent's or the session's own) holds the turn: the words and diamond of the session row.

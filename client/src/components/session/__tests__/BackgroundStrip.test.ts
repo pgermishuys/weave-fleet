@@ -104,23 +104,27 @@ describe("BackgroundStrip", () => {
     const [shellRow, agentRow] = rows(wrapper);
     expect(shellRow!.text()).toContain("Shell");
     expect(shellRow!.get("code").text()).toBe("bun run test:e2e");
-    expect(shellRow!.text()).toContain("3m 12s");
+    expect(shellRow!.text()).toContain("3m");
     expect(shellRow!.find("[data-testid='background-work-output']").exists()).toBe(true);
     expect(shellRow!.get("[data-testid='background-work-stop']").attributes("aria-label")).toBe("Stop bun run test:e2e");
     // A shell runs in no session of its own.
     expect(shellRow!.find("[data-testid='background-work-open']").exists()).toBe(false);
 
-    expect(agentRow!.text()).toContain("Agent");
+    expect(agentRow!.text()).toContain("Subagent");
     expect(agentRow!.text()).toContain("code-reviewer · Review the diff");
     expect(agentRow!.get("[data-testid='background-work-model']").text()).toContain("Sonnet 5.5");
-    expect(agentRow!.text()).toContain("1m 40s");
+    expect(agentRow!.text()).toContain("1m");
     expect(agentRow!.get("[data-testid='background-work-open']").attributes("href")).toBe("/sessions/child-1?instanceId=i-child&parentSessionId=s1");
     expect(agentRow!.get("[data-testid='background-work-stop']").attributes("aria-label")).toBe("Stop Review the diff");
     expect(agentRow!.find("[data-testid='background-work-output']").exists()).toBe(false);
 
+    // Past their first minute, times change once a minute, not every second.
     vi.advanceTimersByTime(2_000);
     await flushPromises();
-    expect(shellRow!.text()).toContain("3m 14s");
+    expect(shellRow!.text()).toContain("3m");
+    vi.advanceTimersByTime(58_000);
+    await flushPromises();
+    expect(shellRow!.text()).toContain("4m");
   });
 
   it("offers no Output when the output can't be read, and no Stop when it can't be stopped on its own", async () => {
@@ -146,7 +150,7 @@ describe("BackgroundStrip", () => {
     expect(wrapper.get("[data-testid='background-strip-summary']").text()).toBe("1 running · 1 finished");
     const finished = rows(wrapper).find((row) => row.attributes("data-status") === "ended")!;
     expect(finished.get("[data-testid='background-work-result']").text()).toContain("exit 0");
-    expect(finished.text()).toContain("20s ago");
+    expect(finished.text()).toContain("just now");
     expect(finished.find("[data-testid='background-work-stop']").exists()).toBe(false);
     expect(finished.find("[data-testid='background-work-output']").exists()).toBe(true);
 

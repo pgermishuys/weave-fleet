@@ -172,6 +172,37 @@ describe("session route files view close", () => {
     });
   });
 
+  it("shows_a_line_pointing_at_the_parent_instead_of_the_composer_when_a_subagent_session_cannot_be_prompted", async () => {
+    search.value = { instanceId: "instance-1" };
+    const reason = "Claude Code can't prompt a subagent on its own. Ask the session that started it.";
+    apiFetchMock.mockResolvedValue(Response.json({
+      id: "session-1",
+      instanceId: "instance-1",
+      parentSessionId: "parent-1",
+      title: "Review the scripts",
+      lifecycleStatus: "running",
+      activityStatus: "idle",
+      retentionStatus: "active",
+      harnessType: "claude-code",
+      capabilities: {
+        canPrompt: false, canRestart: true, canAbort: false, canArchive: true, canUnarchive: false, canFork: false,
+        canDelete: true, promptDisabledReason: reason, restartDisabledReason: null, abortDisabledReason: null,
+        archiveDisabledReason: null, unarchiveDisabledReason: null, forkDisabledReason: null, deleteDisabledReason: null,
+      },
+    }));
+    const { Route } = await import("@/routes/sessions.$id");
+    const SessionDetailPage = (Route as unknown as { config: { component: DefineComponent } }).config.component;
+
+    const wrapper = mount(SessionDetailPage, { attachTo: document.body });
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="composer"]').exists()).toBe(false);
+    const line = wrapper.get('[data-testid="subagent-prompt-line"]');
+    expect(line.text()).toContain("Ask the session that started it");
+    expect(line.attributes("title")).toBe(reason);
+    wrapper.unmount();
+  });
+
   it("restores_chat_mode_and_clears_files_view_search_when_files_view_closes", async () => {
     const { Route } = await import("@/routes/sessions.$id");
     const SessionDetailPage = (Route as unknown as { config: { component: DefineComponent } }).config.component;

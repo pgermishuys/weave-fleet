@@ -35,7 +35,7 @@ describe("AgentTaskRow", () => {
     ["pending", "Starting", true],
     ["completed", "Done", false],
     ["error", "Failed", false],
-    ["cancelled", "Cancelled", false],
+    ["cancelled", "Stopped", false],
   ])("shows a %s child as %s", (status, word, working) => {
     const wrapper = mount(AgentTaskRow, { props: { delegation: delegation({ status }) } });
 
