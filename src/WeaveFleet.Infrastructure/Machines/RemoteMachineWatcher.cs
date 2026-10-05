@@ -123,14 +123,18 @@ public sealed partial class RemoteMachineWatcher(
 
     private Task ForwardAsync(RemoteMachine machine, SessionNotificationPayload payload)
     {
-        // Never push this machine's own notifications twice, nor bounce them between machines that list each other.
-        if (payload.MachineId == identity.Get().Id)
+        // A machine's hub only carries its own notifications. One that claims to be another machine's is dropped: the
+        // id decides which of the phone's keys an Allow from the notification uses. That also stops two machines that
+        // list each other from echoing this machine's own notifications back.
+        if (payload.MachineId is not null && payload.MachineId != machine.Id)
+            return Task.CompletedTask;
+        if (machine.Id == identity.Get().Id)
             return Task.CompletedTask;
 
         dispatcher.Enqueue(payload with
         {
-            MachineId = payload.MachineId ?? machine.Id,
-            MachineName = payload.MachineName ?? machine.Name,
+            MachineId = machine.Id,
+            MachineName = machine.Name,
             Kind = payload.Kind ?? PushNotificationDispatcher.KindFromReason(payload.Reason),
         });
         return Task.CompletedTask;

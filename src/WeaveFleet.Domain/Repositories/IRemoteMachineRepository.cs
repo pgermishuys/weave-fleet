@@ -23,6 +23,9 @@ public interface IRemoteMachineRepository
 
     Task<IReadOnlyList<DeviceGrant>> ListGrantsForDeviceAsync(string deviceId);
 
+    /// <summary>Every grant on the machine, removed or not.</summary>
+    Task<IReadOnlyList<DeviceGrant>> ListGrantsForMachineAsync(string machineId);
+
     /// <summary>Grants whose device was removed here but not yet on the other machine.</summary>
     Task<IReadOnlyList<DeviceGrant>> ListRevokedGrantsAsync();
 

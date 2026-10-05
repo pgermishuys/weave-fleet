@@ -1,3 +1,4 @@
+using WeaveFleet.Api.Auth;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Terminals;
 
@@ -154,6 +155,10 @@ public static class TerminalEndpoints
 
         using var attachment = attached.Value;
         using var socket = await http.WebSockets.AcceptWebSocketAsync();
+        // A paired phone's terminal closes when the phone is removed.
+        using var tracked = FleetClaims.DeviceIdOf(http.User) is { } deviceId
+            ? http.RequestServices.GetRequiredService<DeviceConnections>().Track(deviceId, socket.Abort)
+            : null;
         await TerminalSocket.RunAsync(socket, attachment, http.RequestAborted);
         return Results.Empty;
     }

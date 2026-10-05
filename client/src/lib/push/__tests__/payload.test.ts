@@ -39,6 +39,8 @@ describe("parsePushPayload", () => {
   it("keeps the tap on this origin", () => {
     expect(parsePushPayload({ ...valid, url: "https://evil.example/x" })?.url).toBe("/phone");
     expect(parsePushPayload({ ...valid, url: "//evil.example/x" })?.url).toBe("/phone");
+    expect(parsePushPayload({ ...valid, url: "/\\evil.example/x" })?.url).toBe("/phone");
+    expect(parsePushPayload({ ...valid, url: "/\t/evil.example/x" })?.url).toBe("/phone");
     expect(parsePushPayload({ ...valid, url: undefined })?.url).toBe("/phone");
   });
 

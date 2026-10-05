@@ -110,7 +110,8 @@ This is what any client relies on. The web app is one client. A native app would
 - `publicUrl` is the address phones should use for the machine, when someone saved one (null otherwise). Pairing
   puts it in the QR code.
 
-`PUT /api/machine` with `{ "name": "…", "publicUrl": "…" }` changes either for every client (local mode only). A
+`PUT /api/machine` with `{ "name": "…", "publicUrl": "…" }` changes either for every client (local mode only, owner
+only: `403` for a device token or an agent). A
 field left out stays as it is; an empty name goes back to the host name, an empty `publicUrl` clears it.
 
 ### Authentication
@@ -172,8 +173,9 @@ Local mode only.
   signs the browser in with a device cookie. `404` for a used or expired code; a bad name doesn't use the code up.
   `/api/pairing/*` takes 10 requests a minute in all, and typed codes 5 a minute.
 - `GET /api/machine/devices` (owner): `{ devices: [{ id, name, platform, createdAt, lastUsedAt, pairedVia }] }`.
-- `DELETE /api/machine/devices/{id}` (owner): removes the device. Its token stops working at once, its push
-  subscriptions go, and the tokens its home got it on other machines are removed there.
+- `DELETE /api/machine/devices/{id}` (owner): removes the device. Its token stops working at once, its open hub
+  connections and terminals are closed, its push subscriptions go, and the tokens its home got it on other machines
+  are removed there.
 - `POST /api/machine/devices` (the machine token only, not a cookie) with `{ name, platform, pairedVia }`:
   `{ deviceId, token }`. Another machine (a phone's home) calls this to get the phone a token here; see device grants.
 
@@ -190,16 +192,19 @@ Each machine keeps the list of other machines its clients know.
   1, token auth, not this machine) and keeps it. These calls go out from Fleet: http(s) only, 5-second timeout, no
   redirects.
 - `PUT /api/machines/{id}` (owner) with any of `{ baseUrl, token, name }`; a new address or token is checked first.
-- `DELETE /api/machines/{id}` (owner).
+- `DELETE /api/machines/{id}` (owner). First removes the device tokens this machine got its phones there; if that
+  machine doesn't answer, those tokens stay until they're removed on it (or go unused for 30 days).
 - `POST /api/machines/import` (owner) with `{ machines: [{ id, name, baseUrl, token, os, addedAt }] }`: saves a
   browser's own list as it is (no call to each machine), idempotent by id; skips this machine and bad addresses.
 - `POST /api/machines/{id}/device-grant` (a paired device): a device grant. Home asks machine `{id}` for a device
   token named "<phone> via <home>" with the machine token it keeps, records only that machine's id for the device, and
-  returns `{ machineId, baseUrl, token }` to the phone. Asking again replaces the grant.
+  returns `{ machineId, baseUrl, token }` to the phone. Asking again replaces the grant: the old token there is
+  removed first, and if that machine can't be reached nothing changes (`502`).
 
 Machine tokens are kept encrypted (Data Protection). Home keeps one SignalR connection per listed machine (its
 machine token as the bearer, the `sessions` topic) to push those machines' notifications to its phones; it doesn't
-forward notifications that say they're its own.
+forward one that names a machine other than the one it came from, and labels each with the id and name in its own
+list.
 
 ### Push: `/api/push/*`
 
@@ -216,7 +221,8 @@ Local mode only. Web Push with VAPID; each machine's key pair is kept in `fleet.
 - `POST /api/push/test` with `{ endpoint }`: pushes a test to that subscription; `{ outcome }` is `delivered`, `gone`
   (and removed), `retry_later` or `failed`.
 
-The endpoint is a capability URL, so it only travels in bodies. A device manages only the subscriptions it made; the
+The endpoint must be an `https://` address with a DNS name (no IP address, `localhost` or local name): Fleet posts to
+it, without following redirects. The endpoint is a capability URL, so it only travels in bodies. A device manages only the subscriptions it made; the
 owner manages any. A subscription the push service says is gone (`404`/`410`), or that fails 10 times in a row, is
 removed.
 

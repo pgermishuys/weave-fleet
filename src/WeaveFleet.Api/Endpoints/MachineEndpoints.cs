@@ -65,6 +65,8 @@ public static class MachineEndpoints
             return Results.Ok(ToResponse(identity, fleetOptions, policy));
         })
         .Produces<MachineResponse>(200)
+        // The phone address decides where pairing QR codes point, so only the owner changes it (or the name).
+        .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
         .WithName("UpdateMachine");
 
         group.MapGet("/access", (ILocalTokenAuthService tokens, LoopbackAuthPolicy policy) =>

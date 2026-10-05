@@ -39,6 +39,22 @@ function clip(value: string, max: number): string {
   return value.length <= max ? value : `${value.slice(0, max - 1).trimEnd()}…`;
 }
 
+const PATH_BASE = "https://fleet.invalid";
+
+/**
+ * The path when `url` is a path on this origin, else null. Resolved the way a browser would, so `/\evil.example`
+ * (which browsers read as `//evil.example`) and the like don't get through.
+ */
+function samePagePath(url: string | null): string | null {
+  if (!url || !url.startsWith("/")) return null;
+  try {
+    const resolved = new URL(url, PATH_BASE);
+    return resolved.origin === PATH_BASE ? `${resolved.pathname}${resolved.search}${resolved.hash}` : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Reads a push. Null when it isn't a version 1 Fleet push. Long titles and bodies are clipped; a `url` that isn't a
  * path on this origin is replaced by the phone home page, so a push can't send the phone somewhere else.
@@ -54,8 +70,7 @@ export function parsePushPayload(data: unknown): PushPayloadV1 | null {
   const title = text(raw.title);
   if (!machineId || !sessionId || !title || !kind || !PUSH_KINDS.includes(kind)) return null;
 
-  const url = text(raw.url);
-  const safeUrl = url && url.startsWith("/") && !url.startsWith("//") ? url : "/phone";
+  const safeUrl = samePagePath(text(raw.url)) ?? "/phone";
 
   return {
     v: 1,

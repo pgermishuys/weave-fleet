@@ -549,7 +549,7 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
 
 ### Phase 7 — Docs, E2E, security, verification
 
-- [ ] 25. Docs: `docs/phone.md`, update `docs/machines.md`
+- [x] 25. Docs: `docs/phone.md`, update `docs/machines.md`
   - **What**: User and contract documentation.
   - **Files**: `docs/phone.md` (new), `docs/machines.md`, `README.md` (link only, if it lists docs)
   - **Depends on**: Tasks 1–24
@@ -561,7 +561,7 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
   - **Acceptance**:
     - Every new endpoint in this plan appears in `docs/machines.md`.
 
-- [ ] 26. End-to-end tests (phone viewport) and opt-in Web Push E2E
+- [x] 26. End-to-end tests (phone viewport) and opt-in Web Push E2E
   - **What**: Full-stack coverage of pairing, inbox and session view.
   - **Files**: `tests/WeaveFleet.E2E/Tests/PhonePairingTests.cs`, `tests/WeaveFleet.E2E/Tests/PhoneInboxTests.cs`, `tests/WeaveFleet.E2E/Tests/PhoneSessionTests.cs`, `tests/WeaveFleet.E2E/Tests/WebPushTests.cs`, `tests/WeaveFleet.E2E/Infrastructure/*` (phone context helper: viewport 390×844, `isMobile`, `hasTouch`)
   - **Depends on**: Tasks 1–24
@@ -578,7 +578,7 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
     - `dotnet test tests/WeaveFleet.E2E --filter "Category=E2E"` passes, including the new phone tests.
     - `FLEET_PUSH_E2E=1 xvfb-run -a dotnet test tests/WeaveFleet.E2E --filter "Category=PushE2E"` passes locally.
 
-- [ ] 27. Security audit (before merge)
+- [x] 27. Security audit (before merge)
   - **What**: Have the security auditor (warp) review auth, tokens, pairing, push and CORS; fix every blocking finding.
   - **Depends on**: Tasks 1–26
   - **Implementation outline**:
@@ -732,6 +732,39 @@ Differences from the plan:
 - A Phase 6 commit went in with four socket test suites failing (their HubConnection test doubles lacked
   `onreconnecting`); fixed in the next commit.
 - Deferred: nothing.
+
+### Phase 7 — done (2026-10-05)
+Docs (`docs/phone.md`, `docs/machines.md`, README link), phone E2E (pairing, inbox, session view, device scope) and the
+opt-in real Web Push E2E (`Category=PushE2E`, passed under `xvfb-run -a` against FCM) are in. A Release AOT publish
+(linux-x64) builds with no trimming or AOT warnings.
+
+Security review (Task 27): verdict **approve**, nothing blocking. Every should-fix was fixed, each with a test:
+1. `PUT /api/machine` was open to devices and agents, and `publicUrl` decides where pairing QR codes point. Now owner
+   only.
+2. Removing a device didn't close its live hub connection or terminals (they ran until the phone reconnected). New
+   `DeviceConnections` closes them on removal, including one that signed in just before.
+3. The watcher trusted the `machineId` in another machine's notifications, so a listed machine could speak for
+   another (and an Allow from that push would use the wrong key). Notifications naming a different machine are
+   dropped; the id and name always come from home's own list.
+4. Device grants: a re-grant whose old remote token couldn't be removed overwrote the row and forgot that token; a
+   grant finishing just after the phone was removed came back to life; removing a machine dropped its grants without
+   trying to remove them there. Now: the old token goes first (else `502`, nothing changes), a grant re-checks the
+   device after saving and undoes itself, and `DELETE /api/machines/{id}` removes the grants on that machine first.
+5. `DeviceTokenService` cached misses, so made-up ids grew the cache without bound. Only real devices are cached, and
+   a removed id is never put back by a load or touch that was already under way (closes the 30 s cache race in-process).
+6. The typed-code limiter was skipped when a request also carried a secret. Any request with a typed code counts.
+
+Notes from the review, also acted on: push endpoints must be https with a DNS name (no IPs, `localhost` or local
+names) and the push client no longer follows redirects; an unreadable stored machine token (Data Protection keys
+changed) no longer breaks `GET /api/machines` (token `null`) or the grant (clear message); the service worker's push
+`url` check now resolves the URL like a browser would (`/\evil.example` was let through).
+
+Left as they are (noted, not changed): a permission push shows the command on the lock screen, like the mockups;
+`/auth/token-login` isn't rate limited beyond the 256-bit secret; loopback is the owner, as before.
+
+Differences from the plan:
+- Findings and fixes are recorded here rather than in a PR description (the PR is the user's to open).
+- Task 28's real-device smoke tests (iPhone, Android, two machines over `tailscale serve`) need the user's devices.
 
 ## Risks and unknowns
 - **iOS**: no notification action buttons (tap → deep link only); push only for Home Screen apps on iOS 16.4+; permission request must be on a user gesture; Safari and Home Screen app storage may be separate → manual pairing code fallback (Task 6). Focus modes can silence pushes.

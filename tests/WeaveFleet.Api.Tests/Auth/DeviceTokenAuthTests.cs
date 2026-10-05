@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Api.Auth;
 using WeaveFleet.Api.Tests.Infrastructure;
@@ -59,6 +60,18 @@ public sealed class DeviceTokenAuthTests
         (await device.GetAsync("/api/machine/access")).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
         (await device.PostAsync("/api/machine/access/token", content: null)).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
         (await owner.GetAsync("/api/machine/access")).StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task A_device_cannot_change_where_pairing_codes_point()
+    {
+        await using var factory = CreateFactory();
+        var (_, token) = await IssueAsync(factory);
+        using var device = CreateClient(factory, token);
+        using var owner = CreateClient(factory, MachineToken(factory));
+
+        (await device.PutAsJsonAsync("/api/machine", new { publicUrl = "https://evil.example" })).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        (await owner.PutAsJsonAsync("/api/machine", new { publicUrl = "https://hangar.tail1234.ts.net" })).StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 
     [Fact]
@@ -121,6 +134,51 @@ public sealed class DeviceTokenAuthTests
         using var client = CreateClient(factory);
 
         (await client.GetAsync("/api/machine/access")).StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Removing_a_device_closes_its_hub_connection_at_once()
+    {
+        await using var factory = CreateFactory();
+        var (device, token) = await IssueAsync(factory);
+        await using var hub = new HubConnectionBuilder()
+            .WithUrl($"{factory.Server.BaseAddress}hubs/session-events", options =>
+            {
+                options.HttpMessageHandlerFactory = _ => factory.Server.CreateHandler();
+                options.Transports = Microsoft.AspNetCore.Http.Connections.HttpTransportType.LongPolling;
+                options.AccessTokenProvider = () => Task.FromResult<string?>(token);
+            })
+            .Build();
+        var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        hub.Closed += _ =>
+        {
+            closed.TrySetResult();
+            return Task.CompletedTask;
+        };
+        await hub.StartAsync();
+        var connections = factory.Services.GetRequiredService<DeviceConnections>();
+        connections.CountFor(device.Id).ShouldBe(1);
+
+        using var owner = CreateClient(factory, MachineToken(factory));
+        (await owner.DeleteAsync($"/api/machine/devices/{device.Id}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        await closed.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        connections.CountFor(device.Id).ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task A_connection_that_signed_in_just_before_its_device_was_removed_closes_when_tracked()
+    {
+        var devices = new DeviceTokenService(new WeaveFleet.Testing.Fakes.Repositories.InMemoryDeviceRepository(), TimeProvider.System);
+        using var connections = new DeviceConnections(devices);
+        var closes = 0;
+        using var other = connections.Track("other", () => closes += 100);
+        var (summary, _) = await devices.IssueAsync("Pixel", "android");
+        (await devices.RevokeAsync(summary.Id)).ShouldBeTrue();
+
+        using var late = connections.Track(summary.Id, () => closes++);
+
+        closes.ShouldBe(1, "only the removed device's connection closes");
     }
 
     [Fact]

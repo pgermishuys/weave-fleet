@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Devices;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
@@ -14,11 +15,13 @@ namespace WeaveFleet.Application.Machines;
 /// phone talks to that machine directly and never sees its machine token. Home asks the other machine with the
 /// machine token it keeps (<c>POST /api/machine/devices</c>) and remembers only the other machine's id for the device,
 /// never the token: that goes to the phone. Removing the phone here removes it there too; if the other machine is
-/// away, the removal waits and is retried when it answers again.
+/// away, the removal waits and is retried when it answers again. Removing the other machine from the list removes the
+/// phones' tokens on it first, as far as it answers.
 /// </summary>
 public sealed partial class DeviceGrantService(
     IRemoteMachineRepository repository,
     RemoteMachineService machines,
+    DeviceTokenService devices,
     IHttpClientFactory httpClients,
     MachineIdentityStore identity,
     TimeProvider time,
@@ -34,19 +37,28 @@ public sealed partial class DeviceGrantService(
         if (machine is null)
             return GrantResult.Fail(GrantFailure.NoSuchMachine, "That machine isn't in this machine's list.");
 
-        var previous = await repository.GetGrantAsync(deviceId, machineId);
-        if (previous is not null)
-            await TryRemoveRemoteAsync(machine, previous.RemoteDeviceId, cancellationToken);
-
         var self = identity.Get();
         var homeName = self.Name ?? Environment.MachineName;
+        if (machines.TryTokenOf(machine) is not { } machineToken)
+            return GrantResult.Fail(GrantFailure.Refused, $"{homeName} can't read its token for {machine.Name}. Enter it again in Settings › Machines on the computer.");
+
+        // The old token goes before a new one is made: the grant row only remembers one, and a token this machine
+        // forgets about could never be removed when the phone is.
+        var previous = await repository.GetGrantAsync(deviceId, machineId);
+        if (previous is not null)
+        {
+            if (!await TryRemoveRemoteAsync(machine, previous.RemoteDeviceId, cancellationToken))
+                return GrantResult.Fail(GrantFailure.Unreachable, $"Can't reach {machine.Name} from {homeName} right now.");
+            await repository.DeleteGrantAsync(deviceId, machineId);
+        }
+
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{machine.BaseUrl}/api/machine/devices")
         {
             Content = JsonContent.Create(
                 new MintRequest(Clip($"{deviceName} via {homeName}", 60), platform ?? "other", self.Id),
                 MachinesJsonContext.Default.MintRequest),
         };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", machines.TokenOf(machine));
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", machineToken);
 
         HttpResponseMessage response;
         try
@@ -87,6 +99,15 @@ public sealed partial class DeviceGrantService(
                 RemoteDeviceId = minted.DeviceId,
                 CreatedAt = time.GetUtcNow(),
             });
+
+            // The phone may have been removed while the other machine was minting. Its removal either already listed
+            // this grant or happened before the check below, which then undoes the grant itself.
+            if (await devices.ValidateDeviceAsync(deviceId) is null)
+            {
+                await RevokeAsync(machine, new DeviceGrant { DeviceId = deviceId, MachineId = machineId, RemoteDeviceId = minted.DeviceId }, cancellationToken);
+                return GrantResult.Fail(GrantFailure.Refused, "This phone was removed.");
+            }
+
             return new GrantResult(new Grant(machine.Id, machine.BaseUrl, minted.Token), null, null);
         }
     }
@@ -95,12 +116,38 @@ public sealed partial class DeviceGrantService(
     public async Task RevokeAllAsync(string deviceId, CancellationToken cancellationToken)
     {
         foreach (var grant in await repository.ListGrantsForDeviceAsync(deviceId))
+            await RevokeAsync(await repository.GetAsync(grant.MachineId), grant, cancellationToken);
+    }
+
+    /// <summary>
+    /// Removes every phone's token on a machine that's about to leave the list. Returns how many it couldn't: with the
+    /// machine gone there's no token left to retry with, so those stay until removed on the machine itself.
+    /// </summary>
+    public async Task<int> RemoveGrantsOnAsync(string machineId, CancellationToken cancellationToken)
+    {
+        var machine = await repository.GetAsync(machineId);
+        if (machine is null)
+            return 0;
+
+        var left = 0;
+        foreach (var grant in await repository.ListGrantsForMachineAsync(machineId))
         {
-            await repository.MarkGrantRevokedAsync(grant.DeviceId, grant.MachineId, time.GetUtcNow());
-            var machine = await repository.GetAsync(grant.MachineId);
-            if (machine is null || await TryRemoveRemoteAsync(machine, grant.RemoteDeviceId, cancellationToken))
+            if (await TryRemoveRemoteAsync(machine, grant.RemoteDeviceId, cancellationToken))
                 await repository.DeleteGrantAsync(grant.DeviceId, grant.MachineId);
+            else
+                left++;
         }
+
+        if (left > 0)
+            LogGrantsLeft(logger, left, machine.Name);
+        return left;
+    }
+
+    private async Task RevokeAsync(RemoteMachine? machine, DeviceGrant grant, CancellationToken cancellationToken)
+    {
+        await repository.MarkGrantRevokedAsync(grant.DeviceId, grant.MachineId, time.GetUtcNow());
+        if (machine is null || await TryRemoveRemoteAsync(machine, grant.RemoteDeviceId, cancellationToken))
+            await repository.DeleteGrantAsync(grant.DeviceId, grant.MachineId);
     }
 
     /// <summary>Tries again the removals that waited for <paramref name="machineId"/>.</summary>
@@ -138,6 +185,9 @@ public sealed partial class DeviceGrantService(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Couldn't remove a phone on {Machine} yet; trying again when it answers.")]
     private static partial void LogRemoveWaits(ILogger logger, string machine);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{Count} phone token(s) on {Machine} couldn't be removed before it left the list. Remove them in its Settings › Devices.")]
+    private static partial void LogGrantsLeft(ILogger logger, int count, string machine);
 }
 
 /// <summary>A token the phone can use on another machine.</summary>

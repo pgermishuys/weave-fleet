@@ -165,6 +165,11 @@ public static class PushEndpoints
         if (string.IsNullOrEmpty(endpoint) || endpoint.Length > MaxEndpointLength
             || !Uri.TryCreate(endpoint, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
             return Results.BadRequest(new ErrorResponse("endpoint must be the subscription's https:// address."));
+        // Fleet posts to this address, so it must be a push service on the internet: those always have a DNS name.
+        // A bare IP or a local name would point Fleet at this machine's own network instead.
+        if (uri.HostNameType != UriHostNameType.Dns || uri.IsLoopback || !uri.Host.Contains('.', StringComparison.Ordinal)
+            || uri.Host.EndsWith(".local", StringComparison.OrdinalIgnoreCase) || uri.Host.EndsWith(".internal", StringComparison.OrdinalIgnoreCase))
+            return Results.BadRequest(new ErrorResponse("endpoint must be a push service's address."));
         return null;
     }
 

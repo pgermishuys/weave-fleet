@@ -114,7 +114,7 @@ public static class DeviceEndpoints
             ManualCodeAttempts attempts,
             MachineIdentityStore identities) =>
         {
-            if (Limited(attempts, request.ManualCode, request.Secret) is { } limited)
+            if (Limited(attempts, request.ManualCode) is { } limited)
                 return limited;
 
             var ticket = codes.Peek(request.Secret, request.ManualCode);
@@ -137,7 +137,7 @@ public static class DeviceEndpoints
             MachineIdentityStore identities,
             LoopbackAuthPolicy policy) =>
         {
-            if (Limited(attempts, request.ManualCode, request.Secret) is { } limited)
+            if (Limited(attempts, request.ManualCode) is { } limited)
                 return limited;
 
             // Check the request before using the code up, so a typo in the name doesn't cost the code.
@@ -161,9 +161,10 @@ public static class DeviceEndpoints
         return app;
     }
 
-    private static IResult? Limited(ManualCodeAttempts attempts, string? manualCode, string? secret)
+    private static IResult? Limited(ManualCodeAttempts attempts, string? manualCode)
     {
-        if (!string.IsNullOrEmpty(secret) || string.IsNullOrWhiteSpace(manualCode))
+        // Any request carrying a typed code counts, with or without a secret beside it: either form finds a code.
+        if (string.IsNullOrWhiteSpace(manualCode))
             return null;
 
         using var lease = attempts.Limiter.AttemptAcquire();

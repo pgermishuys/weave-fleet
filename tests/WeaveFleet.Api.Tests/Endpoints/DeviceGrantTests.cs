@@ -125,6 +125,70 @@ public sealed class DeviceGrantTests
         (await hangar.Services.GetRequiredService<IRemoteMachineRepository>().ListRevokedGrantsAsync()).ShouldBeEmpty();
     }
 
+    [Fact]
+    public async Task A_new_grant_waits_until_the_old_token_on_the_other_machine_is_gone()
+    {
+        await using var falcon = Fleet();
+        var route = new SwitchableHandler();
+        await using var hangar = Fleet(handler: route);
+        route.Target = falcon.Server.CreateHandler();
+        await ListAsync(hangar, falcon);
+        var (phoneDevice, phoneToken) = await hangar.Services.GetRequiredService<DeviceTokenService>().IssueAsync("Pixel 9", "android");
+        using var phone = Client(hangar, phoneToken);
+        (await phone.PostAsync($"/api/machines/{MachineId(falcon)}/device-grant", null)).StatusCode.ShouldBe(HttpStatusCode.OK);
+        var first = (await hangar.Services.GetRequiredService<IRemoteMachineRepository>().GetGrantAsync(phoneDevice.Id, MachineId(falcon)))!;
+
+        route.Down = true;
+        (await phone.PostAsync($"/api/machines/{MachineId(falcon)}/device-grant", null)).StatusCode.ShouldBe(HttpStatusCode.BadGateway);
+        (await hangar.Services.GetRequiredService<IRemoteMachineRepository>().GetGrantAsync(phoneDevice.Id, MachineId(falcon)))!
+            .RemoteDeviceId.ShouldBe(first.RemoteDeviceId, "hangar still knows the token it couldn't remove");
+
+        route.Down = false;
+        (await phone.PostAsync($"/api/machines/{MachineId(falcon)}/device-grant", null)).StatusCode.ShouldBe(HttpStatusCode.OK);
+        var onFalcon = await falcon.Services.GetRequiredService<DeviceTokenService>().ListAsync();
+        onFalcon.Count.ShouldBe(1);
+        onFalcon.Single().Id.ShouldNotBe(first.RemoteDeviceId);
+    }
+
+    [Fact]
+    public async Task A_grant_that_finishes_after_the_phone_was_removed_is_undone()
+    {
+        await using var falcon = Fleet();
+        var route = new SwitchableHandler();
+        await using var hangar = Fleet(handler: route);
+        route.Target = falcon.Server.CreateHandler();
+        await ListAsync(hangar, falcon);
+        var (phoneDevice, phoneToken) = await hangar.Services.GetRequiredService<DeviceTokenService>().IssueAsync("Pixel 9", "android");
+        using var phone = Client(hangar, phoneToken);
+        route.BeforeSend = async request =>
+        {
+            if (request.Method == HttpMethod.Post)
+                await hangar.Services.GetRequiredService<DeviceTokenService>().RevokeAsync(phoneDevice.Id);
+        };
+
+        (await phone.PostAsync($"/api/machines/{MachineId(falcon)}/device-grant", null)).IsSuccessStatusCode.ShouldBeFalse();
+
+        (await falcon.Services.GetRequiredService<DeviceTokenService>().ListAsync()).ShouldBeEmpty();
+        (await hangar.Services.GetRequiredService<IRemoteMachineRepository>().ListGrantsForMachineAsync(MachineId(falcon))).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Removing_a_machine_from_the_list_removes_phones_tokens_on_it()
+    {
+        await using var falcon = Fleet();
+        await using var hangar = Fleet(routeTo: falcon);
+        await ListAsync(hangar, falcon);
+        var (_, phoneToken) = await hangar.Services.GetRequiredService<DeviceTokenService>().IssueAsync("Pixel 9", "android");
+        using var phone = Client(hangar, phoneToken);
+        var falconToken = (await (await phone.PostAsync($"/api/machines/{MachineId(falcon)}/device-grant", null)).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("token").GetString()!;
+
+        using var owner = Client(hangar, MachineToken(hangar));
+        (await owner.DeleteAsync($"/api/machines/{MachineId(falcon)}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        (await Client(falcon, falconToken).GetAsync("/api/sessions")).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+        (await hangar.Services.GetRequiredService<IRemoteMachineRepository>().ListGrantsForMachineAsync(MachineId(falcon))).ShouldBeEmpty();
+    }
+
     private static async Task ListAsync(WebApplicationFactory<Program> home, WebApplicationFactory<Program> other) =>
         await home.Services.GetRequiredService<RemoteMachineService>().ImportAsync(
             [new ImportedMachine(MachineId(other), "falcon", "https://falcon.test", MachineToken(other), "linux", null)]);
@@ -135,11 +199,15 @@ public sealed class DeviceGrantTests
 
         public bool Down { get; set; }
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        public Func<HttpRequestMessage, Task>? BeforeSend { get; set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             if (Down)
                 throw new HttpRequestException("connection refused");
-            return new HttpMessageInvoker(Target!, disposeHandler: false).SendAsync(request, cancellationToken);
+            if (BeforeSend is { } before)
+                await before(request);
+            return await new HttpMessageInvoker(Target!, disposeHandler: false).SendAsync(request, cancellationToken);
         }
     }
 

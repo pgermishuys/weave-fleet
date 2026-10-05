@@ -133,6 +133,16 @@ public sealed class DeviceTokenServiceTests
     }
 
     [Fact]
+    public async Task Made_up_devices_are_never_cached()
+    {
+        // Anyone can send tokens with made-up ids; caching each miss would grow the cache without end.
+        for (var i = 0; i < 3; i++)
+            (await _service.ValidateAsync(DeviceToken.Create(Ulid.NewUlid().ToString()).Token)).ShouldBeNull();
+
+        _devices.Reads.ShouldBe(3);
+    }
+
+    [Fact]
     public async Task Repeated_checks_are_served_from_the_cache()
     {
         var (_, token) = await _service.IssueAsync("Pixel", "android");

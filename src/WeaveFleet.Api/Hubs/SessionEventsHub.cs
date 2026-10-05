@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.SignalR;
+using WeaveFleet.Api.Auth;
 using WeaveFleet.Api.Endpoints;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Recaps;
@@ -25,12 +26,16 @@ public class SessionEventsHub : Hub
     private readonly IHubContext<SessionEventsHub> _hubContext;
     private readonly SessionRecapService _recaps;
     private readonly DeskPresenceTracker _presence;
+    private readonly DeviceConnections _deviceConnections;
 
     // Per-connection state: subscribed topics
     private static readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> ConnectionTopics = new();
 
     // Per-connection state: pump cancellation
     private static readonly ConcurrentDictionary<string, CancellationTokenSource> ConnectionCancellations = new();
+
+    // Per-connection state: a paired device's connection, closed if the device is removed
+    private static readonly ConcurrentDictionary<string, IDisposable> DeviceRegistrations = new();
 
     // Maps parent topic to set of child topics auto-subscribed via delegation
     private static readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> ParentChildTopics = new();
@@ -67,9 +72,11 @@ public class SessionEventsHub : Hub
         ISessionMessageProxy proxy,
         IHubContext<SessionEventsHub> hubContext,
         SessionRecapService recaps,
-        DeskPresenceTracker presence)
+        DeskPresenceTracker presence,
+        DeviceConnections deviceConnections)
     {
         _presence = presence;
+        _deviceConnections = deviceConnections;
         _broadcaster = broadcaster;
         _userContext = userContext;
         _logger = logger;
@@ -84,6 +91,12 @@ public class SessionEventsHub : Hub
     public override async Task OnConnectedAsync()
     {
         var connectionId = Context.ConnectionId;
+
+        if (Context.User is { } user && FleetClaims.DeviceIdOf(user) is { } deviceId)
+        {
+            var context = Context;
+            DeviceRegistrations[connectionId] = _deviceConnections.Track(deviceId, context.Abort);
+        }
 
         // Initialize per-connection topic filter set
         var topics = new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
@@ -124,6 +137,8 @@ public class SessionEventsHub : Hub
         // A closed tab isn't looking at anything any more.
         _recaps.RemoveConnection(connectionId);
         _presence.Remove(connectionId);
+        if (DeviceRegistrations.TryRemove(connectionId, out var registration))
+            registration.Dispose();
 
         // Cancel the pump task
         if (ConnectionCancellations.TryRemove(connectionId, out var cts))

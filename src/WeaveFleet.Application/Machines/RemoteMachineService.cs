@@ -41,6 +41,22 @@ public sealed class RemoteMachineService(
     /// <summary>The machine's access token in the clear, for talking to it.</summary>
     public string TokenOf(RemoteMachine machine) => _tokens.Unprotect(machine.EncryptedToken);
 
+    /// <summary>
+    /// <see cref="TokenOf"/>, or null when it can't be read (the Data Protection keys changed since it was saved). The
+    /// owner fixes that by entering the token again in Settings › Machines.
+    /// </summary>
+    public string? TryTokenOf(RemoteMachine machine)
+    {
+        try
+        {
+            return TokenOf(machine);
+        }
+        catch (System.Security.Cryptography.CryptographicException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>Checks the address and token against the machine and saves it. Error is what to tell the user.</summary>
     public async Task<(RemoteMachine? Machine, string? Error)> AddAsync(string baseUrl, string token, CancellationToken cancellationToken)
     {

@@ -222,7 +222,8 @@ public static class DependencyInjection
         // Web Push: subscriptions, the machine's VAPID keys, and one sender per channel (webpush now).
         services.AddSingleton<IPushSubscriptionRepository, PushSubscriptionRepository>();
         services.AddSingleton(sp => new WeaveFleet.Application.Configuration.VapidKeyStore(sp.GetRequiredService<FleetOptions>().DatabasePath));
-        services.AddHttpClient(WeaveFleet.Infrastructure.Push.WebPushSender.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(15));
+        services.AddHttpClient(WeaveFleet.Infrastructure.Push.WebPushSender.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(15))
+            .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.SocketsHttpHandler { AllowAutoRedirect = false });
         services.AddSingleton<WeaveFleet.Application.Push.IPushSender, WeaveFleet.Infrastructure.Push.WebPushSender>();
         // Other machines, kept server-side: the phone's home machine watches them and gets the phone a token on each.
         services.AddSingleton<IRemoteMachineRepository, RemoteMachineRepository>();

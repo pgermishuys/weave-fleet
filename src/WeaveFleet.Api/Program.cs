@@ -425,6 +425,9 @@ else
     builder.Services.AddScoped<IUserContext, LocalUserContext>();
 }
 
+// A removed phone's hub connections and terminals close at once.
+builder.Services.AddSingleton<WeaveFleet.Api.Auth.DeviceConnections>();
+
 // ── Rate limits ──────────────────────────────────────────────────────────────
 // Pairing is open to anyone holding a code, so guesses are limited. Behind tailscale serve every caller arrives from
 // 127.0.0.1, so the window is shared by everyone: 10 requests a minute.

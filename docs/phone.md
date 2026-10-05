@@ -88,9 +88,12 @@ If home is off or unreachable, notifications stop for every machine, and the inb
 
 ## Removing a phone
 
-Settings → Machines → This machine → Devices with access → **Remove**. The phone's key stops working at once, its
-notifications stop, and home removes the keys it got the phone on other machines (a machine that's off gets the removal
-when it's next reachable).
+Settings → Machines → This machine → Devices with access → **Remove**. The phone's key stops working at once, an open
+Fleet on the phone is disconnected, its notifications stop, and home removes the keys it got the phone on other
+machines (a machine that's off gets the removal when it's next reachable).
+
+Removing a machine from home's list removes the phones' keys on it too, if it answers. If it doesn't, remove them in
+that machine's own Settings → Machines → Devices with access.
 
 ## Troubleshooting
 

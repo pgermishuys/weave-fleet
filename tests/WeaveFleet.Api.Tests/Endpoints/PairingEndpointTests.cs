@@ -205,6 +205,19 @@ public sealed class PairingEndpointTests
     }
 
     [Fact]
+    public async Task A_typed_code_counts_even_with_a_secret_beside_it()
+    {
+        await using var factory = CreateFactory();
+        using var stranger = Client(factory);
+
+        var statuses = new List<HttpStatusCode>();
+        for (var i = 0; i < 6; i++)
+            statuses.Add((await stranger.PostAsJsonAsync("/api/pairing/preview", new { secret = $"guess-{i}", manualCode = "AAAA-AAAA" })).StatusCode);
+
+        statuses[5].ShouldBe(HttpStatusCode.TooManyRequests);
+    }
+
+    [Fact]
     public async Task Pairing_requests_are_limited_to_ten_a_minute()
     {
         await using var factory = CreateFactory();

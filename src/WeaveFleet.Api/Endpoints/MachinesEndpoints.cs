@@ -25,7 +25,7 @@ public static class MachinesEndpoints
         {
             var owner = FleetClaims.IsOwner(http.User);
             var list = await machines.ListAsync();
-            return Results.Ok(new MachineListResponse(list.Select(m => ToResponse(m, owner ? machines.TokenOf(m) : null)).ToList()));
+            return Results.Ok(new MachineListResponse(list.Select(m => ToResponse(m, owner ? machines.TryTokenOf(m) : null)).ToList()));
         })
         .Produces<MachineListResponse>(200)
         .WithName("ListMachines");
@@ -52,8 +52,12 @@ public static class MachinesEndpoints
         .Produces<MachineEntryResponse>(200)
         .WithName("UpdateRemoteMachine");
 
-        group.MapDelete("/{id}", async (string id, RemoteMachineService machines) =>
-            await machines.DeleteAsync(id) ? Results.NoContent() : Results.NotFound(new ErrorResponse("No such machine.")))
+        // Phones' tokens on the machine go first, while there's still a token to remove them with.
+        group.MapDelete("/{id}", async (string id, RemoteMachineService machines, DeviceGrantService grants, CancellationToken cancellationToken) =>
+        {
+            await grants.RemoveGrantsOnAsync(id, cancellationToken);
+            return await machines.DeleteAsync(id) ? Results.NoContent() : Results.NotFound(new ErrorResponse("No such machine."));
+        })
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
         .WithName("RemoveRemoteMachine");
 
@@ -88,7 +92,7 @@ public static class MachinesEndpoints
                 .Where(m => m.Id is not null && m.BaseUrl is not null && m.Token is not null)
                 .Select(m => new ImportedMachine(m.Id!, m.Name, m.BaseUrl!, m.Token!, m.Os, m.AddedAt));
             var list = await machines.ImportAsync(imported);
-            return Results.Ok(new MachineListResponse(list.Select(m => ToResponse(m, machines.TokenOf(m))).ToList()));
+            return Results.Ok(new MachineListResponse(list.Select(m => ToResponse(m, machines.TryTokenOf(m))).ToList()));
         })
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
         .Produces<MachineListResponse>(200)

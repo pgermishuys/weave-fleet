@@ -67,6 +67,8 @@ public sealed class PushEndpointTests
         using var owner = Client(factory, MachineToken(factory));
 
         (await owner.PutAsJsonAsync("/api/push/subscriptions", Body("http://insecure.example/x"))).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        foreach (var inside in new[] { "https://169.254.169.254/latest", "https://127.0.0.1/x", "https://[::1]/x", "https://localhost/x", "https://router/x", "https://nas.local/x" })
+            (await owner.PutAsJsonAsync("/api/push/subscriptions", Body(inside))).StatusCode.ShouldBe(HttpStatusCode.BadRequest, inside);
         (await owner.PutAsJsonAsync("/api/push/subscriptions", Body(Endpoint, kinds: ["everything"]))).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         (await owner.PutAsJsonAsync("/api/push/subscriptions", new { endpoint = Endpoint, keys = new { p256dh = "AAAA", auth = "AAAA" } })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         (await owner.PutAsJsonAsync("/api/push/subscriptions", Body(Endpoint) with { channel = "apns" })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);

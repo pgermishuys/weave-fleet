@@ -115,6 +115,15 @@ public sealed class RemoteMachineRepository(IDbConnectionFactory connectionFacto
             ReadGrant);
     }
 
+    public async Task<IReadOnlyList<DeviceGrant>> ListGrantsForMachineAsync(string machineId)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        return await conn.QueryAsync(
+            $"SELECT {GrantColumns} FROM device_grants WHERE machine_id = @MachineId",
+            cmd => cmd.AddParameter("MachineId", machineId),
+            ReadGrant);
+    }
+
     public async Task<IReadOnlyList<DeviceGrant>> ListRevokedGrantsAsync()
     {
         using var conn = connectionFactory.CreateConnection();

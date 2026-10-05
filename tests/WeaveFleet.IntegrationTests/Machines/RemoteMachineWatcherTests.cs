@@ -84,6 +84,36 @@ public sealed class RemoteMachineWatcherTests
     }
 
     [Fact]
+    public async Task A_machine_cannot_speak_for_another_and_its_name_comes_from_the_list()
+    {
+        await using var falcon = new FleetHost();
+        var sender = new RecordingSender();
+        await using var hangar = new FleetHost(sender);
+        await SubscribeAsync(hangar);
+        hangar.Services.GetRequiredService<RemoteMachineWatcher>().Handler = falcon.Server.CreateHandler();
+        await hangar.Services.GetRequiredService<RemoteMachineService>().ImportAsync(
+            [new ImportedMachine(falcon.MachineId, "falcon", "http://falcon.test", falcon.Token, "linux", null)]);
+        await WaitForAsync(async () => (await StatusAsync(hangar, falcon.MachineId)) == RemoteMachineStatuses.Online);
+        var sink = falcon.Services.GetServices<ISessionNotificationSink>().OfType<BroadcastNotificationSink>().Single();
+
+        await sink.HandleAsync(
+            new SessionNotificationPayload { SessionId = "s", Reason = SessionNotificationReasons.NeedsYou, Kind = SessionNotificationKinds.Permission, MachineId = "kestrel-id", MachineName = "kestrel", Title = "Spoofed", Body = "Allow?" },
+            "local-user",
+            CancellationToken.None);
+        await sink.HandleAsync(
+            new SessionNotificationPayload { SessionId = "s", Reason = SessionNotificationReasons.NeedsYou, Kind = SessionNotificationKinds.Permission, MachineId = falcon.MachineId, MachineName = "hangar", Title = "Real", Body = "Allow?" },
+            "local-user",
+            CancellationToken.None);
+
+        await WaitForAsync(() => Task.FromResult(sender.Sent.Count > 0));
+        await Task.Delay(200);
+        var payload = JsonDocument.Parse(sender.Sent.Single()).RootElement;
+        payload.GetProperty("title").GetString().ShouldBe("Real");
+        payload.GetProperty("machineId").GetString().ShouldBe(falcon.MachineId);
+        payload.GetProperty("machineName").GetString().ShouldBe("falcon");
+    }
+
+    [Fact]
     public async Task A_machine_that_does_not_answer_is_marked_unreachable()
     {
         var sender = new RecordingSender();

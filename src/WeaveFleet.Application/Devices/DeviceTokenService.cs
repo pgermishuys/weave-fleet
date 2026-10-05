@@ -26,6 +26,9 @@ public sealed class DeviceTokenService(IDeviceRepository devices, TimeProvider t
     private readonly ConcurrentDictionary<string, CachedDevice> _cache = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, DateTimeOffset> _lastTouched = new(StringComparer.Ordinal);
 
+    // Removed here: a load or touch that was already under way must not put the device back. Ids are never reused.
+    private readonly ConcurrentDictionary<string, byte> _removed = new(StringComparer.Ordinal);
+
     /// <summary>Raised after a device is removed, with its id.</summary>
     public event Action<string>? Revoked;
 
@@ -91,6 +94,7 @@ public sealed class DeviceTokenService(IDeviceRepository devices, TimeProvider t
     /// <summary>Removes a device's access. False when there's no such device or it was already removed.</summary>
     public async Task<bool> RevokeAsync(string deviceId)
     {
+        _removed[deviceId] = 0;
         var revoked = await devices.RevokeAsync(deviceId, time.GetUtcNow());
         _cache.TryRemove(deviceId, out _);
         _lastTouched.TryRemove(deviceId, out _);
@@ -100,7 +104,7 @@ public sealed class DeviceTokenService(IDeviceRepository devices, TimeProvider t
     }
 
     private bool IsLive(Device device) =>
-        device.RevokedAt is null && device.LastUsedAt + Expiry >= time.GetUtcNow();
+        device.RevokedAt is null && !_removed.ContainsKey(device.Id) && device.LastUsedAt + Expiry >= time.GetUtcNow();
 
     private async Task<Device?> LoadAsync(string deviceId)
     {
@@ -108,8 +112,11 @@ public sealed class DeviceTokenService(IDeviceRepository devices, TimeProvider t
         if (_cache.TryGetValue(deviceId, out var cached) && now - cached.LoadedAt < CacheFor)
             return cached.Device;
 
+        // Only devices that exist are cached: ids from requests are anyone's to choose, and caching misses would let a
+        // stream of made-up tokens grow the cache without end.
         var device = await devices.GetAsync(deviceId);
-        _cache[deviceId] = new CachedDevice(device, now);
+        if (device is not null && !_removed.ContainsKey(deviceId))
+            _cache[deviceId] = new CachedDevice(device, now);
         return device;
     }
 
@@ -125,9 +132,9 @@ public sealed class DeviceTokenService(IDeviceRepository devices, TimeProvider t
             return;
 
         await devices.TouchAsync(device.Id, now);
-        if (_cache.TryGetValue(device.Id, out var cached) && cached.Device is not null)
+        if (!_removed.ContainsKey(device.Id) && _cache.TryGetValue(device.Id, out var cached) && cached.Device is not null)
             _cache[device.Id] = cached with { Device = cached.Device with { LastUsedAt = now } };
     }
 
-    private sealed record CachedDevice(Device? Device, DateTimeOffset LoadedAt);
+    private sealed record CachedDevice(Device Device, DateTimeOffset LoadedAt);
 }
