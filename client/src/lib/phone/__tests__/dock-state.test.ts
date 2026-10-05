@@ -42,4 +42,8 @@ describe("pendingQuestion", () => {
     expect(pendingQuestion([message("running")])).toEqual({ requestId: "call-q", question: { header: "h", question: "Which?", options: [] }, more: 1 });
     expect(pendingQuestion([message("completed")])).toBeNull();
   });
+
+  it("counts a call answered in one part as answered, even if another part for it still runs", () => {
+    expect(pendingQuestion([message("running"), { ...message("completed"), messageId: "m2" }])).toBeNull();
+  });
 });

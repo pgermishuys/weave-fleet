@@ -12,8 +12,7 @@ import type { PermissionAsk } from "@/composables/use-session-permissions";
 import { toPermissionAsk } from "@/composables/use-session-permissions";
 import { convertFleetMessageToAccumulated, type FleetMessage } from "@/lib/pagination-utils";
 import type { FeedStatus, InboxAsk } from "@/lib/phone/inbox";
-import { getQuestionInput } from "@/lib/question-types";
-import type { AccumulatedToolPart } from "@/lib/client-types";
+import { pendingQuestion } from "@/lib/phone/dock-state";
 
 export const POLL_INTERVAL_MS = 15_000;
 /** Even with a live hub, re-read now and then: a missed event shouldn't leave the inbox wrong for long. */
@@ -246,18 +245,6 @@ export class MachineFeed {
 
 /** The newest question tool call still waiting for an answer, from Fleet's message shape. */
 export function findPendingQuestion(messages: readonly FleetMessage[]): InboxAsk | null {
-  for (const message of [...messages].reverse()) {
-    const accumulated = convertFleetMessageToAccumulated(message);
-    for (const part of [...accumulated.parts].reverse()) {
-      if (part.type !== "tool") continue;
-      const tool = part as AccumulatedToolPart;
-      const status = (tool.state as { status?: string } | null)?.status;
-      if (status !== "pending" && status !== "running") continue;
-      const input = getQuestionInput(tool);
-      if (input?.questions.length) {
-        return { kind: "question", requestId: tool.callId, question: input.questions[0], more: input.questions.length - 1 };
-      }
-    }
-  }
-  return null;
+  const pending = pendingQuestion(messages.map(convertFleetMessageToAccumulated));
+  return pending ? { kind: "question", requestId: pending.requestId, question: pending.question, more: pending.more } : null;
 }

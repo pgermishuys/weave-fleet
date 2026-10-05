@@ -19,11 +19,22 @@ export type Dock =
   | { kind: "permission"; ask: PermissionAsk; later: number }
   | { kind: "question"; pending: PendingQuestion; later: number };
 
-/** The question tool call still waiting for an answer, newest first. */
+/**
+ * The question tool call still waiting for an answer, newest first. A call answered anywhere counts as answered: the
+ * snapshot and a live update can carry the same call as two parts, one still running.
+ */
 export function pendingQuestion(messages: readonly AccumulatedMessage[]): PendingQuestion | null {
+  const settled = new Set<string>();
+  for (const message of messages) {
+    for (const part of message.parts) {
+      const status = part.type === "tool" ? (part.state as { status?: string } | null)?.status : undefined;
+      if (part.type === "tool" && part.tool === "question" && (status === "completed" || status === "error")) settled.add(part.callId);
+    }
+  }
+
   for (const message of [...messages].reverse()) {
     for (const part of [...message.parts].reverse()) {
-      if (part.type !== "tool" || part.tool !== "question") continue;
+      if (part.type !== "tool" || part.tool !== "question" || settled.has(part.callId)) continue;
       const status = (part.state as { status?: string } | null)?.status;
       if (status !== "pending" && status !== "running") continue;
       const input = getQuestionInput(part as AccumulatedToolPart);
