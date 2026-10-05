@@ -125,7 +125,7 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
 
 ### Phase 1 — Per-device tokens and pairing
 
-- [ ] 1. Devices table, entity and repository
+- [x] 1. Devices table, entity and repository
   - **What**: Persist paired devices.
   - **Files**: `src/WeaveFleet.Infrastructure/Migrations/048_add_devices.sql` (use the next free number if 048 is taken), `src/WeaveFleet.Domain/Entities/Device.cs`, `src/WeaveFleet.Domain/Repositories/IDeviceRepository.cs`, `src/WeaveFleet.Infrastructure/Data/Repositories/DeviceRepository.cs`, `src/WeaveFleet.Infrastructure/DependencyInjection.cs`, `tests/WeaveFleet.Infrastructure.Tests/Data/DeviceRepositoryTests.cs`
   - **Depends on**: None
@@ -141,7 +141,7 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
     - Repository round-trips, revoke hides the row from `ListActiveAsync`.
     - `dotnet test tests/WeaveFleet.Infrastructure.Tests --filter "FullyQualifiedName~DeviceRepository"` passes.
 
-- [ ] 2. DeviceTokenService (issue, validate, expire, revoke)
+- [x] 2. DeviceTokenService (issue, validate, expire, revoke)
   - **What**: Application service owning device token format, hashing, sliding expiry and last-seen throttling.
   - **Files**: `src/WeaveFleet.Application/Devices/DeviceTokenService.cs`, `src/WeaveFleet.Application/Devices/DeviceToken.cs`, `src/WeaveFleet.Infrastructure/DependencyInjection.cs`, `tests/WeaveFleet.Application.Tests/Devices/DeviceTokenServiceTests.cs`
   - **Depends on**: Task 1
@@ -157,7 +157,7 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
     - Tests cover: valid token, wrong secret, unknown id, malformed, revoked, expired at 30 days + 1 s, sliding renewal after use, throttled touch.
     - `dotnet test tests/WeaveFleet.Application.Tests --filter "FullyQualifiedName~DeviceTokenService"` passes.
 
-- [ ] 3. Auth: device tokens in bearer + cookie, `MachineOwner` policy
+- [x] 3. Auth: device tokens in bearer + cookie, `MachineOwner` policy
   - **What**: Accept device tokens everywhere a machine token works, tag them with scope claims, keep revoked devices out of cookie sessions, and lock owner-only endpoints.
   - **Files**: `src/WeaveFleet.Api/Auth/BearerTokenHandler.cs`, `src/WeaveFleet.Api/Auth/FleetClaims.cs` (new), `src/WeaveFleet.Api/Program.cs`, `src/WeaveFleet.Api/Endpoints/AuthEndpoints.cs`, `src/WeaveFleet.Api/Endpoints/MachineEndpoints.cs`, `tests/WeaveFleet.Api.Tests/Auth/DeviceTokenAuthTests.cs`, `tests/WeaveFleet.Api.Tests/Auth/MachineAccessEndpointTests.cs`
   - **Depends on**: Task 2
@@ -178,7 +178,7 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
     - Revoked device: header ⇒ 401; existing cookie ⇒ 401 on next API call.
     - `dotnet test tests/WeaveFleet.Api.Tests --filter "FullyQualifiedName~Auth"` passes (old tests unchanged and green).
 
-- [ ] 4. Pairing service and endpoints, device management, `PublicUrl`
+- [x] 4. Pairing service and endpoints, device management, `PublicUrl`
   - **What**: One-time pairing codes, preview/redeem, device list/remove, machine-to-machine device minting, and a configurable phone URL.
   - **Files**: `src/WeaveFleet.Application/Devices/PairingCodeStore.cs`, `src/WeaveFleet.Application/Configuration/MachineIdentityStore.cs` (add optional `PublicUrl` to `MachineIdentity`), `src/WeaveFleet.Api/Endpoints/DeviceEndpoints.cs` (new; map from `MapFleetEndpoints` in `src/WeaveFleet.Api/Endpoints/FleetEndpoints.cs`), `src/WeaveFleet.Api/Endpoints/MachineEndpoints.cs`, `src/WeaveFleet.Api/Contracts/DeviceContracts.cs`, `src/WeaveFleet.Api/JsonContext.cs`, `src/WeaveFleet.Api/Program.cs` (rate limiter), `tests/WeaveFleet.Api.Tests/Endpoints/PairingEndpointTests.cs`, `tests/WeaveFleet.Application.Tests/Devices/PairingCodeStoreTests.cs`
   - **Depends on**: Task 3
@@ -202,7 +202,7 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
     - Removing a device makes its token 401 immediately.
     - `dotnet test tests/WeaveFleet.Api.Tests --filter "FullyQualifiedName~Pairing"` and `tests/WeaveFleet.Application.Tests --filter "FullyQualifiedName~PairingCodeStore"` pass.
 
-- [ ] 5. Settings › Machines › This machine: "Add a phone" and "Devices with access"
+- [x] 5. Settings › Machines › This machine: "Add a phone" and "Devices with access"
   - **What**: Desktop UI to show a QR + manual code and manage devices, per `mockups/phone-app/index.html` (section "Getting Fleet onto a phone", step 1).
   - **Files**: `client/src/components/settings/MachinesSection.vue`, `client/src/components/settings/AddPhonePanel.vue` (new), `client/src/components/settings/DevicesList.vue` (new), `client/src/lib/pairing.ts` (new: encode/decode v1 payload, choose phone base URL), `client/src/lib/__tests__/pairing.test.ts`, `client/package.json` (QR dependency)
   - **Depends on**: Task 4
@@ -219,7 +219,7 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
     - `bunx vue-tsc --noEmit` clean.
     - Visual check against the mockup (screenshot at desktop size).
 
-- [ ] 6. Phone pairing landing `/pair` and device credentials
+- [x] 6. Phone pairing landing `/pair` and device credentials
   - **What**: "Connect this phone to <machine>?" page; stores the device token; works outside `AppShell`.
   - **Files**: `client/src/routes/pair.tsx`, `client/src/components/phone/PhoneShell.vue` (new, minimal frame with safe-area insets), `client/src/components/phone/PairPage.vue`, `client/src/lib/device-credentials.ts`, `client/src/lib/__tests__/device-credentials.test.ts`, `client/src/routes/__root.tsx`, `client/src/components/layout/AuthGate.vue` (or wherever `AuthGate` lives — skip auth gate for `/pair`)
   - **Depends on**: Tasks 4, 5
@@ -599,6 +599,28 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
     - Record any iOS storage-split behaviour observed during pairing in `docs/phone.md`.
   - **Acceptance**:
     - All commands green; both device smoke tests pass.
+
+## Progress
+
+### Phase 1 — done (2026-10-05)
+Shipped: devices table (migration **051**, since 048–050 were taken on main), `DeviceTokenService`, device tokens in
+`BearerTokenHandler` + `/auth/token-login`, cookie re-validation, `MachineOwner` policy, pairing codes and endpoints,
+`publicUrl`, Settings "Add a phone" + "Devices with access", `/pair` and device credentials. Live-checked on a
+scratch Fleet (127.0.0.1 + RequireToken, as behind `tailscale serve`): desktop makes a code, a 390×844 phone context
+opens the QR URL, connects, lands signed in as a device (403 on `/api/machine/access`), the device shows on the
+desktop, a second redeem is 404, and Remove makes the phone's next request 401.
+
+Differences from the plan (code won, or a detail the plan left open):
+- The branch was rebased onto `origin/main` before starting (49 commits behind, including migrations 048–050).
+- Device **cookies** carry `fleet_scope=device` + `fleet_device` but **not** `amr=token`, like the owner's
+  token-login cookie: `amr=token` lets a terminal socket open from any origin, which only a presented token may do.
+  Bearer device tokens do get `amr=token`.
+- `PUT /api/machine`: a field left out (`null`) now stays as it is; an empty string resets it. Before, a missing
+  `name` reset the name, which would have happened on every `publicUrl` save.
+- The typed-code limit (5/min) is a `ManualCodeAttempts` singleton checked in the endpoint, beside the
+  `AddRateLimiter` policy (10/min) on `/api/pairing/*`; the limiter can't see the body to tell the two apart.
+- "Add a phone" asks for the phone's address first when the page is on loopback and no `publicUrl` is saved.
+- Deferred: nothing.
 
 ## Risks and unknowns
 - **iOS**: no notification action buttons (tap → deep link only); push only for Home Screen apps on iOS 16.4+; permission request must be on a user gesture; Safari and Home Screen app storage may be separate → manual pairing code fallback (Task 6). Focus modes can silence pushes.
