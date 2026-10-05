@@ -1,0 +1,17 @@
+{
+  "id": "./flow.html",
+  "name": "Fleet (native feel mockup)",
+  "short_name": "Fleet mock",
+  "description": "Mockups of Fleet's phone app with a native feel.",
+  "start_url": "./flow.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#F3F2EF",
+  "background_color": "#F3F2EF",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#F3F2EF">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<title>Fleet on your phone: before and after</title>
+<script>
+  (function () {
+    var t = localStorage.getItem("fleet-mock-theme") || "auto";
+    if (t === "auto") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0d0d10" : "#F3F2EF";
+  })();
+</script>
+<link rel="stylesheet" href="native.css">
+<link rel="stylesheet" href="pages.css">
+</head>
+<body class="doc">
+<div style="margin:0 12px"><a class="navbtn glass navbtn--text navbtn--accent" href="index.html" style="text-decoration:none;display:inline-flex">‹ Mockups</a></div>
+<h1>Before and after</h1>
+<p class="lede">Today's phone app next to the mockup, one rough edge at a time. Tap Today / Proposed, or Side by side. "Try it" opens that exact screen in the mockup.</p>
+<div class="seg" id="mode" style="margin:0 16px 26px"><button data-m="single" aria-pressed="true">One at a time</button><button data-m="side" aria-pressed="false">Side by side</button></div>
+<div id="list"></div>
+<script>
+  var items = [
+    ["Inbox", "Big title that folds into the bar; the stray \"2 machines\" becomes a status line under it; tinted buttons instead of white boxes; the system font; a floating tab bar (iOS 26).", "inbox.png", "01-inbox-light.png", "flow.html"],
+    ["Inbox, dark", "Same, in dark. The tab bar and buttons are glass over the content.", "inbox-dark.png", "01-inbox-dark.png", "flow.html"],
+    ["Ask: More…", "A sheet that opens half way and drags to full. The command wraps between words only, and \"Always allow\" keeps dotnet test in one piece instead of leaving * on its own line.", "inbox-more.png", "02-ask-light.png", "flow.html#ask"],
+    ["Ask docked in a session", "Compact: the same card as the inbox (Allow once, More…), with Later to fold it away. The header has a proper back button.", "session-permission.png", "03-session-light.png", "flow.html#session"],
+    ["Session and composer", "A message box that grows to five lines; the send button is grey (not washed-out blue) until you type.", "session-finished.png", "03-session-finished-light.png", "flow.html#session-finished"],
+    ["Run a command", "Starts with the keyboard up, sits above it, Return runs; the empty send button is plain grey.", "session-finished-terminal.png", "03-terminal-keyboard-light.png", "flow.html#terminal"],
+    ["New session", "A sheet, not a settings page: no resize handle, no dead gap, Start above the keyboard, and Agent/Model shimmer in place instead of popping in late.", "new-session.png", "04-new-light.png", "flow.html#new"],
+    ["New session with the keyboard up", "Start stays reachable while you type.", "new-session.png", "04-new-empty-keyboard-light.png", "flow.html#new"],
+    ["Notification setup", "The same text size as the rest of the app and one Done (top right). Today's is smaller and has two.", "phone-setup-on.png", "05-notify-on-light.png", "flow.html#notify-on"],
+    ["Long durations", "A session stuck for days reads \"13d 6h\", not \"19154h 33m\". (Today's screenshot doesn't show the bug; this is the fix.)", "", "03-session-stuck-light.png", "flow.html#session-working"],
+    ["Sessions tab", "Grouped by day, searchable, and swipe left to archive with Undo.", "inbox-sessions.png", "06-sessions-light.png", "flow.html#sessions"],
+    ["Android", "The same screens with Material 3 bars, back arrow, a New session button and Material switches.", "inbox.png", "07-android-inbox-light.png", "flow.html"],
+  ];
+  var list = document.getElementById("list");
+  items.forEach(function (it, i) {
+    var before = it[2] ? "before/" + it[2] : "", after = "shots/" + it[3];
+    var el = document.createElement("section");
+    el.className = "ba";
+    el.innerHTML = '<h2>' + (i + 1) + '. ' + it[0] + '</h2><p>' + it[1] + '</p>' +
+      (before ? '<div class="seg"><button aria-pressed="false" data-s="before">Today</button><button aria-pressed="true" data-s="after">Proposed</button></div>' : '') +
+      '<div class="single"><figure><img loading="lazy" src="' + after + '" alt="Proposed: ' + it[0] + '" width="390" height="844"><figcaption>Proposed</figcaption></figure></div>' +
+      (before ? '<div class="pair"><figure><img loading="lazy" src="' + before + '" alt="Today: ' + it[0] + '"><figcaption>Today</figcaption></figure><figure><img loading="lazy" src="' + after + '" alt="Proposed: ' + it[0] + '"><figcaption>Proposed</figcaption></figure></div>' : '') +
+      '<div class="links"><a class="btn" href="' + it[4] + '">Try it</a></div>';
+    list.appendChild(el);
+    if (!before) return;
+    var img = el.querySelector(".single img"), cap = el.querySelector(".single figcaption");
+    var show = function (s) {
+      img.src = s === "before" ? before : after; cap.textContent = s === "before" ? "Today" : "Proposed";
+      el.querySelectorAll(".seg button").forEach(function (b) { b.setAttribute("aria-pressed", b.dataset.s === s); });
+    };
+    el.querySelectorAll(".seg button").forEach(function (b) { b.addEventListener("click", function () { show(b.dataset.s); }); });
+    // tap the picture to flip between them
+    el.querySelector(".single figure").addEventListener("click", function () { show(cap.textContent === "Today" ? "after" : "before"); });
+  });
+  document.querySelectorAll("#mode button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      document.querySelectorAll("#mode button").forEach(function (x) { x.setAttribute("aria-pressed", x === b); });
+      document.querySelectorAll(".ba").forEach(function (s) { if (s.querySelector(".pair")) s.classList.toggle("is-side", b.dataset.m === "side"); });
+    });
+  });
+  document.addEventListener("touchstart", function () {}, { passive: true });
+</script>
+</body>
+</html>
