@@ -779,6 +779,54 @@ Also fixed: the phone's link to the full Fleet went to `/`, which sends the inst
 it's `/?view=full` now. Not on the phone page: GitHub issues as a source, an existing worktree you haven't used from the
 phone before, harness profiles, attachments on the first message, a typed branch name.
 
+### Native feel (2026-10-05)
+Built from the approved mockups (`mockups/phone-native/`, brief `.weave/plans/phone-native-feel.md`) with the user's
+eight decisions. Screens: `mockups/phone-app/shots-native/` (390×844 @2x, light and dark, iOS and Android looks; kit in
+`~/.cache/fleet-phone/pw/native/`).
+
+What changed:
+- **Native layer** (`client/src/assets/phone.css`, `composables/phone/use-phone-env.ts`): scoped to `html[data-phone]`,
+  set only while a phone page is on screen, so the desktop is untouched. The look is detected (`navigator.userAgentData`
+  then the user agent; iOS unless Android) with `?look=ios|android` remembered (`?look=auto` forgets). The phone's system
+  font at native sizes (17px body; `font: -apple-system-body` follows the iPhone text size), tokens from `main.css` plus a
+  light/dark native layer, instant pressed states (rows a beat later; a ripple on Android), safe areas, `theme-color` for
+  light and dark (black while a sheet recesses the page), and an app frame that follows `visualViewport`.
+- **Navigation** (`PhoneStack.vue`): the inbox at the bottom, sessions pushed over it with the iOS parallax and popped
+  the same way; swipe back from anywhere on the iOS look (Safari's own edge swipe is left alone); Back on a session
+  opened from a link goes to the inbox. The `/phone/*` routes only name addresses; the stack draws the screens.
+- **Sheets** (`BottomSheet.vue`): detents (fit, medium, large), drag with rubber-banding, flick closed with velocity,
+  recess on iOS, floating menus, a history entry so Android's back closes them, relaid out when the frame changes height.
+- **Inbox**: large titles per tab that fold into the bar, the machines as a status line, skeletons until the machines
+  answer, pull to refresh, optimistic Allow once, rows that swipe left to archive (with Undo; never approve), floating
+  glass tab bar on iOS, Material bar and New session button on Android, re-tap a tab to scroll up.
+- **Session**: the bar is the status; the ask docks compact above the composer (Allow once, More…; Later folds it into
+  a pill); Return makes a new line; Run a command runs on Return and its send stays plain until typed; commands wrap
+  only between words; durations count days ("13d 6h").
+- **New session** and **Notifications** are sheets over the inbox that keep their addresses. New session brings the
+  keyboard up (an invisible field takes focus inside the tap, then hands it on), keeps Start above it, opens pickers
+  inside the sheet, and shimmers Agent and Model in place while they load. Notifications has one Done.
+- **Haptics** (`lib/phone/haptics.ts`): only Allow once, Start and Archive; `navigator.vibrate` after a gesture on
+  Android, the hidden `<input switch>` trick on iOS 18+, nothing elsewhere.
+- Pairing and the answered page use the same layer. Pure logic has tests: gestures, look detection, command words,
+  ask wording, the machines line, durations.
+
+Deviations from the mockups, and why:
+- The docked question has Skip in its More… sheet (the session can reject a question; the inbox can't, so it has no
+  Skip there). A multiple-choice question shows Answer… instead of quick buttons (one tap can't pick several).
+- Stop stays as the composer's button while the agent works (the mockups had no Stop); the ⋯ menu also has it.
+- Menu "Open on my computer" shares the link straight away instead of opening the terminal sheet.
+- Agent/model/effort chips still appear over the composer while typing (an existing feature the mockups didn't show).
+- Swipe back is only offered where Back lands on the inbox (the only screen kept under a session); a child session's
+  Back still pops with the animation, without the drag.
+- No machine OS in the Machines rows (the feed doesn't carry it); they say Home/Live/Checking and the session count.
+- The manifest keeps dark splash colours (a manifest can't vary by theme); the page paints the right one before load.
+- The E2E question test answers with one tap now, and checks the composer stays under the docked ask.
+
+Needs the user's real phone: the keyboard (Start and the dock above it, the New session keyboard coming up with the
+sheet, Run a command), pull to refresh on iOS (it reads Safari's own rubber band), sheet drag over scrolling content,
+swipe back feel next to Safari's edge swipe, haptics (the iOS switch trick in particular), the status bar colour in the
+Home Screen app (`apple-mobile-web-app-status-bar-style` is `default` now), and the text-size setting.
+
 ## Risks and unknowns
 - **iOS**: no notification action buttons (tap → deep link only); push only for Home Screen apps on iOS 16.4+; permission request must be on a user gesture; Safari and Home Screen app storage may be separate → manual pairing code fallback (Task 6). Focus modes can silence pushes.
 - **Home machine single point of failure**: if home is down, no notifications for any machine; inbox shows remotes as unreachable. Documented; a push gateway is the future fix.
