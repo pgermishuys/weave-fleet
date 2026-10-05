@@ -19,6 +19,7 @@ using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.OpenApi;
+using Microsoft.AspNetCore.RateLimiting;
 using WeaveFleet.Api;
 using WeaveFleet.Api.Auth;
 using WeaveFleet.Api.Endpoints;
@@ -424,6 +425,21 @@ else
     builder.Services.AddScoped<IUserContext, LocalUserContext>();
 }
 
+// ── Rate limits ──────────────────────────────────────────────────────────────
+// Pairing is open to anyone holding a code, so guesses are limited. Behind tailscale serve every caller arrives from
+// 127.0.0.1, so the window is shared by everyone: 10 requests a minute.
+builder.Services.AddSingleton<ManualCodeAttempts>();
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddFixedWindowLimiter(DeviceEndpoints.PairingRateLimitPolicy, limiter =>
+    {
+        limiter.PermitLimit = 10;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueLimit = 0;
+    });
+});
+
 // ── Antiforgery ──────────────────────────────────────────────────────────────
 builder.Services.AddAntiforgery(options =>
 {
@@ -582,6 +598,7 @@ app.UseAgentRequests();
 app.UseRouting();
 
 app.UseCors();
+app.UseRateLimiter();
 
 // An unhandled exception answered by Kestrel goes out with its headers cleared, CORS ones included, so a page on
 // another machine saw a CORS failure instead of the 500. Handled here, inside CORS, the 500 keeps them. Development

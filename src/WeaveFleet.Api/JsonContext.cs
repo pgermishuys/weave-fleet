@@ -310,6 +310,18 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(MachineAccessResponse))]
 [JsonSerializable(typeof(MachineAddress))]
 [JsonSerializable(typeof(TokenLoginRequest))]
+// Devices and pairing
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.CreatePairingRequest))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.CreatePairingResponse))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.PairingPayload))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.PairingPreviewRequest))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.PairingPreviewResponse))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.PairingRedeemRequest))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.PairingRedeemResponse))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.DeviceListResponse))]
+[JsonSerializable(typeof(WeaveFleet.Application.Devices.DeviceSummary))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.CreateDeviceRequest))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.CreateDeviceResponse))]
 // Open Directory
 [JsonSerializable(typeof(OpenDirectoryRequest))]
 [JsonSerializable(typeof(OpenFileRequest))]

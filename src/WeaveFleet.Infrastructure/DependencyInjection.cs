@@ -218,6 +218,7 @@ public static class DependencyInjection
         // Singleton: devices belong to the machine, not a user, and the auth handler reads them on every request.
         services.AddSingleton<IDeviceRepository, DeviceRepository>();
         services.AddSingleton<WeaveFleet.Application.Devices.DeviceTokenService>();
+        services.AddSingleton<WeaveFleet.Application.Devices.PairingCodeStore>();
         services.AddScoped<PromptQueueService>();
         // Singleton: the relay hands it every event; it sends a session's next queued message when its turn ends.
         services.AddSingleton<PromptQueueDispatcher>();

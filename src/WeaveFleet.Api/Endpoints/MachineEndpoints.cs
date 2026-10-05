@@ -42,13 +42,26 @@ public static class MachineEndpoints
         if (fleetOptions.Auth.Enabled || !fleetOptions.Auth.TokenAuthEnabled)
             return app;
 
+        // Each field left out stays as it is; an empty one goes back to the default.
         group.MapPut("", (UpdateMachineRequest request, MachineIdentityStore store, LoopbackAuthPolicy policy) =>
         {
             var name = request.Name?.Trim();
             if (name is { Length: > MaxNameLength })
                 return Results.BadRequest(new ErrorResponse($"A machine name can be at most {MaxNameLength} characters."));
 
-            var identity = store.Update(current => current with { Name = string.IsNullOrEmpty(name) ? null : name });
+            var publicUrl = request.PublicUrl?.Trim();
+            if (!string.IsNullOrEmpty(publicUrl))
+            {
+                publicUrl = NormalizeBaseUrl(publicUrl);
+                if (publicUrl is null)
+                    return Results.BadRequest(new ErrorResponse("The phone address must be a full http:// or https:// address, like https://hangar.tail9c2e.ts.net."));
+            }
+
+            var identity = store.Update(current => current with
+            {
+                Name = request.Name is null ? current.Name : string.IsNullOrEmpty(name) ? null : name,
+                PublicUrl = request.PublicUrl is null ? current.PublicUrl : string.IsNullOrEmpty(publicUrl) ? null : publicUrl,
+            });
             return Results.Ok(ToResponse(identity, fleetOptions, policy));
         })
         .Produces<MachineResponse>(200)
@@ -75,7 +88,22 @@ public static class MachineEndpoints
         return app;
     }
 
-    private static MachineResponse ToResponse(MachineIdentity identity, FleetOptions options, LoopbackAuthPolicy policy)
+    /// <summary>
+    /// An absolute http(s) URL reduced to scheme, host, port and path, without a trailing slash, query or fragment.
+    /// Null when <paramref name="value"/> isn't one.
+    /// </summary>
+    internal static string? NormalizeBaseUrl(string value)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            || string.IsNullOrEmpty(uri.Host)
+            || !string.IsNullOrEmpty(uri.UserInfo))
+            return null;
+
+        return uri.GetLeftPart(UriPartial.Path).TrimEnd('/');
+    }
+
+    internal static MachineResponse ToResponse(MachineIdentity identity, FleetOptions options, LoopbackAuthPolicy policy)
     {
         var hostName = Environment.MachineName;
         return new MachineResponse(
@@ -87,7 +115,8 @@ public static class MachineEndpoints
             ApiVersion,
             options.Auth.Enabled ? "sign-in" : "token",
             policy.IsRemoteReachable,
-            !policy.AllowsLoopbackAutoAuth);
+            !policy.AllowsLoopbackAutoAuth,
+            identity.PublicUrl);
     }
 
     private static MachineAccessResponse ToAccessResponse(ILocalTokenAuthService tokens, FleetOptions options, LoopbackAuthPolicy policy)
@@ -174,7 +203,7 @@ public static class MachineEndpoints
     private static string UrlFor(IPAddress address, int port)
         => address.AddressFamily == AddressFamily.InterNetworkV6 ? $"http://[{address}]:{port}" : $"http://{address}:{port}";
 
-    private static string OperatingSystemName()
+    internal static string OperatingSystemName()
     {
         if (OperatingSystem.IsWindows())
             return "windows";
@@ -196,6 +225,7 @@ public static class MachineEndpoints
 /// <param name="AuthMode"><c>token</c> (local mode: present the access token) or <c>sign-in</c> (cloud mode).</param>
 /// <param name="RemoteReachable">Whether Fleet listens on an address other devices can reach.</param>
 /// <param name="RequiresToken">Whether every request needs the token, this machine's own included.</param>
+/// <param name="PublicUrl">The address phones should use for this machine, when someone set one; pairing puts it in the QR code.</param>
 public sealed record MachineResponse(
     string Id,
     string Name,
@@ -205,10 +235,11 @@ public sealed record MachineResponse(
     int ApiVersion,
     string AuthMode,
     bool RemoteReachable,
-    bool RequiresToken);
+    bool RequiresToken,
+    string? PublicUrl = null);
 
-/// <summary>Renames this machine. An empty name goes back to the host name.</summary>
-public sealed record UpdateMachineRequest(string? Name);
+/// <summary>Changes this machine's name or phone address. A field left out stays; an empty one goes back to the default.</summary>
+public sealed record UpdateMachineRequest(string? Name, string? PublicUrl = null);
 
 /// <summary>How another device reaches this Fleet.</summary>
 /// <param name="Token">The access token. Whoever has it can do anything this Fleet can.</param>
