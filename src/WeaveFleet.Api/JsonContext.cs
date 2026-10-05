@@ -322,6 +322,13 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(WeaveFleet.Application.Devices.DeviceSummary))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.CreateDeviceRequest))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.CreateDeviceResponse))]
+// Machines (server-side list)
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.MachineEntryResponse))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.MachineListResponse))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.AddMachineRequest))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.UpdateRemoteMachineRequest))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.ImportMachinesRequest))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.ImportMachineEntry))]
 // Push
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.VapidKeyResponse))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.SavePushSubscriptionRequest))]

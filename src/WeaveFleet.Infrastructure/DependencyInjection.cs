@@ -224,6 +224,11 @@ public static class DependencyInjection
         services.AddSingleton(sp => new WeaveFleet.Application.Configuration.VapidKeyStore(sp.GetRequiredService<FleetOptions>().DatabasePath));
         services.AddHttpClient(WeaveFleet.Infrastructure.Push.WebPushSender.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(15));
         services.AddSingleton<WeaveFleet.Application.Push.IPushSender, WeaveFleet.Infrastructure.Push.WebPushSender>();
+        // Other machines, kept server-side: the phone's home machine watches them and gets the phone a token on each.
+        services.AddSingleton<IRemoteMachineRepository, RemoteMachineRepository>();
+        services.AddSingleton<WeaveFleet.Application.Machines.RemoteMachineService>();
+        services.AddHttpClient(WeaveFleet.Application.Machines.RemoteMachineService.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(5))
+            .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.SocketsHttpHandler { AllowAutoRedirect = false });
         services.AddScoped<PromptQueueService>();
         // Singleton: the relay hands it every event; it sends a session's next queued message when its turn ends.
         services.AddSingleton<PromptQueueDispatcher>();
