@@ -8,13 +8,23 @@ import FoldedStepsRow from "@/components/phone/session/FoldedStepsRow.vue";
 import PhoneMarkdown from "@/components/phone/session/PhoneMarkdown.vue";
 import PhonePlanBar from "@/components/phone/session/PhonePlanBar.vue";
 import PhoneSessionHeader from "@/components/phone/session/PhoneSessionHeader.vue";
+import ChangesSheet from "@/components/phone/session/ChangesSheet.vue";
+import FilesSheet from "@/components/phone/session/FilesSheet.vue";
+import OpenOnComputerCard from "@/components/phone/session/OpenOnComputerCard.vue";
 import PlanSheet from "@/components/phone/session/PlanSheet.vue";
+import SessionMenuSheet, { type MenuAction } from "@/components/phone/session/SessionMenuSheet.vue";
+import SideConversationSheet from "@/components/phone/session/SideConversationSheet.vue";
 import SinceYouLookedMarker from "@/components/phone/session/SinceYouLookedMarker.vue";
 import StepsSheet from "@/components/phone/session/StepsSheet.vue";
 import DockedPermission from "@/components/phone/session/DockedPermission.vue";
 import DockedQuestion from "@/components/phone/session/DockedQuestion.vue";
 import PhoneComposer from "@/components/phone/session/PhoneComposer.vue";
+import { harnessCapabilities } from "@/composables/use-composer-actions";
 import { useDeskPresence } from "@/composables/use-desk-presence";
+import { useDiffs } from "@/composables/use-diffs";
+import { useHarnesses } from "@/composables/use-harnesses";
+import { useRunShellCommand } from "@/composables/use-run-shell-command";
+import { useAbortSession, useArchiveSession, useForkSession, useRenameSession } from "@/composables/use-session-actions";
 import { useQuestionAnswer } from "@/composables/use-question-answer";
 import { useSessionPermissions } from "@/composables/use-session-permissions";
 import { chooseDock, pendingQuestion } from "@/lib/phone/dock-state";
@@ -160,6 +170,63 @@ watch(() => stream.isLoading.value, (loading) => {
   }, 1500);
 }, { immediate: true });
 
+// The ⋯ menu and what it opens.
+const sheet = shallowRef<"menu" | "changes" | "files" | "side" | "terminal" | null>(null);
+const { harnesses } = useHarnesses();
+const caps = computed(() => harnessCapabilities(session.value?.harnessType, harnesses.value));
+const { diffs, isLoading: diffsLoading, fetchDiffs } = useDiffs(sessionId);
+const { runShellCommand } = useRunShellCommand(sessionId.value);
+const { abortSession } = useAbortSession();
+const { archiveSession } = useArchiveSession();
+const { forkSession } = useForkSession();
+const { renameSession } = useRenameSession();
+watch(sheet, (open) => {
+  if (open === "menu") void fetchDiffs();
+});
+const computerLink = computed(() => `${getActiveMachine()?.baseUrl ?? window.location.origin}/sessions/${encodeURIComponent(sessionId.value)}`);
+
+async function onMenu(action: MenuAction): Promise<void> {
+  switch (action) {
+    case "changes":
+      sheet.value = "changes";
+      void fetchDiffs();
+      break;
+    case "files":
+    case "side":
+    case "terminal":
+      sheet.value = action;
+      break;
+    case "computer":
+      sheet.value = "terminal";
+      break;
+    case "stop":
+      sheet.value = null;
+      await abortSession(sessionId.value).catch(() => undefined);
+      break;
+    case "archive":
+      sheet.value = null;
+      await archiveSession(sessionId.value).catch(() => undefined);
+      back();
+      break;
+    case "fork": {
+      sheet.value = null;
+      const forked = await forkSession(sessionId.value).catch(() => null);
+      if (forked) void router.navigate({ to: "/phone/s/$machineId/$sessionId", params: { machineId: machineId.value, sessionId: forked.session.id } });
+      break;
+    }
+  }
+}
+
+async function onRename(next: string): Promise<void> {
+  sheet.value = null;
+  if (next) await renameSession(sessionId.value, next).catch(() => undefined);
+}
+
+function runCommand(command: string): void {
+  sheet.value = null;
+  void runShellCommand(command);
+}
+
 const stepsOpen = shallowRef<readonly FoldedStep[] | null>(null);
 const planOpen = shallowRef(false);
 
@@ -198,7 +265,7 @@ onUnmounted(() => {
       :state="status.state"
       :detail="status.detail"
       @back="back"
-      @menu="() => undefined"
+      @menu="sheet = 'menu'"
     />
     <PhonePlanBar
       v-if="progress && progress.total > 0"
@@ -378,6 +445,47 @@ onUnmounted(() => {
       :key="sessionId"
       :session-id="sessionId"
       :machine-name="machineName"
+      @side="sheet = 'side'"
+    />
+
+    <SessionMenuSheet
+      :open="sheet === 'menu'"
+      :title="title"
+      :machine-name="machineName"
+      :changed-files="diffs.length"
+      :working="status.tone === 'working'"
+      :supports-side="caps.supportsSide"
+      :can-fork="session?.capabilities?.canFork ?? true"
+      @pick="onMenu"
+      @rename="onRename"
+      @close="sheet = null"
+    />
+    <ChangesSheet
+      :open="sheet === 'changes'"
+      :session-id="sessionId"
+      :diffs="diffs"
+      :loading="diffsLoading"
+      @close="sheet = null"
+    />
+    <FilesSheet
+      :open="sheet === 'files'"
+      :session-id="sessionId"
+      @close="sheet = null"
+    />
+    <SideConversationSheet
+      :open="sheet === 'side'"
+      :session-id="sessionId"
+      @kept="openChild"
+      @close="sheet = null"
+    />
+    <OpenOnComputerCard
+      :open="sheet === 'terminal'"
+      title="Terminal"
+      :machine-name="machineName"
+      :link="computerLink"
+      :supports-shell="caps.supportsShell"
+      @run="runCommand"
+      @close="sheet = null"
     />
 
     <StepsSheet
