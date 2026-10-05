@@ -157,6 +157,19 @@ public sealed class FleetOptions
 
     /// <summary>Transactional outbox polling and cleanup configuration.</summary>
     public OutboxOptions Outbox { get; set; } = new();
+
+    /// <summary>Web Push to phones (<c>Fleet:Push:*</c>).</summary>
+    public PushOptions Push { get; set; } = new();
+}
+
+/// <summary>Web Push settings.</summary>
+public sealed class PushOptions
+{
+    /// <summary>
+    /// The VAPID subject: who push services contact about this sender. A <c>mailto:</c> or <c>https:</c> URL; Apple
+    /// rejects <c>localhost</c> and invalid ones, so the default is Weave's site.
+    /// </summary>
+    public string Subject { get; set; } = "https://tryweave.io";
 }
 
 /// <summary>Harness feature flag configuration.</summary>

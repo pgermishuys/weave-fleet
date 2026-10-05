@@ -219,6 +219,11 @@ public static class DependencyInjection
         services.AddSingleton<IDeviceRepository, DeviceRepository>();
         services.AddSingleton<WeaveFleet.Application.Devices.DeviceTokenService>();
         services.AddSingleton<WeaveFleet.Application.Devices.PairingCodeStore>();
+        // Web Push: subscriptions, the machine's VAPID keys, and one sender per channel (webpush now).
+        services.AddSingleton<IPushSubscriptionRepository, PushSubscriptionRepository>();
+        services.AddSingleton(sp => new WeaveFleet.Application.Configuration.VapidKeyStore(sp.GetRequiredService<FleetOptions>().DatabasePath));
+        services.AddHttpClient(WeaveFleet.Infrastructure.Push.WebPushSender.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(15));
+        services.AddSingleton<WeaveFleet.Application.Push.IPushSender, WeaveFleet.Infrastructure.Push.WebPushSender>();
         services.AddScoped<PromptQueueService>();
         // Singleton: the relay hands it every event; it sends a session's next queued message when its turn ends.
         services.AddSingleton<PromptQueueDispatcher>();
