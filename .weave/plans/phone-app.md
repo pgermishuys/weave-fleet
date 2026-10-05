@@ -515,7 +515,7 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
 
 ### Phase 6 — Notification actions, deep links and awkward cases
 
-- [ ] 23. Android action buttons and deep link to the ask
+- [x] 23. Android action buttons and deep link to the ask
   - **What**: Allow once / Deny from the notification (Android); tapping any notification opens the session at the ask.
   - **Files**: `client/src/lib/push/notification-options.ts`, `client/src/sw/sw.ts`, `client/src/lib/push/answer.ts`, `client/src/lib/push/__tests__/answer.test.ts`, `client/src/components/phone/session/PhoneSessionPage.vue`, `client/src/components/phone/AnsweredPage.vue` (route `client/src/routes/phone.answered.tsx`)
   - **Depends on**: Tasks 8, 11, 16, 21
@@ -532,7 +532,7 @@ Make Fleet usable from a phone as an installable PWA served by each machine: QR 
     - Playwright can't click a system notification's action button, so E2E calls `answer.ts` (the same code the SW runs) from the page against a live server with the device token and checks that the permission resolves. Real Android covers the button itself in Task 28.
     - `bun run test` passes.
 
-- [ ] 24. Unreachable machines, held messages and subscription churn
+- [x] 24. Unreachable machines, held messages and subscription churn
   - **What**: Awkward cases from `session.html`.
   - **Files**: `client/src/lib/phone/outbox.ts`, `client/src/lib/phone/__tests__/outbox.test.ts`, `client/src/components/phone/session/PhoneComposer.vue`, `client/src/components/phone/session/UnreachableBanner.vue`, `client/src/composables/phone/use-push-subscription.ts`
   - **Depends on**: Tasks 20, 12, 17
@@ -714,6 +714,23 @@ Differences from the plan:
 - The @ file picker is a search sheet (`useFindFiles`) that inserts `@path`; the desktop's inline `@` popup isn't on
   the phone, though typing `@path` still works.
 - Not yet checked against a real harness turn from the phone; that's Task 26's E2E.
+- Deferred: nothing.
+
+### Phase 6 — done (2026-10-05)
+Shipped: Allow once / Deny buttons on Android permission pushes, answered by the service worker with the phone's own
+key (`lib/push/notification-action.ts`, the same code the tests run), a replacing "Allowed — falcon carries on"
+notification and `/phone/answered`; deep links dock the ask and say "Already answered." when it's gone; unreachable
+machines (banner with countdown, "last heard", "Working when last heard"); held messages (`lib/phone/outbox.ts`) sent
+in order when the machine is back; and the push subscription re-check with a "notifications are off" banner. The
+unreachable case was checked in mock mode with a hub that drops (screenshot `session-away.png`).
+
+Differences from the plan:
+- The banner needs to know as soon as the connection drops, but the socket's `onDisconnect` fires only after SignalR's
+  automatic reconnect gives up (~18 s). A new `onConnectionLost` fires when reconnecting starts; `onDisconnect` is
+  unchanged for the rest of the app.
+- Held messages go out with `sendText`: straight away when the session is idle, into Fleet's queue when it's busy.
+- A Phase 6 commit went in with four socket test suites failing (their HubConnection test doubles lacked
+  `onreconnecting`); fixed in the next commit.
 - Deferred: nothing.
 
 ## Risks and unknowns
