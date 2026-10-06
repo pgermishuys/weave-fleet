@@ -159,8 +159,20 @@ internal sealed record ClaudeCodeSystemMessage : ClaudeCodeStreamMessage
     /// </summary>
     [JsonPropertyName("prompt")] public string? Prompt { get; init; }
 
-    /// <summary>On <c>task_notification</c>: <c>completed</c>, <c>failed</c> or <c>stopped</c>.</summary>
+    /// <summary>
+    /// On <c>task_notification</c>: <c>completed</c>, <c>failed</c> or <c>stopped</c>. On a <c>status</c> line:
+    /// <c>compacting</c> while a compaction runs.
+    /// </summary>
     [JsonPropertyName("status")] public string? Status { get; init; }
+
+    /// <summary>On the <c>status</c> line that ends a compaction: <c>success</c> or <c>failed</c>.</summary>
+    [JsonPropertyName("compact_result")] public string? CompactResult { get; init; }
+
+    /// <summary>Why a compaction failed, with <see cref="CompactResult"/> <c>failed</c>.</summary>
+    [JsonPropertyName("compact_error")] public string? CompactError { get; init; }
+
+    /// <summary>On <c>compact_boundary</c>: <c>{ trigger: "manual" | "auto", pre_tokens, ... }</c>.</summary>
+    [JsonPropertyName("compact_metadata")] public JsonElement? CompactMetadata { get; init; }
 
     /// <summary>On <c>task_notification</c>: the file the task's output went to.</summary>
     [JsonPropertyName("output_file")] public string? OutputFile { get; init; }
@@ -231,6 +243,12 @@ internal sealed record ClaudeCodeResultMessage : ClaudeCodeStreamMessage
     [JsonPropertyName("usage")] public ClaudeCodeUsage? Usage { get; init; }
     [JsonPropertyName("total_cost_usd")] public decimal? TotalCostUsd { get; init; }
     [JsonPropertyName("session_id")] public string? SessionId { get; init; }
+
+    /// <summary>
+    /// Usage by model over the turn, keyed by model id: each with <c>contextWindow</c> and <c>maxOutputTokens</c>,
+    /// the model's limits.
+    /// </summary>
+    [JsonPropertyName("modelUsage")] public JsonElement? ModelUsage { get; init; }
 }
 
 // ---------------------------------------------------------------------------
@@ -394,6 +412,22 @@ internal sealed class ClaudeCodeToolResultContentConverter : JsonConverter<strin
 /// <summary>Token usage statistics.</summary>
 internal sealed record ClaudeCodeUsage
 {
+    [JsonPropertyName("input_tokens")] public int InputTokens { get; init; }
+    [JsonPropertyName("output_tokens")] public int OutputTokens { get; init; }
+    [JsonPropertyName("cache_read_input_tokens")] public int? CacheReadInputTokens { get; init; }
+    [JsonPropertyName("cache_creation_input_tokens")] public int? CacheCreationInputTokens { get; init; }
+
+    /// <summary>
+    /// On a result line, whose own counts add up the turn's calls: the calls one by one, of <c>type</c>
+    /// <c>message</c> (or <c>compaction</c>, a summarising call).
+    /// </summary>
+    [JsonPropertyName("iterations")] public IReadOnlyList<ClaudeCodeUsageIteration>? Iterations { get; init; }
+}
+
+/// <summary>One model call's usage on a result line (<see cref="ClaudeCodeUsage.Iterations"/>).</summary>
+internal sealed record ClaudeCodeUsageIteration
+{
+    [JsonPropertyName("type")] public string? Type { get; init; }
     [JsonPropertyName("input_tokens")] public int InputTokens { get; init; }
     [JsonPropertyName("output_tokens")] public int OutputTokens { get; init; }
     [JsonPropertyName("cache_read_input_tokens")] public int? CacheReadInputTokens { get; init; }

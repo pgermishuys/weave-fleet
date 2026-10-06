@@ -648,6 +648,34 @@ public static class SessionEndpoints
         })
         .WithName("RunSessionShellCommand");
 
+        // GET /api/sessions/{id}/context — how full the session's context window is, or 204 when its harness hasn't
+        // said yet. Live changes arrive as context.updated on the session's topic.
+        group.MapGet("/{id}/context", async Task<IResult> (string id, SessionService sessionService, SessionContextService contexts, CancellationToken ct) =>
+        {
+            var result = await sessionService.GetSessionAsync(id);
+            if (result.IsFailure)
+                return result.Error.ToSessionApiResult();
+
+            return await contexts.GetAsync(id, ct) is { } context
+                ? Results.Json(context, ApiJsonContext.Default.SessionContextUsage)
+                : Results.NoContent();
+        })
+        .Produces<WeaveFleet.Domain.Events.SessionContextUsage>(200)
+        .WithName("GetSessionContext");
+
+        // POST /api/sessions/{id}/compact — Compact now: the harness summarises the conversation so far. 202 once the
+        // harness has taken it; the compaction's progress and end arrive as context.updated.
+        group.MapPost("/{id}/compact", async (string id, SessionOrchestrator orchestrator, HttpContext http, CancellationToken ct) =>
+        {
+            // The user's choice: an agent can't throw away its own conversation from under itself.
+            if (http.IsAgentRequest())
+                return Results.Json(new ErrorResponse("Agents can't compact a session's context."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
+
+            var result = await orchestrator.CompactAsync(id, ct);
+            return result.Match(_ => Results.Accepted(), err => err.ToSessionApiResult());
+        })
+        .WithName("CompactSession");
+
         // GET /api/sessions/{id}/side — the side conversation open on the session (/btw), or 204 when there is none.
         group.MapGet("/{id}/side", async (string id, SessionOrchestrator orchestrator) =>
         {

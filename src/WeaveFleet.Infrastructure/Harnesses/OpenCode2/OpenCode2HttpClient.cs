@@ -188,6 +188,18 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
         await EnsureSuccessAsync(response, "interrupt the session", ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Asks V2 to compact the session's context. V2 takes it into the session's inbox and answers at once; the
+    /// compaction's progress arrives as <c>session.compaction.*</c> events.
+    /// </summary>
+    public async Task CompactAsync(string sessionId, CancellationToken ct)
+    {
+        using var content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
+        using var response = await http.PostAsync(
+            $"api/session/{Uri.EscapeDataString(sessionId)}/compact", content, ct).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, "compact the session", ct).ConfigureAwait(false);
+    }
+
     public async Task DeleteSessionAsync(string sessionId, CancellationToken ct)
     {
         using var response = await http.DeleteAsync($"api/session/{Uri.EscapeDataString(sessionId)}", ct).ConfigureAwait(false);

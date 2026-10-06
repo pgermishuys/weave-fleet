@@ -25,6 +25,7 @@ public class SessionEventsHub : Hub
     private readonly ISessionMessageProxy _proxy;
     private readonly IHubContext<SessionEventsHub> _hubContext;
     private readonly SessionRecapService _recaps;
+    private readonly SessionContextService? _contexts;
     private readonly DeskPresenceTracker _presence;
     private readonly DeviceConnections _deviceConnections;
 
@@ -73,8 +74,10 @@ public class SessionEventsHub : Hub
         IHubContext<SessionEventsHub> hubContext,
         SessionRecapService recaps,
         DeskPresenceTracker presence,
-        DeviceConnections deviceConnections)
+        DeviceConnections deviceConnections,
+        SessionContextService? contexts = null)
     {
+        _contexts = contexts;
         _presence = presence;
         _deviceConnections = deviceConnections;
         _broadcaster = broadcaster;
@@ -229,8 +232,11 @@ public class SessionEventsHub : Hub
         // merges delegations from Fleet's database, and includes activity status
         var snapshot = await _proxy.GetSnapshotAsync(sessionId, pageSize: 100, cursor: null);
 
+        // How full the context is: Fleet's own record, whichever way the messages came.
+        var context = _contexts is null ? null : await _contexts.GetAsync(sessionId).ConfigureAwait(false);
+
         // Remove lastEventId from snapshot (client dedup watermark no longer needed)
-        return snapshot with { LastEventId = null, Recap = _recaps.Get(sessionId) };
+        return snapshot with { LastEventId = null, Recap = _recaps.Get(sessionId), Context = context };
     }
 
     /// <summary>

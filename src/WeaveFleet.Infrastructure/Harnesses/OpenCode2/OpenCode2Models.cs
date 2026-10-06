@@ -337,6 +337,17 @@ internal sealed record OpenCode2ModelInfo
     /// <summary>False when the user turned the model off; unset counts as on.</summary>
     public bool? Enabled { get; init; }
     public IReadOnlyList<OpenCode2ModelVariant>? Variants { get; init; }
+
+    /// <summary>The model's token limits; V2 gives a model it doesn't know 200,000 of context.</summary>
+    public OpenCode2ModelLimit? Limit { get; init; }
+}
+
+/// <summary>A model's token limits: its context window, and what one call may read and write.</summary>
+internal sealed record OpenCode2ModelLimit
+{
+    public int Context { get; init; }
+    public int? Input { get; init; }
+    public int Output { get; init; }
 }
 
 internal sealed record OpenCode2ModelVariant

@@ -2216,7 +2216,8 @@ public sealed partial class SessionOrchestrator(
             activityStatus,
             instanceTracker.Get(session.InstanceId) is not null,
             SessionCapabilitiesResolver.ForkUnsupportedReason(harness),
-            SessionCapabilitiesResolver.PromptUnsupportedReason(session, harness));
+            SessionCapabilitiesResolver.PromptUnsupportedReason(session, harness),
+            SessionCapabilitiesResolver.CompactUnsupportedReason(harness));
     }
 
     private async Task<Result<Session>> GetSessionAsync(string sessionId)

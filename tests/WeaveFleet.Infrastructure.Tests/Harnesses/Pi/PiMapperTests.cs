@@ -1,5 +1,6 @@
 using System.Text.Json;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.Pi;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.Pi;
@@ -233,6 +234,56 @@ public sealed class PiMapperTests
     }
 
     [Fact]
+    public void an_assistant_messages_usage_is_the_contexts_size()
+    {
+        var read = PiMapper.TryReadContextCall(new PiMessageEndEvent
+        {
+            Message = new PiMessage
+            {
+                Role = "assistant",
+                Provider = "openrouter",
+                Model = "anthropic/claude-sonnet-4.5",
+                Usage = new PiUsage { Input = 12, Output = 300, CacheRead = 40_000, CacheWrite = 900, TotalTokens = 41_212 },
+            },
+        }).ShouldNotBeNull();
+
+        read.Call.Used.ShouldBe(41_212);
+        read.Provider.ShouldBe("openrouter");
+        read.Model.ShouldBe("anthropic/claude-sonnet-4.5");
+        PiMapper.TryReadContextCall(new PiMessageEndEvent { Message = new PiMessage { Role = "user" } }).ShouldBeNull();
+        PiMapper.TryReadContextCall(new PiMessageEndEvent { Message = new PiMessage { Role = "assistant" } }).ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData("manual", ContextCompactionTriggers.Manual)]
+    [InlineData("threshold", ContextCompactionTriggers.Auto)]
+    [InlineData("overflow", ContextCompactionTriggers.Auto)]
+    public void a_compaction_starts_with_what_started_it(string reason, string trigger)
+    {
+        var started = new PiMapper(SessionId).Map(new PiCompactionStartEvent { Reason = reason })
+            .Single(e => e.Type == EventTypes.ContextCompaction);
+
+        var report = ContextEvents.ReadCompaction(started).ShouldNotBeNull();
+        report.Phase.ShouldBe(ContextCompactionPhases.Started);
+        report.Trigger.ShouldBe(trigger);
+    }
+
+    [Fact]
+    public void a_compaction_that_was_aborted_or_errored_failed()
+    {
+        var mapper = new PiMapper(SessionId);
+        ContextCompaction(mapper.Map(new PiCompactionEndEvent { Reason = "manual" })).Phase.ShouldBe(ContextCompactionPhases.Ended);
+        ContextCompaction(mapper.Map(new PiCompactionEndEvent { Reason = "manual", Aborted = true })).Phase.ShouldBe(ContextCompactionPhases.Failed);
+
+        var failed = ContextCompaction(mapper.Map(new PiCompactionEndEvent { Reason = "threshold", ErrorMessage = "summary failed" }));
+        failed.Phase.ShouldBe(ContextCompactionPhases.Failed);
+        failed.Error.ShouldBe("summary failed");
+
+        static ContextCompactionReport ContextCompaction(IReadOnlyList<HarnessEvent> events)
+            => ContextEvents.ReadCompaction(events.Single(e => e.Type == EventTypes.ContextCompaction)).ShouldNotBeNull();
+    }
+
+    [Fact]
     public void compaction_retry_session_state_response_and_protocol_errors_map_expected_events()
     {
         var mapper = new PiMapper(SessionId);
@@ -248,11 +299,13 @@ public sealed class PiMapperTests
         var error = mapper.Map(new PiErrorEvent { Error = "raw error" });
         var protocolError = mapper.Map(new PiProtocolErrorEvent { Kind = "unknown_event", Message = "bad event" });
 
-        StatusType(compactionStart.Single()).ShouldBe("working");
-        StatusActivity(compactionStart.Single()).ShouldBe("compaction_start");
-        compactionEnd.Single().Type.ShouldBe(EventTypes.SessionCompacted);
-        Payload(compactionEnd.Single()).GetProperty("message").GetString().ShouldBe("done");
-        Payload(compactionEnd.Single()).GetProperty("success").GetBoolean().ShouldBeTrue();
+        StatusType(compactionStart[0]).ShouldBe("working");
+        StatusActivity(compactionStart[0]).ShouldBe("compaction_start");
+        compactionStart[1].Type.ShouldBe(EventTypes.ContextCompaction);
+        compactionEnd[0].Type.ShouldBe(EventTypes.SessionCompacted);
+        Payload(compactionEnd[0]).GetProperty("message").GetString().ShouldBe("done");
+        Payload(compactionEnd[0]).GetProperty("success").GetBoolean().ShouldBeTrue();
+        compactionEnd[1].Type.ShouldBe(EventTypes.ContextCompaction);
         StatusActivity(retryStart.Single()).ShouldBe("auto_retry_start");
         StatusDetail(retryStart.Single()).ShouldBe("rate_limit");
         StatusType(retryEnd.Single()).ShouldBe("busy");

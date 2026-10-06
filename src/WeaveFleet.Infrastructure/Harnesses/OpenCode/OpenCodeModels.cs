@@ -631,6 +631,15 @@ internal sealed record OpenCodeProviderModel
     [JsonPropertyName("name")] public string? Name { get; init; }
     [JsonPropertyName("capabilities")] public JsonElement? Capabilities { get; init; }
     [JsonPropertyName("variants")] public IReadOnlyDictionary<string, OpenCodeModelVariant>? Variants { get; init; }
+    [JsonPropertyName("limit")] public OpenCodeModelLimit? Limit { get; init; }
+}
+
+/// <summary>A model's token limits: its context window, and what one call may read and write.</summary>
+internal sealed record OpenCodeModelLimit
+{
+    [JsonPropertyName("context")] public int Context { get; init; }
+    [JsonPropertyName("input")] public int? Input { get; init; }
+    [JsonPropertyName("output")] public int Output { get; init; }
 }
 
 /// <summary>A model variant within a provider model, keyed by variant ID in the parent dictionary.</summary>
@@ -701,6 +710,13 @@ internal sealed record OpenCodeSseEvent
 // ---------------------------------------------------------------------------
 
 /// <summary>Request body for POST /session/:id/fork.</summary>
+/// <summary>The body of POST /session/{id}/summarize: the model that writes the summary.</summary>
+internal sealed record OpenCodeSummarizeRequest
+{
+    [JsonPropertyName("providerID")] public required string ProviderId { get; init; }
+    [JsonPropertyName("modelID")] public required string ModelId { get; init; }
+}
+
 internal sealed record OpenCodeForkRequest
 {
     /// <summary>The message the fork stops before: it copies only the messages older than this one. Null copies all.</summary>

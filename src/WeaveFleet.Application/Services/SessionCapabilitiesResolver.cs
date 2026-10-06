@@ -21,7 +21,8 @@ public sealed class SessionCapabilitiesResolver(
             activityTracker.GetEffectiveActivityStatus(session.Id) ?? "idle",
             instanceTracker.Get(session.InstanceId) is not null,
             ForkUnsupportedReason(harness),
-            PromptUnsupportedReason(session, harness));
+            PromptUnsupportedReason(session, harness),
+            CompactUnsupportedReason(harness));
     }
 
     /// <summary>
@@ -34,6 +35,17 @@ public sealed class SessionCapabilitiesResolver(
         null => null,
         { Capabilities.SupportsForking: true } => null,
         _ => $"{harness.DisplayName} can't copy a conversation, so its sessions can't be forked.",
+    };
+
+    /// <summary>
+    /// Why sessions on <paramref name="harness"/> can't be compacted from Fleet, or null when they can
+    /// (<see cref="HarnessCapabilities.SupportsCompaction"/>).
+    /// </summary>
+    public static string? CompactUnsupportedReason(IHarness? harness) => harness switch
+    {
+        null => null,
+        { Capabilities.SupportsCompaction: true } => null,
+        _ => $"{harness.DisplayName} can't be asked to compact its context.",
     };
 
     /// <summary>
@@ -52,13 +64,17 @@ public sealed class SessionCapabilitiesResolver(
     /// <param name="promptUnsupportedReason">
     /// Why the session can never be prompted (<see cref="PromptUnsupportedReason"/>); null when it can.
     /// </param>
+    /// <param name="compactUnsupportedReason">
+    /// Why the session's harness can't compact (<see cref="CompactUnsupportedReason"/>); null when it can.
+    /// </param>
     public static SessionActionCapabilities Resolve(
         string? lifecycleStatus,
         string? retentionStatus,
         string? activityStatus,
         bool isLive,
         string? forkUnsupportedReason = null,
-        string? promptUnsupportedReason = null)
+        string? promptUnsupportedReason = null,
+        string? compactUnsupportedReason = null)
     {
         var normalizedRetentionStatus = Normalize(retentionStatus, "active");
         var effectiveLifecycleStatus = GetEffectiveLifecycleStatus(lifecycleStatus, isLive);
@@ -74,6 +90,9 @@ public sealed class SessionCapabilitiesResolver(
         var canArchive = !isArchived;
         var canUnarchive = isArchived;
         var canFork = !isArchived && forkUnsupportedReason is null;
+        // Compacting is a turn of its own, so it waits for the session's turn to end. A session that isn't running
+        // wakes for it, as for a prompt.
+        var canCompact = canPrompt && !isBusy && compactUnsupportedReason is null;
         const bool canDelete = true;
 
         return new SessionActionCapabilities(
@@ -90,7 +109,16 @@ public sealed class SessionCapabilitiesResolver(
             ArchiveDisabledReason: canArchive ? null : GetAlreadyArchivedReason(isArchived),
             UnarchiveDisabledReason: canUnarchive ? null : "Session is not archived.",
             ForkDisabledReason: canFork ? null : GetArchivedReadOnlyReason(isArchived) ?? forkUnsupportedReason,
-            DeleteDisabledReason: null);
+            DeleteDisabledReason: null)
+        {
+            CanCompact = canCompact,
+            CompactDisabledReason = canCompact
+                ? null
+                : GetArchivedReadOnlyReason(isArchived)
+                    ?? compactUnsupportedReason
+                    ?? promptUnsupportedReason
+                    ?? (isBusy ? "Wait for the agent to finish its turn." : "Session is not running."),
+        };
     }
 
     private static string Normalize(string? value, string fallback) =>

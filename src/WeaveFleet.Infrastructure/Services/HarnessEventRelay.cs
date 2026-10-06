@@ -94,6 +94,7 @@ public sealed class HarnessEventRelay : BackgroundService
     private readonly PendingPermissionStore? _permissions;
     private readonly AgentBrowserCalls? _browserCalls;
     private readonly RunningWorkRecorder? _work;
+    private readonly SessionContextRecorder? _context;
     private readonly SessionCallbackDispatcher? _callbacks;
     private CancellationToken _stoppingToken;
 
@@ -121,8 +122,10 @@ public sealed class HarnessEventRelay : BackgroundService
         PendingPermissionStore? permissions = null,
         AgentBrowserCalls? browserCalls = null,
         RunningWorkRecorder? work = null,
-        SessionCallbackDispatcher? callbacks = null)
+        SessionCallbackDispatcher? callbacks = null,
+        SessionContextRecorder? context = null)
     {
+        _context = context;
         _callbacks = callbacks;
         _browserCalls = browserCalls;
         _work = work;
@@ -147,6 +150,17 @@ public sealed class HarnessEventRelay : BackgroundService
     /// Notes the call that can be taking browser steps now (Code Mode's <c>execute</c>, Fleet's browser tools), so each
     /// step is filed under it. Here, before the event goes on, so the call is known before its first command arrives.
     /// </summary>
+    private void ObserveContextEvent(string fleetSessionId, string? userId, HarnessEvent evt)
+    {
+        if (_context is null)
+            return;
+
+        if (evt.Type == EventTypes.ContextUsage && ContextEvents.ReadUsage(evt) is { } usage)
+            _context.Observe(fleetSessionId, userId, usage);
+        else if (evt.Type == EventTypes.ContextCompaction && ContextEvents.ReadCompaction(evt) is { } compaction)
+            _context.Observe(fleetSessionId, userId, compaction);
+    }
+
     private void ObserveBrowserCall(string fleetSessionId, DomainEvent? domainEvent)
     {
         if (_browserCalls is null || domainEvent is not MessagePartUpdated { Payload.Part: ToolMessageEventPart tool } || !AgentBrowserCalls.UsesBrowser(tool.ToolName))
@@ -362,6 +376,13 @@ public sealed class HarnessEventRelay : BackgroundService
                     continue;
                 }
 
+                // How full the context is goes to Fleet's record of it, which tells clients itself.
+                if (EventTypes.IsContextEvent(evt.Type))
+                {
+                    ObserveContextEvent(targetFleetSessionId, sessionUserId, evt);
+                    continue;
+                }
+
                 // An ask is shown where the user looks: a subagent's on the session it works for.
                 if (_permissions is not null && evt.Type is EventTypes.PermissionAsked or EventTypes.PermissionReplied)
                     targetFleetSessionId = await ObservePermissionEventAsync(evt, targetFleetSessionId, sessionUserId).ConfigureAwait(false);
@@ -386,6 +407,7 @@ public sealed class HarnessEventRelay : BackgroundService
                 _queue?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
                 _callbacks?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
                 _failures?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
+                _context?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
                 if (domainEvent is TurnFailed turnFailed)
                     _notifier?.OnSessionFailed(targetFleetSessionId, turnFailed.Payload.Error.Message);
                 _logger.LogDebug("[Relay:Pump] Translated type={Type} domainEvent={DomainEvent} targetSession={TargetSession}",

@@ -69,6 +69,15 @@ public interface IHarnessSession : IAsyncDisposable
         => throw new NotSupportedException($"{HarnessType} sessions can't run shell commands.");
 
     /// <summary>
+    /// Compacts the session's context: the harness summarises the conversation so far, and the agent carries on from
+    /// the summary. Returns once the harness has taken the request; the compaction's progress and end arrive as
+    /// <see cref="EventTypes.ContextCompaction"/> events. Throws <see cref="HarnessBusyException"/> when the harness
+    /// won't compact during a turn. Only for a harness with <see cref="HarnessCapabilities.SupportsCompaction"/>.
+    /// </summary>
+    Task CompactAsync(CompactOptions options, CancellationToken ct)
+        => throw new NotSupportedException($"{HarnessType} sessions can't be compacted.");
+
+    /// <summary>
     /// Copies the conversation up to its last finished turn into a new harness session, for Fork and for a side
     /// conversation (<c>/btw</c>). A turn still running isn't copied: the fork would carry on with it. The session
     /// itself is left as it is. Null when the harness can't. Only for a harness with

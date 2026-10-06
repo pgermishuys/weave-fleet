@@ -105,6 +105,20 @@ public sealed class FakeHarnessSession : IHarnessSession
         return RunShellCommandBehavior?.Invoke(options, ct) ?? Task.CompletedTask;
     }
 
+    private readonly ConcurrentBag<CompactOptions> _compactCalls = [];
+
+    /// <summary>Records each <see cref="CompactAsync"/> call for test assertions.</summary>
+    public IReadOnlyList<CompactOptions> CompactCalls => [.. _compactCalls];
+
+    /// <summary>Optional override for <see cref="CompactAsync"/>, called after the call is recorded.</summary>
+    public Func<CompactOptions, CancellationToken, Task>? CompactBehavior { get; set; }
+
+    public Task CompactAsync(CompactOptions options, CancellationToken ct)
+    {
+        _compactCalls.Add(options);
+        return CompactBehavior?.Invoke(options, ct) ?? Task.CompletedTask;
+    }
+
     public Task StopAsync(CancellationToken ct)
     {
         StopCalled = true;

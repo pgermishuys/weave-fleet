@@ -61,6 +61,19 @@ public static class EventTypes
     /// <summary>Running work ended. A <see cref="WorkReport"/> with <see cref="WorkReport.EndedReason"/>.</summary>
     public const string WorkEnded = "work.ended";
 
+    /// <summary>
+    /// The size of the session's last model call and its model's limits. Fleet's own event, with a
+    /// <see cref="ContextUsageReport"/> payload. The relay hands it to Fleet's record of the session's context rather
+    /// than the conversation.
+    /// </summary>
+    public const string ContextUsage = "context.usage";
+
+    /// <summary>The session's context was compacted, or a compaction started or failed. A <see cref="ContextCompactionReport"/>.</summary>
+    public const string ContextCompaction = "context.compaction";
+
+    /// <summary>Returns <c>true</c> for <see cref="ContextUsage"/> and <see cref="ContextCompaction"/>.</summary>
+    public static bool IsContextEvent(string type) => type is ContextUsage or ContextCompaction;
+
     /// <summary>Returns <c>true</c> for <see cref="WorkStarted"/>, <see cref="WorkUpdated"/> and <see cref="WorkEnded"/>.</summary>
     public static bool IsWorkEvent(string type) => type is WorkStarted or WorkUpdated or WorkEnded;
 

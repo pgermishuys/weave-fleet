@@ -76,6 +76,14 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(11, "OffTheRecordForkLeft"),
             "Could not delete off-the-record fork {ForkId}; the next ask in its directory will remove it");
 
+    private static readonly Action<ILogger, string, Exception?> LogCompactFailed =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(14, "CompactFailed"),
+            "Compacting OpenCode session {OpenCodeSessionId} failed");
+
+    private static readonly Action<ILogger, string, Exception?> LogModelLimitsUnavailable =
+        LoggerMessage.Define<string>(LogLevel.Debug, new EventId(15, "ModelLimitsUnavailable"),
+            "Couldn't read the limits of model {ModelId} from OpenCode");
+
     private readonly IOpenCodeInstanceHandle _instanceHandle;
     private readonly string _workingDirectory;
     private readonly ILogger<OpenCodeHarnessSession> _logger;
@@ -110,6 +118,12 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     // Tool calls already reported as files.written, so a re-sent completed part isn't reported twice.
     private const int MaxRememberedFileWrites = 10_000;
     private readonly ConcurrentDictionary<string, byte> _reportedFileWrites = new(StringComparer.Ordinal);
+
+    /// <summary>The last model call reported as the context's size, by message id: OpenCode sends a message's tokens again.</summary>
+    private (string MessageId, ContextCall Call)? _reportedContextCall;
+
+    /// <summary>The model of the session's last call, for compacting with when the session names none.</summary>
+    private (string ProviderId, string ModelId)? _lastCallModel;
 
     // The child session of each running task call, by call: what Stop aborts.
     private readonly ConcurrentDictionary<string, string> _workChildren = new(StringComparer.Ordinal);
@@ -602,6 +616,62 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             CancellationToken.None).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Compacts the session's context with OpenCode's summarize, which writes the summary with a model: the session's
+    /// chosen one, else the one its last call ran on, else OpenCode's default. OpenCode answers only once the summary
+    /// is written, so the request carries on in the background; its start and end arrive as events.
+    /// </summary>
+    public async Task CompactAsync(CompactOptions options, CancellationToken ct)
+    {
+        var requestedModel = ResolveRequestedModel(options.ProviderId, options.ModelId);
+
+        await EnsureConnectedAsync(requestedModel.ProviderId, requestedModel.ModelId, ct).ConfigureAwait(false);
+        await EnsureSessionAsync(ct).ConfigureAwait(false);
+        await WaitForPostRecoveryEventSubscriptionAsync(_openCodeSessionId!, ct).ConfigureAwait(false);
+
+        var (providerId, modelId) = await ResolveCompactionModelAsync(requestedModel.ProviderId, requestedModel.ModelId, ct).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(providerId) || string.IsNullOrWhiteSpace(modelId))
+            throw new NotSupportedException("OpenCode compacts with a model, and this session has none yet. Pick one, or send a prompt first.");
+
+        var openCodeSessionId = _openCodeSessionId!;
+        var http = _instanceHandle.HttpClient;
+        var request = new OpenCodeSummarizeRequest { ProviderId = providerId, ModelId = modelId };
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await http.SummarizeSessionAsync(openCodeSessionId, request, _workingDirectory, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (TaskCanceledException)
+            {
+                // The client gave up waiting; OpenCode carries on, and says when it's done.
+            }
+            catch (Exception ex)
+            {
+                LogCompactFailed(_logger, openCodeSessionId, ex);
+            }
+        }, CancellationToken.None);
+    }
+
+    private async Task<(string? ProviderId, string? ModelId)> ResolveCompactionModelAsync(string? providerId, string? modelId, CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(providerId) && !string.IsNullOrWhiteSpace(modelId))
+            return (providerId, modelId);
+
+        if (_lastCallModel is { } last)
+            return last;
+
+        try
+        {
+            var config = await _instanceHandle.HttpClient.GetConfigDefaultsAsync(_workingDirectory, ct).ConfigureAwait(false);
+            return config?.Model is { } combined ? ResolveRequestedModel(null, combined) : (null, null);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException)
+        {
+            return (null, null);
+        }
+    }
+
     /// <summary>The agent OpenCode would give a prompt that names none; <c>build</c> when it can't say.</summary>
     private async Task<string> ResolveDefaultAgentAsync(CancellationToken ct)
     {
@@ -802,10 +872,79 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
                     yield return written.Event;
             }
 
+            // How full the context is, and its compactions, become Fleet's own events.
+            if (isParentEvent || harnessEvent.FleetSessionId is not null)
+            {
+                if (OpenCodeMapper.TryReadContextCall(sseEvt) is { } contextCall && _reportedContextCall != (contextCall.MessageId, contextCall.Call))
+                {
+                    _reportedContextCall = (contextCall.MessageId, contextCall.Call);
+                    var model = ExtractModelInfo(harnessEvent.Payload);
+                    yield return await ContextUsageEventAsync(
+                        contextCall.Call,
+                        contextCall.ProviderId ?? model.ProviderId,
+                        contextCall.ModelId ?? model.ModelId,
+                        harnessEvent.SessionId,
+                        harnessEvent.FleetSessionId,
+                        remember: isParentEvent,
+                        ct).ConfigureAwait(false);
+                }
+
+                if (OpenCodeMapper.TryMapCompactionStarted(sseEvt, harnessEvent.SessionId) is { } compacting)
+                    yield return compacting with { FleetSessionId = harnessEvent.FleetSessionId };
+
+                // Only on success: a compaction that fails is over when its turn ends.
+                if (sseEvt.Type == EventTypes.SessionCompacted)
+                    yield return ContextEvents.Compaction(ContextCompactionPhases.Ended, harnessEvent.SessionId, fleetSessionId: harnessEvent.FleetSessionId);
+            }
+
             // Emit synthetic tool-result event if this is a completed tool part with output
             var toolResultEvent = TryBuildToolResultEvent(sseEvt, harnessEvent);
             if (toolResultEvent is not null)
                 yield return toolResultEvent;
+        }
+    }
+
+    /// <summary>A model call's size, with its model's limits from OpenCode's provider list.</summary>
+    private async Task<HarnessEvent> ContextUsageEventAsync(
+        ContextCall call,
+        string? providerId,
+        string? modelId,
+        string sessionId,
+        string? fleetSessionId,
+        bool remember,
+        CancellationToken ct)
+    {
+        if (remember && !string.IsNullOrWhiteSpace(providerId) && !string.IsNullOrWhiteSpace(modelId))
+            _lastCallModel = (providerId, modelId);
+
+        var limit = await GetModelLimitAsync(providerId, modelId, ct).ConfigureAwait(false);
+        var report = new ContextUsageReport
+        {
+            Call = call,
+            Limit = limit is { Context: > 0 } ? limit.Context : null,
+            CompactsAt = limit is null ? null : OpenCodeMapper.CompactsAt(limit),
+            ProviderId = providerId,
+            ModelId = modelId,
+        };
+        return ContextEvents.Usage(report, sessionId, fleetSessionId);
+    }
+
+    /// <summary>The model's limits from OpenCode's provider list (kept in the catalog cache), or null when it isn't there.</summary>
+    private async Task<OpenCodeModelLimit?> GetModelLimitAsync(string? providerId, string? modelId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(providerId) || string.IsNullOrWhiteSpace(modelId))
+            return null;
+
+        try
+        {
+            var providers = await _instanceHandle.HttpClient.GetProvidersAsync(_workingDirectory, ct).ConfigureAwait(false);
+            var provider = providers.All.FirstOrDefault(p => string.Equals(p.Id, providerId, StringComparison.Ordinal));
+            return provider is not null && provider.Models.TryGetValue(modelId, out var model) ? model.Limit : null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogModelLimitsUnavailable(_logger, modelId, ex);
+            return null;
         }
     }
 

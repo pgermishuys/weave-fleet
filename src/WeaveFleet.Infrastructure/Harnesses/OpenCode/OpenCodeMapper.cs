@@ -680,6 +680,93 @@ internal static class OpenCodeMapper
         }
     }
 
+    /// <summary>
+    /// The size of a model call of the session, from the <c>message.updated</c> of its assistant message, which is one
+    /// call in OpenCode. Only once the call has output: OpenCode's own context meter skips the ones without, which are
+    /// still under way. The assistant message a compaction writes is skipped too: its tokens are the summarising
+    /// call's, not the new context's.
+    /// </summary>
+    internal static (string MessageId, ContextCall Call, string? ProviderId, string? ModelId)? TryReadContextCall(OpenCodeSseEvent evt)
+    {
+        if (evt.Type is not EventTypes.MessageUpdated
+            || evt.Properties.ValueKind != JsonValueKind.Object
+            || !evt.Properties.TryGetProperty("info", out var infoEl)
+            || infoEl.ValueKind != JsonValueKind.Object
+            || !HasStringProperty(infoEl, "role", out var role) || role != "assistant")
+        {
+            return null;
+        }
+
+        OpenCodeAssistantMessage? assistant;
+        try
+        {
+            assistant = OpenCodeMessageDeserializer.DeserializeAssistantMessage(infoEl);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        if (assistant?.Tokens is not { Output: > 0 } tokens
+            || assistant.Mode == "compaction"
+            || assistant.Summary is { ValueKind: JsonValueKind.True })
+        {
+            return null;
+        }
+
+        var call = new ContextCall
+        {
+            Input = ToTokens(tokens.Input),
+            CacheRead = ToTokens(tokens.Cache?.Read ?? 0),
+            CacheWrite = ToTokens(tokens.Cache?.Write ?? 0),
+            Output = ToTokens(tokens.Output),
+            Reasoning = ToTokens(tokens.Reasoning),
+        };
+        return (assistant.Id, call, assistant.ProviderId, assistant.ModelId);
+
+        static int ToTokens(double value) => value <= 0 ? 0 : value >= int.MaxValue ? int.MaxValue : (int)value;
+    }
+
+    /// <summary>
+    /// A compaction of the session started: OpenCode adds a user message with a <c>compaction</c> part, its <c>auto</c>
+    /// telling whether OpenCode started it (the context was nearly full) or someone asked. Null for anything else.
+    /// </summary>
+    internal static HarnessEvent? TryMapCompactionStarted(OpenCodeSseEvent evt, string sessionId)
+    {
+        if (evt.Type != EventTypes.MessagePartUpdated
+            || evt.Properties.ValueKind != JsonValueKind.Object
+            || !evt.Properties.TryGetProperty("part", out var part)
+            || part.ValueKind != JsonValueKind.Object
+            || !HasStringProperty(part, "type", out var partType) || partType != "compaction")
+        {
+            return null;
+        }
+
+        var auto = part.TryGetProperty("auto", out var autoEl) && autoEl.ValueKind == JsonValueKind.True;
+        return ContextEvents.Compaction(
+            ContextCompactionPhases.Started,
+            sessionId,
+            auto ? ContextCompactionTriggers.Auto : ContextCompactionTriggers.Manual);
+    }
+
+    /// <summary>
+    /// Where OpenCode compacts the context on its own, from the model's limits: when a call's tokens reach what the
+    /// model can read less room for its output (<c>overflow.ts</c>). Null when the model's window isn't known.
+    /// </summary>
+    internal static int? CompactsAt(OpenCodeModelLimit limit)
+    {
+        if (limit.Context <= 0)
+            return null;
+
+        // OpenCode caps a call's output at 32,000 tokens, and takes that cap when the model names none.
+        const int OutputCap = 32_000;
+        var maxOutput = limit.Output > 0 ? Math.Min(limit.Output, OutputCap) : OutputCap;
+        var usable = limit.Input is > 0 and var input
+            ? input - Math.Min(20_000, maxOutput)
+            : limit.Context - maxOutput;
+        return usable > 0 ? usable : null;
+    }
+
     internal static TokenEventData WithModelInfo(
         TokenEventData tokenEvent,
         string? modelId,

@@ -51,6 +51,8 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
 
     // The work Fleet asked V2 to stop: V2's notice then says the removed shell failed, but the user stopped it.
     private readonly ConcurrentDictionary<string, byte> _stopping = new(StringComparer.Ordinal);
+    // The models' limits from V2's model list, by provider/model; null while being read or when it has none.
+    private readonly ConcurrentDictionary<string, OpenCode2ModelLimit?> _modelLimits = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _attachLock = new(1, 1);
     private readonly Channel<HarnessEvent> _events = Channel.CreateBounded<HarnessEvent>(new BoundedChannelOptions(1000)
     {
@@ -510,6 +512,17 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
     }
 
     /// <summary>
+    /// Asks V2 to compact the session's context. V2 answers once it has taken the request; the compaction's start
+    /// and end arrive as events.
+    /// </summary>
+    public async Task CompactAsync(CompactOptions options, CancellationToken ct)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var server = await AttachedServerAsync(ct).ConfigureAwait(false);
+        await server.Client.CompactAsync(ResumeToken, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Answers the form a question tool call asked with. <paramref name="requestId"/> is the tool call's id (what
     /// the question card knows) or the form's; <paramref name="answers"/> has the chosen labels, one list per question.
     /// </summary>
@@ -557,6 +570,13 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
             _analytics.AcceptTokenEvent(usage);
         }
 
+        // Read before mapping too: the mapper forgets a step's model once the step ends.
+        if (_mapper.TryReadContextCall(evt) is { } contextCall)
+            Write(ContextUsageEvent(contextCall.Call, contextCall.ProviderId, contextCall.ModelId));
+
+        if (_mapper.TryMapCompaction(evt) is { } compaction)
+            Write(compaction);
+
         // Read before mapping too: the mapper forgets a tool call once it ends. A subagent call is running work, which Fleet
         // records with its child session.
         if (_mapper.TryReadDelegation(evt) is { } delegation)
@@ -601,6 +621,63 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         foreach (var harnessEvent in _mapper.Map(evt))
             Write(harnessEvent);
     }
+
+    /// <summary>
+    /// A step's size, with its model's window when V2's model list has been read. The first time a model's isn't
+    /// known, the list is read in the background and the window follows in a report of its own.
+    /// </summary>
+    private HarnessEvent ContextUsageEvent(ContextCall call, string? providerId, string? modelId)
+    {
+        var key = ModelKey(providerId, modelId);
+        var limit = key is not null && _modelLimits.TryGetValue(key, out var known) ? known : null;
+        if (key is not null && !_modelLimits.ContainsKey(key))
+            _ = ReadModelLimitsAsync(providerId!, modelId!, key);
+
+        return ContextEvents.Usage(
+            new ContextUsageReport
+            {
+                Call = call,
+                Limit = limit is { Context: > 0 } ? limit.Context : null,
+                ProviderId = providerId,
+                ModelId = modelId,
+            },
+            _context.FleetSessionId,
+            _context.FleetSessionId);
+    }
+
+    private async Task ReadModelLimitsAsync(string providerId, string modelId, string key)
+    {
+        if (!_modelLimits.TryAdd(key, null))
+            return;
+
+        try
+        {
+            var server = await AttachedServerAsync(CancellationToken.None).ConfigureAwait(false);
+            var models = await server.Client.GetModelsAsync(_context.WorkingDirectory, CancellationToken.None).ConfigureAwait(false);
+            foreach (var model in models)
+            {
+                if (ModelKey(model.ProviderId, model.Id) is { } modelKey && model.Limit is { Context: > 0 } limit)
+                    _modelLimits[modelKey] = limit;
+            }
+
+            if (_modelLimits.TryGetValue(key, out var found) && found is not null)
+            {
+                Write(ContextEvents.Usage(
+                    new ContextUsageReport { Limit = found.Context, ProviderId = providerId, ModelId = modelId },
+                    _context.FleetSessionId,
+                    _context.FleetSessionId));
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Asked again with the model's next step.
+            _modelLimits.TryRemove(key, out _);
+            LogModelLimitsUnavailable(_logger, modelId, ex);
+        }
+    }
+
+    private static string? ModelKey(string? providerId, string? modelId)
+        => string.IsNullOrWhiteSpace(providerId) || string.IsNullOrWhiteSpace(modelId) ? null : $"{providerId}/{modelId}";
 
     /// <summary>Passes an event on, keeping <see cref="_work"/> up to date with the work events among them.</summary>
     private void Write(HarnessEvent harnessEvent)
@@ -1161,6 +1238,9 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "OpenCode 2 session {InstanceId} put no user message in for command {Command} that Fleet saw")]
     private static partial void LogCommandMessageNotSeen(ILogger logger, string instanceId, string command);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Couldn't read the limits of model {ModelId} from OpenCode 2")]
+    private static partial void LogModelLimitsUnavailable(ILogger logger, string modelId, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't delete OpenCode 2 session {InstanceId} from its server")]
     private static partial void LogDeleteFailed(ILogger logger, string instanceId, Exception exception);

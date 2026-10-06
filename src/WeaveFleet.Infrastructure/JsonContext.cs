@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using WeaveFleet.Domain.DTOs;
+using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Skills;
@@ -169,6 +170,7 @@ internal sealed partial class HarnessEventJsonContext : JsonSerializerContext
 [JsonSerializable(typeof(List<OpenCodeMessageWithParts>))]
 [JsonSerializable(typeof(OpenCodePromptRequest))]
 [JsonSerializable(typeof(OpenCodeForkRequest))]
+[JsonSerializable(typeof(OpenCodeSummarizeRequest))]
 [JsonSerializable(typeof(OpenCodeCommandRequest))]
 [JsonSerializable(typeof(OpenCodeShellRequest))]
 [JsonSerializable(typeof(List<OpenCodeAgentInfo>))]
@@ -250,6 +252,10 @@ internal sealed partial class ClaudeCodeJsonContext : JsonSerializerContext
 [JsonSerializable(typeof(FilesWrittenPayload))]
 [JsonSerializable(typeof(PermissionAsk))]
 [JsonSerializable(typeof(WorkReport))]
+[JsonSerializable(typeof(ContextUsageReport))]
+[JsonSerializable(typeof(ContextCompactionReport))]
+[JsonSerializable(typeof(ContextCall))]
+[JsonSerializable(typeof(List<SessionContextTurn>))]
 [JsonSerializable(typeof(List<WorkReport>))]
 [JsonSerializable(typeof(PermissionReplied))]
 [JsonSerializable(typeof(List<PermissionAsk>))]

@@ -559,6 +559,16 @@ internal sealed class OpenCodeHttpClient
         await PostVoidAsync(url, body, OpenCodeJsonContext.Default.OpenCodePermissionReplyRequest, ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// POST /session/{sessionId}/summarize?directory={directory}: compacts the session's context. OpenCode answers once
+    /// the summary is written, which can take longer than the client's timeout; the compaction carries on either way.
+    /// </summary>
+    public Task SummarizeSessionAsync(string sessionId, OpenCodeSummarizeRequest request, string directory, CancellationToken ct)
+    {
+        var url = BuildUrl($"/session/{Uri.EscapeDataString(sessionId)}/summarize", directory);
+        return PostVoidAsync(url, request, OpenCodeJsonContext.Default.OpenCodeSummarizeRequest, ct);
+    }
+
     /// <summary>POST /session/{sessionId}/fork?directory={directory}</summary>
     public async Task<OpenCodeSessionInfo> ForkSessionAsync(
         string sessionId,
