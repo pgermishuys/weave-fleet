@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onUnmounted, shallowRef, watch } from "vue";
-import { AlertCircle, Check, LoaderCircle, Smartphone } from "lucide-vue-next";
+import { AlertCircle, Check, Circle, Copy, LoaderCircle, Smartphone } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import QrCode from "@/components/settings/QrCode.vue";
 import { createPairingCode, savePublicUrl, type PairingCodeResponse } from "@/lib/devices-api";
 import { choosePhoneBaseUrl, supportsInstall } from "@/lib/pairing";
+import { phoneReadiness } from "@/lib/phone-readiness";
 
 /**
  * Settings → Machines → This machine → Add a phone: a one-time QR code (and a code to type) a phone scans to get
@@ -14,7 +15,11 @@ import { choosePhoneBaseUrl, supportsInstall } from "@/lib/pairing";
 const props = defineProps<{
   machineName: string;
   publicUrl: string | null;
-  addresses: readonly { url: string }[];
+  addresses: readonly { url: string; kind?: string }[];
+  /** Fleet asks every request for a token (`--require-token`). */
+  requiresToken: boolean;
+  /** The port Fleet listens on, for the commands in the checklist. */
+  port: number;
   /** Names of the devices with access now, so a new one shows up as "connected". */
   deviceNames: readonly string[];
 }>();
@@ -49,6 +54,27 @@ const host = computed(() => {
 const secondsLeft = computed(() => code.value ? Math.max(0, Math.round((Date.parse(code.value.expiresAt) - now.value) / 1000)) : 0);
 const countdown = computed(() => `${Math.floor(secondsLeft.value / 60)}:${String(secondsLeft.value % 60).padStart(2, "0")}`);
 const insecure = computed(() => !!code.value && !supportsInstall(code.value.payload.url));
+const readiness = computed(() => phoneReadiness({
+  machineName: props.machineName,
+  phoneUrl: props.publicUrl ?? suggestedUrl.value ?? null,
+  addresses: props.addresses,
+  requiresToken: props.requiresToken,
+  port: props.port,
+}));
+const ready = computed(() => readiness.value.every((item) => item.ok));
+const copied = shallowRef<string | null>(null);
+
+async function copyCommand(command: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(command);
+    copied.value = command;
+    setTimeout(() => {
+      if (copied.value === command) copied.value = null;
+    }, 1500);
+  } catch {
+    // The command is on screen to select by hand.
+  }
+}
 
 async function start(baseUrl = phoneUrl.value || suggestedUrl.value || ""): Promise<void> {
   if (!baseUrl) {
@@ -172,7 +198,84 @@ onUnmounted(stopTimer);
     </div>
 
     <template v-else-if="!code">
-      <div class="flex flex-wrap items-center gap-3">
+      <div
+        class="add-phone__ready"
+        data-testid="add-phone-readiness"
+      >
+        <h4 class="text-sm font-semibold text-text">
+          Use Fleet from your phone
+        </h4>
+        <p class="mt-1 max-w-prose text-sm text-muted">
+          Answer agents, start sessions and get notifications on your phone. It connects straight to
+          {{ machineName }}{{ ready ? ", and everything it needs is in place:" : ". It needs three things:" }}
+        </p>
+        <ul class="mt-3 grid gap-3">
+          <li
+            v-for="item in readiness"
+            :key="item.id"
+            class="add-phone__item"
+            :data-testid="`add-phone-ready-${item.id}`"
+            :data-ok="item.ok"
+          >
+            <Check
+              v-if="item.ok"
+              :size="16"
+              class="add-phone__mark text-running"
+              aria-label="Done"
+            />
+            <Circle
+              v-else
+              :size="16"
+              class="add-phone__mark text-muted"
+              aria-label="Still to do"
+            />
+            <div class="min-w-0">
+              <p class="text-sm text-text">
+                {{ item.title }}
+              </p>
+              <p class="mt-0.5 max-w-prose text-xs text-muted">
+                {{ item.detail }}
+                <a
+                  v-if="item.link"
+                  :href="item.link.href"
+                  target="_blank"
+                  rel="noopener"
+                  class="text-accent underline-offset-2 hover:underline"
+                >{{ item.link.label }}</a>
+              </p>
+              <div
+                v-if="item.command"
+                class="add-phone__command"
+              >
+                <code>{{ item.command }}</code>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  :aria-label="`Copy ${item.command}`"
+                  @click="copyCommand(item.command)"
+                >
+                  <Check
+                    v-if="copied === item.command"
+                    :size="14"
+                  />
+                  <Copy
+                    v-else
+                    :size="14"
+                  />
+                </Button>
+              </div>
+            </div>
+          </li>
+        </ul>
+        <p
+          v-if="!ready"
+          class="mt-3 max-w-prose text-xs text-muted"
+        >
+          Without these the phone can still pair over your Wi-Fi and use Fleet in its browser, but not as an app or with
+          notifications. Step by step: docs/phone.md.
+        </p>
+      </div>
+      <div class="mt-4 flex flex-wrap items-center gap-3">
         <Button
           variant="outline"
           size="sm"
@@ -339,6 +442,44 @@ onUnmounted(stopTimer);
 </template>
 
 <style scoped>
+.add-phone__ready {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--card-bg);
+}
+
+.add-phone__item {
+  display: flex;
+  gap: 10px;
+}
+
+.add-phone__mark {
+  flex: none;
+  margin-top: 2px;
+}
+
+.add-phone__command {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  max-width: 100%;
+}
+
+.add-phone__command code {
+  min-width: 0;
+  overflow-x: auto;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  background: var(--main-bg);
+  font-family: var(--font-mono-stack);
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--text);
+}
+
 .add-phone__card {
   padding: 16px;
   border: 1px solid var(--border);

@@ -14,6 +14,7 @@ import { useThemeStore } from "@/stores/theme";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 import { restoreActiveMachine } from "@/lib/machines";
 import { startServiceWorker } from "@/composables/use-service-worker";
+import { captureInstallPrompt } from "@/lib/phone/install-prompt";
 import { router } from "./router";
 
 // Decide which machine this page works in before anything asks a server for something.
@@ -62,6 +63,9 @@ if (browserWindow) {
 }
 
 await router.load();
+
+// Chrome offers to install the app once, as the page loads; the phone setup screen shows it later.
+captureInstallPrompt();
 
 app.mount("#app");
 

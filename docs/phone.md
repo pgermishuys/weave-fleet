@@ -36,15 +36,23 @@ The QR code works once and expires after 10 minutes. Its secret sits in the URL 
 to a server, so it doesn't reach any log. Every phone gets its own key: removing one signs out only that phone.
 A key that isn't used for 30 days stops working; pair again.
 
-No camera, or iPhone Home Screen app with its own storage? Open `<address>/pair` on the phone and type the code shown
-under the QR code (`XXXX-XXXX`). On some iPhones the Home Screen app doesn't share Safari's storage, so after adding
-Fleet to the Home Screen it may ask to pair again: type the code.
+No camera? Open `<address>/pair` on the phone and type the code shown under the QR code (`XXXX-XXXX`).
+
+Settings → Machines → **Add a phone** first checks what the phone needs, with a ✓ for each and the command to run
+for anything missing: Tailscale on both, an https:// address (`tailscale serve`), and Fleet asking for a key
+(`--require-token`).
+
+**Adding Fleet to an iPhone's Home Screen keeps you signed in.** iOS 17.2 and later copy Safari's cookies into the
+Home Screen app (not its other storage), so Fleet opens there signed in and gets the phone a fresh key for itself
+and for your other machines; the key left behind in Safari stops working. On older iOS the Home Screen app starts
+empty and asks to pair once more: make a new code on the computer.
 
 ## Notifications
 
 After pairing, the phone shows **Notifications**:
 
-1. iPhone: tap Share → **Add to Home Screen**, then open Fleet from its icon.
+1. iPhone: tap Share → **Add to Home Screen**, then open Fleet from its icon. Android: **Install Fleet** (or Chrome's
+   menu ⋮ → Install app); notifications work in Chrome without installing.
 2. Choose what to be told about: **Needs you** (a command or edit waits for approval, or a workflow waits on you),
    **Questions**, **Finished**, **Failed**, and **Quiet while I'm at the desk** (no pushes while Fleet is open and
    visible on a computer).

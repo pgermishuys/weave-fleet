@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import { Bell, Check, LoaderCircle, Share } from "lucide-vue-next";
+import { Bell, Check, Download, LoaderCircle, Share } from "lucide-vue-next";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
 import { showToast } from "@/composables/phone/use-phone-toast";
 import { usePushSubscription } from "@/composables/phone/use-push-subscription";
 import { haptic } from "@/lib/phone/haptics";
+import { installed, installPrompt, promptInstall } from "@/lib/phone/install-prompt";
 import { readPushEnvironment } from "@/lib/push/capabilities";
 import { CHOICE_GROUPS, groupsFor, kindsFor } from "@/lib/push/subscribe";
 
@@ -24,6 +25,13 @@ const testing = shallowRef(false);
 
 const groups = computed(() => groupsFor(push.choices.value.kinds));
 const needsHomeScreen = computed(() => push.state.value === "ios-needs-install");
+// Android notifications work in Chrome as it is; installing just gives Fleet its own icon and full screen.
+const offerInstall = computed(() => !environment.isIos && !environment.isStandalone && !installed.value
+  && (installPrompt.value !== null || /Android/i.test(navigator.userAgent)));
+
+async function install(): Promise<void> {
+  if (await promptInstall()) haptic("success");
+}
 const deviceLine = computed(() => {
   if (environment.isIos) return environment.isStandalone ? "iPhone · Home Screen app" : "iPhone · Safari";
   return /Android/i.test(navigator.userAgent) ? "Android · Chrome" : "This browser";
@@ -135,9 +143,39 @@ watch(() => push.subscribed.value, () => {
             </div>
           </div>
           <p class="ph-foot">
-            iOS only lets web apps send notifications once they're on the Home Screen. If it asks to pair again there,
-            enter the code shown on your computer.
+            iOS only lets web apps send notifications once they're on the Home Screen. Fleet opens there signed in. On
+            iOS older than 17.2 it asks to pair once more: make a new code on the computer.
           </p>
+        </template>
+
+        <template v-else-if="offerInstall">
+          <div class="ph-label">
+            Add Fleet to this phone
+          </div>
+          <div
+            class="ph-card"
+            data-testid="setup-install"
+          >
+            <button
+              v-if="installPrompt"
+              type="button"
+              class="ph-set"
+              data-testid="setup-install-button"
+              @click="install"
+            >
+              <Download
+                class="ph-set__ic"
+                aria-hidden="true"
+              />
+              <span class="ph-set__main"><span class="ph-set__t">Install Fleet</span><span class="ph-set__s">Its own icon, full screen</span></span>
+            </button>
+            <div
+              v-else
+              class="ph-set ph-set--static"
+            >
+              <span class="ph-set__main"><span class="ph-set__t">In Chrome's menu ⋮, choose Install app</span><span class="ph-set__s">or Add to Home screen</span></span>
+            </div>
+          </div>
         </template>
 
         <p

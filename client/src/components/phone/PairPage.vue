@@ -203,6 +203,13 @@ function enterCode(): void {
               />
               <span>{{ step === "connecting" ? "Connecting…" : "Connect" }}</span>
             </button>
+            <p
+              class="pair__fine"
+              data-testid="pair-how"
+            >
+              Your phone talks straight to {{ preview?.machineName }} over your own network. Nothing goes through Weave.
+              Next, add Fleet to your Home Screen and turn on notifications.
+            </p>
             <p class="pair__fine">
               Not you? Close this page.
             </p>
