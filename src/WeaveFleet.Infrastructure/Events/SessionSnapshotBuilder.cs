@@ -81,7 +81,7 @@ public sealed class SessionSnapshotBuilder(
 
         var messageRows = await connection.QueryAsync(
             """
-            SELECT m.id, m.session_id, m.role, m.parts_json, m.timestamp, m.created_at, m.agent_name, m.model_id
+            SELECT m.id, m.session_id, m.role, m.parts_json, m.timestamp, m.created_at, m.agent_name, m.model_id, m.steered
             FROM messages m
             INNER JOIN sessions s ON s.id = m.session_id
             WHERE m.session_id = @SessionId
@@ -293,6 +293,8 @@ public sealed class SessionSnapshotBuilder(
                         Reasoning = totalReasoningTokens,
                     }
                     : null,
+                // A prompt sent into a running turn, which a harness whose history Fleet keeps can't say itself.
+                Steered = message.Steered ? true : null,
             },
             Parts = parts,
         };
@@ -401,7 +403,8 @@ public sealed class SessionSnapshotBuilder(
         reader.GetString(reader.GetOrdinal("timestamp")),
         reader.GetString(reader.GetOrdinal("created_at")),
         reader.GetNullableString(reader.GetOrdinal("agent_name")),
-        reader.GetNullableString(reader.GetOrdinal("model_id")));
+        reader.GetNullableString(reader.GetOrdinal("model_id")),
+        reader.GetInt64(reader.GetOrdinal("steered")) != 0);
 
 
     private sealed record SessionRow(string Id, string Title, string Status);
@@ -414,6 +417,7 @@ public sealed class SessionSnapshotBuilder(
         string Timestamp,
         string CreatedAt,
         string? AgentName,
-        string? ModelId);
+        string? ModelId,
+        bool Steered);
 
 }
