@@ -72,9 +72,9 @@ const contextMenuStubs = {
     template: "<div data-testid=\"context-menu-content\"><slot /></div>",
   },
   ContextMenuItem: {
-    props: ["disabled", "variant"],
+    props: ["disabled", "variant", "hint"],
     emits: ["select"],
-    template: "<button type=\"button\" :disabled=\"disabled\" :data-variant=\"variant\" @click=\"$emit('select', $event)\"><slot /></button>",
+    template: "<button type=\"button\" :disabled=\"disabled\" :data-variant=\"variant\" :data-hint=\"hint\" @click=\"$emit('select', $event)\"><slot /></button>",
   },
   ContextMenuSeparator: {
     template: "<hr>",
@@ -86,8 +86,8 @@ const contextMenuStubs = {
     template: "<div><slot /></div>",
   },
   ContextMenuSubTrigger: {
-    props: ["disabled"],
-    template: "<button type=\"button\" :disabled=\"disabled\"><slot /></button>",
+    props: ["disabled", "hint"],
+    template: "<button type=\"button\" :disabled=\"disabled\" :data-hint=\"hint\"><slot /></button>",
   },
   ContextMenuTrigger: {
     template: "<div><slot /></div>",
@@ -326,7 +326,7 @@ describe("SessionItem", () => {
     expect(text).toContain("Archive");
     expect(text).not.toContain("Restore");
     expect(text).toContain("Fork");
-    expect(text).toContain("Permanently Delete");
+    expect(text).toContain("Delete permanently…");
   });
 
   it("hides_context_actions_disabled_by_session_capabilities", () => {
@@ -340,7 +340,7 @@ describe("SessionItem", () => {
 
     const text = wrapper.get("[data-testid='context-menu-content']").text();
     expect(text).not.toContain("Archive");
-    expect(text).not.toContain("Permanently Delete");
+    expect(text).not.toContain("Delete permanently");
   });
 
   it("says_what_fork_does", () => {
@@ -348,7 +348,9 @@ describe("SessionItem", () => {
 
     const fork = wrapper.get("[data-testid='session-context-fork']");
     expect(fork.attributes("disabled")).toBeUndefined();
-    expect(wrapper.get("[data-testid='session-context-fork-note']").text()).toBe("A new session with a copy of this conversation");
+    expect(fork.attributes("data-hint")).toBe("A new session with a copy of this conversation.");
+    // The footer says it while the row is highlighted; nothing extra on the row.
+    expect(wrapper.find("[data-testid='session-context-fork-note']").exists()).toBe(false);
   });
 
   it("shows_fork_off_with_the_reason_on_a_harness_that_cant_fork", () => {

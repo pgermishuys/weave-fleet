@@ -23,8 +23,10 @@ import {
 import {
   ContextMenu,
   ContextMenuContent,
+  ContextMenuHint,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuShortcut,
   ContextMenuSub,
   ContextMenuSubContent,
   ContextMenuSubTrigger,
@@ -256,6 +258,21 @@ const projectTargets = computed(() => {
   return targets;
 });
 
+const currentProjectId = computed(() => props.session.projectId ?? null);
+const currentProjectLabel = computed(() =>
+  projectTargets.value.find((target) => target.id === currentProjectId.value)?.label ?? props.session.projectName ?? null);
+
+const FORK_HINT = "A new session with a copy of this conversation.";
+
+/** The menu's footer while no row is highlighted: where the session lives and what runs it. */
+const menuFooter = computed(() => {
+  const harnessType = props.session.harnessType ?? "opencode";
+  const harness = harnesses.value.find((item) => item.type === harnessType)?.displayName;
+  return [props.session.projectName ?? props.session.workspaceDisplayName, props.session.branch, harness]
+    .filter(Boolean)
+    .join(" · ");
+});
+
 
 function handleSelect(event: MouseEvent): void {
   if (isInlineEditing.value) {
@@ -456,6 +473,10 @@ function handleSaveAsWorkflow(): void {
 }
 
 async function handleMove(projectId: string | null): Promise<void> {
+  if (projectId === currentProjectId.value) {
+    return;
+  }
+
   try {
     await moveSession(sessionId.value, projectId);
   } catch {
@@ -681,18 +702,21 @@ function removeSessionFromStore(): void {
       </div>
     </ContextMenuTrigger>
 
-    <ContextMenuContent class="w-56">
+    <ContextMenuContent class="w-66">
+      <!-- Change this session -->
       <ContextMenuItem
         :disabled="isAnyActionPending"
         @select="startRename"
       >
         <Pencil class="size-3.5" />
         Rename
+        <ContextMenuShortcut>F2</ContextMenuShortcut>
       </ContextMenuItem>
 
       <ContextMenuItem
         v-if="canArchive"
         :disabled="isAnyActionPending"
+        hint="Hides it from the list. You can undo it for a few seconds, then find it under Archived."
         data-testid="session-context-archive"
         @select="handleArchive"
       >
@@ -703,6 +727,7 @@ function removeSessionFromStore(): void {
       <ContextMenuItem
         v-if="canRestore"
         :disabled="isAnyActionPending"
+        hint="Puts it back in the list."
         data-testid="session-context-restore"
         @select="handleRestore"
       >
@@ -710,57 +735,51 @@ function removeSessionFromStore(): void {
         Restore
       </ContextMenuItem>
 
-      <ContextMenuItem
-        v-if="moveOutLabel"
-        :disabled="isAnyActionPending"
-        data-testid="session-context-move-out"
-        @select="handleMoveOut"
-      >
-        <CornerLeftUp class="size-3.5" />
-        <span class="truncate">{{ moveOutLabel }}</span>
-      </ContextMenuItem>
+      <!-- Start from it -->
+      <template v-if="!isArchivedSession">
+        <ContextMenuSeparator />
 
-      <ContextMenuItem
-        v-if="moveBackLabel"
-        :disabled="isAnyActionPending"
-        data-testid="session-context-move-back"
-        @select="handleMoveBack"
-      >
-        <CornerDownRight class="size-3.5" />
-        <span class="truncate">{{ moveBackLabel }}</span>
-      </ContextMenuItem>
-
-      <ContextMenuItem
-        v-if="showFork"
-        :disabled="isAnyActionPending || !canFork"
-        data-testid="session-context-fork"
-        @select="handleFork"
-      >
-        <GitFork class="size-3.5" />
-        <span class="flex flex-col">
-          <span>Fork</span>
+        <ContextMenuItem
+          v-if="showFork"
+          :disabled="isAnyActionPending || !canFork"
+          :hint="FORK_HINT"
+          data-testid="session-context-fork"
+          @select="handleFork"
+        >
+          <GitFork class="size-3.5" />
+          <!-- A row that's off can't be highlighted, so it says why on the row instead of in the footer. -->
           <span
-            class="text-[11px] text-muted-foreground"
-            data-testid="session-context-fork-note"
-          >{{ forkDisabledReason ?? "A new session with a copy of this conversation" }}</span>
-        </span>
-      </ContextMenuItem>
+            v-if="forkDisabledReason"
+            class="flex min-w-0 flex-col"
+          >
+            <span>Fork</span>
+            <span
+              class="text-[11.5px] text-muted"
+              data-testid="session-context-fork-note"
+            >{{ forkDisabledReason }}</span>
+          </span>
+          <template v-else>
+            Fork
+          </template>
+        </ContextMenuItem>
+
+        <ContextMenuItem
+          :disabled="isAnyActionPending"
+          hint="Same folder and harness, an empty conversation."
+          data-testid="session-context-new-in-folder"
+          @select="handleNewSessionInFolder"
+        >
+          <Plus class="size-3.5" />
+          New session in this folder
+        </ContextMenuItem>
+      </template>
+
+      <!-- Reuse it -->
+      <ContextMenuSeparator />
 
       <ContextMenuItem
-        v-if="!isArchivedSession"
         :disabled="isAnyActionPending"
-        data-testid="session-context-new-in-folder"
-        @select="handleNewSessionInFolder"
-      >
-        <Plus class="size-3.5" />
-        <span class="flex flex-col">
-          <span>New session in this folder</span>
-          <span class="text-[11px] text-muted-foreground">Same folder and harness, an empty conversation</span>
-        </span>
-      </ContextMenuItem>
-
-      <ContextMenuItem
-        :disabled="isAnyActionPending"
+        hint="Opens Automations with this session's first message and folder filled in."
         data-testid="session-repeat-on-schedule"
         @select="handleRepeatOnSchedule"
       >
@@ -771,26 +790,26 @@ function removeSessionFromStore(): void {
       <ContextMenuItem
         v-if="canSaveAsWorkflow"
         :disabled="isAnyActionPending"
-        :title="DRAFT_COST_NOTE"
+        :hint="DRAFT_COST_NOTE"
         data-testid="session-save-as-workflow"
         @select="handleSaveAsWorkflow"
       >
         <Sparkles class="size-3.5" />
-        <span class="flex flex-col">
-          <span>Save as workflow…</span>
-          <span
-            class="text-[11px] text-muted-foreground"
-            data-testid="session-save-as-workflow-cost"
-          >Asks the model once, from the cache</span>
-        </span>
+        Save as workflow…
       </ContextMenuItem>
+
+      <!-- Take it elsewhere -->
+      <ContextMenuSeparator />
 
       <OpenToolContextSubmenu :directory="session.workspaceDirectory" />
 
       <ContextMenuSub>
-        <ContextMenuSubTrigger :disabled="isAnyActionPending">
+        <ContextMenuSubTrigger
+          :disabled="isAnyActionPending"
+          :hint="currentProjectLabel ? `Now in ${currentProjectLabel}.` : undefined"
+        >
           <FolderOpen class="size-3.5" />
-          Move to Project
+          Move to project
         </ContextMenuSubTrigger>
         <ContextMenuSubContent class="w-52">
           <ContextMenuItem
@@ -803,34 +822,65 @@ function removeSessionFromStore(): void {
             <ContextMenuItem
               v-for="project in projectTargets"
               :key="project.id ?? 'ungrouped'"
-              :disabled="project.id === (session.projectId ?? null)"
               @select="handleMove(project.id)"
             >
-              {{ project.label }}
+              <span class="min-w-0 flex-1 truncate">{{ project.label }}</span>
+              <Check
+                v-if="project.id === currentProjectId"
+                class="size-3.5 text-accent"
+                aria-label="Current project"
+              />
             </ContextMenuItem>
           </template>
         </ContextMenuSubContent>
       </ContextMenuSub>
 
-      <ContextMenuSeparator />
+      <ContextMenuItem
+        v-if="moveOutLabel"
+        :disabled="isAnyActionPending"
+        hint="Lists it on its own instead of under the session it came from."
+        data-testid="session-context-move-out"
+        @select="handleMoveOut"
+      >
+        <CornerLeftUp class="size-3.5" />
+        <span class="truncate">{{ moveOutLabel }}</span>
+      </ContextMenuItem>
+
+      <ContextMenuItem
+        v-if="moveBackLabel"
+        :disabled="isAnyActionPending"
+        hint="Lists it under the session it came from again."
+        data-testid="session-context-move-back"
+        @select="handleMoveBack"
+      >
+        <CornerDownRight class="size-3.5" />
+        <span class="truncate">{{ moveBackLabel }}</span>
+      </ContextMenuItem>
 
       <ContextMenuItem
         :disabled="isAnyActionPending"
+        :hint="`Copies ${sessionId}.`"
         @select="handleCopySessionId"
       >
         <Copy class="size-3.5" />
         Copy session ID
       </ContextMenuItem>
 
-      <ContextMenuItem
-        v-if="canDelete"
-        variant="destructive"
-        :disabled="isAnyActionPending"
-        @select="openDeleteDialog"
-      >
-        <Trash2 class="size-3.5" />
-        Permanently Delete
-      </ContextMenuItem>
+      <template v-if="canDelete">
+        <ContextMenuSeparator />
+
+        <ContextMenuItem
+          variant="destructive"
+          :disabled="isAnyActionPending"
+          hint="Deletes the session and its history. Fleet asks first; it can't be undone."
+          @select="openDeleteDialog"
+        >
+          <Trash2 class="size-3.5" />
+          Delete permanently…
+        </ContextMenuItem>
+      </template>
+
+      <ContextMenuHint>{{ menuFooter }}</ContextMenuHint>
     </ContextMenuContent>
   </ContextMenu>
 

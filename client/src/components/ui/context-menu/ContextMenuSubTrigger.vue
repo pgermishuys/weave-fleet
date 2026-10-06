@@ -8,12 +8,20 @@ import {
   useForwardProps,
 } from "reka-ui"
 import { cn } from "@/lib/utils"
+import { menuSubTriggerClass } from "@/components/ui/menu-classes"
+import { useMenuRowHint } from "./hint"
 
-const props = defineProps<ContextMenuSubTriggerProps & { class?: HTMLAttributes["class"], inset?: boolean }>()
+const props = defineProps<ContextMenuSubTriggerProps & {
+  class?: HTMLAttributes["class"]
+  inset?: boolean
+  /** What the submenu is for, in the menu's footer (ContextMenuHint); it stays while the submenu is open. */
+  hint?: string
+}>()
 
-const delegatedProps = reactiveOmit(props, "class")
+const delegatedProps = reactiveOmit(props, "class", "hint")
 
 const forwardedProps = useForwardProps(delegatedProps)
+const { onFocus, onBlur } = useMenuRowHint(() => props.hint, (row) => row.dataset.state === "open")
 </script>
 
 <template>
@@ -21,10 +29,13 @@ const forwardedProps = useForwardProps(delegatedProps)
     data-slot="context-menu-sub-trigger"
     :data-inset="inset ? '' : undefined"
     v-bind="forwardedProps"
+    :aria-description="hint"
     :class="cn(
-      'focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-xs outline-hidden select-none data-[inset]:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*=\'size-\'])]:size-3.5',
+      menuSubTriggerClass,
       props.class,
     )"
+    @focus="onFocus"
+    @blur="onBlur"
   >
     <slot />
     <ChevronRightIcon class="ml-auto" />

@@ -28,9 +28,9 @@ const stubs = {
   ContextMenu: { template: "<div><slot /></div>" },
   ContextMenuContent: { template: "<div><slot /></div>" },
   ContextMenuItem: {
-    props: ["disabled", "variant"],
+    props: ["disabled", "variant", "hint"],
     emits: ["select"],
-    template: "<button type=\"button\" :disabled=\"disabled\" @click=\"$emit('select', $event)\"><slot /></button>",
+    template: "<button type=\"button\" :disabled=\"disabled\" :data-hint=\"hint\" @click=\"$emit('select', $event)\"><slot /></button>",
   },
   ContextMenuSeparator: { template: "<hr>" },
   ContextMenuSub: { template: "<div><slot /></div>" },
@@ -82,8 +82,7 @@ describe("SessionItem: Save as workflow…", () => {
 
     const entry = wrapper.get("[data-testid='session-save-as-workflow']");
     expect(entry.text()).toContain("Save as workflow…");
-    expect(wrapper.get("[data-testid='session-save-as-workflow-cost']").text()).toBe("Asks the model once, from the cache");
-    expect(entry.attributes("title")).toBe("Asks the model once. From a session it reads the conversation from the cache, so it's cheap.");
+    expect(entry.attributes("data-hint")).toBe("Asks the model once. From a session it reads the conversation from the cache, so it's cheap.");
     const labels = wrapper.findAll("button").map((b) => b.text());
     expect(labels.findIndex((l) => l.includes("Save as workflow…"))).toBe(labels.findIndex((l) => l.includes("Repeat on a schedule…")) + 1);
   });

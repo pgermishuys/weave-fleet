@@ -36,6 +36,8 @@
   --transition-pulse: 2s;
   /* Lift for the conversation sheet; dark themes rely on the surface step instead. */
   --sheet-shadow: none;
+  /* Lift for menus: they open over panels of the same colour in most themes, so the shadow sets them apart. */
+  --menu-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.25);
   /* Status glyphs: colour only the states that need attention. Idle is the
      resting state, so it stays quiet; waiting on the user is amber. */
   --status-idle: var(--muted);
@@ -71,6 +73,7 @@
   --main-bg: #F3F2EF;
   --border: rgba(26, 25, 24, 0.09);
   --sheet-shadow: 0 1px 2px rgba(26, 25, 24, 0.04), 0 12px 32px -18px rgba(26, 25, 24, 0.18);
+  --menu-shadow: 0 16px 40px -12px rgba(26, 25, 24, 0.22), 0 2px 6px rgba(26, 25, 24, 0.06);
   --text: #1A1918;
   --muted: #6E6A65;
   --accent: #5B6EC7;
@@ -203,6 +206,7 @@
   --card-bg: #EEE8D5;
   --main-bg: #FDF6E3;
   --border: #D6CDB7;
+  --menu-shadow: 0 16px 40px -12px rgba(7, 54, 66, 0.25), 0 2px 6px rgba(7, 54, 66, 0.08);
   --text: #073642;
   --muted: #657B83;
   --accent: #268BD2;
@@ -315,6 +319,13 @@
   .cm-editor .cm-content:focus-visible,
   .go-to-file__input input:focus-visible,
   .phone-composer-input:focus-visible {
+    box-shadow: none !important;
+  }
+
+  /* A menu's rows show focus with the highlight tint, the same for the keyboard as for the pointer. */
+  [role="menuitem"]:focus-visible,
+  [role="menuitemcheckbox"]:focus-visible,
+  [role="menuitemradio"]:focus-visible {
     box-shadow: none !important;
   }
 

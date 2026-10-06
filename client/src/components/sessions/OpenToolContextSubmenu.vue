@@ -72,9 +72,9 @@ function handleOpenFile(filePath: string, toolId: string): void {
 
 <template>
   <ContextMenuSub>
-    <ContextMenuSubTrigger>
+    <ContextMenuSubTrigger hint="Opens the session's folder in an editor, a terminal or the file manager.">
       <ExternalLink class="size-3.5" />
-      Open in...
+      Open in
     </ContextMenuSubTrigger>
     <ContextMenuSubContent>
       <ContextMenuItem
@@ -87,7 +87,6 @@ function handleOpenFile(filePath: string, toolId: string): void {
       <ContextMenuItem
         v-if="!toolsLoading && tools.length === 0"
         disabled
-        class="text-muted-foreground"
       >
         No tools detected
       </ContextMenuItem>
