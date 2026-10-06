@@ -94,6 +94,31 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task A_workflow_runs_next_step_goes_to_the_project_its_steps_were_moved_to()
+    {
+        ConfigureHarnessAndScratchProject();
+        using var tempDirectory = new TempDirectory();
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "plan", WorkspaceId = "w1", InstanceId = "i1", OpencodeSessionId = "oc-plan", Title = "Run · Plan",
+            Status = "idle", Directory = tempDirectory.Path, CreatedAt = "2026-01-01T00:00:00.0000000Z",
+            WorkflowRunId = "run-1", ProjectId = "proj-1", UserId = "user-1",
+        });
+
+        var next = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path, Title = "Run · Implement", WorkflowRunId = "run-1",
+        });
+        var other = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path, Title = "Another run · Plan", WorkflowRunId = "run-2",
+        });
+
+        next.Value.Session.ProjectId.ShouldBe("proj-1");
+        other.Value.Session.ProjectId.ShouldBe("scratch-1");
+    }
+
+    [Fact]
     public async Task A_session_another_sessions_agent_started_remembers_it()
     {
         ConfigureHarnessAndScratchProject();

@@ -384,6 +384,14 @@ public sealed class InMemorySessionRepository : ISessionRepository
         return Task.CompletedTask;
     }
 
+    public Task<IReadOnlyList<Session>> GetForWorkflowRunAsync(string workflowRunId)
+    {
+        IReadOnlyList<Session> result = [.. _store.Values
+            .Where(s => s.WorkflowRunId == workflowRunId)
+            .OrderByDescending(s => s.CreatedAt, StringComparer.Ordinal)];
+        return Task.FromResult(result);
+    }
+
     public Task UpdateLineageDetachedAsync(string id, string? detachedAt)
     {
         if (_store.TryGetValue(id, out var session))

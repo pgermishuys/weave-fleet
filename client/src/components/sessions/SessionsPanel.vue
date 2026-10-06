@@ -571,10 +571,7 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
   const targetProjectName = targetProjectId === null
     ? null
     : (projectsById.value.get(targetProjectId)?.name ?? previousProjectName);
-  sessionsStore.patchSession(sessionId, {
-    projectId: targetProjectId,
-    projectName: targetProjectName,
-  });
+  sessionsStore.patchSessionProject(sessionId, targetProjectId, targetProjectName);
 
   isDragMovePending.value = true;
 
@@ -590,10 +587,7 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
     dragAnnouncement.value = `Moved ${sessionTitle} to ${targetProject}`;
   } catch {
     // Rollback optimistic update on failure
-    sessionsStore.patchSession(sessionId, {
-      projectId: previousProjectId,
-      projectName: previousProjectName,
-    });
+    sessionsStore.patchSessionProject(sessionId, previousProjectId, previousProjectName);
     dragAnnouncement.value = "Move failed. Session returned to original project.";
   } finally {
     isDragMovePending.value = false;

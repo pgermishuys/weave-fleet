@@ -264,8 +264,10 @@ public sealed partial class SessionOrchestrator(
 
         var launchArtifacts = ((RuntimePreparation.Ready)preparation).Artifacts;
 
-        // Resolve or default project
-        var projectId = request.ProjectId ?? await ResolveScratchProjectIdAsync();
+        // Resolve or default project. A workflow run's next step goes where the run's steps are.
+        var projectId = request.ProjectId
+            ?? await ResolveWorkflowRunProjectIdAsync(request.WorkflowRunId)
+            ?? await ResolveScratchProjectIdAsync();
 
         // Look up project name for analytics context (best-effort)
         string? projectName = null;
@@ -2225,6 +2227,11 @@ public sealed partial class SessionOrchestrator(
 
         return session;
     }
+
+    private async Task<string?> ResolveWorkflowRunProjectIdAsync(string? workflowRunId)
+        => workflowRunId is null
+            ? null
+            : (await sessionRepository.GetForWorkflowRunAsync(workflowRunId)).FirstOrDefault(s => s.ProjectId is not null)?.ProjectId;
 
     private async Task<string?> ResolveScratchProjectIdAsync()
     {
