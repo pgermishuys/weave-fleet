@@ -54,7 +54,8 @@ public sealed class ClaudeCodeMapperTests
         result.Parts.Count.ShouldBe(1);
         var part = result.Parts[0].ShouldBeOfType<ToolUsePart>();
         part.ToolCallId.ShouldBe("toolu_abc");
-        part.ToolName.ShouldBe("Edit");
+        // Under Fleet's name for it, as OpenCode's edits are shown.
+        part.ToolName.ShouldBe("edit");
         part.State.ShouldBe(ToolUseState.Running);
     }
 
@@ -228,7 +229,7 @@ public sealed class ClaudeCodeMapperTests
 
         var toolPart = events[2].Payload!.Value.GetProperty("part");
         toolPart.GetProperty("type").GetString().ShouldBe("tool");
-        toolPart.GetProperty("tool").GetString().ShouldBe("Edit");
+        toolPart.GetProperty("tool").GetString().ShouldBe("edit");
         toolPart.GetProperty("callID").GetString().ShouldBe("toolu_1");
         toolPart.GetProperty("state").GetProperty("status").GetString().ShouldBe("running");
     }

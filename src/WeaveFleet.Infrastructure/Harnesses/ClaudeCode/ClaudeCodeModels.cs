@@ -30,7 +30,47 @@ internal static class ClaudeCodeJsonOptions
 [JsonDerivedType(typeof(ClaudeCodeControlRequest), "control_request")]
 [JsonDerivedType(typeof(ClaudeCodeControlCancelRequest), "control_cancel_request")]
 [JsonDerivedType(typeof(ClaudeCodeControlResponse), "control_response")]
+[JsonDerivedType(typeof(ClaudeCodeStreamEvent), "stream_event")]
 internal record ClaudeCodeStreamMessage;
+
+/// <summary>
+/// A piece of the message the model is writing, with <c>--include-partial-messages</c>: one of the Messages API's
+/// streaming events (<c>message_start</c>, <c>content_block_start</c>, <c>content_block_delta</c>, …). The finished
+/// block still follows as an <c>assistant</c> line, just before its <c>content_block_stop</c>.
+/// </summary>
+internal sealed record ClaudeCodeStreamEvent : ClaudeCodeStreamMessage
+{
+    [JsonPropertyName("event")] public ClaudeCodeStreamEventBody? Event { get; init; }
+
+    /// <summary>The sub-agent call this message belongs to; null for the main conversation.</summary>
+    [JsonPropertyName("parent_tool_use_id")] public string? ParentToolUseId { get; init; }
+}
+
+/// <summary>What a <see cref="ClaudeCodeStreamEvent"/> says.</summary>
+internal sealed record ClaudeCodeStreamEventBody
+{
+    [JsonPropertyName("type")] public string? Type { get; init; }
+
+    /// <summary>On <c>message_start</c>: the message, whose id the finished blocks carry too.</summary>
+    [JsonPropertyName("message")] public ClaudeCodeApiMessage? Message { get; init; }
+
+    /// <summary>The content block a <c>content_block_*</c> event is about.</summary>
+    [JsonPropertyName("index")] public int? Index { get; init; }
+
+    /// <summary>On <c>content_block_start</c>: the block, still empty.</summary>
+    [JsonPropertyName("content_block")] public ClaudeCodeContentBlock? ContentBlock { get; init; }
+
+    /// <summary>On <c>content_block_delta</c>: what was added, e.g. <c>{ type: text_delta, text }</c>.</summary>
+    [JsonPropertyName("delta")] public ClaudeCodeStreamDelta? Delta { get; init; }
+}
+
+/// <summary>A <c>content_block_delta</c>'s addition: <c>text_delta</c>, <c>thinking_delta</c>, or another kind Fleet doesn't show.</summary>
+internal sealed record ClaudeCodeStreamDelta
+{
+    [JsonPropertyName("type")] public string? Type { get; init; }
+    [JsonPropertyName("text")] public string? Text { get; init; }
+    [JsonPropertyName("thinking")] public string? Thinking { get; init; }
+}
 
 /// <summary>
 /// Claude Code asks its host something, with <c>--permission-prompt-tool stdio</c>: <c>can_use_tool</c> asks whether a
@@ -165,6 +205,12 @@ internal sealed record ClaudeCodeAssistantMessage : ClaudeCodeStreamMessage
 internal sealed record ClaudeCodeUserMessage : ClaudeCodeStreamMessage
 {
     [JsonPropertyName("message")] public ClaudeCodeApiMessage? Message { get; init; }
+
+    /// <summary>
+    /// What the tool reported besides its result, for the line's one tool result: an edit's <c>structuredPatch</c>, a
+    /// created file's <c>type: create</c> and content.
+    /// </summary>
+    [JsonPropertyName("tool_use_result")] public JsonElement? ToolUseResult { get; init; }
 
     /// <summary>The sub-agent call this message belongs to; null for the main conversation.</summary>
     [JsonPropertyName("parent_tool_use_id")] public string? ParentToolUseId { get; init; }

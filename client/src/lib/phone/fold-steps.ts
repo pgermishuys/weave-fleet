@@ -172,7 +172,7 @@ export function foldMessages(messages: readonly AccumulatedMessage[]): PhoneBloc
             flush();
             blocks.push(question);
           }
-        } else if (SUBAGENT_TOOLS.has(part.tool)) {
+        } else if (SUBAGENT_TOOLS.has(part.tool.toLowerCase())) {
           flush();
           blocks.push(subagentBlock(part));
         } else {

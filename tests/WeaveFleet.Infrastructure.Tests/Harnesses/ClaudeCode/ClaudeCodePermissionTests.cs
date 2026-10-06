@@ -111,7 +111,7 @@ public sealed class ClaudeCodePermissionTests : IDisposable
     }
 
     [Fact]
-    public async Task A_session_at_allow_everything_runs_claude_as_before()
+    public async Task A_session_at_allow_everything_runs_claude_in_bypass_mode_still_asking_fleet()
     {
         if (OperatingSystem.IsWindows())
             return;
@@ -125,7 +125,8 @@ public sealed class ClaudeCodePermissionTests : IDisposable
         await NextAsync(session, EventTypes.SessionIdle);
 
         var args = await File.ReadAllLinesAsync(arguments);
-        args.ShouldNotContain("--permission-prompt-tool");
+        // Without it Claude Code takes AskUserQuestion away; Fleet answers any other ask at once.
+        args.ShouldContain("--permission-prompt-tool");
         args.SkipWhile(a => a != "--permission-mode").Skip(1).First().ShouldBe("bypassPermissions");
         // The prompt still goes on stdin as a stream-json message, which stays open for the next one.
         args.SkipWhile(a => a != "--input-format").Skip(1).First().ShouldBe("stream-json");

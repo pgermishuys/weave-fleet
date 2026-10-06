@@ -85,11 +85,11 @@ public sealed class ClaudeCodeHarnessTests
     }
 
     [Fact]
-    public void Capabilities_SupportsImageAttachments_IsFalse()
+    public void Capabilities_SupportsImageAttachments_IsTrue()
     {
         var harness = CreateHarness();
 
-        harness.Capabilities.SupportsImageAttachments.ShouldBeFalse();
+        harness.Capabilities.SupportsImageAttachments.ShouldBeTrue();
     }
 
     [Fact]

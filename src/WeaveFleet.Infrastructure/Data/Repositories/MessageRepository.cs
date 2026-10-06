@@ -31,8 +31,8 @@ public sealed class MessageRepository : IMessageRepository
     {
         await connection.ExecuteNonQueryAsync(
             """
-            INSERT INTO messages (id, session_id, role, parts_json, timestamp, created_at, agent_name, model_id, error_json)
-            SELECT @Id, @SessionId, @Role, @PartsJson, @Timestamp, @CreatedAt, @AgentName, @ModelId, @ErrorJson
+            INSERT INTO messages (id, session_id, role, parts_json, timestamp, created_at, agent_name, model_id, error_json, steered)
+            SELECT @Id, @SessionId, @Role, @PartsJson, @Timestamp, @CreatedAt, @AgentName, @ModelId, @ErrorJson, @Steered
             FROM sessions
             WHERE id = @SessionId AND user_id = @UserId
             ON CONFLICT(id, session_id) DO UPDATE SET
@@ -43,7 +43,9 @@ public sealed class MessageRepository : IMessageRepository
                 -- pagination remains anchored to the message's logical timestamp, not later rewrites.
                 agent_name = COALESCE(excluded.agent_name, messages.agent_name),
                 model_id = COALESCE(excluded.model_id, messages.model_id),
-                error_json = COALESCE(excluded.error_json, messages.error_json)
+                error_json = COALESCE(excluded.error_json, messages.error_json),
+                -- Once sent into a running turn, always: a later save of the same prompt doesn't say.
+                steered = MAX(excluded.steered, messages.steered)
             """,
             cmd =>
             {
@@ -56,6 +58,7 @@ public sealed class MessageRepository : IMessageRepository
                 cmd.AddParameter("AgentName", message.AgentName);
                 cmd.AddParameter("ModelId", message.ModelId);
                 cmd.AddParameter("ErrorJson", message.ErrorJson);
+                cmd.AddParameter("Steered", message.Steered ? 1 : 0);
                 cmd.AddParameter("UserId", _userContext.UserId);
             },
             transaction);
@@ -398,5 +401,6 @@ public sealed class MessageRepository : IMessageRepository
         AgentName = r.GetNullableString(r.GetOrdinal("agent_name")),
         ModelId = r.GetNullableString(r.GetOrdinal("model_id")),
         ErrorJson = r.GetNullableString(r.GetOrdinal("error_json")),
+        Steered = r.GetInt64(r.GetOrdinal("steered")) != 0,
     };
 }

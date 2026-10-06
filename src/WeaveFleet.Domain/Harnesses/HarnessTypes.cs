@@ -71,6 +71,13 @@ public sealed record HarnessCapabilities
     public bool SupportsSteering { get; init; }
 
     /// <summary>
+    /// With <see cref="SupportsSteering"/>: the composer's Enter sends into the running turn, and Queue is the extra step.
+    /// Without it Enter queues, and steering is the extra step (OpenCode 1, whose steered message waits for the turn's
+    /// next model request).
+    /// </summary>
+    public bool SteersByDefault { get; init; }
+
+    /// <summary>
     /// The user can run a shell command in the session's folder from the composer (<c>!git status</c>):
     /// <see cref="IHarnessSession.RunShellCommandAsync"/> runs it without a model turn, the command and its output
     /// show in the conversation as a message of role <see cref="ShellCommands.Role"/>, and the agent sees them on

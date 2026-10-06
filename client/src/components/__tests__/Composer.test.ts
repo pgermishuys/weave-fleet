@@ -1087,11 +1087,38 @@ describe("Composer with a minimized side conversation", () => {
   });
 });
 
+describe("Composer images", () => {
+  const harnesses = [
+    { type: "opencode", displayName: "OpenCode", available: true, userEnabled: true, capabilities: { supportsImageAttachments: true } },
+    { type: "pi", displayName: "Pi", available: true, userEnabled: true, capabilities: { supportsImageAttachments: false } },
+  ];
+
+  beforeEach(() => {
+    mockApi.GET.mockReset();
+    configureApiFetch();
+    const fallback = mockApi.GET.getMockImplementation() as unknown as (url: string, init?: unknown) => Promise<unknown>;
+    mockApi.GET.mockImplementation((async (url: string, init?: unknown) => {
+      if (url === "/api/harnesses") return { data: harnesses, error: undefined, response: new Response() };
+      return fallback(url, init);
+    }) as never);
+  });
+
+  it("offers Attach image only where the harness passes images on", async () => {
+    const takes = mountComposer({ session: createSession({ harnessType: "opencode" }) });
+    await flushPromises();
+    expect(takes.find("button[title='Attach image']").exists()).toBe(true);
+
+    const drops = mountComposer({ session: createSession({ harnessType: "pi" }) });
+    await flushPromises();
+    expect(drops.find("button[title='Attach image']").exists()).toBe(false);
+  });
+});
+
 describe("Composer steering", () => {
   const harnesses = [
     { type: "opencode", displayName: "OpenCode", available: true, userEnabled: true, capabilities: { supportsSteering: true } },
     { type: "claude-code", displayName: "Claude Code", available: true, userEnabled: true, capabilities: { supportsSteering: false } },
-    { type: "opencode2", displayName: "OpenCode 2", available: true, userEnabled: true, capabilities: { supportsSteering: true } },
+    { type: "opencode2", displayName: "OpenCode 2", available: true, userEnabled: true, capabilities: { supportsSteering: true, steersByDefault: true } },
   ];
 
   function pressKey(element: Element, key: string, init: KeyboardEventInit = {}): KeyboardEvent {

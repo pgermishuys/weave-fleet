@@ -328,6 +328,8 @@ export interface HarnessCapabilities {
   supportsOffTheRecordPrompt?: boolean;
   /** A message sent while a turn runs can go into that turn (steer) instead of waiting in the queue. */
   supportsSteering?: boolean;
+  /** With steering: Enter sends into the running turn and queueing is the extra step (OpenCode 2, Claude Code). */
+  steersByDefault?: boolean;
   /** The user can run a shell command in the session's folder from the composer (`!git status`). */
   supportsShellCommands?: boolean;
   /** A session can fork into a side conversation at its last finished turn (`/btw` in the composer). */

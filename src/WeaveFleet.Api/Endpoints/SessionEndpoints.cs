@@ -926,12 +926,12 @@ public static class SessionEndpoints
     /// another harness (the test harness) doesn't have.</remarks>
     internal static async Task<string?> CallingSessionAsync(HttpContext http, IUserContext userContext)
     {
-        if (http.AgentBridgeToken() is not { } bridgeToken
-            || http.Request.Headers[AgentRequests.HarnessSessionHeader].ToString().Trim() is not { Length: > 0 } harnessSessionId)
-        {
+        if (http.AgentBridgeToken() is not { } bridgeToken)
             return null;
-        }
 
+        // A harness that runs one process per session (Claude Code) knows the caller from the token alone, so an agent
+        // that doesn't name its own session (a plain curl) is still placed; the others need the name.
+        var harnessSessionId = http.Request.Headers[AgentRequests.HarnessSessionHeader].ToString().Trim();
         var callers = http.RequestServices.GetServices<IHarnessCanvasCallerResolver>();
         var caller = await callers.ResolveAsync(bridgeToken, harnessSessionId, http.RequestAborted);
         return caller is not null && string.Equals(caller.UserId, userContext.UserId, StringComparison.Ordinal) ? caller.FleetSessionId : null;

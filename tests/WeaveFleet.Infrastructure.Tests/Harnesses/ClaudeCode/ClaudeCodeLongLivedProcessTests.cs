@@ -261,12 +261,13 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
         Starts().ShouldBe(1);
         StdinLines().ShouldContain(line => line.Contains("\"set_permission_mode\"") && line.Contains("\"acceptEdits\""));
 
-        // Edits → All: a process started without Fleet's permission prompts, in bypassPermissions.
+        // Edits → All: Claude Code won't switch into bypassPermissions, so a process started in it. It still asks Fleet,
+        // which answers at once, so the agent keeps AskUserQuestion.
         await session.ApplyPermissionsAsync(new PermissionPolicy(PermissionLevels.All), CancellationToken.None);
         await PromptAsync("three");
         Starts().ShouldBe(2);
         Arguments(0).ShouldContain("--permission-prompt-tool");
-        Arguments(1).ShouldNotContain("--permission-prompt-tool");
+        Arguments(1).ShouldContain("--permission-prompt-tool");
         ShouldHaveArgument(Arguments(1), "--permission-mode", "bypassPermissions");
         ShouldHaveArgument(Arguments(1), "--resume", "cc-1");
     }
@@ -362,14 +363,178 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
         _messages.All.Single(m => m.Role == "user").PartsJson.ShouldNotContain("lost work");
     }
 
+    [Fact]
+    public async Task A_steered_prompt_goes_into_the_running_turn_and_is_saved_where_it_was_sent()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var session = Start();
+        await session.SendPromptAsync("steer me", null, CancellationToken.None);
+        await WaitForAsync(() => Tools().Any(t => t.ToolCallId == "toolu_steer"));
+
+        // It doesn't wait for the turn: it's written at once, and Claude Code reads it at the step's end.
+        await session.SendPromptAsync("change course", new PromptOptions { Delivery = PromptDelivery.Steer, MessageId = "msg_fleet_steer" }, CancellationToken.None)
+            .WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitForAsync(() => Count(EventTypes.SessionIdle) == 1);
+
+        Prompts().ShouldBe(["steer me", "change course"]);
+        Statuses().ShouldBe(["busy", "idle"]);
+        AssistantText().ShouldBe(["Changed course."]);
+
+        // Claude Code doesn't write it back: Fleet keeps it, under the id it was shown with, as sent mid-turn.
+        var steered = MessagePersistenceService.ToHarnessMessage(_messages.All.Single(m => m.Id == "msg_fleet_steer"));
+        steered.Role.ShouldBe("user");
+        steered.Steered.ShouldBeTrue();
+        steered.TextContent.ShouldBe("change course");
+    }
+
+    [Fact]
+    public async Task A_steered_prompt_with_no_turn_running_starts_one()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        Start();
+        await PromptAsync("one", new PromptOptions { Delivery = PromptDelivery.Steer });
+
+        Statuses().ShouldBe(["busy", "idle"]);
+        AssistantText().ShouldBe(["Reply 1"]);
+    }
+
+    [Fact]
+    public async Task A_question_waits_on_the_user_and_their_answer_goes_back_with_the_questions()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var session = Start();
+        await session.SendPromptAsync("ask me", null, CancellationToken.None);
+        await WaitForAsync(() => Statuses().Contains(ActivityStatuses.WaitingInput));
+        _events.ShouldNotContain(e => e.Type == EventTypes.PermissionAsked);
+
+        await session.AnswerQuestionAsync("toolu_ask", [["Blue"]], CancellationToken.None);
+        await WaitForAsync(() => Count(EventTypes.SessionIdle) == 1);
+
+        // allow, with the questions it asked and the answers by question text.
+        var answer = JsonDocument.Parse(StdinLines().Single(line => line.Contains("\"control_response\""))).RootElement
+            .GetProperty("response");
+        answer.GetProperty("request_id").GetString().ShouldBe("req_ask");
+        var allowed = answer.GetProperty("response");
+        allowed.GetProperty("behavior").GetString().ShouldBe("allow");
+        allowed.GetProperty("updatedInput").GetProperty("questions")[0].GetProperty("question").GetString().ShouldBe("Which colour?");
+        allowed.GetProperty("updatedInput").GetProperty("answers").GetProperty("Which colour?").GetString().ShouldBe("Blue");
+
+        Statuses().ShouldBe(["busy", ActivityStatuses.WaitingInput, ActivityStatuses.Busy, "idle"]);
+        var question = Tools().Single(t => t.ToolCallId == "toolu_ask");
+        question.ToolName.ShouldBe("question");
+        question.State.ShouldBe(ToolUseState.Completed);
+        question.Metadata!.Value.GetProperty("answers")[0][0].GetString().ShouldBe("Blue");
+    }
+
+    [Fact]
+    public async Task A_dismissed_question_is_refused()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var session = Start();
+        await session.SendPromptAsync("ask me", null, CancellationToken.None);
+        await WaitForAsync(() => Statuses().Contains(ActivityStatuses.WaitingInput));
+
+        await session.RejectQuestionAsync("req_ask", CancellationToken.None);
+
+        var refusal = JsonDocument.Parse(StdinLines().Single(line => line.Contains("\"control_response\""))).RootElement
+            .GetProperty("response").GetProperty("response");
+        refusal.GetProperty("behavior").GetString().ShouldBe("deny");
+        await Should.ThrowAsync<KeyNotFoundException>(() => session.AnswerQuestionAsync("toolu_ask", [["Red"]], CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Effort_starts_the_process_with_it_and_a_change_switches_it_in_place()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        Start();
+        await PromptAsync("one", new PromptOptions { ModelId = "sonnet", Effort = "high" });
+        ShouldHaveArgument(Arguments(0), "--effort", "high");
+
+        await PromptAsync("two", new PromptOptions { Effort = "low" });
+        Starts().ShouldBe(1);
+        var applied = JsonDocument.Parse(StdinLines().Single(line => line.Contains("apply_flag_settings"))).RootElement;
+        applied.GetProperty("request").GetProperty("settings").GetProperty("effortLevel").GetString().ShouldBe("low");
+
+        // No effort named: the process keeps what it runs at.
+        await PromptAsync("three");
+        StdinLines().Count(line => line.Contains("apply_flag_settings")).ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Each_process_calls_Fleet_with_a_token_of_its_own_that_ends_with_it()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var tokens = new ClaudeCodeBridgeTokenRegistry();
+        var session = Start(bridgeTokens: tokens);
+        await session.ApplyPermissionsAsync(new PermissionPolicy(PermissionLevels.Ask), CancellationToken.None);
+        await PromptAsync("one");
+
+        var first = Environment(0);
+        var token = first["FLEET_BRIDGE_TOKEN"];
+        first["FLEET_URL"].ShouldBe($"http://127.0.0.1:5999/agent/{token}");
+        first["FLEET_HARNESS_SESSION_ID"].ShouldBe("fleet-cc");
+        tokens.Find(token).ShouldBe(new WeaveFleet.Application.Canvases.HarnessCanvasCaller("fleet-cc", TestUserContext.DefaultUserId));
+        (await new ClaudeCodeCanvasCallerResolver(tokens).ResolveAsync(token, "")).ShouldNotBeNull();
+
+        // A process started to switch into bypassPermissions gets a new token; the old one stops working.
+        await session.ApplyPermissionsAsync(new PermissionPolicy(PermissionLevels.All), CancellationToken.None);
+        await PromptAsync("two");
+        Starts().ShouldBe(2);
+        var second = Environment(1)["FLEET_BRIDGE_TOKEN"];
+        second.ShouldNotBe(token);
+        tokens.Find(token).ShouldBeNull();
+        new ClaudeCodeBridgeTokens(tokens).IsKnown(second).ShouldBeTrue();
+
+        await session.StopAsync(CancellationToken.None);
+        tokens.Find(second).ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Images_go_ahead_of_the_prompt_as_image_blocks()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        Start();
+        await PromptAsync("what is this?", new PromptOptions
+        {
+            Attachments = [new HarnessAttachment("image/png", "red.png", "iVBORw0KGgo="), new HarnessAttachment("application/pdf", "doc.pdf", "JVBERi0=")],
+        });
+
+        var content = JsonDocument.Parse(StdinLines().Single()).RootElement.GetProperty("message").GetProperty("content");
+        content.GetArrayLength().ShouldBe(2);
+        content[0].GetProperty("type").GetString().ShouldBe("image");
+        content[0].GetProperty("source").GetProperty("media_type").GetString().ShouldBe("image/png");
+        content[0].GetProperty("source").GetProperty("data").GetString().ShouldBe("iVBORw0KGgo=");
+        content[1].GetProperty("text").GetString().ShouldBe("what is this?");
+    }
+
     // -----------------------------------------------------------------------
+
+    private Dictionary<string, string> Environment(int start)
+        => File.ReadAllLines(Path.Combine(_directory, $"env-{start}.txt"))
+            .Select(line => line.Split('=', 2))
+            .ToDictionary(pair => pair[0], pair => pair[1], StringComparer.Ordinal);
 
     private List<WorkReport> Work(string type)
         => _events.Where(e => e.Type == type)
             .Select(e => JsonSerializer.Deserialize(e.Payload!.Value, WeaveFleet.Infrastructure.InfrastructureJsonContext.Default.WorkReport)!)
             .ToList();
 
-    private ClaudeCodeHarnessSession Start(bool honoursInterrupt = true, bool switchesModel = true, string? claudeSessionId = null)
+    private ClaudeCodeHarnessSession Start(
+        bool honoursInterrupt = true, bool switchesModel = true, string? claudeSessionId = null, ClaudeCodeBridgeTokenRegistry? bridgeTokens = null)
     {
         var delegations = new InMemoryDelegationRepository();
         var sessions = new InMemorySessionRepository();
@@ -392,7 +557,9 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
             logger: _log,
             loggerFactory: NullLoggerFactory.Instance,
             ownerUserId: TestUserContext.DefaultUserId,
-            claudeSessionId: claudeSessionId)
+            claudeSessionId: claudeSessionId,
+            bridgeTokens: bridgeTokens,
+            fleetUrl: () => "http://127.0.0.1:5999/")
         {
             Time = _time,
         };
@@ -468,7 +635,9 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
         => StdinLines()
             .Select(line => JsonDocument.Parse(line).RootElement)
             .Where(json => json.GetProperty("type").GetString() == "user")
-            .Select(json => json.GetProperty("message").GetProperty("content").GetString()!)
+            .Select(json => json.GetProperty("message").GetProperty("content") is { ValueKind: JsonValueKind.String } text
+                ? text.GetString()!
+                : json.GetProperty("message").GetProperty("content").EnumerateArray().Last().GetProperty("text").GetString()!)
             .ToList();
 
     private List<HarnessMessage> Conversation()
@@ -506,8 +675,10 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
             start=0
             [ -f "$dir/starts.txt" ] && start=$(wc -l < "$dir/starts.txt")
             printf '%s\n' "$@" > "$dir/args-$start.tmp" && mv "$dir/args-$start.tmp" "$dir/args-$start.txt"
+            env | grep '^FLEET_' | sort > "$dir/env-$start.txt"
             echo $$ >> "$dir/starts.txt"
             n=0
+            steering=0
             wake() {
               sleep "$1"
               echo '{"type":"system","subtype":"background_tasks_changed","tasks":[],"session_id":"cc-1"}'
@@ -544,16 +715,37 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
                 *'"subtype":"set_permission_mode"'*'"bypassPermissions"'*)
                   echo '{"type":"control_response","response":{"subtype":"error","request_id":"'"$rid"'","error":"Cannot set permission mode to bypassPermissions because the session was not launched with --dangerously-skip-permissions"}}'
                   ;;
-                *'"subtype":"set_permission_mode"'*)
+                *'"subtype":"set_permission_mode"'*|*'"subtype":"apply_flag_settings"'*)
                   echo '{"type":"control_response","response":{"subtype":"success","request_id":"'"$rid"'"}}'
                   ;;
+                *'"type":"control_response"'*'"updatedInput"'*)
+                  echo '{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_ask","type":"tool_result","content":"Your questions have been answered"}]},"parent_tool_use_id":null}'
+                  echo '{"type":"assistant","message":{"id":"msg_answered","role":"assistant","content":[{"type":"text","text":"You answered."}]},"parent_tool_use_id":null}'
+                  echo '{"type":"result","subtype":"success","is_error":false,"result":"You answered.","session_id":"cc-1"}'
+                  ;;
                 *'"type":"user"'*)
+                  if [ "$steering" = 1 ]; then
+                    # Read at the step's end, in the same turn: no init of its own.
+                    steering=0
+                    echo '{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_steer","type":"tool_result","content":"one"}]},"parent_tool_use_id":null}'
+                    echo '{"type":"assistant","message":{"id":"msg_steered","role":"assistant","content":[{"type":"text","text":"Changed course."}]},"parent_tool_use_id":null}'
+                    echo '{"type":"result","subtype":"success","is_error":false,"result":"Changed course.","session_id":"cc-1"}'
+                    continue
+                  fi
                   n=$((n+1))
                   echo '{"type":"system","subtype":"init","session_id":"cc-1","model":"claude-test"}'
                   case "$line" in
                     *'start background'*) started "sleep 1"; wake 1 $n 0 & ;;
                     *'start slow background'*) started "sleep 2"; wake 0.2 $n 1.5 & ;;
                     *'start lasting background'*) started "sleep 600" ;;
+                    *'steer me'*)
+                      steering=1
+                      echo '{"type":"assistant","message":{"id":"msg_'$n'","role":"assistant","content":[{"type":"tool_use","id":"toolu_steer","name":"Bash","input":{"command":"sleep 5; echo one"}}]},"parent_tool_use_id":null}'
+                      ;;
+                    *'ask me'*)
+                      echo '{"type":"assistant","message":{"id":"msg_'$n'","role":"assistant","content":[{"type":"tool_use","id":"toolu_ask","name":"AskUserQuestion","input":{"questions":[{"question":"Which colour?","header":"Colour","options":[{"label":"Red","description":"r"},{"label":"Blue","description":"b"}],"multiSelect":false}]}}]},"parent_tool_use_id":null}'
+                      echo '{"type":"control_request","request_id":"req_ask","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[{"question":"Which colour?","header":"Colour","options":[{"label":"Red","description":"r"},{"label":"Blue","description":"b"}],"multiSelect":false}]},"tool_use_id":"toolu_ask"}}'
+                      ;;
                     *'"hang"'*)
                       echo '{"type":"assistant","message":{"id":"msg_'$n'","role":"assistant","content":[{"type":"tool_use","id":"toolu_hang","name":"Bash","input":{"command":"sleep 600"}}]},"parent_tool_use_id":null}'
                       ;;

@@ -2,6 +2,7 @@ import type { AccumulatedToolPart } from "@/lib/client-types";
 import { apiUrl } from "@/lib/api-client";
 import { backgroundWorkId, type BackgroundState } from "@/lib/background-work";
 import { isWorkRunning, type RunningWorkItem } from "@/lib/running-work";
+import { parseUnifiedDiff } from "@/lib/diff-parser";
 import { getToolLabel } from "@/lib/tool-labels";
 
 export interface DiffLine {
@@ -77,9 +78,9 @@ export function subagentTask(part: AccumulatedToolPart): string {
 /** The tools that run an agent in a child session: OpenCode's `task`, OpenCode 2's `subagent`. */
 const SUBAGENT_TOOLS = new Set(["task", "subagent"]);
 
-/** Whether a tool call ran a subagent, so its card links to the child session. */
+/** Whether a tool call ran a subagent, so its card links to the child session. Names are matched in any case. */
 export function isSubagentTool(toolName: string): boolean {
-  return SUBAGENT_TOOLS.has(toolName);
+  return SUBAGENT_TOOLS.has(toolName.toLowerCase());
 }
 
 /**
@@ -146,6 +147,17 @@ export function toolDiffLines(part: AccumulatedToolPart): DiffLine[] {
 }
 
 /**
+ * What the card shows as the call's diff: the lines a harness attached, or else the unified diff it kept on the call
+ * (`metadata.diff`, as OpenCode's edits and Claude Code's do).
+ */
+function cardDiffLines(part: AccumulatedToolPart): DiffLine[] {
+  const attached = toolDiffLines(part);
+  if (attached.length > 0) return attached;
+  const text = toolDiffText(part);
+  return text ? parseUnifiedDiff(text).lines : [];
+}
+
+/**
  * The screenshot Fleet kept for the call, from `metadata.screenshot` ({ sessionId, id, width, height }). The harness
  * keeps metadata with the call, so it's there after a reload too. The session is Fleet's, and can be the parent's:
  * a sub-agent's shot is kept under the session you started.
@@ -202,7 +214,7 @@ export function toToolCardItem(
     status,
     summary,
     output,
-    diffLines: getDiffLines(state),
+    diffLines: cardDiffLines(part),
     initiallyCollapsed: state?.status !== "error",
     preview: buildPreview(output, summary),
     isPatternTool: part.tool === "glob" || part.tool === "grep",

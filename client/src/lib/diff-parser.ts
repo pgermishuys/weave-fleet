@@ -85,3 +85,70 @@ function buildLcsLengths(beforeLines: string[], afterLines: string[]): number[][
 
   return lcsLengths;
 }
+
+/**
+ * Parse a unified diff (what most harnesses attach to an edit) into lines. Hunk headers give the
+ * line numbers; "--- /dev/null" means the file is new.
+ */
+export function parseUnifiedDiff(patch: string): { lines: DiffLine[]; created: boolean; paths: string[] } {
+  const lines: DiffLine[] = [];
+  const paths: string[] = [];
+  let created = false;
+  let oldLine = 0;
+  let newLine = 0;
+
+  for (const raw of patch.split("\n")) {
+    const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(raw);
+    if (hunk) {
+      oldLine = Number(hunk[1]);
+      newLine = Number(hunk[2]);
+      continue;
+    }
+
+    if (raw.startsWith("--- ")) {
+      if (raw.slice(4).trim() === "/dev/null") created = true;
+      continue;
+    }
+
+    if (raw.startsWith("+++ ")) {
+      const path = stripPatchPathPrefix(raw.slice(4).trim());
+      if (path && path !== "/dev/null") paths.push(path);
+      continue;
+    }
+
+    // OpenCode's apply_patch names its files in its own header.
+    const applyPatch = /^\*\*\* (Add|Update|Delete) File: (.+)$/.exec(raw);
+    if (applyPatch) {
+      if (applyPatch[1] === "Add") created = true;
+      paths.push(applyPatch[2]!.trim());
+      continue;
+    }
+
+    if (raw.startsWith("diff ") || raw.startsWith("index ") || raw.startsWith("\\ ")) continue;
+
+    if (raw.startsWith("+")) {
+      lines.push({ type: "add", content: raw.slice(1), newLineNumber: newLine });
+      newLine += 1;
+      continue;
+    }
+
+    if (raw.startsWith("-")) {
+      lines.push({ type: "remove", content: raw.slice(1), oldLineNumber: oldLine });
+      oldLine += 1;
+      continue;
+    }
+
+    if (raw.startsWith(" ")) {
+      lines.push({ type: "context", content: raw.slice(1), oldLineNumber: oldLine, newLineNumber: newLine });
+      oldLine += 1;
+      newLine += 1;
+    }
+  }
+
+  return { lines, created, paths };
+}
+
+function stripPatchPathPrefix(path: string): string {
+  const withoutTab = path.split("\t")[0] ?? path;
+  return withoutTab.replace(/^[ab]\//, "");
+}

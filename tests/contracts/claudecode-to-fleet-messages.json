@@ -47,7 +47,7 @@
             "type": "tool",
             "kind": 1,
             "toolCallId": "toolu_abc123",
-            "toolName": "Bash",
+            "toolName": "bash",
             "arguments": { "command": "ls -la" },
             "state": 1
           }
@@ -82,8 +82,8 @@
             "type": "tool",
             "kind": 1,
             "toolCallId": "toolu_xyz789",
-            "toolName": "Read",
-            "arguments": { "file_path": "/tmp/data.txt" },
+            "toolName": "read",
+            "arguments": { "filePath": "/tmp/data.txt" },
             "state": 1
           }
         ],

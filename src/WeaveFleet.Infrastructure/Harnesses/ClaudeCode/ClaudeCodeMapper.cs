@@ -1,6 +1,7 @@
 using System.Text.Json;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
@@ -122,6 +123,28 @@ internal static class ClaudeCodeMapper
     }
 
     /// <summary>
+    /// Creates a <c>message.part.delta</c> event: <paramref name="delta"/> added to the text of a text or reasoning part
+    /// while the model writes it, the way OpenCode 2's are. The finished part replaces what the deltas built up.
+    /// </summary>
+    internal static HarnessEvent CreatePartDeltaEvent(string messageId, string sessionId, string partId, string delta)
+        => new()
+        {
+            Type = EventTypes.MessagePartDelta,
+            SessionId = sessionId,
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(
+                new MessagePartDeltaStreamedPayload
+                {
+                    SessionId = sessionId,
+                    MessageId = messageId,
+                    PartId = partId,
+                    Field = "text",
+                    Delta = delta,
+                },
+                InfrastructureJsonContext.Default.MessagePartDeltaStreamedPayload),
+        };
+
+    /// <summary>
     /// Creates a <c>session.status</c> event with the given status type (e.g. "busy" or "idle").
     /// </summary>
     internal static HarnessEvent CreateSessionStatusEvent(string sessionId, string statusType)
@@ -184,6 +207,7 @@ internal static class ClaudeCodeMapper
             Input = tool.Arguments.ValueKind != JsonValueKind.Undefined ? tool.Arguments : null,
             Output = toolOutput is null ? null : ToToolOutput(toolOutput),
             Error = tool.Error,
+            Metadata = tool.Metadata,
         };
 
         return new ClaudeCodeToolPartPayload
@@ -251,12 +275,16 @@ internal static class ClaudeCodeMapper
                 ? new ReasoningPart(thinking.Thinking)
                 : null,
 
+            // Under Fleet's names (ClaudeCodeTools), with what an edit changes.
             ClaudeCodeToolUseBlock toolUse => new ToolUsePart(
                 ToolCallId: toolUse.Id ?? string.Empty,
-                ToolName: toolUse.Name ?? string.Empty,
-                Arguments: toolUse.Input,
+                ToolName: ClaudeCodeTools.Name(toolUse.Name ?? string.Empty),
+                Arguments: ClaudeCodeTools.Input(toolUse.Name ?? string.Empty, toolUse.Input),
                 // Claude Code doesn't distinguish pending/completed during streaming
-                State: ToolUseState.Running),
+                State: ToolUseState.Running)
+            {
+                Metadata = ClaudeCodeTools.Metadata(ClaudeCodeTools.Diff(toolUse.Name ?? string.Empty, toolUse.Input)),
+            },
 
             ClaudeCodeToolResultBlock toolResult => new ToolResultPart(
                 ToolCallId: toolResult.ToolUseId ?? string.Empty,

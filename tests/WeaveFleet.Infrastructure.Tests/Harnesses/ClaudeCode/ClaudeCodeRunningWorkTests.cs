@@ -60,7 +60,7 @@ public sealed class ClaudeCodeRunningWorkTests : IAsyncLifetime
         nested.First().Role.ShouldBe("user");
         nested.First().TextContent.ShouldBe("Run the Bash command `echo nested-ok` and reply with its output.");
         var bash = nested.SelectMany(m => m.Parts).OfType<ToolUsePart>().ShouldHaveSingleItem();
-        (bash.ToolName, bash.State).ShouldBe(("Bash", ToolUseState.Completed));
+        (bash.ToolName, bash.State).ShouldBe(("bash", ToolUseState.Completed));
         nested.SelectMany(m => m.Parts).OfType<ToolResultPart>().ShouldHaveSingleItem().Content.ShouldBe("nested-ok");
         nested.Last().TextContent.ShouldContain("nested-ok");
         nested.Where(m => m.Role == "assistant").ShouldAllBe(m => m.ModelId == "claude-haiku-4-5-20251001");

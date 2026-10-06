@@ -18,4 +18,7 @@ public sealed class PersistedMessage
 
     /// <summary>The failure the turn stopped with, as <see cref="WeaveFleet.Domain.Events.TurnError"/> JSON; set only on a saved turn failure.</summary>
     public string? ErrorJson { get; set; }
+
+    /// <summary>A prompt the user sent into a running turn, for a harness whose history Fleet keeps.</summary>
+    public bool Steered { get; set; }
 }
