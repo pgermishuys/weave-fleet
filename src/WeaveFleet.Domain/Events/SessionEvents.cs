@@ -90,6 +90,38 @@ public static class SessionNotificationReasons
 
     /// <summary>The turn ended.</summary>
     public const string Finished = "finished";
+
+    /// <summary>The session stopped with an error.</summary>
+    public const string Failed = "failed";
+}
+
+/// <summary>
+/// What exactly a notification is about, finer than <see cref="SessionNotificationReasons"/>: phones choose which
+/// kinds they want pushed.
+/// </summary>
+public static class SessionNotificationKinds
+{
+    /// <summary>The agent waits for permission to do something (run a command, edit a file).</summary>
+    public const string Permission = "permission";
+
+    /// <summary>The agent asked a question.</summary>
+    public const string Question = "question";
+
+    /// <summary>The turn ended.</summary>
+    public const string Finished = "finished";
+
+    /// <summary>The session stopped with an error.</summary>
+    public const string Failed = "failed";
+
+    /// <summary>A workflow step waits for the user.</summary>
+    public const string Workflow = "workflow";
+
+    public static readonly IReadOnlyList<string> All = [Permission, Question, Finished, Failed, Workflow];
+
+    /// <summary>What a phone gets unless it chooses otherwise: every kind.</summary>
+    public static readonly IReadOnlyList<string> Default = All;
+
+    public static bool IsKnown(string? kind) => kind is not null && All.Contains(kind);
 }
 
 /// <summary>
@@ -117,6 +149,21 @@ public sealed record SessionNotificationPayload
     /// Gets the one line under the heading.
     /// </summary>
     public required string Body { get; init; }
+
+    /// <summary>
+    /// Gets what exactly it's about (<see cref="SessionNotificationKinds"/>). Older Fleets sent none; read
+    /// <see cref="Reason"/> then.
+    /// </summary>
+    public string? Kind { get; init; }
+
+    /// <summary>Gets the permission the agent waits on, when <see cref="Kind"/> is <c>permission</c>.</summary>
+    public string? RequestId { get; init; }
+
+    /// <summary>Gets the machine the session is on, so a phone that follows several machines knows which.</summary>
+    public string? MachineId { get; init; }
+
+    /// <summary>Gets that machine's name.</summary>
+    public string? MachineName { get; init; }
 }
 
 /// <summary>

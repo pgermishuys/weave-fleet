@@ -205,3 +205,28 @@ describe("machines", () => {
     });
   });
 });
+
+describe("phone pages", () => {
+  const falcon = { id: "falcon", name: "falcon", baseUrl: "https://falcon.ts.net", token: "fdt_f.1", addedAt: "" };
+
+  it("opens a phone session on the machine its path names, and other phone pages on home", async () => {
+    const { restoreActiveMachine, saveMachines, saveActiveMachineId, getActiveMachine } = await import("../machines");
+    saveMachines([falcon]);
+    saveActiveMachineId("falcon");
+
+    expect(restoreActiveMachine("/phone")).toBeNull();
+    expect(getActiveMachine()).toBeNull();
+    expect(restoreActiveMachine("/phone/s/falcon/s1")?.id).toBe("falcon");
+    expect(restoreActiveMachine("/phone/s/hangar-id/s1")).toBeNull();
+  });
+
+  it("remembers a machine the phone has a key for without duplicating it", async () => {
+    const { rememberPhoneMachine, loadMachines, saveMachines } = await import("../machines");
+    saveMachines([]);
+
+    rememberPhoneMachine(falcon);
+    rememberPhoneMachine({ ...falcon, token: "fdt_f.2" });
+
+    expect(loadMachines().map((m) => `${m.id}:${m.token}`)).toEqual(["falcon:fdt_f.2"]);
+  });
+});

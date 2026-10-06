@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -508,6 +509,65 @@ public sealed class TestHarnessSession : IHarnessSession
 
     /// <summary>The answers passed to the most recent <see cref="AnswerQuestionAsync"/> call.</summary>
     public IReadOnlyList<IReadOnlyList<string>>? LastAnswers { get; private set; }
+
+    private static readonly JsonSerializerOptions PermissionJson = new(JsonSerializerDefaults.Web)
+    {
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+    };
+
+    private readonly ConcurrentDictionary<string, PermissionAsk> _asks = new(StringComparer.Ordinal);
+
+    /// <summary>The answers given to permission asks, oldest first: (request id, reply, message).</summary>
+    public ConcurrentQueue<(string RequestId, string Reply, string? Message)> PermissionReplies { get; } = new();
+
+    /// <summary>
+    /// The agent asks for permission, as an adapter reports it: Fleet's <c>permission.asked</c> event, then the session
+    /// waiting on the user.
+    /// </summary>
+    [UnconditionalSuppressMessage("AOT", "IL2026", Justification = "Test infrastructure only")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test infrastructure only")]
+    public async Task AskPermissionAsync(PermissionAsk ask, CancellationToken ct = default)
+    {
+        _asks[ask.Id] = ask;
+        await PushEventCoreAsync(new HarnessEvent
+        {
+            Type = EventTypes.PermissionAsked,
+            SessionId = InstanceId,
+            FleetSessionId = _fleetSessionId,
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(ask, PermissionJson),
+        }, ct).ConfigureAwait(false);
+        await PushStatusAsync("waiting_input", ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    [UnconditionalSuppressMessage("AOT", "IL2026", Justification = "Test infrastructure only")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test infrastructure only")]
+    public async Task ReplyToPermissionAsync(string requestId, string reply, string? message, CancellationToken ct)
+    {
+        if (!_asks.TryRemove(requestId, out var ask))
+            throw new KeyNotFoundException($"No permission ask {requestId}.");
+
+        PermissionReplies.Enqueue((requestId, reply, message));
+        await PushEventCoreAsync(new HarnessEvent
+        {
+            Type = EventTypes.PermissionReplied,
+            SessionId = InstanceId,
+            FleetSessionId = _fleetSessionId,
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new PermissionReplied { Id = ask.Id, SessionId = ask.SessionId, Reply = reply }, PermissionJson),
+        }, ct).ConfigureAwait(false);
+        await PushStatusAsync(_asks.IsEmpty ? "busy" : "waiting_input", ct).ConfigureAwait(false);
+    }
+
+    private ValueTask PushStatusAsync(string status, CancellationToken ct) => PushEventCoreAsync(new HarnessEvent
+    {
+        Type = EventTypes.SessionStatus,
+        SessionId = InstanceId,
+        FleetSessionId = _fleetSessionId,
+        Timestamp = DateTimeOffset.UtcNow,
+        Payload = JsonSerializer.SerializeToElement(new { sessionID = InstanceId, status = new { type = status } }),
+    }, ct);
 
     private async ValueTask PushEventCoreAsync(HarnessEvent evt, CancellationToken ct)
     {

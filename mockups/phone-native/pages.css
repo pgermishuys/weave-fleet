@@ -1,0 +1,49 @@
+/* The landing and before/after pages: ordinary scrolling documents on top of native.css's tokens. */
+html, body { height: auto; overflow: auto; background: var(--main-bg); overscroll-behavior: auto; }
+body { padding: calc(env(safe-area-inset-top) + 20px) 0 calc(env(safe-area-inset-bottom) + 40px); max-width: 560px; margin: 0 auto; }
+.doc h1 { font-size: var(--t-large); font-weight: 700; margin: 8px 20px 4px; letter-spacing: 0.01em; }
+.doc .lede { margin: 0 20px 18px; color: var(--muted); font-size: var(--t-body); line-height: 1.45; }
+.doc h2 { font-size: var(--t-title3); font-weight: 700; margin: 30px 20px 10px; }
+.doc p.note { margin: 8px 20px; font-size: var(--t-sub); color: var(--muted); line-height: 1.45; }
+.doc .group .row { text-decoration: none; }
+.doc .row__title--wrap, .doc .row__sub { white-space: normal; }
+.doc .row__sub { line-height: 1.4; }
+.step-n { width: 28px; height: 28px; border-radius: 14px; background: var(--accent); color: #fff; font-weight: 700; font-size: var(--t-sub); display: grid; place-items: center; flex: none; align-self: flex-start; margin-top: 2px; }
+.try { margin: 6px 0 0; padding-left: 18px; font-size: var(--t-sub); color: var(--muted); line-height: 1.45; }
+.try li { margin: 2px 0; }
+.cta { margin: 0 20px; }
+.seg { display: flex; padding: 3px; border-radius: 12px; background: var(--fill-strong); gap: 2px; }
+.seg button { flex: 1; height: 34px; border-radius: 9px; font-size: var(--t-foot); font-weight: 600; color: var(--text); transition: background 0.2s; }
+.seg button[aria-pressed="true"] { background: var(--seg-on, #fff); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+.choice { padding: 12px 16px; }
+.choice + .choice { border-top: 0.5px solid var(--border); }
+.choice__t { font-size: var(--t-body); margin-bottom: 4px; }
+.choice__s { font-size: var(--t-foot); color: var(--muted); margin-bottom: 10px; line-height: 1.4; }
+.decision { padding: 14px 16px; }
+.decision + .decision { border-top: 0.5px solid var(--border); }
+.decision h3 { margin: 0 0 6px; font-size: var(--t-body); font-weight: 600; }
+.decision ol { margin: 0; padding-left: 20px; font-size: var(--t-sub); line-height: 1.45; color: var(--muted); }
+.decision ol li { margin: 3px 0; }
+.decision .rec { margin-top: 8px; font-size: var(--t-sub); line-height: 1.45; }
+.decision .rec b { color: var(--accent); }
+.limits li { margin: 6px 0; }
+.limits { margin: 0 20px; padding-left: 18px; font-size: var(--t-sub); line-height: 1.45; }
+.limits b { color: var(--text); }
+
+/* before / after */
+.ba { margin: 0 16px 34px; }
+.ba h2 { margin: 0 4px 6px; }
+.ba p { margin: 0 4px 12px; font-size: var(--t-sub); color: var(--muted); line-height: 1.45; }
+.ba .seg { margin-bottom: 12px; }
+.ba figure { margin: 0; position: relative; border-radius: 22px; overflow: hidden; box-shadow: 0 0 0 0.5px var(--border), 0 10px 30px rgba(0, 0, 0, 0.12); background: var(--card-bg); }
+.ba img { display: block; width: 100%; height: auto; }
+.ba figcaption { position: absolute; left: 10px; top: 10px; padding: 4px 10px; border-radius: 10px; font-size: var(--t-cap); font-weight: 700; color: #fff; background: rgba(0, 0, 0, 0.55); }
+.ba .pair { display: none; gap: 8px; }
+.ba .pair figure { flex: 1; border-radius: 14px; }
+.ba.is-side .pair { display: flex; }
+.ba.is-side .single { display: none; }
+.ba .links { display: flex; gap: 8px; margin-top: 12px; }
+.ba .links .btn { flex: 1; height: 42px; font-size: var(--t-sub); text-decoration: none; }
+.doc .row:active, .doc .seg button:active, .ba .seg button:active { background: var(--pressed); }
+.doc .row { -webkit-user-select: text; user-select: text; }
+:root:not([data-theme="light"]) { --seg-on: #3a3a44; }

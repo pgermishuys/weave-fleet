@@ -3,6 +3,9 @@ import { computed, onMounted, onUnmounted, reactive, shallowRef } from "vue";
 import { storeToRefs } from "pinia";
 import { AlertCircle, Check, Copy, Eye, EyeOff, LoaderCircle, Plus, RefreshCw } from "lucide-vue-next";
 import { useMachinesStore, type MachineAccess, type MachineEntry } from "@/stores/machines";
+import AddPhonePanel from "@/components/settings/AddPhonePanel.vue";
+import DevicesList from "@/components/settings/DevicesList.vue";
+import { listDevices, type PairedDevice } from "@/lib/devices-api";
 
 /**
  * Settings → Machines: the machines this client knows, adding one by URL and token, and how other devices reach
@@ -104,6 +107,8 @@ function location(entry: MachineEntry): string {
 
 // ── This machine's access ────────────────────────────────────────────────────
 const access = shallowRef<MachineAccess | null>(null);
+/** This browser signed in as a paired device: it may not see the token or manage devices. */
+const isDevice = shallowRef(false);
 const accessLoaded = shallowRef(false);
 const accessError = shallowRef<string | null>(null);
 const showToken = shallowRef(false);
@@ -115,12 +120,34 @@ const homeName = computed(() => home.value?.name ?? "This machine");
 async function loadAccess(): Promise<void> {
   accessError.value = null;
   try {
-    access.value = await machines.loadHomeAccess();
+    const loaded = await machines.loadHomeAccess();
+    isDevice.value = loaded === "device";
+    access.value = loaded === "device" ? null : loaded;
+    if (access.value) void refreshDevices();
   } catch (error) {
     accessError.value = error instanceof Error ? error.message : String(error);
   } finally {
     accessLoaded.value = true;
   }
+}
+
+// ── Paired devices ───────────────────────────────────────────────────────────
+const devices = shallowRef<PairedDevice[]>([]);
+const deviceNames = computed(() => devices.value.map((device) => device.name));
+const thisComputer = computed(() => access.value?.requiresToken
+  ? "Signed in with the machine token"
+  : "Signed in on loopback");
+
+async function refreshDevices(): Promise<void> {
+  try {
+    devices.value = await listDevices();
+  } catch {
+    // An older Fleet has no devices; the list just stays empty.
+  }
+}
+
+function onPublicUrlSaved(url: string): void {
+  if (home.value) home.value = { ...home.value, publicUrl: url || null };
 }
 
 async function copy(value: string, what: string): Promise<void> {
@@ -450,10 +477,36 @@ onUnmounted(() => stopPolling?.());
         v-else-if="!access"
         class="mt-2 text-sm text-muted"
       >
-        {{ accessLoaded ? "This Fleet doesn't hand out access tokens: it signs people in with an identity provider, or it's too old for machines." : "Loading…" }}
+        <template v-if="isDevice">
+          This browser is signed in as a paired device. Adding phones and seeing the token happen on the computer.
+        </template>
+        <template v-else>
+          {{ accessLoaded ? "This Fleet doesn't hand out access tokens: it signs people in with an identity provider, or it's too old for machines." : "Loading…" }}
+        </template>
       </p>
 
       <template v-else>
+        <div
+          class="mb-6 mt-3"
+          data-testid="machine-phones"
+        >
+          <AddPhonePanel
+            :machine-name="homeName"
+            :public-url="home?.publicUrl ?? null"
+            :addresses="access.addresses"
+            :requires-token="access.requiresToken"
+            :port="access.port"
+            :device-names="deviceNames"
+            @refresh="refreshDevices"
+            @saved-url="onPublicUrlSaved"
+          />
+          <DevicesList
+            :devices="devices"
+            :this-computer="thisComputer"
+            @removed="refreshDevices"
+          />
+        </div>
+
         <p
           v-if="!access.remoteReachable && !access.requiresToken"
           class="mt-2 max-w-prose text-sm text-muted"

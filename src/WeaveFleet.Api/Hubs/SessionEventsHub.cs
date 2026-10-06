@@ -2,10 +2,12 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.SignalR;
+using WeaveFleet.Api.Auth;
 using WeaveFleet.Api.Endpoints;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Recaps;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Events;
 
 namespace WeaveFleet.Api.Hubs;
@@ -23,12 +25,17 @@ public class SessionEventsHub : Hub
     private readonly ISessionMessageProxy _proxy;
     private readonly IHubContext<SessionEventsHub> _hubContext;
     private readonly SessionRecapService _recaps;
+    private readonly DeskPresenceTracker _presence;
+    private readonly DeviceConnections _deviceConnections;
 
     // Per-connection state: subscribed topics
     private static readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> ConnectionTopics = new();
 
     // Per-connection state: pump cancellation
     private static readonly ConcurrentDictionary<string, CancellationTokenSource> ConnectionCancellations = new();
+
+    // Per-connection state: a paired device's connection, closed if the device is removed
+    private static readonly ConcurrentDictionary<string, IDisposable> DeviceRegistrations = new();
 
     // Maps parent topic to set of child topics auto-subscribed via delegation
     private static readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> ParentChildTopics = new();
@@ -64,8 +71,12 @@ public class SessionEventsHub : Hub
         ILogger<SessionEventsHub> logger,
         ISessionMessageProxy proxy,
         IHubContext<SessionEventsHub> hubContext,
-        SessionRecapService recaps)
+        SessionRecapService recaps,
+        DeskPresenceTracker presence,
+        DeviceConnections deviceConnections)
     {
+        _presence = presence;
+        _deviceConnections = deviceConnections;
         _broadcaster = broadcaster;
         _userContext = userContext;
         _logger = logger;
@@ -80,6 +91,12 @@ public class SessionEventsHub : Hub
     public override async Task OnConnectedAsync()
     {
         var connectionId = Context.ConnectionId;
+
+        if (Context.User is { } user && FleetClaims.DeviceIdOf(user) is { } deviceId)
+        {
+            var context = Context;
+            DeviceRegistrations[connectionId] = _deviceConnections.Track(deviceId, context.Abort);
+        }
 
         // Initialize per-connection topic filter set
         var topics = new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
@@ -119,6 +136,9 @@ public class SessionEventsHub : Hub
 
         // A closed tab isn't looking at anything any more.
         _recaps.RemoveConnection(connectionId);
+        _presence.Remove(connectionId);
+        if (DeviceRegistrations.TryRemove(connectionId, out var registration))
+            registration.Dispose();
 
         // Cancel the pump task
         if (ConnectionCancellations.TryRemove(connectionId, out var cts))
@@ -284,6 +304,17 @@ public class SessionEventsHub : Hub
         }
 
         _recaps.SetFocus(connectionId, sessionId, focused);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Tells Fleet whether this window is on screen, and whether it's a computer (<c>desktop</c>) or a phone
+    /// (<c>phone</c>). Sent every 30 seconds and when visibility changes. Phones that chose "quiet while I'm at the desk"
+    /// get no pushes while a computer window is visible.
+    /// </summary>
+    public Task SetPresenceAsync(bool visible, string formFactor)
+    {
+        _presence.Set(Context.ConnectionId, visible, formFactor);
         return Task.CompletedTask;
     }
 

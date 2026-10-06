@@ -20,7 +20,7 @@ namespace WeaveFleet.E2E.Infrastructure;
 /// all production harness registrations. Uses an isolated per-test SQLite database.
 /// Starts a real Kestrel server (not the in-memory TestServer) so Playwright can connect.
 /// </summary>
-public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>, IAsyncDisposable
+public class FleetWebApplicationFactory : WebApplicationFactory<Program>, IAsyncDisposable
 {
     private readonly string _dbPath;
     private readonly string _analyticsDbPath;
@@ -42,6 +42,12 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
         _analyticsDbPath = analyticsDatabasePath;
         _ownsDatabaseFiles = false;
     }
+
+    /// <summary>
+    /// Local mode with the access token on, and every request asked for it (as behind <c>tailscale serve</c>): pairing,
+    /// devices and push exist only then. Off by default, as the other E2E tests run signed in by loopback.
+    /// </summary>
+    protected virtual bool RequireToken => false;
 
     /// <summary>The <see cref="TestHarness.TestHarness"/> singleton registered in this factory's DI container.</summary>
     public TestHarness.TestHarness TestHarness { get; } = new();
@@ -139,7 +145,8 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
         builder.UseSetting("Fleet:AnalyticsDatabasePath", _analyticsDbPath);
         builder.UseSetting("Fleet:AnalyticsEnabled", "true");
         builder.UseSetting("Fleet:Auth:Enabled", "false");
-        builder.UseSetting("Fleet:Auth:TokenAuthEnabled", "false");
+        builder.UseSetting("Fleet:Auth:TokenAuthEnabled", RequireToken ? "true" : "false");
+        builder.UseSetting("Fleet:Auth:RequireToken", RequireToken ? "true" : "false");
         builder.UseSetting("Fleet:Port", "0");
 
         // Use environment-based configuration to override FleetOptions singleton
@@ -169,7 +176,8 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
                 Auth = new AuthOptions
                 {
                     Enabled = false,
-                    TokenAuthEnabled = false
+                    TokenAuthEnabled = RequireToken,
+                    RequireToken = RequireToken,
                 },
             };
 
@@ -273,6 +281,7 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
     public new async ValueTask DisposeAsync()
     {
         await base.DisposeAsync();
+        GC.SuppressFinalize(this);
 
         if (!_ownsDatabaseFiles)
             return;

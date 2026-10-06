@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Entities;
@@ -19,7 +20,8 @@ public sealed class SessionNotifierTests
 
     private readonly FakeEventBroadcaster _broadcaster = new();
     private readonly SessionFocusTracker _focus = new();
-    private readonly FakeNotificationPreference _preference = new() { Enabled = true };
+    private readonly FakePendingPermissions _pending = new();
+    private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 10, 5, 9, 0, 0, TimeSpan.Zero));
     private readonly InMemorySessionRepository _sessions = new();
     private readonly SessionNotifier _sut;
 
@@ -36,10 +38,11 @@ public sealed class SessionNotifierTests
 
         _sut = new SessionNotifier(
             _focus,
-            _broadcaster,
-            _preference,
+            [new BroadcastNotificationSink(_broadcaster)],
             TestServiceScopeFactory.Create(services => services.AddSingleton<ISessionRepository>(_sessions)),
-            NullLogger<SessionNotifier>.Instance);
+            NullLogger<SessionNotifier>.Instance,
+            _pending,
+            time: _time);
     }
 
     [Fact]
@@ -91,14 +94,88 @@ public sealed class SessionNotifierTests
     }
 
     [Fact]
-    public async Task says_nothing_when_the_setting_is_off()
+    public async Task a_permission_ask_is_a_permission_with_its_request_and_command()
     {
-        _preference.Enabled = false;
+        _pending.Asks.Add(new PermissionAsk { Id = "perm-1", SessionId = SessionId, Kind = PermissionKinds.Shell, Tool = "bash", Title = "dotnet test" });
 
         await ChangeAsync(ActivityStatuses.Busy);
         await ChangeAsync(ActivityStatuses.WaitingInput);
 
-        _broadcaster.Broadcasts.ShouldBeEmpty();
+        var payload = Payload(Single());
+        payload.Kind.ShouldBe(SessionNotificationKinds.Permission);
+        payload.RequestId.ShouldBe("perm-1");
+        payload.Body.ShouldBe("Wants to run dotnet test");
+        payload.Reason.ShouldBe(SessionNotificationReasons.NeedsYou);
+    }
+
+    [Fact]
+    public async Task waiting_without_a_permission_ask_is_a_question()
+    {
+        await ChangeAsync(ActivityStatuses.Busy);
+        await ChangeAsync(ActivityStatuses.WaitingInput);
+
+        var payload = Payload(Single());
+        payload.Kind.ShouldBe(SessionNotificationKinds.Question);
+        payload.RequestId.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task a_finished_turn_is_finished()
+    {
+        await ChangeAsync(ActivityStatuses.Busy);
+        await ChangeAsync(ActivityStatuses.Idle);
+
+        Payload(Single()).Kind.ShouldBe(SessionNotificationKinds.Finished);
+    }
+
+    [Fact]
+    public async Task a_failed_turn_says_failed_and_not_finished_too()
+    {
+        await ChangeAsync(ActivityStatuses.Busy);
+        _sut.OnSessionFailed(SessionId, "The model is overloaded.");
+        await WaitForAsync(1);
+        await ChangeAsync(ActivityStatuses.Idle);
+        await Task.Delay(50);
+
+        var payload = Payload(Single());
+        payload.Kind.ShouldBe(SessionNotificationKinds.Failed);
+        payload.Reason.ShouldBe(SessionNotificationReasons.Failed);
+        payload.Body.ShouldBe("Stopped: The model is overloaded.");
+    }
+
+    [Fact]
+    public async Task a_workflow_wait_is_a_workflow()
+    {
+        _sut.OnWorkflowNeedsYou(SessionId, "Review the plan.");
+        await WaitForAsync(1);
+
+        var payload = Payload(Single());
+        payload.Kind.ShouldBe(SessionNotificationKinds.Workflow);
+        payload.Body.ShouldBe("Review the plan.");
+    }
+
+    [Fact]
+    public async Task the_same_ask_twice_within_thirty_seconds_is_sent_once()
+    {
+        _sut.OnWorkflowNeedsYou(SessionId, "Review the plan.");
+        await WaitForAsync(1);
+        _sut.OnWorkflowNeedsYou(SessionId, "Review the plan.");
+        await Task.Delay(50);
+        _broadcaster.Broadcasts.Count.ShouldBe(1);
+
+        _time.Advance(SessionNotifier.RepeatWindow);
+        _sut.OnWorkflowNeedsYou(SessionId, "Review the plan.");
+        await WaitForAsync(2);
+        _broadcaster.Broadcasts.Count.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task long_bodies_are_cut_short()
+    {
+        _sut.OnWorkflowNeedsYou(SessionId, new string('x', 400));
+        await WaitForAsync(1);
+
+        Payload(Single()).Body.Length.ShouldBe(140);
     }
 
     [Fact]
@@ -185,10 +262,16 @@ public sealed class SessionNotifierTests
     private static SessionNotificationPayload Payload(FakeEventBroadcaster.BroadcastRecord record)
         => record.Payload.Deserialize<SessionNotificationPayload>(PayloadJson)!;
 
-    private sealed class FakeNotificationPreference : INotificationPreference
+    private async Task WaitForAsync(int count)
     {
-        public bool Enabled { get; set; }
+        for (var i = 0; i < 40 && _broadcaster.Broadcasts.Count < count; i++)
+            await Task.Delay(5);
+    }
 
-        public Task<bool> IsEnabledAsync(string userId, CancellationToken ct) => Task.FromResult(Enabled);
+    private sealed class FakePendingPermissions : IPendingPermissions
+    {
+        public List<PermissionAsk> Asks { get; } = [];
+
+        public IReadOnlyList<PermissionAsk> WaitingIn(string sessionId) => Asks.Where(a => a.SessionId == sessionId).ToList();
     }
 }

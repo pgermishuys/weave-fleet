@@ -311,9 +311,10 @@
     outline: none !important;
   }
 
-  /* Fields that fill their own box show focus with the caret: the file editor, Go to file. */
+  /* Fields that fill their own box show focus with the caret: the file editor, Go to file, the phone composer. */
   .cm-editor .cm-content:focus-visible,
-  .go-to-file__input input:focus-visible {
+  .go-to-file__input input:focus-visible,
+  .phone-composer-input:focus-visible {
     box-shadow: none !important;
   }
 

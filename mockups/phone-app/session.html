@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A session on the phone</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Fleet's tokens (client/src/assets/main.css): light first, the default dark theme below. */
+:root {
+  --page: #E9E7E2; --main-bg: #F3F2EF; --panel-bg: #FFFFFF; --card-bg: #FFFFFF; --sunk: #F3F2EF;
+  --border: rgba(26,25,24,.09); --text: #1A1918; --muted: #6E6A65;
+  --accent: #5B6EC7; --accent-dim: rgba(91,110,199,.12);
+  --running: #16a34a; --waiting: #d97706; --waiting-dim: rgba(217,119,6,.12);
+  --complete: #2563eb; --error: #dc2626; --frame: #1A1918; --key: #FFFFFF; --kbd: #D5D7DD;
+  --shadow: 0 1px 2px rgba(26,25,24,.05), 0 18px 40px -22px rgba(26,25,24,.35);
+  --sans: "Inter", system-ui, -apple-system, sans-serif; --mono: "JetBrains Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: #08080a; --main-bg: #0d0d10; --panel-bg: #141418; --card-bg: #1b1b20; --sunk: #0d0d10;
+    --border: rgba(255,255,255,.075); --text: #e8e8ec; --muted: #8e8e9a;
+    --accent: #6366f1; --accent-dim: rgba(99,102,241,.15);
+    --running: #22c55e; --waiting: #f59e0b; --waiting-dim: rgba(245,158,11,.13);
+    --complete: #3b82f6; --error: #ef4444; --frame: #2a2a31; --key: #3a3a42; --kbd: #232329;
+    --shadow: 0 18px 40px -24px rgba(0,0,0,.8);
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--text); font: 14px/1.5 var(--sans); padding: 0 16px 64px; }
+.wrap { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: minmax(0,1fr); gap: 36px; }
+header.top { padding-top: 28px; display: grid; gap: 8px; max-width: 72ch; }
+h1 { font-size: 26px; line-height: 1.2; margin: 0; letter-spacing: -.01em; text-wrap: balance; }
+h2 { font-size: 18px; margin: 0; text-wrap: balance; }
+h3 { font-size: 15px; margin: 0; }
+p { margin: 0; }
+.lede { color: var(--muted); font-size: 15px; }
+.eyebrow { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+a { color: var(--accent); }
+code { font-family: var(--mono); font-size: .9em; }
+button { font: inherit; color: inherit; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Prototype layout */
+.proto { display: grid; grid-template-columns: 340px minmax(0,1fr); gap: 36px; align-items: start; }
+@media (max-width: 820px) { .proto { grid-template-columns: minmax(0,1fr); justify-items: center; } .notes { justify-self: stretch; } }
+.notes { display: grid; gap: 18px; position: sticky; top: 16px; }
+.steps-list { display: grid; gap: 4px; counter-reset: s; }
+.step-btn { display: grid; grid-template-columns: 26px 1fr; gap: 8px; text-align: left; background: transparent; border: 1px solid transparent; border-radius: 10px; padding: 8px 10px; cursor: pointer; color: var(--muted); }
+.step-btn .n { font-family: var(--mono); font-size: 12px; padding-top: 1px; }
+.step-btn b { color: var(--text); font-weight: 600; font-size: 13.5px; display: block; }
+.step-btn span.d { font-size: 12.5px; }
+.step-btn[aria-current="step"] { background: var(--panel-bg); border-color: var(--border); }
+.step-btn[aria-current="step"] .n { color: var(--accent); }
+.explain { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; display: grid; gap: 8px; }
+.explain ul { margin: 0; padding-left: 18px; display: grid; gap: 5px; color: var(--muted); font-size: 13px; }
+.explain ul b { color: var(--text); font-weight: 600; }
+.nav { display: flex; gap: 8px; }
+.nbtn { border: 1px solid var(--border); background: var(--panel-bg); border-radius: 8px; padding: 6px 12px; cursor: pointer; font-weight: 500; font-size: 13px; }
+.nbtn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.hint { font-size: 12px; color: var(--muted); }
+
+/* Phone */
+.phone { width: 340px; max-width: 100%; height: 700px; border-radius: 44px; padding: 10px; background: var(--frame); box-shadow: var(--shadow); }
+.screen { height: 100%; border-radius: 35px; overflow: hidden; background: var(--main-bg); display: flex; flex-direction: column; position: relative; }
+.sb { display: flex; justify-content: space-between; padding: 11px 24px 2px; font-size: 12px; font-weight: 600; flex: none; }
+.sb i { font-style: normal; letter-spacing: 1px; }
+
+.hdr { flex: none; display: flex; align-items: center; gap: 6px; padding: 4px 10px 8px; border-bottom: 1px solid var(--border); background: var(--main-bg); }
+.ib { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; color: var(--muted); border: 0; background: transparent; cursor: pointer; flex: none; }
+.ib svg { width: 19px; height: 19px; }
+.ib:hover { background: var(--accent-dim); }
+.hdr .t { min-width: 0; flex: 1; display: grid; }
+.hdr .t b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.status { font-size: 11.5px; color: var(--muted); display: flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; }
+.status .st { font-weight: 600; }
+.status.run .st { color: var(--running); }
+.status.wait .st { color: var(--waiting); }
+.status.done .st { color: var(--complete); }
+.mchip { font-size: 10.5px; border: 1px solid var(--border); border-radius: 5px; padding: 0 4px; background: var(--sunk); color: var(--text); font-weight: 500; }
+.dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; }
+.dot.run { background: var(--running); box-shadow: 0 0 0 3px color-mix(in srgb, var(--running) 22%, transparent); animation: pulse 2s infinite; }
+.dot.wait { background: var(--waiting); }
+.dot.done { background: var(--complete); }
+@keyframes pulse { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--running) 8%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .dot.run { animation: none; } * { transition: none !important; } }
+
+.progress { flex: none; display: flex; align-items: center; gap: 8px; margin: 8px 10px 0; padding: 6px 10px; border-radius: 10px; background: var(--panel-bg); border: 1px solid var(--border); font-size: 11.5px; color: var(--muted); cursor: pointer; text-align: left; }
+.progress .bar { width: 34px; height: 4px; border-radius: 4px; background: var(--border); overflow: hidden; flex: none; }
+.progress .bar i { display: block; height: 100%; background: var(--accent); }
+.progress span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.progress b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.convo { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 10px; scrollbar-width: none; }
+.convo::-webkit-scrollbar { display: none; }
+.spacer { flex: 1; }
+.msg { font-size: 13px; line-height: 1.55; }
+.msg.user { align-self: flex-end; background: var(--accent-dim); border-radius: 14px 14px 4px 14px; padding: 8px 11px; max-width: 86%; }
+.msg.user.new { outline: 1px dashed color-mix(in srgb, var(--accent) 50%, transparent); }
+.who { font-size: 10.5px; color: var(--muted); font-weight: 600; letter-spacing: .02em; }
+.fold { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: 1px solid var(--border); background: var(--panel-bg); border-radius: 10px; padding: 7px 10px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.fold b { color: var(--text); font-weight: 500; }
+.fold .chev { margin-left: auto; }
+.fold .ok { color: var(--running); }
+.fold:hover { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.sub { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 10px; padding: 7px 10px; font-size: 12px; background: var(--panel-bg); }
+.sub .a { font-family: var(--mono); font-size: 11px; color: var(--accent); }
+.sub .x { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sub .tag { font-size: 10.5px; font-weight: 600; color: var(--complete); }
+.working { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+.answered { font-size: 12px; color: var(--muted); border-left: 2px solid var(--border); padding-left: 9px; }
+.answered b { color: var(--text); font-weight: 500; }
+.recap { font-size: 12px; color: var(--muted); font-style: italic; }
+.prcard { border: 1px solid var(--border); background: var(--panel-bg); border-radius: 12px; padding: 10px 11px; display: grid; gap: 8px; }
+.prcard .top { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.prcard .top b { font-weight: 600; }
+.pill { font-size: 10.5px; font-weight: 600; border-radius: 6px; padding: 1px 6px; }
+.pill.draft { background: var(--sunk); color: var(--muted); border: 1px solid var(--border); }
+.pill.pend { background: var(--waiting-dim); color: var(--waiting); }
+.row2 { display: flex; gap: 6px; }
+.b { flex: 1; font-size: 12px; font-weight: 600; border-radius: 9px; padding: 7px 8px; border: 1px solid var(--border); background: var(--card-bg); cursor: pointer; }
+.b.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.jump { position: absolute; left: 50%; transform: translateX(-50%); bottom: 96px; background: var(--text); color: var(--main-bg); font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 5px 11px; border: 0; cursor: pointer; }
+
+/* Bottom dock: composer, or the ask */
+.dock { flex: none; background: var(--main-bg); padding: 6px 10px 14px; display: grid; gap: 6px; border-top: 1px solid transparent; }
+.dock.ask { border-top-color: var(--border); background: var(--panel-bg); padding-top: 10px; }
+.queued { display: flex; align-items: center; gap: 8px; border: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent); border-radius: 10px; padding: 6px 6px 6px 10px; font-size: 12px; }
+.queued .lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); }
+.queued .x { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+.qb { font-size: 11px; font-weight: 600; border: 1px solid var(--border); background: var(--card-bg); border-radius: 7px; padding: 3px 7px; cursor: pointer; }
+.composer { border: 1px solid var(--border); background: var(--card-bg); border-radius: 18px; padding: 6px 6px 6px 6px; display: grid; gap: 4px; }
+.composer.focus { border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.crow { display: flex; align-items: flex-end; gap: 4px; }
+.field { flex: 1; min-width: 0; font-size: 13.5px; padding: 6px 4px; color: var(--muted); cursor: text; min-height: 32px; line-height: 1.4; text-align: left; border: 0; background: transparent; }
+.field.typed { color: var(--text); }
+.caret { display: inline-block; width: 1.5px; height: 15px; background: var(--accent); vertical-align: -2px; margin-left: 1px; animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.round { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; border: 0; cursor: pointer; flex: none; }
+.round svg { width: 16px; height: 16px; }
+.round.plus { background: var(--sunk); color: var(--muted); }
+.round.send { background: var(--accent); color: #fff; }
+.round.stop { background: var(--text); color: var(--main-bg); }
+.round.stop svg { width: 11px; height: 11px; }
+.sendq { border: 0; border-radius: 999px; background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; padding: 0 12px; height: 32px; cursor: pointer; flex: none; }
+.chips { display: flex; gap: 5px; padding: 0 2px 2px; flex-wrap: wrap; }
+.chip { font-size: 11px; border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; color: var(--muted); background: var(--sunk); cursor: pointer; }
+.chip b { color: var(--text); font-weight: 500; }
+.qhint { font-size: 11px; color: var(--muted); padding: 0 6px; }
+.dock, .composer, .prcard, .sheet, .convo > * { min-width: 0; }
+.dock, .composer, .prcard, .sheet { grid-template-columns: minmax(0,1fr); }
+.fold .ft { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.big .bl { flex: 1; min-width: 0; }
+.crow.actions { justify-content: flex-end; }
+.crow.actions .round.plus { margin-right: auto; }
+.field.full { padding: 4px 6px 2px; }
+
+/* Ask in the dock (PermissionCard on a phone) */
+.askhead { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; }
+.needs { margin-left: auto; font-size: 10.5px; font-weight: 700; color: var(--waiting); background: var(--waiting-dim); border-radius: 6px; padding: 1px 6px; }
+.cmd { font-family: var(--mono); font-size: 11px; background: var(--sunk); border: 1px solid var(--border); border-radius: 9px; padding: 7px 9px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; }
+.cmd .dim { color: var(--muted); }
+.big { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 1px solid var(--border); background: var(--card-bg); border-radius: 12px; padding: 10px 12px; font-size: 13px; font-weight: 500; cursor: pointer; min-height: 44px; }
+.big .sc { margin-left: auto; font-size: 11px; color: var(--muted); font-weight: 400; }
+.big.primary { background: var(--accent); border-color: var(--accent); color: #fff; justify-content: center; font-weight: 600; }
+.big.deny { color: var(--muted); }
+.big.sel { border-color: var(--accent); background: var(--accent-dim); }
+.big .radio { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--muted); flex: none; }
+.big.sel .radio { border: 5px solid var(--accent); }
+.later { font-size: 11.5px; color: var(--muted); text-align: center; background: transparent; border: 0; cursor: pointer; padding: 2px; }
+
+/* Keyboard */
+.kbd { flex: none; background: var(--kbd); padding: 8px 4px 20px; display: grid; gap: 7px; }
+.krow { display: flex; gap: 5px; justify-content: center; }
+.krow i { height: 36px; flex: 1; max-width: 28px; border-radius: 6px; background: var(--key); box-shadow: 0 1px 0 rgba(0,0,0,.25); }
+.krow i.w { max-width: 150px; flex: 5; }
+.krow i.m { max-width: 42px; flex: 1.4; opacity: .7; }
+
+/* Sheets */
+.scrim { position: absolute; inset: 0; background: rgba(0,0,0,.42); z-index: 5; }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; background: var(--panel-bg); border-radius: 22px 22px 0 0; padding: 8px 14px 22px; display: grid; gap: 10px; max-height: 88%; overflow-y: auto; }
+.grab { width: 38px; height: 4px; border-radius: 4px; justify-self: center; background: color-mix(in srgb, var(--muted) 45%, transparent); }
+.sheet h4 { margin: 0; font-size: 14px; }
+.menu { display: grid; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.menu button { display: flex; align-items: center; gap: 10px; text-align: left; border: 0; border-bottom: 1px solid var(--border); background: var(--card-bg); padding: 11px 12px; font-size: 13px; cursor: pointer; }
+.menu button:last-child { border-bottom: 0; }
+.menu button .s { margin-left: auto; font-size: 11.5px; color: var(--muted); }
+.menu button.red { color: var(--error); }
+.menu button svg { width: 17px; height: 17px; color: var(--muted); flex: none; }
+.tl { display: grid; gap: 0; grid-template-columns: minmax(0,1fr); }
+.tl div { display: flex; gap: 8px; font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--border); align-items: center; }
+.tl div:last-child { border-bottom: 0; }
+.tl .k { font-family: var(--mono); font-size: 10.5px; color: var(--muted); width: 42px; flex: none; }
+.tl .p { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.add { color: var(--running); } .del { color: var(--error); }
+.diff { font-family: var(--mono); font-size: 10.5px; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
+.diff div { padding: 1px 8px; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.diff .a { background: color-mix(in srgb, var(--running) 13%, transparent); }
+.diff .d { background: color-mix(in srgb, var(--error) 12%, transparent); }
+.seg { display: flex; gap: 4px; background: var(--sunk); border-radius: 9px; padding: 3px; font-size: 11.5px; }
+.seg span { flex: 1; text-align: center; padding: 4px 0; border-radius: 7px; color: var(--muted); }
+.seg span.on { background: var(--card-bg); color: var(--text); font-weight: 600; }
+
+/* Static frames */
+.frames { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; }
+.shot { display: grid; grid-template-columns: minmax(0,1fr); gap: 10px; width: 300px; max-width: 100%; min-width: 0; }
+.shot .phone { width: 300px; height: 600px; }
+.cap { display: grid; gap: 2px; padding: 0 4px; }
+.cap b { font-size: 13px; } .cap span { font-size: 12.5px; color: var(--muted); }
+.banner { flex: none; display: flex; align-items: center; gap: 8px; font-size: 11.5px; padding: 7px 12px; background: var(--waiting-dim); color: var(--waiting); font-weight: 500; }
+.banner.err { background: color-mix(in srgb, var(--error) 12%, transparent); color: var(--error); }
+
+.rules { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
+.rules > div { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; display: grid; gap: 4px; align-content: start; }
+.rules p { font-size: 13px; color: var(--muted); }
+@media (max-width: 860px) { .rules { grid-template-columns: minmax(0,1fr); } }
+.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--panel-bg); }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 13px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 14px; border-bottom: 1px solid var(--border); }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+tr:last-child td { border-bottom: 0; }
+td:first-child { font-weight: 600; }
+td { color: var(--muted); } td:first-child { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <span class="eyebrow">Mockup · Fleet phone app · <a href="index.html">back to the three options</a></span>
+  <h1>A session on the phone</h1>
+  <p class="lede">One session from start to finish: the agent is working, you queue a follow-up, it asks to run a command, it asks you a question, then it finishes with a pull request. Click through it on the phone, or use the steps on the right. Everything you can tap is live.</p>
+</header>
+
+<section class="proto">
+  <div class="phone"><div class="screen" id="screen"></div></div>
+
+  <div class="notes">
+    <div class="steps-list" id="steps"></div>
+    <div class="explain" id="explain"></div>
+    <div class="nav">
+      <button class="nbtn" id="prev">‹ Back</button>
+      <button class="nbtn primary" id="next">Next ›</button>
+    </div>
+    <p class="hint">Also try: the folded steps row, the <b>+</b> button, the agent and model chips, the plan bar and the <b>⋯</b> menu.</p>
+  </div>
+</section>
+
+<section style="display:grid;gap:16px">
+  <div style="display:grid;gap:4px;max-width:72ch">
+    <span class="eyebrow">The rules behind it</span>
+    <h2>Six decisions the prototype makes</h2>
+  </div>
+  <div class="rules">
+    <div><h3>The bottom is for whatever needs you</h3><p>When the agent asks, the ask takes the composer's place at the bottom, where your thumb is. Once you answer, the composer comes back.</p></div>
+    <div><h3>The header is the status</h3><p>Machine, state and elapsed time, always visible: <b>Working · 1m 12s</b>, <b>Needs you</b>, <b>Finished</b>. The plan bar sits under it when there is one.</p></div>
+    <div><h3>A turn's tool calls fold into one row</h3><p>"Read 4 files · edited 1 · ran 1 command". Tap it for the list, then a step for its diff or output. Text from the agent stays in the conversation.</p></div>
+    <div><h3>Sending while it works queues</h3><p>The send button says <b>Queue</b> while the agent works, and the message waits above the composer until the turn ends. <b>Send now</b> steers the agent mid-turn, if the harness supports it.</p></div>
+    <div><h3>Settings live behind chips</h3><p>Agent, model and effort are chips above the keyboard while you type. Each opens a sheet, not a dropdown. Attachments, <code>@</code> files, <code>!</code> commands and <code>/btw</code> are behind <b>+</b>.</p></div>
+    <div><h3>What a phone can't do well opens elsewhere</h3><p>Terminal, the editor and app previews say so and offer the computer. Diffs and files are read-only sheets. One-off <code>!</code> commands still work.</p></div>
+  </div>
+</section>
+
+<section style="display:grid;gap:16px">
+  <div style="display:grid;gap:4px;max-width:72ch">
+    <span class="eyebrow">The awkward cases</span>
+    <h2>When the network or the phone gets in the way</h2>
+  </div>
+  <div class="frames">
+    <div class="shot">
+      <div class="phone"><div class="screen">
+        <div class="sb"><span>14:31</span><i>●●○ ▮</i></div>
+        <div class="hdr">
+          <button class="ib" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <div class="t"><b>Fix flaky SignalR reconnect test</b><span class="status"><span class="mchip">hangar</span> last heard 14:29</span></div>
+        </div>
+        <div class="banner err">Can't reach hangar. Trying again in 4 s.</div>
+        <div class="convo"><div class="spacer"></div>
+          <div class="msg">CI schedules the first reconnect retry at 2 s, and the test only waits 2 s…</div>
+          <div class="working" style="opacity:.6"><span class="dot run" style="animation:none;box-shadow:none;background:var(--muted)"></span>Working when last heard</div>
+        </div>
+        <div class="dock">
+          <div class="queued"><span class="lbl">Held</span><span class="x">Skip the E2E run, just open the PR</span><button class="qb">Edit</button></div>
+          <div class="composer"><div class="crow"><button class="round plus" aria-label="Add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg></button><span class="field">Type a message…</span><button class="round send" aria-label="Send" style="opacity:.4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></div></div>
+          <p class="qhint" style="text-align:center">Sends when hangar answers again.</p>
+        </div>
+      </div></div>
+      <div class="cap"><b>Machine unreachable</b><span>The conversation stays as last heard. What you type is held on the phone and sent when the machine is back, never silently dropped.</span></div>
+    </div>
+
+    <div class="shot">
+      <div class="phone"><div class="screen">
+        <div class="sb"><span>14:52</span><i>●●● ▮</i></div>
+        <div class="hdr">
+          <button class="ib" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <div class="t"><b>Fix flaky SignalR reconnect test</b><span class="status done"><span class="mchip">hangar</span><span class="dot done"></span><span class="st">Finished</span> · 14:44</span></div>
+        </div>
+        <div class="convo"><div class="spacer"></div>
+          <div class="msg" style="opacity:.55">I raised the harness wait to 5 s…</div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--accent);font-weight:600"><span style="flex:1;height:1px;background:var(--accent);opacity:.4"></span>Since you looked at 14:20<span style="flex:1;height:1px;background:var(--accent);opacity:.4"></span></div>
+          <button class="fold"><span class="ft"><b>Ran 2 commands</b> · <span class="ok">53 passed</span></span><span class="chev">›</span></button>
+          <div class="msg">E2E passes too. I opened a draft pull request.</div>
+          <div class="recap">recap: harness waits 5 s for reconnect; 41 contract and 12 E2E tests pass; draft PR #252.</div>
+        </div>
+                <div class="dock"><div class="composer"><div class="crow"><button class="round plus" aria-label="Add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg></button><span class="field">Type a message…</span><button class="round send" aria-label="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></div></div></div>
+      </div></div>
+      <div class="cap"><b>Coming back later</b><span>Opens where you left off, with a line marking what's new since you last looked. Opening from a notification jumps straight to the ask instead.</span></div>
+    </div>
+
+    <div class="shot">
+      <div class="phone"><div class="screen">
+        <div class="sb"><span>14:53</span><i>●●● ▮</i></div>
+        <div class="hdr">
+          <button class="ib" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <div class="t"><b>Fix flaky SignalR reconnect test</b><span class="status done"><span class="mchip">hangar</span><span class="dot done"></span><span class="st">Finished</span></span></div>
+        </div>
+        <div class="convo" style="opacity:.4"><div class="spacer"></div><div class="msg">E2E passes too. I opened a draft pull request.</div></div>
+        <div class="scrim"></div>
+        <div class="sheet">
+          <div class="grab"></div>
+          <h4>Terminal</h4>
+          <p style="font-size:12.5px;color:var(--muted)">Terminals need a keyboard and a wide screen, so they open on the computer. On the phone you can run a one-off command and see its output in the conversation.</p>
+          <div class="composer focus"><div class="crow"><span class="field typed" style="font-family:var(--mono);font-size:12px">! git log --oneline -3<span class="caret"></span></span><button class="round send" aria-label="Run"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></div></div>
+          <p class="qhint">Runs in the session's folder, no model turn.</p>
+          <div class="menu"><button>Open hangar on my computer<span class="s">sends a link</span></button></div>
+        </div>
+      </div></div>
+      <div class="cap"><b>Something the phone doesn't do</b><span>It says why and offers the closest thing that works: a <code>!</code> command, or a handoff to the computer.</span></div>
+    </div>
+  </div>
+</section>
+
+<section style="display:grid;gap:16px">
+  <div style="display:grid;gap:4px;max-width:72ch">
+    <span class="eyebrow">Desktop to phone</span>
+    <h2>Where each desktop piece goes</h2>
+  </div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>On the desktop</th><th>On the phone</th></tr></thead>
+    <tbody>
+      <tr><td>Composer: Enter sends, Ctrl+Enter steers</td><td>One button: <b>Send</b> when idle, <b>Queue</b> while working. <b>Send now</b> next to it when the harness can steer.</td></tr>
+      <tr><td>Agent, model and effort dropdowns</td><td>Chips above the keyboard while typing; each opens a sheet</td></tr>
+      <tr><td>Image paste, <code>@</code> files, <code>!</code> shell, <code>/btw</code></td><td>Behind <b>+</b>: Photo or camera, file, command, side question. Typing <code>@</code>, <code>!</code> or <code>/</code> still works.</td></tr>
+      <tr><td>Permission card with keys 1 to 3</td><td>Docked at the bottom with 44px rows, in place of the composer. Deny opens a text field.</td></tr>
+      <tr><td>Question card</td><td>The same, docked. Multiple choice uses radio rows, <b>Send answer</b> and <b>Later</b>.</td></tr>
+      <tr><td>Tool cards in the stream</td><td>One folded row per run of steps; tap for the list, then a step for its diff or output</td></tr>
+      <tr><td>Subagent rows</td><td>Kept as rows; tapping opens the child session</td></tr>
+      <tr><td>Right panel: changes, files, progress</td><td>Sheets from the <b>⋯</b> menu and the plan bar, read-only</td></tr>
+      <tr><td>Terminal, editor, browser canvas</td><td>Not on the phone. A one-off <code>!</code> command, or open on the computer.</td></tr>
+      <tr><td>Abort, fork, rename, archive</td><td>The <b>⋯</b> menu. While it works, the send button becomes Stop when the field is empty.</td></tr>
+      <tr><td>Side conversation (<code>/btw</code>)</td><td>A full-height sheet over the session, with its own composer</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+</div>
+
+<script>
+const I = {
+  back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>',
+  more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>',
+  up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+  stop: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="3"/></svg>',
+};
+
+const steps = [
+  { t: 'Working', d: 'Open a session while the agent works',
+    x: ['The header says <b>Working · 1m 12s</b> on <b>hangar</b>. The plan bar under it says what\'s next.',
+        'The agent\'s reads and edits fold into <b>one row</b>. Its sentences stay in the conversation.',
+        'With an empty field, the round button is <b>Stop</b>. Tap the composer to type.'] },
+  { t: 'Typing', d: 'Write a follow-up while it works',
+    x: ['The keyboard takes the bottom half. The conversation shrinks but keeps scrolling.',
+        'Chips for <b>agent</b>, <b>model</b> and <b>effort</b> appear while you type. Tap one to change it for this message.',
+        'The button says <b>Queue</b>: it\'s sent when the turn ends. <b>Send now</b> steers the agent at its next step.'] },
+  { t: 'Queued', d: 'The follow-up waits for the turn',
+    x: ['The message waits above the composer, marked <b>Next</b>. You can edit it, send it now or remove it.',
+        'Fleet keeps the queue on the server, so closing the app doesn\'t lose it.'] },
+  { t: 'Needs you', d: 'The agent asks to run a command',
+    x: ['The header turns amber: <b>Needs you</b>. The phone also got a notification.',
+        'The ask <b>replaces the composer</b> at the bottom, with big rows: Allow once, Don\'t ask again, Deny.',
+        'Deny opens a text field so you can tell the agent what to do instead. <b>Later</b> folds the ask so you can scroll up and read first.'] },
+  { t: 'Question', d: 'The agent asks you something',
+    x: ['The command ran and folded into the row above: <b>41 passed</b>.',
+        'A question docks the same way. Pick a choice, or <b>Something else…</b> to type an answer.',
+        'Tap <b>Send answer</b> to carry on.'] },
+  { t: 'Finished', d: 'Queue sent, work done, PR opened',
+    x: ['Your answer stays as a quiet line. The queued follow-up went out when the turn ended, and the agent ran the E2E tests.',
+        'A <b>recap</b> line and a pull request card close the turn: <b>Review changes</b> opens a diff sheet.',
+        'The header says <b>Finished</b>, and the button is <b>Send</b> again.'] },
+];
+
+let step = 0, overlay = null, sel = 1, denyOpen = false, deferred = false;
+
+function header() {
+  const s = [
+    ['run', '<span class="dot run"></span><span class="st">Working</span> · 1m 12s'],
+    ['run', '<span class="dot run"></span><span class="st">Working</span> · 1m 20s'],
+    ['run', '<span class="dot run"></span><span class="st">Working</span> · 1m 31s'],
+    ['wait', '<span class="dot wait"></span><span class="st">Needs you</span> · 2m'],
+    ['wait', '<span class="dot wait"></span><span class="st">Needs you</span> · 3m'],
+    ['done', '<span class="dot done"></span><span class="st">Finished</span> · 6m 40s'],
+  ][step];
+  return `<div class="sb"><span>14:${String(7 + step).padStart(2,'0')}</span><i>●●● ▮</i></div>
+  <div class="hdr">
+    <button class="ib" aria-label="Back to Needs you">${I.back}</button>
+    <div class="t"><b>Fix flaky SignalR reconnect test</b><span class="status ${s[0]}"><span class="mchip">hangar</span>${s[1]}</span></div>
+    <button class="ib" aria-label="Session menu" data-ov="menu">${I.more}</button>
+  </div>
+  ${step < 5 ? `<button class="progress" data-ov="plan"><span class="bar"><i style="width:${step < 4 ? 60 : 80}%"></i></span><span>Next: ${step < 4 ? 'run the contract tests' : 'open the pull request'}</span><b>${step < 4 ? '3/5' : '4/5'}</b></button>` : ''}`;
+}
+
+function convo() {
+  let h = `<div class="spacer"></div>
+  <div class="msg user">The reconnect test fails about 1 in 10 runs on CI. Find out why and fix it.</div>
+  <button class="fold" data-ov="tools"><span class="ft"><b>Read 4 files</b> · edited 1 · searched 2</span><span class="chev">›</span></button>
+  <div class="msg">CI schedules the first reconnect retry at 2 s, and the test only waits 2 s, so it loses the race about one run in ten. I raised the harness wait to 5 s.</div>
+  <div class="sub"><span class="a">shuttle</span><span class="x">Look for other tests with the same 2 s wait</span><span class="tag">Done</span></div>`;
+  if (step <= 2) h += `<div class="working"><span class="dot run"></span>Working · 1m ${[12,20,31][step]}s</div>`;
+  if (step >= 3) h += `<div class="msg">None of the other tests wait on a reconnect. Running the contract tests to check the fix holds.</div>`;
+  if (step >= 4) h += `<button class="fold" data-ov="tools"><span class="ft"><b>Ran dotnet test</b> · <span class="ok">41 passed</span></span><span class="chev">›</span></button>
+    <div class="msg">All 41 pass, and 20 runs in a row came back green.</div>`;
+  if (step === 5) h += `
+    <div class="answered">Asked · Open the PR now, or after the E2E tests? → <b>Wait for E2E, then open it</b> ✓</div>
+    <div class="msg user">Also run the E2E SignalR tests before you open the PR.</div>
+    <button class="fold" data-ov="tools"><span class="ft"><b>Ran dotnet test tests/WeaveFleet.E2E</b> · <span class="ok">12 passed</span></span><span class="chev">›</span></button>
+    <div class="msg">E2E passes too. I opened a draft pull request.</div>
+    <div class="prcard"><div class="top"><b>#252</b><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Wait 5 s for the reconnect in the test harness</span></div>
+      <div class="top"><span class="pill draft">Draft</span><span class="pill pend">Checks running</span><span style="color:var(--muted);font-size:11.5px">1 file · <span class="add">+4</span> <span class="del">−1</span></span></div>
+      <div class="row2"><button class="b" data-ov="diff">Review changes</button><button class="b">Open on GitHub</button></div></div>
+    <div class="recap">recap: harness waits 5 s for reconnect; 41 contract and 12 E2E tests pass; draft PR #252.</div>`;
+  return `<div class="convo" id="convo">${h}</div>`;
+}
+
+function composer({ typing = false, busy = true } = {}) {
+  const field = typing
+    ? `<span class="field typed">Also run the E2E SignalR tests before you open the PR<span class="caret"></span></span>`
+    : `<button class="field" data-go="1">Type a message…</button>`;
+  const btn = typing
+    ? `<button class="qb" data-go="2" style="height:32px;border-radius:999px;padding:0 10px">Send now</button><button class="sendq" data-go="2">Queue</button>`
+    : busy ? `<button class="round stop" aria-label="Stop">${I.stop}</button>`
+           : `<button class="round send" aria-label="Send">${I.up}</button>`;
+  return `<div class="composer ${typing ? 'focus' : ''}">
+    ${typing ? `<div class="chips"><button class="chip" data-ov="agent">Agent <b>loom</b></button><button class="chip" data-ov="model"><b>Opus 5.5</b></button><button class="chip" data-ov="model">Effort <b>high</b></button></div>` : ''}
+    ${typing
+      ? `<span class="field typed full">Also run the E2E SignalR tests before you open the PR<span class="caret"></span></span><div class="crow actions"><button class="round plus" aria-label="Add" data-ov="plus">${I.plus}</button>${btn}</div>`
+      : `<div class="crow"><button class="round plus" aria-label="Add" data-ov="plus">${I.plus}</button>${field}${btn}</div>`}
+  </div>
+  ${typing ? `<p class="qhint">Queue sends it when the agent finishes. Send now: it reads it at its next step.</p>` : ''}`;
+}
+
+const queued = `<div class="queued"><span class="lbl">Next</span><span class="x">Also run the E2E SignalR tests before you open the PR</span><button class="qb">Send now</button><button class="qb" aria-label="Remove">✕</button></div>`;
+
+function dock() {
+  if (step === 0) return `<div class="dock">${composer()}</div>`;
+  if (step === 1) return `<div class="dock">${composer({ typing: true })}</div>`;
+  if (step === 2) return `<div class="dock">${queued}${composer()}</div>`;
+  if (step === 3) {
+    if (deferred) return `<div class="dock">${queued}<button class="fold" data-undefer style="border-color:color-mix(in srgb,var(--waiting) 50%,transparent)"><span class="ft"><span class="dot wait"></span><b>Wants to run dotnet test</b></span><span class="chev">Answer ›</span></button>${composer()}</div>`;
+    return `<div class="dock ask">
+      <div class="askhead"><span class="dot wait"></span>Run a command<span class="needs">Needs you</span></div>
+      <div class="cmd"><span class="dim">~/src/weave-fleet $ </span>dotnet test tests/WeaveFleet.IntegrationTests --filter SignalREventContractTests</div>
+      <button class="big primary" data-go="4">Allow once</button>
+      <button class="big" data-go="4"><span class="bl">Don't ask again for <code>dotnet test</code></span><span class="sc">this session</span></button>
+      ${denyOpen
+        ? `<div class="composer focus"><div class="crow"><span class="field typed">Run only the reconnect test, not the whole suite<span class="caret"></span></span><button class="sendq" style="background:var(--error)">Deny</button></div></div>`
+        : `<button class="big deny" data-deny>Deny, and tell the agent what to do instead…</button>`}
+      <button class="later" data-defer>Later: let me read first</button>
+    </div>`;
+  }
+  if (step === 4) {
+    const opts = ['Open it as a draft now', 'Wait for E2E, then open it', 'Something else…'];
+    return `<div class="dock ask">
+      <div class="askhead"><span class="dot wait"></span>Question<span class="needs">Needs you</span></div>
+      <p style="font-size:13px;font-weight:500">Open the PR now, or after the E2E tests?</p>
+      ${opts.map((o, i) => `<button class="big ${sel === i ? 'sel' : ''}" data-sel="${i}"><span class="radio"></span>${o}</button>`).join('')}
+      <div class="row2"><button class="b">Skip</button><button class="b primary" data-go="5">Send answer</button></div>
+    </div>`;
+  }
+  return `<div class="dock">${composer({ busy: false })}</div>`;
+}
+
+const kbd = `<div class="kbd">${[10,9,7].map((n,r)=>`<div class="krow">${r===2?'<i class="m"></i>':''}${'<i></i>'.repeat(n)}${r===2?'<i class="m"></i>':''}</div>`).join('')}<div class="krow"><i class="m"></i><i class="m"></i><i class="w"></i><i class="m"></i></div></div>`;
+
+function sheet() {
+  if (!overlay) return '';
+  const wrap = (inner) => `<div class="scrim" data-close></div><div class="sheet"><div class="grab"></div>${inner}</div>`;
+  if (overlay === 'tools') return wrap(`<h4>Steps in this turn</h4>
+    <div class="tl">
+      <div><span class="k">read</span><span class="p">tests/WeaveFleet.E2E/SignalRTransportTests.cs</span></div>
+      <div><span class="k">read</span><span class="p">client/src/composables/use-signalr-socket.ts</span></div>
+      <div><span class="k">search</span><span class="p">"WaitForReconnect" · 3 matches</span></div>
+      <div><span class="k">read</span><span class="p">tests/…/TestHarness.cs</span></div>
+      <button class="fold" data-ov="diff" style="margin:4px 0"><span style="font-family:var(--mono);font-size:10.5px;width:42px;flex:none">edit</span><span class="ft"><b>tests/…/TestHarness.cs</b></span><span class="add">+4</span><span class="del">−1</span><span>›</span></button>
+      ${step >= 4 ? '<div><span class="k">run</span><span class="p">dotnet test … · 41 passed · 38 s</span></div>' : ''}
+    </div>`);
+  if (overlay === 'diff') return wrap(`<div class="seg"><span class="on">Changes</span><span>Files</span></div>
+    <h4 style="font-family:var(--mono);font-size:12px">tests/WeaveFleet.E2E/TestHarness.cs <span class="add">+4</span> <span class="del">−1</span></h4>
+    <div class="diff">
+      <div>  public async Task WaitForReconnect(</div>
+      <div class="d">-     var timeout = TimeSpan.FromSeconds(2);</div>
+      <div class="a">+     // CI's first retry lands at 2 s; give it</div>
+      <div class="a">+     // room so the test doesn't race it.</div>
+      <div class="a">+     var timeout = TimeSpan.FromSeconds(5);</div>
+      <div class="a">+     _log.LogDebug("reconnect wait {T}", timeout);</div>
+      <div>      await _hub.WaitForStateAsync(</div>
+    </div>
+    <p style="font-size:12px;color:var(--muted)">Read-only. Swipe down to go back.</p>`);
+  if (overlay === 'plus') return wrap(`<h4>Add to the message</h4><div class="menu">
+      <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M21 17l-5-5-8 7"/></svg>Photo or screenshot<span class="s">up to 5</span></button>
+      <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Camera</button>
+      <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4"/></svg>A file from hangar<span class="s">@</span></button>
+      <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-5-6-5M12 19h8"/></svg>Run a command<span class="s">!</span></button>
+      <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Side question<span class="s">/btw</span></button>
+    </div>`);
+  if (overlay === 'model') return wrap(`<h4>Model for this message</h4><div class="menu">
+      <button><b>Claude Opus 5.5</b><span class="s">✓</span></button><button>Claude Sonnet 5</button><button>GPT-5.5</button></div>
+      <h4>Effort</h4><div class="seg"><span>Low</span><span>Medium</span><span class="on">High</span></div>`);
+  if (overlay === 'agent') return wrap(`<h4>Agent</h4><div class="menu">
+      <button><b>loom</b><span class="s">✓ orchestrator</span></button><button>shuttle<span class="s">implementation</span></button><button>pattern<span class="s">planner</span></button></div>`);
+  if (overlay === 'plan') return wrap(`<h4>Plan · 3 of 5</h4><div class="tl">
+      <div><span class="k" style="color:var(--running)">done</span><span class="p">Reproduce the flaky failure</span></div>
+      <div><span class="k" style="color:var(--running)">done</span><span class="p">Find why the reconnect races</span></div>
+      <div><span class="k" style="color:var(--running)">done</span><span class="p">Raise the harness wait</span></div>
+      <div><span class="k" style="color:var(--accent)">next</span><span class="p"><b>Run the contract tests</b></span></div>
+      <div><span class="k">·</span><span class="p">Open the pull request</span></div></div>`);
+  if (overlay === 'menu') return wrap(`<h4>Fix flaky SignalR reconnect test</h4><div class="menu">
+      <button>Changes<span class="s">1 file</span></button>
+      <button>Files</button>
+      <button>Side question<span class="s">/btw</span></button>
+      <button>Fork from here</button>
+      <button>Rename</button>
+      <button>Open on my computer</button>
+      <button>Archive</button>
+      ${step < 5 ? '<button class="red">Stop the agent</button>' : ''}
+    </div>`);
+  return '';
+}
+
+function render() {
+  const s = document.getElementById('screen');
+  s.innerHTML = header() + convo() + dock() + (step === 1 || (step === 3 && denyOpen) ? kbd : '') + sheet();
+  const c = document.getElementById('convo'); c.scrollTop = c.scrollHeight;
+  document.getElementById('steps').innerHTML = steps.map((st, i) =>
+    `<button class="step-btn" data-step="${i}" ${i === step ? 'aria-current="step"' : ''}><span class="n">0${i + 1}</span><span><b>${st.t}</b><span class="d">${st.d}</span></span></button>`).join('');
+  document.getElementById('explain').innerHTML = `<h3>${steps[step].t}</h3><ul>${steps[step].x.map(x => `<li>${x}</li>`).join('')}</ul>`;
+  document.getElementById('prev').disabled = step === 0;
+  document.getElementById('next').textContent = step === steps.length - 1 ? 'Start again' : 'Next ›';
+}
+function go(n) { step = n; overlay = null; denyOpen = false; deferred = false; sel = 1; render(); }
+
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('button, [data-close]'); if (!t) return;
+  if (t.dataset.step) return go(+t.dataset.step);
+  if (t.id === 'next') return go(step === steps.length - 1 ? 0 : step + 1);
+  if (t.id === 'prev') return go(Math.max(0, step - 1));
+  if ('close' in t.dataset) { overlay = null; return render(); }
+  if (t.dataset.ov) { overlay = t.dataset.ov; return render(); }
+  if (t.dataset.go) return go(+t.dataset.go);
+  if ('deny' in t.dataset) { denyOpen = true; return render(); }
+  if ('defer' in t.dataset) { deferred = true; return render(); }
+  if ('undefer' in t.dataset) { deferred = false; return render(); }
+  if (t.dataset.sel) { sel = +t.dataset.sel; return render(); }
+});
+render();
+</script>
+</body>
+</html>

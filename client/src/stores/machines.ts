@@ -13,6 +13,7 @@ import {
   switchToMachine,
   type MachineConnection,
 } from "@/lib/machines";
+import { readCredentialsSync } from "@/lib/device-credentials";
 
 /** The machine contract this client speaks (`apiVersion` in `GET /api/machine`). */
 export const SUPPORTED_MACHINE_API_VERSION = 1;
@@ -28,6 +29,8 @@ export interface MachineInfo {
   authMode: string;
   remoteReachable: boolean;
   requiresToken: boolean;
+  /** The address phones should use for this machine, when someone saved one. */
+  publicUrl?: string | null;
 }
 
 /** What `GET /api/machine/access` says: how other devices reach the home machine. */
@@ -62,6 +65,27 @@ export interface MachineSessions {
   loadedAt: number | null;
   loading: boolean;
 }
+
+/** Set once this browser's own list has been copied to the server, so it's never imported twice. */
+export const MACHINES_IMPORTED_KEY = "weave:machines-imported";
+
+/** A machine as `GET /api/machines` lists it; the token only for the owner. */
+interface ServerMachine {
+  id: string;
+  name: string;
+  baseUrl: string;
+  os: string | null;
+  status: string;
+  addedAt: string;
+  lastSeenAt: string | null;
+  token: string | null;
+}
+
+/**
+ * Where the list lives: `server` (home keeps it; this browser caches it), `device` (a paired phone reads it without
+ * tokens and uses its own grants), or `local` (home is too old to keep one: this browser's own list, as before).
+ */
+export type MachineListSource = "pending" | "server" | "device" | "local";
 
 const POLL_INTERVAL_MS = 15_000;
 /** How often a live machine that isn't home is asked whether it's still there. */
@@ -157,6 +181,107 @@ export const useMachinesStore = defineStore("machines", () => {
    */
   const liveReachable = shallowRef(true);
 
+  /** Where the list comes from; see {@link MachineListSource}. */
+  const source = shallowRef<MachineListSource>("pending");
+
+  function fromServer(machine: ServerMachine): MachineConnection | null {
+    const token = machine.token ?? readCredentialsSync()?.grants.find((grant) => grant.machineId === machine.id)?.token ?? null;
+    if (!token) return null;
+    return { id: machine.id, name: machine.name, baseUrl: machine.baseUrl, token, os: machine.os ?? undefined, addedAt: machine.addedAt };
+  }
+
+  /**
+   * Reads the list from home. The first time, machines only this browser knew (from before the list moved to the
+   * server) are copied up. Home too old to keep a list (404) leaves this browser's own list in charge.
+   */
+  async function syncFromServer(): Promise<void> {
+    let response: Response;
+    try {
+      response = await fetchOnMachine(null, "/api/machines");
+    } catch {
+      source.value = "local";
+      return;
+    }
+    if (!response.ok) {
+      source.value = "local";
+      return;
+    }
+
+    let listed: ServerMachine[];
+    try {
+      const body = await response.json() as { machines?: unknown };
+      if (!Array.isArray(body?.machines)) throw new Error("not a machine list");
+      listed = body.machines as ServerMachine[];
+    } catch {
+      source.value = "local";
+      return;
+    }
+    const owner = listed.every((machine) => machine.token !== null);
+    if (!owner) {
+      source.value = "device";
+      connections.value = listed.map(fromServer).filter((connection): connection is MachineConnection => connection !== null);
+      return;
+    }
+
+    const missing = connections.value.filter((local) => !listed.some((remote) => remote.id === local.id));
+    if (missing.length && !alreadyImported()) {
+      const imported = await importToServer(missing);
+      if (imported) listed = imported;
+    }
+    markImported();
+    source.value = "server";
+    connections.value = listed.map(fromServer).filter((connection): connection is MachineConnection => connection !== null);
+    persist();
+  }
+
+  function alreadyImported(): boolean {
+    try {
+      return localStorage.getItem(MACHINES_IMPORTED_KEY) === "true";
+    } catch {
+      return false;
+    }
+  }
+
+  function markImported(): void {
+    try {
+      localStorage.setItem(MACHINES_IMPORTED_KEY, "true");
+    } catch {
+      // Without storage the next load imports again, which is harmless: import is idempotent.
+    }
+  }
+
+  async function importToServer(machines: readonly MachineConnection[]): Promise<ServerMachine[] | null> {
+    try {
+      const response = await fetchOnMachine(null, "/api/machines/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ machines }),
+      });
+      return response.ok ? ((await response.json()) as { machines: ServerMachine[] }).machines : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Copies a change to home's list. The browser already checked the machine, so home just keeps it. */
+  async function saveToServer(connection: MachineConnection): Promise<void> {
+    if (source.value !== "server") return;
+    await importToServer([connection]);
+  }
+
+  async function removeFromServer(id: string): Promise<void> {
+    if (source.value !== "server") return;
+    try {
+      await fetchOnMachine(null, `/api/machines/${encodeURIComponent(id)}`, { method: "DELETE" });
+    } catch {
+      // Home will still list it; the next add or forget tries again.
+    }
+  }
+
+  const ready = syncFromServer().catch(() => {
+    source.value = "local";
+  });
+
   /** Whether the client knows any machine besides home. Everything machine-shaped hides until it does. */
   const hasMachines = computed(() => connections.value.length > 0);
 
@@ -224,6 +349,7 @@ export const useMachinesStore = defineStore("machines", () => {
       ? connections.value.map((candidate) => candidate.id === info.id ? connection : candidate)
       : [...connections.value, connection];
     persist();
+    await saveToServer(connection);
     void refreshMachine(connection.id);
     return connection;
   }
@@ -235,6 +361,7 @@ export const useMachinesStore = defineStore("machines", () => {
     others.value = rest;
     saveCachedSessions(rest);
     persist();
+    void removeFromServer(id);
     // Working in the machine that's gone: go home.
     if (liveKey === id) switchToMachine(null, "/");
   }
@@ -263,6 +390,8 @@ export const useMachinesStore = defineStore("machines", () => {
   function updateConnection(id: string, patch: Partial<MachineConnection>): void {
     connections.value = connections.value.map((connection) => connection.id === id ? { ...connection, ...patch } : connection);
     persist();
+    const updated = connections.value.find((connection) => connection.id === id);
+    if (updated) void saveToServer(updated);
   }
 
   /** Swaps a machine's token for a new one after checking it works. */
@@ -276,9 +405,11 @@ export const useMachinesStore = defineStore("machines", () => {
   }
 
   /** How other devices reach the home machine. */
-  async function loadHomeAccess(): Promise<MachineAccess | null> {
+  /** How other devices reach home. Null on an older Fleet, or "device" when this browser is a paired device, which may not manage access. */
+  async function loadHomeAccess(): Promise<MachineAccess | "device" | null> {
     const response = await fetchOnMachine(null, "/api/machine/access");
     if (response.status === 404) return null;
+    if (response.status === 403) return "device";
     if (!response.ok) throw new Error(await readError(response, "Couldn't read this machine's access."));
     return await response.json() as MachineAccess;
   }
@@ -386,6 +517,9 @@ export const useMachinesStore = defineStore("machines", () => {
 
   return {
     connections,
+    source,
+    ready,
+    syncFromServer,
     home,
     others,
     liveKey,

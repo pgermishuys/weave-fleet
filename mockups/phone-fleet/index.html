@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#F3F2EF">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Fleet">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<title>Fleet on your phone, in Fleet's look</title>
+<script>
+  (function () {
+    var t = localStorage.getItem("fleet-mock-theme") || "auto";
+    if (t === "auto") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0d0d10" : "#F3F2EF";
+  })();
+</script>
+<link rel="stylesheet" href="fleet.css">
+<link rel="stylesheet" href="pages.css">
+</head>
+<body class="doc">
+<div class="doc-top" style="max-width:640px"><img src="icons/weave-logo.png" alt="Fleet"><span style="font-weight:600">Phone mockups</span><a class="btn btn--outline btn--sm" href="compare.html">Compare</a></div>
+<main class="sheetdoc">
+<h1>Fleet on your phone, in Fleet's look</h1>
+<p class="lede">The same Fleet you have open on your computer, at thumb size: Inter, Fleet's surfaces and hairlines, its status glyphs, the permission and question cards, the composer and the tool rows. One design on iPhone and Android. Everything you can drag, swipe or pull still moves the way the native round did. Nothing here talks to Fleet; it's all pretend data.</p>
+<div class="cta"><a class="btn btn--primary" href="flow.html">Open the app mockup</a><a class="btn btn--outline" href="compare.html">Desktop, today, proposed</a></div>
+<p class="note">Best on your phone. For the full effect add it to your Home Screen (Safari: Share, then Add to Home Screen; Chrome: menu, then Add to Home screen) and open "Fleet" from there: full screen, and swipe back without Safari's own gesture getting in the way.</p>
+
+<h2>What makes it Fleet</h2>
+<div class="card carry">
+  <div><b>Surfaces</b><span>The window chrome with a panel floating on it, as desktop draws the sidebar and conversation: warm <code class="inline-code">#F3F2EF</code> around white panels in light, <code class="inline-code">#0d0d10</code> → <code class="inline-code">#141418</code> → <code class="inline-code">#1b1b20</code> in dark. Hairline borders are translucent text colour, not grey lines.
+    <span class="swatches"><span class="sw"><i style="background:#F3F2EF"></i>chrome</span><span class="sw"><i style="background:#fff"></i>panel</span><span class="sw"><i style="background:#0d0d10"></i>chrome</span><span class="sw"><i style="background:#141418"></i>panel</span><span class="sw"><i style="background:#1b1b20"></i>card</span><span class="sw"><i style="background:var(--accent)"></i>accent</span><span class="sw"><i style="background:var(--waiting)"></i>waiting</span></span></span></div>
+  <div><b>Type</b><span>Inter at Fleet's weights (500 for rows and buttons, 600 for titles, never 700), JetBrains Mono for paths and commands. Desktop sizes scaled about 1.15×: body 16 (14), rows 15 (13), meta 13 (12), page title 24/600 (22/600).</span></div>
+  <div><b>Status</b><span>Desktop's glyphs, colour only where you're needed:
+    <span class="glyphs"><span><span class="glyph glyph--working"><i></i><i></i><i></i><i></i></span>Working</span><span><span class="glyph glyph--waiting"></span>Needs you</span><span><span class="glyph glyph--quiet"></span>Finished</span><span><span class="glyph glyph--error"></span>Failed</span></span></span></div>
+  <div><b>Components</b><span>The permission card (amber 5% tint, numbered choices), the question card, one-line tool rows in a tinted box, user messages as a hairline bubble (not an accent blob), the composer frame with Agent and Model under the text, the dropdown menu, the undo toast, the session row with its glyph and quiet time, Settings cards with uppercase labels.</span></div>
+  <div><b>Shape</b><span>Radii 10 / 12 / 16 (desktop's 8 / 10 / 12 / 14 stepped up for 44px targets); rectangular buttons with ui/button's primary and outline variants; pills only where desktop uses them (the machine chip, Undo).</span></div>
+  <div><b>Gone</b><span>iOS glass bars, large-title collapse into a glass bar, the floating capsule tab bar, Material 3 bars and switches, ripples, the card-stack recess behind sheets, capsule buttons, accent-filled message bubbles, the system font.</span></div>
+</div>
+
+<h2>The flow</h2>
+<div class="card">
+  <div class="step"><span class="choice__n">1</span><div><div class="step__t"><a href="flow.html">Needs you</a></div>
+    <ul class="try"><li>Grey placeholders for a moment, then everything fades in without moving</li><li>Pull down: the Working glyph fills in dot by dot, then ticks while it refreshes</li><li>Allow once flips at once, then the card tidies away and the session joins Working</li><li>Swipe a Working or Finished row left to archive; Undo in the toast</li><li>Scroll: the page title moves into the bar beside the logo</li></ul></div></div>
+  <div class="step"><span class="choice__n">2</span><div><div class="step__t"><a href="flow.html#ask">Ask: More…</a></div>
+    <ul class="try"><li>Opens half way, sized to the card; drag it up, flick it down</li><li>It's the desktop permission card: 1 Allow once, 2 Don't ask again for <code class="inline-code">dotnet test *</code>, 3 Deny and say what instead</li><li><a href="flow.html#question">The question version</a>: tap an answer to send it, or type your own</li></ul></div></div>
+  <div class="step"><span class="choice__n">3</span><div><div class="step__t"><a href="flow.html#session">Session</a></div>
+    <ul class="try"><li>On iPhone, swipe right anywhere to go back</li><li>Tap a tool row (the Edit one) for its diff</li><li>Later folds the docked ask into "1 waiting · Review"</li><li>Allow once and watch the Bash row start, then the agent finish</li><li>Type a long message: the composer grows to five lines above the keyboard</li><li>⋯ then Run a command; <a href="flow.html#session-working">a session stuck for days</a> reads "13d 6h"</li></ul></div></div>
+  <div class="step"><span class="choice__n">4</span><div><div class="step__t"><a href="flow.html#new">New session</a></div>
+    <ul class="try"><li>New session (top right): the keyboard comes up with the sheet</li><li>Desktop's chips under the box: Machine, Folder, Where, Harness; each slides in a picker</li><li>Agent and Model sit in the composer, shimmering until the harness answers</li><li>Start: the sheet closes and the new session opens, "Starting on hangar"</li></ul></div></div>
+  <div class="step"><span class="choice__n">5</span><div><div class="step__t"><a href="flow.html#notify">Notifications</a></div>
+    <ul class="try"><li>A Settings page at thumb size: cards, uppercase labels, accent switches</li><li>Turn on, then Send a test notification and tap the banner: it opens the session</li></ul></div></div>
+  <div class="step"><span class="choice__n">6</span><div><div class="step__t"><a href="flow.html#pair">Pairing</a> and <a href="flow.html#answered">answered</a></div>
+    <ul class="try"><li>What a QR code from Settings → Machines opens, and the page an Allow once from a notification lands on</li><li><a href="flow.html#sessions">Sessions</a> are grouped by machine, as in the desktop sidebar (tap a machine to fold it); <a href="flow.html#machines">Machines</a> reads like Settings → Machines</li></ul></div></div>
+</div>
+
+<h2>Try the choices</h2>
+<div class="card" id="choices">
+  <div class="choice-row"><div class="choice-row__t">Theme</div><div class="choice-row__s">Fleet's Light and Dark (desktop's default pair).</div><div class="seg" data-pref="theme"><button data-v="auto">Auto</button><button data-v="light">Light</button><button data-v="dark">Dark</button></div></div>
+  <div class="choice-row"><div class="choice-row__t">Panel</div><div class="choice-row__s">Floating on the chrome with a 6px gap, like desktop's panels, or edge to edge.</div><div class="seg" data-pref="inset"><button data-v="on">Floating</button><button data-v="off">Edge to edge</button></div></div>
+  <div class="choice-row"><div class="choice-row__t">Ask docked in a session</div><div class="choice-row__s">Compact (Allow once, More…) or desktop's three numbered choices.</div><div class="seg" data-pref="docked"><button data-v="compact">Compact</button><button data-v="full">All three</button></div></div>
+</div>
+<p class="note">These change the app mockup and are saved on this phone.</p>
+
+<h2>Decisions for you</h2>
+<div class="card">
+  <div class="decision"><h3>1. Panel floating on the chrome, or edge to edge?</h3><ol><li>Floating: a 6px rim of chrome around a rounded panel, the bar and tab bar on the chrome</li><li>Edge to edge: the panel fills the width, rounded only at the top</li></ol><div class="rec"><b>Recommend 1.</b> It's the single strongest "this is Fleet" cue (most of all in light: white on warm grey), and 12px of width is cheap at 390. Set Panel above to compare.</div></div>
+  <div class="decision"><h3>2. The ask docked in a session</h3><ol><li>Compact: the command, Allow once and More… (the sheet has all three choices)</li><li>Desktop's three numbered choices, docked</li></ol><div class="rec"><b>Recommend 1.</b> The full card takes half the screen; compact leaves the conversation readable, and More… is the desktop card exactly.</div></div>
+  <div class="decision"><h3>3. Answering a question</h3><ol><li>Tap an answer and it's sent (the button flips to a tick at once)</li><li>As on desktop: pick, then Send answer</li></ol><div class="rec"><b>Recommend 1.</b> Desktop's two steps exist for the 1–3 keys; on a phone one tap is the point of answering from the inbox. Typing your own still has its own send.</div></div>
+</div>
+
+<h2>What a web app can't do natively</h2>
+<ul class="plain">
+  <li><b>Haptics on iPhone:</b> no API; the mockup uses the unofficial hidden-switch trick (iOS 18+). Android vibrates after your first tap.</li>
+  <li><b>Notifications on iPhone</b> need Fleet on the Home Screen (iOS 16.4+), and no action buttons on the notification itself.</li>
+  <li><b>Swipe back in a Safari tab</b> works from the middle of the page only; Safari owns the edge. From the Home Screen ours is the only one.</li>
+  <li><b>Keyboard:</b> no height or animation events; the app follows visualViewport, so the composer trails the keyboard slightly on iPhone.</li>
+</ul>
+
+<script>
+  document.addEventListener("touchstart", function () {}, { passive: true });
+  document.querySelectorAll(".seg[data-pref]").forEach(function (seg) {
+    var k = seg.dataset.pref, def = { theme: "auto", inset: "on", docked: "compact" }[k];
+    var cur = localStorage.getItem("fleet-mock-" + k) || def;
+    seg.querySelectorAll("button").forEach(function (b) {
+      b.setAttribute("aria-pressed", b.dataset.v === cur);
+      b.addEventListener("click", function () {
+        localStorage.setItem("fleet-mock-" + k, b.dataset.v);
+        seg.querySelectorAll("button").forEach(function (x) { x.setAttribute("aria-pressed", x === b); });
+        if (k === "theme") {
+          var t = b.dataset.v === "auto" ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") : b.dataset.v;
+          document.documentElement.dataset.theme = t;
+          document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0d0d10" : "#F3F2EF";
+        }
+      });
+    });
+  });
+</script>
+</main>
+</body>
+</html>

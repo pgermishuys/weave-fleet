@@ -19,6 +19,7 @@ using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.OpenApi;
+using Microsoft.AspNetCore.RateLimiting;
 using WeaveFleet.Api;
 using WeaveFleet.Api.Auth;
 using WeaveFleet.Api.Endpoints;
@@ -293,6 +294,8 @@ if (fleetOptions.Auth.Enabled)
     {
         options.AddPolicy("FleetUser", policy =>
             policy.RequireAuthenticatedUser());
+        options.AddPolicy(FleetClaims.MachineOwnerPolicy, policy =>
+            policy.RequireAuthenticatedUser().RequireAssertion(context => FleetClaims.IsOwner(context.User)));
     });
 
     // Cloud mode: IUserContext reads from HTTP claims
@@ -362,6 +365,20 @@ else
                 return Task.CompletedTask;
             };
 
+            // A paired device's cookie lasts only as long as the device: removed or expired, the next request fails.
+            options.Events.OnValidatePrincipal = async context =>
+            {
+                if (context.Principal is null || FleetClaims.DeviceIdOf(context.Principal) is not { } deviceId)
+                    return;
+
+                var deviceTokens = context.HttpContext.RequestServices.GetRequiredService<WeaveFleet.Application.Devices.DeviceTokenService>();
+                if (await deviceTokens.ValidateDeviceAsync(deviceId) is not null)
+                    return;
+
+                context.RejectPrincipal();
+                await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            };
+
             if (fleetOptions.Auth.TokenAuthEnabled)
             {
                 options.ForwardDefaultSelector = context =>
@@ -390,10 +407,41 @@ else
 
             policy.RequireAuthenticatedUser();
         });
+
+        // Managing access (the machine token, paired devices, the machine list) is for the owner: not a paired
+        // device, and not an agent.
+        options.AddPolicy(FleetClaims.MachineOwnerPolicy, policy =>
+        {
+            if (fleetOptions.Auth.TokenAuthEnabled)
+                policy.AddAuthenticationSchemes(
+                    CookieAuthenticationDefaults.AuthenticationScheme,
+                    BearerTokenHandler.SchemeName);
+
+            policy.RequireAuthenticatedUser();
+            policy.RequireAssertion(context => FleetClaims.IsOwner(context.User));
+        });
     });
 
     builder.Services.AddScoped<IUserContext, LocalUserContext>();
 }
+
+// A removed phone's hub connections and terminals close at once.
+builder.Services.AddSingleton<WeaveFleet.Api.Auth.DeviceConnections>();
+
+// ── Rate limits ──────────────────────────────────────────────────────────────
+// Pairing is open to anyone holding a code, so guesses are limited. Behind tailscale serve every caller arrives from
+// 127.0.0.1, so the window is shared by everyone: 10 requests a minute.
+builder.Services.AddSingleton<ManualCodeAttempts>();
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddFixedWindowLimiter(DeviceEndpoints.PairingRateLimitPolicy, limiter =>
+    {
+        limiter.PermitLimit = 10;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueLimit = 0;
+    });
+});
 
 // ── Antiforgery ──────────────────────────────────────────────────────────────
 builder.Services.AddAntiforgery(options =>
@@ -553,6 +601,7 @@ app.UseAgentRequests();
 app.UseRouting();
 
 app.UseCors();
+app.UseRateLimiter();
 
 // An unhandled exception answered by Kestrel goes out with its headers cleared, CORS ones included, so a page on
 // another machine saw a CORS failure instead of the 500. Handled here, inside CORS, the 500 keeps them. Development
@@ -661,8 +710,13 @@ app.UseDefaultFiles(); // Serves index.html for "/"
 
 // Hashed assets (e.g. /assets/index-abc123.js) get immutable long-lived cache.
 // Everything else (index.html) gets no-cache so browsers always fetch the latest entry point.
+// The web app manifest needs its own type for browsers to offer to install Fleet. The service worker (/sw.js) is
+// unhashed and must never be cached stale, so it falls under no-cache; it may control the whole origin.
+var staticContentTypes = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
+staticContentTypes.Mappings[".webmanifest"] = "application/manifest+json";
 app.UseStaticFiles(new StaticFileOptions
 {
+    ContentTypeProvider = staticContentTypes,
     OnPrepareResponse = ctx =>
     {
         var path = ctx.Context.Request.Path.Value ?? string.Empty;
@@ -674,6 +728,9 @@ app.UseStaticFiles(new StaticFileOptions
         {
             ctx.Context.Response.Headers.CacheControl = "no-cache";
         }
+
+        if (string.Equals(path, "/sw.js", StringComparison.OrdinalIgnoreCase))
+            ctx.Context.Response.Headers["Service-Worker-Allowed"] = "/";
     },
 });
 

@@ -215,6 +215,24 @@ public static class DependencyInjection
         // Singleton: holds which messages a session asked to hear back about, until the turn handling them ends.
         services.AddSingleton<SessionUpdates>();
         services.AddScoped<IQueuedPromptRepository, QueuedPromptRepository>();
+        // Singleton: devices belong to the machine, not a user, and the auth handler reads them on every request.
+        services.AddSingleton<IDeviceRepository, DeviceRepository>();
+        services.AddSingleton<WeaveFleet.Application.Devices.DeviceTokenService>();
+        services.AddSingleton<WeaveFleet.Application.Devices.PairingCodeStore>();
+        // Web Push: subscriptions, the machine's VAPID keys, and one sender per channel (webpush now).
+        services.AddSingleton<IPushSubscriptionRepository, PushSubscriptionRepository>();
+        services.AddSingleton(sp => new WeaveFleet.Application.Configuration.VapidKeyStore(sp.GetRequiredService<FleetOptions>().DatabasePath));
+        services.AddHttpClient(WeaveFleet.Infrastructure.Push.WebPushSender.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(15))
+            .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.SocketsHttpHandler { AllowAutoRedirect = false });
+        services.AddSingleton<WeaveFleet.Application.Push.IPushSender, WeaveFleet.Infrastructure.Push.WebPushSender>();
+        // Other machines, kept server-side: the phone's home machine watches them and gets the phone a token on each.
+        services.AddSingleton<IRemoteMachineRepository, RemoteMachineRepository>();
+        services.AddSingleton<WeaveFleet.Application.Machines.RemoteMachineService>();
+        services.AddHttpClient(WeaveFleet.Application.Machines.RemoteMachineService.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(5))
+            .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.SocketsHttpHandler { AllowAutoRedirect = false });
+        services.AddSingleton<WeaveFleet.Application.Machines.DeviceGrantService>();
+        services.AddSingleton<WeaveFleet.Infrastructure.Machines.RemoteMachineWatcher>();
+        services.AddHostedService(sp => sp.GetRequiredService<WeaveFleet.Infrastructure.Machines.RemoteMachineWatcher>());
         services.AddScoped<PromptQueueService>();
         // Singleton: the relay hands it every event; it sends a session's next queued message when its turn ends.
         services.AddSingleton<PromptQueueDispatcher>();
@@ -387,8 +405,12 @@ public static class DependencyInjection
         services.AddSingleton<IRecapPreference, RecapPreference>();
         services.AddSingleton<SessionRecapService>();
 
-        // SessionNotifier is singleton — remembers each session's last activity status between events.
-        services.AddSingleton<INotificationPreference, NotificationPreference>();
+        // SessionNotifier is singleton — remembers each session's last activity status between events. It hands what
+        // it decides to send to every sink: the open tabs, and phones through the push dispatcher.
+        services.AddSingleton<DeskPresenceTracker>();
+        services.AddSingleton<ISessionNotificationSink, BroadcastNotificationSink>();
+        services.AddSingleton<WeaveFleet.Application.Push.PushNotificationDispatcher>();
+        services.AddSingleton<ISessionNotificationSink>(sp => sp.GetRequiredService<WeaveFleet.Application.Push.PushNotificationDispatcher>());
         services.AddSingleton<SessionNotifier>();
 
         // EventBroadcaster is singleton — pub/sub hub shared across all requests

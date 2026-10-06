@@ -265,6 +265,41 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task A_session_notification_carries_its_kind_request_and_machine()
+    {
+        await _hub.InvokeAsync("SubscribeToSessionsTopicAsync");
+        var sink = _server.Services.GetServices<WeaveFleet.Application.Sessions.ISessionNotificationSink>()
+            .OfType<WeaveFleet.Application.Sessions.BroadcastNotificationSink>()
+            .Single();
+
+        await sink.HandleAsync(new SessionNotificationPayload
+        {
+            SessionId = "s1",
+            Reason = SessionNotificationReasons.NeedsYou,
+            Kind = SessionNotificationKinds.Permission,
+            RequestId = "perm-1",
+            MachineId = "hangar-id",
+            MachineName = "hangar",
+            Title = "Fix flaky SignalR reconnect test",
+            Body = "Wants to run dotnet test",
+        }, "local-user", CancellationToken.None);
+
+        var received = await WaitForEventAsync(TimeSpan.FromSeconds(5));
+        received.ShouldNotBeNull("No session_notification arrived");
+        received.Topic.ShouldBe("sessions");
+        received.Data.GetProperty("type").GetString().ShouldBe("session_notification");
+        var props = received.Data.GetProperty("properties");
+        props.GetProperty("sessionId").GetString().ShouldBe("s1");
+        props.GetProperty("reason").GetString().ShouldBe("needs_you");
+        props.GetProperty("kind").GetString().ShouldBe("permission");
+        props.GetProperty("requestId").GetString().ShouldBe("perm-1");
+        props.GetProperty("machineId").GetString().ShouldBe("hangar-id");
+        props.GetProperty("machineName").GetString().ShouldBe("hangar");
+        props.GetProperty("title").GetString().ShouldBe("Fix flaky SignalR reconnect test");
+        props.GetProperty("body").GetString().ShouldBe("Wants to run dotnet test");
+    }
+
+    [Fact]
     public async Task Hub_sends_activity_status_event_with_correct_shape()
     {
         var sessionId = await CreateSessionAsync();

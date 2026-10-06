@@ -41,7 +41,8 @@ public sealed class MachineIdentityStore
             var created = new MachineIdentity(
                 loaded is not null && Guid.TryParse(loaded.Id, out _) ? loaded.Id : Guid.NewGuid().ToString("N"),
                 loaded?.Name,
-                loaded?.AccessToken is { Length: >= MinimumTokenLength } token ? token : NewToken());
+                loaded?.AccessToken is { Length: >= MinimumTokenLength } token ? token : NewToken(),
+                loaded?.PublicUrl);
             Write(created);
             return _identity = created;
         }
@@ -107,7 +108,11 @@ public sealed class MachineIdentityStore
 /// <param name="Id">Stable id, a GUID without dashes. Never changes once made.</param>
 /// <param name="Name">The name someone gave this machine, or null to use the host name.</param>
 /// <param name="AccessToken">The token other devices use to reach this Fleet, unless the environment fixes one.</param>
-public sealed record MachineIdentity(string Id, string? Name, string? AccessToken);
+/// <param name="PublicUrl">
+/// The address a phone should use for this machine, e.g. <c>https://hangar.tail9c2e.ts.net</c> from
+/// <c>tailscale serve</c>. Pairing puts it in the QR code. Null until someone sets it.
+/// </param>
+public sealed record MachineIdentity(string Id, string? Name, string? AccessToken, string? PublicUrl = null);
 
 [JsonSerializable(typeof(MachineIdentity))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, WriteIndented = true)]

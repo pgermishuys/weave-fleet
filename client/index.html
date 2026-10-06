@@ -3,14 +3,32 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#0c0c0d" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F3F2EF" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0d0d10" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Weave Fleet" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Fleet" />
+    <meta name="format-detection" content="telephone=no" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
     <title>Weave Agent Fleet</title>
+    <script>
+      // The phone pages, before the first paint: the theme's background and status bar colour, so a dark phone
+      // never flashes white while the app loads. (The desktop pages paint their own.)
+      (function () {
+        if (!/^\/(phone|pair)(\/|$)/.test(location.pathname)) return;
+        var light = ["light", "solarized-light"], theme = "system";
+        try { theme = localStorage.getItem("weave:theme") || "system"; } catch (e) {}
+        var isLight = theme === "system" ? !matchMedia("(prefers-color-scheme: dark)").matches : light.indexOf(theme) >= 0;
+        var bg = isLight ? "#F3F2EF" : "#0d0d10";
+        document.documentElement.style.background = bg;
+        document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) { m.content = bg; });
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>

@@ -351,8 +351,7 @@ public sealed class HarnessEventRelayTests
         var publisher = new FakeEventPublisher();
         var notifier = new SessionNotifier(
             new SessionFocusTracker(),
-            broadcaster,
-            new NotificationsOn(),
+            [new BroadcastNotificationSink(broadcaster)],
             scopeFactory,
             NullLogger<SessionNotifier>.Instance);
         var relay = new HarnessEventRelay(
@@ -416,11 +415,6 @@ public sealed class HarnessEventRelayTests
             .Where(b => b.Type == SessionNotifier.EventType)
             .Select(b => (b.Payload.GetProperty("sessionId").GetString()!, b.Payload.GetProperty("reason").GetString()!))
             .ToList();
-    }
-
-    private sealed class NotificationsOn : INotificationPreference
-    {
-        public Task<bool> IsEnabledAsync(string userId, CancellationToken ct) => Task.FromResult(true);
     }
 
     // A pump that throws used to leave its session deaf until the session was woken again: no live

@@ -3,6 +3,7 @@ import { useRouter } from "@tanstack/vue-router";
 import { onGlobalEvent } from "@/composables/use-signalr-socket";
 import { usePreferencesStore } from "@/stores/preferences";
 import { isSessionNotificationEvent, type DomainEvent } from "@/lib/domain-events";
+import { useServiceWorker } from "@/composables/use-service-worker";
 
 /** The Settings → Features switch for desktop notifications. Off unless turned on. */
 export const DESKTOP_NOTIFICATIONS_PREFERENCE_KEY = "DesktopNotifications";
@@ -50,6 +51,7 @@ export function useSessionNotifications(): void {
   preferences.ensureLoaded();
   const router = useRouter();
   const enabled = computed(() => preferences.get(DESKTOP_NOTIFICATIONS_PREFERENCE_KEY, "false") === "true");
+  const { registration } = useServiceWorker();
 
   const unsubscribe = onGlobalEvent("sessions", (event: DomainEvent) => {
     if (!isSessionNotificationEvent(event) || !enabled.value) return;
@@ -61,6 +63,17 @@ export function useSessionNotifications(): void {
 
     // The server sent this because no tab was looking; make sure that's still true of this one.
     if (isLookingAt(sessionId, window.location.pathname)) return;
+
+    // With a service worker, it shows the notification (Android refuses a constructed one) and a click comes back
+    // as a "navigate" message.
+    if (registration.value) {
+      void registration.value.showNotification(payload.title || "Weave Fleet", {
+        body: payload.body ?? "",
+        tag: sessionId,
+        data: { url: `/sessions/${encodeURIComponent(sessionId)}` },
+      }).catch(() => undefined);
+      return;
+    }
 
     try {
       const notification = new Notification(payload.title || "Weave Fleet", {

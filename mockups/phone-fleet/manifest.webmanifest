@@ -1,0 +1,17 @@
+{
+  "id": "./flow.html?v=fleet",
+  "name": "Fleet (Fleet look mockup)",
+  "short_name": "Fleet",
+  "description": "Mockups of Fleet's phone app in Fleet's own look.",
+  "start_url": "./flow.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#F3F2EF",
+  "background_color": "#F3F2EF",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

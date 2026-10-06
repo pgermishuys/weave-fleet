@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#F3F2EF">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Fleet mock">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<title>Fleet on your phone: native feel</title>
+<script>
+  (function () {
+    var t = localStorage.getItem("fleet-mock-theme") || "auto";
+    if (t === "auto") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0d0d10" : "#F3F2EF";
+  })();
+</script>
+<link rel="stylesheet" href="native.css">
+<link rel="stylesheet" href="pages.css">
+</head>
+<body class="doc">
+<h1>Native feel</h1>
+<p class="lede">Mockups of Fleet's phone app that feel like an iPhone or Android app, not a web page. They're real and touch-driven: drag the sheets, swipe back, pull to refresh. Nothing talks to Fleet; it's all pretend data.</p>
+<div class="cta"><a class="btn btn--primary btn--big" href="flow.html" style="text-decoration:none">Open the app mockup</a></div>
+<p class="note">Best on your phone. For the full effect add it to your Home Screen first (Safari: Share, then Add to Home Screen; Chrome: menu, then Add to Home screen) and open "Fleet mock" from there: full screen, no browser bars, and swipe back without Safari's own gesture getting in the way.</p>
+
+<h2>The flow</h2>
+<div class="group">
+  <div class="row" data-href="flow.html"><span class="step-n">1</span><div class="row__main"><div class="row__title">Inbox</div>
+    <ul class="try"><li>Grey placeholders while it loads, then everything fades in without moving</li><li>Pull down to refresh; scroll and the big title folds into the bar</li><li>Tap Allow once: it flips at once, then the card tidies away</li><li>Swipe a Working or Finished row left to archive (Undo in the toast)</li><li>Tap Needs you again to jump to the top</li></ul></div></div>
+  <div class="row" data-href="flow.html#ask"><span class="step-n">2</span><div class="row__main"><div class="row__title">Ask</div>
+    <ul class="try"><li>The sheet opens half way; drag it up, flick it down to close</li><li>"Always allow" keeps <code>dotnet test</code> in one piece</li><li>Deny opens a box to type in; the sheet stays above the keyboard</li><li><a href="flow.html#question">The question version</a></li></ul></div></div>
+  <div class="row" data-href="flow.html#session"><span class="step-n">3</span><div class="row__main"><div class="row__title">Session</div>
+    <ul class="try"><li>On iPhone, swipe right anywhere on the page to go back</li><li>Later folds the ask into a small pill; tap it to bring it back</li><li>Allow once and watch the agent finish</li><li>Type a long message: the box grows to five lines and stays above the keyboard</li><li>••• then Run a command: the send button is grey until you type</li><li><a href="flow.html#session-working">A session stuck for days</a> reads "13d 6h"</li></ul></div></div>
+  <div class="row" data-href="flow.html"><span class="step-n">4</span><div class="row__main"><div class="row__title">New session</div>
+    <ul class="try"><li>Tap + (Android: New session): the keyboard comes up with the sheet</li><li>Start sits right above the keyboard</li><li>Agent and Model shimmer while they load, without pushing anything down</li><li>Tap Machine or Harness: the choice slides in; pick one and it slides back</li><li>Start: the sheet closes and the new session opens</li></ul></div></div>
+  <div class="row" data-href="flow.html#notify"><span class="step-n">5</span><div class="row__main"><div class="row__title">Notification setup</div>
+    <ul class="try"><li>Same text size as everything else; one Done</li><li>Turn on, flip a few switches</li><li>Send a test notification, then tap the banner: it opens the session</li></ul></div></div>
+</div>
+<div class="group" style="margin-top:14px"><a class="row row--accent" href="compare.html"><div class="row__main"><div class="row__title">Before and after</div><div class="row__sub">Today's screens next to these, rough edge by rough edge</div></div></a></div>
+
+<h2>Try the choices</h2>
+<p class="note" style="margin-top:-4px">These change the app mockup, so you can compare on one phone. They're saved on this phone.</p>
+<div class="group" id="choices">
+  <div class="choice"><div class="choice__t">Theme</div><div class="seg" data-pref="theme"><button data-v="auto">Auto</button><button data-v="light">Light</button><button data-v="dark">Dark</button></div></div>
+  <div class="choice"><div class="choice__t">Look</div><div class="choice__s">Auto follows your phone. Try the other one too.</div><div class="seg" data-pref="platform"><button data-v="auto">Auto</button><button data-v="ios">iPhone</button><button data-v="android">Android</button></div></div>
+  <div class="choice"><div class="choice__t">Typeface</div><div class="choice__s">System is San Francisco on iPhone and Roboto on Android. Inter is what desktop Fleet uses.</div><div class="seg" data-pref="font"><button data-v="system">System</button><button data-v="inter">Inter</button></div></div>
+  <div class="choice"><div class="choice__t">New session: Start button</div><div class="seg" data-pref="start"><button data-v="bottom">Above the keyboard</button><button data-v="top">Top right</button></div></div>
+</div>
+
+<h2>Decisions for you</h2>
+<div class="group">
+  <div class="decision"><h3>1. One look, or each platform's own?</h3><ol><li>Follow each platform: iOS 26 glass bars on iPhone; Material 3 on Android (back arrow, flat tab bar with a pill, a New session button at the bottom right, Material switches, ripples)</li><li>The iPhone look everywhere</li></ol><div class="rec"><b>Recommend 1.</b> Same screens and layout; only the bars, back button, switches, press feedback and pull-to-refresh spinner change. Set Look to Android above to see it.</div></div>
+  <div class="decision"><h3>2. Typeface on the phone</h3><ol><li>The system font (San Francisco / Roboto), which follows the phone's text size setting on iPhone</li><li>Inter, as on desktop</li></ol><div class="rec"><b>Recommend 1.</b> It's the single biggest "this is an app" cue, and it's free.</div></div>
+  <div class="decision"><h3>3. The ask docked in a session</h3><ol><li>Compact: Allow once and More… (Always allow and Deny are one tap away, in the sheet)</li><li>All three choices docked, as today</li></ol><div class="rec"><b>Recommend 1.</b> It leaves room for the conversation and uses the same card as the inbox.</div></div>
+  <div class="decision"><h3>4. New session</h3><ol><li>A sheet over the inbox (swipe down or Cancel to back out), Start above the keyboard</li><li>The same sheet with Start top right, like Mail's Send</li><li>A pushed page, as today</li></ol><div class="rec"><b>Recommend 1.</b> Starting a session is a "compose" action, and the big Start is where your thumb already is.</div></div>
+  <div class="decision"><h3>5. Swipe actions</h3><ol><li>Swipe left on a session to archive, with Undo</li><li>Also swipe right on an ask to Allow once</li><li>No swipe actions</li></ol><div class="rec"><b>Recommend 1.</b> Never approve a command with a swipe; it's too easy to do by accident.</div></div>
+  <div class="decision"><h3>6. Return key in the message box</h3><ol><li>Return adds a new line; the arrow sends</li><li>Return sends</li></ol><div class="rec"><b>Recommend 1</b>, as in Messages and the Claude app. The Run a command box is the exception: Return runs it.</div></div>
+  <div class="decision"><h3>7. "2 machines" in the inbox header</h3><ol><li>A status line under the big title ("hangar and falcon online", amber when one can't be reached)</li><li>Drop it; the Machines tab covers it</li></ol><div class="rec"><b>Recommend 1.</b> Whether Fleet can reach your machines is worth a glance, but it shouldn't sit among the buttons.</div></div>
+  <div class="decision"><h3>8. Haptics on iPhone</h3><ol><li>Use the hidden-switch trick (iOS 18 and later) for a few confirmations</li><li>None on iPhone</li></ol><div class="rec"><b>Recommend 1, kept small.</b> It's unofficial and could stop working, but then it simply goes quiet. The mockup uses it, so you can feel it.</div></div>
+</div>
+
+<h2>What a web app can't do natively</h2>
+<ul class="limits">
+  <li><b>Haptics on iPhone:</b> there's no API. Only the unofficial switch trick above. Android has vibration, and Chrome only allows it after you've tapped the page.</li>
+  <li><b>Notifications on iPhone</b> need Fleet on the Home Screen (iOS 16.4+). No Allow once button on the notification itself on iPhone (Android can show action buttons). No Live Activities, Dynamic Island, widgets or notification grouping.</li>
+  <li><b>Swipe back in Safari:</b> Safari owns the left edge, so in a browser tab our swipe works from the middle of the page only. From the Home Screen there's no system back at all, so ours is the only one. Android's back gesture works through history.</li>
+  <li><b>Keyboard:</b> no keyboard height or animation events; we follow visualViewport, which on iPhone updates as the keyboard settles, so the composer can trail the keyboard rather than ride it. Safari's form bar (arrows and Done) may still sit above the keyboard.</li>
+  <li><b>Status bar and launch:</b> the Home Screen app picks its status bar style at launch; theme-color can't recolour it later on iPhone. The splash screen is one colour (light or dark, not both), unless we ship a startup image per iPhone size.</li>
+  <li><b>Sheets, push and pop</b> are drawn by us, not the system: tuned to feel close (velocity, rubber band, detents), but not identical. iOS 26 glass is an approximation with blur; no refraction.</li>
+  <li><b>Browser bars:</b> in a Safari tab the address bar doesn't shrink as you scroll, because the app scrolls inside itself (needed for the fixed bars and keyboard handling). From the Home Screen there are no bars.</li>
+  <li><b>Background:</b> no background refresh; the phone may drop the page from memory, so Fleet must come back instantly from cache.</li>
+</ul>
+<p class="note">What does work: Home Screen icon and full screen, app icon badge (iPhone 16.4+ and Android), web push, the phone's dark mode, safe areas, momentum scrolling and rubber banding, and Dynamic Type through the system font.</p>
+
+<script>
+  document.addEventListener("touchstart", function () {}, { passive: true }); // lets :active show on iPhone
+  document.querySelectorAll(".seg[data-pref]").forEach(function (seg) {
+    var k = seg.dataset.pref, def = { theme: "auto", platform: "auto", font: "system", start: "bottom" }[k];
+    var cur = localStorage.getItem("fleet-mock-" + k) || def;
+    seg.querySelectorAll("button").forEach(function (b) {
+      b.setAttribute("aria-pressed", b.dataset.v === cur);
+      b.addEventListener("click", function () {
+        localStorage.setItem("fleet-mock-" + k, b.dataset.v);
+        seg.querySelectorAll("button").forEach(function (x) { x.setAttribute("aria-pressed", x === b); });
+        if (k === "theme") {
+          var t = b.dataset.v === "auto" ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") : b.dataset.v;
+          document.documentElement.dataset.theme = t;
+          document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0d0d10" : "#F3F2EF";
+        }
+      });
+    });
+  });
+  // a whole row opens its step; a link inside it wins
+  document.querySelectorAll(".row[data-href]").forEach(function (r) {
+    r.addEventListener("click", function (e) { if (!e.target.closest("a")) location.href = r.dataset.href; });
+  });
+</script>
+</body>
+</html>

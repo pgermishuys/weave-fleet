@@ -72,6 +72,96 @@ describe("machines store", () => {
     vi.useRealTimers();
   });
 
+  describe("the list on the server", () => {
+    function serverMachine(connection: MachineConnection, withToken = true) {
+      return { id: connection.id, name: connection.name, baseUrl: connection.baseUrl, os: connection.os ?? null, status: "online", addedAt: connection.addedAt, lastSeenAt: null, token: withToken ? connection.token : null };
+    }
+
+    it("copies this browser's machines to home once, then reads them from there", async () => {
+      saveMachines([falcon]);
+      const imports: unknown[] = [];
+      routes["/api/machines"] = () => json({ machines: [] });
+      routes["/api/machines/import"] = (_, init) => {
+        imports.push(JSON.parse(String(init.body)));
+        return json({ machines: [serverMachine(falcon)] });
+      };
+
+      const store = useMachinesStore();
+      await store.ready;
+
+      expect(store.source).toBe("server");
+      expect(imports).toHaveLength(1);
+      expect((imports[0] as { machines: MachineConnection[] }).machines.map((m) => m.id)).toEqual([falcon.id]);
+      expect(store.connections.map((c) => c.id)).toEqual([falcon.id]);
+      expect(localStorage.getItem("weave:machines-imported")).toBe("true");
+
+      // Another load doesn't import again, even if home has since dropped the machine.
+      setActivePinia(createPinia());
+      const again = useMachinesStore();
+      await again.ready;
+      expect(imports).toHaveLength(1);
+      expect(again.connections).toEqual([]);
+      expect(loadMachines()).toEqual([]);
+    });
+
+    it("takes home's list over the cached one", async () => {
+      routes["/api/machines"] = () => json({ machines: [serverMachine(falcon)] });
+
+      const store = useMachinesStore();
+      await store.ready;
+
+      expect(store.connections.map((c) => c.token)).toEqual([falcon.token]);
+      expect(loadMachines().map((m) => m.id)).toEqual([falcon.id]);
+    });
+
+    it("keeps this browser's own list when home is too old to keep one", async () => {
+      saveMachines([falcon]);
+
+      const store = useMachinesStore();
+      await store.ready;
+
+      expect(store.source).toBe("local");
+      expect(store.connections.map((c) => c.id)).toEqual([falcon.id]);
+      expect(localStorage.getItem("weave:machines-imported")).toBeNull();
+    });
+
+    it("writes adds and forgets through to home", async () => {
+      const calls: string[] = [];
+      routes["/api/machines"] = () => json({ machines: [] });
+      routes["/api/machines/import"] = (_, init) => {
+        calls.push(`import ${(JSON.parse(String(init.body)) as { machines: MachineConnection[] }).machines.map((m) => m.id).join(",")}`);
+        return json({ machines: [] });
+      };
+      routes[`/api/machines/${falcon.id}`] = (_, init) => {
+        calls.push(`${init.method} ${falcon.id}`);
+        return new Response(null, { status: 204 });
+      };
+      const store = useMachinesStore();
+      await store.ready;
+
+      await store.addMachine("http://100.64.90.72:2113", falcon.token);
+      store.forgetMachine(falcon.id);
+      await vi.waitFor(() => expect(calls).toContain(`DELETE ${falcon.id}`));
+
+      expect(calls[0]).toBe(`import ${falcon.id}`);
+    });
+
+    it("on a paired phone, lists only machines it has a key for", async () => {
+      const osprey = { ...falcon, id: "oooooooooooooooooooooooooooooooo", name: "osprey", baseUrl: "https://osprey.ts.net" };
+      routes["/api/machines"] = () => json({ machines: [serverMachine(falcon, false), serverMachine(osprey, false)] });
+      localStorage.setItem("weave:device-credentials", JSON.stringify({
+        homeMachineId: homeInfo.id, homeMachineName: "kestrel", homeBaseUrl: "", deviceId: "d", token: "fdt_d.x",
+        grants: [{ machineId: osprey.id, baseUrl: osprey.baseUrl, token: "fdt_grant.y" }], pairedAt: "",
+      }));
+
+      const store = useMachinesStore();
+      await store.ready;
+
+      expect(store.source).toBe("device");
+      expect(store.connections.map((c) => [c.id, c.token])).toEqual([[osprey.id, "fdt_grant.y"]]);
+    });
+  });
+
   describe("adding a machine", () => {
     it("checks the address and token with the machine, then keeps it", async () => {
       const store = useMachinesStore();

@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
-using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
@@ -9,31 +9,41 @@ using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Sessions;
 
-/// <summary>Whether a user has turned desktop notifications on. Off unless they have.</summary>
-public interface INotificationPreference
-{
-    Task<bool> IsEnabledAsync(string userId, CancellationToken ct);
-}
-
 /// <summary>
-/// Tells you about a session while you're looking somewhere else. Two moments are worth interrupting for:
-/// the agent stopped on a question only you can answer, and a turn ended. Whether you're looking is the
-/// same signal the session recap waits on — a tab that has the session open, visible and focused — so
-/// Fleet is quiet about the session in front of you and speaks up about the ones behind it.
-/// The notification is pushed to the global sessions topic; the browser shows it.
+/// Tells you about a session while you're looking somewhere else. The moments worth interrupting for: the agent
+/// waits on you (a permission or a question), a turn ended, or it failed. Whether you're looking is the same signal
+/// the session recap waits on — a tab that has the session open, visible and focused — so Fleet is quiet about the
+/// session in front of you and speaks up about the ones behind it.
+/// <para>
+/// What to send is decided here; where it goes is up to the <see cref="ISessionNotificationSink"/>s: the open tabs
+/// (which apply the desktop setting themselves) and phones (which apply their own choices).
+/// </para>
 /// </summary>
 public sealed partial class SessionNotifier(
     SessionFocusTracker focusTracker,
-    IEventBroadcaster eventBroadcaster,
-    INotificationPreference preference,
+    IEnumerable<ISessionNotificationSink> sinks,
     IServiceScopeFactory scopeFactory,
-    ILogger<SessionNotifier> logger)
+    ILogger<SessionNotifier> logger,
+    IPendingPermissions? pendingPermissions = null,
+    MachineIdentityStore? machine = null,
+    TimeProvider? time = null)
 {
     /// <summary>The event type on the global sessions topic.</summary>
     public const string EventType = "session_notification";
 
+    /// <summary>The same notification twice within this long is sent once.</summary>
+    public static readonly TimeSpan RepeatWindow = TimeSpan.FromSeconds(30);
+
+    private const int MaxBodyLength = 140;
+
+    private readonly TimeProvider _time = time ?? TimeProvider.System;
+    private readonly ISessionNotificationSink[] _sinks = [.. sinks];
+
     // session id → the last activity status we were told about
     private readonly ConcurrentDictionary<string, string> _last = new(StringComparer.Ordinal);
+
+    // session id → the last notification sent, to skip repeats and the "finished" that follows a failure
+    private readonly ConcurrentDictionary<string, Sent> _sent = new(StringComparer.Ordinal);
 
     /// <summary>Called for every activity change the harness reports, on the relay's pump.</summary>
     public void OnActivityChanged(string sessionId, string activityStatus)
@@ -49,7 +59,19 @@ public sealed partial class SessionNotifier(
         if (focusTracker.IsWatched(sessionId))
             return;
 
-        _ = NotifyAsync(sessionId, reason);
+        if (reason == SessionNotificationReasons.NeedsYou)
+        {
+            // A permission ask names what the agent wants to do; anything else waiting is a question.
+            var waiting = pendingPermissions?.WaitingIn(sessionId);
+            var ask = waiting is { Count: > 0 } ? waiting[0] : null;
+            if (ask is not null)
+                Send(sessionId, reason, SessionNotificationKinds.Permission, WantsTo(ask), ask.Id);
+            else
+                Send(sessionId, reason, SessionNotificationKinds.Question, "Asked you a question.");
+            return;
+        }
+
+        Send(sessionId, reason, SessionNotificationKinds.Finished, "Finished its turn.");
     }
 
     /// <summary>
@@ -61,11 +83,25 @@ public sealed partial class SessionNotifier(
         if (focusTracker.IsWatched(sessionId))
             return;
 
-        _ = NotifyAsync(sessionId, SessionNotificationReasons.NeedsYou, body);
+        Send(sessionId, SessionNotificationReasons.NeedsYou, SessionNotificationKinds.Workflow, body);
+    }
+
+    /// <summary>A turn failed, or the session couldn't start. <paramref name="message"/> is the short reason.</summary>
+    public void OnSessionFailed(string sessionId, string? message)
+    {
+        if (focusTracker.IsWatched(sessionId))
+            return;
+
+        var body = string.IsNullOrWhiteSpace(message) ? "Stopped with an error." : $"Stopped: {message}";
+        Send(sessionId, SessionNotificationReasons.Failed, SessionNotificationKinds.Failed, body);
     }
 
     /// <summary>Drops what's held for a deleted session.</summary>
-    public void Forget(string sessionId) => _last.TryRemove(sessionId, out _);
+    public void Forget(string sessionId)
+    {
+        _last.TryRemove(sessionId, out _);
+        _sent.TryRemove(sessionId, out _);
+    }
 
     /// <summary>
     /// What this change is worth telling you about, or <see langword="null"/> for the changes that aren't.
@@ -89,7 +125,42 @@ public sealed partial class SessionNotifier(
         return null;
     }
 
-    private async Task NotifyAsync(string sessionId, string reason, string? body = null)
+    private static string WantsTo(PermissionAsk ask)
+    {
+        var what = string.IsNullOrWhiteSpace(ask.Title) ? ask.Tool : ask.Title;
+        return ask.Kind switch
+        {
+            PermissionKinds.Shell => $"Wants to run {what}",
+            PermissionKinds.Edit => $"Wants to edit {what}",
+            PermissionKinds.Read => $"Wants to read {what}",
+            PermissionKinds.Web => $"Wants to open {what}",
+            _ => $"Wants to use {what}",
+        };
+    }
+
+    private void Send(string sessionId, string reason, string kind, string body, string? requestId = null)
+    {
+        var now = _time.GetUtcNow();
+        var next = new Sent(kind, requestId, now);
+        var skip = false;
+        _sent.AddOrUpdate(
+            sessionId,
+            next,
+            (_, previous) =>
+            {
+                var recent = now - previous.At < RepeatWindow;
+                // The same thing again, or the idle that follows a failed turn: already said.
+                skip = recent && ((previous.Kind == kind && previous.RequestId == requestId)
+                    || (previous.Kind == SessionNotificationKinds.Failed && kind == SessionNotificationKinds.Finished));
+                return skip ? previous : next;
+            });
+        if (skip)
+            return;
+
+        _ = NotifyAsync(sessionId, reason, kind, body, requestId);
+    }
+
+    private async Task NotifyAsync(string sessionId, string reason, string kind, string body, string? requestId)
     {
         try
         {
@@ -108,31 +179,36 @@ public sealed partial class SessionNotifier(
             if (!string.IsNullOrEmpty(session.ParentSessionId))
                 return;
 
-            if (!await preference.IsEnabledAsync(session.UserId, CancellationToken.None).ConfigureAwait(false))
-                return;
-
             // You may have come back while we were reading all that.
             if (focusTracker.IsWatched(sessionId))
                 return;
 
+            var identity = machine?.Get();
             var payload = new SessionNotificationPayload
             {
                 SessionId = sessionId,
                 Reason = reason,
+                Kind = kind,
+                RequestId = requestId,
+                MachineId = identity?.Id,
+                MachineName = identity is null ? null : identity.Name ?? Environment.MachineName,
                 Title = string.IsNullOrWhiteSpace(session.Title) ? "Untitled session" : session.Title,
-                Body = body ?? (reason == SessionNotificationReasons.NeedsYou
-                    ? "Waiting on your answer."
-                    : "Finished its turn."),
+                Body = Clip(body),
             };
 
-            await eventBroadcaster.BroadcastAsync(
-                "sessions",
-                EventType,
-                JsonSerializer.SerializeToElement(payload, ApplicationJsonContext.Default.SessionNotificationPayload),
-                session.UserId,
-                CancellationToken.None).ConfigureAwait(false);
+            foreach (var sink in _sinks)
+            {
+                try
+                {
+                    await sink.HandleAsync(payload, session.UserId, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    LogSinkFailed(ex, sink.GetType().Name, sessionId);
+                }
+            }
 
-            LogNotified(sessionId, reason);
+            LogNotified(sessionId, kind);
         }
         catch (Exception ex)
         {
@@ -140,9 +216,20 @@ public sealed partial class SessionNotifier(
         }
     }
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Notified about session {SessionId} ({Reason})")]
-    private partial void LogNotified(string sessionId, string reason);
+    private static string Clip(string text)
+    {
+        var line = text.ReplaceLineEndings(" ").Trim();
+        return line.Length <= MaxBodyLength ? line : string.Concat(line.AsSpan(0, MaxBodyLength - 1).TrimEnd(), "…");
+    }
+
+    private sealed record Sent(string Kind, string? RequestId, DateTimeOffset At);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Notified about session {SessionId} ({Kind})")]
+    private partial void LogNotified(string sessionId, string kind);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Could not notify about session {SessionId}")]
     private partial void LogNotifyFailed(Exception ex, string sessionId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Notification sink {Sink} failed for session {SessionId}")]
+    private partial void LogSinkFailed(Exception ex, string sink, string sessionId);
 }

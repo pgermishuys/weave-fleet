@@ -13,18 +13,25 @@ import { Route as WorkflowsRouteImport } from './routes/workflows'
 import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as RepositoriesRouteImport } from './routes/repositories'
+import { Route as PhoneRouteImport } from './routes/phone'
+import { Route as PairRouteImport } from './routes/pair'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as GithubRouteImport } from './routes/github'
 import { Route as BoardRouteImport } from './routes/board'
 import { Route as AutomationsRouteImport } from './routes/automations'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PhoneIndexRouteImport } from './routes/phone.index'
 import { Route as GithubIndexRouteImport } from './routes/github.index'
 import { Route as SessionsNewRouteImport } from './routes/sessions.new'
 import { Route as SessionsIdRouteImport } from './routes/sessions.$id'
+import { Route as PhoneSetupRouteImport } from './routes/phone.setup'
+import { Route as PhoneNewRouteImport } from './routes/phone.new'
+import { Route as PhoneAnsweredRouteImport } from './routes/phone.answered'
 import { Route as SettingsPluginsPluginIdRouteImport } from './routes/settings_.plugins.$pluginId'
 import { Route as GithubOwnerRepoRouteImport } from './routes/github.$owner.$repo'
 import { Route as GithubOwnerRepoIndexRouteImport } from './routes/github.$owner.$repo.index'
+import { Route as PhoneSMachineIdSessionIdRouteImport } from './routes/phone.s.$machineId.$sessionId'
 import { Route as GithubOwnerRepoPullsNumberRouteImport } from './routes/github.$owner.$repo.pulls.$number'
 import { Route as GithubOwnerRepoIssuesNumberRouteImport } from './routes/github.$owner.$repo.issues.$number'
 
@@ -46,6 +53,16 @@ const SettingsRoute = SettingsRouteImport.update({
 const RepositoriesRoute = RepositoriesRouteImport.update({
   id: '/repositories',
   path: '/repositories',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PhoneRoute = PhoneRouteImport.update({
+  id: '/phone',
+  path: '/phone',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PairRoute = PairRouteImport.update({
+  id: '/pair',
+  path: '/pair',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -78,6 +95,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PhoneIndexRoute = PhoneIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => PhoneRoute,
+} as any)
 const GithubIndexRoute = GithubIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -92,6 +114,21 @@ const SessionsIdRoute = SessionsIdRouteImport.update({
   id: '/sessions/$id',
   path: '/sessions/$id',
   getParentRoute: () => rootRouteImport,
+} as any)
+const PhoneSetupRoute = PhoneSetupRouteImport.update({
+  id: '/setup',
+  path: '/setup',
+  getParentRoute: () => PhoneRoute,
+} as any)
+const PhoneNewRoute = PhoneNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => PhoneRoute,
+} as any)
+const PhoneAnsweredRoute = PhoneAnsweredRouteImport.update({
+  id: '/answered',
+  path: '/answered',
+  getParentRoute: () => PhoneRoute,
 } as any)
 const SettingsPluginsPluginIdRoute = SettingsPluginsPluginIdRouteImport.update({
   id: '/settings_/plugins/$pluginId',
@@ -108,6 +145,12 @@ const GithubOwnerRepoIndexRoute = GithubOwnerRepoIndexRouteImport.update({
   path: '/',
   getParentRoute: () => GithubOwnerRepoRoute,
 } as any)
+const PhoneSMachineIdSessionIdRoute =
+  PhoneSMachineIdSessionIdRouteImport.update({
+    id: '/s/$machineId/$sessionId',
+    path: '/s/$machineId/$sessionId',
+    getParentRoute: () => PhoneRoute,
+  } as any)
 const GithubOwnerRepoPullsNumberRoute =
   GithubOwnerRepoPullsNumberRouteImport.update({
     id: '/pulls/$number',
@@ -128,15 +171,22 @@ export interface FileRoutesByFullPath {
   '/board': typeof BoardRoute
   '/github': typeof GithubRouteWithChildren
   '/login': typeof LoginRoute
+  '/pair': typeof PairRoute
+  '/phone': typeof PhoneRouteWithChildren
   '/repositories': typeof RepositoriesRoute
   '/settings': typeof SettingsRoute
   '/welcome': typeof WelcomeRoute
   '/workflows': typeof WorkflowsRoute
+  '/phone/answered': typeof PhoneAnsweredRoute
+  '/phone/new': typeof PhoneNewRoute
+  '/phone/setup': typeof PhoneSetupRoute
   '/sessions/$id': typeof SessionsIdRoute
   '/sessions/new': typeof SessionsNewRoute
   '/github/': typeof GithubIndexRoute
+  '/phone/': typeof PhoneIndexRoute
   '/github/$owner/$repo': typeof GithubOwnerRepoRouteWithChildren
   '/settings/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
+  '/phone/s/$machineId/$sessionId': typeof PhoneSMachineIdSessionIdRoute
   '/github/$owner/$repo/': typeof GithubOwnerRepoIndexRoute
   '/github/$owner/$repo/issues/$number': typeof GithubOwnerRepoIssuesNumberRoute
   '/github/$owner/$repo/pulls/$number': typeof GithubOwnerRepoPullsNumberRoute
@@ -147,14 +197,20 @@ export interface FileRoutesByTo {
   '/automations': typeof AutomationsRoute
   '/board': typeof BoardRoute
   '/login': typeof LoginRoute
+  '/pair': typeof PairRoute
   '/repositories': typeof RepositoriesRoute
   '/settings': typeof SettingsRoute
   '/welcome': typeof WelcomeRoute
   '/workflows': typeof WorkflowsRoute
+  '/phone/answered': typeof PhoneAnsweredRoute
+  '/phone/new': typeof PhoneNewRoute
+  '/phone/setup': typeof PhoneSetupRoute
   '/sessions/$id': typeof SessionsIdRoute
   '/sessions/new': typeof SessionsNewRoute
   '/github': typeof GithubIndexRoute
+  '/phone': typeof PhoneIndexRoute
   '/settings/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
+  '/phone/s/$machineId/$sessionId': typeof PhoneSMachineIdSessionIdRoute
   '/github/$owner/$repo': typeof GithubOwnerRepoIndexRoute
   '/github/$owner/$repo/issues/$number': typeof GithubOwnerRepoIssuesNumberRoute
   '/github/$owner/$repo/pulls/$number': typeof GithubOwnerRepoPullsNumberRoute
@@ -167,15 +223,22 @@ export interface FileRoutesById {
   '/board': typeof BoardRoute
   '/github': typeof GithubRouteWithChildren
   '/login': typeof LoginRoute
+  '/pair': typeof PairRoute
+  '/phone': typeof PhoneRouteWithChildren
   '/repositories': typeof RepositoriesRoute
   '/settings': typeof SettingsRoute
   '/welcome': typeof WelcomeRoute
   '/workflows': typeof WorkflowsRoute
+  '/phone/answered': typeof PhoneAnsweredRoute
+  '/phone/new': typeof PhoneNewRoute
+  '/phone/setup': typeof PhoneSetupRoute
   '/sessions/$id': typeof SessionsIdRoute
   '/sessions/new': typeof SessionsNewRoute
   '/github/': typeof GithubIndexRoute
+  '/phone/': typeof PhoneIndexRoute
   '/github/$owner/$repo': typeof GithubOwnerRepoRouteWithChildren
   '/settings_/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
+  '/phone/s/$machineId/$sessionId': typeof PhoneSMachineIdSessionIdRoute
   '/github/$owner/$repo/': typeof GithubOwnerRepoIndexRoute
   '/github/$owner/$repo/issues/$number': typeof GithubOwnerRepoIssuesNumberRoute
   '/github/$owner/$repo/pulls/$number': typeof GithubOwnerRepoPullsNumberRoute
@@ -189,15 +252,22 @@ export interface FileRouteTypes {
     | '/board'
     | '/github'
     | '/login'
+    | '/pair'
+    | '/phone'
     | '/repositories'
     | '/settings'
     | '/welcome'
     | '/workflows'
+    | '/phone/answered'
+    | '/phone/new'
+    | '/phone/setup'
     | '/sessions/$id'
     | '/sessions/new'
     | '/github/'
+    | '/phone/'
     | '/github/$owner/$repo'
     | '/settings/plugins/$pluginId'
+    | '/phone/s/$machineId/$sessionId'
     | '/github/$owner/$repo/'
     | '/github/$owner/$repo/issues/$number'
     | '/github/$owner/$repo/pulls/$number'
@@ -208,14 +278,20 @@ export interface FileRouteTypes {
     | '/automations'
     | '/board'
     | '/login'
+    | '/pair'
     | '/repositories'
     | '/settings'
     | '/welcome'
     | '/workflows'
+    | '/phone/answered'
+    | '/phone/new'
+    | '/phone/setup'
     | '/sessions/$id'
     | '/sessions/new'
     | '/github'
+    | '/phone'
     | '/settings/plugins/$pluginId'
+    | '/phone/s/$machineId/$sessionId'
     | '/github/$owner/$repo'
     | '/github/$owner/$repo/issues/$number'
     | '/github/$owner/$repo/pulls/$number'
@@ -227,15 +303,22 @@ export interface FileRouteTypes {
     | '/board'
     | '/github'
     | '/login'
+    | '/pair'
+    | '/phone'
     | '/repositories'
     | '/settings'
     | '/welcome'
     | '/workflows'
+    | '/phone/answered'
+    | '/phone/new'
+    | '/phone/setup'
     | '/sessions/$id'
     | '/sessions/new'
     | '/github/'
+    | '/phone/'
     | '/github/$owner/$repo'
     | '/settings_/plugins/$pluginId'
+    | '/phone/s/$machineId/$sessionId'
     | '/github/$owner/$repo/'
     | '/github/$owner/$repo/issues/$number'
     | '/github/$owner/$repo/pulls/$number'
@@ -248,6 +331,8 @@ export interface RootRouteChildren {
   BoardRoute: typeof BoardRoute
   GithubRoute: typeof GithubRouteWithChildren
   LoginRoute: typeof LoginRoute
+  PairRoute: typeof PairRoute
+  PhoneRoute: typeof PhoneRouteWithChildren
   RepositoriesRoute: typeof RepositoriesRoute
   SettingsRoute: typeof SettingsRoute
   WelcomeRoute: typeof WelcomeRoute
@@ -285,6 +370,20 @@ declare module '@tanstack/vue-router' {
       path: '/repositories'
       fullPath: '/repositories'
       preLoaderRoute: typeof RepositoriesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/phone': {
+      id: '/phone'
+      path: '/phone'
+      fullPath: '/phone'
+      preLoaderRoute: typeof PhoneRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pair': {
+      id: '/pair'
+      path: '/pair'
+      fullPath: '/pair'
+      preLoaderRoute: typeof PairRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -329,6 +428,13 @@ declare module '@tanstack/vue-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/phone/': {
+      id: '/phone/'
+      path: '/'
+      fullPath: '/phone/'
+      preLoaderRoute: typeof PhoneIndexRouteImport
+      parentRoute: typeof PhoneRoute
+    }
     '/github/': {
       id: '/github/'
       path: '/'
@@ -350,6 +456,27 @@ declare module '@tanstack/vue-router' {
       preLoaderRoute: typeof SessionsIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/phone/setup': {
+      id: '/phone/setup'
+      path: '/setup'
+      fullPath: '/phone/setup'
+      preLoaderRoute: typeof PhoneSetupRouteImport
+      parentRoute: typeof PhoneRoute
+    }
+    '/phone/new': {
+      id: '/phone/new'
+      path: '/new'
+      fullPath: '/phone/new'
+      preLoaderRoute: typeof PhoneNewRouteImport
+      parentRoute: typeof PhoneRoute
+    }
+    '/phone/answered': {
+      id: '/phone/answered'
+      path: '/answered'
+      fullPath: '/phone/answered'
+      preLoaderRoute: typeof PhoneAnsweredRouteImport
+      parentRoute: typeof PhoneRoute
+    }
     '/settings_/plugins/$pluginId': {
       id: '/settings_/plugins/$pluginId'
       path: '/settings/plugins/$pluginId'
@@ -370,6 +497,13 @@ declare module '@tanstack/vue-router' {
       fullPath: '/github/$owner/$repo/'
       preLoaderRoute: typeof GithubOwnerRepoIndexRouteImport
       parentRoute: typeof GithubOwnerRepoRoute
+    }
+    '/phone/s/$machineId/$sessionId': {
+      id: '/phone/s/$machineId/$sessionId'
+      path: '/s/$machineId/$sessionId'
+      fullPath: '/phone/s/$machineId/$sessionId'
+      preLoaderRoute: typeof PhoneSMachineIdSessionIdRouteImport
+      parentRoute: typeof PhoneRoute
     }
     '/github/$owner/$repo/pulls/$number': {
       id: '/github/$owner/$repo/pulls/$number'
@@ -417,6 +551,24 @@ const GithubRouteChildren: GithubRouteChildren = {
 const GithubRouteWithChildren =
   GithubRoute._addFileChildren(GithubRouteChildren)
 
+interface PhoneRouteChildren {
+  PhoneAnsweredRoute: typeof PhoneAnsweredRoute
+  PhoneNewRoute: typeof PhoneNewRoute
+  PhoneSetupRoute: typeof PhoneSetupRoute
+  PhoneIndexRoute: typeof PhoneIndexRoute
+  PhoneSMachineIdSessionIdRoute: typeof PhoneSMachineIdSessionIdRoute
+}
+
+const PhoneRouteChildren: PhoneRouteChildren = {
+  PhoneAnsweredRoute: PhoneAnsweredRoute,
+  PhoneNewRoute: PhoneNewRoute,
+  PhoneSetupRoute: PhoneSetupRoute,
+  PhoneIndexRoute: PhoneIndexRoute,
+  PhoneSMachineIdSessionIdRoute: PhoneSMachineIdSessionIdRoute,
+}
+
+const PhoneRouteWithChildren = PhoneRoute._addFileChildren(PhoneRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AnalyticsRoute: AnalyticsRoute,
@@ -424,6 +576,8 @@ const rootRouteChildren: RootRouteChildren = {
   BoardRoute: BoardRoute,
   GithubRoute: GithubRouteWithChildren,
   LoginRoute: LoginRoute,
+  PairRoute: PairRoute,
+  PhoneRoute: PhoneRouteWithChildren,
   RepositoriesRoute: RepositoriesRoute,
   SettingsRoute: SettingsRoute,
   WelcomeRoute: WelcomeRoute,

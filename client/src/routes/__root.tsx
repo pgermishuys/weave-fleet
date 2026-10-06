@@ -3,6 +3,8 @@ import { Outlet, createRootRoute, useLocation } from "@tanstack/vue-router";
 import AuthGate from "@/components/auth/AuthGate.vue";
 import AppShell from "@/components/layout/AppShell.vue";
 import NotFoundPage from "@/components/pages/NotFoundPage.vue";
+import PhoneAuthGate from "@/components/phone/PhoneAuthGate.vue";
+import PhoneShell from "@/components/phone/PhoneShell.vue";
 
 /**
  * Root layout component.
@@ -22,16 +24,31 @@ const RootLayout = defineComponent({
     });
 
     const isLoginRoute = computed(() => pathname.value === "/login");
+    // Pairing happens before the phone has any key, so it skips the sign-in gate and the desktop shell.
+    const isPairRoute = computed(() => pathname.value === "/pair");
+    // The phone pages have their own frame and sign-in, without the desktop shell.
+    const isPhoneRoute = computed(() => pathname.value === "/phone" || pathname.value.startsWith("/phone/"));
 
     // Stable slot functions — created once in setup, not on every render.
     const authGateSlots = { default: () => <Outlet /> };
     const appShellSlots = {
       default: () => <AuthGate v-slots={authGateSlots} />,
     };
+    const phoneShellSlots = { default: () => <Outlet /> };
+    const phoneGateSlots = { default: () => <Outlet /> };
+    const gatedPhoneShellSlots = { default: () => <PhoneAuthGate v-slots={phoneGateSlots} /> };
 
     return () => {
       if (isLoginRoute.value) {
         return <Outlet />;
+      }
+
+      if (isPairRoute.value) {
+        return <PhoneShell v-slots={phoneShellSlots} />;
+      }
+
+      if (isPhoneRoute.value) {
+        return <PhoneShell v-slots={gatedPhoneShellSlots} />;
       }
 
       return <AppShell v-slots={appShellSlots} />;

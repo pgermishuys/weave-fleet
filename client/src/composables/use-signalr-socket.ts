@@ -62,6 +62,9 @@ const topicEventCounts = new Map<string, number>()
 const snapshotRequests = new Map<string, SnapshotRequest>()
 const reconnectCallbacks = new Map<string, () => void>()
 const disconnectCallbacks = new Map<string, () => void>()
+// Told as soon as the connection is lost, including while SignalR is still retrying (the phone's "Can't reach" banner).
+const connectionLostCallbacks = new Map<string, () => void>()
+let connectionLostNextId = 0
 
 // Per-topic operation queue to ensure subscribe/unsubscribe operations are sequenced
 const topicOperationQueues = new Map<string, Promise<void>>()
@@ -240,6 +243,12 @@ async function connect(): Promise<void> {
   // Register event handler for incoming events
   hubConnection.on("Event", handleHubEvent)
 
+  hubConnection.onreconnecting(() => {
+    for (const callback of connectionLostCallbacks.values()) {
+      callback()
+    }
+  })
+
   // Handle reconnection
   hubConnection.onreconnected(async () => {
     await resubscribeAll()
@@ -259,6 +268,9 @@ async function connect(): Promise<void> {
     }
     
     notifyDisconnected()
+    for (const callback of connectionLostCallbacks.values()) {
+      callback()
+    }
     // SignalR has given up (or the connection dropped for good). Without this the app stayed
     // deaf, showing every session as it last was, until a reload.
     scheduleReconnect()
@@ -497,6 +509,7 @@ export function _resetForTesting(): void {
   snapshotRequests.clear()
   reconnectCallbacks.clear()
   disconnectCallbacks.clear()
+  connectionLostCallbacks.clear()
   topicOperationQueues.clear()
   topicSubscriptionEpochs.clear()
   globalEventHandlers.clear()
@@ -542,12 +555,33 @@ export function setSessionFocus(sessionId: string, focused: boolean): void {
   })
 }
 
+/**
+ * Tells Fleet whether this window is on screen and whether it's a computer or a phone, so phones that asked to be
+ * quiet at the desk skip pushes while a computer shows Fleet. Sent every 30 s; the server forgets a window after 90 s.
+ */
+export function setPresence(visible: boolean, formFactor: "desktop" | "phone"): void {
+  if (connection?.state !== HubConnectionState.Connected) return
+  void connection.invoke("SetPresenceAsync", visible, formFactor).catch(() => {
+    // An older Fleet has no presence; nothing to do.
+  })
+}
+
 export function onReconnect(callback: () => void): () => void {
   const id = String(reconnectCallbackNextId++)
   reconnectCallbacks.set(id, callback)
 
   return () => {
     reconnectCallbacks.delete(id)
+  }
+}
+
+/** Called when the connection is lost, as soon as SignalR starts retrying (`onDisconnect` waits until it gives up). */
+export function onConnectionLost(callback: () => void): () => void {
+  const id = String(connectionLostNextId++)
+  connectionLostCallbacks.set(id, callback)
+
+  return () => {
+    connectionLostCallbacks.delete(id)
   }
 }
 

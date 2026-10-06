@@ -7,6 +7,7 @@
   <ItemGroup>
     <PackageReference Include="dbup-sqlite" />
     <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
     <PackageReference Include="Porta.Pty" />
   </ItemGroup>
 
@@ -28,6 +29,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="WeaveFleet.Api.Tests" />
     <InternalsVisibleTo Include="WeaveFleet.Infrastructure.Tests" />
     <InternalsVisibleTo Include="WeaveFleet.IntegrationTests" />
     <InternalsVisibleTo Include="WeaveFleet.ConformanceTests" />

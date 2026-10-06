@@ -140,6 +140,7 @@ public sealed class AgentPathAuthTests
                 NullLoggerFactory.Instance,
                 UrlEncoder.Default,
                 new StubLocalTokenAuthService(AccessToken),
+                new WeaveFleet.Application.Devices.DeviceTokenService(new WeaveFleet.Testing.Fakes.Repositories.InMemoryDeviceRepository(), TimeProvider.System),
                 new LoopbackAuthPolicy("0.0.0.0"));
             await handler.InitializeAsync(
                 new AuthenticationScheme(BearerTokenHandler.SchemeName, null, typeof(BearerTokenHandler)), context);

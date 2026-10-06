@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#F3F2EF">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Fleet mock">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<title>Fleet</title>
+<script>
+  // Before the first paint: pick the theme so a dark phone never flashes white.
+  (function () {
+    var q = new URLSearchParams(location.search), t = q.get("theme") || localStorage.getItem("fleet-mock-theme") || "auto";
+    if (t === "auto") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.dataset.theme = t;
+    document.documentElement.style.background = t === "dark" ? "#0d0d10" : "#F3F2EF";
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0d0d10" : "#F3F2EF";
+  })();
+</script>
+<link rel="stylesheet" href="native.css">
+</head>
+<body>
+<div id="app">
+  <div id="stage"></div>
+  <div id="overlays"></div>
+</div>
+<script type="module" src="flow.js"></script>
+</body>
+</html>
