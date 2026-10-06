@@ -38,6 +38,7 @@ public sealed class OpenCodeHarness : IHarness
         SupportsSteering = true,
         // POST /session/{id}/shell, between turns (OpenCode refuses one while a turn runs).
         SupportsShellCommands = true,
+        SupportsCompaction = true,
         SupportsSideConversations = true,
         // Synthetic text parts ahead of the prompt.
         TakesModelNotes = true,

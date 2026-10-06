@@ -377,4 +377,109 @@ internal static class ClaudeCodeMapper
             return null;
         }
     }
+
+    /// <summary>
+    /// The size of a model call from an assistant line's usage: what it read (fresh, from the cache and into it) and
+    /// wrote. Claude Code puts the call's usage on every line of the call, with the output count from its start: a
+    /// placeholder until <see cref="LastCall"/> gives the real one at the turn's end.
+    /// </summary>
+    internal static ContextCall ToContextCall(ClaudeCodeUsage usage) => new()
+    {
+        Input = Math.Max(0, usage.InputTokens),
+        CacheRead = Math.Max(0, usage.CacheReadInputTokens ?? 0),
+        CacheWrite = Math.Max(0, usage.CacheCreationInputTokens ?? 0),
+        Output = Math.Max(0, usage.OutputTokens),
+    };
+
+    /// <summary>
+    /// The turn's last model call from its result line, with its real output count: the last of
+    /// <see cref="ClaudeCodeUsage.Iterations"/> that isn't a summarising one. Null when the line lists none.
+    /// </summary>
+    internal static ContextCall? LastCall(ClaudeCodeResultMessage result)
+    {
+        var last = result.Usage?.Iterations?.LastOrDefault(iteration => iteration.Type is null or "message");
+        return last is null
+            ? null
+            : new ContextCall
+            {
+                Input = Math.Max(0, last.InputTokens),
+                CacheRead = Math.Max(0, last.CacheReadInputTokens ?? 0),
+                CacheWrite = Math.Max(0, last.CacheCreationInputTokens ?? 0),
+                Output = Math.Max(0, last.OutputTokens),
+            };
+    }
+
+    /// <summary>
+    /// The model's context window and output cap from a result line's <c>modelUsage</c>: the entry for
+    /// <paramref name="modelId"/>, or the only entry. Null when the line has neither.
+    /// </summary>
+    internal static (int ContextWindow, int? MaxOutputTokens)? ReadModelLimits(ClaudeCodeResultMessage result, string? modelId)
+    {
+        if (result.ModelUsage is not { ValueKind: JsonValueKind.Object } models)
+            return null;
+
+        JsonElement entry;
+        if (modelId is not null && models.TryGetProperty(modelId, out var named))
+        {
+            entry = named;
+        }
+        else
+        {
+            var all = models.EnumerateObject().ToList();
+            if (all.Count != 1)
+                return null;
+            entry = all[0].Value;
+        }
+
+        if (entry is not { ValueKind: JsonValueKind.Object } usage
+            || !usage.TryGetProperty("contextWindow", out var window) || !window.TryGetInt32(out var contextWindow) || contextWindow <= 0)
+        {
+            return null;
+        }
+
+        int? maxOutput = usage.TryGetProperty("maxOutputTokens", out var output) && output.TryGetInt32(out var value) && value > 0 ? value : null;
+        return (contextWindow, maxOutput);
+    }
+
+    /// <summary>
+    /// Where Claude Code compacts on its own: its window less the room it keeps for output (at most 20,000 tokens) and
+    /// a 13,000-token buffer. Its settings can move it; this is the default.
+    /// </summary>
+    internal static int? CompactsAt(int contextWindow, int? maxOutputTokens)
+    {
+        var threshold = contextWindow - Math.Min(maxOutputTokens ?? 20_000, 20_000) - 13_000;
+        return threshold > 0 ? threshold : null;
+    }
+
+    /// <summary>
+    /// Claude Code's compaction lines as Fleet's (<see cref="EventTypes.ContextCompaction"/>): a <c>status</c> line saying
+    /// <c>compacting</c> starts one; <c>compact_boundary</c> ends it (with what started it); a <c>status</c> line with
+    /// <c>compact_result</c> <c>failed</c> says it failed. Null for any other system line.
+    /// </summary>
+    internal static HarnessEvent? TryMapCompaction(ClaudeCodeSystemMessage system, string fleetSessionId)
+    {
+        if (system.Subtype == "compact_boundary")
+        {
+            var trigger = system.CompactMetadata is { ValueKind: JsonValueKind.Object } metadata
+                && metadata.TryGetProperty("trigger", out var triggerEl) && triggerEl.ValueKind == JsonValueKind.String
+                ? triggerEl.GetString() switch
+                {
+                    "auto" => ContextCompactionTriggers.Auto,
+                    "manual" => ContextCompactionTriggers.Manual,
+                    _ => null,
+                }
+                : null;
+            return ContextEvents.Compaction(ContextCompactionPhases.Ended, fleetSessionId, trigger);
+        }
+
+        if (system.Subtype != "status")
+            return null;
+
+        if (system.CompactResult == "failed")
+            return ContextEvents.Compaction(ContextCompactionPhases.Failed, fleetSessionId, error: system.CompactError);
+
+        return system.Status == "compacting"
+            ? ContextEvents.Compaction(ContextCompactionPhases.Started, fleetSessionId)
+            : null;
+    }
 }

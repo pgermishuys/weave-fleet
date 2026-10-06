@@ -38,6 +38,12 @@ public sealed record SessionSnapshot
     /// </summary>
     public SessionRecapPayload? Recap { get; init; }
 
+    /// <summary>
+    /// Gets how full the session's context window is, when its harness has said. Live changes arrive as
+    /// <c>context.updated</c>.
+    /// </summary>
+    public SessionContextUsage? Context { get; init; }
+
     private readonly long? _lastEventId;
 
     /// <summary>

@@ -21,6 +21,7 @@ public sealed class SessionCapabilitiesResolverTests
     private const string ArchivedReadOnlyReason = "Archived sessions are read-only.";
     private const string SessionNotRunningReason = "Session is not running.";
     private const string SessionNotBusyReason = "Session is not busy.";
+    private const string WaitForTurnReason = "Wait for the agent to finish its turn.";
     private const string SessionAlreadyArchivedReason = "Session is already archived.";
     private const string SessionNotArchivedReason = "Session is not archived.";
 
@@ -224,6 +225,35 @@ public sealed class SessionCapabilitiesResolverTests
             ? Disconnected
             : lifecycleStatus;
 
+    [Fact]
+    public void compact_is_off_for_a_harness_that_cant_compact_and_says_why()
+    {
+        var harness = new FakeHarness("pi-like", "Pi-like", new HarnessCapabilities { SupportsCompaction = false });
+
+        var capabilities = SessionCapabilitiesResolver.Resolve(
+            "running",
+            Active,
+            Idle,
+            isLive: true,
+            compactUnsupportedReason: SessionCapabilitiesResolver.CompactUnsupportedReason(harness));
+
+        capabilities.CanCompact.ShouldBeFalse();
+        capabilities.CompactDisabledReason.ShouldBe("Pi-like can't be asked to compact its context.");
+        SessionCapabilitiesResolver.CompactUnsupportedReason(new FakeHarness("oc", "OpenCode", new HarnessCapabilities { SupportsCompaction = true })).ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData("busy", false)]
+    [InlineData("waiting_input", false)]
+    [InlineData("idle", true)]
+    public void compact_waits_for_the_turn_to_end(string activityStatus, bool expectedCanCompact)
+    {
+        var capabilities = SessionCapabilitiesResolver.Resolve("running", Active, activityStatus, isLive: true);
+
+        capabilities.CanCompact.ShouldBe(expectedCanCompact);
+        capabilities.CompactDisabledReason.ShouldBe(expectedCanCompact ? null : WaitForTurnReason);
+    }
+
     private static SessionActionCapabilities CreateExpectedCapabilities(
         string lifecycleStatus,
         string retentionStatus,
@@ -235,6 +265,7 @@ public sealed class SessionCapabilitiesResolverTests
         var canArchive = !IsArchived(retentionStatus);
         var canUnarchive = IsArchived(retentionStatus);
         var canFork = !IsArchived(retentionStatus);
+        var canCompact = canPrompt && !IsWorking(activityStatus);
 
         return new SessionActionCapabilities(
             CanPrompt: canPrompt,
@@ -250,7 +281,15 @@ public sealed class SessionCapabilitiesResolverTests
             ArchiveDisabledReason: canArchive ? null : SessionAlreadyArchivedReason,
             UnarchiveDisabledReason: canUnarchive ? null : SessionNotArchivedReason,
             ForkDisabledReason: canFork ? null : ArchivedReadOnlyReason,
-            DeleteDisabledReason: null);
+            DeleteDisabledReason: null)
+        {
+            CanCompact = canCompact,
+            CompactDisabledReason = canCompact
+                ? null
+                : IsArchived(retentionStatus)
+                    ? ArchivedReadOnlyReason
+                    : IsWorking(activityStatus) ? WaitForTurnReason : SessionNotRunningReason,
+        };
     }
 
     private static bool GetExpectedCanPrompt(string lifecycleStatus, string retentionStatus) =>

@@ -156,6 +156,7 @@ public static class DependencyInjection
         services.AddScoped<IBoardRepository, BoardRepository>();
         services.AddScoped<ISmartLinkRepository, SmartLinkRepository>();
         services.AddScoped<ISessionProgressRepository, SessionProgressRepository>();
+        services.AddScoped<ISessionContextRepository, SessionContextRepository>();
         services.AddScoped<ICanvasRepository, CanvasRepository>();
         services.AddScoped<IAppRunRepository, AppRunRepository>();
         services.AddScoped<IAutomationRepository, AutomationRepository>();
@@ -244,6 +245,9 @@ public static class DependencyInjection
         // The asks waiting on the user, kept by the relay and read when a session opens.
         services.AddSingleton<PendingPermissionStore>();
         services.AddSingleton<RunningWorkRecorder>();
+        services.AddScoped<SessionContextService>();
+        // Singleton: the relay hands it every context report and every event; it keeps how full each session's context is.
+        services.AddSingleton<SessionContextRecorder>();
         services.AddSingleton<IPendingPermissions>(sp => sp.GetRequiredService<PendingPermissionStore>());
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowsFeature>();
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowModelRoles>();

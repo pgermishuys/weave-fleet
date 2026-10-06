@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.Pi;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.Pi;
@@ -273,6 +274,61 @@ public sealed class PiHarnessSessionTests
         next.GetProperty("type").GetString().ShouldBe("prompt");
         await harness.WriteResponseAsync(next.GetProperty("id").GetString(), "prompt", true, null, cts.Token);
         await nextTask;
+    }
+
+    [Fact]
+    public async Task an_assistant_messages_usage_reports_the_context_with_the_models_window_from_pis_state()
+    {
+        await using var harness = CreateHarness();
+        await using var session = harness.CreateSession();
+        session.UpdateState(new PiState
+        {
+            Model = new PiModelInfo { Provider = "anthropic", Id = "claude-sonnet-4-5", ContextWindow = 200_000 },
+            AutoCompactionEnabled = true,
+        });
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        await harness.WriteEventAsync(new PiMessageEndEvent
+        {
+            Message = new PiMessage { Role = "assistant", Usage = new PiUsage { Input = 10, Output = 90, CacheRead = 50_000, CacheWrite = 100 } },
+        }, cts.Token);
+
+        var usage = await ReadUntilAsync(session, EventTypes.ContextUsage, cts.Token);
+        var report = ContextEvents.ReadUsage(usage).ShouldNotBeNull();
+        report.Call.ShouldNotBeNull().Used.ShouldBe(50_200);
+        report.Limit.ShouldBe(200_000);
+        report.CompactsAt.ShouldBe(200_000 - 16_384);
+        report.ProviderId.ShouldBe("anthropic");
+        report.ModelId.ShouldBe("claude-sonnet-4-5");
+    }
+
+    [Fact]
+    public async Task compact_sends_pis_compact_command_and_a_refusal_is_a_failed_compaction()
+    {
+        await using var harness = CreateHarness();
+        await using var session = harness.CreateSession();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        await session.CompactAsync(new CompactOptions(), cts.Token);
+
+        var command = await harness.ReadCommandAsync(cts.Token);
+        command.GetProperty("type").GetString().ShouldBe("compact");
+        await harness.WriteResponseAsync(command.GetProperty("id").GetString(), "compact", false, null, "Nothing to compact (session too small)", cts.Token);
+
+        var failed = ContextEvents.ReadCompaction(await ReadUntilAsync(session, EventTypes.ContextCompaction, cts.Token)).ShouldNotBeNull();
+        failed.Phase.ShouldBe(ContextCompactionPhases.Failed);
+        failed.Error.ShouldBe("Nothing to compact (session too small)");
+    }
+
+    private static async Task<HarnessEvent> ReadUntilAsync(PiHarnessSession session, string type, CancellationToken ct)
+    {
+        await foreach (var evt in session.SubscribeAsync(ct).WithCancellation(ct))
+        {
+            if (evt.Type == type)
+                return evt;
+        }
+
+        throw new InvalidOperationException($"No {type} event arrived.");
     }
 
     [Fact]

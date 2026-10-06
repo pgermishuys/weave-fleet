@@ -35,6 +35,10 @@ internal sealed class PiHarnessSession : IHarnessSession
         LoggerMessage.Define<string>(LogLevel.Debug, new EventId(6, "SessionDeleteFailed"),
             "Failed to delete Pi session file {SessionFile}.");
 
+    private static readonly Action<ILogger, string, Exception?> LogCompactFailed =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(8, "CompactFailed"),
+            "Compacting Pi session {InstanceId} failed");
+
     private static readonly Action<ILogger, string, string, string, Exception?> LogSetModel =
         LoggerMessage.Define<string, string, string>(LogLevel.Information, new EventId(7, "SetModel"),
             "Switching Pi instance {InstanceId} to model {Provider}/{Model}.");
@@ -57,6 +61,11 @@ internal sealed class PiHarnessSession : IHarnessSession
     private string? _sessionFile;
     private string? _sessionId;
     private PiModelRef? _model;
+    private readonly string _fleetSessionId;
+
+    // The model's context window, and whether Pi compacts on its own, from Pi's state.
+    private int? _contextWindow;
+    private bool _autoCompaction = true;
     private HarnessSessionStatus _status = HarnessSessionStatus.Idle;
     private bool _disposed;
 
@@ -80,6 +89,7 @@ internal sealed class PiHarnessSession : IHarnessSession
         ILogger<PiHarnessSession> logger)
     {
         InstanceId = instanceId;
+        _fleetSessionId = fleetSessionId;
         _processManager = processManager;
         _client = client;
         _shutdownTimeout = shutdownTimeout;
@@ -105,6 +115,9 @@ internal sealed class PiHarnessSession : IHarnessSession
         UpdateResumeState(state.SessionFile, state.SessionId);
         if (PiModelRef.From(state.Model) is { } model)
             _model = model;
+        if (state.Model?.ContextWindow is > 0 and var window)
+            _contextWindow = window;
+        _autoCompaction = state.AutoCompactionEnabled;
 
         if (_status is HarnessSessionStatus.Stopping or HarnessSessionStatus.Stopped or HarnessSessionStatus.Error)
             return;
@@ -140,6 +153,55 @@ internal sealed class PiHarnessSession : IHarnessSession
         EnsureSuccess(response);
         _status = HarnessSessionStatus.Running;
     }
+
+    /// <summary>
+    /// Compacts the session's context with Pi's compact command. Pi answers only once the compaction is done, so the
+    /// request carries on in the background; Pi reports its start and end as events, and a refusal (nothing to
+    /// compact yet) is reported as a failed compaction.
+    /// </summary>
+    public Task CompactAsync(CompactOptions options, CancellationToken ct)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var response = await _client.SendRequestAsync(new PiCompactCommand { Id = NewRequestId() }, _pumpCts.Token).ConfigureAwait(false);
+                if (!response.Success)
+                {
+                    await _eventChannel.Writer.WriteAsync(
+                        ContextEvents.Compaction(ContextCompactionPhases.Failed, _fleetSessionId, ContextCompactionTriggers.Manual, response.Error ?? "Pi couldn't compact the session."),
+                        _pumpCts.Token).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // The session is stopping.
+            }
+            catch (Exception ex)
+            {
+                LogCompactFailed(_logger, InstanceId, ex);
+            }
+        }, CancellationToken.None);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// A model call's size, with the model's window from Pi's state and where Pi compacts: when the context goes over
+    /// the window less the 16,384 tokens Pi keeps in reserve by default.
+    /// </summary>
+    private HarnessEvent ContextUsageEvent(ContextCall call, string? provider, string? model) => ContextEvents.Usage(
+        new ContextUsageReport
+        {
+            Call = call,
+            Limit = _contextWindow,
+            CompactsAt = _autoCompaction && _contextWindow is > PiReserveTokens and var window ? window - PiReserveTokens : null,
+            ProviderId = provider ?? _model?.Provider,
+            ModelId = model ?? _model?.ModelId,
+        },
+        _fleetSessionId);
+
+    private const int PiReserveTokens = 16_384;
 
     public Task<string?> SendCommandAsync(CommandOptions options, CancellationToken ct)
         => throw new NotSupportedException("The Pi harness does not expose slash commands yet.");
@@ -361,6 +423,9 @@ internal sealed class PiHarnessSession : IHarnessSession
                 {
                     await _eventChannel.Writer.WriteAsync(harnessEvent, _pumpCts.Token).ConfigureAwait(false);
                 }
+
+                if (PiMapper.TryReadContextCall(evt) is { } contextCall)
+                    await _eventChannel.Writer.WriteAsync(ContextUsageEvent(contextCall.Call, contextCall.Provider, contextCall.Model), _pumpCts.Token).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException)
@@ -430,10 +495,11 @@ internal sealed class PiHarnessSession : IHarnessSession
                 $"Pi couldn't switch to {requested}, so the message wasn't sent: {(response.Error ?? "Pi gave no reason").TrimEnd('.')}.{current}");
         }
 
-        _model = response.Data is { ValueKind: JsonValueKind.Object } data
-            && PiModelRef.From(JsonSerializer.Deserialize(data, PiJsonContext.Default.PiModelInfo)) is { } switched
-                ? switched
-                : requested;
+        var switchedTo = response.Data is { ValueKind: JsonValueKind.Object } data
+            ? JsonSerializer.Deserialize(data, PiJsonContext.Default.PiModelInfo)
+            : null;
+        _model = PiModelRef.From(switchedTo) ?? requested;
+        _contextWindow = switchedTo?.ContextWindow is > 0 and var window ? window : null;
     }
 
     private void SetRunningIfActive()

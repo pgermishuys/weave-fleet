@@ -8,6 +8,7 @@ using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 using WeaveFleet.Testing.Fakes.Repositories;
 
@@ -213,6 +214,54 @@ public sealed class ClaudeCodeHarnessSessionPumpTests : IAsyncLifetime
         // Nothing else will say the turn is over.
         events.Count(e => e.Type == EventTypes.SessionIdle).ShouldBe(1);
     }
+
+    [Fact]
+    public async Task TwoToolRun_ReportsEachCallsSizeOnce_AndTheLastCallsRealOutputAtTheEnd()
+    {
+        var events = await PumpAsync(Fixture("two-tools.jsonl"));
+
+        // Claude Code repeats a call's usage on each of its lines; the result's last iteration has the real output.
+        var calls = ContextReports(events).Select(r => r.Call.ShouldNotBeNull()).ToList();
+        calls.Select(c => c.CacheRead).ShouldBe([12224, 19370, 19608, 19608]);
+        calls[^1].Output.ShouldBe(60);
+        calls[^1].Used.ShouldBe(8 + 19608 + 150 + 60);
+        ContextReports(events).ShouldAllBe(r => r.ModelId != null && r.ProviderId == "anthropic");
+    }
+
+    [Fact]
+    public async Task ResultLine_GivesTheModelsWindow_AndWhereClaudeCodeCompacts()
+    {
+        var events = await PumpAsync(
+            """{"type":"system","subtype":"init","session_id":"cc-1","model":"claude-opus-5"}""",
+            """{"type":"assistant","message":{"id":"msg_A","role":"assistant","model":"claude-opus-5","content":[{"type":"text","text":"hi"}],"usage":{"input_tokens":4,"output_tokens":1,"cache_read_input_tokens":30000,"cache_creation_input_tokens":200}},"parent_tool_use_id":null}""",
+            """{"type":"result","subtype":"success","is_error":false,"result":"hi","session_id":"cc-1","usage":{"input_tokens":4,"output_tokens":12,"cache_read_input_tokens":30000,"cache_creation_input_tokens":200,"iterations":[{"type":"message","input_tokens":4,"output_tokens":12,"cache_read_input_tokens":30000,"cache_creation_input_tokens":200}]},"modelUsage":{"claude-opus-5":{"inputTokens":4,"outputTokens":12,"contextWindow":1000000,"maxOutputTokens":64000,"costUSD":0.01}}}""");
+
+        var reports = ContextReports(events);
+        reports[0].Limit.ShouldBeNull();
+        var final = reports[^1];
+        final.Limit.ShouldBe(1_000_000);
+        final.CompactsAt.ShouldBe(1_000_000 - 20_000 - 13_000);
+        final.ModelId.ShouldBe("claude-opus-5");
+        final.Call.ShouldNotBeNull().Used.ShouldBe(30_216);
+    }
+
+    [Fact]
+    public async Task CompactionLines_StartEndAndFailACompaction()
+    {
+        var events = await PumpAsync(
+            """{"type":"system","subtype":"status","status":"compacting","session_id":"cc-1"}""",
+            """{"type":"system","subtype":"compact_boundary","session_id":"cc-1","compact_metadata":{"trigger":"manual","pre_tokens":120000}}""",
+            """{"type":"system","subtype":"status","status":"compacting","session_id":"cc-1"}""",
+            """{"type":"system","subtype":"status","status":null,"compact_result":"failed","compact_error":"Not enough messages to compact.","session_id":"cc-1"}""");
+
+        var compactions = events.Where(e => e.Type == EventTypes.ContextCompaction).Select(e => ContextEvents.ReadCompaction(e).ShouldNotBeNull()).ToList();
+        compactions.Select(c => c.Phase).ShouldBe([ContextCompactionPhases.Started, ContextCompactionPhases.Ended, ContextCompactionPhases.Started, ContextCompactionPhases.Failed]);
+        compactions[1].Trigger.ShouldBe(ContextCompactionTriggers.Manual);
+        compactions[3].Error.ShouldBe("Not enough messages to compact.");
+    }
+
+    private static List<ContextUsageReport> ContextReports(IEnumerable<HarnessEvent> events)
+        => events.Where(e => e.Type == EventTypes.ContextUsage).Select(e => ContextEvents.ReadUsage(e).ShouldNotBeNull()).ToList();
 
     private static async Task WaitForAsync(Func<bool> condition)
     {

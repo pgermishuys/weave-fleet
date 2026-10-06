@@ -106,7 +106,7 @@ internal sealed record PiSetThinkingLevelCommand : PiCommand
     [JsonPropertyName("thinkingLevel")] public required string ThinkingLevel { get; init; }
 }
 
-/// <summary>Compact the current conversation context.</summary>
+/// <summary>Compact the current conversation context. Pi answers once the compaction is done.</summary>
 internal sealed record PiCompactCommand : PiCommand;
 
 /// <summary>Execute a shell command via Pi RPC.</summary>
@@ -240,13 +240,19 @@ internal sealed record PiToolExecutionEndEvent : PiEvent
 internal sealed record PiCompactionStartEvent : PiEvent
 {
     [JsonPropertyName("message")] public string? Message { get; init; }
+
+    /// <summary><c>manual</c> (the compact command), <c>threshold</c> (the context was nearly full) or <c>overflow</c>.</summary>
+    [JsonPropertyName("reason")] public string? Reason { get; init; }
 }
 
-/// <summary>Context compaction ended.</summary>
+/// <summary>Context compaction ended: with a result, or aborted, or with an error.</summary>
 internal sealed record PiCompactionEndEvent : PiEvent
 {
     [JsonPropertyName("message")] public string? Message { get; init; }
     [JsonPropertyName("success")] public bool? Success { get; init; }
+    [JsonPropertyName("reason")] public string? Reason { get; init; }
+    [JsonPropertyName("aborted")] public bool? Aborted { get; init; }
+    [JsonPropertyName("errorMessage")] public string? ErrorMessage { get; init; }
 }
 
 /// <summary>Automatic retry started.</summary>

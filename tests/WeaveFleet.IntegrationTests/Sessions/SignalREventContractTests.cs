@@ -225,6 +225,53 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task How_full_the_context_is_reaches_the_session_as_context_updated_and_is_in_its_snapshot()
+    {
+        var sessionId = await CreateSessionAsync();
+        await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
+        await WaitForBroadcasterSubscriberAsync();
+
+        // What an adapter sends after a model call of the session's: Fleet's own context.usage event.
+        var harness = await HarnessOfAsync(sessionId);
+        await harness.PushEventAsync(Work(EventTypes.ContextUsage, sessionId, """
+            {"call":{"input":1000,"cacheRead":74500,"cacheWrite":0,"output":500,"reasoning":0},"limit":200000,"compactsAt":167000,
+             "modelId":"claude-opus-5","providerId":"anthropic"}
+            """));
+        var updated = await WaitForWorkEventAsync("context.updated", $"session:{sessionId}");
+
+        // The exact shape the ring by Send reads: SessionContextUsage, camelCase, nulls left out.
+        var context = updated.Data.GetProperty("properties");
+        context.GetProperty("sessionId").GetString().ShouldBe(sessionId);
+        context.GetProperty("used").GetInt32().ShouldBe(76_000);
+        context.GetProperty("limit").GetInt32().ShouldBe(200_000);
+        context.GetProperty("compactsAt").GetInt32().ShouldBe(167_000);
+        context.GetProperty("modelId").GetString().ShouldBe("claude-opus-5");
+        context.GetProperty("lastCall").GetProperty("cacheRead").GetInt32().ShouldBe(74_500);
+        context.GetProperty("lastCall").GetProperty("used").GetInt32().ShouldBe(76_000);
+        context.GetProperty("compacting").GetBoolean().ShouldBeFalse();
+        context.GetProperty("turns").GetArrayLength().ShouldBe(0);
+        context.TryGetProperty("compactedAt", out _).ShouldBeFalse(context.GetRawText());
+
+        // A compaction starting says so.
+        await harness.PushEventAsync(Work(EventTypes.ContextCompaction, sessionId, """{"phase":"started","trigger":"manual"}"""));
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!Received().Any(e => e.Data.GetProperty("type").GetString() == "context.updated"
+            && e.Data.GetProperty("properties").GetProperty("compacting").GetBoolean()))
+        {
+            DateTime.UtcNow.ShouldBeLessThan(deadline, "No context.updated said the compaction started.");
+            await _eventReceived.WaitAsync(TimeSpan.FromMilliseconds(200));
+        }
+
+        // The harness's own context events never reach the conversation.
+        Received().Select(e => e.Data.GetProperty("type").GetString()).ShouldAllBe(type => type == "context.updated");
+
+        // A session opened now gets it in its snapshot.
+        var snapshot = await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
+        snapshot.GetProperty("context").GetProperty("used").GetInt32().ShouldBe(76_000);
+        snapshot.GetProperty("context").GetProperty("compacting").GetBoolean().ShouldBeTrue();
+    }
+
+    [Fact]
     public async Task Hub_sends_message_part_delta_with_correct_shape()
     {
         var sessionId = await CreateSessionAsync();

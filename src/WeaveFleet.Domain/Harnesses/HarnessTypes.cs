@@ -86,6 +86,12 @@ public sealed record HarnessCapabilities
     public bool SupportsShellCommands { get; init; }
 
     /// <summary>
+    /// Fleet can ask the harness to compact a session's context (<see cref="IHarnessSession.CompactAsync"/>): Compact
+    /// now. Every adapter reports how full the context is (<see cref="EventTypes.ContextUsage"/>) either way.
+    /// </summary>
+    public bool SupportsCompaction { get; init; }
+
+    /// <summary>
     /// A session can fork into a side conversation (<c>/btw</c> in the composer): a fork
     /// (<see cref="IHarnessSession.ForkConversationAsync"/>) Fleet runs as a hidden session of its own beside the first.
     /// Prompts to it carry <see cref="PromptOptions.ModelNotes"/>, which the harness gives the model without showing them

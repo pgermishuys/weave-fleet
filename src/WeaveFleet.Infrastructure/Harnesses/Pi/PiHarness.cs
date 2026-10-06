@@ -25,6 +25,8 @@ public sealed class PiHarness : IHarness
         // Pi's fork and clone switch the process they're sent to over to the copy, and a Fleet session is one Pi process: the
         // session would become the fork. Copying without that needs a second process, which Fleet doesn't start.
         SupportsForking = false,
+        // Pi's compact command.
+        SupportsCompaction = true,
         SupportsResume = true,
         SupportsImageAttachments = false,
         SupportsStreaming = true,

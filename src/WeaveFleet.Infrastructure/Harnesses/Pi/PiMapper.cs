@@ -65,8 +65,15 @@ internal sealed class PiMapper
             PiToolExecutionStartEvent toolStart => MapToolExecutionStart(toolStart),
             PiToolExecutionUpdateEvent toolUpdate => MapToolExecutionUpdate(toolUpdate),
             PiToolExecutionEndEvent toolEnd => MapToolExecutionEnd(toolEnd),
-            PiCompactionStartEvent compactionStart => [CreateInformationalStatus("working", "compaction_start", compactionStart.Message)],
-            PiCompactionEndEvent compactionEnd => [CreateCompactedEvent(compactionEnd)],
+            PiCompactionStartEvent compactionStart =>
+            [
+                CreateInformationalStatus("working", "compaction_start", compactionStart.Message),
+                ContextEvents.Compaction(
+                    ContextCompactionPhases.Started,
+                    _sessionId,
+                    compactionStart.Reason == "manual" ? ContextCompactionTriggers.Manual : compactionStart.Reason is null ? null : ContextCompactionTriggers.Auto),
+            ],
+            PiCompactionEndEvent compactionEnd => [CreateCompactedEvent(compactionEnd), MapCompactionEnd(compactionEnd)],
             PiAutoRetryStartEvent retryStart => [CreateInformationalStatus("working", "auto_retry_start", retryStart.Reason)],
             PiAutoRetryEndEvent retryEnd => [CreateInformationalStatus("busy", "auto_retry_end", retryEnd.Success?.ToString(CultureInfo.InvariantCulture))],
             PiQueueUpdateEvent => [],
@@ -463,6 +470,31 @@ internal sealed class PiMapper
         };
 
         return CreateEvent(EventTypes.SessionStatus, JsonSerializer.SerializeToElement(payload, PiMapperJsonContext.Default.PiSessionStatusPayload));
+    }
+
+    /// <summary>A compaction that ended with an error, or was aborted, failed; any other ended.</summary>
+    private HarnessEvent MapCompactionEnd(PiCompactionEndEvent evt)
+        => evt.Aborted == true || !string.IsNullOrWhiteSpace(evt.ErrorMessage)
+            ? ContextEvents.Compaction(ContextCompactionPhases.Failed, _sessionId, error: evt.ErrorMessage ?? "The compaction was stopped.")
+            : ContextEvents.Compaction(ContextCompactionPhases.Ended, _sessionId);
+
+    /// <summary>
+    /// The size of a model call: an assistant message's usage, once it ends. Pi counts each kind once, with the
+    /// reasoning in the output.
+    /// </summary>
+    internal static (ContextCall Call, string? Provider, string? Model)? TryReadContextCall(PiEvent evt)
+    {
+        if (evt is not PiMessageEndEvent { Message: { Role: "assistant", Usage: { } usage } message })
+            return null;
+
+        var call = new ContextCall
+        {
+            Input = Math.Max(0, usage.Input),
+            CacheRead = Math.Max(0, usage.CacheRead),
+            CacheWrite = Math.Max(0, usage.CacheWrite),
+            Output = Math.Max(0, usage.Output),
+        };
+        return call.Used > 0 ? (call, message.Provider, message.Model) : null;
     }
 
     private HarnessEvent CreateCompactedEvent(PiCompactionEndEvent evt)

@@ -167,6 +167,88 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
     }
 
     /// <summary>
+    /// The size of a finished step, which is one model call: <c>session.step.ended</c> carries the step's own tokens,
+    /// each kind counted once. Read before <see cref="Map"/>, which forgets the step's model.
+    /// </summary>
+    public (ContextCall Call, string? ProviderId, string? ModelId)? TryReadContextCall(OpenCode2Event evt)
+    {
+        if (evt.Type is not "session.step.ended"
+            || evt.Data.ValueKind != JsonValueKind.Object
+            || !evt.Data.TryGetProperty("tokens", out var tokens)
+            || tokens.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var messageId = ReadString(evt.Data, "assistantMessageID");
+        var model = messageId is not null && _messages.TryGetValue(messageId, out var message)
+            ? (message.ProviderId, message.ModelId)
+            : CurrentModel;
+
+        int cacheRead = 0, cacheWrite = 0;
+        if (tokens.TryGetProperty("cache", out var cache) && cache.ValueKind == JsonValueKind.Object)
+        {
+            cacheRead = Tokens(cache, "read");
+            cacheWrite = Tokens(cache, "write");
+        }
+
+        var call = new ContextCall
+        {
+            Input = Tokens(tokens, "input"),
+            CacheRead = cacheRead,
+            CacheWrite = cacheWrite,
+            Output = Tokens(tokens, "output"),
+            Reasoning = Tokens(tokens, "reasoning"),
+        };
+        return call.Used > 0 ? (call, model.ProviderId, model.ModelId) : null;
+
+        static int Tokens(JsonElement element, string name)
+            => ReadDouble(element, name) is > 0 and var value ? (int)Math.Min(value, int.MaxValue) : 0;
+    }
+
+    /// <summary>
+    /// V2's compaction events as Fleet's (<see cref="EventTypes.ContextCompaction"/>): <c>session.compaction.started</c>
+    /// (with V2's reason, <c>auto</c> or <c>manual</c>), <c>.ended</c> and <c>.failed</c>. Null for anything else.
+    /// </summary>
+    public HarnessEvent? TryMapCompaction(OpenCode2Event evt)
+    {
+        var data = evt.Data;
+        return evt.Type switch
+        {
+            "session.compaction.started" => ContextEvents.Compaction(
+                ContextCompactionPhases.Started,
+                fleetSessionId,
+                trigger: data.ValueKind == JsonValueKind.Object ? ReadString(data, "reason") switch
+                {
+                    "auto" => ContextCompactionTriggers.Auto,
+                    "manual" => ContextCompactionTriggers.Manual,
+                    _ => null,
+                } : null,
+                fleetSessionId: fleetSessionId),
+            "session.compaction.ended" => ContextEvents.Compaction(ContextCompactionPhases.Ended, fleetSessionId, fleetSessionId: fleetSessionId),
+            "session.compaction.failed" => ContextEvents.Compaction(
+                ContextCompactionPhases.Failed,
+                fleetSessionId,
+                error: data.ValueKind == JsonValueKind.Object ? ErrorText(data) : null,
+                fleetSessionId: fleetSessionId),
+            _ => null,
+        };
+
+        static string? ErrorText(JsonElement data)
+        {
+            if (!data.TryGetProperty("error", out var error))
+                return ReadString(data, "message");
+            return error.ValueKind switch
+            {
+                JsonValueKind.String => error.GetString(),
+                JsonValueKind.Object => ReadString(error, "message")
+                    ?? (error.TryGetProperty("data", out var inner) && inner.ValueKind == JsonValueKind.Object ? ReadString(inner, "message") : null),
+                _ => null,
+            };
+        }
+    }
+
+    /// <summary>
     /// What a <c>subagent</c> tool call says about the delegation it is: the agent and task once the call is made, its
     /// child session once V2 created it (the call's progress, then its result), and how it ended. Read before
     /// <see cref="Map"/>, which forgets a call once it ends.

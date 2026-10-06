@@ -5,9 +5,13 @@ using WeaveFleet.Api.Hubs;
 using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
+using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Testing.Fakes;
+using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Api.Tests.Hubs;
 
@@ -22,6 +26,7 @@ public sealed class SessionEventsHubTests : IAsyncLifetime
     private ApiWebApplicationFactory? _factory;
     private HubConnection? _connection;
     private readonly FakeSessionMessageProxy _proxy = new();
+    private readonly InMemorySessionContextRepository _contexts = new();
 
     public async Task InitializeAsync()
     {
@@ -32,6 +37,7 @@ public sealed class SessionEventsHubTests : IAsyncLifetime
             {
                 // Register a fake message proxy that returns empty snapshots
                 services.AddSingleton<ISessionMessageProxy>(_proxy);
+                services.AddSingleton<ISessionContextRepository>(_contexts);
             });
         await Task.CompletedTask;
     }
@@ -107,6 +113,31 @@ public sealed class SessionEventsHubTests : IAsyncLifetime
         snapshot.ShouldNotBeNull();
         snapshot.Session.ShouldNotBeNull();
         snapshot.Session.Id.ShouldBe("session-1");
+    }
+
+    // The ring by Send has the context's size as soon as the session opens, and again after a reconnect.
+    [Fact]
+    public async Task SubscribeToSession_IncludesHowFullTheContextIs()
+    {
+        await _contexts.UpsertAsync(new SessionContext
+        {
+            SessionId = "session-1",
+            UserId = "local-user",
+            Used = 76_000,
+            Limit = 200_000,
+            ModelId = "claude-opus-5",
+            LastCall = new ContextCall { Input = 1_000, CacheRead = 75_000 },
+            Turns = [new SessionContextTurn(76_000, 200_000, DateTimeOffset.UnixEpoch, AfterCompaction: false)],
+        }, CancellationToken.None);
+        _connection = await CreateConnectedHubAsync();
+
+        var snapshot = await _connection.InvokeAsync<JsonElement>("SubscribeToSessionAsync", "session-1");
+
+        var context = snapshot.GetProperty("context");
+        context.GetProperty("used").GetInt32().ShouldBe(76_000);
+        context.GetProperty("limit").GetInt32().ShouldBe(200_000);
+        context.GetProperty("lastCall").GetProperty("cacheRead").GetInt32().ShouldBe(75_000);
+        context.GetProperty("turns")[0].GetProperty("used").GetInt32().ShouldBe(76_000);
     }
 
     [Fact]

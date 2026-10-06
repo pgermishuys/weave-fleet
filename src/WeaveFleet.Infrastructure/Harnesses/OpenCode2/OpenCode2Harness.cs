@@ -47,6 +47,7 @@ public sealed class OpenCode2Harness : IHarness
         SteersByDefault = true,
         // POST /api/session/{id}/shell: a shell message in the history, its output passed to the model next turn.
         SupportsShellCommands = true,
+        SupportsCompaction = true,
         // POST /api/session/{id}/fork copies the history before a message into a new session.
         SupportsForking = true,
         SupportsSideConversations = true,

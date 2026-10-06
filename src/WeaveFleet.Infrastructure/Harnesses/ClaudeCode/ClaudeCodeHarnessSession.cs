@@ -149,6 +149,12 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     // between --resume runs can't reuse the conversation's prompt cache.
     private string? _memoryNotes;
     private string? _modelId;             // captured from init or result messages
+
+    // The context window: the last call reported (its message id; Claude Code repeats a call's usage on each of its
+    // lines), and the model's limits from the last result line.
+    private string? _reportedContextCallId;
+    private int? _contextWindow;
+    private int? _maxOutputTokens;
     private HarnessSessionStatus _status = HarnessSessionStatus.Idle;
     private ClaudeCodeProcessManager? _process;
     private ProcessSettings? _processSettings;
@@ -565,6 +571,13 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         await SendPromptAsync(promptText, promptOptions, ct).ConfigureAwait(false);
         return options.MessageId;
     }
+
+    /// <summary>
+    /// Compacts the session's context with Claude Code's own <c>/compact</c>, sent as a prompt: Claude Code runs it as a
+    /// turn of its own, and reports the compaction's start and end on its way.
+    /// </summary>
+    public Task CompactAsync(CompactOptions options, CancellationToken ct)
+        => SendPromptAsync("/compact", new PromptOptions { ModelId = options.ModelId }, ct);
 
     /// <inheritdoc />
     public async Task<MessagePage> GetMessagesAsync(MessageQuery? query, CancellationToken ct)
@@ -1205,7 +1218,10 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 }
                 else if (msg is ClaudeCodeSystemMessage system)
                 {
-                    await ReportWorkAsync(TrackBackgroundWork(system), children).ConfigureAwait(false);
+                    if (ClaudeCodeMapper.TryMapCompaction(system, _fleetSessionId) is { } compaction)
+                        await _eventChannel.Writer.WriteAsync(compaction, CancellationToken.None).ConfigureAwait(false);
+                    else
+                        await ReportWorkAsync(TrackBackgroundWork(system), children).ConfigureAwait(false);
                 }
                 else if (msg is ClaudeCodeStreamEvent { Event: { } streamed } streamEvent)
                 {
@@ -1242,6 +1258,13 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
 
                     if (assistantMsg.Message?.Model is not null)
                         _modelId = assistantMsg.Message.Model;
+
+                    if (assistantMsg.Message is { Id: { } callId, Usage: { } usage } && callId != _reportedContextCallId)
+                    {
+                        _reportedContextCallId = callId;
+                        await _eventChannel.Writer.WriteAsync(ContextUsageEvent(ClaudeCodeMapper.ToContextCall(usage)), CancellationToken.None)
+                            .ConfigureAwait(false);
+                    }
                 }
                 else if (msg is ClaudeCodeUserMessage userMsg)
                 {
@@ -1454,6 +1477,18 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         return child.IsSuccess ? child.Value.Id : null;
     }
 
+    /// <summary>A model call's size (or, with none, the model's limits), with the limits the last result line gave.</summary>
+    private HarnessEvent ContextUsageEvent(ContextCall? call) => ContextEvents.Usage(
+        new ContextUsageReport
+        {
+            Call = call,
+            Limit = _contextWindow,
+            CompactsAt = _contextWindow is { } window ? ClaudeCodeMapper.CompactsAt(window, _maxOutputTokens) : null,
+            ModelId = _modelId,
+            ProviderId = "anthropic",
+        },
+        _fleetSessionId);
+
     /// <summary>A result line: the turn is over. The process carries on, waiting for the next prompt.</summary>
     private async Task EndTurnAsync(ClaudeCodeResultMessage result, ClaudeCodeProcessManager processManager)
     {
@@ -1478,6 +1513,15 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             if (tokenEvent is not null)
                 _analyticsCollector.AcceptTokenEvent(tokenEvent);
         }
+
+        // The model's limits, and the last call's real output count, come with the result.
+        var limits = ClaudeCodeMapper.ReadModelLimits(result, _modelId);
+        var limitsChanged = limits is { } known && (known.ContextWindow != _contextWindow || known.MaxOutputTokens != _maxOutputTokens);
+        if (limits is { } newLimits)
+            (_contextWindow, _maxOutputTokens) = newLimits;
+        var lastCall = ClaudeCodeMapper.LastCall(result);
+        if (lastCall is not null || limitsChanged)
+            await _eventChannel.Writer.WriteAsync(ContextUsageEvent(lastCall), CancellationToken.None).ConfigureAwait(false);
 
         if (result.SessionId is not null && _claudeSessionId is null)
         {

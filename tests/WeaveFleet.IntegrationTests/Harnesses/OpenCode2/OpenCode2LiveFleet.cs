@@ -216,7 +216,7 @@ public sealed class OpenCode2LiveFleet : IAsyncLifetime
                   "npm": "@ai-sdk/openai-compatible",
                   "options": { "baseURL": "{{llmBaseUrl.ToString().TrimEnd('/')}}/v1", "apiKey": "fake-key" },
                   "models": {
-                    "fake-model": { "name": "Fake", "tool_call": true },
+                    "fake-model": { "name": "Fake", "tool_call": true, "limit": { "context": 300000, "output": 4000 } },
                     "fake-model-2": { "name": "Fake Two", "tool_call": true }
                   }
                 }
