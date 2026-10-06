@@ -176,6 +176,10 @@ Local mode only.
 - `DELETE /api/machine/devices/{id}` (owner): removes the device. Its token stops working at once, its open hub
   connections and terminals are closed, its push subscriptions go, and the tokens its home got it on other machines
   are removed there.
+- `POST /api/machine/devices/me/token` (a paired device, by cookie or token): a new token for the device itself, as
+  `{ deviceId, token, machine }` like redeem; its old token stops working. For a phone that's signed in but lost its
+  token: an iPhone's Home Screen app starts with a copy of Safari's cookies and none of its storage. `400` for an
+  owner, `401` for a removed device.
 - `POST /api/machine/devices` (the machine token only, not a cookie) with `{ name, platform, pairedVia }`:
   `{ deviceId, token }`. Another machine (a phone's home) calls this to get the phone a token here; see device grants.
 

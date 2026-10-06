@@ -117,6 +117,46 @@ public sealed class DeviceTokenAuthTests
     }
 
     [Fact]
+    public async Task A_signed_in_phone_that_lost_its_token_gets_a_new_one_and_the_old_one_stops()
+    {
+        // An iPhone's Home Screen app starts with a copy of Safari's cookies but none of its storage.
+        await using var factory = CreateFactory();
+        var (device, oldToken) = await IssueAsync(factory);
+        using var homeScreenApp = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = true });
+        (await homeScreenApp.PostAsJsonAsync("/auth/token-login", new { token = oldToken })).StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        var reissued = await homeScreenApp.PostAsync("/api/machine/devices/me/token", content: null);
+
+        reissued.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await reissued.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        body.GetProperty("deviceId").GetString().ShouldBe(device.Id);
+        body.GetProperty("machine").GetProperty("id").GetString().ShouldNotBeNullOrEmpty();
+        var newToken = body.GetProperty("token").GetString()!;
+        newToken.ShouldNotBe(oldToken);
+        using (var withNew = CreateClient(factory, newToken))
+            (await withNew.GetAsync("/api/sessions")).StatusCode.ShouldBe(HttpStatusCode.OK);
+        using (var withOld = CreateClient(factory, oldToken))
+            (await withOld.GetAsync("/api/sessions")).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+        (await homeScreenApp.GetAsync("/api/sessions")).StatusCode.ShouldBe(HttpStatusCode.OK, "the cookie keeps working");
+    }
+
+    [Fact]
+    public async Task Only_a_live_paired_device_gets_a_new_token()
+    {
+        await using var factory = CreateFactory();
+        using var owner = CreateClient(factory, MachineToken(factory));
+        using var stranger = CreateClient(factory);
+        var (device, token) = await IssueAsync(factory);
+        using var removed = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = true });
+        (await removed.PostAsJsonAsync("/auth/token-login", new { token })).StatusCode.ShouldBe(HttpStatusCode.OK);
+        await factory.Services.GetRequiredService<DeviceTokenService>().RevokeAsync(device.Id);
+
+        (await owner.PostAsync("/api/machine/devices/me/token", content: null)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await stranger.PostAsync("/api/machine/devices/me/token", content: null)).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+        (await removed.PostAsync("/api/machine/devices/me/token", content: null)).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
     public async Task The_owner_cookie_still_manages_access()
     {
         await using var factory = CreateFactory();

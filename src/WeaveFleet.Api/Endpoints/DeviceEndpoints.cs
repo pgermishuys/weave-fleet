@@ -17,6 +17,7 @@ namespace WeaveFleet.Api.Endpoints;
 /// <item><c>POST /api/pairing/preview</c>, <c>POST /api/pairing/redeem</c> (anyone with the code): which machine,
 /// then a device token and a device sign-in cookie. Rate limited.</item>
 /// <item><c>GET</c>/<c>DELETE /api/machine/devices</c> (owner): the devices with access, and removing one.</item>
+/// <item><c>POST /api/machine/devices/me/token</c> (a paired device): a new token for itself, the old one stops.</item>
 /// <item><c>POST /api/machine/devices</c> (the machine token only): a device token for a phone paired with another
 /// machine, which that machine (its home) asks for on the phone's behalf.</item>
 /// </list>
@@ -105,6 +106,25 @@ public static class DeviceEndpoints
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
         .Produces<CreateDeviceResponse>(200)
         .WithName("CreateDevice");
+
+        // A paired phone that's signed in but lost its token asks for a new one: the iPhone Home Screen app starts with a
+        // copy of Safari's cookies but none of its storage. The old token stops working.
+        machine.MapPost("/devices/me/token", async (
+            HttpContext http,
+            DeviceTokenService devices,
+            MachineIdentityStore identities,
+            LoopbackAuthPolicy policy) =>
+        {
+            if (FleetClaims.DeviceIdOf(http.User) is not { } deviceId)
+                return Results.BadRequest(new ErrorResponse("Only a paired device has a device token."));
+            var token = await devices.ReissueAsync(deviceId);
+            return token is null
+                ? Results.Unauthorized()
+                : Results.Ok(new PairingRedeemResponse(deviceId, token, MachineEndpoints.ToResponse(identities.Get(), fleetOptions, policy)));
+        })
+        .RequireAuthorization()
+        .Produces<PairingRedeemResponse>(200)
+        .WithName("ReissueDeviceToken");
 
         var pairing = app.MapGroup("/api/pairing").WithTags("Devices").RequireRateLimiting(PairingRateLimitPolicy);
 

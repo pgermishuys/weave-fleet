@@ -19,6 +19,12 @@ public interface IDeviceRepository
     /// <summary>Records that the device used its token at <paramref name="lastUsedAt"/>.</summary>
     Task TouchAsync(string id, DateTimeOffset lastUsedAt);
 
+    /// <summary>
+    /// Gives a device that hasn't been removed a new token hash (its old token stops working) and records it as used at
+    /// <paramref name="at"/>. False when there's no such device or it was removed.
+    /// </summary>
+    Task<bool> ReplaceTokenHashAsync(string id, byte[] tokenHash, DateTimeOffset at);
+
     /// <summary>Removes the device's access. False when there's no such device or it was already removed.</summary>
     Task<bool> RevokeAsync(string id, DateTimeOffset at);
 }

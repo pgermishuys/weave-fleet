@@ -91,6 +91,25 @@ public sealed class DeviceTokenService(IDeviceRepository devices, TimeProvider t
         return active.Where(IsLive).Select(DeviceSummary.From).ToList();
     }
 
+    /// <summary>
+    /// A new token for a live device; its old token stops working. For a phone that still holds its sign-in cookie but
+    /// lost the token beside it: an iPhone's Home Screen app gets a copy of Safari's cookies, not of its storage.
+    /// Null when the device is removed or expired.
+    /// </summary>
+    public async Task<string?> ReissueAsync(string deviceId)
+    {
+        if (await ValidateDeviceAsync(deviceId) is null)
+            return null;
+
+        var (token, hash) = DeviceToken.Create(deviceId);
+        var now = time.GetUtcNow();
+        if (!await devices.ReplaceTokenHashAsync(deviceId, hash, now))
+            return null;
+        _cache.TryRemove(deviceId, out _);
+        _lastTouched[deviceId] = now;
+        return token;
+    }
+
     /// <summary>Removes a device's access. False when there's no such device or it was already removed.</summary>
     public async Task<bool> RevokeAsync(string deviceId)
     {

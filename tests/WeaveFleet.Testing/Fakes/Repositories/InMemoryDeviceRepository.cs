@@ -40,6 +40,14 @@ public sealed class InMemoryDeviceRepository : IDeviceRepository
         return Task.CompletedTask;
     }
 
+    public Task<bool> ReplaceTokenHashAsync(string id, byte[] tokenHash, DateTimeOffset at)
+    {
+        if (!_store.TryGetValue(id, out var device) || device.RevokedAt is not null)
+            return Task.FromResult(false);
+        _store[id] = device with { TokenHash = tokenHash, LastUsedAt = at };
+        return Task.FromResult(true);
+    }
+
     public Task<bool> RevokeAsync(string id, DateTimeOffset at)
     {
         if (!_store.TryGetValue(id, out var device) || device.RevokedAt is not null)

@@ -62,6 +62,20 @@ public sealed class DeviceRepository(IDbConnectionFactory connectionFactory) : I
             });
     }
 
+    public async Task<bool> ReplaceTokenHashAsync(string id, byte[] tokenHash, DateTimeOffset at)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        var changed = await conn.ExecuteNonQueryAsync(
+            "UPDATE devices SET token_hash = @TokenHash, last_used_at = @At WHERE id = @Id AND revoked_at IS NULL",
+            cmd =>
+            {
+                cmd.AddParameter("Id", id);
+                cmd.AddParameter("TokenHash", tokenHash);
+                cmd.AddParameter("At", Format(at));
+            });
+        return changed > 0;
+    }
+
     public async Task<bool> RevokeAsync(string id, DateTimeOffset at)
     {
         using var conn = connectionFactory.CreateConnection();

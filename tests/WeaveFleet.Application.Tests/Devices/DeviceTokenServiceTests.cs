@@ -133,6 +133,23 @@ public sealed class DeviceTokenServiceTests
     }
 
     [Fact]
+    public async Task Reissuing_replaces_the_token_and_only_for_live_devices()
+    {
+        var (device, oldToken) = await _service.IssueAsync("iPhone", "ios");
+        (await _service.ValidateAsync(oldToken)).ShouldNotBeNull();
+
+        var newToken = await _service.ReissueAsync(device.Id);
+
+        newToken.ShouldNotBeNull();
+        (await _service.ValidateAsync(newToken)).ShouldNotBeNull();
+        (await _service.ValidateAsync(oldToken)).ShouldBeNull("the cached old token goes with it");
+
+        await _service.RevokeAsync(device.Id);
+        (await _service.ReissueAsync(device.Id)).ShouldBeNull();
+        (await _service.ReissueAsync(Ulid.NewUlid().ToString())).ShouldBeNull();
+    }
+
+    [Fact]
     public async Task Made_up_devices_are_never_cached()
     {
         // Anyone can send tokens with made-up ids; caching each miss would grow the cache without end.

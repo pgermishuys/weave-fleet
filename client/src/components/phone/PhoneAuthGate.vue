@@ -2,11 +2,14 @@
 import { onMounted, shallowRef } from "vue";
 import { LoaderCircle } from "lucide-vue-next";
 import { readCredentialsSync } from "@/lib/device-credentials";
+import { restoreCredentials } from "@/lib/phone/restore-credentials";
 
 /**
- * Sign-in for the phone pages. The phone signs in with its device cookie; if that's gone (cleared, or iOS gave the
- * Home Screen app its own storage) but its device token is still here, the token signs it in again. A phone with
- * neither isn't paired: it goes to /pair. Unlike the desktop gate there's no onboarding: that happens on a computer.
+ * Sign-in for the phone pages. The phone signs in with its device cookie; if that's gone but its device token is still
+ * here, the token signs it in again. A phone with neither isn't paired: it goes to /pair. Signed in but without its
+ * token (an iPhone Home Screen app starts with Safari's cookies and none of its storage), the phone gets a new token
+ * first, so it can reach the other machines too. Unlike the desktop gate there's no onboarding: that happens on a
+ * computer.
  */
 const state = shallowRef<"checking" | "ready" | "error">("checking");
 const message = shallowRef("");
@@ -19,6 +22,7 @@ async function signedIn(): Promise<boolean> {
 onMounted(async () => {
   try {
     if (await signedIn()) {
+      if (!readCredentialsSync()) await restoreCredentials();
       state.value = "ready";
       return;
     }
