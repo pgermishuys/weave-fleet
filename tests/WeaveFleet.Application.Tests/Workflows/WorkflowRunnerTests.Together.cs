@@ -22,7 +22,9 @@ public sealed partial class WorkflowRunnerTests
         design.Prompt.ShouldBe(
             "Design Press ? to see every keyboard shortcut.\n"
             + $"Write it to {DesignDoc} with a mockup next to it in {DesignMockup}.\n"
-            + "Don't change any code.\n\nUse the fleet-mockups skill.");
+            + "Don't change any code.\n\n"
+            + FleetWorkflows.LaterSteps(["Plan", "Approve the plan", "Implement", "Review", "Open the pull request", "Push and open the PR"])
+            + "\n\nUse the fleet-mockups skill.");
         Visit("design").Finish.ShouldBe(WorkflowFinishers.You);
         Visit("design").PromptMessageId.ShouldBe(design.PromptMessageId);
 
@@ -116,7 +118,9 @@ public sealed partial class WorkflowRunnerTests
         plan.Prompt.Contains("Read ", StringComparison.Ordinal).ShouldBeFalse();
         plan.Prompt.ShouldNotContain("first.");
         plan.Prompt.ShouldContain("Reuse what the code already has.\nWhere the request, the design and the code disagree");
-        plan.Prompt.ShouldContain("can't go on without the answer.\n\n" + FleetWorkflows.Footer(["ready"]));
+        plan.Prompt.ShouldContain("can't go on without the answer.\n\n" + FleetWorkflows.LaterSteps(
+            ["Approve the plan", "Implement", "Review", "Open the pull request", "Push and open the PR"])
+            + "\n\n" + FleetWorkflows.Footer(["ready"]));
     }
 
     [Fact]
