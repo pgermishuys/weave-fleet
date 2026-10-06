@@ -414,7 +414,7 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
         _events.ShouldNotContain(e => e.Type == EventTypes.PermissionAsked);
 
         await session.AnswerQuestionAsync("toolu_ask", [["Blue"]], CancellationToken.None);
-        await WaitForAsync(() => Count(EventTypes.SessionIdle) == 1);
+        await WaitForAsync(() => Count(EventTypes.SessionIdle) == 1 && StdinLines().Any(line => line.Contains("\"control_response\"")));
 
         // allow, with the questions it asked and the answers by question text.
         var answer = JsonDocument.Parse(StdinLines().Single(line => line.Contains("\"control_response\""))).RootElement
@@ -443,6 +443,8 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
         await WaitForAsync(() => Statuses().Contains(ActivityStatuses.WaitingInput));
 
         await session.RejectQuestionAsync("req_ask", CancellationToken.None);
+        // The stand-in claude records what it reads a moment after Fleet writes it.
+        await WaitForAsync(() => StdinLines().Any(line => line.Contains("\"control_response\"")));
 
         var refusal = JsonDocument.Parse(StdinLines().Single(line => line.Contains("\"control_response\""))).RootElement
             .GetProperty("response").GetProperty("response");
