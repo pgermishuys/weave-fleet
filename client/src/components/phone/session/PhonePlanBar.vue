@@ -18,28 +18,28 @@ const share = computed(() => props.progress.total ? Math.round((props.progress.d
 </script>
 
 <template>
-  <button
-    type="button"
-    class="ph-step ppb"
-    data-testid="phone-plan-bar"
-    @click="emit('open')"
-  >
-    <span
-      class="ppb__track"
-      aria-hidden="true"
-    ><span
-      class="ppb__fill"
-      :style="{ width: `${share}%` }"
-    /></span>
-    <span class="ph-step__t ppb__text">{{ next ? `Next: ${next}` : "Plan done" }}</span>
-    <span class="ppb__count">{{ progress.done }}/{{ progress.total }}</span>
-    <ChevronRight
-      class="ph-row__chev"
-      :size="16"
-      :stroke-width="3"
-      aria-hidden="true"
-    />
-  </button>
+  <div class="ph-tools">
+    <button
+      type="button"
+      class="ph-tool ppb"
+      data-testid="phone-plan-bar"
+      @click="emit('open')"
+    >
+      <span
+        class="ppb__track"
+        aria-hidden="true"
+      ><span
+        class="ppb__fill"
+        :style="{ width: `${share}%` }"
+      /></span>
+      <span class="ph-tool__d ppb__text">{{ next ? `Next: ${next}` : "Plan done" }}</span>
+      <span class="ph-tool__r">{{ progress.done }}/{{ progress.total }}</span>
+      <ChevronRight
+        class="ph-tool__ic"
+        aria-hidden="true"
+      />
+    </button>
+  </div>
 </template>
 
 <style scoped>
@@ -48,8 +48,8 @@ const share = computed(() => props.progress.total ? Math.round((props.progress.d
   height: 5px;
   flex: none;
   overflow: hidden;
-  border-radius: 3px;
-  background: var(--ph-fill-strong);
+  border-radius: var(--radius-btn);
+  background: var(--ph-tint-9);
 }
 
 .ppb__fill {
@@ -59,11 +59,8 @@ const share = computed(() => props.progress.total ? Math.round((props.progress.d
 }
 
 .ppb__text {
-  color: var(--muted);
-}
-
-.ppb__count {
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
+  font-family: var(--ph-font);
+  font-size: 14px;
+  color: var(--text);
 }
 </style>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dontAskAgain, permissionTitle, permissionWants } from "../asks";
+import { dontAskAgain, permissionTitle } from "../asks";
 
 describe("permission ask words", () => {
   it("heads the ask with what the agent wants, as the desktop card does", () => {
@@ -8,7 +8,6 @@ describe("permission ask words", () => {
     expect(permissionTitle({ kind: "web", tool: "webfetch" })).toBe("Go online");
     expect(permissionTitle({ kind: "other", tool: "external_directory" })).toBe("Work outside the folder");
     expect(permissionTitle({ kind: "other", tool: "webfetch" })).toBe("Use webfetch");
-    expect(permissionWants({ kind: "edit", tool: "edit" })).toBe("Wants to edit a file");
   });
 
   it("says what Don't ask again covers: the patterns, or the whole kind of thing", () => {

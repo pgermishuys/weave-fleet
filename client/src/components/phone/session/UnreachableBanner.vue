@@ -7,7 +7,7 @@ const emit = defineEmits<{ (event: "retry"): void }>();
 <template>
   <button
     type="button"
-    class="ph-banner ub"
+    class="ph-banner ph-banner--bad ub"
     role="alert"
     data-testid="unreachable-banner"
     @click="emit('retry')"
@@ -26,8 +26,6 @@ const emit = defineEmits<{ (event: "retry"): void }>();
 .ub {
   width: auto;
   margin: 0;
-  background: color-mix(in srgb, var(--error) 12%, var(--ph-grouped-bg));
-  color: var(--error);
   font-weight: 500;
 }
 </style>

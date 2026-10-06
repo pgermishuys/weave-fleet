@@ -24,11 +24,8 @@ watch(() => props.open, (open) => {
     @close="emit('close')"
   >
     <div class="ph-sheet__pad pfs__search">
-      <label class="ph-search">
-        <Search
-          :size="18"
-          aria-hidden="true"
-        />
+      <label class="ph-field">
+        <Search aria-hidden="true" />
         <input
           v-model="query"
           class="phone-composer-input"
@@ -43,30 +40,28 @@ watch(() => props.open, (open) => {
     </div>
     <p
       v-if="isLoading && files.length === 0"
-      class="ph-group-f"
+      class="ph-foot pfs__looking"
     >
       Looking…
     </p>
     <div
       v-if="files.length"
-      class="ph-group"
+      class="ph-card"
     >
       <button
         v-for="file in files.slice(0, 50)"
         :key="file"
         type="button"
-        class="ph-row"
-        style="--ph-sep-left: 52px"
+        class="ph-set"
         @click="emit('pick', file); emit('close')"
       >
         <FileText
-          class="pfs__icon"
-          :size="22"
+          class="ph-set__ic"
           aria-hidden="true"
         />
-        <span class="ph-row__main">
-          <span class="ph-row__title pfs__name">{{ file.split("/").pop() }}</span>
-          <span class="ph-row__sub">{{ file.split("/").slice(0, -1).join("/") || "." }}</span>
+        <span class="ph-set__main">
+          <span class="ph-set__t"><span>{{ file.split("/").pop() }}</span></span>
+          <span class="ph-set__s ph-mono pfs__folder">{{ file.split("/").slice(0, -1).join("/") || "." }}</span>
         </span>
       </button>
     </div>
@@ -75,16 +70,17 @@ watch(() => props.open, (open) => {
 
 <style scoped>
 .pfs__search {
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
-.pfs__icon {
-  flex: none;
-  color: var(--muted);
+.pfs__looking {
+  margin-top: 0;
 }
 
-.pfs__name {
-  font-family: var(--ph-mono);
-  font-size: 0.85rem;
+.pfs__folder {
+  overflow: hidden;
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 </style>

@@ -12,17 +12,6 @@ export function permissionTitle(ask: Pick<PermissionAsk, "kind" | "tool">): stri
   }
 }
 
-/** The docked ask's one line: "Wants to run a command", … (until the docked ask takes the desktop card's head). */
-export function permissionWants(ask: Pick<PermissionAsk, "kind" | "tool">): string {
-  switch (ask.kind) {
-    case "shell": return "Wants to run a command";
-    case "edit": return "Wants to edit a file";
-    case "read": return "Wants to read a file";
-    case "web": return "Wants to open a web page";
-    default: return `Wants to use ${ask.tool}`;
-  }
-}
-
 /**
  * What "Don't ask again" covers, as the desktop PermissionCard words it: the harness's patterns ("Don't ask again for
  * `dotnet test *`"), or the whole kind of thing when there are none.

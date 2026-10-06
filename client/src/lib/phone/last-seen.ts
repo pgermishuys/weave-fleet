@@ -2,7 +2,7 @@
  * When you last looked at a session on the phone, so coming back shows "Since you looked at 14:20" before what's new.
  * Kept per machine and session in localStorage. No Vue.
  */
-import type { PhoneBlock } from "@/lib/phone/fold-steps";
+import type { PhoneBlock, PhoneItem } from "@/lib/phone/fold-steps";
 
 const KEY = "weave:phone-last-seen";
 const MAX_ENTRIES = 200;
@@ -36,7 +36,7 @@ export function markSeen(machineId: string, sessionId: string, at: number): void
  * Where the "Since you looked" line goes: before the first block from the agent (or you) that's newer than when you
  * last looked. Null when you've never looked, or nothing's new. Blocks without a time count as old.
  */
-export function sinceYouLookedIndex(blocks: readonly PhoneBlock[], seenAt: number | null): number | null {
+export function sinceYouLookedIndex(blocks: readonly (PhoneBlock | PhoneItem)[], seenAt: number | null): number | null {
   if (seenAt === null) return null;
   const index = blocks.findIndex((block) => "createdAt" in block && typeof block.createdAt === "number" && block.createdAt > seenAt);
   return index > 0 ? index : null;

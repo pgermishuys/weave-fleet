@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { shallowRef, watch } from "vue";
 import { computed } from "vue";
-import { ArrowLeft, ChevronLeft, ChevronRight, FileText, Folder, LoaderCircle } from "lucide-vue-next";
-import { phoneLook } from "@/composables/phone/use-phone-env";
+import { ChevronLeft, ChevronRight, FileText, Folder, LoaderCircle, X } from "lucide-vue-next";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
 import { browseSessionDirectory, readSessionFile } from "@/api/session-files";
 
@@ -82,34 +81,32 @@ watch(() => props.open, (open) => {
       <button
         v-if="canGoBack"
         type="button"
-        class="ph-navbtn ph-glass"
+        class="ph-icon-btn ph-icon-btn--text fls__back"
         aria-label="Back"
         @click="goBack"
       >
-        <ArrowLeft
-          v-if="phoneLook === 'android'"
-          :size="24"
-          aria-hidden="true"
-        />
-        <ChevronLeft
-          v-else
-          :size="24"
-          :stroke-width="2.4"
-          aria-hidden="true"
-        />
+        <ChevronLeft aria-hidden="true" />
       </button>
       <h2>{{ heading }}</h2>
-      <span class="ph-navbar__spacer" />
       <LoaderCircle
         v-if="loading"
-        class="ph-spinner fls__spin"
+        class="ph-spinner"
         :size="18"
       />
+      <button
+        type="button"
+        class="ph-icon-btn"
+        aria-label="Close"
+        data-testid="sheet-close"
+        @click="emit('close')"
+      >
+        <X aria-hidden="true" />
+      </button>
     </template>
 
     <p
       v-if="error"
-      class="ph-note ph-note--error"
+      class="ph-foot ph-foot--bad fls__note"
       role="alert"
     >
       {{ error }}
@@ -123,47 +120,42 @@ watch(() => props.open, (open) => {
       </p>
       <p
         v-if="file.note"
-        class="ph-note fls__note"
+        class="ph-foot fls__note"
       >
         {{ file.note }}
       </p>
       <pre
         v-if="file.text !== null"
-        class="ph-code fls__pre"
+        class="ph-cmd fls__pre"
         data-testid="phone-file-text"
       >{{ file.text }}</pre>
     </div>
     <div
       v-else-if="entries.length"
-      class="ph-group"
+      class="ph-card"
     >
       <button
         v-for="entry in entries"
         :key="entry.relativePath"
         type="button"
-        class="ph-row"
-        style="--ph-sep-left: 52px"
+        class="ph-set"
         data-testid="phone-file"
         @click="entry.isDirectory ? browse(entry.relativePath) : read(entry)"
       >
         <Folder
           v-if="entry.isDirectory"
-          class="fls__icon fls__icon--dir"
-          :size="22"
+          class="ph-set__ic fls__dir"
           aria-hidden="true"
         />
         <FileText
           v-else
-          class="fls__icon"
-          :size="22"
+          class="ph-set__ic"
           aria-hidden="true"
         />
-        <span class="ph-row__main"><span class="ph-row__title">{{ entry.name }}</span></span>
+        <span class="ph-set__main"><span class="ph-set__t">{{ entry.name }}</span></span>
         <ChevronRight
           v-if="entry.isDirectory"
-          class="ph-row__chev"
-          :size="16"
-          :stroke-width="3"
+          class="ph-set__chev"
           aria-hidden="true"
         />
       </button>
@@ -172,14 +164,14 @@ watch(() => props.open, (open) => {
 </template>
 
 <style scoped>
-.fls__spin {
-  margin-right: 12px;
+.fls__back {
+  margin-left: -10px;
 }
 
 .fls__path {
   margin: 0 0 10px;
   font-family: var(--ph-mono);
-  font-size: 0.8rem;
+  font-size: 12px;
   color: var(--muted);
   overflow-wrap: anywhere;
 }
@@ -189,18 +181,15 @@ watch(() => props.open, (open) => {
 }
 
 .fls__pre {
+  max-height: none;
+  margin-top: 0;
   overflow-x: auto;
-  font-size: 0.72rem;
+  font-size: 12px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-.fls__icon {
-  flex: none;
-  color: var(--muted);
-}
-
-.fls__icon--dir {
+.fls__dir {
   color: var(--accent);
 }
 </style>

@@ -5,7 +5,9 @@ import BottomSheet from "@/components/phone/BottomSheet.vue";
 import PhoneMarkdown from "@/components/phone/session/PhoneMarkdown.vue";
 import { useSessionStream } from "@/composables/use-session-stream";
 import { useSideConversation } from "@/composables/use-side-conversation";
+import PhoneGlyph from "@/components/phone/PhoneGlyph.vue";
 import { foldMessages } from "@/lib/phone/fold-steps";
+import { autogrow } from "@/lib/phone/keyboard";
 
 /**
  * A side question (`/btw`) as a full-height sheet over the session: its own conversation and composer, a fork that
@@ -46,27 +48,23 @@ async function discard(): Promise<void> {
     @close="emit('close')"
   >
     <template #head>
+      <h2>Side question<span class="ph-sheet__sub">The session carries on; this stays here</span></h2>
       <button
         v-if="side.side.value"
         type="button"
-        class="ph-navbtn ph-glass ph-navbtn--text"
+        class="ph-btn ph-btn--outline ph-btn--sm"
         @click="keep"
       >
         Keep
       </button>
-      <h2>Side question</h2>
-      <span class="ph-navbar__spacer" />
       <button
         type="button"
-        class="ph-navbtn ph-glass"
+        class="ph-icon-btn"
         aria-label="Close"
+        data-testid="sheet-close"
         @click="side.side.value ? discard() : emit('close')"
       >
-        <X
-          :size="22"
-          :stroke-width="2.4"
-          aria-hidden="true"
-        />
+        <X aria-hidden="true" />
       </button>
     </template>
 
@@ -84,24 +82,23 @@ async function discard(): Promise<void> {
       >
         <p
           v-if="block.kind === 'user'"
-          class="ph-bubble scs__you"
+          class="ph-umsg"
         >
           {{ block.text }}
         </p>
         <PhoneMarkdown
           v-else-if="block.kind === 'text'"
           :text="block.text"
-          class="ph-agent"
         />
       </template>
       <p
         v-if="side.working.value || side.starting.value"
         class="ph-working"
       >
-        <span
-          class="ph-typing"
-          aria-hidden="true"
-        ><i /><i /><i /></span>Thinking…
+        <PhoneGlyph
+          kind="working"
+          label="Thinking"
+        /><span class="ph-working__word">Thinking</span>
       </p>
       <p
         v-if="side.error.value"
@@ -114,30 +111,30 @@ async function discard(): Promise<void> {
 
     <template #foot>
       <form
-        class="ph-composer ph-glass-field"
+        class="ph-frame"
         @submit.prevent="ask"
       >
         <textarea
           v-model="question"
           class="phone-composer-input"
           rows="1"
-          placeholder="Ask on the side"
+          placeholder="Ask on the side…"
           aria-label="Side question"
           enterkeyhint="enter"
           data-testid="side-input"
+          @input="autogrow($event.target as HTMLTextAreaElement)"
         />
-        <button
-          type="submit"
-          class="ph-send"
-          aria-label="Ask"
-          :disabled="!question.trim()"
-        >
-          <ArrowUp
-            :size="22"
-            :stroke-width="2.6"
-            aria-hidden="true"
-          />
-        </button>
+        <div class="ph-frame__bar">
+          <span class="ph-sel ph-sel--note">/btw · doesn't interrupt the agent</span>
+          <button
+            type="submit"
+            class="ph-send"
+            aria-label="Ask"
+            :disabled="!question.trim()"
+          >
+            <ArrowUp aria-hidden="true" />
+          </button>
+        </div>
       </form>
     </template>
   </BottomSheet>
@@ -149,19 +146,15 @@ async function discard(): Promise<void> {
 }
 
 .scs__empty {
-  margin: 4px 4px 0;
-  font-size: var(--ph-t-sub);
+  margin: 4px 2px 0;
+  font-size: var(--ph-t-meta);
   line-height: 1.4;
   color: var(--muted);
 }
 
-.scs__you {
-  margin: 0;
-}
-
 .scs__error {
   margin: 0;
-  font-size: var(--ph-t-sub);
+  font-size: var(--ph-t-meta);
   color: var(--error);
 }
 </style>

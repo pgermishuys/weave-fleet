@@ -2,7 +2,7 @@
 import { Check } from "lucide-vue-next";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
 
-/** A list to pick one from (agent, model or effort), as a sheet of rows with a check on the current one. */
+/** A list to pick one from (agent, model or effort), as a sheet of settings rows with a check on the current one. */
 export interface ChipOption {
   id: string;
   label: string;
@@ -20,37 +20,33 @@ const emit = defineEmits<{ (event: "pick", id: string): void; (event: "close"): 
     :title="title"
     @close="emit('close')"
   >
-    <div class="ph-group">
+    <div class="ph-card">
       <button
         v-for="option in options"
         :key="option.id"
         type="button"
-        class="ph-row"
+        class="ph-set"
         :aria-pressed="option.id === selected"
         @click="emit('pick', option.id); emit('close')"
       >
-        <span class="ph-row__main">
-          <span class="ph-row__title">{{ option.label }}</span>
+        <span class="ph-set__main">
+          <span class="ph-set__t">{{ option.label }}</span>
           <span
             v-if="option.detail"
-            class="ph-row__sub"
+            class="ph-set__s"
           >{{ option.detail }}</span>
         </span>
         <Check
           v-if="option.id === selected"
-          class="ph-row__check"
-          :size="22"
-          :stroke-width="2.6"
+          class="ph-set__check"
           aria-hidden="true"
+        />
+        <span
+          v-else
+          class="ph-set__nocheck"
         />
       </button>
     </div>
   </BottomSheet>
 </template>
 
-<style scoped>
-.ph-row__title,
-.ph-row__sub {
-  display: block;
-}
-</style>

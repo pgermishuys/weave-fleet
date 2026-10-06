@@ -1,123 +1,71 @@
 <script setup lang="ts">
-import { ArrowLeft, ChevronLeft, Ellipsis } from "lucide-vue-next";
-import { phoneLook } from "@/composables/phone/use-phone-env";
+import { computed } from "vue";
+import { ChevronLeft, Ellipsis } from "lucide-vue-next";
+import PhoneGlyph from "@/components/phone/PhoneGlyph.vue";
+import type { HeaderTone } from "@/lib/phone/session-status";
 
 /**
- * The session's bar, and its status: back, the title, and under it a dot, the machine and what it's doing —
- * "hangar · Working · 1m 12s", "hangar · Needs you" (amber), "hangar · Finished 22 min ago". Glass buttons on
- * iPhone; a back arrow and plain icons on Android. Content blurs under it once scrolled.
+ * The session's head inside its panel, as the desktop's SessionDetailHeader: back, the title, and under it the status
+ * glyph and what it's doing — "Needs you · hangar · weave-fleet" (amber), "Working · 1m 12s · hangar", "Finished
+ * 22 min ago · hangar" — then ⋯ for the menu. A hairline under it.
  */
-defineProps<{
+const props = defineProps<{
   title: string;
   machineName: string;
-  tone: "working" | "needs-you" | "finished" | "error" | "unreachable" | "idle";
+  folder?: string | null;
+  tone: HeaderTone;
   status: string;
-  scrolled: boolean;
 }>();
 const emit = defineEmits<{ (event: "back"): void; (event: "menu"): void }>();
+
+const glyph = computed(() => {
+  switch (props.tone) {
+    case "working": return "working" as const;
+    case "needs-you": return "waiting" as const;
+    case "error":
+    case "unreachable": return "error" as const;
+    case "finished": return "quiet" as const;
+    default: return "idle" as const;
+  }
+});
+const where = computed(() => (props.tone === "needs-you" ? [props.machineName, props.folder].filter(Boolean).join(" · ") : props.tone === "unreachable" ? "" : props.machineName));
 </script>
 
 <template>
   <header
-    class="ph-navbar"
-    :class="{ 'ph-navbar--scrolled': scrolled }"
+    class="ph-shead"
     data-testid="phone-session-header"
   >
     <button
       type="button"
-      class="ph-navbtn ph-glass"
+      class="ph-icon-btn ph-icon-btn--text"
       aria-label="Back"
       data-testid="phone-session-back"
       @click="emit('back')"
     >
-      <ArrowLeft
-        v-if="phoneLook === 'android'"
-        :size="24"
-        aria-hidden="true"
-      />
-      <ChevronLeft
-        v-else
-        :size="26"
-        :stroke-width="2.4"
-        aria-hidden="true"
-      />
+      <ChevronLeft aria-hidden="true" />
     </button>
-    <div class="psh">
-      <h1 class="psh__title">
+    <div class="ph-shead__main">
+      <h1 class="ph-shead__t">
         {{ title }}
       </h1>
-      <p class="psh__line">
+      <p class="ph-shead__s">
+        <PhoneGlyph :kind="glyph" />
         <span
-          class="ph-dot psh__dot"
-          :class="{
-            'ph-dot--running': tone === 'working',
-            'ph-dot--waiting': tone === 'needs-you',
-            'ph-dot--done': tone === 'finished',
-            'ph-dot--error': tone === 'error' || tone === 'unreachable',
-          }"
-          aria-hidden="true"
-        />
-        <span class="psh__machine">{{ machineName }}</span>
-        <span
-          class="psh__state"
           data-testid="phone-session-state"
-        >· {{ status }}</span>
+          :class="{ 'ph-shead__waiting': tone === 'needs-you', 'ph-shead__bad': tone === 'error' }"
+        >{{ status }}</span>
+        <span v-if="where">· {{ where }}</span>
       </p>
     </div>
     <button
       type="button"
-      class="ph-navbtn ph-glass"
+      class="ph-icon-btn"
       aria-label="More"
       data-testid="phone-session-menu"
       @click="emit('menu')"
     >
-      <Ellipsis
-        :size="24"
-        :stroke-width="2.6"
-        aria-hidden="true"
-      />
+      <Ellipsis aria-hidden="true" />
     </button>
   </header>
 </template>
-
-<style scoped>
-.psh {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  justify-content: center;
-  min-width: 0;
-  padding: 0 6px;
-}
-
-.psh__title {
-  margin: 0;
-  overflow: hidden;
-  font-size: var(--ph-t-body);
-  font-weight: 600;
-  line-height: 1.25;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.psh__line {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin: 0;
-  overflow: hidden;
-  font-size: var(--ph-t-foot);
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-.psh__dot {
-  width: 7px;
-  height: 7px;
-}
-
-.psh__state {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-</style>

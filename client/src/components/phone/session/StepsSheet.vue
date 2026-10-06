@@ -1,169 +1,152 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import { ArrowLeft, ChevronLeft, LoaderCircle } from "lucide-vue-next";
+import { ChevronLeft, X } from "lucide-vue-next";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
-import type { FoldedStep } from "@/lib/phone/fold-steps";
-import { phoneLook } from "@/composables/phone/use-phone-env";
+import PhoneToolRun from "@/components/phone/session/PhoneToolRun.vue";
+import { stepDetail, stepRow, type FoldedStep } from "@/lib/phone/fold-steps";
 
-/** The steps of a folded row, then one step's diff or output. Read-only. */
-const props = defineProps<{ open: boolean; steps: readonly FoldedStep[] }>();
+/**
+ * Steps, read-only: a list of them ("3 more steps"), or one step opened — an edit as its diff, a command with what it
+ * printed. A step opened from the list has Back to it.
+ */
+const props = defineProps<{ open: boolean; steps: readonly FoldedStep[]; focus?: FoldedStep | null }>();
 const emit = defineEmits<{ (event: "close"): void }>();
 
 const picked = shallowRef<FoldedStep | null>(null);
 watch(() => props.open, (open) => {
-  if (!open) picked.value = null;
-});
+  picked.value = open ? props.focus ?? null : null;
+}, { immediate: true });
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-}
-
-const VERBS: Record<FoldedStep["category"], string> = { read: "Read", edit: "Edited", run: "Ran", search: "Searched", other: "Used" };
-/** "Read", "Ran · running", "Edited · failed": the line over each step. */
-function stepLine(step: FoldedStep): string {
-  const verb = step.category === "other" ? `Used ${step.tool}` : VERBS[step.category];
-  if (step.status === "running" || step.status === "pending") return `${verb} · running`;
-  if (step.status === "error") return `${verb} · failed`;
-  return verb;
-}
-
-/** An edit as -/+ lines; anything else as its output. */
-const detail = computed(() => {
-  const step = picked.value;
-  if (!step) return { kind: "none" as const, text: "" };
-  const state = asRecord(step.part.state);
-  const input = asRecord(state?.input);
-  if (step.category === "edit" && typeof input?.oldString === "string" && typeof input?.newString === "string") {
-    const lines = [
-      ...input.oldString.split("\n").map((line) => `- ${line}`),
-      ...input.newString.split("\n").map((line) => `+ ${line}`),
-    ];
-    return { kind: "diff" as const, text: lines.join("\n") };
-  }
-  if (step.category === "edit" && typeof input?.content === "string") {
-    return { kind: "diff" as const, text: input.content.split("\n").map((line) => `+ ${line}`).join("\n") };
-  }
-  const output = state?.output ?? state?.error;
-  const text = typeof output === "string" ? output : output == null ? "" : JSON.stringify(output, null, 2);
-  return { kind: "output" as const, text: text || (step.status === "running" ? "Still running…" : "No output.") };
+const fromList = computed(() => !props.focus);
+const row = computed(() => (picked.value ? stepRow(picked.value) : null));
+const detail = computed(() => (picked.value ? stepDetail(picked.value) : null));
+const subtitle = computed(() => {
+  if (!row.value) return "";
+  return row.value.pattern || picked.value?.category === "run" ? row.value.detail : row.value.detail.split("/").pop() ?? "";
 });
 </script>
 
 <template>
   <BottomSheet
     :open="open"
-    :label="picked ? picked.label : 'Steps'"
+    :label="row ? row.label : 'Steps'"
     :detents="['medium', 'large']"
     initial="medium"
-    :title="picked ? undefined : 'Steps'"
+    :title="row ? undefined : `${steps.length} more step${steps.length === 1 ? '' : 's'}`"
     @close="emit('close')"
   >
     <template
-      v-if="picked"
+      v-if="row"
       #head
     >
       <button
+        v-if="fromList"
         type="button"
-        class="ph-navbtn ph-glass"
+        class="ph-icon-btn ph-icon-btn--text ss__back"
         aria-label="Back to the steps"
         @click="picked = null"
       >
-        <ArrowLeft
-          v-if="phoneLook === 'android'"
-          :size="24"
-          aria-hidden="true"
-        />
-        <ChevronLeft
-          v-else
-          :size="24"
-          :stroke-width="2.4"
-          aria-hidden="true"
-        />
+        <ChevronLeft aria-hidden="true" />
       </button>
-      <h2>{{ stepLine(picked) }}</h2>
+      <h2>{{ row.label }}<span class="ph-sheet__sub">{{ subtitle }}</span></h2>
+      <button
+        type="button"
+        class="ph-icon-btn"
+        aria-label="Close"
+        data-testid="sheet-close"
+        @click="emit('close')"
+      >
+        <X aria-hidden="true" />
+      </button>
     </template>
 
-    <div
-      v-if="!picked"
-      class="ph-group"
-    >
-      <button
-        v-for="step in steps"
-        :key="step.id"
-        type="button"
-        class="ph-row"
-        data-testid="phone-step"
-        @click="picked = step"
-      >
-        <span class="ph-row__main">
-          <span
-            class="ph-row__sub ss__verb"
-            :class="{ 'ss__verb--bad': step.status === 'error' }"
-          >{{ stepLine(step) }}</span>
-          <span class="ph-row__title ss__label">{{ step.label }}</span>
-        </span>
-        <LoaderCircle
-          v-if="step.status === 'running' || step.status === 'pending'"
-          class="ph-spinner"
-          :size="18"
-          aria-hidden="true"
-        />
-      </button>
-    </div>
-    <div
-      v-else
-      class="ph-sheet__pad"
-    >
-      <p class="ss__title">
-        {{ picked.label }}
-      </p>
-      <pre
-        class="ph-code ss__pre"
+    <div class="ph-sheet__pad">
+      <PhoneToolRun
+        v-if="!picked"
+        :parts="[{ kind: 'steps', key: 'sheet', steps: [...steps], summary: '', running: false, failed: 0 }]"
+        all
+        @open="(step) => (picked = step)"
+      />
+      <div
+        v-else-if="detail?.kind === 'diff'"
+        class="ph-cmd ss__diff"
         data-testid="phone-step-detail"
-      ><template v-if="detail.kind === 'diff'"><span
-        v-for="(line, index) in detail.text.split('\n')"
-        :key="index"
-        :class="line.startsWith('+') ? 'ss__add' : 'ss__del'"
-      >{{ line }}
-</span></template><template v-else>{{ detail.text }}</template></pre>
+      >
+        <div class="ss__file">
+          {{ detail.file }} <span class="ph-add">+{{ detail.adds }}</span> <span class="ph-del">−{{ detail.dels }}</span>
+        </div>
+        <div class="ss__lines">
+          <span
+            v-for="(line, index) in detail.lines"
+            :key="index"
+            class="ss__line"
+            :class="`ss__line--${line.kind}`"
+          >{{ line.text || " " }}</span>
+        </div>
+      </div>
+      <pre
+        v-else-if="detail"
+        class="ph-cmd ss__out"
+        data-testid="phone-step-detail"
+      ><template v-if="detail.command"><span class="ph-cmd__p">$ </span>{{ detail.command }}
+</template><span class="ss__result">{{ detail.text }}</span></pre>
     </div>
   </BottomSheet>
 </template>
 
 <style scoped>
-.ss__verb {
-  margin: 0 0 2px;
-  font-size: var(--ph-t-foot);
+.ss__back {
+  margin-left: -10px;
 }
 
-.ss__verb--bad {
-  color: var(--error);
+.ss__diff {
+  margin-top: 0;
+  padding: 0;
+  overflow: hidden;
+  font-size: 12.5px;
 }
 
-.ss__label {
-  font-family: var(--ph-mono);
-  font-size: 0.85rem;
+.ss__file {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
 }
 
-.ss__title {
-  margin: 0 0 10px;
-  font-family: var(--ph-mono);
-  font-size: 0.85rem;
-  overflow-wrap: anywhere;
-}
-
-.ss__pre {
+.ss__lines {
+  padding: 6px 0;
   overflow-x: auto;
-  font-size: 0.75rem;
+  white-space: pre;
+}
+
+.ss__line {
+  display: block;
+  min-width: max-content;
+  padding: 0 12px;
+}
+
+.ss__line--hunk {
+  color: var(--muted);
+}
+
+.ss__line--del {
+  background: color-mix(in srgb, var(--error) 10%, transparent);
+}
+
+.ss__line--add {
+  background: color-mix(in srgb, var(--running) 10%, transparent);
+}
+
+.ss__out {
+  max-height: none;
+  margin-top: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
-.ss__add {
-  color: var(--diff-add);
-}
-
-.ss__del {
-  color: var(--diff-del);
+.ss__result {
+  color: var(--muted);
 }
 </style>

@@ -6,9 +6,9 @@ import { holdKeyboard } from "@/lib/phone/keyboard";
 import { shareLink } from "@/lib/phone/share";
 import { ago } from "@/lib/phone/time";
 import { storeToRefs } from "pinia";
-import { Check, ChevronRight, CornerDownRight, ImageIcon, LoaderCircle } from "lucide-vue-next";
+import { Check, CornerDownRight, ImageIcon, LoaderCircle } from "lucide-vue-next";
+import PhoneGlyph from "@/components/phone/PhoneGlyph.vue";
 import ShellCommandBlock from "@/components/session/ShellCommandBlock.vue";
-import FoldedStepsRow from "@/components/phone/session/FoldedStepsRow.vue";
 import PhoneMarkdown from "@/components/phone/session/PhoneMarkdown.vue";
 import PhonePlanBar from "@/components/phone/session/PhonePlanBar.vue";
 import PhoneSessionHeader from "@/components/phone/session/PhoneSessionHeader.vue";
@@ -20,6 +20,7 @@ import SessionMenuSheet, { type MenuAction } from "@/components/phone/session/Se
 import SideConversationSheet from "@/components/phone/session/SideConversationSheet.vue";
 import SinceYouLookedMarker from "@/components/phone/session/SinceYouLookedMarker.vue";
 import StepsSheet from "@/components/phone/session/StepsSheet.vue";
+import PhoneToolRun from "@/components/phone/session/PhoneToolRun.vue";
 import DockedPermission from "@/components/phone/session/DockedPermission.vue";
 import DockedQuestion from "@/components/phone/session/DockedQuestion.vue";
 import PhoneComposer from "@/components/phone/session/PhoneComposer.vue";
@@ -40,17 +41,19 @@ import { useSessionStream } from "@/composables/use-session-stream";
 import { useSessions } from "@/composables/use-sessions";
 import { readCredentialsSync } from "@/lib/device-credentials";
 import { getActiveMachine } from "@/lib/machines";
-import { foldMessages, type FoldedStep } from "@/lib/phone/fold-steps";
+import { foldMessages, groupTools, type FoldedStep } from "@/lib/phone/fold-steps";
+import { sessionFolder } from "@/lib/phone/inbox";
 import { lastSeenAt, markSeen, sinceYouLookedIndex } from "@/lib/phone/last-seen";
 import { headerStatus } from "@/lib/phone/session-status";
 import { useSessionsStore } from "@/stores/sessions";
 import { usePhoneNav } from "@/composables/phone/use-phone-nav";
 
 /**
- * A session on the phone (`/phone/s/<machine>/<session>`, pushed over the inbox by PhoneStack): the bar is the status,
- * a plan row when there's a plan, the conversation with each run of tool calls folded into one row, and the dock at
- * the bottom — whatever the agent waits on, compact (Allow once and More…), above the composer — which stays above
- * the keyboard. The conversation always clears the dock, whatever its height.
+ * A session on the phone (`/phone/s/<machine>/<session>`, pushed over the inbox by PhoneStack), in one panel on the
+ * window chrome: the head says what it's doing, a plan row when there's a plan, the conversation as the desktop draws
+ * it (your messages in bubbles, the agent's words, each run of tool calls as a box of tool rows), and the dock at the
+ * bottom — whatever the agent waits on, compact (Allow once and More…), above the composer — which stays above the
+ * keyboard. The conversation always clears the dock, whatever its height.
  */
 const props = defineProps<{ machineId: string; sessionId: string; ask?: string }>();
 const nav = usePhoneNav();
@@ -69,9 +72,11 @@ const session = computed(() => sessions.value.find((item) => item.session.id ===
 const stream = useSessionStream(sessionId);
 const { progress } = useSessionProgress(sessionId);
 const blocks = computed(() => foldMessages(stream.messages.value));
+const items = computed(() => groupTools(blocks.value));
 
 const machineName = computed(() => getActiveMachine()?.name ?? readCredentialsSync()?.homeMachineName ?? "This machine");
 const title = computed(() => session.value?.session.title?.trim() || "Session");
+const folder = computed(() => (session.value ? sessionFolder(session.value) : null));
 
 const turnStartedAt = computed(() => {
   for (const message of [...stream.messages.value].reverse()) {
@@ -107,7 +112,7 @@ watch(status, (next) => {
 
 // "Since you looked": read once on arrival; written when you leave or the app goes off screen.
 const seenAt = shallowRef<number | null>(lastSeenAt(machineId.value, sessionId.value));
-const markerIndex = computed(() => sinceYouLookedIndex(blocks.value, seenAt.value));
+const markerIndex = computed(() => sinceYouLookedIndex(items.value, seenAt.value));
 
 function rememberSeen(): void {
   markSeen(machineId.value, sessionId.value, Date.now());
@@ -119,12 +124,7 @@ function onVisibility(): void {
 
 const scrollRef = useTemplateRef<HTMLElement>("scroll");
 const dockRef = useTemplateRef<HTMLElement>("dock");
-const scrolled = shallowRef(false);
 let scrolledOnArrival = false;
-
-function onScroll(): void {
-  scrolled.value = (scrollRef.value?.scrollTop ?? 0) > 4;
-}
 
 // The conversation always clears the dock (a docked ask, a five-line message, the keyboard), staying at the bottom.
 let dockObserver: ResizeObserver | null = null;
@@ -135,7 +135,7 @@ function watchDock(): void {
     const el = scrollRef.value;
     if (!el) return;
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-    el.style.paddingBottom = `${dock.offsetHeight + 16}px`;
+    el.style.paddingBottom = `${dock.offsetHeight + 12}px`;
     if (atBottom) el.scrollTop = el.scrollHeight;
   });
   dockObserver.observe(dock);
@@ -172,6 +172,9 @@ const dock = computed(() => chooseDock({
   later: later.value,
   focus: search.value.ask ?? null,
 }));
+
+/** The tool calls waiting on an ask, so their rows say "Needs you". */
+const waitingCalls = computed(() => new Set(asks.value.map((ask) => ask.callId).filter((id): id is string => !!id)));
 
 function putOff(id: string): void {
   later.value = new Set([...later.value, id]);
@@ -270,7 +273,7 @@ function runCommand(command: string): void {
   void runShellCommand(command);
 }
 
-const stepsOpen = shallowRef<readonly FoldedStep[] | null>(null);
+const stepsOpen = shallowRef<{ steps: readonly FoldedStep[]; focus: FoldedStep | null } | null>(null);
 const planOpen = shallowRef(false);
 
 function back(): void {
@@ -288,14 +291,14 @@ const shown = computed(() => (dock.value.kind !== "composer" || dock.value.later
   ? { tone: "needs-you" as const, state: "Needs you", detail: "" }
   : status.value);
 
-/** What the bar says the session is doing, after the machine's name. */
+/** What the head says the session is doing, before the machine's name. */
 const statusText = computed(() => {
   const value = shown.value;
   switch (value.tone) {
     case "working": return value.detail ? `${value.state} · ${value.detail}` : value.state;
     case "needs-you": return "Needs you";
     case "finished": return lastMessageAt.value ? `Finished ${ago(lastMessageAt.value, now.value)}` : "Finished";
-    case "unreachable": return `Can't reach it · last heard ${value.detail}`;
+    case "unreachable": return `Can't reach ${machineName.value} · last heard ${value.detail}`;
     default: return value.state;
   }
 });
@@ -318,223 +321,200 @@ onUnmounted(() => {
     class="ps"
     data-testid="phone-session"
   >
-    <PhoneSessionHeader
-      :title="title"
-      :machine-name="machineName"
-      :tone="shown.tone"
-      :status="statusText"
-      :scrolled="scrolled"
-      @back="back"
-      @menu="sheet = 'menu'"
-    />
+    <div class="ph-panel ph-panel--full">
+      <PhoneSessionHeader
+        :title="title"
+        :machine-name="machineName"
+        :folder="folder"
+        :tone="shown.tone"
+        :status="statusText"
+        @back="back"
+        @menu="sheet = 'menu'"
+      />
 
-    <main
-      ref="scroll"
-      class="ph-scroller ps__scroll"
-      @scroll.passive="onScroll"
-    >
-      <div class="ph-convo">
-        <UnreachableBanner
-          v-if="!reachability.reachable.value"
-          :machine-name="machineName"
-          :retry-in="reachability.retryIn.value"
-          @retry="reachability.retry"
-        />
-        <PhonePlanBar
-          v-if="progress && progress.total > 0"
-          :progress="progress"
-          @open="planOpen = true"
-        />
-        <button
-          v-if="stream.hasMore.value"
-          type="button"
-          class="ph-btn ph-btn--plain ps__older"
-          :disabled="stream.isLoadingOlder.value"
-          @click="stream.loadOlder"
-        >
-          {{ stream.isLoadingOlder.value ? "Loading…" : "Earlier messages" }}
-        </button>
-        <div
-          v-if="stream.isLoading.value && blocks.length === 0"
-          class="ps__loading"
-          role="status"
-        >
-          <LoaderCircle
-            class="ph-spinner"
-            :size="22"
-            aria-hidden="true"
+      <main
+        ref="scroll"
+        class="ph-scroller"
+      >
+        <div class="ph-convo">
+          <UnreachableBanner
+            v-if="!reachability.reachable.value"
+            :machine-name="machineName"
+            :retry-in="reachability.retryIn.value"
+            @retry="reachability.retry"
           />
-        </div>
+          <PhonePlanBar
+            v-if="progress && progress.total > 0"
+            :progress="progress"
+            @open="planOpen = true"
+          />
+          <button
+            v-if="stream.hasMore.value"
+            type="button"
+            class="ph-btn ph-btn--outline ph-btn--sm ps__older"
+            :disabled="stream.isLoadingOlder.value"
+            @click="stream.loadOlder"
+          >
+            {{ stream.isLoadingOlder.value ? "Loading…" : "Earlier messages" }}
+          </button>
+          <div
+            v-if="stream.isLoading.value && blocks.length === 0"
+            class="ps__loading"
+            role="status"
+          >
+            <LoaderCircle
+              class="ph-spinner"
+              :size="22"
+              aria-hidden="true"
+            />
+          </div>
 
-        <template
-          v-for="(block, index) in blocks"
-          :key="block.key"
-        >
-          <SinceYouLookedMarker
-            v-if="index === markerIndex && seenAt"
-            :at="seenAt"
-          />
-          <template v-if="block.kind === 'user'">
+          <template
+            v-for="(block, index) in items"
+            :key="block.key"
+          >
+            <SinceYouLookedMarker
+              v-if="index === markerIndex && seenAt"
+              :at="seenAt"
+            />
+            <template v-if="block.kind === 'user'">
+              <p
+                class="ph-umsg"
+                data-testid="phone-user-message"
+              >
+                {{ block.text }}
+              </p>
+              <span
+                v-if="block.steered || block.images"
+                class="ph-umsg-meta"
+              >
+                <template v-if="block.steered"><CornerDownRight
+                  :size="12"
+                  aria-hidden="true"
+                /> sent into the turn</template>
+                <template v-if="block.images"><ImageIcon
+                  :size="12"
+                  aria-hidden="true"
+                /> {{ block.images }} image{{ block.images === 1 ? "" : "s" }}</template>
+              </span>
+            </template>
+            <PhoneMarkdown
+              v-else-if="block.kind === 'text'"
+              :text="block.text"
+            />
+            <PhoneToolRun
+              v-else-if="block.kind === 'tools'"
+              :parts="block.parts"
+              :waiting-calls="waitingCalls"
+              @open="(step, run) => (stepsOpen = { steps: run, focus: step })"
+              @more="(rest) => (stepsOpen = { steps: rest, focus: null })"
+              @child="openChild"
+            />
             <p
-              class="ph-bubble"
-              data-testid="phone-user-message"
+              v-else-if="block.kind === 'question' && !block.pending"
+              class="ps__asked"
+            >
+              Asked · {{ block.question }} <template v-if="block.answer">
+                → {{ block.answer }} <Check
+                  :size="14"
+                  class="ps__answered"
+                  aria-hidden="true"
+                />
+              </template>
+            </p>
+            <ShellCommandBlock
+              v-else-if="block.kind === 'shell'"
+              :command="block.view"
+              class="ps__shell"
+            />
+            <p
+              v-else-if="block.kind === 'error'"
+              class="ph-banner ph-banner--bad ps__error"
+              role="alert"
             >
               {{ block.text }}
             </p>
-            <span
-              v-if="block.steered || block.images"
-              class="ph-bubble-meta"
-            >
-              <template v-if="block.steered"><CornerDownRight
-                :size="12"
-                aria-hidden="true"
-              /> sent into the turn</template>
-              <template v-if="block.images"><ImageIcon
-                :size="12"
-                aria-hidden="true"
-              /> {{ block.images }} image{{ block.images === 1 ? "" : "s" }}</template>
-            </span>
           </template>
-          <PhoneMarkdown
-            v-else-if="block.kind === 'text'"
-            :text="block.text"
-            class="ph-agent"
-          />
-          <FoldedStepsRow
-            v-else-if="block.kind === 'steps'"
-            :summary="block.summary"
-            :running="block.running"
-            :failed="block.failed"
-            :count="block.steps.length"
-            @open="stepsOpen = block.steps"
-          />
-          <button
-            v-else-if="block.kind === 'subagent'"
-            type="button"
-            class="ph-step"
-            :disabled="!block.childSessionId"
-            data-testid="phone-subagent"
-            @click="block.childSessionId && openChild(block.childSessionId)"
+
+          <p
+            v-if="shown.tone === 'working'"
+            class="ph-working"
+            data-testid="phone-working"
           >
-            <span class="ph-step__who">{{ block.agent }}</span>
-            <span class="ph-step__t">{{ block.title }}</span>
-            <LoaderCircle
-              v-if="block.running"
-              class="ph-spinner"
-              :size="18"
-              aria-hidden="true"
+            <PhoneGlyph
+              kind="working"
+              label="Working"
             />
+            <span class="ph-working__word">{{ status.state }}</span>
             <span
-              v-else
-              class="ph-step__done"
-            >Done</span>
-            <ChevronRight
-              v-if="!block.running && block.childSessionId"
-              class="ph-row__chev"
-              :size="16"
-              :stroke-width="3"
-              aria-hidden="true"
-            />
+              v-if="status.detail"
+              class="ph-working__t"
+            >· {{ status.detail }}</span>
+          </p>
+          <p
+            v-else-if="shown.tone === 'needs-you'"
+            class="ph-working ph-working--waiting"
+          >
+            <PhoneGlyph
+              kind="waiting"
+              label="Waiting for you"
+            />Waiting for you
+          </p>
+          <p
+            v-else-if="status.tone === 'unreachable' && lastStatus.tone === 'working'"
+            class="ph-working"
+          >
+            Working when last heard
+          </p>
+        </div>
+      </main>
+
+      <div
+        ref="dock"
+        class="ph-dock"
+      >
+        <Transition name="ph-pill">
+          <button
+            v-if="dock.later > 0 && dock.kind === 'composer'"
+            type="button"
+            class="ph-waiting-pill ph-press"
+            data-testid="later-pill"
+            @click="bringBack"
+          >
+            <PhoneGlyph kind="waiting" />{{ dock.later }} waiting · Review
           </button>
-          <p
-            v-else-if="block.kind === 'question' && !block.pending"
-            class="ps__asked"
-          >
-            Asked · {{ block.question }} <template v-if="block.answer">
-              → {{ block.answer }} <Check
-                :size="14"
-                class="ps__answered"
-                aria-hidden="true"
-              />
-            </template>
-          </p>
-          <ShellCommandBlock
-            v-else-if="block.kind === 'shell'"
-            :command="block.view"
-            class="ps__shell"
+        </Transition>
+        <Transition name="ph-dock">
+          <DockedPermission
+            v-if="dock.kind === 'permission'"
+            :key="dock.ask.id"
+            :ask="dock.ask"
+            :answer="answerPermission"
+            :machine-name="machineName"
+            :session-title="title"
+            @later="putOff(dock.ask.id)"
+            @answered="onAnswered"
           />
-          <p
-            v-else-if="block.kind === 'error'"
-            class="ps__error"
-            role="alert"
-          >
-            {{ block.text }}
-          </p>
-        </template>
-
-        <p
-          v-if="shown.tone === 'working'"
-          class="ph-working"
-          data-testid="phone-working"
-        >
-          <span
-            class="ph-typing"
-            aria-hidden="true"
-          ><i /><i /><i /></span>{{ status.state }} · {{ status.detail }}
-        </p>
-        <p
-          v-else-if="shown.tone === 'needs-you'"
-          class="ph-working ph-working--waiting"
-        >
-          Waiting for you
-        </p>
-        <p
-          v-else-if="status.tone === 'unreachable' && lastStatus.tone === 'working'"
-          class="ph-working"
-        >
-          Working when last heard
-        </p>
+          <DockedQuestion
+            v-else-if="dock.kind === 'question'"
+            :key="dock.pending.requestId"
+            :pending="dock.pending"
+            :answer="questions.answerQuestion"
+            :reject="questions.rejectQuestion"
+            :machine-name="machineName"
+            :session-title="title"
+            @later="putOff(dock.pending.requestId)"
+          />
+        </Transition>
+        <PhoneComposer
+          :key="sessionId"
+          :session-id="sessionId"
+          :machine-id="machineId"
+          :machine-name="machineName"
+          :reachable="reachability.reachable.value"
+          @side="sheet = 'side'"
+        />
       </div>
-    </main>
-
-    <div
-      ref="dock"
-      class="ph-dock"
-    >
-      <Transition name="ph-pill">
-        <button
-          v-if="dock.later > 0 && dock.kind === 'composer'"
-          type="button"
-          class="ph-waiting-pill ph-glass ph-press"
-          data-testid="later-pill"
-          @click="bringBack"
-        >
-          <span
-            class="ph-dot ph-dot--waiting"
-            aria-hidden="true"
-          />{{ dock.later }} waiting · Review
-        </button>
-      </Transition>
-      <Transition name="ph-dock">
-        <DockedPermission
-          v-if="dock.kind === 'permission'"
-          :key="dock.ask.id"
-          :ask="dock.ask"
-          :answer="answerPermission"
-          :machine-name="machineName"
-          :session-title="title"
-          @later="putOff(dock.ask.id)"
-          @answered="onAnswered"
-        />
-        <DockedQuestion
-          v-else-if="dock.kind === 'question'"
-          :key="dock.pending.requestId"
-          :pending="dock.pending"
-          :answer="questions.answerQuestion"
-          :reject="questions.rejectQuestion"
-          :machine-name="machineName"
-          :session-title="title"
-          @later="putOff(dock.pending.requestId)"
-        />
-      </Transition>
-      <PhoneComposer
-        :key="sessionId"
-        :session-id="sessionId"
-        :machine-id="machineId"
-        :machine-name="machineName"
-        :reachable="reachability.reachable.value"
-        @side="sheet = 'side'"
-      />
     </div>
 
     <SessionMenuSheet
@@ -572,6 +552,7 @@ onUnmounted(() => {
       :open="sheet === 'terminal'"
       title="Run a command"
       :machine-name="machineName"
+      :folder="session?.workspaceDirectory ?? null"
       :link="computerLink"
       :supports-shell="caps.supportsShell"
       @run="runCommand"
@@ -580,7 +561,8 @@ onUnmounted(() => {
 
     <StepsSheet
       :open="stepsOpen !== null"
-      :steps="stepsOpen ?? []"
+      :steps="stepsOpen?.steps ?? []"
+      :focus="stepsOpen?.focus ?? null"
       @close="stepsOpen = null"
     />
     <PlanSheet
@@ -595,11 +577,7 @@ onUnmounted(() => {
 .ps {
   position: absolute;
   inset: 0;
-  background: var(--main-bg);
-}
-
-.ps__scroll {
-  padding-bottom: 120px;
+  background: var(--ph-chrome);
 }
 
 .ps__loading {
@@ -610,13 +588,11 @@ onUnmounted(() => {
 
 .ps__older {
   align-self: center;
-  height: 36px;
-  font-size: var(--ph-t-foot);
 }
 
 .ps__asked {
   margin: 0;
-  font-size: var(--ph-t-foot);
+  font-size: var(--ph-t-meta);
   color: var(--muted);
 }
 
@@ -630,15 +606,7 @@ onUnmounted(() => {
 }
 
 .ps__error {
-  margin: 0;
-  padding: 10px 14px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--error) 10%, transparent);
-  font-size: var(--ph-t-sub);
-  color: var(--error);
-}
-
-.ph-bubble {
+  width: auto;
   margin: 0;
 }
 </style>

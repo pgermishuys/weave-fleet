@@ -1,17 +1,18 @@
 <script setup lang="ts">
 import { shallowRef, useTemplateRef } from "vue";
-import { Check } from "lucide-vue-next";
+import { Check, ShieldAlert } from "lucide-vue-next";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
 import CommandText from "@/components/phone/CommandText.vue";
 import PermissionChoices from "@/components/phone/PermissionChoices.vue";
 import type { PermissionAsk } from "@/composables/use-session-permissions";
-import { permissionTitle, permissionWants } from "@/lib/phone/asks";
+import { dontAskAgain, permissionTitle } from "@/lib/phone/asks";
 import { haptic } from "@/lib/phone/haptics";
 import type { PermissionReply } from "@/lib/push/answer";
 
 /**
- * A permission ask docked above the composer, compact: what it wants to run (wrapped only between words, three lines
- * at most), Allow once and More… (every choice, in a sheet). Allow once flips at once; Later folds it into a pill.
+ * A permission ask docked above the composer, compact, as the desktop's card: what it wants, the command (wrapped only
+ * between words, three lines at most), Allow once and More… (every choice, in a sheet). Allow once turns green at
+ * once; Later folds it into "1 waiting · Review".
  */
 const props = defineProps<{
   ask: PermissionAsk;
@@ -33,7 +34,7 @@ async function onAnswer(reply: PermissionReply, message?: string): Promise<void>
   if (reply === "once") haptic("success");
   try {
     await props.answer(props.ask, reply, message);
-    emit("answered", reply === "reject" ? "Denied. The agent was told." : reply === "always" ? `Won't ask again for ${props.ask.always[0] ?? props.ask.tool} in this session` : "Allowed once");
+    emit("answered", reply === "reject" ? "Denied. The agent was told." : reply === "always" ? `Won't ask again for ${dontAskAgain(props.ask).code ?? props.ask.tool} in this session` : "Allowed once");
   } catch (failure) {
     sent.value = null;
     error.value = failure instanceof Error ? failure.message : String(failure);
@@ -43,17 +44,18 @@ async function onAnswer(reply: PermissionReply, message?: string): Promise<void>
 
 <template>
   <div
-    class="ph-docked-ask"
+    class="ph-pcard ph-docked"
     data-testid="docked-permission"
   >
-    <div class="ph-docked-ask__h">
-      <span
-        class="ph-dot ph-dot--waiting"
+    <div class="ph-pcard__head">
+      <ShieldAlert
+        class="ph-pcard__icon"
         aria-hidden="true"
-      />{{ permissionWants(ask) }}
+      />
+      <span class="ph-pcard__title">{{ permissionTitle(ask) }}</span>
       <button
         type="button"
-        class="ph-docked-ask__later ph-press"
+        class="ph-later"
         data-testid="docked-later"
         @click="emit('later')"
       >
@@ -63,12 +65,12 @@ async function onAnswer(reply: PermissionReply, message?: string): Promise<void>
     <CommandText
       v-if="ask.title"
       :command="ask.title"
-      :directory="ask.directory"
+      :prompt="ask.kind === 'shell'"
       class="ph-clamp3"
     />
     <p
       v-if="error"
-      class="ph-docked-ask__note dp__error"
+      class="ph-pcard__note ph-pcard__note--bad"
       role="alert"
     >
       {{ error }}
@@ -84,8 +86,6 @@ async function onAnswer(reply: PermissionReply, message?: string): Promise<void>
       >
         <Check
           v-if="sent"
-          :size="20"
-          :stroke-width="2.6"
           aria-hidden="true"
         />
         <span>{{ sent === "once" ? "Allowed" : sent === "always" ? "Always allowed" : sent === "reject" ? "Denied" : "Allow once" }}</span>
@@ -93,7 +93,7 @@ async function onAnswer(reply: PermissionReply, message?: string): Promise<void>
       <button
         v-if="!sent"
         type="button"
-        class="ph-btn"
+        class="ph-btn ph-btn--outline"
         data-testid="docked-more"
         @click="more = true"
       >
@@ -106,6 +106,7 @@ async function onAnswer(reply: PermissionReply, message?: string): Promise<void>
       :open="more"
       :label="permissionTitle(ask)"
       :title="permissionTitle(ask)"
+      :subtitle="`${machineName} · ${sessionTitle}`"
       :detents="['medium', 'large']"
       initial="medium"
       @close="more = false"
@@ -113,17 +114,9 @@ async function onAnswer(reply: PermissionReply, message?: string): Promise<void>
       <PermissionChoices
         :ask="ask"
         :busy="sent !== null"
-        :machine-name="machineName"
-        :session-title="sessionTitle"
         @answer="onAnswer"
         @expand="sheetRef?.expand()"
       />
     </BottomSheet>
   </div>
 </template>
-
-<style scoped>
-.dp__error {
-  color: var(--error);
-}
-</style>

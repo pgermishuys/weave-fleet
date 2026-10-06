@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, shallowRef, useTemplateRef } from "vue";
-import { Check } from "lucide-vue-next";
+import { Check, CircleHelp } from "lucide-vue-next";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
 import QuestionChoices from "@/components/phone/QuestionChoices.vue";
 import type { PendingQuestion } from "@/lib/phone/dock-state";
 
 /**
- * The agent's question docked above the composer, compact: the question, its first two options as buttons (a tap
- * answers) and More… (every option, your own words, Skip, in a sheet). Later folds it into a pill.
+ * The agent's question docked above the composer, compact: the question, its first two options as buttons (one tap
+ * answers) and More… (every option, your own words, Skip, in a sheet). A question that takes several answers has
+ * Answer… instead. Later folds it into "1 waiting · Review".
  */
 const props = defineProps<{
   pending: PendingQuestion;
@@ -43,29 +44,30 @@ function answerWith(labels: string[]): void {
 
 <template>
   <div
-    class="ph-docked-ask"
+    class="ph-pcard ph-docked"
     data-testid="docked-question"
   >
-    <div class="ph-docked-ask__h">
-      <span
-        class="ph-dot ph-dot--waiting"
+    <div class="ph-pcard__head">
+      <CircleHelp
+        class="ph-pcard__icon"
         aria-hidden="true"
-      />Asked you
+      />
+      <span class="ph-pcard__title">Question</span>
       <button
         type="button"
-        class="ph-docked-ask__later ph-press"
+        class="ph-later"
         data-testid="docked-later"
         @click="emit('later')"
       >
         Later
       </button>
     </div>
-    <p class="ph-docked-ask__q">
+    <p class="ph-pcard__q dq__q">
       {{ pending.question.question }}
     </p>
     <p
       v-if="error"
-      class="ph-docked-ask__note dq__error"
+      class="ph-pcard__note ph-pcard__note--bad"
       role="alert"
     >
       {{ error }}
@@ -78,22 +80,20 @@ function answerWith(labels: string[]): void {
         v-for="option in quick"
         :key="option.label"
         type="button"
-        class="ph-btn"
+        class="ph-btn ph-btn--outline"
         :class="{ 'ph-btn--done': sent === option.label }"
         :disabled="sent !== null"
         @click="answerWith([option.label])"
       >
         <Check
           v-if="sent === option.label"
-          :size="20"
-          :stroke-width="2.6"
           aria-hidden="true"
         />
         <span>{{ option.label }}</span>
       </button>
       <button
         type="button"
-        class="ph-btn"
+        class="ph-btn ph-btn--outline"
         :disabled="sent !== null"
         data-testid="docked-more"
         @click="more = true"
@@ -107,6 +107,7 @@ function answerWith(labels: string[]): void {
       :open="more"
       label="Question"
       title="Question"
+      :subtitle="`${machineName} · ${sessionTitle}`"
       :detents="['medium', 'large']"
       initial="medium"
       @close="more = false"
@@ -115,8 +116,6 @@ function answerWith(labels: string[]): void {
         :question="pending.question"
         :more="pending.more"
         :busy="sent !== null"
-        :machine-name="machineName"
-        :session-title="sessionTitle"
         skippable
         @answer="answerWith"
         @skip="run('Skipped', () => props.reject(pending.requestId))"
@@ -127,11 +126,7 @@ function answerWith(labels: string[]): void {
 </template>
 
 <style scoped>
-.ph-docked-ask__q {
-  margin: 0;
-}
-
-.dq__error {
-  color: var(--error);
+.dq__q {
+  margin-top: 8px;
 }
 </style>

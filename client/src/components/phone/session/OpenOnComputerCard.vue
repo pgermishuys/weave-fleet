@@ -1,20 +1,22 @@
 <script setup lang="ts">
 import { nextTick, shallowRef, useTemplateRef, watch } from "vue";
-import { ArrowUp, ChevronRight } from "lucide-vue-next";
+import { ArrowUp, ChevronRight, SquareTerminal } from "lucide-vue-next";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
 import { showToast } from "@/composables/phone/use-phone-toast";
-import { takeKeyboard } from "@/lib/phone/keyboard";
+import { autogrow, takeKeyboard } from "@/lib/phone/keyboard";
 import { shareLink } from "@/lib/phone/share";
 
 /**
  * Run a command: what a phone can't do well (a terminal) offers the closest thing that works — a one-off `!`
- * command that runs on Return, its output in the conversation — and a link to open a terminal on the computer.
- * The send button stays plain until there's something to run.
+ * command in the composer's frame that runs on Return, its output in the conversation — and a link to open a
+ * terminal on the computer. The send button stays quiet until there's something to run.
  */
 const props = defineProps<{
   open: boolean;
   title: string;
   machineName: string;
+  /** The folder it runs in, for the line under the title. */
+  folder?: string | null;
   /** The address of this session on the computer. */
   link: string;
   supportsShell: boolean;
@@ -50,6 +52,7 @@ async function share(): Promise<void> {
     :open="open"
     :label="title"
     :title="title"
+    :subtitle="folder ? `in ${folder} on ${machineName}` : `on ${machineName}`"
     @close="emit('close')"
   >
     <div
@@ -57,66 +60,67 @@ async function share(): Promise<void> {
       class="ph-sheet__pad"
     >
       <form
-        class="ph-composer ph-glass-field ph-term"
+        class="ph-frame ph-frame--term"
         @submit.prevent="run"
       >
-        <span
-          class="ph-term__bang"
-          aria-hidden="true"
-        >!</span>
-        <textarea
-          ref="field"
-          v-model="command"
-          class="phone-composer-input"
-          rows="1"
-          placeholder="git log --oneline -3"
-          aria-label="Command"
-          autocapitalize="off"
-          autocomplete="off"
-          autocorrect="off"
-          spellcheck="false"
-          enterkeyhint="go"
-          data-testid="ooc-command"
-          @keydown.enter.prevent="run"
-        />
-        <button
-          type="submit"
-          class="ph-send ph-send--quiet"
-          aria-label="Run"
-          :disabled="!command.trim()"
-        >
-          <ArrowUp
-            :size="22"
-            :stroke-width="2.6"
+        <div class="ph-frame__top">
+          <span
+            class="ph-term__bang"
             aria-hidden="true"
+          >!</span>
+          <textarea
+            ref="field"
+            v-model="command"
+            class="phone-composer-input"
+            rows="1"
+            placeholder="git log --oneline -3"
+            aria-label="Command"
+            autocapitalize="off"
+            autocomplete="off"
+            autocorrect="off"
+            spellcheck="false"
+            enterkeyhint="go"
+            data-testid="ooc-command"
+            @input="autogrow($event.target as HTMLTextAreaElement)"
+            @keydown.enter.prevent="run"
           />
-        </button>
+        </div>
+        <div class="ph-frame__bar">
+          <span class="ph-sel ph-sel--note">Runs without a model turn</span>
+          <button
+            type="submit"
+            class="ph-send"
+            aria-label="Run"
+            :disabled="!command.trim()"
+          >
+            <ArrowUp aria-hidden="true" />
+          </button>
+        </div>
       </form>
-      <p class="ph-group-f ooc__hint">
-        Runs in the session's folder, with no model turn. The output shows in the conversation.
-      </p>
     </div>
     <p
       v-else
-      class="ph-group-f ooc__hint"
+      class="ph-foot ooc__hint"
     >
       This harness can't run one-off commands. Terminals open on the computer.
     </p>
-    <div class="ph-group ooc__group">
+    <div class="ph-card ooc__card">
       <button
         type="button"
-        class="ph-row"
+        class="ph-set"
         data-testid="ooc-share"
         @click="share"
       >
-        <span class="ph-row__main">
-          <span class="ph-row__title">Open a terminal on {{ machineName }}</span>
-          <span class="ph-row__sub">Sends a link to the computer</span>
+        <SquareTerminal
+          class="ph-set__ic"
+          aria-hidden="true"
+        />
+        <span class="ph-set__main">
+          <span class="ph-set__t">Open a terminal on {{ machineName }}</span>
+          <span class="ph-set__s">Sends a link to the computer</span>
         </span>
         <ChevronRight
-          class="ph-row__chev"
-          :size="16"
-          :stroke-width="3"
+          class="ph-set__chev"
           aria-hidden="true"
         />
       </button>
@@ -126,10 +130,10 @@ async function share(): Promise<void> {
 
 <style scoped>
 .ooc__hint {
-  margin: 8px 4px 0;
+  margin-top: 0;
 }
 
-.ooc__group {
-  margin-top: 18px;
+.ooc__card {
+  margin-top: 14px;
 }
 </style>

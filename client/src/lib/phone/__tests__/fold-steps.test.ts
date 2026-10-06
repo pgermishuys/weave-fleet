@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AccumulatedMessage, AccumulatedPart } from "@/lib/client-types";
-import { foldMessages, summarizeSteps, stepCategory } from "../fold-steps";
+import { foldMessages, groupTools, stepCategory, stepDetail, stepRow, summarizeSteps, visibleSteps, type FoldedStep } from "../fold-steps";
 
 function tool(id: string, name: string, status = "completed", input: Record<string, unknown> = {}, metadata?: Record<string, unknown>): AccumulatedPart {
   return { partId: id, type: "tool", tool: name, callId: id, state: { status, input, ...(metadata ? { metadata } : {}) } };
@@ -85,5 +85,83 @@ describe("summaries", () => {
     expect(summarizeSteps([])).toBe("Worked");
     const steps = foldMessages([message("a", "assistant", [tool("1", "bash"), tool("2", "todowrite")])])[0];
     expect(steps.kind === "steps" && steps.summary).toBe("Ran 1 command · used 1 tool");
+  });
+});
+
+describe("tool rows", () => {
+  const steps = (parts: AccumulatedPart[]): FoldedStep[] => {
+    const block = foldMessages([message("a", "assistant", parts)])[0];
+    return block.kind === "steps" ? block.steps : [];
+  };
+
+  it("draws each step as the desktop's tool row: label, detail, and how it ended", () => {
+    const [read, grep, edit, bash, failed, running] = steps([
+      tool("r", "read", "completed", { filePath: "tests/WeaveFleet.E2E/SignalRTransportTests.cs" }),
+      tool("g", "grep", "completed", { pattern: "WaitForReconnect(" }),
+      tool("e", "edit", "completed", { filePath: "tests/TestHarness.cs", oldString: "a\nwait 2", newString: "a\nwait 5" }),
+      tool("b", "bash", "completed", { command: "bun run test", description: "Run the tests" }),
+      tool("x", "bash", "error", { command: "dotnet build" }),
+      tool("y", "shell", "running", { command: "dotnet ef migrations add X" }),
+    ]);
+    expect(stepRow(read)).toEqual({ label: "Read", detail: "tests/WeaveFleet.E2E/SignalRTransportTests.cs", pattern: false, result: "done", adds: 0, dels: 0 });
+    expect(stepRow(grep)).toMatchObject({ label: "Grep", detail: "WaitForReconnect(", pattern: true, result: "done" });
+    expect(stepRow(edit)).toMatchObject({ label: "Edit", detail: "tests/TestHarness.cs", result: "diff", adds: 1, dels: 1 });
+    expect(stepRow(bash)).toMatchObject({ label: "Bash", detail: "bun run test", result: "done" });
+    expect(stepRow(failed).result).toBe("failed");
+    expect(stepRow(running)).toMatchObject({ label: "Shell", detail: "dotnet ef migrations add X", result: "running" });
+  });
+
+  it("counts a unified diff the harness attached", () => {
+    const [edit] = steps([tool("e", "edit", "completed", { filePath: "a.ts" }, { diff: "--- a/a.ts\n+++ b/a.ts\n@@ -1 +1,2 @@\n-old\n+new\n+more" })]);
+    expect(stepRow(edit)).toMatchObject({ result: "diff", adds: 2, dels: 1 });
+  });
+
+  it("shows the first three steps and folds the rest, never leaving just one behind", () => {
+    expect(visibleSteps([1, 2, 3])).toEqual({ rows: [1, 2, 3], more: [] });
+    expect(visibleSteps([1, 2, 3, 4])).toEqual({ rows: [1, 2, 3, 4], more: [] });
+    expect(visibleSteps([1, 2, 3, 4, 5, 6])).toEqual({ rows: [1, 2, 3], more: [4, 5, 6] });
+  });
+});
+
+describe("a step opened", () => {
+  const only = (part: AccumulatedPart): FoldedStep => {
+    const block = foldMessages([message("a", "assistant", [part])])[0];
+    if (block.kind !== "steps") throw new Error("not steps");
+    return block.steps[0];
+  };
+
+  it("shows an edit as its diff, with the file and its counts", () => {
+    const detail = stepDetail(only(tool("e", "edit", "completed", { filePath: "tests/TestHarness.cs", oldString: "var wait = 2;", newString: "var wait = 5;" })));
+    expect(detail).toEqual({ kind: "diff", file: "TestHarness.cs", adds: 1, dels: 1, lines: [{ kind: "del", text: "- var wait = 2;" }, { kind: "add", text: "+ var wait = 5;" }] });
+  });
+
+  it("keeps a unified diff's hunk headers", () => {
+    const detail = stepDetail(only(tool("e", "edit", "completed", { filePath: "a.ts" }, { diff: "--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-old\n+new" })));
+    expect(detail.kind === "diff" && detail.lines.map((l) => l.kind)).toEqual(["hunk", "del", "add"]);
+  });
+
+  it("shows a command with what it printed, or says it's still running", () => {
+    expect(stepDetail(only(tool("b", "bash", "completed", { command: "bun run test" }, undefined)))).toEqual({ kind: "output", command: "bun run test", text: "No output." });
+    const done = only({ partId: "b", type: "tool", tool: "bash", callId: "b", state: { status: "completed", input: { command: "ls" }, output: "a\nb\n" } } as AccumulatedPart);
+    expect(stepDetail(done)).toEqual({ kind: "output", command: "ls", text: "a\nb" });
+    expect(stepDetail(only(tool("r", "read", "running", { filePath: "a.cs" })))).toEqual({ kind: "output", command: null, text: "Still running…" });
+  });
+});
+
+describe("tool boxes", () => {
+  it("puts tool runs and subagents that follow each other in one box", () => {
+    const items = groupTools(foldMessages([
+      message("u", "user", [text("ut", "Fix it")]),
+      message("a", "assistant", [
+        tool("r", "read"),
+        text("t", "Found it."),
+        tool("e", "edit"),
+        tool("s", "task", "running", { description: "Look for the same race", subagent_type: "shuttle" }),
+        tool("b", "bash", "running", { command: "dotnet test" }),
+      ]),
+    ]));
+    expect(items.map((item) => item.kind)).toEqual(["user", "tools", "text", "tools"]);
+    const last = items[3];
+    expect(last.kind === "tools" && last.parts.map((part) => part.kind)).toEqual(["steps", "subagent", "steps"]);
   });
 });

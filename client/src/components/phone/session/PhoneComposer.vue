@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, shallowRef, useTemplateRef, watch } from "vue";
-import { ArrowUp, CornerDownRight, Plus, Square, X } from "lucide-vue-next";
+import { ArrowUp, ChevronDown, CornerDownRight, Plus, Square, X } from "lucide-vue-next";
 import PhoneChipSheet, { type ChipOption } from "@/components/phone/session/PhoneChipSheet.vue";
 import PhoneFilePickSheet from "@/components/phone/session/PhoneFilePickSheet.vue";
 import PhonePlusSheet, { type PlusChoice } from "@/components/phone/session/PhonePlusSheet.vue";
@@ -10,14 +10,16 @@ import { useDraftState } from "@/composables/use-draft-state";
 import { useModels } from "@/composables/use-models";
 import type { ImageAttachment } from "@/lib/client-types";
 import { ALLOWED_IMAGE_MIMES, MAX_IMAGE_BYTES } from "@/lib/image-validation";
+import { autogrow } from "@/lib/phone/keyboard";
 import { flushHeld, heldFor, hold, removeHeld, type HeldMessage } from "@/lib/phone/outbox";
 
 /**
- * The phone's composer, per the session rules: one round button — Send when idle, Queue while the agent works, Stop
- * while it works and nothing is typed — with Send now beside it when the harness can steer. Return makes a new line
- * (the arrow sends), as messaging apps do. Queued messages wait above it marked "Next". Agent, model and effort are
- * chips while you type, each a sheet; + adds a photo, the camera, a file, a command or a side question. Typing `@`,
- * `!` or `/btw` still works. It sits in the session's dock, which stays above the keyboard.
+ * The phone's composer, the desktop's ComposerFrame: a raised card with the text on top and a toolbar under it — +
+ * (a photo, the camera, a file, a command, a side question), the agent and model (and effort, when the model has
+ * it), each a sheet, and one round button: Send when idle, Queue while the agent works, Stop while it works and
+ * nothing is typed, with Now beside it when the harness can steer. Return makes a new line (the arrow sends), as
+ * messaging apps do. Queued messages wait above it marked "Next". Typing `@`, `!` or `/btw` still works. It sits in
+ * the session's dock, which stays above the keyboard.
  */
 const props = withDefaults(defineProps<{ sessionId: string; machineId: string; machineName: string; reachable?: boolean }>(), { reachable: true });
 const emit = defineEmits<{ (event: "sent"): void; (event: "side"): void }>();
@@ -33,7 +35,6 @@ const { models, defaultModelKey, modelsByKey } = useModels(props.sessionId);
 const textareaRef = useTemplateRef<HTMLTextAreaElement>("textarea");
 const photoInput = useTemplateRef<HTMLInputElement>("photoInput");
 const cameraInput = useTemplateRef<HTMLInputElement>("cameraInput");
-const focused = shallowRef(false);
 const plusOpen = shallowRef(false);
 const filesOpen = shallowRef(false);
 const chip = shallowRef<"agent" | "model" | "effort" | null>(null);
@@ -57,13 +58,12 @@ const effortOptions = computed<ChipOption[]>(() => effortVariants.value.map((var
 const agentLabel = computed(() => agents.value.find((agent) => agent.id === agentId.value)?.name ?? "Agent");
 const modelLabel = computed(() => models.value.find((model) => model.selectionKey === modelKey.value)?.name ?? "Model");
 const effortLabel = computed(() => (draft.effort || "medium").replace(/^./, (c) => c.toUpperCase()));
+/** Effort only where the model has levels of it. */
+const hasEffort = computed(() => (modelsByKey.value[modelKey.value]?.variants?.length ?? 0) > 0);
 
 /** Grows with what's typed, up to five lines, then scrolls. */
 function resize(): void {
-  const el = textareaRef.value;
-  if (!el) return;
-  el.style.height = "auto";
-  el.style.height = `${Math.min(el.scrollHeight, 22 * 5 + 18)}px`;
+  autogrow(textareaRef.value);
 }
 
 function onInput(event: Event): void {
@@ -203,7 +203,7 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
       <li
         v-for="(item, index) in actions.queue.value"
         :key="item.id"
-        class="pc__queued ph-glass"
+        class="pc__queued"
         data-testid="phone-queued"
       >
         <span class="pc__next">{{ index === 0 ? "Next" : "Then" }}</span>
@@ -211,21 +211,18 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
         <button
           v-if="actions.canSendQueued(item)"
           type="button"
-          class="pc__mini ph-press"
+          class="ph-sel"
           @click="actions.sendQueued(item)"
         >
           Send now
         </button>
         <button
           type="button"
-          class="pc__mini ph-press"
+          class="ph-icon-btn pc__x"
           :aria-label="`Remove ${item.text}`"
           @click="actions.removeQueued(item)"
         >
-          <X
-            :size="16"
-            aria-hidden="true"
-          />
+          <X aria-hidden="true" />
         </button>
       </li>
     </ol>
@@ -238,7 +235,7 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
       <li
         v-for="item in held"
         :key="item.id"
-        class="pc__queued ph-glass"
+        class="pc__queued"
         data-testid="phone-held"
       >
         <span class="pc__next pc__next--held">Held</span>
@@ -246,7 +243,7 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
         <button
           v-if="item.error && reachable"
           type="button"
-          class="pc__mini ph-press"
+          class="ph-sel"
           :title="item.error"
           @click="flush"
         >
@@ -254,45 +251,13 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
         </button>
         <button
           type="button"
-          class="pc__mini ph-press"
+          class="ph-sel"
           @click="editHeld(item)"
         >
           Edit
         </button>
       </li>
     </ol>
-
-    <div
-      v-if="focused || chip"
-      class="pc__chips"
-    >
-      <button
-        type="button"
-        class="pc__chip ph-glass ph-press"
-        data-testid="chip-agent"
-        @mousedown.prevent
-        @click="chip = 'agent'"
-      >
-        {{ agentLabel }}
-      </button>
-      <button
-        type="button"
-        class="pc__chip ph-glass ph-press"
-        data-testid="chip-model"
-        @mousedown.prevent
-        @click="chip = 'model'"
-      >
-        {{ modelLabel }}
-      </button>
-      <button
-        type="button"
-        class="pc__chip ph-glass ph-press"
-        @mousedown.prevent
-        @click="chip = 'effort'"
-      >
-        {{ effortLabel }}
-      </button>
-    </div>
 
     <div
       v-if="photos.length"
@@ -324,73 +289,96 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
     </p>
 
     <form
-      class="ph-composer ph-glass"
+      class="ph-frame"
       @submit.prevent="submit(false)"
     >
-      <button
-        type="button"
-        class="ph-composer__plus"
-        aria-label="Add"
-        data-testid="composer-plus"
-        @click="plusOpen = true"
-      >
-        <Plus
-          :size="24"
-          aria-hidden="true"
-        />
-      </button>
       <textarea
         ref="textarea"
         :value="draft.text"
         class="phone-composer-input"
         rows="1"
-        :placeholder="actions.disabled.value ? 'This session is archived' : 'Message'"
+        :placeholder="actions.disabled.value ? 'This session is archived' : `Message ${machineName}…`"
         :disabled="actions.disabled.value"
         aria-label="Message"
         data-testid="phone-composer-input"
         enterkeyhint="enter"
         @input="onInput"
-        @focus="focused = true"
-        @blur="focused = false"
         @keydown.enter.meta.prevent="submit(false)"
         @keydown.enter.ctrl.prevent="submit(false)"
       />
-      <button
-        v-if="offerSendNow"
-        type="button"
-        class="pc__now ph-press"
-        aria-label="Send now, into the running turn"
-        title="Send now, into the running turn"
-        data-testid="composer-send-now"
-        @click="submit(true)"
-      >
-        <CornerDownRight
-          :size="16"
-          aria-hidden="true"
-        />Now
-      </button>
-      <button
-        type="submit"
-        class="ph-send"
-        :class="{ 'ph-send--stop': primary === 'stop', 'ph-send--queue': primary === 'queue' }"
-        :disabled="actions.disabled.value || (primary === 'send' && !hasContent)"
-        :aria-label="primary === 'stop' ? 'Stop' : primary === 'queue' ? 'Queue' : 'Send'"
-        :data-testid="`composer-${primary}`"
-      >
-        <Square
-          v-if="primary === 'stop'"
-          :size="14"
-          fill="currentColor"
-          aria-hidden="true"
-        />
-        <span v-else-if="primary === 'queue'">Queue</span>
-        <ArrowUp
-          v-else
-          :size="22"
-          :stroke-width="2.6"
-          aria-hidden="true"
-        />
-      </button>
+      <div class="ph-frame__bar">
+        <button
+          type="button"
+          class="ph-icon-btn"
+          aria-label="Add"
+          data-testid="composer-plus"
+          @click="plusOpen = true"
+        >
+          <Plus aria-hidden="true" />
+        </button>
+        <button
+          v-if="agentOptions.length"
+          type="button"
+          class="ph-sel"
+          data-testid="chip-agent"
+          @mousedown.prevent
+          @click="chip = 'agent'"
+        >
+          <span>{{ agentLabel }}</span><ChevronDown aria-hidden="true" />
+        </button>
+        <button
+          v-if="modelOptions.length"
+          type="button"
+          class="ph-sel"
+          data-testid="chip-model"
+          @mousedown.prevent
+          @click="chip = 'model'"
+        >
+          <span>{{ modelLabel }}</span><ChevronDown aria-hidden="true" />
+        </button>
+        <button
+          v-if="hasEffort"
+          type="button"
+          class="ph-sel"
+          data-testid="chip-effort"
+          @mousedown.prevent
+          @click="chip = 'effort'"
+        >
+          <span>{{ effortLabel }}</span><ChevronDown aria-hidden="true" />
+        </button>
+        <span class="pc__spacer" />
+        <button
+          v-if="offerSendNow"
+          type="button"
+          class="ph-sel pc__now"
+          aria-label="Send now, into the running turn"
+          title="Send now, into the running turn"
+          data-testid="composer-send-now"
+          @click="submit(true)"
+        >
+          <CornerDownRight aria-hidden="true" />Now
+        </button>
+        <button
+          type="submit"
+          class="ph-send"
+          :class="{ 'ph-send--stop': primary === 'stop', 'ph-send--queue': primary === 'queue' }"
+          :disabled="actions.disabled.value || (primary === 'send' && !hasContent)"
+          :aria-label="primary === 'stop' ? 'Stop' : primary === 'queue' ? 'Queue' : 'Send'"
+          :data-testid="`composer-${primary}`"
+        >
+          <Square
+            v-if="primary === 'stop'"
+            class="pc__stop"
+            fill="currentColor"
+            aria-hidden="true"
+          />
+          <span v-else-if="primary === 'queue'">Queue</span>
+          <ArrowUp
+            v-else
+            aria-hidden="true"
+          />
+        </button>
+      </div>
     </form>
 
     <p
@@ -463,15 +451,18 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
   align-items: center;
   gap: 8px;
   min-height: 44px;
-  padding: 4px 4px 4px 14px;
-  border-radius: 22px;
-  font-size: var(--ph-t-sub);
+  padding: 4px 4px 4px 12px;
+  border: 1px solid var(--ph-frame-edge);
+  border-radius: var(--ph-r-btn);
+  background: var(--ph-card);
+  box-shadow: var(--ph-lift);
+  font-size: 14px;
 }
 
 .pc__next {
-  font-size: var(--ph-t-cap2);
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--accent);
 }
@@ -488,44 +479,34 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
   text-overflow: ellipsis;
 }
 
-.pc__mini {
-  display: inline-flex;
-  align-items: center;
-  min-height: 36px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 18px;
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  font-size: var(--ph-t-foot);
-  font-weight: 600;
+.pc__x {
+  width: 32px;
+  height: 32px;
+}
+
+.pc__x svg {
+  width: 16px;
+  height: 16px;
 }
 
 .pc__away {
   margin: 0;
-  font-size: var(--ph-t-foot);
+  font-size: var(--ph-t-meta);
   text-align: center;
   color: var(--muted);
 }
 
-.pc__chips {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  scrollbar-width: none;
+.pc__spacer {
+  flex: 1;
 }
 
-.pc__chip {
-  min-height: 34px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 17px;
+.pc__now {
   color: var(--text);
-  font: inherit;
-  font-size: var(--ph-t-foot);
-  font-weight: 500;
-  white-space: nowrap;
+}
+
+.pc__stop {
+  width: 13px;
+  height: 13px;
 }
 
 .pc__photos {
@@ -540,7 +521,7 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
 .pc__photo img {
   width: 56px;
   height: 56px;
-  border-radius: 12px;
+  border-radius: var(--ph-r-btn);
   object-fit: cover;
 }
 
@@ -552,32 +533,14 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
   width: 22px;
   height: 22px;
   place-items: center;
-  border: 0;
   border-radius: 50%;
   background: var(--text);
-  color: var(--main-bg);
+  color: var(--ph-panel);
 }
 
 .pc__error {
   margin: 0 8px;
-  font-size: var(--ph-t-foot);
+  font-size: var(--ph-t-meta);
   color: var(--error);
-}
-
-.pc__now {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: 4px;
-  height: 40px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 20px;
-  background: var(--ph-fill);
-  color: var(--text);
-  font: inherit;
-  font-size: var(--ph-t-sub);
-  font-weight: 600;
-  white-space: nowrap;
 }
 </style>

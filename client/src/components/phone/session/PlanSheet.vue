@@ -18,7 +18,7 @@ const emit = defineEmits<{ (event: "close"): void }>();
     @close="emit('close')"
   >
     <template v-if="progress">
-      <p class="ph-group-f pls__count">
+      <p class="ph-foot pls__count">
         {{ progress.done }} of {{ progress.total }} done
       </p>
       <template v-if="progress.plan">
@@ -28,22 +28,20 @@ const emit = defineEmits<{ (event: "close"): void }>();
         >
           <div
             v-if="group.title"
-            class="ph-group-h"
+            class="ph-label"
           >
             {{ group.title }}
           </div>
-          <div class="ph-group pls__group">
+          <div class="ph-card pls__group">
             <div
               v-for="step in group.steps"
               :key="step.key"
-              class="ph-row ph-row--static"
+              class="ph-set ph-set--static"
               :class="{ 'pls__row--done': step.checked }"
             >
               <Check
                 v-if="step.checked"
-                class="pls__check"
-                :size="20"
-                :stroke-width="2.6"
+                class="ph-set__ic pls__check"
                 aria-hidden="true"
               />
               <span
@@ -51,26 +49,24 @@ const emit = defineEmits<{ (event: "close"): void }>();
                 class="pls__box"
                 aria-hidden="true"
               />
-              <span class="ph-row__main"><span class="ph-row__title ph-row__title--wrap">{{ step.number ? `${step.number} ` : "" }}{{ step.title }}</span></span>
+              <span class="ph-set__main"><span class="ph-set__t">{{ step.number ? `${step.number} ` : "" }}{{ step.title }}</span></span>
             </div>
           </div>
         </template>
       </template>
       <div
         v-else
-        class="ph-group pls__group"
+        class="ph-card pls__group"
       >
         <div
           v-for="(todo, index) in progress.todos"
           :key="index"
-          class="ph-row ph-row--static"
+          class="ph-set ph-set--static"
           :class="{ 'pls__row--done': todo.status === 'completed' }"
         >
           <Check
             v-if="todo.status === 'completed'"
-            class="pls__check"
-            :size="20"
-            :stroke-width="2.6"
+            class="ph-set__ic pls__check"
             aria-hidden="true"
           />
           <span
@@ -78,7 +74,7 @@ const emit = defineEmits<{ (event: "close"): void }>();
             class="pls__box"
             aria-hidden="true"
           />
-          <span class="ph-row__main"><span class="ph-row__title ph-row__title--wrap">{{ todo.content }}</span></span>
+          <span class="ph-set__main"><span class="ph-set__t">{{ todo.content }}</span></span>
         </div>
       </div>
     </template>
@@ -87,28 +83,27 @@ const emit = defineEmits<{ (event: "close"): void }>();
 
 <style scoped>
 .pls__count {
-  margin: 0 32px 10px;
+  margin: -6px 18px 10px;
 }
 
-.pls__group + .ph-group-h {
+.pls__group + .ph-label {
   margin-top: 18px;
 }
 
-.pls__row--done .ph-row__title {
+.pls__row--done .ph-set__t {
   color: var(--muted);
 }
 
 .pls__check {
-  flex: none;
   color: var(--running);
 }
 
 .pls__box {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   flex: none;
   margin: 0 1px;
-  border: 2px solid var(--muted);
-  border-radius: 5px;
+  border: 1.5px solid var(--muted);
+  border-radius: calc(var(--radius-btn) - 4px);
 }
 </style>
