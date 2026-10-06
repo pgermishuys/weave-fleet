@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fleet · Right-click menu options</title>
+<link rel="preconnect" href="https://rsms.me/">
+<link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+<style>
+/* ─── Fleet tokens, copied from client/src/assets/main.css ─────────────── */
+:root {
+  --rail-bg: #0d0d10; --panel-bg: #141418; --card-bg: #1b1b20; --main-bg: #0d0d10;
+  --border: rgba(255,255,255,.075); --text: #e8e8ec; --muted: #8e8e9a;
+  --accent: #6366f1; --accent-dim: rgba(99,102,241,.15);
+  --destructive: #dc2626; --destructive-foreground: #ffffff;
+  --running: #22c55e; --idle: #f59e0b; --error: #ef4444;
+  --radius-card: 10px; --radius-btn: 8px; --radius-panel: 12px;
+  --transition: 150ms ease-out;
+  --font-sans-stack: "Inter Variable","Inter",system-ui,-apple-system,sans-serif;
+  --font-mono-stack: "JetBrains Mono Variable","JetBrains Mono",ui-monospace,monospace;
+  /* Proposed: the shadow Fleet's chip menus (.ns-pop) already use, tuned per theme. */
+  --menu-shadow: 0 16px 40px -12px rgba(0,0,0,.55), 0 2px 6px rgba(0,0,0,.25);
+}
+:root[data-theme="light"] {
+  --rail-bg:#FFFFFF; --panel-bg:#FFFFFF; --card-bg:#ffffff; --main-bg:#F3F2EF;
+  --border: rgba(26,25,24,.09); --text:#1A1918; --muted:#6E6A65;
+  --accent:#5B6EC7; --accent-dim: rgba(91,110,199,.12);
+  --destructive:#dc2626; --destructive-foreground:#ffffff; --running:#16a34a; --idle:#d97706; --error:#dc2626;
+  --menu-shadow: 0 16px 40px -12px rgba(26,25,24,.22), 0 2px 6px rgba(26,25,24,.06);
+}
+:root[data-theme="weave-classic"] { --rail-bg:#0B1120; --panel-bg:#1E293B; --card-bg:#1E293B; --main-bg:#0F172A; --border:rgba(255,255,255,.1); --text:#F8FAFC; --muted:#94A3B8; --accent:#A855F7; --accent-dim:rgba(168,85,247,.15); --destructive:#dc2626; }
+:root[data-theme="black"] { --rail-bg:#000; --panel-bg:#0A0A0A; --card-bg:#0A0A0A; --main-bg:#000; --border:rgba(255,255,255,.08); --text:#FAFAFA; --muted:#A1A1AA; --accent:#A855F7; --accent-dim:rgba(168,85,247,.15); --destructive:#dc2626; }
+:root[data-theme="nord"] { --rail-bg:#272C36; --panel-bg:#3B4252; --card-bg:#3B4252; --main-bg:#2E3440; --border:rgba(216,222,233,.12); --text:#ECEFF4; --muted:#D8DEE9; --accent:#88C0D0; --accent-dim:rgba(136,192,208,.15); --destructive:#BF616A; --destructive-foreground:#ECEFF4; }
+:root[data-theme="dracula"] { --rail-bg:#21222C; --panel-bg:#343746; --card-bg:#343746; --main-bg:#282A36; --border:rgba(248,248,242,.1); --text:#F8F8F2; --muted:#BFBFBF; --accent:#BD93F9; --accent-dim:rgba(189,147,249,.15); --destructive:#FF5555; --destructive-foreground:#282A36; }
+:root[data-theme="solarized-dark"] { --rail-bg:#001E28; --panel-bg:#073642; --card-bg:#073642; --main-bg:#002B36; --border:rgba(253,246,227,.1); --text:#FDF6E3; --muted:#839496; --accent:#268BD2; --accent-dim:rgba(38,139,210,.15); --destructive:#DC322F; --destructive-foreground:#FDF6E3; }
+:root[data-theme="solarized-light"] { --rail-bg:#EEE8D5; --panel-bg:#FDF6E3; --card-bg:#EEE8D5; --main-bg:#FDF6E3; --border:#D6CDB7; --text:#073642; --muted:#657B83; --accent:#268BD2; --accent-dim:rgba(38,139,210,.12); --destructive:#DC322F; --destructive-foreground:#FDF6E3; --menu-shadow: 0 16px 40px -12px rgba(7,54,66,.25), 0 2px 6px rgba(7,54,66,.08); }
+:root[data-theme="monokai"] { --rail-bg:#1E1F1C; --panel-bg:#3E3D32; --card-bg:#3E3D32; --main-bg:#272822; --border:rgba(248,248,242,.1); --text:#F8F8F2; --muted:#B3B3A6; --accent:#A6E22E; --accent-dim:rgba(166,226,46,.15); --destructive:#F92672; --destructive-foreground:#F8F8F2; }
+:root[data-theme="github-dark"] { --rail-bg:#010409; --panel-bg:#161B22; --card-bg:#161B22; --main-bg:#0D1117; --border:rgba(240,246,252,.1); --text:#E6EDF3; --muted:#8B949E; --accent:#58A6FF; --accent-dim:rgba(88,166,255,.15); --destructive:#F85149; --destructive-foreground:#E6EDF3; }
+
+* { box-sizing: border-box; border-color: var(--border); }
+html { font-family: var(--font-sans-stack); -webkit-font-smoothing: antialiased; }
+body { margin: 0; background: var(--main-bg); color: var(--text); font-size: 14px; line-height: 1.45; }
+svg.i { width: 14px; height: 14px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ─── Page chrome ─────────────────────────────────────────────────────── */
+.top { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; gap: 16px; padding: 12px 28px; background: color-mix(in srgb, var(--main-bg) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
+.top h1 { margin: 0; font-size: 15px; font-weight: 600; }
+.top .sub { color: var(--muted); font-size: 13px; }
+.top .spacer { flex: 1; }
+.top h1, .top .sub { white-space: nowrap; }
+.themes { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.themes select { height: 28px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius-btn); background: color-mix(in srgb, var(--text) 4%, transparent); color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer; }
+.themes select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+select option { background: var(--card-bg); color: var(--text); }
+.stage:focus { outline: none; }
+.nav { display: flex; gap: 4px; }
+.nav a { color: var(--muted); text-decoration: none; font-size: 12.5px; padding: 4px 8px; border-radius: var(--radius-btn); }
+.nav a:hover { color: var(--text); background: color-mix(in srgb, var(--text) 6%, transparent); }
+
+main { max-width: 1240px; margin: 0 auto; padding: 28px 28px 80px; }
+.intro { max-width: 760px; color: color-mix(in srgb, var(--text) 86%, transparent); }
+.intro p { margin: 0 0 10px; }
+.intro .hint { color: var(--muted); font-size: 13px; }
+section.opt { margin-top: 44px; padding-top: 28px; border-top: 1px solid var(--border); }
+.opt-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
+.opt-head .tag { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.opt-head h2 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -.01em; }
+.opt-head .rec { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; color: var(--accent); background: var(--accent-dim); }
+.opt-lede { margin: 0 0 18px; color: var(--muted); max-width: 780px; }
+.opt-body { display: grid; grid-template-columns: 640px minmax(0,1fr); gap: 28px; align-items: start; }
+@media (max-width: 1100px) { .opt-body { grid-template-columns: 1fr; } }
+.notes h3 { margin: 0 0 6px; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.notes ul { margin: 0 0 18px; padding-left: 18px; }
+.notes li { margin: 0 0 5px; font-size: 13.5px; }
+.notes li b { font-weight: 600; }
+.notes .cost { font-size: 13px; color: var(--muted); }
+.notes code { font-family: var(--font-mono-stack); font-size: 12px; padding: 1px 4px; border-radius: 4px; background: color-mix(in srgb, var(--text) 6%, transparent); }
+.bad { color: var(--error); }
+.shots { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
+.shots figure { margin: 0; }
+.shots img { width: 100%; border-radius: var(--radius-card); border: 1px solid var(--border); display: block; }
+.shots figcaption { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+/* ─── Stage: a slice of the Fleet sidebar to right-click ──────────────── */
+.stage { position: relative; height: 540px; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--panel-bg); overflow: hidden; user-select: none; }
+.stage .caption { position: absolute; right: 12px; bottom: 10px; font-size: 11.5px; color: var(--muted); }
+.side { width: 270px; padding: 10px 8px; }
+.proj { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px; font-size: 13px; font-weight: 600; color: color-mix(in srgb, var(--text) 86%, transparent); }
+.proj .n { margin-left: auto; color: var(--muted); font-weight: 400; font-size: 12px; }
+.proj svg { color: var(--muted); width: 12px; height: 12px; }
+.row { min-height: 32px; display: flex; align-items: center; gap: 9px; padding: 0 10px; margin: 1px 0; border-radius: var(--radius-btn); color: color-mix(in srgb, var(--text) 86%, transparent); font-size: 13px; cursor: pointer; transition: background var(--transition); }
+.row:hover { background: color-mix(in srgb, var(--text) 5%, transparent); color: var(--text); }
+.row.ctx { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
+.row .g { width: 8px; height: 8px; flex-shrink: 0; }
+.row .g.run { border-radius: 50%; background: var(--running); }
+.row .g.wait { border-radius: 50%; background: var(--idle); }
+.row .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .m { font-size: 11.5px; color: var(--muted); }
+
+/* ─── Shared menu behaviour ───────────────────────────────────────────── */
+.menu { position: absolute; z-index: 10; }
+.menu [data-item] { position: relative; }
+.toast { position: absolute; left: 50%; bottom: 14px; transform: translate(-50%, 6px); opacity: 0; padding: 6px 12px; border-radius: var(--radius-btn); background: var(--card-bg); border: 1px solid var(--border); box-shadow: var(--menu-shadow); font-size: 12.5px; transition: opacity 150ms, transform 150ms; pointer-events: none; }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ─── TODAY: shadcn defaults as they render in Fleet ──────────────────── */
+.m-today { width: 224px; padding: 4px; background: var(--card-bg); color: var(--text); border: 1px solid var(--border); border-radius: 0; box-shadow: 0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -2px rgba(0,0,0,.1); font-size: 12px; }
+.m-today [data-item] { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; cursor: default; }
+.m-today [data-item] .i { color: var(--muted); }
+.m-today [data-item][data-hl] { background: var(--accent); }
+.m-today [data-item][data-hl] .i { color: inherit; }
+.m-today .desc { display: block; font-size: 11px; color: var(--muted); }
+.m-today [data-hl] .desc { color: inherit; opacity: .8; }
+.m-today .chev { margin-left: auto; }
+.m-today .sep { height: 1px; margin: 4px -4px; background: var(--border); }
+.m-today [data-danger] { color: var(--destructive-foreground); }
+.m-today [data-danger] .i { color: var(--destructive-foreground); }
+.m-today [data-danger][data-hl] { background: color-mix(in srgb, var(--destructive) 10%, transparent); }
+.m-today .lbl, .m-today .hint, .m-today .head, .m-today .quick { display: none; }
+.m-today .kbd { margin-left: auto; color: var(--muted); letter-spacing: .1em; }
+.m-today.sub { width: auto; min-width: 128px; }
+
+/* ─── FLEET menu (options A–C share this) ─────────────────────────────── */
+.m-fleet { width: 264px; padding: 5px; background: var(--card-bg); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--menu-shadow); font-size: 13px; transform-origin: var(--origin, top left); }
+.m-fleet.anim { animation: menu-in 120ms ease-out; }
+@keyframes menu-in { from { opacity: 0; transform: scale(.97) translateY(-2px); } to { opacity: 1; transform: none; } }
+.m-fleet [data-item] { display: grid; grid-template-columns: 16px minmax(0,1fr) auto; align-items: center; column-gap: 8px; min-height: 30px; padding: 5px 8px; border-radius: calc(var(--radius-btn) - 2px); cursor: default; transition: background 80ms ease-out; }
+.m-fleet [data-item] > .i { color: var(--muted); justify-self: center; transition: color 80ms ease-out; }
+.m-fleet [data-item][data-hl] { background: color-mix(in srgb, var(--text) 7%, transparent); }
+.m-fleet [data-item][data-hl] > .i { color: var(--text); }
+.m-fleet .txt { min-width: 0; display: flex; flex-direction: column; }
+.m-fleet .txt > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-fleet .desc { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-fleet .chev { color: var(--muted); width: 13px; height: 13px; }
+.m-fleet .sep { height: 1px; margin: 4px 2px; background: var(--border); }
+.m-fleet [data-danger] { color: var(--destructive); }
+.m-fleet [data-danger] > .i { color: var(--destructive); }
+.m-fleet [data-danger][data-hl] { background: color-mix(in srgb, var(--destructive) 12%, transparent); }
+.m-fleet [data-danger][data-hl] > .i { color: var(--destructive); }
+.m-fleet [data-disabled] { opacity: .45; }
+.m-fleet [data-current] .chk { color: var(--accent); width: 14px; height: 14px; }
+.m-fleet .kbd { display: inline-block; padding: 2px 5px; font-size: 10px; font-weight: 500; line-height: 1; color: var(--muted); background: color-mix(in srgb, var(--text) 6%, transparent); border: 1px solid var(--border); border-radius: calc(var(--radius-btn) - 3px); }
+.m-fleet .lbl { padding: 7px 8px 3px; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
+.m-fleet .mono { font-family: var(--font-mono-stack); font-size: 12px; }
+.m-fleet.sub { width: 216px; }
+.m-fleet .hint, .m-fleet .head, .m-fleet .quick { display: none; }
+
+/* A: descriptions stay inline, but on one line each. */
+.opt-a .m-fleet .desc { display: block; }
+
+/* B + C: descriptions move to a footer that follows the highlighted row. */
+.opt-b .m-fleet .desc, .opt-c .m-fleet .desc { display: none; }
+.opt-b .m-fleet:not(.sub) .hint, .opt-c .m-fleet:not(.sub) .hint { display: block; margin: 4px -5px -5px; padding: 8px 13px 9px; border-top: 1px solid var(--border); border-radius: 0 0 var(--radius-card) var(--radius-card); background: color-mix(in srgb, var(--text) 2.5%, transparent); color: var(--muted); font-size: 11.5px; line-height: 1.4; height: 50px; overflow: hidden; }
+.hint b { color: color-mix(in srgb, var(--text) 86%, transparent); font-weight: 500; }
+
+/* C: the session up top, and the four most-used verbs as a strip. */
+.opt-c .m-fleet { width: 280px; }
+.opt-c .m-fleet.sub { width: 216px; }
+.opt-c .m-fleet:not(.sub) .head { display: block; padding: 7px 8px 8px; }
+.head .ht { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.head .hm { display: flex; align-items: center; gap: 6px; margin-top: 2px; color: var(--muted); font-size: 11.5px; }
+.head .hm .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--running); }
+.head .hm .mono { font-size: 11px; }
+.opt-c .m-fleet:not(.sub) .quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 0 0 4px; }
+.quick [data-item] { display: flex !important; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 52px !important; padding: 6px 2px !important; border: 1px solid var(--border); border-radius: var(--radius-btn) !important; font-size: 11.5px; color: color-mix(in srgb, var(--text) 86%, transparent); }
+.quick [data-item] > .i { width: 15px; height: 15px; }
+.quick [data-item][data-hl] { color: var(--text); }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <h1>Right-click menu</h1>
+  <span class="sub">Options for the session menu</span>
+  <nav class="nav"><a href="#today">Today</a><a href="#a">A</a><a href="#b">B</a><a href="#c">C</a></nav>
+  <span class="spacer"></span>
+  <label class="themes">Theme <select id="themes"></select></label>
+</div>
+
+<main>
+  <div class="intro">
+    <p>The session and project menus use shadcn's stock <code style="font-family:var(--font-mono-stack);font-size:12px">ContextMenu</code> classes. Fleet's own menus (the composer chips, model picker, command palette) were styled later and look different. Below, the menu as it is today, then three options. Every option uses Fleet's real tokens and works in every theme (switch themes at the top right).</p>
+    <p class="hint">Each panel is live: <b>right-click any session row</b> to open the menu there. Hover the rows, open the submenus, and use the arrow keys, Enter and Esc.</p>
+  </div>
+
+  <section class="opt" id="today">
+    <div class="opt-head"><span class="tag">Today</span><h2>What ships now</h2></div>
+    <p class="opt-lede">Rebuilt from the classes in <code>components/ui/context-menu/*.vue</code>. Real screenshots from mock-mode Fleet are underneath.</p>
+    <div class="opt-body">
+      <div class="stage" data-variant="today"></div>
+      <div class="notes">
+        <h3>Why it feels out of place</h3>
+        <ul>
+          <li><b>Square corners.</b> Every other Fleet surface is rounded (10 px cards, 8 px buttons). The menu panel has no radius.</li>
+          <li><b>Solid accent hover.</b> <code>focus:bg-accent</code> resolves to Fleet's indigo, so the highlighted row is a bright block. Everywhere else, Fleet's hover is a soft text tint.</li>
+          <li class="bad"><b>Delete is unreadable.</b> It uses <code>text-destructive-foreground</code>, which is white. In the light theme it is white on pale pink on hover; in dark themes it isn't red at all.</li>
+          <li><b>Rows wrap to three lines.</b> The Fork and New session explanations wrap inside a 224 px menu, so rows are uneven.</li>
+          <li><b>Small, flat, one long list.</b> 12 px type (Fleet menus use 13 px), 11 items with one divider, and a thin <code>shadow-md</code> that barely lifts it off the sidebar.</li>
+          <li><b>Mixed wording.</b> “Move to Project”, “Permanently Delete”, “Open in...” with three dots next to “Repeat on a schedule…”.</li>
+          <li><b>Broken submenu when empty.</b> “No tools detected” opens as a loose grey box.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="shots">
+      <figure><img src="before-dark-sub.png" alt="Today, dark theme, Open in hovered"><figcaption>Dark theme, “Open in...” hovered: solid indigo row, empty submenu.</figcaption></figure>
+      <figure><img src="before-light-del.png" alt="Today, light theme, delete hovered"><figcaption>Light theme, “Permanently Delete” hovered: white text on pale pink.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="opt opt-a" id="a">
+    <div class="opt-head"><span class="tag">Option A</span><h2>Fleet restyle</h2></div>
+    <p class="opt-lede">Same items in the same order. Only the look changes, so it matches Fleet's chip menus (<code>.ns-pop</code> / <code>.ns-option</code>).</p>
+    <div class="opt-body">
+      <div class="stage" data-variant="a"></div>
+      <div class="notes">
+        <h3>What changes</h3>
+        <ul>
+          <li>10 px rounded panel on the raised surface, with a deeper, softer shadow so it lifts off the sidebar.</li>
+          <li>Hover is a 7% text tint and the icon brightens. Accent colour is kept for meaning only (the check on the current project).</li>
+          <li>13 px type, 30 px rows, 14 px icons in a fixed column so labels line up.</li>
+          <li>Explanations stay, but on one line each; the menu is 264 px wide.</li>
+          <li>Delete is red, with a red-tinted hover, in every theme.</li>
+          <li>Sentence case and real ellipses: “Move to project”, “Delete permanently…”, “Open in”.</li>
+          <li>120 ms fade-and-settle when it opens, from the cursor.</li>
+        </ul>
+        <h3>Cost</h3>
+        <p class="cost">Smallest change. Edit the classes in the <code>context-menu</code> primitives (and the matching <code>dropdown-menu</code> ones, so ⋯ menus match), plus the label text. Every context menu in Fleet updates at once.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="opt opt-b" id="b">
+    <div class="opt-head"><span class="tag">Option B</span><h2>Restyle + grouped, with a hint line</h2><span class="rec">Recommended</span></div>
+    <p class="opt-lede">A's look, plus structure. Related actions are grouped, every row is one line, and the explanation for the highlighted row appears in a quiet footer.</p>
+    <div class="opt-body">
+      <div class="stage" data-variant="b"></div>
+      <div class="notes">
+        <h3>What changes, on top of A</h3>
+        <ul>
+          <li><b>Five groups</b>: change this session · start from it · reuse it · take it elsewhere · delete. You scan groups instead of reading 11 rows.</li>
+          <li><b>One line per row.</b> Fork's and Save as workflow's explanations (and the reason when Fork is off) move into the footer. The footer follows the highlighted row and otherwise shows the session's folder and branch.</li>
+          <li><b>Shortcut chips</b> in the same style as the status bar. Only F2 (Rename) exists today, so only that one is shown.</li>
+          <li>Move to project shows a check next to the current project instead of a greyed-out row.</li>
+          <li>Rows that only sometimes appear (Restore, Move out of parent) join the first two groups.</li>
+        </ul>
+        <h3>Cost</h3>
+        <p class="cost">A, plus reordering <code>SessionItem.vue</code>'s menu and a small <code>ContextMenuHint</code> slot that reads the highlighted row's description. The project menu gets the same grouping.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="opt opt-c" id="c">
+    <div class="opt-head"><span class="tag">Option C</span><h2>Session header + quick actions</h2></div>
+    <p class="opt-lede">B, plus the session's name, status and branch at the top, and the four most-used verbs as a strip of buttons. It reads more like a small Fleet card than a system menu.</p>
+    <div class="opt-body">
+      <div class="stage" data-variant="c"></div>
+      <div class="notes">
+        <h3>What changes, on top of B</h3>
+        <ul>
+          <li>The header confirms which session you right-clicked, which helps when titles are cut off in a narrow sidebar.</li>
+          <li>Rename, Fork, Archive and Copy ID are one click in a strip; the list holds the rest.</li>
+        </ul>
+        <h3>Trade-offs</h3>
+        <ul>
+          <li>Taller menu, and the header repeats the row you just clicked.</li>
+          <li>The button strip is a new pattern that no other Fleet menu uses, and with the keyboard it's a second set of things to move between.</li>
+        </ul>
+        <h3>Cost</h3>
+        <p class="cost">B, plus a session-only header component. Other menus stay as in B.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+const ICON = {
+  pencil: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>',
+  archive: '<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
+  fork: '<circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9"/><path d="M12 12v3"/>',
+  plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  repeat: '<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
+  sparkles: '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>',
+  ext: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+  folderOpen: '<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/>',
+  folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+  copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+  trash: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
+  chev: '<path d="m9 18 6-6-6-6"/>',
+  chevDown: '<path d="m6 9 6 6 6-6"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  terminal: '<polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/>',
+  code: '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
+  file: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>',
+};
+const svg = (n, cls = "i") => `<svg class="${cls}" viewBox="0 0 24 24">${ICON[n]}</svg>`;
+
+const SESSION = { title: "Implement mock API plugin for frontend", project: "Fleet Core", branch: "feat/mock-api", harness: "OpenCode" };
+
+const OPEN_IN = [
+  { icon: "code", label: "VS Code" }, { icon: "code", label: "Cursor" }, "sep",
+  { icon: "terminal", label: "Terminal" }, "sep", { icon: "folder", label: "Files" },
+];
+const OPEN_IN_TODAY = [{ label: "No tools detected", muted: true }];
+const PROJECTS = [
+  { label: "Fleet Core", current: true }, { label: "Documentation" }, { label: "Ungrouped" },
+];
+
+// Today's order and wording, straight from SessionItem.vue.
+const TODAY = [
+  { icon: "pencil", label: "Rename" },
+  { icon: "archive", label: "Archive" },
+  { icon: "fork", label: "Fork", desc: "A new session with a copy of this conversation" },
+  { icon: "plus", label: "New session in this folder", desc: "Same folder and harness, an empty conversation" },
+  { icon: "repeat", label: "Repeat on a schedule…" },
+  { icon: "ext", label: "Open in...", sub: OPEN_IN_TODAY },
+  { icon: "folderOpen", label: "Move to Project", sub: PROJECTS.map(p => ({ label: p.label, disabled: p.current })) },
+  "sep",
+  { icon: "copy", label: "Copy session ID" },
+  { icon: "trash", label: "Permanently Delete", danger: true },
+];
+
+const A = [
+  { icon: "pencil", label: "Rename", kbd: "F2" },
+  { icon: "archive", label: "Archive" },
+  { icon: "fork", label: "Fork", desc: "A new session with a copy of this conversation" },
+  { icon: "plus", label: "New session in this folder", desc: "Same folder and harness, empty conversation" },
+  { icon: "repeat", label: "Repeat on a schedule…" },
+  { icon: "sparkles", label: "Save as workflow…", desc: "Asks the model once, from the cache" },
+  { icon: "ext", label: "Open in", sub: OPEN_IN },
+  { icon: "folderOpen", label: "Move to project", sub: PROJECTS },
+  "sep",
+  { icon: "copy", label: "Copy session ID" },
+  { icon: "trash", label: "Delete permanently…", danger: true },
+];
+
+const B = [
+  { icon: "pencil", label: "Rename", kbd: "F2", hint: "Rename this session. Also F2 on a selected row." },
+  { icon: "archive", label: "Archive", hint: "Hide it from the list. <b>Undo</b> appears for a few seconds; Restore from Archived." },
+  "sep",
+  { icon: "fork", label: "Fork", hint: "A <b>new session</b> with a copy of this conversation, on the same harness." },
+  { icon: "plus", label: "New session in this folder", hint: "Same folder and harness, an <b>empty</b> conversation." },
+  "sep",
+  { icon: "repeat", label: "Repeat on a schedule…", hint: "Opens Automations with this session's prompt and folder filled in." },
+  { icon: "sparkles", label: "Save as workflow…", hint: "Drafts a workflow from this conversation. Asks the model <b>once</b>, from the cache." },
+  "sep",
+  { icon: "ext", label: "Open in", sub: OPEN_IN, hint: "Open the session's folder in an editor, terminal or file manager." },
+  { icon: "folderOpen", label: "Move to project", sub: PROJECTS, hint: "Now in <b>Fleet Core</b>." },
+  { icon: "copy", label: "Copy session ID", hint: "Copies <span class='mono'>ses_7f3a…c21</span> to the clipboard." },
+  "sep",
+  { icon: "trash", label: "Delete permanently…", danger: true, hint: "Deletes the session and its history. Asks first. <b>Can't be undone.</b>" },
+];
+
+const C_QUICK = [
+  { icon: "pencil", label: "Rename", hint: "Rename this session. Also F2 on a selected row." },
+  { icon: "fork", label: "Fork", hint: "A <b>new session</b> with a copy of this conversation, on the same harness." },
+  { icon: "archive", label: "Archive", hint: "Hide it from the list. <b>Undo</b> appears for a few seconds." },
+  { icon: "copy", label: "Copy ID", hint: "Copies <span class='mono'>ses_7f3a…c21</span> to the clipboard." },
+];
+const C = [
+  { icon: "plus", label: "New session in this folder", hint: "Same folder and harness, an <b>empty</b> conversation." },
+  { icon: "repeat", label: "Repeat on a schedule…", hint: "Opens Automations with this session's prompt and folder filled in." },
+  { icon: "sparkles", label: "Save as workflow…", hint: "Drafts a workflow from this conversation. Asks the model <b>once</b>, from the cache." },
+  "sep",
+  { icon: "ext", label: "Open in", sub: OPEN_IN, hint: "Open the session's folder in an editor, terminal or file manager." },
+  { icon: "folderOpen", label: "Move to project", sub: PROJECTS, hint: "Now in <b>Fleet Core</b>." },
+  "sep",
+  { icon: "trash", label: "Delete permanently…", danger: true, hint: "Deletes the session and its history. Asks first. <b>Can't be undone.</b>" },
+];
+
+const VARIANTS = {
+  today: { cls: "m-today", items: TODAY },
+  a: { cls: "m-fleet", items: A },
+  b: { cls: "m-fleet", items: B },
+  c: { cls: "m-fleet", items: C, quick: C_QUICK },
+};
+const DEFAULT_HINT = `<b>${SESSION.project}</b> · <span class="mono">${SESSION.branch}</span> · ${SESSION.harness}`;
+
+const ROWS = [
+  { proj: "Fleet Core", n: 5 },
+  { t: SESSION.title, m: "114w" },
+  { t: "Add progress rings to session rows", g: "run" },
+  { t: "Refactor the session cache", m: "114w" },
+  { t: "Wire up the retry banner", m: "114w" },
+  { t: "Migrate settings storage", g: "wait" },
+  { proj: "Documentation", n: 1 },
+  { t: "Update documentation for v2.0", m: "Done" },
+  { proj: "Ungrouped", n: 1 },
+  { t: "Fix authentication flow", g: "run" },
+];
+
+function itemHtml(it, variant) {
+  if (it === "sep") return '<div class="sep" role="separator"></div>';
+  const attrs = [
+    'data-item', 'role="menuitem"',
+    it.danger ? 'data-danger' : '', it.disabled ? 'data-disabled' : '', it.current ? 'data-current' : '',
+    it.muted ? 'data-disabled' : '',
+  ].join(" ");
+  const icon = it.icon ? svg(it.icon) : '<span></span>';
+  const label = it.desc
+    ? `<span class="txt"><span>${it.label}</span><span class="desc">${it.desc}</span></span>`
+    : `<span class="txt"><span>${it.label}</span></span>`;
+  let tail = "";
+  if (it.sub) tail = svg("chev", "i chev");
+  else if (it.current && variant !== "today") tail = svg("check", "i chk");
+  else if (it.kbd) tail = `<span class="kbd">${it.kbd}</span>`;
+  return `<div ${attrs}>${icon}${label}${tail}</div>`;
+}
+
+function buildMenu(variant, items, { sub = false, quick = null } = {}) {
+  const v = VARIANTS[variant];
+  const el = document.createElement("div");
+  el.className = `menu ${v.cls}${sub ? " sub" : ""}`;
+  el.setAttribute("role", "menu");
+  let html = "";
+  if (!sub && variant === "c") {
+    html += `<div class="head"><div class="ht">${SESSION.title}</div><div class="hm"><span class="dot"></span>Working · <span class="mono">${SESSION.branch}</span></div></div>`;
+    html += `<div class="quick">${quick.map(q => itemHtml(q, variant)).join("")}</div><div class="sep"></div>`;
+  }
+  html += items.map(it => itemHtml(it, variant)).join("");
+  if (!sub) html += `<div class="hint">${DEFAULT_HINT}</div>`;
+  el.innerHTML = html;
+  // Map DOM rows back to their data.
+  const data = (quick && !sub ? quick : []).concat(items.filter(i => i !== "sep"));
+  [...el.querySelectorAll("[data-item]")].forEach((n, i) => { n._data = data[i]; });
+  return el;
+}
+
+function setupStage(stage) {
+  const variant = stage.dataset.variant;
+  const side = document.createElement("div");
+  side.className = "side";
+  side.innerHTML = ROWS.map((r, i) => r.proj
+    ? `<div class="proj">${svg("chevDown")}${r.proj}<span class="n">${r.n}</span></div>`
+    : `<div class="row" data-row="${i}"><span class="g ${r.g || ""}"></span><span class="t">${r.t}</span>${r.m ? `<span class="m">${r.m}</span>` : ""}</div>`).join("");
+  stage.appendChild(side);
+  const cap = document.createElement("div"); cap.className = "caption"; cap.textContent = "Right-click a row";
+  const toast = document.createElement("div"); toast.className = "toast";
+  stage.append(cap, toast);
+
+  let menu = null, subMenu = null, subOwner = null, activeRow = null, subTimer = null;
+  const stageRect = () => stage.getBoundingClientRect();
+
+  function close() {
+    menu?.remove(); subMenu?.remove(); menu = subMenu = subOwner = null;
+    activeRow?.classList.remove("ctx"); activeRow = null;
+  }
+  function closeSub() { subMenu?.remove(); subMenu = null; if (subOwner) delete subOwner.dataset.hl; subOwner = null; }
+
+  function highlight(m, node) {
+    m.querySelectorAll("[data-hl]").forEach(n => { if (n !== node && n !== subOwner) delete n.dataset.hl; });
+    if (node) node.dataset.hl = "";
+    if (m === menu) {
+      const hint = menu.querySelector(".hint");
+      if (hint) hint.innerHTML = node?._data?.hint ?? DEFAULT_HINT;
+    }
+  }
+
+  function openSub(owner) {
+    if (subOwner === owner) return;
+    closeSub();
+    subOwner = owner;
+    owner.dataset.hl = "";
+    subMenu = buildMenu(variant, owner._data.sub, { sub: true });
+    stage.appendChild(subMenu);
+    const sr = stageRect(), mr = menu.getBoundingClientRect(), or = owner.getBoundingClientRect();
+    const pad = variant === "today" ? 0 : -4;
+    let x = mr.right - sr.left + (variant === "today" ? 0 : 2);
+    let y = or.top - sr.top + pad;
+    const w = subMenu.offsetWidth, h = subMenu.offsetHeight;
+    if (x + w > sr.width - 6) x = mr.left - sr.left - w - 2;
+    y = Math.min(y, sr.height - h - 6);
+    subMenu.style.left = x + "px"; subMenu.style.top = y + "px";
+    if (variant !== "today") { subMenu.style.setProperty("--origin", "top left"); subMenu.classList.add("anim"); }
+    wire(subMenu, true);
+  }
+
+  function choose(node) {
+    const d = node._data;
+    if (!d || node.hasAttribute("data-disabled")) return;
+    if (d.sub) { openSub(node); return; }
+    const verb = d.danger ? "Would open the delete confirmation" : `Would run “${d.label}”`;
+    close();
+    toast.textContent = verb;
+    toast.classList.add("show");
+    clearTimeout(toast._t); toast._t = setTimeout(() => toast.classList.remove("show"), 1400);
+  }
+
+  function wire(m, isSub) {
+    m.addEventListener("mousemove", e => {
+      const node = e.target.closest("[data-item]");
+      if (!node || node.hasAttribute("data-disabled")) return;
+      highlight(m, node);
+      if (!isSub) {
+        clearTimeout(subTimer);
+        if (node._data?.sub) subTimer = setTimeout(() => openSub(node), 90);
+        else if (subMenu) subTimer = setTimeout(closeSub, 160);
+      }
+    });
+    m.addEventListener("mouseleave", () => { if (isSub || !subMenu) highlight(m, null); });
+    m.addEventListener("click", e => { const n = e.target.closest("[data-item]"); if (n) choose(n); });
+    m.addEventListener("contextmenu", e => e.preventDefault());
+  }
+
+  function open(row, clientX, clientY) {
+    close();
+    activeRow = row; row.classList.add("ctx");
+    const v = VARIANTS[variant];
+    menu = buildMenu(variant, v.items, { quick: v.quick });
+    stage.appendChild(menu);
+    const sr = stageRect();
+    let x = clientX - sr.left, y = clientY - sr.top;
+    const w = menu.offsetWidth, h = menu.offsetHeight;
+    let ox = "left", oy = "top";
+    if (x + w > sr.width - 6) { x -= w; ox = "right"; }
+    if (y + h > sr.height - 6) { y = Math.max(6, sr.height - h - 6); }
+    menu.style.left = x + "px"; menu.style.top = y + "px";
+    menu.style.setProperty("--origin", `${oy} ${ox}`);
+    if (variant !== "today") menu.classList.add("anim");
+    wire(menu, false);
+    stage.focus({ preventScroll: true });
+  }
+
+  stage.tabIndex = -1;
+  stage.addEventListener("contextmenu", e => {
+    e.preventDefault();
+    const row = e.target.closest(".row");
+    if (row) open(row, e.clientX, e.clientY); else close();
+  });
+  stage.addEventListener("mousedown", e => { if (e.button === 0 && !e.target.closest(".menu")) close(); });
+
+  stage.addEventListener("keydown", e => {
+    if (!menu) return;
+    const m = subMenu && subMenu.querySelector("[data-hl]") ? subMenu : menu;
+    const nodes = [...m.querySelectorAll("[data-item]:not([data-disabled])")];
+    const cur = m.querySelector("[data-item][data-hl]");
+    let i = nodes.indexOf(cur);
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      if (m === menu) closeSub();
+      i = e.key === "ArrowDown" ? (i + 1) % nodes.length : (i - 1 + nodes.length) % nodes.length;
+      highlight(m, nodes[i]);
+    } else if (e.key === "ArrowRight" && cur?._data?.sub && m === menu) {
+      e.preventDefault(); openSub(cur);
+      const first = subMenu.querySelector("[data-item]:not([data-disabled])"); if (first) highlight(subMenu, first);
+    } else if (e.key === "ArrowLeft" && m === subMenu) {
+      e.preventDefault(); const owner = subOwner; closeSub(); highlight(menu, owner);
+    } else if (e.key === "Enter" && cur) { e.preventDefault(); choose(cur); }
+    else if (e.key === "Escape") { e.preventDefault(); subMenu ? (() => { const o = subOwner; closeSub(); highlight(menu, o); })() : close(); }
+  });
+
+  // Open on load so the option reads without interaction.
+  requestAnimationFrame(() => {
+    const row = side.querySelector('[data-row="1"]');
+    const sr = stageRect(), rr = row.getBoundingClientRect();
+    open(row, rr.left + 96, rr.top + rr.height / 2 + 2);
+    menu.classList.remove("anim");
+    window.scrollTo(0, 0);
+  });
+}
+
+document.querySelectorAll(".stage").forEach(setupStage);
+
+const THEMES = [["dark","Dark"],["light","Light"],["weave-classic","Weave Classic"],["black","Black"],["nord","Nord"],["dracula","Dracula"],["solarized-dark","Solarized Dark"],["solarized-light","Solarized Light"],["monokai","Monokai"],["github-dark","GitHub Dark"]];
+const themesEl = document.getElementById("themes");
+function setTheme(t) {
+  document.documentElement.dataset.theme = t;
+  themesEl.value = t;
+  history.replaceState(null, "", "?theme=" + t + location.hash);
+}
+THEMES.forEach(([t, l]) => { const o = document.createElement("option"); o.value = t; o.textContent = l; themesEl.appendChild(o); });
+themesEl.onchange = () => setTheme(themesEl.value);
+setTheme(new URLSearchParams(location.search).get("theme") || "dark");
+</script>
+</body>
+</html>
