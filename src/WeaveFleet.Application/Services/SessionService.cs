@@ -104,7 +104,12 @@ public sealed class SessionService(
                 return FleetError.NotFoundFor(nameof(Project), projectId);
         }
 
-        await sessionRepository.UpdateProjectAsync(sessionId, projectId);
+        // A workflow run's steps show as one group in the Sessions list, so they move together; later steps follow.
+        var moving = session.WorkflowRunId is { } runId
+            ? await sessionRepository.GetForWorkflowRunAsync(runId)
+            : [session];
+        foreach (var each in moving)
+            await sessionRepository.UpdateProjectAsync(each.Id, projectId);
         return Unit.Value;
     }
 

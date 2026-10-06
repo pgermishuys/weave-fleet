@@ -67,6 +67,9 @@ public interface ISessionRepository
     Task<int> MarkAllNonTerminalStoppedAsync(string stoppedAt);
     Task UpdateProjectAsync(string id, string? projectId);
 
+    /// <summary>A workflow run's step sessions, newest first.</summary>
+    Task<IReadOnlyList<Session>> GetForWorkflowRunAsync(string workflowRunId);
+
     /// <summary>Moves the session out of the session it came from (a time), or back under it (null).</summary>
     Task UpdateLineageDetachedAsync(string id, string? detachedAt);
     /// <summary>

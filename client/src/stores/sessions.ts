@@ -38,6 +38,14 @@ export const useSessionsStore = defineStore("sessions", () => {
       : item);
   }
 
+  /** Moves a session to a project, with the rest of its workflow run: Fleet moves a run's steps together. */
+  function patchSessionProject(sessionId: string, projectId: string | null, projectName: string | null): void {
+    const runId = sessions.value.find((item) => item.session.id === sessionId)?.workflowRunId ?? null;
+    sessions.value = sessions.value.map((item) => item.session.id === sessionId || (runId !== null && item.workflowRunId === runId)
+      ? { ...item, projectId, projectName }
+      : item);
+  }
+
   function upsertSession(nextSession: SessionListItem): void {
     const existingSession = sessions.value.find((item) => item.session.id === nextSession.session.id);
     if (existingSession) {
@@ -96,6 +104,7 @@ export const useSessionsStore = defineStore("sessions", () => {
     setActiveSessionId,
     setRetentionStatus,
     patchSession,
+    patchSessionProject,
     upsertSession,
     patchSessionStateOverride,
     removeSession,

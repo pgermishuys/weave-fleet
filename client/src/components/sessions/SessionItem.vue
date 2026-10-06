@@ -479,6 +479,8 @@ async function handleMove(projectId: string | null): Promise<void> {
 
   try {
     await moveSession(sessionId.value, projectId);
+    const projectName = projectId === null ? null : (projects.value.find((project) => project.id === projectId)?.name ?? null);
+    sessionsStore.patchSessionProject(sessionId.value, projectId, projectName);
   } catch {
     // Errors are handled by the mutation composable state.
   }

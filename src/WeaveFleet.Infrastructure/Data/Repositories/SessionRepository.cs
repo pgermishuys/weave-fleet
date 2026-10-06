@@ -722,6 +722,21 @@ public sealed class SessionRepository(
             });
     }
 
+    public async Task<IReadOnlyList<Session>> GetForWorkflowRunAsync(string workflowRunId)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        var dbConn = (DbConnection)conn;
+        await using var cmd = dbConn.CreateCommand();
+        cmd.CommandText = "SELECT * FROM sessions WHERE workflow_run_id = @WorkflowRunId AND user_id = @UserId ORDER BY created_at DESC";
+        cmd.AddParameter("WorkflowRunId", workflowRunId);
+        cmd.AddParameter("UserId", userContext.UserId);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        var list = new List<Session>();
+        while (await reader.ReadAsync())
+            list.Add(ReadSession(reader));
+        return list;
+    }
+
     public async Task UpdateLineageDetachedAsync(string id, string? detachedAt)
     {
         using var conn = connectionFactory.CreateConnection();

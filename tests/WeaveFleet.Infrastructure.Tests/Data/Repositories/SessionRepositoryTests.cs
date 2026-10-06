@@ -192,6 +192,34 @@ public sealed class SessionRepositoryTests
     }
 
     [Fact]
+    public async Task GetForWorkflowRun_lists_the_runs_steps_newest_first()
+    {
+        var (conn, repo, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var (ws, inst) = await InsertDependenciesAsync(factory);
+        Session Step(string title, string? runId, int minute) => new()
+        {
+            Id = Guid.NewGuid().ToString(),
+            WorkspaceId = ws.Id,
+            InstanceId = inst.Id,
+            OpencodeSessionId = $"oc-{title}",
+            Title = title,
+            Status = "active",
+            Directory = "/tmp/ws",
+            CreatedAt = new DateTime(2026, 10, 6, 12, minute, 0, DateTimeKind.Utc).ToString("O"),
+            WorkflowRunId = runId,
+            UserId = TestUserContext.DefaultUserId
+        };
+        await repo.InsertAsync(Step("Plan", "run-1", 0));
+        await repo.InsertAsync(Step("Implement", "run-1", 5));
+        await repo.InsertAsync(Step("Other run", "run-2", 3));
+        await repo.InsertAsync(Step("Plain", null, 4));
+
+        (await repo.GetForWorkflowRunAsync("run-1")).Select(s => s.Title).ShouldBe(["Implement", "Plan"]);
+    }
+
+    [Fact]
     public async Task A_session_keeps_which_session_it_was_forked_from_or_started_by()
     {
         var (conn, repo, factory) = await CreateAsync();

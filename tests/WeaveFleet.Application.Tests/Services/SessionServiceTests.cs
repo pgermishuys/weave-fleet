@@ -183,6 +183,36 @@ public sealed class SessionServiceTests
     }
 
     [Fact]
+    public async Task Moving_a_step_of_a_workflow_run_moves_the_whole_run()
+    {
+        // The run's steps show as one group in the Sessions list, so moving one step must not split it.
+        static Session Step(string id, string runId)
+        {
+            var step = MakeSession(id);
+            step.WorkflowRunId = runId;
+            return step;
+        }
+
+        _builder.SessionRepository.Seed(Step("plan", "run-1"));
+        _builder.SessionRepository.Seed(Step("implement", "run-1"));
+        _builder.SessionRepository.Seed(Step("other-run", "run-2"));
+        _builder.SessionRepository.Seed(MakeSession("plain"));
+        _builder.ProjectRepository.Seed(new Project
+        {
+            Id = "p1", Name = "P1", Type = "user", Position = 1,
+            CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01"
+        });
+
+        var result = await _sut.MoveSessionToProjectAsync("implement", "p1");
+
+        result.IsSuccess.ShouldBeTrue();
+        (await _builder.SessionRepository.GetByIdAsync("plan"))!.ProjectId.ShouldBe("p1");
+        (await _builder.SessionRepository.GetByIdAsync("implement"))!.ProjectId.ShouldBe("p1");
+        (await _builder.SessionRepository.GetByIdAsync("other-run"))!.ProjectId.ShouldBeNull();
+        (await _builder.SessionRepository.GetByIdAsync("plain"))!.ProjectId.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task GetFleetSummaryAsync_ReturnsAggregatedData()
     {
         // Seed 4 active sessions: 3 busy + 1 idle, with tokens/cost totalling 1000 / $0.50

@@ -69,6 +69,24 @@ describe("useSessionsStore", () => {
     expect(store.sessions.map((item) => item.session.id)).toEqual(["session-2", "session-1"]);
   });
 
+  it("moves a workflow run's steps to a project together, and nothing else", () => {
+    const store = useSessionsStore();
+    const step = (id: string, workflowRunId: string | null): SessionListItem => {
+      const item = createSessionListItem();
+      return { ...item, session: { ...item.session, id }, projectId: "scratch", projectName: "Scratch", workflowRunId };
+    };
+    store.setSessions([step("plan", "run-1"), step("implement", "run-1"), step("other", "run-2"), step("plain", null)]);
+
+    store.patchSessionProject("implement", "project-2", "Site");
+
+    expect(store.sessions.map((item) => [item.session.id, item.projectId, item.projectName])).toEqual([
+      ["plan", "project-2", "Site"],
+      ["implement", "project-2", "Site"],
+      ["other", "scratch", "Scratch"],
+      ["plain", "scratch", "Scratch"],
+    ]);
+  });
+
   it("updates a known session in place", () => {
     const store = useSessionsStore();
     const first = createSessionListItem();
