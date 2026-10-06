@@ -427,15 +427,17 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
           :disabled="isAnyActionPending"
           @select="handleNewSessionRequest"
         >
-          <Plus class="h-4 w-4" />
+          <Plus class="size-3.5" />
           New session
         </ContextMenuItem>
+
+        <ContextMenuSeparator />
 
         <ContextMenuItem
           :disabled="isAnyActionPending"
           @select="startRename"
         >
-          <Pencil class="h-4 w-4" />
+          <Pencil class="size-3.5" />
           Rename
           <ContextMenuShortcut>F2</ContextMenuShortcut>
         </ContextMenuItem>
@@ -445,8 +447,8 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
           :disabled="isAnyActionPending"
           @select="handleMoveUp"
         >
-          <ArrowUp class="h-4 w-4" />
-          Move Up
+          <ArrowUp class="size-3.5" />
+          Move up
         </ContextMenuItem>
 
         <ContextMenuItem
@@ -454,8 +456,8 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
           :disabled="isAnyActionPending"
           @select="handleMoveDown"
         >
-          <ArrowDown class="h-4 w-4" />
-          Move Down
+          <ArrowDown class="size-3.5" />
+          Move down
         </ContextMenuItem>
 
         <ContextMenuSeparator />
@@ -465,8 +467,8 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
           :disabled="isAnyActionPending"
           @select="openDeleteDialog"
         >
-          <Trash2 class="h-4 w-4" />
-          Delete
+          <Trash2 class="size-3.5" />
+          Delete…
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
