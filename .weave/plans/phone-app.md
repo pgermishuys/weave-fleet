@@ -827,6 +827,65 @@ sheet, Run a command), pull to refresh on iOS (it reads Safari's own rubber band
 swipe back feel next to Safari's edge swipe, haptics (the iOS switch trick in particular), the status bar colour in the
 Home Screen app (`apple-mobile-web-app-status-bar-style` is `default` now), and the text-size setting.
 
+### Fleet look (2026-10-06)
+The user saw the Fleet-style mockups (`mockups/phone-fleet/`) and asked for exactly that: "it's exactly how I would
+expect a fleet mobile app to look". Built with the mockup's three recommendations: the panel floats on the window
+chrome (6px inset, rounded, desktop's panel shadow); the docked ask is compact (Allow once + More…) and Later folds
+it into "1 waiting · Review"; one tap answers a question (several answers keep Answer…). Screens:
+`mockups/phone-app/shots-fleet/` (390×844 @2x, light and dark, iPhone and Android user agents; kit in
+`~/.cache/fleet-phone/pw/fleet/`, Vite in mock mode with `VITE_SW_DEV=1` so the notifications-on screen has a worker).
+
+What changed from the native round:
+- **One design.** The iOS/Android look (`?look=`, `lib/phone/look.ts`, the `data-phone` look value, Material styles,
+  glass, the floating tab bar, the FAB, the ripple, the recess behind sheets, the system font and
+  `-apple-system-body`) is gone; `lib/phone/platform.ts` keeps only "is this iOS WebKit" for the tricks that need it
+  (Safari's edge swipe, its rubber band, the haptic switch). The stored `weave:phone-look` is cleared once.
+- **Tokens** (`assets/phone.css`): every value derives from `main.css` (surfaces, `--status-waiting`, `--sheet-shadow`,
+  radii two steps rounder, Inter and JetBrains Mono, desktop sizes about 1.15x). Light/dark only decide the panel's
+  edge, shadows and the scrim, so every theme works.
+- **Chrome and panels**: the chrome bar (logo, Notifications, New session as an outline button; the page's name once
+  its head scrolls away), the content in a panel, the tab bar as the rail along the bottom (the count is the one
+  amber thing). Sessions, pairing and the answered page are full panels.
+- **Inbox**: ask cards are desktop's Permission/Question cards; rows are the session list's (StatusGlyph via
+  `PhoneGlyph`, place and branch, Needs you / working time / age). Sessions are grouped by machine under folding
+  machine headers (folds kept on the phone), Machines is a settings page with OS and live tags and "This phone"
+  (Notifications, Pair with another machine, the full Fleet). The home machine's OS comes from `/api/machine`.
+- **Sheets**: title with a line under it and ×; half-open sheets are as tall as their content (42–72% of the
+  screen, `detentOffsets`); menus are desktop's dropdown at touch size; More… has numbered choices (1 Allow once,
+  2 Don't ask again for `pattern` · this session, 3 Deny, which opens a composer frame).
+- **Session**: SessionDetailHeader inside the panel; a turn's tool calls and subagents in one box of tool rows
+  (`stepRow`, `groupTools`, the first three of a run then "N more steps"; the call an ask waits on says Needs you);
+  desktop's Markdown styles; the working line as WorkingIndicator; the composer as ComposerFrame with the agent and
+  model in its toolbar.
+- **New session** is the desktop composer: the frame with agent and model (the harness's defaults named), the
+  Machine/Folder/Where/Harness chips, and one line saying what Start does (`startCaption`).
+- **Pull to refresh** is Fleet's Working glyph filling in dot by dot (`pullDots`), ticking while it refreshes; the
+  **toast** is desktop's inverted Undo toast with its draining bar (6 s with an action, as the desktop's).
+- **Swipe back** now works on every phone (Android's edge gesture is still the system's Back).
+
+Deviations from the mockups, and why:
+- No "Permission settings" link in the permission sheet: permission settings live on the computer.
+- Stop stays the composer's button while the agent works and nothing is typed (built behaviour; the mockup's
+  waiting session shows a disabled send). Effort shows in the toolbar only when the model has levels.
+- No paperclip in New session: the phone still can't attach to a first message.
+- No pull-request chips on rows, and a finished command shows ✓ or "failed" rather than a summary ("2 failed",
+  "#412"): the phone's feed carries neither.
+- Deny's send works with an empty box (deny without a message stays allowed); the mockup disables it until typed.
+- A machine's row under Machines filters Sessions to it (the mockup's row was a placeholder). The live tag means the
+  machine's feed is live, so a remote machine on its event hub shows it too.
+- The answered page has no command box: the notification's link doesn't carry the command.
+- The agent's words use desktop's `.md-content` (0.85em between paragraphs, the mockup has 10px).
+- Run a command's subtitle shows the folder's full path (the phone doesn't know the machine's home to write `~`).
+- "Since you looked" drops the time from the line, as the mockup does (it's in the label and title).
+- Needs you lists the newest three finished sessions with the day's count and "All sessions".
+- The phone no longer follows the iPhone text-size setting: the type is Fleet's fixed scale, as in the mockups.
+
+Needs the user's real phone: the 6px panel inset against the screen's rounded corners and the home indicator, the
+keyboard (the composer and Start above it with the panel's inset, New session's keyboard coming up with the sheet),
+pull to refresh on iOS (Safari's rubber band driving the dots), swipe back on Android next to the system's edge
+gesture, sheet drag and flick over content-sized sheets, haptics, the status bar in the Home Screen app (now the
+chrome colour, light and dark), Inter at 16px on a real screen, and swipe to archive with the Undo toast's bar.
+
 ## Risks and unknowns
 - **iOS**: no notification action buttons (tap → deep link only); push only for Home Screen apps on iOS 16.4+; permission request must be on a user gesture; Safari and Home Screen app storage may be separate → manual pairing code fallback (Task 6). Focus modes can silence pushes.
 - **Home machine single point of failure**: if home is down, no notifications for any machine; inbox shows remotes as unreachable. Documented; a push gateway is the future fix.
