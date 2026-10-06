@@ -37,6 +37,7 @@ steps:
       Read {{previous.files}} first.
       Where the request, the design and the code disagree, choose what changes the least and keep going.
       List each choice under a "Decisions to confirm" heading near the top of the plan: the user reads the plan before approving it.
+      The tasks are for Implement. Leave pushing, pull requests and deploying out of them: later steps do those, and any that no later step does go under "Decisions to confirm".
       Ask a question only if you truly can't go on without the answer.
 
       {{previous.summary}}

@@ -29,6 +29,15 @@ public static class FleetWorkflows
     public static string Footer(IReadOnlyList<string> outcomes)
         => $"This is one step of a Fleet workflow. When the step is finished, call {StepTool} once, as your last action, "
            + $"with outcome set to one of: {string.Join(", ", outcomes)}. Put what the next step needs in summary.";
+
+    /// <summary>
+    /// The steps that come after a step, so its agent leaves their work to them. Without it, an agent carrying out a plan
+    /// that ends with "push and merge" did that during Implement, ahead of the workflow's own push and merge steps.
+    /// </summary>
+    public static string LaterSteps(IReadOnlyList<string> titles)
+        => $"The steps after this one: {string.Join(", ", titles)}. Do only this step's work. When the request or a plan "
+           + "asks for something a later step does, such as pushing, opening or merging a pull request, or deploying, "
+           + "leave it to that step and say what you left.";
 }
 
 /// <summary>Whether workflows are on for the current user.</summary>

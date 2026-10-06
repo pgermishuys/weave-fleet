@@ -514,6 +514,15 @@ public sealed partial class WorkflowRunner(
         return null;
     }
 
+    /// <summary>The titles of the steps after a step in the file, without optional steps that are off.</summary>
+    internal static IReadOnlyList<string> LaterTitles(RunState state, WorkflowStep step)
+        => state.Workflow.Steps
+            .SkipWhile(s => s.Id != step.Id)
+            .Skip(1)
+            .Where(s => s is not WorkflowAgentStep { Optional: true } optional || state.Options.OptionalSteps.Contains(optional.Id))
+            .Select(s => s.Title)
+            .ToList();
+
     /// <summary>A step's declared files with this run filled in.</summary>
     internal static IReadOnlyList<string> FilesOf(RunState state, WorkflowAgentStep step)
         => WorkflowYaml.FilesOf(step, variable => variable switch
@@ -699,8 +708,8 @@ public sealed partial class WorkflowRunner(
     }
 
     /// <summary>
-    /// The step's instructions with the run filled in, a note sent back, the user's note from the step before, and the
-    /// footer. A step the user finishes has no footer: it has no step tool to call.
+    /// The step's instructions with the run filled in, a note sent back, the user's note from the step before, the steps
+    /// after it, and the footer. A step the user finishes has no footer: it has no step tool to call.
     /// </summary>
     internal static string PromptFor(RunState state, WorkflowAgentStep step, WorkflowRunStep visit)
     {
@@ -733,6 +742,8 @@ public sealed partial class WorkflowRunner(
         // The note the user wrote for the next step when they moved on; not for the same step when it comes round again.
         if (previous is { HandOffNote: { } handOff } && previous.StepId != step.Id)
             parts.Add($"Note from the user:\n{handOff}");
+        if (LaterTitles(state, step) is { Count: > 0 } later)
+            parts.Add(FleetWorkflows.LaterSteps(later));
         if (step.Skill is { } skill && !state.Options.WithoutSkills.Contains(step.Id))
             parts.Add($"Use the {skill} skill.");
         if (visit.Finish != WorkflowFinishers.You)

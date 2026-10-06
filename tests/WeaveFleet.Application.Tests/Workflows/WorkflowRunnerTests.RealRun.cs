@@ -44,7 +44,37 @@ public sealed partial class WorkflowRunnerTests
         plan.ShouldContain(
             "Where the request, the design and the code disagree, choose what changes the least and keep going.\n"
             + "List each choice under a \"Decisions to confirm\" heading near the top of the plan: the user reads the plan before approving it.\n"
+            + "The tasks are for Implement. Leave pushing, pull requests and deploying out of them: later steps do those, and any that no later step does go under \"Decisions to confirm\".\n"
             + "Ask a question only if you truly can't go on without the answer.");
+    }
+
+    [Fact]
+    public async Task each_step_knows_the_steps_after_it_and_leaves_their_work_to_them()
+    {
+        // An Implement agent carrying out a plan that ended with "push and merge" pushed and opened the PR itself,
+        // ahead of the workflow's own steps for that.
+        var run = await StartAsync();
+        Prompt("plan").ShouldContain(FleetWorkflows.LaterSteps(
+            ["Approve the plan", "Implement", "Review", "Open the pull request", "Push and open the PR"]));
+
+        await DoneAsync(_sessions.Started[^1].SessionId, "ready", "Plan.");
+        await _runner.AnswerAsync(UserId, run, "choice:0", null);
+
+        Prompt("implement").ShouldEndWith(
+            FleetWorkflows.LaterSteps(["Review", "Open the pull request", "Push and open the PR"])
+            + "\n\n" + FleetWorkflows.Footer(["done"]));
+        Prompt("implement").ShouldContain("Do only this step's work.");
+    }
+
+    [Fact]
+    public async Task an_optional_step_thats_on_is_one_of_the_steps_after()
+    {
+        var run = await StartAsync(optional: ["verify"]);
+        await DoneAsync(_sessions.Started[^1].SessionId, "ready", "Plan.");
+        await _runner.AnswerAsync(UserId, run, "choice:0", null);
+
+        Prompt("implement").ShouldContain(FleetWorkflows.LaterSteps(
+            ["Review", "Check it runs", "Open the pull request", "Push and open the PR"]));
     }
 
     [Fact]

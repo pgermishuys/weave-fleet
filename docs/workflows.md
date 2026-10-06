@@ -134,8 +134,17 @@ A declared file (`writes:`) can use `{{slug}}` and `{{run.branch}}`: the variabl
 ## How a run moves
 
 Each agent step starts as a new session in the run's worktree. Its prompt is the step's `prompt` with the variables
-filled in, then a note if the step was sent back, then one short footer that Fleet adds to step sessions only (a step you finish
-has none, see [Steps you finish](#steps-you-finish)):
+filled in, then a note if the step was sent back, then the steps after it, then one short footer that Fleet adds to
+step sessions only (a step you finish has none, see [Steps you finish](#steps-you-finish)).
+
+The steps after it are listed by title, in file order, without optional steps that are off, so an agent carrying out a
+plan doesn't push or merge ahead of the steps that do:
+
+> The steps after this one: Review, Open the pull request, Push and open the PR. Do only this step's work. When the
+> request or a plan asks for something a later step does, such as pushing, opening or merging a pull request, or
+> deploying, leave it to that step and say what you left.
+
+The last step has no such line. The footer:
 
 > This is one step of a Fleet workflow. When the step is finished, call fleet_step_done once, as your last action,
 > with outcome set to one of: pass, changes. Put what the next step needs in summary.
