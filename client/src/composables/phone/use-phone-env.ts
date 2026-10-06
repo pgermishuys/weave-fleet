@@ -12,11 +12,6 @@ import { RETIRED_LOOK_KEY, isIosWebKit, readPlatformSignals } from "@/lib/phone/
  * Everything is undone when the phone pages go away.
  */
 
-/**
- * Retired: the iOS/Android look is gone; this stays "ios" only until the screens still reading it move to Fleet's
- * look in the next commits, then it goes.
- */
-export const phoneLook = shallowRef<"ios" | "android">("ios");
 /** The keyboard's height over the page, in px. */
 export const keyboardHeight = shallowRef(0);
 

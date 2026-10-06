@@ -22,41 +22,39 @@ const sessionPath = computed(() => search.value.machine && search.value.session
 
 <template>
   <main
-    class="ph-page answered"
+    class="answered"
     data-testid="answered-page"
   >
-    <div class="answered__body">
-      <div class="ph-sheet__pad ph-hero">
-        <span
-          class="answered__icon"
-          :class="{ 'answered__icon--no': !allowed }"
-          aria-hidden="true"
-        >
-          <Check
-            v-if="allowed"
-            :size="34"
-            :stroke-width="2.6"
-          />
-          <X
-            v-else
-            :size="34"
-            :stroke-width="2.6"
-          />
-        </span>
-        <h3>{{ allowed ? `Allowed. ${machineName} carries on.` : `Denied. ${machineName} was told.` }}</h3>
-        <p>{{ allowed ? "It ran once; it'll ask again next time." : "The agent will try something else, or ask you." }}</p>
-      </div>
-      <div class="ph-sheet__pad answered__actions">
-        <!-- A session on another machine opens with a page load there. -->
-        <a
-          v-if="sessionPath"
-          :href="sessionPath"
-          class="ph-btn ph-btn--primary ph-btn--big"
-        ><span>Open the session</span></a>
-        <a
-          href="/phone"
-          class="ph-btn ph-btn--big"
-        ><span>Back to Needs you</span></a>
+    <div class="ph-panel ph-panel--full">
+      <div class="ph-center-page answered__page">
+        <div class="answered__body">
+          <span
+            class="ph-done-mark"
+            :class="{ 'ph-done-mark--bad': !allowed }"
+            aria-hidden="true"
+          >
+            <Check v-if="allowed" />
+            <X v-else />
+          </span>
+          <h1 class="answered__title">
+            {{ allowed ? `Allowed. ${machineName} carries on.` : `Denied. ${machineName} was told.` }}
+          </h1>
+          <p class="ph-center-page__lede">
+            {{ allowed ? "It ran once; it'll ask again next time." : "The agent will try something else, or ask you." }}
+          </p>
+          <div class="ph-actions">
+            <!-- A session on another machine opens with a page load there. -->
+            <a
+              v-if="sessionPath"
+              :href="sessionPath"
+              class="ph-btn ph-btn--primary ph-btn--block"
+            ><span>Open the session</span></a>
+            <a
+              href="/phone"
+              class="ph-btn ph-btn--outline ph-btn--block"
+            ><span>Back to Needs you</span></a>
+          </div>
+        </div>
       </div>
     </div>
   </main>
@@ -64,40 +62,23 @@ const sessionPath = computed(() => search.value.machine && search.value.session
 
 <style scoped>
 .answered {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+  position: absolute;
+  inset: 0;
 }
 
 .answered__body {
   width: 100%;
   max-width: 480px;
   margin: 0 auto;
+  text-align: center;
 }
 
-.answered__icon {
-  display: grid;
-  width: 72px;
-  height: 72px;
-  margin: 0 auto;
-  place-items: center;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--running) 16%, transparent);
-  color: var(--running);
+.answered__title {
+  margin-top: 18px;
+  margin-bottom: 6px;
 }
 
-.answered__icon--no {
-  background: color-mix(in srgb, var(--error) 14%, transparent);
-  color: var(--error);
-}
-
-.answered__actions {
-  display: grid;
-  gap: 10px;
-  margin-top: 28px;
-}
-
-.answered__actions a {
+.answered .ph-actions a {
   text-decoration: none;
 }
 </style>

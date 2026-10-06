@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import { Check, LoaderCircle, Plus, Share } from "lucide-vue-next";
+import { Bell, Check, LoaderCircle, Share } from "lucide-vue-next";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
-import { phoneLook } from "@/composables/phone/use-phone-env";
 import { showToast } from "@/composables/phone/use-phone-toast";
 import { usePushSubscription } from "@/composables/phone/use-push-subscription";
 import { haptic } from "@/lib/phone/haptics";
@@ -10,9 +9,10 @@ import { readPushEnvironment } from "@/lib/push/capabilities";
 import { CHOICE_GROUPS, groupsFor, kindsFor } from "@/lib/push/subscribe";
 
 /**
- * Turning on notifications (`/phone/setup`, a sheet over the inbox; step 3 of pairing): what they're for, on iPhone
- * the Home Screen steps first, then Turn on notifications, which asks for permission (it has to be this tap: iOS
- * ignores a request that isn't). Once on: which ones, quiet at the desk, and a test. One Done closes it.
+ * Turning on notifications (`/phone/setup`, a sheet over the inbox; step 3 of pairing), as a Settings page at touch
+ * size: what they're for, on iPhone the Home Screen steps first, then Turn on notifications, which asks for permission
+ * (it has to be this tap: iOS ignores a request that isn't). Once on: which ones, quiet at the desk, and a test. One
+ * Done closes it.
  */
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ (event: "close"): void }>();
@@ -26,12 +26,12 @@ const groups = computed(() => groupsFor(push.choices.value.kinds));
 const needsHomeScreen = computed(() => push.state.value === "ios-needs-install");
 const deviceLine = computed(() => {
   if (environment.isIos) return environment.isStandalone ? "iPhone · Home Screen app" : "iPhone · Safari";
-  return phoneLook.value === "android" ? "Android · Chrome" : "This browser";
+  return /Android/i.test(navigator.userAgent) ? "Android · Chrome" : "This browser";
 });
 
 /** The phone's words for each kind of notification. */
 const WORDS: Record<string, { label: string; detail: string }> = {
-  "needs-you": { label: "Something needs me", detail: "A command or edit waits for my approval" },
+  "needs-you": { label: "Something needs me", detail: "A command or an edit waits for my approval" },
   questions: { label: "An agent asks", detail: "A question I need to answer" },
   finished: { label: "A session finishes", detail: "Its turn ended" },
   failed: { label: "A session fails", detail: "It stopped with an error" },
@@ -82,16 +82,14 @@ watch(() => push.subscribed.value, () => {
     :open="open"
     label="Notifications"
     :detents="['large']"
-    recess
     :history="false"
     @close="emit('close')"
   >
     <template #head>
       <h2>Notifications</h2>
-      <span class="ph-navbar__spacer" />
       <button
         type="button"
-        class="ph-navbtn ph-glass ph-navbtn--text ph-navbtn--accent"
+        class="ph-btn ph-btn--primary ph-btn--sm setup__done"
         data-testid="setup-done"
         @click="emit('close')"
       >
@@ -101,60 +99,42 @@ watch(() => push.subscribed.value, () => {
 
     <div data-testid="notification-setup">
       <template v-if="!push.subscribed.value">
-        <div class="ph-sheet__pad ph-hero">
+        <div class="ph-hero">
           <img
             src="/icons/apple-touch-icon.png"
             alt=""
-            width="72"
-            height="72"
+            width="60"
+            height="60"
           >
           <h3>Know when an agent needs you</h3>
           <p>Fleet taps you on the shoulder when a command waits for your approval, an agent asks a question, or a session finishes.</p>
         </div>
 
         <template v-if="needsHomeScreen">
-          <div class="ph-group-h">
-            On iPhone, first add Fleet to your Home Screen
+          <div class="ph-label">
+            On iPhone, add Fleet to your Home Screen first
           </div>
           <div
-            class="ph-group"
+            class="ph-card"
             data-testid="setup-home-screen"
           >
-            <div
-              class="ph-row ph-row--static"
-              style="--ph-sep-left: 56px"
-            >
-              <span class="ph-row__icon ph-row__icon--plain"><Share
-                :size="22"
-                aria-hidden="true"
-              /></span>
-              <span class="ph-row__main"><span class="ph-row__title ph-row__title--wrap">Tap Share in Safari</span></span>
+            <div class="ph-set ph-set--static">
+              <span class="ph-choice__n">1</span>
+              <span class="ph-set__main"><span class="ph-set__t">Tap Share <Share
+                class="setup__share"
+                aria-label="(the share icon)"
+              /> in Safari</span></span>
             </div>
-            <div
-              class="ph-row ph-row--static"
-              style="--ph-sep-left: 56px"
-            >
-              <span class="ph-row__icon ph-row__icon--plain"><Plus
-                :size="22"
-                aria-hidden="true"
-              /></span>
-              <span class="ph-row__main"><span class="ph-row__title ph-row__title--wrap">Choose Add to Home Screen</span></span>
+            <div class="ph-set ph-set--static">
+              <span class="ph-choice__n">2</span>
+              <span class="ph-set__main"><span class="ph-set__t">Choose Add to Home Screen</span></span>
             </div>
-            <div
-              class="ph-row ph-row--static"
-              style="--ph-sep-left: 56px"
-            >
-              <span class="ph-row__icon ph-row__icon--plain"><img
-                src="/icons/apple-touch-icon.png"
-                alt=""
-                width="24"
-                height="24"
-                class="setup__mini-icon"
-              ></span>
-              <span class="ph-row__main"><span class="ph-row__title ph-row__title--wrap">Open Fleet from the Home Screen</span></span>
+            <div class="ph-set ph-set--static">
+              <span class="ph-choice__n">3</span>
+              <span class="ph-set__main"><span class="ph-set__t">Open Fleet from the Home Screen</span></span>
             </div>
           </div>
-          <p class="ph-group-f">
+          <p class="ph-foot">
             iOS only lets web apps send notifications once they're on the Home Screen. If it asks to pair again there,
             enter the code shown on your computer.
           </p>
@@ -162,7 +142,7 @@ watch(() => push.subscribed.value, () => {
 
         <p
           v-if="push.state.value === 'insecure'"
-          class="ph-note ph-note--warn setup__note"
+          class="ph-foot ph-foot--warn setup__note"
           data-testid="setup-insecure"
         >
           Notifications need HTTPS, through <code>tailscale serve</code>. This page still works in the browser. On the
@@ -170,7 +150,7 @@ watch(() => push.subscribed.value, () => {
         </p>
         <p
           v-else-if="push.state.value === 'denied'"
-          class="ph-note ph-note--warn setup__note"
+          class="ph-foot ph-foot--warn setup__note"
           role="alert"
           data-testid="setup-denied"
         >
@@ -179,7 +159,7 @@ watch(() => push.subscribed.value, () => {
         </p>
         <p
           v-else-if="push.state.value === 'unsupported'"
-          class="ph-note setup__note"
+          class="ph-foot setup__note"
         >
           This browser can't get notifications. Use Chrome on Android, or Safari on an iPhone with Fleet on the Home
           Screen.
@@ -188,7 +168,7 @@ watch(() => push.subscribed.value, () => {
         <div class="ph-sheet__pad setup__turn-on">
           <button
             type="button"
-            class="ph-btn ph-btn--primary ph-btn--big"
+            class="ph-btn ph-btn--primary ph-btn--block"
             :disabled="push.busy.value"
             data-testid="setup-turn-on"
             @click="turnOn"
@@ -196,7 +176,6 @@ watch(() => push.subscribed.value, () => {
             <LoaderCircle
               v-if="push.busy.value"
               class="ph-spinner"
-              :size="20"
               aria-hidden="true"
             />
             <span>{{ push.busy.value ? "Asking…" : "Turn on notifications" }}</span>
@@ -205,39 +184,35 @@ watch(() => push.subscribed.value, () => {
       </template>
 
       <template v-else>
-        <div class="ph-group ph-fade-in">
+        <div class="ph-card ph-fade-in">
           <div
-            class="ph-row ph-row--static"
+            class="ph-set ph-set--static"
             data-testid="setup-on"
           >
-            <span class="ph-row__icon setup__on-icon"><Check
-              :size="22"
-              :stroke-width="2.6"
-              aria-hidden="true"
-            /></span>
-            <span class="ph-row__main">
-              <span class="ph-row__title">On for this phone</span>
-              <span class="ph-row__sub">{{ deviceLine }}</span>
+            <span class="ph-done-mark ph-done-mark--sm"><Check aria-hidden="true" /></span>
+            <span class="ph-set__main">
+              <span class="ph-set__t">On for this phone</span>
+              <span class="ph-set__s">{{ deviceLine }}</span>
             </span>
           </div>
         </div>
-        <div class="ph-group-h">
+        <div class="ph-label">
           Tell me when
         </div>
-        <div class="ph-group ph-fade-in">
+        <div class="ph-card ph-fade-in">
           <button
             v-for="group in CHOICE_GROUPS"
             :key="group.id"
             type="button"
-            class="ph-row"
+            class="ph-set"
             role="switch"
             :aria-checked="groups.includes(group.id)"
             :data-testid="`setup-kind-${group.id}`"
             @click="setGroup(group.id, !groups.includes(group.id))"
           >
-            <span class="ph-row__main">
-              <span class="ph-row__title">{{ WORDS[group.id]?.label ?? group.label }}</span>
-              <span class="ph-row__sub ph-row__sub--wrap">{{ WORDS[group.id]?.detail ?? group.detail }}</span>
+            <span class="ph-set__main">
+              <span class="ph-set__t">{{ WORDS[group.id]?.label ?? group.label }}</span>
+              <span class="ph-set__s">{{ WORDS[group.id]?.detail ?? group.detail }}</span>
             </span>
             <span
               class="ph-switch"
@@ -246,18 +221,18 @@ watch(() => push.subscribed.value, () => {
             />
           </button>
         </div>
-        <div class="ph-group ph-fade-in setup__gap">
+        <div class="ph-card ph-fade-in">
           <button
             type="button"
-            class="ph-row"
+            class="ph-set"
             role="switch"
             :aria-checked="push.choices.value.quietWhenDesk"
             data-testid="setup-quiet"
             @click="setQuiet(!push.choices.value.quietWhenDesk)"
           >
-            <span class="ph-row__main">
-              <span class="ph-row__title">Quiet at my desk</span>
-              <span class="ph-row__sub ph-row__sub--wrap">Skip the phone while Fleet is open on a computer</span>
+            <span class="ph-set__main">
+              <span class="ph-set__t">Quiet at my desk</span>
+              <span class="ph-set__s">Skip the phone while Fleet is open on a computer</span>
             </span>
             <span
               class="ph-switch"
@@ -266,25 +241,28 @@ watch(() => push.subscribed.value, () => {
             />
           </button>
         </div>
-        <div class="ph-group setup__gap">
+        <div class="ph-sheet__pad setup__test">
           <button
             type="button"
-            class="ph-row ph-row--accent"
+            class="ph-btn ph-btn--outline ph-btn--block"
             :disabled="testing"
             data-testid="setup-test"
             @click="test"
           >
-            <span class="ph-row__main"><span class="ph-row__title">Send a test notification</span></span>
             <LoaderCircle
               v-if="testing"
               class="ph-spinner"
-              :size="18"
               aria-hidden="true"
             />
+            <Bell
+              v-else
+              aria-hidden="true"
+            />
+            <span>Send a test notification</span>
           </button>
         </div>
         <p
-          class="ph-group-f"
+          class="ph-foot"
           role="status"
         >
           {{ testOutcome ?? "It arrives like a real one, so you can see how it looks." }}
@@ -293,7 +271,7 @@ watch(() => push.subscribed.value, () => {
 
       <p
         v-if="push.error.value"
-        class="ph-note ph-note--error setup__note"
+        class="ph-foot ph-foot--bad setup__note"
         role="alert"
       >
         {{ push.error.value }}
@@ -303,28 +281,28 @@ watch(() => push.subscribed.value, () => {
 </template>
 
 <style scoped>
-.ph-row__title,
-.ph-row__sub {
-  display: block;
+.setup__done {
+  margin-right: 4px;
 }
 
-.setup__mini-icon {
-  border-radius: 6px;
+.setup__share {
+  display: inline;
+  width: 15px;
+  height: 15px;
+  margin: 0 2px;
+  vertical-align: -2px;
+  color: var(--accent);
 }
 
 .setup__note {
-  margin: 18px 32px 0;
+  margin-top: 18px;
 }
 
 .setup__turn-on {
-  margin-top: 24px;
-}
-
-.setup__on-icon {
-  background: var(--running);
-}
-
-.setup__gap {
   margin-top: 22px;
+}
+
+.setup__test {
+  margin-top: 18px;
 }
 </style>

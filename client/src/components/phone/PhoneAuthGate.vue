@@ -49,7 +49,7 @@ onMounted(async () => {
   <slot v-if="state === 'ready'" />
   <div
     v-else
-    class="ph-page phone-gate"
+    class="phone-gate"
     :role="state === 'error' ? 'alert' : 'status'"
   >
     <LoaderCircle
@@ -64,7 +64,10 @@ onMounted(async () => {
 
 <style scoped>
 .phone-gate {
+  position: absolute;
+  inset: 0;
   display: grid;
+  padding: 24px;
   place-items: center;
   color: var(--muted);
   font-size: var(--ph-t-body);

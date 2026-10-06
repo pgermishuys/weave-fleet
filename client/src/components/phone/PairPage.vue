@@ -2,6 +2,7 @@
 import { computed, onMounted, shallowRef } from "vue";
 import { useRouter } from "@tanstack/vue-router";
 import { LoaderCircle, Monitor } from "lucide-vue-next";
+import weaveLogo from "@/assets/weave_logo.png";
 import {
   PairingCodeGoneError,
   previewPairing,
@@ -130,203 +131,200 @@ function enterCode(): void {
 
 <template>
   <main
-    class="ph-page pair"
+    class="pair"
     data-testid="pair-page"
   >
-    <div
-      v-if="step === 'loading'"
-      class="pair__center"
-      role="status"
-    >
-      <LoaderCircle
-        class="ph-spinner"
-        :size="24"
-        aria-hidden="true"
-      />
-      <span class="sr-only">Checking the code…</span>
-    </div>
-
-    <form
-      v-else-if="step === 'confirm' || step === 'connecting'"
-      class="pair__body"
-      @submit.prevent="connect"
-    >
-      <div class="ph-sheet__pad ph-hero">
-        <img
-          src="/icons/apple-touch-icon.png"
-          alt=""
-          width="72"
-          height="72"
-        >
-        <p class="pair__machine">
-          <span
-            class="ph-machine"
-            data-testid="pair-machine"
-          ><Monitor
-            :size="14"
-            aria-hidden="true"
-          />{{ preview?.machineName }} · {{ preview?.os }}</span>
-        </p>
-        <h3>Connect this phone to {{ preview?.machineName }}?</h3>
-        <p>
-          This phone gets its own key to {{ preview?.machineName }}. It can start sessions, answer agents and read
-          their work. Remove it any time in Settings › Machines.
-        </p>
-      </div>
-      <label
-        class="ph-group-h pair__label"
-        for="pair-device-name"
-      >Name this phone</label>
-      <div class="ph-group">
-        <input
-          id="pair-device-name"
-          v-model="deviceName"
-          class="phone-composer-input ph-field"
-          maxlength="60"
-          autocomplete="off"
-          enterkeyhint="go"
-          data-testid="pair-device-name"
-        >
-      </div>
-      <p
-        v-if="error"
-        class="ph-group-f ph-note--error"
-        role="alert"
+    <div class="ph-panel ph-panel--full">
+      <div
+        v-if="step === 'loading'"
+        class="ph-center-page pair__loading"
+        role="status"
       >
-        {{ error }}
-      </p>
-      <div class="ph-sheet__pad pair__actions">
-        <button
-          type="submit"
-          class="ph-btn ph-btn--primary ph-btn--big"
-          :disabled="step === 'connecting'"
-          data-testid="pair-connect"
-        >
-          <LoaderCircle
-            v-if="step === 'connecting'"
-            class="ph-spinner"
-            :size="20"
-            aria-hidden="true"
-          />
-          <span>{{ step === "connecting" ? "Connecting…" : "Connect" }}</span>
-        </button>
-        <p class="pair__fine">
-          Not you? Close this page.
-        </p>
+        <LoaderCircle
+          class="ph-spinner"
+          :size="24"
+          aria-hidden="true"
+        />
+        <span class="sr-only">Checking the code…</span>
       </div>
-    </form>
-
-    <form
-      v-else-if="step === 'code'"
-      class="pair__body"
-      @submit.prevent="submitCode"
-    >
-      <div class="ph-sheet__pad ph-hero">
-        <img
-          src="/icons/apple-touch-icon.png"
-          alt=""
-          width="72"
-          height="72"
-        >
-        <h3>Enter the code from your computer</h3>
-        <p>
-          On the computer, open Settings › Machines › Add a phone. Opened Fleet from the Home Screen? Enter the code
-          shown there; the camera link may not reach the Home Screen app.
-        </p>
-      </div>
-      <label
-        class="ph-group-h pair__label"
-        for="pair-code"
-      >Code</label>
-      <div class="ph-group">
-        <input
-          id="pair-code"
-          v-model="typedCode"
-          class="phone-composer-input ph-field pair__code"
-          placeholder="XXXX-XXXX"
-          autocomplete="one-time-code"
-          autocapitalize="characters"
-          spellcheck="false"
-          maxlength="12"
-          enterkeyhint="go"
-          data-testid="pair-code"
-        >
-      </div>
-      <p
-        v-if="error"
-        class="ph-group-f ph-note--error"
-        role="alert"
+      <form
+        v-else-if="step === 'confirm' || step === 'connecting'"
+        class="ph-center-page"
+        @submit.prevent="connect"
       >
-        {{ error }}
-      </p>
-      <div class="ph-sheet__pad pair__actions">
-        <button
-          type="submit"
-          class="ph-btn ph-btn--primary ph-btn--big"
-          data-testid="pair-code-continue"
-        >
-          <span>Continue</span>
-        </button>
-      </div>
-    </form>
+        <div class="pair__body">
+          <img
+            class="pair__logo"
+            :src="weaveLogo"
+            alt="Fleet"
+          >
+          <p class="pair__machine">
+            <span
+              class="ph-from pair__from"
+              data-testid="pair-machine"
+            ><Monitor aria-hidden="true" />{{ preview?.machineName }} · {{ preview?.os }}</span>
+          </p>
+          <h1>Connect this phone to {{ preview?.machineName }}?</h1>
+          <p class="ph-center-page__lede">
+            This phone gets its own key to {{ preview?.machineName }}. It can start sessions, answer agents and read
+            their work. Remove it any time in Settings&nbsp;→&nbsp;Machines.
+          </p>
+          <label
+            class="ph-label pair__label"
+            for="pair-device-name"
+          >Name this phone</label>
+          <input
+            id="pair-device-name"
+            v-model="deviceName"
+            class="phone-composer-input ph-input"
+            maxlength="60"
+            autocomplete="off"
+            enterkeyhint="go"
+            data-testid="pair-device-name"
+          >
+          <p
+            v-if="error"
+            class="ph-foot ph-foot--bad pair__error"
+            role="alert"
+          >
+            {{ error }}
+          </p>
+          <div class="ph-actions">
+            <button
+              type="submit"
+              class="ph-btn ph-btn--primary ph-btn--block"
+              :disabled="step === 'connecting'"
+              data-testid="pair-connect"
+            >
+              <LoaderCircle
+                v-if="step === 'connecting'"
+                class="ph-spinner"
+                aria-hidden="true"
+              />
+              <span>{{ step === "connecting" ? "Connecting…" : "Connect" }}</span>
+            </button>
+            <p class="pair__fine">
+              Not you? Close this page.
+            </p>
+          </div>
+        </div>
+      </form>
 
-    <div
-      v-else-if="step === 'gone'"
-      class="pair__body"
-      data-testid="pair-gone"
-    >
-      <div class="ph-sheet__pad ph-hero">
-        <h3>This code has expired or was already used</h3>
-        <p>
-          Ask for a new code on the computer: Settings › Machines › Add a phone. Each code works once, for 10 minutes.
-        </p>
-      </div>
-      <div class="ph-sheet__pad pair__actions">
-        <button
-          type="button"
-          class="ph-btn ph-btn--big"
-          @click="enterCode"
-        >
-          <span>Type a code instead</span>
-        </button>
-      </div>
-    </div>
+      <form
+        v-else-if="step === 'code'"
+        class="ph-center-page"
+        @submit.prevent="submitCode"
+      >
+        <div class="pair__body">
+          <img
+            class="pair__logo"
+            :src="weaveLogo"
+            alt="Fleet"
+          >
+          <h1>Enter the code from your computer</h1>
+          <p class="ph-center-page__lede">
+            On the computer, open Settings&nbsp;→&nbsp;Machines&nbsp;→&nbsp;Add a phone. Opened Fleet from the Home
+            Screen? Enter the code shown there; the camera link may not reach the Home Screen app.
+          </p>
+          <label
+            class="ph-label pair__label"
+            for="pair-code"
+          >Code</label>
+          <input
+            id="pair-code"
+            v-model="typedCode"
+            class="phone-composer-input ph-input ph-input--code"
+            placeholder="XXXX-XXXX"
+            autocomplete="one-time-code"
+            autocapitalize="characters"
+            spellcheck="false"
+            maxlength="12"
+            enterkeyhint="go"
+            data-testid="pair-code"
+          >
+          <p
+            v-if="error"
+            class="ph-foot ph-foot--bad pair__error"
+            role="alert"
+          >
+            {{ error }}
+          </p>
+          <div class="ph-actions">
+            <button
+              type="submit"
+              class="ph-btn ph-btn--primary ph-btn--block"
+              data-testid="pair-code-continue"
+            >
+              <span>Continue</span>
+            </button>
+          </div>
+        </div>
+      </form>
 
-    <div
-      v-else-if="step === 'wrong-machine'"
-      class="pair__body"
-      data-testid="pair-wrong-machine"
-    >
-      <div class="ph-sheet__pad ph-hero">
-        <h3>This code is for {{ payload?.machineName }}</h3>
-        <p>It has to be opened at {{ payload?.machineName }}'s own address, not this one.</p>
+      <div
+        v-else-if="step === 'gone'"
+        class="ph-center-page"
+        data-testid="pair-gone"
+      >
+        <div class="pair__body">
+          <h1>This code has expired or was already used</h1>
+          <p class="ph-center-page__lede">
+            Ask for a new code on the computer: Settings&nbsp;→&nbsp;Machines&nbsp;→&nbsp;Add a phone. Each code works
+            once, for 10 minutes.
+          </p>
+          <div class="ph-actions">
+            <button
+              type="button"
+              class="ph-btn ph-btn--outline ph-btn--block"
+              @click="enterCode"
+            >
+              <span>Type a code instead</span>
+            </button>
+          </div>
+        </div>
       </div>
-      <div class="ph-sheet__pad pair__actions">
-        <a
-          class="ph-btn ph-btn--primary ph-btn--big pair__link"
-          :href="rightPlaceLink ?? undefined"
-        ><span>Open {{ rightPlace }}</span></a>
-      </div>
-    </div>
 
-    <div
-      v-else
-      class="pair__body"
-    >
-      <div class="ph-sheet__pad ph-hero">
-        <h3>Couldn't reach Fleet</h3>
-        <p role="alert">
-          {{ error }}
-        </p>
+      <div
+        v-else-if="step === 'wrong-machine'"
+        class="ph-center-page"
+        data-testid="pair-wrong-machine"
+      >
+        <div class="pair__body">
+          <h1>This code is for {{ payload?.machineName }}</h1>
+          <p class="ph-center-page__lede">
+            It has to be opened at {{ payload?.machineName }}'s own address, not this one.
+          </p>
+          <div class="ph-actions">
+            <a
+              class="ph-btn ph-btn--primary ph-btn--block pair__link"
+              :href="rightPlaceLink ?? undefined"
+            ><span>Open {{ rightPlace }}</span></a>
+          </div>
+        </div>
       </div>
-      <div class="ph-sheet__pad pair__actions">
-        <button
-          type="button"
-          class="ph-btn ph-btn--primary ph-btn--big"
-          @click="look"
-        >
-          <span>Try again</span>
-        </button>
+
+      <div
+        v-else
+        class="ph-center-page"
+      >
+        <div class="pair__body">
+          <h1>Couldn't reach Fleet</h1>
+          <p
+            class="ph-center-page__lede"
+            role="alert"
+          >
+            {{ error }}
+          </p>
+          <div class="ph-actions">
+            <button
+              type="button"
+              class="ph-btn ph-btn--primary ph-btn--block"
+              @click="look"
+            >
+              <span>Try again</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </main>
@@ -334,49 +332,57 @@ function enterCode(): void {
 
 <style scoped>
 .pair {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+  position: absolute;
+  inset: 0;
 }
 
-.pair__center {
-  display: grid;
-  flex: 1;
-  place-items: center;
+.pair__loading {
+  align-items: center;
 }
 
 .pair__body {
   width: 100%;
   max-width: 480px;
   margin: 0 auto;
-  padding-bottom: 24px;
+}
+
+.pair__logo {
+  display: block;
+  width: 72px;
+  height: 34px;
+  margin: 0 auto;
+  object-fit: contain;
 }
 
 .pair__machine {
-  margin: 14px 0 0;
+  margin: 18px 0 0;
+  text-align: center;
 }
 
-.ph-hero .pair__machine + h3 {
-  margin-top: 6px;
+.pair__from {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.pair__from svg {
+  width: 14px;
+  height: 14px;
 }
 
 .pair__label {
   display: block;
+  margin: 26px 2px 8px;
 }
 
-.pair__code {
-  font-family: var(--ph-mono);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.pair__actions {
-  margin-top: 24px;
+.pair__error {
+  margin: 8px 2px 0;
 }
 
 .pair__fine {
-  margin: 14px 0 0;
-  font-size: var(--ph-t-foot);
+  margin: 6px 0 0;
+  padding: 12px 0;
+  font-size: var(--ph-t-ui);
   text-align: center;
   color: var(--muted);
 }
