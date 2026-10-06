@@ -50,8 +50,12 @@ const harnessChoice = shallowRef<string | null>(null);
 const { enabledHarnesses, defaultHarnessType } = useEnabledHarnesses();
 const { choiceFor } = useModelRoles();
 
-/** The harnesses workflows run on; Describe it asks one of them, on its Standard model. */
-const workflowHarnesses = computed(() => enabledHarnesses.value.filter((harness) => harness.capabilities.supportsWorkflowSteps));
+/**
+ * The harnesses workflows run on that can ask a question off the record; Describe it asks one of them, on its Standard
+ * model.
+ */
+const workflowHarnesses = computed(() => enabledHarnesses.value.filter((harness) =>
+  harness.capabilities.supportsWorkflowSteps && harness.capabilities.supportsOffTheRecordPrompt));
 const harnessType = computed({
   get: () => harnessChoice.value
     ?? (workflowHarnesses.value.some((h) => h.type === defaultHarnessType.value) ? defaultHarnessType.value : workflowHarnesses.value[0]?.type ?? null),

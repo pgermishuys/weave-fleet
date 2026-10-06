@@ -28,6 +28,7 @@ const PAGES: readonly { id: Pages; label: string; description: string }[] = [
 const HOW: Record<string, string> = {
   opencode2: "Its own browser tools, in Code Mode. Fleet is the browser behind them.",
   opencode: "Fleet's browser tools: read the page, act on it.",
+  "claude-code": "Fleet's browser tools: read the page, act on it.",
 };
 
 const settings = shallowRef<BrowserSettings>({ enabled: true, pages: "session", scripts: false });

@@ -78,7 +78,15 @@ internal sealed record ClaudeCodeToolStateContent
     [JsonPropertyName("output")] public JsonElement? Output { get; init; }
     [JsonPropertyName("error")] public string? Error { get; init; }
 
-    /// <summary>What Fleet keeps with the call for showing it: an edit's <c>diff</c>, a question's <c>answers</c>.</summary>
+    /// <summary>The tool card's heading, for the tools that give one (Fleet's own).</summary>
+    [JsonPropertyName("title")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Title { get; init; }
+
+    /// <summary>
+    /// What Fleet keeps with the call for showing it: an edit's <c>diff</c>, a question's <c>answers</c>, the canvas or
+    /// screenshot one of Fleet's tools made.
+    /// </summary>
     [JsonPropertyName("metadata")] public JsonElement? Metadata { get; init; }
 }
 

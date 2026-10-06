@@ -6,7 +6,12 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
+using WeaveFleet.Application.FleetTools;
+using WeaveFleet.Application.Memory;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
+using WeaveFleet.Application.Workflows;
+using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
@@ -28,6 +33,8 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
     private readonly FakeTimeProvider _time = new();
     private readonly CapturingLogger _log = new();
     private readonly ConcurrentQueue<HarnessEvent> _events = new();
+    private readonly InMemoryUserPreferenceRepository _preferences = new();
+    private readonly InMemorySessionRepository _sessions = new();
     private ClaudeCodeHarnessSession? _session;
     private Task _reader = Task.CompletedTask;
 
@@ -504,6 +511,102 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task A_process_gets_Fleets_tools_from_Fleets_MCP_server_and_the_token_stays_off_its_command_line()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        Start(bridgeTokens: new ClaudeCodeBridgeTokenRegistry());
+        await PromptAsync("one");
+
+        var arguments = Arguments(0);
+        ShouldHaveArgument(arguments, "--mcp-config", """{"mcpServers":{"fleet":{"type":"http","url":"${FLEET_URL}/mcp"}}}""");
+        arguments.ShouldNotContain("--strict-mcp-config");
+        arguments.ShouldNotContain(argument => argument.Contains(Environment(0)["FLEET_BRIDGE_TOKEN"], StringComparison.Ordinal));
+
+        // Every tool the session gets is allowed up front, except fleet_app_start, which asks as a shell command does.
+        // Memory, messages between sessions and workflows are off, and the session isn't a workflow step.
+        AllowedTools(0).ShouldBe(
+        [
+            "mcp__fleet__fleet_canvas_list", "mcp__fleet__fleet_canvas_open", "mcp__fleet__fleet_canvas_read",
+            "mcp__fleet__fleet_canvas_patch", "mcp__fleet__fleet_canvas_focus", "mcp__fleet__fleet_page_show",
+            "mcp__fleet__fleet_browser_open", "mcp__fleet__fleet_browser_read", "mcp__fleet__fleet_browser_act",
+            "mcp__fleet__fleet_browser_screenshot", "mcp__fleet__fleet_session_read",
+        ]);
+    }
+
+    [Fact]
+    public async Task Without_a_Fleet_address_a_process_gets_no_Fleet_tools()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        Start();
+        await PromptAsync("one");
+
+        Arguments(0).ShouldNotContain("--mcp-config");
+        Arguments(0).ShouldNotContain("--allowedTools");
+    }
+
+    [Fact]
+    public async Task A_switch_that_changes_takes_a_new_process_that_resumes_with_the_tools_it_gives_now()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        Start(bridgeTokens: new ClaudeCodeBridgeTokenRegistry());
+        await PromptAsync("one");
+        AllowedTools(0).ShouldNotContain("mcp__fleet__fleet_memory_save");
+
+        await _preferences.SetAsync(AgentMemory.PreferenceKey, "true");
+        await _preferences.SetAsync(SessionMessages.PreferenceKey, "true");
+        await _preferences.SetAsync(WeaveFleet.Application.Browser.AgentBrowserSettings.EnabledKey, "false");
+        await PromptAsync("two");
+
+        Starts().ShouldBe(2);
+        ShouldHaveArgument(Arguments(1), "--resume", "cc-1");
+        AllowedTools(1).ShouldContain("mcp__fleet__fleet_memory_save");
+        AllowedTools(1).ShouldContain("mcp__fleet__fleet_memory_forget");
+        AllowedTools(1).ShouldContain("mcp__fleet__fleet_message");
+        AllowedTools(1).ShouldNotContain("mcp__fleet__fleet_browser_read");
+        AllowedTools(1).ShouldNotContain("mcp__fleet__fleet_browser_act");
+
+        // Nothing changed since: the process carries on.
+        await PromptAsync("three");
+        Starts().ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task A_switch_that_changes_while_work_runs_in_the_background_waits_for_it()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var session = Start(bridgeTokens: new ClaudeCodeBridgeTokenRegistry());
+        await PromptAsync("start lasting background");
+
+        await _preferences.SetAsync(AgentMemory.PreferenceKey, "true");
+        await PromptAsync("two");
+
+        Starts().ShouldBe(1);
+        session.BackgroundWork.ShouldBe(["task-1"]);
+    }
+
+    [Fact]
+    public async Task Only_a_workflow_step_the_agent_finishes_gets_the_step_tool()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        await _preferences.SetAsync(FleetWorkflows.PreferenceKey, "true");
+        _sessions.Seed(new Session { Id = "fleet-cc", WorkspaceId = "ws-1", Directory = _directory, Title = "Plan", WorkflowRunId = "run-1" });
+        Start(bridgeTokens: new ClaudeCodeBridgeTokenRegistry());
+        await PromptAsync("one");
+
+        AllowedTools(0).ShouldContain("mcp__fleet__fleet_step_done");
+    }
+
+    [Fact]
     public async Task Images_go_ahead_of_the_prompt_as_image_blocks()
     {
         if (OperatingSystem.IsWindows())
@@ -539,7 +642,7 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
         bool honoursInterrupt = true, bool switchesModel = true, string? claudeSessionId = null, ClaudeCodeBridgeTokenRegistry? bridgeTokens = null)
     {
         var delegations = new InMemoryDelegationRepository();
-        var sessions = new InMemorySessionRepository();
+        var sessions = _sessions;
         var connections = new FakeDbConnectionFactory();
         var services = new ServiceCollection();
         services.AddSingleton<IMessageRepository>(_messages);
@@ -547,6 +650,15 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
         services.AddSingleton<IDbConnectionFactory>(connections);
         services.AddSingleton(new SessionActivityWriteService(
             connections, _messages, delegations, sessions, new InMemorySmartLinkRepository(), new InMemoryOutboxRepository(), new FakeOutboxDispatcher()));
+
+        // Which of Fleet's tools a process gets, from the owner's settings.
+        services.AddSingleton(new FleetOptions());
+        services.AddSingleton<IUserPreferenceRepository>(_preferences);
+        services.AddSingleton<IBackgroundUserScope, NoUserScope>();
+        services.AddSingleton<SessionMessagesFeature>();
+        services.AddSingleton<AgentMemoryFeature>();
+        services.AddSingleton<WorkflowsFeature>();
+        services.AddSingleton<FleetToolSettings>();
 
         _session = new ClaudeCodeHarnessSession(
             instanceId: "cc-instance",
@@ -605,6 +717,26 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
                 return false;
             }
         }
+    }
+
+    private sealed class NoUserScope : IBackgroundUserScope
+    {
+        public IDisposable Begin(string userId) => new Nothing();
+
+        private sealed class Nothing : IDisposable
+        {
+            public void Dispose()
+            {
+            }
+        }
+    }
+
+    /// <summary>The tools a start may use without asking (<c>--allowedTools</c>), by Claude Code's names.</summary>
+    private string[] AllowedTools(int start)
+    {
+        var arguments = Arguments(start);
+        var at = Array.IndexOf(arguments, "--allowedTools");
+        return at < 0 ? [] : arguments[at + 1].Split(',');
     }
 
     private static void ShouldHaveArgument(string[] arguments, string name, string value)

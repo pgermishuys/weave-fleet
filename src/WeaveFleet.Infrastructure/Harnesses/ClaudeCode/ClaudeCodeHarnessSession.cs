@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.FleetTools;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
@@ -80,6 +81,10 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     private static readonly Action<ILogger, string, string, Exception?> LogChildFailed =
         LoggerMessage.Define<string, string>(LogLevel.Warning, new EventId(12, "ChildFailed"),
             "Claude Code for session {SessionId}: couldn't make a child session for subagent call {CallId}; its steps aren't kept.");
+
+    private static readonly Action<ILogger, string, Exception?> LogFleetToolsUnread =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(13, "FleetToolsUnread"),
+            "Claude Code for session {SessionId}: couldn't read which of Fleet's tools it gets; it keeps the ones it has.");
 
     private readonly string _workingDirectory;
     private readonly ClaudeCodeOptions _config;
@@ -368,11 +373,6 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     private async Task<ClaudeCodeProcessManager> EnsureProcessAsync(PromptOptions? options, CancellationToken ct)
     {
         var policy = _permissions.Policy;
-        var wanted = new ProcessSettings(
-            PermissionMode: PermissionModeFor(policy),
-            Model: options?.ModelId ?? _config.DefaultModel,
-            Effort: options?.Effort);
-
         ClaudeCodeProcessManager? process;
         ProcessSettings? current;
         lock (_gate)
@@ -381,8 +381,31 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             current = _processSettings;
         }
 
+        var wanted = new ProcessSettings(
+            PermissionMode: PermissionModeFor(policy),
+            Model: options?.ModelId ?? _config.DefaultModel,
+            Effort: options?.Effort,
+            FleetTools: await ReadFleetToolsAsync(current?.FleetTools).ConfigureAwait(false));
+
         if (process is { IsRunning: true } && current is not null)
         {
+            // Claude Code lists an MCP server's tools when it starts, so a switch that changed since (memory, messages
+            // between sessions, Settings → Browser) takes a new process, which resumes the conversation. Not while work
+            // it left running would end with it: until that's done, the process keeps the tools it has.
+            if (current.FleetTools != wanted.FleetTools)
+            {
+                bool working;
+                lock (_gate)
+                    working = _tasks.HasBackgroundWork;
+                if (!working)
+                {
+                    await StopProcessAsync(process, "Fleet's tools for it changed").ConfigureAwait(false);
+                    return await StartProcessAsync(wanted, ct).ConfigureAwait(false);
+                }
+
+                wanted = wanted with { FleetTools = current.FleetTools };
+            }
+
             // A prompt that names no model or effort keeps what the process runs.
             var model = wanted.Model ?? current.Model;
             var effort = wanted.Effort ?? current.Effort;
@@ -460,6 +483,17 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             AppendSystemPrompt = _memoryNotes,
             EnvironmentVariables = environment,
         };
+
+        // Fleet's own tools, from Fleet's MCP server under the process's FLEET_URL. Each is allowed up front (Fleet allows
+        // them at every level), except fleet_app_start, which asks as a shell command does.
+        if (settings.FleetTools is { } fleetTools && environment.ContainsKey("FLEET_URL"))
+        {
+            procOptions = procOptions with
+            {
+                McpConfig = ClaudeCodeFleetTools.McpConfig,
+                AllowedTools = [.. procOptions.AllowedTools, .. ClaudeCodeFleetTools.AllowedWithoutAsking(fleetTools)],
+            };
+        }
 
         StreamReader stdout;
         try
@@ -674,7 +708,8 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     /// </summary>
     private async Task OnToolPermissionAsync(string requestId, ClaudeCodeControlRequestBody request, ClaudeCodeProcessManager process)
     {
-        var tool = request.ToolName ?? "tool";
+        // Fleet's own tools under their names, which every level allows (fleet_app_start under the shell's).
+        var tool = ClaudeCodeTools.PermissionName(request.ToolName ?? "tool");
         var input = request.Input.ValueKind == System.Text.Json.JsonValueKind.Undefined ? default : request.Input.Clone();
 
         // A question is the user's to answer, at any permission level: its call shows as Fleet's question card.
@@ -1267,7 +1302,12 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             foreach (var block in assistantMsg.Message?.Content ?? [])
             {
                 if (block is ClaudeCodeToolUseBlock { Id: { } callId } toolUse)
+                {
                     _tasks.ObserveToolUse(callId, toolUse.Name, toolUse.Input, assistantMsg.ParentToolUseId);
+                    // Its call to Fleet's MCP server comes next, naming only this id; this says whether a subagent made it.
+                    if (ClaudeCodeTools.FleetTool(toolUse.Name) is not null)
+                        _bridgeTokens?.NoteCall(callId, assistantMsg.ParentToolUseId);
+                }
             }
         }
     }
@@ -1781,6 +1821,12 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
 
             if (_answers.TryRemove(callId, out var answers))
                 finished = finished with { Metadata = ClaudeCodeTools.Metadata(null, answers) };
+
+            // One of Fleet's own tools: its card's title and what it made (a canvas, a screenshot), which Fleet's MCP
+            // server kept for it, since the result Claude Code reports carries only what the model reads.
+            if (conversation.ToolCalls.TryGetValue(callId, out var called) && ClaudeCodeTools.FleetTool(called.Name) is not null
+                && FleetToolCalls()?.Take(callId) is { } record)
+                finished = finished with { Title = record.Title, Metadata = record.Metadata };
             parts[index] = finished;
             parts.Add(new ToolResultPart(callId, content, isError));
 
@@ -1792,6 +1838,20 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 [ClaudeCodeMapper.CreatePartUpdatedEvent(message.Id, conversation.FleetSessionId, finished, index, isError ? null : content)])
                 .ConfigureAwait(false);
         }
+    }
+
+    private FleetToolCallRecords? _fleetToolCalls;
+
+    /// <summary>What Fleet's MCP server kept about its tool calls; none where Fleet doesn't run one (tests).</summary>
+    private FleetToolCallRecords? FleetToolCalls()
+    {
+        if (_fleetToolCalls is null)
+        {
+            using var scope = _scopeFactory.CreateScope();
+            _fleetToolCalls = scope.ServiceProvider.GetService<FleetToolCallRecords>();
+        }
+
+        return _fleetToolCalls;
     }
 
     /// <summary>Marks tool calls that never got a result as failed, so they don't show as running forever.</summary>
@@ -1999,7 +2059,31 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     }
 
     /// <summary>What a claude process was started with, or switched to since.</summary>
-    private sealed record ProcessSettings(string PermissionMode, string? Model, string? Effort);
+    /// <param name="FleetTools">Which of Fleet's tools it has; null for none (Fleet can't be reached from it).</param>
+    private sealed record ProcessSettings(string PermissionMode, string? Model, string? Effort, FleetToolSwitches? FleetTools = null);
+
+    /// <summary>
+    /// Which of Fleet's tools the session's next process gets: none for a subagent's child session, which never runs one, or
+    /// when there's no Fleet address to give it. When the settings can't be read, a process keeps the tools it has.
+    /// </summary>
+    private async Task<FleetToolSwitches?> ReadFleetToolsAsync(FleetToolSwitches? current)
+    {
+        if (_readOnlyChild || _bridgeTokens is null || string.IsNullOrEmpty(_fleetUrl()))
+            return null;
+
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            return scope.ServiceProvider.GetService<FleetToolSettings>() is { } settings
+                ? await settings.ForSessionAsync(_ownerUserId, _fleetSessionId).ConfigureAwait(false)
+                : null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not OutOfMemoryException)
+        {
+            LogFleetToolsUnread(_logger, _fleetSessionId, ex);
+            return current;
+        }
+    }
 
     /// <summary>A turn: from Fleet's prompt, or Claude Code's own <c>init</c>, to its <c>result</c>.</summary>
     private sealed class Turn

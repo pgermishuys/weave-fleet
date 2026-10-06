@@ -71,7 +71,7 @@ const harnessType = computed({
 const harnessName = (type: string) => enabledHarnesses.value.find((h) => h.type === type)?.displayName ?? type;
 // Said only once the list has loaded: until then there's nothing to go on.
 const notAvailable = computed(() => allHarnesses.value.length > 0 && workflowHarnesses.value.length === 0
-  ? `Workflows aren't available on ${harnessName(defaultHarnessType.value)}. Pick OpenCode or OpenCode 2.`
+  ? `Workflows aren't available on ${harnessName(defaultHarnessType.value)}. Pick OpenCode, OpenCode 2 or Claude Code.`
   : null);
 
 const { models, isSupported: offersModels } = useHarnessCatalog(

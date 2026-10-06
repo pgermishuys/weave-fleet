@@ -336,10 +336,15 @@ until they're back on.
 
 ## Harnesses
 
-Workflows run on **OpenCode** and **OpenCode 2**. `fleet_step_done` is a tool only step sessions see: with workflows on,
-every other session on the same OpenCode process or server has a rule that denies it, and Fleet refuses a call from any
-session that isn't the running step's own, including a step's subagents. Claude Code and Pi can't hide a tool from one
-session and not another, so workflows aren't available on them.
+Workflows run on **OpenCode**, **OpenCode 2** and **Claude Code**. `fleet_step_done` is a tool only step sessions see:
+with workflows on, every other session on the same OpenCode process or server has a rule that denies it, and Fleet
+refuses a call from any session that isn't the running step's own, including a step's subagents. Claude Code runs one
+process per session, and gets Fleet's tools from Fleet's MCP server, so only a step's process lists `fleet_step_done`.
+Its subagents run in the same process and see the tool too; Fleet refuses their calls. Pi has no Fleet tools, so
+workflows aren't available on it.
+
+On Claude Code a step's `agent:` is ignored (Claude Code has no agents to pick from, so a Plan step can edit files), and
+a step's `skill:` asks for a Fleet skill Claude Code doesn't load yet.
 
 ## Errors
 

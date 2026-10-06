@@ -657,7 +657,7 @@ onMounted(load);
             <span>OpenCode and OpenCode 2</span><span>Read and save notes</span>
           </li>
           <li class="border-t border-border py-2">
-            <span class="flex justify-between gap-3"><span>Claude Code</span><span>Reads notes</span></span>
+            <span class="flex justify-between gap-3"><span>Claude Code</span><span>Reads and saves notes</span></span>
             <span
               class="mt-1 flex items-start gap-2"
               data-testid="memory-claude-warning"

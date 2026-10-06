@@ -293,6 +293,10 @@ public static class DependencyInjection
         services.AddScoped<AgentBrowserAccess>();
         services.AddScoped<AgentBrowserCanvas>();
         services.AddScoped<AgentBrowserBridge>();
+        // Fleet's own tools over MCP, for harnesses that take tools that way (Claude Code).
+        services.AddScoped<WeaveFleet.Application.FleetTools.FleetToolSettings>();
+        services.AddScoped<WeaveFleet.Application.FleetTools.FleetToolCalls>();
+        services.AddSingleton<WeaveFleet.Application.FleetTools.FleetToolCallRecords>();
         services.AddSingleton<CdpAgentBrowser>(sp => new CdpAgentBrowser(
             sp.GetRequiredService<ChromeHost>(),
             sp.GetRequiredService<IServiceScopeFactory>(),
@@ -511,6 +515,7 @@ public static class DependencyInjection
         services.AddSingleton<IHarnessRuntime>(sp => sp.GetRequiredService<ClaudeCodeHarnessRuntime>());
         services.AddSingleton<IHarnessBridgeTokens>(sp => new ClaudeCodeBridgeTokens(sp.GetRequiredService<ClaudeCodeHarnessRuntime>().BridgeTokens));
         services.AddSingleton<IHarnessCanvasCallerResolver>(sp => new ClaudeCodeCanvasCallerResolver(sp.GetRequiredService<ClaudeCodeHarnessRuntime>().BridgeTokens));
+        services.AddSingleton<WeaveFleet.Application.FleetTools.IHarnessMcpCalls>(sp => new ClaudeCodeMcpCalls(sp.GetRequiredService<ClaudeCodeHarnessRuntime>().BridgeTokens));
 
         // Register PiHarness (descriptor) and PiHarnessRuntime (provisioning) as separate singletons.
         services.AddSingleton<PiHarness>();

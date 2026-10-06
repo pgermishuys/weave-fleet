@@ -207,6 +207,7 @@ internal static class ClaudeCodeMapper
             Input = tool.Arguments.ValueKind != JsonValueKind.Undefined ? tool.Arguments : null,
             Output = toolOutput is null ? null : ToToolOutput(toolOutput),
             Error = tool.Error,
+            Title = tool.Title,
             Metadata = tool.Metadata,
         };
 

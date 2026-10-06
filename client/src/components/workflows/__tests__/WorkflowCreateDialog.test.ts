@@ -8,9 +8,10 @@ vi.mock("@/composables/use-signalr-socket", () => ({ onGlobalEvent: () => () => 
 vi.mock("@/composables/use-enabled-harnesses", async () => {
   const { ref } = await import("vue");
   const harnesses = [
-    { type: "opencode", displayName: "OpenCode", capabilities: { supportsWorkflowSteps: true } },
-    { type: "opencode2", displayName: "OpenCode 2", capabilities: { supportsWorkflowSteps: true } },
-    { type: "claude-code", displayName: "Claude Code", capabilities: { supportsWorkflowSteps: false } },
+    { type: "opencode", displayName: "OpenCode", capabilities: { supportsWorkflowSteps: true, supportsOffTheRecordPrompt: true } },
+    { type: "opencode2", displayName: "OpenCode 2", capabilities: { supportsWorkflowSteps: true, supportsOffTheRecordPrompt: true } },
+    // Runs workflow steps, but can't ask the model off the record, which drafting needs.
+    { type: "claude-code", displayName: "Claude Code", capabilities: { supportsWorkflowSteps: true, supportsOffTheRecordPrompt: false } },
   ];
   return { useEnabledHarnesses: () => ({ enabledHarnesses: ref(harnesses), defaultHarnessType: ref("opencode") }) };
 });
@@ -98,7 +99,7 @@ describe("WorkflowCreateDialog", () => {
     expect(wrapper.get("[data-testid='workflow-describe-cost']").text())
       .toBe("Asks the model once. From a session it reads the conversation from the cache, so it's cheap.");
     expect(submit.attributes("disabled")).toBeDefined();
-    // Only the harnesses workflows run on, on their Standard model.
+    // Only the harnesses workflows run on that can ask off the record, on their Standard model.
     const options = wrapper.findAll("[data-testid='workflow-describe-harness'] option").map((o) => o.text());
     expect(options).toEqual(["OpenCode", "OpenCode 2"]);
     expect(wrapper.text()).toContain("On your Standard model: gpt-5.4.");

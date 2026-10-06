@@ -170,7 +170,7 @@ onMounted(() => {
         v-if="harnesses.length === 0 && allHarnesses.length > 0"
         class="mt-4 text-sm text-muted"
       >
-        Workflows run on OpenCode and OpenCode 2. Turn one of them on in Settings → Harnesses.
+        Workflows run on OpenCode, OpenCode 2 and Claude Code. Turn one of them on in Settings → Harnesses.
       </p>
 
       <template v-else-if="harnesses.length > 0">
