@@ -1,25 +1,25 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, shallowRef, useTemplateRef, watch } from "vue";
-import { ArrowLeft, ArrowUp, Check, ChevronLeft, ChevronRight, LoaderCircle, Search } from "lucide-vue-next";
+import { ArrowUp, Check, ChevronDown, ChevronLeft, Cpu, Folder, GitBranch, LoaderCircle, Monitor, Search, X } from "lucide-vue-next";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { useHarnessCatalog } from "@/composables/use-harness-catalog";
 import { useNewSessionDefaults } from "@/composables/use-new-session-defaults";
 import { useRepositories } from "@/composables/use-repositories";
 import { useCreateSession } from "@/composables/use-session-actions";
-import { phoneLook } from "@/composables/phone/use-phone-env";
 import { keepOffered, modelFor, modelFromKey, modelName } from "@/lib/agent-model-choice";
 import { animateTo, EASE_OUT } from "@/lib/phone/animate";
 import { haptic } from "@/lib/phone/haptics";
 import { takeKeyboard } from "@/lib/phone/keyboard";
 import { buildCreateSessionRequest, type NewSessionFolder, type NewSessionWorkspace } from "@/lib/new-session-request";
-import { folderFromId, folderId, folderName, folderOptions, type PhoneMachine } from "@/lib/phone/new-session";
+import { folderFromId, folderId, folderName, folderOptions, startCaption, type PhoneMachine } from "@/lib/phone/new-session";
+import { autogrow, grownHeight } from "@/lib/phone/keyboard";
 
 /**
  * The New session sheet's pages for one machine (the sheet provides the machine, and builds this again when it
- * changes). What to do comes first, with the keyboard up; under it the choices as grouped rows (machine, folder,
- * where in a repository, harness, agent and model), each opening a picker page that slides in inside the sheet.
- * Agent and model shimmer in place while the harness lists them. Start, kept above the keyboard, creates the session
- * with the message as its first prompt and opens it.
+ * changes), as the desktop's new-session composer: what to do in the composer's frame, the agent and model in its
+ * toolbar (shimmering in place while the harness lists them), and under it the Machine, Folder, Where and Harness
+ * chips, each opening a picker page that slides in inside the sheet, and a line saying what Start will do. Start,
+ * kept above the keyboard, creates the session with the message as its first prompt and opens it.
  */
 const props = defineProps<{ machine: PhoneMachine; machines: readonly PhoneMachine[] }>();
 const message = defineModel<string>("message", { required: true });
@@ -85,10 +85,18 @@ const whereLabel = computed(() => {
   return chosen.path.split(/[\\/]/).filter(Boolean).pop() ?? chosen.path;
 });
 const harnessLabel = computed(() => enabledHarnesses.value.find((harness) => harness.type === harnessType.value)?.displayName ?? "None");
+const caption = computed(() => startCaption({
+  machine: props.machine.name,
+  folder: folder.value,
+  folderName: folder.value ? folderName(folder.value, repositories.value) : "",
+  workspace: workspace.value,
+  harness: harnessType.value ? harnessLabel.value : null,
+}));
 const defaultModel = computed(() => (catalog.value ? modelFor(catalog.value, agent.value) : null));
-const agentLabel = computed(() => agent.value || "Default");
+/** What the toolbar names: the choice, else the harness's own default by name, as the desktop composer does. */
+const agentLabel = computed(() => agent.value || catalog.value?.defaultAgent || "Default");
 const modelLabel = computed(() => {
-  const chosen = modelFromKey(model.value);
+  const chosen = modelFromKey(model.value) ?? defaultModel.value;
   if (chosen && catalog.value) return modelName(catalog.value, chosen);
   return "Default";
 });
@@ -227,11 +235,9 @@ async function start(): Promise<void> {
 
 // The message box grows with what's typed, from four lines.
 const promptRef = useTemplateRef<HTMLTextAreaElement>("prompt");
+const MIN_HEIGHT = grownHeight(Infinity, 4);
 function fit(): void {
-  const el = promptRef.value;
-  if (!el) return;
-  el.style.height = "auto";
-  el.style.height = `${Math.max(el.scrollHeight, 22 * 4)}px`;
+  autogrow(promptRef.value, MIN_HEIGHT);
 }
 watch(message, () => void nextTick(fit));
 onMounted(() => {
@@ -248,192 +254,166 @@ onMounted(() => {
     data-testid="phone-new-session"
   >
     <div class="ph-sheet__head">
+      <h2>New session</h2>
       <button
         type="button"
-        class="ph-navbtn ph-glass ph-navbtn--text"
+        class="ph-icon-btn"
+        aria-label="Close"
         data-testid="phone-new-cancel"
         @click="emit('cancel')"
       >
-        Cancel
+        <X aria-hidden="true" />
       </button>
-      <h2>New session</h2>
-      <span class="ph-navbar__spacer" />
     </div>
     <div class="ph-sheet__body">
       <div class="ph-sheet__pad">
-        <div class="ph-prompt-card">
+        <div class="ph-frame">
           <textarea
             ref="prompt"
             v-model="message"
-            class="phone-composer-input"
+            class="phone-composer-input pns__prompt"
             rows="4"
-            placeholder="What should the agent do?"
+            placeholder="Describe the task, or ask a question…"
             aria-label="What should the agent do?"
             enterkeyhint="enter"
             data-testid="phone-new-message"
           />
+          <div class="ph-frame__bar pns__bar">
+            <template v-if="showAgentModel">
+              <button
+                type="button"
+                class="ph-sel"
+                :disabled="catalogLoading"
+                data-testid="phone-new-agent"
+                @click="openPicker('agent')"
+              >
+                <span
+                  v-if="catalogLoading"
+                  class="ph-sk pns__sk"
+                />
+                <span
+                  v-else
+                  class="ph-fade-in"
+                >{{ agentLabel }}</span>
+                <ChevronDown aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                class="ph-sel"
+                :disabled="catalogLoading"
+                data-testid="phone-new-model"
+                @click="openPicker('model')"
+              >
+                <span
+                  v-if="catalogLoading"
+                  class="ph-sk pns__sk"
+                />
+                <span
+                  v-else
+                  class="ph-fade-in"
+                >{{ modelLabel }}</span>
+                <ChevronDown aria-hidden="true" />
+              </button>
+            </template>
+          </div>
         </div>
-      </div>
 
-      <div class="ph-group-h">
-        Where it runs
-      </div>
-      <div class="ph-group">
-        <button
-          type="button"
-          class="ph-row"
-          :class="{ 'ph-row--static': machines.length < 2 }"
-          :disabled="machines.length < 2"
-          data-testid="phone-new-machine"
-          @click="openPicker('machine')"
-        >
-          <span class="ph-row__main"><span class="ph-row__title">Machine</span></span>
-          <span class="ph-row__value">{{ machine.name }}</span>
-          <ChevronRight
-            v-if="machines.length > 1"
-            class="ph-row__chev"
-            :size="16"
-            :stroke-width="3"
-            aria-hidden="true"
-          />
-        </button>
-        <button
-          type="button"
-          class="ph-row"
-          data-testid="phone-new-folder"
-          @click="openPicker('folder')"
-        >
-          <span class="ph-row__main"><span class="ph-row__title">Folder</span></span>
-          <span
-            v-if="folderLabel"
-            class="ph-row__value"
-            :class="{ 'pns__choose': !folder }"
-          >{{ folderLabel }}</span>
-          <span
-            v-else
-            class="ph-sk pns__sk"
-          />
-          <ChevronRight
-            class="ph-row__chev"
-            :size="16"
-            :stroke-width="3"
-            aria-hidden="true"
-          />
-        </button>
-        <button
-          v-if="folder?.kind === 'repository'"
-          type="button"
-          class="ph-row"
-          data-testid="phone-new-where"
-          @click="openPicker('where')"
-        >
-          <span class="ph-row__main"><span class="ph-row__title">Where</span></span>
-          <span class="ph-row__value">{{ whereLabel }}</span>
-          <ChevronRight
-            class="ph-row__chev"
-            :size="16"
-            :stroke-width="3"
-            aria-hidden="true"
-          />
-        </button>
-      </div>
-
-      <div class="ph-group-h">
-        Who does it
-      </div>
-      <div class="ph-group">
-        <button
-          type="button"
-          class="ph-row"
-          :class="{ 'ph-row--static': enabledHarnesses.length < 2 }"
-          :disabled="enabledHarnesses.length < 2"
-          data-testid="phone-new-harness"
-          @click="openPicker('harness')"
-        >
-          <span class="ph-row__main"><span class="ph-row__title">Harness</span></span>
-          <span class="ph-row__value">{{ harnessLabel }}</span>
-          <ChevronRight
-            v-if="enabledHarnesses.length > 1"
-            class="ph-row__chev"
-            :size="16"
-            :stroke-width="3"
-            aria-hidden="true"
-          />
-        </button>
-        <template v-if="showAgentModel">
+        <div class="ph-chips pns__chips">
           <button
             type="button"
-            class="ph-row"
-            :disabled="catalogLoading"
-            data-testid="phone-new-agent"
-            @click="openPicker('agent')"
+            class="ph-chip"
+            :disabled="machines.length < 2"
+            data-testid="phone-new-machine"
+            @click="openPicker('machine')"
           >
-            <span class="ph-row__main"><span class="ph-row__title">Agent</span></span>
-            <span
-              v-if="catalogLoading"
-              class="ph-sk pns__sk"
-            />
-            <span
-              v-else
-              class="ph-row__value ph-fade-in"
-            >{{ agentLabel }}</span>
-            <ChevronRight
-              class="ph-row__chev"
-              :size="16"
-              :stroke-width="3"
+            <Monitor aria-hidden="true" />
+            <span>{{ machine.name }}</span>
+            <ChevronDown
+              v-if="machines.length > 1"
+              class="ph-chip__chev"
               aria-hidden="true"
             />
           </button>
           <button
             type="button"
-            class="ph-row"
-            :disabled="catalogLoading"
-            data-testid="phone-new-model"
-            @click="openPicker('model')"
+            class="ph-chip"
+            :class="{ 'ph-chip--muted': !folder }"
+            data-testid="phone-new-folder"
+            @click="openPicker('folder')"
           >
-            <span class="ph-row__main"><span class="ph-row__title">Model</span></span>
-            <span
-              v-if="catalogLoading"
-              class="ph-sk pns__sk"
-            />
+            <Folder aria-hidden="true" />
+            <span v-if="folderLabel">{{ folder ? folderLabel : "Choose a folder" }}</span>
             <span
               v-else
-              class="ph-row__value ph-fade-in"
-            >{{ modelLabel }}</span>
-            <ChevronRight
-              class="ph-row__chev"
-              :size="16"
-              :stroke-width="3"
+              class="ph-sk pns__sk"
+            />
+            <ChevronDown
+              class="ph-chip__chev"
               aria-hidden="true"
             />
           </button>
-        </template>
+          <button
+            v-if="folder?.kind === 'repository'"
+            type="button"
+            class="ph-chip"
+            data-testid="phone-new-where"
+            @click="openPicker('where')"
+          >
+            <GitBranch aria-hidden="true" />
+            <span>{{ whereLabel }}</span>
+            <ChevronDown
+              class="ph-chip__chev"
+              aria-hidden="true"
+            />
+          </button>
+          <button
+            type="button"
+            class="ph-chip"
+            :disabled="enabledHarnesses.length < 2"
+            data-testid="phone-new-harness"
+            @click="openPicker('harness')"
+          >
+            <Cpu aria-hidden="true" />
+            <span>{{ harnessLabel }}</span>
+            <ChevronDown
+              v-if="enabledHarnesses.length > 1"
+              class="ph-chip__chev"
+              aria-hidden="true"
+            />
+          </button>
+        </div>
+        <p
+          v-if="noHarnessReason"
+          class="ph-foot pns__caption"
+        >
+          {{ noHarnessReason }} Turn a harness on in Settings › Harnesses on a computer.
+        </p>
+        <p
+          v-else
+          class="ph-foot pns__caption"
+          data-testid="phone-new-caption"
+        >
+          <template
+            v-for="(part, index) in caption"
+            :key="index"
+          >
+            <b v-if="part.bold">{{ part.text }}</b><span v-else>{{ part.text }}</span>
+          </template>
+        </p>
+        <p
+          v-if="error"
+          class="ph-foot ph-foot--bad pns__caption"
+          role="alert"
+          data-testid="phone-new-error"
+        >
+          {{ error }}
+        </p>
       </div>
-      <p
-        v-if="noHarnessReason"
-        class="ph-group-f"
-      >
-        {{ noHarnessReason }} Turn a harness on in Settings › Harnesses on a computer.
-      </p>
-      <p
-        v-else-if="showAgentModel"
-        class="ph-group-f"
-      >
-        Agent and model come from {{ harnessLabel }} on {{ machine.name }}.
-      </p>
-      <p
-        v-if="error"
-        class="ph-note ph-note--error pns__error"
-        role="alert"
-        data-testid="phone-new-error"
-      >
-        {{ error }}
-      </p>
     </div>
     <div class="ph-sheet__foot">
       <button
         type="button"
-        class="ph-btn ph-btn--primary ph-btn--big"
+        class="ph-btn ph-btn--primary ph-btn--block"
         :disabled="!canStart"
         data-testid="phone-new-start"
         @click="start"
@@ -441,13 +421,10 @@ onMounted(() => {
         <LoaderCircle
           v-if="starting"
           class="ph-spinner"
-          :size="20"
           aria-hidden="true"
         />
         <ArrowUp
           v-else
-          :size="22"
-          :stroke-width="2.6"
           aria-hidden="true"
         />
         <span>{{ starting ? "Starting…" : `Start on ${machine.name}` }}</span>
@@ -466,24 +443,14 @@ onMounted(() => {
       class="ph-sheet-page"
       data-testid="phone-new-picker"
     >
-      <div class="ph-sheet__head">
+      <div class="ph-sheet__head ph-sheet__head--back">
         <button
           type="button"
-          class="ph-navbtn ph-glass"
+          class="ph-icon-btn ph-icon-btn--text"
           aria-label="Back"
           @click="closePicker"
         >
-          <ArrowLeft
-            v-if="phoneLook === 'android'"
-            :size="24"
-            aria-hidden="true"
-          />
-          <ChevronLeft
-            v-else
-            :size="24"
-            :stroke-width="2.4"
-            aria-hidden="true"
-          />
+          <ChevronLeft aria-hidden="true" />
         </button>
         <h2>{{ pickerTitle[picker] }}</h2>
       </div>
@@ -492,11 +459,8 @@ onMounted(() => {
           v-if="picker === 'folder'"
           class="ph-sheet__pad pns__search"
         >
-          <label class="ph-search">
-            <Search
-              :size="18"
-              aria-hidden="true"
-            />
+          <label class="ph-field">
+            <Search aria-hidden="true" />
             <input
               v-model="folderQuery"
               class="phone-composer-input"
@@ -509,38 +473,36 @@ onMounted(() => {
             >
           </label>
         </div>
-        <div class="ph-group">
+        <div class="ph-card">
           <button
             v-for="option in options"
             :key="option.id"
             type="button"
-            class="ph-row"
+            class="ph-set"
             :aria-pressed="option.id === selectedOption"
             @click="pick(option.id)"
           >
-            <span class="ph-row__main">
-              <span class="ph-row__title">{{ option.label }}</span>
+            <span class="ph-set__main">
+              <span class="ph-set__t">{{ option.label }}</span>
               <span
                 v-if="option.detail"
-                class="ph-row__sub ph-row__sub--wrap"
+                class="ph-set__s"
               >{{ option.detail }}</span>
             </span>
             <Check
               v-if="option.id === selectedOption"
-              class="ph-row__check"
-              :size="22"
-              :stroke-width="2.6"
+              class="ph-set__check"
               aria-hidden="true"
             />
             <span
               v-else
-              class="pns__no-check"
+              class="ph-set__nocheck"
             />
           </button>
         </div>
         <p
           v-if="picker === 'folder' && loadingFolders && options.length <= 1"
-          class="ph-group-f"
+          class="ph-foot"
         >
           Looking for folders on {{ machine.name }}…
         </p>
@@ -550,34 +512,31 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.ph-row__title,
-.ph-row__sub {
-  display: block;
-}
-
-.ph-prompt-card textarea {
-  min-height: calc(22px * 4);
+.pns__prompt {
   max-height: 40vh;
 }
 
+.pns__bar {
+  min-height: 42px;
+}
+
 .pns__sk {
-  width: 64px;
+  width: 44px;
 }
 
-.pns__choose {
-  color: var(--accent);
+.pns__chips {
+  margin-top: 12px;
 }
 
-.pns__no-check {
-  width: 22px;
-  flex: none;
+.pns__caption {
+  margin: 10px 2px 0;
+}
+
+.pns__caption b {
+  font-weight: 600;
 }
 
 .pns__search {
-  margin-bottom: 14px;
-}
-
-.pns__error {
-  margin: 12px 32px 0;
+  margin-bottom: 12px;
 }
 </style>

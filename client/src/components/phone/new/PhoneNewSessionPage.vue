@@ -75,7 +75,6 @@ function started(sessionId: string): void {
     :open="open"
     label="New session"
     :detents="['large']"
-    recess
     bare
     :history="false"
     @close="emit('close')"

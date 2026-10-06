@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DeviceCredentials } from "@/lib/device-credentials";
 import { opensAsPhoneApp } from "@/routes/index";
-import { folderFromId, folderId, folderName, folderOptions, phoneMachines } from "../new-session";
+import { folderFromId, folderId, folderName, folderOptions, phoneMachines, startCaption } from "../new-session";
 
 const credentials: DeviceCredentials = {
   homeMachineId: "hangar-id",
@@ -75,5 +75,21 @@ describe("opening the installed app", () => {
   it("goes to the phone inbox, unless the full Fleet was asked for", () => {
     expect(opensAsPhoneApp("", phone)).toBe(true);
     expect(opensAsPhoneApp("?view=full", phone)).toBe(false);
+  });
+});
+
+describe("the line under the New session chips", () => {
+  const words = (parts: { text: string; bold?: boolean }[]) => parts.map((p) => (p.bold ? `**${p.text}**` : p.text)).join("");
+
+  it("says where Start runs it, and with what", () => {
+    const repo = { kind: "repository" as const, path: "/home/me/src/weave-fleet" };
+    expect(words(startCaption({ machine: "hangar", folder: repo, folderName: "weave-fleet", workspace: { kind: "new" }, harness: "OpenCode 2" })))
+      .toBe("Runs on **hangar**, in a new worktree of **weave-fleet**, with OpenCode 2.");
+    expect(words(startCaption({ machine: "hangar", folder: repo, folderName: "weave-fleet", workspace: { kind: "current" }, harness: "OpenCode 2" })))
+      .toBe("Runs on **hangar**, straight in **weave-fleet**, with OpenCode 2.");
+    expect(words(startCaption({ machine: "falcon", folder: repo, folderName: "weave-fleet", workspace: { kind: "existing", path: "/w/fix-reconnect" }, harness: "Pi" })))
+      .toBe("Runs on **falcon**, in the fix-reconnect worktree of **weave-fleet**, with Pi.");
+    expect(words(startCaption({ machine: "hangar", folder: { kind: "none" }, folderName: "No folder", workspace: { kind: "current" }, harness: null })))
+      .toBe("Runs on **hangar**.");
   });
 });

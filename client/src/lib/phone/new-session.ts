@@ -92,3 +92,26 @@ export function folderOptions(repositories: readonly ScannedRepository[], recent
   add({ kind: "none" }, "Just chat; no files");
   return options;
 }
+
+/** A piece of the line under the New session chips; the names are bold. */
+export interface CaptionPart {
+  text: string;
+  bold?: boolean;
+}
+
+/**
+ * "Runs on **hangar**, in a new worktree of **weave-fleet**, with OpenCode 2.": what Start will do, in one sentence
+ * under the chips.
+ */
+export function startCaption(input: { machine: string; folder: NewSessionFolder | null; folderName: string; workspace: { kind: "current" | "new" | "existing"; path?: string }; harness: string | null }): CaptionPart[] {
+  const parts: CaptionPart[] = [{ text: "Runs on " }, { text: input.machine, bold: true }];
+  const folder = input.folder;
+  if (folder && folder.kind !== "none") {
+    if (folder.kind === "repository" && input.workspace.kind === "new") parts.push({ text: ", in a new worktree of " });
+    else if (folder.kind === "repository" && input.workspace.kind === "existing") parts.push({ text: `, in the ${input.workspace.path?.split(/[\\/]/).filter(Boolean).pop() ?? "existing"} worktree of ` });
+    else parts.push({ text: ", straight in " });
+    parts.push({ text: input.folderName, bold: true });
+  }
+  parts.push({ text: input.harness ? `, with ${input.harness}.` : "." });
+  return parts;
+}
