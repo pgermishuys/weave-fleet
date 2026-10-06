@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SessionListItem } from "@/api/client";
-import { askPreview, buildInbox, machinesLine, rowInfo, sessionLine, type InboxMachineState } from "../inbox";
+import { askPreview, buildInbox, machinesStatus, rowGlyph, rowMeta, rowPlace, type InboxMachineState } from "../inbox";
 
 const NOW = Date.parse("2026-10-05T14:07:00Z");
 
@@ -76,28 +76,39 @@ describe("previews", () => {
     expect(askPreview(inbox.needsYou[1]).lead).toBe("Waiting on you");
   });
 
-  it("writes the row line", () => {
-    const inbox = buildInbox([machine("falcon", [session("c", "active", 6), session("b", "idle", 22)])], NOW);
-    expect(rowInfo(inbox.working[0], "6m")).toBe("falcon · Working · 6m");
-    expect(rowInfo(inbox.finished[0], "22m")).toBe("falcon · 22m ago");
-    const stale = buildInbox([machine("falcon", [session("c", "active", 6)], { status: "unreachable" })], NOW);
-    expect(rowInfo(stale.working[0], "6m")).toBe("falcon · Working when last heard · 6m");
+  it("says where a row's session is, by machine or by folder", () => {
+    const inbox = buildInbox([machine("falcon", [
+      session("c", "active", 6, { branch: "refactor/references", workspaceDirectory: "/home/me/src/weave-fleet" } as Partial<SessionListItem>),
+      session("d", "idle", 22, { workspaceDisplayName: "weave", branch: null } as Partial<SessionListItem>),
+    ])], NOW);
+    expect(rowPlace(inbox.working[0], "machine")).toBe("falcon · refactor/references");
+    expect(rowPlace(inbox.working[0], "folder")).toBe("weave-fleet · refactor/references");
+    expect(rowPlace(inbox.finished[0], "folder")).toBe("weave");
+    expect(rowPlace({ machineName: "hangar", folder: null, branch: null }, "folder")).toBe("hangar");
+  });
+
+  it("gives each row its glyph and what it says on the right", () => {
+    const words = { duration: "6m 2s", short: "22m" };
+    expect(rowGlyph({ status: "waiting_input" })).toBe("waiting");
+    expect(rowGlyph({ status: "active" })).toBe("working");
+    expect(rowGlyph({ status: "error" })).toBe("error");
+    expect(rowGlyph({ status: "idle" })).toBe("quiet");
+    expect(rowMeta({ status: "waiting_input" }, words)).toEqual({ text: "Needs you", tone: "waiting" });
+    expect(rowMeta({ status: "error" }, words)).toEqual({ text: "Failed", tone: "error" });
+    expect(rowMeta({ status: "active" }, words)).toEqual({ text: "6m 2s", tone: "quiet" });
+    expect(rowMeta({ status: "idle" }, words)).toEqual({ text: "22m", tone: "quiet" });
   });
 });
 
 describe("the inbox's machines line", () => {
-  it("names the machines that answer, and the ones that don't", () => {
-    expect(machinesLine([{ name: "hangar", status: "live" }, { name: "falcon", status: "polling" }])).toEqual({ text: "hangar and falcon online", tone: "online" });
-    expect(machinesLine([{ name: "hangar", status: "live" }, { name: "falcon", status: "unreachable" }])).toEqual({ text: "hangar online · falcon unreachable", tone: "partial" });
-    expect(machinesLine([{ name: "hangar", status: "unreachable" }])).toEqual({ text: "hangar unreachable", tone: "offline" });
-    expect(machinesLine([{ name: "hangar", status: "connecting" }])).toEqual({ text: "Connecting…", tone: "connecting" });
-    expect(machinesLine([{ name: "a", status: "live" }, { name: "b", status: "live" }, { name: "c", status: "live" }]).text).toBe("a, b and c online");
-  });
-
-  it("says what a session row is doing", () => {
-    const base = { key: "k", machineId: "m", machineName: "hangar", sessionId: "s", title: "T", updatedAt: 0, activity: null, ask: null, stale: false };
-    expect(sessionLine({ ...base, status: "active" }, { duration: "6m", ago: "3 min ago" })).toBe("hangar · Working · 6m");
-    expect(sessionLine({ ...base, status: "waiting_input" }, { duration: "6m", ago: "3 min ago" })).toBe("hangar · Needs you · 3 min ago");
-    expect(sessionLine({ ...base, status: "idle" }, { duration: "6m", ago: "22 min ago" })).toBe("hangar · 22 min ago");
+  it("gives each machine a dot, and says how they are", () => {
+    expect(machinesStatus([{ name: "hangar", status: "live" }, { name: "falcon", status: "polling" }])).toEqual({
+      machines: [{ name: "hangar", tone: "online" }, { name: "falcon", tone: "online" }],
+      note: "online",
+    });
+    expect(machinesStatus([{ name: "hangar", status: "live" }, { name: "falcon", status: "unreachable" }]).note).toBe("falcon unreachable");
+    expect(machinesStatus([{ name: "hangar", status: "live" }, { name: "falcon", status: "connecting" }]).note).toBe("1 connecting");
+    expect(machinesStatus([{ name: "hangar", status: "connecting" }])).toEqual({ machines: [{ name: "hangar", tone: "connecting" }], note: "connecting…" });
+    expect(machinesStatus([{ name: "a", status: "unreachable" }, { name: "b", status: "unreachable" }]).note).toBe("a and b unreachable");
   });
 });

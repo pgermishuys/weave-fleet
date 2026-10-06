@@ -1,7 +1,7 @@
 import { onUnmounted, type Ref } from "vue";
 import { animateTo } from "@/lib/phone/animate";
 import { addSample, axisIntent, swipeBackRelease, velocity, type Sample } from "@/lib/phone/gestures";
-import { iosWebKit, phoneLook, standalone } from "@/composables/phone/use-phone-env";
+import { iosWebKit, standalone } from "@/composables/phone/use-phone-env";
 
 /** How far the page under a pushed one sits to the left (iOS parallax), and how dim it is. */
 export const PARALLAX = -0.3;
@@ -18,9 +18,10 @@ function scrollsSideways(target: Element, stop: Element): boolean {
 }
 
 /**
- * Swipe back from anywhere on a pushed screen (iOS 26), on the iOS look only: the screen follows the finger, the one
- * under it slides back in from the left and brightens, and letting go goes back on a flick or past 45% — or springs
- * back. In Safari (not the Home Screen app) the very edge is left to Safari's own swipe.
+ * Swipe back from anywhere on a pushed screen, on every phone: the screen follows the finger, the one under it slides
+ * back in from the left and brightens, and letting go goes back on a flick or past 45% — or springs back. In Safari
+ * (not the Home Screen app) the very edge is left to Safari's own swipe; Android's edge gesture is the system's own
+ * Back, which pops the stack through history.
  */
 export function useSwipeBack(options: {
   screen: Ref<HTMLElement | null>;
@@ -50,7 +51,7 @@ export function useSwipeBack(options: {
   function onTouchStart(event: TouchEvent): void {
     mode = null;
     dx = 0;
-    if (phoneLook.value !== "ios" || !options.enabled()) return;
+    if (!options.enabled()) return;
     const touch = event.touches[0];
     if (!standalone && iosWebKit && touch.clientX < 22) return;
     const target = event.target as Element;

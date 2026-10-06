@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addSample, axisIntent, detentOffsets, popDuration, pullDistance, rubber, sheetRelease, swipeBackRelease, swipeRowRelease, velocity } from "../gestures";
+import { addSample, axisIntent, detentOffsets, popDuration, pullDistance, pullDots, rubber, sheetRelease, swipeBackRelease, swipeRowRelease, velocity } from "../gestures";
 
 describe("gesture maths", () => {
   it("rubber-bands: follows less the further it goes, never past the dimension", () => {
@@ -27,6 +27,15 @@ describe("gesture maths", () => {
   it("puts a medium sheet so its top 52% of the screen shows", () => {
     expect(detentOffsets(["fit"], 400, 844)).toEqual({ fit: 0 });
     expect(detentOffsets(["medium", "large"], 780, 844)).toEqual({ large: 0, medium: 341 });
+  });
+
+  it("sizes a half-open sheet to its content, between 42% and 72% of the screen", () => {
+    // short content: no shorter than 42% of the screen
+    expect(detentOffsets(["medium", "large"], 780, 844, 200)).toEqual({ large: 0, medium: Math.round(780 - 844 * 0.42) });
+    // content that fits: exactly its height, so nothing is cut in two
+    expect(detentOffsets(["medium", "large"], 780, 844, 500)).toEqual({ large: 0, medium: 280 });
+    // long content: no taller than 72%, it scrolls or opens fully
+    expect(detentOffsets(["medium", "large"], 780, 844, 2000)).toEqual({ large: 0, medium: Math.round(780 - 844 * 0.72) });
   });
 
   it("settles a dragged sheet on the nearest stop, or closes it when flicked or dragged low", () => {
@@ -57,6 +66,8 @@ describe("gesture maths", () => {
 
   it("pulls with resistance", () => {
     expect(pullDistance(-20)).toBe(0);
+    expect([0, 17, 18, 36, 54, 71, 72, 200].map((d) => pullDots(d))).toEqual([0, 0, 1, 2, 3, 3, 4, 4]);
+    expect(pullDots(0, true)).toBe(4);
     expect(pullDistance(100)).toBeGreaterThan(50);
     expect(pullDistance(100)).toBeLessThan(100);
   });

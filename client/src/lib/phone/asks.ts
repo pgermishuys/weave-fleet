@@ -1,4 +1,4 @@
-/** How the phone words an agent's permission ask: the sheet's title, and what "always" would allow. No Vue. */
+/** How the phone words an agent's permission ask: its heading, and what "Don't ask again" would allow. No Vue. */
 import type { PermissionAsk } from "@/composables/use-session-permissions";
 
 /** "Run a command", "Edit a file", …: what the agent wants, as the ask's heading. */
@@ -7,12 +7,12 @@ export function permissionTitle(ask: Pick<PermissionAsk, "kind" | "tool">): stri
     case "shell": return "Run a command";
     case "edit": return "Edit a file";
     case "read": return "Read a file";
-    case "web": return "Open a web page";
-    default: return `Use ${ask.tool}`;
+    case "web": return "Go online";
+    default: return ask.tool === "external_directory" ? "Work outside the folder" : `Use ${ask.tool}`;
   }
 }
 
-/** The docked ask's one line: "Wants to run a command", "Wants to edit a file", … */
+/** The docked ask's one line: "Wants to run a command", … (until the docked ask takes the desktop card's head). */
 export function permissionWants(ask: Pick<PermissionAsk, "kind" | "tool">): string {
   switch (ask.kind) {
     case "shell": return "Wants to run a command";
@@ -24,12 +24,16 @@ export function permissionWants(ask: Pick<PermissionAsk, "kind" | "tool">): stri
 }
 
 /**
- * What "Always allow in this session" covers, from the ask's first pattern: a trailing `*` reads as "starts with"
- * ("Commands that start with `dotnet test`"), anything else as itself.
+ * What "Don't ask again" covers, as the desktop PermissionCard words it: the harness's patterns ("Don't ask again for
+ * `dotnet test *`"), or the whole kind of thing when there are none.
  */
-export function alwaysCovers(ask: Pick<PermissionAsk, "kind" | "tool" | "always">): { lead: string; code: string } {
-  const pattern = ask.always[0]?.trim() || ask.tool;
-  const prefix = /\s*\*$/.test(pattern) ? pattern.replace(/\s*\*$/, "") : null;
-  if (prefix) return { lead: ask.kind === "shell" ? "Commands that start with" : "Anything that starts with", code: prefix };
-  return { lead: ask.kind === "shell" ? "The command" : "Anything matching", code: pattern };
+export function dontAskAgain(ask: Pick<PermissionAsk, "kind" | "tool" | "always">): { lead: string; code: string | null } {
+  const patterns = ask.always.filter((pattern) => pattern !== "*");
+  if (patterns.length > 0) return { lead: "Don't ask again for", code: patterns.join(", ") };
+  switch (ask.kind) {
+    case "edit": return { lead: "Don't ask again for file edits", code: null };
+    case "shell": return { lead: "Don't ask again for commands", code: null };
+    case "web": return { lead: "Don't ask again for web access", code: null };
+    default: return { lead: "Don't ask again for", code: ask.tool };
+  }
 }

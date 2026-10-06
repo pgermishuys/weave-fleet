@@ -1,27 +1,22 @@
 import { onMounted, onUnmounted, shallowRef, type Ref } from "vue";
 
 /**
- * iOS large titles: the big title scrolls away into the bar, which then shows the small title over a soft edge; a
- * scroll that stops halfway snaps to either side, and pulling down past the top stretches the title a little.
- * `scrolled` drives the bar; `stretch(px)` is for pull to refresh, which moves the content itself.
+ * The page head in the panel and the chrome bar above it: once the head ("Needs you", the machines under it) scrolls
+ * away, the bar shows the page's name beside the logo. A scroll that stops halfway through the head settles to either
+ * side, so the head is never left cut in two.
  */
 export function useLargeTitle(scroller: Ref<HTMLElement | null>, title: Ref<HTMLElement | null>) {
   const scrolled = shallowRef(false);
   let touching = false;
   let idle: ReturnType<typeof setTimeout> | undefined;
 
-  const threshold = (): number => (title.value?.offsetHeight ?? 60) - 6;
-
-  function stretch(pull: number): void {
-    if (title.value) title.value.style.transform = pull > 0 ? `scale(${1 + Math.min(pull, 120) / 900})` : "";
-  }
+  const threshold = (): number => (title.value?.offsetHeight ?? 60) - 8;
 
   function onScroll(): void {
     const el = scroller.value;
     if (!el) return;
     const y = el.scrollTop;
-    scrolled.value = y > threshold() - 10;
-    stretch(-y);
+    scrolled.value = y > threshold() - 12;
     clearTimeout(idle);
     idle = setTimeout(() => {
       const edge = threshold();
@@ -50,5 +45,5 @@ export function useLargeTitle(scroller: Ref<HTMLElement | null>, title: Ref<HTML
     el?.removeEventListener("touchend", onTouchEnd);
   });
 
-  return { scrolled, stretch };
+  return { scrolled };
 }

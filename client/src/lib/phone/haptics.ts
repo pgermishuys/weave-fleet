@@ -4,7 +4,7 @@
  * a hidden one is clicked from inside the user's tap. That is a trick, not an API, and may stop working. Elsewhere,
  * nothing.
  */
-import { isIosWebKit, readLookSignals } from "@/lib/phone/look";
+import { isIosWebKit, readPlatformSignals } from "@/lib/phone/platform";
 
 export type HapticKind = "light" | "success" | "heavy";
 
@@ -30,7 +30,7 @@ export function haptic(kind: HapticKind = "light"): void {
     }
     return;
   }
-  if (!isIosWebKit(readLookSignals())) return;
+  if (!isIosWebKit(readPlatformSignals())) return;
   if (!iosSwitch?.isConnected) {
     iosSwitch = document.createElement("label");
     iosSwitch.setAttribute("aria-hidden", "true");

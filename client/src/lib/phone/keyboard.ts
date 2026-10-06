@@ -28,3 +28,15 @@ export function takeKeyboard(field: HTMLElement | null | undefined): void {
 export function keyboardHeld(): boolean {
   return proxy !== null;
 }
+
+/** The most a growing field shows before it scrolls: five lines of 24px, and its padding. */
+export function grownHeight(scrollHeight: number, lines = 5, lineHeight = 24, padding = 14): number {
+  return Math.min(scrollHeight, lines * lineHeight + padding);
+}
+
+/** Grows a text box with what's typed, up to five lines, then it scrolls. */
+export function autogrow(field: HTMLTextAreaElement | null | undefined, minHeight = 0): void {
+  if (!field) return;
+  field.style.height = "auto";
+  field.style.height = `${Math.max(minHeight, grownHeight(field.scrollHeight))}px`;
+}

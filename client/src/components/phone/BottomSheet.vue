@@ -3,26 +3,27 @@ import { computed, nextTick, onUnmounted, shallowRef, useSlots, useTemplateRef, 
 import { X } from "lucide-vue-next";
 import { cssPx, reducedMotion } from "@/lib/phone/animate";
 import { addSample, clamp, detentOffsets, rubber, sheetRelease, velocity, type Detent, type Sample } from "@/lib/phone/gestures";
-import { keyboardHeight, pageRecessed, phoneLook } from "@/composables/phone/use-phone-env";
+import { keyboardHeight } from "@/composables/phone/use-phone-env";
 import { popSheetEntry, pushSheetEntry, sheetHistorySettled, topSheetEntry } from "@/lib/phone/sheet-history";
 
 /**
- * A sheet from the bottom of the phone screen, as the phones draw them (ported from the mockups' kit.js): a grabber,
- * detents (sized to its content, or medium and large), dragged with the finger and flicked closed with speed,
- * rubber-banding past the top, over a dimmed page. On iPhone a full sheet pushes the page back (recess) and a menu
- * floats. Tapping the dim, Escape, Android's back gesture, or the × closes it. It sits in the app frame, which
- * follows the visual viewport, so its footer (a Start button) stays above the keyboard.
+ * A sheet from the bottom of the phone screen, in Fleet's look (ported from the mockups' kit.js): a grabber, a title
+ * with a line under it and a × , detents (sized to its content, or medium and large, medium as tall as the content
+ * up to 72%), dragged with the finger and flicked closed with speed, rubber-banding past the top, over a dimmed page.
+ * A menu floats off the screen's edges, as the desktop's dropdowns do. Tapping the dim, Escape, Android's back
+ * gesture, or the × closes it. It sits in the app frame, which follows the visual viewport, so its footer (a Start
+ * button) stays above the keyboard.
  */
 const props = withDefaults(defineProps<{
   open: boolean;
   label: string;
-  /** A centred title in the sheet's head, with a × to close. */
+  /** The sheet's title in its head, with a × to close. */
   title?: string;
+  /** A line under the title: where the ask is from, what the sheet is about. */
+  subtitle?: string;
   detents?: Detent[];
   initial?: Detent;
-  /** iOS: push the page back behind the sheet, as a card. */
-  recess?: boolean;
-  /** iOS: float the sheet off the screen's edges, as a menu. */
+  /** Float the sheet off the screen's edges, as a menu. */
   floating?: boolean;
   /** Shorthand for a large sheet. */
   full?: boolean;
@@ -31,7 +32,7 @@ const props = withDefaults(defineProps<{
   history?: boolean;
   /** The default slot fills the sheet under the grabber, without the head and the scrolling body. */
   bare?: boolean;
-}>(), { title: undefined, detents: undefined, initial: undefined, closeButton: undefined, history: true });
+}>(), { title: undefined, subtitle: undefined, detents: undefined, initial: undefined, closeButton: undefined, history: true });
 const emit = defineEmits<{ (event: "close"): void }>();
 const slots = useSlots();
 
@@ -41,8 +42,7 @@ const backdropRef = useTemplateRef<HTMLElement>("backdrop");
 const rendered = shallowRef(false);
 
 const activeDetents = computed<Detent[]>(() => (props.full ? ["large"] : props.detents ?? ["fit"]));
-const recess = computed(() => props.recess === true && phoneLook.value === "ios");
-const floating = computed(() => props.floating === true && phoneLook.value === "ios");
+const floating = computed(() => props.floating === true);
 const showHead = computed(() => !props.bare && (Boolean(slots.head) || Boolean(props.title) || props.closeButton === true));
 const showClose = computed(() => props.closeButton ?? Boolean(props.title));
 
@@ -52,7 +52,6 @@ let current = 0;
 let entry = 0;
 let generation = 0;
 
-const stage = (): HTMLElement | null => document.querySelector<HTMLElement>(".ph-stage");
 const screenHeight = (): number => layerRef.value?.clientHeight ?? window.innerHeight;
 const floatGap = (): number => (floating.value && sheetRef.value ? parseFloat(getComputedStyle(sheetRef.value).bottom) || 8 : 0);
 const stops = (): number[] => Object.values(offsets).sort((a, b) => a - b);
@@ -62,7 +61,7 @@ const dismissAt = (): number => sheetHeight + floatGap() + 10;
 function layout(): void {
   const sheet = sheetRef.value;
   if (!sheet) return;
-  const max = screenHeight() - cssPx("var(--ph-safe-top)") - (recess.value ? 14 : 10) - floatGap();
+  const max = screenHeight() - cssPx("var(--ph-safe-top)") - 10 - floatGap();
   if (activeDetents.value.includes("fit")) {
     sheet.style.height = "auto";
     sheet.style.maxHeight = `${max}px`;
@@ -72,7 +71,19 @@ function layout(): void {
     sheet.style.height = `${max}px`;
     sheet.style.maxHeight = "";
   }
-  offsets = detentOffsets(activeDetents.value, sheetHeight, screenHeight());
+  offsets = detentOffsets(activeDetents.value, sheetHeight, screenHeight(), contentHeight(sheet));
+}
+
+/** How tall the sheet's content is: its head and foot, and all of its body (scrolled or not). */
+function contentHeight(sheet: HTMLElement): number {
+  let total = 0;
+  for (const child of sheet.children) {
+    const el = child as HTMLElement;
+    if (el.matches(".ph-sheet__body")) total += el.scrollHeight;
+    else if (el.matches(".ph-sheet-pages")) total += [...el.querySelectorAll<HTMLElement>(":scope > .ph-sheet-page:last-child > *")].reduce((sum, part) => sum + (part.matches(".ph-sheet__body") ? part.scrollHeight : part.offsetHeight), 0);
+    else total += el.offsetHeight;
+  }
+  return total;
 }
 
 function paint(y: number): void {
@@ -82,15 +93,6 @@ function paint(y: number): void {
   sheet.style.transform = `translateY(${y}px)`;
   const low = lowest();
   if (backdropRef.value) backdropRef.value.style.opacity = String(y <= low ? 1 : clamp(1 - (y - low) / (dismissAt() - low), 0, 1));
-  if (recess.value) {
-    const r = clamp(1 - y / Math.max(1, sheetHeight), 0, 1);
-    const page = stage();
-    if (page) {
-      page.style.transform = `translateY(${(cssPx("var(--ph-safe-top)") + 6) * r}px) scale(${1 - 0.07 * r})`;
-      page.style.borderRadius = `${14 * r}px`;
-    }
-    pageRecessed.value = r;
-  }
   sheet.classList.toggle("ph-sheet--below-top", y > (stops()[0] ?? 0) + 1);
 }
 
@@ -101,23 +103,10 @@ async function snap(y: number, ms = 420, ease = "var(--ph-ease)"): Promise<void>
   const transition = `transform ${duration}ms ${ease}`;
   sheet.style.transition = transition;
   if (backdropRef.value) backdropRef.value.style.transition = `opacity ${duration}ms ${ease}`;
-  const page = recess.value ? stage() : null;
-  if (page) page.style.transition = `${transition}, border-radius ${duration}ms ${ease}`;
   paint(y);
   await new Promise((resolve) => setTimeout(resolve, duration + 10));
   if (sheetRef.value) sheetRef.value.style.transition = "";
   if (backdropRef.value) backdropRef.value.style.transition = "";
-  if (page) page.style.transition = "";
-}
-
-function resetPage(): void {
-  if (!recess.value && pageRecessed.value === 0) return;
-  const page = stage();
-  if (page) {
-    page.style.transform = "";
-    page.style.borderRadius = "";
-  }
-  pageRecessed.value = 0;
 }
 
 async function show(): Promise<void> {
@@ -146,7 +135,6 @@ async function hide(): Promise<void> {
   (document.activeElement as HTMLElement | null)?.blur?.();
   if (sheetRef.value) await snap(dismissAt(), 320, "cubic-bezier(0.4, 0, 1, 1)");
   if (mine !== generation) return;
-  resetPage();
   rendered.value = false;
 }
 
@@ -253,7 +241,6 @@ onUnmounted(() => {
   window.removeEventListener("popstate", onPop);
   document.removeEventListener("keydown", onKey);
   if (entry) popSheetEntry(entry);
-  if (rendered.value) resetPage();
 });
 </script>
 
@@ -296,21 +283,21 @@ onUnmounted(() => {
             class="ph-sheet__head"
           >
             <slot name="head">
-              <h2>{{ title }}</h2>
-              <span class="ph-navbar__spacer" />
+              <h2>
+                {{ title }}<span
+                  v-if="subtitle"
+                  class="ph-sheet__sub"
+                >{{ subtitle }}</span>
+              </h2>
               <button
                 v-if="showClose"
                 type="button"
-                class="ph-navbtn ph-glass"
+                class="ph-icon-btn"
                 aria-label="Close"
                 data-testid="sheet-close"
                 @click="emit('close')"
               >
-                <X
-                  :size="22"
-                  :stroke-width="2.4"
-                  aria-hidden="true"
-                />
+                <X aria-hidden="true" />
               </button>
             </slot>
           </div>

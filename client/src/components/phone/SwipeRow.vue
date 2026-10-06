@@ -10,13 +10,14 @@ import { animateTo, collapse } from "@/lib/phone/animate";
 import { addSample, axisIntent, swipeRowRelease, velocity, type Sample } from "@/lib/phone/gestures";
 
 /**
- * A list row you can swipe left to archive, as Mail does: Archive shows behind it, a short swipe leaves it open, all
- * the way archives it (the row slides off and folds away). Only ever archive: nothing is approved with a swipe.
+ * A list row you can swipe left to archive: Archive shows behind it (inverted, like the Undo toast), a short swipe
+ * leaves it open, all the way archives it (the row slides off and folds away). Only ever archive: nothing is approved
+ * with a swipe.
  */
 const emit = defineEmits<{ (event: "archive"): void }>();
 
 const wrapRef = useTemplateRef<HTMLElement>("wrap");
-const ACTION = 88;
+const ACTION = 84;
 let startX = 0;
 let startY = 0;
 let base = 0;
@@ -27,7 +28,7 @@ let samples: Sample[] = [];
 const self = { close };
 
 function row(): HTMLElement | null {
-  return wrapRef.value?.querySelector<HTMLElement>(":scope > .ph-row") ?? null;
+  return wrapRef.value?.querySelector<HTMLElement>(":scope > .ph-srow") ?? null;
 }
 function actions(): HTMLElement | null {
   return wrapRef.value?.querySelector<HTMLElement>(":scope > .ph-swipe-actions") ?? null;
@@ -151,10 +152,7 @@ onUnmounted(() => {
         tabindex="-1"
         @click="commit"
       >
-        <Archive
-          :size="22"
-          aria-hidden="true"
-        />
+        <Archive aria-hidden="true" />
         <span>Archive</span>
       </button>
     </div>

@@ -1,49 +1,38 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { sessionLine, type InboxItem } from "@/lib/phone/inbox";
-import { ago, duration } from "@/lib/phone/time";
+import PhoneGlyph from "@/components/phone/PhoneGlyph.vue";
+import { rowGlyph, rowMeta, rowPlace, type InboxItem } from "@/lib/phone/inbox";
+import { duration, short } from "@/lib/phone/time";
 
-/** A session as a list row: its status dot, title and one line ("falcon · Working · 6m"). Tapping opens it. */
-const props = defineProps<{ item: InboxItem; now: number }>();
+/**
+ * A session as a row, as the desktop's session list draws it: its status glyph, the title, where it is and its
+ * branch under it, and on the right "Needs you", how long it's been working or how long ago it finished. Tapping
+ * opens it.
+ */
+const props = withDefaults(defineProps<{ item: InboxItem; now: number; by?: "machine" | "folder" }>(), { by: "machine" });
 const emit = defineEmits<{ (event: "open", item: InboxItem): void }>();
 
-const tone = computed(() => {
-  if (props.item.status === "active") return "running";
-  if (props.item.status === "waiting_input") return "waiting";
-  if (props.item.status === "error") return "error";
-  return "done";
-});
-const info = computed(() => sessionLine(props.item, { duration: duration(props.item.updatedAt, props.now), ago: ago(props.item.updatedAt, props.now) }));
+const glyph = computed(() => rowGlyph(props.item));
+const place = computed(() => rowPlace(props.item, props.by));
+const meta = computed(() => rowMeta(props.item, { duration: duration(props.item.updatedAt, props.now), short: short(props.item.updatedAt, props.now) }));
 </script>
 
 <template>
   <button
     type="button"
-    class="ph-row"
-    :class="{ 'ph-row--stale': item.stale }"
-    style="--ph-sep-left: 44px"
+    class="ph-srow"
+    :class="{ 'ph-srow--quiet': glyph === 'quiet', 'ph-srow--stale': item.stale }"
     data-testid="inbox-row"
     @click="emit('open', item)"
   >
-    <span
-      class="ph-dot"
-      :class="`ph-dot--${tone}`"
-      aria-hidden="true"
-    />
-    <span class="ph-row__main">
-      <span class="ph-row__title">{{ item.title }}</span>
-      <span class="ph-row__sub">{{ info }}</span>
+    <span class="ph-srow__g"><PhoneGlyph :kind="glyph" /></span>
+    <span class="ph-srow__main">
+      <span class="ph-srow__t">{{ item.title }}</span>
+      <span class="ph-srow__s">{{ place }}</span>
     </span>
+    <span
+      class="ph-srow__m"
+      :class="{ 'ph-srow__m--waiting': meta.tone === 'waiting', 'ph-srow__m--error': meta.tone === 'error' }"
+    >{{ meta.text }}</span>
   </button>
 </template>
-
-<style scoped>
-.ph-row__title,
-.ph-row__sub {
-  display: block;
-}
-
-.ph-row--stale {
-  opacity: 0.6;
-}
-</style>

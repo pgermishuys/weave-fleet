@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ago, duration } from "../time";
+import { ago, duration, short } from "../time";
 
 const NOW = 1_000_000_000_000;
 
@@ -11,6 +11,15 @@ describe("time words", () => {
     expect(ago(NOW - 30 * 3_600_000, NOW)).toBe("yesterday");
     expect(ago(NOW - 3 * 86_400_000, NOW)).toBe("3 days ago");
     expect(ago(null, NOW)).toBe("");
+  });
+
+  it("says how long ago compactly, as the session list does", () => {
+    expect(short(NOW - 10_000, NOW)).toBe("now");
+    expect(short(NOW - 22 * 60_000, NOW)).toBe("22m");
+    expect(short(NOW - 5 * 3_600_000, NOW)).toBe("5h");
+    expect(short(NOW - 30 * 3_600_000, NOW)).toBe("1d");
+    expect(short(NOW - 15 * 86_400_000, NOW)).toBe("2w");
+    expect(short(undefined, NOW)).toBe("");
   });
 
   it("says how long it's been going", () => {

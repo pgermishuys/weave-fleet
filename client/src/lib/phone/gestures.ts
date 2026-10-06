@@ -39,13 +39,18 @@ export type Detent = "fit" | "medium" | "large";
 
 /**
  * Where each detent puts the sheet, as a translateY from fully open. A sized-to-content sheet has one stop at 0; a
- * medium/large one is as tall as the screen allows and medium shows its top 52% of the screen.
+ * medium/large one is as tall as the screen allows. Half open (medium) shows the whole content when it's short, so it
+ * never cuts a line in two: as tall as the content, but at least 42% and at most 72% of the screen. Without a content
+ * height it shows the top 52%.
  */
-export function detentOffsets(detents: readonly Detent[], sheetHeight: number, screenHeight: number): Partial<Record<Detent, number>> {
+export function detentOffsets(detents: readonly Detent[], sheetHeight: number, screenHeight: number, contentHeight?: number): Partial<Record<Detent, number>> {
   if (detents.includes("fit")) return { fit: 0 };
   const offsets: Partial<Record<Detent, number>> = {};
   if (detents.includes("large")) offsets.large = 0;
-  if (detents.includes("medium")) offsets.medium = Math.max(0, Math.round(sheetHeight - screenHeight * 0.52));
+  if (detents.includes("medium")) {
+    const shown = contentHeight === undefined ? screenHeight * 0.52 : clamp(contentHeight, screenHeight * 0.42, screenHeight * 0.72);
+    offsets.medium = Math.max(0, Math.round(sheetHeight - shown));
+  }
   return offsets;
 }
 
@@ -87,6 +92,15 @@ export function swipeRowRelease(input: { x: number; width: number; velocity: num
 
 /** Pull to refresh: how far the content follows a pull of `dy`, and whether letting go now refreshes. */
 export const PULL_THRESHOLD = 72;
+
+/**
+ * How many of the pull indicator's four dots are filled (Fleet's Working glyph, clockwise from the top left): one a
+ * quarter of the way to the threshold, all four at it, and all four while it refreshes.
+ */
+export function pullDots(distance: number, refreshing = false): number {
+  if (refreshing) return 4;
+  return Math.floor(clamp(distance / PULL_THRESHOLD, 0, 1) * 4 + 0.001);
+}
 export function pullDistance(dy: number): number {
   return dy <= 0 ? 0 : rubber(dy, 260, 0.9);
 }

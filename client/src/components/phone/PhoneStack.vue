@@ -16,7 +16,7 @@ import { popDuration } from "@/lib/phone/gestures";
 /**
  * The phone app as a navigation stack, the way the phones do it: the inbox (with its three tabs) at the bottom, a
  * session pushed over it from the right, the page under it sliding a third to the left and dimming. Back pops it
- * (on iOS also a swipe from anywhere on the page). New session and Notifications are sheets over the inbox, each
+ * (and a swipe from anywhere on the page). New session and Notifications are sheets over the inbox, each
  * still its own address (/phone/new, /phone/setup) so links and Back work. The routes under /phone draw nothing
  * themselves: this reads the address and draws the screens, so a session being popped stays on screen while it
  * slides away. Pages that aren't part of the stack (/phone/answered) draw as usual.

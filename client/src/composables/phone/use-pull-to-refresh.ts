@@ -1,41 +1,30 @@
 import { onMounted, onUnmounted, shallowRef, type Ref } from "vue";
 import { animateTo } from "@/lib/phone/animate";
-import { PULL_THRESHOLD, clamp, pullDistance } from "@/lib/phone/gestures";
-import { iosWebKit, phoneLook } from "@/composables/phone/use-phone-env";
+import { PULL_THRESHOLD, clamp, pullDistance, pullDots } from "@/lib/phone/gestures";
+import { iosWebKit } from "@/composables/phone/use-phone-env";
 
 /**
- * Pull to refresh, as each phone does it: on iOS the spokes fill in as you pull and spin while it refreshes; on
- * Android a round indicator drops in. iPhone Safari already rubber-bands the list, so there it reads that (a negative
- * scroll); elsewhere it follows the touches itself.
+ * Pull to refresh, the same on every phone: Fleet's Working glyph fills in dot by dot as you pull, and ticks while it
+ * refreshes with the list held a little lower. iPhone Safari already rubber-bands the list, so there it reads that (a
+ * negative scroll); elsewhere it follows the touches itself.
  */
 export function usePullToRefresh(options: {
   scroller: Ref<HTMLElement | null>;
   inner: Ref<HTMLElement | null>;
   indicator: () => HTMLElement | null;
   onRefresh: () => Promise<void>;
-  stretch?: (pull: number) => void;
 }) {
   const refreshing = shallowRef(false);
-  const spokes = shallowRef(0);
-  let armed = false;
+  const dots = shallowRef(0);
   let pull = 0;
-
-  const ios = (): boolean => phoneLook.value === "ios";
 
   function show(distance: number): void {
     pull = distance;
     const indicator = options.indicator();
     if (!indicator) return;
-    if (ios()) {
-      spokes.value = refreshing.value ? 8 : Math.round(clamp(distance / PULL_THRESHOLD, 0, 1) * 8);
-      indicator.style.opacity = String(refreshing.value ? 1 : clamp(distance / 30, 0, 1));
-      indicator.style.transform = refreshing.value ? "" : `translateY(${Math.max(0, distance - 50) * 0.5}px)`;
-    } else {
-      indicator.style.transform = `translateY(${clamp(distance, 0, 130) * 0.9}px) rotate(${distance * 3}deg)`;
-      indicator.style.opacity = String(clamp(distance / 40, 0, 1));
-    }
-    if (distance > PULL_THRESHOLD && !armed) armed = true;
-    if (distance < PULL_THRESHOLD - 10) armed = false;
+    dots.value = pullDots(distance, refreshing.value);
+    indicator.style.opacity = String(refreshing.value ? 1 : clamp(distance / 24, 0, 1));
+    indicator.style.transform = refreshing.value ? "" : `translateY(${Math.max(0, distance - 56) * 0.5}px)`;
   }
 
   async function trigger(): Promise<void> {
@@ -43,15 +32,12 @@ export function usePullToRefresh(options: {
     const inner = options.inner.value;
     refreshing.value = true;
     show(PULL_THRESHOLD);
-    if (ios() && inner) await animateTo(inner, { transform: "translateY(54px)" }, 260, "var(--ph-ease-out)");
-    else if (indicator) indicator.style.transform = "translateY(70px)";
+    if (inner) await animateTo(inner, { transform: "translateY(52px)" }, 260, "var(--ph-ease-out)");
     try {
       await options.onRefresh();
     } finally {
-      if (ios() && inner) void animateTo(inner, { transform: "translateY(0)" }, 380);
-      else if (indicator) await animateTo(indicator, { transform: "translateY(0) scale(0.2)", opacity: "0" }, 260);
+      if (inner) void animateTo(inner, { transform: "translateY(0)" }, 380);
       refreshing.value = false;
-      armed = false;
       show(0);
       if (indicator) indicator.style.opacity = "0";
     }
@@ -80,7 +66,7 @@ export function usePullToRefresh(options: {
     if (dy <= 0 || el.scrollTop > 0) {
       if (active) {
         show(0);
-        if (ios() && options.inner.value) options.inner.value.style.transform = "";
+        if (options.inner.value) options.inner.value.style.transform = "";
       }
       active = false;
       return;
@@ -89,10 +75,7 @@ export function usePullToRefresh(options: {
     event.preventDefault();
     const distance = pullDistance(dy);
     show(distance);
-    if (ios()) {
-      if (options.inner.value) options.inner.value.style.transform = `translateY(${distance}px)`;
-      options.stretch?.(distance);
-    }
+    if (options.inner.value) options.inner.value.style.transform = `translateY(${distance}px)`;
   }
   function onTouchEnd(): void {
     const el = options.scroller.value;
@@ -103,14 +86,11 @@ export function usePullToRefresh(options: {
     if (!active) return;
     active = false;
     tracking = false;
-    options.stretch?.(0);
     if (pull > PULL_THRESHOLD) {
       void trigger();
       return;
     }
-    const indicator = options.indicator();
-    if (ios() && options.inner.value) void animateTo(options.inner.value, { transform: "translateY(0)" }, 300);
-    else if (indicator) void animateTo(indicator, { transform: "translateY(0)", opacity: "0" }, 200);
+    if (options.inner.value) void animateTo(options.inner.value, { transform: "translateY(0)" }, 300);
     show(0);
   }
 
@@ -132,5 +112,5 @@ export function usePullToRefresh(options: {
     el?.removeEventListener("touchend", onTouchEnd);
   });
 
-  return { refreshing, spokes };
+  return { refreshing, dots };
 }

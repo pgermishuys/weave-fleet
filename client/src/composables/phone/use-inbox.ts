@@ -15,6 +15,18 @@ import {
   type PermissionReply,
 } from "@/lib/push/answer";
 
+/** The home machine's operating system, for its row under Machines; null when it doesn't say. */
+async function fetchHomeOs(homeToken: string | null): Promise<string | null> {
+  try {
+    const response = await fetch("/api/machine", { headers: homeToken ? { Authorization: `Bearer ${homeToken}` } : {}, credentials: "include" });
+    if (!response.ok) return null;
+    const body = await response.json() as { os?: unknown };
+    return typeof body.os === "string" && body.os ? body.os : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Feeds close after the app has been off screen this long, and open again when it comes back. */
 export const HIDDEN_CLOSE_MS = 5 * 60_000;
 
@@ -43,6 +55,7 @@ export function useInbox() {
     id: entry.listed.id,
     name: entry.listed.name,
     isHome: entry.isHome,
+    os: entry.listed.os ?? null,
     status: entry.snapshot?.status ?? (entry.problem ? "unreachable" : "connecting"),
     lastHeardAt: entry.snapshot?.lastHeardAt ?? (entry.listed.lastSeenAt ? Date.parse(entry.listed.lastSeenAt) : null),
     sessions: entry.snapshot?.sessions ?? [],
@@ -52,9 +65,9 @@ export function useInbox() {
 
   const inbox = computed(() => buildInbox(machines.value, now.value));
 
-  function homeEntry(credentials: DeviceCredentials | null): MachineEntry {
+  function homeEntry(credentials: DeviceCredentials | null, os: string | null): MachineEntry {
     return {
-      listed: { id: credentials?.homeMachineId ?? "home", name: credentials?.homeMachineName ?? "This machine", baseUrl: "" },
+      listed: { id: credentials?.homeMachineId ?? "home", name: credentials?.homeMachineName ?? "This machine", baseUrl: "", os },
       isHome: true,
       target: { baseUrl: "", token: null },
       feed: null,
@@ -70,7 +83,10 @@ export function useInbox() {
   async function open(): Promise<void> {
     loading.value = true;
     const homeToken = readCredentialsSync()?.token ?? null;
-    const listed = await fetchMachineList(homeToken).catch(() => [] as ListedMachine[]);
+    const [listed, homeOs] = await Promise.all([
+      fetchMachineList(homeToken).catch(() => [] as ListedMachine[]),
+      fetchHomeOs(homeToken),
+    ]);
     const credentials = (await grants.ensureGrants(listed)) ?? await readCredentials();
 
     const others: MachineEntry[] = listed
@@ -89,7 +105,7 @@ export function useInbox() {
       });
 
     await close();
-    entries.value = [homeEntry(credentials), ...others];
+    entries.value = [homeEntry(credentials, homeOs), ...others];
     loading.value = false;
 
     for (const entry of entries.value) {

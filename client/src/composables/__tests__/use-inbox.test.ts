@@ -42,10 +42,11 @@ describe("useInbox", () => {
       if (url === "/api/machines") {
         return Response.json({ machines: [
           { id: "hangar", name: "hangar", baseUrl: "https://hangar.ts.net" },
-          { id: "falcon", name: "falcon", baseUrl: "https://falcon.ts.net" },
+          { id: "falcon", name: "falcon", baseUrl: "https://falcon.ts.net", os: "macos" },
           { id: "osprey", name: "osprey", baseUrl: "https://osprey.ts.net" },
         ] });
       }
+      if (url === "/api/machine") return Response.json({ id: "hangar", name: "hangar", os: "linux" });
       if (url.includes("/device-grant")) return Response.json({ error: "Can't reach osprey from hangar right now." }, { status: 502 });
       posts.push({ url, init });
       return new Response(null, { status: 204 });
@@ -74,6 +75,12 @@ describe("useInbox", () => {
     expect(osprey?.status).toBe("unreachable");
     expect(osprey?.problem).toBe("Can't reach osprey from hangar right now.");
     expect(inbox.machines.value.find((m) => m.id === "hangar")?.isHome).toBe(true);
+  });
+
+  it("knows each machine's operating system: home's from itself, the rest from home's list", async () => {
+    const inbox = await mountInbox();
+
+    expect(inbox.machines.value.map((m) => [m.id, m.os])).toEqual([["hangar", "linux"], ["falcon", "macos"], ["osprey", null]]);
   });
 
   it("answers on the machine that asked, with that machine's key", async () => {

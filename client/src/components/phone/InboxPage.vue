@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, shallowRef, useTemplateRef } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import { Bell, ChevronRight, Laptop, Monitor, Plus, Search } from "lucide-vue-next";
+import { Bell, Check, ChevronDown, ChevronRight, ExternalLink, Laptop, Plus, Search, Smartphone } from "lucide-vue-next";
+import weaveLogo from "@/assets/weave_logo.png";
 import InboxAskRow from "@/components/phone/InboxAskRow.vue";
 import InboxSessionRow from "@/components/phone/InboxSessionRow.vue";
 import PhoneTabBar, { type PhoneTab } from "@/components/phone/PhoneTabBar.vue";
@@ -9,7 +10,6 @@ import PullIndicator from "@/components/phone/PullIndicator.vue";
 import SwipeRow from "@/components/phone/SwipeRow.vue";
 import { useInbox } from "@/composables/phone/use-inbox";
 import { useLargeTitle } from "@/composables/phone/use-large-title";
-import { phoneLook } from "@/composables/phone/use-phone-env";
 import { usePhoneNav } from "@/composables/phone/use-phone-nav";
 import { showToast } from "@/composables/phone/use-phone-toast";
 import { usePullToRefresh } from "@/composables/phone/use-pull-to-refresh";
@@ -18,15 +18,16 @@ import { readCredentialsSync } from "@/lib/device-credentials";
 import { rememberPhoneMachine } from "@/lib/machines";
 import { haptic } from "@/lib/phone/haptics";
 import { holdKeyboard } from "@/lib/phone/keyboard";
-import { buildInbox, machinesLine, type InboxItem } from "@/lib/phone/inbox";
+import { buildInbox, machinesStatus, type InboxItem } from "@/lib/phone/inbox";
 import { ago, clock } from "@/lib/phone/time";
 import type { AnswerOutcome, PermissionReply } from "@/lib/push/answer";
 
 /**
- * The phone's home, three tabs under one tab bar. Needs you: what waits on you on every machine (answered from the
- * list), then what's working and what finished. Sessions: everything from the last month, searchable. Machines:
- * which machines the phone reaches, and notifications. Each tab has an iOS large title that folds into the bar as
- * it scrolls; Needs you pulls to refresh; a session row swipes left to archive (with Undo).
+ * The phone's home, in Fleet's look: the chrome bar (logo, Notifications, New session), a panel with three pages,
+ * and the rail laid along the bottom as tabs. Needs you: what waits on you on every machine (answered from the list),
+ * then what's working and what finished. Sessions: everything from the last month by machine, filterable. Machines:
+ * which machines the phone reaches, and this phone's own settings. Each page's head scrolls away into the bar; Needs
+ * you pulls to refresh; a session row swipes left to archive (with Undo).
  */
 const props = defineProps<{ tab: PhoneTab }>();
 
@@ -46,9 +47,9 @@ onMounted(() => {
 });
 onUnmounted(() => document.removeEventListener("visibilitychange", checkPush));
 
-const ios = computed(() => phoneLook.value === "ios");
+const TITLES: Record<PhoneTab, string> = { "needs-you": "Needs you", sessions: "Sessions", machines: "Machines" };
 const unreachable = computed(() => machines.value.filter((m) => m.status === "unreachable" && !m.problem));
-const status = computed(() => machinesLine(machines.value));
+const status = computed(() => machinesStatus(machines.value));
 // Rows (and placeholders) until the first word from the machines, so nothing jumps in.
 const firstLoad = computed(() => loading.value || (machines.value.length > 0 && machines.value.every((m) => m.status === "connecting")));
 
@@ -56,19 +57,56 @@ const firstLoad = computed(() => loading.value || (machines.value.length > 0 && 
 const archived = shallowRef<ReadonlySet<string>>(new Set());
 const shown = (items: readonly InboxItem[]): InboxItem[] => items.filter((item) => !archived.value.has(item.key));
 const working = computed(() => shown(inbox.value.working));
-const finished = computed(() => shown(inbox.value.finished));
+const finishedAll = computed(() => shown(inbox.value.finished));
+/** The newest few; the rest are a tap away under Sessions. */
+const finished = computed(() => finishedAll.value.slice(0, 3));
 
-/** Every session from the last 30 days, newest first, for the Sessions tab. */
+/** Every session from the last 30 days, by machine: what needs you first, then newest first. */
 const query = shallowRef("");
-const allSessions = computed(() => {
+const recent = computed(() => {
   const built = buildInbox(machines.value, now.value, 30 * 24 * 3_600_000);
-  const words = query.value.trim().toLowerCase();
-  return shown([...built.needsYou, ...built.working, ...built.finished])
-    .filter((item) => !words || item.title.toLowerCase().includes(words) || item.machineName.toLowerCase().includes(words))
-    .sort((a, b) => b.updatedAt - a.updatedAt);
+  return shown([...built.needsYou, ...built.working, ...built.finished]);
 });
-const today = computed(() => allSessions.value.filter((item) => now.value - item.updatedAt < 24 * 3_600_000));
-const earlier = computed(() => allSessions.value.filter((item) => now.value - item.updatedAt >= 24 * 3_600_000));
+const allSessions = computed(() => {
+  const words = query.value.trim().toLowerCase();
+  return recent.value.filter((item) => !words || [item.title, item.machineName, item.folder ?? "", item.branch ?? ""].some((text) => text.toLowerCase().includes(words)));
+});
+const byMachine = computed(() => machines.value
+  .map((machine) => ({
+    machine,
+    items: allSessions.value
+      .filter((item) => item.machineId === machine.id)
+      .sort((a, b) => Number(b.status === "waiting_input") - Number(a.status === "waiting_input") || b.updatedAt - a.updatedAt),
+  }))
+  .filter((group) => group.items.length > 0 || !query.value.trim()));
+const sessionsLine = computed(() => {
+  const total = recent.value.length;
+  return `${total} session${total === 1 ? "" : "s"} on ${machines.value.length} machine${machines.value.length === 1 ? "" : "s"}`;
+});
+
+// A machine's sessions fold under its heading, as the desktop's machine headers do; remembered on this phone.
+const FOLDS_KEY = "weave:phone-machine-folds";
+function readFolds(): Set<string> {
+  try {
+    const stored = JSON.parse(localStorage.getItem(FOLDS_KEY) ?? "[]") as unknown;
+    return new Set(Array.isArray(stored) ? stored.filter((id): id is string => typeof id === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+const folded = shallowRef<ReadonlySet<string>>(readFolds());
+function toggleFold(id: string): void {
+  const next = new Set(folded.value);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  folded.value = next;
+  haptic("light");
+  try {
+    localStorage.setItem(FOLDS_KEY, JSON.stringify([...next]));
+  } catch {
+    // no storage: folds last this visit
+  }
+}
 
 function setKey(key: string, on: boolean): void {
   const next = new Set(archived.value);
@@ -80,7 +118,7 @@ function setKey(key: string, on: boolean): void {
 async function archive(item: InboxItem): Promise<void> {
   haptic("success");
   setKey(item.key, true);
-  showToast("Archived", {
+  showToast(`Archived “${item.title}”`, {
     label: "Undo",
     run: () => {
       setKey(item.key, false);
@@ -100,6 +138,12 @@ function select(next: PhoneTab): void {
     return;
   }
   void router.navigate({ to: "/phone", search: next === "needs-you" ? {} : { tab: next }, replace: true });
+}
+
+/** A machine's row under Machines: its sessions, under Sessions. */
+function showMachine(name: string): void {
+  query.value = name;
+  select("sessions");
 }
 
 async function open(item: InboxItem): Promise<void> {
@@ -137,8 +181,21 @@ function notifications(): void {
 }
 
 const homeName = computed(() => readCredentialsSync()?.homeMachineName ?? machines.value.find((m) => m.isHome)?.name ?? "This machine");
+const machinesLine = computed(() => {
+  const online = machines.value.filter((m) => m.status === "live" || m.status === "polling").length;
+  return `${online} online · this phone is paired with ${homeName.value}`;
+});
 
-// One scroller, large title and bar per tab, so each keeps its place.
+function machineDetail(machine: (typeof machines.value)[number]): string {
+  if (machine.problem) return machine.problem;
+  if (machine.status === "unreachable") return `Unreachable · last heard ${ago(machine.lastHeardAt, now.value) || "never"}`;
+  if (machine.status === "connecting") return "Connecting…";
+  const count = `${machine.sessions.length} session${machine.sessions.length === 1 ? "" : "s"}`;
+  if (machine.isHome) return `${count} · this phone's home`;
+  return `${count} · ${machine.status === "polling" ? "checked every 15 s" : `reached through ${homeName.value}`}`;
+}
+
+// One scroller and page head per tab, so each keeps its place; the bar follows the one on screen.
 const needsScroller = useTemplateRef<HTMLElement>("needsScroller");
 const needsInner = useTemplateRef<HTMLElement>("needsInner");
 const needsTitle = useTemplateRef<HTMLElement>("needsTitle");
@@ -146,9 +203,12 @@ const sessionsScroller = useTemplateRef<HTMLElement>("sessionsScroller");
 const sessionsTitle = useTemplateRef<HTMLElement>("sessionsTitle");
 const machinesScroller = useTemplateRef<HTMLElement>("machinesScroller");
 const machinesTitle = useTemplateRef<HTMLElement>("machinesTitle");
-const needsBar = useLargeTitle(needsScroller, needsTitle);
-const sessionsBar = useLargeTitle(sessionsScroller, sessionsTitle);
-const machinesBar = useLargeTitle(machinesScroller, machinesTitle);
+const heads = {
+  "needs-you": useLargeTitle(needsScroller, needsTitle),
+  sessions: useLargeTitle(sessionsScroller, sessionsTitle),
+  machines: useLargeTitle(machinesScroller, machinesTitle),
+};
+const barScrolled = computed(() => heads[props.tab].scrolled.value);
 
 function scrollerFor(tab: PhoneTab): HTMLElement | null {
   return tab === "needs-you" ? needsScroller.value : tab === "sessions" ? sessionsScroller.value : machinesScroller.value;
@@ -159,20 +219,10 @@ const pull = usePullToRefresh({
   scroller: needsScroller,
   inner: needsInner,
   indicator: () => ptr.value?.indicator ?? null,
-  stretch: needsBar.stretch,
   onRefresh: async () => {
     await Promise.all([refreshAll(), new Promise((resolve) => setTimeout(resolve, 600))]);
   },
 });
-
-// Android: the New session button shrinks to its icon while scrolling down.
-const fabSmall = shallowRef(false);
-let lastY = 0;
-function onScroll(event: Event): void {
-  const y = (event.target as HTMLElement).scrollTop;
-  fabSmall.value = y > lastY && y > 40;
-  lastY = y;
-}
 </script>
 
 <template>
@@ -180,455 +230,449 @@ function onScroll(event: Event): void {
     class="inbox"
     data-testid="phone-inbox"
   >
-    <!-- Needs you -->
-    <div
-      v-show="tab === 'needs-you'"
-      class="inbox__tab"
+    <header
+      class="ph-bar"
+      :class="{ 'ph-bar--scrolled': barScrolled }"
     >
-      <header
-        class="ph-navbar"
-        :class="{ 'ph-navbar--scrolled': needsBar.scrolled.value }"
+      <img
+        class="ph-bar__logo"
+        :src="weaveLogo"
+        alt="Fleet"
       >
-        <div class="ph-navbar__title">
-          <span>Needs you</span>
-        </div>
-        <div class="ph-navbar__spacer" />
-        <div class="ph-navbtn-group ph-glass">
-          <button
-            v-if="ios"
-            type="button"
-            class="ph-navbtn"
-            aria-label="New session"
-            data-testid="phone-new-session-button"
-            @click="newSession"
-          >
-            <Plus
-              :size="24"
-              aria-hidden="true"
-            />
-          </button>
-          <button
-            type="button"
-            class="ph-navbtn"
-            aria-label="Notifications"
-            data-testid="phone-notifications-button"
-            @click="notifications"
-          >
-            <Bell
-              :size="24"
-              aria-hidden="true"
-            />
-          </button>
-        </div>
-      </header>
-      <PullIndicator
-        ref="ptr"
-        :spokes="pull.spokes.value"
-        :refreshing="pull.refreshing.value"
-      />
+      <span class="ph-bar__title">{{ TITLES[tab] }}</span>
+      <span class="ph-bar__spacer" />
+      <button
+        type="button"
+        class="ph-icon-btn"
+        aria-label="Notifications"
+        data-testid="phone-notifications-button"
+        @click="notifications"
+      >
+        <Bell aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        class="ph-btn ph-btn--outline ph-btn--sm inbox__new"
+        data-testid="phone-new-session-button"
+        @click="newSession"
+      >
+        <Plus aria-hidden="true" />New session
+      </button>
+    </header>
+
+    <div class="ph-panel">
+      <!-- Needs you -->
       <div
-        ref="needsScroller"
-        class="ph-scroller"
-        @scroll.passive="onScroll"
+        v-show="tab === 'needs-you'"
+        class="ph-tabpage"
       >
+        <PullIndicator
+          ref="ptr"
+          :dots="pull.dots.value"
+          :refreshing="pull.refreshing.value"
+        />
         <div
-          ref="needsInner"
-          class="ph-scroller__inner"
+          ref="needsScroller"
+          class="ph-scroller"
         >
           <div
-            ref="needsTitle"
-            class="ph-large-title"
+            ref="needsInner"
+            class="ph-scroller__inner"
           >
-            <h1>Needs you</h1>
-            <p data-testid="inbox-machines-line">
-              <span
-                class="ph-dot ph-dot--sm"
-                :class="{ 'ph-dot--live': status.tone === 'online', 'ph-dot--waiting': status.tone === 'partial', 'ph-dot--error': status.tone === 'offline' }"
-                aria-hidden="true"
-              />{{ status.text }}
-            </p>
-          </div>
-
-          <template v-if="firstLoad">
             <div
-              v-for="n in 2"
-              :key="`ask-${n}`"
-              class="ph-ask inbox__sk-card"
-              role="presentation"
+              ref="needsTitle"
+              class="ph-page-head"
             >
-              <span
-                class="ph-sk"
-                style="width: 38%"
-              />
-              <div class="inbox__sk-line">
+              <h1>Needs you</h1>
+              <p data-testid="inbox-machines-line">
                 <span
-                  class="ph-sk"
-                  style="width: 72%; height: 1.05em"
-                />
-              </div>
-              <span
-                class="ph-sk"
-                style="width: 30%"
-              />
-              <div class="inbox__sk-line">
-                <span class="ph-sk inbox__sk-code" />
-              </div>
-              <div class="ph-btns">
-                <span class="ph-sk inbox__sk-btn" />
-                <span class="ph-sk inbox__sk-btn" />
-              </div>
+                  v-for="(machine, index) in status.machines"
+                  :key="machine.name"
+                  class="inbox__machine"
+                  :class="{ 'inbox__machine--next': index > 0 }"
+                ><span
+                  class="ph-mdot"
+                  :class="{ 'ph-mdot--off': machine.tone === 'connecting', 'ph-mdot--bad': machine.tone === 'away' }"
+                  aria-hidden="true"
+                />{{ machine.name }}</span>
+                <span>· {{ status.note }}</span>
+              </p>
             </div>
-            <div class="ph-section-h">
-              <span
-                class="ph-sk"
-                style="width: 90px; height: 1em"
-              />
-            </div>
-            <div class="ph-group">
+
+            <template v-if="firstLoad">
               <div
-                v-for="n in 2"
-                :key="`row-${n}`"
-                class="ph-row"
+                class="ph-asks"
+                role="presentation"
               >
-                <span class="ph-dot inbox__sk-dot" />
-                <div class="ph-row__main">
+                <div
+                  v-for="n in 2"
+                  :key="`ask-${n}`"
+                  class="ph-pcard inbox__sk-card"
+                >
                   <span
                     class="ph-sk"
-                    style="width: 70%"
+                    style="width: 42%"
                   />
-                  <div class="inbox__sk-sub">
+                  <div class="inbox__sk-title">
                     <span
                       class="ph-sk"
-                      style="width: 45%; height: 0.8em"
+                      style="width: 76%; height: 1em"
                     />
+                  </div>
+                  <div class="ph-cmd inbox__sk-cmd">
+                    <span
+                      class="ph-sk"
+                      style="width: 88%"
+                    />
+                  </div>
+                  <div class="ph-btns">
+                    <span class="ph-sk inbox__sk-btn" />
+                    <span class="ph-sk inbox__sk-btn" />
                   </div>
                 </div>
               </div>
-            </div>
-            <span
-              role="status"
-              class="sr-only"
-            >Loading</span>
-          </template>
-
-          <div
-            v-else
-            class="ph-fade-in"
-          >
-            <button
-              v-if="push.permissionRevoked.value"
-              type="button"
-              class="ph-banner"
-              data-testid="push-revoked"
-              @click="notifications"
-            >
-              Notifications are off for this phone. Turn them back on ›
-            </button>
-            <p
-              v-for="machine in unreachable"
-              :key="machine.id"
-              class="ph-banner ph-banner--muted"
-              data-testid="inbox-unreachable"
-            >
-              {{ machine.name }} unreachable<template v-if="machine.lastHeardAt">
-                since {{ clock(machine.lastHeardAt) }}
-              </template>. Showing what it said last.
-            </p>
-
-            <InboxAskRow
-              v-for="item in inbox.needsYou"
-              :key="item.key"
-              :item="item"
-              :now="now"
-              @open="open"
-              @permission="onPermission"
-              @question="onQuestion"
-            />
-            <p
-              v-if="inbox.needsYou.length === 0"
-              class="inbox__quiet"
-            >
-              Nothing needs you right now.
-            </p>
-
-            <template v-if="working.length">
-              <h2 class="ph-section-h">
-                Working <small>{{ working.length }}</small>
-              </h2>
-              <div class="ph-group">
-                <SwipeRow
-                  v-for="item in working"
-                  :key="item.key"
-                  @archive="archive(item)"
-                >
-                  <InboxSessionRow
-                    :item="item"
-                    :now="now"
-                    @open="open"
-                  />
-                </SwipeRow>
+              <div class="ph-section-h">
+                <span
+                  class="ph-sk"
+                  style="width: 76px"
+                />
               </div>
+              <div class="ph-rows">
+                <div
+                  v-for="n in 2"
+                  :key="`row-${n}`"
+                  class="ph-srow"
+                >
+                  <span class="ph-srow__g"><span class="ph-sk inbox__sk-glyph" /></span>
+                  <div class="ph-srow__main">
+                    <span
+                      class="ph-sk"
+                      style="width: 68%"
+                    />
+                    <div class="inbox__sk-sub">
+                      <span
+                        class="ph-sk"
+                        style="width: 44%; height: 0.75em"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <span
+                role="status"
+                class="sr-only"
+              >Loading</span>
             </template>
 
-            <template v-if="finished.length">
-              <h2 class="ph-section-h inbox__section-gap">
-                Finished <small>{{ finished.length }}</small>
-              </h2>
-              <div class="ph-group">
-                <SwipeRow
-                  v-for="item in finished"
-                  :key="item.key"
-                  @archive="archive(item)"
-                >
-                  <InboxSessionRow
-                    :item="item"
-                    :now="now"
-                    @open="open"
-                  />
-                </SwipeRow>
-              </div>
-            </template>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Sessions -->
-    <div
-      v-show="tab === 'sessions'"
-      class="inbox__tab"
-    >
-      <header
-        class="ph-navbar"
-        :class="{ 'ph-navbar--scrolled': sessionsBar.scrolled.value }"
-      >
-        <div class="ph-navbar__title">
-          <span>Sessions</span>
-        </div>
-        <div class="ph-navbar__spacer" />
-        <button
-          v-if="ios"
-          type="button"
-          class="ph-navbtn ph-glass"
-          aria-label="New session"
-          data-testid="phone-sessions-new"
-          @click="newSession"
-        >
-          <Plus
-            :size="24"
-            aria-hidden="true"
-          />
-        </button>
-      </header>
-      <div
-        ref="sessionsScroller"
-        class="ph-scroller"
-        @scroll.passive="onScroll"
-      >
-        <div class="ph-scroller__inner">
-          <div
-            ref="sessionsTitle"
-            class="ph-large-title"
-          >
-            <h1>Sessions</h1>
-          </div>
-          <div class="inbox__search">
-            <label class="ph-search">
-              <Search
-                :size="18"
-                aria-hidden="true"
-              />
-              <input
-                v-model="query"
-                class="phone-composer-input"
-                type="search"
-                placeholder="Search sessions"
-                aria-label="Search sessions"
-                enterkeyhint="search"
-                data-testid="phone-sessions-search"
-              >
-            </label>
-          </div>
-          <template v-if="today.length">
-            <div class="ph-group-h">
-              Today
-            </div>
-            <div class="ph-group">
-              <SwipeRow
-                v-for="item in today"
-                :key="item.key"
-                @archive="archive(item)"
-              >
-                <InboxSessionRow
-                  :item="item"
-                  :now="now"
-                  @open="open"
-                />
-              </SwipeRow>
-            </div>
-          </template>
-          <template v-if="earlier.length">
-            <div class="ph-group-h">
-              Earlier
-            </div>
-            <div class="ph-group">
-              <SwipeRow
-                v-for="item in earlier"
-                :key="item.key"
-                @archive="archive(item)"
-              >
-                <InboxSessionRow
-                  :item="item"
-                  :now="now"
-                  @open="open"
-                />
-              </SwipeRow>
-            </div>
-          </template>
-          <p
-            v-if="!firstLoad && allSessions.length === 0"
-            class="inbox__quiet"
-          >
-            {{ query ? "No sessions match." : "No sessions in the last month." }}
-          </p>
-          <div class="ph-group inbox__section-gap">
-            <a
-              class="ph-row ph-row--accent"
-              href="/?view=full"
-            >
-              <span class="ph-row__main"><span class="ph-row__title">Open the full Fleet</span></span>
-              <ChevronRight
-                class="ph-row__chev"
-                :size="16"
-                :stroke-width="3"
-                aria-hidden="true"
-              />
-            </a>
-          </div>
-          <p class="ph-group-f">
-            Swipe a session left to archive it.
-          </p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Machines -->
-    <div
-      v-show="tab === 'machines'"
-      class="inbox__tab"
-    >
-      <header
-        class="ph-navbar"
-        :class="{ 'ph-navbar--scrolled': machinesBar.scrolled.value }"
-      >
-        <div class="ph-navbar__title">
-          <span>Machines</span>
-        </div>
-      </header>
-      <div
-        ref="machinesScroller"
-        class="ph-scroller"
-      >
-        <div class="ph-scroller__inner">
-          <div
-            ref="machinesTitle"
-            class="ph-large-title"
-          >
-            <h1>Machines</h1>
-          </div>
-          <div class="ph-group">
             <div
-              v-for="machine in machines"
-              :key="machine.id"
-              class="ph-row ph-row--static"
-              style="--ph-sep-left: 62px"
-              data-testid="phone-machine"
+              v-else
+              class="ph-fade-in"
             >
-              <span
-                class="ph-row__icon"
-                :class="machine.isHome ? 'inbox__icon--home' : 'inbox__icon--other'"
-                aria-hidden="true"
+              <button
+                v-if="push.permissionRevoked.value"
+                type="button"
+                class="ph-banner"
+                data-testid="push-revoked"
+                @click="notifications"
               >
-                <Monitor :size="20" />
-              </span>
-              <span class="ph-row__main">
-                <span class="ph-row__title">{{ machine.name }}</span>
-                <span class="ph-row__sub">
-                  <template v-if="machine.problem">{{ machine.problem }}</template>
-                  <template v-else-if="machine.status === 'unreachable'">Unreachable · last heard {{ ago(machine.lastHeardAt, now) || "never" }}</template>
-                  <template v-else-if="machine.status === 'connecting'">Connecting…</template>
-                  <template v-else>{{ machine.isHome ? "Home · sends notifications" : machine.status === "polling" ? "Checking every 15 s" : "Live" }} · {{ machine.sessions.length }} session{{ machine.sessions.length === 1 ? "" : "s" }}</template>
-                </span>
-              </span>
-              <span
-                class="ph-dot ph-dot--sm"
-                :class="machine.status === 'live' || machine.status === 'polling' ? 'ph-dot--live' : machine.status === 'unreachable' ? 'ph-dot--error' : ''"
-                aria-hidden="true"
-              />
+                Notifications are off for this phone. Turn them back on ›
+              </button>
+              <p
+                v-for="machine in unreachable"
+                :key="machine.id"
+                class="ph-banner ph-banner--muted"
+                data-testid="inbox-unreachable"
+              >
+                {{ machine.name }} unreachable<template v-if="machine.lastHeardAt">
+                  since {{ clock(machine.lastHeardAt) }}
+                </template>. Showing what it said last.
+              </p>
+
+              <div
+                v-if="inbox.needsYou.length"
+                class="ph-asks"
+              >
+                <InboxAskRow
+                  v-for="item in inbox.needsYou"
+                  :key="item.key"
+                  :item="item"
+                  :now="now"
+                  @open="open"
+                  @permission="onPermission"
+                  @question="onQuestion"
+                />
+              </div>
+              <p
+                v-else
+                class="ph-empty ph-fade-in"
+              >
+                <Check aria-hidden="true" />
+                <span>Nothing needs you right now.</span>
+              </p>
+
+              <template v-if="working.length">
+                <h2 class="ph-section-h">
+                  Working <small>{{ working.length }}</small>
+                </h2>
+                <div class="ph-rows">
+                  <SwipeRow
+                    v-for="item in working"
+                    :key="item.key"
+                    @archive="archive(item)"
+                  >
+                    <InboxSessionRow
+                      :item="item"
+                      :now="now"
+                      @open="open"
+                    />
+                  </SwipeRow>
+                </div>
+              </template>
+
+              <template v-if="finished.length">
+                <h2 class="ph-section-h">
+                  Finished <small>{{ finishedAll.length }}</small>
+                  <button
+                    type="button"
+                    class="ph-section-h__act ph-press"
+                    data-testid="inbox-all-sessions"
+                    @click="select('sessions')"
+                  >
+                    All sessions
+                  </button>
+                </h2>
+                <div class="ph-rows">
+                  <SwipeRow
+                    v-for="item in finished"
+                    :key="item.key"
+                    @archive="archive(item)"
+                  >
+                    <InboxSessionRow
+                      :item="item"
+                      :now="now"
+                      @open="open"
+                    />
+                  </SwipeRow>
+                </div>
+              </template>
             </div>
           </div>
-          <p class="ph-group-f">
-            {{ homeName }} sends this phone's notifications for every machine here. Add machines on a computer, in
-            Settings › Machines.
-          </p>
-          <div class="ph-group inbox__section-gap">
-            <button
-              type="button"
-              class="ph-row"
-              style="--ph-sep-left: 62px"
-              data-testid="phone-machines-notifications"
-              @click="notifications"
+        </div>
+      </div>
+
+      <!-- Sessions -->
+      <div
+        v-show="tab === 'sessions'"
+        class="ph-tabpage"
+      >
+        <div
+          ref="sessionsScroller"
+          class="ph-scroller"
+        >
+          <div class="ph-scroller__inner">
+            <div
+              ref="sessionsTitle"
+              class="ph-page-head"
             >
-              <span
-                class="ph-row__icon inbox__icon--bell"
-                aria-hidden="true"
-              ><Bell :size="20" /></span>
-              <span class="ph-row__main"><span class="ph-row__title">Notifications</span></span>
-              <span class="ph-row__value">{{ push.subscribed.value ? "On" : "Off" }}</span>
-              <ChevronRight
-                class="ph-row__chev"
-                :size="16"
-                :stroke-width="3"
-                aria-hidden="true"
-              />
-            </button>
-            <a
-              class="ph-row"
-              href="/?view=full"
-              style="--ph-sep-left: 62px"
+              <h1>Sessions</h1>
+              <p>{{ sessionsLine }}</p>
+            </div>
+            <div class="inbox__filter">
+              <label class="ph-field">
+                <Search aria-hidden="true" />
+                <input
+                  v-model="query"
+                  class="phone-composer-input"
+                  type="search"
+                  placeholder="Filter sessions"
+                  aria-label="Filter sessions"
+                  enterkeyhint="search"
+                  data-testid="phone-sessions-search"
+                >
+              </label>
+            </div>
+            <template
+              v-for="group in byMachine"
+              :key="group.machine.id"
             >
-              <span
-                class="ph-row__icon inbox__icon--plain"
-                aria-hidden="true"
-              ><Laptop :size="20" /></span>
-              <span class="ph-row__main"><span class="ph-row__title">Open the full Fleet</span></span>
-              <ChevronRight
-                class="ph-row__chev"
-                :size="16"
-                :stroke-width="3"
-                aria-hidden="true"
-              />
-            </a>
+              <button
+                type="button"
+                class="ph-mhead"
+                :class="{ 'ph-mhead--folded': folded.has(group.machine.id) }"
+                :aria-expanded="!folded.has(group.machine.id)"
+                data-testid="phone-machine-head"
+                @click="toggleFold(group.machine.id)"
+              >
+                <ChevronDown
+                  class="ph-mhead__chev"
+                  aria-hidden="true"
+                />
+                <span
+                  class="ph-mdot"
+                  :class="{ 'ph-mdot--off': group.machine.status === 'connecting', 'ph-mdot--bad': group.machine.status === 'unreachable' }"
+                  aria-hidden="true"
+                />
+                {{ group.machine.name }}
+                <span
+                  v-if="group.machine.status === 'live'"
+                  class="ph-tag ph-tag--live"
+                >live</span>
+                <small>{{ group.items.length }}</small>
+              </button>
+              <div
+                v-if="!folded.has(group.machine.id)"
+                class="ph-rows"
+              >
+                <SwipeRow
+                  v-for="item in group.items"
+                  :key="item.key"
+                  @archive="archive(item)"
+                >
+                  <InboxSessionRow
+                    :item="item"
+                    :now="now"
+                    by="folder"
+                    @open="open"
+                  />
+                </SwipeRow>
+              </div>
+            </template>
+            <p
+              v-if="!firstLoad && allSessions.length === 0"
+              class="ph-empty inbox__none"
+            >
+              {{ query ? "No sessions match." : "No sessions in the last month." }}
+            </p>
+            <p class="ph-foot inbox__swipe-hint">
+              Swipe a session left to archive it.
+            </p>
+            <div class="ph-card inbox__gap">
+              <a
+                class="ph-set ph-set--accent"
+                href="/?view=full"
+              >
+                <span class="ph-set__main"><span class="ph-set__t">Open the full Fleet</span></span>
+                <ExternalLink
+                  class="ph-set__chev"
+                  aria-hidden="true"
+                />
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Machines -->
+      <div
+        v-show="tab === 'machines'"
+        class="ph-tabpage"
+      >
+        <div
+          ref="machinesScroller"
+          class="ph-scroller"
+        >
+          <div class="ph-scroller__inner">
+            <div
+              ref="machinesTitle"
+              class="ph-page-head"
+            >
+              <h1>Machines</h1>
+              <p>{{ machinesLine }}</p>
+            </div>
+            <div class="ph-card inbox__first-card">
+              <button
+                v-for="machine in machines"
+                :key="machine.id"
+                type="button"
+                class="ph-set"
+                data-testid="phone-machine"
+                @click="showMachine(machine.name)"
+              >
+                <span
+                  class="ph-mdot"
+                  :class="{ 'ph-mdot--off': machine.status === 'connecting', 'ph-mdot--bad': machine.status === 'unreachable' || !!machine.problem }"
+                  aria-hidden="true"
+                />
+                <span class="ph-set__main">
+                  <span class="ph-set__t">
+                    <span>{{ machine.name }}</span>
+                    <span
+                      v-if="machine.os"
+                      class="ph-tag"
+                    >{{ machine.os }}</span>
+                    <span
+                      v-if="machine.status === 'live'"
+                      class="ph-tag ph-tag--live"
+                    >live</span>
+                  </span>
+                  <span class="ph-set__s">{{ machineDetail(machine) }}</span>
+                </span>
+                <ChevronRight
+                  class="ph-set__chev"
+                  aria-hidden="true"
+                />
+              </button>
+            </div>
+            <p class="ph-foot">
+              {{ homeName }} sends this phone's notifications for every machine here. Add machines from Fleet on a
+              computer, in Settings&nbsp;→&nbsp;Machines.
+            </p>
+            <div class="ph-label">
+              This phone
+            </div>
+            <div class="ph-card">
+              <button
+                type="button"
+                class="ph-set"
+                data-testid="phone-machines-notifications"
+                @click="notifications"
+              >
+                <Bell
+                  class="ph-set__ic"
+                  aria-hidden="true"
+                />
+                <span class="ph-set__main"><span class="ph-set__t">Notifications</span></span>
+                <span class="ph-set__v">{{ push.subscribed.value ? "On" : "Off" }}</span>
+                <ChevronRight
+                  class="ph-set__chev"
+                  aria-hidden="true"
+                />
+              </button>
+              <a
+                class="ph-set"
+                href="/pair"
+                data-testid="phone-machines-pair"
+              >
+                <Smartphone
+                  class="ph-set__ic"
+                  aria-hidden="true"
+                />
+                <span class="ph-set__main"><span class="ph-set__t">Pair with another machine</span></span>
+                <ChevronRight
+                  class="ph-set__chev"
+                  aria-hidden="true"
+                />
+              </a>
+              <a
+                class="ph-set"
+                href="/?view=full"
+              >
+                <Laptop
+                  class="ph-set__ic"
+                  aria-hidden="true"
+                />
+                <span class="ph-set__main"><span class="ph-set__t">Open the full Fleet</span></span>
+                <ChevronRight
+                  class="ph-set__chev"
+                  aria-hidden="true"
+                />
+              </a>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
-    <button
-      v-if="!ios && tab !== 'machines'"
-      type="button"
-      class="ph-fab"
-      :class="{ 'ph-fab--small': fabSmall }"
-      aria-label="New session"
-      data-testid="phone-new-session-button"
-      @click="newSession"
-    >
-      <Plus
-        :size="24"
-        aria-hidden="true"
-      />
-      <span>New session</span>
-    </button>
     <PhoneTabBar
       :tab="tab"
       :needs-you="inbox.needsYou.length"
@@ -638,75 +682,71 @@ function onScroll(event: Event): void {
 </template>
 
 <style scoped>
-.inbox,
-.inbox__tab {
+.inbox {
   position: absolute;
   inset: 0;
 }
 
-.inbox__quiet {
-  margin: 6px 20px 8px;
-  font-size: var(--ph-t-sub);
-  color: var(--muted);
-}
-
-.inbox__section-gap {
-  margin-top: 22px;
-}
-
-.inbox__search {
-  padding: 0 16px 14px;
-}
-
-.inbox__sk-card {
-  box-shadow: none;
-}
-
-.inbox__sk-line {
-  margin: 12px 0 8px;
-}
-
-.inbox__sk-code {
-  width: 100%;
-  height: 38px;
-  border-radius: 10px;
-}
-
-.inbox__sk-btn {
-  height: 46px;
-  border-radius: 23px;
-}
-
-.inbox__sk-dot {
-  background: var(--ph-fill-strong);
-}
-
-.inbox__sk-sub {
-  margin-top: 7px;
-}
-
-.ph-row__title,
-.ph-row__sub {
-  display: block;
+.inbox__new {
+  margin-left: 2px;
 }
 
 .inbox__machine {
-  cursor: default;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.inbox__icon--home {
-  background: var(--accent);
+.inbox__machine--next {
+  margin-left: 6px;
 }
 
-.inbox__icon--other {
-  background: var(--queued);
+.inbox__filter {
+  padding: 6px 12px 2px;
 }
 
-.inbox__icon--bell {
-  background: var(--error);
+.inbox__none {
+  margin-top: 18px;
 }
 
-.inbox__icon--plain {
-  background: var(--muted);
+.inbox__swipe-hint {
+  margin-top: 14px;
+}
+
+.inbox__gap {
+  margin-top: 18px;
+}
+
+.inbox__first-card {
+  margin-top: 8px;
+}
+
+.inbox__sk-card {
+  border-color: var(--border);
+  background: var(--ph-panel);
+}
+
+.inbox__sk-title {
+  margin: 14px 0 4px;
+}
+
+.inbox__sk-cmd {
+  border-color: transparent;
+  background: var(--ph-tint-3);
+}
+
+.inbox__sk-btn {
+  height: 44px;
+  border-radius: var(--ph-r-btn);
+}
+
+.inbox__sk-glyph {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.inbox__sk-sub {
+  margin-top: 8px;
 }
 </style>

@@ -10,6 +10,18 @@ export function ago(timestamp: number | null | undefined, now: number): string {
   return days === 1 ? "yesterday" : `${days} days ago`;
 }
 
+/** "now", "3m", "5h", "2d", "3w": how long ago, compact, as the desktop's session list writes it. */
+export function short(timestamp: number | null | undefined, now: number): string {
+  if (!timestamp) return "";
+  const minutes = Math.floor(Math.max(0, now - timestamp) / 60_000);
+  if (minutes < 1) return "now";
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return days < 7 ? `${days}d` : `${Math.floor(days / 7)}w`;
+}
+
 /** "1m 12s", "6m", "2h 5m", "13d 6h": how long something has been going. */
 export function duration(fromTimestamp: number | null | undefined, now: number): string {
   if (!fromTimestamp) return "";

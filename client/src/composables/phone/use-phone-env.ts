@@ -1,25 +1,26 @@
 import { onUnmounted, shallowRef, watch } from "vue";
 import { useThemeStore } from "@/stores/theme";
-import { LOOK_STORAGE_KEY, isIosWebKit, readLookSignals, resolveLook, type PhoneLook } from "@/lib/phone/look";
+import { RETIRED_LOOK_KEY, isIosWebKit, readPlatformSignals } from "@/lib/phone/platform";
 
 /**
- * The phone's native layer, switched on while a phone page is on screen (PhoneShell calls this once):
- * - the look (iOS or Android) and light/dark as attributes on <html>, which scope phone.css;
- * - the phone's own text size (17px body, the iPhone's text size setting) instead of the desktop's;
- * - the status bar colour (`theme-color`) matching the page, black while a sheet pushes the page back;
+ * Fleet's phone layer, switched on while a phone page is on screen (PhoneShell calls this once):
+ * - `data-phone` and light/dark as attributes on <html>, which scope phone.css (one Fleet design on every phone);
+ * - the phone's own type scale instead of the desktop's font size setting;
+ * - the status bar colour (`theme-color`) matching the window chrome the panels float on;
  * - the keyboard: the app frame follows the visual viewport (--ph-vvh, --ph-vvtop) and --ph-kb is its height;
- * - instant pressed states on buttons and rows (with a ripple on Android), as native controls have.
+ * - instant pressed states on buttons and rows, as native controls have.
  * Everything is undone when the phone pages go away.
  */
 
-/** The look in use, for components that draw differently on each (back arrow, tab bar, New session button). */
-export const phoneLook = shallowRef<PhoneLook>("ios");
-/** How far a sheet has pushed the page back (0–1): the status bar goes black with it. */
-export const pageRecessed = shallowRef(0);
+/**
+ * Retired: the iOS/Android look is gone; this stays "ios" only until the screens still reading it move to Fleet's
+ * look in the next commits, then it goes.
+ */
+export const phoneLook = shallowRef<"ios" | "android">("ios");
 /** The keyboard's height over the page, in px. */
 export const keyboardHeight = shallowRef(0);
 
-const signals = typeof navigator === "undefined" ? { userAgent: "" } : readLookSignals();
+const signals = typeof navigator === "undefined" ? { userAgent: "" } : readPlatformSignals();
 export const iosWebKit = isIosWebKit(signals);
 export const standalone = typeof window !== "undefined"
   && (window.matchMedia?.("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true);
@@ -30,66 +31,29 @@ export function safariSwipedBack(): boolean {
   return iosWebKit && !standalone && performance.now() - lastEdgeTouch < 1200;
 }
 
-const PRESSABLE = ".ph-btn,.ph-navbtn,.ph-tab,.ph-row:not(.ph-row--static),.ph-step,.ph-send,.ph-composer__plus,.ph-link-btn,.ph-ask__open,.ph-fab,.ph-press";
-const DELAYED = ".ph-row,.ph-step,.ph-ask__open";
-
-function readLook(): PhoneLook {
-  let stored: string | null = null;
-  try {
-    stored = localStorage.getItem(LOOK_STORAGE_KEY);
-  } catch {
-    // no storage: detect every time
-  }
-  const query = new URLSearchParams(window.location.search).get("look");
-  const resolved = resolveLook({ query, stored, signals });
-  try {
-    if (resolved.store === null) localStorage.removeItem(LOOK_STORAGE_KEY);
-    else if (resolved.store) localStorage.setItem(LOOK_STORAGE_KEY, resolved.store);
-  } catch {
-    // no storage: the override lasts this page
-  }
-  return resolved.look;
-}
+const PRESSABLE = ".ph-btn,.ph-icon-btn,.ph-tab,.ph-srow,.ph-set:not(.ph-set--static),.ph-tool,.ph-choice,.ph-mi,.ph-chip,.ph-sel,.ph-send,.ph-link,.ph-mhead,.ph-pcard__open,.ph-press";
+const DELAYED = ".ph-srow,.ph-set,.ph-tool,.ph-choice,.ph-mhead,.ph-pcard__open";
 
 /** Pressed states: instant on buttons, a beat later on rows (so a scroll doesn't flash them). Port of kit.js. */
-function installPress(root: HTMLElement): () => void {
+function installPress(): () => void {
   let current: HTMLElement | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let startX = 0;
   let startY = 0;
   let addedAt = 0;
-  let ripple: HTMLElement | null = null;
 
-  const add = (el: HTMLElement, x: number, y: number): void => {
+  const add = (el: HTMLElement): void => {
     el.classList.add("is-pressed");
     addedAt = performance.now();
-    if (root.dataset.phone !== "android") return;
-    const style = getComputedStyle(el);
-    if (style.position === "static") return;
-    const rect = el.getBoundingClientRect();
-    const size = Math.hypot(Math.max(x - rect.left, rect.right - x), Math.max(y - rect.top, rect.bottom - y)) * 2;
-    ripple = document.createElement("span");
-    ripple.className = "ph-ripple";
-    Object.assign(ripple.style, { width: `${size}px`, height: `${size}px`, left: `${x - rect.left - size / 2}px`, top: `${y - rect.top - size / 2}px` });
-    if (style.overflow === "visible") el.style.overflow = "hidden";
-    el.appendChild(ripple);
   };
   const release = (quick: boolean): void => {
     clearTimeout(timer);
     const el = current;
     current = null;
     if (!el) return;
-    if (quick && !el.classList.contains("is-pressed")) add(el, startX, startY);
-    const done = ripple;
-    ripple = null;
+    if (quick && !el.classList.contains("is-pressed")) add(el);
     const wait = Math.max(0, 110 - (performance.now() - addedAt));
-    setTimeout(() => {
-      el.classList.remove("is-pressed");
-      if (done) {
-        done.classList.add("ph-ripple--out");
-        setTimeout(() => done.remove(), 500);
-      }
-    }, wait);
+    setTimeout(() => el.classList.remove("is-pressed"), wait);
   };
   const start = (target: EventTarget | null, x: number, y: number): void => {
     const el = (target as Element | null)?.closest?.<HTMLElement>(PRESSABLE);
@@ -97,16 +61,14 @@ function installPress(root: HTMLElement): () => void {
     current = el;
     startX = x;
     startY = y;
-    if (el.matches(DELAYED)) timer = setTimeout(() => current === el && add(el, x, y), 70);
-    else add(el, x, y);
+    if (el.matches(DELAYED)) timer = setTimeout(() => current === el && add(el), 70);
+    else add(el);
   };
   const cancel = (): void => {
     clearTimeout(timer);
     const el = current;
     current = null;
     el?.classList.remove("is-pressed");
-    ripple?.remove();
-    ripple = null;
   };
 
   const onTouchStart = (event: TouchEvent): void => {
@@ -199,20 +161,24 @@ export function usePhoneEnv() {
   };
   media?.addEventListener?.("change", onSystemScheme);
 
-  phoneLook.value = readLook();
-  root.dataset.phone = phoneLook.value;
+  root.dataset.phone = "";
+  try {
+    localStorage.removeItem(RETIRED_LOOK_KEY);
+  } catch {
+    // no storage: nothing was kept
+  }
   root.dataset.phoneScheme = scheme.value;
   if (standalone) root.classList.add("ph-standalone");
-  // The phone uses its own text size, not the desktop's setting.
+  // The phone uses its own type scale, not the desktop's font size setting.
   const desktopFontSize = root.style.fontSize;
   root.style.removeProperty("font-size");
   // index.html painted the background before the app loaded; from here phone.css paints it.
   root.style.removeProperty("background");
 
+  // The status bar is the window chrome the panels float on.
   function paintStatusBar(): void {
-    const background = getComputedStyle(root).getPropertyValue("--main-bg").trim() || (scheme.value === "light" ? "#F3F2EF" : "#0d0d10");
-    const color = pageRecessed.value > 0.5 ? "#000000" : background;
-    for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) meta.content = color;
+    const chrome = getComputedStyle(root).getPropertyValue("--main-bg").trim() || (scheme.value === "light" ? "#F3F2EF" : "#0d0d10");
+    for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) meta.content = chrome;
   }
 
   watch(scheme, (next) => {
@@ -220,10 +186,9 @@ export function usePhoneEnv() {
     paintStatusBar();
   });
   watch(() => theme.resolvedThemeId, () => requestAnimationFrame(paintStatusBar));
-  watch(pageRecessed, paintStatusBar);
   paintStatusBar();
 
-  const removePress = installPress(root);
+  const removePress = installPress();
   const removeViewport = installViewport(root);
 
   onUnmounted(() => {
@@ -236,5 +201,5 @@ export function usePhoneEnv() {
     if (desktopFontSize) root.style.fontSize = desktopFontSize;
   });
 
-  return { look: phoneLook, scheme };
+  return { scheme };
 }

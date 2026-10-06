@@ -20,6 +20,8 @@ export interface InboxMachineState {
   id: string;
   name: string;
   isHome: boolean;
+  /** "linux", "macos", "windows", when the machine says. */
+  os?: string | null;
   status: FeedStatus;
   /** When the machine last answered, in ms. */
   lastHeardAt: number | null;
@@ -36,6 +38,9 @@ export interface InboxItem {
   machineName: string;
   sessionId: string;
   title: string;
+  /** The folder it works in ("weave-fleet"), and its branch, when the machine says. */
+  folder: string | null;
+  branch: string | null;
   updatedAt: number;
   status: SessionListItem["sessionStatus"];
   activity: string | null;
@@ -53,6 +58,14 @@ export interface Inbox {
 /** Finished sessions stay on the home screen for a day. */
 export const FINISHED_FOR_MS = 24 * 60 * 60_000;
 
+/** The folder a session works in, by name: the project's or workspace's, else the last part of its path. */
+export function sessionFolder(session: Pick<SessionListItem, "projectName" | "workspaceDisplayName" | "sourceDirectory" | "workspaceDirectory">): string | null {
+  const named = session.projectName?.trim() || session.workspaceDisplayName?.trim();
+  if (named) return named;
+  const path = (session.sourceDirectory || session.workspaceDirectory || "").replace(/[\\/]+$/, "");
+  return path ? path.split(/[\\/]/).pop() || null : null;
+}
+
 function item(machine: InboxMachineState, session: SessionListItem): InboxItem {
   return {
     key: `${machine.id}:${session.session.id}`,
@@ -60,6 +73,8 @@ function item(machine: InboxMachineState, session: SessionListItem): InboxItem {
     machineName: machine.name,
     sessionId: session.session.id,
     title: session.session.title?.trim() || "Untitled session",
+    folder: sessionFolder(session),
+    branch: session.branch?.trim() || null,
     updatedAt: sessionUpdatedAt(session),
     status: session.sessionStatus,
     activity: session.activityStatus ?? null,
@@ -118,42 +133,51 @@ export function askPreview(entry: InboxItem): { lead: string; detail: string | n
   }
 }
 
-/** "hangar · Working · 6m", the line under a working or finished row. */
-export function rowInfo(entry: InboxItem, age: string): string {
-  if (entry.status === "active") {
-    const what = entry.activity === "retry" ? "Retrying" : entry.activity === "delegating" ? "Delegating" : "Working";
-    return `${entry.machineName} · ${entry.stale ? `${what} when last heard` : what} · ${age}`;
-  }
-  return `${entry.machineName} · ${age} ago`;
-}
-
 /** "hangar", "hangar and falcon", "hangar, falcon and shuttle". */
 export function listNames(names: readonly string[]): string {
   if (names.length <= 1) return names[0] ?? "";
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
+/** How a machine's dot looks under the page title: online filled, reaching it hollow, unreachable red. */
+export type MachineTone = "online" | "connecting" | "away";
+
 /**
- * The status line under the inbox's large title: which machines answer ("hangar and falcon online"), which don't,
- * and a tone for its dot (all well, some away, none reachable).
+ * The line under "Needs you": each machine with its dot, then a word for them all — "online", "falcon unreachable",
+ * "1 connecting", or "connecting…" before any has answered.
  */
-export function machinesLine(machines: readonly Pick<InboxMachineState, "name" | "status">[]): { text: string; tone: "online" | "partial" | "offline" | "connecting" } {
-  const online = machines.filter((m) => m.status === "live" || m.status === "polling").map((m) => m.name);
-  const away = machines.filter((m) => m.status === "unreachable").map((m) => m.name);
-  const connecting = machines.filter((m) => m.status === "connecting");
-  if (machines.length === 0 || (online.length === 0 && away.length === 0)) return { text: "Connecting…", tone: "connecting" };
+export function machinesStatus(machines: readonly Pick<InboxMachineState, "name" | "status">[]): { machines: { name: string; tone: MachineTone }[]; note: string } {
+  const list = machines.map((m) => ({ name: m.name, tone: (m.status === "live" || m.status === "polling" ? "online" : m.status === "unreachable" ? "away" : "connecting") as MachineTone }));
+  const online = list.filter((m) => m.tone === "online").length;
+  const away = list.filter((m) => m.tone === "away").map((m) => m.name);
+  const connecting = list.length - online - away.length;
+  if (online + away.length === 0) return { machines: list, note: "connecting…" };
   const parts: string[] = [];
-  if (online.length) parts.push(`${listNames(online)} online`);
   if (away.length) parts.push(`${listNames(away)} unreachable`);
-  if (connecting.length && online.length + away.length > 0) parts.push(`${connecting.length} connecting`);
-  const tone = away.length === 0 ? (connecting.length ? "connecting" : "online") : online.length ? "partial" : "offline";
-  return { text: parts.join(" · "), tone: tone === "connecting" && online.length ? "online" : tone };
+  else if (!connecting) parts.push("online");
+  if (connecting) parts.push(`${connecting} connecting`);
+  return { machines: list, note: parts.join(" · ") };
 }
 
-/** The line under a session row: "falcon · Working · 6m", "hangar · Needs you · 3 min ago", "hangar · 22 min ago". */
-export function sessionLine(entry: InboxItem, words: { duration: string; ago: string }): string {
-  if (entry.status === "active") return rowInfo(entry, words.duration);
-  if (entry.status === "waiting_input") return [entry.machineName, "Needs you", words.ago].filter(Boolean).join(" · ");
-  if (entry.status === "error") return [entry.machineName, "Stopped with an error", words.ago].filter(Boolean).join(" · ");
-  return [entry.machineName, words.ago].filter(Boolean).join(" · ");
+/** The status glyph in front of a session row: amber diamond, working dots, red triangle, or a quiet dot. */
+export function rowGlyph(entry: Pick<InboxItem, "status">): "waiting" | "working" | "error" | "quiet" {
+  if (entry.status === "waiting_input") return "waiting";
+  if (entry.status === "active") return "working";
+  if (entry.status === "error") return "error";
+  return "quiet";
+}
+
+/** The line under a row's title: where it is and its branch — "falcon · refactor/references" in the inbox (by
+ * machine), "weave-fleet · fix/flaky-reconnect" under a machine's heading (by folder). */
+export function rowPlace(entry: Pick<InboxItem, "machineName" | "folder" | "branch">, by: "machine" | "folder"): string {
+  const where = by === "folder" ? entry.folder ?? entry.machineName : entry.machineName;
+  return [where, entry.branch].filter(Boolean).join(" · ");
+}
+
+/** The right of a row: "Needs you" (amber), "Failed" (red), how long it's been working, or how long ago it finished. */
+export function rowMeta(entry: Pick<InboxItem, "status">, words: { duration: string; short: string }): { text: string; tone: "waiting" | "error" | "quiet" } {
+  if (entry.status === "waiting_input") return { text: "Needs you", tone: "waiting" };
+  if (entry.status === "error") return { text: "Failed", tone: "error" };
+  if (entry.status === "active") return { text: words.duration, tone: "quiet" };
+  return { text: words.short, tone: "quiet" };
 }
