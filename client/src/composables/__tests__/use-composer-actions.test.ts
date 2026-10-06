@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { canSendQueuedNow, composerStatus, harnessCapabilities, primaryAction, routeDraft, type HarnessCapabilities } from "../use-composer-actions";
 
-const steers: HarnessCapabilities = { canSteer: true, steersByDefault: true, supportsShell: true, supportsSide: true };
-const plain: HarnessCapabilities = { canSteer: false, steersByDefault: false, supportsShell: false, supportsSide: false };
+const steers: HarnessCapabilities = { canSteer: true, steersByDefault: true, supportsShell: true, supportsSide: true, supportsImages: true };
+const plain: HarnessCapabilities = { canSteer: false, steersByDefault: false, supportsShell: false, supportsSide: false, supportsImages: false };
 
 describe("composerStatus", () => {
   it("reads busy, waiting and idle", () => {
@@ -17,15 +17,22 @@ describe("composerStatus", () => {
 
 describe("harnessCapabilities", () => {
   const harnesses = [
-    { type: "opencode2", capabilities: { supportsSteering: true, supportsShellCommands: true, supportsSideConversations: true } },
-    { type: "opencode", capabilities: { supportsSteering: true, supportsShellCommands: true, supportsSideConversations: false } },
-    { type: "claude-code", capabilities: {} },
+    { type: "opencode2", capabilities: { supportsSteering: true, steersByDefault: true, supportsShellCommands: true, supportsSideConversations: true, supportsImageAttachments: true } },
+    { type: "opencode", capabilities: { supportsSteering: true, supportsShellCommands: true, supportsSideConversations: false, supportsImageAttachments: true } },
+    { type: "claude-code", capabilities: { supportsSteering: true, steersByDefault: true, supportsImageAttachments: true } },
+    { type: "pi", capabilities: {} },
   ];
 
-  it("steers by default only on OpenCode 2", () => {
+  it("steers by default where the harness says so", () => {
     expect(harnessCapabilities("opencode2", harnesses)).toEqual(steers);
     expect(harnessCapabilities("opencode", harnesses)).toMatchObject({ canSteer: true, steersByDefault: false, supportsSide: false });
-    expect(harnessCapabilities("claude-code", harnesses)).toEqual(plain);
+    expect(harnessCapabilities("claude-code", harnesses)).toMatchObject({ canSteer: true, steersByDefault: true, supportsShell: false });
+    expect(harnessCapabilities("pi", harnesses)).toEqual(plain);
+  });
+
+  it("offers images only where the harness passes them on", () => {
+    expect(harnessCapabilities("claude-code", harnesses).supportsImages).toBe(true);
+    expect(harnessCapabilities("pi", harnesses).supportsImages).toBe(false);
   });
 });
 

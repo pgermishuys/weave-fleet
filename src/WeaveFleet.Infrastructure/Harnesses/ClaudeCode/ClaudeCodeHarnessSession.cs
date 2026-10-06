@@ -125,6 +125,19 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     // A subagent's child session: Claude Code can't prompt it, so this instance only reads what its parent saved.
     private readonly bool _readOnlyChild;
 
+    // The bridge token each process gets for calling Fleet (FLEET_URL), and where Fleet listens; none in tests.
+    private readonly ClaudeCodeBridgeTokenRegistry? _bridgeTokens;
+    private readonly Func<string?> _fleetUrl;
+
+    // The models the picker offers; Claude Code's own list, from the runtime.
+    private readonly ClaudeCodeCatalog? _catalog;
+
+    // AskUserQuestion calls waiting on the user, by tool call: Claude Code's request, and the questions it asked.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, PendingQuestion> _questions = new(StringComparer.Ordinal);
+
+    // What the user answered each question call with, kept with the call once it returns.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, IReadOnlyList<IReadOnlyList<string>>> _answers = new(StringComparer.Ordinal);
+
     private string? _claudeSessionId;    // captured from init message, used for --resume
     // The memory notes from the session's first prompt, sent with every prompt after it: a system prompt that changes
     // between --resume runs can't reuse the conversation's prompt cache.
@@ -155,7 +168,10 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         string? projectId = null,
         string? projectName = null,
         string? claudeSessionId = null,
-        bool readOnlyChild = false)
+        bool readOnlyChild = false,
+        ClaudeCodeBridgeTokenRegistry? bridgeTokens = null,
+        Func<string?>? fleetUrl = null,
+        ClaudeCodeCatalog? catalog = null)
     {
         InstanceId = instanceId;
         _fleetSessionId = fleetSessionId;
@@ -172,6 +188,9 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         _projectName = projectName;
         _claudeSessionId = claudeSessionId;
         _readOnlyChild = readOnlyChild;
+        _bridgeTokens = bridgeTokens;
+        _fleetUrl = fleetUrl ?? (() => null);
+        _catalog = catalog;
         _root = new Conversation(fleetSessionId);
         ChildSessions = MakeChildSessionAsync;
     }
@@ -225,6 +244,10 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 "This is a Claude Code subagent's session: Claude Code can't prompt a subagent on its own. Ask the session that started it.");
         }
 
+        // A message for the running turn goes straight in: Claude Code reads it at the agent's next step.
+        if (options?.Delivery == PromptDelivery.Steer && await TrySteerAsync(text, options, ct).ConfigureAwait(false))
+            return;
+
         await _promptLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
@@ -237,7 +260,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             {
                 // The conversation is read back from Fleet's database, so the prompt is saved there, under
                 // the id Fleet already showed it with.
-                await PersistUserPromptAsync(text, options).ConfigureAwait(false);
+                await PersistUserPromptAsync(text, options, steered: false).ConfigureAwait(false);
 
                 // 2. Emit session busy status
                 var busyEvent = ClaudeCodeMapper.CreateSessionStatusEvent(_fleetSessionId, "busy");
@@ -246,7 +269,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 // 3. Send it to the session's claude process, starting one if there's none, with Fleet's notes to the
                 //    model ahead of it.
                 _memoryNotes ??= options?.MemoryNotes;
-                var line = ClaudeCodeInput.UserMessage(text, options?.ModelNotes);
+                var line = ClaudeCodeInput.UserMessage(text, options?.ModelNotes, options?.Attachments);
                 var process = await EnsureProcessAsync(options, ct).ConfigureAwait(false);
                 if (!await SendToAsync(process, turn, line, ct).ConfigureAwait(false))
                 {
@@ -275,6 +298,31 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         {
             _promptLock.Release();
         }
+    }
+
+    /// <summary>
+    /// Writes a prompt into the running turn. Claude Code reads it when the agent's current step ends (a tool call
+    /// returns), in the same turn, and goes on from there; the command running meanwhile isn't stopped (Fleet doesn't
+    /// send the <c>priority: now</c> that would). Claude Code doesn't write the message back, so it's saved here, under
+    /// the id Fleet showed it with when it was sent. False when no turn is running on a live process: the prompt then
+    /// starts one of its own.
+    /// </summary>
+    private async Task<bool> TrySteerAsync(string text, PromptOptions options, CancellationToken ct)
+    {
+        ClaudeCodeProcessManager? process;
+        lock (_gate)
+            process = _turn?.Process is { IsRunning: true } running && ReferenceEquals(running, _process) ? running : null;
+        if (process is null)
+            return false;
+
+        LogSendPrompt(_logger, InstanceId, null);
+        var line = ClaudeCodeInput.UserMessage(text, options.ModelNotes, options.Attachments);
+        if (!await process.WriteLineAsync(line, ct).ConfigureAwait(false))
+            return false;
+
+        // Had the turn just ended, Claude Code starts one with it by itself, which Fleet follows like any other.
+        await PersistUserPromptAsync(text, options, steered: true).ConfigureAwait(false);
+        return true;
     }
 
     /// <summary>Waits for a running turn to end, then starts Fleet's.</summary>
@@ -314,17 +362,16 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     }
 
     /// <summary>
-    /// The session's claude process, set up for this prompt: a running one switches model and permission mode with
-    /// control requests; one that can't, or that runs without Fleet's permission prompts when they're now needed (or the
-    /// other way round), is replaced. A new one resumes the conversation.
+    /// The session's claude process, set up for this prompt: a running one switches model, effort and permission mode
+    /// with control requests; one that can't is replaced. A new one resumes the conversation.
     /// </summary>
     private async Task<ClaudeCodeProcessManager> EnsureProcessAsync(PromptOptions? options, CancellationToken ct)
     {
         var policy = _permissions.Policy;
         var wanted = new ProcessSettings(
-            AsksForPermission: policy.Level != PermissionLevels.All,
             PermissionMode: PermissionModeFor(policy),
-            Model: options?.ModelId ?? _config.DefaultModel);
+            Model: options?.ModelId ?? _config.DefaultModel,
+            Effort: options?.Effort);
 
         ClaudeCodeProcessManager? process;
         ProcessSettings? current;
@@ -336,19 +383,22 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
 
         if (process is { IsRunning: true } && current is not null)
         {
+            // A prompt that names no model or effort keeps what the process runs.
             var model = wanted.Model ?? current.Model;
-            if (current.AsksForPermission == wanted.AsksForPermission
-                && await SwitchAsync(process, current.PermissionMode, wanted.PermissionMode,
+            var effort = wanted.Effort ?? current.Effort;
+            if (await SwitchAsync(process, current.PermissionMode, wanted.PermissionMode,
                     id => ClaudeCodeInput.SetPermissionMode(id, wanted.PermissionMode), ct).ConfigureAwait(false)
                 && await SwitchAsync(process, current.Model, model,
-                    id => ClaudeCodeInput.SetModel(id, model!), ct).ConfigureAwait(false))
+                    id => ClaudeCodeInput.SetModel(id, model!), ct).ConfigureAwait(false)
+                && await SwitchAsync(process, current.Effort, effort,
+                    id => ClaudeCodeInput.SetEffort(id, effort), ct).ConfigureAwait(false))
             {
                 lock (_gate)
-                    _processSettings = wanted with { Model = model };
+                    _processSettings = wanted with { Model = model, Effort = effort };
                 return process;
             }
 
-            await StopProcessAsync(process, "it couldn't switch to the prompt's model or permission settings").ConfigureAwait(false);
+            await StopProcessAsync(process, "it couldn't switch to the prompt's model, effort or permission settings").ConfigureAwait(false);
         }
         else if (process is not null)
         {
@@ -380,19 +430,35 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         var processManager = new ClaudeCodeProcessManager(
             _loggerFactory.CreateLogger<ClaudeCodeProcessManager>());
 
+        // The agent reaches Fleet's API under a path that names this process (FLEET_URL), so its calls are this session's
+        // whatever Fleet binds to. The token is the process's own: it stops working when the process ends.
+        var environment = new Dictionary<string, string>(_environmentVariables, StringComparer.Ordinal);
+        if (_bridgeTokens is not null)
+        {
+            var bridgeToken = _bridgeTokens.Issue(_fleetSessionId, _ownerUserId);
+            processManager.BridgeToken = bridgeToken;
+            environment["FLEET_BRIDGE_TOKEN"] = bridgeToken;
+            environment["FLEET_HARNESS_SESSION_ID"] = _fleetSessionId;
+            if (_fleetUrl() is { Length: > 0 } fleetUrl)
+                environment["FLEET_URL"] = $"{fleetUrl.TrimEnd('/')}{WeaveFleet.Application.Sessions.SessionMessages.AgentPathPrefix}/{bridgeToken}";
+        }
+
         var procOptions = new ClaudeCodeProcessOptions
         {
             BinaryPath = _config.BinaryPath,
             WorkingDirectory = _workingDirectory,
             SessionId = _claudeSessionId,  // null for the session's first process
             Model = settings.Model,
+            Effort = settings.Effort,
             PermissionMode = settings.PermissionMode,
-            AsksForPermission = settings.AsksForPermission,
+            // Always: at "Allow everything" Fleet answers every ask at once, but without it Claude Code takes
+            // AskUserQuestion away from the agent, since nothing could answer it.
+            AsksForPermission = true,
             AllowedTools = _config.AllowedTools,
             MaxTurns = _config.MaxTurns,
             MaxBudgetUsd = _config.MaxBudgetUsd,
             AppendSystemPrompt = _memoryNotes,
-            EnvironmentVariables = _environmentVariables,
+            EnvironmentVariables = environment,
         };
 
         StreamReader stdout;
@@ -402,6 +468,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         }
         catch
         {
+            RevokeBridgeToken(processManager);
             await processManager.DisposeAsync().ConfigureAwait(false);
             throw;
         }
@@ -587,6 +654,9 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         SettlePermission(requestId, reply);
     }
 
+    /// <summary>Whether anything still waits on the user: a permission ask or a question.</summary>
+    private bool WaitsOnUser => _permissions.Pending.Any || !_questions.IsEmpty;
+
     /// <summary>
     /// Claude Code's mode for a policy: it allows reading itself, and asks Fleet about the rest. At
     /// <see cref="PermissionLevels.All"/> it's the configured mode, which bypasses asking.
@@ -606,6 +676,16 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     {
         var tool = request.ToolName ?? "tool";
         var input = request.Input.ValueKind == System.Text.Json.JsonValueKind.Undefined ? default : request.Input.Clone();
+
+        // A question is the user's to answer, at any permission level: its call shows as Fleet's question card.
+        if (ClaudeCodeTools.IsQuestion(tool) && request.ToolUseId is { } questionCall)
+        {
+            _questions[questionCall] = new PendingQuestion(requestId, input);
+            await _eventChannel.Writer.WriteAsync(PermissionEvents.Status(ActivityStatuses.WaitingInput, _fleetSessionId), CancellationToken.None)
+                .ConfigureAwait(false);
+            return;
+        }
+
         if (_permissions.Decide(tool, ClaudeCodePermissions.Patterns(tool, input)) is { } decision)
         {
             await process.WriteLineAsync(
@@ -633,7 +713,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         if (_permissions.Pending.Remove(requestId) is not { } settled)
             return;
         _eventChannel.Writer.TryWrite(PermissionEvents.Replied(settled.Ask, reply, _fleetSessionId));
-        if (!_permissions.Pending.Any && reply != PermissionReplies.Gone)
+        if (!WaitsOnUser && reply != PermissionReplies.Gone)
             _eventChannel.Writer.TryWrite(PermissionEvents.Status(ActivityStatuses.Busy, _fleetSessionId));
     }
 
@@ -641,17 +721,74 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     private void ForgetPermissionAsks()
     {
         _askInputs.Clear();
+        _questions.Clear();
         foreach (var entry in _permissions.Pending.Clear())
             _eventChannel.Writer.TryWrite(PermissionEvents.Replied(entry.Ask, PermissionReplies.Gone, _fleetSessionId));
     }
 
     /// <inheritdoc />
-    public Task AnswerQuestionAsync(string requestId, IReadOnlyList<IReadOnlyList<string>> answers, CancellationToken ct)
-        => throw new NotSupportedException("The ClaudeCode harness does not support the question tool.");
+    /// <remarks>
+    /// Answers an <c>AskUserQuestion</c> call. <paramref name="requestId"/> is the tool call's id (what the question card
+    /// knows) or Claude Code's request's. The call runs with its questions and the answers, by question text, the
+    /// chosen labels joined with ", ".
+    /// </remarks>
+    public async Task AnswerQuestionAsync(string requestId, IReadOnlyList<IReadOnlyList<string>> answers, CancellationToken ct)
+    {
+        var (callId, question) = FindQuestion(requestId);
+        var byQuestion = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (question.Input.ValueKind == System.Text.Json.JsonValueKind.Object
+            && question.Input.TryGetProperty("questions", out var questions)
+            && questions.ValueKind == System.Text.Json.JsonValueKind.Array)
+        {
+            var index = 0;
+            foreach (var asked in questions.EnumerateArray())
+            {
+                if (PermissionEvents.String(asked, "question") is { } text)
+                    byQuestion[text] = index < answers.Count ? string.Join(", ", answers[index]) : string.Empty;
+                index++;
+            }
+
+            _answers[callId] = answers;
+            await AnswerAsync(callId, question, ClaudeCodeInput.Answer(question.RequestId, questions, byQuestion), ct).ConfigureAwait(false);
+            return;
+        }
+
+        await AnswerAsync(callId, question, ClaudeCodeInput.Deny(question.RequestId, "The question couldn't be read, so it wasn't asked."), ct)
+            .ConfigureAwait(false);
+    }
 
     /// <inheritdoc />
+    /// <remarks>The call is refused, and the agent told the user dismissed it.</remarks>
     public Task RejectQuestionAsync(string requestId, CancellationToken ct)
-        => throw new NotSupportedException("The ClaudeCode harness does not support the question tool.");
+    {
+        var (callId, question) = FindQuestion(requestId);
+        return AnswerAsync(callId, question, ClaudeCodeInput.Deny(question.RequestId, "The user dismissed the question without answering."), ct);
+    }
+
+    private (string CallId, PendingQuestion Question) FindQuestion(string requestId)
+    {
+        if (_questions.TryGetValue(requestId, out var byCall))
+            return (requestId, byCall);
+        foreach (var (callId, question) in _questions)
+        {
+            if (question.RequestId == requestId)
+                return (callId, question);
+        }
+
+        throw new KeyNotFoundException($"Question '{requestId}' isn't waiting for an answer.");
+    }
+
+    private async Task AnswerAsync(string callId, PendingQuestion question, string line, CancellationToken ct)
+    {
+        if (_process is not { } process || !await process.WriteLineAsync(line, ct).ConfigureAwait(false))
+        {
+            _questions.TryRemove(callId, out _);
+            throw new KeyNotFoundException($"Question '{callId}' isn't waiting for an answer: Claude Code has stopped.");
+        }
+
+        if (_questions.TryRemove(new KeyValuePair<string, PendingQuestion>(callId, question)) && !WaitsOnUser)
+            _eventChannel.Writer.TryWrite(PermissionEvents.Status(ActivityStatuses.Busy, _fleetSessionId));
+    }
 
     /// <inheritdoc />
     public Task<HealthCheckResult> CheckHealthAsync(CancellationToken ct)
@@ -765,8 +902,9 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         => Task.FromResult<IReadOnlyList<CommandInfo>>([]);
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<ProviderInfo>> GetProvidersAsync(CancellationToken ct)
-        => Task.FromResult<IReadOnlyList<ProviderInfo>>([]);
+    /// <remarks>Claude Code's own list, with each model's efforts (<see cref="ClaudeCodeCatalog"/>).</remarks>
+    public async Task<IReadOnlyList<ProviderInfo>> GetProvidersAsync(CancellationToken ct)
+        => _catalog is null ? [] : await _catalog.GetProvidersAsync(_workingDirectory, ct).ConfigureAwait(false);
 
     /// <inheritdoc />
     /// <remarks>Ends the claude process, and with it any work the agent left running in the background.</remarks>
@@ -1033,6 +1171,23 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 {
                     await ReportWorkAsync(TrackBackgroundWork(system), children).ConfigureAwait(false);
                 }
+                else if (msg is ClaudeCodeStreamEvent { Event: { } streamed } streamEvent)
+                {
+                    // The text as the model writes it: a subagent's in its child session, the session's own in its turn.
+                    Conversation? conversation;
+                    if (streamEvent.ParentToolUseId is { } subagentCall)
+                    {
+                        conversation = await ChildAsync(subagentCall, children).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        JoinTurn(processManager);
+                        conversation = _root;
+                    }
+
+                    if (conversation is not null)
+                        StreamPart(conversation, streamed);
+                }
                 else if (msg is ClaudeCodeAssistantMessage assistantMsg)
                 {
                     ObserveToolCalls(assistantMsg);
@@ -1082,6 +1237,11 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 else if (msg is ClaudeCodeControlCancelRequest { RequestId: { } cancelledId })
                 {
                     SettlePermission(cancelledId, PermissionReplies.Gone);
+                    foreach (var (callId, question) in _questions)
+                    {
+                        if (question.RequestId == cancelledId)
+                            _questions.TryRemove(callId, out _);
+                    }
                 }
                 else if (msg is ClaudeCodeResultMessage result)
                 {
@@ -1211,7 +1371,34 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
 
         var child = new Conversation(childSessionId);
         children[callId] = child;
+        if (parent is not null)
+            await LinkChildAsync(parent, callId, childSessionId).ConfigureAwait(false);
         return child;
+    }
+
+    /// <summary>
+    /// The subagent call names the session its steps went to (<c>metadata.sessionId</c>), as OpenCode's do, so its row
+    /// opens it wherever the conversation is read, after a reload too.
+    /// </summary>
+    private async Task LinkChildAsync(Conversation parent, string callId, string childSessionId)
+    {
+        if (!parent.ToolCallMessageIds.TryGetValue(callId, out var claudeMessageId)
+            || !parent.Messages.TryGetValue(claudeMessageId, out var message))
+        {
+            return;
+        }
+
+        var parts = message.Parts.ToList();
+        var index = parts.FindIndex(part => part is ToolUsePart tool && tool.ToolCallId == callId);
+        if (index < 0)
+            return;
+
+        var linked = (ToolUsePart)parts[index] with { Metadata = ClaudeCodeTools.ChildSession(childSessionId) };
+        parts[index] = linked;
+        message = message with { Parts = parts };
+        parent.Messages[claudeMessageId] = message;
+        await PersistMessageAsync(parent.FleetSessionId, message, [ClaudeCodeMapper.CreatePartUpdatedEvent(message.Id, parent.FleetSessionId, linked, index)])
+            .ConfigureAwait(false);
     }
 
     /// <summary>Fleet's hidden child session for a subagent, made like any delegated child (<see cref="SessionOrchestrator"/>).</summary>
@@ -1234,6 +1421,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             turn = _turn is { } running && (running.Process is null || ReferenceEquals(running.Process, processManager)) ? running : null;
 
         ForgetPermissionAsks();
+        await SettleStreamingAsync(_root).ConfigureAwait(false);
 
         // Extract analytics
         if (_analyticsCollector is not null)
@@ -1318,6 +1506,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         // A subagent cut off with its process: its calls won't finish, and it isn't working any more.
         foreach (var child in children.Values.OfType<Conversation>())
         {
+            await SettleStreamingAsync(child).ConfigureAwait(false);
             await FailUnfinishedToolsAsync(child).ConfigureAwait(false);
             if (child.Busy)
             {
@@ -1328,6 +1517,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
 
         if (turn is not null)
         {
+            await SettleStreamingAsync(_root).ConfigureAwait(false);
             await FailUnfinishedToolsAsync(_root).ConfigureAwait(false);
 
             if (!_aborting && !stopping)
@@ -1339,6 +1529,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
 
         if (current)
             ForgetPermissionAsks();
+        RevokeBridgeToken(processManager);
         await processManager.DisposeAsync().ConfigureAwait(false);
 
         if (turn is null)
@@ -1353,9 +1544,117 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             _eventChannel.Writer.TryWrite(ClaudeCodeMapper.CreateSessionIdleEvent(_fleetSessionId));
     }
 
+    /// <summary>The process ended: its calls to Fleet's API stop working.</summary>
+    private void RevokeBridgeToken(ClaudeCodeProcessManager processManager)
+    {
+        if (processManager.BridgeToken is { } token)
+            _bridgeTokens?.Revoke(token);
+    }
+
+    /// <summary>
+    /// A streaming event (<c>--include-partial-messages</c>): the model's text and thinking go out as part deltas while
+    /// it writes them, under the message and part ids the finished blocks get, so the finished <c>assistant</c> line
+    /// replaces what the deltas built up. Deltas aren't saved; the finished block is.
+    /// </summary>
+    private void StreamPart(Conversation conversation, ClaudeCodeStreamEventBody streamed)
+    {
+        switch (streamed.Type)
+        {
+            case "message_start" when streamed.Message?.Id is { } claudeId:
+                // Fleet's id for the message is given now, so the deltas name the message the finished blocks go to.
+                if (!conversation.Messages.ContainsKey(claudeId))
+                {
+                    conversation.Messages[claudeId] = new HarnessMessage
+                    {
+                        Id = AscendingMessageId.New(),
+                        Role = "assistant",
+                        Parts = [],
+                        Timestamp = DateTimeOffset.UtcNow,
+                        ModelId = streamed.Message.Model,
+                    };
+                }
+
+                conversation.StreamingMessageId = claudeId;
+                conversation.Streaming = null;
+                break;
+
+            case "content_block_start" when conversation.StreamingMessageId is { } claudeId
+                                            && conversation.Messages.TryGetValue(claudeId, out var message):
+                // The part the finished block will be: the message's next.
+                var partId = $"{message.Id}-part-{message.Parts.Count}";
+                conversation.Streaming = streamed.ContentBlock switch
+                {
+                    ClaudeCodeTextBlock => new StreamingBlock(claudeId, "text", partId),
+                    ClaudeCodeThinkingBlock => new StreamingBlock(claudeId, "reasoning", partId),
+                    _ => null,
+                };
+                break;
+
+            case "content_block_delta" when conversation.Streaming is { } block
+                                            && Delta(streamed.Delta, block.Kind) is { Length: > 0 } delta
+                                            && conversation.Messages.TryGetValue(block.ClaudeMessageId, out var streaming):
+                if (!block.Shown)
+                {
+                    block.Shown = true;
+                    MessagePart empty = block.Kind == "text" ? new TextPart(string.Empty) { PartId = block.PartId } : new ReasoningPart(string.Empty) { PartId = block.PartId };
+                    _eventChannel.Writer.TryWrite(ForSession(ClaudeCodeMapper.CreateMessageUpdatedEvent(streaming, conversation.FleetSessionId), conversation.FleetSessionId));
+                    if (ClaudeCodeMapper.CreatePartUpdatedEvent(streaming.Id, conversation.FleetSessionId, empty, streaming.Parts.Count) is { } started)
+                        _eventChannel.Writer.TryWrite(ForSession(started, conversation.FleetSessionId));
+                }
+
+                block.Text.Append(delta);
+                _eventChannel.Writer.TryWrite(ForSession(
+                    ClaudeCodeMapper.CreatePartDeltaEvent(streaming.Id, conversation.FleetSessionId, block.PartId, delta), conversation.FleetSessionId));
+                break;
+
+            case "message_stop":
+                conversation.Streaming = null;
+                break;
+        }
+    }
+
+    /// <summary>What a delta adds to a block of <paramref name="kind"/>; null for anything else (a tool's input, a signature).</summary>
+    private static string? Delta(ClaudeCodeStreamDelta? delta, string kind) => (delta?.Type, kind) switch
+    {
+        ("text_delta", "text") => delta.Text,
+        ("thinking_delta", "reasoning") => delta.Thinking,
+        _ => null,
+    };
+
+    /// <summary>
+    /// A block whose first words went out but whose finished line never came (the turn was stopped, the process ended):
+    /// it's saved as far as it got, so the conversation shows after a reload what it showed then.
+    /// </summary>
+    private async Task SettleStreamingAsync(Conversation conversation)
+    {
+        if (conversation.Streaming is not { Shown: true } block || !conversation.Messages.TryGetValue(block.ClaudeMessageId, out var message))
+        {
+            conversation.Streaming = null;
+            return;
+        }
+
+        conversation.Streaming = null;
+        var text = block.Text.ToString();
+        MessagePart part = block.Kind == "text" ? new TextPart(text) { PartId = block.PartId } : new ReasoningPart(text) { PartId = block.PartId };
+        var index = message.Parts.Count;
+        message = message with { Parts = [.. message.Parts, part] };
+        conversation.Messages[block.ClaudeMessageId] = message;
+        var partEvent = ClaudeCodeMapper.CreatePartUpdatedEvent(message.Id, conversation.FleetSessionId, part, index);
+        await PersistMessageAsync(conversation.FleetSessionId, message, [partEvent]).ConfigureAwait(false);
+        if (partEvent is not null)
+            _eventChannel.Writer.TryWrite(ForSession(partEvent, conversation.FleetSessionId));
+    }
+
     /// <summary>Adds an assistant line's content blocks to its message in <paramref name="conversation"/> and saves it.</summary>
     private async Task AddAssistantBlocksAsync(Conversation conversation, ClaudeCodeAssistantMessage assistantMsg)
     {
+        foreach (var block in assistantMsg.Message?.Content ?? [])
+        {
+            // Claude Code's own name and input, which say what a file tool changed once it returns.
+            if (block is ClaudeCodeToolUseBlock { Id: { } callId } raw)
+                conversation.ToolCalls[callId] = raw;
+        }
+
         var incoming = ClaudeCodeMapper.ToHarnessMessage(assistantMsg, DateTimeOffset.UtcNow);
         if (incoming.Parts.Count == 0)
             return;
@@ -1390,7 +1689,26 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         message = message with { Parts = parts, ModelId = message.ModelId ?? incoming.ModelId };
         conversation.Messages[incoming.Id] = message;
         await PersistMessageAsync(conversation.FleetSessionId, message, partEvents).ConfigureAwait(false);
+
+        // The block the deltas built up is finished. Its saved event goes out after the save; this one follows the
+        // deltas on their own way, so a late delta can't land after it and double the text.
+        if (conversation.Streaming is { Shown: true } streamed && streamed.ClaudeMessageId == incoming.Id)
+        {
+            conversation.Streaming = null;
+            foreach (var partEvent in partEvents)
+            {
+                if (partEvent is not null && PartId(partEvent) == streamed.PartId)
+                    _eventChannel.Writer.TryWrite(ForSession(partEvent, conversation.FleetSessionId));
+            }
+        }
     }
+
+    private static string? PartId(HarnessEvent partEvent)
+        => partEvent.Payload is { ValueKind: System.Text.Json.JsonValueKind.Object } payload
+           && payload.TryGetProperty("part", out var part)
+           && part.ValueKind == System.Text.Json.JsonValueKind.Object
+            ? PermissionEvents.String(part, "id")
+            : null;
 
     /// <summary>
     /// A user line in a subagent's conversation: the results of its tool calls, or what it was asked, which opens its
@@ -1453,6 +1771,16 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 State = isError ? ToolUseState.Error : ToolUseState.Completed,
                 Error = isError ? content : null,
             };
+
+            // What an edit changed, from the patch Claude Code reports; what the user answered a question with.
+            if (!isError && conversation.ToolCalls.TryGetValue(callId, out var raw)
+                && ClaudeCodeTools.Diff(raw.Name ?? string.Empty, raw.Input, userMsg.ToolUseResult) is { } diff)
+            {
+                finished = finished with { Metadata = ClaudeCodeTools.Metadata(diff) };
+            }
+
+            if (_answers.TryRemove(callId, out var answers))
+                finished = finished with { Metadata = ClaudeCodeTools.Metadata(null, answers) };
             parts[index] = finished;
             parts.Add(new ToolResultPart(callId, content, isError));
 
@@ -1565,7 +1893,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         }
     }
 
-    private async Task PersistUserPromptAsync(string text, PromptOptions? options)
+    private async Task PersistUserPromptAsync(string text, PromptOptions? options, bool steered)
     {
         try
         {
@@ -1577,7 +1905,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 DateTimeOffset.UtcNow,
                 options?.Agent,
                 options?.MessageId ?? AscendingMessageId.New(),
-                options?.Attachments);
+                options?.Attachments) with { Steered = steered };
             await repo.UpsertAsync(MessagePersistenceService.ToPersistedMessage(_fleetSessionId, message)).ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -1626,6 +1954,15 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         public Dictionary<string, HarnessMessage> Messages { get; } = new(StringComparer.Ordinal);
         public Dictionary<string, string> ToolCallMessageIds { get; } = new(StringComparer.Ordinal);
 
+        /// <summary>Claude Code's own tool calls, by id, for what they did once they return.</summary>
+        public Dictionary<string, ClaudeCodeToolUseBlock> ToolCalls { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>The message the model is writing, by Claude's id (<c>message_start</c>).</summary>
+        public string? StreamingMessageId { get; set; }
+
+        /// <summary>The text or thinking block the model is writing now, if any.</summary>
+        public StreamingBlock? Streaming { get; set; }
+
         /// <summary>What a subagent was asked, once its child session shows it.</summary>
         public string? Prompt { get; set; }
 
@@ -1639,11 +1976,30 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         {
             Messages.Clear();
             ToolCallMessageIds.Clear();
+            ToolCalls.Clear();
+            StreamingMessageId = null;
+            Streaming = null;
         }
     }
 
+    /// <summary>An <c>AskUserQuestion</c> call waiting on the user: Claude Code's request, and what it asked.</summary>
+    private sealed record PendingQuestion(string RequestId, System.Text.Json.JsonElement Input);
+
+    /// <summary>
+    /// A text or thinking block the model is writing: the part it becomes in Fleet's message, and the text so far.
+    /// <see cref="Shown"/> once its first words went out.
+    /// </summary>
+    private sealed class StreamingBlock(string claudeMessageId, string kind, string partId)
+    {
+        public string ClaudeMessageId { get; } = claudeMessageId;
+        public string Kind { get; } = kind;
+        public string PartId { get; } = partId;
+        public System.Text.StringBuilder Text { get; } = new();
+        public bool Shown { get; set; }
+    }
+
     /// <summary>What a claude process was started with, or switched to since.</summary>
-    private sealed record ProcessSettings(bool AsksForPermission, string PermissionMode, string? Model);
+    private sealed record ProcessSettings(string PermissionMode, string? Model, string? Effort);
 
     /// <summary>A turn: from Fleet's prompt, or Claude Code's own <c>init</c>, to its <c>result</c>.</summary>
     private sealed class Turn

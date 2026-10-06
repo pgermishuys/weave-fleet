@@ -47,6 +47,14 @@ describe("foldMessages", () => {
     expect(blocks[0].kind === "steps" && blocks[0].steps).toHaveLength(3);
   });
 
+  it("keeps a subagent call as a row whatever the case of its tool's name", () => {
+    const blocks = foldMessages([
+      message("a1", "assistant", [tool("t1", "Task", "running", { description: "Review the scripts" }, { sessionId: "child-1" })]),
+    ]);
+
+    expect(blocks).toEqual([expect.objectContaining({ kind: "subagent", title: "Review the scripts", childSessionId: "child-1" })]);
+  });
+
   it("keeps subagents as rows and turns questions into lines", () => {
     const blocks = foldMessages([
       message("a1", "assistant", [

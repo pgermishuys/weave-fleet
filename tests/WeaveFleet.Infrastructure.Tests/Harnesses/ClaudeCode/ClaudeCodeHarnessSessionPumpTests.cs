@@ -64,7 +64,7 @@ public sealed class ClaudeCodeHarnessSessionPumpTests : IAsyncLifetime
         var events = await PumpAsync(Fixture("two-tools.jsonl"));
 
         var tools = Conversation().SelectMany(m => m.Parts).OfType<ToolUsePart>().ToList();
-        tools.Select(t => t.ToolName).ShouldBe(["Read", "Bash"]);
+        tools.Select(t => t.ToolName).ShouldBe(["read", "bash"]);
         tools.ShouldAllBe(t => t.State == ToolUseState.Completed);
         Conversation().Last().Parts.OfType<TextPart>().ShouldHaveSingleItem().Text
             .ShouldBe("The note file contains \"hello from file\" and the echo command executed successfully.");
@@ -73,7 +73,7 @@ public sealed class ClaudeCodeHarnessSessionPumpTests : IAsyncLifetime
         var bashUpdate = _outbox.All
             .Where(m => m.Type == EventTypes.MessagePartUpdated)
             .Select(m => JsonDocument.Parse(m.Payload).RootElement.GetProperty("part"))
-            .Last(p => p.TryGetProperty("tool", out var name) && name.GetString() == "Bash");
+            .Last(p => p.TryGetProperty("tool", out var name) && name.GetString() == "bash");
         bashUpdate.GetProperty("state").GetProperty("status").GetString().ShouldBe("completed");
         bashUpdate.GetProperty("state").GetProperty("output").GetString().ShouldBe("done");
 
@@ -178,7 +178,8 @@ public sealed class ClaudeCodeHarnessSessionPumpTests : IAsyncLifetime
             """{"subtype":"success","is_error":false,"result":"","session_id":"s","type":"result"}""");
 
         var tool = Conversation().SelectMany(m => m.Parts).OfType<ToolUsePart>().ShouldHaveSingleItem();
-        tool.ToolName.ShouldBe("Agent");
+        // Fleet's subagent tool, so the call links to its child session.
+        tool.ToolName.ShouldBe("task");
         tool.State.ShouldBe(ToolUseState.Completed);
     }
 

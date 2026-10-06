@@ -827,6 +827,13 @@ public sealed partial class SessionOrchestrator(
         if (string.Equals(sessionResult.Value.RetentionStatus, "archived", StringComparison.Ordinal))
             return FleetError.ValidationError("Session.RetentionStatus", "Archived sessions are read-only.");
 
+        // A harness that can't pass images on would drop them without a word.
+        if (options?.Attachments is { Count: > 0 }
+            && harnessRegistry.GetByType(sessionResult.Value.HarnessType)?.Capabilities.SupportsImageAttachments != true)
+        {
+            return FleetError.ValidationError("Prompt.Attachments", "This session's harness can't take images. Send the prompt without them.");
+        }
+
         var delivery = SteeringDelivery(options?.Delivery, sessionResult.Value, out var steeringError);
         if (steeringError is not null)
             return steeringError;

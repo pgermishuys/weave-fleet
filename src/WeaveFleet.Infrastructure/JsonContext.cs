@@ -77,6 +77,9 @@ internal sealed record ClaudeCodeToolStateContent
     [JsonPropertyName("input")] public JsonElement? Input { get; init; }
     [JsonPropertyName("output")] public JsonElement? Output { get; init; }
     [JsonPropertyName("error")] public string? Error { get; init; }
+
+    /// <summary>What Fleet keeps with the call for showing it: an edit's <c>diff</c>, a question's <c>answers</c>.</summary>
+    [JsonPropertyName("metadata")] public JsonElement? Metadata { get; init; }
 }
 
 internal sealed record ClaudeCodeToolPartContent

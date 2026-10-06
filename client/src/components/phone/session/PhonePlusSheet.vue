@@ -5,7 +5,7 @@ import BottomSheet from "@/components/phone/BottomSheet.vue";
 /** What + offers, as a floating menu: a photo or screenshot, the camera, a file from the folder, a command, a side question. */
 export type PlusChoice = "photo" | "camera" | "file" | "command" | "side";
 
-defineProps<{ open: boolean; machineName: string; supportsShell: boolean; supportsSide: boolean }>();
+defineProps<{ open: boolean; machineName: string; supportsShell: boolean; supportsSide: boolean; supportsImages: boolean }>();
 const emit = defineEmits<{ (event: "pick", choice: PlusChoice): void; (event: "close"): void }>();
 </script>
 
@@ -21,6 +21,7 @@ const emit = defineEmits<{ (event: "pick", choice: PlusChoice): void; (event: "c
       role="menu"
     >
       <button
+        v-if="supportsImages"
         type="button"
         class="ph-mi"
         role="menuitem"
@@ -32,6 +33,7 @@ const emit = defineEmits<{ (event: "pick", choice: PlusChoice): void; (event: "c
         <span class="ph-mi__hint">up to 5</span>
       </button>
       <button
+        v-if="supportsImages"
         type="button"
         class="ph-mi"
         role="menuitem"

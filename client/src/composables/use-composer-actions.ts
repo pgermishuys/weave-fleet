@@ -35,8 +35,10 @@ export function composerStatus(activityStatus: string | null | undefined, optimi
 export interface HarnessCapabilities {
   /** It takes a message into a running turn, read at the agent's next step. */
   canSteer: boolean;
-  /** Enter steers and Queue waits (OpenCode 2); other harnesses that steer keep Enter for the queue. */
+  /** Enter steers and Queue waits (the harness says so); other harnesses that steer keep Enter for the queue. */
   steersByDefault: boolean;
+  /** Images can go with a prompt. */
+  supportsImages: boolean;
   /** `!command` runs in the session's folder. */
   supportsShell: boolean;
   /** `/btw` side conversations. */
@@ -45,7 +47,13 @@ export interface HarnessCapabilities {
 
 interface HarnessLike {
   type: string;
-  capabilities: { supportsSteering?: boolean; supportsShellCommands?: boolean; supportsSideConversations?: boolean };
+  capabilities: {
+    supportsSteering?: boolean;
+    steersByDefault?: boolean;
+    supportsShellCommands?: boolean;
+    supportsSideConversations?: boolean;
+    supportsImageAttachments?: boolean;
+  };
 }
 
 export function harnessCapabilities(harnessType: string | null | undefined, harnesses: readonly HarnessLike[]): HarnessCapabilities {
@@ -54,9 +62,10 @@ export function harnessCapabilities(harnessType: string | null | undefined, harn
   const canSteer = caps?.supportsSteering === true;
   return {
     canSteer,
-    steersByDefault: canSteer && type === "opencode2",
+    steersByDefault: canSteer && caps?.steersByDefault === true,
     supportsShell: caps?.supportsShellCommands === true,
     supportsSide: caps?.supportsSideConversations === true,
+    supportsImages: caps?.supportsImageAttachments === true,
   };
 }
 

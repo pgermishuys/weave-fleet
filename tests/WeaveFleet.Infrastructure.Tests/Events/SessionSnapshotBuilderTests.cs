@@ -12,6 +12,26 @@ public sealed class SessionSnapshotBuilderTests
     // Opening a parent while its subagent waits on a question: the subagent's row has to say so from the
     // snapshot, since the child's own activity_status went out before the parent was opened.
     [Fact]
+    public async Task BuildAsync_says_which_prompt_was_sent_into_a_running_turn()
+    {
+        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
+        using var _ = keeper;
+        var session = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, TestUserContext.DefaultUserId);
+        var messages = new MessageRepository(factory, new TestUserContext());
+        var asked = MessagePersistenceService.CreateUserPromptMessage("Run the three commands", DateTimeOffset.UtcNow, null, "msg_1");
+        var steered = MessagePersistenceService.CreateUserPromptMessage("Stop after this one", DateTimeOffset.UtcNow, null, "msg_2") with { Steered = true };
+        await messages.UpsertAsync(MessagePersistenceService.ToPersistedMessage(session.Session.Id, asked));
+        await messages.UpsertAsync(MessagePersistenceService.ToPersistedMessage(session.Session.Id, steered));
+        // Saved again without the mark (a later write of the same prompt): it stays steered.
+        await messages.UpsertAsync(MessagePersistenceService.ToPersistedMessage(session.Session.Id, steered with { Steered = false }));
+
+        var snapshot = await new SessionSnapshotBuilder(factory, new TestUserContext(), new SessionActivityTracker()).BuildAsync(session.Session.Id);
+
+        snapshot.Messages.Single(m => m.Info.Id == "msg_1").Info.Steered.ShouldBeNull();
+        snapshot.Messages.Single(m => m.Info.Id == "msg_2").Info.Steered.ShouldBe(true);
+    }
+
+    [Fact]
     public async Task BuildAsync_gives_each_delegation_what_its_child_shows()
     {
         var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();

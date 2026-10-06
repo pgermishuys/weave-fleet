@@ -15,6 +15,10 @@ internal sealed record ClaudeCodeProcessOptions
     public string? SessionId { get; init; }
 
     public string? Model { get; init; }
+
+    /// <summary>The reasoning effort (<c>--effort</c>: <c>low</c> … <c>max</c>); null for the model's default.</summary>
+    public string? Effort { get; init; }
+
     public required string PermissionMode { get; init; }
 
     /// <summary>
@@ -86,6 +90,9 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
     /// <summary>Why Fleet stopped the process, for the log; null when it exited by itself.</summary>
     public string? StopReason { get; set; }
 
+    /// <summary>The token the process calls Fleet with (<c>FLEET_URL</c>); null when it has none.</summary>
+    public string? BridgeToken { get; set; }
+
     /// <summary><c>true</c> when the process was killed because a turn ran past its timeout.</summary>
     public bool TimedOut { get; private set; }
 
@@ -149,6 +156,9 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
         // Print mode refuses stream-json output without it.
         psi.ArgumentList.Add("--verbose");
 
+        // The text as the model writes it (stream_event lines), not a whole block at a time.
+        psi.ArgumentList.Add("--include-partial-messages");
+
         if (options.SessionId is not null)
         {
             psi.ArgumentList.Add("--resume");
@@ -159,6 +169,12 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
         {
             psi.ArgumentList.Add("--model");
             psi.ArgumentList.Add(options.Model);
+        }
+
+        if (options.Effort is not null)
+        {
+            psi.ArgumentList.Add("--effort");
+            psi.ArgumentList.Add(options.Effort);
         }
 
         if (!string.IsNullOrEmpty(options.PermissionMode))

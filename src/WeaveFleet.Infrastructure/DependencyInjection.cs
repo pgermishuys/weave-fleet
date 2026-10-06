@@ -509,6 +509,8 @@ public static class DependencyInjection
         services.AddSingleton<IHarness>(sp => sp.GetRequiredService<ClaudeCodeHarness>());
         services.AddSingleton<ClaudeCodeHarnessRuntime>();
         services.AddSingleton<IHarnessRuntime>(sp => sp.GetRequiredService<ClaudeCodeHarnessRuntime>());
+        services.AddSingleton<IHarnessBridgeTokens>(sp => new ClaudeCodeBridgeTokens(sp.GetRequiredService<ClaudeCodeHarnessRuntime>().BridgeTokens));
+        services.AddSingleton<IHarnessCanvasCallerResolver>(sp => new ClaudeCodeCanvasCallerResolver(sp.GetRequiredService<ClaudeCodeHarnessRuntime>().BridgeTokens));
 
         // Register PiHarness (descriptor) and PiHarnessRuntime (provisioning) as separate singletons.
         services.AddSingleton<PiHarness>();

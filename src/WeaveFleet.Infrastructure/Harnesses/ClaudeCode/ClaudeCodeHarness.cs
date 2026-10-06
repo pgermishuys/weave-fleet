@@ -29,9 +29,14 @@ public sealed class ClaudeCodeHarness : IHarness
         // the session did since. Fleet also keeps Claude Code's history itself, which a fork doesn't copy.
         SupportsForking = false,
         SupportsResume = true,
-        SupportsImageAttachments = false,
+        // Sent as image blocks ahead of the prompt's text.
+        SupportsImageAttachments = true,
         SupportsStreaming = true,
         SupportsDelegation = false,
+        // A message sent mid-turn goes to the claude process at once, and Claude Code reads it when the agent's current
+        // step ends, in the same turn.
+        SupportsSteering = true,
+        SteersByDefault = true,
         // Background shells, monitors and subagents (task_* messages); stop_task stops one, and a command's output file
         // can be read.
         ReportsBackgroundWork = true,

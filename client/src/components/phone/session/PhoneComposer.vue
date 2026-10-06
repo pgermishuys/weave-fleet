@@ -411,6 +411,7 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
       :machine-name="machineName"
       :supports-shell="actions.caps.value.supportsShell"
       :supports-side="actions.caps.value.supportsSide"
+      :supports-images="actions.caps.value.supportsImages"
       @pick="onPlus"
       @close="plusOpen = false"
     />

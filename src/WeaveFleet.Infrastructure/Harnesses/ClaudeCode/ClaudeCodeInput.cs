@@ -18,6 +18,24 @@ internal static class ClaudeCodeInput
     internal static string SetModel(string requestId, string model)
         => Request(requestId, "set_model", json => json.WriteString("model", model));
 
+    /// <summary>Runs the following turns at reasoning effort <paramref name="effort"/> (<c>low</c> … <c>max</c>), or the model's default when null.</summary>
+    internal static string SetEffort(string requestId, string? effort)
+        => Request(requestId, "apply_flag_settings", json =>
+        {
+            json.WriteStartObject("settings");
+            if (effort is null)
+                json.WriteNull("effortLevel");
+            else
+                json.WriteString("effortLevel", effort);
+            json.WriteEndObject();
+        });
+
+    /// <summary>
+    /// Asks what the process offers: its <c>models</c> (with each one's effort levels), commands and agents. Claude Code
+    /// answers before any prompt, and lists the models a gateway offers too.
+    /// </summary>
+    internal static string Initialize(string requestId) => Request(requestId, "initialize", _ => { });
+
     /// <summary>
     /// Changes the permission mode. Claude Code refuses <c>bypassPermissions</c> unless the process started in it.
     /// </summary>
@@ -47,23 +65,42 @@ internal static class ClaudeCodeInput
         json.WriteEndObject();
     });
 
+    /// <summary>The image types Claude takes as <c>image</c> content blocks.</summary>
+    internal static readonly IReadOnlySet<string> ImageTypes =
+        new HashSet<string>(["image/gif", "image/jpeg", "image/png", "image/webp"], StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
-    /// The prompt, as a user message. Fleet's <paramref name="notes"/> to the model (<see cref="PromptOptions.ModelNotes"/>)
-    /// go before it as text blocks of their own, so the question is read last; Fleet keeps the prompt without them.
+    /// The prompt, as a user message. Its <paramref name="images"/> go first, as base64 <c>image</c> blocks (Claude Code
+    /// expands a command or a skill only when the text is what the message ends with), then Fleet's
+    /// <paramref name="notes"/> to the model (<see cref="PromptOptions.ModelNotes"/>) as text blocks of their own, so the
+    /// question is read last; Fleet keeps the prompt without them. Other attachments are left out.
     /// </summary>
-    internal static string UserMessage(string text, IReadOnlyList<string>? notes = null) => Line(json =>
+    internal static string UserMessage(string text, IReadOnlyList<string>? notes = null, IReadOnlyList<HarnessAttachment>? images = null) => Line(json =>
     {
+        var pictures = images?.Where(image => ImageTypes.Contains(image.Mime) && image.Data.Length > 0).ToList() ?? [];
         json.WriteString("type", "user");
         json.WriteStartObject("message");
         json.WriteString("role", "user");
-        if (notes is not { Count: > 0 })
+        if (notes is not { Count: > 0 } && pictures.Count == 0)
         {
             json.WriteString("content", text);
         }
         else
         {
             json.WriteStartArray("content");
-            foreach (var block in notes.Append(text))
+            foreach (var image in pictures)
+            {
+                json.WriteStartObject();
+                json.WriteString("type", "image");
+                json.WriteStartObject("source");
+                json.WriteString("type", "base64");
+                json.WriteString("media_type", image.Mime.ToLowerInvariant());
+                json.WriteString("data", image.Data);
+                json.WriteEndObject();
+                json.WriteEndObject();
+            }
+
+            foreach (var block in (notes ?? []).Append(text))
             {
                 json.WriteStartObject();
                 json.WriteString("type", "text");
@@ -89,6 +126,23 @@ internal static class ClaudeCodeInput
             json.WriteStartObject();
             json.WriteEndObject();
         }
+    });
+
+    /// <summary>
+    /// Answers an <c>AskUserQuestion</c> call: it runs with the <paramref name="questions"/> it asked and the user's
+    /// <paramref name="answers"/>, by question text, each the chosen labels joined with ", ".
+    /// </summary>
+    internal static string Answer(string requestId, JsonElement questions, IReadOnlyDictionary<string, string> answers) => Response(requestId, json =>
+    {
+        json.WriteString("behavior", "allow");
+        json.WriteStartObject("updatedInput");
+        json.WritePropertyName("questions");
+        questions.WriteTo(json);
+        json.WriteStartObject("answers");
+        foreach (var (question, answer) in answers)
+            json.WriteString(question, answer);
+        json.WriteEndObject();
+        json.WriteEndObject();
     });
 
     /// <summary>Tells Claude Code Fleet can't answer a request it doesn't know (a hook callback, say).</summary>

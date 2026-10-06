@@ -41,6 +41,7 @@ public sealed class MessagePersistenceService
             AgentName = message.Agent,
             ModelId = message.ModelId,
             ErrorJson = message.Error is { } error ? JsonSerializer.Serialize(error, ApplicationJsonContext.Default.TurnError) : null,
+            Steered = message.Steered,
         };
     }
 
@@ -143,6 +144,7 @@ public sealed class MessagePersistenceService
             Error = persisted.ErrorJson is { } errorJson
                 ? JsonSerializer.Deserialize(errorJson, ApplicationJsonContext.Default.TurnError)
                 : null,
+            Steered = persisted.Steered,
         };
     }
 

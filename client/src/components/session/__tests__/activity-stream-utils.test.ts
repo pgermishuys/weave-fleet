@@ -20,6 +20,30 @@ function create_tool_part(state: unknown, tool = "bash"): AccumulatedToolPart {
   };
 }
 
+describe("toToolCardItem diff", () => {
+  it("shows the unified diff kept on the call's metadata, with its line numbers", () => {
+    const item = toToolCardItem(create_tool_part({
+      status: "completed",
+      input: { filePath: "/work/calc.py", oldString: "def sub(a, b):", newString: "def subtract(a, b):" },
+      metadata: { diff: "--- /work/calc.py\n+++ /work/calc.py\n@@ -2,4 +2,4 @@\n     return a + b\n \n-def sub(a, b):\n+def subtract(a, b):\n" },
+    }, "edit"));
+
+    expect(item.diffLines?.map((line) => line.type)).toEqual(["context", "context", "remove", "add"]);
+    expect(item.diffLines?.[2]).toMatchObject({ content: "def sub(a, b):", oldLineNumber: 4 });
+    expect(item.diffLines?.[3]).toMatchObject({ content: "def subtract(a, b):", newLineNumber: 4 });
+  });
+
+  it("prefers diff lines the harness attached", () => {
+    const item = toToolCardItem(create_tool_part({
+      status: "completed",
+      diffLines: [{ type: "add", content: "x" }],
+      metadata: { diff: "@@ -1 +1 @@\n-a\n+b\n" },
+    }, "edit"));
+
+    expect(item.diffLines).toEqual([expect.objectContaining({ type: "add", content: "x" })]);
+  });
+});
+
 describe("toToolCardItem", () => {
   // Claude Code reports a call that started background work done at once; the work says it still runs.
   it("draws a call whose work runs on in the background as Background, whatever the call says", () => {
@@ -201,6 +225,8 @@ describe("isSubagentTool", () => {
   it("links OpenCode's task and OpenCode 2's subagent calls to their child session", () => {
     expect(isSubagentTool("task")).toBe(true);
     expect(isSubagentTool("subagent")).toBe(true);
+    // In any case: a harness that keeps its own capitalised name still links.
+    expect(isSubagentTool("Task")).toBe(true);
     expect(isSubagentTool("shell")).toBe(false);
   });
 });

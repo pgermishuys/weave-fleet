@@ -164,6 +164,8 @@ function removeAttachment(id: string): void {
 
 
 function handlePaste(event: ClipboardEvent): void {
+  // A harness that can't take images: a pasted one stays out of the draft, and text pastes as text.
+  if (!supportsImages.value) return;
   const items = Array.from(event.clipboardData?.items ?? []);
   const imageItems = items.filter((item) => item.type.startsWith("image/"));
   if (imageItems.length === 0) return;
@@ -176,7 +178,7 @@ function handlePaste(event: ClipboardEvent): void {
 
 function handleDragOver(event: DragEvent): void {
   event.preventDefault();
-  isDragging.value = true;
+  isDragging.value = supportsImages.value;
 }
 
 function handleDragLeave(): void {
@@ -186,6 +188,7 @@ function handleDragLeave(): void {
 function handleDrop(event: DragEvent): void {
   event.preventDefault();
   isDragging.value = false;
+  if (!supportsImages.value) return;
   const files = Array.from(event.dataTransfer?.files ?? []);
   for (const file of files) {
     if (file.type.startsWith("image/")) {
@@ -217,6 +220,8 @@ const selectedSession = computed(() => {
 /** The session's harness can run a shell command from the composer; elsewhere `!` is just text. */
 const capabilities = computed(() => harnessCapabilities(selectedSession.value?.harnessType, harnesses.value));
 const supportsShellCommands = computed(() => capabilities.value.supportsShell);
+/** The session's harness passes images on to the model; elsewhere Attach image isn't offered. */
+const supportsImages = computed(() => capabilities.value.supportsImages);
 
 /** The session's harness can fork it for a side conversation (`/btw`); the `/` popup offers it only then. */
 /** The agent reads an @-referenced session with fleet_session_read; without Fleet's tools it gets a recap instead. */
@@ -1164,7 +1169,7 @@ function handleKeydown(event: KeyboardEvent): void {
             <span>btw</span>
           </span>
           <Button
-            v-else
+            v-else-if="supportsImages"
             variant="toolbar-icon"
             size="toolbar"
             title="Attach image"

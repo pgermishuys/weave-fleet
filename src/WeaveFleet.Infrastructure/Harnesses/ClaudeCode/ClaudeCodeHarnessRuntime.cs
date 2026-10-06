@@ -3,6 +3,8 @@ using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
@@ -44,6 +46,40 @@ public sealed class ClaudeCodeHarnessRuntime : IHarnessRuntime
         _logger = logger;
         _loggerFactory = loggerFactory;
         _analyticsCollector = analyticsCollector;
+        _catalog = new ClaudeCodeCatalog(options.ClaudeCode, loggerFactory);
+    }
+
+    private readonly ClaudeCodeCatalog _catalog;
+
+    /// <summary>The bridge tokens of the claude processes this runtime's sessions run.</summary>
+    internal ClaudeCodeBridgeTokenRegistry BridgeTokens { get; } = new();
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Claude Code's own model list, with each model's efforts (<see cref="ClaudeCodeCatalog"/>). It has no agents to
+    /// choose from.
+    /// </remarks>
+    public async Task<HarnessCatalog?> GetCatalogAsync(string ownerUserId, string directory, HarnessProfile? profile, CancellationToken ct)
+    {
+        var providers = await _catalog.GetProvidersAsync(directory, ct).ConfigureAwait(false);
+        var defaultModel = _options.ClaudeCode.DefaultModel is { } model
+                           && providers.Any(provider => provider.Models.Any(m => string.Equals(m.Id, model, StringComparison.Ordinal)))
+            ? model
+            : null;
+        return new HarnessCatalog
+        {
+            Agents = [],
+            Providers = providers,
+            DefaultModelProviderId = defaultModel is null ? null : ClaudeCodeCatalog.ProviderId,
+            DefaultModelId = defaultModel,
+        };
+    }
+
+    /// <summary>Where Fleet listens, for the agent's <c>FLEET_URL</c>; null until it knows.</summary>
+    private string? LocalFleetUrl()
+    {
+        using var scope = _scopeFactory.CreateScope();
+        return scope.ServiceProvider.GetService<ILocalFleetUrl>()?.TryGet();
     }
 
     /// <inheritdoc />
@@ -134,7 +170,10 @@ public sealed class ClaudeCodeHarnessRuntime : IHarnessRuntime
             ownerUserId: options.OwnerUserId,
             analyticsCollector: _analyticsCollector,
             projectId: options.ProjectId,
-            projectName: options.ProjectName);
+            projectName: options.ProjectName,
+            bridgeTokens: BridgeTokens,
+            fleetUrl: LocalFleetUrl,
+            catalog: _catalog);
 
         try
         {
@@ -178,7 +217,10 @@ public sealed class ClaudeCodeHarnessRuntime : IHarnessRuntime
             projectName: options.ProjectName,
             claudeSessionId: options.ResumeToken,
             // A subagent's child session: what its parent's process saved, which Claude Code can't prompt on its own.
-            readOnlyChild: options.DelegatedChild);
+            readOnlyChild: options.DelegatedChild,
+            bridgeTokens: BridgeTokens,
+            fleetUrl: LocalFleetUrl,
+            catalog: _catalog);
 
         LogSpawned(_logger, instanceId, null);
         return Task.FromResult<IHarnessSession>(instance);

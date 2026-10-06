@@ -19,3 +19,10 @@ replaced with `<WORKDIR>`.
   with a background shell of its own; a background command stopped with `stop_task` while the turn ran a foreground
   one. Thinking, usage and `task_updated` lines dropped, the task folder replaced with `<TASKS>`. The running work
   each gives is in `tests/contracts/claudecode-work-events.json`.
+- `partial-messages.jsonl`, `file-tools.jsonl`, `ask-user-question.jsonl`, `initialize.json` (Claude Code 2.1.290,
+  2026-10-06, `--model haiku`): a reply streamed with `--include-partial-messages` (`stream_event` lines; signature deltas
+  dropped); Read, Edit (three times; this build has no MultiEdit, Glob, Grep or TodoWrite), Write, Bash and TaskCreate
+  calls, with each tool result's `tool_use_result` (an edit's `structuredPatch`, a new file's `type: create`), minus
+  `originalFile`; an `AskUserQuestion` call asked as `can_use_tool` (`--permission-mode default --permission-prompt-tool
+  stdio`) and answered with `updatedInput: { questions, answers }`; and the answer to an `initialize` control request, its
+  model list cut to a few and everything but `models` dropped. The working directory is `/work`.
