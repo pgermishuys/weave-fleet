@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#F3F2EF">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<title>Fleet on your phone: desktop, today, proposed</title>
+<script>
+  (function () {
+    var t = localStorage.getItem("fleet-mock-theme") || "auto";
+    if (t === "auto") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0d0d10" : "#F3F2EF";
+  })();
+</script>
+<link rel="stylesheet" href="fleet.css">
+<link rel="stylesheet" href="pages.css">
+</head>
+<body class="doc wide">
+<div class="doc-top"><img src="icons/weave-logo.png" alt="Fleet"><span style="font-weight:600">Desktop, today, proposed</span><a class="btn btn--outline btn--sm" href="index.html">Mockups</a></div>
+<main class="sheetdoc">
+<h1>The family resemblance</h1>
+<p class="lede" style="max-width:780px">For each screen: the desktop Fleet it comes from, the phone app as built today (the native round, iPhone look), and the proposal. Desktop pictures are the real app in mock mode, cropped to the part that matters; "Full screen" shows all of it. "Try it" opens that screen in the mockup.</p>
+<div id="list"></div>
+</main>
+<script>
+  // title, what carried over, desktop crop, desktop full, today, proposed, try
+  var items = [
+    ["Needs you", "The dashboard's language: <b>page title 22/600</b> with one muted line under it, <b>section titles 12/600 muted</b> with a quiet count, <b>rows with a status glyph</b> and a quiet time on the right. Asks use the <b>permission card's amber 5% tint and 40% edge</b>, its shield icon, the machine as a <b>pcard__from pill</b>, and the command in a <b>panel-coloured mono box</b>. Buttons are ui/button <b>primary + outline</b>, not tinted capsules.",
+      "crop-home-light.jpg", "home-light.png", "01-inbox-ios-light.png", "01-inbox-light.png", "flow.html"],
+    ["Needs you, dark", "Desktop's three dark surfaces: chrome #0d0d10, panel #141418, raised #1b1b20. Outline buttons take the panel colour inside the amber card, exactly as pcard__choice does.",
+      "crop-home-dark.jpg", "home-dark.png", "01-inbox-ios-dark.png", "01-inbox-dark.png", "flow.html?theme=dark"],
+    ["Ask: More…", "This is <b>PermissionCard.vue</b> at thumb size: cwd line over <b>$ command</b>, then <b>numbered choices</b> (1 Allow once, 2 Don't ask again for <code class=\"inline-code\">dotnet test *</code> · this session, 3 Deny and say what instead) and the hint line with <b>Permission settings</b> in accent. Only the sheet around it is phone.",
+      "crop-pcard-light.jpg", "session-permission-light.png", "02-ask-ios-light.png", "02-ask-light.png", "flow.html#ask"],
+    ["Question", "<b>QuestionCard.vue</b>: help icon in amber, the question in body text, options as numbered rows with a muted description, and a box for your own words. One tap sends (decision 3).",
+      "crop-qcard-light.jpg", "session-question-light.png", "02-question-ios-light.png", "02-question-light.png", "flow.html#question"],
+    ["Session with the ask docked", "The conversation column: <b>user message as a hairline bubble</b> (text 5% tint, 16/16/4/16 corners), agent text plain, <b>tool rows one line each in a tinted box</b> (icon, label 500, mono detail, green tick or +1 −1), the <b>Working glyph and word shimmer</b>, the header's place line. The docked ask is the same amber card, compact.",
+      "crop-session-light.jpg", "session-permission-light.png", "03-session-ios-light.png", "03-session-light.png", "flow.html#session"],
+    ["Session, dark", "Same pieces on the dark surfaces; the composer is the raised card with desktop's lift shadow.",
+      "crop-session-dark.jpg", "session-permission-dark.png", "03-session-ios-dark.png", "03-session-dark.png", "flow.html?theme=dark#session"],
+    ["Composer and a finished session", "<b>ComposerFrame.vue</b>: a raised card with a hairline that turns accent on focus, the text on top and a toolbar under it (attach, <b>Agent ⌄ and Model ⌄ selector buttons</b>, a round send). \"Since you looked\" and the draft PR are Fleet's own.",
+      "crop-session-question-light.jpg", "session-question-light.png", "03-session-finished-ios-light.png", "03-session-finished-light.png", "flow.html#session-finished"],
+    ["Session menu", "Desktop's <b>dropdown menu</b>: muted 16px icons, 13px → 15px labels, hairline separators, hints on the right. It floats as a card over the screen instead of an iOS glass sheet.",
+      "crop-menu-light.jpg", "menu-light.png", "03-menu-ios-light.png", "03-menu-light.png", "flow.html#menu"],
+    ["New session", "Desktop's new-session composer: <b>the frame first, the chips under it</b> (Machine, Folder, Where, Harness, each a bordered chip with a chevron, like Choose a folder) and one plain sentence saying where it runs. Agent and Model live in the frame, as on desktop.",
+      "crop-new-light.jpg", "new-light.png", "04-new-ios-light.png", "04-new-light.png", "flow.html#new"],
+    ["Notifications", "A Settings page: <b>bordered cards</b> of rows, <b>uppercase 12px labels</b>, muted descriptions, switches in accent (ui/switch), and a primary Done.",
+      "crop-settings-light.jpg", "settings-light.png", "05-notify-on-ios-light.png", "05-notify-on-light.png", "flow.html#notify-on"],
+    ["Sessions", "The sidebar: grouped by machine with <b>MachineHeader</b> (chevron that folds, green dot, the coral LIVE tag), the <b>filter field</b> (text 5% tint, no border), rows with glyph, title and quiet time or PR number.",
+      "crop-sidebar-light.jpg", "home-light.png", "06-sessions-ios-light.png", "06-sessions-light.png", "flow.html#sessions"],
+    ["Machines", "Settings → Machines: machine rows with the green dot and the mono LINUX / LIVE tags, a THIS PHONE card underneath.",
+      "crop-machines-light.jpg", "pair-light.png", "06-machines-ios-light.png", "06-machines-light.png", "flow.html#machines"],
+    ["Pairing", "What the QR from Settings → Machines opens: the Weave mark as in the rail, the machine as a pill, a settings-style label and field, one primary Connect.",
+      "crop-machines-light.jpg", "pair-light.png", "07-pair-android-light.png", "07-pair-light.png", "flow.html#pair"],
+    ["Android", "The same design on Android: no Material bars, switches or ripples. Only behaviour differs (Android's own back gesture, vibration for haptics).",
+      "crop-home-light.jpg", "home-light.png", "01-inbox-android-light.png", "08-android-inbox-light.png", "flow.html"],
+  ];
+  var list = document.getElementById("list");
+  items.forEach(function (it, i) {
+    var el = document.createElement("section");
+    el.className = "cmp";
+    el.innerHTML = '<h3><span class="choice__n">' + (i + 1) + '</span>' + it[0] + '</h3><p>' + it[1] + '</p>' +
+      '<div class="cmp__grid">' +
+      '<figure><figcaption>Desktop Fleet<a class="full" href="desktop/' + it[3] + '">Full screen</a></figcaption><img loading="lazy" src="desktop/' + it[2] + '" alt="Desktop: ' + it[0] + '"></figure>' +
+      '<figure><figcaption>Phone today</figcaption><img loading="lazy" src="now/' + it[4] + '" alt="Phone today: ' + it[0] + '"></figure>' +
+      '<figure><figcaption class="is-new">Proposed</figcaption><img loading="lazy" src="shots/' + it[5] + '" alt="Proposed: ' + it[0] + '"></figure>' +
+      '</div><div class="links"><a class="btn btn--outline btn--sm" href="' + it[6] + '">Try it</a></div>';
+    list.appendChild(el);
+  });
+  document.addEventListener("touchstart", function () {}, { passive: true });
+</script>
+</body>
+</html>
