@@ -201,7 +201,7 @@ internal static class ClaudeCodePermissions
     /// <summary>The ask as Fleet shows it; a file in <paramref name="workingDirectory"/> is named relative to it.</summary>
     internal static PermissionAsk ToAsk(string requestId, string fleetSessionId, ClaudeCodeControlRequestBody request, string? workingDirectory = null)
     {
-        var tool = request.ToolName ?? "tool";
+        var tool = ClaudeCodeTools.PermissionName(request.ToolName ?? "tool");
         return new PermissionAsk
         {
             Id = requestId,

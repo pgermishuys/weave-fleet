@@ -80,7 +80,9 @@ public sealed class WorkflowDrafterTests : IDisposable
         var scopes = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
 
         _registry.Register(new FakeHarness("opencode", "OpenCode", new HarnessCapabilities { SupportsOffTheRecordPrompt = true, SupportsWorkflowSteps = true }));
-        _registry.Register(new FakeHarness("claude-code", "Claude Code", new HarnessCapabilities()));
+        // Runs workflow steps, but can't ask off the record.
+        _registry.Register(new FakeHarness("claude-code", "Claude Code", new HarnessCapabilities { SupportsWorkflowSteps = true }));
+        _registry.Register(new FakeHarness("pi", "Pi", new HarnessCapabilities()));
         _registry.Register(_runtime);
 
         _workspaces.Seed(new Workspace { Id = "ws-1", Directory = _repo });
@@ -362,9 +364,18 @@ public sealed class WorkflowDrafterTests : IDisposable
     [Fact]
     public async Task A_description_on_a_harness_workflows_dont_run_on_is_refused()
     {
+        var result = await _sut.FromDescriptionAsync(_repo, "Fix a bug.", "pi", null, CancellationToken.None);
+
+        result.Error.Description.ShouldBe("Workflows aren't available on Pi. Pick OpenCode, OpenCode 2 or Claude Code.");
+        _runtime.OffTheRecordCalls.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_description_on_a_harness_that_runs_workflows_but_cant_ask_off_the_record_is_refused()
+    {
         var result = await _sut.FromDescriptionAsync(_repo, "Fix a bug.", "claude-code", null, CancellationToken.None);
 
-        result.Error.Description.ShouldBe("Workflows aren't available on Claude Code. Pick OpenCode or OpenCode 2.");
+        result.Error.Description.ShouldBe("Claude Code can't draft a workflow: it can't ask a question off the record. Pick OpenCode or OpenCode 2.");
         _runtime.OffTheRecordCalls.ShouldBeEmpty();
     }
 

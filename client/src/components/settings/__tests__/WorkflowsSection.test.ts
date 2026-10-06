@@ -47,7 +47,7 @@ describe("WorkflowsSection", () => {
     expect(wrapper.find('[data-testid="workflows-roles-card"]').exists()).toBe(true);
     for (const role of ["strong", "standard", "fast"])
       expect(wrapper.find(`[data-testid="workflows-role-${role}"]`).exists()).toBe(true);
-    // Only harnesses that can hide the step tool have roles to set.
+    // Only harnesses that run workflow steps have roles to set.
     expect(wrapper.text()).not.toContain("Claude Code");
   });
 });

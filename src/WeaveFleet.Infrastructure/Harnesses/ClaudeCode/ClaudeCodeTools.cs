@@ -52,9 +52,40 @@ internal static class ClaudeCodeTools
             [AskUserQuestion] = ("question", None, "questions", new(StringComparer.Ordinal) { ["multiSelect"] = "multiple" }),
         };
 
-    /// <summary>The name Fleet shows the tool under; a tool Fleet has no name for keeps Claude Code's.</summary>
+    /// <summary>The MCP server Fleet gives every claude process for Fleet's own tools (<see cref="ClaudeCodeFleetTools"/>).</summary>
+    internal const string FleetServer = "fleet";
+
+    /// <summary>What Claude Code puts before the name of a tool from Fleet's MCP server: <c>mcp__fleet__fleet_canvas_open</c>.</summary>
+    private const string FleetToolPrefix = "mcp__" + FleetServer + "__";
+
+    /// <summary>Claude Code's name for Fleet's tool <paramref name="fleetName"/>.</summary>
+    internal static string ClaudeName(string fleetName) => FleetToolPrefix + fleetName;
+
+    /// <summary>Fleet's name for a tool from Fleet's MCP server (<c>fleet_canvas_open</c>), or null for any other tool.</summary>
+    internal static string? FleetTool(string? claudeName)
+        => claudeName is not null && claudeName.StartsWith(FleetToolPrefix, StringComparison.Ordinal) && claudeName.Length > FleetToolPrefix.Length
+            ? claudeName[FleetToolPrefix.Length..]
+            : null;
+
+    /// <summary>
+    /// The name Fleet shows the tool under: Fleet's own tools by their names on every harness, Claude Code's by the names
+    /// Fleet shows OpenCode's. A tool Fleet has no name for keeps Claude Code's.
+    /// </summary>
     internal static string Name(string claudeName)
-        => Shapes.TryGetValue(claudeName, out var shape) ? shape.Name : claudeName;
+        => FleetTool(claudeName) ?? (Shapes.TryGetValue(claudeName, out var shape) ? shape.Name : claudeName);
+
+    /// <summary>
+    /// The name an ask about the tool is decided and shown under. Fleet's tools go under their own names, which Fleet
+    /// allows at every level, except <c>fleet_app_start</c>: it runs a command, so it asks as the shell tool does, as it
+    /// does on OpenCode. Claude Code's tools keep their names.
+    /// </summary>
+    internal static string PermissionName(string claudeName)
+        => FleetTool(claudeName) switch
+        {
+            null => claudeName,
+            "fleet_app_start" => "Bash",
+            var fleetName => fleetName,
+        };
 
     /// <summary>Whether the call is Claude Code's question tool.</summary>
     internal static bool IsQuestion(string? claudeName) => string.Equals(claudeName, AskUserQuestion, StringComparison.Ordinal);

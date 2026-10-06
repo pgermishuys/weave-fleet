@@ -61,7 +61,7 @@ const recentFolders = computed(() => defaults.recentFolders(repositories.value).
 const repositoryOnly = computed(() => repositories.value);
 const areRepositoriesReady = computed(() => scannedAt.value !== null || repositoriesError.value !== null);
 
-/** The harnesses a run can use: the ones that can hide the step tool from sessions that aren't steps. */
+/** The harnesses a run can use: the ones that give the step tool to step sessions only. */
 const workflowHarnesses = computed(() => enabledHarnesses.value.filter((harness) => harness.capabilities.supportsWorkflowSteps));
 const harnessType = computed({
   get: () => harnessChoice.value
@@ -71,7 +71,7 @@ const harnessType = computed({
 const harnessName = (type: string) => enabledHarnesses.value.find((h) => h.type === type)?.displayName ?? type;
 // Said only once the list has loaded: until then there's nothing to go on.
 const notAvailable = computed(() => allHarnesses.value.length > 0 && workflowHarnesses.value.length === 0
-  ? `Workflows aren't available on ${harnessName(defaultHarnessType.value)}. Pick OpenCode or OpenCode 2.`
+  ? `Workflows aren't available on ${harnessName(defaultHarnessType.value)}. Pick OpenCode, OpenCode 2 or Claude Code.`
   : null);
 
 const { models, isSupported: offersModels } = useHarnessCatalog(

@@ -874,11 +874,15 @@ public sealed partial class SessionOrchestrator(
             await EnsureEventSubscriptionReadyAsync(instanceResult.Value, id, ct).ConfigureAwait(false);
 
             // With memory on, write what the session's folder reads before the model sees the prompt: OpenCode reads that
-            // file at a session's first model request. A harness without the memory tools (Claude Code) takes the notes
-            // with the prompt instead, as notes it can read but not change.
+            // file at a session's first model request. A harness that doesn't read the file (Claude Code) takes the notes
+            // with the prompt instead; with Fleet's tools it saves notes as OpenCode does, and without them only reads them.
             var memoryNotes = agentMemory is null
                 ? null
-                : await agentMemory.PrepareSessionAsync(sessionResult.Value.UserId, sessionResult.Value.Directory, canSave: false, ct).ConfigureAwait(false);
+                : await agentMemory.PrepareSessionAsync(
+                    sessionResult.Value.UserId,
+                    sessionResult.Value.Directory,
+                    canSave: harnessRegistry.GetByType(sessionResult.Value.HarnessType)?.Capabilities.SupportsFleetTools == true,
+                    ct).ConfigureAwait(false);
 
             // A session's instructions keep the notes it started with, so a change since then goes with this prompt, in
             // the notes the harness gives the model unseen. Only the harnesses that pass those notes on are told.

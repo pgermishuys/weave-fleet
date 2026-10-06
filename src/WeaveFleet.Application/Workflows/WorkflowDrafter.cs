@@ -95,7 +95,12 @@ public sealed partial class WorkflowDrafter(
         var type = harnessType?.Trim() ?? string.Empty;
         if (harnesses.GetByType(type) is not { } harness)
             return FleetError.NotFoundFor("Harness", type);
-        if (!harness.Capabilities.SupportsWorkflowSteps || harnesses.GetRuntimeByType(type) is not { } runtime)
+        if (!harness.Capabilities.SupportsWorkflowSteps)
+            return FleetError.ValidationError("HarnessType", WorkflowService.NotAvailableOn(harness.DisplayName));
+        // Claude Code runs workflow steps, but has no way to ask a question off the record.
+        if (!harness.Capabilities.SupportsOffTheRecordPrompt)
+            return FleetError.ValidationError("HarnessType", CantDescribeOn(harness.DisplayName));
+        if (harnesses.GetRuntimeByType(type) is not { } runtime)
             return FleetError.ValidationError("HarnessType", WorkflowService.NotAvailableOn(harness.DisplayName));
 
         if (string.IsNullOrWhiteSpace(directory))
@@ -121,6 +126,9 @@ public sealed partial class WorkflowDrafter(
 
     public static string NotAvailableOn(string harnessName)
         => $"Save as workflow isn't available on {harnessName}: it can't ask a question off the record.";
+
+    public static string CantDescribeOn(string harnessName)
+        => $"{harnessName} can't draft a workflow: it can't ask a question off the record. Pick OpenCode or OpenCode 2.";
 
     /// <summary>Asks, checks, and asks once more with the errors if there are any. The conversation is always disposed.</summary>
     internal async Task<Result<WorkflowDrafted>> DraftAsync(

@@ -245,7 +245,7 @@ public sealed class WorkflowService(
     }
 
     public static string NotAvailableOn(string harnessName)
-        => $"Workflows aren't available on {harnessName}. Pick OpenCode or OpenCode 2.";
+        => $"Workflows aren't available on {harnessName}. Pick OpenCode, OpenCode 2 or Claude Code.";
 
     /// <summary>A run's title: the request's first line, cut at a word.</summary>
     internal static string TitleFrom(string request)

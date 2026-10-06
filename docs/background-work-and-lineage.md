@@ -84,8 +84,9 @@ caller is a known session, and on workflow and automation runs. Side conversatio
 `side_of_session_id`.
 
 Knowing the calling session needs the caller to identify itself. OpenCode and OpenCode 2 can (bridge token plus
-harness session id, `IHarnessCanvasCallerResolver`); Claude Code and Pi have no Fleet tools yet, so their
-agent-started sessions get no `spawned_by` until a Fleet MCP server or Pi extension exists. That's a later phase.
+harness session id, `IHarnessCanvasCallerResolver`), and so can Claude Code: each claude process has a bridge token of
+its own, which names its session. Pi has no Fleet tools yet, so its agent-started sessions get no `spawned_by` until a Pi
+extension exists. That's a later phase.
 
 ## API (built in PR 2)
 
@@ -180,7 +181,7 @@ Built in PR 12 (mockup `mockups/lineage-detach-depth/`).
 
 The composer's `@` picker (`use-autocomplete.ts`) gets a Sessions group. Attaching a session adds a reference, not a
 transcript. On harnesses with Fleet tools the agent gets the title, id and a `fleet_session_read` tool to page
-through the history. On harnesses without Fleet tools (Claude Code, Pi today) Fleet adds the session's recap
+through the history. On harnesses without Fleet tools (Pi today) Fleet adds the session's recap
 (`SessionRecapService`) instead, so `@` works everywhere.
 
 ## Pull requests

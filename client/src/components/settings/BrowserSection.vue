@@ -28,6 +28,7 @@ const PAGES: readonly { id: Pages; label: string; description: string }[] = [
 const HOW: Record<string, string> = {
   opencode2: "Its own browser tools, in Code Mode. Fleet is the browser behind them.",
   opencode: "Fleet's browser tools: read the page, act on it.",
+  "claude-code": "Fleet's browser tools: read the page, act on it.",
 };
 
 const settings = shallowRef<BrowserSettings>({ enabled: true, pages: "session", scripts: false });
@@ -117,7 +118,7 @@ async function save(change: Partial<BrowserSettings>): Promise<void> {
       <div class="browser-row">
         <div class="browser-row__text">
           <b>Agents can use a browser</b>
-          <small>Adds browser tools to sessions that can have them (below). Off: OpenCode 2 doesn't see its browser tools, and OpenCode's answer that the browser is off.</small>
+          <small>Adds browser tools to sessions that can have them (below). Off: OpenCode 2 doesn't see its browser tools, Claude Code doesn't see Fleet's from its next message, and OpenCode's answer that the browser is off.</small>
         </div>
         <button
           type="button"

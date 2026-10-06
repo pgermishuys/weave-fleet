@@ -33,6 +33,12 @@ internal sealed record ClaudeCodeProcessOptions
     /// <summary>Text added to Claude Code's system prompt (<c>--append-system-prompt</c>): Fleet's memory notes. Null = none.</summary>
     public string? AppendSystemPrompt { get; init; }
 
+    /// <summary>
+    /// MCP servers Claude Code loads besides the user's own (<c>--mcp-config</c>, as JSON): Fleet's, for its tools. Claude
+    /// Code expands <c>${VAR}</c> in it from the process's environment. Null = none.
+    /// </summary>
+    public string? McpConfig { get; init; }
+
     public IReadOnlyDictionary<string, string> EnvironmentVariables { get; init; }
         = new Dictionary<string, string>();
 }
@@ -187,6 +193,13 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
         {
             psi.ArgumentList.Add("--allowedTools");
             psi.ArgumentList.Add(string.Join(",", options.AllowedTools));
+        }
+
+        // Without --strict-mcp-config, so the user's own MCP servers and the folder's .mcp.json still load.
+        if (options.McpConfig is not null)
+        {
+            psi.ArgumentList.Add("--mcp-config");
+            psi.ArgumentList.Add(options.McpConfig);
         }
 
         if (options.MaxTurns.HasValue)

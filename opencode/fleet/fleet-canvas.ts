@@ -9,6 +9,10 @@
  * from them as written, and every arg is required. OpenCode doesn't validate the args; Fleet does.
  *
  * Every export is treated as a plugin, so export only the plugin function.
+ *
+ * Fleet's MCP server offers the same tools to Claude Code, from a copy of their names, descriptions and args in
+ * src/WeaveFleet.Application/FleetTools/fleet-tools.json. Change a tool here and change it there: FleetToolCatalogPluginTests
+ * fails until the two match.
  */
 
 import { createHash } from "node:crypto"
