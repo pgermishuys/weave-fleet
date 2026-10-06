@@ -123,7 +123,7 @@ watch(library, (workflows) => {
   state.value.workflowId = workflows.find((workflow) => workflow.errors.length === 0)?.id ?? null;
 });
 
-/** The harnesses a run can use: the ones that can hide the step tool from sessions that aren't steps. */
+/** The harnesses a run can use: the ones that give the step tool to step sessions only. */
 const workflowHarnesses = computed(() => enabledHarnesses.value.filter((harness) => harness.capabilities.supportsWorkflowSteps));
 const defaultRunsWorkflows = computed(() => workflowHarnesses.value.some((harness) => harness.type === defaultHarnessType.value));
 const workflowHarness = computed({

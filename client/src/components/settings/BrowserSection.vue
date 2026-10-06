@@ -118,7 +118,7 @@ async function save(change: Partial<BrowserSettings>): Promise<void> {
       <div class="browser-row">
         <div class="browser-row__text">
           <b>Agents can use a browser</b>
-          <small>Adds browser tools to sessions that can have them (below). Off: OpenCode 2 doesn't see its browser tools, and OpenCode's answer that the browser is off.</small>
+          <small>Adds browser tools to sessions that can have them (below). Off: OpenCode 2 doesn't see its browser tools, Claude Code doesn't see Fleet's from its next message, and OpenCode's answer that the browser is off.</small>
         </div>
         <button
           type="button"
