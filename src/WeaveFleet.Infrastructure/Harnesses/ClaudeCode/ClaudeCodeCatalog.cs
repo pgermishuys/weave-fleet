@@ -72,9 +72,6 @@ internal sealed partial class ClaudeCodeCatalog(ClaudeCodeOptions config, ILogge
         return models;
     }
 
-    /// <summary>The model a prompt that names none gets, when Fleet's settings choose one.</summary>
-    public string? DefaultModel => config.DefaultModel;
-
     private async Task<IReadOnlyList<ProviderInfo>?> LoadAsync(string directory)
     {
         try
