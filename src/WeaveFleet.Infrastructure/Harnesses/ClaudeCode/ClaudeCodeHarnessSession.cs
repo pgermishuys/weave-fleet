@@ -133,6 +133,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     // The bridge token each process gets for calling Fleet (FLEET_URL), and where Fleet listens; none in tests.
     private readonly ClaudeCodeBridgeTokenRegistry? _bridgeTokens;
     private readonly Func<string?> _fleetUrl;
+    private FleetToolCallRecords? _fleetToolCalls;
 
     // The models the picker offers; Claude Code's own list, from the runtime.
     private readonly ClaudeCodeCatalog? _catalog;
@@ -1839,8 +1840,6 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 .ConfigureAwait(false);
         }
     }
-
-    private FleetToolCallRecords? _fleetToolCalls;
 
     /// <summary>What Fleet's MCP server kept about its tool calls; none where Fleet doesn't run one (tests).</summary>
     private FleetToolCallRecords? FleetToolCalls()
