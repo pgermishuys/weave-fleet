@@ -886,6 +886,21 @@ pull to refresh on iOS (Safari's rubber band driving the dots), swipe back on An
 gesture, sheet drag and flick over content-sized sheets, haptics, the status bar in the Home Screen app (now the
 chrome colour, light and dark), Inter at 16px on a real screen, and swipe to archive with the Undo toast's bar.
 
+### Seamless pairing (2026-10-06)
+Walked the whole path on a scratch Fleet (tokens required, as behind `tailscale serve`): desktop Add a phone → QR →
+iPhone pairs → setup → "Home Screen" launch with only Safari's cookies → inbox, all machines. What changed:
+- **The Home Screen app keeps you signed in.** iOS 17.2+ copies Safari's cookies into a Home Screen app, but not
+  IndexedDB/localStorage, so the app opened signed in yet without the phone's token (no keys to other machines, no
+  token sign-in later). New `POST /api/machine/devices/me/token` gives a signed-in device a new token (the old one,
+  left in Safari, stops working); `PhoneAuthGate` calls it when it finds the phone signed in with no credentials.
+  Older iOS starts the app empty: it pairs once more.
+- **Add a phone explains what's needed**, in plain words, with ✓ or the command to run: Tailscale on both, an https://
+  address (`tailscale serve`), Fleet asking for a key (`--require-token`) (`lib/phone-readiness.ts`).
+- **The pairing page says what happens:** the phone talks straight to the machine; nothing goes through Weave; next,
+  the Home Screen and notifications.
+- **Android gets an Install button** on the setup screen (Chrome's `beforeinstallprompt`, caught at load), or the
+  menu steps when Chrome hasn't offered it.
+
 ## Risks and unknowns
 - **iOS**: no notification action buttons (tap → deep link only); push only for Home Screen apps on iOS 16.4+; permission request must be on a user gesture; Safari and Home Screen app storage may be separate → manual pairing code fallback (Task 6). Focus modes can silence pushes.
 - **Home machine single point of failure**: if home is down, no notifications for any machine; inbox shows remotes as unreachable. Documented; a push gateway is the future fix.
