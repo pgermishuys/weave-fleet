@@ -10,8 +10,9 @@ namespace WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 /// The models Claude Code offers, with the reasoning efforts each takes, for the model picker. They come from Claude
 /// Code itself: a <c>claude</c> process answers the <c>initialize</c> request with its <c>models</c>, which include the
 /// ones a gateway offers (<c>CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY</c>), before any prompt and without calling a
-/// model. Fleet asks once per folder (a project's settings can change them) and keeps the answer for
-/// <see cref="CacheFor"/>. When Claude Code can't say, the picker offers <see cref="Fallback"/>.
+/// model. The same answer lists its commands and skills, for the composer's <c>/</c>. Fleet asks once per folder (a
+/// project's settings can change them) and set of built-in skills, and keeps the answer for <see cref="CacheFor"/>. When Claude
+/// Code can't say, the picker offers <see cref="Fallback"/> and the composer no commands.
 /// </summary>
 internal sealed partial class ClaudeCodeCatalog(ClaudeCodeOptions config, ILoggerFactory loggerFactory)
 {
@@ -41,49 +42,85 @@ internal sealed partial class ClaudeCodeCatalog(ClaudeCodeOptions config, ILogge
         },
     ];
 
-    private readonly ConcurrentDictionary<string, (DateTimeOffset At, Task<IReadOnlyList<ProviderInfo>?> Models)> _byFolder =
-        new(StringComparer.Ordinal);
+    // By folder and the built-in skills turned on: a project's settings, and those skills, change the answer.
+    private readonly ConcurrentDictionary<(string Directory, string? Skills), (DateTimeOffset At, Task<JsonElement?> Answer)> _answers = new();
 
     private readonly ILogger _logger = loggerFactory.CreateLogger<ClaudeCodeCatalog>();
 
     /// <summary>The clock for the cache; the system's unless a test says otherwise.</summary>
     internal TimeProvider Time { get; init; } = TimeProvider.System;
 
-    /// <summary>Asks a claude process in a folder what it offers; Fleet's unless a test says otherwise.</summary>
-    internal Func<string, CancellationToken, Task<JsonElement?>>? Ask { get; init; }
+    /// <summary>Asks a claude process in a folder, with Fleet's skills folder, what it offers; Fleet's unless a test says otherwise.</summary>
+    internal Func<string, string?, CancellationToken, Task<JsonElement?>>? Ask { get; init; }
 
     /// <summary>The models Claude Code offers in <paramref name="directory"/>, or <see cref="Fallback"/>.</summary>
-    public async Task<IReadOnlyList<ProviderInfo>> GetProvidersAsync(string directory, CancellationToken ct)
+    public async Task<IReadOnlyList<ProviderInfo>> GetProvidersAsync(string directory, CancellationToken ct, ClaudeCodeSkillsFolder? skills = null)
+        => await AnswerAsync(directory, skills, ct).ConfigureAwait(false) is { } answer && FromInitialize(answer) is { } models
+            ? models
+            : Fallback;
+
+    /// <summary>The commands and skills Claude Code offers in <paramref name="directory"/>; none when it can't say.</summary>
+    public async Task<IReadOnlyList<ClaudeCodeCommand>> GetCommandsAsync(string directory, ClaudeCodeSkillsFolder? skills, CancellationToken ct)
+        => await AnswerAsync(directory, skills, ct).ConfigureAwait(false) is { } answer ? CommandsFromInitialize(answer) : [];
+
+    private async Task<JsonElement?> AnswerAsync(string directory, ClaudeCodeSkillsFolder? skills, CancellationToken ct)
     {
         var now = Time.GetUtcNow();
-        var entry = _byFolder.AddOrUpdate(
-            directory,
-            _ => (now, LoadAsync(directory)),
-            (_, known) => now - known.At < CacheFor && !known.Models.IsFaulted ? known : (now, LoadAsync(directory)));
+        var key = (directory, skills?.Skills);
+        var entry = _answers.AddOrUpdate(
+            key,
+            _ => (now, LoadAsync(directory, skills?.Folder)),
+            (_, known) => now - known.At < CacheFor && !known.Answer.IsFaulted ? known : (now, LoadAsync(directory, skills?.Folder)));
 
-        var models = await entry.Models.WaitAsync(ct).ConfigureAwait(false);
-        if (models is null)
+        var answer = await entry.Answer.WaitAsync(ct).ConfigureAwait(false);
+        if (answer is null)
         {
             // Asked again next time rather than kept.
-            _byFolder.TryRemove(new KeyValuePair<string, (DateTimeOffset, Task<IReadOnlyList<ProviderInfo>?>)>(directory, entry));
-            return Fallback;
+            _answers.TryRemove(new KeyValuePair<(string, string?), (DateTimeOffset, Task<JsonElement?>)>(key, entry));
         }
 
-        return models;
+        return answer;
     }
 
-    private async Task<IReadOnlyList<ProviderInfo>?> LoadAsync(string directory)
+    private async Task<JsonElement?> LoadAsync(string directory, string? skillsDirectory)
     {
         try
         {
-            var answer = await (Ask ?? AskClaudeAsync)(directory, CancellationToken.None).ConfigureAwait(false);
-            return answer is { } response ? FromInitialize(response) : null;
+            return await (Ask ?? AskClaudeAsync)(directory, skillsDirectory, CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             LogAskFailed(_logger, directory, ex);
             return null;
         }
+    }
+
+    /// <summary>
+    /// The <c>commands</c> in an <c>initialize</c> answer: each one's <c>name</c>, <c>description</c>, and whether it's
+    /// <c>builtin</c> (Claude Code's own, its bundled skills and its terminal commands alike) rather than the user's, a
+    /// project's, a plugin's or Fleet's built-in skills. Names starting <c>__</c> are Claude Code's internals.
+    /// </summary>
+    internal static IReadOnlyList<ClaudeCodeCommand> CommandsFromInitialize(JsonElement response)
+    {
+        if (response.ValueKind != JsonValueKind.Object
+            || !response.TryGetProperty("commands", out var list)
+            || list.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var commands = new List<ClaudeCodeCommand>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var command in list.EnumerateArray())
+        {
+            if (PermissionEvents.String(command, "name") is not { Length: > 0 } name || name.StartsWith("__", StringComparison.Ordinal) || !seen.Add(name))
+                continue;
+
+            var builtIn = command.TryGetProperty("builtin", out var flag) && flag.ValueKind == JsonValueKind.True;
+            commands.Add(new ClaudeCodeCommand(name, PermissionEvents.String(command, "description"), builtIn));
+        }
+
+        return commands;
     }
 
     /// <summary>
@@ -128,7 +165,7 @@ internal sealed partial class ClaudeCodeCatalog(ClaudeCodeOptions config, ILogge
     /// Starts <c>claude</c> in <paramref name="directory"/> the way a session would, sends <c>initialize</c>, and stops it
     /// once it answered. No prompt is sent, so no model is called.
     /// </summary>
-    private async Task<JsonElement?> AskClaudeAsync(string directory, CancellationToken ct)
+    private async Task<JsonElement?> AskClaudeAsync(string directory, string? skillsDirectory, CancellationToken ct)
     {
         await using var process = new ClaudeCodeProcessManager(loggerFactory.CreateLogger<ClaudeCodeProcessManager>());
         var stdout = await process.StartAsync(new ClaudeCodeProcessOptions
@@ -136,6 +173,7 @@ internal sealed partial class ClaudeCodeCatalog(ClaudeCodeOptions config, ILogge
             BinaryPath = config.BinaryPath,
             WorkingDirectory = directory,
             PermissionMode = "default",
+            SkillsDirectory = skillsDirectory,
         }, ct).ConfigureAwait(false);
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -162,9 +200,12 @@ internal sealed partial class ClaudeCodeCatalog(ClaudeCodeOptions config, ILogge
             // Its output never closed; the process is gone either way.
         }
 
-        return answer is { Subtype: "success", Response: { } models } ? models.Clone() : null;
+        return answer is { Subtype: "success", Response: { } response } ? response.Clone() : null;
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't ask Claude Code which models it offers in {Directory}; the picker offers Claude Code's aliases")]
     private static partial void LogAskFailed(ILogger logger, string directory, Exception exception);
 }
+
+/// <summary>A command or skill a claude process offers: <see cref="BuiltIn"/> for Claude Code's own.</summary>
+internal sealed record ClaudeCodeCommand(string Name, string? Description, bool BuiltIn);

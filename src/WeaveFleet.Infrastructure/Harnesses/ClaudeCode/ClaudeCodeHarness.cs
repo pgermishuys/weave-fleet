@@ -24,7 +24,8 @@ public sealed class ClaudeCodeHarness : IHarness
         RequiresInitialPrompt = false,
         SupportsAgents = false,
         SupportsModelSelection = true,
-        SupportsCommands = false,
+        // Its commands and skills, Fleet's built-in skills among them, sent as "/name arguments" for Claude Code to expand.
+        SupportsCommands = true,
         // --fork-session copies the conversation only when the fork's first prompt runs, so it would take in whatever
         // the session did since. Fleet also keeps Claude Code's history itself, which a fork doesn't copy.
         SupportsForking = false,

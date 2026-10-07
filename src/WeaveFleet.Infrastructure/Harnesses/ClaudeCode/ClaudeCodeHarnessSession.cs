@@ -137,6 +137,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
 
     // The models the picker offers; Claude Code's own list, from the runtime.
     private readonly ClaudeCodeCatalog? _catalog;
+    private readonly ClaudeCodeFleetSkills? _skills;
 
     // AskUserQuestion calls waiting on the user, by tool call: Claude Code's request, and the questions it asked.
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, PendingQuestion> _questions = new(StringComparer.Ordinal);
@@ -200,7 +201,8 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         bool readOnlyChild = false,
         ClaudeCodeBridgeTokenRegistry? bridgeTokens = null,
         Func<string?>? fleetUrl = null,
-        ClaudeCodeCatalog? catalog = null)
+        ClaudeCodeCatalog? catalog = null,
+        ClaudeCodeFleetSkills? skills = null)
     {
         InstanceId = instanceId;
         _fleetSessionId = fleetSessionId;
@@ -220,6 +222,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         _bridgeTokens = bridgeTokens;
         _fleetUrl = fleetUrl ?? (() => null);
         _catalog = catalog;
+        _skills = skills;
         _root = new Conversation(fleetSessionId);
         ChildSessions = MakeChildSessionAsync;
     }
@@ -418,25 +421,27 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             PermissionMode: PermissionModeFor(policy),
             Model: options?.ModelId ?? _config.DefaultModel,
             Effort: options?.Effort,
-            FleetTools: await ReadFleetToolsAsync(current?.FleetTools).ConfigureAwait(false));
+            FleetTools: await ReadFleetToolsAsync(current?.FleetTools).ConfigureAwait(false),
+            Skills: await ReadSkillsAsync().ConfigureAwait(false));
 
         if (process is { IsRunning: true } && current is not null)
         {
-            // Claude Code lists an MCP server's tools when it starts, so a switch that changed since (memory, messages
-            // between sessions, Settings → Browser) takes a new process, which resumes the conversation. Not while work
-            // it left running would end with it: until that's done, the process keeps the tools it has.
-            if (current.FleetTools != wanted.FleetTools)
+            // Claude Code lists an MCP server's tools and its skills when it starts, so a switch that changed since
+            // (memory, messages between sessions, Settings → Browser, a built-in skill) takes a new process, which resumes
+            // the conversation. Not while work it left running would end with it: until that's done, the process keeps
+            // the tools and skills it has.
+            if (current.FleetTools != wanted.FleetTools || current.Skills != wanted.Skills)
             {
                 bool working;
                 lock (_gate)
                     working = _tasks.HasBackgroundWork;
                 if (!working)
                 {
-                    await StopProcessAsync(process, "Fleet's tools for it changed").ConfigureAwait(false);
+                    await StopProcessAsync(process, "Fleet's tools or skills for it changed").ConfigureAwait(false);
                     return await StartProcessAsync(wanted, ct).ConfigureAwait(false);
                 }
 
-                wanted = wanted with { FleetTools = current.FleetTools };
+                wanted = wanted with { FleetTools = current.FleetTools, Skills = current.Skills };
             }
 
             // A prompt that names no model or effort keeps what the process runs.
@@ -514,6 +519,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             MaxTurns = _config.MaxTurns,
             MaxBudgetUsd = _config.MaxBudgetUsd,
             AppendSystemPrompt = _memoryNotes,
+            SkillsDirectory = settings.Skills?.Folder,
             EnvironmentVariables = environment,
         };
 
@@ -990,13 +996,33 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         => Task.FromResult<IReadOnlyList<AgentInfo>>([]);
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<CommandInfo>> GetCommandsAsync(CancellationToken ct)
-        => Task.FromResult<IReadOnlyList<CommandInfo>>([]);
+    /// <remarks>
+    /// What the session's process offers (<see cref="ClaudeCodeCatalog"/>): the user's, a project's and plugins' commands
+    /// and skills, and Fleet's built-in skills. Not Claude Code's own: its terminal commands do what Fleet's controls do,
+    /// and several of its skills do what Fleet's do (<c>/code-review</c> beside <c>/fleet-code-review</c>). They still run
+    /// when typed in full.
+    /// </remarks>
+    public async Task<IReadOnlyList<CommandInfo>> GetCommandsAsync(CancellationToken ct)
+    {
+        if (_catalog is null)
+            return [];
+
+        var skills = await ReadSkillsAsync().ConfigureAwait(false);
+        return ComposerCommands(await _catalog.GetCommandsAsync(_workingDirectory, skills, ct).ConfigureAwait(false));
+    }
+
+    /// <summary>The commands that aren't Claude Code's own.</summary>
+    internal static IReadOnlyList<CommandInfo> ComposerCommands(IReadOnlyList<ClaudeCodeCommand> commands)
+        => [.. commands
+            .Where(command => !command.BuiltIn)
+            .Select(command => new CommandInfo { Name = command.Name, Description = command.Description })];
 
     /// <inheritdoc />
     /// <remarks>Claude Code's own list, with each model's efforts (<see cref="ClaudeCodeCatalog"/>).</remarks>
     public async Task<IReadOnlyList<ProviderInfo>> GetProvidersAsync(CancellationToken ct)
-        => _catalog is null ? [] : await _catalog.GetProvidersAsync(_workingDirectory, ct).ConfigureAwait(false);
+        => _catalog is null
+            ? []
+            : await _catalog.GetProvidersAsync(_workingDirectory, ct, await ReadSkillsAsync().ConfigureAwait(false)).ConfigureAwait(false);
 
     /// <inheritdoc />
     /// <remarks>Ends the claude process, and with it any work the agent left running in the background.</remarks>
@@ -2348,7 +2374,13 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
 
     /// <summary>What a claude process was started with, or switched to since.</summary>
     /// <param name="FleetTools">Which of Fleet's tools it has; null for none (Fleet can't be reached from it).</param>
-    private sealed record ProcessSettings(string PermissionMode, string? Model, string? Effort, FleetToolSwitches? FleetTools = null);
+    /// <param name="Skills">The folder of built-in skills it loads; null for none.</param>
+    private sealed record ProcessSettings(
+        string PermissionMode, string? Model, string? Effort, FleetToolSwitches? FleetTools = null, ClaudeCodeSkillsFolder? Skills = null);
+
+    /// <summary>The built-in skills the session's next process loads: none for a subagent's child session, which never runs one.</summary>
+    private Task<ClaudeCodeSkillsFolder?> ReadSkillsAsync()
+        => _readOnlyChild || _skills is null ? Task.FromResult<ClaudeCodeSkillsFolder?>(null) : _skills.ForOwnerAsync(_ownerUserId);
 
     /// <summary>
     /// Which of Fleet's tools the session's next process gets: none for a subagent's child session, which never runs one, or

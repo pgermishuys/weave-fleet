@@ -356,8 +356,8 @@ process per session, and gets Fleet's tools from Fleet's MCP server, so only a s
 Its subagents run in the same process and see the tool too; Fleet refuses their calls. Pi has no Fleet tools, so
 workflows aren't available on it.
 
-On Claude Code a step's `agent:` is ignored (Claude Code has no agents to pick from, so a Plan step can edit files), and
-a step's `skill:` asks for a Fleet skill Claude Code doesn't load yet.
+On Claude Code a step's `agent:` is ignored (Claude Code has no agents to pick from, so a Plan step can edit files). Its
+`skill:` works as on OpenCode: Claude Code loads the built-in skills you turned on.
 
 ## Errors
 

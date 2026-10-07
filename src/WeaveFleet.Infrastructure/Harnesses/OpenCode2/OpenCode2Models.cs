@@ -377,6 +377,17 @@ internal sealed record OpenCode2CommandInfo
 }
 
 /// <summary>
+/// A skill V2 loaded (<c>GET /api/skill</c>). V2 keeps skills apart from its commands: one is run by naming it in a
+/// prompt's <c>skills</c> (<see cref="OpenCode2PromptSkill"/>), not through the command route.
+/// </summary>
+internal sealed record OpenCode2SkillInfo
+{
+    public string? Id { get; init; }
+    public string? Name { get; init; }
+    public string? Description { get; init; }
+}
+
+/// <summary>
 /// One entry of <c>GET /api/config</c>: the config documents and folders V2 read for a location, global first and the
 /// folder's own last. A document's <see cref="Info"/> is its content in V2's shape (<c>default_agent</c>, <c>agents</c>, …).
 /// </summary>
@@ -490,6 +501,9 @@ internal sealed record OpenCode2PromptRequest
     public required string Text { get; init; }
     public IReadOnlyList<OpenCode2PromptFile>? Files { get; init; }
 
+    /// <summary>Skills to activate with the prompt: V2 puts each one's content on the user message for the model.</summary>
+    public IReadOnlyList<OpenCode2PromptSkill>? Skills { get; init; }
+
     /// <summary>
     /// <c>steer</c> (into the running turn, at its next step) or <c>queue</c> (after it). Left out, V2 steers.
     /// </summary>
@@ -521,6 +535,13 @@ internal sealed record OpenCode2PromptFile
 {
     public required string Uri { get; init; }
     public string? Name { get; init; }
+}
+
+/// <summary>A skill named in a prompt (V2's <c>Prompt.SkillAttachment</c>); V2 fills in its text.</summary>
+internal sealed record OpenCode2PromptSkill
+{
+    public required string Id { get; init; }
+    public required string Name { get; init; }
 }
 
 /// <summary><c>POST /api/session/{id}/interrupt</c>.</summary>
@@ -841,6 +862,7 @@ internal sealed record OpenCode2ErrorBody
 [JsonSerializable(typeof(OpenCode2Envelope<OpenCode2ModelInfo>))]
 [JsonSerializable(typeof(OpenCode2Envelope<List<OpenCode2ProviderInfo>>))]
 [JsonSerializable(typeof(OpenCode2Envelope<List<OpenCode2CommandInfo>>))]
+[JsonSerializable(typeof(OpenCode2Envelope<List<OpenCode2SkillInfo>>))]
 [JsonSerializable(typeof(OpenCode2Envelope<OpenCode2GenerateResult>))]
 [JsonSerializable(typeof(OpenCode2Envelope<List<OpenCode2ShellInfo>>))]
 [JsonSerializable(typeof(OpenCode2Envelope<OpenCode2ShellOutputPage>))]

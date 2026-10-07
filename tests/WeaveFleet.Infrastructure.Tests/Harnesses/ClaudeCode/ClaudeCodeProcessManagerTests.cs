@@ -33,10 +33,23 @@ public sealed class ClaudeCodeProcessManagerTests : IDisposable
         (await RunAsync(null)).ShouldNotContain("--append-system-prompt");
     }
 
+    [Fact]
+    public async Task Fleets_built_in_skills_load_from_an_added_folder_and_only_when_there_are_some()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var args = await RunAsync(null, skillsDirectory: "/fleet/claude-code/skills/0123456789abcdef");
+
+        args[args.IndexOf("--add-dir") + 1].ShouldBe("/fleet/claude-code/skills/0123456789abcdef");
+        (await RunAsync(null)).ShouldNotContain("--add-dir");
+    }
+
     /// <summary>Runs a stand-in claude that writes each argument it got on a line of its own, and returns them.</summary>
-    private async Task<List<string>> RunAsync(string? appendSystemPrompt)
+    private async Task<List<string>> RunAsync(string? appendSystemPrompt, string? skillsDirectory = null)
     {
         var output = Path.Combine(_folder, "args.txt");
+        File.Delete(output);
         var claude = Path.Combine(_folder, "claude");
         await File.WriteAllTextAsync(claude, $"#!/bin/sh\nprintf '%s\\n' \"$@\" > '{output}.tmp' && mv '{output}.tmp' '{output}'\ncat > /dev/null\n");
         if (!OperatingSystem.IsWindows())
@@ -49,6 +62,7 @@ public sealed class ClaudeCodeProcessManagerTests : IDisposable
             WorkingDirectory = _folder,
             PermissionMode = "bypassPermissions",
             AppendSystemPrompt = appendSystemPrompt,
+            SkillsDirectory = skillsDirectory,
         }, CancellationToken.None);
 
         // claude keeps running for the next prompt; the arguments are written as it starts.

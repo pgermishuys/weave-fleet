@@ -39,6 +39,9 @@ internal sealed record ClaudeCodeProcessOptions
     /// </summary>
     public string? McpConfig { get; init; }
 
+    /// <summary>A folder whose <c>.claude/skills</c> Claude Code loads besides the user's own (<c>--add-dir</c>): Fleet's built-in skills. Null = none.</summary>
+    public string? SkillsDirectory { get; init; }
+
     public IReadOnlyDictionary<string, string> EnvironmentVariables { get; init; }
         = new Dictionary<string, string>();
 }
@@ -203,6 +206,12 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
         {
             psi.ArgumentList.Add("--mcp-config");
             psi.ArgumentList.Add(options.McpConfig);
+        }
+
+        if (options.SkillsDirectory is not null)
+        {
+            psi.ArgumentList.Add("--add-dir");
+            psi.ArgumentList.Add(options.SkillsDirectory);
         }
 
         if (options.MaxTurns.HasValue)

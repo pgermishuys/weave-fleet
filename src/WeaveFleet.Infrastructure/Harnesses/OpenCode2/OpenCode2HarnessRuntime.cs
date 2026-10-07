@@ -661,23 +661,8 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         using var userScope = BackgroundUserContext.BeginScope(ownerUserId);
         using var scope = _scopeFactory.CreateScope();
 
-        var builtInSkills = new OwnerSkills([], new Dictionary<string, string>(StringComparer.Ordinal));
-        if (scope.ServiceProvider.GetService<IUserPreferenceRepository>() is { } preferences)
-        {
-            var skills = await BuiltInSkillService.GetSessionSkillsAsync(
-                preferences,
-                scope.ServiceProvider.GetService<ISkillVersionStore>(),
-                ownerUserId,
-                OpenCode2FleetFiles.BuiltInSkillNames).ConfigureAwait(false);
-            var yours = new Dictionary<string, string>(StringComparer.Ordinal);
-            foreach (var (name, _, folder) in skills)
-            {
-                if (folder is not null && ReadVersion(folder, name) is { } content)
-                    yours[name] = content;
-            }
-
-            builtInSkills = new OwnerSkills(skills.Select(skill => skill.Name).ToList(), yours);
-        }
+        var builtInSkills = await BuiltInSkillFiles.ReadOwnerAsync(
+            scope.ServiceProvider, ownerUserId, ex => LogFleetFilesInstallFailed(_logger, ex)).ConfigureAwait(false);
 
         var sessionMessages = scope.ServiceProvider.GetService<SessionMessagesFeature>() is { } feature
             && await feature.IsEnabledAsync().ConfigureAwait(false);
@@ -689,23 +674,6 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             ? memoryStore.ContextFolder(ownerUserId)
             : null;
         return (builtInSkills, sessionMessages, workflows, memoryFolder);
-    }
-
-    /// <summary>The built-in skills the owner turned on, and the text of their own version of any they made one of.</summary>
-    private sealed record OwnerSkills(IReadOnlyList<string> Names, IReadOnlyDictionary<string, string> Yours);
-
-    /// <summary>A version's <c>SKILL.md</c> from its folder; null when it can't be read, so Fleet's copy is used.</summary>
-    private string? ReadVersion(string folder, string name)
-    {
-        try
-        {
-            return File.ReadAllText(Path.Combine(folder, name, "SKILL.md"));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            LogFleetFilesInstallFailed(_logger, ex);
-            return null;
-        }
     }
 
     /// <summary>
