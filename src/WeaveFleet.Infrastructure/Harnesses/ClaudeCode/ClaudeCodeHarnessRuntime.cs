@@ -47,9 +47,14 @@ public sealed class ClaudeCodeHarnessRuntime : IHarnessRuntime
         _loggerFactory = loggerFactory;
         _analyticsCollector = analyticsCollector;
         _catalog = new ClaudeCodeCatalog(options.ClaudeCode, loggerFactory);
+        _skills = new ClaudeCodeFleetSkills(
+            Path.GetDirectoryName(Path.GetFullPath(options.DatabasePath)) ?? Environment.CurrentDirectory,
+            scopeFactory,
+            loggerFactory.CreateLogger<ClaudeCodeFleetSkills>());
     }
 
     private readonly ClaudeCodeCatalog _catalog;
+    private readonly ClaudeCodeFleetSkills _skills;
 
     /// <summary>The bridge tokens of the claude processes this runtime's sessions run.</summary>
     internal ClaudeCodeBridgeTokenRegistry BridgeTokens { get; } = new();
@@ -61,7 +66,8 @@ public sealed class ClaudeCodeHarnessRuntime : IHarnessRuntime
     /// </remarks>
     public async Task<HarnessCatalog?> GetCatalogAsync(string ownerUserId, string directory, HarnessProfile? profile, CancellationToken ct)
     {
-        var providers = await _catalog.GetProvidersAsync(directory, ct).ConfigureAwait(false);
+        var skills = await _skills.ForOwnerAsync(ownerUserId).ConfigureAwait(false);
+        var providers = await _catalog.GetProvidersAsync(directory, ct, skills).ConfigureAwait(false);
         var defaultModel = _options.ClaudeCode.DefaultModel is { } model
                            && providers.Any(provider => provider.Models.Any(m => string.Equals(m.Id, model, StringComparison.Ordinal)))
             ? model
@@ -173,7 +179,8 @@ public sealed class ClaudeCodeHarnessRuntime : IHarnessRuntime
             projectName: options.ProjectName,
             bridgeTokens: BridgeTokens,
             fleetUrl: LocalFleetUrl,
-            catalog: _catalog);
+            catalog: _catalog,
+            skills: _skills);
 
         try
         {
@@ -220,7 +227,8 @@ public sealed class ClaudeCodeHarnessRuntime : IHarnessRuntime
             readOnlyChild: options.DelegatedChild,
             bridgeTokens: BridgeTokens,
             fleetUrl: LocalFleetUrl,
-            catalog: _catalog);
+            catalog: _catalog,
+            skills: _skills);
 
         LogSpawned(_logger, instanceId, null);
         return Task.FromResult<IHarnessSession>(instance);

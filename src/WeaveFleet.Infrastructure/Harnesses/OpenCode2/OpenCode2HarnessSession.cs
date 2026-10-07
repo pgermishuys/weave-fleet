@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
@@ -463,13 +464,25 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
 
     /// <summary>
     /// Runs one of V2's commands as the next turn; V2 expands its template into the user's message, under an id of its
-    /// own. That id is read off V2's inbox (<see cref="OnEvent"/>), one command at a time.
+    /// own. That id is read off V2's inbox (<see cref="OnEvent"/>), one command at a time. A skill, which V2 has no
+    /// command for, goes as a prompt that names it, under Fleet's id: V2 adds the skill's content for the model.
     /// </summary>
     public async Task<string?> SendCommandAsync(CommandOptions options, CancellationToken ct)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         var server = await AttachedServerAsync(ct).ConfigureAwait(false);
         LogCommand(_logger, InstanceId, options.Command);
+
+        if (await OpenCode2Catalog.FindSkillAsync(server, _context.WorkingDirectory, options.Command, ct).ConfigureAwait(false) is { } skill)
+        {
+            await ApplyChoicesAsync(server, options.Agent, options.ProviderId, options.ModelId, effort: null, ct).ConfigureAwait(false);
+            if (options.MessageId is { } messageId)
+                _promptsNotTakenIn[messageId] = 0;
+            await server.Client.PromptAsync(
+                ResumeToken, CommandFormatting.FormatCommandPrompt(options), options.MessageId, files: null, delivery: null, ct, [skill])
+                .ConfigureAwait(false);
+            return options.MessageId;
+        }
 
         await ApplyChoicesAsync(server, options.Agent, options.ProviderId, options.ModelId, effort: null, ct).ConfigureAwait(false);
 

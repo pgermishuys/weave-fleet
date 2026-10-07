@@ -64,14 +64,61 @@ internal static class OpenCode2Catalog
         return ToProviderInfos(await providers, await models);
     }
 
+    /// <summary>
+    /// What the composer offers after <c>/</c>: V2's commands, then its skills. V2 lists them apart, and a skill runs
+    /// through a prompt, not the command route (<see cref="FindSkillAsync"/>); a command of the same name wins.
+    /// </summary>
     public static async Task<IReadOnlyList<CommandInfo>> ReadCommandsAsync(OpenCode2Server server, string directory, CancellationToken ct)
     {
         await server.LoadLocationAsync(directory, ct).ConfigureAwait(false);
-        var client = server.Client;
-        return (await client.GetCommandsAsync(directory, ct).ConfigureAwait(false))
+        var commands = server.Client.GetCommandsAsync(directory, ct);
+        var skills = SkillsOrNoneAsync(server, directory, ct);
+        await Task.WhenAll(commands, skills).ConfigureAwait(false);
+        return ToCommandInfos(await commands, await skills);
+    }
+
+    internal static IReadOnlyList<CommandInfo> ToCommandInfos(IReadOnlyList<OpenCode2CommandInfo> commands, IReadOnlyList<OpenCode2SkillInfo> skills)
+    {
+        var listed = commands
             .Where(command => !string.IsNullOrWhiteSpace(command.Name))
             .Select(command => new CommandInfo { Name = command.Name!, Description = command.Description })
             .ToList();
+        var names = listed.Select(command => command.Name).ToHashSet(StringComparer.Ordinal);
+        listed.AddRange(skills
+            .Where(skill => !string.IsNullOrWhiteSpace(skill.Name) && names.Add(skill.Name!))
+            .Select(skill => new CommandInfo { Name = skill.Name!, Description = skill.Description }));
+        return listed;
+    }
+
+    /// <summary>
+    /// The skill a <c>/name</c> runs: one named <paramref name="name"/> when no command is, else null, and the command
+    /// route runs it. The session's folder is loaded already.
+    /// </summary>
+    public static async Task<OpenCode2PromptSkill?> FindSkillAsync(OpenCode2Server server, string directory, string name, CancellationToken ct)
+    {
+        if ((await SkillsOrNoneAsync(server, directory, ct).ConfigureAwait(false))
+                .FirstOrDefault(skill => string.Equals(skill.Name, name, StringComparison.Ordinal)) is not { Id: { Length: > 0 } id })
+        {
+            return null;
+        }
+
+        var commands = await server.Client.GetCommandsAsync(directory, ct).ConfigureAwait(false);
+        return commands.Any(command => string.Equals(command.Name, name, StringComparison.Ordinal))
+            ? null
+            : new OpenCode2PromptSkill { Id = id, Name = name };
+    }
+
+    /// <summary>V2's skills in <paramref name="directory"/>; none when it can't list them, so its commands still work.</summary>
+    private static async Task<IReadOnlyList<OpenCode2SkillInfo>> SkillsOrNoneAsync(OpenCode2Server server, string directory, CancellationToken ct)
+    {
+        try
+        {
+            return await server.Client.GetSkillsAsync(directory, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException)
+        {
+            return [];
+        }
     }
 
     internal static HarnessCatalog ToCatalog(

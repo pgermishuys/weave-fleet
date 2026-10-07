@@ -69,11 +69,11 @@ public sealed class ClaudeCodeHarnessTests
     }
 
     [Fact]
-    public void Capabilities_SupportsCommands_IsFalse()
+    public void Capabilities_SupportsCommands_IsTrue()
     {
         var harness = CreateHarness();
 
-        harness.Capabilities.SupportsCommands.ShouldBeFalse();
+        harness.Capabilities.SupportsCommands.ShouldBeTrue();
     }
 
     [Fact]

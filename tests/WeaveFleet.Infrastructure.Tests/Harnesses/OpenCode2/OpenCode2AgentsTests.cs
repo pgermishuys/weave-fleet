@@ -190,12 +190,60 @@ public sealed class OpenCode2AgentsTests
         var commands = await session.GetCommandsAsync(CancellationToken.None);
 
         // The folder may have loaded (its events arrived) before the read asked for it.
-        api.Requests[^1].Path.ShouldBe("/api/command");
+        api.Requests.Select(r => r.Path).ShouldContain("/api/command");
+        api.Requests.Select(r => r.Path).ShouldContain("/api/skill");
         commands.Select(c => (c.Name, c.Description)).ShouldBe(
         [
             ("init", "guided AGENTS.md setup"),
             ("hello", "Says hello"),
+            // V2 lists skills apart from commands; a command of the same name ("hello") wins.
+            ("fleet-walkthrough", "Walk the user through a change"),
         ]);
+    }
+
+    [Fact]
+    public async Task A_folder_whose_skills_cant_be_read_still_lists_its_commands()
+    {
+        var api = CatalogApi(skills: null);
+        await using var server = LoadingServer(api);
+        await using var session = NewSession(server);
+
+        var commands = await session.GetCommandsAsync(CancellationToken.None);
+
+        commands.Select(c => c.Name).ShouldBe(["init", "hello"]);
+    }
+
+    [Fact]
+    public async Task A_skill_runs_as_a_prompt_that_names_it_under_Fleets_id()
+    {
+        // V2 has no command for a skill (its command route answers 404): a prompt's skills make V2 add its content.
+        var api = SkillsAndCommands();
+        await using var server = Server(api);
+        await using var session = NewSession(server);
+
+        var messageId = await session.SendCommandAsync(
+            new CommandOptions { Command = "fleet-walkthrough", Arguments = "the branch", MessageId = "msg_fleet" },
+            CancellationToken.None);
+
+        messageId.ShouldBe("msg_fleet");
+        api.Posts().ShouldNotContain(r => r.Path.EndsWith("/command", StringComparison.Ordinal));
+        var prompt = api.Posts().Single(r => r.Path.EndsWith("/prompt", StringComparison.Ordinal));
+        prompt.Path.ShouldBe($"/api/session/{Session}/prompt");
+        JsonDocument.Parse(prompt.Body!).RootElement.GetRawText().ShouldBe(
+            """{"id":"msg_fleet","text":"/fleet-walkthrough the branch","skills":[{"id":"fleet-walkthrough","name":"fleet-walkthrough"}]}""");
+    }
+
+    [Fact]
+    public async Task A_command_named_like_a_skill_runs_as_the_command()
+    {
+        var api = SkillsAndCommands();
+        await using var server = TakingCommandsIn(api, "msg_command");
+        await using var session = NewSession(server);
+
+        await session.SendCommandAsync(new CommandOptions { Command = "hello" }, CancellationToken.None);
+
+        api.Posts().ShouldNotContain(r => r.Path.EndsWith("/prompt", StringComparison.Ordinal));
+        api.Posts().Single(r => r.Path.EndsWith("/command", StringComparison.Ordinal)).Path.ShouldBe($"/api/session/{Session}/command");
     }
 
     [Fact]
@@ -566,7 +614,29 @@ public sealed class OpenCode2AgentsTests
           {"id":"reviewer","name":"reviewer","mode":"primary","hidden":false,"permissions":[]}]}
         """;
 
-    private static StubHandler CatalogApi(Action<HttpRequestMessage>? seen = null) => new(request =>
+    private const string CommandsJson
+        = """{"location":{"directory":"/work/rocket"},"data":[{"name":"init","description":"guided AGENTS.md setup"},{"name":""},{"name":"hello","description":"Says hello"}]}""";
+
+    private const string SkillsJson = """
+        {"location":{"directory":"/work/rocket"},"data":[
+          {"id":"hello","name":"hello","description":"A skill a command shadows","path":"/skills/hello/SKILL.md","content":"x"},
+          {"id":"fleet-walkthrough","name":"fleet-walkthrough","description":"Walk the user through a change","path":"/skills/fleet-walkthrough/SKILL.md","content":"x"},
+          {"id":"","name":""}]}
+        """;
+
+    /// <summary>V2 listing commands and skills, and taking a session's prompts and commands.</summary>
+    private static StubHandler SkillsAndCommands() => new(request => request.RequestUri!.AbsolutePath switch
+    {
+        "/api/command" => Json(CommandsJson),
+        "/api/skill" => Json(SkillsJson),
+        var path when path.EndsWith("/prompt", StringComparison.Ordinal)
+            => Json("""{"data":{"id":"msg_fleet","sessionID":"ses_1","time":{"created":1},"type":"user","payload":{"text":"hi"},"delivery":"steer"}}"""),
+        "/api/agent" => Json(AgentsJson),
+        "/api/model/default" => Json(DefaultModelJson),
+        _ => new HttpResponseMessage(HttpStatusCode.NoContent),
+    });
+
+    private static StubHandler CatalogApi(Action<HttpRequestMessage>? seen = null, string? skills = SkillsJson) => new(request =>
     {
         seen?.Invoke(request);
         return request.RequestUri!.AbsolutePath switch
@@ -586,7 +656,8 @@ public sealed class OpenCode2AgentsTests
                   {"id":"opencode","name":"OpenCode Zen","activation":"disabled","package":"p"},
                   {"id":"fakellm","name":"Fake LLM","activation":"enabled","package":"p"}]}
                 """),
-            "/api/command" => Json("""{"location":{"directory":"/work/rocket"},"data":[{"name":"init","description":"guided AGENTS.md setup"},{"name":""},{"name":"hello","description":"Says hello"}]}"""),
+            "/api/command" => Json(CommandsJson),
+            "/api/skill" when skills is not null => Json(skills),
             _ => new HttpResponseMessage(HttpStatusCode.NotFound),
         };
     });

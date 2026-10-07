@@ -163,7 +163,8 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
         string? messageId,
         IReadOnlyList<OpenCode2PromptFile>? files,
         string? delivery,
-        CancellationToken ct)
+        CancellationToken ct,
+        IReadOnlyList<OpenCode2PromptSkill>? skills = null)
     {
         using var response = await http.PostAsJsonAsync(
             $"api/session/{Uri.EscapeDataString(sessionId)}/prompt",
@@ -172,6 +173,7 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
                 Id = messageId,
                 Text = text,
                 Files = files is { Count: > 0 } ? files : null,
+                Skills = skills is { Count: > 0 } ? skills : null,
                 Delivery = delivery,
                 Metadata = delivery == OpenCode2Deliveries.Steer ? new OpenCode2PromptMetadata { FleetDelivery = delivery } : null,
             },
@@ -433,6 +435,12 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
         => (await http.GetFromJsonAsync(
             $"api/command?{LocationQuery(directory)}",
             OpenCode2JsonContext.Default.OpenCode2EnvelopeListOpenCode2CommandInfo,
+            ct).ConfigureAwait(false))?.Data ?? [];
+
+    public async Task<IReadOnlyList<OpenCode2SkillInfo>> GetSkillsAsync(string directory, CancellationToken ct)
+        => (await http.GetFromJsonAsync(
+            $"api/skill?{LocationQuery(directory)}",
+            OpenCode2JsonContext.Default.OpenCode2EnvelopeListOpenCode2SkillInfo,
             ct).ConfigureAwait(false))?.Data ?? [];
 
     /// <summary>The config V2 read for <paramref name="directory"/>, global first and the folder's own last.</summary>
