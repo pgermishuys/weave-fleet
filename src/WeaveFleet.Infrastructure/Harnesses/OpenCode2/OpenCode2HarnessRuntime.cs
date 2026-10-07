@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.FleetTools;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Memory;
 using WeaveFleet.Application.Services;
@@ -13,6 +14,7 @@ using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Skills;
 using WeaveFleet.Application.Terminals;
 using WeaveFleet.Application.Weave;
+using WeaveFleet.Application.Walkthroughs;
 using WeaveFleet.Application.Workflows;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
@@ -619,7 +621,8 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             profile,
             Workflows: workflows && plugin is not null,
             WeaveConfigFolder: await _weave.GetConfigFolderAsync(ownerUserId).ConfigureAwait(false),
-            MemoryFolder: plugin is not null ? memoryFolder : null);
+            MemoryFolder: plugin is not null ? memoryFolder : null,
+            Walkthrough: plugin is not null && builtInSkills.Names.Contains(FleetToolSwitches.WalkthroughSkill));
     }
 
     /// <inheritdoc />
@@ -742,6 +745,8 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             environment[SessionMessages.EnvironmentVariable] = "1";
         if (setup.Workflows)
             environment[FleetWorkflows.EnvironmentVariable] = "1";
+        if (setup.Walkthrough)
+            environment[WalkthroughBridge.EnvironmentVariable] = "1";
         if (setup.WeaveConfigFolder is { } weaveFolder)
             environment[WeaveEnvironment.GlobalConfigDir] = weaveFolder;
         if (setup.MemoryFolder is { } memoryFolder)

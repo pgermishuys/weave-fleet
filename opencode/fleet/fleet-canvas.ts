@@ -262,6 +262,37 @@ export const FleetCanvasPlugin = async (input: { directory?: string }) => ({
         callFleet("page-show", context, { path: args.path, title: args.title }),
     },
 
+    // Only in processes started with fleet-walkthrough on: the skill says how to write the guide.
+    ...(process.env.FLEET_WALKTHROUGH === "1"
+      ? {
+          fleet_walkthrough_show: {
+            description: [
+              "Show the user a guided walkthrough of a change in a page canvas beside the chat: an overview, then chapters, each explained beside the real hunks of the files it covers.",
+              "Use it from the fleet-walkthrough skill, which says how to group and order the chapters and check every claim.",
+              "Fleet takes the hunks from the change itself, so send the outline only, never code: by default the session's changes as the Changes tab shows them, or guide.from and guide.to.",
+              "Every file a chapter names must be in the change, named from the repository's root; Fleet says which aren't, and lists the files no chapter covers.",
+              "Calling it again with the same title updates the tab.",
+            ].join(" "),
+            args: {
+              title: {
+                type: "string",
+                description: "Short title for the tab and the page: what the change does, e.g. \"Branches compare with where they left main\".",
+              },
+              guide: {
+                type: "object",
+                description: [
+                  "{\"summary\": two or three sentences, \"steps\"?: [{\"text\", \"chapter\"?: n}], \"chapters\": [{\"title\", \"body\": [paragraphs], \"cite\"?: \"path:line\", \"files\": [path or {\"path\", \"collapsed\": true}], \"closer\"?: [questions]}], \"diagram\"?: {\"caption\", \"before\"?: {\"rows\", \"problem\"?}, \"after\": {\"rows\"}}, \"alsoChanged\"?: [{\"path\", \"note\"}], \"from\"?: ref, \"to\"?: ref}.",
+                  "A diagram row is {\"label\"?, \"branch\"?: true, \"nodes\": [{\"text\", \"code\"?: true, \"chapter\"?: n, \"kind\"?: \"new\"|\"gone\", \"note\"?}]}, its nodes joined by arrows.",
+                  "alsoChanged paths may use * and **. Text may use `backticks` for code.",
+                ].join(" "),
+              },
+            },
+            execute: (args: { title: string; guide: unknown }, context: ToolContext) =>
+              callFleet("walkthrough-show", context, { title: args.title, guide: args.guide }),
+          },
+        }
+      : {}),
+
     fleet_app_start: {
       description: [
         "Start the project's web app as a long-running server and show its page to the user in a browser canvas beside the chat.",

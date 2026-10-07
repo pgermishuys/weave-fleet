@@ -50,6 +50,13 @@ describe("getToolLabel", () => {
     expect(getToolIcon("fleet_page_show")).not.toBe(getToolIcon("unknown-tool"));
   });
 
+  it("labels a walkthrough by its title", () => {
+    expect(getToolLabel("fleet_walkthrough_show", { title: "Orders ship from the nearest warehouse", guide: {} })).toBe("Orders ship from the nearest warehouse");
+    expect(getToolLabel("fleet_walkthrough_show", null)).toBe("fleet_walkthrough_show");
+    expect(getToolDisplayLabel("fleet_walkthrough_show")).toBe("Walkthrough");
+    expect(getToolIcon("fleet_walkthrough_show")).not.toBe(getToolIcon("unknown-tool"));
+  });
+
   it("names reading an @-referenced session", () => {
     expect(getToolDisplayLabel("fleet_session_read")).toBe("Read session");
     expect(getToolIcon("fleet_session_read")).not.toBe(getToolIcon("unknown-tool"));

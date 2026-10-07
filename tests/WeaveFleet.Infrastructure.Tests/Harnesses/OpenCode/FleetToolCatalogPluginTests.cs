@@ -61,6 +61,7 @@ public sealed partial class FleetToolCatalogPluginTests
     {
         FleetToolCatalog.All.Where(tool => tool.Requires is not null).Select(tool => (tool.Name, tool.Requires)).ShouldBe(
         [
+            ("fleet_walkthrough_show", "walkthrough"),
             ("fleet_browser_read", "browser"),
             ("fleet_browser_act", "browser"),
             ("fleet_message", "sessionMessages"),

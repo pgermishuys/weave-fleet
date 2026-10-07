@@ -756,7 +756,7 @@ public static class CanvasOps
 
     private static PageState ReadPage(FieldReader r)
     {
-        r.AllowOnly("pageId", "entry", "source", "files", "bytes", "shownAt", "warnings");
+        r.AllowOnly("pageId", "entry", "source", "files", "bytes", "shownAt", "warnings", "label");
         return new PageState
         {
             PageId = r.Page("pageId"),
@@ -766,6 +766,7 @@ public static class CanvasOps
             Bytes = (long)r.Number("bytes"),
             ShownAt = r.Page("shownAt"),
             Warnings = r.OptionalStrings("warnings"),
+            Label = r.OptionalNonEmptyText("label"),
         };
     }
 

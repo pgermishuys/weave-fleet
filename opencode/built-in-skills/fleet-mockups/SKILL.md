@@ -1,6 +1,6 @@
 ---
 name: fleet-mockups
-description: Build UI mockups, prototypes, before-and-after comparisons and visual explainers as HTML pages, and show them to the user in a page canvas beside the chat. Use when the user asks for a mockup, wireframe, prototype or design options, or to see an idea before it's built.
+description: Build UI mockups, prototypes and before-and-after comparisons of screens as HTML pages, and show them to the user in a page canvas beside the chat. Use when the user asks for a mockup, wireframe, prototype or design options, or to see an idea before it's built. Not for showing how something works (fleet-explain) or walking through a change (fleet-walkthrough).
 ---
 
 # Mockups in a page canvas

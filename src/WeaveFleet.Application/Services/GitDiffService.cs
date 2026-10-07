@@ -71,6 +71,28 @@ public sealed class GitDiffService
     }
 
     /// <summary>
+    /// The commit <paramref name="reference"/> names (a branch, a tag, a commit, <c>origin/main</c>), or null when it
+    /// names none. Something that reads as an option is no reference.
+    /// </summary>
+    public async Task<string?> ResolveCommitAsync(string repoRoot, string reference, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(reference) || reference.StartsWith('-') || reference.Contains("..", StringComparison.Ordinal))
+            return null;
+
+        var result = await RunGitAsync(repoRoot, ["rev-parse", "--verify", "--quiet", "--end-of-options", reference + "^{commit}"], ct).ConfigureAwait(false);
+        var commit = result.StandardOutput.Trim();
+        return result.IsSuccess && commit.Length > 0 ? commit : null;
+    }
+
+    /// <summary>Where <paramref name="a"/> and <paramref name="b"/> (commits) last met, or null when they never did.</summary>
+    public async Task<string?> MergeBaseAsync(string repoRoot, string a, string b, CancellationToken ct)
+    {
+        var result = await RunGitAsync(repoRoot, ["merge-base", a, b], ct).ConfigureAwait(false);
+        var commit = result.StandardOutput.Trim();
+        return result.IsSuccess && commit.Length > 0 ? commit : null;
+    }
+
+    /// <summary>
     /// What a session's changes are compared with. On a branch other than the repository's main branch it's where
     /// the branch left main, as a pull request shows it: rebasing onto a newer main, pulling it, or switching
     /// branches then doesn't list other people's work as the session's. On main itself or a detached HEAD there's
@@ -226,11 +248,14 @@ public sealed class GitDiffService
         return ToTextContent(result.StandardOutput);
     }
 
+    /// <param name="baselineRef">What the folder is compared with; or a range (<c>a...b</c>) between two commits, with
+    /// <paramref name="includeUntracked"/> off, since the folder isn't part of it.</param>
     public async Task<GitDiffComputationResult> ComputeDiffsWithAvailabilityAsync(
         string repoRoot,
         string baselineRef,
         string workspacePrefix,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool includeUntracked = true)
     {
         if (string.IsNullOrWhiteSpace(repoRoot) || string.IsNullOrWhiteSpace(baselineRef))
             return GitDiffComputationResult.Unavailable;
@@ -246,16 +271,66 @@ public sealed class GitDiffService
         if (!statusResult.IsSuccess)
             return GitDiffComputationResult.Unavailable;
 
-        var untrackedArgs = BuildPathspecArguments(["ls-files", "--others", "--exclude-standard", "--"], prefix);
-        var untrackedResult = await RunGitAsync(repoRoot, untrackedArgs, ct).ConfigureAwait(false);
-        if (!untrackedResult.IsSuccess)
-            return GitDiffComputationResult.Unavailable;
+        var untracked = string.Empty;
+        if (includeUntracked)
+        {
+            var untrackedArgs = BuildPathspecArguments(["ls-files", "--others", "--exclude-standard", "--"], prefix);
+            var untrackedResult = await RunGitAsync(repoRoot, untrackedArgs, ct).ConfigureAwait(false);
+            if (!untrackedResult.IsSuccess)
+                return GitDiffComputationResult.Unavailable;
+            untracked = untrackedResult.StandardOutput;
+        }
 
-        var untrackedLineCounts = CountUntrackedLines(repoRoot, untrackedResult.StandardOutput);
+        var untrackedLineCounts = CountUntrackedLines(repoRoot, untracked);
 
         return new GitDiffComputationResult(
-            ParseDiffs(diffResult.StandardOutput, statusResult.StandardOutput, untrackedResult.StandardOutput, untrackedLineCounts),
+            ParseDiffs(diffResult.StandardOutput, statusResult.StandardOutput, untracked, untrackedLineCounts),
             Available: true);
+    }
+
+    /// <summary>
+    /// One changed file as a unified diff, three lines of context, against <paramref name="baselineRef"/> (as
+    /// <see cref="ComputeDiffsWithAvailabilityAsync"/> takes it). An untracked file comes as one hunk of added lines, so
+    /// every file reads the same way. No text for a binary file, or one too big to show.
+    /// </summary>
+    public async Task<FilePatch> ReadPatchAsync(string repoRoot, string baselineRef, FileDiffSummary file, CancellationToken ct)
+    {
+        if (file.IsBinary)
+            return FilePatch.BinaryFile;
+
+        if (file.IsUntracked)
+        {
+            var content = await ReadWorkingTreeFileContentAsync(repoRoot, file.Path, ct).ConfigureAwait(false);
+            return content.State switch
+            {
+                FileContentReadState.Available => new FilePatch(AddedLinesPatch(content.Content!), Binary: false, TooBig: false),
+                FileContentReadState.Binary => FilePatch.BinaryFile,
+                FileContentReadState.Truncated => FilePatch.TooBigFile,
+                _ => FilePatch.Missing,
+            };
+        }
+
+        var result = await RunGitAsync(
+            repoRoot, ["diff", "-U3", "--no-color", "--no-ext-diff", "--no-textconv", baselineRef, "--", file.Path], ct).ConfigureAwait(false);
+        if (!result.IsSuccess)
+            return FilePatch.Missing;
+        if (Encoding.UTF8.GetByteCount(result.StandardOutput) > MaxFileContentBytes)
+            return FilePatch.TooBigFile;
+        return new FilePatch(result.StandardOutput, Binary: result.StandardOutput.Contains("\nBinary files ", StringComparison.Ordinal), TooBig: false);
+    }
+
+    internal static string AddedLinesPatch(string content)
+    {
+        var lines = content.ReplaceLineEndings("\n").Split('\n');
+        if (lines.Length > 0 && lines[^1].Length == 0)
+            lines = lines[..^1];
+        if (lines.Length == 0)
+            return string.Empty;
+
+        var patch = new StringBuilder().Append("@@ -0,0 +1,").Append(lines.Length).Append(" @@\n");
+        foreach (var line in lines)
+            patch.Append('+').Append(line).Append('\n');
+        return patch.ToString();
     }
 
     private async Task<FileDiffContent> ToFileDiffContentAsync(
@@ -651,6 +726,14 @@ public sealed record FileDiffSummary(
     bool IsUntracked)
 {
     public string? Status { get; init; }
+}
+
+/// <summary>A file's unified diff (<see cref="GitDiffService.ReadPatchAsync"/>); no text when it's binary, too big or gone.</summary>
+public sealed record FilePatch(string? Text, bool Binary, bool TooBig)
+{
+    public static FilePatch BinaryFile { get; } = new(Text: null, Binary: true, TooBig: false);
+    public static FilePatch TooBigFile { get; } = new(Text: null, Binary: false, TooBig: true);
+    public static FilePatch Missing { get; } = new(Text: null, Binary: false, TooBig: false);
 }
 
 public sealed record FileDiffContent(

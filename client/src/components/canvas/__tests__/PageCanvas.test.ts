@@ -32,6 +32,15 @@ describe("PageCanvas", () => {
       .toBe("/tmp/mockups/settings/options a.html");
   });
 
+  it("says what a page Fleet wrote itself is, in place of a file", () => {
+    const wrapper = mount(PageCanvas, {
+      props: { sessionId: "s1", page: { ...page, source: "walkthrough:Orders", label: "Walkthrough · compared with main at 55650b2" } },
+    });
+
+    expect(wrapper.get(".page-canvas__source").text()).toBe("Walkthrough · compared with main at 55650b2");
+    expect(wrapper.text()).not.toContain("walkthrough:Orders");
+  });
+
   it("loads the page again when the agent shows it again, and on Reload", async () => {
     const wrapper = mount(PageCanvas, { props: { sessionId: "s1", page } });
     const first = wrapper.get("iframe").element;

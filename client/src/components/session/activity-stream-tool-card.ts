@@ -85,9 +85,9 @@ export function isSubagentTool(toolName: string): boolean {
 
 /**
  * Fleet's browser and page tools; their card reads "title · address" once the page answered, "title · size" for a
- * shot, or "title · file" for a page.
+ * shot, "title · file" for a page, or "title · chapters" for a walkthrough.
  */
-const BROWSER_TOOLS = new Set(["fleet_app_start", "fleet_browser_open", "fleet_browser_screenshot", "fleet_page_show"]);
+const BROWSER_TOOLS = new Set(["fleet_app_start", "fleet_browser_open", "fleet_browser_screenshot", "fleet_page_show", "fleet_walkthrough_show"]);
 
 /**
  * Tools whose card title comes from Fleet's answer: "Messaged Update documentation" for fleet_message, "Read t3code

@@ -4,6 +4,7 @@ using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Memory;
 using WeaveFleet.Application.Pages;
 using WeaveFleet.Application.Sessions;
+using WeaveFleet.Application.Walkthroughs;
 using WeaveFleet.Application.Workflows;
 
 namespace WeaveFleet.Api.Endpoints;
@@ -75,6 +76,10 @@ public static class CanvasBridgeEndpoints
         group.MapPost("/page-show", async (CanvasBridgeRequest request, HttpContext http, PageBridge bridge, CancellationToken ct)
             => ToResult(await bridge.ShowAsync(BridgeToken(http), request.HarnessSessionId, request.Path, request.Title, ct)))
             .WithName("CanvasBridgePageShow");
+
+        group.MapPost("/walkthrough-show", async (WalkthroughBridgeRequest request, HttpContext http, WalkthroughBridge bridge, CancellationToken ct)
+            => ToResult(await bridge.ShowAsync(BridgeToken(http), request.HarnessSessionId, request.Title, request.Guide, ct)))
+            .WithName("CanvasBridgeWalkthroughShow");
 
         var session = app.MapGroup($"{PathPrefix}/session")
             .AllowAnonymous()

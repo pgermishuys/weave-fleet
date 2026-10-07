@@ -227,6 +227,9 @@ public sealed class PageState
     public string ShownAt { get; set; } = string.Empty;
     public List<string> Warnings { get; set; } = [];
 
+    /// <summary>What the tab's bar says in place of <see cref="Source"/>, for a page Fleet wrote itself (a walkthrough).</summary>
+    public string? Label { get; set; }
+
     public static PageState Parse(string json)
     {
         var root = JsonNode.Parse(json)?.AsObject() ?? throw new FormatException("Page state is not a JSON object.");
@@ -239,6 +242,7 @@ public sealed class PageState
             Bytes = (long?)root["bytes"] ?? 0,
             ShownAt = (string?)root["shownAt"] ?? string.Empty,
             Warnings = root["warnings"] is JsonArray warnings ? [.. warnings.Select(item => (string?)item).OfType<string>()] : [],
+            Label = (string?)root["label"],
         };
     }
 
@@ -258,6 +262,8 @@ public sealed class PageState
             foreach (var warning in Warnings)
                 writer.WriteStringValue(warning);
             writer.WriteEndArray();
+            if (Label is not null)
+                writer.WriteString("label", Label);
             writer.WriteEndObject();
         }
 

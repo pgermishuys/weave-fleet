@@ -174,6 +174,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(CanvasResponse))]
 [JsonSerializable(typeof(List<CanvasResponse>))]
 [JsonSerializable(typeof(CanvasBridgeRequest))]
+[JsonSerializable(typeof(WalkthroughBridgeRequest))]
 [JsonSerializable(typeof(SessionMessageBridgeRequest))]
 [JsonSerializable(typeof(SessionReadBridgeRequest))]
 [JsonSerializable(typeof(SessionReferenceDto))]

@@ -69,6 +69,14 @@ onBeforeUnmount(() => window.removeEventListener("message", onMessage));
         <RotateCw :size="14" />
       </button>
       <p
+        v-if="page.label"
+        class="page-canvas__source"
+        :title="page.label"
+      >
+        <span class="page-canvas__file">{{ page.label }}</span>
+      </p>
+      <p
+        v-else
         class="page-canvas__source"
         :title="page.source"
       >

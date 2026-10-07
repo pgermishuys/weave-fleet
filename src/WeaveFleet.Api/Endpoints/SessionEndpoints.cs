@@ -543,7 +543,7 @@ public static class SessionEndpoints
             return await result.Match<Task<IResult>>(
                 async session =>
                 {
-                    if (await ResolveDiffScopeAsync(session, gitDiffService, ct) is not { } scope)
+                    if (await SessionDiffScope.ResolveAsync(session, gitDiffService, ct) is not { } scope)
                         return Results.Ok(new GetSessionDiffsResponse([], Available: false, Base: null));
 
                     var diffAvailability = await gitDiffService.ComputeDiffsWithAvailabilityAsync(
@@ -576,7 +576,7 @@ public static class SessionEndpoints
             return await result.Match<Task<IResult>>(
                 async session =>
                 {
-                    if (await ResolveDiffScopeAsync(session, gitDiffService, ct) is not { } scope)
+                    if (await SessionDiffScope.ResolveAsync(session, gitDiffService, ct) is not { } scope)
                         return Results.NotFound();
 
                     var diff = await gitDiffService.ComputeFileDiffWithContentAsync(
@@ -1149,22 +1149,6 @@ public static class SessionEndpoints
             : DeriveSessionStatus(session, activityStatus);
     }
 
-    private sealed record DiffScope(string RepoRoot, GitDiffBase Base, string WorkspacePrefix);
-
-    // Where a session's changes are read and what they're compared with. A session Fleet took no baseline for (a
-    // delegated child, say) still has its folder's branch to compare with when that folder is a git repository.
-    private static async Task<DiffScope?> ResolveDiffScopeAsync(Session session, GitDiffService gitDiffService, CancellationToken ct)
-    {
-        var repoRoot = string.IsNullOrWhiteSpace(session.GitRepoRoot)
-            ? await gitDiffService.FindRepoRootAsync(session.Directory, ct)
-            : session.GitRepoRoot;
-        if (repoRoot is null || TryComputeWorkspacePrefix(repoRoot, session.Directory) is not { } prefix)
-            return null;
-
-        var diffBase = await gitDiffService.ResolveDiffBaseAsync(repoRoot, session.GitBaselineRef, ct);
-        return diffBase is null ? null : new DiffScope(repoRoot, diffBase, prefix);
-    }
-
     private static SessionDiffBase ToSessionDiffBase(GitDiffBase diffBase) =>
         diffBase.Kind == GitDiffBaseKind.Branch
             ? new SessionDiffBase("branch", diffBase.MainBranch, diffBase.Ref)
@@ -1191,62 +1175,6 @@ public static class SessionEndpoints
             IsBinary: diff.IsBinary,
             IsTruncated: diff.IsTruncated);
 
-    private static string? TryComputeWorkspacePrefix(string repoRoot, string sessionDirectory)
-    {
-        if (string.IsNullOrWhiteSpace(repoRoot))
-            return null;
-
-        if (string.IsNullOrWhiteSpace(sessionDirectory))
-            return string.Empty;
-
-        try
-        {
-            var repoRootFullPath = Path.GetFullPath(repoRoot);
-            var sessionDirectoryFullPath = Path.GetFullPath(sessionDirectory);
-
-            if (!IsSameOrChildPath(sessionDirectoryFullPath, repoRootFullPath))
-                return null;
-
-            if (PathsEqual(sessionDirectoryFullPath, repoRootFullPath))
-                return string.Empty;
-
-            return Path.GetRelativePath(repoRootFullPath, sessionDirectoryFullPath)
-                .Replace(Path.DirectorySeparatorChar, '/')
-                .Replace(Path.AltDirectorySeparatorChar, '/')
-                .Trim('/');
-        }
-        catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException or UnauthorizedAccessException)
-        {
-            return null;
-        }
-    }
-
-    private static bool IsSameOrChildPath(string candidatePath, string rootPath)
-    {
-        var root = TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
-        var candidate = TrimEndingDirectorySeparator(Path.GetFullPath(candidatePath));
-        if (PathsEqual(candidate, root))
-            return true;
-
-        return candidate.StartsWith(EnsureEndingDirectorySeparator(root), PathStringComparison);
-    }
-
-    private static bool PathsEqual(string left, string right) =>
-        string.Equals(
-            TrimEndingDirectorySeparator(left),
-            TrimEndingDirectorySeparator(right),
-            PathStringComparison);
-
-    private static string EnsureEndingDirectorySeparator(string path) =>
-        Path.EndsInDirectorySeparator(path) ? path : path + Path.DirectorySeparatorChar;
-
-    private static string TrimEndingDirectorySeparator(string path) =>
-        Path.GetPathRoot(path) == path
-            ? path
-            : path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
-    private static StringComparison PathStringComparison =>
-        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
     private static long TryParseUnixMs(string? iso)
     {

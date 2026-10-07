@@ -9,12 +9,14 @@ using Microsoft.Extensions.Logging;
 using WeaveFleet.Application;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.FleetTools;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Memory;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Skills;
 using WeaveFleet.Application.Weave;
+using WeaveFleet.Application.Walkthroughs;
 using WeaveFleet.Application.Workflows;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
@@ -399,6 +401,10 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
             envVars[OpenCodeFleetSkills.BuiltInVariable] = string.Join(',', fleetCopies);
         if (yourVersions.Count > 0)
             envVars[OpenCodeFleetSkills.YourVersionsVariable] = string.Join(Path.PathSeparator, yourVersions);
+
+        // fleet-walkthrough comes with its page tool, Fleet's or the owner's version alike.
+        if (builtInSkills.Any(skill => skill.Name == FleetToolSwitches.WalkthroughSkill))
+            envVars[WalkthroughBridge.EnvironmentVariable] = "1";
 
         // Messages between sessions change the process's tools and its FLEET_URL, so sessions with it on and off
         // never share a process.
