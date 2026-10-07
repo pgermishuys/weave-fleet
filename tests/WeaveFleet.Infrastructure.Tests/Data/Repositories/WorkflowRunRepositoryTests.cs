@@ -66,6 +66,32 @@ public sealed class WorkflowRunRepositoryTests
     }
 
     [Fact]
+    public async Task A_runs_chosen_project_is_saved_and_never_overwritten_by_update()
+    {
+        var (keeper, repo, _) = await CreateAsync();
+        using var _ = keeper;
+        var run = Run("run-1", "2026-09-23T10:00:00.0000000Z");
+        run.ProjectId = "proj-1";
+        await repo.InsertAsync(run);
+
+        run.Status = WorkflowRunStatus.Waiting;
+        await repo.UpdateAsync(run);
+
+        (await repo.GetAsync("run-1")).ShouldNotBeNull().ProjectId.ShouldBe("proj-1");
+    }
+
+    [Fact]
+    public async Task A_run_with_no_chosen_project_saves_null()
+    {
+        var (keeper, repo, _) = await CreateAsync();
+        using var _ = keeper;
+        var run = Run("run-1", "2026-09-23T10:00:00.0000000Z");
+        await repo.InsertAsync(run);
+
+        (await repo.GetAsync("run-1")).ShouldNotBeNull().ProjectId.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task A_run_keeps_the_automation_that_started_it()
     {
         var (keeper, repo, _) = await CreateAsync();

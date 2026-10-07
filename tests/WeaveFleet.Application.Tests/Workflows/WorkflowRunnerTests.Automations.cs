@@ -58,6 +58,7 @@ public sealed partial class WorkflowRunnerTests
             new WorkflowModelRoles(_preferences),
             new WorkflowSkills(new SkillCatalog(), _preferences),
             _preferences,
+            _projects,
             user,
             TimeProvider.System);
         var automationWorkflows = new AutomationWorkflows(
@@ -145,6 +146,52 @@ public sealed partial class WorkflowRunnerTests
 
         started.IsSuccess.ShouldBeTrue(started.IsFailure ? started.Error.Description : null);
         started.Value.StartedBy.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task the_run_box_can_choose_the_runs_project()
+    {
+        using var rig = NewAutomationRig();
+        _preferences.Seed(BuiltInSkillService.PreferenceKey, "fleet-code-review");
+        _projects.Seed(new Project { Id = "proj-1", Name = "Dependencies", Type = "standard", Position = 0, CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01" });
+
+        var started = await rig.Workflows.StartAsync(
+            new StartWorkflowRunRequest("builtin:build-a-feature", rig.Repository.Path, "Add a shortcut sheet", ProjectId: "proj-1"),
+            CancellationToken.None);
+
+        started.IsSuccess.ShouldBeTrue(started.IsFailure ? started.Error.Description : null);
+        _runs.Run(started.Value.Id).ProjectId.ShouldBe("proj-1");
+
+        // And the first step's session is started in it.
+        var plan = _sessions.Started.ShouldHaveSingleItem();
+        plan.SessionId.ShouldNotBeNull();
+    }
+
+    [Fact]
+    public async Task an_unknown_project_is_rejected()
+    {
+        using var rig = NewAutomationRig();
+        _preferences.Seed(BuiltInSkillService.PreferenceKey, "fleet-code-review");
+
+        var started = await rig.Workflows.StartAsync(
+            new StartWorkflowRunRequest("builtin:build-a-feature", rig.Repository.Path, "Add a shortcut sheet", ProjectId: "no-such-project"),
+            CancellationToken.None);
+
+        started.IsFailure.ShouldBeTrue();
+        started.Error.Description.ShouldContain("Project");
+    }
+
+    [Fact]
+    public async Task a_run_without_a_chosen_project_leaves_it_null()
+    {
+        using var rig = NewAutomationRig();
+        _preferences.Seed(BuiltInSkillService.PreferenceKey, "fleet-code-review");
+
+        var started = await rig.Workflows.StartAsync(
+            new StartWorkflowRunRequest("builtin:build-a-feature", rig.Repository.Path, "Add a shortcut sheet"), CancellationToken.None);
+
+        started.IsSuccess.ShouldBeTrue();
+        _runs.Run(started.Value.Id).ProjectId.ShouldBeNull();
     }
 
     [Fact]

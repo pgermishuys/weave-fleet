@@ -20,6 +20,7 @@ public sealed partial class WorkflowRunnerTests
     private readonly FakeStepSessions _sessions = new();
     private readonly FakeRunEvents _events = new();
     private readonly InMemoryUserPreferenceRepository _preferences = new();
+    private readonly InMemoryProjectRepository _projects = new();
     private readonly SessionActivityTracker _activity = new();
     private readonly FakeFiles _files = new();
     private readonly FakeSkillCatalog _skills = new();

@@ -14,6 +14,7 @@ namespace WeaveFleet.Application.Workflows;
 /// <param name="OptionalSteps">The optional steps switched on for this run.</param>
 /// <param name="RoleOverrides">The run's own model per role, from the Models menu.</param>
 /// <param name="CheckWithMe">"Check with me after each step", from the Run box: every agent step is one you finish.</param>
+/// <param name="ProjectId">The project the run's first step session goes in; null for Scratch.</param>
 public sealed record StartWorkflowRunRequest(
     string WorkflowId,
     string Directory,
@@ -23,7 +24,8 @@ public sealed record StartWorkflowRunRequest(
     string? HarnessProfileId = null,
     IReadOnlyList<string>? OptionalSteps = null,
     IReadOnlyDictionary<string, WorkflowModelChoice>? RoleOverrides = null,
-    bool CheckWithMe = false);
+    bool CheckWithMe = false,
+    string? ProjectId = null);
 
 /// <summary>The automation starting a run, so the run can say "Started by …". Never read from a request body.</summary>
 public sealed record WorkflowRunStartedBy(string AutomationId, string AutomationName);
@@ -42,6 +44,7 @@ public sealed class WorkflowService(
     WorkflowModelRoles roles,
     WorkflowSkills skills,
     IUserPreferenceRepository preferences,
+    IProjectRepository projects,
     IUserContext user,
     TimeProvider time)
 {
@@ -106,6 +109,15 @@ public sealed class WorkflowService(
         if (repository.IsFailure)
             return repository.Error;
 
+        string? projectId = null;
+        if (!string.IsNullOrWhiteSpace(request.ProjectId))
+        {
+            var project = await projects.GetByIdAsync(request.ProjectId).ConfigureAwait(false);
+            if (project is null)
+                return FleetError.NotFoundFor("Project", request.ProjectId);
+            projectId = project.Id;
+        }
+
         var harnessType = string.IsNullOrWhiteSpace(request.HarnessType)
             ? await preferences.GetAsync(DefaultHarnessPreferenceKey).ConfigureAwait(false) is { Length: > 0 } preferred ? preferred : FallbackHarness
             : request.HarnessType.Trim();
@@ -156,6 +168,7 @@ public sealed class WorkflowService(
             BaseBranch = string.IsNullOrWhiteSpace(request.BaseBranch) ? null : request.BaseBranch.Trim(),
             HarnessType = harnessType,
             HarnessProfileId = string.IsNullOrWhiteSpace(request.HarnessProfileId) ? null : request.HarnessProfileId,
+            ProjectId = projectId,
             Options = new WorkflowRunOptions { OptionalSteps = optional, RoleOverrides = overrides, StepModels = models, CheckWithMe = request.CheckWithMe }.Write(),
             Status = WorkflowRunStatus.Running,
             AutomationId = startedBy?.AutomationId,
