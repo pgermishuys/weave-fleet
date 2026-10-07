@@ -242,7 +242,7 @@ export const FleetCanvasPlugin = async (input: { directory?: string }) => ({
         "Use it when the user asks to see something, or when a page is clearly the best way to answer them.",
         "Don't open one for your own notes, or when you're working on a task delegated by another agent: your result goes to that agent, not to the user.",
         "Pass the .html file's absolute path. Fleet copies the file and the web files in its folder (CSS, scripts, images, fonts) and serves the copy itself, so there's no server to start.",
-        "Showing the same file again updates the same tab, and the user's tab reloads, so show it again after every edit you want them to see.",
+        "Showing the same file again updates the same tab, and the user's tab reloads, so show it again after every edit you want them to see. Each time, Fleet checks the page at desktop and phone width and tells you about script errors, files that didn't load and anything wider than the window.",
         "Use relative links, and keep the page's files in its folder: paths starting with / or ../ don't load. Pages run sandboxed: localStorage isn't available.",
         "Not for the project's own app, or anything that needs a build or a dev server: use fleet_app_start.",
         "Not for a page already running at a localhost address: use fleet_browser_open.",
@@ -382,8 +382,8 @@ export const FleetCanvasPlugin = async (input: { directory?: string }) => ({
     fleet_browser_screenshot: {
       description: [
         "Look at a page in a browser or page canvas: Fleet takes a screenshot and attaches it to this tool's result, as an image you can see.",
-        "Use it to check UI work you just did — layout, spacing, colours, whether the thing you changed is even on the screen — instead of assuming the code is enough.",
-        "Take one after a change, and again after the fix.",
+        "Use it when how a page looks is the point of the work, such as a change to an app's UI, a mockup or a design: check the layout, spacing, colours and whether the thing you changed is even on the screen, instead of assuming the code is enough.",
+        "Not to confirm that a report or a page of results rendered: fleet_page_show already checks its pages for script errors, files that didn't load and content wider than the window, and the user is looking at the page.",
         "Fleet shoots the page in its own headless browser, so the user's tab doesn't move and nothing is clicked.",
         "It loads the page fresh, so it doesn't show what you clicked or typed: for that, use fleet_browser_read with what \"screenshot\".",
         "A shot costs roughly width × height / 750 tokens of context (about 1,400 for desktop, 500 for phone), so take the ones you'll actually read.",

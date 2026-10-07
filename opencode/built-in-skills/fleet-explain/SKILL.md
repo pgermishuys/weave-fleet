@@ -105,7 +105,8 @@ No build step and no animation library; SVG and a little JavaScript are enough.
 Show it with **`fleet_page_show`** and the page's path. Fleet copies the folder, serves the copy and shows it in a
 page canvas beside the chat; there's no server to start. After you fix the page, show it again: the user's tab
 reloads. Keep links relative and the page's files in its folder. The page runs sandboxed, so it can't use
-`localStorage`.
+`localStorage`. Each time it shows the page, Fleet checks it for script errors, files that didn't load and sideways
+scrolling: fix what it reports before you take any stills.
 
 Take **`fleet_browser_screenshot`** stills with `path: "?step=N"`: two key steps at desktop, and one with
 `viewport: "phone"`. Check what each still says before how it looks. Each must pass all of these:

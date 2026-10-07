@@ -118,9 +118,18 @@ never lorem ipsum.
   instead of replacing it.
 - Motion: one planned moment beats effects scattered everywhere, and none at all is often better.
 
-## 6. Look once, then hand it over
+## 6. Check it, then hand it over
 
-When the page is showing in a page or browser canvas, take one `fleet_browser_screenshot`, plus one with `viewport: "phone"`
-if the layout matters or the page shows a command or code. On the phone shot, look for anything cut off at the right
-edge. Fix what the shots show in one pass, then hand it over. Don't loop on screenshots: the user reviews the live
-page and asks for more polish if they want it.
+`fleet_page_show` checks the page each time it shows it, at desktop and phone width: script errors, files that didn't
+load, a page with nothing on it, and anything wider than the window. Fix what it reports and show the page again
+until the check is clean.
+
+Whether to look at it as well depends on what the page is for:
+
+- **A report, results, a document or a dashboard of data:** a clean check is enough. Don't take a screenshot: the
+  user is already looking at the page.
+- **A mockup, a design or a landing page, where the look is the point:** take one `fleet_browser_screenshot` at
+  desktop width and fix what it shows in one pass. Add one with `viewport: "phone"` only when the phone layout is part
+  of what the user asked for.
+
+Don't loop on screenshots: the user reviews the live page and asks for more polish if they want it.

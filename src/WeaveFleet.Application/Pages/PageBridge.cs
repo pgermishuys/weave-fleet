@@ -13,14 +13,17 @@ namespace WeaveFleet.Application.Pages;
 /// The agent's <c>fleet_page_show</c>: shows an HTML file it wrote in a page canvas. Fleet copies the page
 /// (<see cref="IPageStore"/>) and serves the copy itself, so nothing has to run. A file is shown in one tab:
 /// showing it again replaces the copy and the tab reloads. A project's page is refused, since it needs the
-/// project's server (<c>fleet_app_start</c>).
+/// project's server (<c>fleet_app_start</c>). Once the tab is up, Fleet loads the page (<see cref="IPageChecker"/>)
+/// and tells the agent what's wrong with it in words, so it doesn't need a screenshot to find out.
 /// </summary>
 public sealed class PageBridge(
     IEnumerable<IHarnessCanvasCallerResolver> callers,
     IBackgroundUserScope userScope,
     ICanvasService canvases,
     IPageStore pages,
-    ISessionRepository sessions)
+    ISessionRepository sessions,
+    IPageChecker? checker = null,
+    ILocalFleetUrl? fleetUrl = null)
 {
     public const string PathRequirement = "\"path\" must name an .html file you wrote, e.g. \"/tmp/mockups/settings/options.html\".";
 
@@ -92,11 +95,41 @@ public sealed class PageBridge(
                 .Append(" from ").Append(file).Append(" (").Append(CanvasText.PageSize(copy.Files, copy.Bytes)).Append(" copied from its folder).");
             foreach (var warning in warnings)
                 output.Append("\nWarning: ").Append(warning);
-            output.Append("\nAfter an edit, call fleet_page_show again with the same file: the user's tab reloads by itself.")
-                .Append(" To look at the page yourself, use fleet_browser_screenshot with this canvas.");
+            output.Append("\nAfter an edit, call fleet_page_show again with the same file: the user's tab reloads by itself.");
+            output.Append('\n').Append(CheckText(await CheckAsync(copy, ct)));
 
             return CanvasResult.Ok(new CanvasToolOutput($"{canvas.Title} · {copy.Entry}", output.ToString(), canvas.Id, canvas.Version));
         }, ct);
+
+    private async Task<PageCheckOutcome?> CheckAsync(PageCopy copy, CancellationToken ct)
+        => checker is not null && fleetUrl?.TryGet() is { } fleet
+            ? await checker.CheckAsync(PageRules.EntryUrl(fleet, copy.PageId, copy.Entry).AbsoluteUri, ct)
+            : null;
+
+    private static readonly string Widths = string.Join(" and ", IPageChecker.Widths) + " px wide";
+
+    /// <summary>
+    /// What the check found, and whether the agent still needs to look. A screenshot costs over a thousand tokens and
+    /// the user already sees the page, so a clean check is the end of it unless the look is what the page is for.
+    /// </summary>
+    private static string CheckText(PageCheckOutcome? check)
+    {
+        if (check is null || check.Problem is not null)
+        {
+            var why = check?.Problem is { } problem ? $"Fleet couldn't check the page: {problem.TrimEnd().TrimEnd('.')}. " : string.Empty;
+            return why + "To look at the page yourself, use fleet_browser_screenshot with this canvas.";
+        }
+
+        if (check.Findings.Count == 0)
+            return $"Fleet loaded the page at {Widths}: no script errors, every file loaded, nothing wider than the window. "
+                   + "For a report, results or a document, that's enough: hand it over without a screenshot. "
+                   + "Use fleet_browser_screenshot with this canvas only when how the page looks is the point, such as a mockup or a design.";
+
+        var text = new StringBuilder("Fleet loaded the page at ").Append(Widths).Append(" and found:");
+        foreach (var finding in check.Findings)
+            text.Append("\n- ").Append(finding);
+        return text.Append("\nFix these, then call fleet_page_show again: it checks the page again.").ToString();
+    }
 
     private const string ProjectPageAdvice =
         "If it's the project's app, run it with fleet_app_start and its dev command (read package.json or the README first). "

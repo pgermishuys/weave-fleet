@@ -18,11 +18,8 @@ public sealed class HeadlessChromeScreenshotter : IScreenshotter, IAsyncDisposab
 
     private static readonly TimeSpan LoadTimeout = TimeSpan.FromSeconds(10);
 
-    /// <summary>How long closing a tab may take after a shot; a browser that doesn't answer is quit anyway.</summary>
-    private static readonly TimeSpan CloseTabTimeout = TimeSpan.FromSeconds(2);
-
     /// <summary>After the load event: enough for a framework to paint its first frame, short enough not to drag.</summary>
-    private static readonly TimeSpan SettleDelay = TimeSpan.FromMilliseconds(400);
+    internal static readonly TimeSpan SettleDelay = TimeSpan.FromMilliseconds(400);
 
     private static readonly Action<ILogger, string, int, int, long, Exception?> LogCaptured =
         LoggerMessage.Define<string, int, int, long>(LogLevel.Information, new EventId(2, "ScreenshotCaptured"),
@@ -89,89 +86,33 @@ public sealed class HeadlessChromeScreenshotter : IScreenshotter, IAsyncDisposab
 
     private static async Task<ScreenshotOutcome> ShootAsync(CdpConnection cdp, ScreenshotRequest request, CancellationToken ct)
     {
-        var created = await cdp.SendAsync("Target.createTarget", write => write.WriteString("url", "about:blank"), ct: ct);
-        string target;
-        using (created)
+        await using var tab = await HeadlessTab.OpenAsync(cdp, request.Width, request.Height, ct);
+
+        var (error, loaded) = await tab.NavigateAsync(request.Url, LoadTimeout, ct);
+        if (error is not null)
+            return ScreenshotOutcome.Fail($"The browser couldn't open {request.Url}: {error}. Is the app still running?");
+
+        // A page that never fires "load" still has something on it, and a picture of it says more than an
+        // error does: dev servers hold connections open (HMR sockets, a slow asset), and the agent asked to
+        // see the page, not to hear about its network.
+        var note = loaded
+            ? null
+            : $"The page hadn't finished loading after {LoadTimeout.TotalSeconds:0} seconds; this is how far it had got.";
+
+        await Task.Delay(SettleDelay, ct);
+
+        // Like every call here, it gives up when the browser stops answering (CdpConnection.DefaultReplyTimeout),
+        // and CaptureAsync quits that browser so the next shot starts a fresh one.
+        using var captured = await cdp.SendAsync("Page.captureScreenshot", write =>
         {
-            target = created.RootElement.GetProperty("result").GetProperty("targetId").GetString()!;
-        }
+            write.WriteString("format", "png");
+            write.WriteBoolean("captureBeyondViewport", false);
+        }, tab.Session, ct);
 
-        try
-        {
-            var attached = await cdp.SendAsync("Target.attachToTarget", write =>
-            {
-                write.WriteString("targetId", target);
-                write.WriteBoolean("flatten", true);
-            }, ct: ct);
-
-            string page;
-            using (attached)
-            {
-                page = attached.RootElement.GetProperty("result").GetProperty("sessionId").GetString()!;
-            }
-
-            (await cdp.SendAsync("Page.enable", sessionId: page, ct: ct)).Dispose();
-            (await cdp.SendAsync("Network.enable", sessionId: page, ct: ct)).Dispose();
-
-            // The whole point of the tool is seeing the change just made. A warm browser that serves the page it
-            // saw a minute ago would show the old one, and the agent would trust it.
-            (await cdp.SendAsync("Network.setCacheDisabled", write => write.WriteBoolean("cacheDisabled", true), page, ct)).Dispose();
-
-            // Not "mobile": that makes Chrome treat a page without a viewport meta tag as 980 CSS px wide and
-            // shrink it to fit, so a narrow shot comes back as the desktop layout in miniature. A plain window of
-            // the asked-for size is what a developer dragging their browser narrow sees, and fires the same
-            // media queries.
-            (await cdp.SendAsync("Emulation.setDeviceMetricsOverride", write =>
-            {
-                write.WriteNumber("width", request.Width);
-                write.WriteNumber("height", request.Height);
-                write.WriteNumber("deviceScaleFactor", 1);
-                write.WriteBoolean("mobile", false);
-            }, page, ct)).Dispose();
-
-            using var loaded = cdp.Expect("Page.loadEventFired", page);
-            var navigated = await cdp.SendAsync("Page.navigate", write => write.WriteString("url", request.Url), page, ct);
-            using (navigated)
-            {
-                var result = navigated.RootElement.GetProperty("result");
-                if (result.TryGetProperty("errorText", out var error) && error.GetString() is { Length: > 0 } text)
-                    return ScreenshotOutcome.Fail($"The browser couldn't open {request.Url}: {text}. Is the app still running?");
-            }
-
-            // A page that never fires "load" still has something on it, and a picture of it says more than an
-            // error does: dev servers hold connections open (HMR sockets, a slow asset), and the agent asked to
-            // see the page, not to hear about its network.
-            var note = await loaded.ArrivedAsync(LoadTimeout, ct)
-                ? null
-                : $"The page hadn't finished loading after {LoadTimeout.TotalSeconds:0} seconds; this is how far it had got.";
-
-            await Task.Delay(SettleDelay, ct);
-
-            // Like every call here, it gives up when the browser stops answering (CdpConnection.DefaultReplyTimeout),
-            // and CaptureAsync quits that browser so the next shot starts a fresh one.
-            using var captured = await cdp.SendAsync("Page.captureScreenshot", write =>
-            {
-                write.WriteString("format", "png");
-                write.WriteBoolean("captureBeyondViewport", false);
-            }, page, ct);
-
-            var data = captured.RootElement.GetProperty("result").GetProperty("data").GetString();
-            return string.IsNullOrEmpty(data)
-                ? ScreenshotOutcome.Fail("The browser returned an empty screenshot.")
-                : ScreenshotOutcome.Ok(Convert.FromBase64String(data), request.Width, request.Height, note);
-        }
-        finally
-        {
-            try
-            {
-                using var closing = new CancellationTokenSource(CloseTabTimeout);
-                (await cdp.SendAsync("Target.closeTarget", write => write.WriteString("targetId", target), ct: closing.Token)).Dispose();
-            }
-            catch (Exception error) when (error is CdpException or OperationCanceledException)
-            {
-                // The tab goes with the browser.
-            }
-        }
+        var data = captured.RootElement.GetProperty("result").GetProperty("data").GetString();
+        return string.IsNullOrEmpty(data)
+            ? ScreenshotOutcome.Fail("The browser returned an empty screenshot.")
+            : ScreenshotOutcome.Ok(Convert.FromBase64String(data), request.Width, request.Height, note);
     }
 
     public async ValueTask DisposeAsync()

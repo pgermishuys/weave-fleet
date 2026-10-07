@@ -13,9 +13,11 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using WeaveFleet.Application.Canvases;
+using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Infrastructure.Browser;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Services;
 
@@ -357,6 +359,14 @@ public sealed partial class FleetCanvasPluginLiveTests
             var requests = await WaitForAsync(() => llm.Queue.Requests.ToList(), list => list.Count(r => OfferedToolNames([r]).Count > 0) >= 3, ct);
             OfferedToolNames(requests).ShouldContain("fleet_page_show");
             requests[^1].ShouldContain("only serves files, and Fleet serves files itself");
+
+            // Fleet checked the page it serves in its own headless browser, so the agent needn't screenshot it to know
+            // it works. Without a browser on the machine, the agent is told to look for itself.
+            var afterShow = requests.First(request => request.Contains("Fleet loaded the page at") || request.Contains("To look at the page yourself"));
+            if (ChromeFinder.Find(services.GetRequiredService<FleetOptions>().Browser.ChromePath) is null)
+                afterShow.ShouldContain("To look at the page yourself, use fleet_browser_screenshot");
+            else
+                afterShow.ShouldContain("Fleet loaded the page at 1280 and 390 px wide: no script errors, every file loaded, nothing wider than the window.");
 
             // The page is in a page canvas, and Fleet serves its copy to anyone with the address.
             PageState shown;

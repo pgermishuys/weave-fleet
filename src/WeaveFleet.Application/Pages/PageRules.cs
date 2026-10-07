@@ -35,6 +35,12 @@ public static partial class PageRules
 
     private static readonly string[] ProjectFileExtensions = [".csproj", ".fsproj", ".sln", ".slnx"];
 
+    /// <summary>Where Fleet, at <paramref name="fleetUrl"/>, serves a page's folder: <c>/pages/{pageId}/</c>.</summary>
+    public static Uri Root(string fleetUrl, string pageId) => new($"{fleetUrl.TrimEnd('/')}/pages/{pageId}/");
+
+    /// <summary>Where Fleet serves the page itself.</summary>
+    public static Uri EntryUrl(string fleetUrl, string pageId, string entry) => new(Root(fleetUrl, pageId), Uri.EscapeDataString(entry));
+
     public static bool IsPageFile(string path)
         => Path.GetExtension(path) is { } extension
            && (extension.Equals(".html", StringComparison.OrdinalIgnoreCase) || extension.Equals(".htm", StringComparison.OrdinalIgnoreCase));
