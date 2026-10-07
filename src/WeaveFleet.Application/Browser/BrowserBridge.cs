@@ -223,8 +223,8 @@ public sealed class BrowserBridge(
             return false;
         }
 
-        var root = new Uri($"{fleet.TrimEnd('/')}/pages/{page.PageId}/");
-        var entry = new Uri(root, Uri.EscapeDataString(page.Entry));
+        var root = PageRules.Root(fleet, page.PageId);
+        var entry = PageRules.EntryUrl(fleet, page.PageId, page.Entry);
         var relative = string.IsNullOrWhiteSpace(path) ? string.Empty : path.Trim().TrimStart('/');
         if (!Uri.TryCreate(entry, relative, out var resolved) || !resolved.AbsoluteUri.StartsWith(root.AbsoluteUri, StringComparison.Ordinal))
         {

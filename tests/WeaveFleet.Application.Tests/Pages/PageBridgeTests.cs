@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Pages;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Tests.Canvases;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Testing.Fakes.Repositories;
@@ -21,6 +22,7 @@ public sealed class PageBridgeTests : IDisposable
     private readonly ScopedUser _user = new();
     private readonly FakeCallers _callers = new();
     private readonly FakePageStore _pages = new();
+    private readonly FakePageChecker _checker = new();
     private readonly CanvasService _canvases;
     private readonly PageBridge _bridge;
 
@@ -30,7 +32,7 @@ public sealed class PageBridgeTests : IDisposable
         _sessions.Seed(new Session { Id = SessionId, Directory = _session.FullName });
         _callers.Add(Token, OpenCodeSessionId, new HarnessCanvasCaller(SessionId, Owner));
         _canvases = new CanvasService(_canvasRepository, new FakeEventBroadcaster(), _user);
-        _bridge = new PageBridge([_callers], _user, _canvases, _pages, _sessions);
+        _bridge = new PageBridge([_callers], _user, _canvases, _pages, _sessions, _checker, new FixedFleetUrl());
     }
 
     public void Dispose()
@@ -65,6 +67,59 @@ public sealed class PageBridgeTests : IDisposable
         shown.Value.Title.ShouldBe("Settings options · options.html");
         shown.Value.Output.ShouldStartWith($"Showing \"Settings options\" ({canvas.Id}) from {file} (2 files, 38 KB copied from its folder).");
         shown.Value.Output.ShouldContain("call fleet_page_show again with the same file");
+    }
+
+    [Fact]
+    public async Task Fleet_checks_the_page_it_serves_and_a_clean_check_is_the_end_of_it_for_a_report()
+    {
+        var shown = await _bridge.ShowAsync(Token, OpenCodeSessionId, Mockup("results/report.html"), "Results");
+
+        var copy = _pages.Copies.ShouldHaveSingleItem();
+        _checker.Urls.ShouldBe([$"{FixedFleetUrl.Url}/pages/{copy.PageId}/report.html"]);
+        var output = shown.Value!.Output;
+        output.ShouldContain("Fleet loaded the page at 1280 and 390 px wide: no script errors, every file loaded, nothing wider than the window.");
+        output.ShouldContain("For a report, results or a document, that's enough: hand it over without a screenshot.");
+        output.ShouldContain("only when how the page looks is the point");
+    }
+
+    [Fact]
+    public async Task What_the_check_finds_is_listed_for_the_agent_to_fix_before_it_shows_the_page_again()
+    {
+        _checker.Next = PageCheckOutcome.Found(
+        [
+            "Script error: ReferenceError: drawChart is not defined (report.html:42).",
+            "At 390 px wide the page scrolls sideways: table.results reaches 612 px.",
+        ]);
+
+        var shown = await _bridge.ShowAsync(Token, OpenCodeSessionId, Mockup("report.html"), "Results");
+
+        shown.Value!.Output.ShouldEndWith("""
+            Fleet loaded the page at 1280 and 390 px wide and found:
+            - Script error: ReferenceError: drawChart is not defined (report.html:42).
+            - At 390 px wide the page scrolls sideways: table.results reaches 612 px.
+            Fix these, then call fleet_page_show again: it checks the page again.
+            """.ReplaceLineEndings("\n"));
+    }
+
+    [Fact]
+    public async Task A_page_Fleet_could_not_check_leaves_the_agent_the_screenshot()
+    {
+        _checker.Next = PageCheckOutcome.Fail("Fleet couldn't find Chrome or Edge on this machine.");
+
+        var shown = await _bridge.ShowAsync(Token, OpenCodeSessionId, Mockup("report.html"), "Results");
+
+        shown.Value!.Output.ShouldEndWith(
+            "Fleet couldn't check the page: Fleet couldn't find Chrome or Edge on this machine. To look at the page yourself, use fleet_browser_screenshot with this canvas.");
+    }
+
+    [Fact]
+    public async Task Without_a_checker_the_agent_is_pointed_at_the_screenshot_as_before()
+    {
+        var bridge = new PageBridge([_callers], _user, _canvases, _pages, _sessions);
+
+        var shown = await bridge.ShowAsync(Token, OpenCodeSessionId, Mockup("report.html"), "Results");
+
+        shown.Value!.Output.ShouldEndWith("To look at the page yourself, use fleet_browser_screenshot with this canvas.");
     }
 
     [Fact]
@@ -224,5 +279,12 @@ public sealed class PageBridgeTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, html);
         return path;
+    }
+
+    private sealed class FixedFleetUrl : ILocalFleetUrl
+    {
+        public const string Url = "http://127.0.0.1:5123";
+
+        public string? TryGet() => Url;
     }
 }

@@ -22,6 +22,8 @@ serves the copy itself and shows it in a page canvas beside the chat. There's no
 `python -m http.server` or `npx serve`, and don't use `fleet_app_start` for a mockup.
 
 - **After every edit, show it again** with the same path. The same tab updates and reloads for the user.
+- **Fix what the check finds.** Each time Fleet shows the page it reports script errors, files that didn't load and
+  anything wider than a desktop or a phone window. Fix those and show the page again.
 - **One tab per file.** Show another page in the folder with its own path, or link to it from the first page.
 - **Links stay inside the folder** and are relative: `styles.css` or `option-b.html`, not `/styles.css` or
   `../shared.css`. Fleet warns you about links that won't load.

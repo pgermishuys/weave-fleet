@@ -279,6 +279,9 @@ public static class DependencyInjection
         services.AddSingleton<IScreenshotter>(sp => new HeadlessChromeScreenshotter(
             sp.GetRequiredService<ChromeHost>(),
             sp.GetRequiredService<ILogger<HeadlessChromeScreenshotter>>()));
+        services.AddSingleton<IPageChecker>(sp => new HeadlessChromePageChecker(
+            sp.GetRequiredService<ChromeHost>(),
+            sp.GetRequiredService<ILogger<HeadlessChromePageChecker>>()));
         services.AddSingleton(sp => new SessionScreenshotStore(
             sp.GetRequiredService<FleetOptions>().ResolvedScreenshotDirectory,
             sp.GetRequiredService<ILogger<SessionScreenshotStore>>()));
