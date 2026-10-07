@@ -68,6 +68,7 @@ onMounted(() => {
 });
 onUnmounted(() => {
   releaseSessionList?.();
+  clearTimeout(dragUnderwayTimer);
   selection.clear();
   window.removeEventListener("keydown", handleSelectionKeydown);
 });
@@ -123,6 +124,13 @@ const isArchivedView = computed(() => retentionStatus.value === "archived");
 
 /** The session being dragged in the list, from where (app state, not the drag's own data). */
 const activeSessionDrag = shallowRef<ActiveSessionDrag | null>(null);
+
+/**
+ * Whether the drag has got under way, a moment after dragstart. Chrome cancels a drag whose row moves during
+ * dragstart, so the empty Pinned group (which pushes the rows down) waits for this.
+ */
+const isSessionDragUnderway = shallowRef(false);
+let dragUnderwayTimer: ReturnType<typeof setTimeout> | undefined;
 
 /** Pinned sessions (and what came from them) sit in the Pinned group above the projects; the rest in their projects. */
 const pinnedSplit = computed(() => isArchivedView.value
@@ -403,7 +411,8 @@ const pinnedGroup = computed<ProjectTreeGroup>(() => ({
   sessions: filteredPinnedSessions.value,
 }));
 const showPinnedGroup = computed(() => !isArchivedView.value
-  && (filteredPinnedSessions.value.length > 0 || (activeSessionDrag.value !== null && !normalizedQuery.value)));
+  && (filteredPinnedSessions.value.length > 0
+    || (activeSessionDrag.value !== null && isSessionDragUnderway.value && !normalizedQuery.value)));
 
 const filteredProjectGroups = computed<ProjectTreeGroup[]>(() => {
   if (!normalizedQuery.value) {
@@ -561,6 +570,11 @@ function handleSessionDragStart(sessionId: string, projectId: string | null): vo
   }
 
   activeSessionDrag.value = { sessionId, projectId };
+  isSessionDragUnderway.value = false;
+  clearTimeout(dragUnderwayTimer);
+  dragUnderwayTimer = setTimeout(() => {
+    isSessionDragUnderway.value = true;
+  });
 }
 
 /** A fork or a started session dragged out of its parent: it stands on its own (Undo in the toast). */
@@ -572,6 +586,8 @@ function handleMoveOutOfParent(sessionId: string): void {
 
 function handleSessionDragEnd(): void {
   activeSessionDrag.value = null;
+  isSessionDragUnderway.value = false;
+  clearTimeout(dragUnderwayTimer);
 }
 
 /** Whether the session being dragged is pinned: dropping it on its own project unpins it. */
