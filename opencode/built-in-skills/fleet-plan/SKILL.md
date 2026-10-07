@@ -10,7 +10,9 @@ level by level, answer decisions, edit schemas, strike calls and comment on anyt
 **Respond → Send to agent**, and the answers arrive in the chat as the user's next message. **Do not start building until
 that message arrives.**
 
-Adapted from html-plan by Thariq Shihipar (MIT). `UPSTREAM.md` says what Fleet changed.
+Adapted from html-plan by Thariq Shihipar. The runtime, its reference and its example are html-plan's files, used under
+the MIT and Apache-2.0 licenses (`LICENSE`, `LICENSE-APACHE-2.0`); `UPSTREAM.md` says what Fleet changed. Keep the
+notices at the top of `runtime/htmlplan.js` and `runtime/htmlplan.css`: every packed page carries them.
 
 ```
 <this skill's folder>/
