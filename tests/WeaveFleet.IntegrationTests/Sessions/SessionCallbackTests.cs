@@ -74,11 +74,20 @@ public sealed class SessionCallbackTests : IAsyncLifetime, IDisposable
 
         prompts.ShouldContain(expected);
 
-        // Delivered to the session's new instance, and only then marked fired.
+        // Delivered to the session's new instance, and only then marked fired. The mark is written after the prompt
+        // returns, so the coordinator can show the prompt a moment before the callback stops being "started".
         using var check = _server.Services.CreateScope();
         var coordinator = await check.ServiceProvider.GetRequiredService<ISessionRepository>().GetByIdAsync(coordinatorId);
         coordinator.ShouldNotBeNull().InstanceId.ShouldNotBe(coordinatorInstanceId);
-        (await check.ServiceProvider.GetRequiredService<ISessionCallbackRepository>().GetStartedAsync()).ShouldBeEmpty();
+        var callbacks = check.ServiceProvider.GetRequiredService<ISessionCallbackRepository>();
+        var started = await callbacks.GetStartedAsync();
+        while (started.Count > 0 && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(100);
+            started = await callbacks.GetStartedAsync();
+        }
+
+        started.ShouldBeEmpty();
     }
 
     /// <summary>What the coordinator's harness was prompted with, read from its live instance once it has one.</summary>
