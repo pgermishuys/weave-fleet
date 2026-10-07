@@ -141,7 +141,8 @@ public sealed class ClaudeCodeHarnessSessionPumpTests : IAsyncLifetime
         conversation.Count.ShouldBe(3);
         conversation.ShouldAllBe(m => !m.Id.StartsWith("msg_011C", StringComparison.Ordinal));
         conversation.Select(m => m.Id).ShouldBe(conversation.Select(m => m.Id).Order(StringComparer.Ordinal));
-        conversation.Last().Parts.ShouldHaveSingleItem().ShouldBeOfType<TextPart>();
+        // Its text, and what its model call used.
+        conversation.Last().Parts.Select(p => p.GetType()).ShouldBe([typeof(TextPart), typeof(StepFinishPart)]);
     }
 
     [Fact]

@@ -6,6 +6,7 @@
  */
 import type { SessionListItem } from "@/api/client";
 import { formatRetryClock, formatRetryIn, limitName } from "@/lib/turn-retry";
+import { describeRetry, retryShortLabel, type RetryStatus } from "@/lib/retry-status";
 
 export type SessionRowTone = "attention" | "working" | "retry" | "error" | "quiet";
 
@@ -76,10 +77,8 @@ export function sessionRowStatus(item: SessionListItem, now: number): SessionRow
       return { label: "Error", tone: "error", description: "Error" };
     case "active":
       if (item.activityStatus === "retry") {
-        const attempt = item.retryAttempt;
-        return attempt
-          ? { label: `Retry ${attempt}`, tone: "retry", description: `Retrying (attempt ${attempt})` }
-          : { label: "Retrying", tone: "retry", description: "Retrying" };
+        const retry = sessionRetry(item);
+        return { label: retryShortLabel(retry), tone: "retry", description: describeRetry(retry, now) };
       }
       return {
         label: "",
@@ -109,4 +108,14 @@ export function sessionRowStatus(item: SessionListItem, now: number): SessionRow
       };
     }
   }
+}
+
+/** What a retrying session's row knows of the retry, from the activity_status push. */
+export function sessionRetry(item: SessionListItem): RetryStatus {
+  return {
+    attempt: item.retryAttempt,
+    maxAttempts: item.retryMaxAttempts,
+    message: item.retryMessage,
+    next: item.retryNext,
+  };
 }

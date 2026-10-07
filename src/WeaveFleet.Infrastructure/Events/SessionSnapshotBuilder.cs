@@ -267,6 +267,10 @@ public sealed class SessionSnapshotBuilder(
                         CompletedAt = stepFinishPart.CompletedAt,
                     });
                     break;
+
+                case CompactionPart compactionPart:
+                    parts.Add(CompactionEventPart(compactionPart, message.SessionId, message.Id, index));
+                    break;
             }
         }
 
@@ -426,4 +430,16 @@ public sealed class SessionSnapshotBuilder(
         bool Steered,
         string? ErrorJson = null);
 
+
+    /// <summary>A compaction's divider, as history and the live conversation carry it.</summary>
+    internal static CompactionMessageEventPart CompactionEventPart(CompactionPart part, string sessionId, string messageId, int index) => new()
+    {
+        Id = part.PartId ?? $"{messageId}-compaction-{index}",
+        SessionId = sessionId,
+        MessageId = messageId,
+        Trigger = part.Trigger,
+        TokensBefore = part.TokensBefore,
+        TokensAfter = part.TokensAfter,
+        Summary = part.Summary,
+    };
 }

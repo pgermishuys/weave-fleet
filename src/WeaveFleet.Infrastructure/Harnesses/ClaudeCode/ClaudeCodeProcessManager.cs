@@ -96,6 +96,9 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
     /// <summary>Why Fleet stopped the process, for the log; null when it exited by itself.</summary>
     public string? StopReason { get; set; }
 
+    /// <summary>Whether Fleet has asked this process for the account's usage limits (<c>get_usage</c>).</summary>
+    internal bool UsageAsked { get; set; }
+
     /// <summary>The token the process calls Fleet with (<c>FLEET_URL</c>); null when it has none.</summary>
     public string? BridgeToken { get; set; }
 

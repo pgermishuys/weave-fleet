@@ -28,7 +28,8 @@ internal sealed record ParsedActivityStatus(
     string Status,
     int? RetryAttempt = null,
     string? RetryMessage = null,
-    DateTimeOffset? RetryNext = null);
+    DateTimeOffset? RetryNext = null,
+    int? RetryMax = null);
 
 /// <summary>
 /// Background service that subscribes to <see cref="InstanceTracker"/> registration/removal
@@ -96,6 +97,7 @@ public sealed class HarnessEventRelay : BackgroundService
     private readonly AgentBrowserCalls? _browserCalls;
     private readonly RunningWorkRecorder? _work;
     private readonly SessionContextRecorder? _context;
+    private readonly HarnessUsageLimits? _usageLimits;
     private readonly SessionCallbackDispatcher? _callbacks;
     private CancellationToken _stoppingToken;
 
@@ -125,10 +127,12 @@ public sealed class HarnessEventRelay : BackgroundService
         RunningWorkRecorder? work = null,
         SessionCallbackDispatcher? callbacks = null,
         SessionContextRecorder? context = null,
-        TurnRetryScheduler? retries = null)
+        TurnRetryScheduler? retries = null,
+        HarnessUsageLimits? usageLimits = null)
     {
         _context = context;
         _retries = retries;
+        _usageLimits = usageLimits;
         _callbacks = callbacks;
         _browserCalls = browserCalls;
         _work = work;
@@ -386,6 +390,14 @@ public sealed class HarnessEventRelay : BackgroundService
                     continue;
                 }
 
+                // Usage limits are the harness's account's, not the session's: they go to Fleet's record of them.
+                if (evt.Type == EventTypes.HarnessUsage)
+                {
+                    if (_usageLimits is not null && sessionHarnessType is { Length: > 0 } && UsageLimitEvents.Read(evt) is { } limits)
+                        await _usageLimits.ObserveAsync(sessionUserId, sessionHarnessType, limits, ct).ConfigureAwait(false);
+                    continue;
+                }
+
                 // An ask is shown where the user looks: a subagent's on the session it works for.
                 if (_permissions is not null && evt.Type is EventTypes.PermissionAsked or EventTypes.PermissionReplied)
                     targetFleetSessionId = await ObservePermissionEventAsync(evt, targetFleetSessionId, sessionUserId).ConfigureAwait(false);
@@ -464,7 +476,8 @@ public sealed class HarnessEventRelay : BackgroundService
                             sessionUserId,
                             parsedStatus.RetryAttempt,
                             parsedStatus.RetryMessage,
-                            parsedStatus.RetryNext);
+                            parsedStatus.RetryNext,
+                            parsedStatus.RetryMax);
                         _recaps?.OnActivityChanged(targetFleetSessionId, parsedStatus.Status);
 
                         // A parent whose subagent waits on a question shows that, not its own busy; the notifier
@@ -481,7 +494,8 @@ public sealed class HarnessEventRelay : BackgroundService
                                     parsedStatus.Status,
                                     parsedStatus.RetryAttempt,
                                     parsedStatus.RetryMessage,
-                                    parsedStatus.RetryNext).ConfigureAwait(false)
+                                    parsedStatus.RetryNext,
+                                    parsedStatus.RetryMax).ConfigureAwait(false)
                                 : await BuildActivityStatusPayloadAsync(targetFleetSessionId, shownStatus).ConfigureAwait(false),
                             sessionUserId,
                             ct).ConfigureAwait(false);
@@ -611,7 +625,8 @@ public sealed class HarnessEventRelay : BackgroundService
         string activityStatus,
         int? retryAttempt = null,
         string? retryMessage = null,
-        DateTimeOffset? retryNext = null)
+        DateTimeOffset? retryNext = null,
+        int? retryMax = null)
     {
         using var scope = _scopeFactory.CreateScope();
         var sessionRepository = scope.ServiceProvider.GetRequiredService<ISessionRepository>();
@@ -632,7 +647,8 @@ public sealed class HarnessEventRelay : BackgroundService
             capabilities,
             retryAttempt,
             retryMessage,
-            retryNext);
+            retryNext,
+            retryMax);
     }
 
     private static ParsedActivityStatus? ParseActivityStatus(string eventType, JsonElement? payload)
@@ -652,15 +668,16 @@ public sealed class HarnessEventRelay : BackgroundService
             if (statusType == "retry")
             {
                 var attempt = statusProp.TryGetProperty("count", out var countProp) && countProp.TryGetInt32(out var c) ? c : (int?)null;
+                var max = statusProp.TryGetProperty("max", out var maxProp) && maxProp.TryGetInt32(out var m) ? m : (int?)null;
                 var message = statusProp.TryGetProperty("reason", out var reasonProp) ? reasonProp.GetString() : null;
                 DateTimeOffset? next = null;
 
-                if (statusProp.TryGetProperty("delay", out var delayProp) && delayProp.TryGetInt32(out var delayMs))
+                if (statusProp.TryGetProperty("delay", out var delayProp) && delayProp.TryGetInt64(out var delayMs))
                 {
                     next = DateTimeOffset.UtcNow.AddMilliseconds(delayMs);
                 }
 
-                return new ParsedActivityStatus(statusType, attempt, message, next);
+                return new ParsedActivityStatus(statusType, attempt, message, next, max);
             }
 
             return new ParsedActivityStatus(statusType);

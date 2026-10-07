@@ -110,6 +110,30 @@ internal static class ClaudeCodeMapper
                 toolResult.ToolCallId,
                 toolResult.Content,
                 toolResult.IsError),
+            StepFinishPart step => JsonSerializer.SerializeToElement(
+                new MessagePartUpdatedPayload
+                {
+                    SessionId = sessionId,
+                    Part = new StepFinishedMessageEventPart
+                    {
+                        Id = $"{messageId}-step-finish-{step.Index}",
+                        SessionId = sessionId,
+                        MessageId = messageId,
+                        Index = step.Index,
+                        Reason = step.Reason,
+                        Cost = step.Cost,
+                        Tokens = new MessageTokenUsage { Input = step.TokensInput, Output = step.TokensOutput, Reasoning = step.TokensReasoning },
+                        CompletedAt = step.CompletedAt,
+                    },
+                },
+                InfrastructureJsonContext.Default.MessagePartUpdatedPayload),
+            CompactionPart compaction => JsonSerializer.SerializeToElement(
+                new MessagePartUpdatedPayload
+                {
+                    SessionId = sessionId,
+                    Part = Events.SessionSnapshotBuilder.CompactionEventPart(compaction, sessionId, messageId, partIndex),
+                },
+                InfrastructureJsonContext.Default.MessagePartUpdatedPayload),
             _ => null,
         };
 
@@ -164,6 +188,65 @@ internal static class ClaudeCodeMapper
             Timestamp = DateTimeOffset.UtcNow,
             Payload = payload,
         };
+    }
+
+    /// <summary>
+    /// Claude Code's <c>api_retry</c> line as Fleet's retry status (<see cref="ActivityStatuses.Retry"/>, as OpenCode 2's
+    /// <c>session.retry.scheduled</c> is): the attempt out of how many, why, and how long until it tries again. Null for
+    /// any other system line.
+    /// </summary>
+    internal static HarnessEvent? TryMapRetry(ClaudeCodeSystemMessage system, string sessionId)
+    {
+        if (system.Subtype != "api_retry")
+            return null;
+
+        var payload = JsonSerializer.SerializeToElement(
+            new SessionStatusEventPayload
+            {
+                Status = new SessionStatusEventKind
+                {
+                    Type = ActivityStatuses.Retry,
+                    Count = system.Attempt,
+                    Max = system.MaxRetries,
+                    Reason = DescribeRetry(system),
+                    Delay = system.RetryDelayMs is >= 0 and var delay ? delay : null,
+                },
+            },
+            InfrastructureJsonContext.Default.SessionStatusEventPayload);
+
+        return new HarnessEvent
+        {
+            Type = EventTypes.SessionStatus,
+            SessionId = sessionId,
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = payload,
+        };
+    }
+
+    /// <summary>
+    /// Why a model call is being retried, in words: "API overloaded (529)", "Rate limited (429)", "Connection error".
+    /// </summary>
+    internal static string DescribeRetry(ClaudeCodeSystemMessage system)
+    {
+        var error = system.Error switch
+        {
+            { ValueKind: JsonValueKind.String } text => text.GetString(),
+            { ValueKind: JsonValueKind.Object } obj when obj.TryGetProperty("type", out var type) && type.ValueKind == JsonValueKind.String => type.GetString(),
+            _ => null,
+        };
+
+        var what = (error, system.ErrorStatus) switch
+        {
+            ("overloaded" or "overloaded_error", _) or (_, 529) => "API overloaded",
+            ("rate_limit" or "rate_limit_error", _) or (_, 429) => "Rate limited",
+            ("authentication_failed" or "authentication_error", _) or (_, 401) => "Not signed in",
+            ("server_error" or "api_error", _) or (_, >= 500) => "API error",
+            (_, null) => "Connection error",
+            _ when !string.IsNullOrWhiteSpace(error) => $"API error: {error.Replace('_', ' ')}",
+            _ => "API error",
+        };
+
+        return system.ErrorStatus is { } status ? $"{what} ({status})" : what;
     }
 
     private static List<HarnessEvent> CreateAssistantEvents(
@@ -363,6 +446,25 @@ internal static class ClaudeCodeMapper
     };
 
     /// <summary>
+    /// What one model call used, as Fleet's step-finish part: what it read fresh (not from the cache, so cache writes
+    /// count), what it wrote less its thinking, and its thinking. <paramref name="cost"/> is the turn's, on its last
+    /// message; Claude Code doesn't price each call.
+    /// </summary>
+    internal static StepFinishPart ToStepFinish(ClaudeCodeUsage usage, string? stopReason, double cost, int? outputOverride = null)
+    {
+        var output = Math.Max(0, outputOverride ?? usage.OutputTokens);
+        var thinking = Math.Clamp(usage.OutputTokensDetails?.ThinkingTokens ?? 0, 0, output);
+        return new StepFinishPart(
+            Index: 0,
+            Reason: stopReason,
+            Cost: cost,
+            TokensInput: Math.Max(0, usage.InputTokens) + Math.Max(0, usage.CacheCreationInputTokens ?? 0),
+            TokensOutput: output - thinking,
+            TokensReasoning: thinking,
+            CompletedAt: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+    }
+
+    /// <summary>
     /// Why a run failed, from its result line (e.g. "Reached maximum number of turns (1)"),
     /// or null when it succeeded.
     /// </summary>
@@ -392,7 +494,8 @@ internal static class ClaudeCodeMapper
         string? projectName,
         string? workspaceDirectory,
         string? modelId,
-        string userId = "local-user")
+        string userId = "local-user",
+        decimal? turnCostUsd = null)
     {
         try
         {
@@ -404,9 +507,8 @@ internal static class ClaudeCodeMapper
             var inputTokens = (double)(usage?.InputTokens ?? 0);
             var outputTokens = (double)(usage?.OutputTokens ?? 0);
             var cacheReadTokens = (double)(usage?.CacheReadInputTokens ?? 0);
-            var totalCostUsd = result.TotalCostUsd.HasValue
-                ? (double)result.TotalCostUsd.Value
-                : 0.0;
+            // The result's total_cost_usd is the process's so far, not the turn's; the session works out the turn's.
+            var totalCostUsd = (double)(turnCostUsd ?? result.TotalCostUsd ?? 0m);
 
             var estimatedCost = ModelPricing.EstimateCost(
                 modelId,
@@ -506,6 +608,150 @@ internal static class ClaudeCodeMapper
         int? maxOutput = usage.TryGetProperty("maxOutputTokens", out var output) && output.TryGetInt32(out var value) && value > 0 ? value : null;
         return (contextWindow, maxOutput);
     }
+
+    /// <summary>
+    /// The divider for a <c>compact_boundary</c> line: what started it, and the context's size before and after
+    /// (<c>compact_metadata.pre_tokens</c> and <c>post_tokens</c>). Null for any other line.
+    /// </summary>
+    internal static CompactionPart? ToCompactionPart(ClaudeCodeSystemMessage system)
+    {
+        if (system.Subtype != "compact_boundary")
+            return null;
+
+        var metadata = system.CompactMetadata is { ValueKind: JsonValueKind.Object } m ? m : default;
+        return new CompactionPart(
+            Trigger: ReadString(metadata, "trigger") switch
+            {
+                "auto" => ContextCompactionTriggers.Auto,
+                "manual" => ContextCompactionTriggers.Manual,
+                _ => null,
+            },
+            TokensBefore: ReadInt(metadata, "pre_tokens"),
+            TokensAfter: ReadInt(metadata, "post_tokens"));
+    }
+
+    private const string SummaryPreamble = "Summary:";
+    private static readonly string[] SummaryTrailers =
+    [
+        "\nIf you need specific details from before compaction",
+        "\nContinue the conversation from where it left off",
+        "\nPlease continue the conversation from where we left",
+    ];
+
+    /// <summary>
+    /// The summary in Claude Code's synthetic line after a compaction, without its framing: what follows "Summary:", up to
+    /// the note about the full transcript and the instruction to carry on. Null when the line isn't one.
+    /// </summary>
+    internal static string? ReadCompactionSummary(ClaudeCodeUserMessage user)
+    {
+        if (user.IsSynthetic != true || user.Message?.Content is not { Count: > 0 } blocks)
+            return null;
+
+        var text = string.Join("\n\n", blocks.OfType<ClaudeCodeTextBlock>().Select(block => block.Text).Where(t => !string.IsNullOrEmpty(t)));
+        if (!text.StartsWith("This session is being continued", StringComparison.Ordinal))
+            return null;
+
+        var start = text.IndexOf(SummaryPreamble, StringComparison.Ordinal);
+        var summary = start >= 0 ? text[(start + SummaryPreamble.Length)..] : text;
+        foreach (var trailer in SummaryTrailers)
+        {
+            var end = summary.IndexOf(trailer, StringComparison.Ordinal);
+            if (end >= 0)
+                summary = summary[..end];
+        }
+
+        return summary.Trim() is { Length: > 0 } trimmed ? trimmed : null;
+    }
+
+    private static string? ReadString(JsonElement element, string property)
+        => element.ValueKind == JsonValueKind.Object && element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+
+    private static int? ReadInt(JsonElement element, string property)
+        => element.ValueKind == JsonValueKind.Object && element.TryGetProperty(property, out var value) && value.TryGetInt32(out var number) && number >= 0
+            ? number
+            : null;
+
+    /// <summary>
+    /// A <c>rate_limit_event</c> as Fleet's usage limits: every window it lists, the one its status is about with that
+    /// status. Null when it lists none.
+    /// </summary>
+    internal static UsageLimitReport? ToUsageLimits(ClaudeCodeRateLimitEvent rateLimit)
+    {
+        if (rateLimit.RateLimitInfo is not { } info)
+            return null;
+
+        var windows = new Dictionary<string, UsageLimitWindow>(StringComparer.Ordinal);
+        foreach (var (name, window) in info.UnifiedWindows ?? new Dictionary<string, ClaudeCodeRateLimitWindow>())
+        {
+            windows[name] = new UsageLimitWindow
+            {
+                Window = name,
+                Utilization = window.Utilization is { } used ? Math.Clamp(used, 0, 1) : null,
+                ResetsAt = FromEpochSeconds(window.ResetsAt),
+                Status = window.Utilization >= 1 ? UsageLimitStatuses.Rejected : UsageLimitStatuses.Allowed,
+            };
+        }
+
+        if (info.RateLimitType is { Length: > 0 } type)
+        {
+            var known = windows.GetValueOrDefault(type);
+            windows[type] = new UsageLimitWindow
+            {
+                Window = type,
+                Utilization = info.Utilization is { } used ? Math.Clamp(used, 0, 1) : known?.Utilization,
+                ResetsAt = FromEpochSeconds(info.ResetsAt) ?? known?.ResetsAt,
+                Status = info.Status switch
+                {
+                    "rejected" => UsageLimitStatuses.Rejected,
+                    "allowed_warning" => UsageLimitStatuses.Warning,
+                    _ => known?.Status ?? UsageLimitStatuses.Allowed,
+                },
+            };
+        }
+
+        return windows.Count == 0 ? null : new UsageLimitReport { Windows = [.. windows.Values] };
+    }
+
+    /// <summary>
+    /// The answer to Claude Code's <c>get_usage</c> request as Fleet's usage limits, so they show before the first turn:
+    /// <c>{ rate_limits_available, rate_limits: { five_hour: { utilization (0–100), resets_at (ISO) }, … } }</c>. Null when
+    /// the login has none (an API key, a gateway).
+    /// </summary>
+    internal static UsageLimitReport? ToUsageLimits(JsonElement usage)
+    {
+        if (usage.ValueKind != JsonValueKind.Object
+            || !usage.TryGetProperty("rate_limits_available", out var available) || available.ValueKind != JsonValueKind.True
+            || !usage.TryGetProperty("rate_limits", out var limits) || limits.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var windows = new List<UsageLimitWindow>();
+        foreach (var name in (string[])[UsageLimitWindows.FiveHour, UsageLimitWindows.SevenDay, UsageLimitWindows.SevenDayOpus, UsageLimitWindows.SevenDaySonnet])
+        {
+            if (!limits.TryGetProperty(name, out var window) || window.ValueKind != JsonValueKind.Object
+                || !window.TryGetProperty("utilization", out var utilization) || !utilization.TryGetDouble(out var percent))
+            {
+                continue;
+            }
+
+            var used = Math.Clamp(percent / 100, 0, 1);
+            windows.Add(new UsageLimitWindow
+            {
+                Window = name,
+                Utilization = used,
+                ResetsAt = ReadString(window, "resets_at") is { } reset && DateTimeOffset.TryParse(reset, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var at) ? at : null,
+                Status = used >= 1 ? UsageLimitStatuses.Rejected : UsageLimitStatuses.Allowed,
+            });
+        }
+
+        return windows.Count == 0 ? null : new UsageLimitReport { Windows = windows };
+    }
+
+    private static DateTimeOffset? FromEpochSeconds(long? seconds)
+        => seconds is > 0 and var value ? DateTimeOffset.FromUnixTimeSeconds(value) : null;
 
     /// <summary>
     /// Where Claude Code compacts on its own: its window less the room it keeps for output (at most 20,000 tokens) and

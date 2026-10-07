@@ -305,6 +305,7 @@ public enum MessagePartKind
     Agent = 6,
     Subtask = 7,
     Patch = 8,
+    Compaction = 9,
 }
 
 /// <summary>One logical piece of an agent message.</summary>
@@ -318,6 +319,7 @@ public enum MessagePartKind
 [JsonDerivedType(typeof(AgentPart), "agent")]
 [JsonDerivedType(typeof(SubtaskPart), "subtask")]
 [JsonDerivedType(typeof(PatchPart), "patch")]
+[JsonDerivedType(typeof(CompactionPart), "compaction")]
 public abstract record MessagePart(MessagePartKind Kind);
 
 /// <summary>Plain text content.</summary>
@@ -398,6 +400,24 @@ public sealed record SubtaskPart(
     string? Agent,
     JsonElement? Metadata) : MessagePart(MessagePartKind.Subtask);
 
+/// <summary>
+/// Where the harness compacted the conversation: everything before it reaches the model only as a summary. The
+/// conversation shows it as a divider, every harness the same way.
+/// </summary>
+/// <param name="Trigger">What started it: <see cref="ContextCompactionTriggers.Auto"/> or <see cref="ContextCompactionTriggers.Manual"/>, when known.</param>
+/// <param name="TokensBefore">The context's size before, when the harness says.</param>
+/// <param name="TokensAfter">Its size after, when the harness says.</param>
+/// <param name="Summary">The summary the model goes on from, when the harness gives it.</param>
+public sealed record CompactionPart(
+    string? Trigger = null,
+    int? TokensBefore = null,
+    int? TokensAfter = null,
+    string? Summary = null) : MessagePart(MessagePartKind.Compaction)
+{
+    /// <summary>The harness's own id for this part, so history and live updates name the same part.</summary>
+    public string? PartId { get; init; }
+}
+
 /// <summary>Git patch/diff part showing file changes made by the agent.</summary>
 public sealed record PatchPart(string? Patch) : MessagePart(MessagePartKind.Patch);
 
@@ -423,6 +443,12 @@ public sealed record HarnessMessage
 
     /// <summary>A prompt the user sent into a running turn (<see cref="PromptDelivery.Steer"/>), rather than after it.</summary>
     public bool Steered { get; init; }
+
+    /// <summary>
+    /// The summary a compaction wrote, as a message of its own (OpenCode's): the conversation shows it behind the
+    /// compaction's divider (<see cref="CompactionPart"/>) rather than as a reply.
+    /// </summary>
+    public bool CompactionSummary { get; init; }
 
     /// <summary>
     /// The slash command this user message came from, when it did. Its text is then what the harness made of the

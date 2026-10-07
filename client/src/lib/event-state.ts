@@ -9,6 +9,7 @@ import type {
   AccumulatedTextPart,
   AccumulatedToolPart,
   AccumulatedFilePart,
+  AccumulatedCompactionPart,
 } from "@/lib/client-types";
 import { toMessageRole } from "@/lib/shell-commands";
 import type { SlashCommand, TurnError } from "@/lib/domain-events";
@@ -115,6 +116,7 @@ export function ensureMessage(
     modelID,
     parentID: info.parentID,
     ...(info.steered === true ? { steered: true } : {}),
+    ...(info.compactionSummary === true ? { compactionSummary: true } : {}),
     command: role === "user" ? readCommand(info.command) : undefined,
   };
   
@@ -187,8 +189,9 @@ export function mergeMessageUpdate(
   const hasNewCommand = Boolean(command && (command.name !== existing.command?.name || command.arguments !== existing.command?.arguments));
 
   const hasNewSteered = info.steered === true && !existing.steered;
+  const hasNewCompactionSummary = info.compactionSummary === true && !existing.compactionSummary;
 
-  if (!hasNewCompletedAt && !hasNewCreatedAt && !hasNewTokens && !hasUpdatedTokens && !hasNewCost && !hasSnapshotParts && !hasNewModelID && !hasNewTurnError && !hasNewFinish && !hasNewRole && !hasNewCommand && !hasNewSteered) {
+  if (!hasNewCompletedAt && !hasNewCreatedAt && !hasNewTokens && !hasUpdatedTokens && !hasNewCost && !hasSnapshotParts && !hasNewModelID && !hasNewTurnError && !hasNewFinish && !hasNewRole && !hasNewCommand && !hasNewSteered && !hasNewCompactionSummary) {
     return prev; // nothing new to merge
   }
 
@@ -202,6 +205,7 @@ export function mergeMessageUpdate(
     ...(hasNewTurnError ? { turnError } : {}),
     ...(hasNewFinish ? { finish } : {}),
     ...(hasNewSteered ? { steered: true } : {}),
+    ...(hasNewCompactionSummary ? { compactionSummary: true } : {}),
     ...(hasNewRole ? { role } : {}),
     ...(hasNewCommand ? { command } : {}),
     tokens: mergedTokens,
@@ -218,7 +222,11 @@ function mapCommittedSnapshotPart(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   part: Record<string, any>,
   index: number,
-): AccumulatedTextPart | AccumulatedFilePart | AccumulatedToolPart | AccumulatedReasoningPart | null {
+): AccumulatedTextPart | AccumulatedFilePart | AccumulatedToolPart | AccumulatedReasoningPart | AccumulatedCompactionPart | null {
+  if (part.type === "compaction") {
+    return toCompactionPart(part, `${messageId}-compaction-${index}`);
+  }
+
   if (part.type === "text") {
     return {
       partId: typeof part.id === "string" ? part.id : `${messageId}-text-${index}`,
@@ -261,8 +269,9 @@ function mapCommittedSnapshotPart(
 
 function mergeCommittedSnapshotParts(
   existingParts: AccumulatedMessage["parts"],
-  snapshotParts: Array<AccumulatedTextPart | AccumulatedFilePart | AccumulatedToolPart | AccumulatedReasoningPart>,
+  snapshotParts: Array<AccumulatedTextPart | AccumulatedFilePart | AccumulatedToolPart | AccumulatedReasoningPart | AccumulatedCompactionPart>,
 ): AccumulatedMessage["parts"] {
+  const snapshotCompactionParts = snapshotParts.filter((p): p is AccumulatedCompactionPart => p.type === "compaction");
   const snapshotTextParts = snapshotParts.filter((p): p is AccumulatedTextPart => p.type === "text");
   const snapshotFileParts = snapshotParts.filter((p): p is AccumulatedFilePart => p.type === "file");
   const snapshotReasoningParts = snapshotParts.filter((p): p is AccumulatedReasoningPart => p.type === "reasoning");
@@ -303,11 +312,19 @@ function mergeCommittedSnapshotParts(
   );
   const mergedTools = [...snapshotToolParts, ...existingToolParts];
 
+  // A divider: the snapshot's wins (it may have gained its summary since), and one only known live is kept.
+  const snapshotCompactionPartIds = new Set(snapshotCompactionParts.map((p) => p.partId));
+  const existingCompactionParts = existingParts.filter(
+    (p): p is AccumulatedCompactionPart => p.type === "compaction" && !snapshotCompactionPartIds.has(p.partId),
+  );
+  const mergedCompactions = [...snapshotCompactionParts, ...existingCompactionParts];
+
   const otherParts = existingParts.filter(
-    (part) => part.type !== "text" && part.type !== "reasoning" && part.type !== "file" && part.type !== "tool",
+    (part) =>
+      part.type !== "text" && part.type !== "reasoning" && part.type !== "file" && part.type !== "tool" && part.type !== "compaction",
   );
 
-  return [...mergedText, ...mergedFiles, ...mergedReasoning, ...mergedTools, ...otherParts];
+  return [...mergedCompactions, ...mergedText, ...mergedFiles, ...mergedReasoning, ...mergedTools, ...otherParts];
 }
 
 export function applyPartUpdate(
@@ -415,6 +432,14 @@ export function applyPartUpdate(
         };
       }
       return { ...msg, parts: [...msg.parts, newPart] };
+    }
+
+    if (part.type === "compaction") {
+      const newPart = toCompactionPart(part, part.id);
+      const existing = msg.parts.find((p) => p.partId === newPart.partId);
+      return existing
+        ? { ...msg, parts: msg.parts.map((p) => (p.partId === newPart.partId ? newPart : p)) }
+        : { ...msg, parts: [...msg.parts, newPart] };
     }
 
     if (part.type === "step-finish") {
@@ -529,4 +554,22 @@ export function isRelevantToSession(
 
   // Unknown events — skip to avoid noise
   return false;
+}
+
+/** A compaction part from the wire (live or a snapshot), with only the fields it has. */
+export function toCompactionPart(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  part: Record<string, any>,
+  fallbackId: string,
+): AccumulatedCompactionPart {
+  const number = (value: unknown) => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined);
+  const text = (value: unknown) => (typeof value === "string" && value.trim() ? value : undefined);
+  return {
+    partId: typeof part.id === "string" ? part.id : fallbackId,
+    type: "compaction",
+    trigger: text(part.trigger),
+    tokensBefore: number(part.tokensBefore),
+    tokensAfter: number(part.tokensAfter),
+    summary: text(part.summary),
+  };
 }

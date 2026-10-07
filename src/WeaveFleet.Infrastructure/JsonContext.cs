@@ -23,6 +23,9 @@ internal sealed record ActivityStatusPayload
     [JsonPropertyName("attempt")] public int? Attempt { get; init; }
     [JsonPropertyName("message")] public string? Message { get; init; }
     [JsonPropertyName("next")] public string? Next { get; init; }
+
+    /// <summary>How many times the harness tries in all, when it says (Claude Code does; OpenCode doesn't).</summary>
+    [JsonPropertyName("maxAttempts")] public int? MaxAttempts { get; init; }
 }
 
 // ── A harness's own session.status event, the way adapters report a turn starting or ending ──────
@@ -30,6 +33,16 @@ internal sealed record ActivityStatusPayload
 internal sealed record SessionStatusEventKind
 {
     [JsonPropertyName("type")] public required string Type { get; init; }
+
+    /// <summary>With <see cref="ActivityStatuses.Retry"/>: which attempt this is, out of <see cref="Max"/>.</summary>
+    [JsonPropertyName("count")] public int? Count { get; init; }
+    [JsonPropertyName("max")] public int? Max { get; init; }
+
+    /// <summary>With <see cref="ActivityStatuses.Retry"/>: why the model call failed.</summary>
+    [JsonPropertyName("reason")] public string? Reason { get; init; }
+
+    /// <summary>With <see cref="ActivityStatuses.Retry"/>: milliseconds until the next attempt.</summary>
+    [JsonPropertyName("delay")] public long? Delay { get; init; }
 }
 
 internal sealed record SessionStatusEventPayload
@@ -231,6 +244,7 @@ internal sealed partial class ClaudeCodeJsonContext : JsonSerializerContext
 [JsonSerializable(typeof(SessionActionCapabilities))]
 [JsonSerializable(typeof(ClaudeCodeMessageUpdatedPayload))]
 [JsonSerializable(typeof(ClaudeCodeTextPartPayload))]
+[JsonSerializable(typeof(UsageLimitReport))]
 [JsonSerializable(typeof(ClaudeCodeToolPartPayload))]
 [JsonSerializable(typeof(SessionStatusEventPayload))]
 [JsonSerializable(typeof(MessageLifecyclePayload))]
@@ -293,7 +307,8 @@ internal sealed partial class InfrastructureJsonContext : JsonSerializerContext
         SessionActionCapabilities capabilities,
         int? retryAttempt = null,
         string? retryMessage = null,
-        DateTimeOffset? retryNext = null)
+        DateTimeOffset? retryNext = null,
+        int? retryMax = null)
         => JsonSerializer.SerializeToElement(
             new ActivityStatusPayload
             {
@@ -302,7 +317,8 @@ internal sealed partial class InfrastructureJsonContext : JsonSerializerContext
                 Capabilities = capabilities,
                 Attempt = retryAttempt,
                 Message = retryMessage,
-                Next = retryNext?.ToString("O")
+                Next = retryNext?.ToString("O"),
+                MaxAttempts = retryMax,
             },
             Default.ActivityStatusPayload);
 

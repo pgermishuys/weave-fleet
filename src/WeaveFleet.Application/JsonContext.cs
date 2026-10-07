@@ -120,6 +120,8 @@ internal sealed record QuickChatSourceInput;
 [JsonSerializable(typeof(CommittedMessage))]
 [JsonSerializable(typeof(SessionQueueChanged))]
 [JsonSerializable(typeof(ScheduledRetryChanged))]
+[JsonSerializable(typeof(HarnessUsage))]
+[JsonSerializable(typeof(List<HarnessUsage>))]
 [JsonSerializable(typeof(CommittedUserPromptMessage))]
 [JsonSerializable(typeof(CommittedTextPart))]
 [JsonSerializable(typeof(CommittedFilePart))]

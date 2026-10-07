@@ -71,6 +71,11 @@ interface SessionDetailResponse {
   spawnedBySessionId?: string | null;
   spawnKind?: string | null;
   lineageDetachedAt?: string | null;
+  /** While the harness waits to retry a failed model call: which attempt, out of how many, why and when. */
+  retryAttempt?: number | null;
+  retryMaxAttempts?: number | null;
+  retryMessage?: string | null;
+  retryNext?: string | null;
 }
 
 type ComposerInstance = ComponentPublicInstance & {
@@ -145,6 +150,10 @@ function normalizeSessionDetailResponse(payload: unknown): SessionDetailResponse
     harnessType: getStringField(value, "harnessType", "HarnessType"),
     harnessProfileName: getStringField(value, "harnessProfileName", "HarnessProfileName"),
     tags: Array.isArray(value.tags ?? value.Tags) ? (value.tags ?? value.Tags) as string[] : undefined,
+    retryAttempt: getNumberField(value, "retryAttempt", "RetryAttempt"),
+    retryMaxAttempts: getNumberField(value, "retryMaxAttempts", "RetryMaxAttempts"),
+    retryMessage: getStringField(value, "retryMessage", "RetryMessage"),
+    retryNext: getStringField(value, "retryNext", "RetryNext"),
   };
 }
 
@@ -334,6 +343,15 @@ const SessionDetailPage = defineComponent({
             origin: nextRemoteSession.origin ?? selectedSession.value?.origin ?? null,
             harnessType: nextRemoteSession.harnessType ?? selectedSession.value?.harnessType ?? null,
             tags: nextRemoteSession.tags ?? selectedSession.value?.tags ?? [],
+            // Which attempt a retrying session is on, why and when, so a page opened mid-retry says so.
+            ...(normalizedActivityStatus === "retry"
+              ? {
+                  retryAttempt: nextRemoteSession.retryAttempt ?? selectedSession.value?.retryAttempt ?? null,
+                  retryMaxAttempts: nextRemoteSession.retryMaxAttempts ?? selectedSession.value?.retryMaxAttempts ?? null,
+                  retryMessage: nextRemoteSession.retryMessage ?? selectedSession.value?.retryMessage ?? null,
+                  retryNext: nextRemoteSession.retryNext ?? selectedSession.value?.retryNext ?? null,
+                }
+              : {}),
           } satisfies SessionListItem;
 
           sessionsStore.upsertSession(nextSession);
@@ -793,6 +811,9 @@ const SessionDetailPage = defineComponent({
             activityStatus={headerActivityStatus.value}
             lifecycleStatus={effectiveLifecycleStatus.value}
             retryAttempt={selectedSession.value?.retryAttempt ?? null}
+            retryMaxAttempts={selectedSession.value?.retryMaxAttempts ?? null}
+            retryMessage={selectedSession.value?.retryMessage ?? null}
+            retryNext={selectedSession.value?.retryNext ?? null}
             retentionStatus={optimisticSessionState.value?.retentionStatus ?? sessionStateOverride.value?.retentionStatus ?? selectedSession.value?.retentionStatus ?? remoteSession.value?.retentionStatus}
             totalTokens={selectedSession.value?.totalTokens ?? remoteSession.value?.totalTokens ?? null}
             totalCost={selectedSession.value?.totalCost ?? remoteSession.value?.totalCost ?? null}

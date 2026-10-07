@@ -45,6 +45,14 @@ public sealed record SessionListResponse(
     /// <summary>The workflow run this session is a step of; the session list nests it under the run.</summary>
     public string? WorkflowRunId { get; init; }
 
+    /// <summary>While the harness waits to retry a failed model call: which attempt this is, out of how many.</summary>
+    public int? RetryAttempt { get; init; }
+    public int? RetryMaxAttempts { get; init; }
+
+    /// <summary>While the harness waits to retry: why the call failed, and when it tries again (ISO 8601).</summary>
+    public string? RetryMessage { get; init; }
+    public string? RetryNext { get; init; }
+
     /// <summary>How much work the session's agent left running (subagents, background shells, monitors): the list's chip.</summary>
     public int RunningWorkCount { get; init; }
 

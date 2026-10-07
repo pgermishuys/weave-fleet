@@ -17,6 +17,9 @@ import { storeToRefs } from "pinia";
 import MessageBubble from "@/components/session/MessageBubble.vue";
 import ReasoningBlock from "@/components/session/ReasoningBlock.vue";
 import ShellCommandBlock from "@/components/session/ShellCommandBlock.vue";
+import CompactionDivider from "@/components/session/CompactionDivider.vue";
+import { compactionOf, foldCompactionSummaries, type CompactionView } from "@/lib/compaction";
+import { sessionRetry } from "@/lib/session-row-status";
 import WorkingIndicator from "@/components/session/WorkingIndicator.vue";
 import PermissionCard from "@/components/session/PermissionCard.vue";
 import { useSessionPermissions } from "@/composables/use-session-permissions";
@@ -94,6 +97,8 @@ interface ActivityMessage {
   shell?: ShellCommandView;
   /** The slash command a message of yours came from; its body is then what the harness made of the command. */
   command?: SlashCommand;
+  /** Set when this is where the harness compacted the conversation: it shows as a divider. */
+  compaction?: CompactionView;
 }
 
 const props = defineProps<{
@@ -427,6 +432,7 @@ function toActivityMessage(message: AccumulatedMessage, finished: ReadonlyMap<st
     showIdentity: true,
     turnError: message.turnError,
     command: message.role === "user" ? message.command : undefined,
+    compaction: compactionOf(message),
   } satisfies ActivityMessage;
 }
 
@@ -461,21 +467,31 @@ function toShellActivityMessage(message: AccumulatedMessage): ActivityMessage {
 
 const deliveredMessages = computed<ActivityMessage[]>(() => {
   const finished = finishedBackground.value;
+  // A compaction's summary written as a message of its own (OpenCode's) shows behind its divider, not as a reply.
+  const compactions = foldCompactionSummaries(sessionMessages.value);
   // Preserve upstream order from sessionMessages (snapshot + live events)
   return sessionMessages.value
+    .filter((message) => !compactions.hidden.has(message.messageId))
     .map((message) => {
-      const inputs = derivationInputs(message, finished);
-      const cached = derivedMessages.get(message);
-      if (cached && sameItems(cached.inputs, inputs)) {
-        return cached.message;
-      }
-
-      const derived = toActivityMessage(message, finished);
-      derivedMessages.set(message, { inputs, message: derived });
-      return derived;
+      const derived = deriveActivityMessage(message, finished);
+      const summary = compactions.summaries.get(message.messageId);
+      return summary && derived.compaction ? { ...derived, compaction: { ...derived.compaction, summary } } : derived;
     })
     .filter((message) => message.role === "user" || hasVisibleMessageContent(message));
 });
+
+/** A message's view, built again only when what it was built from changed. */
+function deriveActivityMessage(message: AccumulatedMessage, finished: ReadonlyMap<string, BackgroundState>): ActivityMessage {
+  const inputs = derivationInputs(message, finished);
+  const cached = derivedMessages.get(message);
+  if (cached && sameItems(cached.inputs, inputs)) {
+    return cached.message;
+  }
+
+  const derived = toActivityMessage(message, finished);
+  derivedMessages.set(message, { inputs, message: derived });
+  return derived;
+}
 
 // The header names the model that answers next. A session that was never given one explicitly has only
 // the stream to go on, and the stream is open here — so it puts the last answer's model in the store.
@@ -645,6 +661,11 @@ watch(
 const isWaitingForInput = computed(() =>
   sessionStatus.value === "waiting_input" || selectedSession.value?.activityStatus === "waiting_input");
 // The turn's clock starts at your last prompt.
+// Waiting out a failed model call, as the activity_status push says, for every harness that reports it.
+const sessionRetrying = computed(() => {
+  const item = sessions.value.find((candidate) => candidate.session.id === props.sessionId);
+  return item?.activityStatus === "retry" ? sessionRetry(item) : null;
+});
 const turnStartedAt = computed(() => {
   for (let index = messages.value.length - 1; index >= 0; index -= 1) {
     const message = messages.value[index];
@@ -1127,6 +1148,7 @@ function hasVisibleMessageContent(message: ActivityMessage): boolean {
     || (message.tools?.length ?? 0) > 0
     || (message.questionParts?.length ?? 0) > 0
     || message.shell != null
+    || message.compaction != null
     || message.background != null
     // A turn can fail before it produces anything; the failure is the content.
     || message.turnError != null;
@@ -1356,6 +1378,10 @@ function handleImproveSkill(skill: string, toolId: string): void {
           v-if="message.shell"
           :command="message.shell"
         />
+        <CompactionDivider
+          v-else-if="message.compaction"
+          :compaction="message.compaction"
+        />
         <MessageBubble
           v-else
           :author="message.author"
@@ -1460,6 +1486,7 @@ function handleImproveSkill(skill: string, toolId: string): void {
         <WorkingIndicator
           :since="turnStartedAt"
           :waiting="isWaitingForInput"
+          :retry="sessionRetrying"
         />
       </div>
     </section>

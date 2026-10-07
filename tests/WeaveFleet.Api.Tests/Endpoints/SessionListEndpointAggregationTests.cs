@@ -230,6 +230,34 @@ public sealed class SessionListEndpointAggregationTests : IAsyncLifetime, IDispo
     }
 
     [Fact]
+    public async Task A_retrying_session_says_which_attempt_why_and_when_in_the_list_and_on_its_own()
+    {
+        // Claude Code's api_retry, as the relay records it: a page opened mid-retry reads it from here.
+        using var scope = _factory!.Services.CreateScope();
+        var activityTracker = scope.ServiceProvider.GetRequiredService<Application.Services.SessionActivityTracker>();
+        var next = DateTimeOffset.UtcNow.AddSeconds(12);
+        activityTracker.Update("session-standalone", "retry", _userId, retryAttempt: 3, retryMessage: "API overloaded (529)", retryNext: next, retryMax: 10);
+
+        var sessions = await _client!.GetFromJsonAsync<JsonElement[]>("/api/sessions", JsonSerializerOptions.Web);
+        var single = await _client!.GetFromJsonAsync<JsonElement>("/api/sessions/session-standalone", JsonSerializerOptions.Web);
+
+        var listed = sessions.ShouldNotBeNull().Single(s => s.GetProperty("session").GetProperty("id").GetString() == "session-standalone");
+        foreach (var session in new[] { listed, single })
+        {
+            session.GetProperty("activityStatus").GetString().ShouldBe("retry");
+            session.GetProperty("retryAttempt").GetInt32().ShouldBe(3);
+            session.GetProperty("retryMaxAttempts").GetInt32().ShouldBe(10);
+            session.GetProperty("retryMessage").GetString().ShouldBe("API overloaded (529)");
+            session.GetProperty("retryNext").GetDateTimeOffset().ShouldBe(next);
+        }
+
+        // A session that isn't retrying says nothing about it.
+        var parent = sessions.Single(s => s.GetProperty("session").GetProperty("id").GetString() == "session-parent");
+        var saysAttempt = parent.TryGetProperty("retryAttempt", out var attempt) && attempt.ValueKind != JsonValueKind.Null;
+        saysAttempt.ShouldBeFalse();
+    }
+
+    [Fact]
     public async Task ListSessions_WhenParentHasTrackerBusyChild_ReturnsActiveSessionStatus()
     {
         // Register the child as busy in the activity tracker

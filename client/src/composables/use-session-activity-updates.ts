@@ -64,6 +64,9 @@ export function useSessionActivityUpdates(): void {
           activityStatus?: string
           capabilities?: unknown
           attempt?: number | null
+          maxAttempts?: number | null
+          message?: string | null
+          next?: string | null
         }
 
         if (payload.sessionId && payload.activityStatus) {
@@ -78,11 +81,17 @@ export function useSessionActivityUpdates(): void {
             currentSession?.sessionStatus
           )
 
+          // Why and when a retrying session tries again, until it's working again.
+          const retrying = payload.activityStatus === "retry"
+
           // Update both activityStatus and sessionStatus in the store
           sessionsStore.patchSession(payload.sessionId, {
             activityStatus: payload.activityStatus,
             sessionStatus: newSessionStatus,
-            retryAttempt: payload.activityStatus === "retry" ? payload.attempt ?? null : null,
+            retryAttempt: retrying ? payload.attempt ?? null : null,
+            retryMaxAttempts: retrying ? payload.maxAttempts ?? null : null,
+            retryMessage: retrying ? payload.message ?? null : null,
+            retryNext: retrying ? payload.next ?? null : null,
           })
 
           // Clear any optimistic busy state override

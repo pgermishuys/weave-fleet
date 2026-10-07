@@ -13,6 +13,8 @@ import {
   type ContextTurn,
 } from "@/lib/context-usage";
 import { useSessionsStore } from "@/stores/sessions";
+import { useHarnessUsageFor } from "@/composables/use-harness-usage";
+import { currentWindows, isNearLimit, percentLabel, resetLabel, windowLabel } from "@/lib/usage-limits";
 
 /**
  * How full the session's context window is, by Send: a ring, with the percentage once it's three-quarters full. Click
@@ -26,6 +28,20 @@ const props = defineProps<{
 const { context, isRequesting, requestError, compact } = useSessionContext(() => props.sessionId);
 const { sessions } = storeToRefs(useSessionsStore());
 const session = computed(() => sessions.value.find((item) => item.session.id === props.sessionId) ?? null);
+
+// The account's usage limits under the context, when the session's harness reports them (Claude Code on a claude.ai
+// login); nothing for an API key or a gateway.
+const harnessUsage = useHarnessUsageFor(() => session.value?.harnessType);
+const limits = computed(() => {
+  const now = Date.now();
+  return currentWindows(harnessUsage.value, now).map((window) => ({
+    key: window.window,
+    label: windowLabel(window.window),
+    value: [percentLabel(window), resetLabel(window.resetsAt, now)].filter(Boolean).join(" · "),
+    fill: window.status === "rejected" ? 100 : Math.round((window.utilization ?? 0) * 100),
+    tone: window.status === "rejected" ? "danger" : isNearLimit(window) ? "warn" : "ok",
+  }));
+});
 
 const open = shallowRef(false);
 const hoveredTurn = shallowRef<number | null>(null);
@@ -301,6 +317,35 @@ const error = computed(() => requestError.value ?? context.value?.compactionErro
           </template>
         </dl>
 
+        <section
+          v-if="limits.length"
+          class="context-card__limits"
+          aria-label="Usage limits"
+          data-testid="context-limits"
+        >
+          <div
+            v-for="limit in limits"
+            :key="limit.key"
+            class="context-card__limit"
+            :data-tone="limit.tone"
+            data-testid="context-limit"
+          >
+            <p class="context-card__label context-card__limit-label">
+              <span>{{ limit.label }}</span>
+              <span class="context-card__limit-value">{{ limit.value }}</span>
+            </p>
+            <div
+              class="context-card__meter context-card__limit-meter"
+              aria-hidden="true"
+            >
+              <div
+                class="context-card__meter-fill context-card__limit-fill"
+                :style="{ width: `${limit.fill}%` }"
+              />
+            </div>
+          </div>
+        </section>
+
         <p
           v-if="error"
           class="context-card__error"
@@ -509,6 +554,40 @@ const error = computed(() => requestError.value ?? context.value?.compactionErro
 
 .context-card__label {
   margin: 14px 0 6px;
+}
+
+.context-card__limits {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.context-card__label.context-card__limit-label {
+  margin: 0;
+}
+
+.context-card__limit-value {
+  color: var(--text);
+}
+
+.context-card__meter.context-card__limit-meter {
+  margin: 5px 0 0;
+  height: 4px;
+}
+
+.context-card__limit[data-tone="ok"] .context-card__limit-fill {
+  background: var(--accent);
+}
+
+.context-card__limit[data-tone="warn"] .context-card__limit-fill {
+  background: var(--status-waiting);
+}
+
+.context-card__limit[data-tone="danger"] .context-card__limit-fill {
+  background: var(--error);
 }
 
 .context-card__chart {

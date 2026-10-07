@@ -422,6 +422,9 @@ internal sealed record OpenCodeRetryPart : OpenCodeMessagePart
 internal sealed record OpenCodeCompactionPart : OpenCodeMessagePart
 {
     [JsonPropertyName("summary")] public string? Summary { get; init; }
+
+    /// <summary>True when OpenCode compacted on its own because the context was nearly full.</summary>
+    [JsonPropertyName("auto")] public bool? Auto { get; init; }
 }
 
 /// <summary>Tool result part.</summary>

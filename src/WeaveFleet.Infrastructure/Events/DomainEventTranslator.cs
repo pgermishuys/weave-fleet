@@ -580,9 +580,25 @@ internal sealed class DomainEventTranslator
             {
                 SessionId = sessionId,
                 Error = payload.Info.Error ?? ReadMessageError(evt),
+                CompactionSummary = payload.Info.CompactionSummary ?? (IsCompactionSummary(evt) ? true : null),
             },
             Parts = parts.Select(part => NormalizeMessageEventPart(part, sessionId)).ToArray(),
         };
+    }
+
+    /// <summary>
+    /// Whether the raw message is the summary a compaction wrote (OpenCode's <c>mode: compaction</c> or
+    /// <c>summary: true</c> on an assistant message). Read here: a user message's <c>summary</c> is an object.
+    /// </summary>
+    private static bool IsCompactionSummary(HarnessEvent evt)
+    {
+        if (evt.Payload is not { ValueKind: JsonValueKind.Object } payload || TryGetObjectProperty(payload, "info") is not { } info)
+            return false;
+
+        return info.TryGetProperty("role", out var role) && role.ValueEquals("assistant")
+            && Harnesses.OpenCode.OpenCodeMapper.IsCompactionSummary(
+                info.TryGetProperty("mode", out var mode) && mode.ValueKind == JsonValueKind.String ? mode.GetString() : null,
+                info.TryGetProperty("summary", out var summary) ? summary : null);
     }
 
     /// <summary>

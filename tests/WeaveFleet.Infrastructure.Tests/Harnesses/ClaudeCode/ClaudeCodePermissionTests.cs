@@ -150,6 +150,7 @@ public sealed class ClaudeCodePermissionTests : IDisposable
                 echo '{"type":"system","subtype":"init","session_id":"cc-1"}'
                 echo '{"type":"control_request","request_id":"req_1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"git push origin main"},"tool_use_id":"toolu_1"}}'
                 IFS= read -r answer
+                case "$answer" in *'"get_usage"'*) IFS= read -r answer ;; esac
                 printf '%s\n' "$answer" >> '{{{answers}}}'
                 echo '{"type":"result","subtype":"success","is_error":false,"result":"ok","session_id":"cc-1"}'
                 cat > /dev/null

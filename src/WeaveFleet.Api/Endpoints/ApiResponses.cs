@@ -210,6 +210,13 @@ public sealed record GetSessionResponse(
 
     /// <summary>Where it sits in the Pinned group above the projects (ascending), or null when it isn't pinned.</summary>
     public double? PinOrder { get; init; }
+    /// <summary>While the harness waits to retry a failed model call: which attempt this is, out of how many.</summary>
+    public int? RetryAttempt { get; init; }
+    public int? RetryMaxAttempts { get; init; }
+
+    /// <summary>While the harness waits to retry: why the call failed, and when it tries again (ISO 8601).</summary>
+    public string? RetryMessage { get; init; }
+    public string? RetryNext { get; init; }
 }
 
 /// <summary>

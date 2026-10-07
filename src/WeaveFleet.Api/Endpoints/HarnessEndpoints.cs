@@ -50,6 +50,13 @@ public static class HarnessEndpoints
         })
         .WithName("GetHarnesses");
 
+        // GET /api/harnesses/usage — the usage limits the user's harnesses last reported (a claude.ai login's 5-hour and
+        // weekly windows); empty for a harness that doesn't report them, e.g. on an API key or a gateway.
+        group.MapGet("/harnesses/usage", (HarnessUsageLimits limits, IUserContext userContext)
+            => Results.Ok(limits.Get(userContext.UserId).ToList()))
+        .WithName("GetHarnessUsage")
+        .Produces<List<HarnessUsage>>();
+
         // POST /api/harnesses/{type}/update — update the harness once no session is working; poll GET /api/harnesses
         group.MapPost("/harnesses/{type}/update", async (
             string type,
