@@ -5,15 +5,17 @@ import { apiFetch } from "@/lib/api-client";
 /** Open files are few; keep the bases of the most recent ones. */
 const MAX_CACHED = 50;
 
-// A session's baseline is taken once when it starts, so a file's base never changes for that session.
+// A file's base stays the same until what the changes are compared with moves (a rebase onto a newer main,
+// say), so it's kept under that too.
 const cache = new Map<string, Promise<string | null>>();
 
 /**
- * A changed file's contents at the session's baseline: "" for a file the session added, null when it can't
- * be read (it isn't among the changes, or the request failed; failures aren't cached).
+ * A changed file's contents at what the session's changes are compared with: "" for a file the session added,
+ * null when it can't be read (it isn't among the changes, or the request failed; failures aren't cached).
+ * `base` is {@link baseKey} of that comparison.
  */
-export function fetchDiffBase(sessionId: string, path: string): Promise<string | null> {
-  const key = `${sessionId}\u0000${path}`;
+export function fetchDiffBase(sessionId: string, path: string, base = ""): Promise<string | null> {
+  const key = `${sessionId}\u0000${base}\u0000${path}`;
   const cached = cache.get(key);
   if (cached) {
     cache.delete(key);
@@ -56,19 +58,20 @@ export function useDiffBase(
   sessionId: MaybeRefOrGetter<string>,
   path: MaybeRefOrGetter<string>,
   changed: MaybeRefOrGetter<boolean>,
+  comparedWith: MaybeRefOrGetter<string> = "",
 ): Readonly<ShallowRef<string | null>> {
   const base = shallowRef<string | null>(null);
   let request = 0;
 
   watch(
-    () => [toValue(sessionId), toValue(path), toValue(changed)] as const,
-    async ([id, file, isChanged]) => {
+    () => [toValue(sessionId), toValue(path), toValue(changed), toValue(comparedWith)] as const,
+    async ([id, file, isChanged, compared]) => {
       const current = ++request;
       if (!id || !file || !isChanged) {
         base.value = null;
         return;
       }
-      const loaded = await fetchDiffBase(id, file);
+      const loaded = await fetchDiffBase(id, file, compared);
       if (current === request) base.value = loaded;
     },
     { immediate: true },

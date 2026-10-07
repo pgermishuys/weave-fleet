@@ -42,8 +42,10 @@ vi.mock("@/components/visual-renderers/MarkdownRenderer.vue", () => ({
 const sharedDiffs = vi.hoisted(() => ({}) as {
   diffs: import("vue").Ref<FileDiffItem[]>;
   byFile: ComputedRef<ReadonlyMap<string, FileDiffItem>>;
+  base: import("vue").Ref<null>;
 });
 sharedDiffs.diffs = ref<FileDiffItem[]>([]);
+sharedDiffs.base = ref(null);
 sharedDiffs.byFile = computed(() => new Map(sharedDiffs.diffs.value.map((diff) => [diff.file, diff])));
 
 function file(content: string, hash = "h1") {

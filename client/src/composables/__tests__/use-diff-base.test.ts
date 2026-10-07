@@ -28,6 +28,24 @@ describe("useDiffBase", () => {
     expect(apiFetchMock).toHaveBeenCalledWith("/api/sessions/s1/diffs/file?path=src%2Fa.ts");
   });
 
+  it("reads a file's base again once what the changes are compared with moves", async () => {
+    apiFetchMock.mockResolvedValueOnce(diffResponse("old main\n"));
+    apiFetchMock.mockResolvedValueOnce(diffResponse("newer main\n"));
+    const comparedWith = shallowRef("branch:aaa1111");
+
+    const { result, wrapper } = await mountComposable(() => useDiffBase("s1", "src/a.ts", true, comparedWith));
+    await flushAll();
+    expect(result.value).toBe("old main\n");
+
+    comparedWith.value = "branch:bbb2222";
+    await nextTick();
+    await flushAll();
+    expect(result.value).toBe("newer main\n");
+    expect(apiFetchMock).toHaveBeenCalledTimes(2);
+
+    wrapper.unmount();
+  });
+
   it("doesn't cache a failed read", async () => {
     apiFetchMock.mockResolvedValueOnce(new Response(null, { status: 404 }));
     apiFetchMock.mockResolvedValueOnce(diffResponse("old\n"));

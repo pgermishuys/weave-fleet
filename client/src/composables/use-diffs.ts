@@ -1,5 +1,5 @@
 import { computed, readonly, shallowRef, toValue, watch, type ComputedRef, type MaybeRefOrGetter, type Ref, type ShallowRef } from "vue";
-import type { FileDiffItem, SessionDiffsResponse } from "@/api/client";
+import type { FileDiffItem, SessionDiffBase, SessionDiffsResponse } from "@/api/client";
 import { api } from "@/api/client";
 import { useWeaveSocket } from "@/composables/use-weave-socket";
 import type { DomainEvent } from "@/lib/domain-events";
@@ -10,6 +10,8 @@ export interface UseDiffsResult {
   /** The same list by path, for lookups from every row of a file tree. */
   byFile: ComputedRef<ReadonlyMap<string, FileDiffItem>>;
   available: Readonly<ShallowRef<boolean>>;
+  /** What the changes are compared with; it moves when the branch is rebased onto a newer main. */
+  base: Readonly<ShallowRef<SessionDiffBase | null>>;
   isLoading: Readonly<ShallowRef<boolean>>;
   isStale: Readonly<ShallowRef<boolean>>;
   error: Readonly<ShallowRef<string | undefined>>;
@@ -21,12 +23,19 @@ function listKey(items: readonly FileDiffItem[]): string {
   return items.map((item) => `${item.file}\u0000${item.status}\u0000${item.additions}\u0000${item.deletions}`).join("\n");
 }
 
+/** Identifies a diff base: a file's base contents are the same for as long as this is. */
+export function baseKey(base: SessionDiffBase | null | undefined): string {
+  if (!base) return "";
+  return base.kind === "branch" ? `branch:${base.commit ?? ""}` : "session";
+}
+
 export function useDiffs(
   sessionId: MaybeRefOrGetter<string | null | undefined>,
 ): UseDiffsResult {
   // Replaced whole, never mutated: a session can change hundreds of files.
   const diffs = shallowRef<readonly FileDiffItem[]>([]);
   const available = shallowRef(false);
+  const base = shallowRef<SessionDiffBase | null>(null);
   const isLoading = shallowRef(false);
   const isStale = shallowRef(false);
   const error = shallowRef<string | undefined>(undefined);
@@ -43,6 +52,7 @@ export function useDiffs(
       requestId += 1;
       diffs.value = [];
       available.value = false;
+      base.value = null;
       isLoading.value = false;
       isStale.value = false;
       error.value = undefined;
@@ -76,6 +86,8 @@ export function useDiffs(
       // Keep the old list when nothing changed, so what's derived from it doesn't recompute on every edit event.
       if (listKey(items) !== listKey(diffs.value)) diffs.value = items;
       available.value = Array.isArray(responseData) || typeof responseData?.available !== "boolean" ? true : responseData.available;
+      const nextBase = Array.isArray(responseData) ? null : (responseData?.base ?? null);
+      if (baseKey(nextBase) !== baseKey(base.value)) base.value = nextBase;
       isStale.value = false;
       error.value = undefined;
     } catch (fetchError) {
@@ -84,6 +96,7 @@ export function useDiffs(
       }
 
       available.value = false;
+      base.value = null;
       error.value = fetchError instanceof Error ? fetchError.message : String(fetchError);
     } finally {
       if (currentRequestId === requestId) {
@@ -117,6 +130,7 @@ export function useDiffs(
       requestId += 1;
       diffs.value = [];
       available.value = false;
+      base.value = null;
       isLoading.value = false;
       isStale.value = false;
       error.value = undefined;
@@ -162,6 +176,7 @@ export function useDiffs(
     diffs: computed(() => diffs.value),
     byFile,
     available: readonly(available),
+    base: readonly(base),
     isLoading: readonly(isLoading),
     isStale: readonly(isStale),
     error: readonly(error),

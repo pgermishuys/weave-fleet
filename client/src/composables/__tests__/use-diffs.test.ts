@@ -235,6 +235,37 @@ describe("useDiffs", () => {
     wrapper.unmount();
   });
 
+  it("exposes what the changes are compared with, keeping it while it doesn't move", async () => {
+    const respond = (commit: string) => {
+      const body = { diffs: [], available: true, base: { kind: "branch", branch: "main", commit } };
+      return { data: body, error: undefined, response: createJsonResponse(body) };
+    };
+    apiFetchMock.mockResolvedValueOnce(respond("aaa1111"));
+    apiFetchMock.mockResolvedValueOnce(respond("aaa1111"));
+    apiFetchMock.mockResolvedValueOnce(respond("bbb2222"));
+
+    const sessionId = shallowRef("session-1");
+    const { useDiffs } = await import("@/composables/use-diffs");
+    const { result, wrapper } = await mountComposable(() => useDiffs(sessionId));
+
+    await result.fetchDiffs();
+    const first = result.base.value;
+    expect(first).toEqual({ kind: "branch", branch: "main", commit: "aaa1111" });
+
+    await result.fetchDiffs();
+    expect(result.base.value).toBe(first);
+
+    // The branch was rebased onto a newer main.
+    await result.fetchDiffs();
+    expect(result.base.value).toEqual({ kind: "branch", branch: "main", commit: "bbb2222" });
+
+    sessionId.value = "session-2";
+    await flushAll();
+    expect(result.base.value).toBeNull();
+
+    wrapper.unmount();
+  });
+
   it("documents that backend session diff summaries include before and after content", async () => {
     const backendDiffSummary = {
       file: "src/App.vue",

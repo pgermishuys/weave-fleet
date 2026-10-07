@@ -2,12 +2,19 @@
 import { computed, shallowRef, watch } from "vue";
 import { ChevronLeft, File, LoaderCircle, X } from "lucide-vue-next";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
-import type { FileDiffItem } from "@/api/client";
+import type { FileDiffItem, SessionDiffBase } from "@/api/client";
 import { apiFetch } from "@/lib/api-client";
+import { diffBaseLabel } from "@/lib/diff-base";
 import { parseDiffLines, type DiffLine } from "@/lib/diff-parser";
 
 /** The session's changed files as settings rows (name, folder, +a −d), then one file's diff, read-only. */
-const props = defineProps<{ open: boolean; sessionId: string; diffs: readonly FileDiffItem[]; loading: boolean }>();
+const props = defineProps<{
+  open: boolean;
+  sessionId: string;
+  diffs: readonly FileDiffItem[];
+  loading: boolean;
+  base?: SessionDiffBase | null;
+}>();
 const emit = defineEmits<{ (event: "close"): void }>();
 
 const picked = shallowRef<FileDiffItem | null>(null);
@@ -27,6 +34,14 @@ const shown = computed(() => {
     for (let i = Math.max(0, index - 3); i <= Math.min(all.length - 1, index + 3); i++) keep.add(i);
   });
   return all.map((line, index) => ({ line, index, gap: keep.has(index) && index > 0 && !keep.has(index - 1) })).filter((entry) => keep.has(entry.index));
+});
+
+const subtitle = computed(() => {
+  if (!props.diffs.length) return undefined;
+  const files = `${props.diffs.length} file${props.diffs.length === 1 ? "" : "s"}`;
+  const label = diffBaseLabel(props.base);
+  if (!label) return `${files} in this session's folder`;
+  return label.commit ? `${files} · ${label.text.toLowerCase()} at ${label.commit}` : `${files} · ${label.text.toLowerCase()}`;
 });
 
 const fileName = (path: string): string => path.split(/[\\/]/).pop() ?? path;
@@ -56,7 +71,7 @@ async function openFile(item: FileDiffItem): Promise<void> {
     :open="open"
     label="Changes"
     :title="picked ? undefined : 'Changes'"
-    :subtitle="diffs.length ? `${diffs.length} file${diffs.length === 1 ? '' : 's'} in this session's folder` : undefined"
+    :subtitle="subtitle"
     :detents="['medium', 'large']"
     initial="medium"
     @close="emit('close')"

@@ -207,7 +207,7 @@ watch(() => stream.isLoading.value, (loading) => {
 const sheet = shallowRef<"menu" | "changes" | "files" | "side" | "terminal" | null>(null);
 const { harnesses } = useHarnesses();
 const caps = computed(() => harnessCapabilities(session.value?.harnessType, harnesses.value));
-const { diffs, isLoading: diffsLoading, fetchDiffs } = useDiffs(sessionId);
+const { diffs, base: diffsBase, isLoading: diffsLoading, fetchDiffs } = useDiffs(sessionId);
 const { runShellCommand } = useRunShellCommand(sessionId.value);
 const { abortSession } = useAbortSession();
 const { archiveSession } = useArchiveSession();
@@ -540,6 +540,7 @@ onUnmounted(() => {
       :open="sheet === 'changes'"
       :session-id="sessionId"
       :diffs="diffs"
+      :base="diffsBase"
       :loading="diffsLoading"
       @close="sheet = null"
     />

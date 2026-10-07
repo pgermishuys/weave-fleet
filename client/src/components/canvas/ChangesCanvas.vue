@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, inject, onBeforeUnmount } from "vue";
-import { FileText } from "lucide-vue-next";
+import { FileText, GitBranch, History } from "lucide-vue-next";
 import type { UseDiffsResult } from "@/composables/use-diffs";
+import { diffBaseLabel } from "@/lib/diff-base";
 import { fileCanvasId, useCanvasesStore } from "@/stores/canvases";
 
 const props = defineProps<{
@@ -10,6 +11,9 @@ const props = defineProps<{
 
 const canvases = useCanvasesStore();
 const sharedDiffs = inject<UseDiffsResult>("sharedDiffs");
+
+const base = computed(() => sharedDiffs?.base.value ?? null);
+const baseLabel = computed(() => diffBaseLabel(base.value));
 
 const changedFiles = computed(() =>
   [...(sharedDiffs?.diffs.value ?? [])]
@@ -59,10 +63,28 @@ function isOpen(path: string): boolean {
 <template>
   <div class="changes-canvas">
     <p
+      v-if="baseLabel"
+      class="changes-canvas__base"
+      :title="baseLabel.detail"
+      data-testid="changes-base"
+    >
+      <component
+        :is="base?.kind === 'branch' ? GitBranch : History"
+        :size="12"
+        class="changes-canvas__base-icon"
+        aria-hidden="true"
+      />
+      <span>{{ baseLabel.text }}</span>
+      <span
+        v-if="baseLabel.commit"
+        class="changes-canvas__base-commit"
+      >{{ baseLabel.commit }}</span>
+    </p>
+    <p
       v-if="changedFiles.length === 0"
       class="changes-canvas__empty"
     >
-      No changes in this session yet.
+      {{ base?.kind === "branch" ? "No changes on this branch yet." : "No changes in this session yet." }}
     </p>
     <div
       v-else
@@ -113,6 +135,33 @@ function isOpen(path: string): boolean {
   display: flex;
   flex-direction: column;
   padding: 8px 8px 6px;
+}
+
+/* Lines up with the rows' icons below it. */
+.changes-canvas__base {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 10px 16px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.changes-canvas__base-icon {
+  flex-shrink: 0;
+  color: color-mix(in srgb, var(--muted) 75%, transparent);
+}
+
+.changes-canvas__base-commit {
+  font-family: var(--font-mono-stack);
+  font-size: 11.5px;
+  color: color-mix(in srgb, var(--muted) 80%, transparent);
+}
+
+.changes-canvas__base + .changes-canvas__list {
+  padding-top: 4px;
 }
 
 .changes-canvas__empty {

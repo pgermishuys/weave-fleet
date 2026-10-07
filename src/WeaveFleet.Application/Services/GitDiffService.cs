@@ -31,12 +31,8 @@ public sealed class GitDiffService
         if (string.IsNullOrWhiteSpace(workDir))
             return null;
 
-        var repoRootResult = await RunGitAsync(workDir, ["rev-parse", "--show-toplevel"], ct).ConfigureAwait(false);
-        if (!repoRootResult.IsSuccess)
-            return null;
-
-        var repoRoot = repoRootResult.StandardOutput.Trim();
-        if (string.IsNullOrWhiteSpace(repoRoot))
+        var repoRoot = await FindRepoRootAsync(workDir, ct).ConfigureAwait(false);
+        if (repoRoot is null)
             return null;
 
         var stashResult = await RunGitAsync(repoRoot, ["stash", "create", $"fleet baseline {baselineId}"], ct).ConfigureAwait(false);
@@ -61,6 +57,90 @@ public sealed class GitDiffService
             return null;
 
         return new GitBaselineCapture(refName, repoRoot);
+    }
+
+    /// <summary>The root of the git repository <paramref name="directory"/> is in, or null when it isn't in one.</summary>
+    public async Task<string?> FindRepoRootAsync(string directory, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(directory))
+            return null;
+
+        var result = await RunGitAsync(directory, ["rev-parse", "--show-toplevel"], ct).ConfigureAwait(false);
+        var repoRoot = result.StandardOutput.Trim();
+        return result.IsSuccess && !string.IsNullOrWhiteSpace(repoRoot) ? repoRoot : null;
+    }
+
+    /// <summary>
+    /// What a session's changes are compared with. On a branch other than the repository's main branch it's where
+    /// the branch left main, as a pull request shows it: rebasing onto a newer main, pulling it, or switching
+    /// branches then doesn't list other people's work as the session's. On main itself or a detached HEAD there's
+    /// no branch to compare, so it's the baseline taken when the session started. Null when there's neither.
+    /// </summary>
+    public async Task<GitDiffBase?> ResolveDiffBaseAsync(string repoRoot, string? sessionBaselineRef, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot))
+            return null;
+
+        var branchBase = await ResolveBranchBaseAsync(repoRoot, ct).ConfigureAwait(false);
+        if (branchBase is not null)
+            return branchBase;
+
+        return string.IsNullOrWhiteSpace(sessionBaselineRef)
+            ? null
+            : new GitDiffBase(sessionBaselineRef, GitDiffBaseKind.SessionStart, MainBranch: null);
+    }
+
+    private async Task<GitDiffBase?> ResolveBranchBaseAsync(string repoRoot, CancellationToken ct)
+    {
+        var branchResult = await RunGitAsync(repoRoot, ["symbolic-ref", "--quiet", "--short", "HEAD"], ct).ConfigureAwait(false);
+        var branch = branchResult.StandardOutput.Trim();
+        if (!branchResult.IsSuccess || branch.Length == 0)
+            return null;
+
+        var main = await FindMainBranchAsync(repoRoot, ct).ConfigureAwait(false);
+        if (main is null || string.Equals(branch, main.Value.Name, StringComparison.Ordinal))
+            return null;
+
+        var mergeBaseResult = await RunGitAsync(repoRoot, ["merge-base", "HEAD", main.Value.Ref], ct).ConfigureAwait(false);
+        var mergeBase = mergeBaseResult.StandardOutput.Trim();
+        if (!mergeBaseResult.IsSuccess || mergeBase.Length == 0)
+            return null;
+
+        return new GitDiffBase(mergeBase, GitDiffBaseKind.Branch, main.Value.Name);
+    }
+
+    // The branch pull requests go to: origin's default branch, else main or master. Origin's copy comes first,
+    // because that's what a branch is rebased onto.
+    private static readonly string[] MainBranchCandidates =
+        ["refs/remotes/origin/main", "refs/remotes/origin/master", "refs/heads/main", "refs/heads/master"];
+
+    private async Task<(string Ref, string Name)?> FindMainBranchAsync(string repoRoot, CancellationToken ct)
+    {
+        const string OriginHead = "refs/remotes/origin/HEAD";
+        var result = await RunGitAsync(
+            repoRoot,
+            ["for-each-ref", "--format=%(refname)%09%(symref)", OriginHead, .. MainBranchCandidates],
+            ct).ConfigureAwait(false);
+        if (!result.IsSuccess)
+            return null;
+
+        var refs = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var line in SplitLines(result.StandardOutput))
+        {
+            var columns = line.Split('\t');
+            refs[columns[0]] = columns.Length > 1 ? columns[1] : string.Empty;
+        }
+
+        var found = refs.TryGetValue(OriginHead, out var originDefault) && originDefault.Length > 0
+            ? originDefault
+            : MainBranchCandidates.FirstOrDefault(refs.ContainsKey);
+        if (found is null)
+            return null;
+
+        var name = found.StartsWith("refs/remotes/origin/", StringComparison.Ordinal)
+            ? found["refs/remotes/origin/".Length..]
+            : found.StartsWith("refs/heads/", StringComparison.Ordinal) ? found["refs/heads/".Length..] : found;
+        return (found, name);
     }
 
     public async Task<IReadOnlyList<FileDiffSummary>> ComputeDiffsAsync(
@@ -546,6 +626,17 @@ public sealed record GitCommandResult(int ExitCode, string StandardOutput, strin
 }
 
 public sealed record GitBaselineCapture(string RefName, string RepoRoot);
+
+public enum GitDiffBaseKind
+{
+    /// <summary>The baseline taken when the session started.</summary>
+    SessionStart,
+
+    /// <summary>Where the branch left the repository's main branch; <see cref="GitDiffBase.Ref"/> is that commit.</summary>
+    Branch
+}
+
+public sealed record GitDiffBase(string Ref, GitDiffBaseKind Kind, string? MainBranch);
 
 public sealed record GitDiffComputationResult(IReadOnlyList<FileDiffSummary> Diffs, bool Available)
 {
