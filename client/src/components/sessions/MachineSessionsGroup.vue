@@ -1,22 +1,27 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { Pin } from "lucide-vue-next";
+import { computed, watch } from "vue";
 import type { SessionListItem } from "@/api/client";
-import DraftSessionRow from "@/components/sessions/DraftSessionRow.vue";
 import MachineHeader from "@/components/sessions/MachineHeader.vue";
-import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
-import { useRelativeTime } from "@/composables/use-relative-time";
-import { formatCompactAge, isSessionLive, sessionRowDim, sessionRowStatus } from "@/lib/session-row-status";
-import { lineageDescendants, lineageKindLabel, nestLineage, type LineageKind } from "@/lib/session-lineage";
-import { isPinned, splitPinned } from "@/lib/session-pins";
+import ProjectGroup from "@/components/sessions/ProjectGroup.vue";
+import { splitPinned } from "@/lib/session-pins";
+import {
+  PINNED_GROUP_ID,
+  buildProjectGroups,
+  draftGroupIdFor,
+  draftGroupKeyFor,
+  filterProjectGroups,
+  pinnedProjectGroup,
+  sessionMatchesQuery,
+} from "@/lib/session-project-groups";
 import type { MachineEntry, MachineSessions } from "@/stores/machines";
 import type { NewSessionDraftRow } from "@/stores/workspace-ui";
-import { machineGroupKey, useSidebarStore } from "@/stores/sidebar";
+import { machineGroupKey, projectGroupKey, useSidebarStore } from "@/stores/sidebar";
 
 /**
- * A machine the app isn't working in: its sessions as it last listed them, refreshed on a timer. Its rows only
- * open the session, which makes this machine live; archiving, moving and renaming happen once it's live,
- * so nothing here can act on the wrong machine.
+ * A machine the app isn't working in: its sessions as it last listed them, refreshed on a timer, in the same tree the
+ * live machine shows (Pinned, its projects in their order, what each session started under it). Its rows only open
+ * the session, which makes this machine live; archiving, moving and renaming happen once it's live, so nothing here
+ * can act on the wrong machine.
  */
 const props = defineProps<{
   machine: MachineEntry;
@@ -32,26 +37,48 @@ const emit = defineEmits<{ open: [session: SessionListItem]; openDraft: [] }>();
 
 const sidebar = useSidebarStore();
 const expanded = computed(() => !sidebar.isGroupCollapsed(machineGroupKey(props.machine.key)));
-const now = useRelativeTime();
 
-const sessions = computed(() => {
-  const all = (props.state?.sessions ?? []).filter((item) => !item.parentSessionId && item.retentionStatus !== "archived");
-  return props.query
-    ? all.filter((item) => (item.session.title ?? "").toLowerCase().includes(props.query))
-    : all;
+const projects = computed(() => props.state?.projects ?? []);
+const projectsById = computed(() => new Map(projects.value.map((project) => [project.id, project])));
+
+const sessions = computed(() => (props.state?.sessions ?? [])
+  .filter((item) => !item.parentSessionId && item.retentionStatus !== "archived"));
+
+const split = computed(() => splitPinned(sessions.value));
+
+function matches(item: SessionListItem): boolean {
+  return sessionMatchesQuery(item, props.query, projectsById.value);
+}
+
+const draftKey = computed(() => (props.draft ? draftGroupKeyFor(props.draft.projectId, projects.value) : null));
+const draftGroupId = computed(() => draftGroupIdFor(draftKey.value, projects.value));
+
+const pinnedGroup = computed(() => pinnedProjectGroup(props.query ? split.value.pinned.filter(matches) : split.value.pinned));
+
+const projectGroups = computed(() => {
+  const groups = buildProjectGroups(split.value.rest, projects.value, draftKey.value);
+  return props.query ? filterProjectGroups(groups, props.query, matches) : groups;
 });
 
-/**
- * Its rows: forks and started sessions under the top-level session they came from, one indent in, with their kind.
- * Its pinned sessions come first, in their pinned order.
- */
-const rows = computed(() => {
-  const { pinned, rest } = splitPinned(sessions.value);
-  const { roots, childrenOf } = nestLineage([...pinned, ...rest]);
-  return roots.flatMap((item) => [
-    { item, kind: null as LineageKind | null },
-    ...lineageDescendants(item, childrenOf),
-  ]);
+const count = computed(() => pinnedGroup.value.sessionCount
+  + projectGroups.value.reduce((total, group) => total + group.sessionCount, 0));
+
+/** What each session's agent had running when the list came back: the chip on its row. */
+const runningCounts = computed(() => new Map(sessions.value
+  .filter((item) => item.runningWorkCount)
+  .map((item) => [item.session.id, item.runningWorkCount!])));
+
+function isProjectExpanded(groupId: string): boolean {
+  return !sidebar.isGroupCollapsed(projectGroupKey(props.machine.key, groupId));
+}
+
+function toggleProject(groupId: string): void {
+  sidebar.toggleGroupCollapsed(projectGroupKey(props.machine.key, groupId));
+}
+
+// A draft shows in its group, so that group opens when a draft lands in it.
+watch(draftGroupId, (groupId) => {
+  if (groupId) sidebar.setGroupCollapsed(projectGroupKey(props.machine.key, groupId), false);
 });
 
 const unreachable = computed(() => Boolean(props.state?.error));
@@ -61,20 +88,12 @@ const note = computed(() => {
   if (!props.state?.loadedAt) return props.state?.loading ? "…" : null;
   return null;
 });
-
-function title(item: SessionListItem): string {
-  return item.session.title?.trim() || "Untitled session";
-}
-
-function age(item: SessionListItem): string {
-  const time = item.session.time;
-  return formatCompactAge(time?.updated ?? time?.created ?? "", now.value);
-}
 </script>
 
 <template>
   <section
     class="machine-group"
+    :class="{ 'machine-group--stale': unreachable }"
     :aria-label="`Sessions on ${machine.name}`"
     data-testid="machine-group"
     :data-machine="machine.key"
@@ -83,18 +102,12 @@ function age(item: SessionListItem): string {
       :name="machine.name"
       :unreachable="unreachable"
       :note="note"
-      :count="sessions.length"
+      :count="count"
       :expanded="expanded"
       @toggle="sidebar.toggleGroupCollapsed(machineGroupKey(machine.key))"
     />
 
     <template v-if="expanded">
-      <DraftSessionRow
-        v-if="draft"
-        :draft="draft"
-        :active="draftActive ?? false"
-        @open="emit('openDraft')"
-      />
       <p
         v-if="state?.error"
         class="machine-group__error"
@@ -102,54 +115,39 @@ function age(item: SessionListItem): string {
       >
         {{ state.error }}
       </p>
-      <button
-        v-for="{ item, kind } in rows"
-        :key="item.session.id"
-        type="button"
-        class="machine-row"
-        :class="[
-          { 'machine-row--stale': unreachable, 'machine-row--child': kind },
-          sessionRowDim(item, now) > 0 ? `machine-row--dim-${sessionRowDim(item, now)}` : '',
-        ]"
-        :title="`Open on ${machine.name}`"
-        data-testid="machine-session-row"
-        :data-session-id="item.session.id"
-        @click="emit('open', item)"
-      >
-        <StatusGlyph
-          v-if="isSessionLive(item)"
-          :status="item.sessionStatus"
-          :activity="item.activityStatus"
-          :label="sessionRowStatus(item, now).description"
-        />
-        <span
-          v-else
-          class="machine-row__slot"
-          aria-hidden="true"
-        />
-        <Pin
-          v-if="isPinned(item)"
-          class="machine-row__pin"
-          aria-label="Pinned"
-        />
-        <span class="machine-row__title">{{ title(item) }}</span>
-        <span
-          v-if="item.runningWorkCount"
-          class="machine-row__running"
-          :title="`${item.runningWorkCount} running in the background`"
-        >{{ item.runningWorkCount }}</span>
-        <span
-          v-if="kind"
-          class="machine-row__kind"
-        >{{ lineageKindLabel(kind) }}</span>
-        <span
-          v-else
-          class="machine-row__meta"
-          :class="`machine-row__meta--${sessionRowStatus(item, now).tone}`"
-        >{{ sessionRowStatus(item, now).label || age(item) }}</span>
-      </button>
+      <ProjectGroup
+        v-if="pinnedGroup.sessionCount > 0"
+        key="pinned"
+        :project="pinnedGroup"
+        pinned
+        :expanded="isProjectExpanded(PINNED_GROUP_ID)"
+        :active-session-id="null"
+        :active-drag-session-id="null"
+        :active-drag-project-id="null"
+        :running-counts="runningCounts"
+        :open-on-machine="machine.name"
+        data-testid="pinned-group"
+        @toggle="toggleProject"
+        @select-session="emit('open', $event)"
+      />
+      <ProjectGroup
+        v-for="project in projectGroups"
+        :key="project.id"
+        :project="project"
+        :expanded="isProjectExpanded(project.id)"
+        :active-session-id="null"
+        :active-drag-session-id="null"
+        :active-drag-project-id="null"
+        :draft="project.id === draftGroupId ? draft : null"
+        :draft-active="draftActive"
+        :running-counts="runningCounts"
+        :open-on-machine="machine.name"
+        @toggle="toggleProject"
+        @select-session="emit('open', $event)"
+        @open-draft="emit('openDraft')"
+      />
       <p
-        v-if="!state?.error && state?.loadedAt && sessions.length === 0 && !draft"
+        v-if="!state?.error && state?.loadedAt && projectGroups.length === 0 && pinnedGroup.sessionCount === 0"
         class="machine-group__empty"
       >
         {{ query ? "No matching sessions" : "No sessions" }}
@@ -159,19 +157,6 @@ function age(item: SessionListItem): string {
 </template>
 
 <style scoped>
-.machine-row__pin {
-  width: 11px;
-  height: 11px;
-  flex-shrink: 0;
-  color: color-mix(in srgb, var(--muted) 80%, transparent);
-}
-
-.machine-group {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
 .machine-group__error,
 .machine-group__empty {
   margin: 2px 10px 4px 26px;
@@ -184,102 +169,8 @@ function age(item: SessionListItem): string {
   color: color-mix(in srgb, var(--error) 80%, var(--muted));
 }
 
-.machine-row {
-  width: 100%;
-  min-width: 0;
-  min-height: 30px;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: var(--radius-btn);
-  background: transparent;
-  color: color-mix(in srgb, var(--text) 80%, transparent);
-  text-align: left;
-  font: inherit;
-  cursor: pointer;
-  transition: background var(--transition), color var(--transition);
-}
-
-.machine-row:hover {
-  background: color-mix(in srgb, var(--text) 5%, transparent);
-  color: var(--text);
-}
-
-.machine-row:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-
-.machine-row--dim-1 {
-  color: color-mix(in srgb, var(--text) 55%, transparent);
-}
-
-.machine-row--dim-2,
-.machine-row--stale {
-  color: color-mix(in srgb, var(--text) 40%, transparent);
-}
-
-.machine-row__slot {
-  width: 8px;
-  height: 8px;
-  flex-shrink: 0;
-}
-
-.machine-row__title {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
-  line-height: 1.3;
-}
-
-.machine-row__meta {
-  flex-shrink: 0;
-  font-size: 11px;
-  color: color-mix(in srgb, var(--muted) 80%, transparent);
-  font-variant-numeric: tabular-nums;
-}
-
-/* A fork or a started session, under the session it came from. */
-.machine-row--child {
-  width: calc(100% - 13px);
-  margin-left: 13px;
-  min-height: 28px;
-  border-left: 1px solid var(--border);
-  border-radius: 0 var(--radius-btn) var(--radius-btn) 0;
-}
-
-.machine-row__kind {
-  flex-shrink: 0;
-  color: var(--muted);
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.machine-row__running {
-  flex-shrink: 0;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--running) 14%, transparent);
-  color: var(--running);
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 18px;
-  font-variant-numeric: tabular-nums;
-}
-
-.machine-row__meta--attention {
-  color: var(--status-waiting);
-}
-
-.machine-row__meta--error {
-  color: var(--error);
+/* An unreachable machine's rows are the last ones it returned. */
+.machine-group--stale :deep(.session-item) {
+  opacity: 0.6;
 }
 </style>

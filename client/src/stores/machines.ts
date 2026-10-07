@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { computed, ref, shallowRef } from "vue";
 import type { SessionListItem } from "@/api/client";
+import type { ProjectSummary } from "@/lib/session-project-groups";
 import { onDisconnect, onReconnect } from "@/composables/use-signalr-socket";
 import {
   HOME_MACHINE_KEY,
@@ -57,9 +58,11 @@ export interface MachineEntry {
   connection: MachineConnection | null;
 }
 
-/** A machine that isn't live, as its sidebar group shows it: the last session list it returned. */
+/** A machine that isn't live, as its sidebar group shows it: the last session and project lists it returned. */
 export interface MachineSessions {
   sessions: SessionListItem[];
+  /** Its projects, for their order and names; empty until it first answers. */
+  projects: ProjectSummary[];
   error: string | null;
   /** When the list last came back, in ms; null before it ever has. */
   loadedAt: number | null;
@@ -92,9 +95,16 @@ const POLL_INTERVAL_MS = 15_000;
 const LIVE_CHECK_INTERVAL_MS = 10_000;
 const SESSIONS_CACHE_KEY = "weave:machine-sessions";
 
-/** Only what a machine group's rows show, so the cache stays small. */
-function trimForCache(item: SessionListItem): SessionListItem {
-  const { session, instanceId, sessionStatus, activityStatus, retentionStatus, parentSessionId, retryAttempt } = item;
+/**
+ * Only what a machine's tree shows (its project, its pin, what it came from), so the cache stays small and the tree
+ * after a reload looks as it did before.
+ */
+export function trimForCache(item: SessionListItem): SessionListItem {
+  const {
+    session, instanceId, sessionStatus, activityStatus, retentionStatus, parentSessionId, retryAttempt, projectId,
+    projectName, pinOrder, forkedFromSessionId, spawnedBySessionId, spawnKind, lineageDetachedAt, runningWorkCount,
+    workflowRunId,
+  } = item;
   return {
     session: { id: session.id, title: session.title, time: session.time },
     instanceId,
@@ -103,17 +113,38 @@ function trimForCache(item: SessionListItem): SessionListItem {
     retentionStatus,
     parentSessionId,
     retryAttempt,
+    projectId,
+    projectName,
+    pinOrder,
+    forkedFromSessionId,
+    spawnedBySessionId,
+    spawnKind,
+    lineageDetachedAt,
+    runningWorkCount,
+    workflowRunId,
   } as SessionListItem;
+}
+
+function trimProject({ id, name, type, position }: ProjectSummary): ProjectSummary {
+  return { id, name, type, position };
 }
 
 /** Each machine's last list, so a machine that's away still shows its sessions after a reload. */
 function loadCachedSessions(): Record<string, MachineSessions> {
   try {
     const raw = typeof window === "undefined" ? null : window.localStorage.getItem(SESSIONS_CACHE_KEY);
-    const cached = raw ? JSON.parse(raw) as Record<string, { sessions: SessionListItem[]; loadedAt: number }> : {};
+    const cached = raw
+      ? JSON.parse(raw) as Record<string, { sessions: SessionListItem[]; projects?: ProjectSummary[]; loadedAt: number }>
+      : {};
     return Object.fromEntries(Object.entries(cached).map(([key, value]) => [
       key,
-      { sessions: Array.isArray(value.sessions) ? value.sessions : [], error: null, loadedAt: value.loadedAt ?? null, loading: false },
+      {
+        sessions: Array.isArray(value.sessions) ? value.sessions : [],
+        projects: Array.isArray(value.projects) ? value.projects : [],
+        error: null,
+        loadedAt: value.loadedAt ?? null,
+        loading: false,
+      },
     ]));
   } catch {
     return {};
@@ -124,7 +155,11 @@ function saveCachedSessions(others: Record<string, MachineSessions>): void {
   try {
     const cached = Object.fromEntries(Object.entries(others)
       .filter(([, value]) => value.loadedAt !== null)
-      .map(([key, value]) => [key, { sessions: value.sessions.map(trimForCache), loadedAt: value.loadedAt }]));
+      .map(([key, value]) => [key, {
+        sessions: value.sessions.map(trimForCache),
+        projects: value.projects.map(trimProject),
+        loadedAt: value.loadedAt,
+      }]));
     window.localStorage.setItem(SESSIONS_CACHE_KEY, JSON.stringify(cached));
   } catch {
     // The cache is a nicety: without it an unreachable machine just shows no rows.
@@ -427,16 +462,23 @@ export const useMachinesStore = defineStore("machines", () => {
     const entry = entries.value.find((candidate) => candidate.key === key);
     if (!entry) return;
 
-    const current = others.value[key] ?? { sessions: [], error: null, loadedAt: null, loading: false };
+    const current = others.value[key] ?? { sessions: [], projects: [], error: null, loadedAt: null, loading: false };
     others.value = { ...others.value, [key]: { ...current, loading: true } };
 
     try {
-      const response = await fetchOnMachine(entry.connection, `/api/sessions?limit=${SESSION_PAGE_SIZE}&offset=0`);
+      const [response, projectsResponse] = await Promise.all([
+        fetchOnMachine(entry.connection, `/api/sessions?limit=${SESSION_PAGE_SIZE}&offset=0`),
+        // Its projects only order and name the groups: without them the sessions still group by the names they carry.
+        fetchOnMachine(entry.connection, "/api/projects").catch(() => null),
+      ]);
       if (response.status === 401) throw new Error(`${entry.name} didn't accept the token.`);
       if (!response.ok) throw new Error(await readError(response, `${entry.name} answered ${response.status}.`));
       const sessions = await response.json() as SessionListItem[];
+      const projects = projectsResponse?.ok
+        ? await (projectsResponse.json() as Promise<ProjectSummary[]>).catch(() => current.projects)
+        : current.projects;
       if (!entries.value.some((candidate) => candidate.key === key)) return;
-      others.value = { ...others.value, [key]: { sessions, error: null, loadedAt: Date.now(), loading: false } };
+      others.value = { ...others.value, [key]: { sessions, projects, error: null, loadedAt: Date.now(), loading: false } };
       saveCachedSessions(others.value);
       rememberSessionMachines(entry.isHome ? null : key, sessions.map((item) => item.session.id));
     } catch (error) {
@@ -509,9 +551,22 @@ export const useMachinesStore = defineStore("machines", () => {
     };
   }
 
-  /** Makes `key`'s machine live and opens `path` there. */
-  function openOn(key: string, path: string): void {
+  /**
+   * Makes `key`'s machine live and opens `path` there. The live machine's own list (`liveList`) is kept as its last
+   * list first, so after the reload it shows at once, as it did, rather than empty until it's polled.
+   */
+  function openOn(
+    key: string,
+    path: string,
+    liveList?: { sessions: readonly SessionListItem[]; projects: readonly ProjectSummary[] },
+  ): void {
     if (key === liveKey) return;
+    if (liveList) {
+      saveCachedSessions({
+        ...others.value,
+        [liveKey]: { sessions: [...liveList.sessions], projects: [...liveList.projects], error: null, loadedAt: Date.now(), loading: false },
+      });
+    }
     switchToMachine(key === HOME_MACHINE_KEY ? null : key, path);
   }
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, shallowRef, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from "vue";
 import { useLocation, useRouter } from "@tanstack/vue-router";
 import { Archive, ArchiveRestore, ArrowLeft, FolderPlus, LoaderCircle, Plus, Search, X } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
@@ -13,6 +13,17 @@ import { useArchiveQueueStore } from "@/stores/archive-queue";
 import { useLineageMovesStore } from "@/stores/lineage-moves";
 import { useSessionPinsStore } from "@/stores/session-pins";
 import { isPinned, splitPinned } from "@/lib/session-pins";
+import {
+  PINNED_GROUP_ID,
+  buildProjectGroups,
+  draftGroupIdFor,
+  draftGroupKeyFor,
+  filterProjectGroups,
+  pinnedProjectGroup,
+  sessionMatchesQuery,
+  type ProjectTreeGroup,
+} from "@/lib/session-project-groups";
+import { saveSessionListScroll, takeSessionListScroll } from "@/lib/session-list-scroll";
 import { useSessionSelectionStore } from "@/stores/session-selection";
 import { useSessionsStore } from "@/stores/sessions";
 import { machineGroupKey, projectGroupKey, useSidebarStore } from "@/stores/sidebar";
@@ -25,27 +36,6 @@ import MachineSessionsGroup from "./MachineSessionsGroup.vue";
 import NewProjectDialog from "./NewProjectDialog.vue";
 
 import ProjectGroup from "./ProjectGroup.vue";
-
-interface ProjectReorderTarget {
-  projectId: string;
-  position: number;
-}
-
-interface ProjectTreeGroup {
-  id: string;
-  projectId: string | null;
-  name: string;
-  isUngrouped: boolean;
-  canMoveUp: boolean;
-  canMoveDown: boolean;
-  moveUpTargets: ProjectReorderTarget[];
-  moveDownTargets: ProjectReorderTarget[];
-  sessionCount: number;
-  sessions: SessionListItem[];
-}
-
-/** The Pinned group's id, for folding it like a project. */
-const PINNED_GROUP_ID = "pinned";
 
 interface ActiveSessionDrag {
   sessionId: string;
@@ -142,12 +132,13 @@ const { running: runningWork, groups: runningWorkGroups } = useRunningWorkAcross
 const runningCounts = computed(() => new Map(runningWorkGroups.value.map((group) => [group.sessionId, group.items.length])));
 const runningSubagents = computed(() => runningSubagentsBySession(runningWork.value));
 
-// Other machines: every machine is listed, the live one first and in full, the rest as their last polled list.
+// Other machines: every machine is listed, in a fixed order (home, then the others as they were added), so switching
+// machines only moves the Live tag. The live one is listed in full, the rest as their last polled list.
 const machines = useMachinesStore();
 const { entries: machineEntries, hasMachines, others: machineSessions } = storeToRefs(machines);
 const showMachines = computed(() => hasMachines.value && !isArchivedView.value);
 const liveMachineEntry = computed(() => machineEntries.value.find((entry) => entry.isLive) ?? machineEntries.value[0]);
-const otherMachines = computed(() => (showMachines.value ? machineEntries.value.filter((entry) => entry !== liveMachineEntry.value) : []));
+const listedMachines = computed(() => (showMachines.value ? machineEntries.value : [liveMachineEntry.value]));
 // Folding the live machine hides its whole tree; without other machines there's no heading to fold it with.
 const liveMachineExpanded = computed(() => !showMachines.value || !sidebarStore.isGroupCollapsed(machineGroupKey(machines.liveKey)));
 
@@ -174,9 +165,19 @@ watch(
   (ids) => machines.rememberLiveSessions(ids),
 );
 
+const sessionsList = useTemplateRef<HTMLElement>("sessionsList");
+
+/**
+ * Opening another machine's session reloads the page on that machine. The list keeps its place across the reload, so
+ * the row clicked stays under the pointer, and this machine's list is kept so it shows at once afterwards.
+ */
 function handleMachineSessionOpen(machine: MachineEntry, session: SessionListItem): void {
   const search = session.instanceId ? `?instanceId=${encodeURIComponent(session.instanceId)}` : "";
-  machines.openOn(machine.key, `/sessions/${encodeURIComponent(session.session.id)}${search}`);
+  if (sessionsList.value) saveSessionListScroll(sessionsList.value.scrollTop);
+  machines.openOn(machine.key, `/sessions/${encodeURIComponent(session.session.id)}${search}`, {
+    sessions: sessionsStore.sessions,
+    projects: projects.value,
+  });
 }
 
 const searchQuery = shallowRef("");
@@ -207,9 +208,6 @@ watch(
 );
 
 const normalizedQuery = computed(() => searchQuery.value.trim().toLowerCase());
-const userProjects = computed(() => {
-  return projects.value.filter((project) => project.type !== "scratch");
-});
 const projectsById = computed(() => {
   return new Map(projects.value.map((project) => [project.id, project]));
 });
@@ -226,10 +224,7 @@ const draftGroupKey = computed<string | null>(() => {
   if (!draft || newSessionMachine.value !== null) {
     return null;
   }
-  if (draft.projectId && projectsById.value.has(draft.projectId)) {
-    return draft.projectId;
-  }
-  return projects.value.find((project) => project.type === "scratch")?.id ?? "Ungrouped";
+  return draftGroupKeyFor(draft.projectId, projects.value);
 });
 const errorMessage = computed(() => {
   const error = sessionsError.value ?? projectsError.value;
@@ -239,158 +234,44 @@ const errorMessage = computed(() => {
 });
 const hasSessions = computed(() => sessions.value.length > 0);
 
-function getProjectDisplayName(session: SessionListItem): string {
-  if (!session.projectId) {
-    return "Ungrouped";
-  }
-
-  if (session.projectName?.trim()) {
-    return session.projectName;
-  }
-
-  const project = projectsById.value.get(session.projectId);
-  if (project) {
-    return project.name;
-  }
-
-  return "Ungrouped";
+/**
+ * Back from a switch to another machine: the list goes back to where it was scrolled once the live machine's sessions
+ * and projects are in (the other machines show their kept lists at once), so the row clicked is where it was. Gives
+ * up after a few seconds, and when the user has scrolled since.
+ */
+const pendingScroll = takeSessionListScroll();
+if (pendingScroll !== null) {
+  let restored = false;
+  const giveUp = setTimeout(() => restore(), 3_000);
+  const restore = (): void => {
+    if (restored) return;
+    restored = true;
+    clearTimeout(giveUp);
+    void nextTick(() => scrollListTo(pendingScroll));
+  };
+  watch(
+    () => (hasSessions.value || Boolean(errorMessage.value)) && !isLoading.value && projects.value.length > 0,
+    (ready) => {
+      if (ready) restore();
+    },
+    { immediate: true },
+  );
+  onUnmounted(() => clearTimeout(giveUp));
 }
 
-
-function buildReorderTargets(
-  projectOrder: Array<{ projectId: string | null }>,
-): ProjectReorderTarget[] {
-  return projectOrder.flatMap((project, index) => {
-    if (!project.projectId) {
-      return [];
-    }
-
-    return [{
-      projectId: project.projectId,
-      position: index + 1,
-    }];
-  });
+/** Scrolls the list to `top`, a frame at a time while it isn't tall enough yet; not once the user has scrolled it. */
+function scrollListTo(top: number, framesLeft = 10, reached = 0): void {
+  const list = sessionsList.value;
+  if (!list || Math.abs(list.scrollTop - reached) >= 1) return;
+  list.scrollTop = top;
+  const now = list.scrollTop;
+  if (now < top - 1 && framesLeft > 0) requestAnimationFrame(() => scrollListTo(top, framesLeft - 1, now));
 }
 
-function swapProjects<T>(projects: readonly T[], leftIndex: number, rightIndex: number): T[] {
-  const nextProjects = [...projects];
-  const leftProject = nextProjects[leftIndex];
-
-  nextProjects[leftIndex] = nextProjects[rightIndex];
-  nextProjects[rightIndex] = leftProject;
-
-  return nextProjects;
-}
-
-const projectGroups = computed<ProjectTreeGroup[]>(() => {
-  const groupedSessions = new Map<string, {
-    id: string;
-    projectId: string | null;
-    name: string;
-    sortPosition: number;
-    isUngrouped: boolean;
-    sessions: SessionListItem[];
-  }>();
-
-  for (const project of userProjects.value) {
-    groupedSessions.set(project.id, {
-      id: project.id,
-      projectId: project.id,
-      name: project.name,
-      sortPosition: project.position,
-      isUngrouped: false,
-      sessions: [],
-    });
-  }
-
-  for (const session of pinnedSplit.value.rest) {
-    const project = session.projectId ? projectsById.value.get(session.projectId) : undefined;
-    const projectName = getProjectDisplayName(session);
-    const groupKey = session.projectId ?? projectName;
-    const existing = groupedSessions.get(groupKey);
-
-    if (existing) {
-      existing.sessions.push(session);
-      continue;
-    }
-
-    groupedSessions.set(groupKey, {
-      id: session.projectId ?? "ungrouped",
-      projectId: session.projectId ?? null,
-      name: projectName,
-      sortPosition: project?.position ?? Number.MAX_SAFE_INTEGER,
-      isUngrouped: projectName === "Ungrouped",
-      sessions: [session],
-    });
-  }
-
-  // The draft's group shows even before it has a session (Scratch, the first time).
-  const draftKey = draftGroupKey.value;
-  if (draftKey && !groupedSessions.has(draftKey)) {
-    const project = projectsById.value.get(draftKey);
-    groupedSessions.set(draftKey, {
-      id: project?.id ?? "ungrouped",
-      projectId: project?.id ?? null,
-      name: project?.name ?? "Ungrouped",
-      sortPosition: project?.position ?? Number.MAX_SAFE_INTEGER,
-      isUngrouped: !project,
-      sessions: [],
-    });
-  }
-
-  const sortedGroups = [...groupedSessions.values()]
-    .sort((left, right) => {
-      if (left.isUngrouped) {
-        return 1;
-      }
-
-      if (right.isUngrouped) {
-        return -1;
-      }
-
-      if (left.sortPosition !== right.sortPosition) {
-        return left.sortPosition - right.sortPosition;
-      }
-
-      return left.name.localeCompare(right.name);
-    });
-
-  const orderedUserGroups = sortedGroups.filter((projectGroup) => !projectGroup.isUngrouped);
-
-  return sortedGroups.map((projectGroup) => {
-      const orderedIndex = orderedUserGroups.findIndex((candidate) => candidate.id === projectGroup.id);
-      const canMoveUp = orderedIndex > 0;
-      const canMoveDown = orderedIndex >= 0 && orderedIndex < orderedUserGroups.length - 1;
-      const moveUpTargets = canMoveUp
-        ? buildReorderTargets(swapProjects(orderedUserGroups, orderedIndex, orderedIndex - 1))
-        : [];
-      const moveDownTargets = canMoveDown
-        ? buildReorderTargets(swapProjects(orderedUserGroups, orderedIndex, orderedIndex + 1))
-        : [];
-      return {
-        id: projectGroup.id,
-        projectId: projectGroup.projectId,
-        name: projectGroup.name,
-        isUngrouped: projectGroup.isUngrouped,
-        canMoveUp,
-        canMoveDown,
-        moveUpTargets,
-        moveDownTargets,
-        sessionCount: projectGroup.sessions.length,
-        sessions: projectGroup.sessions,
-      } satisfies ProjectTreeGroup;
-    });
-});
+const projectGroups = computed<ProjectTreeGroup[]>(() => buildProjectGroups(pinnedSplit.value.rest, projects.value, draftGroupKey.value));
 
 function matchesQuery(session: SessionListItem): boolean {
-  const searchable = [
-    session.session.title,
-    session.session.id,
-    getProjectDisplayName(session),
-    session.sessionStatus,
-  ].join(" ").toLowerCase();
-
-  return searchable.includes(normalizedQuery.value);
+  return sessionMatchesQuery(session, normalizedQuery.value, projectsById.value);
 }
 
 const filteredPinnedSessions = computed(() => normalizedQuery.value
@@ -398,18 +279,7 @@ const filteredPinnedSessions = computed(() => normalizedQuery.value
   : pinnedSplit.value.pinned);
 
 /** The Pinned group, shaped like a project. It shows while it has sessions, and during a drag so one can be dropped in. */
-const pinnedGroup = computed<ProjectTreeGroup>(() => ({
-  id: PINNED_GROUP_ID,
-  projectId: null,
-  name: "Pinned",
-  isUngrouped: false,
-  canMoveUp: false,
-  canMoveDown: false,
-  moveUpTargets: [],
-  moveDownTargets: [],
-  sessionCount: filteredPinnedSessions.value.length,
-  sessions: filteredPinnedSessions.value,
-}));
+const pinnedGroup = computed<ProjectTreeGroup>(() => pinnedProjectGroup(filteredPinnedSessions.value));
 const showPinnedGroup = computed(() => !isArchivedView.value
   && (filteredPinnedSessions.value.length > 0
     || (activeSessionDrag.value !== null && isSessionDragUnderway.value && !normalizedQuery.value)));
@@ -422,21 +292,7 @@ const filteredProjectGroups = computed<ProjectTreeGroup[]>(() => {
       : projectGroups.value;
   }
 
-  return projectGroups.value
-    .map((project) => {
-      const projectMatch = project.name.toLowerCase().includes(normalizedQuery.value);
-      const sessions = projectMatch
-        ? project.sessions
-        : project.sessions.filter(matchesQuery);
-
-      return {
-        ...project,
-        sessionCount: sessions.length,
-        ...(projectMatch && project.sessions.length === 0 ? { sessionCount: 0 } : {}),
-        sessions,
-      } satisfies ProjectTreeGroup;
-    })
-    .filter((project) => project.sessions.length > 0 || project.name.toLowerCase().includes(normalizedQuery.value));
+  return filterProjectGroups(projectGroups.value, normalizedQuery.value, matchesQuery);
 });
 
 function showArchived(show: boolean): void {
@@ -471,10 +327,7 @@ async function restoreSelected(): Promise<void> {
 }
 
 /** The id of the group the draft row shows in (groups are keyed by project id, or "ungrouped"). */
-const draftGroupId = computed<string | null>(() => {
-  const key = draftGroupKey.value;
-  return key === null ? null : projectsById.value.has(key) ? key : "ungrouped";
-});
+const draftGroupId = computed<string | null>(() => draftGroupIdFor(draftGroupKey.value, projects.value));
 
 // A draft shows in its group, so that group opens when a draft lands in it.
 watch(draftGroupId, (groupId) => {
@@ -786,147 +639,155 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
       >
     </div>
 
-    <div class="sessions-list">
-      <MachineHeader
-        v-if="showMachines && liveMachineEntry"
-        :name="liveMachineEntry.name"
-        live
-        :unreachable="!machines.liveReachable"
-        :note="machines.liveReachable ? null : 'unreachable'"
-        :count="liveSessionCount"
-        :expanded="liveMachineExpanded"
-        @toggle="handleToggleLiveMachine"
-      />
-
-      <template v-if="liveMachineExpanded">
-        <div
-          v-if="errorMessage && hasSessions"
-          class="sessions-feedback-banner"
-          aria-live="polite"
-        >
-          <p class="sessions-feedback-banner__copy">
-            Showing cached sessions. Refresh failed: {{ errorMessage }}
-          </p>
-          <button
-            type="button"
-            class="sessions-feedback-banner__button"
-            @click="handleRetry"
-          >
-            Retry
-          </button>
-        </div>
-
-        <div
-          v-if="isLoading && !hasSessions"
-          class="sessions-feedback-state"
-          aria-live="polite"
-        >
-          <LoaderCircle
-            class="sessions-feedback-state__icon sessions-feedback-state__icon--spinning"
-            aria-hidden="true"
-          />
-          <p class="sessions-feedback-state__title">
-            Loading sessions
-          </p>
-          <p class="sessions-feedback-state__copy">
-            Fetching the latest sessions and projects.
-          </p>
-        </div>
-
-        <div
-          v-else-if="errorMessage && !hasSessions"
-          class="sessions-feedback-state sessions-feedback-state--error"
-          aria-live="polite"
-        >
-          <p class="sessions-feedback-state__title">
-            Unable to load sessions
-          </p>
-          <p class="sessions-feedback-state__copy">
-            {{ errorMessage }}
-          </p>
-          <button
-            type="button"
-            class="sessions-feedback-state__button"
-            @click="handleRetry"
-          >
-            Retry
-          </button>
-        </div>
-
-        <template v-else>
-          <ProjectGroup
-            v-if="showPinnedGroup"
-            key="pinned"
-            :project="pinnedGroup"
-            pinned
-            :expanded="isProjectExpanded(PINNED_GROUP_ID)"
-            :active-session-id="activeSessionId"
-            :active-drag-session-id="activeSessionDrag?.sessionId ?? null"
-            :active-drag-project-id="activeSessionDrag?.projectId ?? null"
-            :row-keys="sessionRowKeys"
-            :running-counts="runningCounts"
-            :running-subagents="runningSubagents"
-            data-testid="pinned-group"
-            @session-changed="handleRetry"
-            @toggle="handleToggleProject"
-            @select-session="handleSessionSelect"
-            @drag-session-start="handleSessionDragStart"
-            @drag-session-end="handleSessionDragEnd"
-            @pin-session="handlePinSession"
-          />
-          <ProjectGroup
-            v-for="project in filteredProjectGroups"
-            :key="project.id"
-            :project="project"
-            :expanded="isProjectExpanded(project.id)"
-            :active-session-id="activeSessionId"
-            :active-drag-session-id="activeSessionDrag?.sessionId ?? null"
-            :active-drag-project-id="activeSessionDrag?.projectId ?? null"
-            :draft="project.id === draftGroupId ? newSessionDraftRow : null"
-            :draft-active="isNewSessionOpen"
-            :row-keys="sessionRowKeys"
-            :running-counts="runningCounts"
-            :running-subagents="runningSubagents"
-            :active-drag-pinned="activeDragPinned"
-            @new-session="handleProjectSessionCreate"
-            @open-draft="handleOpenDraft"
-            @project-changed="handleProjectChanged"
-            @session-changed="handleRetry"
-            @toggle="handleToggleProject"
-            @select-session="handleSessionSelect"
-            @drag-session-start="handleSessionDragStart"
-            @drag-session-end="handleSessionDragEnd"
-            @move-session="handleMoveSession"
-            @move-out-of-parent="handleMoveOutOfParent"
-            @unpin-session="handleUnpinSession"
-          />
-        </template>
-
-        <div
-          v-if="!isLoading && !errorMessage && filteredProjectGroups.length === 0 && !showPinnedGroup"
-          class="sessions-empty-state"
-        >
-          <p class="sessions-empty-state__title">
-            <template v-if="normalizedQuery">No sessions found</template>
-            <template v-else>{{ isArchivedView ? "No archived sessions" : "No sessions yet" }}</template>
-          </p>
-          <p class="sessions-empty-state__copy">
-            {{ normalizedQuery ? "Try a different search term or clear the filter." : isArchivedView ? "Sessions you archive show up here." : "Start one with New session above." }}
-          </p>
-        </div>
-      </template>
-
-      <MachineSessionsGroup
-        v-for="machine in otherMachines"
+    <div
+      ref="sessionsList"
+      class="sessions-list"
+    >
+      <template
+        v-for="machine in listedMachines"
         :key="machine.key"
-        :machine="machine"
-        :state="machineSessions[machine.key]"
-        :query="normalizedQuery"
-        :draft="machine.key === newSessionMachine ? newSessionDraftRow : null"
-        :draft-active="isNewSessionOpen"
-        @open="handleMachineSessionOpen(machine, $event)"
-        @open-draft="handleOpenDraft"
-      />
+      >
+        <template v-if="machine.key === liveMachineEntry.key">
+          <MachineHeader
+            v-if="showMachines"
+            :name="machine.name"
+            live
+            :unreachable="!machines.liveReachable"
+            :note="machines.liveReachable ? null : 'unreachable'"
+            :count="liveSessionCount"
+            :expanded="liveMachineExpanded"
+            @toggle="handleToggleLiveMachine"
+          />
+
+          <template v-if="liveMachineExpanded">
+            <div
+              v-if="errorMessage && hasSessions"
+              class="sessions-feedback-banner"
+              aria-live="polite"
+            >
+              <p class="sessions-feedback-banner__copy">
+                Showing cached sessions. Refresh failed: {{ errorMessage }}
+              </p>
+              <button
+                type="button"
+                class="sessions-feedback-banner__button"
+                @click="handleRetry"
+              >
+                Retry
+              </button>
+            </div>
+
+            <div
+              v-if="isLoading && !hasSessions"
+              class="sessions-feedback-state"
+              aria-live="polite"
+            >
+              <LoaderCircle
+                class="sessions-feedback-state__icon sessions-feedback-state__icon--spinning"
+                aria-hidden="true"
+              />
+              <p class="sessions-feedback-state__title">
+                Loading sessions
+              </p>
+              <p class="sessions-feedback-state__copy">
+                Fetching the latest sessions and projects.
+              </p>
+            </div>
+
+            <div
+              v-else-if="errorMessage && !hasSessions"
+              class="sessions-feedback-state sessions-feedback-state--error"
+              aria-live="polite"
+            >
+              <p class="sessions-feedback-state__title">
+                Unable to load sessions
+              </p>
+              <p class="sessions-feedback-state__copy">
+                {{ errorMessage }}
+              </p>
+              <button
+                type="button"
+                class="sessions-feedback-state__button"
+                @click="handleRetry"
+              >
+                Retry
+              </button>
+            </div>
+
+            <template v-else>
+              <ProjectGroup
+                v-if="showPinnedGroup"
+                key="pinned"
+                :project="pinnedGroup"
+                pinned
+                :expanded="isProjectExpanded(PINNED_GROUP_ID)"
+                :active-session-id="activeSessionId"
+                :active-drag-session-id="activeSessionDrag?.sessionId ?? null"
+                :active-drag-project-id="activeSessionDrag?.projectId ?? null"
+                :row-keys="sessionRowKeys"
+                :running-counts="runningCounts"
+                :running-subagents="runningSubagents"
+                data-testid="pinned-group"
+                @session-changed="handleRetry"
+                @toggle="handleToggleProject"
+                @select-session="handleSessionSelect"
+                @drag-session-start="handleSessionDragStart"
+                @drag-session-end="handleSessionDragEnd"
+                @pin-session="handlePinSession"
+              />
+              <ProjectGroup
+                v-for="project in filteredProjectGroups"
+                :key="project.id"
+                :project="project"
+                :expanded="isProjectExpanded(project.id)"
+                :active-session-id="activeSessionId"
+                :active-drag-session-id="activeSessionDrag?.sessionId ?? null"
+                :active-drag-project-id="activeSessionDrag?.projectId ?? null"
+                :draft="project.id === draftGroupId ? newSessionDraftRow : null"
+                :draft-active="isNewSessionOpen"
+                :row-keys="sessionRowKeys"
+                :running-counts="runningCounts"
+                :running-subagents="runningSubagents"
+                :active-drag-pinned="activeDragPinned"
+                @new-session="handleProjectSessionCreate"
+                @open-draft="handleOpenDraft"
+                @project-changed="handleProjectChanged"
+                @session-changed="handleRetry"
+                @toggle="handleToggleProject"
+                @select-session="handleSessionSelect"
+                @drag-session-start="handleSessionDragStart"
+                @drag-session-end="handleSessionDragEnd"
+                @move-session="handleMoveSession"
+                @move-out-of-parent="handleMoveOutOfParent"
+                @unpin-session="handleUnpinSession"
+              />
+            </template>
+
+            <div
+              v-if="!isLoading && !errorMessage && filteredProjectGroups.length === 0 && !showPinnedGroup"
+              class="sessions-empty-state"
+            >
+              <p class="sessions-empty-state__title">
+                <template v-if="normalizedQuery">No sessions found</template>
+                <template v-else>{{ isArchivedView ? "No archived sessions" : "No sessions yet" }}</template>
+              </p>
+              <p class="sessions-empty-state__copy">
+                {{ normalizedQuery ? "Try a different search term or clear the filter." : isArchivedView ? "Sessions you archive show up here." : "Start one with New session above." }}
+              </p>
+            </div>
+          </template>
+        </template>
+        <MachineSessionsGroup
+          v-else
+          :machine="machine"
+          :state="machineSessions[machine.key]"
+          :query="normalizedQuery"
+          :draft="machine.key === newSessionMachine ? newSessionDraftRow : null"
+          :draft-active="isNewSessionOpen"
+          @open="handleMachineSessionOpen(machine, $event)"
+          @open-draft="handleOpenDraft"
+        />
+      </template>
 
       <!-- Complete drop zone -->
       <Transition name="complete-drop-zone">

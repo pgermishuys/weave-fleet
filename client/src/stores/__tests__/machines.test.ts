@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
-import { HOME_MACHINE_KEY, loadMachines, loadSessionMachines, saveMachines, setActiveMachine, type MachineConnection } from "@/lib/machines";
+import { HOME_MACHINE_KEY, loadMachines, loadSessionMachines, saveMachines, setActiveMachine, switchToMachine, type MachineConnection } from "@/lib/machines";
 import { useMachinesStore, type MachineInfo } from "@/stores/machines";
+
+// Switching machines reloads the page; here it only records where it went.
+vi.mock("@/lib/machines", async (original) => ({ ...await original<typeof import("@/lib/machines")>(), switchToMachine: vi.fn() }));
 
 const homeInfo: MachineInfo = {
   id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -316,6 +319,66 @@ describe("machines store", () => {
       await store.renameMachine(falcon.id, "hangar");
 
       expect(loadMachines()[0].name).toBe("hangar");
+    });
+
+    it("keeps each session's project, pin and lineage, and the machine's projects, across a reload", async () => {
+      const projects = [
+        { id: "p-lighthouse", name: "Lighthouse", type: "user", position: 1, description: null, sessionCount: 2, createdAt: "", updatedAt: "" },
+        { id: "p-scratch", name: "Scratch", type: "scratch", position: 0, description: null, sessionCount: 0, createdAt: "", updatedAt: "" },
+      ];
+      routes["http://100.64.90.72:2113/api/projects"] = (_, init) => {
+        expect(new Headers(init.headers).get("Authorization")).toBe(`Bearer ${falcon.token}`);
+        return json(projects);
+      };
+      routes["http://100.64.90.72:2113/api/sessions"] = () => json([
+        { ...session("pinned", "Spring planting"), projectId: "p-lighthouse", projectName: "Lighthouse", pinOrder: 1 },
+        { ...session("fork", "Fork of it"), projectId: "p-lighthouse", projectName: "Lighthouse", forkedFromSessionId: "pinned", spawnKind: "fork", runningWorkCount: 2 },
+      ]);
+      await useMachinesStore().refreshMachine(falcon.id);
+
+      setActivePinia(createPinia());
+      routes["http://100.64.90.72:2113/api/sessions"] = () => {
+        throw new TypeError("Failed to fetch");
+      };
+      const reloaded = useMachinesStore();
+      await reloaded.refreshMachine(falcon.id);
+
+      const [pinned, fork] = reloaded.others[falcon.id].sessions;
+      expect(pinned).toMatchObject({ projectId: "p-lighthouse", projectName: "Lighthouse", pinOrder: 1 });
+      expect(fork).toMatchObject({ forkedFromSessionId: "pinned", spawnKind: "fork", runningWorkCount: 2 });
+      expect(reloaded.others[falcon.id].projects).toEqual([
+        { id: "p-lighthouse", name: "Lighthouse", type: "user", position: 1 },
+        { id: "p-scratch", name: "Scratch", type: "scratch", position: 0 },
+      ]);
+    });
+
+    it("still lists the sessions when the machine's projects don't answer", async () => {
+      routes["http://100.64.90.72:2113/api/sessions"] = () => json([{ ...session("remote-1", "Kept"), projectId: "p-lighthouse", projectName: "Lighthouse" }]);
+      routes["http://100.64.90.72:2113/api/projects"] = () => json({ error: "no" }, 500);
+      const store = useMachinesStore();
+
+      await store.refreshMachine(falcon.id);
+
+      expect(store.others[falcon.id].sessions).toHaveLength(1);
+      expect(store.others[falcon.id].projects).toEqual([]);
+      expect(store.others[falcon.id].error).toBeNull();
+    });
+
+    it("keeps the live machine's list when switching away, so it shows at once after the reload", () => {
+      const store = useMachinesStore();
+
+      store.openOn(falcon.id, "/sessions/remote-1", {
+        sessions: [{ ...session("home-1", "Local work"), projectId: "p-1", projectName: "weave-fleet" }] as never,
+        projects: [{ id: "p-1", name: "weave-fleet", type: "user", position: 1 }],
+      });
+
+      expect(switchToMachine).toHaveBeenCalledWith(falcon.id, "/sessions/remote-1");
+      setActiveMachine(falcon);
+      setActivePinia(createPinia());
+      const reloaded = useMachinesStore();
+      expect(reloaded.liveKey).toBe(falcon.id);
+      expect(reloaded.others[HOME_MACHINE_KEY].sessions[0]).toMatchObject({ projectId: "p-1", session: { title: "Local work" } });
+      expect(reloaded.others[HOME_MACHINE_KEY].projects.map((project) => project.name)).toEqual(["weave-fleet"]);
     });
 
     it("forgets a machine without touching its sessions", () => {

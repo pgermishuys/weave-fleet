@@ -15,6 +15,8 @@ const props = defineProps<{
   run: WorkflowRun | null;
   steps: { session: SessionListItem; label: string }[];
   activeSessionId: string | null;
+  /** On a machine that isn't live: its name; the step rows only open their session there. */
+  openOnMachine?: string;
 }>();
 
 const emit = defineEmits<{
@@ -84,6 +86,7 @@ function openRun(): void {
         :label="step.label"
         :step-note="stepNote(step.session.session.id)"
         :active="step.session.session.id === activeSessionId"
+        :open-on-machine="openOnMachine"
         @select="emit('selectSession', $event)"
         @drag-session-start="(id, project) => emit('dragSessionStart', id, project)"
         @drag-session-end="emit('dragSessionEnd')"
