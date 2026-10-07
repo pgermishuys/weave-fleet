@@ -64,6 +64,11 @@ interface Props {
   pinned?: boolean;
   /** Whether the session being dragged is pinned: dropping it on its own project unpins it. */
   activeDragPinned?: boolean;
+  /**
+   * On a machine that isn't live: the machine's name. Its rows only open their session there; the project has no menu
+   * and nothing drags, so nothing acts on the wrong machine.
+   */
+  openOnMachine?: string;
 }
 
 interface Emits {
@@ -93,7 +98,8 @@ const workflows = useWorkflowsStore();
 const lineage = computed(() => nestLineage(props.project.sessions));
 
 /** A workflow run's step sessions group under one row; everything else is a row of its own. */
-const entries = computed(() => groupRunSessions(lineage.value.roots, workflows.runForSession));
+// The workflows store knows the live machine's runs only; another machine's steps group under a plain header.
+const entries = computed(() => groupRunSessions(lineage.value.roots, props.openOnMachine ? () => null : workflows.runForSession));
 
 type ChildRow =
   | { kind: "subagent"; key: string; work: RunningWorkItem }
@@ -173,7 +179,7 @@ const {
   isDeleting,
 } = useDeleteProject();
 
-const canShowContextMenu = computed(() => !props.project.isUngrouped && props.project.projectId !== null);
+const canShowContextMenu = computed(() => !props.openOnMachine && !props.project.isUngrouped && props.project.projectId !== null);
 const isAnyActionPending = computed(() => isUpdating.value || isReordering.value || isDeleting.value);
 
 // Drag-and-drop drop target state
@@ -661,6 +667,7 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
             :run="entry.run"
             :steps="entry.steps"
             :active-session-id="activeSessionId"
+            :open-on-machine="openOnMachine"
             @select-session="handleSessionSelect"
             @drag-session-start="handleSessionDragStart"
             @drag-session-end="handleSessionDragEnd"
@@ -672,6 +679,7 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
               :running-count="runningCounts?.get(entry.session.session.id)"
               :has-children="hasChildren(entry.session)"
               :children-expanded="childrenExpanded(entry.session)"
+              :open-on-machine="openOnMachine"
               @select="handleSessionSelect"
               @toggle-children="toggleChildren(entry.session)"
               @drag-session-start="handleSessionDragStart"
@@ -700,6 +708,7 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
                   :kind-label="child.label"
                   :active="child.item.session.id === activeSessionId"
                   :running-count="runningCounts?.get(child.item.session.id)"
+                  :open-on-machine="openOnMachine"
                   @select="handleSessionSelect"
                   @drag-session-start="handleSessionDragStart"
                   @drag-session-end="handleSessionDragEnd"
