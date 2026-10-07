@@ -43,6 +43,7 @@ public sealed partial class PromptQueueService(
     SessionActivityTracker activity,
     IHarnessRegistry harnesses,
     IUserContext userContext,
+    TurnRetryScheduler retries,
     ILogger<PromptQueueService> logger)
 {
     /// <summary>The event carrying a session's queue after it changed (<see cref="SessionQueueChanged"/>).</summary>
@@ -156,10 +157,14 @@ public sealed partial class PromptQueueService(
     /// <summary>
     /// Sends the first queued item: called when the session's turn ends, and after queueing into an idle session. A
     /// shell command isn't a turn, so the item after one goes straight away. An item the session refuses goes back
-    /// to the front, for the next time the session is free.
+    /// to the front, for the next time the session is free. While Fleet waits to try a turn a limit stopped again
+    /// (<see cref="TurnRetryService"/>), nothing goes: the queue comes after the work the limit cut off.
     /// </summary>
     public async Task SendNextAsync(string sessionId, CancellationToken ct = default)
     {
+        if (retries.IsHolding(sessionId))
+            return;
+
         while (await queue.TakeFirstAsync(sessionId).ConfigureAwait(false) is { } item)
         {
             await BroadcastAsync(sessionId, ct).ConfigureAwait(false);

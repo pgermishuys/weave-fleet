@@ -34,6 +34,7 @@ public static class SessionEndpoints
             SessionCapabilitiesResolver capabilitiesResolver,
             SessionProgressReader progressReader,
             IDelegationRepository delegationRepository,
+            IScheduledRetryRepository scheduledRetries,
             CancellationToken ct,
             int limit = 100,
             int offset = 0,
@@ -86,10 +87,14 @@ public static class SessionEndpoints
                     var runningWorkBySessionId = await delegationRepository.CountRunningAsync(
                         sessions.Select(session => session.Id).ToArray());
 
+                    var retriesBySessionId = (await scheduledRetries.ListForUserAsync())
+                        .ToDictionary(retry => retry.SessionId, ScheduledRetryView.From, StringComparer.Ordinal);
+
                     return Results.Ok(sessions.Select(session => ToListResponse(session, parentIdsWithBusyChildren, projectNamesById, originsBySessionId, activityTracker, capabilitiesResolver, workspacesById) with
                     {
                         Progress = progressBySessionId.GetValueOrDefault(session.Id),
                         RunningWorkCount = runningWorkBySessionId.GetValueOrDefault(session.Id),
+                        ScheduledRetry = retriesBySessionId.GetValueOrDefault(session.Id),
                     }).ToList());
                 },
                 error => Task.FromResult(Results.Problem(error.Description) as IResult));
@@ -394,6 +399,34 @@ public static class SessionEndpoints
             return result.Match(_ => Results.Accepted(), err => err.ToSessionApiResult());
         })
         .WithName("SendQueuedPromptNow");
+
+        // GET /api/sessions/{id}/retry — when Fleet tries a turn a model provider's limit stopped again; 204 when it won't.
+        group.MapGet("/{id}/retry", async (string id, TurnRetryService retries) =>
+        {
+            var result = await retries.GetAsync(id);
+            return result.Match(
+                retry => retry is null
+                    ? Results.NoContent()
+                    : Results.Json(ScheduledRetryView.From(retry), ApiJsonContext.Default.ScheduledRetryView),
+                err => err.ToSessionApiResult());
+        })
+        .WithName("GetSessionRetry");
+
+        // DELETE /api/sessions/{id}/retry — don't retry: the user takes it from here, and what they queued goes now.
+        group.MapDelete("/{id}/retry", async (string id, TurnRetryService retries, CancellationToken ct) =>
+        {
+            var result = await retries.CancelAsync(id, ct);
+            return result.Match(_ => Results.NoContent(), err => err.ToSessionApiResult());
+        })
+        .WithName("CancelSessionRetry");
+
+        // POST /api/sessions/{id}/retry/send — try again now rather than when the limit resets.
+        group.MapPost("/{id}/retry/send", async (string id, TurnRetryService retries, CancellationToken ct) =>
+        {
+            var result = await retries.SendNowAsync(id, ct);
+            return result.Match(_ => Results.Accepted(), err => err.ToSessionApiResult());
+        })
+        .WithName("SendSessionRetryNow");
 
         // POST /api/sessions/{id}/abort
         group.MapPost("/{id}/abort", async (string id, SessionOrchestrator orchestrator) =>

@@ -3,6 +3,7 @@ using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Infrastructure.Events;
 
 namespace WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 
@@ -295,6 +296,71 @@ internal static class ClaudeCodeMapper
             _ => null,
         };
     }
+
+    /// <summary>
+    /// The failure to report when a model provider's limit ended the turn, or <see langword="null"/> when something
+    /// else did. Claude Code ends such a turn with a message it wrote itself (<paramref name="apiErrorText"/>, e.g.
+    /// "You've hit your session limit · resets 3:43am (UTC)", flagged <paramref name="apiError"/> <c>rate_limit</c>), and
+    /// a result with the call's HTTP status. A claude.ai login also says which window turned it away and when that
+    /// resets (<paramref name="rejectedResetAt"/>, from <c>rate_limit_event</c>); an API key or a gateway doesn't.
+    /// </summary>
+    internal static TurnError? ReadLimitFailure(
+        ClaudeCodeResultMessage result,
+        string? apiError,
+        string? apiErrorText,
+        DateTimeOffset? rejectedResetAt,
+        DateTimeOffset now)
+    {
+        var status = result.ApiErrorStatus;
+        // The rejected window is the reason only when the call was turned away for a limit (a 529 isn't one).
+        var limited = apiError == "rate_limit" || status == 429;
+        if (!limited)
+            rejectedResetAt = null;
+        var kind = result.TerminalReason == "blocking_limit" || rejectedResetAt is not null
+            ? TurnErrorKinds.UsageLimit
+            : apiError switch
+            {
+                "rate_limit" => TurnErrorKinds.RateLimit,
+                "overloaded" => TurnErrorKinds.Overloaded,
+                _ => status switch
+                {
+                    429 => TurnErrorKinds.RateLimit,
+                    529 or 503 => TurnErrorKinds.Overloaded,
+                    _ => null,
+                },
+            };
+        if (kind is null)
+            return null;
+
+        var message = apiErrorText?.Trim() is { Length: > 0 } text
+            ? text
+            : DescribeFailedResult(result) ?? "The model provider turned the request away.";
+        return ProviderLimitReader.Classify(
+            new TurnError
+            {
+                Name = status is { } code ? $"APIError {code}" : "APIError",
+                Message = message,
+                IsRetryable = true,
+                // "You've hit your session limit" is a usage limit even without rate_limit_event (a gateway passing it on).
+                Kind = kind == TurnErrorKinds.RateLimit
+                    ? ProviderLimitReader.ReadKind(null, message, status, null) ?? kind
+                    : kind,
+                RetryAt = rejectedResetAt,
+            },
+            now,
+            status);
+    }
+
+    /// <summary>A <c>session.error</c> event carrying a failure Fleet's error reader takes as it is.</summary>
+    internal static HarnessEvent CreateSessionErrorEvent(string sessionId, TurnError error) => new()
+    {
+        Type = EventTypes.SessionError,
+        SessionId = sessionId,
+        Timestamp = DateTimeOffset.UtcNow,
+        Payload = JsonSerializer.SerializeToElement(
+            new TurnFailedPayload { SessionId = sessionId, Error = error },
+            InfrastructureJsonContext.Default.TurnFailedPayload),
+    };
 
     /// <summary>
     /// Why a run failed, from its result line (e.g. "Reached maximum number of turns (1)"),

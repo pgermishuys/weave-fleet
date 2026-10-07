@@ -885,6 +885,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetSessionRetry"];
+        put?: never;
+        post?: never;
+        delete: operations["CancelSessionRetry"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/retry/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["SendSessionRetryNow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{id}/retention": {
         parameters: {
             query?: never;
@@ -3893,6 +3925,14 @@ export interface components {
             text: string;
             createdAt: string;
         };
+        ScheduledRetryView: {
+            dueAt: string;
+            /** Format: int32 */
+            attempt: number;
+            kind: string;
+            reason: string;
+            providerSaid: boolean;
+        };
         RunningWorkItem: {
             id: string;
             sessionId: string;
@@ -6320,6 +6360,75 @@ export interface operations {
             path: {
                 id: string;
                 itemId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetSessionRetry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduledRetryView"];
+                };
+            };
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CancelSessionRetry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    SendSessionRetryNow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
             };
             cookie?: never;
         };

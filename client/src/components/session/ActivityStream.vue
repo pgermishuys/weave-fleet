@@ -46,6 +46,9 @@ import { useProblemReportStore } from "@/stores/problem-report";
 import { toShellCommandView, type ShellCommandView } from "@/lib/shell-commands";
 import { messagesAfter } from "@/lib/side-conversation";
 import { splitTurnErrorMessage } from "@/lib/turn-error";
+import { limitTitle } from "@/lib/turn-retry";
+import { scheduledRetryOf } from "@/composables/use-session-retry";
+import TurnFailureRetry from "@/components/session/TurnFailureRetry.vue";
 import ImproveSkillDialog from "@/components/skills/ImproveSkillDialog.vue";
 import { improveTurn, type ImproveTurn } from "@/lib/skill-versions";
 import { useBuiltInSkillsStore } from "@/stores/built-in-skills";
@@ -138,6 +141,9 @@ const hasMore = computed(() => stream.hasMore.value && sessionMessages.value.len
 const { models } = useModels(() => props.sessionId);
 const { sentPrompts } = useSentPrompts(props.sessionId);
 const { canSend, retryPrompt } = useSendPrompt(props.sessionId);
+// When a model provider's limit stopped the turn, Fleet tries again by itself (TurnFailureRetry says when); its own
+// Try now stands in for Retry meanwhile.
+const isRetryWaiting = computed(() => scheduledRetryOf(props.sessionId) !== null);
 
 /** The prompt a failed turn was answering, which Retry sends again. */
 const lastUserPrompt = computed<string | undefined>(() => {
@@ -1373,6 +1379,7 @@ function handleImproveSkill(skill: string, toolId: string): void {
         <div
           v-if="message.turnError"
           class="turn-failure"
+          :class="{ 'turn-failure--limit': limitTitle(message.turnError.kind) }"
           data-testid="turn-failure"
         >
           <div class="turn-failure__head">
@@ -1380,7 +1387,7 @@ function handleImproveSkill(skill: string, toolId: string): void {
               class="turn-failure__icon"
               aria-hidden="true"
             />
-            <span class="turn-failure__title">This turn stopped early</span>
+            <span class="turn-failure__title">{{ limitTitle(message.turnError.kind) ?? "This turn stopped early" }}</span>
           </div>
           <p class="turn-failure__message">{{ splitTurnErrorMessage(message.turnError.message).summary }}</p>
           <details
@@ -1390,6 +1397,10 @@ function handleImproveSkill(skill: string, toolId: string): void {
             <summary>Details</summary>
             <pre>{{ splitTurnErrorMessage(message.turnError.message).details }}</pre>
           </details>
+          <TurnFailureRetry
+            v-if="message.turnError.kind && message.id === messages.at(-1)?.id"
+            :session-id="sessionId"
+          />
           <div class="turn-failure__foot">
             <!-- OpenCode names errors it can't classify "UnknownError", which tells the reader nothing. -->
             <span class="turn-failure__name">{{ message.turnError.name === "UnknownError" ? "" : message.turnError.name }}</span>
@@ -1408,7 +1419,7 @@ function handleImproveSkill(skill: string, toolId: string): void {
               </button>
               <!-- Only the latest failure: Retry sends the last prompt again, which an earlier failure didn't answer. -->
               <button
-                v-if="lastUserPrompt && message.id === messages.at(-1)?.id"
+                v-if="lastUserPrompt && message.id === messages.at(-1)?.id && !isRetryWaiting"
                 class="turn-failure__retry"
                 type="button"
                 data-testid="turn-failure-retry"
@@ -1582,6 +1593,16 @@ function handleImproveSkill(skill: string, toolId: string): void {
   border-radius: var(--radius-card);
   background: color-mix(in srgb, var(--error) 7%, var(--card-bg));
   align-self: flex-start;
+}
+
+/* A limit passes by itself: it reads as a wait, not a fault. */
+.turn-failure--limit {
+  border-color: color-mix(in srgb, var(--status-waiting) 35%, var(--border));
+  background: color-mix(in srgb, var(--status-waiting) 6%, var(--card-bg));
+}
+
+.turn-failure--limit .turn-failure__icon {
+  color: var(--status-waiting);
 }
 
 .turn-failure__head {

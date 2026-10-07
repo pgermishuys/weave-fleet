@@ -216,6 +216,7 @@ public static class DependencyInjection
         // Singleton: holds which messages a session asked to hear back about, until the turn handling them ends.
         services.AddSingleton<SessionUpdates>();
         services.AddScoped<IQueuedPromptRepository, QueuedPromptRepository>();
+        services.AddScoped<IScheduledRetryRepository, ScheduledRetryRepository>();
         // Singleton: devices belong to the machine, not a user, and the auth handler reads them on every request.
         services.AddSingleton<IDeviceRepository, DeviceRepository>();
         services.AddSingleton<WeaveFleet.Application.Devices.DeviceTokenService>();
@@ -242,6 +243,10 @@ public static class DependencyInjection
         services.AddHostedService<SessionCallbackPoller>();
         // Singleton: the relay hands it every event; it keeps each failed turn's failure so a reload still shows it.
         services.AddSingleton<TurnFailureRecorder>();
+        services.AddScoped<TurnRetryService>();
+        // Singleton: the relay hands it every event; it tries a turn a model provider's limit stopped again when it resets.
+        services.AddSingleton<TurnRetryScheduler>();
+        services.AddHostedService(sp => sp.GetRequiredService<TurnRetryScheduler>());
         // The asks waiting on the user, kept by the relay and read when a session opens.
         services.AddSingleton<PendingPermissionStore>();
         services.AddSingleton<RunningWorkRecorder>();

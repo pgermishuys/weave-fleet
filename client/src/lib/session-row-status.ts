@@ -5,6 +5,7 @@
  * session was last active.
  */
 import type { SessionListItem } from "@/api/client";
+import { formatRetryClock, formatRetryIn, limitName } from "@/lib/turn-retry";
 
 export type SessionRowTone = "attention" | "working" | "retry" | "error" | "quiet";
 
@@ -90,6 +91,16 @@ export function sessionRowStatus(item: SessionListItem, now: number): SessionRow
     case "disconnected":
       return { label: "Offline", tone: "quiet", description: "Offline" };
     default: {
+      // A limit stopped its last turn and Fleet tries again by itself.
+      const retry = item.scheduledRetry;
+      if (retry) {
+        const clock = formatRetryClock(retry.dueAt, now);
+        return {
+          label: `Retry ${clock}`,
+          tone: "retry",
+          description: `Stopped by ${limitName(retry.kind)}. Fleet tries again at ${clock} (${formatRetryIn(retry.dueAt, now)})`,
+        };
+      }
       const time = item.session.time;
       return {
         label: formatCompactAge(time?.updated ?? time?.created ?? "", now),

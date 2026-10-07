@@ -21,6 +21,7 @@ import SideConversationSheet from "@/components/phone/session/SideConversationSh
 import SinceYouLookedMarker from "@/components/phone/session/SinceYouLookedMarker.vue";
 import StepsSheet from "@/components/phone/session/StepsSheet.vue";
 import PhoneToolRun from "@/components/phone/session/PhoneToolRun.vue";
+import PhoneRetryLine from "@/components/phone/session/PhoneRetryLine.vue";
 import DockedPermission from "@/components/phone/session/DockedPermission.vue";
 import DockedQuestion from "@/components/phone/session/DockedQuestion.vue";
 import PhoneComposer from "@/components/phone/session/PhoneComposer.vue";
@@ -429,12 +430,17 @@ onUnmounted(() => {
             />
             <p
               v-else-if="block.kind === 'error'"
-              class="ph-banner ph-banner--bad ps__error"
+              class="ph-banner ps__error"
+              :class="{ 'ph-banner--bad': !block.limit }"
               role="alert"
             >
               {{ block.text }}
             </p>
           </template>
+          <PhoneRetryLine
+            :key="sessionId"
+            :session-id="sessionId"
+          />
 
           <p
             v-if="shown.tone === 'working'"

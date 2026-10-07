@@ -63,6 +63,10 @@ export interface TurnError {
   name: string;
   message: string;
   isRetryable: boolean;
+  /** The model provider's limit that stopped the turn; Fleet tries such a turn again by itself. */
+  kind?: "rate_limit" | "usage_limit" | "overloaded" | null;
+  /** When the provider said a request can go again (ISO), when it said. */
+  retryAt?: string | null;
 }
 
 export interface TurnFailedPayload {
@@ -591,6 +595,19 @@ export interface SessionQueueChanged extends EventCursorMetadata {
 }
 
 /**
+ * When Fleet tries a turn a model provider's limit stopped again changed: scheduled, sent, or called off. Sent on the
+ * session's topic and on `sessions`. `retry` is null when none waits. Not persisted; it loads from
+ * `GET /api/sessions/{id}/retry`.
+ */
+export interface SessionRetryChanged extends EventCursorMetadata {
+  type: "session.retry";
+  payload: {
+    sessionId: string;
+    retry: { dueAt: string; attempt: number; kind: string; reason: string; providerSaid: boolean } | null;
+  };
+}
+
+/**
  * The agent asks to do something the session's permission level doesn't allow. Sent on the topic of the session it's
  * shown on (a subagent's on the session it works for). Not persisted; waiting asks load from
  * `GET /api/sessions/{id}/permissions`.
@@ -642,5 +659,6 @@ export type DomainEvent =
   | SessionRecap
   | SessionNotification
   | SessionQueueChanged
+  | SessionRetryChanged
   | PermissionAsked
   | PermissionReplied;
