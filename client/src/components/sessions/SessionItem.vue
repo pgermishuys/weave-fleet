@@ -82,6 +82,11 @@ interface Props {
   /** Whether it has children nested under it, and whether they show. */
   hasChildren?: boolean;
   childrenExpanded?: boolean;
+  /**
+   * On a machine that isn't live: the machine's name. The row only opens the session there; renaming, pinning,
+   * archiving, dragging and the menu wait until that machine is live, so nothing acts on the wrong machine.
+   */
+  openOnMachine?: string;
 }
 
 interface Emits {
@@ -176,11 +181,15 @@ const prBadge = computed(() => {
   return { number, state: prState(facts), checks: facts.checks, description: `Pull request #${number} · ${prWords(facts)}` };
 });
 const isArchivedSession = computed(() => props.session.retentionStatus === "archived");
+const readOnly = computed(() => Boolean(props.openOnMachine));
 const fallbackCanArchive = computed(() => !isArchivedSession.value);
 // The retention state wins over capabilities, which only refresh with the list.
-const canArchive = computed(() => !isArchivedSession.value && (props.session.capabilities?.canArchive ?? fallbackCanArchive.value));
-const canRestore = computed(() => isArchivedSession.value);
+const canArchive = computed(() => !readOnly.value
+  && !isArchivedSession.value && (props.session.capabilities?.canArchive ?? fallbackCanArchive.value));
+const canRestore = computed(() => !readOnly.value && isArchivedSession.value);
 const isSelected = computed(() => selection.isSelected(sessionId.value));
+/** Whether rows are being picked: never on another machine's rows, which can't be archived from here. */
+const isSelecting = computed(() => !readOnly.value && selection.isSelecting);
 const canFork = computed(() => props.session.capabilities?.canFork ?? true);
 /** Fork shows on every session that isn't archived; on a harness that can't copy a conversation it's off, with why. */
 const showFork = computed(() => !isArchivedSession.value);
@@ -226,7 +235,7 @@ const isAnyActionPending = computed(() =>
   || isRenaming.value
 );
 
-const isDraggable = computed(() => !isInlineEditing.value && !isAnyActionPending.value);
+const isDraggable = computed(() => !readOnly.value && !isInlineEditing.value && !isAnyActionPending.value);
 const isDragging = shallowRef(false);
 
 function handleDragStart(event: DragEvent): void {
@@ -286,6 +295,11 @@ function handleSelect(event: MouseEvent): void {
     return;
   }
 
+  if (readOnly.value) {
+    emit("select", props.session);
+    return;
+  }
+
   // ⌘/Ctrl-click and Shift-click pick rows; while any are picked, a plain click adds or removes one.
   if (event.shiftKey) {
     selection.extendTo(sessionId.value, sessionsStore.activeSessionId);
@@ -301,7 +315,7 @@ function handleSelect(event: MouseEvent): void {
 }
 
 function handleRowKeydown(event: KeyboardEvent): void {
-  if (event.key === "F2") {
+  if (event.key === "F2" && !readOnly.value) {
     event.preventDefault();
     startRename();
     return;
@@ -333,7 +347,7 @@ function handleArchive(): void {
 
 const pinned = computed(() => isPinned(props.session));
 /** Any session in the list can be pinned, except an archived one. */
-const canPin = computed(() => !isArchivedSession.value);
+const canPin = computed(() => !readOnly.value && !isArchivedSession.value);
 const canMovePinUp = computed(() => pinned.value && pinnedNeighbourFor(sessionsStore.sessions, sessionId.value, -1) !== undefined);
 const canMovePinDown = computed(() => pinned.value && pinnedNeighbourFor(sessionsStore.sessions, sessionId.value, 1) !== undefined);
 
@@ -380,6 +394,7 @@ function handleContextMenuOpenChange(value: boolean): void {
 }
 
 function startRename(): void {
+  if (readOnly.value) return;
   isContextMenuOpen.value = false;
   renameDraft.value = rawTitle.value;
   initialRenameTitle.value = rawTitle.value;
@@ -564,7 +579,10 @@ function removeSessionFromStore(): void {
     :open="isContextMenuOpen"
     @update:open="handleContextMenuOpenChange"
   >
-    <ContextMenuTrigger as-child>
+    <ContextMenuTrigger
+      as-child
+      :disabled="readOnly"
+    >
       <div
         class="session-item-shell"
         :class="{ 'session-item-shell--dragging': isDragging }"
@@ -582,21 +600,21 @@ function removeSessionFromStore(): void {
             :class="{
               active,
               'session-item--selected': isSelected,
-              'session-item--has-action': (canArchive || canRestore || canPin) && !selection.isSelecting,
-              'session-item--has-two-actions': canArchive && canPin && !selection.isSelecting,
+              'session-item--has-action': (canArchive || canRestore || canPin) && !isSelecting,
+              'session-item--has-two-actions': canArchive && canPin && !isSelecting,
               [`session-item--dim-${rowDim}`]: rowDim > 0,
             }"
             :aria-current="active ? 'true' : undefined"
-            :aria-pressed="selection.isSelecting ? isSelected : undefined"
+            :aria-pressed="isSelecting ? isSelected : undefined"
             :aria-expanded="hasChildren ? Boolean(childrenExpanded) : undefined"
-            title="Double-click to rename"
-            data-testid="session-row"
+            :title="openOnMachine ? `Open on ${openOnMachine}` : 'Double-click to rename'"
+            :data-testid="openOnMachine ? 'machine-session-row' : 'session-row'"
             @click="handleSelect"
             @dblclick="startRename"
             @keydown="handleRowKeydown"
           >
             <span
-              v-if="selection.isSelecting"
+              v-if="isSelecting"
               class="session-check"
               :class="{ 'session-check--on': isSelected }"
               aria-hidden="true"
@@ -681,7 +699,7 @@ function removeSessionFromStore(): void {
             >{{ rowStatus.label }}</span>
           </button>
           <button
-            v-if="canPin && !selection.isSelecting"
+            v-if="canPin && !isSelecting"
             type="button"
             class="session-row-action session-row-action--pin"
             :class="{ 'session-row-action--second': canArchive, 'session-row-action--on': pinned }"
@@ -700,7 +718,7 @@ function removeSessionFromStore(): void {
             />
           </button>
           <button
-            v-if="canRestore && !selection.isSelecting"
+            v-if="canRestore && !isSelecting"
             type="button"
             class="session-row-action"
             :aria-label="`Restore ${displayTitle}`"
@@ -712,7 +730,7 @@ function removeSessionFromStore(): void {
             <ArchiveRestore aria-hidden="true" />
           </button>
           <button
-            v-else-if="canArchive && !selection.isSelecting"
+            v-else-if="canArchive && !isSelecting"
             type="button"
             class="session-row-action"
             :aria-label="`Archive ${displayTitle}`"
