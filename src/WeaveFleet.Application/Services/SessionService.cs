@@ -138,6 +138,58 @@ public sealed class SessionService(
         return Unit.Value;
     }
 
+    /// <summary>
+    /// Pins the session in the Pinned group above the projects, just before <paramref name="beforeSessionId"/>, or at
+    /// the end when that's null or isn't pinned. Pinning one that's already pinned moves it. Returns its new order.
+    /// </summary>
+    public async Task<Result<double>> PinSessionAsync(string sessionId, string? beforeSessionId)
+    {
+        SetSessionTag(sessionId);
+        var session = await sessionRepository.GetByIdAsync(sessionId);
+        if (session is null)
+            return FleetError.NotFoundFor(nameof(Session), sessionId);
+        if (session.ParentSessionId is not null)
+            return FleetError.ValidationError("Pin", "A subagent's session isn't in the list; pin the session it belongs to.");
+        if (session.RetentionStatus == "archived")
+            return FleetError.ValidationError("Pin", "Archived sessions can't be pinned; restore it first.");
+
+        var others = (await sessionRepository.ListPinnedAsync()).Where(p => p.Id != sessionId).ToList();
+        var at = beforeSessionId is null ? -1 : others.FindIndex(p => p.Id == beforeSessionId);
+        if (at < 0)
+        {
+            var last = others.Count == 0 ? 0 : others[^1].PinOrder;
+            await sessionRepository.UpdatePinOrderAsync(sessionId, last + 1);
+            return last + 1;
+        }
+
+        var after = at == 0 ? others[0].PinOrder - 1 : others[at - 1].PinOrder;
+        var order = (after + others[at].PinOrder) / 2;
+        if (order > after && order < others[at].PinOrder)
+        {
+            await sessionRepository.UpdatePinOrderAsync(sessionId, order);
+            return order;
+        }
+
+        // Halved too often to fit between them: number every pin again, 1, 2, 3, with this one in its place.
+        others.Insert(at, (sessionId, 0));
+        for (var i = 0; i < others.Count; i++)
+            await sessionRepository.UpdatePinOrderAsync(others[i].Id, i + 1);
+        return at + 1;
+    }
+
+    /// <summary>Unpins the session: it goes back to its project, newest first. Unpinning one that isn't pinned does nothing.</summary>
+    public async Task<Result<Unit>> UnpinSessionAsync(string sessionId)
+    {
+        SetSessionTag(sessionId);
+        var session = await sessionRepository.GetByIdAsync(sessionId);
+        if (session is null)
+            return FleetError.NotFoundFor(nameof(Session), sessionId);
+
+        if (session.PinOrder is not null)
+            await sessionRepository.UpdatePinOrderAsync(sessionId, null);
+        return Unit.Value;
+    }
+
     private static void SetSessionTag(string sessionId)
         => Activity.Current?.SetTag(FleetInstrumentation.SessionIdTag, sessionId);
 

@@ -109,6 +109,12 @@ public sealed class Session
     /// </summary>
     public string? LineageDetachedAt { get; set; }
 
+    /// <summary>
+    /// Where the session sits in the Pinned group above the projects (ascending), or null when it isn't pinned.
+    /// Archiving a session unpins it.
+    /// </summary>
+    public double? PinOrder { get; set; }
+
     public List<string> Tags { get; set; } = [];
 }
 

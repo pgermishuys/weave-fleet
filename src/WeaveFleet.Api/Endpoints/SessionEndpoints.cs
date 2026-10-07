@@ -149,6 +149,7 @@ public static class SessionEndpoints
                         SpawnedBySessionId = session.SpawnedBySessionId,
                         SpawnKind = session.SpawnKind,
                         LineageDetachedAt = session.LineageDetachedAt,
+                        PinOrder = session.PinOrder,
                     });
                 },
                 error => Task.FromResult(error.ToSessionApiResult()));
@@ -820,6 +821,29 @@ public static class SessionEndpoints
         .Produces<ApiErrorResponse>(404)
         .WithName("UpdateSessionLineage");
 
+        // PUT /api/sessions/{id}/pin — pin a session above the projects, before another pinned one or at the end
+        group.MapPut("/{id}/pin", async (string id, PinSessionRequest req, SessionService sessionService) =>
+        {
+            var result = await sessionService.PinSessionAsync(id, req.BeforeSessionId);
+            return result.Match(
+                order => Results.Ok(new PinSessionResponse(order)),
+                error => error.ToSessionApiResult());
+        })
+        .Produces<PinSessionResponse>(200)
+        .Produces<ApiErrorResponse>(400)
+        .Produces<ApiErrorResponse>(404)
+        .WithName("PinSession");
+
+        // DELETE /api/sessions/{id}/pin — unpin it; it goes back to its project
+        group.MapDelete("/{id}/pin", async (string id, SessionService sessionService) =>
+        {
+            var result = await sessionService.UnpinSessionAsync(id);
+            return result.ToNoContentResult();
+        })
+        .Produces(204)
+        .Produces<ApiErrorResponse>(404)
+        .WithName("UnpinSession");
+
         // PATCH /api/sessions/{id}/tags — replace session tags
         group.MapPatch("/{id}/tags", async (string id, UpdateSessionTagsRequest req, SessionService sessionService) =>
         {
@@ -1035,6 +1059,7 @@ public static class SessionEndpoints
             SpawnedBySessionId = s.SpawnedBySessionId,
             SpawnKind = s.SpawnKind,
             LineageDetachedAt = s.LineageDetachedAt,
+            PinOrder = s.PinOrder,
         };
     }
 
@@ -1245,6 +1270,7 @@ public static class SessionEndpoints
             SpawnedBySessionId = s.SpawnedBySessionId,
             SpawnKind = s.SpawnKind,
             LineageDetachedAt = s.LineageDetachedAt,
+            PinOrder = s.PinOrder,
         };
     }
 

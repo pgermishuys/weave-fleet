@@ -229,6 +229,7 @@ public sealed class InMemorySessionRepository : ISessionRepository
         {
             session.RetentionStatus = "archived";
             session.ArchivedAt = archivedAt;
+            session.PinOrder = null;
         }
         return Task.CompletedTask;
     }
@@ -397,6 +398,23 @@ public sealed class InMemorySessionRepository : ISessionRepository
         if (_store.TryGetValue(id, out var session))
             session.LineageDetachedAt = detachedAt;
         return Task.CompletedTask;
+    }
+
+    public Task UpdatePinOrderAsync(string id, double? pinOrder)
+    {
+        if (_store.TryGetValue(id, out var session))
+            session.PinOrder = pinOrder;
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<(string Id, double PinOrder)>> ListPinnedAsync()
+    {
+        IReadOnlyList<(string, double)> pinned = _store.Values
+            .Where(s => s.PinOrder is not null && s.RetentionStatus == "active")
+            .OrderBy(s => s.PinOrder)
+            .Select(s => (s.Id, s.PinOrder!.Value))
+            .ToList();
+        return Task.FromResult(pinned);
     }
 
     public Task UpdateSelectedModelAsync(string id, string providerId, string modelId)

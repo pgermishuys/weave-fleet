@@ -933,6 +933,22 @@ export interface paths {
         patch: operations["UpdateSessionLineage"];
         trace?: never;
     };
+    "/api/sessions/{id}/pin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["PinSession"];
+        post?: never;
+        delete: operations["UnpinSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{id}/tags": {
         parameters: {
             query?: never;
@@ -3758,6 +3774,13 @@ export interface components {
         UpdateSessionLineageRequest: {
             detached: boolean;
         };
+        PinSessionRequest: {
+            beforeSessionId: null | string;
+        };
+        PinSessionResponse: {
+            /** Format: double */
+            pinOrder: number;
+        };
         OnCompleteInfo: {
             notifySessionId: string;
             notifyInstanceId: string;
@@ -4067,6 +4090,8 @@ export interface components {
             spawnedBySessionId?: null | string;
             spawnKind?: null | string;
             lineageDetachedAt?: null | string;
+            /** Format: double */
+            pinOrder?: null | number;
         };
         SessionMessageBridgeRequest: {
             harnessSessionId: null | string;
@@ -6354,6 +6379,79 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    PinSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PinSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PinSessionResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    UnpinSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
             };
         };
     };

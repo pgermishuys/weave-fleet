@@ -11,6 +11,8 @@ import { runningSubagentsBySession } from "@/lib/session-lineage";
 import { useMoveSession } from "@/composables/use-session-actions";
 import { useArchiveQueueStore } from "@/stores/archive-queue";
 import { useLineageMovesStore } from "@/stores/lineage-moves";
+import { useSessionPinsStore } from "@/stores/session-pins";
+import { isPinned, splitPinned } from "@/lib/session-pins";
 import { useSessionSelectionStore } from "@/stores/session-selection";
 import { useSessionsStore } from "@/stores/sessions";
 import { machineGroupKey, projectGroupKey, useSidebarStore } from "@/stores/sidebar";
@@ -42,6 +44,9 @@ interface ProjectTreeGroup {
   sessions: SessionListItem[];
 }
 
+/** The Pinned group's id, for folding it like a project. */
+const PINNED_GROUP_ID = "pinned";
+
 interface ActiveSessionDrag {
   sessionId: string;
   projectId: string | null;
@@ -51,6 +56,7 @@ interface ActiveSessionDrag {
 const sessionsStore = useSessionsStore();
 const archiveQueue = useArchiveQueueStore();
 const lineageMoves = useLineageMovesStore();
+const pins = useSessionPinsStore();
 const selection = useSessionSelectionStore();
 const sidebarStore = useSidebarStore();
 const { newSessionDraftRow, newSessionMachine, sessionRowKeys } = storeToRefs(useWorkspaceUiStore());
@@ -115,6 +121,14 @@ const sessions = computed(() => {
 
 const isArchivedView = computed(() => retentionStatus.value === "archived");
 
+/** The session being dragged in the list, from where (app state, not the drag's own data). */
+const activeSessionDrag = shallowRef<ActiveSessionDrag | null>(null);
+
+/** Pinned sessions (and what came from them) sit in the Pinned group above the projects; the rest in their projects. */
+const pinnedSplit = computed(() => isArchivedView.value
+  ? { pinned: [] as SessionListItem[], rest: sessions.value }
+  : splitPinned(sessions.value));
+
 // What every session's agent has running: a chip on its row, and its running subagents nested under it.
 const { running: runningWork, groups: runningWorkGroups } = useRunningWorkAcrossSessions();
 const runningCounts = computed(() => new Map(runningWorkGroups.value.map((group) => [group.sessionId, group.items.length])));
@@ -129,7 +143,8 @@ const otherMachines = computed(() => (showMachines.value ? machineEntries.value.
 // Folding the live machine hides its whole tree; without other machines there's no heading to fold it with.
 const liveMachineExpanded = computed(() => !showMachines.value || !sidebarStore.isGroupCollapsed(machineGroupKey(machines.liveKey)));
 
-const liveSessionCount = computed(() => filteredProjectGroups.value.reduce((total, group) => total + group.sessionCount, 0));
+const liveSessionCount = computed(() => filteredProjectGroups.value.reduce((total, group) => total + group.sessionCount, 0)
+  + filteredPinnedSessions.value.length);
 
 function handleToggleLiveMachine(): void {
   sidebarStore.toggleGroupCollapsed(machineGroupKey(machines.liveKey));
@@ -280,7 +295,7 @@ const projectGroups = computed<ProjectTreeGroup[]>(() => {
     });
   }
 
-  for (const session of sessions.value) {
+  for (const session of pinnedSplit.value.rest) {
     const project = session.projectId ? projectsById.value.get(session.projectId) : undefined;
     const projectName = getProjectDisplayName(session);
     const groupKey = session.projectId ?? projectName;
@@ -359,6 +374,37 @@ const projectGroups = computed<ProjectTreeGroup[]>(() => {
     });
 });
 
+function matchesQuery(session: SessionListItem): boolean {
+  const searchable = [
+    session.session.title,
+    session.session.id,
+    getProjectDisplayName(session),
+    session.sessionStatus,
+  ].join(" ").toLowerCase();
+
+  return searchable.includes(normalizedQuery.value);
+}
+
+const filteredPinnedSessions = computed(() => normalizedQuery.value
+  ? pinnedSplit.value.pinned.filter(matchesQuery)
+  : pinnedSplit.value.pinned);
+
+/** The Pinned group, shaped like a project. It shows while it has sessions, and during a drag so one can be dropped in. */
+const pinnedGroup = computed<ProjectTreeGroup>(() => ({
+  id: PINNED_GROUP_ID,
+  projectId: null,
+  name: "Pinned",
+  isUngrouped: false,
+  canMoveUp: false,
+  canMoveDown: false,
+  moveUpTargets: [],
+  moveDownTargets: [],
+  sessionCount: filteredPinnedSessions.value.length,
+  sessions: filteredPinnedSessions.value,
+}));
+const showPinnedGroup = computed(() => !isArchivedView.value
+  && (filteredPinnedSessions.value.length > 0 || (activeSessionDrag.value !== null && !normalizedQuery.value)));
+
 const filteredProjectGroups = computed<ProjectTreeGroup[]>(() => {
   if (!normalizedQuery.value) {
     // Archived sessions are the only reason to show a project there.
@@ -372,16 +418,7 @@ const filteredProjectGroups = computed<ProjectTreeGroup[]>(() => {
       const projectMatch = project.name.toLowerCase().includes(normalizedQuery.value);
       const sessions = projectMatch
         ? project.sessions
-        : project.sessions.filter((session) => {
-            const searchable = [
-              session.session.title,
-              session.session.id,
-              getProjectDisplayName(session),
-              session.sessionStatus,
-            ].join(" ").toLowerCase();
-
-            return searchable.includes(normalizedQuery.value);
-          });
+        : project.sessions.filter(matchesQuery);
 
       return {
         ...project,
@@ -400,7 +437,7 @@ function showArchived(show: boolean): void {
 
 // Shift-click ranges follow the rows as the list shows them.
 watch(
-  () => filteredProjectGroups.value
+  () => [...(showPinnedGroup.value ? [pinnedGroup.value] : []), ...filteredProjectGroups.value]
     .filter((group) => liveMachineExpanded.value && isProjectExpanded(group.id))
     .flatMap((group) => group.sessions.map((session) => session.session.id)),
   (order) => selection.setVisibleOrder(order),
@@ -514,7 +551,6 @@ function handleSessionSelect(session: SessionListItem): void {
 
 const dragAnnouncement = shallowRef("");
 const isDragMovePending = shallowRef(false);
-const activeSessionDrag = shallowRef<ActiveSessionDrag | null>(null);
 const isCompleteDropZoneHovered = shallowRef(false);
 
 function handleSessionDragStart(sessionId: string, projectId: string | null): void {
@@ -536,6 +572,25 @@ function handleMoveOutOfParent(sessionId: string): void {
 
 function handleSessionDragEnd(): void {
   activeSessionDrag.value = null;
+}
+
+/** Whether the session being dragged is pinned: dropping it on its own project unpins it. */
+const activeDragPinned = computed(() => {
+  const id = activeSessionDrag.value?.sessionId;
+  const item = id ? sessionsStore.sessions.find((candidate) => candidate.session.id === id) : undefined;
+  return item ? isPinned(item) : false;
+});
+
+/** A session dropped in the Pinned group: pinned where it was dropped. */
+function handlePinSession(sessionId: string, beforeSessionId: string | null): void {
+  activeSessionDrag.value = null;
+  void pins.pin(sessionId, beforeSessionId);
+}
+
+/** A pinned session dropped back on its own project. */
+function handleUnpinSession(sessionId: string): void {
+  activeSessionDrag.value = null;
+  void pins.unpin(sessionId);
 }
 
 async function handleMoveSession(sessionId: string, targetProjectId: string | null): Promise<void> {
@@ -782,34 +837,57 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
           </button>
         </div>
 
-        <ProjectGroup
-          v-for="project in filteredProjectGroups"
-          v-else
-          :key="project.id"
-          :project="project"
-          :expanded="isProjectExpanded(project.id)"
-          :active-session-id="activeSessionId"
-          :active-drag-session-id="activeSessionDrag?.sessionId ?? null"
-          :active-drag-project-id="activeSessionDrag?.projectId ?? null"
-          :draft="project.id === draftGroupId ? newSessionDraftRow : null"
-          :draft-active="isNewSessionOpen"
-          :row-keys="sessionRowKeys"
-          :running-counts="runningCounts"
-          :running-subagents="runningSubagents"
-          @new-session="handleProjectSessionCreate"
-          @open-draft="handleOpenDraft"
-          @project-changed="handleProjectChanged"
-          @session-changed="handleRetry"
-          @toggle="handleToggleProject"
-          @select-session="handleSessionSelect"
-          @drag-session-start="handleSessionDragStart"
-          @drag-session-end="handleSessionDragEnd"
-          @move-session="handleMoveSession"
-          @move-out-of-parent="handleMoveOutOfParent"
-        />
+        <template v-else>
+          <ProjectGroup
+            v-if="showPinnedGroup"
+            key="pinned"
+            :project="pinnedGroup"
+            pinned
+            :expanded="isProjectExpanded(PINNED_GROUP_ID)"
+            :active-session-id="activeSessionId"
+            :active-drag-session-id="activeSessionDrag?.sessionId ?? null"
+            :active-drag-project-id="activeSessionDrag?.projectId ?? null"
+            :row-keys="sessionRowKeys"
+            :running-counts="runningCounts"
+            :running-subagents="runningSubagents"
+            data-testid="pinned-group"
+            @session-changed="handleRetry"
+            @toggle="handleToggleProject"
+            @select-session="handleSessionSelect"
+            @drag-session-start="handleSessionDragStart"
+            @drag-session-end="handleSessionDragEnd"
+            @pin-session="handlePinSession"
+          />
+          <ProjectGroup
+            v-for="project in filteredProjectGroups"
+            :key="project.id"
+            :project="project"
+            :expanded="isProjectExpanded(project.id)"
+            :active-session-id="activeSessionId"
+            :active-drag-session-id="activeSessionDrag?.sessionId ?? null"
+            :active-drag-project-id="activeSessionDrag?.projectId ?? null"
+            :draft="project.id === draftGroupId ? newSessionDraftRow : null"
+            :draft-active="isNewSessionOpen"
+            :row-keys="sessionRowKeys"
+            :running-counts="runningCounts"
+            :running-subagents="runningSubagents"
+            :active-drag-pinned="activeDragPinned"
+            @new-session="handleProjectSessionCreate"
+            @open-draft="handleOpenDraft"
+            @project-changed="handleProjectChanged"
+            @session-changed="handleRetry"
+            @toggle="handleToggleProject"
+            @select-session="handleSessionSelect"
+            @drag-session-start="handleSessionDragStart"
+            @drag-session-end="handleSessionDragEnd"
+            @move-session="handleMoveSession"
+            @move-out-of-parent="handleMoveOutOfParent"
+            @unpin-session="handleUnpinSession"
+          />
+        </template>
 
         <div
-          v-if="!isLoading && !errorMessage && filteredProjectGroups.length === 0"
+          v-if="!isLoading && !errorMessage && filteredProjectGroups.length === 0 && !showPinnedGroup"
           class="sessions-empty-state"
         >
           <p class="sessions-empty-state__title">

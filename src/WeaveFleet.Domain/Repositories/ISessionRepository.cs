@@ -72,6 +72,12 @@ public interface ISessionRepository
 
     /// <summary>Moves the session out of the session it came from (a time), or back under it (null).</summary>
     Task UpdateLineageDetachedAsync(string id, string? detachedAt);
+
+    /// <summary>Pins the session at <paramref name="pinOrder"/> in the Pinned group, or unpins it (null).</summary>
+    Task UpdatePinOrderAsync(string id, double? pinOrder);
+
+    /// <summary>The user's pinned sessions that aren't archived, in the order they're pinned.</summary>
+    Task<IReadOnlyList<(string Id, double PinOrder)>> ListPinnedAsync();
     /// <summary>
     /// Persist the most-recent model selection used on this session, so a SPA refresh
     /// (which loses local state) can fall back to it on the next prompt.
