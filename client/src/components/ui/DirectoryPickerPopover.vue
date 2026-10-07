@@ -161,7 +161,7 @@ function handleSearchUpdate(value: string | number): void {
         class="flex items-center justify-between gap-2 border-b border-border p-2"
       >
         <p class="min-w-0 truncate font-mono text-xs text-text">
-          Workspace roots
+          Locations
         </p>
 
         <div class="flex items-center gap-1">
@@ -242,7 +242,7 @@ function handleSearchUpdate(value: string | number): void {
           v-else-if="filteredEntries.length === 0 && browser.currentPath.value === null"
           class="px-2 py-4 text-sm text-muted"
         >
-          No roots available. Configure workspace roots in settings.
+          No locations yet. Add one in Settings → Folders.
         </p>
 
         <p

@@ -51,7 +51,7 @@ const pluginSections = computed<readonly DecoratedSettingsSection[]>(() => {
         Settings
       </h1>
       <p class="mt-1 text-sm text-muted">
-        Manage credentials, workspace preferences, appearance, skills, memory, permissions, harnesses, Weave, system details, and plugin-provided settings.
+        Manage credentials, folders, appearance, skills, memory, permissions, harnesses, Weave, system details, and plugin-provided settings.
       </p>
       <p
         v-if="!machines.live.isHome && activeSection !== 'machines'"

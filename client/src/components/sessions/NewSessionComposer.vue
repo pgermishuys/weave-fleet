@@ -940,6 +940,7 @@ onUnmounted(() => {
           :folder="folder"
           :repositories="repositories"
           :recent-folders="recentFolders"
+          :plain-folders="defaults.plainFolders()"
           :allow-browse="!isCloudMode && !gitHubPreset"
           :allow-none="!gitHubPreset"
           :allow-create="!isCloudMode && !gitHubPreset"

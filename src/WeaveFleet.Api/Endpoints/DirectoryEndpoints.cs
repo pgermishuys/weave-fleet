@@ -32,7 +32,9 @@ public static class DirectoryEndpoints
                     IsRoot: e.IsRoot)).ToList(),
                 CurrentPath: result.CurrentPath,
                 ParentPath: result.ParentPath,
-                Roots: result.Roots));
+                Roots: result.Roots,
+                Exists: result.Exists,
+                NearestExisting: result.NearestExisting));
         })
         .WithName("GetDirectories");
 
@@ -59,12 +61,20 @@ public static class DirectoryEndpoints
             NewFolderService newFolders,
             CancellationToken ct) =>
         {
-            var result = await newFolders.CreateAsync(req.Path, req.Git, ct);
+            var result = await newFolders.CreateAsync(req.Path, req.Git, req.Branch, ct);
             return result.IsSuccess
                 ? Results.Ok(ToResponse(result.Value))
                 : result.Error.ToErrorResult();
         })
         .WithName("CreateDirectory");
+
+        // GET /api/directories/defaults — the first branch a new repository gets unless the person says otherwise,
+        // and the home folder `~` stands for on this machine
+        group.MapGet("/directories/defaults", async () =>
+            Results.Ok(new NewFolderDefaultsResponse(
+                await NewFolderService.FirstBranchAsync(),
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile))))
+        .WithName("GetNewFolderDefaults");
 
         // POST /api/directories/clone — clones a repository into a new folder. A request Fleet refuses
         // is an ordinary error response; once git is running, the response is newline-delimited JSON:
@@ -143,7 +153,11 @@ public static class DirectoryEndpoints
     }
 }
 
-internal sealed record CreateFolderRequest(string Path, bool Git);
+/// <param name="Branch">A new repository's first branch; null for git's own default, or main.</param>
+internal sealed record CreateFolderRequest(string Path, bool Git, string? Branch = null);
+
+/// <summary>What a new folder gets unless the person says otherwise, and what <c>~</c> means here.</summary>
+public sealed record NewFolderDefaultsResponse(string FirstBranch, string Home);
 
 internal sealed record CloneFolderRequest(string Repository, string Path);
 
@@ -156,7 +170,9 @@ public sealed record DirectoryListingResponse(
     IReadOnlyList<DirectoryEntryResponse> Entries,
     string? CurrentPath,
     string? ParentPath,
-    IReadOnlyList<string> Roots);
+    IReadOnlyList<string> Roots,
+    bool Exists,
+    string? NearestExisting);
 
 public sealed record FolderInspectionResponse(
     string Path,

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Ellipsis } from "lucide-vue-next";
+import { Ellipsis, Layers } from "lucide-vue-next";
 import type { ProjectResponse } from "@/api/client";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -46,8 +46,14 @@ const selectValue = computed({
         data-testid="new-session-more-chip"
         :disabled="disabled"
         :aria-label="selectedProjectName ? `More options (project ${selectedProjectName}): project, title, tags` : 'More options: project, title, tags'"
-        title="Project, title, tags"
+        :title="selectedProjectName ? `Project ${selectedProjectName}: the sidebar group it's filed under` : 'Project, title, tags'"
       >
+        <!-- A project is a sidebar group, not a folder: its own icon keeps "Weave Fleet" apart from weave-fleet. -->
+        <Layers
+          v-if="selectedProjectName"
+          class="ns-chip__icon"
+          aria-hidden="true"
+        />
         <span
           v-if="selectedProjectName"
           class="ns-chip__label"

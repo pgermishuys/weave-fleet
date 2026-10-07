@@ -1,20 +1,14 @@
 <script setup lang="ts">
 import type { WorkspaceRootItem, WorkspaceRootsResponse } from "@/api/client";
-import { onMounted, reactive, ref, shallowRef, watch } from "vue";
+import { onMounted, ref, shallowRef } from "vue";
 import { AlertCircle, Folder, FolderGit2, LoaderCircle, Plus, RefreshCw, Trash2 } from "lucide-vue-next";
 import { api } from "@/api/client";
 import DirectoryPickerPopover from "@/components/ui/DirectoryPickerPopover.vue";
 import { useDirectoryBrowser } from "@/composables/use-directory-browser";
-import {
-  readWorkspacePreferences,
-  writeWorkspacePreferences,
-} from "@/lib/workspace-preferences";
-import type { WorkspacePreferences } from "@/lib/workspace-preferences";
 
 const buttonPrimaryClass = "inline-flex items-center justify-center gap-2 rounded-btn bg-primary px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60";
 const buttonSecondaryClass = "inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-sm font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60";
 const inputClass = "w-full rounded-btn border border-border bg-main-bg px-3 py-2 text-sm text-text outline-none transition-colors placeholder:text-muted focus:border-accent";
-const selectClass = "w-full rounded-btn border border-border bg-main-bg px-3 py-2 text-sm text-text outline-none transition-colors focus:border-accent disabled:cursor-not-allowed disabled:opacity-60";
 
 const workspaceRoots = ref<WorkspaceRootItem[]>([]);
 const workspaceRootsLoading = shallowRef(true);
@@ -37,21 +31,9 @@ function handleDirectorySelected(path: string): void {
   newWorkspaceRoot.value = path;
 }
 
-const workspacePreferences = reactive<WorkspacePreferences>(
-  readWorkspacePreferences(typeof window !== "undefined" ? window.localStorage : null),
-);
-
 onMounted(() => {
   void loadWorkspaceRoots();
 });
-
-watch(
-  workspacePreferences,
-  (next) => {
-    writeWorkspacePreferences(next, typeof window !== "undefined" ? window.localStorage : null);
-  },
-  { deep: true },
-);
 
 async function loadWorkspaceRoots(): Promise<void> {
   workspaceRootsLoading.value = true;
@@ -60,7 +42,7 @@ async function loadWorkspaceRoots(): Promise<void> {
   try {
     const { data, error: apiError } = await api.GET("/api/workspace-roots");
     if (apiError) {
-      throw new Error(apiError ? String(apiError) : "Failed to load workspace roots");
+      throw new Error(apiError ? String(apiError) : "Couldn't load your locations.");
     }
 
     if (!data) {
@@ -69,15 +51,10 @@ async function loadWorkspaceRoots(): Promise<void> {
 
     const payload = data as WorkspaceRootsResponse;
     workspaceRoots.value = payload.roots;
-
-    const preferredRootStillExists = payload.roots.some((root) => root.path === workspacePreferences.preferredRootPath);
-    if (!preferredRootStillExists) {
-      workspacePreferences.preferredRootPath = payload.roots[0]?.path ?? "";
-    }
   } catch (error) {
     workspaceRootsError.value = error instanceof Error
       ? error.message
-      : "Failed to load workspace settings.";
+      : "Couldn't load your locations.";
   } finally {
     workspaceRootsLoading.value = false;
     isRefreshingWorkspaceRoots.value = false;
@@ -92,7 +69,7 @@ async function refreshWorkspaceRoots(): Promise<void> {
 async function addWorkspaceRoot(): Promise<void> {
   const path = newWorkspaceRoot.value.trim();
   if (!path) {
-    addWorkspaceRootError.value = "Workspace root path is required.";
+    addWorkspaceRootError.value = "Enter the folder to add.";
     return;
   }
 
@@ -105,19 +82,16 @@ async function addWorkspaceRoot(): Promise<void> {
     });
 
     if (apiError) {
-      throw new Error(apiError ? String(apiError) : "Failed to add workspace root");
+      throw new Error(apiError ? String(apiError) : "Couldn't add that location.");
     }
 
     newWorkspaceRoot.value = "";
     await loadWorkspaceRoots();
-
-    if (workspacePreferences.autoRefreshRepositories) {
-      await api.POST("/api/repositories/refresh");
-    }
+    await api.POST("/api/repositories/refresh");
   } catch (error) {
     addWorkspaceRootError.value = error instanceof Error
       ? error.message
-      : "Failed to add workspace root.";
+      : "Couldn't add that location.";
   } finally {
     isAddingWorkspaceRoot.value = false;
   }
@@ -136,22 +110,15 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
     });
 
     if (apiError) {
-      throw new Error(apiError ? String(apiError) : "Failed to remove workspace root");
-    }
-
-    if (workspacePreferences.preferredRootPath === root.path) {
-      workspacePreferences.preferredRootPath = "";
+      throw new Error(apiError ? String(apiError) : "Couldn't remove that location.");
     }
 
     await loadWorkspaceRoots();
-
-    if (workspacePreferences.autoRefreshRepositories) {
-      await api.POST("/api/repositories/refresh");
-    }
+    await api.POST("/api/repositories/refresh");
   } catch (error) {
     workspaceRootsError.value = error instanceof Error
       ? error.message
-      : "Failed to remove workspace root.";
+      : "Couldn't remove that location.";
   } finally {
     deletingRootId.value = null;
   }
@@ -162,60 +129,17 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
   <section class="rounded-card border border-border bg-card-bg p-6 shadow-sm">
     <div class="flex flex-col gap-1">
       <h2 class="text-lg font-semibold text-text">
-        Workspace
+        Folders
       </h2>
       <p class="text-sm text-muted">
-        Set workspace defaults and manage the local directories Weave scans for repositories.
+        Fleet lists the repositories it finds in these locations, up to three folders deep. New folders and
+        clones go in the one you used last. A folder you open or create anywhere else is added here.
       </p>
     </div>
 
-    <div class="mt-5 grid gap-4 lg:grid-cols-2">
-      <label class="grid gap-1 text-sm text-text">
-        <span class="text-xs font-medium uppercase tracking-wide text-muted">Workspace label</span>
-        <input
-          v-model="workspacePreferences.displayName"
-          type="text"
-          :class="inputClass"
-          placeholder="Workspace"
-        >
-      </label>
-
-      <label class="grid gap-1 text-sm text-text">
-        <span class="text-xs font-medium uppercase tracking-wide text-muted">Preferred root</span>
-        <select
-          v-model="workspacePreferences.preferredRootPath"
-          :class="selectClass"
-          :disabled="workspaceRootsLoading"
-        >
-          <option value="">Use first available root</option>
-          <option
-            v-for="root in workspaceRoots"
-            :key="root.id ?? root.path"
-            :value="root.path"
-          >
-            {{ root.path }}
-          </option>
-        </select>
-      </label>
-    </div>
-
-    <label class="mt-4 flex items-start justify-between gap-4 rounded-card border border-border bg-main-bg p-4">
-      <div>
-        <p class="text-sm font-medium text-text">Refresh repository index after root changes</p>
-        <p class="mt-1 text-xs text-muted">
-          When enabled, adding or removing roots refreshes the repository scanner automatically.
-        </p>
-      </div>
-      <input
-        v-model="workspacePreferences.autoRefreshRepositories"
-        type="checkbox"
-        class="mt-1 h-4 w-4 rounded border-border accent-[var(--accent)]"
-      >
-    </label>
-
     <div class="mt-6 flex items-center justify-between gap-3">
       <h3 class="text-sm font-semibold text-text">
-        Configured roots
+        Locations
       </h3>
       <button
         type="button"
@@ -241,7 +165,7 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
         class="animate-spin"
         aria-hidden="true"
       />
-      <span>Loading workspace roots…</span>
+      <span>Loading your locations…</span>
     </div>
 
     <div
@@ -267,10 +191,10 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
         aria-hidden="true"
       />
       <p class="mt-3 text-sm font-medium text-text">
-        No workspace roots configured
+        No locations yet
       </p>
       <p class="mt-1 text-xs text-muted">
-        Add a local directory to enable repository browsing and workspace-backed sessions.
+        Add the folder you keep your code in, such as ~/source, and Fleet lists the repositories inside it.
       </p>
     </div>
 
@@ -289,7 +213,7 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
           </p>
           <div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
             <span class="rounded-full border border-border px-2 py-1">
-              {{ root.source === "env" ? "Environment" : "Custom" }}
+              {{ root.source === "env" ? "From the environment" : "Added" }}
             </span>
             <span
               v-if="!root.exists"
@@ -327,10 +251,10 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
       <div class="space-y-3">
         <div>
           <h3 class="text-sm font-semibold text-text">
-            Add workspace root
+            Add a location
           </h3>
           <p class="mt-1 text-xs text-muted">
-            Provide an absolute path that Weave can use for directory discovery.
+            A folder Fleet looks in for repositories, such as the one you clone into.
           </p>
         </div>
 
@@ -385,7 +309,7 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
               :size="16"
               aria-hidden="true"
             />
-            <span>{{ isAddingWorkspaceRoot ? "Adding…" : "Add root" }}</span>
+            <span>{{ isAddingWorkspaceRoot ? "Adding…" : "Add location" }}</span>
           </button>
         </div>
 

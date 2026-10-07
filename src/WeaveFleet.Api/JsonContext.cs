@@ -234,6 +234,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(DirectoryListingResponse))]
 [JsonSerializable(typeof(FolderInspectionResponse))]
 [JsonSerializable(typeof(CreateFolderRequest))]
+[JsonSerializable(typeof(NewFolderDefaultsResponse))]
 [JsonSerializable(typeof(CloneFolderRequest))]
 [JsonSerializable(typeof(NewFolderResponse))]
 [JsonSerializable(typeof(CloneStreamLine))]

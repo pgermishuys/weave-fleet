@@ -211,6 +211,7 @@
  */
 @layer base {
   .ns-folder-search__input:focus-visible,
+  .ns-folder-pathbox__input:focus-visible,
   .ns-base-search__input:focus-visible {
     border-color: transparent !important;
     box-shadow: none !important;

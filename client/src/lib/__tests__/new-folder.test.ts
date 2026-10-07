@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { defaultNewFolderRoot, folderNameFrom, joinPath, parseCloneSource, rootContaining } from "@/lib/new-folder";
+import {
+  defaultNewFolderRoot,
+  folderPathFrom,
+  foldersBetween,
+  isRootedPath,
+  joinPath,
+  parseCloneSource,
+  rootContaining,
+  separatorOf,
+  splitTypedPath,
+  withSeparator,
+} from "@/lib/new-folder";
 
 describe("parseCloneSource", () => {
   it.each([
@@ -29,12 +40,48 @@ describe("parseCloneSource", () => {
   );
 });
 
-describe("folderNameFrom", () => {
-  it("keeps case, turns spaces into dashes, and drops characters folders can't have", () => {
-    expect(folderNameFrom("  Recipe Box ")).toBe("Recipe-Box");
-    expect(folderNameFrom('what: "a" <test>?')).toBe("what-a-test");
-    expect(folderNameFrom("..hidden")).toBe("hidden");
-    expect(folderNameFrom("   ")).toBe("");
+describe("folderPathFrom", () => {
+  it("keeps case and turns spaces into dashes", () => {
+    expect(folderPathFrom("  Recipe Box ")).toEqual({ segments: ["Recipe-Box"], invalid: null });
+    expect(folderPathFrom("..hidden")).toEqual({ segments: ["hidden"], invalid: null });
+    expect(folderPathFrom("   ")).toEqual({ segments: [], invalid: null });
+  });
+
+  it("reads / and \\ as folders inside folders, on any machine", () => {
+    expect(folderPathFrom("clients\\acme portal").segments).toEqual(["clients", "acme-portal"]);
+    expect(folderPathFrom("clients/acme-portal/").segments).toEqual(["clients", "acme-portal"]);
+    // Never climbs out of the location.
+    expect(folderPathFrom("../../etc").segments).toEqual(["etc"]);
+  });
+
+  it("names a character no folder can have instead of dropping it", () => {
+    expect(folderPathFrom('what: "a"').invalid).toBe(":");
+    expect(folderPathFrom("notes?").invalid).toBe("?");
+  });
+});
+
+describe("the folder box", () => {
+  it("splits what's typed into the folder to list and the name typed in it", () => {
+    expect(splitTypedPath("~/src/clients/acme")).toEqual({ folder: "~/src/clients/", name: "acme" });
+    expect(splitTypedPath("C:\\Users\\me\\source\\")).toEqual({ folder: "C:\\Users\\me\\source\\", name: "" });
+    expect(splitTypedPath("acme")).toEqual({ folder: "", name: "acme" });
+  });
+
+  it("tells a path of its own from a name inside the location", () => {
+    expect(["~", "~/src", "/srv", "C:\\source", "c:/source", "\\\\server\\share"].every(isRootedPath)).toBe(true);
+    expect(["clients/acme", "acme", ".\\acme"].some(isRootedPath)).toBe(false);
+  });
+
+  it("writes separators the way the machine does", () => {
+    expect(separatorOf("C:\\Users\\me\\source")).toBe("\\");
+    expect(separatorOf("/home/me/src")).toBe("/");
+    expect(separatorOf(null)).toBe("/");
+    expect(withSeparator("clients/acme\\site", "\\")).toBe("clients\\acme\\site");
+  });
+
+  it("lists the folders a create would make between what's there and the target", () => {
+    expect(foldersBetween("/home/me/src", "/home/me/src/clients/acme")).toEqual(["clients", "acme"]);
+    expect(foldersBetween("C:\\source\\", "C:\\source\\acme")).toEqual(["acme"]);
   });
 });
 

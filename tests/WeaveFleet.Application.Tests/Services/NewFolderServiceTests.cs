@@ -77,6 +77,43 @@ public sealed class NewFolderServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Create_WithGit_StartsOnTheBranchAskedFor()
+    {
+        var path = Path.Combine(_root, "recipe-box");
+
+        var result = await Service().CreateAsync(path, git: true, branch: "trunk");
+
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : null);
+        Git(path, "symbolic-ref", "--short", "HEAD").Trim().ShouldBe("trunk");
+    }
+
+    [Fact]
+    public async Task Create_WithGit_AndNoBranch_StartsOnGitsOwnDefault_OrMain()
+    {
+        var path = Path.Combine(_root, "recipe-box");
+
+        var result = await Service().CreateAsync(path, git: true);
+
+        // A plain `git init` says master wherever init.defaultBranch isn't set; Fleet says main there.
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : null);
+        var configured = GitOrNull(_root, "config", "--get", "init.defaultBranch")?.Trim();
+        Git(path, "symbolic-ref", "--short", "HEAD").Trim().ShouldBe(string.IsNullOrEmpty(configured) ? "main" : configured);
+        (await NewFolderService.FirstBranchAsync()).ShouldBe(string.IsNullOrEmpty(configured) ? "main" : configured);
+    }
+
+    [Fact]
+    public async Task Create_WithABranchNameGitRefuses_MakesNothing()
+    {
+        var path = Path.Combine(_root, "recipe-box");
+
+        var result = await Service().CreateAsync(path, git: true, branch: "two..dots");
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Description.ShouldBe("two..dots isn't a name git allows for a branch.");
+        Directory.Exists(path).ShouldBeFalse();
+    }
+
+    [Fact]
     public async Task Create_WithoutGit_MakesAPlainFolder()
     {
         var path = Path.Combine(_root, "notes");
@@ -238,6 +275,17 @@ public sealed class NewFolderServiceTests : IDisposable
         WorkspaceRootService.ExpandHome("~").ShouldBe(home);
         WorkspaceRootService.ExpandHome("/srv/~/x").ShouldBe("/srv/~/x");
         WorkspaceRootService.ExpandHome("~other/x").ShouldBe("~other/x");
+    }
+
+    private static string? GitOrNull(string workingDir, params string[] args)
+    {
+        var startInfo = new ProcessStartInfo("git") { WorkingDirectory = workingDir, RedirectStandardOutput = true, RedirectStandardError = true };
+        foreach (var arg in args)
+            startInfo.ArgumentList.Add(arg);
+        using var process = Process.Start(startInfo)!;
+        var output = process.StandardOutput.ReadToEnd();
+        process.WaitForExit();
+        return process.ExitCode == 0 ? output : null;
     }
 
     private static string Git(string workingDir, params string[] args)

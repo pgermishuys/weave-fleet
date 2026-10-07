@@ -15,12 +15,15 @@ interface NewSessionDefaults {
   workspaceByRepository: Record<string, RememberedWorkspace>;
   /** The agent and model last started with, by folder (path, or "none" for a quick chat) and then harness. */
   choiceByFolder: Record<string, Record<string, AgentModelChoice>>;
-  /** The workspace root the last new folder or clone went into. */
+  /** The location the last new folder or clone went into. */
   lastNewFolderRoot: string | null;
+  /** Plain (non-git) folders sessions ran in, most recent first: the repository scan never finds them. */
+  plainFolders: string[];
 }
 
 export const NEW_SESSION_DEFAULTS_KEY = "weave:new-session:defaults";
 const MAX_RECENT_FOLDERS = 5;
+const MAX_PLAIN_FOLDERS = 30;
 
 const EMPTY_DEFAULTS: NewSessionDefaults = {
   lastFolder: null,
@@ -28,6 +31,7 @@ const EMPTY_DEFAULTS: NewSessionDefaults = {
   workspaceByRepository: {},
   choiceByFolder: {},
   lastNewFolderRoot: null,
+  plainFolders: [],
 };
 
 export interface UseNewSessionDefaultsResult {
@@ -44,7 +48,9 @@ export interface UseNewSessionDefaultsResult {
   lastWorktreeFor: (repositoryPath: string) => string | null;
   /** The agent and model last started with in a folder on a harness; Default for both the first time. */
   choiceFor: (folder: NewSessionFolder, harnessType: string) => AgentModelChoice;
-  /** The workspace root the last new folder or clone went into, if any. */
+  /** Plain (non-git) folders sessions ran in, most recent first. */
+  plainFolders: () => string[];
+  /** The location the last new folder or clone went into, if any. */
   lastNewFolderRoot: () => string | null;
   /** Records where a new folder or clone went, so the next one goes there too. */
   rememberNewFolderRoot: (root: string) => void;
@@ -108,6 +114,9 @@ function normalize(stored: unknown): NewSessionDefaults {
     workspaceByRepository: workspaces as Record<string, string>,
     choiceByFolder: normalizeChoices(value.choiceByFolder),
     lastNewFolderRoot: typeof value.lastNewFolderRoot === "string" ? value.lastNewFolderRoot : null,
+    plainFolders: Array.isArray(value.plainFolders)
+      ? value.plainFolders.filter((path): path is string => typeof path === "string" && path.length > 0)
+      : [],
   };
 }
 
@@ -165,6 +174,10 @@ export function useNewSessionDefaults(): UseNewSessionDefaultsResult {
     return normalize(stored.value).choiceByFolder[folderKey(folder)]?.[harnessType] ?? DEFAULT_CHOICE;
   }
 
+  function plainFolders(): string[] {
+    return normalize(stored.value).plainFolders;
+  }
+
   function lastNewFolderRoot(): string | null {
     return normalize(stored.value).lastNewFolderRoot;
   }
@@ -199,6 +212,9 @@ export function useNewSessionDefaults(): UseNewSessionDefaultsResult {
           : current.workspaceByRepository,
         choiceByFolder: choices,
         lastNewFolderRoot: current.lastNewFolderRoot,
+        plainFolders: folder.kind === "directory"
+          ? [folder.path, ...current.plainFolders.filter((path) => path !== folder.path)].slice(0, MAX_PLAIN_FOLDERS)
+          : current.plainFolders,
       };
     });
   }
@@ -209,6 +225,7 @@ export function useNewSessionDefaults(): UseNewSessionDefaultsResult {
     workspaceFor,
     lastWorktreeFor,
     choiceFor,
+    plainFolders,
     lastNewFolderRoot,
     rememberNewFolderRoot,
     remember,
