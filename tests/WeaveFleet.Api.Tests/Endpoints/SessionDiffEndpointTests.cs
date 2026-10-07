@@ -88,6 +88,49 @@ public sealed class SessionDiffEndpointTests
     }
 
     [Fact]
+    public async Task get_session_diffs_on_a_branch_compares_with_where_it_left_main_even_without_a_baseline()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"weave-api-diff-branch-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempRoot);
+
+        try
+        {
+            await RunGitAsync(tempRoot, "init", "-b", "main");
+            await File.WriteAllTextAsync(Path.Combine(tempRoot, "readme.txt"), "readme\n");
+            await RunGitAsync(tempRoot, "add", ".");
+            await RunGitAsync(tempRoot, "-c", "user.name=Weave Test", "-c", "user.email=weave@example.invalid", "commit", "-m", "initial");
+            await RunGitAsync(tempRoot, "checkout", "-b", "feature");
+            await File.WriteAllTextAsync(Path.Combine(tempRoot, "mine.txt"), "mine\n");
+            var repoRoot = (await new GitDiffService().FindRepoRootAsync(tempRoot, CancellationToken.None)).ShouldNotBeNull();
+
+            // A delegated child session: Fleet took no baseline and kept no repository root for it.
+            await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+            await InsertSessionAsync(factory, "session-branch", "workspace-branch", "instance-branch", repoRoot, gitBaselineRef: null, gitRepoRoot: null);
+            using var client = factory.CreateClient();
+
+            var response = await client.GetAsync("/api/sessions/session-branch/diffs");
+
+            response.StatusCode.ShouldBe(HttpStatusCode.OK);
+            var json = await response.Content.ReadFromJsonAsync<JsonElement>(JsonSerializerOptions.Web);
+            json.GetProperty("available").GetBoolean().ShouldBeTrue();
+            json.GetProperty("diffs").EnumerateArray().Select(diff => diff.GetProperty("file").GetString()).ShouldBe(["mine.txt"]);
+            var diffBase = json.GetProperty("base");
+            diffBase.GetProperty("kind").GetString().ShouldBe("branch");
+            diffBase.GetProperty("branch").GetString().ShouldBe("main");
+            diffBase.GetProperty("commit").GetString().ShouldNotBeNullOrEmpty();
+
+            var fileResponse = await client.GetAsync("/api/sessions/session-branch/diffs/file?path=mine.txt");
+            fileResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+        }
+        finally
+        {
+            foreach (var file in Directory.EnumerateFiles(tempRoot, "*", SearchOption.AllDirectories))
+                File.SetAttributes(file, FileAttributes.Normal);
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task get_session_diffs_when_baseline_metadata_is_null_returns_unavailable_empty_response()
     {
         await using var factory = new ApiWebApplicationFactory(authEnabled: false);

@@ -543,18 +543,19 @@ public static class SessionEndpoints
             return await result.Match<Task<IResult>>(
                 async session =>
                 {
-                    if (!TryGetDiffScope(session, out var repoRoot, out var baselineRef, out var workspacePrefix))
-                        return Results.Ok(new GetSessionDiffsResponse([], Available: false));
+                    if (await ResolveDiffScopeAsync(session, gitDiffService, ct) is not { } scope)
+                        return Results.Ok(new GetSessionDiffsResponse([], Available: false, Base: null));
 
                     var diffAvailability = await gitDiffService.ComputeDiffsWithAvailabilityAsync(
-                        repoRoot,
-                        baselineRef,
-                        workspacePrefix,
+                        scope.RepoRoot,
+                        scope.Base.Ref,
+                        scope.WorkspacePrefix,
                         ct);
 
                     return Results.Ok(new GetSessionDiffsResponse(
                         diffAvailability.Diffs.Select(ToFileDiffSummary).ToList(),
-                        diffAvailability.Available));
+                        diffAvailability.Available,
+                        diffAvailability.Available ? ToSessionDiffBase(scope.Base) : null));
                 },
                 error => Task.FromResult(error.ToSessionApiResult()));
         })
@@ -575,13 +576,13 @@ public static class SessionEndpoints
             return await result.Match<Task<IResult>>(
                 async session =>
                 {
-                    if (!TryGetDiffScope(session, out var repoRoot, out var baselineRef, out var workspacePrefix))
+                    if (await ResolveDiffScopeAsync(session, gitDiffService, ct) is not { } scope)
                         return Results.NotFound();
 
                     var diff = await gitDiffService.ComputeFileDiffWithContentAsync(
-                        repoRoot,
-                        baselineRef,
-                        workspacePrefix,
+                        scope.RepoRoot,
+                        scope.Base.Ref,
+                        scope.WorkspacePrefix,
                         path,
                         ct);
 
@@ -1148,25 +1149,26 @@ public static class SessionEndpoints
             : DeriveSessionStatus(session, activityStatus);
     }
 
-    private static bool TryGetDiffScope(
-        Session session,
-        out string repoRoot,
-        out string baselineRef,
-        out string workspacePrefix)
+    private sealed record DiffScope(string RepoRoot, GitDiffBase Base, string WorkspacePrefix);
+
+    // Where a session's changes are read and what they're compared with. A session Fleet took no baseline for (a
+    // delegated child, say) still has its folder's branch to compare with when that folder is a git repository.
+    private static async Task<DiffScope?> ResolveDiffScopeAsync(Session session, GitDiffService gitDiffService, CancellationToken ct)
     {
-        repoRoot = session.GitRepoRoot ?? string.Empty;
-        baselineRef = session.GitBaselineRef ?? string.Empty;
-        workspacePrefix = string.Empty;
-        if (string.IsNullOrWhiteSpace(repoRoot) || string.IsNullOrWhiteSpace(baselineRef))
-            return false;
+        var repoRoot = string.IsNullOrWhiteSpace(session.GitRepoRoot)
+            ? await gitDiffService.FindRepoRootAsync(session.Directory, ct)
+            : session.GitRepoRoot;
+        if (repoRoot is null || TryComputeWorkspacePrefix(repoRoot, session.Directory) is not { } prefix)
+            return null;
 
-        var prefix = TryComputeWorkspacePrefix(repoRoot, session.Directory);
-        if (prefix is null)
-            return false;
-
-        workspacePrefix = prefix;
-        return true;
+        var diffBase = await gitDiffService.ResolveDiffBaseAsync(repoRoot, session.GitBaselineRef, ct);
+        return diffBase is null ? null : new DiffScope(repoRoot, diffBase, prefix);
     }
+
+    private static SessionDiffBase ToSessionDiffBase(GitDiffBase diffBase) =>
+        diffBase.Kind == GitDiffBaseKind.Branch
+            ? new SessionDiffBase("branch", diffBase.MainBranch, diffBase.Ref)
+            : new SessionDiffBase("session", Branch: null, Commit: null);
 
     private static FileDiffSummary ToFileDiffSummary(WeaveFleet.Application.Services.FileDiffSummary diff) =>
         new(

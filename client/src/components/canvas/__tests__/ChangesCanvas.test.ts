@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from "pinia";
 import { computed, ref } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ChangesCanvas from "@/components/canvas/ChangesCanvas.vue";
-import type { FileDiffItem } from "@/api/client";
+import type { FileDiffItem, SessionDiffBase } from "@/api/client";
 import { useCanvasesStore } from "@/stores/canvases";
 
 const { readSessionFileMock } = vi.hoisted(() => ({
@@ -17,6 +17,7 @@ vi.mock("@/api/session-files", () => ({
 
 const sharedDiffs = {
   diffs: ref<FileDiffItem[]>([]),
+  base: ref<SessionDiffBase | null>(null),
   byFile: computed((): ReadonlyMap<string, FileDiffItem> => new Map(sharedDiffs.diffs.value.map((diff) => [diff.file, diff]))),
 };
 
@@ -40,12 +41,35 @@ describe("ChangesCanvas", () => {
     localStorage.clear();
     readSessionFileMock.mockReset();
     sharedDiffs.diffs.value = [];
+    sharedDiffs.base.value = null;
   });
 
   it("says so when the session has no changes", async () => {
     const wrapper = mountCanvas();
     await flushPromises();
 
+    expect(wrapper.text()).toContain("No changes in this session yet.");
+  });
+
+  it("says a branch is compared with where it left main", async () => {
+    sharedDiffs.base.value = { kind: "branch", branch: "main", commit: "8a61fdd7c0ffee" };
+
+    const wrapper = mountCanvas();
+    await flushPromises();
+
+    const base = wrapper.get("[data-testid='changes-base']");
+    expect(base.text()).toBe("Compared with main8a61fdd");
+    expect(base.attributes("title")).toContain("since it left main at 8a61fdd");
+    expect(wrapper.text()).toContain("No changes on this branch yet.");
+  });
+
+  it("says a folder off any branch is compared with the session start", async () => {
+    sharedDiffs.base.value = { kind: "session" };
+
+    const wrapper = mountCanvas();
+    await flushPromises();
+
+    expect(wrapper.get("[data-testid='changes-base']").text()).toBe("Since this session started");
     expect(wrapper.text()).toContain("No changes in this session yet.");
   });
 

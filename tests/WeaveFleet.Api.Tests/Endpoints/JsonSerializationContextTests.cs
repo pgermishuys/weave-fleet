@@ -14,12 +14,13 @@ public sealed class JsonSerializationContextTests
     {
         var response = new GetSessionDiffsResponse(
             [new FileDiffSummary("src/app.cs", "modified", 3, 1, "before", "after", IsBinary: false, IsTruncated: false)],
-            Available: true);
+            Available: true,
+            new SessionDiffBase("branch", "main", "abc123"));
 
         var json = JsonSerializer.Serialize(response, ApiJsonContext.Default.GetSessionDiffsResponse);
 
         Assert.Equal(
-            "{\"diffs\":[{\"file\":\"src/app.cs\",\"status\":\"modified\",\"additions\":3,\"deletions\":1,\"before\":\"before\",\"after\":\"after\",\"isBinary\":false,\"isTruncated\":false}],\"available\":true}",
+            "{\"diffs\":[{\"file\":\"src/app.cs\",\"status\":\"modified\",\"additions\":3,\"deletions\":1,\"before\":\"before\",\"after\":\"after\",\"isBinary\":false,\"isTruncated\":false}],\"available\":true,\"base\":{\"kind\":\"branch\",\"branch\":\"main\",\"commit\":\"abc123\"}}",
             json);
         Assert.DoesNotContain("patch", json, StringComparison.Ordinal);
         Assert.DoesNotContain("content", json, StringComparison.Ordinal);

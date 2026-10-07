@@ -307,6 +307,18 @@ export interface FileDiffItem {
 export interface SessionDiffsResponse {
   diffs: FileDiffItem[];
   available: boolean;
+  /** What the changes are compared with; null when they aren't available. */
+  base?: SessionDiffBase | null;
+}
+
+/**
+ * "branch": where the folder's branch left `branch` (the repository's main branch), at `commit`, as a pull
+ * request shows it. "session": the folder as it was when the session started (on main, or a detached HEAD).
+ */
+export interface SessionDiffBase {
+  kind: "branch" | "session";
+  branch?: string | null;
+  commit?: string | null;
 }
 
 export interface HarnessCapabilities {

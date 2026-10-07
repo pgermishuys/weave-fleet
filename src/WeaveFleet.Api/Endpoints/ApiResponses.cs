@@ -258,7 +258,13 @@ public sealed record SessionMessagesPagination(
     string? OldestMessageId,
     int TotalCount);
 
-public sealed record GetSessionDiffsResponse(IReadOnlyList<FileDiffSummary> Diffs, bool Available);
+public sealed record GetSessionDiffsResponse(IReadOnlyList<FileDiffSummary> Diffs, bool Available, SessionDiffBase? Base);
+
+/// <summary>
+/// What a session's changes are compared with: "branch" is where the folder's branch left <see cref="Branch"/>
+/// (the repository's main branch) at <see cref="Commit"/>; "session" is the folder as it was when the session started.
+/// </summary>
+public sealed record SessionDiffBase(string Kind, string? Branch, string? Commit);
 
 public sealed record FileDiffSummary(
     string File,

@@ -4,7 +4,7 @@ import { ChevronRight, MessageSquarePlus } from "lucide-vue-next";
 import { Transaction, type Text } from "@codemirror/state";
 import { EditorView, type ViewUpdate } from "@codemirror/view";
 import { useDiffBase } from "@/composables/use-diff-base";
-import type { UseDiffsResult } from "@/composables/use-diffs";
+import { baseKey, type UseDiffsResult } from "@/composables/use-diffs";
 import { useCanvasAnnotate } from "@/composables/use-canvas-annotation";
 import { appendDraftReference } from "@/composables/use-draft-state";
 import type { AnnotationAnchor } from "@/lib/annotation-types";
@@ -44,7 +44,7 @@ const isHtml = computed(() => /\.html?$/i.test(props.path));
 const diffItem = computed(() => sharedDiffs?.byFile.value.get(props.path) ?? null);
 const inDiff = computed(() => diffItem.value !== null);
 // The diff list has no contents; the base is fetched once, when the file is among the changes.
-const diffBase = useDiffBase(() => props.sessionId, () => props.path, inDiff);
+const diffBase = useDiffBase(() => props.sessionId, () => props.path, inDiff, () => baseKey(sharedDiffs?.base.value));
 const gitBase = computed<Text | null>(() => (inDiff.value && diffBase.value !== null ? baseText(diffBase.value) : null));
 const hasChanges = computed(() => inDiff.value || (info.value?.dirty ?? false));
 const deleted = computed(() =>

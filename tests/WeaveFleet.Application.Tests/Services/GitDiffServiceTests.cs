@@ -204,6 +204,127 @@ public sealed class GitDiffServiceTests
     }
 
     [Fact]
+    public async Task branch_rebased_onto_a_newer_main_lists_only_the_branchs_own_changes()
+    {
+        var tempRoot = CreateTempDirectory();
+        var service = new GitDiffService();
+
+        try
+        {
+            await InitRepoOnMainAsync(tempRoot);
+            await RunGitAsync(tempRoot, "checkout", "-b", "feature");
+            var baseline = await service.CaptureBaselineAsync(tempRoot, "rebased-branch", CancellationToken.None);
+            baseline.ShouldNotBeNull();
+
+            await File.WriteAllTextAsync(Path.Combine(tempRoot, "mine.txt"), "mine\n");
+            await CommitAllAsync(tempRoot, "the session's work");
+            await RunGitAsync(tempRoot, "checkout", "main");
+            await File.WriteAllTextAsync(Path.Combine(tempRoot, "theirs.txt"), "someone else's\n");
+            await CommitAllAsync(tempRoot, "another pull request");
+            await RunGitAsync(tempRoot, "checkout", "feature");
+            await RunGitAsync(tempRoot, "-c", "user.name=Weave Test", "-c", "user.email=weave@example.invalid", "rebase", "main");
+            await File.WriteAllTextAsync(Path.Combine(tempRoot, "readme.txt"), "readme\nuncommitted\n");
+
+            var diffBase = await service.ResolveDiffBaseAsync(baseline.RepoRoot, baseline.RefName, CancellationToken.None);
+
+            diffBase.ShouldNotBeNull();
+            diffBase.Kind.ShouldBe(GitDiffBaseKind.Branch);
+            diffBase.MainBranch.ShouldBe("main");
+            diffBase.Ref.ShouldBe(await GitOutputAsync(tempRoot, "rev-parse", "main"));
+            var result = await service.ComputeDiffsAsync(baseline.RepoRoot, diffBase.Ref, string.Empty, CancellationToken.None);
+            result.Select(diff => diff.Path).ShouldBe(["mine.txt", "readme.txt"]);
+
+            // Compared with where the session started, main's newer pull request would be listed too.
+            var sinceStart = await service.ComputeDiffsAsync(baseline.RepoRoot, baseline.RefName, string.Empty, CancellationToken.None);
+            sinceStart.Select(diff => diff.Path).ShouldContain("theirs.txt");
+        }
+        finally
+        {
+            DeleteRepo(tempRoot);
+        }
+    }
+
+    [Fact]
+    public async Task branch_is_compared_with_origins_default_branch_before_a_local_main()
+    {
+        var tempRoot = CreateTempDirectory();
+        var service = new GitDiffService();
+
+        try
+        {
+            await InitRepoOnMainAsync(tempRoot);
+            var trunk = await GitOutputAsync(tempRoot, "rev-parse", "HEAD");
+            await File.WriteAllTextAsync(Path.Combine(tempRoot, "local-main.txt"), "only on the local main\n");
+            await CommitAllAsync(tempRoot, "local main moves on");
+            await RunGitAsync(tempRoot, "update-ref", "refs/remotes/origin/trunk", trunk);
+            await RunGitAsync(tempRoot, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk");
+            await RunGitAsync(tempRoot, "checkout", "-b", "feature");
+
+            var diffBase = await service.ResolveDiffBaseAsync(tempRoot, sessionBaselineRef: null, CancellationToken.None);
+
+            diffBase.ShouldNotBeNull();
+            diffBase.Kind.ShouldBe(GitDiffBaseKind.Branch);
+            diffBase.MainBranch.ShouldBe("trunk");
+            diffBase.Ref.ShouldBe(trunk);
+        }
+        finally
+        {
+            DeleteRepo(tempRoot);
+        }
+    }
+
+    [Fact]
+    public async Task on_main_or_a_detached_head_changes_are_compared_with_the_session_start()
+    {
+        var tempRoot = CreateTempDirectory();
+        var service = new GitDiffService();
+
+        try
+        {
+            await InitRepoOnMainAsync(tempRoot);
+            var baseline = await service.CaptureBaselineAsync(tempRoot, "on-main", CancellationToken.None);
+            baseline.ShouldNotBeNull();
+
+            var onMain = await service.ResolveDiffBaseAsync(tempRoot, baseline.RefName, CancellationToken.None);
+            onMain.ShouldBe(new GitDiffBase(baseline.RefName, GitDiffBaseKind.SessionStart, MainBranch: null));
+
+            await RunGitAsync(tempRoot, "checkout", "--detach");
+            var detached = await service.ResolveDiffBaseAsync(tempRoot, baseline.RefName, CancellationToken.None);
+            detached.ShouldBe(new GitDiffBase(baseline.RefName, GitDiffBaseKind.SessionStart, MainBranch: null));
+
+            // With no baseline either, there's nothing to compare with.
+            (await service.ResolveDiffBaseAsync(tempRoot, sessionBaselineRef: null, CancellationToken.None)).ShouldBeNull();
+        }
+        finally
+        {
+            DeleteRepo(tempRoot);
+        }
+    }
+
+    [Fact]
+    public async Task branch_in_a_repository_with_no_main_branch_is_compared_with_the_session_start()
+    {
+        var tempRoot = CreateTempDirectory();
+        var service = new GitDiffService();
+
+        try
+        {
+            await RunGitAsync(tempRoot, "init", "-b", "develop");
+            await File.WriteAllTextAsync(Path.Combine(tempRoot, "readme.txt"), "readme\n");
+            await CommitAllAsync(tempRoot, "initial");
+            await RunGitAsync(tempRoot, "checkout", "-b", "feature");
+
+            var diffBase = await service.ResolveDiffBaseAsync(tempRoot, "refs/fleet/baselines/no-main", CancellationToken.None);
+
+            diffBase.ShouldBe(new GitDiffBase("refs/fleet/baselines/no-main", GitDiffBaseKind.SessionStart, MainBranch: null));
+        }
+        finally
+        {
+            DeleteRepo(tempRoot);
+        }
+    }
+
+    [Fact]
     public void parse_diffs_keeps_renamed_destination_path()
     {
         var result = GitDiffService.ParseDiffs("1\t2\told.cs\tnew.cs\n", "R100\told.cs\tnew.cs\n", string.Empty);
@@ -608,7 +729,7 @@ public sealed class GitDiffServiceTests
         }
     }
 
-    private static async Task RunGitAsync(string workingDirectory, params string[] arguments)
+    private static async Task<string> RunGitAsync(string workingDirectory, params string[] arguments)
     {
         using var process = new Process();
         process.StartInfo = new ProcessStartInfo("git")
@@ -628,6 +749,31 @@ public sealed class GitDiffServiceTests
         await process.WaitForExitAsync();
 
         process.ExitCode.ShouldBe(0, $"git {string.Join(' ', arguments)} failed. stdout: {standardOutput} stderr: {standardError}");
+        return standardOutput;
+    }
+
+    private static async Task InitRepoOnMainAsync(string repoRoot)
+    {
+        await RunGitAsync(repoRoot, "init", "-b", "main");
+        await File.WriteAllTextAsync(Path.Combine(repoRoot, "readme.txt"), "readme\n");
+        await CommitAllAsync(repoRoot, "initial");
+    }
+
+    private static async Task CommitAllAsync(string repoRoot, string message)
+    {
+        await RunGitAsync(repoRoot, "add", ".");
+        await RunGitAsync(repoRoot, "-c", "user.name=Weave Test", "-c", "user.email=weave@example.invalid", "commit", "-m", message);
+    }
+
+    private static async Task<string> GitOutputAsync(string workingDirectory, params string[] arguments) =>
+        (await RunGitAsync(workingDirectory, arguments)).Trim();
+
+    // Git writes some objects read-only, which Directory.Delete refuses on Windows.
+    private static void DeleteRepo(string repoRoot)
+    {
+        foreach (var file in Directory.EnumerateFiles(repoRoot, "*", SearchOption.AllDirectories))
+            File.SetAttributes(file, FileAttributes.Normal);
+        Directory.Delete(repoRoot, recursive: true);
     }
 
     private static string CreateTempDirectory()
