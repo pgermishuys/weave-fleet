@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { ExternalLink, RotateCw, TriangleAlert } from "lucide-vue-next";
+import { appendDraftText } from "@/composables/use-draft-state";
 import { apiUrl } from "@/lib/api-client";
+import { dispatchCommandEvent } from "@/lib/command-events";
+import { keepPageState, pageStateMessage, readPageMessage } from "@/lib/page-bridge";
 import { pageAddress, type ShownPage } from "@/lib/server-canvas";
 
 /**
@@ -9,13 +12,16 @@ import { pageAddress, type ShownPage } from "@/lib/server-canvas";
  * reloads the frame, so the user sees each edit without doing anything.
  *
  * The frame's sandbox matches the one Fleet serves the page with: scripts run, but the page gets an opaque
- * origin, so it can't reach Fleet's cookies or API.
+ * origin, so it can't reach Fleet's cookies or API. Its one way out is a few postMessages to this canvas
+ * (lib/page-bridge): text for the composer, which the user then sends, and state that Fleet keeps for the page.
  */
 const props = defineProps<{
+  sessionId: string;
   page: ShownPage & { title: string };
 }>();
 
 const reloads = ref(0);
+const frame = ref<HTMLIFrameElement | null>(null);
 
 const address = computed(() => apiUrl(pageAddress(props.page)));
 const frameKey = computed(() => `${props.page.pageId}:${props.page.shownAt}:${reloads.value}`);
@@ -24,6 +30,30 @@ const fileName = computed(() => props.page.source.split(/[\\/]/).pop() || props.
 function openOutside(): void {
   window.open(address.value, "_blank", "noopener");
 }
+
+function onMessage(event: MessageEvent): void {
+  // Only this canvas's own frame, which the sandbox keeps at an opaque origin wherever it navigates.
+  const page = frame.value?.contentWindow;
+  if (!page || event.source !== page || event.origin !== "null") return;
+  const message = readPageMessage(event.data);
+  if (!message) return;
+
+  switch (message.type) {
+    case "fleet:page-hello":
+      page.postMessage(pageStateMessage(props.page.pageId), "*");
+      return;
+    case "fleet:page-state":
+      keepPageState(props.page.pageId, message.state);
+      return;
+    case "fleet:page-reply":
+      appendDraftText(props.sessionId, message.text);
+      dispatchCommandEvent("weave:command-focus-prompt", { sessionId: props.sessionId });
+      return;
+  }
+}
+
+onMounted(() => window.addEventListener("message", onMessage));
+onBeforeUnmount(() => window.removeEventListener("message", onMessage));
 </script>
 
 <template>
@@ -75,6 +105,7 @@ function openOutside(): void {
 
     <div class="page-canvas__page">
       <iframe
+        ref="frame"
         :key="frameKey"
         :src="address"
         :title="page.title"
