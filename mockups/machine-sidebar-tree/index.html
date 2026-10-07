@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Other machines in the sidebar</title>
+<style>
+  /* Tokens copied from client/src/assets/main.css (dark). */
+  :root {
+    --rail-bg: #0d0d10;
+    --panel-bg: #141418;
+    --card-bg: #1b1b20;
+    --main-bg: #0d0d10;
+    --border: rgba(255, 255, 255, 0.075);
+    --text: #e8e8ec;
+    --muted: #8e8e9a;
+    --coral: #D95A3A;
+    --accent: #6366f1;
+    --accent-dim: rgba(99, 102, 241, 0.15);
+    --running: #22c55e;
+    --idle: #f59e0b;
+    --error: #ef4444;
+    --radius-btn: 8px;
+    --radius-panel: 12px;
+    --transition: 150ms ease-out;
+    --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
+    --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--main-bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 13px;
+  }
+  .page { max-width: 1240px; margin: 0 auto; padding: 24px 20px 48px; }
+  h1 { font-size: 19px; margin: 0 0 6px; font-weight: 650; }
+  .lede { color: var(--muted); margin: 0 0 18px; max-width: 760px; line-height: 1.5; }
+
+  .tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+  .tab {
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    border-radius: 999px;
+    padding: 6px 13px;
+    font: inherit;
+    cursor: pointer;
+  }
+  .tab:hover { color: var(--text); }
+  .tab[aria-selected="true"] { background: var(--accent-dim); color: var(--text); border-color: transparent; }
+
+  .stage { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 18px; align-items: start; }
+
+  /* The app frame: rail, session list, conversation. */
+  .app {
+    position: relative;
+    display: grid;
+    grid-template-columns: 44px 276px minmax(0, 1fr);
+    height: 640px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-panel);
+    overflow: hidden;
+    background: var(--rail-bg);
+  }
+  .rail { display: flex; flex-direction: column; align-items: center; gap: 10px; padding-top: 12px; }
+  .rail i { width: 22px; height: 22px; border-radius: 6px; background: color-mix(in srgb, var(--text) 8%, transparent); }
+  .rail i:first-child { background: var(--accent-dim); }
+  .sidebar {
+    background: var(--panel-bg);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .sidebar-top { padding: 10px 10px 6px; display: flex; flex-direction: column; gap: 8px; }
+  .new-btn {
+    border: 1px solid var(--border); border-radius: var(--radius-btn); padding: 6px 10px; color: var(--text);
+    font-size: 12.5px; background: color-mix(in srgb, var(--text) 4%, transparent);
+  }
+  .filter {
+    border: 1px solid var(--border); border-radius: var(--radius-btn); padding: 6px 10px; color: var(--muted);
+    font-size: 12px;
+  }
+  .list { flex: 1; overflow-y: auto; padding: 0 6px 16px; scrollbar-width: thin; }
+
+  /* MachineHeader.vue */
+  .machine-header {
+    width: 100%; min-height: 28px; display: flex; align-items: center; gap: 7px; margin-top: 6px;
+    padding: 0 10px 0 4px; border: 0; border-radius: var(--radius-btn); background: transparent; color: var(--text);
+    text-align: left; font: inherit; cursor: pointer;
+  }
+  .machine-header:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+  .machine-header:hover .machine-name { color: var(--coral); }
+  .chev { width: 12px; height: 12px; flex-shrink: 0; color: color-mix(in srgb, var(--muted) 70%, transparent); transition: transform var(--transition); }
+  .collapsed > .chev { transform: rotate(-90deg); }
+  .machine-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--running); flex-shrink: 0; }
+  .machine-name {
+    font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em;
+    transition: color var(--transition); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .live-tag {
+    flex-shrink: 0; padding: 1px 5px; border-radius: 4px; background: color-mix(in srgb, var(--coral) 14%, transparent);
+    color: var(--coral); font-family: var(--font-mono); font-size: 9.5px; font-weight: 700; letter-spacing: 0.09em;
+    text-transform: uppercase;
+  }
+  .live-tag.arrive { animation: arrive 600ms ease-out; }
+  @keyframes arrive { from { transform: scale(1.35); opacity: 0; } to { transform: none; opacity: 1; } }
+  .machine-note { margin-left: auto; font-size: 11px; color: color-mix(in srgb, var(--muted) 80%, transparent); font-variant-numeric: tabular-nums; }
+
+  /* ProjectGroup.vue */
+  .project { margin-top: 4px; }
+  .project + .project { margin-top: 10px; }
+  .project-header {
+    width: 100%; min-height: 26px; display: flex; align-items: center; gap: 6px; padding: 0 10px 0 6px;
+    border: 0; border-radius: var(--radius-btn); background: transparent; color: var(--muted); font: inherit;
+    cursor: pointer; text-align: left;
+  }
+  .project-header:hover { background: color-mix(in srgb, var(--text) 5%, transparent); color: var(--text); }
+  .project-header .chev { width: 13px; height: 13px; }
+  .project-title { flex: 1; font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .project-count { font-size: 12px; font-weight: 500; color: color-mix(in srgb, var(--muted) 70%, transparent); }
+  .tree-indent { padding-left: 0; }
+
+  /* SessionItem.vue / MachineSessionsGroup.vue rows */
+  .row {
+    position: relative;
+    width: 100%; min-width: 0; min-height: 30px; display: flex; align-items: center; gap: 9px; padding: 0 10px;
+    border: 0; border-radius: var(--radius-btn); background: transparent; font: inherit; text-align: left; cursor: pointer;
+    color: color-mix(in srgb, var(--text) 86%, transparent);
+    transition: background var(--transition);
+  }
+  .row:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+  .row.selected { background: var(--accent-dim); color: var(--text); }
+  .row.dim { color: color-mix(in srgb, var(--text) 52%, transparent); }
+  .slot { width: 10px; flex-shrink: 0; display: grid; place-items: center; }
+  .working { width: 7px; height: 7px; border-radius: 50%; background: var(--running); animation: pulse 1.6s ease-in-out infinite; }
+  .waiting { width: 7px; height: 7px; border-radius: 50%; background: var(--idle); }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+  .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+  .meta { flex-shrink: 0; font-size: 11px; color: color-mix(in srgb, var(--muted) 85%, transparent); font-variant-numeric: tabular-nums; }
+  .kind { flex-shrink: 0; font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: color-mix(in srgb, var(--muted) 85%, transparent); }
+  .children { margin: 1px 0 2px 13px; padding-left: 10px; border-left: 1px solid var(--border); }
+  .children .row { min-height: 28px; }
+  .flat-child { padding-left: 28px; }
+  .row .opens {
+    display: none; position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    font-size: 10.5px; color: var(--coral); background: var(--panel-bg); padding: 1px 4px; border-radius: 4px;
+  }
+  .remote .row:hover .opens { display: block; }
+  .remote .row:hover .meta, .remote .row:hover .kind { visibility: hidden; }
+
+  /* Conversation stub */
+  .convo { background: var(--main-bg); display: flex; flex-direction: column; min-width: 0; }
+  .convo-head {
+    height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--border);
+    font-weight: 600; font-size: 13px; min-width: 0;
+  }
+  .convo-head .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip {
+    flex-shrink: 0; font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; color: var(--coral);
+    border: 1px solid color-mix(in srgb, var(--coral) 35%, transparent); border-radius: 999px; padding: 2px 8px;
+  }
+  .convo-body { padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+  .bubble { align-self: flex-end; background: var(--card-bg); border-radius: 12px; padding: 9px 12px; max-width: 80%; line-height: 1.45; }
+  .line { height: 9px; border-radius: 5px; background: color-mix(in srgb, var(--text) 9%, transparent); }
+
+  /* The reload */
+  .reload {
+    position: absolute; inset: 0; background: var(--main-bg); opacity: 0; pointer-events: none;
+    display: grid; place-items: center; color: var(--muted); font-size: 12px; transition: opacity 90ms;
+  }
+  .reload.on { opacity: 1; }
+  .toast {
+    position: absolute; left: calc(320px + (100% - 320px) / 2); bottom: 14px; transform: translateX(-50%); background: var(--card-bg);
+    border: 1px solid var(--border); border-radius: 8px; padding: 6px 11px; font-size: 11.5px; color: var(--muted);
+    opacity: 0; transition: opacity 200ms; pointer-events: none; white-space: nowrap;
+  }
+  .toast.on { opacity: 1; }
+
+  /* Notes column */
+  .notes { display: flex; flex-direction: column; gap: 12px; }
+  .card { border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--panel-bg); padding: 14px 15px; }
+  .card h2 { font-size: 13px; margin: 0 0 8px; font-weight: 650; }
+  .card p, .card li { color: color-mix(in srgb, var(--text) 82%, transparent); line-height: 1.5; margin: 0; }
+  .card ul, .card ol { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+  .card .try { color: var(--coral); font-weight: 600; }
+  .bad { color: #f0a08c; }
+  .good { color: #86e0a6; }
+  code { font-family: var(--font-mono); font-size: 11.5px; background: color-mix(in srgb, var(--text) 7%, transparent); padding: 0 4px; border-radius: 4px; }
+
+  .why { margin-top: 26px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  .why .card h2 { display: flex; gap: 8px; align-items: baseline; }
+  .tagline { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; }
+  .tagline.choice { background: rgba(34, 197, 94, 0.14); color: #86e0a6; }
+  .tagline.real { background: rgba(245, 158, 11, 0.14); color: #f5c06b; }
+
+  @media (max-width: 980px) {
+    .stage { grid-template-columns: 1fr; }
+    .why { grid-template-columns: 1fr; }
+    .app { grid-template-columns: 276px minmax(0, 1fr); }
+    .rail { display: none; }
+    .toast { left: calc(276px + (100% - 276px) / 2); }
+  }
+  @media (max-width: 620px) {
+    .app { grid-template-columns: minmax(0, 1fr); }
+    .convo { display: none; }
+    .toast { left: 50%; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Other machines in the sidebar</h1>
+  <p class="lede">
+    Click a session under <b>aurora</b> in each version and watch the list. The sessions are the ones from your
+    screenshot; the projects they sit in are made up.
+  </p>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" data-mode="today" aria-selected="true">Today</button>
+    <button class="tab" role="tab" data-mode="step1" aria-selected="false">Step 1 · same tree, stays put</button>
+    <button class="tab" role="tab" data-mode="step2" aria-selected="false">Step 2 · no reload</button>
+  </div>
+
+  <div class="stage">
+    <div class="app" id="app">
+      <div class="rail"><i></i><i></i><i></i><i></i></div>
+      <aside class="sidebar">
+        <div class="sidebar-top">
+          <div class="new-btn">+ New session</div>
+          <div class="filter">Filter sessions</div>
+        </div>
+        <div class="list" id="list"></div>
+      </aside>
+      <main class="convo">
+        <div class="convo-head"><span class="t" id="convo-title"></span><span class="chip" id="convo-chip"></span></div>
+        <div class="convo-body">
+          <div class="bubble" id="convo-prompt"></div>
+          <div class="line" style="width: 92%"></div>
+          <div class="line" style="width: 78%"></div>
+          <div class="line" style="width: 85%"></div>
+          <div class="line" style="width: 40%"></div>
+        </div>
+      </main>
+      <div class="reload" id="reload">Reloading…</div>
+      <div class="toast" id="toast"></div>
+    </div>
+
+    <div class="notes" id="notes"></div>
+  </div>
+
+  <div class="why">
+    <div class="card">
+      <h2>Machine jumps to the top <span class="tagline choice">Our choice</span></h2>
+      <p>
+        The sidebar puts the live machine first. I made that call in #326 and offered home-first as the alternative.
+        Nothing technical depends on it. A fixed order (home, then machines in the order you added them) is a
+        one-line change, and the <span class="live-tag" style="font-size:9px">Live</span> tag moves instead of the
+        machine.
+      </p>
+    </div>
+    <div class="card">
+      <h2>No projects on other machines <span class="tagline choice">Our choice</span></h2>
+      <p>
+        Other machines were built as a light "last list we polled" (#320), drawn by their own small component.
+        The list Fleet already fetches from them names each session's project (<code>projectId</code>,
+        <code>projectName</code>); the sidebar ignores it, and the offline cache strips it. To show the full tree we
+        also fetch that machine's <code>/api/projects</code> (for order and empty projects) and draw it with the same
+        project groups the live machine uses.
+      </p>
+    </div>
+    <div class="card">
+      <h2>Opening one reloads the page <span class="tagline real">Real constraint</span></h2>
+      <p>
+        The app works against one machine at a time. The API client, the live event connection, and the stores for
+        sessions, projects, workflows, running work and harnesses all point at that one machine. Switching reloads
+        the page so no store can mix two machines' data. Removing the reload means letting the session you open
+        talk to its own machine while the rest of the page stays put. That's Step 2, and it's the big piece.
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+const CHEV = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+
+// s(id, title, age, opts)
+const s = (id, title, age, o = {}) => ({ id, title, age, ...o });
+
+const MACHINES = {
+  home: {
+    name: "workstation",
+    projects: [
+      { id: "fleet", name: "weave-fleet", sessions: [
+        s("h1", "Machine sidebar: show other machines' projects", "now", { status: "working" }),
+        s("h2", "Changes tab doesn't always show changes", "2h"),
+        s("h3", "Customer ran into a locked database", "3h"),
+        s("h4", "Release v0.47.0", "5h"),
+        s("h5", "Background strip polish", "1d"),
+        s("h6", "Agents tab and lineage", "2d", { dim: true }),
+      ]},
+      { id: "weave", name: "weave", sessions: [
+        s("h7", "Variant none drops the model", "1d"),
+        s("h8", "Adapter 0.2.0-next.6", "2d", { dim: true }),
+        s("h9", "Docs: plugin config hook", "3d", { dim: true }),
+      ]},
+      { id: "scratch", name: "Scratch", sessions: [
+        s("h10", "Try the OpenCode 2 browser plugin", "4d", { dim: true }),
+        s("h11", "Quick regex question", "5d", { dim: true }),
+      ]},
+    ],
+  },
+  aurora: {
+    name: "aurora",
+    projects: [
+      { id: "pinned", name: "Pinned", pinned: true, sessions: [
+        s("a1", "I have a question related to the release notes for 7.4", "1h", { status: "waiting" }),
+      ]},
+      { id: "is", name: "IdentityServer", sessions: [
+        s("a2", "Count Users across Spaces", "1h", { children: [s("a3", "Spike: UM licensed user count across Spaces", "", { status: "working" })] }),
+        s("a8", "Plan: Expired operational data must be cleaned up", "5h"),
+        s("a9", "Review: Fix C01 conformance reporting for external clients", "5h"),
+        s("a10", "Review: Expose passkey attestation format validation", "5h"),
+        s("a11", "Review: Expose passkey signature verifier extension", "5h"),
+        s("a12", "Review: duende-is template refresh", "5h"),
+        s("a14", "Review: 3861 - Bind authentication cookies and state", "5h", { children: [s("a15", "Spike: isolate protected state between schemes", "")] }),
+        s("a17", "Dont index login.duendesoftware.com", "22h"),
+      ]},
+      { id: "bff", name: "BFF", sessions: [
+        s("a4", "Looking at this (https://github.com/DuendeSoftware/issues/412)", "1h", { children: [
+          s("a5", "Verify BFF 4.3.1 release build", ""),
+          s("a6", "Verify BFF 4.2.1 release build", ""),
+          s("a7", "Verify BFF 4.1.3 release build", ""),
+        ]}),
+        s("a13", "Review: BFF: Warn when a YARP route forwards cookies", "5h"),
+        s("a16", "Can we review the comments from github copilot", "8h"),
+      ]},
+      { id: "products", name: "Products", sessions: [
+        s("a18", "End to end Performance Benchmark", "1d", { dim: true }),
+        s("a19", "1116 - Unlimited SKU Addons", "2d", { dim: true }),
+        s("a20", "Visual Explainer", "2d", { dim: true }),
+      ]},
+    ],
+  },
+};
+
+// Today's flat list for a machine that isn't live: newest first, children right under their parent, no projects.
+const FLAT_ORDER = {
+  aurora: ["a1", "a2", "a4", "a8", "a9", "a10", "a11", "a12", "a13", "a14", "a16", "a17", "a18", "a19", "a20"],
+  home: ["h1", "h2", "h3", "h4", "h7", "h5", "h6", "h8", "h9", "h10", "h11"],
+};
+
+const NOTES = {
+  today: `
+    <div class="card">
+      <h2>Try it</h2>
+      <p>Scroll down to <span class="try">aurora</span> and click a session.</p>
+    </div>
+    <div class="card">
+      <h2>What happens</h2>
+      <ul>
+        <li class="bad">aurora is a flat list: no projects, no Pinned group.</li>
+        <li class="bad">The page reloads, aurora jumps to the top, and your machine drops to the bottom as a flat list.</li>
+        <li class="bad">The list scrolls back to the top, so the row you clicked is somewhere else.</li>
+      </ul>
+    </div>`,
+  step1: `
+    <div class="card">
+      <h2>Try it</h2>
+      <p>Click a session under <span class="try">aurora</span>, then one under <span class="try">workstation</span>.</p>
+    </div>
+    <div class="card">
+      <h2>What changes</h2>
+      <ul>
+        <li class="good">Every machine shows the same tree: Pinned, projects, sessions they started.</li>
+        <li class="good">Machines keep their place. Only the <b>Live</b> tag moves.</li>
+        <li class="good">The list keeps its scroll and folds across the switch, so the row you clicked stays under your pointer.</li>
+        <li>The page still reloads (about 0.3 s). Because the list comes back the same, it reads as a blink, not a jump.</li>
+        <li>Rows on a machine that isn't live open the session. Rename, archive, move and drag work once it's live, as today.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h2>Size</h2>
+      <p>Small, client only. One extra request per machine when we poll it (its projects). Fold keys are already per machine.</p>
+    </div>`,
+  step2: `
+    <div class="card">
+      <h2>Try it</h2>
+      <p>Click between <span class="try">aurora</span> and <span class="try">workstation</span> sessions.</p>
+    </div>
+    <div class="card">
+      <h2>What changes on top of Step 1</h2>
+      <ul>
+        <li class="good">No reload. The conversation swaps like any other session; the list doesn't blink.</li>
+        <li class="good">Each machine's statuses update live instead of every 15 s.</li>
+        <li class="good">Rename, archive and pin work on any machine's rows, sent to that machine.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h2>Size</h2>
+      <p>Large. The open session (conversation, Changes, files, terminal) has to ask the session's machine, not "the live one". We'd keep one event connection per machine. The server side already allows this; the work is in the client's shared stores.</p>
+    </div>`,
+};
+
+let mode = "today";
+let live = "home";
+let selected = "h1";
+const folded = new Set();
+
+function find(id) {
+  for (const [key, m] of Object.entries(MACHINES)) {
+    for (const p of m.projects) {
+      for (const x of p.sessions) {
+        if (x.id === id) return { machine: key, session: x };
+        for (const c of x.children ?? []) if (c.id === id) return { machine: key, session: c, parent: x };
+      }
+    }
+  }
+}
+
+function glyph(x) {
+  if (x.status === "working") return '<span class="slot"><span class="working" title="Working"></span></span>';
+  if (x.status === "waiting") return '<span class="slot"><span class="waiting" title="Needs you"></span></span>';
+  return '<span class="slot"></span>';
+}
+
+function row(machineKey, x, { kind = null, extraClass = "" } = {}) {
+  const remote = machineKey !== live;
+  const right = kind ? `<span class="kind">${kind}</span>` : `<span class="meta">${x.age}</span>`;
+  const opens = remote && mode !== "step2" ? `<span class="opens">Open on ${MACHINES[machineKey].name}</span>` : "";
+  return `<button type="button" class="row ${x.dim ? "dim" : ""} ${x.id === selected ? "selected" : ""} ${extraClass}"
+      data-id="${x.id}" title="${x.title}">${glyph(x)}<span class="title">${x.title}</span>${right}${opens}</button>`;
+}
+
+function count(m) {
+  return m.projects.reduce((n, p) => n + p.sessions.length, 0);
+}
+
+function machineHeader(key, { liveTag }) {
+  const m = MACHINES[key];
+  const fold = `machine:${key}`;
+  const arrive = liveTag && justSwitched ? "arrive" : "";
+  return `<button type="button" class="machine-header ${folded.has(fold) ? "collapsed" : ""}" data-fold="${fold}">
+    ${CHEV}<span class="machine-dot"></span><span class="machine-name">${m.name}</span>
+    ${liveTag ? `<span class="live-tag ${arrive}">Live</span>` : ""}
+    <span class="machine-note">${count(m)}</span></button>`;
+}
+
+function tree(key) {
+  const m = MACHINES[key];
+  return m.projects.map((p) => {
+    const fold = `project:${key}:${p.id}`;
+    const isFolded = folded.has(fold);
+    const pin = p.pinned ? '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" style="margin-right:5px;vertical-align:-1px"><path d="M12 17v5M9 10.76V6h6v4.76l2 3.24H7z"/></svg>' : "";
+    const rows = isFolded ? "" : p.sessions.map((x) => {
+      const kids = x.children?.length
+        ? `<div class="children">${x.children.map((c) => row(key, c, { kind: "Started" })).join("")}</div>`
+        : "";
+      return row(key, x) + kids;
+    }).join("");
+    return `<section class="project">
+      <button type="button" class="project-header ${isFolded ? "collapsed" : ""}" data-fold="${fold}">
+        ${CHEV}<span class="project-title">${pin}${p.name}</span><span class="project-count">${p.sessions.length}</span>
+      </button>${rows}</section>`;
+  }).join("");
+}
+
+function flat(key) {
+  return FLAT_ORDER[key].map((id) => {
+    const { session: x } = find(id);
+    const kids = (x.children ?? []).map((c) => row(key, c, { kind: "Started", extraClass: "flat-child" })).join("");
+    return row(key, x) + kids;
+  }).join("");
+}
+
+function machineBlock(key) {
+  const fold = `machine:${key}`;
+  const isLive = key === live;
+  const body = folded.has(fold) ? "" : (mode === "today" && !isLive ? flat(key) : tree(key));
+  return `<div class="machine ${isLive ? "" : "remote"}" data-machine="${key}">
+    ${machineHeader(key, { liveTag: isLive })}<div class="tree-indent">${body}</div></div>`;
+}
+
+let justSwitched = false;
+
+function render() {
+  const order = mode === "today"
+    ? [live, ...Object.keys(MACHINES).filter((k) => k !== live)]
+    : Object.keys(MACHINES); // home, then machines in the order they were added
+  document.getElementById("list").innerHTML = order.map(machineBlock).join("");
+  const { machine, session } = find(selected);
+  document.getElementById("convo-title").textContent = session.title;
+  document.getElementById("convo-chip").textContent = MACHINES[machine].name;
+  document.getElementById("convo-prompt").textContent = session.title;
+  document.getElementById("notes").innerHTML = NOTES[mode];
+  justSwitched = false;
+}
+
+function toast(text) {
+  const el = document.getElementById("toast");
+  el.textContent = text;
+  el.classList.add("on");
+  clearTimeout(toast.t);
+  toast.t = setTimeout(() => el.classList.remove("on"), 1800);
+}
+
+function open(id) {
+  const { machine } = find(id);
+  const list = document.getElementById("list");
+  if (machine === live || mode === "step2") {
+    if (machine !== live) justSwitched = true;
+    live = machine;
+    selected = id;
+    const top = list.scrollTop;
+    render();
+    list.scrollTop = top;
+    return;
+  }
+  // Switching machines reloads the page.
+  const top = list.scrollTop;
+  const reload = document.getElementById("reload");
+  reload.classList.add("on");
+  setTimeout(() => {
+    live = machine;
+    selected = id;
+    justSwitched = true;
+    render();
+    list.scrollTop = mode === "today" ? 0 : top;
+    reload.classList.remove("on");
+    toast(mode === "today" ? "Page reloaded · list back at the top" : "Page reloaded · list kept its place");
+  }, mode === "today" ? 380 : 260);
+}
+
+document.getElementById("list").addEventListener("click", (event) => {
+  const foldBtn = event.target.closest("[data-fold]");
+  if (foldBtn) {
+    const key = foldBtn.dataset.fold;
+    folded.has(key) ? folded.delete(key) : folded.add(key);
+    const list = document.getElementById("list");
+    const top = list.scrollTop;
+    render();
+    list.scrollTop = top;
+    return;
+  }
+  const r = event.target.closest(".row");
+  if (r) open(r.dataset.id);
+});
+
+document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => {
+  document.querySelectorAll(".tab").forEach((t) => t.setAttribute("aria-selected", String(t === tab)));
+  mode = tab.dataset.mode;
+  document.getElementById("toast").classList.remove("on");
+  live = "home";
+  selected = "h1";
+  folded.clear();
+  render();
+  document.getElementById("list").scrollTop = 0;
+}));
+
+render();
+</script>
+</body>
+</html>
