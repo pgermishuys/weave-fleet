@@ -590,11 +590,12 @@ internal sealed record OpenCode2ErrorPayload
     public required OpenCode2ErrorInfo Error { get; init; }
 }
 
-/// <summary>A failure as Fleet's error reader takes it: a name and a message.</summary>
+/// <summary>A failure as Fleet's error reader takes it: a name, a message, and the provider's HTTP status when V2 kept it.</summary>
 internal sealed record OpenCode2ErrorInfo
 {
     public required string Name { get; init; }
     public required string Message { get; init; }
+    public int? Status { get; init; }
 }
 
 internal sealed record OpenCode2MessageUpdatedPayload

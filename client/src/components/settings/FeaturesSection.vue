@@ -3,6 +3,7 @@ import { computed, shallowRef } from "vue";
 import { LoaderCircle } from "lucide-vue-next";
 import { useBoardFeature } from "@/composables/use-board-feature";
 import { SESSION_RECAP_PREFERENCE_KEY } from "@/composables/use-session-recap";
+import { RETRY_AFTER_LIMITS_PREFERENCE_KEY } from "@/composables/use-session-retry";
 import { SESSION_MESSAGES_PREFERENCE_KEY } from "@/lib/session-messages";
 import {
   DESKTOP_NOTIFICATIONS_PREFERENCE_KEY,
@@ -29,6 +30,21 @@ async function toggleSessionRecap(): Promise<void> {
     await preferencesStore.set(SESSION_RECAP_PREFERENCE_KEY, isSessionRecapEnabled.value ? "false" : "true");
   } finally {
     isSavingSessionRecap.value = false;
+  }
+}
+
+// On unless turned off: a turn a model provider's limit stopped carries on by itself.
+const isRetryAfterLimitsEnabled = computed(
+  () => preferencesStore.get(RETRY_AFTER_LIMITS_PREFERENCE_KEY, "true") !== "false",
+);
+const isSavingRetryAfterLimits = shallowRef(false);
+
+async function toggleRetryAfterLimits(): Promise<void> {
+  isSavingRetryAfterLimits.value = true;
+  try {
+    await preferencesStore.set(RETRY_AFTER_LIMITS_PREFERENCE_KEY, isRetryAfterLimitsEnabled.value ? "false" : "true");
+  } finally {
+    isSavingRetryAfterLimits.value = false;
   }
 }
 
@@ -179,6 +195,43 @@ async function toggleBoardFeature(): Promise<void> {
           <span
             class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
             :class="isSessionRecapEnabled ? 'translate-x-5' : 'translate-x-0'"
+          />
+        </button>
+      </div>
+    </div>
+
+    <div class="mt-3 flex items-start justify-between gap-4 rounded-card border border-border bg-main-bg p-4">
+      <div>
+        <p class="text-sm font-medium text-text">
+          Try again when a limit resets
+        </p>
+        <p class="mt-1 text-xs text-muted">
+          When a model provider's rate limit or usage limit stops a turn, send "Continue where you left off."
+          when the limit resets, or after a wait when the provider doesn't say. What you queued waits for it.
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <LoaderCircle
+          v-if="isSavingRetryAfterLimits"
+          :size="16"
+          class="animate-spin text-muted"
+          aria-hidden="true"
+        />
+        <button
+          type="button"
+          role="switch"
+          :aria-checked="isRetryAfterLimitsEnabled"
+          :disabled="preferencesStore.isLoading || isSavingRetryAfterLimits"
+          aria-label="Try again when a limit resets"
+          data-testid="retry-after-limits-switch"
+          class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-main-bg disabled:cursor-not-allowed disabled:opacity-60"
+          :class="isRetryAfterLimitsEnabled ? 'bg-accent' : 'bg-border'"
+          @click="toggleRetryAfterLimits"
+        >
+          <span
+            class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+            :class="isRetryAfterLimitsEnabled ? 'translate-x-5' : 'translate-x-0'"
           />
         </button>
       </div>

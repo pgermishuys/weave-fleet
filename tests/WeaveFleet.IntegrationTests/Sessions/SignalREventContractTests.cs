@@ -272,6 +272,36 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task A_turn_a_usage_limit_stopped_reaches_the_session_with_its_reset_and_when_Fleet_tries_again()
+    {
+        var sessionId = await CreateSessionAsync();
+        await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
+        await WaitForBroadcasterSubscriberAsync();
+
+        // OpenCode's shape: the provider's status and words under data.
+        var harness = await HarnessOfAsync(sessionId);
+        await harness.PushEventAsync(Work(EventTypes.SessionError, sessionId, """
+            {"error":{"name":"APIError","data":{"message":"You've hit your session limit · resets 3:43am (UTC)","statusCode":429,"isRetryable":false}}}
+            """));
+
+        var failed = await WaitForWorkEventAsync("turn.failed", $"session:{sessionId}");
+        var error = failed.Data.GetProperty("properties").GetProperty("error");
+        error.GetProperty("kind").GetString().ShouldBe(TurnErrorKinds.UsageLimit);
+        var retryAt = DateTimeOffset.Parse(error.GetProperty("retryAt").GetString()!, System.Globalization.CultureInfo.InvariantCulture);
+        retryAt.ToUniversalTime().TimeOfDay.ShouldBe(new TimeSpan(3, 43, 0));
+
+        // Fleet schedules the retry and says when, the shape the failure card reads.
+        var scheduled = await WaitForWorkEventAsync("session.retry", $"session:{sessionId}");
+        var retry = scheduled.Data.GetProperty("properties");
+        retry.GetProperty("sessionId").GetString().ShouldBe(sessionId);
+        retry.GetProperty("retry").GetProperty("kind").GetString().ShouldBe(TurnErrorKinds.UsageLimit);
+        retry.GetProperty("retry").GetProperty("attempt").GetInt32().ShouldBe(1);
+        retry.GetProperty("retry").GetProperty("providerSaid").GetBoolean().ShouldBeTrue();
+        DateTimeOffset.Parse(retry.GetProperty("retry").GetProperty("dueAt").GetString()!, System.Globalization.CultureInfo.InvariantCulture)
+            .ShouldBe(retryAt + TurnRetryPolicy.AfterReset);
+    }
+
+    [Fact]
     public async Task Hub_sends_message_part_delta_with_correct_shape()
     {
         var sessionId = await CreateSessionAsync();

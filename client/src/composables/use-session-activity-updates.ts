@@ -2,6 +2,7 @@ import { onMounted, onUnmounted } from "vue"
 import { onGlobalEvent } from "@/composables/use-signalr-socket"
 import { useSessionsStore } from "@/stores/sessions"
 import type { DomainEvent } from "@/lib/domain-events"
+import { toScheduledRetry } from "@/lib/turn-retry"
 
 /**
  * Maps activityStatus to sessionStatus following the server's DeriveSessionStatus logic.
@@ -51,6 +52,12 @@ export function useSessionActivityUpdates(): void {
 
   onMounted(() => {
     unsubscribe = onGlobalEvent("sessions", (event: DomainEvent) => {
+      // When Fleet tries a turn a limit stopped again: the session's row says so.
+      if (event.type === "session.retry") {
+        sessionsStore.patchSession(event.payload.sessionId, { scheduledRetry: toScheduledRetry(event.payload.retry) })
+        return
+      }
+
       if (event.type === "activity_status") {
         const payload = event.payload as {
           sessionId?: string

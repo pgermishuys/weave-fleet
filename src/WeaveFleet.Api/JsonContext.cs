@@ -272,6 +272,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(SideMinimizedApiRequest))]
 [JsonSerializable(typeof(QueuePromptApiRequest))]
 [JsonSerializable(typeof(WeaveFleet.Application.Services.QueuedPromptView))]
+[JsonSerializable(typeof(WeaveFleet.Application.Services.ScheduledRetryView))]
 [JsonSerializable(typeof(List<WeaveFleet.Application.Services.QueuedPromptView>))]
 [JsonSerializable(typeof(SideSeenApiRequest))]
 [JsonSerializable(typeof(UndoableSideConversationResponse))]

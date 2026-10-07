@@ -162,6 +162,13 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     private Turn? _turn;
     private ITimer? _idleTimer;
     private volatile bool _aborting;
+
+    // When the limit that turned a claude.ai login away resets (rate_limit_event); cleared once a window allows again.
+    private DateTimeOffset? _rejectedResetAt;
+
+    // The message Claude Code wrote itself when the turn's model call failed, held back until the result says whether a
+    // limit ended the turn: then the failure card says it instead.
+    private ClaudeCodeAssistantMessage? _apiErrorMessage;
     private bool _disposed;
 
     /// <summary>Initialises the instance with all required dependencies.</summary>
@@ -1240,6 +1247,15 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                     if (conversation is not null)
                         StreamPart(conversation, streamed);
                 }
+                else if (msg is ClaudeCodeRateLimitEvent { RateLimitInfo: { } rateLimit })
+                {
+                    ObserveRateLimit(rateLimit);
+                }
+                else if (msg is ClaudeCodeAssistantMessage { ParentToolUseId: null, IsApiErrorMessage: true, Error: "rate_limit" or "overloaded" or "server_error" } apiErrorMsg)
+                {
+                    JoinTurn(processManager);
+                    _apiErrorMessage = apiErrorMsg;
+                }
                 else if (msg is ClaudeCodeAssistantMessage assistantMsg)
                 {
                     ObserveToolCalls(assistantMsg);
@@ -1316,6 +1332,19 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         {
             await OnProcessEndedAsync(processManager, children).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// A claude.ai login's usage limits changed. A window that turns requests away is remembered with its reset, so a
+    /// turn it stops says when Fleet can try again; a window that allows again clears it.
+    /// </summary>
+    private void ObserveRateLimit(ClaudeCodeRateLimitInfo info)
+    {
+        var overageAllowed = info.OverageStatus is "allowed" or "allowed_warning" || info.IsUsingOverage == true;
+        if (info.Status == "rejected" && !overageAllowed)
+            _rejectedResetAt = info.ResetsAt is > 0 and < 253_402_300_799 ? DateTimeOffset.FromUnixTimeSeconds(info.ResetsAt.Value) : null;
+        else if (info.Status is "allowed" or "allowed_warning")
+            _rejectedResetAt = null;
     }
 
     /// <summary>Remembers the tool calls a line makes: which start background work, and in whose conversation.</summary>
@@ -1530,16 +1559,39 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             _ = PersistResumeTokenAsync(result.SessionId);
         }
 
+        var apiErrorMessage = _apiErrorMessage;
+        _apiErrorMessage = null;
+        var limitFailure = _aborting
+            ? null
+            : ClaudeCodeMapper.ReadLimitFailure(
+                result,
+                apiErrorMessage?.Error,
+                apiErrorMessage is null ? null : ClaudeCodeMapper.ToHarnessMessage(apiErrorMessage, Time.GetUtcNow()).Parts.OfType<TextPart>().FirstOrDefault()?.Text,
+                _rejectedResetAt,
+                Time.GetUtcNow());
+
         if (_aborting)
         {
             // An interrupted turn ends in an error result; the user asked for it, so there's nothing to say, but its
             // tool calls won't finish now.
             await FailUnfinishedToolsAsync(_root).ConfigureAwait(false);
         }
-        else if (ClaudeCodeMapper.DescribeFailedResult(result) is { } failure && !TurnEndsWithText(failure))
+        else if (limitFailure is not null)
         {
-            // Claude Code writes some failures as an assistant message already, e.g. "Not logged in".
-            await PersistNoticeAsync($"Claude Code stopped: {failure}").ConfigureAwait(false);
+            // A limit ended the turn: Fleet's failure card says so, and when it tries again; its tool calls won't finish.
+            await FailUnfinishedToolsAsync(_root).ConfigureAwait(false);
+        }
+        else
+        {
+            // Not a limit after all (a 500, say): Claude Code's own words go in the conversation as they always did.
+            if (apiErrorMessage is not null)
+                await AddAssistantBlocksAsync(_root, apiErrorMessage).ConfigureAwait(false);
+
+            if (ClaudeCodeMapper.DescribeFailedResult(result) is { } failure && !TurnEndsWithText(failure))
+            {
+                // Claude Code writes some failures as an assistant message already, e.g. "Not logged in".
+                await PersistNoticeAsync($"Claude Code stopped: {failure}").ConfigureAwait(false);
+            }
         }
 
         if (turn is null)
@@ -1550,6 +1602,11 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             if (!EndTurn(turn))
                 return;
         }
+
+        // Before the idle, like every harness's failure: the idle ends the turn, this says why.
+        if (limitFailure is not null)
+            await _eventChannel.Writer.WriteAsync(ClaudeCodeMapper.CreateSessionErrorEvent(_fleetSessionId, limitFailure), CancellationToken.None)
+                .ConfigureAwait(false);
 
         foreach (var evt in ClaudeCodeMapper.ToFrontendEvents(result, _fleetSessionId))
             await _eventChannel.Writer.WriteAsync(evt, CancellationToken.None).ConfigureAwait(false);

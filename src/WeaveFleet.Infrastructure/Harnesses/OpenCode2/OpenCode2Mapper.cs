@@ -1173,6 +1173,9 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
         {
             Name = type ?? "Error",
             Message = message ?? type ?? "OpenCode 2 stopped the turn without saying why.",
+            Status = error.ValueKind == JsonValueKind.Object && error.TryGetProperty("status", out var s) && s.TryGetInt32(out var status)
+                ? status
+                : null,
         };
     }
 

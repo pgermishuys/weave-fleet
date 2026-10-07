@@ -19,7 +19,7 @@ export type PhoneBlock =
   | { kind: "subagent"; key: string; title: string; agent: string; running: boolean; childSessionId: string | null }
   | { kind: "question"; key: string; question: string; answer: string | null; pending: boolean }
   | { kind: "shell"; key: string; view: ShellCommandView }
-  | { kind: "error"; key: string; text: string };
+  | { kind: "error"; key: string; text: string; /** A model provider's limit stopped the turn: it passes, so it reads as a wait. */ limit?: boolean };
 
 /** One tool call in a folded run. */
 export interface FoldedStep {
@@ -183,7 +183,12 @@ export function foldMessages(messages: readonly AccumulatedMessage[]): PhoneBloc
 
     if (message.turnError) {
       flush();
-      blocks.push({ kind: "error", key: `e:${message.messageId}`, text: message.turnError.message || "The turn failed." });
+      blocks.push({
+        kind: "error",
+        key: `e:${message.messageId}`,
+        text: message.turnError.message || "The turn failed.",
+        ...(message.turnError.kind ? { limit: true } : {}),
+      });
     }
   }
 

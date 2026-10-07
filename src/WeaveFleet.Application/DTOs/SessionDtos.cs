@@ -62,6 +62,9 @@ public sealed record SessionListResponse(
 
     /// <summary>Where it sits in the Pinned group above the projects (ascending), or null when it isn't pinned.</summary>
     public double? PinOrder { get; init; }
+
+    /// <summary>When Fleet tries a turn a model provider's limit stopped again, or null: the row says so.</summary>
+    public WeaveFleet.Application.Services.ScheduledRetryView? ScheduledRetry { get; init; }
 }
 
 /// <summary>A model as the harness names one.</summary>

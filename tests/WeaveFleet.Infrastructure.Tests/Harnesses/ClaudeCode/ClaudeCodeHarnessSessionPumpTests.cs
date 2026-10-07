@@ -2,11 +2,14 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Infrastructure.Events;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
@@ -23,6 +26,8 @@ public sealed class ClaudeCodeHarnessSessionPumpTests : IAsyncLifetime
 #pragma warning restore CA1001
 {
     private const string SessionId = "fleet-cc-pump";
+
+    private static readonly DateTimeOffset RecordedAt = DateTimeOffset.Parse("2026-10-07T01:51:43Z", System.Globalization.CultureInfo.InvariantCulture);
 
     private readonly InMemoryMessageRepository _messages = new();
     private readonly InMemoryOutboxRepository _outbox = new();
@@ -52,7 +57,11 @@ public sealed class ClaudeCodeHarnessSessionPumpTests : IAsyncLifetime
             scopeFactory: services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
             logger: NullLogger<ClaudeCodeHarnessSession>.Instance,
             loggerFactory: NullLoggerFactory.Instance,
-            ownerUserId: TestUserContext.DefaultUserId);
+            ownerUserId: TestUserContext.DefaultUserId)
+        {
+            // When the limit fixtures were recorded, so their reset is still ahead.
+            Time = new FakeTimeProvider(RecordedAt),
+        };
     }
 
     public Task InitializeAsync() => Task.CompletedTask;
@@ -201,6 +210,67 @@ public sealed class ClaudeCodeHarnessSessionPumpTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task UsageLimit_IsAFailure_WithTheWindowsReset_ReportedBeforeTheIdle()
+    {
+        var events = await PumpAsync(Fixture("usage-limit.jsonl"));
+
+        var failure = Failure(events);
+        failure.Kind.ShouldBe(TurnErrorKinds.UsageLimit);
+        failure.RetryAt.ShouldBe(DateTimeOffset.FromUnixTimeSeconds(1791344624));
+        failure.Message.ShouldBe("You've hit your session limit · resets 3:43am (UTC)");
+        events.FindIndex(e => e.Type == EventTypes.SessionError).ShouldBeLessThan(events.FindIndex(e => e.Type == EventTypes.SessionIdle));
+
+        // The failure card says it; Claude Code's own line doesn't say it twice.
+        AllText().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task RateLimitWithoutAWindow_IsARateLimit_WithNoResetTime()
+    {
+        var events = await PumpAsync(Fixture("rate-limit.jsonl"));
+
+        var failure = Failure(events);
+        failure.Kind.ShouldBe(TurnErrorKinds.RateLimit);
+        failure.RetryAt.ShouldBeNull();
+        failure.Message.ShouldStartWith("API Error: Server is temporarily limiting requests");
+    }
+
+    [Fact]
+    public async Task Overloaded_IsAnOverload()
+    {
+        var events = await PumpAsync(Fixture("overloaded.jsonl"));
+
+        Failure(events).Kind.ShouldBe(TurnErrorKinds.Overloaded);
+        AllText().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task ServerErrorThatIsntALimit_KeepsClaudesOwnWords()
+    {
+        var events = await PumpAsync(
+            """{"type":"system","subtype":"init","session_id":"cc-1","model":"claude-haiku-4-5"}""",
+            """{"type":"assistant","message":{"id":"e-1","model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"API Error: 500 Internal server error"}]},"parent_tool_use_id":null,"error":"server_error","is_api_error_message":true}""",
+            """{"type":"result","subtype":"success","is_error":true,"api_error_status":500,"terminal_reason":"api_error","result":"API Error: 500 Internal server error","session_id":"cc-1"}""");
+
+        events.ShouldNotContain(e => e.Type == EventTypes.SessionError);
+        AllText().ShouldBe(["API Error: 500 Internal server error"]);
+    }
+
+    [Fact]
+    public async Task ARejectedWindow_IsntTheReasonForA529()
+    {
+        var events = await PumpAsync(
+            """{"type":"system","subtype":"init","session_id":"cc-1","model":"claude-haiku-4-5"}""",
+            """{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":1791344624,"rateLimitType":"five_hour"}}""",
+            """{"type":"assistant","message":{"id":"e-1","model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"API Error: 529 Overloaded."}]},"parent_tool_use_id":null,"error":"server_error","is_api_error_message":true}""",
+            """{"type":"result","subtype":"success","is_error":true,"api_error_status":529,"terminal_reason":"api_error","result":"API Error: 529 Overloaded.","session_id":"cc-1"}""");
+
+        var failure = Failure(events);
+        failure.Kind.ShouldBe(TurnErrorKinds.Overloaded);
+        failure.RetryAt.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task RunWithoutResult_StopsItsToolsAndSaysSo()
     {
         var events = await PumpAsync(
@@ -297,6 +367,9 @@ public sealed class ClaudeCodeHarnessSessionPumpTests : IAsyncLifetime
         => MessagePersistenceService.ToHarnessMessages(
                 _messages.All.Where(m => m.Role == "assistant").OrderBy(m => m.Id, StringComparer.Ordinal).ToList())
             .ToList();
+
+    private static TurnError Failure(List<HarnessEvent> events)
+        => HarnessErrorReader.TryReadFromPayload(events.Single(e => e.Type == EventTypes.SessionError).Payload, RecordedAt).ShouldNotBeNull();
 
     private List<string> AllText()
         => Conversation().SelectMany(m => m.Parts).OfType<TextPart>().Select(t => t.Text).ToList();

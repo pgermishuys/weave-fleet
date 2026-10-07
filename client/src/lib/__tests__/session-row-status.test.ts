@@ -61,6 +61,21 @@ describe("sessionRowStatus", () => {
     expect(sessionRowStatus(item("idle"), NOW)).toEqual({ label: "2h", tone: "quiet", description: "Idle" });
   });
 
+  it("says when Fleet tries a turn a limit stopped again", () => {
+    const dueAt = new Date(NOW + 2 * 60 * MIN + 5 * MIN).toISOString();
+    const status = sessionRowStatus(
+      item("idle", { scheduledRetry: { dueAt, attempt: 1, kind: "usage_limit", reason: "You've hit your session limit", providerSaid: true } }),
+      NOW,
+    );
+
+    const clock = new Date(dueAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    expect(status).toEqual({
+      label: `Retry ${clock}`,
+      tone: "retry",
+      description: `Stopped by a usage limit. Fleet tries again at ${clock} (in 2 h 5 min)`,
+    });
+  });
+
   it("shows last activity for stopped sessions, which wake on the next prompt", () => {
     expect(sessionRowStatus(item("stopped"), NOW)).toEqual({ label: "2h", tone: "quiet", description: "Idle" });
   });

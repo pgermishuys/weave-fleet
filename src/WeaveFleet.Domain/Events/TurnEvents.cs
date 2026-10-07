@@ -82,6 +82,33 @@ public sealed record TurnError
     /// fails this way has already exhausted the harness's own retries.
     /// </summary>
     public bool IsRetryable { get; init; }
+
+    /// <summary>
+    /// Gets what kind of limit stopped the turn, one of <see cref="TurnErrorKinds"/>, or <see langword="null"/> for
+    /// any other failure. Fleet tries a turn a limit stopped again by itself.
+    /// </summary>
+    public string? Kind { get; init; }
+
+    /// <summary>
+    /// Gets when the model provider said a new request can go, when it said: a usage limit's reset, or a rate limit's
+    /// retry-after.
+    /// </summary>
+    public DateTimeOffset? RetryAt { get; init; }
+}
+
+/// <summary>The limits <see cref="TurnError.Kind"/> names: the failures that pass by themselves if you wait.</summary>
+public static class TurnErrorKinds
+{
+    /// <summary>Too many requests for now (HTTP 429): it passes in seconds or minutes.</summary>
+    public const string RateLimit = "rate_limit";
+
+    /// <summary>The account's usage for a window (a subscription's 5 hours or week) is used up until it resets.</summary>
+    public const string UsageLimit = "usage_limit";
+
+    /// <summary>The provider is overloaded or down for a while (HTTP 529, 503).</summary>
+    public const string Overloaded = "overloaded";
+
+    public static bool IsKnown(string? kind) => kind is RateLimit or UsageLimit or Overloaded;
 }
 
 /// <summary>

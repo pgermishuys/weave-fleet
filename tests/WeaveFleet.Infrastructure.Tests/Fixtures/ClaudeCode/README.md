@@ -26,3 +26,10 @@ replaced with `<WORKDIR>`.
   `originalFile`; an `AskUserQuestion` call asked as `can_use_tool` (`--permission-mode default --permission-prompt-tool
   stdio`) and answered with `updatedInput: { questions, answers }`; and the answer to an `initialize` control request, its
   model list cut to a few and everything but `models` dropped. The working directory is `/work`.
+- `usage-limit.jsonl`, `rate-limit.jsonl`, `overloaded.jsonl` (Claude Code 2.1.290, 2026-10-07, `--model haiku`): the
+  real CLI signed in with a stand-in claude.ai token through a local proxy that answered every model call with an error.
+  A 429 with `anthropic-ratelimit-unified-status: rejected` and a 5-hour reset (a usage limit: no retries, a rejected
+  `rate_limit_event` with `resetsAt`, Claude Code's own "You've hit your session limit" line flagged `error:
+  rate_limit`, a result with `api_error_status: 429`); a plain 429 (`CLAUDE_CODE_MAX_RETRIES=2`: two `api_retry` lines,
+  a rejected `rate_limit_event` with no reset); and a 529 (`error: server_error`). Partial-message, status and bulky
+  result fields dropped.

@@ -31,7 +31,47 @@ internal static class ClaudeCodeJsonOptions
 [JsonDerivedType(typeof(ClaudeCodeControlCancelRequest), "control_cancel_request")]
 [JsonDerivedType(typeof(ClaudeCodeControlResponse), "control_response")]
 [JsonDerivedType(typeof(ClaudeCodeStreamEvent), "stream_event")]
+[JsonDerivedType(typeof(ClaudeCodeRateLimitEvent), "rate_limit_event")]
 internal record ClaudeCodeStreamMessage;
+
+/// <summary>
+/// How much of the claude.ai account's usage limits are used, when they change: only with a claude.ai login (never
+/// with an API key or a gateway). Recorded from claude 2.1.290:
+/// <c>{"type":"rate_limit_event","rate_limit_info":{"status":"allowed_warning","resetsAt":1791737124,"rateLimitType":"seven_day","utilization":0.63,"isUsingOverage":false,"unifiedWindows":{"five_hour":{"utilization":0.82,"resetsAt":1791344624},…}}}</c>.
+/// </summary>
+internal sealed record ClaudeCodeRateLimitEvent : ClaudeCodeStreamMessage
+{
+    [JsonPropertyName("rate_limit_info")] public ClaudeCodeRateLimitInfo? RateLimitInfo { get; init; }
+}
+
+/// <summary>What a <see cref="ClaudeCodeRateLimitEvent"/> says.</summary>
+internal sealed record ClaudeCodeRateLimitInfo
+{
+    /// <summary><c>allowed</c>, <c>allowed_warning</c> or <c>rejected</c>, for <see cref="RateLimitType"/>.</summary>
+    [JsonPropertyName("status")] public string? Status { get; init; }
+
+    /// <summary>When <see cref="RateLimitType"/> resets, in seconds since the epoch.</summary>
+    [JsonPropertyName("resetsAt")] public long? ResetsAt { get; init; }
+
+    /// <summary>The window the status is about: <c>five_hour</c>, <c>seven_day</c>, <c>seven_day_opus</c>, <c>seven_day_sonnet</c>, …</summary>
+    [JsonPropertyName("rateLimitType")] public string? RateLimitType { get; init; }
+
+    /// <summary>How much of <see cref="RateLimitType"/> is used, from 0 to 1.</summary>
+    [JsonPropertyName("utilization")] public double? Utilization { get; init; }
+
+    [JsonPropertyName("isUsingOverage")] public bool? IsUsingOverage { get; init; }
+    [JsonPropertyName("overageStatus")] public string? OverageStatus { get; init; }
+
+    /// <summary>Every window Claude Code knows, by name: each one's use and reset.</summary>
+    [JsonPropertyName("unifiedWindows")] public IReadOnlyDictionary<string, ClaudeCodeRateLimitWindow>? UnifiedWindows { get; init; }
+}
+
+/// <summary>One window in <see cref="ClaudeCodeRateLimitInfo.UnifiedWindows"/>.</summary>
+internal sealed record ClaudeCodeRateLimitWindow
+{
+    [JsonPropertyName("utilization")] public double? Utilization { get; init; }
+    [JsonPropertyName("resetsAt")] public long? ResetsAt { get; init; }
+}
 
 /// <summary>
 /// A piece of the message the model is writing, with <c>--include-partial-messages</c>: one of the Messages API's
@@ -211,6 +251,15 @@ internal sealed record ClaudeCodeAssistantMessage : ClaudeCodeStreamMessage
 
     /// <summary>The sub-agent call this message belongs to; null for the main conversation.</summary>
     [JsonPropertyName("parent_tool_use_id")] public string? ParentToolUseId { get; init; }
+
+    /// <summary>
+    /// On a message Claude Code wrote itself because the model call failed (<see cref="IsApiErrorMessage"/>): why, e.g.
+    /// <c>rate_limit</c>, <c>overloaded</c>, <c>server_error</c>, <c>authentication_failed</c>, <c>billing_error</c>.
+    /// </summary>
+    [JsonPropertyName("error")] public string? Error { get; init; }
+
+    /// <summary>The message is Claude Code's account of a failed model call ("You've hit your session limit · resets 3:43am"), not the model's.</summary>
+    [JsonPropertyName("is_api_error_message")] public bool? IsApiErrorMessage { get; init; }
 }
 
 /// <summary>User turn — in a print-mode stream, this carries the results of the tools the assistant called.</summary>
@@ -249,6 +298,12 @@ internal sealed record ClaudeCodeResultMessage : ClaudeCodeStreamMessage
     /// the model's limits.
     /// </summary>
     [JsonPropertyName("modelUsage")] public JsonElement? ModelUsage { get; init; }
+
+    /// <summary>The HTTP status of the model call that ended the turn, when one failed (429, 529); the result's <c>subtype</c> can still say <c>success</c>.</summary>
+    [JsonPropertyName("api_error_status")] public int? ApiErrorStatus { get; init; }
+
+    /// <summary>Why the turn ended, e.g. <c>api_error</c>, <c>blocking_limit</c>.</summary>
+    [JsonPropertyName("terminal_reason")] public string? TerminalReason { get; init; }
 }
 
 // ---------------------------------------------------------------------------

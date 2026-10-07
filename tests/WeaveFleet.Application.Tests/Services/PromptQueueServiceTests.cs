@@ -55,6 +55,7 @@ public sealed class PromptQueueServiceTests : IAsyncDisposable
         _builder.ActivityTracker,
         _builder.HarnessRegistry,
         _user,
+        new TurnRetryScheduler(TestServiceScopeFactory.CreateEmpty(), TimeProvider.System, NullLogger<TurnRetryScheduler>.Instance),
         NullLogger<PromptQueueService>.Instance);
 
     private static async Task<string> QueueAsync(PromptQueueService service, string text, string kind = QueuedPromptKinds.Prompt, string? command = null)

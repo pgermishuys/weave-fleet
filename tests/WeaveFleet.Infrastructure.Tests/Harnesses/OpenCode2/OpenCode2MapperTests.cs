@@ -132,6 +132,23 @@ public sealed class OpenCode2MapperTests
         var failed = translator.Translate(events[0] with { FleetSessionId = FleetSession }).ShouldBeOfType<TurnFailed>();
         failed.Payload.Error.Name.ShouldBe("provider");
         failed.Payload.Error.Message.ShouldBe("The model is overloaded.");
+        // V2 keeps the provider's status: a 529 is an overload, which Fleet tries again.
+        failed.Payload.Error.Kind.ShouldBe(TurnErrorKinds.Overloaded);
+    }
+
+    [Fact]
+    public void A_usage_limit_V2_gave_up_on_is_a_usage_limit()
+    {
+        var mapper = new OpenCode2Mapper(FleetSession);
+        var translator = new DomainEventTranslator(NullLogger<DomainEventTranslator>.Instance);
+        translator.Translate(mapper.Map(Event("session.execution.started", """{"sessionID":"ses_1"}"""))[0]);
+
+        var events = mapper.Map(Event("session.execution.failed",
+            """{"sessionID":"ses_1","error":{"type":"QuotaExceeded","message":"You've hit your usage limit. Try again in 2 hours.","status":429}}"""));
+
+        var failed = translator.Translate(events[0] with { FleetSessionId = FleetSession }).ShouldBeOfType<TurnFailed>();
+        failed.Payload.Error.Kind.ShouldBe(TurnErrorKinds.UsageLimit);
+        failed.Payload.Error.RetryAt.ShouldNotBeNull().ShouldBeInRange(DateTimeOffset.UtcNow.AddMinutes(119), DateTimeOffset.UtcNow.AddMinutes(121));
     }
 
     [Fact]

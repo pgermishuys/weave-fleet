@@ -1,6 +1,7 @@
 import createClient from "openapi-fetch";
 import type { paths } from "./generated/schema";
 import type { SessionProgressSummary } from "@/lib/session-progress";
+import type { ScheduledRetry } from "@/lib/turn-retry";
 import { apiUrlOn, setApiBase } from "@/lib/api-client";
 import { getActiveMachine, machineRequestInit, type MachineConnection } from "@/lib/machines";
 
@@ -806,6 +807,8 @@ export interface SessionListItem {
   activityStatus?: string | null;
   /** Client-only: set from the activity_status push while the harness retries. */
   retryAttempt?: number | null;
+  /** When Fleet tries a turn a model provider's limit stopped again; kept current by `session.retry` on `sessions`. */
+  scheduledRetry?: ScheduledRetry | null;
   lifecycleStatus: string;
   retentionStatus: string;
   archivedAt?: string | null;

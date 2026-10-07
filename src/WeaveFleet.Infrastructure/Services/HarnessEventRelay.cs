@@ -91,6 +91,7 @@ public sealed class HarnessEventRelay : BackgroundService
     private readonly WorkflowRunner? _workflows;
     private readonly PromptQueueDispatcher? _queue;
     private readonly TurnFailureRecorder? _failures;
+    private readonly TurnRetryScheduler? _retries;
     private readonly PendingPermissionStore? _permissions;
     private readonly AgentBrowserCalls? _browserCalls;
     private readonly RunningWorkRecorder? _work;
@@ -123,9 +124,11 @@ public sealed class HarnessEventRelay : BackgroundService
         AgentBrowserCalls? browserCalls = null,
         RunningWorkRecorder? work = null,
         SessionCallbackDispatcher? callbacks = null,
-        SessionContextRecorder? context = null)
+        SessionContextRecorder? context = null,
+        TurnRetryScheduler? retries = null)
     {
         _context = context;
+        _retries = retries;
         _callbacks = callbacks;
         _browserCalls = browserCalls;
         _work = work;
@@ -404,6 +407,8 @@ public sealed class HarnessEventRelay : BackgroundService
                 _updates?.Observe(targetFleetSessionId, domainEvent);
                 _workflows?.Observe(targetFleetSessionId, domainEvent);
                 ObserveBrowserCall(targetFleetSessionId, domainEvent);
+                // Before the queue: a limit's failure holds the queue before the idle after it reaches the queue.
+                _retries?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
                 _queue?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
                 _callbacks?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
                 _failures?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
