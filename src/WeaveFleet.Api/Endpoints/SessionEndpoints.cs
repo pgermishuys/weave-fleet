@@ -122,6 +122,8 @@ public static class SessionEndpoints
                     var profile = session.HarnessProfileId is not null ? await harnessProfiles.GetByIdAsync(session.HarnessProfileId) : null;
                     var primaryOrigin = await sessionSourceUsageRepository.GetPrimaryBySessionIdAsync(session.Id);
                     var activityStatus = activityTracker.GetEffectiveActivityStatus(session.Id) ?? "idle";
+                    // A page opened while the harness waits to retry still says which attempt, why and when.
+                    var retry = activityStatus == ActivityStatuses.Retry ? activityTracker.Get(session.Id) : null;
 
                     return Results.Ok(new GetSessionResponse(
                         Id: session.Id,
@@ -155,6 +157,10 @@ public static class SessionEndpoints
                         SpawnKind = session.SpawnKind,
                         LineageDetachedAt = session.LineageDetachedAt,
                         PinOrder = session.PinOrder,
+                        RetryAttempt = retry?.RetryAttempt,
+                        RetryMaxAttempts = retry?.RetryMax,
+                        RetryMessage = retry?.RetryMessage,
+                        RetryNext = retry?.RetryNext?.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
                     });
                 },
                 error => Task.FromResult(error.ToSessionApiResult()));
@@ -1093,7 +1099,7 @@ public static class SessionEndpoints
             SpawnKind = s.SpawnKind,
             LineageDetachedAt = s.LineageDetachedAt,
             PinOrder = s.PinOrder,
-        };
+        }.WithRetry(activityTracker);
     }
 
     private static SessionOriginDto ToOriginDto(SessionSourceUsage usage) =>
@@ -1304,8 +1310,20 @@ public static class SessionEndpoints
             SpawnKind = s.SpawnKind,
             LineageDetachedAt = s.LineageDetachedAt,
             PinOrder = s.PinOrder,
-        };
+        }.WithRetry(activityTracker);
     }
+
+    /// <summary>A page opened while the harness waits to retry still says which attempt, why and when.</summary>
+    private static SessionListResponse WithRetry(this SessionListResponse response, SessionActivityTracker activityTracker)
+        => response.ActivityStatus == ActivityStatuses.Retry && activityTracker.Get(response.Session.Id) is { } retry
+            ? response with
+            {
+                RetryAttempt = retry.RetryAttempt,
+                RetryMaxAttempts = retry.RetryMax,
+                RetryMessage = retry.RetryMessage,
+                RetryNext = retry.RetryNext?.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+            }
+            : response;
 
     private static List<SessionReference>? ToSessionReferences(SessionReferenceDto[]? references)
         => references?.Select(reference => new SessionReference(reference?.Token ?? "", reference?.SessionId ?? "")).ToList();

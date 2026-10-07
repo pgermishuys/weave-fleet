@@ -56,9 +56,14 @@ internal static class OpenCodeMapper
                 ? HarnessErrorReader.TryRead(error)
                 : null,
             Finish = (msg.Info as OpenCodeAssistantMessage)?.Finish,
+            CompactionSummary = msg.Info is OpenCodeAssistantMessage assistant && IsCompactionSummary(assistant.Mode, assistant.Summary),
             Steered = msg.Info.Role == "user" && msg.Parts.OfType<OpenCodeTextPart>().Any(p => IsSteered(p.Metadata)),
         };
     }
+
+    /// <summary>The assistant message a compaction writes: its summary, in <c>mode: compaction</c> or with <c>summary: true</c>.</summary>
+    internal static bool IsCompactionSummary(string? mode, JsonElement? summary)
+        => mode == "compaction" || summary is { ValueKind: JsonValueKind.True };
 
     /// <summary>Whether a text part carries the mark Fleet puts on a prompt sent into a running turn.</summary>
     private static bool IsSteered(JsonElement? metadata)
@@ -100,6 +105,14 @@ internal static class OpenCodeMapper
                     TokensOutput: 0,
                     TokensReasoning: 0,
                     CompletedAt: null);
+
+            // Where OpenCode compacted: Fleet's divider. Its summary is the assistant message that follows, which the
+            // conversation shows behind the divider (HarnessMessage.CompactionSummary).
+            case OpenCodeCompactionPart compaction:
+                return new CompactionPart(Trigger: compaction.Auto == true ? ContextCompactionTriggers.Auto : ContextCompactionTriggers.Manual)
+                {
+                    PartId = NullIfEmpty(compaction.Id),
+                };
 
             case OpenCodeAgentPart agentPart:
                 return new AgentPart(agentPart.Agent, agentPart.Input, agentPart.Output);

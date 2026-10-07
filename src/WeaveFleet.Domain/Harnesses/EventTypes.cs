@@ -71,6 +71,12 @@ public static class EventTypes
     /// <summary>The session's context was compacted, or a compaction started or failed. A <see cref="ContextCompactionReport"/>.</summary>
     public const string ContextCompaction = "context.compaction";
 
+    /// <summary>
+    /// How much of its account's usage limits the harness has used (a <see cref="UsageLimitReport"/>). The account's, not
+    /// the session's: the relay hands it to Fleet's record of each harness's limits rather than the conversation.
+    /// </summary>
+    public const string HarnessUsage = "harness.usage";
+
     /// <summary>Returns <c>true</c> for <see cref="ContextUsage"/> and <see cref="ContextCompaction"/>.</summary>
     public static bool IsContextEvent(string type) => type is ContextUsage or ContextCompaction;
 

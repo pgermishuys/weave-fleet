@@ -253,6 +253,8 @@ public static class DependencyInjection
         services.AddScoped<SessionContextService>();
         // Singleton: the relay hands it every context report and every event; it keeps how full each session's context is.
         services.AddSingleton<SessionContextRecorder>();
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<HarnessUsageLimits>();
         services.AddSingleton<IPendingPermissions>(sp => sp.GetRequiredService<PendingPermissionStore>());
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowsFeature>();
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowModelRoles>();

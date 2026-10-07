@@ -14,7 +14,8 @@ public sealed record SessionActivitySnapshot(
     DateTimeOffset UpdatedAt,
     int? RetryAttempt = null,
     string? RetryMessage = null,
-    DateTimeOffset? RetryNext = null);
+    DateTimeOffset? RetryNext = null,
+    int? RetryMax = null);
 
 /// <summary>
 /// Thread-safe in-memory tracker for per-session activity status (busy/idle).
@@ -46,7 +47,7 @@ public sealed class SessionActivityTracker
     /// <summary>
     /// Update (or insert) the activity status for a fleet session.
     /// </summary>
-    public void Update(string fleetSessionId, string activityStatus, string? userId, int? retryAttempt = null, string? retryMessage = null, DateTimeOffset? retryNext = null)
+    public void Update(string fleetSessionId, string activityStatus, string? userId, int? retryAttempt = null, string? retryMessage = null, DateTimeOffset? retryNext = null, int? retryMax = null)
     {
         _state[fleetSessionId] = new SessionActivitySnapshot(
             fleetSessionId,
@@ -55,7 +56,8 @@ public sealed class SessionActivityTracker
             DateTimeOffset.UtcNow,
             RetryAttempt: retryAttempt,
             RetryMessage: retryMessage,
-            RetryNext: retryNext);
+            RetryNext: retryNext,
+            RetryMax: retryMax);
     }
 
     /// <summary>

@@ -11,7 +11,10 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 /// </summary>
 internal static class OpenCode2History
 {
-    /// <summary>The messages Fleet shows, in the order given; V2's other message types (idle, compaction, …) are left out.</summary>
+    /// <summary>
+    /// The messages Fleet shows, in the order given; a finished compaction shows as a divider, and V2's other message
+    /// types (idle, …) are left out.
+    /// </summary>
     /// <remarks>
     /// A <c>synthetic</c> message is V2 talking to the model: only a background completion is news for the user, and
     /// it shows as a message of the session's own, the way it does live. A <c>shell</c> message is a command the user
@@ -122,6 +125,13 @@ internal static class OpenCode2History
                 Id = id,
                 Role = OpenCode2Mapper.NoticeRole,
                 Parts = [new TextPart(message.Text ?? string.Empty) { PartId = OpenCode2Mapper.PartId(id, "text", 0) }],
+                Timestamp = timestamp,
+            },
+            "compaction" when message.Status == "completed" => new HarnessMessage
+            {
+                Id = id,
+                Role = "assistant",
+                Parts = [OpenCode2Mapper.CompactionDivider(id, message.Reason, message.Summary)],
                 Timestamp = timestamp,
             },
             _ => null,

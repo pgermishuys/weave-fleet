@@ -47,9 +47,20 @@ describe("sessionRowStatus", () => {
 
   it("names a retry, with the attempt when the harness reported one", () => {
     expect(sessionRowStatus(item("active", { activityStatus: "retry", retryAttempt: 2 }), NOW))
-      .toEqual({ label: "Retry 2", tone: "retry", description: "Retrying (attempt 2)" });
+      .toEqual({ label: "Retry 2", tone: "retry", description: "Retrying · attempt 2" });
     expect(sessionRowStatus(item("active", { activityStatus: "retry" }), NOW))
       .toEqual({ label: "Retrying", tone: "retry", description: "Retrying" });
+  });
+
+  // Claude Code says how many attempts it makes, when, and why.
+  it("names a retry out of how many, and says when and why", () => {
+    expect(sessionRowStatus(item("active", {
+      activityStatus: "retry",
+      retryAttempt: 3,
+      retryMaxAttempts: 10,
+      retryMessage: "API overloaded (529)",
+      retryNext: new Date(NOW + 12_000).toISOString(),
+    }), NOW)).toEqual({ label: "Retry 3/10", tone: "retry", description: "Retrying · attempt 3 of 10 · in 12 s · API overloaded (529)" });
   });
 
   it("names lifecycle states quietly", () => {

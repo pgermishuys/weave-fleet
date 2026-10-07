@@ -302,6 +302,74 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task Usage_limits_reach_the_users_clients_as_harness_usage_and_stay_readable()
+    {
+        var sessionId = await CreateSessionAsync();
+        await _hub.InvokeAsync("SubscribeToSessionsTopicAsync");
+        await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
+        await WaitForBroadcasterSubscriberAsync();
+
+        // What an adapter sends when its harness says how much of its account's limits are used.
+        var harness = await HarnessOfAsync(sessionId);
+        await harness.PushEventAsync(Work(EventTypes.HarnessUsage, sessionId, """
+            {"windows":[{"window":"five_hour","utilization":0.82,"resetsAt":"2099-10-07T14:05:00+00:00","status":"warning"},
+                        {"window":"seven_day","utilization":0.63,"resetsAt":"2099-10-12T09:00:00+00:00","status":"allowed"}]}
+            """));
+        var received = await WaitForWorkEventAsync("harness.usage", "sessions");
+
+        // The exact shape the ring's card and the status-bar chip read: HarnessUsage, camelCase.
+        var usage = received.Data.GetProperty("properties");
+        usage.GetProperty("harnessType").GetString().ShouldBe("opencode");
+        var windows = usage.GetProperty("windows");
+        windows.GetArrayLength().ShouldBe(2);
+        windows[0].GetProperty("window").GetString().ShouldBe("five_hour");
+        windows[0].GetProperty("utilization").GetDouble().ShouldBe(0.82);
+        windows[0].GetProperty("resetsAt").GetDateTimeOffset().ShouldBe(new DateTimeOffset(2099, 10, 7, 14, 5, 0, TimeSpan.Zero));
+        windows[0].GetProperty("status").GetString().ShouldBe("warning");
+        usage.TryGetProperty("updatedAt", out _).ShouldBeTrue();
+
+        // The account's, not the conversation's: nothing on the session's topic.
+        Received().Where(e => e.Topic == $"session:{sessionId}").ShouldBeEmpty();
+
+        // A page opened now reads them.
+        using var http = new HttpClient { BaseAddress = new Uri(_server.ServerUrl) };
+        var listed = JsonDocument.Parse(await http.GetStringAsync("/api/harnesses/usage")).RootElement;
+        listed.GetArrayLength().ShouldBe(1);
+        listed[0].GetProperty("harnessType").GetString().ShouldBe("opencode");
+        listed[0].GetProperty("windows").GetArrayLength().ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task A_retry_reaches_the_users_clients_with_the_attempt_out_of_how_many_why_and_when()
+    {
+        var sessionId = await CreateSessionAsync();
+        await _hub.InvokeAsync("SubscribeToSessionsTopicAsync");
+        await WaitForBroadcasterSubscriberAsync();
+
+        // What Claude Code's api_retry becomes.
+        var harness = await HarnessOfAsync(sessionId);
+        await harness.PushEventAsync(Work(EventTypes.SessionStatus, sessionId,
+            """{"status":{"type":"retry","count":3,"max":10,"reason":"API overloaded (529)","delay":12000}}"""));
+
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        ReceivedEvent? status;
+        while ((status = Received().FirstOrDefault(e => e.Topic == "sessions"
+                   && e.Data.GetProperty("type").GetString() == "activity_status"
+                   && e.Data.GetProperty("properties").GetProperty("activityStatus").GetString() == "retry")) is null)
+        {
+            DateTime.UtcNow.ShouldBeLessThan(deadline, "No activity_status said it was retrying.");
+            await _eventReceived.WaitAsync(TimeSpan.FromMilliseconds(200));
+        }
+
+        var props = status.Data.GetProperty("properties");
+        props.GetProperty("sessionId").GetString().ShouldBe(sessionId);
+        props.GetProperty("attempt").GetInt32().ShouldBe(3);
+        props.GetProperty("maxAttempts").GetInt32().ShouldBe(10);
+        props.GetProperty("message").GetString().ShouldBe("API overloaded (529)");
+        (props.GetProperty("next").GetDateTimeOffset() - DateTimeOffset.UtcNow).TotalSeconds.ShouldBeInRange(1, 13);
+    }
+
+    [Fact]
     public async Task Hub_sends_message_part_delta_with_correct_shape()
     {
         var sessionId = await CreateSessionAsync();

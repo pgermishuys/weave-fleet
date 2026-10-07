@@ -169,6 +169,16 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     // The message Claude Code wrote itself when the turn's model call failed, held back until the result says whether a
     // limit ended the turn: then the failure card says it instead.
     private ClaudeCodeAssistantMessage? _apiErrorMessage;
+
+    // Claude Code said it's retrying a failed model call; the session reads as retrying until its next output.
+    private bool _retrying;
+
+    // The divider for the compaction that just happened, until its summary arrives.
+    private HarnessMessage? _compactionDivider;
+
+    // What the process has cost so far: its result lines give the total since it started, so a turn's cost is the
+    // difference.
+    private decimal _processCost;
     private bool _disposed;
 
     /// <summary>Initialises the instance with all required dependencies.</summary>
@@ -297,6 +307,15 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                     process = await EnsureProcessAsync(options, ct).ConfigureAwait(false);
                     if (!await SendToAsync(process, turn, line, ct).ConfigureAwait(false))
                         throw new InvalidOperationException("Claude Code exited before it read the prompt.");
+                }
+
+                // The account's usage limits, once per process, so they show before the turn reports them. Claude Code
+                // calls the request experimental; an answer without limits (an API key, a gateway) or none at all leaves
+                // them unknown.
+                if (!process.UsageAsked)
+                {
+                    process.UsageAsked = true;
+                    _ = ReadUsageLimitsAsync(process);
                 }
             }
             catch
@@ -525,11 +544,28 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         {
             _process = processManager;
             _processSettings = settings;
+            _processCost = 0;
             // Background pump — reads every turn this process runs, until it exits.
             _pump = Task.Run(() => PumpStdoutAsync(stdout, processManager), CancellationToken.None);
         }
 
         return processManager;
+    }
+
+    private async Task ReadUsageLimitsAsync(ClaudeCodeProcessManager process)
+    {
+        try
+        {
+            var requestId = $"fleet-{Guid.NewGuid():N}";
+            var answer = await process.RequestAsync(requestId, ClaudeCodeInput.GetUsage(requestId), _shutdownTimeout, CancellationToken.None)
+                .ConfigureAwait(false);
+            if (answer is { Subtype: "success", Response: { } usage } && ClaudeCodeMapper.ToUsageLimits(usage) is { } limits)
+                _eventChannel.Writer.TryWrite(UsageLimitEvents.Usage(limits, _fleetSessionId));
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Only a head start on what the next turn reports anyway.
+        }
     }
 
     /// <summary>
@@ -1025,6 +1061,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         var turn = new Turn { Process = process };
         _turn = turn;
         _aborting = false;
+        _retrying = false;
         _root.Clear();
         _status = HarnessSessionStatus.Running;
         DisarmIdleTimer();
@@ -1045,6 +1082,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             return false;
 
         _turn = null;
+        _retrying = false;
         turn.Timeout?.Dispose();
         if (_status is not HarnessSessionStatus.Stopping and not HarnessSessionStatus.Stopped)
             _status = HarnessSessionStatus.Idle;
@@ -1225,8 +1263,18 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 }
                 else if (msg is ClaudeCodeSystemMessage system)
                 {
-                    if (ClaudeCodeMapper.TryMapCompaction(system, _fleetSessionId) is { } compaction)
+                    if (system.ParentToolUseId is null && ClaudeCodeMapper.TryMapRetry(system, _fleetSessionId) is { } retry)
+                    {
+                        JoinTurn(processManager);
+                        _retrying = true;
+                        await _eventChannel.Writer.WriteAsync(retry, CancellationToken.None).ConfigureAwait(false);
+                    }
+                    else if (ClaudeCodeMapper.TryMapCompaction(system, _fleetSessionId) is { } compaction)
+                    {
                         await _eventChannel.Writer.WriteAsync(compaction, CancellationToken.None).ConfigureAwait(false);
+                        if (ClaudeCodeMapper.ToCompactionPart(system) is { } divider)
+                            await AddCompactionDividerAsync(divider).ConfigureAwait(false);
+                    }
                     else
                         await ReportWorkAsync(TrackBackgroundWork(system), children).ConfigureAwait(false);
                 }
@@ -1241,15 +1289,20 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                     else
                     {
                         JoinTurn(processManager);
+                        await EndRetryAsync().ConfigureAwait(false);
                         conversation = _root;
                     }
 
                     if (conversation is not null)
-                        StreamPart(conversation, streamed);
+                        await StreamPartAsync(conversation, streamed).ConfigureAwait(false);
                 }
-                else if (msg is ClaudeCodeRateLimitEvent { RateLimitInfo: { } rateLimit })
+                else if (msg is ClaudeCodeRateLimitEvent { RateLimitInfo: { } rateLimit } rateLimitEvent)
                 {
                     ObserveRateLimit(rateLimit);
+
+                    // The account's limits, not the turn's: they go to Fleet's record of them too.
+                    if (ClaudeCodeMapper.ToUsageLimits(rateLimitEvent) is { } limits)
+                        await _eventChannel.Writer.WriteAsync(UsageLimitEvents.Usage(limits, _fleetSessionId), CancellationToken.None).ConfigureAwait(false);
                 }
                 else if (msg is ClaudeCodeAssistantMessage { ParentToolUseId: null, IsApiErrorMessage: true, Error: "rate_limit" or "overloaded" or "server_error" } apiErrorMsg)
                 {
@@ -1270,6 +1323,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                     }
 
                     JoinTurn(processManager);
+                    await EndRetryAsync().ConfigureAwait(false);
                     await AddAssistantBlocksAsync(_root, assistantMsg).ConfigureAwait(false);
 
                     if (assistantMsg.Message?.Model is not null)
@@ -1289,6 +1343,10 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                     {
                         if (await ChildAsync(subagentCall, children).ConfigureAwait(false) is { } child)
                             await AddUserLineAsync(child, userMsg).ConfigureAwait(false);
+                    }
+                    else if (ClaudeCodeMapper.ReadCompactionSummary(userMsg) is { } summary)
+                    {
+                        await AddCompactionSummaryAsync(summary).ConfigureAwait(false);
                     }
                     else
                     {
@@ -1345,6 +1403,43 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             _rejectedResetAt = info.ResetsAt is > 0 and < 253_402_300_799 ? DateTimeOffset.FromUnixTimeSeconds(info.ResetsAt.Value) : null;
         else if (info.Status is "allowed" or "allowed_warning")
             _rejectedResetAt = null;
+    }
+
+    /// <summary>
+    /// Shows where Claude Code compacted the conversation: a message of its own, a divider with the context's size
+    /// before and after, saved so a reload shows it where it happened. The summary follows on its own line.
+    /// </summary>
+    private async Task AddCompactionDividerAsync(CompactionPart divider)
+    {
+        var id = AscendingMessageId.New();
+        var part = divider with { PartId = $"{id}-part-0" };
+        var message = new HarnessMessage { Id = id, Role = "assistant", Parts = [part], Timestamp = DateTimeOffset.UtcNow };
+        _compactionDivider = message;
+        await PersistMessageAsync(_fleetSessionId, message, [ClaudeCodeMapper.CreatePartUpdatedEvent(id, _fleetSessionId, part, 0)])
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>The summary the model goes on from after a compaction, kept behind the divider's Show summary.</summary>
+    private async Task AddCompactionSummaryAsync(string summary)
+    {
+        if (_compactionDivider is not { Parts: [CompactionPart part] } message)
+            return;
+
+        _compactionDivider = null;
+        var withSummary = part with { Summary = summary };
+        message = message with { Parts = [withSummary] };
+        await PersistMessageAsync(_fleetSessionId, message, [ClaudeCodeMapper.CreatePartUpdatedEvent(message.Id, _fleetSessionId, withSummary, 0)])
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>The model answered after a retry: the session is working again, not retrying.</summary>
+    private async Task EndRetryAsync()
+    {
+        if (!_retrying)
+            return;
+        _retrying = false;
+        await _eventChannel.Writer.WriteAsync(ClaudeCodeMapper.CreateSessionStatusEvent(_fleetSessionId, ActivityStatuses.Busy), CancellationToken.None)
+            .ConfigureAwait(false);
     }
 
     /// <summary>Remembers the tool calls a line makes: which start background work, and in whose conversation.</summary>
@@ -1527,6 +1622,8 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
 
         ForgetPermissionAsks();
         await SettleStreamingAsync(_root).ConfigureAwait(false);
+        var processCostBefore = _processCost;
+        await FlushTurnStepsAsync(result).ConfigureAwait(false);
 
         // Extract analytics
         if (_analyticsCollector is not null)
@@ -1538,7 +1635,8 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 _projectName,
                 _workingDirectory,
                 _modelId,
-                _ownerUserId);
+                _ownerUserId,
+                turnCostUsd: _processCost - processCostBefore);
             if (tokenEvent is not null)
                 _analyticsCollector.AcceptTokenEvent(tokenEvent);
         }
@@ -1698,11 +1796,15 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     /// it writes them, under the message and part ids the finished blocks get, so the finished <c>assistant</c> line
     /// replaces what the deltas built up. Deltas aren't saved; the finished block is.
     /// </summary>
-    private void StreamPart(Conversation conversation, ClaudeCodeStreamEventBody streamed)
+    private async Task StreamPartAsync(Conversation conversation, ClaudeCodeStreamEventBody streamed)
     {
         switch (streamed.Type)
         {
             case "message_start" when streamed.Message?.Id is { } claudeId:
+                // The message before it is finished, and not the turn's last: it reports what it used now.
+                if (conversation.PendingStep is { } previous && previous != claudeId)
+                    await FlushStepAsync(conversation, previous, cost: 0).ConfigureAwait(false);
+
                 // Fleet's id for the message is given now, so the deltas name the message the finished blocks go to.
                 if (!conversation.Messages.ContainsKey(claudeId))
                 {
@@ -1749,6 +1851,16 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                     ClaudeCodeMapper.CreatePartDeltaEvent(streaming.Id, conversation.FleetSessionId, block.PartId, delta), conversation.FleetSessionId));
                 break;
 
+            case "message_delta" when streamed.Usage is { } usage && conversation.StreamingMessageId is { } claudeId:
+                // The message's final usage. The session's own reports it when it's known not to be the turn's last,
+                // which carries the turn's cost; a subagent's at once, since its cost is in its parent's turn.
+                conversation.Usage[claudeId] = new MessageUsage(usage, Final: true, streamed.Delta?.StopReason);
+                if (conversation.FleetSessionId == _fleetSessionId)
+                    conversation.PendingStep = claudeId;
+                else
+                    await FlushStepAsync(conversation, claudeId, cost: 0).ConfigureAwait(false);
+                break;
+
             case "message_stop":
                 conversation.Streaming = null;
                 break;
@@ -1762,6 +1874,57 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         ("thinking_delta", "reasoning") => delta.Thinking,
         _ => null,
     };
+
+    /// <summary>
+    /// Adds what a message's model call used to it, as a step-finish part, once: its tokens, and (the turn's last
+    /// message) the turn's cost. <paramref name="output"/> corrects a placeholder output count.
+    /// </summary>
+    private async Task FlushStepAsync(Conversation conversation, string claudeId, double cost, int? output = null)
+    {
+        if (conversation.PendingStep == claudeId)
+            conversation.PendingStep = null;
+        if (!conversation.Usage.TryGetValue(claudeId, out var usage)
+            || !conversation.Messages.TryGetValue(claudeId, out var message)
+            || !conversation.Stepped.Add(claudeId))
+        {
+            return;
+        }
+
+        var step = ClaudeCodeMapper.ToStepFinish(usage.Usage, usage.StopReason, cost, usage.Final ? null : output);
+        message = message with { Parts = [.. message.Parts, step] };
+        conversation.Messages[claudeId] = message;
+        await PersistMessageAsync(
+            conversation.FleetSessionId,
+            message,
+            [ClaudeCodeMapper.CreatePartUpdatedEvent(message.Id, conversation.FleetSessionId, step, message.Parts.Count - 1)]).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The turn is over: every message of the session's own reports what it used, the last with what the turn cost
+    /// (<paramref name="result"/>'s total for the process, less what it had cost before) and its real output count.
+    /// </summary>
+    private async Task FlushTurnStepsAsync(ClaudeCodeResultMessage result)
+    {
+        var turnCost = 0.0;
+        if (result.TotalCostUsd is { } total)
+        {
+            turnCost = (double)Math.Max(0, total - _processCost);
+            _processCost = total;
+        }
+
+        var last = _root.Usage.Keys
+            .Where(_root.Messages.ContainsKey)
+            .OrderBy(id => _root.Messages[id].Id, StringComparer.Ordinal)
+            .LastOrDefault();
+        foreach (var claudeId in _root.Usage.Keys.ToList())
+        {
+            if (claudeId != last)
+                await FlushStepAsync(_root, claudeId, cost: 0).ConfigureAwait(false);
+        }
+
+        if (last is not null)
+            await FlushStepAsync(_root, last, turnCost, ClaudeCodeMapper.LastCall(result)?.Output).ConfigureAwait(false);
+    }
 
     /// <summary>
     /// A block whose first words went out but whose finished line never came (the turn was stopped, the process ended):
@@ -1795,6 +1958,16 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             // Claude Code's own name and input, which say what a file tool changed once it returns.
             if (block is ClaudeCodeToolUseBlock { Id: { } callId } raw)
                 conversation.ToolCalls[callId] = raw;
+        }
+
+        // Its usage, until the stream's message_delta gives the real output count. Without partial messages, the
+        // output is a placeholder; the turn's result corrects the last call's.
+        if (assistantMsg.Message is { Id: { } usageId, Usage: { } lineUsage }
+            && (!conversation.Usage.TryGetValue(usageId, out var known) || !known.Final))
+        {
+            conversation.Usage[usageId] = new MessageUsage(lineUsage, Final: false, assistantMsg.Message.StopReason);
+            if (conversation.FleetSessionId == _fleetSessionId)
+                conversation.PendingStep = usageId;
         }
 
         var incoming = ClaudeCodeMapper.ToHarnessMessage(assistantMsg, DateTimeOffset.UtcNow);
@@ -2132,8 +2305,20 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         /// <summary>A subagent's child session reads as working.</summary>
         public bool Busy { get; set; }
 
+        /// <summary>What each message's model call used, by Claude's message id.</summary>
+        public Dictionary<string, MessageUsage> Usage { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>The messages that have reported what they used (a step-finish part).</summary>
+        public HashSet<string> Stepped { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>The session's latest message, which reports what it used once it's known whether it ends the turn.</summary>
+        public string? PendingStep { get; set; }
+
         public void Clear()
         {
+            Usage.Clear();
+            Stepped.Clear();
+            PendingStep = null;
             Messages.Clear();
             ToolCallMessageIds.Clear();
             ToolCalls.Clear();
@@ -2141,6 +2326,9 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             Streaming = null;
         }
     }
+
+    /// <summary>A message's usage; <paramref name="Final"/> once the stream gave its real output count.</summary>
+    private sealed record MessageUsage(ClaudeCodeUsage Usage, bool Final, string? StopReason = null);
 
     /// <summary>An <c>AskUserQuestion</c> call waiting on the user: Claude Code's request, and what it asked.</summary>
     private sealed record PendingQuestion(string RequestId, System.Text.Json.JsonElement Input);

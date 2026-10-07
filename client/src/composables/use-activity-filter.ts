@@ -55,6 +55,10 @@ export function getPartSearchableText(part: AccumulatedPart): string {
     return part.filename ?? ""
   }
 
+  if (part.type === "compaction") {
+    return part.summary ?? ""
+  }
+
   const state = part.state as { output?: unknown } | undefined
   const output = typeof state?.output === "string" ? state.output : ""
   return `${part.tool} ${output}`

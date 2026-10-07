@@ -91,7 +91,22 @@ export interface AccumulatedFilePart {
   url: string;
 }
 
-export type AccumulatedPart = AccumulatedTextPart | AccumulatedReasoningPart | AccumulatedToolPart | AccumulatedFilePart;
+/** Where the harness compacted the conversation, shown as a divider (see `@/lib/compaction`). */
+export interface AccumulatedCompactionPart {
+  partId: string;
+  type: "compaction";
+  trigger?: string;
+  tokensBefore?: number;
+  tokensAfter?: number;
+  summary?: string;
+}
+
+export type AccumulatedPart =
+  | AccumulatedTextPart
+  | AccumulatedReasoningPart
+  | AccumulatedToolPart
+  | AccumulatedFilePart
+  | AccumulatedCompactionPart;
 
 export interface AccumulatedMessage {
   messageId: string;
@@ -120,6 +135,11 @@ export interface AccumulatedMessage {
    * expanded template), which the conversation keeps behind the command.
    */
   command?: SlashCommand;
+  /**
+   * The summary a compaction wrote as a message of its own (OpenCode's). The conversation shows it behind the
+   * compaction's divider, not as a reply.
+   */
+  compactionSummary?: boolean;
 }
 
 // ─── Image Attachment ───────────────────────────────────────────────────────

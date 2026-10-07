@@ -197,6 +197,12 @@ public sealed record MessageEventInfo
     public bool? Steered { get; init; }
 
     /// <summary>
+    /// Gets whether this message is the summary a compaction wrote (OpenCode's), which the conversation shows behind
+    /// the compaction's divider rather than as a reply. Set only on such a message.
+    /// </summary>
+    public bool? CompactionSummary { get; init; }
+
+    /// <summary>
     /// Gets the slash command a user message came from, so the conversation shows <c>/name arguments</c> rather than
     /// the prompt the harness expanded it into.
     /// </summary>
@@ -250,6 +256,7 @@ public sealed record MessageTokenUsage
 [JsonDerivedType(typeof(FileMessageEventPart), "file")]
 [JsonDerivedType(typeof(StepStartedMessageEventPart), "step-start")]
 [JsonDerivedType(typeof(StepFinishedMessageEventPart), "step-finish")]
+[JsonDerivedType(typeof(CompactionMessageEventPart), "compaction")]
 public abstract record MessageEventPart
 {
     /// <summary>
@@ -381,6 +388,32 @@ public sealed record StepFinishedMessageEventPart : MessageEventPart
     /// Gets the Unix timestamp in milliseconds when the step completed.
     /// </summary>
     public long? CompletedAt { get; init; }
+}
+
+/// <summary>
+/// Where the harness compacted the conversation (<see cref="CompactionPart"/>), shown as a divider.
+/// </summary>
+public sealed record CompactionMessageEventPart : MessageEventPart
+{
+    /// <summary>
+    /// Gets what started it: <c>auto</c> or <c>manual</c>, when known.
+    /// </summary>
+    public string? Trigger { get; init; }
+
+    /// <summary>
+    /// Gets the context's size before the compaction, when the harness says.
+    /// </summary>
+    public int? TokensBefore { get; init; }
+
+    /// <summary>
+    /// Gets the context's size after it, when the harness says.
+    /// </summary>
+    public int? TokensAfter { get; init; }
+
+    /// <summary>
+    /// Gets the summary the model goes on from, when the harness gives it.
+    /// </summary>
+    public string? Summary { get; init; }
 }
 
 /// <summary>

@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { storeToRefs } from "pinia";
 import NoticeChips from "@/components/notices/NoticeChips.vue";
 import RunningWorkCounter from "@/components/layout/RunningWorkCounter.vue";
+import UsageLimitChip from "@/components/layout/UsageLimitChip.vue";
 import { useAppShellStore } from "@/stores/app-shell";
 import { useCommandStore } from "@/stores/commands";
 import { useSessionsStore } from "@/stores/sessions";
@@ -208,6 +209,9 @@ const tokenCount = computed(() => {
       <!-- Work left running in the background, in every session. -->
       <RunningWorkCounter />
 
+      <!-- A harness's usage limit, only while it's close or used up. -->
+      <UsageLimitChip />
+
       <!-- On the right, under the corner a notice card settles from. -->
       <NoticeChips />
 
@@ -260,6 +264,7 @@ const tokenCount = computed(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+  white-space: nowrap;
 }
 
 .shortcut-hint {

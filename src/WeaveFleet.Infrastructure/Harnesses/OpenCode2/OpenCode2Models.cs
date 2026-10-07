@@ -171,8 +171,8 @@ internal sealed record OpenCode2Cursor
 
 /// <summary>
 /// A V2 message (<c>Session.Message.Info</c>). Fleet reads <c>user</c> (<see cref="Text"/>) and <c>assistant</c>
-/// (one step: <see cref="Content"/> is its text, reasoning and tool calls in order); the other types (<c>idle</c>,
-/// <c>shell</c>, <c>compaction</c>, <c>synthetic</c>, …) aren't shown.
+/// (one step: <see cref="Content"/> is its text, reasoning and tool calls in order), <c>shell</c>, <c>compaction</c> (a
+/// divider) and some <c>synthetic</c> ones; the other types (<c>idle</c>, …) aren't shown.
 /// </summary>
 internal sealed record OpenCode2Message
 {
@@ -198,8 +198,15 @@ internal sealed record OpenCode2Message
     [JsonPropertyName("shellID")] public string? ShellId { get; init; }
     public string? Command { get; init; }
 
-    /// <summary><c>running</c>, <c>exited</c>, <c>timeout</c> or <c>killed</c>.</summary>
+    /// <summary>
+    /// <c>running</c>, <c>exited</c>, <c>timeout</c> or <c>killed</c>; on a <c>compaction</c> message, <c>running</c>,
+    /// <c>completed</c> or <c>failed</c>.
+    /// </summary>
     public string? Status { get; init; }
+
+    // A `compaction` message: what started it (`auto` or `manual`) and the summary the model goes on from.
+    public string? Reason { get; init; }
+    public string? Summary { get; init; }
 
     /// <summary>The exit code: a number, or V2's <c>"NaN"</c>/<c>"Infinity"</c> when there's none.</summary>
     public JsonElement Exit { get; init; }

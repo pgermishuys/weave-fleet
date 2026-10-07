@@ -11,6 +11,7 @@ import type {
   AccumulatedToolPart,
 } from "@/lib/client-types"
 import { toMessageRole } from "@/lib/shell-commands"
+import { toCompactionPart } from "@/lib/event-state"
 import type { MessageLifecyclePayload, MessageEventPart } from "@/lib/domain-events"
 
 /**
@@ -60,10 +61,15 @@ function convertToAccumulatedMessage(message: MessageLifecyclePayload): Accumula
     cost: message.info.cost ?? undefined,
     tokens: message.info.tokens ?? undefined,
     ...(message.info.steered === true ? { steered: true } : {}),
+    ...(message.info.compactionSummary === true ? { compactionSummary: true } : {}),
   }
 }
 
 function convertPart(part: MessageEventPart): AccumulatedPart | null {
+  if (part.type === "compaction") {
+    return toCompactionPart(part as unknown as Record<string, unknown>, part.id)
+  }
+
   if (part.type === "text") {
     return {
       partId: part.id,

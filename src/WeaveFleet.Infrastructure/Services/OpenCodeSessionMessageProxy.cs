@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Infrastructure.Events;
 using WeaveFleet.Application;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;
@@ -472,6 +473,7 @@ public sealed class OpenCodeSessionMessageProxy(
                     },
                     CompletedAt = stepFinishPart.CompletedAt,
                 },
+                CompactionPart compactionPart => SessionSnapshotBuilder.CompactionEventPart(compactionPart, fleetSessionId, message.Id, parts.Count),
                 _ => null,
             };
 
@@ -498,6 +500,7 @@ public sealed class OpenCodeSessionMessageProxy(
                 // So a prompt sent into a running turn still says so after a reload.
                 Steered = message.Steered ? true : null,
                 Command = message.Command,
+                CompactionSummary = message.CompactionSummary ? true : null,
             },
             Parts = parts,
         };
@@ -589,6 +592,10 @@ public sealed class OpenCodeSessionMessageProxy(
                     stepPart.Tokens?.Output ?? 0,
                     stepPart.Tokens?.Reasoning ?? 0,
                     stepPart.CompletedAt),
+                CompactionMessageEventPart compaction => new CompactionPart(compaction.Trigger, compaction.TokensBefore, compaction.TokensAfter, compaction.Summary)
+                {
+                    PartId = compaction.Id,
+                },
                 _ => null,
             };
 
@@ -606,6 +613,7 @@ public sealed class OpenCodeSessionMessageProxy(
             ModelId = payload.Info.ModelId,
             Steered = payload.Info.Steered == true,
             Command = payload.Info.Command,
+            CompactionSummary = payload.Info.CompactionSummary == true,
         };
     }
 

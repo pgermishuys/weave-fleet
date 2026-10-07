@@ -33,3 +33,12 @@ replaced with `<WORKDIR>`.
   rate_limit`, a result with `api_error_status: 429`); a plain 429 (`CLAUDE_CODE_MAX_RETRIES=2`: two `api_retry` lines,
   a rejected `rate_limit_event` with no reset); and a 529 (`error: server_error`). Partial-message, status and bulky
   result fields dropped.
+- `api-retry.jsonl`, `compact.jsonl`, `rate-limit-event.jsonl` (Claude Code 2.1.290, 2026-10-07, `--model haiku`, usage and
+  cost kept): a prompt whose first two model calls got 529 from a stand-in Anthropic endpoint in front of a gateway
+  (`system/api_retry` with `attempt`, `max_retries`, `retry_delay_ms`, `error_status`, `error`); a prompt, `/compact`
+  (`status: compacting`, `compact_boundary` with `pre_tokens` and `post_tokens`, the summary as a `user` line with
+  `isSynthetic: true`), then another prompt, with `--include-partial-messages` (text deltas dropped; the summary's
+  transcript path replaced with `<CLAUDE_CONFIG_DIR>`); and a turn signed in with a stand-in OAuth token
+  (`CLAUDE_CODE_OAUTH_TOKEN`) through an endpoint that adds the `anthropic-ratelimit-unified-*` headers, which Claude
+  Code reads only for a claude.ai login, giving a `rate_limit_event`. The headers' values (82% of the 5-hour window, 63%
+  of the weekly) were the stand-in's; the line's shape is Claude Code's.

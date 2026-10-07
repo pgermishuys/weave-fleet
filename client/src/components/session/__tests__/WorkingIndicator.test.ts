@@ -48,4 +48,29 @@ describe("WorkingIndicator", () => {
 
     expect(wrapper.get(".working__elapsed").text()).toBe("· 0s");
   });
+
+  // Claude Code's api_retry and OpenCode 2's retry.scheduled: still in the turn, waiting out a failed model call.
+  it("says it's retrying, which attempt out of how many, when and why, counting down", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-07T10:00:00Z"));
+    const wrapper = mount(WorkingIndicator, {
+      props: {
+        since: Date.parse("2026-10-07T09:59:00Z"),
+        retry: { attempt: 3, maxAttempts: 10, message: "API overloaded (529)", next: "2026-10-07T10:00:12Z" },
+      },
+    });
+
+    expect(wrapper.get('[data-testid="working-retry"]').text()).toBe("Retrying · attempt 3 of 10 · in 12 s · API overloaded (529)");
+    expect(wrapper.find("[aria-label='Retrying']").exists()).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(wrapper.get('[data-testid="working-retry"]').text()).toContain("in 7 s");
+
+    // Working again once the harness answers.
+    await wrapper.setProps({ retry: null });
+    expect(wrapper.text()).toContain("Working");
+    expect(wrapper.find('[data-testid="working-retry"]').exists()).toBe(false);
+    wrapper.unmount();
+    vi.useRealTimers();
+  });
 });

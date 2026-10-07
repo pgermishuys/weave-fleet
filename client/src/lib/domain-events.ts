@@ -111,6 +111,8 @@ export interface MessageEventInfo {
   steered?: boolean | null;
   /** The slash command a user message came from; its text is then what the harness made of the command. */
   command?: SlashCommand | null;
+  /** Set on the summary a compaction wrote as a message of its own (OpenCode's); it shows behind the divider. */
+  compactionSummary?: boolean | null;
 }
 
 export interface BaseMessageEventPart {
@@ -196,7 +198,19 @@ export interface StepFinishedMessageEventPart extends BaseMessageEventPart {
   completedAt: number | null;
 }
 
+/** Where the harness compacted the conversation: a divider, every harness the same way. */
+export interface CompactionMessageEventPart extends BaseMessageEventPart {
+  type: "compaction";
+  /** "auto" or "manual", when known. */
+  trigger?: string | null;
+  tokensBefore?: number | null;
+  tokensAfter?: number | null;
+  /** The summary the model goes on from, when the harness gives it. */
+  summary?: string | null;
+}
+
 export type MessageEventPart =
+  | CompactionMessageEventPart
   | TextMessageEventPart
   | ReasoningMessageEventPart
   | ToolMessageEventPart

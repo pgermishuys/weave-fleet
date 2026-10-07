@@ -106,9 +106,57 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
             "session.shell.started" => ShellStarted(evt, data),
             "session.shell.ended" => ShellEnded(evt, data),
             "session.inbox.delivered" => Delivered(data),
+            "session.compaction.ended" => CompactionEnded(evt, data),
             _ => [],
         };
     }
+
+    /// <summary>
+    /// A finished compaction shows where it happened, as V2's own <c>compaction</c> message does after a reload: a
+    /// divider, with the summary (<c>text</c>) behind it. V2 doesn't say how big the context was before or after.
+    /// </summary>
+    private List<HarnessEvent> CompactionEnded(OpenCode2Event evt, JsonElement data)
+    {
+        var messageId = evt.Id ?? $"{fleetSessionId}-compaction-{evt.Created}";
+        var created = evt.Created ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var divider = CompactionDivider(messageId, ReadString(data, "reason"), ReadString(data, "text"));
+        return
+        [
+            Event(EventTypes.MessageUpdated, JsonSerializer.SerializeToElement(
+                new OpenCode2MessageUpdatedPayload
+                {
+                    Info = new OpenCode2MessageInfo
+                    {
+                        Id = messageId,
+                        Role = "assistant",
+                        SessionId = fleetSessionId,
+                        Time = new OpenCode2MessageTime { Created = created, Completed = created },
+                    },
+                },
+                OpenCode2JsonContext.Default.OpenCode2MessageUpdatedPayload)),
+            Event(EventTypes.MessagePartUpdated, JsonSerializer.SerializeToElement(
+                new MessagePartUpdatedPayload
+                {
+                    SessionId = fleetSessionId,
+                    Part = Events.SessionSnapshotBuilder.CompactionEventPart(divider, fleetSessionId, messageId, 0),
+                },
+                InfrastructureJsonContext.Default.MessagePartUpdatedPayload)),
+        ];
+    }
+
+    /// <summary>The divider for a V2 compaction, live and from history: what started it and its summary.</summary>
+    internal static CompactionPart CompactionDivider(string messageId, string? reason, string? summary)
+        => new(
+            Trigger: reason switch
+            {
+                "auto" => ContextCompactionTriggers.Auto,
+                "manual" => ContextCompactionTriggers.Manual,
+                _ => null,
+            },
+            Summary: string.IsNullOrWhiteSpace(summary) ? null : summary.Trim())
+        {
+            PartId = $"{messageId}-compaction",
+        };
 
     /// <summary>
     /// What a finished step used, for Fleet's token analytics: <c>session.step.ended</c> and

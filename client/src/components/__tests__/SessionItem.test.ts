@@ -212,7 +212,7 @@ describe("SessionItem", () => {
 
     const retrying = mountSessionItem(createSession({ activityStatus: "retry", retryAttempt: 2 }));
     expect(retrying.get(".status-glyph").classes()).toContain("status-glyph--retry");
-    expect(retrying.get(".status-glyph").attributes("aria-label")).toBe("Retrying (attempt 2)");
+    expect(retrying.get(".status-glyph").attributes("aria-label")).toBe("Retrying · attempt 2");
     expect(retrying.get(".session-meta").text()).toBe("Retry 2");
   });
 

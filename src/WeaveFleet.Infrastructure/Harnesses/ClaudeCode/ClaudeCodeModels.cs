@@ -102,6 +102,9 @@ internal sealed record ClaudeCodeStreamEventBody
 
     /// <summary>On <c>content_block_delta</c>: what was added, e.g. <c>{ type: text_delta, text }</c>.</summary>
     [JsonPropertyName("delta")] public ClaudeCodeStreamDelta? Delta { get; init; }
+
+    /// <summary>On <c>message_delta</c>: the message's usage, with its real output count.</summary>
+    [JsonPropertyName("usage")] public ClaudeCodeUsage? Usage { get; init; }
 }
 
 /// <summary>A <c>content_block_delta</c>'s addition: <c>text_delta</c>, <c>thinking_delta</c>, or another kind Fleet doesn't show.</summary>
@@ -110,6 +113,9 @@ internal sealed record ClaudeCodeStreamDelta
     [JsonPropertyName("type")] public string? Type { get; init; }
     [JsonPropertyName("text")] public string? Text { get; init; }
     [JsonPropertyName("thinking")] public string? Thinking { get; init; }
+
+    /// <summary>On <c>message_delta</c>: why the model stopped (<c>end_turn</c>, <c>tool_use</c>, …).</summary>
+    [JsonPropertyName("stop_reason")] public string? StopReason { get; init; }
 }
 
 /// <summary>
@@ -225,6 +231,22 @@ internal sealed record ClaudeCodeSystemMessage : ClaudeCodeStreamMessage
 
     /// <summary>On <c>background_tasks_changed</c>: every task still running.</summary>
     [JsonPropertyName("tasks")] public IReadOnlyList<ClaudeCodeBackgroundTask>? Tasks { get; init; }
+
+    /// <summary>The sub-agent call a line is about, when it's a subagent's; null for the main conversation.</summary>
+    [JsonPropertyName("parent_tool_use_id")] public string? ParentToolUseId { get; init; }
+
+    /// <summary>On <c>api_retry</c>: which retry this is (from 1), out of <see cref="MaxRetries"/>.</summary>
+    [JsonPropertyName("attempt")] public int? Attempt { get; init; }
+    [JsonPropertyName("max_retries")] public int? MaxRetries { get; init; }
+
+    /// <summary>On <c>api_retry</c>: how long Claude Code waits before it tries again.</summary>
+    [JsonPropertyName("retry_delay_ms")] public long? RetryDelayMs { get; init; }
+
+    /// <summary>On <c>api_retry</c>: the HTTP status the model call failed with (529, 429, 500…); null for a connection error.</summary>
+    [JsonPropertyName("error_status")] public int? ErrorStatus { get; init; }
+
+    /// <summary>On <c>api_retry</c>: what went wrong, e.g. <c>overloaded</c>, <c>rate_limit</c>, <c>server_error</c>.</summary>
+    [JsonPropertyName("error")] public JsonElement? Error { get; init; }
 }
 
 /// <summary>What a <c>task_updated</c> message changed.</summary>
@@ -275,6 +297,12 @@ internal sealed record ClaudeCodeUserMessage : ClaudeCodeStreamMessage
 
     /// <summary>The sub-agent call this message belongs to; null for the main conversation.</summary>
     [JsonPropertyName("parent_tool_use_id")] public string? ParentToolUseId { get; init; }
+
+    /// <summary>
+    /// A line Claude Code wrote itself rather than the user: after a <c>compact_boundary</c>, the summary the model goes
+    /// on from ("This session is being continued from a previous conversation…").
+    /// </summary>
+    [JsonPropertyName("isSynthetic")] public bool? IsSynthetic { get; init; }
 }
 
 /// <summary>Final result line — contains cost, usage, and outcome.</summary>
@@ -472,11 +500,20 @@ internal sealed record ClaudeCodeUsage
     [JsonPropertyName("cache_read_input_tokens")] public int? CacheReadInputTokens { get; init; }
     [JsonPropertyName("cache_creation_input_tokens")] public int? CacheCreationInputTokens { get; init; }
 
+    /// <summary>How much of <see cref="OutputTokens"/> was thinking.</summary>
+    [JsonPropertyName("output_tokens_details")] public ClaudeCodeOutputDetails? OutputTokensDetails { get; init; }
+
     /// <summary>
     /// On a result line, whose own counts add up the turn's calls: the calls one by one, of <c>type</c>
     /// <c>message</c> (or <c>compaction</c>, a summarising call).
     /// </summary>
     [JsonPropertyName("iterations")] public IReadOnlyList<ClaudeCodeUsageIteration>? Iterations { get; init; }
+}
+
+/// <summary>What a call's output was made of.</summary>
+internal sealed record ClaudeCodeOutputDetails
+{
+    [JsonPropertyName("thinking_tokens")] public int? ThinkingTokens { get; init; }
 }
 
 /// <summary>One model call's usage on a result line (<see cref="ClaudeCodeUsage.Iterations"/>).</summary>

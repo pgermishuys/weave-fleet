@@ -773,6 +773,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/harnesses/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetHarnessUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{id}/context": {
         parameters: {
             query?: never;
@@ -4017,6 +4033,20 @@ export interface components {
             token: string;
             sessionId: string;
         };
+        HarnessUsage: {
+            harnessType: string;
+            windows: components["schemas"]["UsageLimitWindow"][];
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        UsageLimitWindow: {
+            window: string;
+            /** Format: double */
+            utilization?: number | null;
+            /** Format: date-time */
+            resetsAt?: string | null;
+            status?: string;
+        };
         SessionContextUsage: {
             sessionId: string;
             used?: null | number | string;
@@ -6167,6 +6197,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SideConversationResponse"];
+                };
+            };
+        };
+    };
+    GetHarnessUsage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HarnessUsage"][];
                 };
             };
         };

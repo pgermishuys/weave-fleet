@@ -8,6 +8,7 @@ vi.mock("@/api/client", () => ({
 import { api, type SessionListItem } from "@/api/client";
 import ContextRing from "@/components/session/ContextRing.vue";
 import { _resetSessionContextForTesting, publishSessionContext } from "@/composables/use-session-context";
+import { resetHarnessUsageForTests } from "@/composables/use-harness-usage";
 import { toContextUsage } from "@/lib/context-usage";
 import { useSessionsStore } from "@/stores/sessions";
 
@@ -31,8 +32,9 @@ function publish(overrides: Record<string, unknown> = {}): void {
   }));
 }
 
-function seedSession(capabilities: Record<string, unknown> = {}, totalCost = 1.42): void {
+function seedSession(capabilities: Record<string, unknown> = {}, totalCost = 1.42, harnessType = "claude-code"): void {
   useSessionsStore().setSessions([{
+    harnessType,
     session: { id: "s1", title: "T", time: { created: 1, updated: 2 }, tags: [] },
     totalCost,
     capabilities: { canCompact: true, compactDisabledReason: null, ...capabilities },
@@ -50,7 +52,10 @@ function popover(): HTMLElement | null {
 describe("ContextRing", () => {
   beforeEach(() => {
     _resetSessionContextForTesting();
+    resetHarnessUsageForTests();
     mockApi.POST.mockReset();
+    mockApi.GET.mockReset();
+    mockApi.GET.mockResolvedValue({ data: [], response: { ok: true } } as never);
     seedSession();
   });
 
@@ -152,6 +157,49 @@ describe("ContextRing", () => {
     await flushPromises();
     expect(popover()?.textContent).toContain("Compacted");
     expect(popover()?.textContent).toContain("200,000 token window");
+    wrapper.unmount();
+  });
+
+  it("shows the harness's usage limits under the context, when it reports them", async () => {
+    const inTwoHours = new Date(Date.now() + 2 * 3_600_000 + 5 * 60_000);
+    mockApi.GET.mockResolvedValue({
+      data: [{
+        harnessType: "claude-code",
+        windows: [
+          { window: "seven_day", utilization: 0.63, resetsAt: new Date(Date.now() + 4 * 86_400_000).toISOString(), status: "allowed" },
+          { window: "five_hour", utilization: 0.82, resetsAt: inTwoHours.toISOString(), status: "warning" },
+        ],
+        updatedAt: new Date().toISOString(),
+      }],
+      response: { ok: true },
+    } as never);
+    publish();
+    const wrapper = mountRing();
+    await flushPromises();
+
+    await wrapper.get('[data-testid="context-ring"]').trigger("click");
+    await flushPromises();
+
+    expect(mockApi.GET).toHaveBeenCalledWith("/api/harnesses/usage");
+    const limits = Array.from(popover()?.querySelectorAll<HTMLElement>('[data-testid="context-limit"]') ?? []);
+    expect(limits.map((limit) => limit.querySelector("span")?.textContent)).toEqual(["5-hour limit", "Weekly limit"]);
+    const time = inTwoHours.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    expect(limits[0].textContent).toContain(`82% · resets ${time}`);
+    expect(limits[0].dataset.tone).toBe("warn");
+    expect(limits[1].textContent).toMatch(/63% · resets \w+/);
+    expect(limits[1].dataset.tone).toBe("ok");
+    wrapper.unmount();
+  });
+
+  it("shows no limits for a harness that reports none, as on a gateway", async () => {
+    publish();
+    const wrapper = mountRing();
+    await flushPromises();
+
+    await wrapper.get('[data-testid="context-ring"]').trigger("click");
+    await flushPromises();
+
+    expect(popover()?.querySelector('[data-testid="context-limits"]')).toBeNull();
     wrapper.unmount();
   });
 });

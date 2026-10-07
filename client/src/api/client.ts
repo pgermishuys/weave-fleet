@@ -805,10 +805,16 @@ export interface SessionListItem {
   sourceDirectory?: string | null;
   branch?: string | null;
   activityStatus?: string | null;
-  /** Client-only: set from the activity_status push while the harness retries. */
+  /** While the harness retries: from the session list, then the activity_status push. */
   retryAttempt?: number | null;
   /** When Fleet tries a turn a model provider's limit stopped again; kept current by `session.retry` on `sessions`. */
   scheduledRetry?: ScheduledRetry | null;
+  /** How many attempts the harness makes in all, when it says. */
+  retryMaxAttempts?: number | null;
+  /** Why the model call failed, e.g. "API overloaded (529)". */
+  retryMessage?: string | null;
+  /** When the harness tries again (ISO). */
+  retryNext?: string | null;
   lifecycleStatus: string;
   retentionStatus: string;
   archivedAt?: string | null;

@@ -763,7 +763,9 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
 
     private string[] Arguments(int start) => File.ReadAllLines(Path.Combine(_directory, $"args-{start}.txt"));
 
-    private string[] StdinLines() => File.ReadAllLines(Path.Combine(_directory, "stdin.txt"));
+    /// <summary>What Fleet wrote to claude, less its ask for the account's usage limits (get_usage), which goes to every process.</summary>
+    private string[] StdinLines()
+        => [.. File.ReadAllLines(Path.Combine(_directory, "stdin.txt")).Where(line => !line.Contains("\"get_usage\"", StringComparison.Ordinal))];
 
     private List<string> Prompts()
         => StdinLines()

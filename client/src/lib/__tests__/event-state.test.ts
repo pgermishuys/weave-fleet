@@ -801,3 +801,28 @@ describe("slash commands", () => {
     expect(updated[0]!.command).toEqual({ name: "review", arguments: "main" });
   });
 });
+
+describe("compaction dividers", () => {
+  it("adds a divider live, and its summary when it arrives", () => {
+    const divider = { messageID: "m1", sessionID: "s1", id: "m1-part-0", type: "compaction", trigger: "manual", tokensBefore: 35_438, tokensAfter: 1_450 };
+    let messages = applyPartUpdate([], divider);
+    messages = applyPartUpdate(messages, { ...divider, summary: "What we did." });
+
+    expect(messages[0].parts).toEqual([
+      { partId: "m1-part-0", type: "compaction", trigger: "manual", tokensBefore: 35_438, tokensAfter: 1_450, summary: "What we did." },
+    ]);
+  });
+
+  it("keeps a snapshot's divider, and marks OpenCode's summary message", () => {
+    let messages = ensureMessage([], { id: "m1", role: "assistant", sessionID: "s1" });
+    messages = mergeMessageUpdate(messages, {
+      id: "m1",
+      parts: [{ id: "m1-c", type: "compaction", messageID: "m1", sessionID: "s1", tokensBefore: 181_000, tokensAfter: 34_000 }],
+    });
+    messages = ensureMessage(messages, { id: "m2", role: "assistant", sessionID: "s1" });
+    messages = mergeMessageUpdate(messages, { id: "m2", compactionSummary: true });
+
+    expect(messages[0].parts).toEqual([{ partId: "m1-c", type: "compaction", trigger: undefined, tokensBefore: 181_000, tokensAfter: 34_000, summary: undefined }]);
+    expect(messages[1].compactionSummary).toBe(true);
+  });
+});

@@ -55,6 +55,13 @@ internal static class ClaudeCodeInput
     internal static string GetTaskOutput(string requestId, string taskId)
         => Request(requestId, "get_task_output", json => json.WriteString("task_id", taskId));
 
+    /// <summary>
+    /// Asks how much of the account's usage limits are used (Claude Code calls it experimental). The behaviours it can
+    /// add are left out.
+    /// </summary>
+    internal static string GetUsage(string requestId)
+        => Request(requestId, "get_usage", json => json.WriteBoolean("skip_behaviors", true));
+
     private static string Request(string requestId, string subtype, Action<Utf8JsonWriter> fields) => Line(json =>
     {
         json.WriteString("type", "control_request");

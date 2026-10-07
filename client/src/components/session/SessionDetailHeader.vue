@@ -9,6 +9,7 @@ import type { SessionOrigin } from "@/api/client";
 import { useHarnesses } from "@/composables/use-harnesses";
 import { useModels } from "@/composables/use-models";
 import { modelDisplayName } from "@/lib/agent-model-choice";
+import { describeRetry, retryAttemptLabel, type RetryStatus } from "@/lib/retry-status";
 import { useSessionsStore } from "@/stores/sessions";
 import { useMachinesStore } from "@/stores/machines";
 import { apiFetch } from "@/lib/api-client";
@@ -33,6 +34,7 @@ interface Props {
   totalTokens?: number | null;
   totalCost?: number | null;
   retryAttempt?: number | null;
+  retryMaxAttempts?: number | null;
   retryMessage?: string | null;
   retryNext?: string | null;
   directory?: string | null;
@@ -182,7 +184,7 @@ const sessionStatusLabel = computed(() => {
     case "disconnected":
       return "Disconnected";
     case "retry":
-      return props.retryAttempt ? `Retrying (attempt ${props.retryAttempt})…` : "Retrying…";
+      return retryAttemptLabel(retry.value) ? `Retrying (${retryAttemptLabel(retry.value)})…` : "Retrying…";
     case "waiting":
       return "Needs input";
     default:
@@ -209,10 +211,28 @@ const glyphStatus = computed(() => {
       return "idle";
   }
 });
-const retryNote = computed(() => {
-  if (sessionStatusIndicator.value !== "retry") return null;
-  return props.retryAttempt ? `Retrying · attempt ${props.retryAttempt}` : "Retrying";
-});
+const retry = computed<RetryStatus>(() => ({
+  attempt: props.retryAttempt,
+  maxAttempts: props.retryMaxAttempts,
+  message: props.retryMessage,
+  next: props.retryNext,
+}));
+// Counts down to the next attempt, ticking only while the session retries.
+const retryNow = shallowRef(Date.now());
+let retryTimer: ReturnType<typeof setInterval> | undefined;
+watch(
+  () => sessionStatusIndicator.value === "retry",
+  (retrying) => {
+    clearInterval(retryTimer);
+    retryTimer = undefined;
+    retryNow.value = Date.now();
+    if (retrying) retryTimer = setInterval(() => (retryNow.value = Date.now()), 1_000);
+  },
+  { immediate: true },
+);
+onUnmounted(() => clearInterval(retryTimer));
+// "Retrying · attempt 3 of 10 · in 12 s · API overloaded (529)": the row has no room for why the session is stalled.
+const retryNote = computed(() => (sessionStatusIndicator.value === "retry" ? describeRetry(retry.value, retryNow.value) : null));
 const isArchived = computed(() => props.retentionStatus === "archived");
 const harnessLabel = computed(() => {
   const type = props.harnessType;
@@ -417,6 +437,7 @@ onUnmounted(() => {
             v-if="retryNote"
             data-testid="session-retry-note"
             class="session-detail-header__retry"
+            :title="retryNote"
           >
             {{ retryNote }}
           </span>
@@ -971,7 +992,10 @@ onUnmounted(() => {
 }
 
 .session-detail-header__retry {
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 12px;
   font-weight: 500;
   line-height: 1.4;
