@@ -106,6 +106,21 @@ public sealed partial class OpenCode2FleetFilesTests : IDisposable
     }
 
     [Fact]
+    public void An_owners_own_version_of_fleet_plan_keeps_the_runtime_Fleet_ships_beside_it()
+    {
+        // The skill tells the agent to pack and lint with runtime/pack.mjs from its own folder.
+        var version = "---\nname: fleet-plan\ndescription: My version.\n---\n\nMy way.\n";
+
+        var folder = OpenCode2FleetFiles.SyncBuiltInSkills(
+            _dataDirectory, "local-user", ["fleet-plan"], new Dictionary<string, string> { ["fleet-plan"] = version });
+
+        File.ReadAllText(Path.Combine(folder, "fleet-plan", "SKILL.md")).ShouldBe(version);
+        foreach (var file in new[] { "htmlplan.js", "htmlplan.css", "pack.mjs" })
+            File.ReadAllText(Path.Combine(folder, "fleet-plan", "runtime", file))
+                .ShouldBe(File.ReadAllText(RepoPath("opencode", "built-in-skills", "fleet-plan", "runtime", file)));
+    }
+
+    [Fact]
     public void Built_in_skills_left_from_before_owner_folders_are_removed()
     {
         var name = OpenCode2FleetFiles.BuiltInSkillNames.Order(StringComparer.Ordinal).First();

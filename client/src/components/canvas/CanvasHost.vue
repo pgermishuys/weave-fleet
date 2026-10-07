@@ -273,7 +273,7 @@ const activeProps = computed(() => {
     };
   }
   if (canvas.kind === "page" && canvas.page) {
-    return { page: canvas.page };
+    return { sessionId: props.sessionId, page: canvas.page };
   }
   if (canvas.kind !== "visual" || !canvas.payload) return { sessionId: props.sessionId };
   return canvas.server ? { payload: canvas.payload, readonly: true } : { payload: canvas.payload };

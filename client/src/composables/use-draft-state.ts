@@ -102,3 +102,13 @@ export function appendDraftReference(sessionId: string, reference: string): void
   draft.text = `${draft.text}${separator}${reference} `;
   writeStoredDraft(sessionDraftKey(sessionId), draft.text);
 }
+
+/**
+ * Put `text` in a session's draft, after a blank line if the draft already has text, so nothing typed is lost.
+ * Nothing is sent.
+ */
+export function appendDraftText(sessionId: string, text: string): void {
+  const draft = ensureDraft(sessionId, { agentId: "", modelId: "" });
+  draft.text = draft.text.trim() ? `${draft.text.trimEnd()}\n\n${text}` : text;
+  writeStoredDraft(sessionDraftKey(sessionId), draft.text);
+}
