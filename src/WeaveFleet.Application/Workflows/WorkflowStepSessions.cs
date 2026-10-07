@@ -4,6 +4,7 @@ using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Workflows;
 
@@ -11,7 +12,11 @@ namespace WeaveFleet.Application.Workflows;
 /// Starts a step as an ordinary Fleet session in the run's worktree: the first agent step makes the worktree from the
 /// base branch, named by Settings → Worktree naming from the run's request, and every later step works in it.
 /// </summary>
-public sealed class WorkflowStepSessions(SessionOrchestrator orchestrator, ISessionMessageProxy messages) : IWorkflowStepSessions
+public sealed class WorkflowStepSessions(
+    SessionOrchestrator orchestrator,
+    ISessionMessageProxy messages,
+    ISessionRepository sessions,
+    IProjectRepository projects) : IWorkflowStepSessions
 {
     public async Task<WorkflowStepSession> StartAsync(WorkflowRun run, WorkflowAgentStep agentStep, string prompt, WorkflowModelChoice model, bool userFinishes, CancellationToken ct)
     {
@@ -28,6 +33,10 @@ public sealed class WorkflowStepSessions(SessionOrchestrator orchestrator, ISess
             WorkflowRunId = run.Id,
             WorkflowUserFinishes = userFinishes,
             BranchNamingText = run.Request,
+            // Before the run has any session of its own, nothing else says where it lives: use the run's chosen
+            // project. Once it has one, leave this null so CreateSessionAsync follows wherever its sessions
+            // already are — which is where a move lands them too, even if that first session's prompt failed.
+            ProjectId = await FirstStepProjectIdAsync(run, ct).ConfigureAwait(false),
         }, ct).ConfigureAwait(false);
         if (created.IsFailure)
             return WorkflowStepSession.Failed(created.Error.Description);
@@ -60,6 +69,22 @@ public sealed class WorkflowStepSessions(SessionOrchestrator orchestrator, ISess
     {
         var page = await messages.GetMessagesAsync(sessionId, limit: 30, ct: ct).ConfigureAwait(false);
         return SessionUpdateSender.LastReply(page.Messages, messageId);
+    }
+
+    /// <summary>
+    /// The project only the run's first step session should ask for: the run's chosen project, before the run has
+    /// any session of its own to say where it actually lives. Null once it has one — even a session whose prompt
+    /// failed, so a move after that still decides the next step, not the project chosen when the run started — and
+    /// null if the chosen project was deleted while the run waited (a You step, say) before its first session, so
+    /// Fleet falls back to Scratch instead of trying to insert a session against a project that's gone.
+    /// </summary>
+    internal async Task<string?> FirstStepProjectIdAsync(WorkflowRun run, CancellationToken ct)
+    {
+        if (run.ProjectId is not { } projectId)
+            return null;
+        if ((await sessions.GetForWorkflowRunAsync(run.Id).ConfigureAwait(false)).Count > 0)
+            return null;
+        return await projects.GetByIdAsync(projectId).ConfigureAwait(false) is not null ? projectId : null;
     }
 
     /// <summary>The repository source: a new worktree for the run's first step, the run's worktree after that.</summary>

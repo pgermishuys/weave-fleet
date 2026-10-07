@@ -133,6 +133,7 @@ public sealed class InMemoryWorkflowRunRepository : IWorkflowRunRepository
         WorktreePath = run.WorktreePath,
         HarnessType = run.HarnessType,
         HarnessProfileId = run.HarnessProfileId,
+        ProjectId = run.ProjectId,
         Options = run.Options,
         Status = run.Status,
         CurrentStepId = run.CurrentStepId,

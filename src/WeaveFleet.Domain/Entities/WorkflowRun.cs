@@ -19,6 +19,11 @@ public sealed class WorkflowRun
     public string Title { get; set; } = string.Empty;
     /// <summary>The repository the run's worktree is made from.</summary>
     public string RepositoryPath { get; set; } = string.Empty;
+    /// <summary>
+    /// The project chosen in the Run box before the run started; null for Scratch. Only the first step's session
+    /// uses it — later steps go wherever the run's sessions already are, so moving the run is still followed.
+    /// </summary>
+    public string? ProjectId { get; set; }
     public string? BaseBranch { get; set; }
     /// <summary>The run's branch, once its worktree exists.</summary>
     public string? Branch { get; set; }

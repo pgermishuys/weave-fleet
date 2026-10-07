@@ -11,11 +11,13 @@ import ModelSelector from "@/components/session/ModelSelector.vue";
 import BasePicker from "@/components/sessions/new-session/BasePicker.vue";
 import FolderPicker from "@/components/sessions/new-session/FolderPicker.vue";
 import HarnessPicker from "@/components/sessions/new-session/HarnessPicker.vue";
+import ProjectPicker from "@/components/workflows/ProjectPicker.vue";
 import { useBuiltInSkills } from "@/composables/use-built-in-skills";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { useHarnessCatalog } from "@/composables/use-harness-catalog";
 import { keyFromPath, pathFromKey, useModelRoles } from "@/composables/use-model-roles";
 import { useNewSessionDefaults } from "@/composables/use-new-session-defaults";
+import { useProjects } from "@/composables/use-projects";
 import { useRepositories } from "@/composables/use-repositories";
 import { useRepositoryDetail } from "@/composables/use-repository-detail";
 import { useSettingsNav } from "@/composables/use-settings-nav";
@@ -41,6 +43,7 @@ const { harnesses: allHarnesses, enabledHarnesses, defaultHarnessType } = useEna
 const { skills: builtInSkills } = useBuiltInSkills();
 const { choiceFor } = useModelRoles();
 const { setActiveSection } = useSettingsNav();
+const { projects } = useProjects();
 
 const request = shallowRef("");
 const optionalOn = reactive(new Set<string>());
@@ -51,6 +54,7 @@ const baseBranch = shallowRef<string | null>(null);
 const fetchOrigin = shallowRef(true);
 const branchName = shallowRef("");
 const harnessChoice = shallowRef<string | null>(null);
+const projectId = shallowRef<string | null>(null);
 const isFolderMenuOpen = shallowRef(false);
 const isStarting = shallowRef(false);
 const startError = shallowRef<string | null>(null);
@@ -167,6 +171,7 @@ async function run(): Promise<void> {
       optionalSteps: [...optionalOn],
       roleOverrides,
       checkWithMe: checkWithMe.value,
+      projectId: projectId.value,
     });
     request.value = "";
     const first = started.sessions[0]?.sessionId;
@@ -304,6 +309,11 @@ function handleKeydown(event: KeyboardEvent): void {
         v-if="workflowHarnesses.length > 1"
         v-model="harnessType"
         :harnesses="workflowHarnesses"
+        :disabled="isStarting"
+      />
+      <ProjectPicker
+        v-model="projectId"
+        :projects="projects"
         :disabled="isStarting"
       />
       <Popover>

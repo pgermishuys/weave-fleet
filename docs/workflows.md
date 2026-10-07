@@ -137,6 +137,10 @@ Each agent step starts as a new session in the run's worktree. Its prompt is the
 filled in, then a note if the step was sent back, then the steps after it, then one short footer that Fleet adds to
 step sessions only (a step you finish has none, see [Steps you finish](#steps-you-finish)).
 
+**Project**, in the Run box, puts the run's sessions in a project before the first step starts, instead of Scratch.
+Moving the run to another project (its sessions move together) is still followed: every later step goes wherever the
+run's sessions already are, not back to the project chosen at the start.
+
 The steps after it are listed by title, in file order, without optional steps that are off, so an agent carrying out a
 plan doesn't push or merge ahead of the steps that do:
 

@@ -19,11 +19,11 @@ public sealed class WorkflowRunRepository(IDbConnectionFactory connectionFactory
             """
             INSERT INTO workflow_runs (
                 id, user_id, workflow_id, workflow_name, definition, request, slug, title, repository_path, base_branch,
-                branch, worktree_path, harness_type, harness_profile_id, options, status, current_step_id,
+                branch, worktree_path, harness_type, harness_profile_id, project_id, options, status, current_step_id,
                 waiting_reason, waiting_kind, result, automation_id, automation_name, created_at, updated_at, ended_at
             ) VALUES (
                 @Id, @UserId, @WorkflowId, @WorkflowName, @Definition, @Request, @Slug, @Title, @RepositoryPath, @BaseBranch,
-                @Branch, @WorktreePath, @HarnessType, @HarnessProfileId, @Options, @Status, @CurrentStepId,
+                @Branch, @WorktreePath, @HarnessType, @HarnessProfileId, @ProjectId, @Options, @Status, @CurrentStepId,
                 @WaitingReason, @WaitingKind, @Result, @AutomationId, @AutomationName, @CreatedAt, @UpdatedAt, @EndedAt
             )
             """,
@@ -149,6 +149,7 @@ public sealed class WorkflowRunRepository(IDbConnectionFactory connectionFactory
         cmd.AddParameter("WorktreePath", run.WorktreePath);
         cmd.AddParameter("HarnessType", run.HarnessType);
         cmd.AddParameter("HarnessProfileId", run.HarnessProfileId);
+        cmd.AddParameter("ProjectId", run.ProjectId);
         cmd.AddParameter("Options", run.Options);
         cmd.AddParameter("Status", run.Status);
         cmd.AddParameter("CurrentStepId", run.CurrentStepId);
@@ -200,6 +201,7 @@ public sealed class WorkflowRunRepository(IDbConnectionFactory connectionFactory
         WorktreePath = r.GetNullableString(r.GetOrdinal("worktree_path")),
         HarnessType = r.GetString(r.GetOrdinal("harness_type")),
         HarnessProfileId = r.GetNullableString(r.GetOrdinal("harness_profile_id")),
+        ProjectId = r.GetNullableString(r.GetOrdinal("project_id")),
         Options = r.GetString(r.GetOrdinal("options")),
         Status = r.GetString(r.GetOrdinal("status")),
         CurrentStepId = r.GetNullableString(r.GetOrdinal("current_step_id")),

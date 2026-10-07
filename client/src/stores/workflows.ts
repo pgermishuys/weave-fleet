@@ -25,6 +25,8 @@ export interface StartWorkflowRunRequest {
   roleOverrides?: Partial<Record<WorkflowRole, WorkflowModelChoice>>;
   /** "Check with me after each step": every agent step is one the user finishes. */
   checkWithMe?: boolean;
+  /** The project the run's first step session goes in; omitted or null for Scratch. */
+  projectId?: string | null;
 }
 
 /** A save refused because the file changed on disk since it was opened. */

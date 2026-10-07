@@ -22,6 +22,9 @@ vi.mock("@/composables/use-repositories", () => ({
 }));
 vi.mock("@/composables/use-repository-detail", () => ({ useRepositoryDetail: () => ({ detail: ref(null), isLoading: ref(false) }) }));
 vi.mock("@/composables/use-settings-nav", () => ({ useSettingsNav: () => ({ setActiveSection: vi.fn() }) }));
+vi.mock("@/composables/use-projects", () => ({
+  useProjects: () => ({ projects: ref([{ id: "proj-1", name: "Dependencies", type: "standard" }]) }),
+}));
 vi.mock("@/composables/use-workflows-nav", () => ({
   useWorkflowsNav: () => ({
     repositoryPath: ref("/repo"),
@@ -86,5 +89,28 @@ describe("WorkflowRunBox", () => {
     await flushPromises();
 
     expect(JSON.parse((apiFetchMock.mock.calls[0] as [string, RequestInit])[1].body as string)).toMatchObject({ checkWithMe: false });
+  });
+
+  it("sends no project by default (Scratch)", async () => {
+    const wrapper = mount(WorkflowRunBox, { props: { workflow }, global: { stubs } });
+
+    expect(wrapper.get('[data-testid="workflow-project"]').text()).toContain("Scratch");
+
+    await wrapper.get('[data-testid="workflow-request"]').setValue("Press ?");
+    await wrapper.get('[data-testid="workflow-run"]').trigger("click");
+    await flushPromises();
+
+    expect(JSON.parse((apiFetchMock.mock.calls[0] as [string, RequestInit])[1].body as string)).toMatchObject({ projectId: null });
+  });
+
+  it("sends the chosen project", async () => {
+    const wrapper = mount(WorkflowRunBox, { props: { workflow }, global: { stubs: { ...stubs, ProjectPicker: true } } });
+
+    await wrapper.findComponent({ name: "ProjectPicker" }).vm.$emit("update:modelValue", "proj-1");
+    await wrapper.get('[data-testid="workflow-request"]').setValue("Press ?");
+    await wrapper.get('[data-testid="workflow-run"]').trigger("click");
+    await flushPromises();
+
+    expect(JSON.parse((apiFetchMock.mock.calls[0] as [string, RequestInit])[1].body as string)).toMatchObject({ projectId: "proj-1" });
   });
 });

@@ -55,6 +55,14 @@ public sealed class SessionOrchestratorBuilder
     private ISessionAppCleanup? _sessionApps;
     private ISessionScreenshotStore? _sessionScreenshots;
     private AgentMemoryService? _agentMemory;
+    private readonly List<ISessionSourceProvider> _additionalSourceProviders = [];
+
+    /// <summary>Adds a session source provider beyond the local-directory one Build() always registers.</summary>
+    public SessionOrchestratorBuilder WithSessionSourceProvider(ISessionSourceProvider provider)
+    {
+        _additionalSourceProviders.Add(provider);
+        return this;
+    }
 
     public SessionOrchestratorBuilder WithUserContext(IUserContext userContext)
     {
@@ -117,7 +125,8 @@ public sealed class SessionOrchestratorBuilder
 
         var instanceService = new InstanceService(InstanceRepository, SessionRepository, _userContext);
         var sessionSourceResolutionService = new SessionSourceResolutionService([
-            new LocalDirectorySessionSourceProvider(workspaceRootService)
+            new LocalDirectorySessionSourceProvider(workspaceRootService),
+            .. _additionalSourceProviders,
         ]);
 
         var delegationService = new DelegationService(DelegationRepository, EventBroadcaster, _userContext);
