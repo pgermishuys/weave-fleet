@@ -110,7 +110,7 @@ function choose(workspace: NewSessionWorkspace): void {
       @close-auto-focus="emit('closeAutoFocus', $event)"
     >
       <div class="ns-pop__label">
-        Workspace
+        Checkout
       </div>
       <DropdownMenuItem
         class="ns-option"

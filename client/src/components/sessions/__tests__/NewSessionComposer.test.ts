@@ -28,6 +28,8 @@ const mocks = vi.hoisted(() => ({
   listWorkspaceRoots: vi.fn(),
   createFolder: vi.fn(),
   cloneRepository: vi.fn(),
+  listFolder: vi.fn(),
+  newFolderDefaults: vi.fn(),
   refreshGitHubRepos: vi.fn(),
   search: { value: { projectId: undefined as string | undefined, source: undefined as string | undefined } },
 }));
@@ -61,7 +63,33 @@ vi.mock("@/lib/folder-access", async (importOriginal) => ({
   listWorkspaceRoots: mocks.listWorkspaceRoots,
   createFolder: mocks.createFolder,
   cloneRepository: mocks.cloneRepository,
+  listFolder: mocks.listFolder,
+  newFolderDefaults: mocks.newFolderDefaults,
 }));
+
+/** What the folder box finds on disk: each folder's folders, `true` for a repository. */
+const disk: Record<string, Record<string, boolean>> = {
+  "/home/me/src": { clients: false, comet: true, rocket: true },
+  "/home/me/src/clients": { "northwind-api": true },
+  "/home/me/deep": { "agent-playbook": true },
+  "/srv": { scratch: false },
+  "c:/source": { "agent-playbook": true },
+};
+
+function fakeListing(typed: string) {
+  const path = typed.replace(/^~/, "/home/me").replace(/\\/g, "/");
+  const folders = disk[path];
+  let nearest: string | null = null;
+  for (let above = path.slice(0, path.lastIndexOf("/")); above && !nearest; above = above.slice(0, above.lastIndexOf("/"))) {
+    nearest = disk[above] ? above : null;
+  }
+  return {
+    path,
+    exists: folders !== undefined,
+    nearestExisting: folders ? null : nearest,
+    entries: Object.entries(folders ?? {}).map(([name, isGitRepo]) => ({ name, path: `${path}/${name}`, isGitRepo })),
+  };
+}
 
 const gitHubRepos = shallowRef<{ id: number; full_name: string; name: string }[]>([]);
 
@@ -224,6 +252,22 @@ async function openFolderMenu(view: VueWrapper): Promise<void> {
   await flushPromises();
 }
 
+/** Folder chip → Open or create a folder… */
+async function openPathBox(view: VueWrapper): Promise<void> {
+  await openFolderMenu(view);
+  await folderOption("Open or create a folder").trigger("click");
+  await flushPromises();
+}
+
+function pathInput() {
+  return inDocument().get<HTMLInputElement>("[data-testid='new-session-path-input']");
+}
+
+async function typePath(text: string): Promise<void> {
+  await pathInput().setValue(text);
+  await flushPromises();
+}
+
 function lastCreateCall(): [string | undefined, Record<string, unknown>] {
   return mocks.createSession.mock.calls.at(-1) as [string | undefined, Record<string, unknown>];
 }
@@ -249,6 +293,8 @@ beforeEach(() => {
     warning: null,
   }));
   mocks.cloneRepository.mockReset();
+  mocks.listFolder.mockReset().mockImplementation(async (path: string) => fakeListing(path));
+  mocks.newFolderDefaults.mockReset().mockResolvedValue({ firstBranch: "main", home: "/home/me" });
   mocks.refreshGitHubRepos.mockReset().mockResolvedValue(undefined);
   gitHubRepos.value = [];
   mocks.inspectFolder.mockReset().mockImplementation(async (path: string) => ({
@@ -992,7 +1038,7 @@ describe("NewSessionComposer", () => {
 
       expect(labels.some((label) => label.includes("rocket"))).toBe(true);
       expect(labels.some((label) => label.includes("No folder"))).toBe(false);
-      expect(labels.some((label) => label.includes("Browse for a folder"))).toBe(false);
+      expect(labels.some((label) => label.includes("Open or create a folder"))).toBe(false);
     });
 
     it("can be removed", async () => {
@@ -1023,42 +1069,121 @@ describe("NewSessionComposer", () => {
     rememberFolder({ kind: "repository", path: rocket.path });
     const view = await mountComposer();
 
-    await openFolderMenu(view);
-    await folderOption("Browse for a folder").trigger("click");
-    await flushPromises();
-    const input = inDocument().get<HTMLInputElement>("#new-session-directory");
-    await input.setValue("/srv/scratch");
-    await input.trigger("keydown", { key: "Enter" });
+    await openPathBox(view);
+    await typePath("/srv/scratch");
+    await pathInput().trigger("keydown", { key: "Enter" });
     await flushPromises();
 
     expect(view.get("[data-testid='new-session-folder-chip']").text()).toContain("/srv/scratch");
     expect(view.find("[data-testid='new-session-workspace-chip']").exists()).toBe(false);
   });
 
-  describe("browsing for a folder", () => {
-    async function browseTo(view: VueWrapper, path: string): Promise<void> {
-      await openFolderMenu(view);
-      await folderOption("Browse for a folder").trigger("click");
-      await flushPromises();
-      const input = inDocument().get<HTMLInputElement>("#new-session-directory");
-      await input.setValue(path);
-      await input.trigger("keydown", { key: "Enter" });
-      await flushPromises();
+  describe("the folder box", () => {
+    function pathRows(): string[] {
+      return inDocument().findAll("[id$='-path'] [role='option']").map((row) => row.text());
     }
 
-    function button(label: string) {
-      const found = inDocument().findAll("button").find((candidate) => candidate.text() === label);
-      if (!found) {
-        throw new Error(`No button "${label}"`);
-      }
-      return found;
-    }
+    it("starts in the location and lists what's there", async () => {
+      const view = await mountComposer();
+
+      await openPathBox(view);
+
+      expect(pathInput().element.value).toBe("~/src/");
+      expect(mocks.listFolder).toHaveBeenLastCalledWith("~/src", api, expect.anything());
+      const rows = pathRows();
+      expect(rows[0]).toContain("Open src");
+      expect(rows.slice(1).map((row) => row.split(/Folder|Repository/)[0]!.trim())).toEqual(["clients", "comet", "rocket"]);
+    });
+
+    it("writes ~ only for the machine's own home folder, which the server expands the same way", async () => {
+      mocks.newFolderDefaults.mockResolvedValue({ firstBranch: "main", home: "/home/someone-else" });
+      const view = await mountComposer();
+
+      await openPathBox(view);
+
+      expect(pathInput().element.value).toBe("/home/me/src/");
+      expect(mocks.listFolder).toHaveBeenLastCalledWith("/home/me/src", api, expect.anything());
+    });
+
+    it("puts what's there before Create, so Tab and Enter finish a name instead of making it", async () => {
+      const view = await mountComposer();
+
+      await openPathBox(view);
+      await typePath("~/src/cl");
+
+      const rows = pathRows();
+      expect(rows[0]).toContain("clients");
+      expect(rows[0]).toContain("Tab");
+      expect(rows.at(-1)).toContain("Create cl");
+
+      await pathInput().trigger("keydown", { key: "Tab" });
+      await flushPromises();
+
+      expect(pathInput().element.value).toBe("~/src/clients/");
+      expect(pathRows()[0]).toContain("Open clients");
+      expect(pathRows()[1]).toContain("northwind-api");
+    });
+
+    it("creates a folder inside a folder, typed with \\ or /, on the branch asked for", async () => {
+      const view = await mountComposer();
+
+      await openPathBox(view);
+      await typePath("~/src/clients\\acme-portal");
+
+      expect(mocks.listFolder).toHaveBeenLastCalledWith("~/src/clients", api, expect.anything());
+      const create = inDocument().get("[data-testid='new-session-path-create']");
+      expect(create.text()).toContain("Create acme-portal");
+      expect(create.text()).toContain("in ~/src/clients");
+      const preview = inDocument().get("[data-testid='new-session-path-preview']");
+      expect(preview.text()).toContain("~/src/clients");
+      expect(preview.text()).toContain("acme-portal");
+      expect(preview.text()).toContain("A git repository on main with an empty first commit");
+
+      await inDocument().get("[data-testid='new-session-path-branch']").setValue("trunk");
+      await pathInput().trigger("keydown", { key: "Enter" });
+      await flushPromises();
+
+      expect(mocks.createFolder).toHaveBeenCalledWith("/home/me/src/clients/acme-portal", true, api, "trunk");
+      expect(view.get("[data-testid='new-session-folder-chip']").text()).toContain("acme-portal");
+      expect(view.find("[data-testid='new-session-folder-new']").exists()).toBe(true);
+    });
+
+    it("makes missing folders above it too, and can make an empty folder", async () => {
+      const view = await mountComposer();
+
+      await openPathBox(view);
+      await typePath("~/src/clients/acme/site");
+
+      expect(inDocument().get("[data-testid='new-session-path-create']").text()).toContain("Create acme/site");
+      const preview = inDocument().get("[data-testid='new-session-path-preview']");
+      expect(preview.findAll(".ns-folder-tree__row--new").map((row) => row.text())).toEqual(["acme new", "site new"]);
+
+      await inDocument().get("[data-testid='new-session-path-kind-empty']").trigger("click");
+      await inDocument().get("[data-testid='new-session-path-create-submit']").trigger("click");
+      await flushPromises();
+
+      expect(mocks.createFolder).toHaveBeenCalledWith("/home/me/src/clients/acme/site", false, api, undefined);
+      expect(view.get("[data-testid='new-session-folder-chip']").text()).toContain("~/src/clients/acme/site");
+    });
+
+    it("says which character a folder name can't have, and offers no Create", async () => {
+      const view = await mountComposer();
+
+      await openPathBox(view);
+      await typePath("~/src/notes?");
+
+      expect(inDocument().get("[data-testid='new-session-path-note']").text()).toBe("“?” can't be in a folder name.");
+      expect(inDocument().find("[data-testid='new-session-path-create']").exists()).toBe(false);
+    });
 
     it("uses a git folder as a repository, so it can get a new worktree", async () => {
       mocks.inspectFolder.mockResolvedValue({ path: "/home/me/deep/agent-playbook", exists: true, isGitRepo: true, isWithinRoots: true });
       const view = await mountComposer();
 
-      await browseTo(view, "/home/me/deep/agent-playbook");
+      await openPathBox(view);
+      await typePath("/home/me/deep/agent-playbook");
+      await pathInput().trigger("keydown", { key: "Enter" });
+      await flushPromises();
       await type(view, "Tidy the README");
       await pressEnter(view);
 
@@ -1072,53 +1197,24 @@ describe("NewSessionComposer", () => {
       });
     });
 
-    it("offers to add a folder outside the workspace roots, then uses it", async () => {
+    it("says a folder outside the locations is added to them, and adds it when it's opened", async () => {
       mocks.inspectFolder.mockResolvedValue({ path: "C:\\source\\agent-playbook", exists: true, isGitRepo: true, isWithinRoots: false });
       const view = await mountComposer();
 
-      await browseTo(view, "c:/source/agent-playbook");
+      await openPathBox(view);
+      await typePath("c:/source/agent-playbook");
 
-      expect(inDocument().get("[data-testid='new-session-add-folder']").text()).toContain("agent-playbook isn't in Fleet yet");
+      expect(inDocument().get("[data-testid='new-session-path-adds-location']").text())
+        .toContain("Fleet adds agent-playbook to your locations");
       expect(mocks.addFolderToFleet).not.toHaveBeenCalled();
 
-      await button("Add repository").trigger("click");
+      await pathInput().trigger("keydown", { key: "Enter" });
       await flushPromises();
 
       expect(mocks.addFolderToFleet).toHaveBeenCalledWith("C:\\source\\agent-playbook", api);
       expect(mocks.refreshRepositories).toHaveBeenCalled();
       expect(view.get("[data-testid='new-session-folder-chip']").text()).toContain("agent-playbook");
       expect(view.find("[data-testid='new-session-workspace-chip']").exists()).toBe(true);
-    });
-
-    it("offers to create a folder that doesn't exist, as a git repository unless told not to", async () => {
-      mocks.inspectFolder.mockResolvedValue({ path: "/home/me/src/recipe-box", exists: false, isGitRepo: false, isWithinRoots: false });
-      const view = await mountComposer();
-
-      await browseTo(view, "~/src/recipe-box");
-
-      const card = inDocument().get("[data-testid='new-session-create-folder']");
-      expect(card.text()).toContain("recipe-box doesn't exist yet");
-      expect(card.text()).toContain("Fleet can create ~/src/recipe-box.");
-      expect(view.get("[data-testid='new-session-folder-chip']").text()).not.toContain("recipe-box");
-
-      await inDocument().get("[data-testid='new-session-create-folder-git']").setValue(false);
-      await inDocument().get("[data-testid='new-session-create-folder-submit']").trigger("click");
-      await flushPromises();
-
-      expect(mocks.createFolder).toHaveBeenCalledWith("/home/me/src/recipe-box", false, api);
-      expect(mocks.refreshRepositories).toHaveBeenCalled();
-      expect(view.get("[data-testid='new-session-folder-chip']").text()).toContain("~/src/recipe-box");
-      expect(view.find("[data-testid='new-session-folder-new']").exists()).toBe(true);
-    });
-
-    it("says a folder outside the roots is added too", async () => {
-      mocks.inspectFolder.mockResolvedValue({ path: "/srv/side", exists: false, isGitRepo: false, isWithinRoots: false });
-      const view = await mountComposer();
-
-      await browseTo(view, "/srv/side");
-
-      expect(inDocument().get("[data-testid='new-session-create-folder']").text())
-        .toContain("Fleet can create /srv/side and add it to your folders.");
     });
   });
 
@@ -1139,17 +1235,52 @@ describe("NewSessionComposer", () => {
 
       const row = inDocument().get("[data-testid='new-session-folder-create']");
       expect(row.text()).toContain("Create recipe-box");
-      expect(row.text()).toContain("~/src/recipe-box · git repository");
+      expect(row.text()).toContain("~/src/recipe-box · git repository on main");
       expect(row.attributes("data-highlighted")).toBeDefined();
 
       await input.trigger("keydown", { key: "Enter" });
       await flushPromises();
 
-      expect(mocks.createFolder).toHaveBeenCalledWith("/home/me/src/recipe-box", true, api);
+      expect(mocks.createFolder).toHaveBeenCalledWith("/home/me/src/recipe-box", true, api, undefined);
       expect(view.get("[data-testid='new-session-folder-chip']").text()).toContain("recipe-box");
       expect(view.find("[data-testid='new-session-folder-new']").exists()).toBe(true);
       // A new repository gets New worktree like any other; its first commit gives it a base.
       expect(view.find("[data-testid='new-session-workspace-chip']").exists()).toBe(true);
+    });
+
+    it("a path makes folders inside folders in the location, typed with / or \\", async () => {
+      const view = await mountComposer();
+
+      const input = await search(view, "clients\\acme portal");
+
+      const row = inDocument().get("[data-testid='new-session-folder-create']");
+      expect(row.text()).toContain("Create clients/acme-portal");
+      expect(row.text()).toContain("~/src/clients/acme-portal");
+
+      await input.trigger("keydown", { key: "Enter" });
+      await flushPromises();
+
+      expect(mocks.createFolder).toHaveBeenCalledWith("/home/me/src/clients/acme-portal", true, api, undefined);
+    });
+
+    it("says which character a folder name can't have instead of dropping it", async () => {
+      const view = await mountComposer();
+
+      await search(view, "notes: draft");
+
+      expect(inDocument().get("[data-testid='new-session-folder-invalid']").text()).toBe("“:” can't be in a folder name.");
+      expect(inDocument().find("[data-testid='new-session-folder-create']").exists()).toBe(false);
+    });
+
+    it("a path of its own goes to the folder box", async () => {
+      const view = await mountComposer();
+
+      await search(view, "/srv/");
+      await inDocument().get("[data-testid='new-session-folder-go']").trigger("click");
+      await flushPromises();
+
+      expect(pathInput().element.value).toBe("/srv/");
+      expect(mocks.listFolder).toHaveBeenLastCalledWith("/srv", api, expect.anything());
     });
 
     it("never offers to create a repository that's already there", async () => {
@@ -1172,7 +1303,7 @@ describe("NewSessionComposer", () => {
       await inDocument().get("[data-testid='new-session-folder-create']").trigger("click");
       await flushPromises();
 
-      expect(mocks.createFolder).toHaveBeenCalledWith("/home/me/src/invoices", true, api);
+      expect(mocks.createFolder).toHaveBeenCalledWith("/home/me/src/invoices", true, api, undefined);
       expect(JSON.parse(localStorage.getItem(NEW_SESSION_DEFAULTS_KEY) ?? "{}").lastNewFolderRoot).toBe("/home/me/src");
     });
 
@@ -1282,7 +1413,7 @@ describe("NewSessionComposer", () => {
       expect(mocks.refreshRepositories).toHaveBeenCalled();
     });
 
-    it("New folder… makes an empty folder, a repository or a clone, anywhere", async () => {
+    it("Clone a repository… clones one of yours into a location, or anywhere", async () => {
       gitHubRepos.value = [
         { id: 1, full_name: "pgermishuys/rocket", name: "rocket" },
         { id: 2, full_name: "pgermishuys/weave-website", name: "weave-website" },
@@ -1290,32 +1421,23 @@ describe("NewSessionComposer", () => {
       mocks.cloneRepository.mockResolvedValue({ path: "/home/me/work/weave-website", isGitRepo: true, addedToFleet: false, warning: null });
       const view = await mountComposer();
 
-      await search(view, "landing page");
-      await folderOption("New folder").trigger("click");
+      await openFolderMenu(view);
+      await folderOption("Clone a repository").trigger("click");
       await flushPromises();
 
-      const name = inDocument().get<HTMLInputElement>("[data-testid='new-session-new-folder-name']");
-      expect(name.element.value).toBe("landing-page");
-      expect(inDocument().get("[data-testid='new-session-new-folder-preview']").text())
-        .toContain("A git repository with an empty first commit");
-
-      await inDocument().get("[data-testid='new-session-new-folder-location']").setValue("\u0000other");
-      await inDocument().get("[data-testid='new-session-new-folder-parent']").setValue("/srv");
-      expect(inDocument().get("[data-testid='new-session-new-folder-preview']").text())
-        .toContain("/srv/landing-page");
-      expect(inDocument().get("[data-testid='new-session-new-folder-preview']").text())
-        .toContain("added to your folders");
-
-      await inDocument().findAll("[data-testid='new-session-new-folder'] button").find((button) => button.text() === "Clone")!.trigger("click");
-      await flushPromises();
       expect(mocks.refreshGitHubRepos).toHaveBeenCalled();
       // Only repositories that aren't on this computer yet.
       const suggestions = inDocument().findAll(".ns-folder-suggestion").map((button) => button.text());
       expect(suggestions).toEqual(["pgermishuys/weave-website"]);
 
       await inDocument().findAll(".ns-folder-suggestion")[0]!.trigger("click");
-      await inDocument().get("[data-testid='new-session-new-folder-location']").setValue("/home/me/work");
-      await inDocument().get("[data-testid='new-session-new-folder-submit']").trigger("click");
+      await inDocument().get("[data-testid='new-session-clone-location']").setValue(`${String.fromCharCode(0)}other`);
+      await inDocument().get("[data-testid='new-session-clone-parent']").setValue("/srv");
+      expect(inDocument().get("[data-testid='new-session-clone-preview']").text()).toContain("/srv/weave-website");
+      expect(inDocument().get("[data-testid='new-session-clone-preview']").text()).toContain("added to your locations");
+
+      await inDocument().get("[data-testid='new-session-clone-location']").setValue("/home/me/work");
+      await inDocument().get("[data-testid='new-session-clone-submit']").trigger("click");
       await flushPromises();
 
       expect(mocks.cloneRepository).toHaveBeenCalledWith("pgermishuys/weave-website", "/home/me/work/weave-website", expect.any(Function), api);
@@ -1339,7 +1461,8 @@ describe("NewSessionComposer", () => {
       await openFolderMenu(view);
 
       expect(inDocument().find("input[aria-label='Search, or create a folder']").exists()).toBe(false);
-      expect(inDocument().findAll("[role='option']").some((option) => option.text().includes("New folder"))).toBe(false);
+      const labels = inDocument().findAll("[role='option']").map((option) => option.text());
+      expect(labels.some((label) => label.includes("Open or create a folder") || label.includes("Clone a repository"))).toBe(false);
     });
   });
 

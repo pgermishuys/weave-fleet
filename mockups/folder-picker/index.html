@@ -1,0 +1,767 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Folders without the guesswork: proposals</title>
+<!-- Fonts: Inter and JetBrains Mono (SIL Open Font License 1.1), see fonts/LICENSE-*. -->
+<link rel="stylesheet" href="new-session.css">
+<style>
+@font-face { font-family: "Inter Variable"; src: url("fonts/inter-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; }
+@font-face { font-family: "JetBrains Mono Variable"; src: url("fonts/jetbrains-mono-latin-wght-normal.woff2") format("woff2"); font-weight: 100 800; }
+
+/* Fleet's dark tokens, copied from client/src/assets/main.css. */
+:root {
+  --rail-bg: #0d0d10; --panel-bg: #141418; --card-bg: #1b1b20; --main-bg: #0d0d10;
+  --border: rgba(255, 255, 255, 0.075); --text: #e8e8ec; --muted: #8e8e9a;
+  --accent: #6366f1; --accent-dim: rgba(99, 102, 241, 0.15);
+  --running: #22c55e; --idle: #f59e0b; --error: #ef4444;
+  --radius-card: 10px; --radius-btn: 8px; --radius-panel: 12px; --transition: 150ms ease-out;
+  --font-sans-stack: "Inter Variable", "Inter", system-ui, sans-serif;
+  --font-mono-stack: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--main-bg); color: var(--text); font: 14px/1.5 var(--font-sans-stack); }
+button, input, select { font: inherit; }
+svg.i { width: 14px; height: 14px; flex-shrink: 0; }
+code, .mono { font-family: var(--font-mono-stack); font-size: 0.88em; }
+code { padding: 1px 5px; border-radius: 5px; background: color-mix(in srgb, var(--text) 7%, transparent); }
+
+.page { max-width: 1180px; margin: 0 auto; padding: 48px 28px 96px; }
+.eyebrow { color: var(--accent); font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+h1 { margin: 6px 0 10px; font-size: 30px; line-height: 1.2; letter-spacing: -0.01em; }
+h2 { margin: 0 0 6px; font-size: 21px; letter-spacing: -0.005em; }
+h3 { margin: 0 0 4px; font-size: 15px; }
+.lede { max-width: 760px; color: var(--muted); font-size: 15.5px; }
+.lede strong { color: var(--text); font-weight: 600; }
+section { margin-top: 64px; }
+.sub { max-width: 780px; margin: 0 0 22px; color: var(--muted); }
+nav.toc { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 22px; }
+nav.toc a { padding: 5px 10px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font-size: 12.5px; text-decoration: none; }
+nav.toc a:hover { color: var(--text); background: color-mix(in srgb, var(--text) 5%, transparent); }
+
+.card { padding: 18px; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--panel-bg); }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 900px) { .grid2, .grid3 { grid-template-columns: minmax(0, 1fr); } }
+
+/* Today: real screenshots with a short diagnosis. */
+.shot { display: flex; flex-direction: column; gap: 10px; }
+.shot__frame { display: grid; place-items: center; min-height: 120px; padding: 14px; border-radius: var(--radius-card); background: var(--main-bg); }
+.shot__frame img { display: block; max-width: 100%; height: auto; border-radius: 8px; }
+.shot__frame--tall img { max-height: 380px; width: auto; }
+.span2 { grid-column: span 2; }
+@media (max-width: 900px) { .span2 { grid-column: auto; } }
+.term { margin: 0; width: 100%; color: var(--muted); font-family: var(--font-mono-stack); font-size: 11.5px; line-height: 1.6; white-space: pre-wrap; }
+.shot p { margin: 0; color: var(--muted); font-size: 13px; }
+.shot p strong { color: var(--text); font-weight: 600; }
+.tag { display: inline-block; padding: 0 6px; border-radius: 5px; font-size: 11px; font-weight: 600; line-height: 18px; vertical-align: 1px; }
+.tag--bad { background: color-mix(in srgb, var(--error) 16%, transparent); color: #fca5a5; }
+.tag--good { background: color-mix(in srgb, var(--running) 14%, transparent); color: var(--running); }
+.tag--rec { background: var(--accent-dim); color: #a5b4fc; }
+.tag--new { background: color-mix(in srgb, var(--running) 14%, transparent); color: var(--running); font-size: 10px; line-height: 16px; padding: 0 4px; border-radius: 4px; }
+
+/* The model. */
+.model { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; align-items: stretch; }
+.model__step { position: relative; padding: 14px 16px; border: 1px solid var(--border); background: var(--card-bg); }
+.model__step:first-child { border-radius: var(--radius-card) 0 0 var(--radius-card); }
+.model__step:last-child { border-radius: 0 var(--radius-card) var(--radius-card) 0; background: color-mix(in srgb, var(--card-bg) 60%, var(--main-bg)); border-style: dashed; }
+.model__step + .model__step { border-left: 0; }
+.model__word { display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: 15px; }
+.model__word svg { width: 16px; height: 16px; color: var(--accent); }
+.model__eg { margin-top: 6px; font-family: var(--font-mono-stack); font-size: 12px; color: var(--text); }
+.model__def { margin-top: 6px; color: var(--muted); font-size: 12.5px; }
+.model__arrow { position: absolute; right: -9px; top: 50%; z-index: 1; width: 16px; height: 16px; margin-top: -8px; border-radius: 50%; background: var(--panel-bg); color: var(--muted); display: grid; place-items: center; }
+.model__arrow svg { width: 12px; height: 12px; }
+@media (max-width: 900px) { .model { grid-template-columns: 1fr 1fr; } }
+
+table.words { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.words th { padding: 8px 10px; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .05em; text-align: left; text-transform: uppercase; border-bottom: 1px solid var(--border); }
+table.words td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+table.words td:first-child { color: var(--muted); }
+table.words s { color: var(--muted); text-decoration-color: color-mix(in srgb, var(--error) 70%, transparent); }
+
+/* A fake composer strip to hang menus off. */
+.stage { position: relative; display: flex; flex-direction: column; justify-content: flex-end; min-height: 520px; padding: 18px; border-radius: var(--radius-card); background: var(--main-bg); overflow: hidden; }
+.stage--short { min-height: 0; }
+.stage .ns-pop { position: relative; margin-bottom: 6px; box-shadow: 0 16px 40px -12px rgba(0,0,0,.55), 0 2px 6px rgba(0,0,0,.25); }
+.composer { padding: 12px 14px 10px; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--card-bg); color: var(--muted); font-size: 13.5px; }
+.strip { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 6px 4px 0; }
+.strip__sep { width: 1px; height: 14px; margin-inline: 3px; background: var(--border); }
+.strip__end { margin-left: auto; display: flex; }
+.plan { margin: 4px 8px 0; color: var(--muted); font-size: 12.5px; }
+.plan code { font-size: 11.5px; }
+.ns-chip[data-open] { background: color-mix(in srgb, var(--text) 6%, transparent); color: var(--text); }
+.ns-chip .mute { color: var(--muted); font-weight: 400; }
+
+/* Bits FolderPicker.vue scopes to itself, copied so the menus look the same. */
+.ns-folder-search { display: flex; align-items: center; gap: 7px; margin: -1px -1px 4px; padding: 5px 8px 7px; border-bottom: 1px solid var(--border); color: var(--muted); }
+.ns-folder-search input { min-width: 0; flex: 1; border: 0; background: transparent; color: var(--text); font-size: 13px; outline: none; }
+.ns-folder-search input::placeholder { color: var(--muted); }
+.ns-folder-list { max-height: 330px; overflow-y: auto; }
+.ns-option--make .ns-option__icon { color: var(--accent); }
+.ns-option strong { font-weight: 600; }
+.ns-folder-back { grid-template-columns: 16px minmax(0, 1fr); }
+.ns-folder-actions { display: flex; justify-content: flex-end; gap: 6px; padding: 0 8px 6px; }
+.ns-folder-kinds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: calc(var(--radius-btn) - 2px); }
+.ns-folder-kinds button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 4px; border: 0; border-radius: calc(var(--radius-btn) - 4px); background: transparent; color: var(--muted); cursor: pointer; font-size: 12px; white-space: nowrap; }
+.ns-folder-kinds button svg { width: 13px; height: 13px; }
+.ns-folder-kinds button[aria-pressed="true"] { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); font-weight: 500; }
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border: 0; border-radius: var(--radius-btn); background: var(--accent); color: #fff; cursor: pointer; font-size: 12.5px; font-weight: 500; }
+.btn--ghost { background: transparent; color: var(--text); }
+.btn:disabled { opacity: .5; cursor: default; }
+.option-hint { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.ns-option.has-hint { grid-template-columns: 16px minmax(0, 1fr) auto; }
+.kbd { padding: 0 4px; border: 1px solid var(--border); border-radius: 4px; font-size: 10.5px; color: var(--muted); }
+
+/* Path box (option B). */
+.pathbox { display: flex; align-items: center; gap: 6px; margin: 2px 8px 6px; padding: 0 8px; border: 1px solid var(--accent); border-radius: calc(var(--radius-btn) - 2px); background: color-mix(in srgb, var(--text) 3%, transparent); }
+.pathbox input { flex: 1; min-width: 0; height: 32px; border: 0; background: transparent; color: var(--text); font-family: var(--font-mono-stack); font-size: 12.5px; outline: none; }
+.pathbox svg { color: var(--muted); }
+.tree { display: grid; gap: 1px; margin: 0 8px 8px; padding: 8px 10px; border-radius: calc(var(--radius-btn) - 2px); background: color-mix(in srgb, var(--text) 4%, transparent); font-family: var(--font-mono-stack); font-size: 12px; }
+.tree__row { display: flex; align-items: center; gap: 6px; }
+.tree__row svg { width: 13px; height: 13px; color: var(--muted); }
+.tree__row--new { color: var(--text); }
+.tree__row--new svg { color: var(--accent); }
+.tree__what { margin-top: 4px; color: var(--muted); font-family: var(--font-sans-stack); font-size: 11.5px; }
+.create-opts { display: grid; grid-template-columns: minmax(0, 1fr) 118px; gap: 8px; align-items: end; padding: 0 8px 8px; }
+.create-opts .ns-field { padding: 0; }
+.create-kind { display: grid; gap: 8px; padding: 6px 8px 8px; }
+.create-branch { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.create-branch input { width: 64px; height: 26px; padding: 0 7px; border: 1px solid var(--border); border-radius: 6px; background: color-mix(in srgb, var(--text) 3%, transparent); color: var(--text); font-family: var(--font-mono-stack); font-size: 12px; outline: none; }
+.create-branch input:focus { border-color: var(--accent); }
+.note { display: flex; gap: 7px; margin: 0 8px 8px; color: var(--muted); font-size: 12px; }
+.note svg { margin-top: 2px; color: var(--idle); }
+.os-toggle { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 8px; }
+.os-toggle button { padding: 3px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; font-size: 12px; }
+.os-toggle button[aria-pressed="true"] { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); }
+.try { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 12px; color: var(--muted); font-size: 12.5px; }
+.try button.chip { padding: 3px 9px; border: 1px solid var(--border); border-radius: 999px; background: transparent; color: var(--text); cursor: pointer; font-family: var(--font-mono-stack); font-size: 11.5px; }
+.try button.chip:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
+
+/* Proposal headers. */
+.prop { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 24px; align-items: start; }
+@media (max-width: 1000px) { .prop { grid-template-columns: minmax(0, 1fr); } }
+.prop__head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.prop__letter { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: var(--card-bg); border: 1px solid var(--border); font-weight: 700; }
+.prop--rec .prop__letter { background: var(--accent); border-color: var(--accent); color: #fff; }
+ul.points { margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 13.5px; }
+ul.points li { margin: 5px 0; }
+ul.points li strong { color: var(--text); font-weight: 600; }
+.verdict { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; font-size: 12.5px; }
+.verdict div { padding: 10px 12px; border-radius: var(--radius-card); background: var(--card-bg); color: var(--muted); }
+.verdict b { display: block; margin-bottom: 3px; color: var(--text); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; }
+.verdict ul { margin: 0; padding-left: 16px; }
+
+/* C: tree list. */
+.ftree .ns-option { grid-template-columns: 16px minmax(0, 1fr) auto; }
+.ftree .lvl1 { padding-left: 24px; }
+.ftree .lvl2 { padding-left: 40px; }
+.ftree .add { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 5px; color: var(--muted); }
+.ftree .ns-option[data-highlighted] .add { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); }
+.inline-new { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 8px; align-items: center; padding: 3px 8px 3px 24px; }
+.inline-new svg { color: var(--accent); }
+.inline-new input { height: 26px; padding: 0 7px; border: 1px solid var(--accent); border-radius: 6px; background: color-mix(in srgb, var(--text) 3%, transparent); color: var(--text); font-family: var(--font-mono-stack); font-size: 12px; outline: none; }
+.loc-label { display: flex; align-items: center; gap: 6px; }
+.loc-label svg { width: 11px; height: 11px; }
+
+/* Settings after. */
+.set { padding: 22px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--card-bg); }
+.set h4 { margin: 0; font-size: 17px; }
+.set p.d { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+.set .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--main-bg); }
+.set .row .t { font-size: 13.5px; font-weight: 500; }
+.set .row .s { color: var(--muted); font-size: 12px; }
+.set .lbl { margin-top: 20px; font-size: 13px; font-weight: 600; }
+.set input.small { width: 110px; height: 30px; padding: 0 9px; border: 1px solid var(--border); border-radius: 7px; background: transparent; color: var(--text); font-family: var(--font-mono-stack); font-size: 12.5px; }
+.set .add { display: flex; gap: 8px; margin-top: 10px; }
+.set .add .fake { flex: 1; display: flex; align-items: center; height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); font-family: var(--font-mono-stack); font-size: 12.5px; }
+.pill { padding: 1px 8px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font-size: 11px; }
+
+.everywhere { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
+.everywhere li { padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--panel-bg); color: var(--muted); font-size: 13px; }
+.everywhere li b { display: block; margin-bottom: 3px; color: var(--text); font-size: 14px; }
+@media (max-width: 900px) { .everywhere { grid-template-columns: 1fr; } }
+ol.q { margin: 0; padding-left: 20px; color: var(--muted); }
+ol.q li { margin: 8px 0; }
+ol.q li b { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="eyebrow">Proposal · New session → Folder</div>
+  <h1>Folders without the guesswork</h1>
+  <p class="lede">
+    Starting a session asks one question: <strong>where should the agent work?</strong> Today the answer goes through
+    five names for overlapping ideas, and two ways to make a new folder that follow different rules. This page shows
+    what that looks like now, a smaller set of words, and three ways to fix creating folders.
+  </p>
+  <nav class="toc">
+    <a href="#today">What goes wrong today</a>
+    <a href="#words">Four words</a>
+    <a href="#a">A · Fix the form</a>
+    <a href="#b">B · One path box (recommended)</a>
+    <a href="#c">C · Folder tree</a>
+    <a href="#every">In every option</a>
+    <a href="#questions">Questions for you</a>
+  </nav>
+
+  <!-- ─────────────────────────────── Today ─────────────────────────────── -->
+  <section id="today">
+    <h2>What goes wrong today</h2>
+    <p class="sub">Screenshots of the current build in mock mode. Nothing here is broken on purpose; each piece made
+      sense when it was added, but together they don't add up to one idea.</p>
+    <div class="grid3">
+      <div class="card shot">
+        <div class="shot__frame"><img src="screenshots/before-new-backslash.png" alt="New folder form with clients\acme-portal typed"></div>
+        <p><span class="tag tag--bad">Silent change</span> <strong>A folder inside a folder can't be made here.</strong>
+          Typing <code>clients\acme-portal</code> drops the separator without a word; the preview reads
+          <code>~/src/clientsacme-portal</code>. <code>/</code> goes the same way.</p>
+      </div>
+      <div class="card shot">
+        <div class="shot__frame"><img src="screenshots/before-browse-create.png" alt="Browse view offering to create a nested folder"></div>
+        <p><span class="tag tag--bad">Two rules</span> <strong>Browse for a folder… can make it.</strong>
+          The same nested path typed under Browse offers "Create folder". Two create flows, two sets of rules, and
+          the one that works is labelled as a way to <em>find</em> folders.</p>
+      </div>
+      <div class="card shot">
+        <div class="shot__frame"><img src="screenshots/before-new-other.png" alt="Location set to Another folder with a typed parent path"></div>
+        <p><span class="tag tag--bad">Typing paths</span> <strong>Location lists only the top folders.</strong>
+          To put a project inside <code>~/src/clients</code> you pick "Another folder…" and type the full parent
+          path. There's no way to browse to it.</p>
+      </div>
+      <div class="card shot span2">
+        <div class="shot__frame"><img src="screenshots/before-strip.png" alt="Composer chips: weave-fleet, New worktree, from origin/main"></div>
+        <p><span class="tag tag--bad">Same name, two things</span> <strong>Folder chip and project chip.</strong>
+          A folder called <code>weave-fleet</code> sits next to a project called "Weave Fleet" (it shows on the
+          right once you pick one). Nothing says one is a place on disk and the other a sidebar group.</p>
+      </div>
+      <div class="card shot">
+        <div class="shot__frame shot__frame--tall"><img src="screenshots/before-workspace-menu.png" alt="Checkout menu headed Workspace"></div>
+        <p><span class="tag tag--bad">One word, three meanings</span> <strong>"Workspace"</strong> heads the
+          checkout menu here, names the Settings page for scanned folders, and is a server concept for a
+          session's working copy.</p>
+      </div>
+      <div class="card shot span2">
+        <div class="shot__frame shot__frame--tall"><img src="screenshots/before-settings.png" alt="Settings Workspace page"></div>
+        <p><span class="tag tag--bad">Unused</span> <strong>Settings → Workspace.</strong> "Workspace label" and
+          "Preferred root" are saved in the browser and read by nothing. "Configured roots", "workspace root"
+          and "directory discovery" are the folders the menu calls "your folders".</p>
+      </div>
+      <div class="card shot">
+        <div class="shot__frame"><pre class="term">$ git init
+hint: Using 'master' as the name for the
+hint: initial branch. This default branch
+hint: name is subject to change. …
+$ git branch --show-current
+master</pre></div>
+        <p><span class="tag tag--bad">Old default</span> <strong>New repositories start on <code>master</code></strong>
+          whenever git's <code>init.defaultBranch</code> isn't set, because Fleet runs a plain <code>git init</code> and git's
+          built-in default is still <code>master</code>.</p>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ─────────────────────────────── Words ─────────────────────────────── -->
+  <section id="words">
+    <h2>Four words, used the same way everywhere</h2>
+    <p class="sub">Every option below uses these. "Workspace" leaves the interface entirely; nothing a person picks
+      is called that.</p>
+    <div class="model">
+      <div class="model__step">
+        <div class="model__word"><i data-i="map-pin"></i>Location</div>
+        <div class="model__eg">~/src</div>
+        <div class="model__def">A folder Fleet looks in for repositories (3 levels deep). New folders go in one.
+          Was: <s>workspace root</s>.</div>
+        <span class="model__arrow"><i data-i="chevron-down" style="transform:rotate(-90deg)"></i></span>
+      </div>
+      <div class="model__step">
+        <div class="model__word"><i data-i="folder-git-2"></i>Folder</div>
+        <div class="model__eg">~/src/clients/acme-portal</div>
+        <div class="model__def">What the session works in: a repository, or a plain folder. Any depth inside a
+          location.</div>
+        <span class="model__arrow"><i data-i="chevron-down" style="transform:rotate(-90deg)"></i></span>
+      </div>
+      <div class="model__step">
+        <div class="model__word"><i data-i="git-fork"></i>Checkout</div>
+        <div class="model__eg">New worktree · from origin/main</div>
+        <div class="model__def">For a repository only: work in the folder itself, or in a worktree beside it.
+          Was: <s>Workspace</s>.</div>
+      </div>
+      <div class="model__step">
+        <div class="model__word"><i data-i="layers"></i>Project</div>
+        <div class="model__eg">Weave Fleet</div>
+        <div class="model__def">The sidebar group the session is filed under. Not a place on disk; chosen
+          separately.</div>
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-top:16px; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr)">
+      <div class="card">
+        <table class="words">
+          <thead><tr><th>Where</th><th>Today</th><th>Proposed</th></tr></thead>
+          <tbody>
+            <tr><td>Settings page</td><td><s>Workspace</s></td><td>Folders</td></tr>
+            <tr><td>Settings list</td><td><s>Configured roots</s>, <s>Add workspace root</s></td><td>Locations, Add a location</td></tr>
+            <tr><td>Settings fields</td><td><s>Workspace label</s>, <s>Preferred root</s></td><td>Removed (unused)</td></tr>
+            <tr><td>Folder menu</td><td><s>New folders go in</s>, <s>your folders</s></td><td>Location</td></tr>
+            <tr><td>Worktree menu header</td><td><s>Workspace</s></td><td>Checkout</td></tr>
+            <tr><td>Project chip</td><td>Name only, at the far right</td><td><i data-i="layers"></i> icon + "Project" tooltip</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="stage stage--short">
+        <div class="ns-pop" style="width:330px">
+          <div class="ns-pop__label">Checkout</div>
+          <div class="ns-option"><i data-i="folder" class="ns-option__icon"></i><span class="ns-option__text"><span class="ns-option__title">This checkout</span><span class="ns-option__detail ns-option__detail--mono">~/src/weave-fleet · main</span></span></div>
+          <div class="ns-option" data-highlighted><i data-i="git-fork" class="ns-option__icon"></i><span class="ns-option__text"><span class="ns-option__title">New worktree</span><span class="ns-option__detail">New branch from the default branch</span></span><i data-i="check" class="ns-option__check"></i></div>
+        </div>
+        <div class="composer">Describe the task, or ask a question…</div>
+        <div class="strip">
+          <button class="ns-chip"><i data-i="folder-git-2" class="ns-chip__icon"></i><span class="ns-chip__label">weave-fleet</span><i data-i="chevron-down" class="ns-chip__chevron"></i></button>
+          <span class="strip__sep"></span>
+          <button class="ns-chip" data-open><i data-i="git-fork" class="ns-chip__icon"></i><span class="ns-chip__label">New worktree</span><i data-i="chevron-down" class="ns-chip__chevron"></i></button>
+          <button class="ns-chip"><i data-i="git-branch" class="ns-chip__icon"></i><span class="ns-chip__label"><span class="mute">from</span> origin/main</span><i data-i="chevron-down" class="ns-chip__chevron"></i></button>
+          <div class="strip__end"><button class="ns-chip" title="Project: the sidebar group"><i data-i="layers" class="ns-chip__icon"></i><span class="ns-chip__label">Weave Fleet</span><i data-i="ellipsis" class="ns-chip__chevron"></i></button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────── A ─────────────────────────────── -->
+  <section id="a">
+    <div class="prop">
+      <div>
+        <div class="prop__head"><span class="prop__letter">A</span><h2>Fix the New folder form</h2><span class="tag">Smallest</span></div>
+        <p class="sub">Keep the menu as it is. Make the form do what it looks like it does.</p>
+        <ul class="points">
+          <li><strong>Name takes a path.</strong> <code>clients/acme-portal</code> or <code>clients\acme-portal</code>
+            makes both folders. Characters that can't be in a name are named inline, never dropped.</li>
+          <li><strong>The preview is a little tree</strong>, marking which folders already exist and which are
+            <span class="tag tag--new">new</span>.</li>
+          <li><strong>Location</strong> lists your locations, then "Choose a folder…", which opens the same folder
+            browser the rest of Fleet uses instead of a text box for a parent path.</li>
+          <li><strong>Branch</strong> field for a git repository, filled with <code>main</code>.</li>
+        </ul>
+        <div class="verdict">
+          <div><b>Good</b><ul><li>A day of work; no new concepts</li><li>Fixes the nested-folder report directly</li></ul></div>
+          <div><b>Leaves</b><ul><li>Two create flows (form and Browse) side by side</li><li>Three extra rows in every menu</li></ul></div>
+        </div>
+      </div>
+      <div class="stage">
+        <div class="ns-pop">
+          <button class="ns-option ns-folder-back"><i data-i="arrow-left" class="ns-option__icon"></i><span class="ns-option__text"><span class="ns-option__title">All folders</span></span></button>
+          <div class="ns-pop__separator"></div>
+          <div class="ns-field"><span class="ns-field__label">Start with</span>
+            <div class="ns-folder-kinds" style="grid-template-columns:repeat(3,1fr)"><button><i data-i="folder"></i>Empty folder</button><button aria-pressed="true"><i data-i="git-branch"></i>Git repository</button><button><i data-i="github"></i>Clone</button></div>
+          </div>
+          <div class="ns-field"><label class="ns-field__label">Name</label><input class="ns-field__input ns-field__input--mono" value="clients\acme-portal"></div>
+          <div class="create-opts">
+            <div class="ns-field"><label class="ns-field__label">Location</label>
+              <select class="ns-field__input"><option>~/src</option><option>Choose a folder…</option></select></div>
+            <div class="ns-field"><label class="ns-field__label">Branch</label><input class="ns-field__input ns-field__input--mono" value="main"></div>
+          </div>
+          <div class="tree">
+            <div class="tree__row"><i data-i="map-pin"></i>~/src</div>
+            <div class="tree__row" style="padding-left:14px"><i data-i="folder"></i>clients</div>
+            <div class="tree__row tree__row--new" style="padding-left:28px"><i data-i="folder-plus"></i>acme-portal <span class="tag tag--new">new</span></div>
+            <div class="tree__what">A git repository on <code>main</code> with an empty first commit</div>
+          </div>
+          <div class="ns-folder-actions"><button class="btn btn--ghost">Cancel</button><button class="btn">Create and use</button></div>
+        </div>
+        <div class="composer">Describe the task, or ask a question…</div>
+        <div class="strip"><button class="ns-chip ns-chip--attention" data-open><i data-i="folder-git-2" class="ns-chip__icon"></i><span class="ns-chip__label">Choose a folder</span><i data-i="chevron-down" class="ns-chip__chevron"></i></button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────── B ─────────────────────────────── -->
+  <section id="b">
+    <div class="prop prop--rec">
+      <div>
+        <div class="prop__head"><span class="prop__letter">B</span><h2>One path box: open or create</h2><span class="tag tag--rec">Recommended</span></div>
+        <p class="sub">"New folder…" and "Browse for a folder…" become one row, <strong style="color:var(--text)">Open or
+          create a folder…</strong>, which opens a single path box that lists what's on disk as you type, like a
+          shell's Tab completion. Clone gets its own row because it takes an address, not a path.</p>
+        <ul class="points">
+          <li><strong>Starts in your location</strong> (<code>~/src/</code>), so most people only type a name.</li>
+          <li><strong>Type <code>/</code> or <code>\</code> to go into a folder</strong>; <span class="kbd">Tab</span>
+            completes the highlighted one. Repositories open on click; plain folders go in.</li>
+          <li><strong>The top row always says what Enter does:</strong> "Open acme-portal" if it's there,
+            "Create acme-portal in ~/src/clients" if it isn't. Missing parent folders are made too, and shown.</li>
+          <li><strong>Outside your locations?</strong> One line says Fleet adds it as a location, instead of a
+            separate "isn't in Fleet yet" step.</li>
+          <li><strong>The search box takes paths too:</strong> type <code>clients/acme-portal</code> in the main
+            menu and the Create row offers exactly that.</li>
+        </ul>
+        <div class="verdict">
+          <div><b>Good</b><ul><li>One way to make a folder, one set of rules</li><li>Never leaves the keyboard; no hidden forms</li><li>Same on Windows and macOS/Linux</li></ul></div>
+          <div><b>Costs</b><ul><li>A folder-listing call per keystroke (the Browse endpoint already exists)</li><li>About 3 days with tests</li></ul></div>
+        </div>
+      </div>
+      <div>
+        <div class="try">
+          <span class="os-toggle" role="group" aria-label="Paths as"><button data-os="unix" aria-pressed="true">macOS / Linux</button><button data-os="win" aria-pressed="false">Windows</button></span>
+          <span>Try:</span>
+          <button class="chip" data-try="clients/acme-portal">clients/acme-portal</button>
+          <button class="chip" data-try="clients\northwind-api">clients\northwind-api</button>
+          <button class="chip" data-try="~/Documents/notes">~/Documents/notes</button>
+          <span>· or click the folder chip and type</span>
+        </div>
+        <div class="stage" id="b-stage">
+          <div class="ns-pop" id="b-pop"></div>
+          <div class="composer">Describe the task, or ask a question…</div>
+          <div class="strip" id="b-strip"></div>
+          <p class="plan" id="b-plan"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────── C ─────────────────────────────── -->
+  <section id="c">
+    <div class="prop">
+      <div>
+        <div class="prop__head"><span class="prop__letter">C</span><h2>The menu is a folder tree</h2><span class="tag">Largest</span></div>
+        <p class="sub">The list is grouped by location and shows folders inside folders, plain folders included.
+          Hover any folder and a <strong style="color:var(--text)">+</strong> makes a new one inside it, typed in
+          place, like a file explorer.</p>
+        <ul class="points">
+          <li><strong>Where things live is visible</strong>, so "a folder inside a folder" needs no explaining.</li>
+          <li><strong>Plain folders appear</strong> next to repositories, not only under Recent.</li>
+          <li>Search still filters; the tree collapses to matches.</li>
+        </ul>
+        <div class="verdict">
+          <div><b>Good</b><ul><li>Most self-explaining for people who think in folders</li><li>Creating in place feels natural</li></ul></div>
+          <div><b>Costs</b><ul><li>Heavier menu; a long tree in a small popover</li><li>Needs a deeper scan, and expand state to remember</li><li>About a week</li></ul></div>
+        </div>
+      </div>
+      <div class="stage">
+        <div class="ns-pop ftree">
+          <div class="ns-folder-search"><i data-i="search"></i><input placeholder="Search folders, or paste a repository to clone…"></div>
+          <div class="ns-pop__label loc-label"><i data-i="map-pin"></i>~/src</div>
+          <div class="ns-option"><i data-i="folder-git-2" class="ns-option__icon"></i><span class="ns-option__text"><span class="ns-option__title">opencode</span></span><span></span></div>
+          <div class="ns-option"><i data-i="folder-git-2" class="ns-option__icon"></i><span class="ns-option__text"><span class="ns-option__title">weave-fleet</span></span><span></span></div>
+          <div class="ns-option" data-highlighted><i data-i="folder-open" class="ns-option__icon"></i><span class="ns-option__text"><span class="ns-option__title">clients</span></span><span class="add" title="New folder in clients"><i data-i="plus"></i></span></div>
+          <div class="ns-option lvl1"><i data-i="folder-git-2" class="ns-option__icon"></i><span class="ns-option__text"><span class="ns-option__title">harbor-app</span></span><span></span></div>
+          <div class="ns-option lvl1"><i data-i="folder-git-2" class="ns-option__icon"></i><span class="ns-option__text"><span class="ns-option__title">northwind-api</span></span><span></span></div>
+          <div class="inline-new"><i data-i="folder-plus"></i><input value="acme-portal"></div>
+          <div style="padding:2px 8px 6px 48px;color:var(--muted);font-size:11.5px">Enter: git repository on <code>main</code> · <span class="kbd">Alt</span>+Enter: empty folder</div>
+          <div class="ns-option"><i data-i="folder" class="ns-option__icon"></i><span class="ns-option__text"><span class="ns-option__title">notes</span></span><span></span></div>
+          <div class="ns-pop__separator"></div>
+          <div class="ns-option"><i data-i="github" class="ns-option__icon"></i><span class="ns-option__text"><span class="ns-option__title">Clone a repository…</span></span><span></span></div>
+          <div class="ns-option"><i data-i="message-square" class="ns-option__icon"></i><span class="ns-option__text"><span class="ns-option__title">No folder, just chat</span></span><span></span></div>
+        </div>
+        <div class="composer">Describe the task, or ask a question…</div>
+        <div class="strip"><button class="ns-chip ns-chip--attention" data-open><i data-i="folder-git-2" class="ns-chip__icon"></i><span class="ns-chip__label">Choose a folder</span><i data-i="chevron-down" class="ns-chip__chevron"></i></button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────── Every option ─────────────────────────────── -->
+  <section id="every">
+    <h2>In every option</h2>
+    <p class="sub">These go in whichever option you pick.</p>
+    <div class="grid2">
+      <ul class="everywhere">
+        <li><b>New repositories start on <code>main</code></b>Fleet runs <code>git init -b main</code>, or uses your
+          <code>init.defaultBranch</code> if you've set one. Changeable in Settings → Folders.</li>
+        <li><b>Nothing typed is dropped silently</b>A character a folder name can't have is shown in red with the
+          reason, and Create stays off until it's fixed.</li>
+        <li><b>Plain folders stay findable</b>A non-git folder you made or opened is listed under Folders,
+          not only under Recent until it scrolls away.</li>
+        <li><b>The four words</b>Location, Folder, Checkout, Project, as above. "Workspace" leaves the interface.</li>
+      </ul>
+      <div class="set">
+        <h4>Folders</h4>
+        <p class="d">Fleet lists the repositories it finds in these locations, up to three folders deep. New folders
+          go in the one you used last.</p>
+        <div class="lbl">Locations</div>
+        <div class="row"><div><div class="t mono">~/src</div><div class="s">2 repositories · 1 folder</div></div><button class="btn btn--ghost" style="color:var(--muted)">Remove</button></div>
+        <div class="add"><div class="fake">Add a location…</div><button class="btn btn--ghost" style="border:1px solid var(--border)"><i data-i="folder-open"></i>Browse</button></div>
+        <div class="lbl">New repositories</div>
+        <div class="row"><div><div class="t">First branch</div><div class="s">Used when git has no <code>init.defaultBranch</code> of its own</div></div><input class="small" value="main"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────── Questions ─────────────────────────────── -->
+  <section id="questions">
+    <h2>Questions for you</h2>
+    <ol class="q">
+      <li><b>A, B or C?</b> I'd build B, with the "In every option" items in the same change.</li>
+      <li><b>"Location" or another word</b> for the folders Fleet looks in? ("Source folder" and "Code folder" were
+        the other candidates; "Location" matches the field already in the New folder form.)</li>
+      <li><b>Should a project remember its folder?</b> Picking "Weave Fleet" could pre-pick <code>weave-fleet</code>
+        and the other way round. Left out of this proposal unless you want it.</li>
+    </ol>
+  </section>
+</div>
+
+<script src="icons.js"></script>
+<script>
+const svg = (name, cls = "i") =>
+  `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] ?? ""}</svg>`;
+function paintIcons(root = document) {
+  root.querySelectorAll("i[data-i]").forEach((el) => {
+    const holder = document.createElement("span");
+    holder.innerHTML = svg(el.dataset.i, `i ${el.className}`.trim());
+    const node = holder.firstElementChild;
+    if (el.getAttribute("style")) node.setAttribute("style", el.getAttribute("style"));
+    el.replaceWith(node);
+  });
+}
+paintIcons();
+
+// ── Option B: a working prototype over an invented disk ─────────────────────
+const HOME = "/home/you";
+const LOCATIONS = [`${HOME}/src`];
+const DISK = {
+  [HOME]: { src: "dir", Documents: "dir" },
+  [`${HOME}/src`]: { "weave-fleet": "git", opencode: "git", clients: "dir", notes: "dir" },
+  [`${HOME}/src/clients`]: { "northwind-api": "git", "harbor-app": "git" },
+  [`${HOME}/src/notes`]: {},
+  [`${HOME}/Documents`]: { recipes: "dir" },
+  [`${HOME}/Documents/recipes`]: {},
+};
+const created = new Set();
+
+const b = { open: true, os: "unix", view: "list", query: "", path: "", hi: 0, kind: "git", branch: "main", folder: null, isNew: false };
+const sep = () => (b.os === "win" ? "\\" : "/");
+function show(path) {
+  if (b.os === "win") return path.replace(HOME, "C:\\Users\\you").replaceAll("/", "\\");
+  return path.replace(HOME, "~");
+}
+function parse(text) {
+  let s = text.trim().replaceAll("\\", "/");
+  if (/^c:\/users\/you/i.test(s)) s = HOME + s.slice("c:/users/you".length);
+  else if (s.startsWith("~")) s = HOME + s.slice(1);
+  else if (!s.startsWith("/")) s = `${LOCATIONS[0]}/${s}`;
+  return s.replace(/\/{2,}/g, "/");
+}
+const parentOf = (p) => p.slice(0, p.lastIndexOf("/")) || "/";
+const nameOf = (p) => p.slice(p.lastIndexOf("/") + 1);
+const kindOf = (p) => DISK[parentOf(p)]?.[nameOf(p)] ?? null;
+const exists = (p) => p in DISK || kindOf(p) !== null;
+const inLocation = (p) => LOCATIONS.some((l) => p === l || p.startsWith(`${l}/`));
+const BAD = /[<>:"|?*]/;
+
+function rowHtml(r, i) {
+  const hint = r.hint ? `<span class="option-hint">${r.hint}</span>` : "";
+  return `<button type="button" class="ns-option ${r.make ? "ns-option--make" : ""} ${hint ? "has-hint" : ""}" data-row="${i}" ${i === b.hi ? "data-highlighted" : ""}>
+    ${svg(r.icon, "i ns-option__icon")}
+    <span class="ns-option__text"><span class="ns-option__title">${r.title}</span>${r.detail ? `<span class="ns-option__detail ${r.mono ? "ns-option__detail--mono" : ""}">${r.detail}</span>` : ""}</span>
+    ${hint || (r.check ? svg("check", "i ns-option__check") : "<span></span>")}</button>`;
+}
+
+function listRows() {
+  const q = b.query.trim();
+  const rows = [];
+  const repos = [`${HOME}/src/opencode`, `${HOME}/src/weave-fleet`, `${HOME}/src/clients/harbor-app`, `${HOME}/src/clients/northwind-api`, ...[...created].filter((p) => kindOf(p) === "git")];
+  const folders = [`${HOME}/src/notes`, ...[...created].filter((p) => kindOf(p) === "dir")];
+  const match = (p) => !q || p.toLowerCase().includes(q.toLowerCase().replaceAll("\\", "/"));
+  const pick = (p) => () => choose(p);
+  const repoRows = repos.filter(match).map((p) => ({ icon: "folder-git-2", title: nameOf(p), detail: show(p), mono: true, check: b.folder === p, go: pick(p), label: "Repositories" }));
+  const folderRows = folders.filter(match).map((p) => ({ icon: "folder", title: nameOf(p), detail: show(p), mono: true, check: b.folder === p, go: pick(p), label: "Folders" }));
+  rows.push(...repoRows, ...folderRows);
+  if (q && !BAD.test(q)) {
+    const target = parse(q);
+    if (!exists(target)) {
+      const made = createRow(target);
+      rows.push({ ...made, label: rows.length ? "Or start something new" : "Nothing matches",
+        detail: `${made.detail} · git repository on main`, hint: "", go: () => openPath(q) });
+    }
+  }
+  rows.push({ sep: true });
+  rows.push({ icon: "folder-open", title: "Open or create a folder…", detail: "Type a path; Fleet lists what's there", go: () => openPath("") });
+  rows.push({ icon: "github", title: "Clone a repository…", detail: "From GitHub or any git address", go: () => {} });
+  rows.push({ icon: "message-square", title: "No folder, just chat", detail: "Ask anything without a repository", go: () => {} });
+  return rows;
+}
+
+function pathState() {
+  const raw = b.path;
+  const trailing = /[\\/]$/.test(raw) || raw === "";
+  const full = parse(raw || "~/src/").replace(/\/$/, "");
+  const dir = trailing ? full : parentOf(full);
+  const leaf = trailing ? "" : nameOf(full);
+  return { full, dir, leaf, trailing, bad: BAD.test(raw.replace(/^[a-z]:/i, "")) };
+}
+
+function pathRows(st) {
+  const rows = [];
+  if (st.bad) return rows;
+  const target = st.trailing ? st.dir : st.full;
+  if (exists(st.dir)) {
+    const kids = Object.entries(DISK[st.dir] ?? {}).sort(([a], [b2]) => a.localeCompare(b2));
+    const needle = st.leaf.toLowerCase();
+    const shown = kids.filter(([n]) => !needle || n.toLowerCase().startsWith(needle));
+    const exact = kids.find(([n]) => n.toLowerCase() === needle);
+    // Create leads only when nothing on disk starts with what was typed; otherwise Enter would make "cl" instead of opening "clients".
+    if (st.leaf && !exact && shown.length === 0) rows.push(createRow(target));
+    if (!st.leaf || exact) {
+      const p = st.leaf ? `${st.dir}/${exact[0]}` : st.dir;
+      rows.push({ icon: kindOf(p) === "git" ? "folder-git-2" : "folder", title: `Open <strong>${nameOf(p)}</strong>`, detail: show(p), mono: true, hint: "Enter", go: () => choose(p) });
+    }
+    for (const [n, k] of shown) {
+      if (exact && n === exact[0]) continue;
+      const p = `${st.dir}/${n}`;
+      rows.push(k === "git"
+        ? { icon: "folder-git-2", title: n, detail: "repository", hint: "", go: () => choose(p) }
+        : { icon: "folder", title: n, detail: Object.keys(DISK[p] ?? {}).length ? "folder" : "empty folder", hint: "Tab", go: () => setPath(show(p) + sep()) });
+    }
+    if (st.leaf && !exact && shown.length > 0) rows.push(createRow(target));
+  } else {
+    rows.push(createRow(target));
+  }
+  return rows;
+}
+
+function createRow(target) {
+  let base = target;
+  while (!exists(base)) base = parentOf(base);
+  const rel = target.slice(base.length + 1).split("/").join(sep());
+  return { icon: "folder-plus", make: true, title: `Create <strong>${rel}</strong>`, detail: `in ${show(base)}`, mono: false, hint: "Enter", create: target, go: () => make(target) };
+}
+
+function treeHtml(target) {
+  let base = target;
+  while (!exists(base)) base = parentOf(base);
+  const fresh = target.slice(base.length + 1).split("/");
+  let html = `<div class="tree__row">${svg(inLocation(base) && LOCATIONS.includes(base) ? "map-pin" : "folder")}${show(base)}</div>`;
+  fresh.forEach((part, i) => {
+    html += `<div class="tree__row tree__row--new" style="padding-left:${(i + 1) * 14}px">${svg("folder-plus")}${part} <span class="tag tag--new">new</span></div>`;
+  });
+  const what = b.kind === "git" ? `A git repository on <code>${b.branch || "main"}</code> with an empty first commit` : "An empty folder";
+  return `<div class="tree">${html}<div class="tree__what">${what}</div></div>`;
+}
+
+function render() {
+  const pop = document.getElementById("b-pop");
+  pop.hidden = !b.open;
+  let html = "";
+  let rows;
+  if (b.view === "list") {
+    rows = listRows();
+    html += `<div class="ns-folder-search">${svg("search")}<input id="b-q" value="${b.query.replaceAll('"', "&quot;")}" placeholder="Search, name a new folder, or paste a repository…" autocomplete="off" spellcheck="false"></div><div class="ns-folder-list">`;
+    let last = null; let ri = 0;
+    const real = rows.filter((r) => !r.sep);
+    for (const r of rows) {
+      if (r.sep) { html += `<div class="ns-pop__separator"></div>`; last = "sep"; continue; }
+      if (r.label && r.label !== last && last !== "sep") html += `<div class="ns-pop__label">${r.label}</div>`;
+      if (r.label) last = r.label;
+      html += rowHtml(r, ri++);
+    }
+    html += `</div>`;
+    rows = real;
+  } else {
+    const st = pathState();
+    rows = pathRows(st);
+    html += `<button type="button" class="ns-option ns-folder-back" id="b-back">${svg("arrow-left", "i ns-option__icon")}<span class="ns-option__text"><span class="ns-option__title">All folders</span></span></button><div class="ns-pop__separator"></div>`;
+    html += `<div class="ns-field" style="padding-bottom:0"><span class="ns-field__label">Open or create a folder</span></div>`;
+    html += `<div class="pathbox">${svg("folder-open")}<input id="b-path" value="${b.path.replaceAll('"', "&quot;")}" autocomplete="off" spellcheck="false" placeholder="${show(LOCATIONS[0])}${sep()}"></div>`;
+    if (st.bad) html += `<p class="note" style="color:var(--error)">${svg("info")}<span>A folder name can't contain <code>&lt; &gt; : " | ? *</code>. Remove it to go on.</span></p>`;
+    html += `<div class="ns-folder-list" style="max-height:210px">${rows.map(rowHtml).join("")}</div>`;
+    const top = rows[b.hi];
+    if (top?.create) {
+      html += `<div class="ns-pop__separator"></div><div class="create-kind">
+        <div class="ns-folder-kinds"><button data-kind="empty" aria-pressed="${b.kind === "empty"}">${svg("folder")}Empty folder</button><button data-kind="git" aria-pressed="${b.kind === "git"}">${svg("git-branch")}Git repository</button></div>
+        ${b.kind === "git" ? `<label class="create-branch">on branch <input id="b-branch" value="${b.branch}" spellcheck="false"></label>` : ""}</div>`;
+      html += treeHtml(top.create);
+      if (!inLocation(top.create)) html += `<p class="note">${svg("info")}<span>${show(parentOf(top.create))} isn't one of your locations. Fleet adds it, so what's in it shows up in this menu.</span></p>`;
+      html += `<div class="ns-folder-actions"><button class="btn" id="b-make">Create and use</button></div>`;
+    } else if (top) {
+      html += `<p class="note" style="color:var(--muted)"><span><span class="kbd">Enter</span> ${top.hint === "Tab" ? "goes in" : "uses the highlighted row"} · <span class="kbd">Tab</span> goes into a folder · <span class="kbd">${sep()}</span> too</span></p>`;
+    }
+  }
+  pop.innerHTML = html;
+  b.rows = rows;
+
+  pop.querySelectorAll("[data-row]").forEach((el) => {
+    el.addEventListener("mousemove", () => { if (b.hi !== +el.dataset.row) { b.hi = +el.dataset.row; render(); refocus(); } });
+    el.addEventListener("click", () => rows[+el.dataset.row]?.go());
+  });
+  pop.querySelectorAll("[data-kind]").forEach((el) => el.addEventListener("click", () => { b.kind = el.dataset.kind; render(); }));
+  pop.querySelector("#b-back")?.addEventListener("click", () => { b.view = "list"; b.hi = 0; render(); refocus(); });
+  pop.querySelector("#b-make")?.addEventListener("click", () => rows[b.hi]?.go());
+  pop.querySelector("#b-branch")?.addEventListener("input", (e) => { b.branch = e.target.value; const w = pop.querySelector(".tree__what code"); if (w) w.textContent = b.branch || "main"; });
+  const q = pop.querySelector("#b-q");
+  q?.addEventListener("input", (e) => { b.query = e.target.value; b.hi = 0; render(); refocus(); });
+  q?.addEventListener("keydown", keys);
+  const p = pop.querySelector("#b-path");
+  p?.addEventListener("input", (e) => { b.path = e.target.value; b.hi = 0; render(); refocus(); });
+  p?.addEventListener("keydown", keys);
+
+  renderStrip();
+}
+
+function refocus() {
+  const el = document.getElementById(b.view === "list" ? "b-q" : "b-path");
+  if (el && document.activeElement?.closest?.("#b-stage") !== el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+}
+
+function keys(e) {
+  const n = b.rows.length;
+  if (e.key === "ArrowDown" && n) { e.preventDefault(); b.hi = (b.hi + 1) % n; render(); refocus(); }
+  else if (e.key === "ArrowUp" && n) { e.preventDefault(); b.hi = (b.hi - 1 + n) % n; render(); refocus(); }
+  else if (e.key === "Enter") { e.preventDefault(); b.rows[b.hi]?.go(); }
+  else if (e.key === "Tab" && b.view === "path") {
+    const r = b.rows[b.hi];
+    if (r && r.hint === "Tab") { e.preventDefault(); r.go(); }
+  }
+}
+
+function setPath(text) { b.path = text; b.hi = 0; render(); refocus(); }
+function openPath(text) {
+  b.view = "path";
+  b.path = text ? (/^[~\/]|^[a-z]:/i.test(text) ? text : show(LOCATIONS[0]) + sep() + text.replaceAll(/[\\/]/g, sep())) : show(LOCATIONS[0]) + sep();
+  b.hi = 0; render(); refocus();
+}
+function choose(path) {
+  b.folder = path; b.isNew = created.has(path);
+  b.view = "list"; b.query = ""; b.hi = 0; b.open = false; render();
+}
+function make(target) {
+  const parts = target.split("/");
+  for (let i = 2; i <= parts.length; i++) {
+    const p = parts.slice(0, i).join("/");
+    if (!exists(p) && exists(parentOf(p))) {
+      DISK[p] = {};
+      DISK[parentOf(p)][nameOf(p)] = i === parts.length && b.kind === "git" ? "git" : "dir";
+    }
+  }
+  if (!inLocation(target)) LOCATIONS.push(parentOf(target));
+  created.add(target);
+  choose(target);
+}
+
+function renderStrip() {
+  const f = b.folder;
+  const kind = f ? kindOf(f) : null;
+  const strip = document.getElementById("b-strip");
+  strip.innerHTML = `<button class="ns-chip ${f ? "" : "ns-chip--attention"}" id="b-chip" ${b.open ? "data-open" : ""}>${svg(kind === "dir" ? "folder" : "folder-git-2", "i ns-chip__icon")}<span class="ns-chip__label">${f ? nameOf(f) : "Choose a folder"}</span>${b.isNew ? '<span class="tag tag--new">new</span>' : ""}${svg("chevron-down", "i ns-chip__chevron")}</button>`
+    + (kind === "git" ? `<span class="strip__sep"></span><button class="ns-chip">${svg("folder", "i ns-chip__icon")}<span class="ns-chip__label">This checkout<span class="ns-chip__hint"> · ${b.isNew ? (b.branch || "main") : "main"}</span></span>${svg("chevron-down", "i ns-chip__chevron")}</button>` : "");
+  document.getElementById("b-chip").onclick = () => { b.open = !b.open; b.view = "list"; b.query = ""; b.hi = 0; render(); if (b.open) refocus(); };
+  document.getElementById("b-plan").innerHTML = f
+    ? `Works in <code>${show(f)}</code>${b.isNew ? ", which Fleet just made" : ""}.`
+    : "Choose where it runs.";
+}
+
+document.querySelectorAll("[data-os]").forEach((el) => el.addEventListener("click", () => {
+  const before = b.os;
+  b.os = el.dataset.os;
+  document.querySelectorAll("[data-os]").forEach((o) => o.setAttribute("aria-pressed", String(o === el)));
+  if (b.view === "path" && before !== b.os) b.path = show(parse(b.path || "~/src/")) + (/[\\/]$/.test(b.path) || !b.path ? sep() : "");
+  render();
+}));
+document.querySelectorAll("[data-try]").forEach((el) => el.addEventListener("click", () => {
+  const t = el.dataset.try;
+  b.open = true;
+  if (t.startsWith("~")) openPath(b.os === "win" ? show(parse(t)) : t);
+  else { b.view = "list"; b.query = t; b.hi = 0; render(); refocus(); }
+}));
+render();
+</script>
+</body>
+</html>

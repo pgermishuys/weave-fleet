@@ -557,11 +557,39 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
     "/home/you/src/weave-fleet": { isGitRepo: true },
     "/home/you/src/opencode": { isGitRepo: true },
     "/home/you/src/notes": { isGitRepo: false },
+    "/home/you/src/clients/northwind-api": { isGitRepo: true },
+    "/home/you/src/clients/harbor-app": { isGitRepo: true },
     "/home/you/work/agent-playbook": { isGitRepo: true },
     "/home/you/Downloads": { isGitRepo: false },
   };
   /** Folders added to the workspace roots from the new-session page. */
   const addedRoots = new Set<string>();
+
+  /** A folder on the pretend disk: one of MOCK_FOLDERS, or a folder above one. */
+  function mockFolderExists(path: string): boolean {
+    return path in MOCK_FOLDERS || Object.keys(MOCK_FOLDERS).some((known) => known.startsWith(`${path}/`));
+  }
+
+  /** The folder box's listing of the pretend disk: `~` is /home/you, either separator works. */
+  function mockListing(typed: string) {
+    const path = typed.replace(/^~/, "/home/you").replaceAll("\\", "/").replace(/(?<=.)\/+$/, "");
+    const names = new Set(Object.keys(MOCK_FOLDERS)
+      .filter((known) => known.startsWith(`${path}/`))
+      .map((known) => known.slice(path.length + 1).split("/")[0]!));
+    const exists = mockFolderExists(path);
+    let nearestExisting: string | null = null;
+    for (let above = path.slice(0, path.lastIndexOf("/")); !exists && above && !nearestExisting; above = above.slice(0, above.lastIndexOf("/"))) {
+      nearestExisting = mockFolderExists(above) ? above : null;
+    }
+    return {
+      entries: [...names].sort().map((name) => ({ name, path: `${path}/${name}`, isGitRepo: MOCK_FOLDERS[`${path}/${name}`]?.isGitRepo ?? false })),
+      currentPath: path,
+      parentPath: path.slice(0, path.lastIndexOf("/")) || null,
+      roots: [],
+      exists,
+      nearestExisting,
+    };
+  }
 
   function mockRepositories() {
     const added = [...addedRoots]
@@ -989,6 +1017,10 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
           isWithinRoots: Boolean(folder) && (path.startsWith("/home/you/src/") || addedRoots.has(path)),
         });
       },
+    },
+    {
+      pattern: /^\/api\/directories\/defaults$/,
+      handler: () => json({ firstBranch: "main", home: "/home/you" }),
     },
     {
       pattern: /^\/api\/repositories\/refresh$/,
@@ -1994,7 +2026,19 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
     // ─── Priority 4: Other commonly hit endpoints ───────────────────────────────
     {
       pattern: /^\/api\/directories$/,
-      handler: () => {
+      handler: async (url, req) => {
+        if (req.method === "POST") {
+          const { path, git } = await req.json() as { path: string; git: boolean; branch?: string | null };
+          console.log(`[mock-api] POST /api/directories ${path} git=${git}`);
+          if (mockFolderExists(path)) return json({ error: `${path} already exists.` }, 409);
+          MOCK_FOLDERS[path] = { isGitRepo: git };
+          return json({ path, isGitRepo: git, addedToFleet: false, warning: null });
+        }
+        const typed = url.searchParams.get("path");
+        if (typed && url.searchParams.get("unconstrained") === "true") {
+          console.log(`[mock-api] GET /api/directories?path=${typed}`);
+          return json(mockListing(typed));
+        }
         console.log("[mock-api] GET /api/directories");
         return new Response(JSON.stringify({
           entries: [
@@ -2012,6 +2056,8 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
           currentPath: null,
           parentPath: null,
           roots: ["C:\\source", "C:\\Users\\demo\\projects"],
+          exists: true,
+          nearestExisting: null,
         }), {
           status: 200,
           headers: { "Content-Type": "application/json" },

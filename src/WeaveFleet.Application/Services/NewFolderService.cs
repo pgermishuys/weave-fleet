@@ -30,13 +30,35 @@ public sealed partial class NewFolderService(
     // Long enough for a signing prompt (commit.gpgsign) to be answered on this machine.
     private static readonly TimeSpan CommitTimeout = TimeSpan.FromSeconds(60);
 
+    /// <summary>The first branch of a new repository when git has no <c>init.defaultBranch</c> of its own.</summary>
+    public const string FallbackFirstBranch = "main";
+
+    private static readonly TimeSpan ConfigTimeout = TimeSpan.FromSeconds(10);
+
     /// <summary>Creates the folder at <paramref name="path"/>, and parent folders it needs.</summary>
     /// <param name="git">Also start a git repository in it, with an empty first commit.</param>
-    public async Task<Result<NewFolder>> CreateAsync(string path, bool git, CancellationToken ct = default)
+    /// <param name="branch">The repository's first branch; by default <see cref="FirstBranchAsync"/>.</param>
+    public async Task<Result<NewFolder>> CreateAsync(string path, bool git, string? branch = null, CancellationToken ct = default)
     {
         var target = await ValidateTargetAsync(path).ConfigureAwait(false);
         if (target.IsFailure)
             return target.Error;
+
+        var firstBranch = FallbackFirstBranch;
+        if (git)
+        {
+            if (string.IsNullOrWhiteSpace(branch))
+            {
+                firstBranch = await FirstBranchAsync().ConfigureAwait(false);
+            }
+            else
+            {
+                var checkedBranch = await CheckBranchNameAsync(branch.Trim()).ConfigureAwait(false);
+                if (checkedBranch.IsFailure)
+                    return checkedBranch.Error;
+                firstBranch = checkedBranch.Value;
+            }
+        }
 
         var (fullPath, isWithinRoots) = target.Value;
         try
@@ -54,7 +76,7 @@ public sealed partial class NewFolderService(
         {
             try
             {
-                await GitCommand.RunAsync(fullPath, InitTimeout, "init").ConfigureAwait(false);
+                await GitCommand.RunAsync(fullPath, InitTimeout, "init", $"--initial-branch={firstBranch}").ConfigureAwait(false);
             }
             catch (GitCommandException ex)
             {
@@ -78,6 +100,44 @@ public sealed partial class NewFolderService(
             return added.Error;
 
         return new NewFolder(fullPath, git, added.Value, warning);
+    }
+
+    /// <summary>
+    /// The branch a new repository starts on: git's own <c>init.defaultBranch</c> when the person has set one,
+    /// otherwise <see cref="FallbackFirstBranch"/>. A plain <c>git init</c> would still say <c>master</c>.
+    /// </summary>
+    public static async Task<string> FirstBranchAsync()
+    {
+        try
+        {
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var result = await GitCommand.ExecAsync(home, ["config", "--get", "init.defaultBranch"], ConfigTimeout, CancellationToken.None)
+                .ConfigureAwait(false);
+            var configured = result.StandardOutput.Trim();
+            return result.ExitCode == 0 && configured.Length > 0 ? configured : FallbackFirstBranch;
+        }
+        catch (Exception ex) when (ex is GitCommandException or System.ComponentModel.Win32Exception)
+        {
+            return FallbackFirstBranch;
+        }
+    }
+
+    /// <summary>The branch name as git would use it, or why git won't.</summary>
+    private static async Task<Result<string>> CheckBranchNameAsync(string branch)
+    {
+        try
+        {
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var result = await GitCommand.ExecAsync(home, ["check-ref-format", "--branch", branch], ConfigTimeout, CancellationToken.None)
+                .ConfigureAwait(false);
+            return result.ExitCode == 0
+                ? result.StandardOutput.Trim()
+                : FleetError.ValidationError("Branch", $"{branch} isn't a name git allows for a branch.");
+        }
+        catch (Exception ex) when (ex is GitCommandException or System.ComponentModel.Win32Exception)
+        {
+            return FleetError.ValidationError("Branch", $"Couldn't check the branch name {branch}.");
+        }
     }
 
     /// <summary>

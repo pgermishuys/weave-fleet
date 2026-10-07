@@ -38,16 +38,62 @@ export function parseCloneSource(text: string): CloneSource | null {
   return null;
 }
 
+/** Characters no folder name may have on Windows, macOS or Linux, and control characters. */
+const BAD_NAME_CHARACTER = /[<>:"|?*\u0000-\u001f]/;
+
+/** A name or path typed for a new folder: the folders it makes, or what's wrong with it. */
+export interface TypedFolderPath {
+  /** The folders to make, outermost first: `clients\acme portal` is `["clients", "acme-portal"]`. */
+  segments: string[];
+  /** A character no folder name can have, when one was typed. Nothing is dropped quietly. */
+  invalid: string | null;
+}
+
 /**
- * The folder name for what was typed: spaces become dashes, and characters no file system allows
- * go. Case is kept. Empty when nothing usable is left.
+ * The folders for what was typed: `/` and `\` separate folders, spaces become dashes, case is kept,
+ * and `.`/`..` go. Characters no file system allows are reported in `invalid`, not removed.
  */
-export function folderNameFrom(text: string): string {
-  return text
-    .trim()
-    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/^[.-]+|[.\s]+$/g, "");
+export function folderPathFrom(text: string): TypedFolderPath {
+  const segments = text
+    .split(/[/\\]/)
+    .map((segment) => segment.trim().replace(/\s+/g, "-").replace(/^[.-]+|[.\s]+$/g, ""))
+    .filter(Boolean);
+  return { segments, invalid: BAD_NAME_CHARACTER.exec(text)?.[0] ?? null };
+}
+
+/** A character no folder name can have in `name`, if there is one. */
+export function invalidNameCharacter(name: string): string | null {
+  return BAD_NAME_CHARACTER.exec(name)?.[0] ?? null;
+}
+
+/** The separator a machine's paths use, judged from one of its paths. */
+export function separatorOf(path: string | null | undefined): "/" | "\\" {
+  if (!path) {
+    return "/";
+  }
+  return /^[A-Za-z]:\\|^\\\\/.test(path) || (path.includes("\\") && !path.includes("/")) ? "\\" : "/";
+}
+
+/** Typed separators, either kind, as the machine writes them. */
+export function withSeparator(text: string, separator: "/" | "\\"): string {
+  return text.replace(/[/\\]/g, separator);
+}
+
+/** Whether typed text names a place by itself (`~`, `/`, `C:\`, `\\server`) rather than one inside a location. */
+export function isRootedPath(text: string): boolean {
+  return /^(~|\/|\\\\|[A-Za-z]:([/\\]|$))/.test(text);
+}
+
+/** Text typed in the folder box: the folder to list (up to the last separator) and the name typed after it. */
+export function splitTypedPath(text: string): { folder: string; name: string } {
+  const index = Math.max(text.lastIndexOf("/"), text.lastIndexOf("\\"));
+  return index < 0 ? { folder: "", name: text } : { folder: text.slice(0, index + 1), name: text.slice(index + 1) };
+}
+
+/** The folders between `base`, which is there, and `target` inside it: the ones a create would make. */
+export function foldersBetween(base: string, target: string): string[] {
+  const trimmed = (value: string) => value.replace(/[/\\]+$/, "");
+  return trimmed(target).slice(trimmed(base).length).split(/[/\\]/).filter(Boolean);
 }
 
 /** `name` inside `parent`, with the separator the parent already uses. */

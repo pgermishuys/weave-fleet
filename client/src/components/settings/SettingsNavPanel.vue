@@ -43,7 +43,7 @@ const { isUpdateAvailable, isUpdateStaged } = useUpdateStatus();
 const showUpdateDot = computed(() => isUpdateAvailable.value || isUpdateStaged.value);
 
 const items: readonly SettingsNavItem[] = [
-  { id: "workspace", label: "Workspace", icon: FolderGit2 },
+  { id: "workspace", label: "Folders", icon: FolderGit2 },
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "features", label: "Features", icon: SlidersHorizontal },
   { id: "skills", label: "Skills", icon: Wrench },

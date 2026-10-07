@@ -4,7 +4,7 @@ namespace WeaveFleet.E2E.Pages;
 
 /// <summary>
 /// Page object for the New Session composer, mounted at the <c>/sessions/new</c> route:
-/// a message box with Folder, Workspace and "…" chips under it.
+/// a message box with Folder, Checkout and "…" chips under it.
 /// </summary>
 public sealed class NewSessionFormPage(IPage page)
 {
@@ -19,7 +19,7 @@ public sealed class NewSessionFormPage(IPage page)
     private ILocator StartWithoutMessageButton => _page.GetByTestId("create-session-without-message");
 
     // The chips' menus are portaled to <body>, so these are looked up on the page, not the form.
-    private ILocator BrowseFolderOption => _page.GetByRole(AriaRole.Option, new PageGetByRoleOptions { Name = "Browse for a folder" });
+    private ILocator OpenFolderOption => _page.GetByRole(AriaRole.Option, new PageGetByRoleOptions { Name = "Open or create a folder" });
     private ILocator DirectoryInput => _page.Locator("#new-session-directory");
     private ILocator TitleInput => _page.Locator("#session-title");
 
@@ -31,12 +31,16 @@ public sealed class NewSessionFormPage(IPage page)
 
     // ── Actions ──────────────────────────────────────────────────────────────
 
-    /// <summary>Run the session in <paramref name="directory"/>: Folder chip → Browse for a folder → type the path.</summary>
+    /// <summary>
+    /// Run the session in <paramref name="directory"/>: Folder chip → Open or create a folder → type the path, and
+    /// Enter once the box offers to open it.
+    /// </summary>
     public async Task SetDirectoryAsync(string directory)
     {
         await FolderChip.ClickAsync();
-        await BrowseFolderOption.ClickAsync();
+        await OpenFolderOption.ClickAsync();
         await DirectoryInput.FillAsync(directory);
+        await _page.GetByTestId("new-session-path-open").First.WaitForAsync();
         await DirectoryInput.PressAsync("Enter");
         await DirectoryInput.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Detached });
     }

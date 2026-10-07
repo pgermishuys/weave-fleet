@@ -45,6 +45,66 @@ public sealed class NewFolderEndpointTests
     }
 
     [Fact]
+    public async Task create_starts_a_repository_on_the_branch_asked_for()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        using var client = factory.CreateClient();
+        using var root = new TempRoot();
+        await RegisterRootAsync(factory, root.Path);
+        var path = Path.Combine(root.Path, "clients", "acme-portal");
+
+        var response = await client.PostAsJsonAsync("/api/directories", new { path, git = true, branch = "trunk" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await File.ReadAllTextAsync(Path.Combine(path, ".git", "HEAD"))).Trim().ShouldBe("ref: refs/heads/trunk");
+    }
+
+    [Fact]
+    public async Task defaults_name_the_first_branch_of_a_new_repository_and_the_home_folder()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        using var client = factory.CreateClient();
+
+        var json = await client.GetFromJsonAsync<JsonElement>("/api/directories/defaults", JsonSerializerOptions.Web);
+
+        json.GetProperty("firstBranch").GetString().ShouldBe(await NewFolderService.FirstBranchAsync());
+        json.GetProperty("home").GetString().ShouldBe(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+    }
+
+    [Fact]
+    public async Task listing_a_folder_that_isnt_there_names_the_nearest_one_that_is()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        using var client = factory.CreateClient();
+        using var root = new TempRoot();
+        var path = Path.Combine(root.Path, "clients", "acme-portal");
+
+        var json = await client.GetFromJsonAsync<JsonElement>(
+            $"/api/directories?unconstrained=true&path={Uri.EscapeDataString(path)}", JsonSerializerOptions.Web);
+
+        json.GetProperty("exists").GetBoolean().ShouldBeFalse();
+        json.GetProperty("currentPath").GetString().ShouldBe(path);
+        json.GetProperty("nearestExisting").GetString().ShouldBe(root.Path);
+        json.GetProperty("entries").GetArrayLength().ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task listing_a_folder_says_it_is_there_and_lists_what_is_in_it()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        using var client = factory.CreateClient();
+        using var root = new TempRoot();
+        Directory.CreateDirectory(Path.Combine(root.Path, "clients"));
+
+        var json = await client.GetFromJsonAsync<JsonElement>(
+            $"/api/directories?unconstrained=true&path={Uri.EscapeDataString(root.Path)}", JsonSerializerOptions.Web);
+
+        json.GetProperty("exists").GetBoolean().ShouldBeTrue();
+        json.GetProperty("nearestExisting").ValueKind.ShouldBe(JsonValueKind.Null);
+        json.GetProperty("entries")[0].GetProperty("name").GetString().ShouldBe("clients");
+    }
+
+    [Fact]
     public async Task clone_returns_400_before_running_git_for_an_address_it_refuses()
     {
         await using var factory = new ApiWebApplicationFactory(authEnabled: false);

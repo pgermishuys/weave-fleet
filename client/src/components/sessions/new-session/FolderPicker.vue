@@ -1,25 +1,25 @@
 <script setup lang="ts">
-import { computed, nextTick, shallowRef, useId, useTemplateRef, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, shallowRef, useId, useTemplateRef, watch } from "vue";
 import {
   ArrowLeft,
   Check,
   ChevronDown,
+  CornerLeftUp,
   Folder,
   FolderGit2,
   FolderOpen,
   FolderPlus,
   GitBranch,
   Github,
+  Info,
   LoaderCircle,
+  MapPin,
   MessageSquare,
-  Plus,
   Search,
 } from "lucide-vue-next";
-import type { FolderInspection, ScannedRepository } from "@/api/client";
+import type { ScannedRepository } from "@/api/client";
 import { Button } from "@/components/ui/button";
-import DirectoryPickerPopover from "@/components/ui/DirectoryPickerPopover.vue";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useDirectoryBrowser } from "@/composables/use-directory-browser";
 import { useMachineTarget } from "@/lib/machine-target";
 import {
   addFolderToFleet,
@@ -28,11 +28,27 @@ import {
   FolderExistsError,
   folderForInspection,
   inspectFolder,
+  listFolder,
   listWorkspaceRoots,
+  newFolderDefaults,
   type CloneProgress,
+  type FolderListing,
   type NewFolder,
 } from "@/lib/folder-access";
-import { defaultNewFolderRoot, folderNameFrom, joinPath, parseCloneSource, rootContaining, type CloneSource } from "@/lib/new-folder";
+import {
+  defaultNewFolderRoot,
+  folderPathFrom,
+  foldersBetween,
+  invalidNameCharacter,
+  isRootedPath,
+  joinPath,
+  parseCloneSource,
+  rootContaining,
+  separatorOf,
+  splitTypedPath,
+  withSeparator,
+  type CloneSource,
+} from "@/lib/new-folder";
 import { tildePath } from "@/lib/new-session-plan";
 import type { NewSessionFolder } from "@/lib/new-session-request";
 import { useGitHubRepos } from "@/plugins/builtin/github/composables/use-github-repos";
@@ -41,16 +57,19 @@ const props = withDefaults(defineProps<{
   folder: NewSessionFolder | null;
   repositories: readonly ScannedRepository[];
   recentFolders: readonly NewSessionFolder[];
+  /** Plain folders sessions ran in, which the repository scan never lists. */
+  plainFolders?: readonly string[];
   /** Any folder on disk (not in cloud mode, not with a GitHub issue attached). */
   allowBrowse: boolean;
   /** No folder at all (not with a GitHub issue attached). */
   allowNone: boolean;
   /** Create a folder or clone a repository from the menu (not in cloud mode, not with a GitHub issue attached). */
   allowCreate?: boolean;
-  /** The workspace root the last new folder went into, so the next one goes there too. */
+  /** The location the last new folder went into, so the next one goes there too. */
   lastNewFolderRoot?: string | null;
   disabled?: boolean;
 }>(), {
+  plainFolders: () => [],
   allowCreate: false,
   lastNewFolderRoot: null,
   disabled: false,
@@ -59,9 +78,9 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   "update:folder": [folder: NewSessionFolder];
   closeAutoFocus: [event: Event];
-  /** A folder was added to the workspace roots, so the repository list is out of date. */
+  /** A folder was added to the locations, so the repository list is out of date. */
   folderAdded: [];
-  /** A folder was created or cloned inside this workspace root. */
+  /** A folder was created or cloned inside this location. */
   created: [root: string];
   /** A clone is under way for the folder the session will use; starting has to wait. */
   "update:busy": [busy: boolean];
@@ -71,43 +90,42 @@ const open = defineModel<boolean>("open", { default: false });
 
 interface FolderOption {
   id: string;
-  group: "Recent" | "Repositories" | "New" | "Other";
+  group: "Recent" | "Repositories" | "Folders" | "New" | "Other";
   title: string;
   /** Bold part of the title, after it: the name to create or the repository to clone. */
   titleName?: string;
   detail: string;
   mono: boolean;
-  icon: "repository" | "directory" | "browse" | "none" | "create" | "clone" | "new";
+  icon: "repository" | "directory" | "browse" | "none" | "create" | "clone";
   isSelected: boolean;
   choose: () => void;
 }
 
-type NewFolderKind = "empty" | "git" | "clone";
-/** A workspace root, or "other" for a parent folder typed in. */
-type NewFolderLocation = string;
-const OTHER_LOCATION = "\u0000other";
+/** A row in the folder box: open a folder, go into one, or create the one typed. */
+interface PathRow {
+  id: string;
+  action: "open" | "enter" | "create";
+  title: string;
+  titleName?: string;
+  detail: string;
+  path: string;
+  isGitRepo: boolean;
+}
+
+/** A location, or "other" for a parent folder typed in (Clone only). */
+type CloneLocation = string;
+const OTHER_LOCATION = `${String.fromCharCode(0)}other`;
 
 const listId = useId();
-const view = shallowRef<"list" | "browse" | "new">("list");
+const view = shallowRef<"list" | "path" | "clone">("list");
 const query = shallowRef("");
 const highlightedIndex = shallowRef(0);
-const directoryDraft = shallowRef("");
-const isDirectoryPickerOpen = shallowRef(false);
 const searchInput = useTemplateRef<HTMLInputElement>("search");
-const directoryInput = useTemplateRef<HTMLInputElement>("directory");
-const newNameInput = useTemplateRef<HTMLInputElement>("newName");
-const newRepositoryInput = useTemplateRef<HTMLInputElement>("newRepository");
+const pathInput = useTemplateRef<HTMLInputElement>("path");
+const cloneRepositoryInput = useTemplateRef<HTMLInputElement>("cloneRepository");
 // Folders on the machine the session starts on.
 const { api: machineApi } = useMachineTarget();
-// Any folder on this computer: one outside the workspace roots can be added from here.
-const directoryBrowser = useDirectoryBrowser(false, { unconstrained: true });
-const browseStatus = shallowRef<"idle" | "checking" | "adding">("idle");
-const browseError = shallowRef<string | null>(null);
-/** A folder that was picked but is outside the workspace roots, waiting to be added. */
-const folderToAdd = shallowRef<FolderInspection | null>(null);
-/** A typed path with no folder there yet, waiting to be created. */
-const folderToCreate = shallowRef<FolderInspection | null>(null);
-const startGitRepository = shallowRef(true);
+const openStatus = shallowRef<"idle" | "checking" | "adding">("idle");
 
 // Making folders.
 const roots = shallowRef<readonly string[] | null>(null);
@@ -125,11 +143,10 @@ const isCloneSuperseded = shallowRef(false);
 let keepStateOnOpen = false;
 /** Folders made from this menu, which the chip marks as new. */
 const createdPaths = shallowRef<ReadonlySet<string>>(new Set());
-const newKind = shallowRef<NewFolderKind>("git");
-const newName = shallowRef("");
-const newRepository = shallowRef("");
-const newLocation = shallowRef<NewFolderLocation>("");
-const newParent = shallowRef("");
+/** The first branch a new repository gets on this machine unless told otherwise. */
+const firstBranch = shallowRef<string | null>(null);
+/** The machine's home folder, which the folder box writes as `~`; null until known. */
+const home = shallowRef<string | null>(null);
 const gitHubRepos = useGitHubRepos({ autoLoad: false });
 
 function baseName(path: string): string {
@@ -167,14 +184,31 @@ function repositoryOption(repository: ScannedRepository, group: FolderOption["gr
   };
 }
 
+function directoryOption(path: string, group: FolderOption["group"]): FolderOption {
+  const folder: NewSessionFolder = { kind: "directory", path };
+  return {
+    id: `${group}:dir:${path}`,
+    group,
+    title: baseName(path),
+    detail: tildePath(path),
+    mono: true,
+    icon: "directory",
+    isSelected: isCurrent(folder),
+    choose: () => choose(folder),
+  };
+}
+
 // ── Where new folders go ──────────────────────────────────────────────────
 
 const currentPath = computed(() => (props.folder && props.folder.kind !== "none" ? props.folder.path : null));
 const newFolderRoot = computed(() =>
   pickedRoot.value ?? defaultNewFolderRoot(roots.value ?? [], props.lastNewFolderRoot, currentPath.value));
+/** How this machine writes paths, judged from one of its folders. */
+const separator = computed(() =>
+  separatorOf(roots.value?.[0] ?? currentPath.value ?? props.repositories[0]?.path ?? null));
 
 async function loadRoots(): Promise<void> {
-  if (!props.allowCreate) {
+  if (!props.allowCreate && !props.allowBrowse) {
     return;
   }
   try {
@@ -184,16 +218,44 @@ async function loadRoots(): Promise<void> {
   }
 }
 
-/** What the search box asks for: a repository to clone, or the name of a folder to create. */
-const cloneFromQuery = computed<CloneSource | null>(() => (props.allowCreate ? parseCloneSource(query.value) : null));
-const nameFromQuery = computed(() => {
-  if (!props.allowCreate || cloneFromQuery.value) {
-    return "";
+async function loadDefaults(): Promise<void> {
+  if ((!props.allowCreate && !props.allowBrowse) || firstBranch.value !== null) {
+    return;
   }
-  const name = folderNameFrom(query.value);
-  const isTaken = props.repositories.some((repository) => repository.name.toLowerCase() === name.toLowerCase());
-  return isTaken ? "" : name;
+  try {
+    const defaults = await newFolderDefaults(machineApi);
+    firstBranch.value = defaults.firstBranch;
+    home.value = defaults.home;
+  } catch {
+    firstBranch.value = "main";
+  }
+  if (!branch.value) {
+    branch.value = firstBranch.value;
+  }
+}
+
+/** What the search box asks for: a repository to clone, or a folder (or folders) to create. */
+const cloneFromQuery = computed<CloneSource | null>(() => (props.allowCreate ? parseCloneSource(query.value) : null));
+/** A path of its own (`~/…`, `/…`, `C:\…`) typed in the search box: one for the folder box, not the location. */
+const isQueryRooted = computed(() => props.allowBrowse && !cloneFromQuery.value && isRootedPath(query.value.trim()));
+const typedFromQuery = computed(() =>
+  props.allowCreate && !cloneFromQuery.value && !isQueryRooted.value && query.value.trim() ? folderPathFrom(query.value) : null);
+/** The folder the search box would create inside the location, if it can. */
+const createFromQuery = computed<string | null>(() => {
+  const typed = typedFromQuery.value;
+  const root = newFolderRoot.value;
+  if (!typed || typed.invalid || typed.segments.length === 0 || !root) {
+    return null;
+  }
+  const [only] = typed.segments;
+  const isTaken = typed.segments.length === 1
+    && props.repositories.some((repository) => repository.name.toLowerCase() === only!.toLowerCase());
+  return isTaken ? null : typed.segments.reduce((path, segment) => joinPath(path, segment), root);
 });
+
+function repositoryLabel(): string {
+  return firstBranch.value ? `git repository on ${firstBranch.value}` : "git repository";
+}
 
 const options = computed<FolderOption[]>(() => {
   const needle = query.value.trim().toLowerCase();
@@ -210,17 +272,11 @@ const options = computed<FolderOption[]>(() => {
         recent.push(repositoryOption(repository, "Recent"));
       }
       recentPaths.add(folder.path);
-    } else if (folder.kind === "directory" && props.allowBrowse && matches(folder.path)) {
-      recent.push({
-        id: `Recent:dir:${folder.path}`,
-        group: "Recent",
-        title: baseName(folder.path),
-        detail: tildePath(folder.path),
-        mono: true,
-        icon: "directory",
-        isSelected: isCurrent(folder),
-        choose: () => choose(folder),
-      });
+    } else if (folder.kind === "directory" && props.allowBrowse) {
+      if (matches(folder.path)) {
+        recent.push(directoryOption(folder.path, "Recent"));
+      }
+      recentPaths.add(folder.path);
     }
   }
 
@@ -228,6 +284,12 @@ const options = computed<FolderOption[]>(() => {
     .filter((repository) => !recentPaths.has(repository.path) && matches(`${repository.name} ${repository.path}`))
     .sort((left, right) => left.name.localeCompare(right.name))
     .map((repository) => repositoryOption(repository, "Repositories"));
+
+  const plain = props.allowBrowse
+    ? props.plainFolders
+      .filter((path) => !recentPaths.has(path) && matches(path))
+      .map((path) => directoryOption(path, "Folders"))
+    : [];
 
   const made: FolderOption[] = [];
   const root = newFolderRoot.value;
@@ -245,44 +307,57 @@ const options = computed<FolderOption[]>(() => {
       isSelected: false,
       choose: () => void clone(source, target, root),
     });
-  } else if (root && nameFromQuery.value) {
-    const target = joinPath(root, nameFromQuery.value);
+  } else if (root && createFromQuery.value) {
+    const target = createFromQuery.value;
     made.push({
       id: "create",
       group: "New",
       title: "Create",
-      titleName: nameFromQuery.value,
-      detail: `${tildePath(target)} · git repository`,
+      titleName: foldersBetween(root, target).join(separatorOf(root)),
+      detail: `${tildePath(target)} · ${repositoryLabel()}`,
       mono: false,
       icon: "create",
       isSelected: false,
       choose: () => void create(target, true, root),
     });
+  } else if (isQueryRooted.value) {
+    const typed = query.value.trim();
+    made.push({
+      id: "go",
+      group: "New",
+      title: "Go to",
+      titleName: typed,
+      detail: props.allowCreate ? "Open it, or create it if it isn't there" : "Open it",
+      mono: false,
+      icon: "browse",
+      isSelected: false,
+      choose: () => showPath(typed),
+    });
   }
 
   const extras: FolderOption[] = [];
-  if (props.allowCreate) {
-    extras.push({
-      id: "new",
-      group: "Other",
-      title: "New folder…",
-      detail: "Empty, a git repository, or a clone",
-      mono: false,
-      icon: "new",
-      isSelected: false,
-      choose: () => showNew(),
-    });
-  }
   if (props.allowBrowse) {
     extras.push({
-      id: "browse",
+      id: "path",
       group: "Other",
-      title: "Browse for a folder…",
-      detail: "Any repository or folder on this computer",
+      title: props.allowCreate ? "Open or create a folder…" : "Open a folder…",
+      detail: props.allowCreate ? "Type a path; Fleet lists what's there" : "Any repository or folder on this computer",
       mono: false,
       icon: "browse",
-      isSelected: props.folder?.kind === "directory",
-      choose: () => showBrowse(),
+      isSelected: false,
+      choose: () => showPath(),
+    });
+  }
+  if (props.allowCreate) {
+    extras.push({
+      id: "clone-form",
+      group: "Other",
+      title: "Clone a repository…",
+      detail: "From GitHub or any git address",
+      mono: false,
+      icon: "clone",
+      isSelected: false,
+      choose: () => showClone(),
     });
   }
   if (props.allowNone) {
@@ -298,11 +373,13 @@ const options = computed<FolderOption[]>(() => {
     });
   }
 
-  return [...recent, ...others, ...made, ...extras];
+  return [...recent, ...others, ...plain, ...made, ...extras];
 });
 
-const hasRepositoryMatches = computed(() => options.value.some((option) => option.icon === "repository"));
-const offersToMake = computed(() => options.value.some((option) => option.group === "New"));
+const hasFolderMatches = computed(() => options.value.some((option) => option.icon === "repository" || option.icon === "directory"));
+const offersToMake = computed(() => options.value.some((option) => option.id === "create" || option.id === "clone"));
+/** A character typed in the search box that no folder name can have. */
+const invalidInQuery = computed(() => typedFromQuery.value?.invalid ?? null);
 
 /** The row's title; a create or clone row says what it's doing while it runs. */
 function optionTitle(option: FolderOption): string {
@@ -328,7 +405,7 @@ function groupLabel(index: number): string | null {
     return "Repository to clone";
   }
   if (option.group === "New") {
-    return hasRepositoryMatches.value ? "Or start something new" : "No repository matches";
+    return hasFolderMatches.value ? "Or start something new" : "No folder matches";
   }
   return option.group === "Other" ? null : option.group;
 }
@@ -346,11 +423,11 @@ function handleSearchKeydown(event: KeyboardEvent): void {
   if (event.key === "ArrowDown") {
     event.preventDefault();
     highlightedIndex.value = (highlightedIndex.value + 1) % count;
-    scrollHighlightedIntoView();
+    scrollIntoView(optionDomId(highlightedIndex.value));
   } else if (event.key === "ArrowUp") {
     event.preventDefault();
     highlightedIndex.value = (highlightedIndex.value - 1 + count) % count;
-    scrollHighlightedIntoView();
+    scrollIntoView(optionDomId(highlightedIndex.value));
   } else if (event.key === "Enter") {
     event.preventDefault();
     const option = options.value[highlightedIndex.value];
@@ -367,9 +444,9 @@ function chooseOption(option: FolderOption): void {
   }
 }
 
-function scrollHighlightedIntoView(): void {
+function scrollIntoView(id: string): void {
   void nextTick(() => {
-    document.getElementById(optionDomId(highlightedIndex.value))?.scrollIntoView?.({ block: "nearest" });
+    document.getElementById(id)?.scrollIntoView?.({ block: "nearest" });
   });
 }
 
@@ -404,14 +481,14 @@ function useMade(made: NewFolder, root: string | null): void {
   choose(folder);
 }
 
-async function create(path: string, git: boolean, root: string | null): Promise<void> {
+async function create(path: string, git: boolean, root: string | null, firstBranchName?: string): Promise<void> {
   if (makeStatus.value !== "idle") {
     return;
   }
   resetMake();
   makeStatus.value = "creating";
   try {
-    useMade(await createFolder(path, git, machineApi), root);
+    useMade(await createFolder(path, git, machineApi, git ? firstBranchName : undefined), root);
   } catch (error) {
     failed(error, "Couldn't create that folder.");
   } finally {
@@ -454,23 +531,39 @@ async function clone(source: CloneSource, path: string, root: string | null): Pr
   }
 }
 
-async function useExisting(): Promise<void> {
-  const path = existingPath.value;
-  if (!path) {
+/**
+ * Uses a folder that's there: a git checkout becomes a repository (so it can get a worktree), anything
+ * else a plain folder. One outside the locations is added to them first, so it's listed next time.
+ */
+async function openFolder(path: string): Promise<void> {
+  if (openStatus.value !== "idle") {
     return;
   }
   resetMake();
+  openStatus.value = "checking";
   try {
     const inspection = await inspectFolder(path, machineApi);
-    if (inspection.isWithinRoots) {
-      choose(folderForInspection(inspection));
-    } else {
-      directoryDraft.value = inspection.path;
-      folderToAdd.value = inspection;
-      view.value = "browse";
+    if (!inspection.exists) {
+      makeError.value = "There's no folder at that path.";
+      return;
     }
+    if (!inspection.isWithinRoots) {
+      openStatus.value = "adding";
+      await addFolderToFleet(inspection.path, machineApi);
+      emit("folderAdded");
+    }
+    choose(folderForInspection(inspection));
   } catch (error) {
-    failed(error, "Couldn't check that folder.");
+    failed(error, "Couldn't open that folder.");
+  } finally {
+    openStatus.value = "idle";
+  }
+}
+
+function useExisting(): void {
+  const path = existingPath.value;
+  if (path) {
+    void openFolder(path);
   }
 }
 
@@ -479,179 +572,317 @@ const cloneStatusText = computed(() => {
   return progress ? `${progress.phase} ${progress.percent}%` : "Starting…";
 });
 
-// ── New folder form ───────────────────────────────────────────────────────
+// ── The folder box: open or create a folder ──────────────────────────────
 
-function showNew(): void {
-  resetMake();
-  const source = cloneFromQuery.value;
-  newKind.value = source ? "clone" : "git";
-  newRepository.value = source ? query.value.trim() : "";
-  newName.value = source ? "" : folderNameFrom(query.value);
-  newLocation.value = newFolderRoot.value ?? OTHER_LOCATION;
-  newParent.value = "";
-  view.value = "new";
-  focusNewForm();
+const pathText = shallowRef("");
+/** The last listing, and the folder it was asked for: rows only use it while it matches what's typed. */
+const listing = shallowRef<{ request: string; result: FolderListing } | null>(null);
+const listingError = shallowRef<string | null>(null);
+const pathHighlight = shallowRef(0);
+const newKind = shallowRef<"empty" | "git">("git");
+const branch = shallowRef("");
+let listingRequest: AbortController | null = null;
+
+function withoutTrailingSeparator(path: string): string {
+  // Keep a root's own separator: `/`, `C:\`.
+  return /^([/\\]|[A-Za-z]:[/\\])$/.test(path) ? path : path.replace(/[/\\]+$/, "");
 }
 
-function focusNewForm(): void {
-  void nextTick(() => (newKind.value === "clone" ? newRepositoryInput.value : newNameInput.value)?.focus());
-}
-
-function setNewKind(kind: NewFolderKind): void {
-  newKind.value = kind;
-  resetMake();
-  if (kind === "clone") {
-    void gitHubRepos.refresh();
+const typedPath = computed(() => splitTypedPath(pathText.value));
+/** The folder whose contents the box lists: what's typed up to the last separator, inside the location when it isn't a path of its own. */
+const folderToList = computed(() => {
+  const { folder } = typedPath.value;
+  const location = newFolderRoot.value ?? "~";
+  if (!folder) {
+    return location;
   }
-  focusNewForm();
+  const typed = withSeparator(folder, separator.value);
+  return withoutTrailingSeparator(isRootedPath(typed) ? typed : joinPath(location, typed));
+});
+const currentListing = computed(() => (listing.value?.request === folderToList.value ? listing.value.result : null));
+
+async function loadListing(path: string): Promise<void> {
+  listingRequest?.abort();
+  const request = new AbortController();
+  listingRequest = request;
+  try {
+    const result = await listFolder(path, machineApi, request.signal);
+    if (!request.signal.aborted) {
+      listing.value = { request: path, result };
+      listingError.value = null;
+    }
+  } catch (error) {
+    if (!request.signal.aborted) {
+      listingError.value = error instanceof Error ? error.message : "Couldn't list that folder.";
+    }
+  }
 }
 
-const newSource = computed(() => (newKind.value === "clone" ? parseCloneSource(newRepository.value) : null));
-const newFolderName = computed(() => (newKind.value === "clone" ? newSource.value?.name ?? "" : folderNameFrom(newName.value)));
-const newParentPath = computed(() => (newLocation.value === OTHER_LOCATION ? newParent.value.trim() : newLocation.value));
-const newTarget = computed(() =>
-  newFolderName.value && newParentPath.value ? joinPath(newParentPath.value, newFolderName.value) : null);
-const isNewOutsideRoots = computed(() => newLocation.value === OTHER_LOCATION);
+watch([folderToList, view], ([path, currentView]) => {
+  if (currentView === "path") {
+    void loadListing(path);
+  }
+});
 
-const newDescription = computed(() => {
+onBeforeUnmount(() => listingRequest?.abort());
+
+/** The new folders a create would make, and the folder that's there above them. */
+const pathCreate = computed<{ base: string; target: string; folders: string[]; invalid: string | null } | null>(() => {
+  const result = currentListing.value;
+  if (!result || !props.allowCreate) {
+    return null;
+  }
+  const name = typedPath.value.name.trim();
+  const base = result.exists ? result.path : result.nearestExisting;
+  const isThere = result.entries.some((entry) => entry.name.toLowerCase() === name.toLowerCase());
+  if (!base || (result.exists && (!name || isThere))) {
+    return null;
+  }
+  const target = name ? joinPath(result.path, name) : result.path;
+  const folders = foldersBetween(base, target);
+  const invalid = folders.map(invalidNameCharacter).find((character) => character !== null) ?? null;
+  return { base, target, folders, invalid };
+});
+
+const pathRows = computed<PathRow[]>(() => {
+  const result = currentListing.value;
+  if (!result) {
+    return [];
+  }
+  const name = typedPath.value.name.trim();
+  const create = pathCreate.value && !pathCreate.value.invalid
+    ? {
+      id: "create",
+      action: "create" as const,
+      title: "Create",
+      titleName: pathCreate.value.folders.join(separatorOf(result.path)),
+      detail: `in ${shownPath(pathCreate.value.base)}`,
+      path: pathCreate.value.target,
+      isGitRepo: false,
+    }
+    : null;
+  if (!result.exists) {
+    return create ? [create] : [];
+  }
+
+  const needle = name.toLowerCase();
+  const matches = result.entries.filter((entry) => entry.name.toLowerCase().startsWith(needle));
+  const exact = result.entries.find((entry) => entry.name === name)
+    ?? result.entries.find((entry) => entry.name.toLowerCase() === needle && needle !== "");
+  const rows: PathRow[] = [];
+  if (!name) {
+    rows.push({ id: "open-here", action: "open", title: "Open", titleName: baseName(result.path), detail: shownPath(result.path), path: result.path, isGitRepo: false });
+  } else if (exact) {
+    rows.push({ id: "open-exact", action: "open", title: "Open", titleName: exact.name, detail: shownPath(exact.path), path: exact.path, isGitRepo: exact.isGitRepo });
+  }
+  // Create leads only when nothing starts with what was typed: otherwise Enter would make "cl" instead of opening "clients".
+  if (create && matches.length === 0) {
+    rows.push(create);
+  }
+  for (const entry of matches) {
+    if (entry !== exact) {
+      rows.push({
+        id: `entry:${entry.path}`,
+        action: "enter",
+        title: entry.name,
+        detail: entry.isGitRepo ? "Repository" : "Folder",
+        path: entry.path,
+        isGitRepo: entry.isGitRepo,
+      });
+    }
+  }
+  if (create && matches.length > 0) {
+    rows.push(create);
+  }
+  return rows;
+});
+
+const highlightedPathRow = computed(() => pathRows.value[pathHighlight.value] ?? null);
+/** Where the highlighted row would add a folder to the locations, for the line that says so. */
+const addsLocation = computed(() => {
+  const row = highlightedPathRow.value;
+  return row !== null && row.action !== "enter" && roots.value !== null && rootContaining(row.path, roots.value) === null;
+});
+const pathNote = computed(() => {
+  const result = currentListing.value;
+  if (listingError.value) {
+    return listingError.value;
+  }
+  if (!result) {
+    return null;
+  }
+  if (pathCreate.value?.invalid) {
+    return `“${pathCreate.value.invalid}” can't be in a folder name.`;
+  }
+  if (!result.exists && !props.allowCreate) {
+    return `There's no folder at ${shownPath(result.path)}.`;
+  }
+  return null;
+});
+
+function pathRowDomId(index: number): string {
+  return `${listId}-path-${index}`;
+}
+
+/**
+ * A folder as the box writes it: `~` for the machine's own home folder, which the server expands the same
+ * way. Anything else stays whole, because `~` there would mean a different folder.
+ */
+function typedPathFor(path: string): string {
+  const own = home.value;
+  if (!own || !path.toLowerCase().startsWith(own.toLowerCase())) {
+    return path;
+  }
+  const rest = path.slice(own.length);
+  return rest === "" || /^[/\\]/.test(rest) ? `~${rest}` : path;
+}
+
+/** A folder for the box's rows: the way the box writes it once the home folder is known. */
+function shownPath(path: string): string {
+  return home.value ? typedPathFor(path) : tildePath(path);
+}
+
+function showPath(text?: string): void {
+  resetMake();
+  const location = newFolderRoot.value;
+  const sep = separator.value;
+  pathText.value = text ?? (location ? `${typedPathFor(location)}${sep}` : `~${sep}`);
+  pathHighlight.value = 0;
+  newKind.value = "git";
+  branch.value = firstBranch.value ?? "";
+  view.value = "path";
+  void nextTick(() => {
+    const input = pathInput.value;
+    input?.focus();
+    input?.setSelectionRange(input.value.length, input.value.length);
+  });
+}
+
+/** Goes into a folder: the box shows what's in it. */
+function enterFolder(path: string): void {
+  pathText.value = `${typedPathFor(path)}${separatorOf(path)}`;
+  pathHighlight.value = 0;
+  void nextTick(() => pathInput.value?.focus());
+}
+
+function goUp(): void {
+  const here = currentListing.value?.path ?? folderToList.value;
+  const index = Math.max(here.lastIndexOf("/"), here.lastIndexOf("\\"));
+  if (index < 0) {
+    return;
+  }
+  const parent = index === 0 ? here.slice(0, 1) : here.slice(0, index);
+  enterFolder(/^[A-Za-z]:$/.test(parent) ? `${parent}\\` : parent);
+}
+
+function createFromPath(): void {
+  const plan = pathCreate.value;
+  if (!plan || plan.invalid) {
+    return;
+  }
+  void create(plan.target, newKind.value === "git", rootContaining(plan.target, roots.value ?? []), branch.value.trim() || undefined);
+}
+
+function runPathRow(row: PathRow): void {
+  if (row.action === "create") {
+    createFromPath();
+  } else if (row.action === "open" || row.isGitRepo) {
+    void openFolder(row.path);
+  } else {
+    enterFolder(row.path);
+  }
+}
+
+function handlePathKeydown(event: KeyboardEvent): void {
+  const count = pathRows.value.length;
+  if (event.key === "ArrowDown" && count > 0) {
+    event.preventDefault();
+    pathHighlight.value = (pathHighlight.value + 1) % count;
+    scrollIntoView(pathRowDomId(pathHighlight.value));
+  } else if (event.key === "ArrowUp" && count > 0) {
+    event.preventDefault();
+    pathHighlight.value = (pathHighlight.value - 1 + count) % count;
+    scrollIntoView(pathRowDomId(pathHighlight.value));
+  } else if (event.key === "Enter") {
+    event.preventDefault();
+    const row = highlightedPathRow.value;
+    if (row && makeStatus.value === "idle") {
+      runPathRow(row);
+    }
+  } else if (event.key === "Tab" && !event.shiftKey) {
+    const row = highlightedPathRow.value;
+    if (row?.action === "enter") {
+      event.preventDefault();
+      enterFolder(row.path);
+    }
+  }
+}
+
+watch(pathText, () => {
+  pathHighlight.value = 0;
+  if (view.value === "path") {
+    resetMake();
+  }
+});
+
+// ── Clone ─────────────────────────────────────────────────────────────────
+
+const cloneText = shallowRef("");
+const cloneLocation = shallowRef<CloneLocation>("");
+const cloneParent = shallowRef("");
+
+function showClone(): void {
+  resetMake();
+  cloneText.value = cloneFromQuery.value ? query.value.trim() : "";
+  cloneLocation.value = newFolderRoot.value ?? OTHER_LOCATION;
+  cloneParent.value = "";
+  void gitHubRepos.refresh();
+  view.value = "clone";
+  void nextTick(() => cloneRepositoryInput.value?.focus());
+}
+
+const cloneSource = computed(() => parseCloneSource(cloneText.value));
+const cloneParentPath = computed(() => (cloneLocation.value === OTHER_LOCATION ? cloneParent.value.trim() : cloneLocation.value));
+const cloneTarget = computed(() =>
+  cloneSource.value && cloneParentPath.value ? joinPath(cloneParentPath.value, cloneSource.value.name) : null);
+const isCloneOutsideRoots = computed(() => cloneLocation.value === OTHER_LOCATION);
+
+const cloneDescription = computed(() => {
   if (makeStatus.value === "cloning") {
     return cloneStatusText.value;
   }
-  const what = {
-    empty: "An empty folder",
-    git: "A git repository with an empty first commit",
-    clone: newSource.value ? `A clone of ${newSource.value.label}` : "A clone",
-  }[newKind.value];
-  return isNewOutsideRoots.value ? `${what}, added to your folders` : what;
+  const what = cloneSource.value ? `A clone of ${cloneSource.value.label}` : "A clone";
+  return isCloneOutsideRoots.value ? `${what}, added to your locations` : what;
 });
 
 /** Your GitHub repositories that aren't on this computer, for Clone. */
 const cloneSuggestions = computed(() => {
-  if (newKind.value !== "clone" || newSource.value) {
+  if (cloneSource.value) {
     return [];
   }
   const local = new Set(props.repositories.map((repository) => repository.name.toLowerCase()));
-  const needle = newRepository.value.trim().toLowerCase();
+  const needle = cloneText.value.trim().toLowerCase();
   return gitHubRepos.repos.value
     .filter((repo) => !local.has(repo.name.toLowerCase()) && (!needle || repo.full_name.toLowerCase().includes(needle)))
     .slice(0, 5);
 });
 
-const canSubmitNew = computed(() =>
-  makeStatus.value === "idle" && newTarget.value !== null && (newKind.value !== "clone" || newSource.value !== null));
+const canSubmitClone = computed(() => makeStatus.value === "idle" && cloneTarget.value !== null && cloneSource.value !== null);
 
-function submitNew(): void {
-  const target = newTarget.value;
-  if (!canSubmitNew.value || !target) {
+function submitClone(): void {
+  const target = cloneTarget.value;
+  if (!canSubmitClone.value || !target || !cloneSource.value) {
     return;
   }
-  const root = isNewOutsideRoots.value ? null : newLocation.value;
-  if (newKind.value === "clone" && newSource.value) {
-    void clone(newSource.value, target, root);
-  } else {
-    void create(target, newKind.value === "git", root);
-  }
+  void clone(cloneSource.value, target, isCloneOutsideRoots.value ? null : cloneLocation.value);
 }
 
-// ── Browse ────────────────────────────────────────────────────────────────
-
-function resetBrowseCheck(): void {
-  browseError.value = null;
-  folderToAdd.value = null;
-  folderToCreate.value = null;
-  resetMake();
-}
-
-function showBrowse(): void {
-  directoryDraft.value = props.folder?.kind === "directory" ? props.folder.path : "";
-  resetBrowseCheck();
-  view.value = "browse";
-  void nextTick(() => directoryInput.value?.focus());
-}
+// ── Menu ──────────────────────────────────────────────────────────────────
 
 function showList(): void {
   resetMake();
   view.value = "list";
   void nextTick(() => searchInput.value?.focus());
-}
-
-/**
- * Uses the typed or picked folder: a git checkout becomes a repository (so it can get a
- * worktree), anything else a plain folder. One outside the workspace roots asks to be added first;
- * one that isn't there yet offers to be created.
- */
-async function useDirectory(path = directoryDraft.value): Promise<void> {
-  const trimmed = path.trim();
-  if (!trimmed || browseStatus.value !== "idle") {
-    return;
-  }
-
-  directoryDraft.value = trimmed;
-  resetBrowseCheck();
-  browseStatus.value = "checking";
-  try {
-    const inspection = await inspectFolder(trimmed, machineApi);
-    if (!inspection.exists && props.allowCreate) {
-      folderToCreate.value = inspection;
-      startGitRepository.value = true;
-    } else if (!inspection.exists) {
-      browseError.value = "There's no folder at that path.";
-    } else if (!inspection.isWithinRoots) {
-      directoryDraft.value = inspection.path;
-      folderToAdd.value = inspection;
-    } else {
-      choose(folderForInspection(inspection));
-    }
-  } catch (error) {
-    browseError.value = error instanceof Error ? error.message : "Couldn't check that folder.";
-  } finally {
-    browseStatus.value = "idle";
-  }
-}
-
-async function addAndUseFolder(): Promise<void> {
-  const inspection = folderToAdd.value;
-  if (!inspection || browseStatus.value !== "idle") {
-    return;
-  }
-
-  browseStatus.value = "adding";
-  try {
-    await addFolderToFleet(inspection.path, machineApi);
-    emit("folderAdded");
-    choose(folderForInspection(inspection));
-  } catch (error) {
-    folderToAdd.value = null;
-    browseError.value = error instanceof Error ? error.message : "Couldn't add that folder.";
-  } finally {
-    browseStatus.value = "idle";
-  }
-}
-
-const createRoot = computed(() => (folderToCreate.value ? rootContaining(folderToCreate.value.path, roots.value ?? []) : null));
-
-function createTypedFolder(): void {
-  const inspection = folderToCreate.value;
-  if (inspection) {
-    void create(inspection.path, startGitRepository.value, createRoot.value);
-  }
-}
-
-function handleDirectoryEnter(): void {
-  if (folderToAdd.value) {
-    void addAndUseFolder();
-  } else if (folderToCreate.value) {
-    createTypedFolder();
-  } else {
-    void useDirectory();
-  }
-}
-
-function handleDirectoryPickerOpenChange(value: boolean): void {
-  if (value) {
-    directoryBrowser.browse(directoryDraft.value.trim() || null);
-  }
-  isDirectoryPickerOpen.value = value;
 }
 
 watch(query, () => {
@@ -672,14 +903,15 @@ watch(open, (isOpen) => {
     pickedRoot.value = null;
     resetMake();
     void loadRoots();
+    void loadDefaults();
     // After the query watcher, which would put the highlight back on the first row.
     void nextTick(() => {
       const selected = options.value.findIndex((option) => option.isSelected);
       highlightedIndex.value = selected >= 0 ? selected : 0;
-      scrollHighlightedIntoView();
+      scrollIntoView(optionDomId(highlightedIndex.value));
     });
   } else {
-    isDirectoryPickerOpen.value = false;
+    listingRequest?.abort();
   }
 });
 
@@ -807,6 +1039,14 @@ const isNew = computed(() => currentPath.value !== null && createdPaths.value.ha
             @keydown="handleSearchKeydown"
           >
         </div>
+        <p
+          v-if="invalidInQuery"
+          class="ns-folder-error"
+          role="alert"
+          data-testid="new-session-folder-invalid"
+        >
+          “{{ invalidInQuery }}” can't be in a folder name.
+        </p>
 
         <div
           :id="listId"
@@ -839,7 +1079,7 @@ const isNew = computed(() => currentPath.value !== null && createdPaths.value.ha
               tabindex="-1"
               :aria-selected="option.isSelected"
               :data-highlighted="index === highlightedIndex ? '' : undefined"
-              :data-testid="option.group === 'New' ? `new-session-folder-${option.id}` : undefined"
+              :data-testid="option.group === 'New' || option.group === 'Other' ? `new-session-folder-${option.id}` : undefined"
               @click="chooseOption(option)"
               @mousemove="highlightedIndex = index"
             >
@@ -873,11 +1113,6 @@ const isNew = computed(() => currentPath.value !== null && createdPaths.value.ha
                 class="ns-option__icon"
                 aria-hidden="true"
               />
-              <Plus
-                v-else-if="option.icon === 'new'"
-                class="ns-option__icon"
-                aria-hidden="true"
-              />
               <MessageSquare
                 v-else
                 class="ns-option__icon"
@@ -902,20 +1137,20 @@ const isNew = computed(() => currentPath.value !== null && createdPaths.value.ha
           </template>
 
           <p
-            v-if="!hasRepositoryMatches && !offersToMake"
+            v-if="!hasFolderMatches && !offersToMake && !isQueryRooted && !invalidInQuery"
             class="ns-pop__note"
           >
             <template v-if="query.trim()">
-              No repository matches “{{ query.trim() }}”.
+              No folder matches “{{ query.trim() }}”.
             </template>
             <template v-else-if="allowCreate">
               No repositories yet. Type a name to create one.
             </template>
             <template v-else-if="allowBrowse">
-              No repositories yet. Browse for a folder to add one.
+              No repositories yet. Open a folder to add one.
             </template>
             <template v-else>
-              No repositories found in your workspace roots.
+              No repositories found in your locations.
             </template>
           </p>
         </div>
@@ -924,10 +1159,14 @@ const isNew = computed(() => currentPath.value !== null && createdPaths.value.ha
           v-if="offersToMake && (roots?.length ?? 0) > 1"
           class="ns-folder-root"
         >
+          <MapPin
+            class="ns-folder-root__icon"
+            aria-hidden="true"
+          />
           <label
             :for="`${listId}-root`"
             class="ns-folder-root__label"
-          >New folders go in</label>
+          >Location</label>
           <select
             :id="`${listId}-root`"
             class="ns-folder-root__select"
@@ -962,7 +1201,270 @@ const isNew = computed(() => currentPath.value !== null && createdPaths.value.ha
         </p>
       </template>
 
-      <template v-else-if="view === 'new'">
+      <template v-else-if="view === 'path'">
+        <button
+          type="button"
+          class="ns-option ns-folder-back"
+          @click="showList"
+        >
+          <ArrowLeft
+            class="ns-option__icon"
+            aria-hidden="true"
+          />
+          <span class="ns-option__text">
+            <span class="ns-option__title">All folders</span>
+          </span>
+        </button>
+        <div class="ns-pop__separator" />
+        <div
+          class="ns-field ns-folder-path-field"
+          data-testid="new-session-path"
+        >
+          <label
+            for="new-session-directory"
+            class="ns-field__label"
+          >{{ allowCreate ? "Open or create a folder" : "Open a folder" }}</label>
+          <div class="ns-folder-pathbox">
+            <FolderOpen
+              class="ns-folder-pathbox__icon"
+              aria-hidden="true"
+            />
+            <input
+              id="new-session-directory"
+              ref="path"
+              v-model="pathText"
+              type="text"
+              class="ns-folder-pathbox__input"
+              autocomplete="off"
+              spellcheck="false"
+              role="combobox"
+              aria-expanded="true"
+              :aria-controls="`${listId}-path`"
+              :aria-activedescendant="highlightedPathRow ? pathRowDomId(pathHighlight) : undefined"
+              data-testid="new-session-path-input"
+              @keydown="handlePathKeydown"
+            >
+            <button
+              type="button"
+              class="ns-folder-pathbox__up"
+              title="Up one folder"
+              aria-label="Up one folder"
+              @click="goUp"
+            >
+              <CornerLeftUp aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+
+        <div
+          :id="`${listId}-path`"
+          class="ns-folder-list ns-folder-list--path"
+          role="listbox"
+          aria-label="What's in this folder"
+        >
+          <button
+            v-for="(row, index) in pathRows"
+            :id="pathRowDomId(index)"
+            :key="row.id"
+            type="button"
+            class="ns-option ns-option--hint"
+            :class="{ 'ns-option--make': row.action === 'create' }"
+            role="option"
+            tabindex="-1"
+            :aria-selected="index === pathHighlight"
+            :data-highlighted="index === pathHighlight ? '' : undefined"
+            :data-testid="`new-session-path-${row.action}`"
+            @click="runPathRow(row)"
+            @mousemove="pathHighlight = index"
+          >
+            <LoaderCircle
+              v-if="(row.action === 'create' && makeStatus === 'creating') || (row.action !== 'create' && openStatus !== 'idle' && index === pathHighlight)"
+              class="ns-option__icon animate-spin"
+              aria-hidden="true"
+            />
+            <FolderPlus
+              v-else-if="row.action === 'create'"
+              class="ns-option__icon"
+              aria-hidden="true"
+            />
+            <FolderGit2
+              v-else-if="row.isGitRepo"
+              class="ns-option__icon"
+              aria-hidden="true"
+            />
+            <FolderOpen
+              v-else-if="row.action === 'open'"
+              class="ns-option__icon"
+              aria-hidden="true"
+            />
+            <Folder
+              v-else
+              class="ns-option__icon"
+              aria-hidden="true"
+            />
+            <span class="ns-option__text">
+              <span class="ns-option__title">
+                {{ row.action === "create" && makeStatus === "creating" ? "Creating" : row.title }}
+                <strong v-if="row.titleName">{{ row.titleName }}</strong>
+              </span>
+              <span
+                class="ns-option__detail"
+                :class="{ 'ns-option__detail--mono': row.action === 'open' }"
+              >{{ row.detail }}</span>
+            </span>
+            <kbd
+              v-if="index === pathHighlight"
+              class="ns-folder-kbd"
+            >{{ row.action === "enter" && !row.isGitRepo ? "Tab" : "Enter" }}</kbd>
+            <span v-else />
+          </button>
+          <p
+            v-if="!currentListing && !listingError"
+            class="ns-pop__note"
+          >
+            Looking…
+          </p>
+          <p
+            v-else-if="currentListing && pathRows.length === 0 && !pathNote"
+            class="ns-pop__note"
+          >
+            Nothing in this folder.
+          </p>
+        </div>
+
+        <p
+          v-if="pathNote"
+          class="ns-folder-error"
+          role="alert"
+          data-testid="new-session-path-note"
+        >
+          {{ pathNote }}
+        </p>
+
+        <template v-if="highlightedPathRow?.action === 'create' && pathCreate">
+          <div class="ns-pop__separator" />
+          <div
+            class="ns-folder-create"
+            data-testid="new-session-path-create-options"
+          >
+            <div
+              class="ns-folder-kinds"
+              role="group"
+              aria-label="Start with"
+            >
+              <button
+                type="button"
+                :aria-pressed="newKind === 'empty'"
+                :disabled="makeStatus !== 'idle'"
+                data-testid="new-session-path-kind-empty"
+                @click="newKind = 'empty'"
+              >
+                <Folder aria-hidden="true" />Empty folder
+              </button>
+              <button
+                type="button"
+                :aria-pressed="newKind === 'git'"
+                :disabled="makeStatus !== 'idle'"
+                data-testid="new-session-path-kind-git"
+                @click="newKind = 'git'"
+              >
+                <GitBranch aria-hidden="true" />Git repository
+              </button>
+            </div>
+            <label
+              v-if="newKind === 'git'"
+              class="ns-folder-branch"
+            >
+              on branch
+              <input
+                v-model="branch"
+                type="text"
+                class="ns-folder-branch__input"
+                :placeholder="firstBranch ?? 'main'"
+                autocomplete="off"
+                spellcheck="false"
+                data-testid="new-session-path-branch"
+                @keydown.enter.prevent="createFromPath"
+              >
+            </label>
+          </div>
+          <div
+            class="ns-folder-tree"
+            data-testid="new-session-path-preview"
+          >
+            <div class="ns-folder-tree__row">
+              <MapPin
+                v-if="roots?.includes(pathCreate.base)"
+                aria-hidden="true"
+              />
+              <Folder
+                v-else
+                aria-hidden="true"
+              />
+              {{ shownPath(pathCreate.base) }}
+            </div>
+            <div
+              v-for="(name, depth) in pathCreate.folders"
+              :key="depth"
+              class="ns-folder-tree__row ns-folder-tree__row--new"
+              :style="{ paddingLeft: `${(depth + 1) * 14}px` }"
+            >
+              <FolderPlus aria-hidden="true" />{{ name }}
+              <span class="ns-folder-new-tag">new</span>
+            </div>
+            <p class="ns-folder-tree__what">
+              <template v-if="newKind === 'git'">
+                A git repository on <code>{{ branch.trim() || firstBranch || "main" }}</code> with an empty first commit
+              </template>
+              <template v-else>
+                An empty folder
+              </template>
+            </p>
+          </div>
+        </template>
+
+        <p
+          v-if="addsLocation"
+          class="ns-folder-hint"
+          data-testid="new-session-path-adds-location"
+        >
+          <Info aria-hidden="true" />
+          <span>Fleet adds {{ highlightedPathRow?.action === "create" ? "it" : highlightedPathRow?.titleName }} to your locations, so it's listed here next time.</span>
+        </p>
+
+        <p
+          v-if="makeError"
+          class="ns-folder-error"
+          role="alert"
+        >
+          {{ makeError }}
+          <button
+            v-if="existingPath"
+            type="button"
+            class="ns-folder-link"
+            @click="useExisting"
+          >
+            Use that folder
+          </button>
+        </p>
+
+        <div
+          v-if="highlightedPathRow?.action === 'create' && pathCreate"
+          class="ns-folder-actions"
+        >
+          <Button
+            type="button"
+            size="sm"
+            data-testid="new-session-path-create-submit"
+            :disabled="makeStatus !== 'idle'"
+            @click="createFromPath"
+          >
+            {{ makeStatus === "creating" ? "Creating…" : "Create and use" }}
+          </Button>
+        </div>
+      </template>
+
+      <template v-else>
         <button
           type="button"
           class="ns-option ns-folder-back"
@@ -979,102 +1481,42 @@ const isNew = computed(() => currentPath.value !== null && createdPaths.value.ha
         <div class="ns-pop__separator" />
         <div
           class="ns-field"
-          data-testid="new-session-new-folder"
-        >
-          <span
-            :id="`${listId}-kind`"
-            class="ns-field__label"
-          >Start with</span>
-          <div
-            class="ns-folder-kinds"
-            role="group"
-            :aria-labelledby="`${listId}-kind`"
-          >
-            <button
-              type="button"
-              :aria-pressed="newKind === 'empty'"
-              :disabled="makeStatus !== 'idle'"
-              @click="setNewKind('empty')"
-            >
-              <Folder aria-hidden="true" />Empty folder
-            </button>
-            <button
-              type="button"
-              :aria-pressed="newKind === 'git'"
-              :disabled="makeStatus !== 'idle'"
-              @click="setNewKind('git')"
-            >
-              <GitBranch aria-hidden="true" />Git repository
-            </button>
-            <button
-              type="button"
-              :aria-pressed="newKind === 'clone'"
-              :disabled="makeStatus !== 'idle'"
-              @click="setNewKind('clone')"
-            >
-              <Github aria-hidden="true" />Clone
-            </button>
-          </div>
-        </div>
-        <div
-          v-if="newKind !== 'clone'"
-          class="ns-field"
+          data-testid="new-session-clone"
         >
           <label
-            :for="`${listId}-name`"
+            :for="`${listId}-repository`"
             class="ns-field__label"
-          >Name</label>
+          >Clone a repository</label>
           <input
-            :id="`${listId}-name`"
-            ref="newName"
-            v-model="newName"
+            :id="`${listId}-repository`"
+            ref="cloneRepository"
+            v-model="cloneText"
             type="text"
             class="ns-field__input ns-field__input--mono"
-            placeholder="my-project"
+            placeholder="owner/repo, or an https or ssh address"
             autocomplete="off"
             spellcheck="false"
-            data-testid="new-session-new-folder-name"
+            data-testid="new-session-clone-repository"
+            :readonly="makeStatus !== 'idle'"
             @input="resetMake"
-            @keydown.enter.prevent="submitNew"
+            @keydown.enter.prevent="submitClone"
           >
         </div>
-        <template v-else>
-          <div class="ns-field">
-            <label
-              :for="`${listId}-repository`"
-              class="ns-field__label"
-            >Repository</label>
-            <input
-              :id="`${listId}-repository`"
-              ref="newRepository"
-              v-model="newRepository"
-              type="text"
-              class="ns-field__input ns-field__input--mono"
-              placeholder="owner/repo, or an https or ssh address"
-              autocomplete="off"
-              spellcheck="false"
-              data-testid="new-session-new-folder-repository"
-              :readonly="makeStatus !== 'idle'"
-              @input="resetMake"
-              @keydown.enter.prevent="submitNew"
-            >
-          </div>
-          <div
-            v-if="cloneSuggestions.length > 0"
-            class="ns-folder-suggestions"
+        <div
+          v-if="cloneSuggestions.length > 0"
+          class="ns-folder-suggestions"
+        >
+          <button
+            v-for="repo in cloneSuggestions"
+            :key="repo.id"
+            type="button"
+            class="ns-folder-suggestion"
+            @click="cloneText = repo.full_name"
           >
-            <button
-              v-for="repo in cloneSuggestions"
-              :key="repo.id"
-              type="button"
-              class="ns-folder-suggestion"
-              @click="newRepository = repo.full_name"
-            >
-              <Github aria-hidden="true" />
-              <span>{{ repo.full_name }}</span>
-            </button>
-          </div>
-        </template>
+            <Github aria-hidden="true" />
+            <span>{{ repo.full_name }}</span>
+          </button>
+        </div>
         <div class="ns-field">
           <label
             :for="`${listId}-location`"
@@ -1082,9 +1524,9 @@ const isNew = computed(() => currentPath.value !== null && createdPaths.value.ha
           >Location</label>
           <select
             :id="`${listId}-location`"
-            v-model="newLocation"
+            v-model="cloneLocation"
             class="ns-field__input"
-            data-testid="new-session-new-folder-location"
+            data-testid="new-session-clone-location"
             :disabled="makeStatus !== 'idle'"
           >
             <option
@@ -1099,26 +1541,26 @@ const isNew = computed(() => currentPath.value !== null && createdPaths.value.ha
             </option>
           </select>
           <input
-            v-if="newLocation === OTHER_LOCATION"
-            v-model="newParent"
+            v-if="cloneLocation === OTHER_LOCATION"
+            v-model="cloneParent"
             type="text"
             class="ns-field__input ns-field__input--mono"
             placeholder="/path/to/parent"
             aria-label="Parent folder"
             autocomplete="off"
             spellcheck="false"
-            data-testid="new-session-new-folder-parent"
+            data-testid="new-session-clone-parent"
             @input="resetMake"
-            @keydown.enter.prevent="submitNew"
+            @keydown.enter.prevent="submitClone"
           >
         </div>
         <div
-          v-if="newTarget"
+          v-if="cloneTarget"
           class="ns-folder-preview"
-          data-testid="new-session-new-folder-preview"
+          data-testid="new-session-clone-preview"
         >
-          <span class="ns-folder-preview__path">{{ tildePath(newTarget) }}</span>
-          <span class="ns-folder-preview__what">{{ newDescription }}</span>
+          <span class="ns-folder-preview__path">{{ tildePath(cloneTarget) }}</span>
+          <span class="ns-folder-preview__what">{{ cloneDescription }}</span>
         </div>
         <p
           v-if="makeError"
@@ -1148,184 +1590,11 @@ const isNew = computed(() => currentPath.value !== null && createdPaths.value.ha
           <Button
             type="button"
             size="sm"
-            data-testid="new-session-new-folder-submit"
-            :disabled="!canSubmitNew"
-            @click="submitNew"
+            data-testid="new-session-clone-submit"
+            :disabled="!canSubmitClone"
+            @click="submitClone"
           >
-            <template v-if="makeStatus === 'cloning'">
-              Cloning…
-            </template>
-            <template v-else-if="makeStatus === 'creating'">
-              Creating…
-            </template>
-            <template v-else>
-              {{ newKind === "clone" ? "Clone and use" : "Create and use" }}
-            </template>
-          </Button>
-        </div>
-      </template>
-
-      <template v-else>
-        <button
-          type="button"
-          class="ns-option ns-folder-back"
-          @click="showList"
-        >
-          <ArrowLeft
-            class="ns-option__icon"
-            aria-hidden="true"
-          />
-          <span class="ns-option__text">
-            <span class="ns-option__title">All folders</span>
-          </span>
-        </button>
-        <div class="ns-pop__separator" />
-        <div class="ns-field">
-          <label
-            for="new-session-directory"
-            class="ns-field__label"
-          >Folder</label>
-          <div class="ns-folder-path">
-            <input
-              id="new-session-directory"
-              ref="directory"
-              v-model="directoryDraft"
-              type="text"
-              class="ns-field__input ns-field__input--mono"
-              placeholder="/path/to/folder"
-              autocomplete="off"
-              spellcheck="false"
-              @input="resetBrowseCheck"
-              @keydown.enter.prevent="handleDirectoryEnter"
-            >
-            <DirectoryPickerPopover
-              :browser="directoryBrowser"
-              :open="isDirectoryPickerOpen"
-              mode="navigate"
-              align="end"
-              content-class="w-[25rem] max-w-[calc(100vw-2rem)]"
-              @update:open="handleDirectoryPickerOpenChange"
-              @select="useDirectory"
-            >
-              <template #trigger>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  class="shrink-0"
-                  aria-label="Browse folders"
-                  title="Browse folders"
-                >
-                  <FolderOpen class="h-4 w-4" />
-                </Button>
-              </template>
-            </DirectoryPickerPopover>
-          </div>
-        </div>
-        <p
-          v-if="browseError || makeError"
-          class="ns-folder-error"
-          role="alert"
-        >
-          {{ browseError ?? makeError }}
-        </p>
-        <div
-          v-if="folderToCreate"
-          class="ns-folder-add"
-          role="status"
-          data-testid="new-session-create-folder"
-        >
-          <FolderPlus
-            class="ns-folder-add__icon"
-            aria-hidden="true"
-          />
-          <div class="ns-folder-add__text">
-            <p class="ns-folder-add__title">
-              {{ baseName(folderToCreate.path) }} doesn't exist yet
-            </p>
-            <p class="ns-folder-add__detail">
-              Fleet can create {{ tildePath(folderToCreate.path) }}{{ roots && !createRoot ? " and add it to your folders" : "" }}.
-            </p>
-            <label class="ns-folder-check">
-              <input
-                v-model="startGitRepository"
-                type="checkbox"
-                data-testid="new-session-create-folder-git"
-              >
-              Start a git repository
-            </label>
-          </div>
-        </div>
-        <div
-          v-else-if="folderToAdd"
-          class="ns-folder-add"
-          role="status"
-          data-testid="new-session-add-folder"
-        >
-          <FolderPlus
-            class="ns-folder-add__icon"
-            aria-hidden="true"
-          />
-          <div class="ns-folder-add__text">
-            <p class="ns-folder-add__title">
-              {{ baseName(folderToAdd.path) }} isn't in Fleet yet
-            </p>
-            <p class="ns-folder-add__detail">
-              {{ folderToAdd.isGitRepo
-                ? "Add this repository to work in its checkout or in new worktrees beside it."
-                : "Add this folder so sessions can work in it." }}
-              You can remove it in Settings.
-            </p>
-          </div>
-        </div>
-        <div class="ns-folder-actions">
-          <template v-if="folderToCreate">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              :disabled="makeStatus !== 'idle'"
-              @click="resetBrowseCheck"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              data-testid="new-session-create-folder-submit"
-              :disabled="makeStatus !== 'idle'"
-              @click="createTypedFolder"
-            >
-              {{ makeStatus === "creating" ? "Creating…" : "Create folder" }}
-            </Button>
-          </template>
-          <template v-else-if="folderToAdd">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              :disabled="browseStatus !== 'idle'"
-              @click="resetBrowseCheck"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              :disabled="browseStatus !== 'idle'"
-              @click="addAndUseFolder()"
-            >
-              {{ browseStatus === "adding" ? "Adding…" : folderToAdd.isGitRepo ? "Add repository" : "Add folder" }}
-            </Button>
-          </template>
-          <Button
-            v-else
-            type="button"
-            size="sm"
-            :disabled="!directoryDraft.trim() || browseStatus !== 'idle'"
-            @click="useDirectory()"
-          >
-            {{ browseStatus === "checking" ? "Checking…" : "Use this folder" }}
+            {{ makeStatus === "cloning" ? "Cloning…" : "Clone and use" }}
           </Button>
         </div>
       </template>
@@ -1380,11 +1649,6 @@ const isNew = computed(() => currentPath.value !== null && createdPaths.value.ha
 
 .ns-folder-back {
   grid-template-columns: 16px minmax(0, 1fr);
-}
-
-.ns-folder-path {
-  display: flex;
-  gap: 6px;
 }
 
 .ns-folder-actions {
@@ -1460,20 +1724,6 @@ const isNew = computed(() => currentPath.value !== null && createdPaths.value.ha
   padding: 2px 0 0;
 }
 
-.ns-folder-check {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin-top: 6px;
-  cursor: pointer;
-  font-size: 12.5px;
-}
-
-.ns-folder-check input {
-  margin: 0;
-  accent-color: var(--accent);
-}
-
 .ns-folder-root {
   display: flex;
   align-items: center;
@@ -1483,6 +1733,12 @@ const isNew = computed(() => currentPath.value !== null && createdPaths.value.ha
   border-top: 1px solid var(--border);
   color: var(--muted);
   font-size: 12px;
+}
+
+.ns-folder-root__icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
 }
 
 .ns-folder-root__select {
@@ -1499,7 +1755,7 @@ const isNew = computed(() => currentPath.value !== null && createdPaths.value.ha
 
 .ns-folder-kinds {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 2px;
   padding: 2px;
   border: 1px solid var(--border);
@@ -1593,5 +1849,170 @@ const isNew = computed(() => currentPath.value !== null && createdPaths.value.ha
   font-size: 10px;
   font-weight: 600;
   line-height: 16px;
+}
+
+/* The folder box: a path field over what's in the folder typed. */
+.ns-folder-path-field {
+  padding-bottom: 4px;
+}
+
+.ns-folder-pathbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px 0 8px;
+  border: 1px solid var(--accent);
+  border-radius: calc(var(--radius-btn) - 2px);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+}
+
+.ns-folder-pathbox__icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.ns-folder-pathbox__input {
+  min-width: 0;
+  height: 30px;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-mono-stack);
+  font-size: 12px;
+  outline: none;
+}
+
+.ns-folder-pathbox__up {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  place-items: center;
+  border: 0;
+  border-radius: calc(var(--radius-btn) - 4px);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.ns-folder-pathbox__up:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+
+.ns-folder-pathbox__up svg {
+  width: 13px;
+  height: 13px;
+}
+
+.ns-folder-list--path {
+  max-height: min(240px, 36vh);
+}
+
+.ns-option--hint {
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+}
+
+.ns-folder-kbd {
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 10.5px;
+  line-height: 16px;
+}
+
+.ns-folder-create {
+  display: grid;
+  gap: 8px;
+  padding: 6px 8px 8px;
+}
+
+.ns-folder-branch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ns-folder-branch__input {
+  width: 120px;
+  height: 26px;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius-btn) - 3px);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+  color: var(--text);
+  font-family: var(--font-mono-stack);
+  font-size: 12px;
+  outline: none;
+}
+
+.ns-folder-branch__input:focus {
+  border-color: var(--accent);
+}
+
+.ns-folder-tree {
+  display: grid;
+  gap: 1px;
+  margin: 0 8px 8px;
+  padding: 7px 9px;
+  border-radius: calc(var(--radius-btn) - 2px);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  font-family: var(--font-mono-stack);
+  font-size: 12px;
+}
+
+.ns-folder-tree__row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+
+.ns-folder-tree__row svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.ns-folder-tree__row--new svg {
+  color: var(--accent);
+}
+
+.ns-folder-tree__what {
+  margin-top: 4px;
+  color: var(--muted);
+  font-family: var(--font-sans-stack);
+  font-size: 11.5px;
+}
+
+.ns-folder-tree__what code {
+  font-family: var(--font-mono-stack);
+  font-size: 11px;
+}
+
+.ns-folder-hint {
+  display: flex;
+  gap: 7px;
+  margin: 0 8px 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.ns-folder-hint svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--status-waiting);
 }
 </style>

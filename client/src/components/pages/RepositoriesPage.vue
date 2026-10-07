@@ -85,7 +85,7 @@ function goToSettings(): void {
           Repositories
         </h1>
         <p class="mt-1 text-sm text-muted-foreground">
-          Browse local git repositories discovered from configured workspace roots.
+          Git repositories Fleet found in your locations (Settings → Folders).
         </p>
       </div>
 
@@ -157,7 +157,7 @@ function goToSettings(): void {
           No repositories found
         </p>
         <p class="text-sm text-muted-foreground">
-          Add workspace roots in Settings to enable repository discovery.
+          Add a location in Settings → Folders, and Fleet lists the repositories inside it.
         </p>
       </div>
       <Button

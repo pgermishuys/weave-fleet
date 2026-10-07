@@ -91,9 +91,9 @@ public sealed partial class DirectoryService(
     }
 
     /// <summary>
-    /// Lists subdirectories at the given path without restricting to workspace roots.
+    /// Lists subdirectories at the given path without restricting to workspace roots; <c>~</c> is the home folder.
     /// If <paramref name="path"/> is null/empty, returns filesystem drive roots.
-    /// Used by the workspace settings UI when adding a new root.
+    /// Used by Settings → Folders when adding a location, and by the new-session folder box as you type.
     /// </summary>
     public Task<DirectoryListingResult> ListDirectoryUnconstrainedAsync(
         string? path,
@@ -124,7 +124,20 @@ public sealed partial class DirectoryService(
                 Roots: []));
         }
 
-        var normalised = Path.GetFullPath(path);
+        string normalised;
+        try
+        {
+            normalised = Path.GetFullPath(WorkspaceRootService.ExpandHome(path.Trim()));
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException)
+        {
+            return Task.FromResult(new DirectoryListingResult(
+                Entries: [],
+                CurrentPath: path,
+                ParentPath: null,
+                Roots: [],
+                Exists: false));
+        }
 
         if (!Directory.Exists(normalised))
         {
@@ -132,7 +145,9 @@ public sealed partial class DirectoryService(
                 Entries: [],
                 CurrentPath: normalised,
                 ParentPath: GetParent(normalised),
-                Roots: []));
+                Roots: [],
+                Exists: false,
+                NearestExisting: NearestExistingFolder(normalised)));
         }
 
         var parent = GetParent(normalised);
@@ -207,6 +222,17 @@ public sealed partial class DirectoryService(
         return false;
     }
 
+    /// <summary>The deepest folder above <paramref name="path"/> that's there, so the picker can show what a create would add.</summary>
+    private static string? NearestExistingFolder(string path)
+    {
+        for (var candidate = GetParent(path); candidate is not null; candidate = GetParent(candidate))
+        {
+            if (Directory.Exists(candidate))
+                return candidate;
+        }
+        return null;
+    }
+
     private static string? GetParent(string path)
     {
         var parent = Path.GetDirectoryName(path);
@@ -221,11 +247,15 @@ public sealed partial class DirectoryService(
 }
 
 /// <summary>Result of a directory listing.</summary>
+/// <param name="Exists">Whether <paramref name="CurrentPath"/> is a folder that's there.</param>
+/// <param name="NearestExisting">When it isn't, the deepest folder above it that is.</param>
 public sealed record DirectoryListingResult(
     IReadOnlyList<DirectoryEntry> Entries,
     string? CurrentPath,
     string? ParentPath,
-    IReadOnlyList<string> Roots);
+    IReadOnlyList<string> Roots,
+    bool Exists = true,
+    string? NearestExisting = null);
 
 /// <summary>What the folder picker needs to know about one folder.</summary>
 public sealed record FolderInspection(

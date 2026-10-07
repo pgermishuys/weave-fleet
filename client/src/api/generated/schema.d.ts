@@ -1717,6 +1717,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/directories/defaults": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetNewFolderDefaults"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/directories/clone": {
         parameters: {
             query?: never;
@@ -3585,6 +3601,7 @@ export interface components {
         CreateFolderRequest: {
             path: string;
             git: boolean;
+            branch?: null | string;
         };
         CreateProjectRequest: {
             name: string;
@@ -8015,6 +8032,24 @@ export interface operations {
             query: {
                 path: string;
             };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetNewFolderDefaults: {
+        parameters: {
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;

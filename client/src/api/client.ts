@@ -281,6 +281,10 @@ export interface DirectoryListResponse {
   currentPath: string | null;
   parentPath: string | null;
   roots: string[];
+  /** Whether `currentPath` is a folder that's there. */
+  exists: boolean;
+  /** When it isn't, the deepest folder above it that is. */
+  nearestExisting: string | null;
 }
 
 /** One folder as the new-session folder picker sees it. */
