@@ -429,6 +429,15 @@ export function isWorkEvent(event: DomainEvent): event is WorkEvent {
   return event.type === "work.started" || event.type === "work.updated" || event.type === "work.ended";
 }
 
+/**
+ * How full the session's context window is changed: a model call, the model's window, or a compaction. The payload
+ * is the whole record as it is now (see `@/lib/context-usage`), on the session's topic.
+ */
+export interface ContextUpdated extends EventCursorMetadata {
+  type: "context.updated";
+  payload: unknown;
+}
+
 export interface ActivityStatus extends EventCursorMetadata {
   type: "activity_status";
   payload: ActivityStatusPayload;
@@ -620,6 +629,7 @@ export type DomainEvent =
   | WorkStarted
   | WorkUpdated
   | WorkEnded
+  | ContextUpdated
   | ActivityStatus
   | FilesChanged
   | CanvasUpdated

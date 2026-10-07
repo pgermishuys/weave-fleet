@@ -2,6 +2,7 @@ import type { AccumulatedMessage, DelegationDto } from "@/lib/client-types"
 import { confirmSentPrompt } from "@/composables/use-send-prompt"
 import { applyDelegationCreated, applyDelegationUpdated } from "@/lib/delegation-state"
 import type { DelegationCompleted, DelegationCreated, DelegationUpdated, DomainEvent, MessageLifecyclePayload, TurnFailedPayload } from "@/lib/domain-events"
+import { toContextUsage, type SessionContextUsage } from "@/lib/context-usage"
 import { applyPartUpdate, applyTextDelta, ensureMessage, mergeMessageUpdate } from "@/lib/event-state"
 import { applyWorkItem, toRunningWorkItem, toRunningWorkItems, type RunningWorkItem } from "@/lib/running-work"
 import type { SessionSnapshot, SessionSnapshotDelegation } from "@/lib/session-snapshot"
@@ -22,6 +23,8 @@ export interface SessionStreamState {
    * `work.*` events. Background work isn't the session's own, so it doesn't change `sessionStatus`.
    */
   runningWork: RunningWorkItem[]
+  /** How full the context window is: the snapshot's `context`, replaced by each `context.updated`. */
+  context: SessionContextUsage | null
   explicitStatus: SessionStreamExplicitStatus
   /**
    * Derived reducer/composable status. This may be tri-state even while
@@ -54,6 +57,7 @@ export function createSessionStreamState(snapshot: SessionSnapshot): SessionStre
     messages: [],
     delegations,
     runningWork: toRunningWorkItems(snapshot.runningWork),
+    context: toContextUsage(snapshot.context),
     explicitStatus,
     sessionStatus: deriveSnapshotSessionStatus(explicitStatus, delegations),
     lastEventId: snapshot.lastEventId ?? snapshot.lastSequenceNumber ?? null,
@@ -138,6 +142,11 @@ export function applyDomainEvent(state: SessionStreamState, event: DomainEvent):
     case "work.updated":
     case "work.ended":
       return withWorkItem(state, event.payload)
+
+    case "context.updated": {
+      const context = toContextUsage(event.payload)
+      return context ? { ...state, context } : state
+    }
 
     case "session.idled":
       return withExplicitStatus(state, "idle")
