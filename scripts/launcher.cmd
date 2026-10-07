@@ -134,7 +134,7 @@ rd /s /q "%ROOT_DIR%" >nul 2>&1 & echo Done. & exit /b 0
 call :read_version
 echo Fleet v!VERSION!
 echo.
-echo Usage: fleet [command] [--port ^<port^>] [--host ^<host^>] [--data-dir ^<path^>] [--profile ^<name^>]
+echo Usage: fleet [command] [--port ^<port^>] [--host ^<host^>] [--data-dir ^<path^>] [--profile ^<name^>] [--require-token]
 echo.
 echo Commands:
 echo   (none)       Start the Fleet server
@@ -149,6 +149,7 @@ echo   --port ^<port^>       Override the server port
 echo   --host ^<host^>       Override the bind host
 echo   --data-dir ^<path^>   Override the data directory (default: %%USERPROFILE%%\.weave)
 echo   --profile ^<name^>    Use a profile-specific data directory
+echo   --require-token     Ask for the access token even over loopback ^(behind tailscale serve^)
 echo.
 echo Environment variables:
 echo   WEAVE_FLEET_PORT                Server port ^(default: 6262^)
@@ -164,6 +165,7 @@ set "PORT_OVERRIDE="
 set "HOST_OVERRIDE="
 set "DATA_DIR_OVERRIDE="
 set "PROFILE_NAME="
+set "REQUIRE_TOKEN="
 
 :parse_args_loop
 if "%~1"=="" goto :start_server
@@ -217,6 +219,12 @@ if /i "%~1"=="--profile" (
     )
     set "PROFILE_NAME=%~2"
     shift
+    shift
+    goto :parse_args_loop
+)
+
+if /i "%~1"=="--require-token" (
+    set "REQUIRE_TOKEN=1"
     shift
     goto :parse_args_loop
 )
@@ -351,6 +359,7 @@ set "Fleet__Port=%WEAVE_FLEET_PORT%"
 if not defined Fleet__DatabasePath set "Fleet__DatabasePath=%DB_PATH_DEFAULT%"
 if not defined Fleet__AnalyticsDatabasePath set "Fleet__AnalyticsDatabasePath=%ANALYTICS_DB_PATH_DEFAULT%"
 if not defined Fleet__DataProtection__KeyPath set "Fleet__DataProtection__KeyPath=%KEY_DIR_DEFAULT%"
+if defined REQUIRE_TOKEN set "Fleet__Auth__RequireToken=true"
 
 echo Fleet v!VERSION! starting on %LISTEN_URL%
 if defined EXTRA_ARGS (
