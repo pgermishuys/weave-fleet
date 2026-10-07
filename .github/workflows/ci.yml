@@ -173,6 +173,29 @@ jobs:
           path: client/test-results/**/*.xml
           reporter: java-junit
 
+  # ── fleet launchers (bin/fleet, bin/fleet.cmd) ───────────────────────────
+  launchers:
+    name: Launchers (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Test launcher.sh
+        if: runner.os != 'Windows'
+        run: sh scripts/test-launchers.sh
+
+      - name: Test launcher.cmd
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: ./scripts/test-launchers.ps1
+
   # ── Desktop app ──────────────────────────────────────────────────────────
   desktop:
     name: Desktop
