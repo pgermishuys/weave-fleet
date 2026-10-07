@@ -164,7 +164,7 @@ show_help() {
   VERSION="$(read_version)"
   echo "Fleet v${VERSION}"
   echo ""
-  echo "Usage: fleet [command] [--port <port>] [--host <host>] [--data-dir <path>] [--profile <name>]"
+  echo "Usage: fleet [command] [--port <port>] [--host <host>] [--data-dir <path>] [--profile <name>] [--require-token]"
   echo ""
   echo "Commands:"
   echo "  (none)       Start the Fleet server"
@@ -179,6 +179,7 @@ echo "  --port <port>       Override the server port"
 echo "  --host <host>       Override the bind host"
 echo "  --data-dir <path>   Override the data directory (default: ~/.weave)"
 echo "  --profile <name>    Use a profile-specific data directory"
+echo "  --require-token     Ask for the access token even over loopback (behind tailscale serve)"
   echo ""
 echo "Environment variables:"
 echo "  WEAVE_FLEET_PORT                Server port (default: 6262)"
@@ -193,6 +194,7 @@ PORT_OVERRIDE=""
 HOST_OVERRIDE=""
 DATA_DIR_OVERRIDE=""
 PROFILE_NAME=""
+REQUIRE_TOKEN=0
 EXTRA_ARGS=""
 
 while [ "$#" -gt 0 ]; do
@@ -311,6 +313,9 @@ while [ "$#" -gt 0 ]; do
     --profile=*)
       PROFILE_NAME="${1#--profile=}"
       ;;
+    --require-token)
+      REQUIRE_TOKEN=1
+      ;;
     *)
       echo "Unknown command or option: $1" >&2
       echo "Run 'fleet help' for usage." >&2
@@ -363,6 +368,9 @@ export Fleet__Port="$PORT"
 export Fleet__DatabasePath="${Fleet__DatabasePath:-$DB_PATH_DEFAULT}"
 export Fleet__AnalyticsDatabasePath="${Fleet__AnalyticsDatabasePath:-$ANALYTICS_DB_PATH_DEFAULT}"
 export Fleet__DataProtection__KeyPath="${Fleet__DataProtection__KeyPath:-$KEY_DIR_DEFAULT}"
+if [ "$REQUIRE_TOKEN" -eq 1 ]; then
+  export Fleet__Auth__RequireToken=true
+fi
 
 echo "Fleet v${VERSION} starting on ${LISTEN_URL}"
 exec "$APP_BIN" --urls "$LISTEN_URL" --contentRoot "$APP_CONTENT_ROOT" $EXTRA_ARGS
