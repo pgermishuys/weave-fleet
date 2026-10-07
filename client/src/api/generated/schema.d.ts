@@ -1557,6 +1557,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/update/releases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetReleaseNotes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/update/check": {
         parameters: {
             query?: never;
@@ -7788,6 +7804,24 @@ export interface operations {
         };
     };
     GetUpdateStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetReleaseNotes: {
         parameters: {
             query?: never;
             header?: never;

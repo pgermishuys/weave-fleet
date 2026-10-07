@@ -212,6 +212,15 @@ async function run(action: { run: () => void | Promise<void> }): Promise<void> {
   await action.run();
 }
 
+/** A link Fleet handles itself (What's new) runs instead of opening the browser, and the card settles. */
+function followLink(event: MouseEvent): void {
+  const link = open.value?.link;
+  if (!link?.run) return;
+  event.preventDefault();
+  link.run();
+  store.settle();
+}
+
 /** × and Esc: the card settles now, into its chip if it has one. It never opens as a card again. */
 function dismiss(): void {
   store.settle();
@@ -304,6 +313,7 @@ onUnmounted(() => {
               :href="open.link.href"
               target="_blank"
               rel="noopener noreferrer"
+              @click="followLink"
             >{{ open.link.label }}</a>
           </p>
         </div>

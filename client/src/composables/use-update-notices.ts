@@ -2,6 +2,7 @@ import { onMounted, onUnmounted, watch } from "vue";
 import { ExternalLink, RotateCw, TriangleAlert } from "lucide-vue-next";
 import { api } from "@/api/client";
 import { useUpdateStatus, type UpdateStatus } from "@/composables/use-update-status";
+import { useWhatsNew } from "@/composables/use-whats-new";
 import { getDesktopBridge, releaseNotesUrl, type DesktopUpdateState } from "@/lib/desktop";
 import { useNoticesStore, type Notice } from "@/stores/notices";
 
@@ -65,7 +66,9 @@ export function useUpdateNotices(): void {
   let stopShowUpdate: (() => void) | undefined;
   let appNoticeId: string | null = null;
 
-  const whatsNew = (version: string) => ({ label: "What's new", href: releaseNotesUrl(version) });
+  const { openWhatsNew } = useWhatsNew();
+  // Opens What's new in Settings → System; the href is only for a middle-click or a copied link.
+  const whatsNew = (version: string) => ({ label: "What's new", href: releaseNotesUrl(version), run: () => openWhatsNew(version) });
 
   // ── The desktop app's updates ──────────────────────────────────────────
   function appReady(version: string): Notice {
@@ -178,14 +181,13 @@ export function useUpdateNotices(): void {
     const previous = readLastVersion(source);
     writeLastVersion(source, version);
     if (!previous || !isNewerVersion(version, previous)) return;
-    const url = releaseNotesUrl(version);
     notices.post({
       id: `updated:${source}:${version}`,
       title: `Updated to Fleet ${version}. See what's new.`,
       chip: `Updated to ${version}`,
       quiet: true,
       expiresMs: UPDATED_CHIP_MS,
-      onChipClick: () => window.open(url, "_blank", "noopener,noreferrer"),
+      onChipClick: () => openWhatsNew(version),
     });
   }
 

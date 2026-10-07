@@ -2,9 +2,10 @@
 import { computed } from "vue";
 import { AlertCircle, CheckCircle2, Download, LoaderCircle, RefreshCw } from "lucide-vue-next";
 import { useDesktopUpdates } from "@/composables/use-desktop-updates";
-import { releaseNotesUrl } from "@/lib/desktop";
+import { useWhatsNew } from "@/composables/use-whats-new";
 
 const { state, isChecking, check, install } = useDesktopUpdates();
+const { openWhatsNew } = useWhatsNew();
 
 const statusLabel = computed(() => {
   const s = state.value;
@@ -30,9 +31,9 @@ const statusLabel = computed(() => {
 
 const isBusy = computed(() => isChecking.value || state.value?.status === "checking" || state.value?.status === "downloading");
 const canCheck = computed(() => state.value?.status === "idle" || state.value?.status === "error");
-const notesUrl = computed(() => {
+const notesVersion = computed(() => {
   const s = state.value;
-  return s?.version && (s.status === "ready" || s.status === "available" || s.status === "downloading") ? releaseNotesUrl(s.version) : null;
+  return s?.version && (s.status === "ready" || s.status === "available" || s.status === "downloading") ? s.version : null;
 });
 const actionLabel = computed(() => {
   if (state.value?.status === "ready") return "Restart to update";
@@ -60,14 +61,15 @@ const actionLabel = computed(() => {
       </div>
 
       <div class="flex items-center gap-2">
-        <a
-          v-if="notesUrl"
-          :href="notesUrl"
-          target="_blank"
-          rel="noopener noreferrer"
+        <button
+          v-if="notesVersion"
+          type="button"
           class="text-xs text-muted underline underline-offset-2 transition-colors hover:text-text"
           data-testid="desktop-app-release-notes"
-        >What's new</a>
+          @click="openWhatsNew(notesVersion)"
+        >
+          What's new
+        </button>
         <button
           v-if="actionLabel"
           type="button"

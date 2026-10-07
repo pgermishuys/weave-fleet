@@ -21,9 +21,9 @@ public sealed partial class UpdateCheckService(
     FleetOptions options,
     UpdateStateHolder stateHolder,
     UpdateDownloadService downloadService,
+    ReleaseNotesStore releaseNotes,
     ILogger<UpdateCheckService> logger) : BackgroundService
 {
-    private const string GitHubApiBase = "https://api.github.com";
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -81,8 +81,8 @@ public sealed partial class UpdateCheckService(
             LogChecking(options.Update.GitHubRepo);
 
             using var client = CreateClient();
-            var url = $"{GitHubApiBase}/repos/{options.Update.GitHubRepo}/releases/latest";
-            using var response = await client.GetAsync(url, ct).ConfigureAwait(false);
+            // The recent releases rather than only the latest: What's new shows their notes.
+            using var response = await client.GetAsync(releaseNotes.ReleasesUrl, ct).ConfigureAwait(false);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -98,9 +98,11 @@ public sealed partial class UpdateCheckService(
             }
 
             var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-            var release = JsonSerializer.Deserialize(json, GitHubReleaseJsonContext.Default.GitHubReleaseDto);
+            var releases = JsonSerializer.Deserialize(json, GitHubReleaseJsonContext.Default.ListGitHubReleaseDto) ?? [];
+            await releaseNotes.SaveAsync(releases, ct).ConfigureAwait(false);
+            var release = ReleaseNotesStore.FromGitHub(releases) is [var newest, ..] ? newest : null;
 
-            if (release is null || string.IsNullOrWhiteSpace(release.TagName))
+            if (release is null)
             {
                 LogInvalidResponse();
                 stateHolder.SetState(new UpdateState(
@@ -113,7 +115,7 @@ public sealed partial class UpdateCheckService(
                 return;
             }
 
-            var latestVersion = release.TagName.TrimStart('v');
+            var latestVersion = release.Version;
             var currentVersion = FleetInstrumentation.ServiceVersion.Split('+')[0].TrimStart('v');
 
             LogVersionFound(currentVersion, latestVersion);
@@ -240,9 +242,13 @@ public sealed partial class UpdateCheckService(
 internal sealed record GitHubReleaseDto(
     [property: JsonPropertyName("tag_name")] string TagName,
     [property: JsonPropertyName("html_url")] string HtmlUrl,
-    [property: JsonPropertyName("body")] string? Body);
+    [property: JsonPropertyName("body")] string? Body,
+    [property: JsonPropertyName("published_at")] string? PublishedAt = null,
+    [property: JsonPropertyName("draft")] bool Draft = false,
+    [property: JsonPropertyName("prerelease")] bool Prerelease = false);
 
 [JsonSerializable(typeof(GitHubReleaseDto))]
+[JsonSerializable(typeof(List<GitHubReleaseDto>))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 internal sealed partial class GitHubReleaseJsonContext : JsonSerializerContext
 {

@@ -27,6 +27,17 @@ public static class UpdateEndpoints
         })
         .WithName("GetUpdateStatus");
 
+        // GET /api/update/releases — the recent releases' notes, for What's new
+        group.MapGet("/releases", async (ReleaseNotesStore releaseNotes, CancellationToken ct) =>
+        {
+            var notes = await releaseNotes.GetAsync(ct);
+            return Results.Ok(new ReleaseNotesResponse(
+                notes.Releases.Select(r => new ReleaseNoteResponse(r.Version, r.PublishedAt, r.Body, r.Url)).ToList(),
+                notes.FetchedAt?.ToString("O"),
+                notes.Error));
+        })
+        .WithName("GetReleaseNotes");
+
         // POST /api/update/check — trigger an update check manually
         group.MapPost("/check", async (
             UpdateCheckService checkService,

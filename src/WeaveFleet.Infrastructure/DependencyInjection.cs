@@ -365,6 +365,7 @@ public static class DependencyInjection
         // Auto-update services
         services.AddSingleton<UpdateStateHolder>();
         services.AddSingleton<UpdateDownloadService>();
+        services.AddSingleton<ReleaseNotesStore>();
         services.AddSingleton<UpdateCheckService>();
         services.AddHostedService(sp => sp.GetRequiredService<UpdateCheckService>());
 
