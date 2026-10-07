@@ -207,6 +207,9 @@ public sealed record GetSessionResponse(
 
     /// <summary>When the user moved it out of the session it came from, or null; it no longer nests under that one.</summary>
     public string? LineageDetachedAt { get; init; }
+
+    /// <summary>Where it sits in the Pinned group above the projects (ascending), or null when it isn't pinned.</summary>
+    public double? PinOrder { get; init; }
 }
 
 /// <summary>

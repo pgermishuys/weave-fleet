@@ -42,6 +42,7 @@ export function sessionsChanged(
       (a.forkedFromSessionId ?? null) !== (b.forkedFromSessionId ?? null) ||
       (a.spawnedBySessionId ?? null) !== (b.spawnedBySessionId ?? null) ||
       (a.lineageDetachedAt ?? null) !== (b.lineageDetachedAt ?? null) ||
+      (a.pinOrder ?? null) !== (b.pinOrder ?? null) ||
       !sameProgressSummary(a.progress, b.progress)
     ) return true;
   }

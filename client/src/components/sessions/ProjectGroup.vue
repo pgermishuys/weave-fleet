@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, shallowRef } from "vue";
-import { ArrowDown, ArrowUp, ChevronDown, Pencil, Plus, Trash2 } from "lucide-vue-next";
+import { computed, shallowRef, watch } from "vue";
+import { ArrowDown, ArrowUp, ChevronDown, Pencil, Pin, Plus, Trash2 } from "lucide-vue-next";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -57,6 +57,13 @@ interface Props {
   runningCounts?: ReadonlyMap<string, number>;
   /** Session id → its running subagents that have a session of their own, nested under it. */
   runningSubagents?: ReadonlyMap<string, readonly RunningWorkItem[]>;
+  /**
+   * The Pinned group above the projects: a pin in its header, and dragging a session in pins it where it's dropped
+   * (a line shows where). Its sessions come from any project.
+   */
+  pinned?: boolean;
+  /** Whether the session being dragged is pinned: dropping it on its own project unpins it. */
+  activeDragPinned?: boolean;
 }
 
 interface Emits {
@@ -71,6 +78,10 @@ interface Emits {
   dragSessionStart: [sessionId: string, projectId: string | null];
   dragSessionEnd: [];
   openDraft: [];
+  /** A session dropped in the Pinned group: pinned just before `beforeSessionId`, or at the end when that's null. */
+  pinSession: [sessionId: string, beforeSessionId: string | null];
+  /** A pinned session dropped on its own project: it goes back there. */
+  unpinSession: [sessionId: string];
 }
 
 const props = defineProps<Props>();
@@ -138,6 +149,13 @@ function toggleChildren(session: SessionListItem): void {
   childrenOverride.value = { ...childrenOverride.value, [session.session.id]: !childrenExpanded(session) };
 }
 
+watch(() => props.activeDragSessionId, (id) => {
+  if (!id) {
+    dragEnterCount.value = 0;
+    pinDropBefore.value = undefined;
+  }
+});
+
 const isContextMenuOpen = shallowRef(false);
 const isInlineEditing = shallowRef(false);
 const isDeleteDialogOpen = shallowRef(false);
@@ -169,9 +187,48 @@ const draggedOutOfParent = computed(() => {
   return item && movableOutOf(item) && !lineage.value.roots.includes(item) ? item : null;
 });
 
+/** A pinned session dragged onto its own project: dropping it there unpins it. */
+const draggedBackHome = computed(() => !props.pinned && Boolean(props.activeDragSessionId) && Boolean(props.activeDragPinned)
+  && props.activeDragProjectId === props.project.projectId);
+
+/**
+ * Whether the Pinned group takes the dragged session: any session in the list, except one nested under a pinned
+ * session (it goes wherever that one goes).
+ */
+const pinnedAcceptsDrag = computed(() => {
+  const id = props.activeDragSessionId;
+  if (!props.pinned || !id) return false;
+  const member = props.project.sessions.find((item) => item.session.id === id);
+  return !member || lineage.value.roots.includes(member);
+});
+
 /** Whether the dragged session would land somewhere new: another project's session, or one moving out of its parent. */
-const acceptsDrag = computed(() => Boolean(props.activeDragSessionId)
-  && (props.activeDragProjectId !== props.project.projectId || draggedOutOfParent.value !== null));
+const acceptsDrag = computed(() => props.pinned
+  ? pinnedAcceptsDrag.value
+  : Boolean(props.activeDragSessionId)
+    && (props.activeDragProjectId !== props.project.projectId || draggedOutOfParent.value !== null || draggedBackHome.value));
+
+/**
+ * In the Pinned group, where the dragged session would go: before this pinned session, or at the end (null). Undefined
+ * while there's nowhere new to put it (not over the group, or over the place it already is).
+ */
+const pinDropBefore = shallowRef<string | null | undefined>(undefined);
+
+function pinDropTarget(event: DragEvent): string | null | undefined {
+  const section = event.currentTarget as HTMLElement | null;
+  if (!section) return undefined;
+  const rows = [...section.querySelectorAll<HTMLElement>(".project-row[data-family]")];
+  const before = rows.find((row) => {
+    const box = row.getBoundingClientRect();
+    return event.clientY < box.top + box.height / 2;
+  })?.dataset.family ?? null;
+  // Dropping it right where it is changes nothing.
+  const dragged = props.activeDragSessionId;
+  const ids = rows.map((row) => row.dataset.family);
+  const at = dragged ? ids.indexOf(dragged) : -1;
+  if (at >= 0 && (before === dragged || before === (ids[at + 1] ?? null))) return undefined;
+  return before;
+}
 
 /**
  * Whether the drag is over the family the dragged session is already in (its top-level session and everything under
@@ -186,7 +243,9 @@ function overOwnFamily(event: DragEvent): boolean {
 }
 
 const isOverOwnFamily = shallowRef(false);
-const isDropTarget = computed(() => dragEnterCount.value > 0 && acceptsDrag.value && !isOverOwnFamily.value);
+const isDropTarget = computed(() => dragEnterCount.value > 0 && acceptsDrag.value && !isOverOwnFamily.value
+  // In the Pinned group a line shows where it goes; the outline is only for an empty or folded group.
+  && (!props.pinned || entries.value.length === 0 || !props.expanded));
 
 function handleSessionDragStart(sessionId: string, projectId: string | null): void {
   emit("dragSessionStart", sessionId, projectId);
@@ -197,6 +256,14 @@ function handleSessionDragEnd(): void {
 }
 
 function handleDragOver(event: DragEvent): void {
+  if (props.pinned) {
+    pinDropBefore.value = pinnedAcceptsDrag.value ? pinDropTarget(event) : undefined;
+    if (pinDropBefore.value !== undefined) {
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+    }
+    return;
+  }
   isOverOwnFamily.value = overOwnFamily(event);
   // Must prevent default to allow drop
   if (acceptsDrag.value && !isOverOwnFamily.value) {
@@ -211,20 +278,37 @@ function handleDragEnter(event: DragEvent): void {
   if (props.activeDragSessionId) {
     dragEnterCount.value++;
     isOverOwnFamily.value = overOwnFamily(event);
+    // Some drags never send dragover after the last move, so the line follows dragenter too.
+    if (props.pinned) pinDropBefore.value = pinnedAcceptsDrag.value ? pinDropTarget(event) : undefined;
   }
 }
 
 function handleDragLeave(): void {
   if (props.activeDragSessionId) {
     dragEnterCount.value = Math.max(0, dragEnterCount.value - 1);
+    if (dragEnterCount.value === 0) pinDropBefore.value = undefined;
   }
 }
 
 function handleDrop(event: DragEvent): void {
   dragEnterCount.value = 0;
   isOverOwnFamily.value = false;
+  const pinBefore = props.pinned && pinnedAcceptsDrag.value ? pinDropTarget(event) : undefined;
+  pinDropBefore.value = undefined;
 
   if (!props.activeDragSessionId) {
+    return;
+  }
+
+  if (props.pinned) {
+    event.preventDefault();
+    if (pinBefore !== undefined) emit("pinSession", props.activeDragSessionId, pinBefore);
+    return;
+  }
+
+  if (draggedBackHome.value) {
+    event.preventDefault();
+    emit("unpinSession", props.activeDragSessionId);
     return;
   }
 
@@ -387,6 +471,7 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
 <template>
   <section
     class="project-group"
+    :class="{ 'project-group--pinned': pinned }"
     :data-project-id="project.projectId"
     @dragover="handleDragOver"
     @dragenter="handleDragEnter"
@@ -484,6 +569,7 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
         :class="{ collapsed: !expanded, 'project-header--drop-target': isDropTarget }"
         :aria-expanded="expanded"
         :aria-dropeffect="isDropTarget ? 'move' : 'none'"
+        :data-testid="pinned ? 'pinned-header' : undefined"
         @click="handleToggle"
         @keydown="handleHeaderKeydown"
       >
@@ -492,7 +578,12 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
           aria-hidden="true"
         />
         <span class="project-copy">
-          <span class="project-title">{{ project.name }}</span>
+          <span class="project-title">
+            <Pin
+              v-if="pinned"
+              class="project-title__pin"
+              aria-hidden="true"
+            />{{ project.name }}</span>
         </span>
 
         <span class="project-count">{{ project.sessionCount }}</span>
@@ -530,10 +621,21 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
         v-if="expanded"
         tag="div"
         class="project-content"
+        :class="{ 'project-content--drop-end': pinned && pinDropBefore === null && entries.length > 0 }"
         :css="false"
         @enter="heightEnter"
         @leave="heightLeave"
       >
+        <div
+          v-if="pinned && entries.length === 0"
+          key="pinned-empty"
+          class="pinned-empty"
+          :class="{ 'pinned-empty--over': dragEnterCount > 0 && pinnedAcceptsDrag }"
+          data-testid="pinned-empty"
+        >
+          <Pin aria-hidden="true" />
+          Drop here to pin
+        </div>
         <div
           v-if="draft"
           :key="draft.key"
@@ -551,6 +653,7 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
           v-for="entry in entries"
           :key="entry.kind === 'run' ? `run:${entry.runId}` : rowKey(entry.session)"
           class="project-row"
+          :class="{ 'project-row--drop-before': entry.kind !== 'run' && pinDropBefore === entry.session.session.id }"
           :data-family="entry.kind === 'run' ? undefined : entry.session.session.id"
         >
           <WorkflowRunGroup
@@ -725,5 +828,64 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
 .project-content {
   padding-top: 2px;
   overflow: hidden;
+}
+
+.project-title__pin {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  margin-right: 5px;
+  vertical-align: -1px;
+}
+
+/* Where a session dragged into Pinned will go: a line before a pinned row, or after the last. */
+.project-row,
+.project-content--drop-end {
+  position: relative;
+}
+
+.project-row--drop-before::before,
+.project-content--drop-end::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.project-row--drop-before::before {
+  top: -1px;
+}
+
+.project-content--drop-end::after {
+  bottom: 0;
+}
+
+.pinned-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  margin: 2px 0;
+  border: 1.5px dashed color-mix(in srgb, var(--muted) 45%, transparent);
+  border-radius: var(--radius-btn);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pinned-empty svg {
+  width: 12px;
+  height: 12px;
+}
+
+.pinned-empty--over {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
 }
 </style>

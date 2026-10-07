@@ -1,0 +1,1026 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fleet · Pin and reorder sessions</title>
+<style>
+@font-face { font-family: "Inter Variable"; src: url("inter-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+/* ─── Fleet tokens, copied from client/src/assets/main.css ─────────────── */
+:root {
+  --rail-bg: #0d0d10; --panel-bg: #141418; --card-bg: #1b1b20; --main-bg: #0d0d10;
+  --border: rgba(255,255,255,.075); --text: #e8e8ec; --muted: #8e8e9a;
+  --accent: #6366f1; --accent-dim: rgba(99,102,241,.15);
+  --running: #22c55e; --error: #ef4444; --status-waiting: #f59e0b;
+  --pr-open: #22c55e; --pr-merged: #8b5cf6;
+  --radius-card: 10px; --radius-btn: 8px; --radius-panel: 12px;
+  --transition: 150ms ease-out;
+  --font-sans-stack: "Inter Variable","Inter",system-ui,-apple-system,sans-serif;
+  --menu-shadow: 0 16px 40px -12px rgba(0,0,0,.55), 0 2px 6px rgba(0,0,0,.25);
+}
+:root[data-theme="light"] {
+  --rail-bg:#FFFFFF; --panel-bg:#FFFFFF; --card-bg:#ffffff; --main-bg:#F3F2EF;
+  --border: rgba(26,25,24,.09); --text:#1A1918; --muted:#6E6A65;
+  --accent:#5B6EC7; --accent-dim: rgba(91,110,199,.12);
+  --running:#16a34a; --error:#dc2626; --status-waiting:#d97706; --pr-open:#16a34a; --pr-merged:#7c3aed;
+  --menu-shadow: 0 16px 40px -12px rgba(26,25,24,.22), 0 2px 6px rgba(26,25,24,.06);
+}
+:root[data-theme="solarized-light"] { --rail-bg:#EEE8D5; --panel-bg:#FDF6E3; --card-bg:#EEE8D5; --main-bg:#FDF6E3; --border:#D6CDB7; --text:#073642; --muted:#657B83; --accent:#268BD2; --accent-dim:rgba(38,139,210,.12); --menu-shadow: 0 16px 40px -12px rgba(7,54,66,.25), 0 2px 6px rgba(7,54,66,.08); }
+:root[data-theme="nord"] { --rail-bg:#272C36; --panel-bg:#3B4252; --card-bg:#3B4252; --main-bg:#2E3440; --border:rgba(216,222,233,.12); --text:#ECEFF4; --muted:#D8DEE9; --accent:#88C0D0; --accent-dim:rgba(136,192,208,.15); }
+
+* { box-sizing: border-box; }
+html { font-family: var(--font-sans-stack); -webkit-font-smoothing: antialiased; }
+body { margin: 0; background: var(--main-bg); color: var(--text); font-size: 14px; line-height: 1.5; }
+svg.i { width: 14px; height: 14px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+button { font: inherit; }
+
+/* ─── Page chrome ─────────────────────────────────────────────────────── */
+.top { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; gap: 16px; padding: 12px 28px; background: color-mix(in srgb, var(--main-bg) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
+.top h1 { margin: 0; font-size: 15px; font-weight: 600; white-space: nowrap; }
+.top .sub { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.top .spacer { flex: 1; }
+.nav { display: flex; gap: 2px; }
+.nav a { color: var(--muted); text-decoration: none; font-size: 12.5px; padding: 4px 8px; border-radius: var(--radius-btn); white-space: nowrap; }
+.nav a:hover { color: var(--text); background: color-mix(in srgb, var(--text) 6%, transparent); }
+.themes { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.themes select { height: 28px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius-btn); background: color-mix(in srgb, var(--text) 4%, transparent); color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer; }
+select option { background: var(--card-bg); color: var(--text); }
+
+main { max-width: 1240px; margin: 0 auto; padding: 28px 28px 96px; }
+.eyebrow { font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+h2 { font-size: 22px; font-weight: 650; margin: 0 0 6px; letter-spacing: -.01em; }
+h3 { font-size: 15px; font-weight: 600; margin: 0 0 6px; }
+p { margin: 0 0 10px; }
+.muted { color: var(--muted); }
+kbd { font-family: var(--font-sans-stack); font-size: 11.5px; padding: 1px 5px; border-radius: 5px; border: 1px solid var(--border); background: color-mix(in srgb, var(--text) 5%, transparent); }
+
+.answer { display: grid; grid-template-columns: 1.15fr 1fr; gap: 28px; padding: 24px 26px; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--panel-bg); margin-bottom: 40px; }
+.answer h2 { font-size: 20px; }
+.answer .lead { font-size: 15.5px; line-height: 1.55; }
+.answer ul { margin: 0; padding-left: 18px; color: color-mix(in srgb, var(--text) 88%, transparent); }
+.answer li { margin-bottom: 8px; }
+.answer li b { color: var(--text); font-weight: 600; }
+
+.option { display: grid; grid-template-columns: 560px 1fr; gap: 32px; padding: 32px 0; border-top: 1px solid var(--border); scroll-margin-top: 60px; }
+.option-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.tag { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--accent-dim); color: var(--accent); white-space: nowrap; }
+.tag--muted { background: color-mix(in srgb, var(--text) 6%, transparent); color: var(--muted); }
+.copy ul { margin: 6px 0 14px; padding-left: 18px; }
+.copy li { margin-bottom: 5px; }
+.copy .good li::marker { color: var(--running); }
+.copy .cost li::marker { color: var(--status-waiting); }
+.copy h4 { margin: 14px 0 2px; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.try { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 10px 12px; border-radius: var(--radius-btn); background: color-mix(in srgb, var(--text) 4%, transparent); font-size: 12.5px; color: var(--muted); }
+.try b { color: var(--text); font-weight: 500; }
+
+/* ─── Mock window ─────────────────────────────────────────────────────── */
+.frame-wrap { display: flex; flex-direction: column; gap: 10px; }
+.frame { position: relative; display: flex; height: 600px; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--rail-bg); overflow: hidden; user-select: none; }
+.rail { width: 48px; margin: 8px 0 8px 8px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding-top: 4px; }
+.rail .logo { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg, #22d3ee, #6366f1 55%, #d946ef); margin-bottom: 10px; }
+.rail .ri { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; color: var(--muted); }
+.rail .ri.on { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
+.rail .ri svg { width: 17px; height: 17px; }
+.panel { width: 280px; flex-shrink: 0; display: flex; flex-direction: column; }
+.panel-actions { display: flex; align-items: center; gap: 6px; padding: 8px 8px 0; height: 48px; }
+.new-btn { flex: 1; height: 32px; display: flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--border); border-radius: var(--radius-btn); background: color-mix(in srgb, var(--text) 4%, transparent); color: var(--text); font-size: 13px; cursor: pointer; }
+.icon-btn { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: var(--radius-btn); background: transparent; color: var(--muted); }
+.search { display: flex; align-items: center; gap: 8px; height: 32px; margin: 4px 8px 8px; padding: 0 10px; border-radius: var(--radius-btn); background: color-mix(in srgb, var(--text) 4%, transparent); color: var(--muted); font-size: 13px; }
+.list { position: relative; flex: 1; overflow-y: auto; overflow-x: hidden; padding: 0 8px 12px; }
+.convo { flex: 1; margin: 8px 8px 8px 0; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--main-bg); padding: 16px; min-width: 0; overflow: hidden; }
+.convo-title { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 14px; }
+.convo-line { height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--text) 7%, transparent); margin-bottom: 9px; }
+.convo-bubble { margin: 18px 0 18px auto; width: 70%; height: 34px; border-radius: 10px; background: color-mix(in srgb, var(--text) 6%, transparent); }
+
+/* Groups (project headers + the proposed Pinned header share the same look) */
+.group { position: relative; border-radius: var(--radius-btn); transition: background var(--transition), outline-color var(--transition); }
+.group + .group { margin-top: 10px; }
+.group-header { width: 100%; min-height: 26px; display: flex; align-items: center; gap: 6px; padding: 0 10px 0 6px; border: 0; border-radius: var(--radius-btn); background: transparent; color: var(--muted); cursor: pointer; text-align: left; }
+.group-header:hover { background: color-mix(in srgb, var(--text) 5%, transparent); color: var(--text); }
+.group-header .chev { width: 13px; height: 13px; color: color-mix(in srgb, var(--muted) 70%, transparent); transition: transform var(--transition); }
+.group.collapsed .chev { transform: rotate(-90deg); }
+.group-title { flex: 1; min-width: 0; font-size: 12px; font-weight: 600; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; }
+.group-title svg { width: 12px; height: 12px; }
+.group-count { font-size: 12px; font-weight: 500; color: color-mix(in srgb, var(--muted) 70%, transparent); font-variant-numeric: tabular-nums; }
+.group-order { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 500; color: color-mix(in srgb, var(--muted) 85%, transparent); padding: 1px 6px; border-radius: 6px; background: color-mix(in srgb, var(--text) 5%, transparent); }
+.group-order svg { width: 11px; height: 11px; }
+.group-order button { border: 0; background: none; color: inherit; padding: 0; cursor: pointer; display: inline-grid; }
+.group-order button:hover { color: var(--text); }
+.group.collapsed .rows { display: none; }
+.group--pinned .rows { padding-bottom: 2px; }
+.pin-divider { height: 1px; margin: 6px 10px 0; background: var(--border); }
+.group.drop-zone { outline: 2px dashed var(--accent); outline-offset: -1px; background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.drop-label { position: absolute; top: 4px; right: 8px; z-index: 3; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 6px; background: var(--accent); color: #fff; pointer-events: none; }
+.pin-zone { display: none; align-items: center; justify-content: center; gap: 6px; height: 40px; margin-bottom: 10px; border: 1.5px dashed color-mix(in srgb, var(--muted) 50%, transparent); border-radius: var(--radius-btn); color: var(--muted); font-size: 12px; }
+.frame.is-dragging .pin-zone { display: flex; }
+.pin-zone.drop-zone { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); }
+
+/* Rows — SessionItem.vue */
+.row-shell { position: relative; display: flex; align-items: center; padding: 1px 0; }
+.row-shell.dragging { opacity: .4; }
+.row { width: 100%; min-width: 0; min-height: 32px; display: flex; align-items: center; gap: 9px; padding: 0 10px; border: 0; border-radius: var(--radius-btn); background: transparent; color: color-mix(in srgb, var(--text) 86%, transparent); text-align: left; cursor: pointer; transition: background var(--transition), color var(--transition); }
+.row:hover { background: color-mix(in srgb, var(--text) 5%, transparent); color: var(--text); }
+.row.active { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); font-weight: 500; }
+.row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.row.dim-1 { color: color-mix(in srgb, var(--text) 55%, transparent); }
+.row.dim-2 { color: color-mix(in srgb, var(--text) 40%, transparent); }
+.row.dim-1 .meta { opacity: .75; } .row.dim-2 .meta { opacity: .6; }
+.row:hover .meta, .row.active .meta { opacity: 1; }
+.row.linked { background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--text); }
+.row.fresh { animation: fresh 1.6s ease-out; }
+@keyframes fresh { 0%, 30% { background: color-mix(in srgb, var(--accent) 22%, transparent); } 100% { background: transparent; } }
+.glyph-slot { width: 8px; height: 8px; flex-shrink: 0; }
+.title { flex: 1 1 auto; min-width: 0; font-size: 13px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meta { flex-shrink: 0; font-size: 12px; line-height: 1.3; color: color-mix(in srgb, var(--muted) 80%, transparent); font-variant-numeric: tabular-nums; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+.meta--attention { padding: 1px 7px; border-radius: var(--radius-btn); background: color-mix(in srgb, var(--status-waiting) 14%, transparent); color: var(--status-waiting); }
+.meta--error { color: var(--error); }
+.pin-mark { width: 11px; height: 11px; color: color-mix(in srgb, var(--muted) 80%, transparent); flex-shrink: 0; }
+.pr { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; font-weight: 500; flex-shrink: 0; }
+.pr svg { width: 12px; height: 12px; }
+.pr--open { color: var(--pr-open); } .pr--merged { color: var(--pr-merged); }
+.dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin: 0 .5px; }
+.dot--waiting { background: var(--status-waiting); } .dot--error { background: var(--error); }
+.quad { width: 8px; height: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 2px; flex-shrink: 0; }
+.quad i { width: 3px; height: 3px; border-radius: 50%; background: var(--text); animation: tick 1.2s infinite steps(1); }
+.quad i:nth-child(2) { animation-delay: .3s; } .quad i:nth-child(4) { animation-delay: .6s; } .quad i:nth-child(3) { animation-delay: .9s; }
+@keyframes tick { 0% { opacity: .25; } 25% { opacity: 1; } 50%, 100% { opacity: 1; } }
+.grip { position: absolute; left: -3px; top: 50%; transform: translateY(-50%); width: 12px; height: 16px; display: none; place-items: center; color: color-mix(in srgb, var(--muted) 75%, transparent); pointer-events: none; }
+.grip svg { width: 12px; height: 14px; }
+.row-shell.can-reorder:hover .grip { display: grid; }
+.row-actions { position: absolute; top: 50%; right: 5px; transform: translateY(-50%); display: none; gap: 2px; }
+.row-shell:hover .row-actions, .row-actions:focus-within { display: flex; }
+.row-shell:hover .meta, .row-shell:hover .pr, .row-shell:hover .pin-mark { visibility: hidden; }
+.row-action { width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.row-action:hover { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); }
+.row-action.on { color: var(--accent); }
+.frame.is-dragging .row-actions { display: none !important; }
+.drop-line { position: absolute; left: 10px; right: 10px; height: 2px; border-radius: 1px; background: var(--accent); pointer-events: none; z-index: 5; display: none; }
+.drop-line::before { content: ""; position: absolute; left: -4px; top: -3px; width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--accent); background: var(--panel-bg); box-sizing: border-box; }
+.ghost { position: fixed; z-index: 1000; pointer-events: none; opacity: .94; border-radius: var(--radius-btn); background: var(--card-bg); box-shadow: var(--menu-shadow); outline: 1px solid var(--border); }
+.ghost .row { background: transparent !important; color: var(--text) !important; }
+.ghost .row-actions, .ghost .grip { display: none !important; }
+body.dragging-any, body.dragging-any * { cursor: grabbing !important; }
+
+.frame-bar { display: flex; align-items: center; gap: 8px; }
+.bar-btn { height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-btn); background: color-mix(in srgb, var(--text) 4%, transparent); color: var(--text); font-size: 12.5px; cursor: pointer; }
+.bar-btn:hover { background: color-mix(in srgb, var(--text) 8%, transparent); }
+.bar-btn svg { width: 13px; height: 13px; }
+.narrate { flex: 1; min-height: 20px; font-size: 12.5px; color: var(--muted); transition: color .4s; }
+.narrate.flash { color: var(--text); }
+
+/* Context menu — PR #379 look */
+.menu { position: fixed; z-index: 2000; min-width: 248px; padding: 4px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--card-bg); box-shadow: var(--menu-shadow); display: none; }
+.menu.open { display: block; }
+.menu-item { width: 100%; display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font-size: 13px; text-align: left; cursor: pointer; }
+.menu-item svg { width: 14px; height: 14px; color: var(--muted); }
+.menu-item:hover, .menu-item:focus-visible { background: color-mix(in srgb, var(--text) 7%, transparent); outline: none; }
+.menu-item[disabled] { color: color-mix(in srgb, var(--text) 40%, transparent); cursor: default; background: transparent; }
+.menu-item .kbd { margin-left: auto; font-size: 11.5px; color: var(--muted); }
+.menu-item.new { position: relative; }
+.menu-item.new::after { content: "new"; margin-left: auto; font-size: 10.5px; font-weight: 600; color: var(--accent); }
+.menu-item.new .kbd { margin-left: 8px; }
+.menu-sep { height: 1px; margin: 4px 6px; background: var(--border); }
+.menu-hint { margin: 4px -4px -4px; padding: 7px 12px 8px; border-top: 1px solid var(--border); font-size: 11.5px; line-height: 1.4; color: var(--muted); min-height: 30px; }
+
+/* Comparison + build notes */
+.section { padding: 36px 0 0; border-top: 1px solid var(--border); margin-top: 8px; scroll-margin-top: 60px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px; }
+th, td { padding: 9px 12px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+th { font-weight: 600; color: var(--muted); font-size: 12px; }
+td:first-child { color: color-mix(in srgb, var(--text) 85%, transparent); }
+td.y { color: var(--running); } td.n { color: var(--muted); } td.w { color: var(--status-waiting); }
+th.rec, td.rec { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 16px; }
+.card { padding: 18px 20px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--panel-bg); }
+.card ul, .card ol { margin: 6px 0 0; padding-left: 18px; }
+.card li { margin-bottom: 7px; }
+code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; padding: 1px 4px; border-radius: 4px; background: color-mix(in srgb, var(--text) 7%, transparent); }
+.prior { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 14px; }
+.prior .card { padding: 14px 16px; font-size: 13px; }
+.prior b { display: block; margin-bottom: 3px; }
+
+@media (max-width: 1100px) {
+  .option, .answer, .cols { grid-template-columns: 1fr; }
+  .prior { grid-template-columns: 1fr 1fr; }
+  .frame { max-width: 560px; }
+  .nav { display: none; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Fleet · Pin and reorder sessions</h1>
+  <span class="sub">Mockups, 7 Oct 2026. Every sidebar below works: hover, click, drag, right-click.</span>
+  <span class="spacer"></span>
+  <nav class="nav">
+    <a href="#today">Today</a><a href="#a">A</a><a href="#b">B</a><a href="#c">C</a><a href="#d">D</a><a href="#compare">Compare</a><a href="#build">If we build A</a>
+  </nav>
+  <label class="themes">Theme
+    <select id="theme">
+      <option value="dark">Dark</option><option value="light">Light</option><option value="solarized-light">Solarized light</option><option value="nord">Nord</option>
+    </select>
+  </label>
+</header>
+
+<main>
+  <section class="answer">
+    <div>
+      <p class="eyebrow">Short answer</p>
+      <h2>Do both, but keep reordering inside Pinned.</h2>
+      <p class="lead">Pin the few sessions you keep going back to. They sit above your projects, and you drag them into whatever order you like. Everything else stays newest first in its project, the same as today.</p>
+      <p class="muted" style="margin:0">That's option A. B, C and D are the other ways to do it, so you can compare them side by side.</p>
+    </div>
+    <div>
+      <p class="eyebrow">Why not reorder the whole list</p>
+      <ul>
+        <li><b>New sessions arrive all day.</b> In a hand-ordered list, each one lands on top of your order, or at the bottom where you won't see it. Either way the order you made keeps getting disturbed, and you end up tidying it. Try "New session arrives" on D.</li>
+        <li><b>Pins are a short list that nothing joins on its own,</b> so an order you set there stays put. That's where a custom order pays off.</li>
+        <li><b>It keeps the rule from September:</b> rows only move when you move them. Pinning is something you do on purpose. Newest first keeps the rest predictable.</li>
+        <li><b>Projects can already be put in order</b> (right-click › Move up / Move down), so the big picture is already yours to arrange.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="option" id="today">
+    <div class="frame-wrap" data-option="today"></div>
+    <div class="copy">
+      <div class="option-head"><h3>Today</h3><span class="tag tag--muted">for reference</span></div>
+      <p>Sessions are grouped by project, newest first, and you can't change that order (<code>SessionRepository</code> sorts by <code>created_at DESC</code>). Projects can be moved up and down. Dragging a session onto another project's header moves it to that project. Quiet sessions fade after 1 and 3 days.</p>
+      <p class="muted">The session you go back to most, like a release checklist or a long-running investigation, sinks a little further every time you start something new.</p>
+    </div>
+  </section>
+
+  <section class="option" id="a">
+    <div class="frame-wrap" data-option="a"></div>
+    <div class="copy">
+      <div class="option-head"><h3>A · Pinned group on top, drag to order it</h3><span class="tag">recommended</span></div>
+      <p>Pinning a session moves it out of its project into a <b>Pinned</b> group above all projects. Inside Pinned, you set the order by dragging. Unpin it and it goes back to its project, in its usual newest-first spot.</p>
+      <h4>Good</h4>
+      <ul class="good">
+        <li>The sessions you care about are always in the same place at the top, no matter how many new ones arrive.</li>
+        <li>You only arrange the short list, and that order never changes unless you change it.</li>
+        <li>It uses the same header look as projects. The Pinned group folds the same way projects do.</li>
+        <li>Ways to pin: the pin button on hover, right-click › <i>Pin to top</i>, or drag a row into Pinned. To unpin, drag it back to its project.</li>
+      </ul>
+      <h4>Costs</h4>
+      <ul class="cost">
+        <li>A pinned session isn't shown under its project. The project count drops by one.</li>
+        <li>Needs a small server change so pins follow you to the phone app and other browsers.</li>
+      </ul>
+      <div class="try"><span><b>Hover</b> a row › pin</span><span><b>Drag</b> pinned rows to reorder</span><span><b>Drag</b> any row into Pinned</span><span><b>Drag</b> a pin back to its project to unpin</span><span>Focus a pin › <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd></span></div>
+    </div>
+  </section>
+
+  <section class="option" id="b">
+    <div class="frame-wrap" data-option="b"></div>
+    <div class="copy">
+      <div class="option-head"><h3>B · Pins rise within their own project</h3><span class="tag tag--muted">alternative</span></div>
+      <p>Pinned sessions stay in their project but go to the top of it, with a small pin mark. You can drag pins into order, but only inside their project.</p>
+      <h4>Good</h4>
+      <ul class="good">
+        <li>Project grouping stays exactly as it is, and a pin never leaves its project.</li>
+        <li>Works well if you think in projects first.</li>
+      </ul>
+      <h4>Costs</h4>
+      <ul class="cost">
+        <li>Your pins are spread across projects. If a project is folded or far down the list, its pins are hidden with it.</li>
+        <li>No single place to get to your most important sessions.</li>
+      </ul>
+      <div class="try"><span><b>Hover</b> a row › pin</span><span><b>Drag</b> pins inside a project</span><span>Focus a pin › <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd></span></div>
+    </div>
+  </section>
+
+  <section class="option" id="c">
+    <div class="frame-wrap" data-option="c"></div>
+    <div class="copy">
+      <div class="option-head"><h3>C · Pinned shortcuts; sessions stay where they are</h3><span class="tag tag--muted">alternative</span></div>
+      <p>Pinning adds a <b>shortcut</b> to a strip at the top, and the session itself stays in its project with a pin mark. Hover a shortcut to see where the session lives. You can drag the shortcuts into order.</p>
+      <h4>Good</h4>
+      <ul class="good">
+        <li>Nothing in the project list moves, ever. This is the strictest version of "rows stay put".</li>
+        <li>You get one place at the top for quick access, like A.</li>
+      </ul>
+      <h4>Costs</h4>
+      <ul class="cost">
+        <li>Every pinned session appears twice. With a few pins the list gets longer and looks repetitive.</li>
+        <li>It's less obvious which row you're "in". Both rows light up when the session is open.</li>
+      </ul>
+      <div class="try"><span><b>Hover</b> a row › pin</span><span><b>Hover</b> a shortcut to find its session</span><span><b>Drag</b> shortcuts to reorder</span><span><b>Drag</b> a shortcut out to unpin</span></div>
+    </div>
+  </section>
+
+  <section class="option" id="d">
+    <div class="frame-wrap" data-option="d"></div>
+    <div class="copy">
+      <div class="option-head"><h3>D · A, plus drag anything anywhere in its project</h3><span class="tag tag--muted">shown for contrast</span></div>
+      <p>Pinned works like A. On top of that, you can drag any session within its project. Once you do, that project switches from <i>Newest first</i> to <i>Your order</i>, and the header shows ↺ to switch back.</p>
+      <h4>Good</h4>
+      <ul class="good">
+        <li>Full control: every list is in the order you set.</li>
+      </ul>
+      <h4>Costs</h4>
+      <ul class="cost">
+        <li>New sessions have to go somewhere. They land on top of your order, so you have to tidy up after every new session. Press <b>New session arrives</b> a few times after dragging.</li>
+        <li>Sessions come and go much faster than projects or pins. Keeping a long list in order becomes a chore.</li>
+        <li>Two kinds of order (per project, and Pinned) to understand and to store.</li>
+      </ul>
+      <div class="try"><span><b>Drag</b> any row inside Fleet Core</span><span>then <b>New session arrives</b></span><span><b>↺</b> on the header resets to newest first</span></div>
+    </div>
+  </section>
+
+  <section class="section" id="compare">
+    <p class="eyebrow">Side by side</p>
+    <h2>How the options compare</h2>
+    <table>
+      <thead><tr><th></th><th>Today</th><th class="rec">A · Pinned group</th><th>B · Pins in project</th><th>C · Shortcuts</th><th>D · A + free order</th></tr></thead>
+      <tbody>
+        <tr><td>Favourites always in one spot</td><td class="n">No</td><td class="y rec">Yes, at the top</td><td class="w">Spread across projects</td><td class="y">Yes, at the top</td><td class="y">Yes, at the top</td></tr>
+        <tr><td>You choose the order of favourites</td><td class="n">No</td><td class="y rec">Drag</td><td class="w">Within a project</td><td class="y">Drag</td><td class="y">Drag</td></tr>
+        <tr><td>New sessions disturb your order</td><td class="n">n/a</td><td class="y rec">Never</td><td class="y">Never</td><td class="y">Never</td><td class="w">Every time</td></tr>
+        <tr><td>Each session listed once</td><td class="y">Yes</td><td class="y rec">Yes</td><td class="y">Yes</td><td class="w">Pinned ones twice</td><td class="y">Yes</td></tr>
+        <tr><td>Project list unchanged</td><td class="y">Yes</td><td class="w rec">Pins leave it</td><td class="y">Yes</td><td class="y">Yes</td><td class="w">Pins leave it; order can change</td></tr>
+        <tr><td>Size of the change</td><td class="n">n/a</td><td class="rec">Small: 1 column, 2 endpoints, Pinned group</td><td>Small</td><td>Small</td><td>Medium: also per-project order and mode</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="section" id="build">
+    <p class="eyebrow">If we build A</p>
+    <h2>What it takes</h2>
+    <div class="cols">
+      <div class="card">
+        <h3>Server</h3>
+        <ul>
+          <li>Add a <code>pin_order</code> column on <code>sessions</code> (a number; empty means not pinned). This is migration 056. Using fractional numbers means a drag only rewrites the row that moved.</li>
+          <li><code>PUT /api/sessions/{id}/pin</code> with the session it now sits after, and <code>DELETE</code> to unpin. Both send the usual session-list update, so other tabs, the phone app and the desktop app all update.</li>
+          <li>Pins are saved on the server, not in the browser, so they're the same on your phone. Each machine keeps the pins for its own sessions.</li>
+          <li>Archiving a session unpins it.</li>
+        </ul>
+        <h3 style="margin-top:16px">Client</h3>
+        <ul>
+          <li><code>SessionsPanel</code> builds a Pinned group above the projects, in the same style as <code>ProjectGroup</code>. With several machines, there's one Pinned group under each machine.</li>
+          <li>Row dragging already exists (it moves sessions between projects). Add the drop line between pinned rows, and let project rows be dropped into Pinned.</li>
+          <li>Hovering a row shows a pin button next to Archive. The right-click menu gets <i>Pin to top</i> / <i>Unpin</i> under Rename. <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> moves a pin, and <kbd>Ctrl</kbd>+<kbd>[</kbd>/<kbd>]</kbd> follows the order on screen.</li>
+          <li>Filter matches pinned rows too. Quiet pins fade like every other row.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Questions for you</h3>
+        <ol>
+          <li><b>Several machines:</b> one Pinned group under each machine (simple, my pick), or one Pinned group across all machines at the very top?</li>
+          <li><b>Archive:</b> unpin when you archive (my pick), or keep the pin so Restore brings it back pinned?</li>
+          <li><b>Fading:</b> should quiet pinned sessions fade like the rest (my pick, because the fade still tells you that you haven't touched it), or always stay at full brightness?</li>
+          <li><b>Sessions another session started:</b> if you pin one, it shows on its own in Pinned, not under its parent. Is that OK?</li>
+          <li><b>Which option?</b> A as recommended, or would you rather have B, C or D?</li>
+        </ol>
+        <h3 style="margin-top:18px">Where else this pattern shows up</h3>
+        <div class="prior" style="grid-template-columns:1fr 1fr">
+          <div class="card"><b>t3code</b>A Pinned shelf above active threads. You drag across the divider to pin or unpin.</div>
+          <div class="card"><b>Slack · Linear</b>Starred and Favourites sections at the top, which you drag into order. Channels and issues keep their own sort.</div>
+          <div class="card"><b>ChatGPT · Claude.ai</b>Pinned or starred chats at the top. The rest stays newest first.</div>
+          <div class="card"><b>VS Code · browsers</b>Pinned tabs collect on the left and keep their order. New tabs open after them.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="menu" id="menu" role="menu"></div>
+
+<script>
+/* ─── Icons (lucide) ─────────────────────────────────────────────────── */
+const I = {
+  pin: '<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>',
+  pinOff: '<path d="M12 17v5"/><path d="M15 9.34V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H7.89"/><path d="m2 2 20 20"/><path d="M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h11"/>',
+  archive: '<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
+  chev: '<path d="m6 9 6 6 6-6"/>',
+  grip: '<circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/>',
+  pr: '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" x2="6" y1="9" y2="21"/>',
+  merge: '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/>',
+  plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  folderPlus: '<path d="M12 10v6"/><path d="M9 13h6"/><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+  msg: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  github: '<path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.4 5.4 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/>',
+  zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
+  gear: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+  pencil: '<path d="M21.17 6.81a1 1 0 0 0-3.99-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/>',
+  fork: '<circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9"/><path d="M12 12v3"/>',
+  folder: '<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/>',
+  up: '<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>',
+  down: '<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>',
+  reset: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+  sort: '<path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/>',
+  spark: '<path d="M12 3v3"/><path d="M12 18v3"/><path d="M3 12h3"/><path d="M18 12h3"/><path d="m5.6 5.6 2.1 2.1"/><path d="m16.3 16.3 2.1 2.1"/><path d="m5.6 18.4 2.1-2.1"/><path d="m16.3 7.7 2.1-2.1"/>',
+};
+const icon = (n, cls = "i") => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${I[n]}</svg>`;
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+/* ─── Data: same sessions in every option ─────────────────────────────── */
+const PROJECTS = [
+  { id: "core", name: "Fleet Core" },
+  { id: "web", name: "Website" },
+  { id: "docs", name: "Documentation" },
+  { id: "none", name: "Ungrouped" },
+];
+const SESSIONS = [
+  { id: "s1", p: "core", t: "Add pinning to the session list", st: "working" },
+  { id: "s2", p: "core", t: "Fix reconnect after laptop sleep", st: "waiting", meta: "Needs you", tone: "attention" },
+  { id: "s3", p: "core", t: "Context ring by Send", pr: { n: 385, s: "merged" }, meta: "2h" },
+  { id: "s4", p: "core", t: "Workflow run picks the wrong project", pr: { n: 384, s: "open" }, meta: "5h" },
+  { id: "s5", p: "core", t: "Refactor the session cache", meta: "2d", dim: 1 },
+  { id: "s6", p: "core", t: "Migrate settings storage", meta: "4d", dim: 2 },
+  { id: "s7", p: "core", t: "Release checklist v0.40", meta: "1d", dim: 1 },
+  { id: "w1", p: "web", t: "Landing page copy", meta: "1d", dim: 1 },
+  { id: "w2", p: "web", t: "Docs search returns nothing", st: "error", meta: "Failed", tone: "error" },
+  { id: "d1", p: "docs", t: "Update architecture notes", pr: { n: 183, s: "merged" }, meta: "Done", dim: 1 },
+  { id: "u1", p: "none", t: "Scratch: try the OpenCode 2 build", meta: "3h" },
+  { id: "u2", p: "none", t: "Phone app device checks", meta: "3d", dim: 2 },
+];
+const NEW_TITLES = ["Flaky E2E on the composer", "Speed up history load", "Answer issue #391", "Try the new Claude model", "Tidy up the release notes", "Look at the Windows smoke test"];
+
+/* ─── Option definitions ──────────────────────────────────────────────── */
+// Each option says how the list is laid out (sections) and what a drag may do (target/drop).
+const name = (st, id) => st.sessions.find((s) => s.id === id)?.t ?? "";
+const projName = (pid) => PROJECTS.find((p) => p.id === pid).name;
+const short = (t) => (t.length > 34 ? t.slice(0, 32) + "…" : t);
+
+function byNewest(st, pid, exclude = new Set()) {
+  return st.sessions.filter((s) => s.p === pid && !exclude.has(s.id)).sort((a, b) => b.c - a.c).map((s) => s.id);
+}
+function moveInArray(arr, id, index) {
+  const out = arr.filter((x) => x !== id);
+  out.splice(Math.max(0, Math.min(index, out.length)), 0, id);
+  return out;
+}
+
+const OPTIONS = {
+  today: {
+    pins: [],
+    sections(st) {
+      return PROJECTS.map((p) => ({ key: "project:" + p.id, kind: "project", pid: p.id, label: p.name, ids: byNewest(st, p.id) }));
+    },
+    canPin: false,
+    narrate: { new: (t) => `“${short(t)}” went to the top of Fleet Core, like now.` },
+  },
+
+  a: {
+    pins: ["s7", "u2"],
+    sections(st) {
+      const pinned = new Set(st.pins);
+      return [
+        { key: "pinned", kind: "pinned", ids: st.pins.slice(), reorder: true },
+        ...PROJECTS.map((p) => ({ key: "project:" + p.id, kind: "project", pid: p.id, label: p.name, ids: byNewest(st, p.id, pinned) })),
+      ];
+    },
+    canPin: true,
+    canDrag: () => true,
+    target(st, drag, sec) {
+      if (sec.kind === "pinned") return { mode: "line" };
+      const s = st.sessions.find((x) => x.id === drag.id);
+      if (drag.from === "pinned" && sec.pid === s.p) return { mode: "zone", label: "Drop to unpin" };
+      return null;
+    },
+    drop(st, drag, sec, index) {
+      if (sec.kind === "pinned") {
+        const wasPinned = st.pins.includes(drag.id);
+        st.pins = moveInArray(st.pins, drag.id, index);
+        return wasPinned ? "Moved. Only you change this order." : `Pinned “${short(name(st, drag.id))}” by dropping it in.`;
+      }
+      st.pins = st.pins.filter((x) => x !== drag.id);
+      return `Unpinned. It's back in ${projName(st.sessions.find((x) => x.id === drag.id).p)}, newest first.`;
+    },
+    narrate: {
+      pin: (t) => `Pinned “${short(t)}”. It left its project and stays on top until you unpin it.`,
+      unpin: (t, p) => `Unpinned “${short(t)}”. It's back in ${p}, in its newest-first spot.`,
+      new: (t) => `“${short(t)}” joined Fleet Core at the top. Pinned didn't move.`,
+      move: () => "Moved. Only you change this order.",
+    },
+  },
+
+  b: {
+    pins: ["s7", "u2"],
+    sections(st) {
+      return PROJECTS.map((p) => {
+        const pins = st.pins.filter((id) => st.sessions.find((s) => s.id === id)?.p === p.id);
+        const rest = byNewest(st, p.id, new Set(pins));
+        return { key: "project:" + p.id, kind: "project", pid: p.id, label: p.name, ids: [...pins, ...rest], pinnedIds: pins, reorderIds: pins };
+      });
+    },
+    canPin: true,
+    pinMark: true,
+    canDrag: (st, id) => st.pins.includes(id),
+    target(st, drag, sec) {
+      const s = st.sessions.find((x) => x.id === drag.id);
+      return sec.kind === "project" && sec.pid === s.p ? { mode: "line" } : null;
+    },
+    drop(st, drag, sec, index) {
+      const local = st.pins.filter((id) => st.sessions.find((s) => s.id === id).p === sec.pid);
+      const ordered = moveInArray(local, drag.id, index);
+      st.pins = [...st.pins.filter((id) => !local.includes(id)), ...ordered];
+      return `Moved inside ${projName(sec.pid)}. Pins can't leave their project.`;
+    },
+    narrate: {
+      pin: (t, p) => `Pinned “${short(t)}”. It's now at the top of ${p}.`,
+      unpin: (t, p) => `Unpinned “${short(t)}”. It's back in its newest-first spot in ${p}.`,
+      new: (t) => `“${short(t)}” landed under Fleet Core's pins. Pins didn't move.`,
+      move: (p) => `Moved inside ${p}.`,
+    },
+  },
+
+  c: {
+    pins: ["s7", "u2"],
+    sections(st) {
+      return [
+        { key: "pinned", kind: "pinned", ids: st.pins.slice(), reorder: true, shortcut: true },
+        ...PROJECTS.map((p) => ({ key: "project:" + p.id, kind: "project", pid: p.id, label: p.name, ids: byNewest(st, p.id) })),
+      ];
+    },
+    canPin: true,
+    pinMark: true,
+    canDrag: () => true,
+    target(st, drag, sec) {
+      if (sec.kind === "pinned") return st.pins.includes(drag.id) && drag.from !== "pinned" ? null : { mode: "line" };
+      if (drag.from === "pinned") return { mode: "zone", label: "Drop to unpin" };
+      return null;
+    },
+    drop(st, drag, sec, index) {
+      if (sec.kind === "pinned") {
+        const was = st.pins.includes(drag.id);
+        st.pins = moveInArray(st.pins, drag.id, index);
+        return was ? "Moved the shortcut. The session didn't move." : `Added a shortcut to “${short(name(st, drag.id))}”.`;
+      }
+      st.pins = st.pins.filter((x) => x !== drag.id);
+      return "Shortcut removed. The session never moved.";
+    },
+    narrate: {
+      pin: (t) => `Added a shortcut to “${short(t)}”. The session stays where it was.`,
+      unpin: (t) => `Shortcut to “${short(t)}” removed. The session never moved.`,
+      new: (t) => `“${short(t)}” joined Fleet Core. Shortcuts didn't move.`,
+      move: () => "Moved the shortcut. The session didn't move.",
+    },
+  },
+
+  d: {
+    pins: ["s7", "u2"],
+    sections(st) {
+      const pinned = new Set(st.pins);
+      return [
+        { key: "pinned", kind: "pinned", ids: st.pins.slice(), reorder: true },
+        ...PROJECTS.map((p) => {
+          const manual = st.manual[p.id];
+          // Sessions your order hasn't seen yet (new, or just unpinned) land on top of it.
+          const ids = manual
+            ? [...byNewest(st, p.id, new Set([...pinned, ...manual])), ...manual.filter((id) => !pinned.has(id) && st.sessions.some((s) => s.id === id))]
+            : byNewest(st, p.id, pinned);
+          return { key: "project:" + p.id, kind: "project", pid: p.id, label: p.name, ids, reorder: true, manual: Boolean(manual) };
+        }),
+      ];
+    },
+    canPin: true,
+    canDrag: () => true,
+    target(st, drag, sec) {
+      if (sec.kind === "pinned") return { mode: "line" };
+      const s = st.sessions.find((x) => x.id === drag.id);
+      return sec.pid === s.p ? { mode: "line" } : null;
+    },
+    drop(st, drag, sec, index) {
+      if (sec.kind === "pinned") {
+        const was = st.pins.includes(drag.id);
+        st.pins = moveInArray(st.pins, drag.id, index);
+        return was ? "Moved. Only you change this order." : `Pinned “${short(name(st, drag.id))}”.`;
+      }
+      const wasPinned = st.pins.includes(drag.id);
+      // Your order is exactly what's on screen, with the dragged row placed where it was dropped.
+      const shown = OPTIONS.d.sections(st).find((s) => s.key === sec.key).ids.filter((id) => id !== drag.id);
+      shown.splice(Math.min(index, shown.length), 0, drag.id);
+      st.pins = st.pins.filter((x) => x !== drag.id);
+      st.manual[sec.pid] = shown;
+      return wasPinned ? `Unpinned and placed by hand in ${projName(sec.pid)}.` : `${projName(sec.pid)} now uses your order. New sessions still land on top of it.`;
+    },
+    narrate: {
+      pin: (t) => `Pinned “${short(t)}”.`,
+      unpin: (t, p) => `Unpinned “${short(t)}”, back in ${p}.`,
+      new: (t, st) => st.manual.core
+        ? `“${short(t)}” landed on top of your order in Fleet Core. You'd tidy it yourself.`
+        : `“${short(t)}” joined Fleet Core at the top. Drag something in Fleet Core first, then try again.`,
+      move: (p) => `Moved. ${p} uses your order now.`,
+    },
+  },
+};
+
+/* ─── State per option ────────────────────────────────────────────────── */
+const states = {};
+function freshState(key) {
+  const sessions = SESSIONS.map((s, i) => ({ ...s, c: 1000 - i }));
+  return { key, sessions, pins: OPTIONS[key].pins.slice(), manual: {}, active: "s1", collapsed: {}, newCount: 0, fresh: null };
+}
+
+/* ─── Render ──────────────────────────────────────────────────────────── */
+function glyph(s) {
+  if (s.st === "working") return '<span class="quad" title="Working"><i></i><i></i><i></i><i></i></span>';
+  if (s.st === "waiting") return '<span class="dot dot--waiting" title="Needs you"></span>';
+  if (s.st === "error") return '<span class="dot dot--error" title="Failed"></span>';
+  return '<span class="glyph-slot"></span>';
+}
+
+function rowHtml(st, opt, sec, id, { pinnedHere, reorderable, shortcut }) {
+  const s = st.sessions.find((x) => x.id === id);
+  const isPinned = st.pins.includes(id);
+  const active = st.active === id;
+  const dim = active ? 0 : s.dim ?? 0;
+  const key = shortcut ? "p-" + id : id;
+  const showMark = opt.pinMark && isPinned && !shortcut;
+  const pr = s.pr ? `<span class="pr pr--${s.pr.s}">${icon(s.pr.s === "merged" ? "merge" : "pr")}#${s.pr.n}</span>` : "";
+  const meta = s.meta && s.st !== "working" ? `<span class="meta${s.tone ? " meta--" + s.tone : ""}">${esc(s.meta)}</span>` : "";
+  const pinBtn = opt.canPin
+    ? `<button class="row-action${isPinned ? " on" : ""}" data-act="pin" title="${isPinned ? (shortcut ? "Remove shortcut" : "Unpin") : "Pin to top"}" aria-label="${isPinned ? "Unpin" : "Pin"} ${esc(s.t)}">${icon(isPinned ? "pinOff" : "pin")}</button>`
+    : "";
+  const archiveBtn = shortcut ? "" : `<button class="row-action" data-act="archive" title="Archive" aria-label="Archive ${esc(s.t)}">${icon("archive")}</button>`;
+  return `<div class="row-shell${reorderable ? " can-reorder" : ""}" data-id="${id}" data-key="${key}" ${reorderable ? "data-slot" : ""} data-section="${sec.key}">
+    <span class="grip">${icon("grip")}</span>
+    <button class="row${active ? " active" : ""}${dim ? " dim-" + dim : ""}${st.fresh === id && !shortcut ? " fresh" : ""}" data-row>
+      ${glyph(s)}
+      <span class="title">${esc(s.t)}</span>
+      ${showMark ? icon("pin", "i pin-mark") : ""}${pr}${meta}
+    </button>
+    <span class="row-actions">${pinBtn}${archiveBtn}</span>
+  </div>`;
+}
+
+function render(key, opts = {}) {
+  const st = states[key];
+  const opt = OPTIONS[key];
+  const wrap = document.querySelector(`[data-option="${key}"]`);
+  const frame = wrap.querySelector(".frame");
+  const list = frame.querySelector(".list");
+
+  // FLIP: remember where every row was.
+  const before = new Map();
+  list.querySelectorAll(".row-shell").forEach((el) => before.set(el.dataset.key, el.getBoundingClientRect().top));
+  const scroll = list.scrollTop;
+
+  const sections = opt.sections(st);
+  let html = "";
+  const pinnedSec = sections.find((s) => s.kind === "pinned");
+  if (pinnedSec && pinnedSec.ids.length === 0) {
+    html += `<div class="pin-zone" data-drop="pinned">${icon("pin")} Drop here to pin</div>`;
+  }
+  for (const sec of sections) {
+    if (sec.kind === "pinned" && sec.ids.length === 0) continue;
+    if (sec.kind === "project" && sec.ids.length === 0 && sec.pid === "none") continue;
+    const collapsed = st.collapsed[sec.key];
+    const count = sec.ids.length;
+    let header;
+    if (sec.kind === "pinned") {
+      header = `<span class="group-title">${icon("pin")}${sec.shortcut ? "Pinned" : "Pinned"}</span><span class="group-count">${count}</span>`;
+    } else {
+      const order = sec.manual
+        ? `<span class="group-order" title="This project uses the order you set">${icon("sort")}Your order<button data-act="reset-order" data-pid="${sec.pid}" title="Back to newest first" aria-label="Back to newest first">${icon("reset")}</button></span>`
+        : "";
+      header = `<span class="group-title">${esc(sec.label)}</span>${order}<span class="group-count">${count}</span>`;
+    }
+    const rows = sec.ids
+      .map((id) => rowHtml(st, opt, sec, id, {
+        reorderable: sec.reorder || (sec.reorderIds ?? []).includes(id),
+        shortcut: Boolean(sec.shortcut),
+      }))
+      .join("");
+    html += `<div class="group group--${sec.kind}${collapsed ? " collapsed" : ""}" data-drop="${sec.key}">
+      <div class="group-header" role="button" tabindex="0" data-act="fold" data-sec="${sec.key}">${icon("chev", "i chev")}${header}</div>
+      <div class="rows">${rows}</div>
+      ${sec.kind === "pinned" && !sec.shortcut ? "" : ""}
+    </div>`;
+  }
+  html += '<div class="drop-line"></div>';
+  list.innerHTML = html;
+  list.scrollTop = scroll;
+
+  const active = st.sessions.find((s) => s.id === st.active);
+  frame.querySelector(".convo-title").textContent = active ? active.t : "No session open";
+
+  // FLIP: slide rows from where they were.
+  if (!opts.noAnim) {
+    list.querySelectorAll(".row-shell").forEach((el) => {
+      const was = before.get(el.dataset.key);
+      if (was === undefined) return;
+      const dy = was - el.getBoundingClientRect().top;
+      if (Math.abs(dy) < 1) return;
+      el.animate([{ transform: `translateY(${dy}px)` }, { transform: "translateY(0)" }], { duration: 180, easing: "cubic-bezier(.2,.7,.3,1)" });
+    });
+  }
+  if (opts.focus) list.querySelector(`.row-shell[data-key="${opts.focus}"] .row`)?.focus();
+  st.fresh = null;
+}
+
+function say(key, text) {
+  const n = document.querySelector(`[data-option="${key}"] .narrate`);
+  n.textContent = text;
+  n.classList.remove("flash");
+  void n.offsetWidth;
+  n.classList.add("flash");
+  clearTimeout(n._t);
+  n._t = setTimeout(() => n.classList.remove("flash"), 1600);
+}
+
+/* ─── Actions ─────────────────────────────────────────────────────────── */
+function togglePin(key, id) {
+  const st = states[key];
+  const opt = OPTIONS[key];
+  const s = st.sessions.find((x) => x.id === id);
+  if (st.pins.includes(id)) {
+    st.pins = st.pins.filter((x) => x !== id);
+    say(key, opt.narrate.unpin(s.t, projName(s.p)));
+  } else {
+    st.pins = [...st.pins, id];
+    say(key, opt.narrate.pin(s.t, projName(s.p)));
+  }
+  render(key);
+}
+function archive(key, id) {
+  const st = states[key];
+  const s = st.sessions.find((x) => x.id === id);
+  st.sessions = st.sessions.filter((x) => x.id !== id);
+  const wasPinned = st.pins.includes(id);
+  st.pins = st.pins.filter((x) => x !== id);
+  if (st.active === id) st.active = null;
+  say(key, `Archived “${short(s.t)}”${wasPinned ? " and unpinned it" : ""}.`);
+  render(key);
+}
+function newSession(key) {
+  const st = states[key];
+  const t = NEW_TITLES[st.newCount % NEW_TITLES.length];
+  st.newCount++;
+  const id = "n" + st.newCount;
+  const c = Math.max(...st.sessions.map((s) => s.c)) + 1;
+  st.sessions.forEach((s) => { if (s.st === "working" && s.id !== "s1") { s.st = undefined; s.meta = "now"; } });
+  st.sessions.push({ id, p: "core", t, st: "working", c });
+  st.fresh = id;
+  say(key, OPTIONS[key].narrate.new(t, st));
+  render(key);
+}
+function moveBy(key, id, secKey, delta) {
+  const st = states[key];
+  const opt = OPTIONS[key];
+  const sec = opt.sections(st).find((s) => s.key === secKey);
+  if (!sec) return;
+  const slots = sec.reorderIds ?? (sec.reorder ? sec.ids : []);
+  const i = slots.indexOf(id);
+  if (i < 0) return;
+  const j = i + delta;
+  if (j < 0 || j >= slots.length) return;
+  opt.drop(st, { id, from: secKey }, sec, j);
+  say(key, sec.kind === "pinned" ? opt.narrate.move() : opt.narrate.move(projName(sec.pid)));
+  render(key, { focus: sec.shortcut ? "p-" + id : id });
+}
+
+/* ─── Mount ───────────────────────────────────────────────────────────── */
+function mount(key) {
+  states[key] = freshState(key);
+  const wrap = document.querySelector(`[data-option="${key}"]`);
+  wrap.innerHTML = `
+    <div class="frame">
+      <div class="rail">
+        <div class="logo"></div>
+        <div class="ri on">${icon("msg")}</div><div class="ri">${icon("github")}</div>
+        <div style="flex:1"></div>
+        <div class="ri">${icon("zap")}</div><div class="ri">${icon("gear")}</div>
+      </div>
+      <div class="panel">
+        <div class="panel-actions"><button class="new-btn" data-act="new">${icon("plus")} New session</button><span class="icon-btn">${icon("folderPlus")}</span></div>
+        <div class="search">${icon("search")} Filter sessions</div>
+        <div class="list"></div>
+      </div>
+      <div class="convo"><div class="convo-title"></div><div class="convo-line" style="width:92%"></div><div class="convo-line" style="width:78%"></div><div class="convo-line" style="width:85%"></div><div class="convo-bubble"></div><div class="convo-line" style="width:88%"></div><div class="convo-line" style="width:64%"></div></div>
+    </div>
+    <div class="frame-bar">
+      <button class="bar-btn" data-act="new">${icon("spark")} New session arrives</button>
+      <button class="bar-btn" data-act="reset">${icon("reset")} Reset</button>
+      <span class="narrate"></span>
+    </div>`;
+  render(key, { noAnim: true });
+
+  wrap.addEventListener("click", (e) => {
+    if (suppressClick) { suppressClick = false; e.stopPropagation(); return; }
+    const act = e.target.closest("[data-act]");
+    const shell = e.target.closest(".row-shell");
+    if (act) {
+      const a = act.dataset.act;
+      if (a === "new") return newSession(key);
+      if (a === "reset") { states[key] = freshState(key); say(key, ""); return render(key); }
+      if (a === "fold") { const st = states[key]; st.collapsed[act.dataset.sec] = !st.collapsed[act.dataset.sec]; return render(key, { noAnim: true }); }
+      if (a === "reset-order") { e.stopPropagation(); delete states[key].manual[act.dataset.pid]; say(key, `${projName(act.dataset.pid)} is back to newest first.`); return render(key); }
+      if (a === "pin") return togglePin(key, shell.dataset.id);
+      if (a === "archive") return archive(key, shell.dataset.id);
+    }
+    if (shell && e.target.closest("[data-row]")) {
+      states[key].active = shell.dataset.id;
+      render(key, { noAnim: true });
+    }
+  });
+
+  wrap.addEventListener("keydown", (e) => {
+    const shell = e.target.closest(".row-shell");
+    if (!shell || !e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+    e.preventDefault();
+    moveBy(key, shell.dataset.id, shell.dataset.section, e.key === "ArrowUp" ? -1 : 1);
+  });
+
+  // C: hovering a shortcut points at the real row.
+  wrap.addEventListener("mouseover", (e) => {
+    if (key !== "c") return;
+    const shell = e.target.closest('.row-shell[data-key^="p-"]');
+    wrap.querySelectorAll(".row.linked").forEach((r) => r.classList.remove("linked"));
+    if (shell) wrap.querySelector(`.row-shell[data-key="${shell.dataset.id}"] .row`)?.classList.add("linked");
+  });
+
+  wrap.addEventListener("contextmenu", (e) => {
+    const shell = e.target.closest(".row-shell");
+    if (!shell) return;
+    e.preventDefault();
+    openMenu(key, shell, e.clientX, e.clientY);
+  });
+
+  wrap.addEventListener("pointerdown", (e) => onPointerDown(key, e));
+}
+
+/* ─── Drag (pointer-based, with a drop line) ──────────────────────────── */
+let drag = null;
+let suppressClick = false;
+
+function onPointerDown(key, e) {
+  if (e.button !== 0) return;
+  const shell = e.target.closest(".row-shell");
+  if (!shell || e.target.closest(".row-actions")) return;
+  const opt = OPTIONS[key];
+  if (!opt.canDrag || !opt.canDrag(states[key], shell.dataset.id)) return;
+  drag = { key, id: shell.dataset.id, from: shell.dataset.section, shell, x0: e.clientX, y0: e.clientY, started: false, pointerId: e.pointerId };
+}
+
+window.addEventListener("pointermove", (e) => {
+  if (!drag) return;
+  if (!drag.started) {
+    if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 5) return;
+    startDrag(e);
+  }
+  const r = drag.offset;
+  // Held a little below-right of the pointer so the drop line stays visible.
+  drag.ghost.style.left = e.clientX - r.x + 18 + "px";
+  drag.ghost.style.top = e.clientY - r.y + 14 + "px";
+  updateTarget(e);
+});
+
+function startDrag(e) {
+  drag.started = true;
+  const rect = drag.shell.getBoundingClientRect();
+  drag.offset = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  const ghost = drag.shell.cloneNode(true);
+  ghost.classList.add("ghost");
+  ghost.style.width = rect.width + "px";
+  document.body.appendChild(ghost);
+  drag.ghost = ghost;
+  drag.shell.classList.add("dragging");
+  drag.frame = drag.shell.closest(".frame");
+  drag.frame.classList.add("is-dragging");
+  document.body.classList.add("dragging-any");
+}
+
+function clearTarget() {
+  if (!drag?.frame) return;
+  drag.frame.querySelectorAll(".drop-zone").forEach((z) => z.classList.remove("drop-zone"));
+  drag.frame.querySelectorAll(".drop-label").forEach((z) => z.remove());
+  const line = drag.frame.querySelector(".drop-line");
+  if (line) line.style.display = "none";
+  drag.target = null;
+}
+
+function updateTarget(e) {
+  clearTarget();
+  const st = states[drag.key];
+  const opt = OPTIONS[drag.key];
+  const el = document.elementsFromPoint(e.clientX, e.clientY).find((n) => n.closest?.("[data-drop]") && drag.frame.contains(n));
+  const zoneEl = el?.closest("[data-drop]");
+  if (!zoneEl) return;
+  const sec = opt.sections(st).find((s) => s.key === zoneEl.dataset.drop);
+  if (!sec) return;
+  const t = opt.target(st, { id: drag.id, from: drag.from }, sec);
+  if (!t) return;
+  if (t.mode === "zone" || zoneEl.classList.contains("pin-zone")) {
+    zoneEl.classList.add("drop-zone");
+    if (t.label) zoneEl.insertAdjacentHTML("beforeend", `<span class="drop-label">${t.label}</span>`);
+    drag.target = { sec, index: 0 };
+    return;
+  }
+  // Line: index among the reorderable rows of that section, ignoring the dragged one.
+  const slots = [...zoneEl.querySelectorAll(".row-shell[data-slot]")].filter((n) => n !== drag.shell && !(sec.kind === "pinned" ? false : n.dataset.key.startsWith("p-")));
+  let index = slots.findIndex((n) => { const b = n.getBoundingClientRect(); return e.clientY < b.top + b.height / 2; });
+  if (index < 0) index = slots.length;
+  const list = drag.frame.querySelector(".list");
+  const lr = list.getBoundingClientRect();
+  let y;
+  if (slots.length === 0) {
+    const h = zoneEl.querySelector(".group-header").getBoundingClientRect();
+    y = h.bottom + 1;
+  } else if (index < slots.length) y = slots[index].getBoundingClientRect().top;
+  else y = slots[slots.length - 1].getBoundingClientRect().bottom;
+  const line = list.querySelector(".drop-line");
+  line.style.display = "block";
+  line.style.top = y - lr.top + list.scrollTop - 1 + "px";
+  drag.target = { sec, index };
+}
+
+window.addEventListener("pointerup", () => {
+  if (!drag) return;
+  const d = drag;
+  if (d.started) {
+    suppressClick = true;
+    setTimeout(() => (suppressClick = false), 0);
+    const target = d.target;
+    clearTarget();
+    d.ghost.remove();
+    d.frame.classList.remove("is-dragging");
+    document.body.classList.remove("dragging-any");
+    d.shell.classList.remove("dragging");
+    if (target) {
+      const msg = OPTIONS[d.key].drop(states[d.key], { id: d.id, from: d.from }, target.sec, target.index);
+      if (msg) say(d.key, msg);
+      render(d.key);
+    }
+  }
+  drag = null;
+});
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && drag?.started) {
+    clearTarget();
+    drag.ghost.remove();
+    drag.frame.classList.remove("is-dragging");
+    document.body.classList.remove("dragging-any");
+    drag.shell.classList.remove("dragging");
+    drag = null;
+  }
+});
+
+/* ─── Right-click menu ────────────────────────────────────────────────── */
+const menu = document.getElementById("menu");
+function openMenu(key, shell, x, y) {
+  const st = states[key];
+  const opt = OPTIONS[key];
+  const id = shell.dataset.id;
+  const s = st.sessions.find((v) => v.id === id);
+  const isPinned = st.pins.includes(id);
+  const secKey = shell.dataset.section;
+  const sec = opt.sections(st).find((v) => v.key === secKey);
+  const slots = sec ? sec.reorderIds ?? (sec.reorder ? sec.ids : []) : [];
+  const canMove = slots.includes(id);
+  const pinLabel = key === "b" ? (isPinned ? "Unpin" : `Pin to top of ${projName(s.p)}`) : key === "c" ? (isPinned ? "Remove shortcut" : "Add shortcut to Pinned") : isPinned ? "Unpin" : "Pin to top";
+  const pinHint = key === "b"
+    ? isPinned ? "Goes back to its newest-first spot." : "Stays in its project, above the rest."
+    : key === "c"
+      ? isPinned ? "The session stays where it is." : "Adds a shortcut on top. The session stays where it is."
+      : isPinned ? `Goes back to ${projName(s.p)}, newest first.` : "Keeps it above your projects. Drag pins to order them.";
+  const items = [
+    `<button class="menu-item" disabled>${icon("pencil")}Rename<span class="kbd">F2</span></button>`,
+    opt.canPin ? `<button class="menu-item new" data-m="pin" data-hint="${esc(pinHint)}">${icon(isPinned ? "pinOff" : "pin")}${pinLabel}</button>` : "",
+    canMove ? `<button class="menu-item new" data-m="up" data-hint="Or press Alt+↑ on the row.">${icon("up")}Move up<span class="kbd">Alt ↑</span></button>` : "",
+    canMove ? `<button class="menu-item new" data-m="down" data-hint="Or press Alt+↓ on the row.">${icon("down")}Move down<span class="kbd">Alt ↓</span></button>` : "",
+    `<button class="menu-item" data-m="archive" data-hint="Hides it from the list. You can undo it for a few seconds, then find it under Archived.">${icon("archive")}Archive</button>`,
+    '<div class="menu-sep"></div>',
+    `<button class="menu-item" disabled>${icon("fork")}Fork</button>`,
+    `<button class="menu-item" disabled>${icon("folder")}Move to project</button>`,
+    '<div class="menu-hint"></div>',
+  ];
+  menu.innerHTML = items.join("");
+  menu.classList.add("open");
+  const hint = menu.querySelector(".menu-hint");
+  hint.textContent = opt.canPin ? pinHint : "";
+  const mw = menu.offsetWidth, mh = menu.offsetHeight;
+  menu.style.left = Math.min(x, innerWidth - mw - 8) + "px";
+  menu.style.top = Math.min(y, innerHeight - mh - 8) + "px";
+  menu.querySelectorAll("[data-hint]").forEach((b) => b.addEventListener("mouseenter", () => (hint.textContent = b.dataset.hint)));
+  menu.onclick = (e) => {
+    const b = e.target.closest("[data-m]");
+    if (!b) return;
+    closeMenu();
+    if (b.dataset.m === "pin") togglePin(key, id);
+    if (b.dataset.m === "archive") archive(key, id);
+    if (b.dataset.m === "up") moveBy(key, id, secKey, -1);
+    if (b.dataset.m === "down") moveBy(key, id, secKey, 1);
+  };
+  menu.querySelector(".menu-item:not([disabled])")?.focus();
+}
+function closeMenu() { menu.classList.remove("open"); }
+window.addEventListener("pointerdown", (e) => { if (!menu.contains(e.target)) closeMenu(); }, true);
+window.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
+window.addEventListener("scroll", closeMenu, true);
+
+/* ─── Theme ───────────────────────────────────────────────────────────── */
+const themeSel = document.getElementById("theme");
+const saved = localStorage.getItem("reorder-mock-theme");
+if (saved) { document.documentElement.dataset.theme = saved; themeSel.value = saved; }
+themeSel.addEventListener("change", () => { document.documentElement.dataset.theme = themeSel.value; localStorage.setItem("reorder-mock-theme", themeSel.value); });
+
+["today", "a", "b", "c", "d"].forEach(mount);
+if (location.hash) document.querySelector(location.hash)?.scrollIntoView();
+</script>
+</body>
+</html>

@@ -3,10 +3,13 @@ import { computed } from "vue";
 import { Undo2, X } from "lucide-vue-next";
 import { ARCHIVE_UNDO_MS, useArchiveQueueStore } from "@/stores/archive-queue";
 import { LINEAGE_UNDO_MS, useLineageMovesStore } from "@/stores/lineage-moves";
+import { useSessionPinsStore } from "@/stores/session-pins";
 
 // One toast for what the session list lets you undo: archiving, and moving a session out of its parent (or back).
+// It also says when pinning or unpinning failed.
 const archiveQueue = useArchiveQueueStore();
 const lineageMoves = useLineageMovesStore();
+const pins = useSessionPinsStore();
 
 const pending = computed(() => {
   if (archiveQueue.pending) {
@@ -19,11 +22,12 @@ const pending = computed(() => {
   }
   return null;
 });
-const error = computed(() => archiveQueue.error ?? lineageMoves.error);
+const error = computed(() => archiveQueue.error ?? lineageMoves.error ?? pins.error);
 
 function dismissError(): void {
   archiveQueue.dismissError();
   lineageMoves.dismissError();
+  pins.dismissError();
 }
 
 const drainStyle = computed(() => ({ animationDuration: `${pending.value?.duration ?? ARCHIVE_UNDO_MS}ms` }));

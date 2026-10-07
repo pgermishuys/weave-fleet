@@ -294,7 +294,8 @@ public sealed class SessionRepository(
             sql.Append(')');
         }
 
-        sql.Append(" ORDER BY created_at DESC LIMIT @Limit OFFSET @Offset");
+        // Pinned sessions come first, so a page always has them however old they are.
+        sql.Append(" ORDER BY pin_order IS NULL, created_at DESC LIMIT @Limit OFFSET @Offset");
 
         cmd.CommandText = sql.ToString();
         await using var reader = await cmd.ExecuteReaderAsync();
@@ -449,7 +450,7 @@ public sealed class SessionRepository(
     public async Task ArchiveAsync(IDbConnection connection, IDbTransaction? transaction, string id, string archivedAt)
     {
         await connection.ExecuteNonQueryAsync(
-            "UPDATE sessions SET retention_status = 'archived', archived_at = @ArchivedAt WHERE id = @Id AND user_id = @UserId",
+            "UPDATE sessions SET retention_status = 'archived', archived_at = @ArchivedAt, pin_order = NULL WHERE id = @Id AND user_id = @UserId",
             cmd =>
             {
                 cmd.AddParameter("Id", id);
@@ -750,6 +751,37 @@ public sealed class SessionRepository(
             });
     }
 
+    public async Task UpdatePinOrderAsync(string id, double? pinOrder)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        await conn.ExecuteNonQueryAsync(
+            "UPDATE sessions SET pin_order = @PinOrder WHERE id = @Id AND user_id = @UserId",
+            cmd =>
+            {
+                cmd.AddParameter("Id", id);
+                cmd.AddParameter("PinOrder", pinOrder);
+                cmd.AddParameter("UserId", userContext.UserId);
+            });
+    }
+
+    public async Task<IReadOnlyList<(string Id, double PinOrder)>> ListPinnedAsync()
+    {
+        using var conn = connectionFactory.CreateConnection();
+        var dbConn = (DbConnection)conn;
+        await using var cmd = dbConn.CreateCommand();
+        cmd.CommandText = """
+            SELECT id, pin_order FROM sessions
+            WHERE user_id = @UserId AND pin_order IS NOT NULL AND retention_status = 'active'
+            ORDER BY pin_order
+            """;
+        cmd.AddParameter("UserId", userContext.UserId);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        var pinned = new List<(string, double)>();
+        while (await reader.ReadAsync())
+            pinned.Add((reader.GetString(0), reader.GetDouble(1)));
+        return pinned;
+    }
+
     public async Task UpdateSelectedModelAsync(string id, string providerId, string modelId)
     {
         using var conn = connectionFactory.CreateConnection();
@@ -839,6 +871,7 @@ public sealed class SessionRepository(
             SpawnedBySessionId = r.GetNullableString(r.GetOrdinal("spawned_by_session_id")),
             SpawnKind = r.GetNullableString(r.GetOrdinal("spawn_kind")),
             LineageDetachedAt = r.GetNullableString(r.GetOrdinal("lineage_detached_at")),
+            PinOrder = r.GetNullableDouble(r.GetOrdinal("pin_order")),
             Tags = tags,
         };
     }

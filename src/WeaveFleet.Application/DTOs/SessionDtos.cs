@@ -59,6 +59,9 @@ public sealed record SessionListResponse(
 
     /// <summary>When the user moved it out of the session it came from, or null; it no longer nests under that one.</summary>
     public string? LineageDetachedAt { get; init; }
+
+    /// <summary>Where it sits in the Pinned group above the projects (ascending), or null when it isn't pinned.</summary>
+    public double? PinOrder { get; init; }
 }
 
 /// <summary>A model as the harness names one.</summary>
@@ -95,6 +98,12 @@ public sealed record MoveSessionRequest(string? ProjectId);
 
 /// <summary>Moves a fork or a session an agent started out of the session it came from (true), or back under it (false).</summary>
 public sealed record UpdateSessionLineageRequest(bool Detached);
+
+/// <summary>Pins a session just before another pinned one, or at the end of the Pinned group when that's null.</summary>
+public sealed record PinSessionRequest(string? BeforeSessionId);
+
+/// <summary>Where a session now sits in the Pinned group (ascending).</summary>
+public sealed record PinSessionResponse(double PinOrder);
 
 /// <summary>Request DTO for renaming a session.</summary>
 public sealed record UpdateSessionTitleRequest(string Title);

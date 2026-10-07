@@ -334,4 +334,93 @@ describe("ProjectGroup", () => {
       });
     });
   });
+
+  describe("the Pinned group", () => {
+    function pinnedItem(id: string, pinOrder: number | null) {
+      return {
+        instanceId: `i-${id}`, workspaceId: "w", workspaceDirectory: "/repo", workspaceDisplayName: null, isolationStrategy: "existing",
+        sessionStatus: "idle", session: { id, title: id, time: { created: 1, updated: 1 }, tags: [] }, instanceStatus: "running",
+        lifecycleStatus: "running", retentionStatus: "active", typedInstanceStatus: "running", isHidden: false, tags: [], pinOrder,
+      };
+    }
+
+    function mountPinned(sessions: unknown[], dragging: string) {
+      const wrapper = mountProjectGroup({
+        pinned: true,
+        project: { ...createProjectGroup(), id: "pinned", projectId: null, name: "Pinned", sessions, sessionCount: sessions.length },
+        activeDragSessionId: dragging,
+        activeDragProjectId: "project-1",
+      });
+      // Each pinned row is 32px tall, one under the other.
+      wrapper.findAll(".project-row[data-family]").forEach((row, index) => {
+        row.element.getBoundingClientRect = () => ({ top: index * 32, height: 32, bottom: index * 32 + 32 }) as DOMRect;
+      });
+      return wrapper;
+    }
+
+    async function dragOverAt(target: { element: Element }, clientY: number): Promise<boolean> {
+      const event = new MouseEvent("dragover", { bubbles: true, cancelable: true, clientY });
+      target.element.dispatchEvent(event);
+      await flushPromises();
+      return event.defaultPrevented;
+    }
+
+    it("has a pin in its header", () => {
+      const wrapper = mountPinned([pinnedItem("a", 1)], "");
+
+      expect(wrapper.get("[data-testid='pinned-header']").text()).toContain("Pinned");
+      expect(wrapper.find(".project-title__pin").exists()).toBe(true);
+    });
+
+    it("shows a line where a dragged session will go, and pins it there", async () => {
+      const wrapper = mountPinned([pinnedItem("a", 1), pinnedItem("b", 2)], "c");
+
+      await wrapper.get("section").trigger("dragenter");
+      expect(await dragOverAt(wrapper.get("section"), 40)).toBe(true);
+      expect(wrapper.get(".project-row[data-family='b']").classes()).toContain("project-row--drop-before");
+
+      await wrapper.get("section").trigger("drop", { clientY: 40 });
+      expect(wrapper.emitted("pinSession")).toEqual([["c", "b"]]);
+    });
+
+    it("pins at the end when it's dropped below the last pinned session", async () => {
+      const wrapper = mountPinned([pinnedItem("a", 1), pinnedItem("b", 2)], "c");
+
+      await wrapper.get("section").trigger("dragenter");
+      await dragOverAt(wrapper.get("section"), 100);
+      expect(wrapper.get(".project-content").classes()).toContain("project-content--drop-end");
+
+      await wrapper.get("section").trigger("drop", { clientY: 100 });
+      expect(wrapper.emitted("pinSession")).toEqual([["c", null]]);
+    });
+
+    it("does nothing when a pinned session is dropped where it already is", async () => {
+      const wrapper = mountPinned([pinnedItem("a", 1), pinnedItem("b", 2)], "a");
+
+      await wrapper.get("section").trigger("dragenter");
+      expect(await dragOverAt(wrapper.get("section"), 40)).toBe(false);
+
+      await wrapper.get("section").trigger("drop", { clientY: 40 });
+      expect(wrapper.emitted("pinSession")).toBeUndefined();
+    });
+
+    it("offers somewhere to drop while it's empty", async () => {
+      const wrapper = mountPinned([], "c");
+
+      expect(wrapper.get("[data-testid='pinned-empty']").text()).toBe("Drop here to pin");
+      await wrapper.get("section").trigger("drop", { clientY: 10 });
+      expect(wrapper.emitted("pinSession")).toEqual([["c", null]]);
+    });
+
+    it("unpins a pinned session dropped on its own project", async () => {
+      const wrapper = mountProjectGroup({ activeDragSessionId: "a", activeDragProjectId: "project-2", activeDragPinned: true });
+
+      await wrapper.get("section").trigger("dragenter");
+      expect(wrapper.get(".project-header").classes()).toContain("project-header--drop-target");
+      await wrapper.get("section").trigger("drop", { preventDefault: () => {} });
+
+      expect(wrapper.emitted("unpinSession")).toEqual([["a"]]);
+      expect(wrapper.emitted("moveSession")).toBeUndefined();
+    });
+  });
 });

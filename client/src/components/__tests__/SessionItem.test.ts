@@ -2,6 +2,7 @@ import { mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
 import { useArchiveQueueStore } from "@/stores/archive-queue";
 import { useLineageMovesStore } from "@/stores/lineage-moves";
+import { useSessionPinsStore } from "@/stores/session-pins";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSessionSelectionStore } from "@/stores/session-selection";
 import SessionItem from "@/components/sessions/SessionItem.vue";
@@ -519,6 +520,67 @@ describe("SessionItem", () => {
       expect(wrapper.emitted("toggleChildren")).toHaveLength(2);
 
       expect(mountWith({}).get("[data-testid='session-row']").attributes("aria-expanded")).toBeUndefined();
+    });
+  });
+
+  describe("pinning", () => {
+    function pinnedSession(id: string, pinOrder: number | null): SessionListItem {
+      return createSession({ session: { id, title: id, time: { created: 1, updated: 2 }, tags: [] }, pinOrder });
+    }
+
+    it("pins from the hover button and the menu, next to Archive", async () => {
+      const wrapper = mountSessionItem(createSession());
+      const pin = vi.spyOn(useSessionPinsStore(), "pin").mockResolvedValue();
+
+      const button = wrapper.get("[data-testid='session-row-pin']");
+      expect(button.attributes("aria-label")).toBe("Pin Fix auth bug");
+      expect(button.classes()).toContain("session-row-action--second");
+      await button.trigger("click");
+      expect(pin).toHaveBeenCalledWith("session-1");
+      expect(wrapper.emitted("select")).toBeUndefined();
+
+      const item = wrapper.get("[data-testid='session-context-pin']");
+      expect(item.text()).toBe("Pin to top");
+      await item.trigger("click");
+      expect(pin).toHaveBeenCalledTimes(2);
+    });
+
+    it("unpins a pinned session, and offers to move it up or down", async () => {
+      useSessionsStore().setSessions([pinnedSession("a", 1), pinnedSession("b", 2)]);
+      const wrapper = mountSessionItem(pinnedSession("a", 1));
+      const pins = useSessionPinsStore();
+      const unpin = vi.spyOn(pins, "unpin").mockResolvedValue();
+      const move = vi.spyOn(pins, "move").mockResolvedValue();
+
+      expect(wrapper.get("[data-testid='session-row-pin']").attributes("aria-label")).toBe("Unpin a");
+      expect(wrapper.get("[data-testid='session-context-pin-up']").attributes("disabled")).toBeDefined();
+      await wrapper.get("[data-testid='session-context-pin-down']").trigger("click");
+      expect(move).toHaveBeenCalledWith("a", 1);
+
+      await wrapper.get("[data-testid='session-context-pin']").trigger("click");
+      expect(unpin).toHaveBeenCalledWith("a");
+    });
+
+    it("moves a pinned row with Alt+Up and Alt+Down, and leaves the arrows alone on other rows", async () => {
+      const move = vi.spyOn(useSessionPinsStore(), "move").mockResolvedValue();
+
+      const pinnedRow = mountSessionItem(pinnedSession("b", 2)).get("[data-testid='session-row']");
+      await pinnedRow.trigger("keydown", { key: "ArrowUp", altKey: true });
+      await pinnedRow.trigger("keydown", { key: "ArrowDown", altKey: true });
+      expect(move.mock.calls).toEqual([["b", -1], ["b", 1]]);
+
+      await mountSessionItem(createSession()).get("[data-testid='session-row']").trigger("keydown", { key: "ArrowUp", altKey: true });
+      expect(move).toHaveBeenCalledTimes(2);
+    });
+
+    it("can't pin an archived session", () => {
+      const wrapper = mountSessionItem(createSession({
+        retentionStatus: "archived",
+        capabilities: createCapabilities({ canArchive: false, canUnarchive: true }),
+      }));
+
+      expect(wrapper.find("[data-testid='session-row-pin']").exists()).toBe(false);
+      expect(wrapper.find("[data-testid='session-context-pin']").exists()).toBe(false);
     });
   });
 });

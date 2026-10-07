@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { Pin } from "lucide-vue-next";
 import type { SessionListItem } from "@/api/client";
 import DraftSessionRow from "@/components/sessions/DraftSessionRow.vue";
 import MachineHeader from "@/components/sessions/MachineHeader.vue";
@@ -7,6 +8,7 @@ import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { useRelativeTime } from "@/composables/use-relative-time";
 import { formatCompactAge, isSessionLive, sessionRowDim, sessionRowStatus } from "@/lib/session-row-status";
 import { lineageDescendants, lineageKindLabel, nestLineage, type LineageKind } from "@/lib/session-lineage";
+import { isPinned, splitPinned } from "@/lib/session-pins";
 import type { MachineEntry, MachineSessions } from "@/stores/machines";
 import type { NewSessionDraftRow } from "@/stores/workspace-ui";
 import { machineGroupKey, useSidebarStore } from "@/stores/sidebar";
@@ -39,9 +41,13 @@ const sessions = computed(() => {
     : all;
 });
 
-/** Its rows: forks and started sessions under the top-level session they came from, one indent in, with their kind. */
+/**
+ * Its rows: forks and started sessions under the top-level session they came from, one indent in, with their kind.
+ * Its pinned sessions come first, in their pinned order.
+ */
 const rows = computed(() => {
-  const { roots, childrenOf } = nestLineage(sessions.value);
+  const { pinned, rest } = splitPinned(sessions.value);
+  const { roots, childrenOf } = nestLineage([...pinned, ...rest]);
   return roots.flatMap((item) => [
     { item, kind: null as LineageKind | null },
     ...lineageDescendants(item, childrenOf),
@@ -121,6 +127,11 @@ function age(item: SessionListItem): string {
           class="machine-row__slot"
           aria-hidden="true"
         />
+        <Pin
+          v-if="isPinned(item)"
+          class="machine-row__pin"
+          aria-label="Pinned"
+        />
         <span class="machine-row__title">{{ title(item) }}</span>
         <span
           v-if="item.runningWorkCount"
@@ -148,6 +159,13 @@ function age(item: SessionListItem): string {
 </template>
 
 <style scoped>
+.machine-row__pin {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  color: color-mix(in srgb, var(--muted) 80%, transparent);
+}
+
 .machine-group {
   display: flex;
   flex-direction: column;

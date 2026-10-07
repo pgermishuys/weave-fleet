@@ -456,6 +456,34 @@ export async function updateSessionLineage(sessionId: string, detached: boolean)
   }
 }
 
+/** Pins a session just before another pinned one, or at the end of the Pinned group; answers where it now sits. */
+export async function pinSession(sessionId: string, beforeSessionId: string | null): Promise<number> {
+  const { data, error, response } = await api.PUT("/api/sessions/{id}/pin", {
+    params: {
+      path: { id: sessionId },
+    },
+    body: { beforeSessionId },
+  });
+
+  if (error || !response.ok || !data) {
+    throw new Error(await readErrorMessage(response, error));
+  }
+  return data.pinOrder;
+}
+
+/** Unpins a session: it goes back to its project. */
+export async function unpinSession(sessionId: string): Promise<void> {
+  const { error, response } = await api.DELETE("/api/sessions/{id}/pin", {
+    params: {
+      path: { id: sessionId },
+    },
+  });
+
+  if (error || !response.ok) {
+    throw new Error(await readErrorMessage(response, error));
+  }
+}
+
 function createRetentionMutation(targetStatus: "archived" | "active", actionName: string, fallbackMessage: string) {
   const state = createMutationState();
 

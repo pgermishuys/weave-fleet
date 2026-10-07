@@ -6,6 +6,8 @@ import { useRouter } from "@tanstack/vue-router";
 import {
   Archive,
   ArchiveRestore,
+  ArrowDown,
+  ArrowUp,
   Check,
   ChevronRight,
   LoaderCircle,
@@ -15,6 +17,8 @@ import {
   FolderOpen,
   GitFork,
   Pencil,
+  Pin,
+  PinOff,
   Plus,
   Repeat,
   Sparkles,
@@ -53,6 +57,8 @@ import { useRelativeTime } from "@/composables/use-relative-time";
 import { useSessionsStore } from "@/stores/sessions";
 import { useArchiveQueueStore } from "@/stores/archive-queue";
 import { useLineageMovesStore } from "@/stores/lineage-moves";
+import { useSessionPinsStore } from "@/stores/session-pins";
+import { isPinned, pinnedNeighbourFor } from "@/lib/session-pins";
 import { movableBackUnder, movableOutOf } from "@/lib/session-lineage";
 import { useSessionSelectionStore } from "@/stores/session-selection";
 import OpenToolContextSubmenu from "@/components/sessions/OpenToolContextSubmenu.vue";
@@ -90,6 +96,7 @@ const emit = defineEmits<Emits>();
 const sessionsStore = useSessionsStore();
 const archiveQueue = useArchiveQueueStore();
 const lineageMoves = useLineageMovesStore();
+const pins = useSessionPinsStore();
 const selection = useSessionSelectionStore();
 const router = useRouter();
 const { startCreateFromSession } = useAutomationsNav();
@@ -299,6 +306,12 @@ function handleRowKeydown(event: KeyboardEvent): void {
     startRename();
     return;
   }
+  // Alt+↑/↓ moves a pinned session up or down in the Pinned group.
+  if (event.altKey && pinned.value && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+    event.preventDefault();
+    void handleMovePin(event.key === "ArrowUp" ? -1 : 1);
+    return;
+  }
   // A row with children opens and closes like a tree item.
   if (props.hasChildren && (event.key === "ArrowRight" || event.key === "ArrowLeft")) {
     const open = event.key === "ArrowRight";
@@ -316,6 +329,28 @@ const runningChipLabel = computed(() => {
 function handleArchive(): void {
   isContextMenuOpen.value = false;
   archiveQueue.archive([sessionId.value]);
+}
+
+const pinned = computed(() => isPinned(props.session));
+/** Any session in the list can be pinned, except an archived one. */
+const canPin = computed(() => !isArchivedSession.value);
+const canMovePinUp = computed(() => pinned.value && pinnedNeighbourFor(sessionsStore.sessions, sessionId.value, -1) !== undefined);
+const canMovePinDown = computed(() => pinned.value && pinnedNeighbourFor(sessionsStore.sessions, sessionId.value, 1) !== undefined);
+
+function handleTogglePin(): void {
+  isContextMenuOpen.value = false;
+  void (pinned.value ? pins.unpin(sessionId.value) : pins.pin(sessionId.value));
+}
+
+async function handleMovePin(delta: -1 | 1): Promise<void> {
+  isContextMenuOpen.value = false;
+  await pins.move(sessionId.value, delta);
+  // The row moved in the list: keep the keyboard on it.
+  await nextTick();
+  [...document.querySelectorAll<HTMLElement>(".session-item-shell[data-session-id]")]
+    .find((shell) => shell.dataset.sessionId === sessionId.value)
+    ?.querySelector<HTMLElement>(".session-item")
+    ?.focus();
 }
 
 function handleMoveOut(): void {
@@ -547,7 +582,8 @@ function removeSessionFromStore(): void {
             :class="{
               active,
               'session-item--selected': isSelected,
-              'session-item--has-action': (canArchive || canRestore) && !selection.isSelecting,
+              'session-item--has-action': (canArchive || canRestore || canPin) && !selection.isSelecting,
+              'session-item--has-two-actions': canArchive && canPin && !selection.isSelecting,
               [`session-item--dim-${rowDim}`]: rowDim > 0,
             }"
             :aria-current="active ? 'true' : undefined"
@@ -645,6 +681,25 @@ function removeSessionFromStore(): void {
             >{{ rowStatus.label }}</span>
           </button>
           <button
+            v-if="canPin && !selection.isSelecting"
+            type="button"
+            class="session-row-action session-row-action--pin"
+            :class="{ 'session-row-action--second': canArchive, 'session-row-action--on': pinned }"
+            :aria-label="pinned ? `Unpin ${displayTitle}` : `Pin ${displayTitle}`"
+            :title="pinned ? 'Unpin' : 'Pin to top'"
+            data-testid="session-row-pin"
+            @click.stop="handleTogglePin"
+          >
+            <PinOff
+              v-if="pinned"
+              aria-hidden="true"
+            />
+            <Pin
+              v-else
+              aria-hidden="true"
+            />
+          </button>
+          <button
             v-if="canRestore && !selection.isSelecting"
             type="button"
             class="session-row-action"
@@ -714,6 +769,47 @@ function removeSessionFromStore(): void {
         Rename
         <ContextMenuShortcut>F2</ContextMenuShortcut>
       </ContextMenuItem>
+
+      <ContextMenuItem
+        v-if="canPin"
+        :hint="pinned
+          ? 'Puts it back in its project, newest first.'
+          : 'Keeps it in Pinned, above your projects. Drag pinned sessions to put them in order.'"
+        data-testid="session-context-pin"
+        @select="handleTogglePin"
+      >
+        <PinOff
+          v-if="pinned"
+          class="size-3.5"
+        />
+        <Pin
+          v-else
+          class="size-3.5"
+        />
+        {{ pinned ? "Unpin" : "Pin to top" }}
+      </ContextMenuItem>
+      <template v-if="pinned">
+        <ContextMenuItem
+          :disabled="!canMovePinUp"
+          hint="Or press Alt+↑ on the row."
+          data-testid="session-context-pin-up"
+          @select="handleMovePin(-1)"
+        >
+          <ArrowUp class="size-3.5" />
+          Move up
+          <ContextMenuShortcut>Alt+↑</ContextMenuShortcut>
+        </ContextMenuItem>
+        <ContextMenuItem
+          :disabled="!canMovePinDown"
+          hint="Or press Alt+↓ on the row."
+          data-testid="session-context-pin-down"
+          @select="handleMovePin(1)"
+        >
+          <ArrowDown class="size-3.5" />
+          Move down
+          <ContextMenuShortcut>Alt+↓</ContextMenuShortcut>
+        </ContextMenuItem>
+      </template>
 
       <ContextMenuItem
         v-if="canArchive"
@@ -985,6 +1081,15 @@ function removeSessionFromStore(): void {
   height: 14px;
 }
 
+/* Pin sits left of Archive; it stays lit on a pinned row. */
+.session-row-action--second {
+  right: 31px;
+}
+
+.session-row-action--on {
+  color: var(--accent);
+}
+
 .session-row-action:hover {
   background: color-mix(in srgb, var(--text) 8%, transparent);
   color: var(--text);
@@ -1002,6 +1107,8 @@ function removeSessionFromStore(): void {
 
 .session-item-shell:hover .session-item--has-action .session-meta,
 .session-item-shell:hover .session-item--has-action .session-progress,
+.session-item-shell:hover .session-item--has-two-actions .pr-badge,
+.session-item-shell:hover .session-item--has-two-actions .session-running-chip,
 .session-item-shell:has(.session-row-action:focus-visible) .session-meta,
 .session-item-shell:has(.session-row-action:focus-visible) .session-progress {
   visibility: hidden;
