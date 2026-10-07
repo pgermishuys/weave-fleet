@@ -45,12 +45,17 @@ public static class FleetToolCatalog
 /// started with: <c>fleet_message</c> with messages between sessions on, <c>fleet_memory_*</c> with memory on,
 /// <c>fleet_step_done</c> in a workflow step's session, and the agent's browser tools with Settings → Browser on.
 /// </summary>
-public sealed record FleetToolSwitches(bool SessionMessages, bool Memory, bool WorkflowStep, bool Browser)
+/// <param name="Walkthrough">The fleet-walkthrough skill is on: its page tool comes with it.</param>
+public sealed record FleetToolSwitches(bool SessionMessages, bool Memory, bool WorkflowStep, bool Browser, bool Walkthrough = false)
 {
     public const string SessionMessagesSwitch = "sessionMessages";
     public const string MemorySwitch = "memory";
     public const string WorkflowStepSwitch = "workflowStep";
     public const string BrowserSwitch = "browser";
+    public const string WalkthroughSwitch = "walkthrough";
+
+    /// <summary>The built-in skill whose page tool is behind <see cref="WalkthroughSwitch"/>.</summary>
+    public const string WalkthroughSkill = "fleet-walkthrough";
 
     /// <summary>Whether a tool that needs <paramref name="requirement"/> is on; a switch Fleet doesn't know keeps its tool off.</summary>
     public bool Allows(string? requirement) => requirement switch
@@ -60,6 +65,7 @@ public sealed record FleetToolSwitches(bool SessionMessages, bool Memory, bool W
         MemorySwitch => Memory,
         WorkflowStepSwitch => WorkflowStep,
         BrowserSwitch => Browser,
+        WalkthroughSwitch => Walkthrough,
         _ => false,
     };
 }

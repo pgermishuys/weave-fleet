@@ -7,6 +7,9 @@ internal sealed class FakePageStore : IPageStore
 {
     public List<(string SessionId, string PageId, string EntryFile)> Copies { get; } = [];
 
+    /// <summary>The page each copy took, as it was then: a page Fleet wrote itself is gone once it's copied.</summary>
+    public List<string> Texts { get; } = [];
+
     public List<string> Deleted { get; } = [];
 
     /// <summary>Set to fail the next copy, as a folder too big to be a page would.</summary>
@@ -21,6 +24,7 @@ internal sealed class FakePageStore : IPageStore
         }
 
         Copies.Add((sessionId, pageId, entryFile));
+        Texts.Add(File.Exists(entryFile) ? File.ReadAllText(entryFile) : string.Empty);
         return Task.FromResult(new PageCopyResult(new PageCopy(pageId, Path.GetFileName(entryFile), 2, 38 * 1024), null));
     }
 

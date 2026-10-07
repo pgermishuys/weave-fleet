@@ -154,6 +154,20 @@ public sealed class OpenCodeHarnessPreparationTests
 
         var environmentVariables = GetEnvironmentVariables(result.ShouldBeOfType<RuntimePreparation.Ready>().Artifacts);
         environmentVariables[OpenCodeFleetSkills.BuiltInVariable].ShouldBe("fleet-code-review,fleet-run");
+        environmentVariables.ContainsKey(WeaveFleet.Application.Walkthroughs.WalkthroughBridge.EnvironmentVariable).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task PrepareRuntimeAsync_gives_fleet_walkthrough_its_page_tool()
+    {
+        var preferences = new InMemoryUserPreferenceRepository();
+        preferences.Seed(BuiltInSkillService.PreferenceKey, "fleet-walkthrough");
+        var harness = CreateHarness(preferences);
+
+        var result = await harness.PrepareRuntimeAsync(CreateContextWithNullModel(), CancellationToken.None);
+
+        var environmentVariables = GetEnvironmentVariables(result.ShouldBeOfType<RuntimePreparation.Ready>().Artifacts);
+        environmentVariables[WeaveFleet.Application.Walkthroughs.WalkthroughBridge.EnvironmentVariable].ShouldBe("1");
     }
 
     [Fact]

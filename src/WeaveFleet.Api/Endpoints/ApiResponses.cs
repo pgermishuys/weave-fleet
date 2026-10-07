@@ -325,6 +325,9 @@ public sealed record CanvasResponse(
 /// is always needed; the rest depends on the tool. <c>state</c> and <c>ops</c> stay raw JSON because models
 /// sometimes send them as strings.
 /// </summary>
+/// <summary>What <c>fleet_walkthrough_show</c> posts: the tab's title and the agent's outline of the change.</summary>
+public sealed record WalkthroughBridgeRequest(string? HarnessSessionId, string? Title = null, JsonElement Guide = default);
+
 public sealed record CanvasBridgeRequest(
     string? HarnessSessionId,
     string? CanvasId = null,

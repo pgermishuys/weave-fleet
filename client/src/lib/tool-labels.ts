@@ -89,6 +89,9 @@ export function getToolLabel(
       return title || toolName;
     }
 
+    case "fleet_walkthrough_show":
+      return typeof input?.title === "string" && input.title ? input.title : toolName;
+
     case "fleet_browser_screenshot": {
       const viewport = typeof input?.viewport === "string" && input.viewport ? input.viewport : "desktop";
       const path = typeof input?.path === "string" && input.path ? ` ${truncate(input.path, 40)}` : "";

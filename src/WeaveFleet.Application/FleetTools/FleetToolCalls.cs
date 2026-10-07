@@ -7,6 +7,7 @@ using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Memory;
 using WeaveFleet.Application.Pages;
 using WeaveFleet.Application.Sessions;
+using WeaveFleet.Application.Walkthroughs;
 using WeaveFleet.Application.Workflows;
 
 namespace WeaveFleet.Application.FleetTools;
@@ -29,6 +30,7 @@ public sealed class FleetToolCalls(
     BrowserBridge browser,
     AgentBrowserBridge agentBrowser,
     PageBridge pages,
+    WalkthroughBridge walkthroughs,
     SessionReadBridge sessionRead,
     SessionMessageBridge messages,
     AgentMemoryBridge memory,
@@ -93,6 +95,7 @@ public sealed class FleetToolCalls(
             "fleet_canvas_patch" => canvases.PatchAsync(token, session, String(args, "canvasId"), Node(args, "ops"), ct),
             "fleet_canvas_focus" => canvases.FocusAsync(token, session, String(args, "canvasId"), ct),
             "fleet_page_show" => pages.ShowAsync(token, session, String(args, "path"), String(args, "title"), ct),
+            "fleet_walkthrough_show" => walkthroughs.ShowAsync(token, session, String(args, "title"), Element(args, "guide"), ct),
             "fleet_app_start" => browser.AppStartAsync(token, session, String(args, "command"), String(args, "title"), ct),
             "fleet_browser_open" => browser.BrowserOpenAsync(token, session, String(args, "url"), String(args, "title"), ct),
             "fleet_browser_screenshot" => browser.ScreenshotAsync(token, session, String(args, "canvasId"), String(args, "path"), String(args, "viewport"), ct),
@@ -141,6 +144,9 @@ public sealed class FleetToolCalls(
             : null;
 
     /// <summary>An object or list argument as the bridge takes it; a model that sent it as JSON text gets it read.</summary>
+    private static JsonElement Element(JsonElement args, string name)
+        => args.ValueKind == JsonValueKind.Object && args.TryGetProperty(name, out var value) ? value : default;
+
     private static JsonNode? Node(JsonElement args, string name)
     {
         if (args.ValueKind != JsonValueKind.Object || !args.TryGetProperty(name, out var value))

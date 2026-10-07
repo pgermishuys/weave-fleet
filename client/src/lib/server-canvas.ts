@@ -35,6 +35,8 @@ export interface ShownPage {
   bytes: number;
   shownAt: string;
   warnings: string[];
+  /** Shown in the tab's bar instead of the source, for a page Fleet wrote itself, e.g. "Walkthrough · compared with main at 55650b2". */
+  label?: string;
 }
 
 type FlowDirection = "TB" | "LR" | "BT" | "RL";
@@ -81,6 +83,7 @@ export function shownPage(state: unknown): ShownPage {
     bytes: count(record.bytes),
     shownAt: text(record.shownAt),
     warnings: asArray(record.warnings).filter((warning): warning is string => typeof warning === "string"),
+    label: typeof record.label === "string" && record.label ? record.label : undefined,
   };
 }
 

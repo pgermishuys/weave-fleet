@@ -53,53 +53,70 @@ public sealed class PageBridge(
             if (PageRules.FindSourceScript(html) is { } script)
                 return Invalid($"{file} loads {script}, which only a build or a dev server can run. {ProjectPageAdvice}");
 
-            var tabs = await PageTabsAsync(sessionId, ct);
-            var sameFile = tabs.FirstOrDefault(tab => string.Equals(tab.State.Source, file, PathComparison));
-            var pageId = sameFile?.State.PageId ?? PageIds.New();
-
-            var copied = await pages.CopyAsync(sessionId, pageId, file, ct);
-            if (copied.Page is not { } copy)
-                return Invalid(copied.Problem ?? "Fleet couldn't copy the page.");
-
             var warnings = PageRules.FindBrokenLinks(html)
                 .Select(link => $"{link} won't load: use a path relative to the page, inside its folder.")
                 .ToList();
-            var state = new PageState
-            {
-                PageId = copy.PageId,
-                Entry = copy.Entry,
-                Source = file,
-                Files = copy.Files,
-                Bytes = copy.Bytes,
-                ShownAt = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
-                Warnings = warnings,
-            };
+            var published = await PublishAsync(sessionId, file, file, BrowserPreviews.TitleOr(title, Path.GetFileNameWithoutExtension(file)), warnings, ct);
+            if (!published.IsSuccess)
+                return CanvasResult.Fail<CanvasToolOutput>(published.Error);
 
-            // The tab that shows this file keeps its title. Otherwise the title picks the tab, as for any canvas.
-            var name = sameFile?.Canvas.Title ?? BrowserPreviews.TitleOr(title, Path.GetFileNameWithoutExtension(file));
-            var replaced = sameFile is null ? tabs.FirstOrDefault(tab => tab.Canvas.Title == name)?.State.PageId : null;
-            var opened = await canvases.OpenAsync(sessionId, CanvasKinds.Page, name, JsonNode.Parse(state.ToJson()), ct);
-            if (!opened.IsSuccess)
-            {
-                if (sameFile is null)
-                    await pages.DeleteAsync(sessionId, pageId, ct);
-                return CanvasResult.Fail<CanvasToolOutput>(opened.Error);
-            }
-
-            if (replaced is not null && replaced != pageId)
-                await pages.DeleteAsync(sessionId, replaced, ct);
-
-            var canvas = opened.Value.Canvas;
+            var (canvas, copy, updated, check) = published.Value;
             var output = new StringBuilder()
-                .Append(sameFile is null ? "Showing " : "Updated ").Append(CanvasText.CanvasName(canvas))
+                .Append(updated ? "Updated " : "Showing ").Append(CanvasText.CanvasName(canvas))
                 .Append(" from ").Append(file).Append(" (").Append(CanvasText.PageSize(copy.Files, copy.Bytes)).Append(" copied from its folder).");
             foreach (var warning in warnings)
                 output.Append("\nWarning: ").Append(warning);
             output.Append("\nAfter an edit, call fleet_page_show again with the same file: the user's tab reloads by itself.");
-            output.Append('\n').Append(CheckText(await CheckAsync(copy, ct)));
+            output.Append('\n').Append(check);
 
             return CanvasResult.Ok(new CanvasToolOutput($"{canvas.Title} · {copy.Entry}", output.ToString(), canvas.Id, canvas.Version));
         }, ct);
+
+    /// <summary>
+    /// Copies <paramref name="file"/> (and the web files in its folder) into a page and shows it in the session's page tab
+    /// for <paramref name="source"/>: the same source updates its tab, which reloads. Otherwise <paramref name="title"/>
+    /// picks the tab, as for any canvas. Says what Fleet's check of the page found.
+    /// </summary>
+    internal async Task<CanvasResult<PublishedPage>> PublishAsync(
+        string sessionId, string source, string file, string title, IReadOnlyList<string> warnings, CancellationToken ct, string? label = null)
+    {
+        var tabs = await PageTabsAsync(sessionId, ct);
+        var sameSource = tabs.FirstOrDefault(tab => string.Equals(tab.State.Source, source, PathComparison));
+        var pageId = sameSource?.State.PageId ?? PageIds.New();
+
+        var copied = await pages.CopyAsync(sessionId, pageId, file, ct);
+        if (copied.Page is not { } copy)
+            return CanvasResult.Fail<PublishedPage>(CanvasErrorKind.Invalid, copied.Problem ?? "Fleet couldn't copy the page.");
+
+        var state = new PageState
+        {
+            PageId = copy.PageId,
+            Entry = copy.Entry,
+            Source = source,
+            Files = copy.Files,
+            Bytes = copy.Bytes,
+            ShownAt = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+            Warnings = [.. warnings],
+            Label = label,
+        };
+
+        // The tab that shows this source keeps its title. Otherwise the title picks the tab, as for any canvas.
+        var name = sameSource?.Canvas.Title ?? title;
+        var replaced = sameSource is null ? tabs.FirstOrDefault(tab => tab.Canvas.Title == name)?.State.PageId : null;
+        var opened = await canvases.OpenAsync(sessionId, CanvasKinds.Page, name, JsonNode.Parse(state.ToJson()), ct);
+        if (!opened.IsSuccess)
+        {
+            if (sameSource is null)
+                await pages.DeleteAsync(sessionId, pageId, ct);
+            return CanvasResult.Fail<PublishedPage>(opened.Error);
+        }
+
+        if (replaced is not null && replaced != pageId)
+            await pages.DeleteAsync(sessionId, replaced, ct);
+
+        return CanvasResult.Ok(new PublishedPage(opened.Value.Canvas, copy, Updated: sameSource is not null, CheckText(await CheckAsync(copy, ct))));
+    }
+
 
     private async Task<PageCheckOutcome?> CheckAsync(PageCopy copy, CancellationToken ct)
         => checker is not null && fleetUrl?.TryGet() is { } fleet
@@ -169,6 +186,8 @@ public sealed class PageBridge(
             .Select(canvas => new PageTab(canvas, PageState.Parse(canvas.StateJson)))];
 
     private sealed record PageTab(Canvas Canvas, PageState State);
+
+    internal sealed record PublishedPage(Canvas Canvas, PageCopy Copy, bool Updated, string Check);
 
     private async Task<CanvasResult<CanvasToolOutput>> RunAsync(
         string? bridgeToken,

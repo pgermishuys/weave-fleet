@@ -298,6 +298,7 @@ public static class DependencyInjection
             sp.GetRequiredService<FleetOptions>().ResolvedPageDirectory,
             sp.GetRequiredService<ILogger<PageStore>>()));
         services.AddScoped<PageBridge>();
+        services.AddScoped<WeaveFleet.Application.Walkthroughs.WalkthroughBridge>();
         services.AddHostedService<SideConversationSweeper>();
         services.AddScoped<BrowserPreviews>();
         services.AddScoped<BrowserBridge>();

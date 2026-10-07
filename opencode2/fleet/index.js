@@ -302,6 +302,37 @@ const tools = [
   ),
 ]
 
+// Only on servers started with fleet-walkthrough on: the skill says how to write the guide.
+if (process.env.FLEET_WALKTHROUGH === "1") {
+  tools.push(
+    fleetTool(
+      "fleet_walkthrough_show",
+      [
+        "Show the user a guided walkthrough of a change in a page canvas beside the chat: an overview, then chapters, each explained beside the real hunks of the files it covers.",
+        "Use it from the fleet-walkthrough skill, which says how to group and order the chapters and check every claim.",
+        "Fleet takes the hunks from the change itself, so send the outline only, never code: by default the session's changes as the Changes tab shows them, or guide.from and guide.to.",
+        "Every file a chapter names must be in the change, named from the repository's root; Fleet says which aren't, and lists the files no chapter covers.",
+        "Calling it again with the same title updates the tab.",
+      ].join(" "),
+      {
+        title: {
+          type: "string",
+          description: "Short title for the tab and the page: what the change does, e.g. \"Branches compare with where they left main\".",
+        },
+        guide: {
+          type: "object",
+          description: [
+            "{\"summary\": two or three sentences, \"steps\"?: [{\"text\", \"chapter\"?: n}], \"chapters\": [{\"title\", \"body\": [paragraphs], \"cite\"?: \"path:line\", \"files\": [path or {\"path\", \"collapsed\": true}], \"closer\"?: [questions]}], \"diagram\"?: {\"caption\", \"before\"?: {\"rows\", \"problem\"?}, \"after\": {\"rows\"}}, \"alsoChanged\"?: [{\"path\", \"note\"}], \"from\"?: ref, \"to\"?: ref}.",
+            "A diagram row is {\"label\"?, \"branch\"?: true, \"nodes\": [{\"text\", \"code\"?: true, \"chapter\"?: n, \"kind\"?: \"new\"|\"gone\", \"note\"?}]}, its nodes joined by arrows.",
+            "alsoChanged paths may use * and **. Text may use `backticks` for code.",
+          ].join(" "),
+        },
+      },
+      (input, tool) => callFleet("walkthrough-show", tool, { title: input.title, guide: input.guide }),
+    ),
+  )
+}
+
 // Only on servers started with messages between sessions on. Fleet then refuses prompts from agents through its API,
 // so this is the one way to message a session, and the message says which session sent it.
 if (process.env.FLEET_SESSION_MESSAGES === "1") {

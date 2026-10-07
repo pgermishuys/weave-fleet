@@ -86,7 +86,7 @@ public sealed class ClaudeCodeFleetToolsTests
     [Fact]
     public void A_process_may_use_every_tool_it_gets_without_asking_but_starting_an_app()
     {
-        var all = new FleetToolSwitches(SessionMessages: true, Memory: true, WorkflowStep: true, Browser: true);
+        var all = new FleetToolSwitches(SessionMessages: true, Memory: true, WorkflowStep: true, Browser: true, Walkthrough: true);
 
         var allowed = ClaudeCodeFleetTools.AllowedWithoutAsking(all).ToList();
 

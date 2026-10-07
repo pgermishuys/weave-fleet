@@ -2,6 +2,7 @@ using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Memory;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
+using WeaveFleet.Application.Skills;
 using WeaveFleet.Application.Workflows;
 using WeaveFleet.Domain.Repositories;
 
@@ -32,7 +33,8 @@ public sealed class FleetToolSettings(
                 SessionMessages: await sessionMessages.IsEnabledAsync().ConfigureAwait(false),
                 Memory: await memory.IsEnabledAsync().ConfigureAwait(false),
                 WorkflowStep: workflowStep,
-                Browser: AgentBrowserSettings.From(await preferences.GetAllAsync().ConfigureAwait(false)).Enabled);
+                Browser: AgentBrowserSettings.From(await preferences.GetAllAsync().ConfigureAwait(false)).Enabled,
+                Walkthrough: (await BuiltInSkillService.GetEnabledAsync(preferences).ConfigureAwait(false)).Contains(FleetToolSwitches.WalkthroughSkill));
         }
     }
 }

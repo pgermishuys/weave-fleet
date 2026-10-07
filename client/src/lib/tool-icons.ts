@@ -1,6 +1,7 @@
 import type { Component } from 'vue'
 import {
   AppWindow,
+  BookOpen,
   Camera,
   CircleCheck,
   FileText,
@@ -37,6 +38,7 @@ const iconMap: Record<string, Component> = {
   fleet_browser_read: Globe,
   fleet_browser_act: Globe,
   fleet_page_show: PanelsTopLeft,
+  fleet_walkthrough_show: BookOpen,
   fleet_message: Send,
   fleet_session_read: MessagesSquare,
   fleet_memory_save: Lightbulb,
@@ -66,6 +68,7 @@ const labelMap: Record<string, string> = {
   fleet_browser_read: 'Read page',
   fleet_browser_act: 'Use page',
   fleet_page_show: 'Show page',
+  fleet_walkthrough_show: 'Walkthrough',
   fleet_message: 'Message session',
   fleet_session_read: 'Read session',
   fleet_memory_save: 'Remember',
