@@ -3,9 +3,11 @@ import { computed } from "vue";
 import { AlertCircle, CheckCircle2, Download, LoaderCircle, RefreshCw } from "lucide-vue-next";
 import { useUpdateStatus } from "@/composables/use-update-status";
 import DesktopAppUpdates from "@/components/settings/DesktopAppUpdates.vue";
-import { getDesktopBridge, releaseNotesUrl } from "@/lib/desktop";
+import { getDesktopBridge } from "@/lib/desktop";
+import { useWhatsNew } from "@/composables/use-whats-new";
 
 const { updateStatus, isLoading, checkForUpdate, downloadUpdate } = useUpdateStatus();
+const { openWhatsNew } = useWhatsNew();
 const inApp = getDesktopBridge() !== null;
 // In the app's window, a Fleet the app started is updated with the app, so its row says so instead of the server's.
 const showServerUpdates = computed(() => !(inApp && updateStatus.value?.status === "managed"));
@@ -58,10 +60,10 @@ const canCheck = computed(
 
 const canDownload = computed(() => updateStatus.value?.status === "available");
 
-const notesUrl = computed(() => {
+const notesVersion = computed(() => {
   const s = updateStatus.value;
   return s?.latestVersion && (s.status === "available" || s.status === "downloading" || s.status === "staged")
-    ? releaseNotesUrl(s.latestVersion)
+    ? s.latestVersion
     : null;
 });
 
@@ -174,13 +176,14 @@ const downloadProgressLabel = computed(() => {
           </div>
 
           <div class="flex items-center gap-2">
-            <a
-              v-if="notesUrl"
-              :href="notesUrl"
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              v-if="notesVersion"
+              type="button"
               class="text-xs text-muted underline underline-offset-2 transition-colors hover:text-text"
-            >What's new</a>
+              @click="openWhatsNew(notesVersion)"
+            >
+              What's new
+            </button>
             <button
               v-if="canDownload"
               type="button"

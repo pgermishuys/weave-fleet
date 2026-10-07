@@ -5,12 +5,14 @@ import { defineComponent, shallowRef } from "vue";
 import type { DesktopUpdateState, FleetDesktopBridge } from "@/lib/desktop";
 import type { UpdateStatus } from "@/composables/use-update-status";
 
-const { getMock, serverStatus } = vi.hoisted(() => ({
+const { getMock, serverStatus, openWhatsNew } = vi.hoisted(() => ({
   getMock: vi.fn(),
   serverStatus: { value: null as unknown },
+  openWhatsNew: vi.fn(),
 }));
 
 vi.mock("@/api/client", () => ({ api: { GET: getMock } }));
+vi.mock("@/composables/use-whats-new", () => ({ useWhatsNew: () => ({ openWhatsNew }) }));
 vi.mock("@/composables/use-update-status", async () => {
   const { shallowRef: ref } = await import("vue");
   const status = ref<UpdateStatus | null>(null);
@@ -81,6 +83,7 @@ describe("update notices", () => {
     localStorage.clear();
     setActivePinia(createPinia());
     getMock.mockReset();
+    openWhatsNew.mockReset();
     server().value = null;
   });
 
@@ -102,6 +105,16 @@ describe("update notices", () => {
         link: { label: "What's new", href: "https://github.com/pgermishuys/fleet-releases/releases/tag/v0.37.0" },
       });
       expect(store.open?.actions?.map((action) => action.label)).toEqual(["Restart", "Later"]);
+    });
+
+    it("opens What's new in Fleet at that version, not GitHub", async () => {
+      fakeBridge(ready);
+      const store = await mountHost();
+      store.openNext();
+
+      store.open?.link?.run?.();
+
+      expect(openWhatsNew).toHaveBeenCalledWith("0.37.0");
     });
 
     it("says nothing while an update downloads", async () => {
@@ -189,6 +202,8 @@ describe("update notices", () => {
 
       expect(store.chips).toEqual([expect.objectContaining({ id: "updated:app:0.37.0", chip: "Updated to 0.37.0", quiet: true })]);
       expect(store.nextWaiting).toBeNull();
+      store.chips[0].onChipClick?.();
+      expect(openWhatsNew).toHaveBeenCalledWith("0.37.0");
 
       vi.advanceTimersByTime(60_000);
       expect(store.chips).toHaveLength(0);

@@ -29,6 +29,14 @@ public sealed record UpdateStatusResponse(
     long? DownloadBytesReceived = null,
     long? DownloadBytesTotal = null);
 
+/// <summary>Fleet's recent releases, newest first, for What's new in Settings → System.</summary>
+public sealed record ReleaseNotesResponse(
+    IReadOnlyList<ReleaseNoteResponse> Releases,
+    string? FetchedAt,
+    string? Error);
+
+public sealed record ReleaseNoteResponse(string Version, string? PublishedAt, string Body, string Url);
+
 // ── Desktop ─────────────────────────────────────────────────────────────────
 
 /// <summary>What the desktop app needs to know before it closes: how many of your sessions are working.</summary>

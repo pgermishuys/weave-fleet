@@ -17,8 +17,8 @@ export interface NoticeContent {
   /** warn tints the icon amber, for a notice that asks before something stops work. */
   tone?: "accent" | "warn";
   actions?: NoticeAction[];
-  /** A link after the body, opened in the browser. */
-  link?: { label: string; href: string };
+  /** A link after the body, opened in the browser, or, with `run`, handled in Fleet (the card then settles). */
+  link?: { label: string; href: string; run?: () => void };
 }
 
 export interface Notice extends NoticeContent {

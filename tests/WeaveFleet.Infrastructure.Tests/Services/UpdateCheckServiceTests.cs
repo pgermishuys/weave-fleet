@@ -89,7 +89,8 @@ public sealed class UpdateCheckServiceTests
         var stateHolder = new UpdateStateHolder();
         var options = new FleetOptions { Desktop = new DesktopOptions { Enabled = true } };
         var download = new UpdateDownloadService(factory, stateHolder, NullLogger<UpdateDownloadService>.Instance);
-        return (new UpdateCheckService(factory, options, stateHolder, download, NullLogger<UpdateCheckService>.Instance), stateHolder);
+        var notes = new ReleaseNotesStore(factory, options, NullLogger<ReleaseNotesStore>.Instance);
+        return (new UpdateCheckService(factory, options, stateHolder, download, notes, NullLogger<UpdateCheckService>.Instance), stateHolder);
     }
 
     private sealed class ThrowingHttpClientFactory : IHttpClientFactory

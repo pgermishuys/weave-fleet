@@ -4,7 +4,7 @@ import type { SidebarRail } from "@/stores/sidebar";
 import type { PluginConnectionStatus, FleetPluginStatus } from "@/plugins/types";
 import { computed, onMounted, onUnmounted, watch } from "vue";
 import { useLocation, useRouter } from "@tanstack/vue-router";
-import { BarChart3, Bug, CircleHelp, ExternalLink, LayoutGrid, MessageSquare, Puzzle, Settings, Smartphone, Workflow, Zap } from "lucide-vue-next";
+import { BarChart3, Bug, CircleHelp, LayoutGrid, MessageSquare, Puzzle, Settings, Smartphone, Sparkles, Workflow, Zap } from "lucide-vue-next";
 import { useIsMobileNav } from "@/composables/use-media-query";
 import { storeToRefs } from "pinia";
 import weaveLogo from "@/assets/weave_logo.png";
@@ -17,6 +17,7 @@ import { useWorkflowsFeature } from "@/composables/use-workflows-feature";
 import { useWorkflowsStore } from "@/stores/workflows";
 import { useSidebarStore } from "@/stores/sidebar";
 import { useProblemReportStore } from "@/stores/problem-report";
+import { useWhatsNew } from "@/composables/use-whats-new";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,8 +25,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-const RELEASE_NOTES_URL = "https://github.com/pgermishuys/fleet-releases/releases";
 
 type RailItemId = SidebarRail | string;
 
@@ -59,6 +58,7 @@ const { isBoardFeatureEnabled } = useBoardFeature();
 const { isWorkflowsEnabled } = useWorkflowsFeature();
 const workflowsStore = useWorkflowsStore();
 const problemReport = useProblemReportStore();
+const { openWhatsNew } = useWhatsNew();
 // On a phone, the phone view: what needs you on every machine.
 const isMobileNav = useIsMobileNav();
 const pathname = useLocation({
@@ -336,15 +336,12 @@ function handleSelect(item: RailItem): void {
               Report a problem…
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem as-child>
-              <a
-                :href="RELEASE_NOTES_URL"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <ExternalLink class="size-3.5" />
-                Release notes
-              </a>
+            <DropdownMenuItem
+              data-testid="rail-whats-new"
+              @select="openWhatsNew()"
+            >
+              <Sparkles class="size-3.5" />
+              What's new
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
