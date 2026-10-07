@@ -1,0 +1,37 @@
+name: Release notes
+
+# Notes are often edited after a release is out (a known issue, a phone note). Copy the edit to the
+# fleet-releases mirror, which is the page the app's and the CLI's "What's new" links open.
+on:
+  release:
+    types: [edited]
+
+permissions:
+  contents: read
+
+jobs:
+  mirror-notes:
+    name: Mirror release notes
+    runs-on: ubuntu-latest
+    if: ${{ !github.event.release.draft }}
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Update the fleet-releases release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.FLEET_RELEASES_TOKEN }}
+          SOURCE_GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          # The release workflow mirrors a new release with its notes; an edit before that has nothing to update.
+          if ! gh release view "$TAG" --repo pgermishuys/fleet-releases > /dev/null 2>&1; then
+            echo "fleet-releases has no $TAG yet; skipping."
+            exit 0
+          fi
+
+          GH_TOKEN="$SOURCE_GH_TOKEN" scripts/mirror-release-notes.sh "$TAG" ./release-notes.md
+          gh release edit "$TAG" --repo pgermishuys/fleet-releases --notes-file ./release-notes.md

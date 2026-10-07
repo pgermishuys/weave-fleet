@@ -485,10 +485,12 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.FLEET_RELEASES_TOKEN }}
+          SOURCE_GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
+          GH_TOKEN="$SOURCE_GH_TOKEN" scripts/mirror-release-notes.sh "$TAG" ./release-notes.md
           gh release create "$TAG" \
             --repo pgermishuys/fleet-releases \
             --title "Fleet $TAG" \
-            --notes "Release $TAG" \
+            --notes-file ./release-notes.md \
             ./assets/*
