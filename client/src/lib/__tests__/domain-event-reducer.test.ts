@@ -207,6 +207,7 @@ function createState(overrides: Partial<SessionStreamState> = {}): SessionStream
     messages: [],
     delegations: [],
     runningWork: [],
+    context: null,
     explicitStatus: "idle",
     sessionStatus: "idle",
     lastEventId: null,
@@ -1304,5 +1305,31 @@ describe("a sub-agent in the background", () => {
     }))
 
     expect(state.sessionStatus).toBe("waiting_input")
+  })
+})
+
+describe("context.updated", () => {
+  const usage = {
+    sessionId: "session-1",
+    used: 76000,
+    limit: 200000,
+    compacting: false,
+    turns: [],
+    updatedAt: "2026-10-06T10:00:00Z",
+  }
+
+  it("starts from the snapshot's context and takes each update whole", () => {
+    const state = createSessionStreamState(createSnapshot({ context: usage }))
+    expect(state.context?.used).toBe(76_000)
+
+    const compacting = applyDomainEvent(state, { type: "context.updated", payload: { ...usage, compacting: true } })
+    expect(compacting.context?.compacting).toBe(true)
+    expect(compacting.messages).toBe(state.messages)
+  })
+
+  it("is null until the harness reports, and ignores a payload that isn't one", () => {
+    const state = createSessionStreamState(createSnapshot({}))
+    expect(state.context).toBeNull()
+    expect(applyDomainEvent(state, { type: "context.updated", payload: { nope: true } })).toBe(state)
   })
 })

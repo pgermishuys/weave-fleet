@@ -25,6 +25,7 @@ import type { SessionHistoryPage } from "@/lib/session-snapshot"
 import { loadSessionHistory, useWeaveSocket, type Unsubscribe } from "@/composables/use-weave-socket"
 import { onGlobalEvent } from "@/composables/use-signalr-socket"
 import { publishRunningWork } from "@/composables/use-running-work"
+import { publishSessionContext } from "@/composables/use-session-context"
 import type { RunningWorkItem } from "@/lib/running-work"
 import { useSessionsStore } from "@/stores/sessions"
 
@@ -79,6 +80,7 @@ function createEmptyState(): SessionStreamState {
     messages: [],
     delegations: [],
     runningWork: [],
+    context: null,
     explicitStatus: "idle",
     sessionStatus: "idle",
     lastEventId: null,
@@ -156,6 +158,16 @@ export function useSessionStream(
     ([loaded, items]) => {
       if (loaded) {
         publishRunningWork(currentSessionId.value, items)
+      }
+    },
+  )
+
+  // The ring by Send reads the session's context from use-session-context; once the snapshot is in, as for its work.
+  watch(
+    () => [snapshotSessionId === currentSessionId.value && !isLoading.value, streamState.value.context] as const,
+    ([loaded, context]) => {
+      if (loaded) {
+        publishSessionContext(currentSessionId.value, context)
       }
     },
   )

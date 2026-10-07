@@ -36,6 +36,8 @@ export interface SessionSnapshot {
   isPartial: boolean;
   /** The recap Fleet wrote while you were away, until your next prompt. */
   recap?: SessionRecapPayload | null;
+  /** How full the session's context window is, when its harness has said (see `@/lib/context-usage`). */
+  context?: unknown;
 }
 
 export interface SessionHistoryPage {

@@ -4,6 +4,7 @@ import { storeToRefs } from "pinia";
 import { ArrowUp, CornerDownRight, ListEnd, Paperclip, SquareTerminal, X, CircleX, MessageCircleQuestionMark } from "lucide-vue-next";
 import AutocompletePopup from "@/components/session/AutocompletePopup.vue";
 import ComposerFrame from "@/components/session/ComposerFrame.vue";
+import ContextRing from "@/components/session/ContextRing.vue";
 import ImageLightbox from "@/components/session/ImageLightbox.vue";
 import AgentSelector from "@/components/session/AgentSelector.vue";
 import ModelSelector from "@/components/session/ModelSelector.vue";
@@ -1206,6 +1207,7 @@ function handleKeydown(event: KeyboardEvent): void {
           <CircleX class="size-3.5" />
         </Button>
 
+        <ContextRing :session-id="sessionId" />
         <Button
           v-if="offerSendNowButton"
           variant="outline"
