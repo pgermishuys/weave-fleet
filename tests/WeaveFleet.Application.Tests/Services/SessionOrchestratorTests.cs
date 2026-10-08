@@ -682,6 +682,38 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
         _builder.MessageRepository.All.ShouldBeEmpty();
     }
 
+    // The first turn can end before create returns. The session that asked to hear about it must be registered by
+    // then, or only the poll (every 30 s) tells it.
+    [Fact]
+    public async Task CreateSessionAsync_WithInitialPromptAndOnComplete_RegistersTheCallbackBeforeSendingTheMessage()
+    {
+        ConfigureHarnessAndScratchProject();
+        using var tempDirectory = new TempDirectory();
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "coordinator", WorkspaceId = "w1", InstanceId = "inst-coordinator", Title = "Coordinator",
+            Status = "idle", Directory = tempDirectory.Path, CreatedAt = "2026-01-01T00:00:00.0000000Z", UserId = "user-1",
+        });
+        string[]? callbacksWhenSent = null;
+        _defaultSession.SendPromptBehavior = (_, _, _) =>
+        {
+            callbacksWhenSent = [.. _builder.SessionCallbackRepository.All.Select(c => c.Status)];
+            return Task.CompletedTask;
+        };
+
+        var result = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path,
+            InitialPrompt = "Write the tests",
+            OnCompleteTargetSessionId = "coordinator",
+            OnCompleteTargetInstanceId = "inst-coordinator",
+        });
+
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : null);
+        callbacksWhenSent.ShouldBe([SessionCallbackStatuses.Pending]);
+        _builder.SessionCallbackRepository.All.ShouldHaveSingleItem().Status.ShouldBe(SessionCallbackStatuses.Started);
+    }
+
     [Fact]
     public async Task CreateSessionAsync_WhenTheFirstMessageCannotBeSent_StillCreatesTheSessionAndSavesNothing()
     {
