@@ -2,6 +2,8 @@
 setlocal enabledelayedexpansion
 
 set "SCRIPT_DIR=%~dp0"
+rem Captured before any shift: shift moves %0 too.
+set "LAUNCHER_PATH=%~f0"
 set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
 for %%I in ("%SCRIPT_DIR%\..") do set "ROOT_DIR=%%~fI"
 
@@ -166,15 +168,23 @@ call :read_version
 echo Fleet v!VERSION!
 echo.
 echo Usage: fleet node [--port ^<port^>] [--host ^<host^>] [--data-dir ^<path^>] [--profile ^<name^>]
+echo        fleet node install-service [--port ^<port^>] [--host ^<host^>] [--data-dir ^<path^>] [--profile ^<name^>] [--print]
+echo        fleet node uninstall-service
 echo.
 echo Starts Fleet as a node: the API without the web app. Every request needs the access token,
 echo even from this machine. Add the node to another Fleet in Settings ^> Machines ^> Add a machine.
+echo.
+echo Commands:
+echo   install-service     Keep the node running as you: now, when you log on, and if it stops
+echo                       ^(a scheduled task named "Fleet node"^)
+echo   uninstall-service   Stop the node and remove that task
 echo.
 echo Options:
 echo   --port ^<port^>       Override the server port
 echo   --host ^<host^>       Override the bind host ^(0.0.0.0 lets other machines connect^)
 echo   --data-dir ^<path^>   Override the data directory (default: %%USERPROFILE%%\.weave)
 echo   --profile ^<name^>    Use a profile-specific data directory
+echo   --print             With install-service: show what it would register and run, and change nothing
 exit /b 0
 
 :parse_args
@@ -184,11 +194,22 @@ set "DATA_DIR_OVERRIDE="
 set "PROFILE_NAME="
 set "REQUIRE_TOKEN="
 set "NODE="
+set "SERVICE_ACTION="
+set "PRINT_ONLY="
 
 rem "fleet node ..." takes the same server options; it only has to come first.
 if /i "%~1"=="node" (
     set "NODE=1"
     shift
+)
+if defined NODE (
+    if /i "%~1"=="install-service" (
+        set "SERVICE_ACTION=install-service"
+        shift
+    ) else if /i "%~1"=="uninstall-service" (
+        set "SERVICE_ACTION=uninstall-service"
+        shift
+    )
 )
 
 :parse_args_loop
@@ -249,6 +270,13 @@ if /i "%~1"=="--profile" (
 
 if /i "%~1"=="--require-token" (
     set "REQUIRE_TOKEN=1"
+    shift
+    goto :parse_args_loop
+)
+
+if /i "%~1"=="--print" (
+    if not "%SERVICE_ACTION%"=="install-service" goto :print_without_install
+    set "PRINT_ONLY=1"
     shift
     goto :parse_args_loop
 )
@@ -372,6 +400,8 @@ set "DB_PATH_DEFAULT=%DATA_DIR%\fleet.db"
 set "ANALYTICS_DB_PATH_DEFAULT=%DATA_DIR%\fleet-analytics.db"
 set "KEY_DIR_DEFAULT=%DATA_DIR%\fleet-keys"
 
+if defined SERVICE_ACTION goto :do_service
+
 if not exist "%DATA_DIR%" mkdir "%DATA_DIR%"
 if not exist "%KEY_DIR_DEFAULT%" mkdir "%KEY_DIR_DEFAULT%"
 
@@ -398,3 +428,107 @@ if defined EXTRA_ARGS (
     "%APP_BIN%" --urls "%LISTEN_URL%" --contentRoot "%APP_CONTENT_ROOT%"
 )
 exit /b %ERRORLEVEL%
+
+rem fleet node install-service / uninstall-service: a scheduled task named "Fleet node" that runs this launcher as
+rem you at log on, hidden, and starts it again when it stops (not after exit code 75: another Fleet already uses the
+rem data directory). Never a Windows service, which would run as SYSTEM, away from your sign-ins and repositories.
+:do_service
+if "%SERVICE_ACTION%"=="uninstall-service" (
+    if defined PORT_OVERRIDE goto :service_no_options
+    if defined HOST_OVERRIDE goto :service_no_options
+    if defined DATA_DIR_OVERRIDE goto :service_no_options
+    if defined PROFILE_NAME goto :service_no_options
+)
+rem The task gets what this run resolved, so it starts the same node whatever its own environment holds.
+for %%I in ("%DATA_DIR%") do set "DATA_DIR=%%~fI"
+set "FLEET_SVC_ACTION=%SERVICE_ACTION%"
+set "FLEET_SVC_PRINT=%PRINT_ONLY%"
+set "FLEET_SVC_INSTALL_LAYOUT=%INSTALL_LAYOUT%"
+set "FLEET_SVC_LAUNCHER=%LAUNCHER_PATH%"
+set "FLEET_SVC_PORT=%WEAVE_FLEET_PORT%"
+set "FLEET_SVC_HOST=%WEAVE_FLEET_HOST%"
+set "FLEET_SVC_DATA_DIR=%DATA_DIR%"
+%PS_CMD% -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$ErrorActionPreference = 'Stop';" ^
+  "$name = 'Fleet node';" ^
+  "$existing = Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue;" ^
+  "if ($env:FLEET_SVC_ACTION -eq 'uninstall-service') {" ^
+  "  if (-not $existing) { Write-Host 'There''s no Fleet node task to remove.'; exit 0 };" ^
+  "  Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue;" ^
+  "  Unregister-ScheduledTask -TaskName $name -Confirm:$false;" ^
+  "  Write-Host 'Stopped the Fleet node task and removed it.';" ^
+  "  Write-Host 'Its data stays where it was. To start it again: fleet node install-service';" ^
+  "  exit 0" ^
+  "};" ^
+  "$dq = [char]34; $nl = [char]10;" ^
+  "$quote = { param($s) '''' + ($s -replace '''', '''''') + '''' };" ^
+  "$run = '& ' + (& $quote $env:FLEET_SVC_LAUNCHER) + ' node --port ' + (& $quote $env:FLEET_SVC_PORT) + ' --host ' + (& $quote $env:FLEET_SVC_HOST) + ' --data-dir ' + (& $quote $env:FLEET_SVC_DATA_DIR);" ^
+  "$loop = 'while ($true) { ' + $run + '; if ($LASTEXITCODE -eq 75) { break }; Start-Sleep -Seconds 5 }';" ^
+  "$arguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command ' + $dq + $loop + $dq;" ^
+  "$user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name;" ^
+  "$esc = { param($s) [System.Security.SecurityElement]::Escape($s) };" ^
+  "$userXml = & $esc $user; $argumentsXml = & $esc $arguments; $homeXml = & $esc $env:USERPROFILE;" ^
+  "$xml = @(" ^
+  "  '<?xml version=''1.0'' encoding=''UTF-16''?>'," ^
+  "  '<Task version=''1.2'' xmlns=''http://schemas.microsoft.com/windows/2004/02/mit/task''>'," ^
+  "  '  <RegistrationInfo>'," ^
+  "  '    <Description>Weave Fleet node. Written by fleet node install-service; fleet node uninstall-service removes it.</Description>'," ^
+  "  '  </RegistrationInfo>'," ^
+  "  '  <Triggers>'," ^
+  "  ('    <LogonTrigger><Enabled>true</Enabled><UserId>' + $userXml + '</UserId></LogonTrigger>')," ^
+  "  '  </Triggers>'," ^
+  "  '  <Principals>'," ^
+  "  ('    <Principal id=''Author''><UserId>' + $userXml + '</UserId><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal>')," ^
+  "  '  </Principals>'," ^
+  "  '  <Settings>'," ^
+  "  '    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>'," ^
+  "  '    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>'," ^
+  "  '    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>'," ^
+  "  '    <StartWhenAvailable>true</StartWhenAvailable>'," ^
+  "  '    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>'," ^
+  "  '    <RestartOnFailure><Interval>PT1M</Interval><Count>999</Count></RestartOnFailure>'," ^
+  "  '  </Settings>'," ^
+  "  '  <Actions Context=''Author''>'," ^
+  "  '    <Exec>'," ^
+  "  '      <Command>powershell.exe</Command>'," ^
+  "  ('      <Arguments>' + $argumentsXml + '</Arguments>')," ^
+  "  ('      <WorkingDirectory>' + $homeXml + '</WorkingDirectory>')," ^
+  "  '    </Exec>'," ^
+  "  '  </Actions>'," ^
+  "  '</Task>'" ^
+  ") -join $nl;" ^
+  "if ($env:FLEET_SVC_PRINT -eq '1') {" ^
+  "  Write-Host ('fleet node install-service would register the scheduled task ' + $name + ':');" ^
+  "  Write-Host '';" ^
+  "  Write-Host $xml;" ^
+  "  Write-Host '';" ^
+  "  Write-Host 'and run:';" ^
+  "  Write-Host ('  Register-ScheduledTask -TaskName ' + (& $quote $name) + ' -Xml <the task above> -Force');" ^
+  "  Write-Host ('  Start-ScheduledTask -TaskName ' + (& $quote $name));" ^
+  "  Write-Host '';" ^
+  "  Write-Host 'Nothing was changed.';" ^
+  "  exit 0" ^
+  "};" ^
+  "if ($env:FLEET_SVC_INSTALL_LAYOUT -ne '1') { Write-Host 'Error: install-service is only supported from an installed package layout.'; exit 1 };" ^
+  "if ($existing) { Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue };" ^
+  "Register-ScheduledTask -TaskName $name -Xml $xml -Force | Out-Null;" ^
+  "$started = $true;" ^
+  "try { Start-ScheduledTask -TaskName $name } catch { $started = $false };" ^
+  "Write-Host '';" ^
+  "if ($existing) { Write-Host 'Updated the Fleet node task and restarted it.' }" ^
+  "elseif ($started) { Write-Host 'Installed the Fleet node task. It runs now, when you log on, and again if it stops.' }" ^
+  "else { Write-Host 'Installed the Fleet node task. It starts when you next log on.' };" ^
+  "Write-Host ('  Task:           ' + $name + ' (Task Scheduler)');" ^
+  "Write-Host ('  Data and token: ' + $env:FLEET_SVC_DATA_DIR + ' (the token is in fleet.machine.json)');" ^
+  "Write-Host ('  Status:         Get-ScheduledTask -TaskName ' + (& $quote $name));" ^
+  "Write-Host '';" ^
+  "Write-Host 'To undo: fleet node uninstall-service'"
+exit /b %ERRORLEVEL%
+
+:service_no_options
+echo Error: uninstall-service does not accept options. >&2
+exit /b 1
+
+:print_without_install
+echo Error: --print only works with fleet node install-service. >&2
+exit /b 1

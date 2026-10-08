@@ -47,9 +47,12 @@ App previews in the Browser tab follow Fleet: each preview gets its own port on 
 
 `fleet node --host 0.0.0.0` starts the same Fleet without its web app, and asks every request for the access token. It prints its addresses and token; add it from another Fleet under Settings → Machines. See [Run a node without the web UI](docs/machines.md#run-a-node-without-the-web-ui).
 
+`fleet node install-service` keeps it running when you log in and after a crash: a systemd user service on Linux, a LaunchAgent on macOS, a scheduled task on Windows. See [Keep a node running](docs/machines.md#keep-a-node-running).
+
 ## Common commands
 
 - `fleet node`
+- `fleet node install-service` / `fleet node uninstall-service`
 - `fleet version`
 - `fleet update`
 - `fleet uninstall`
