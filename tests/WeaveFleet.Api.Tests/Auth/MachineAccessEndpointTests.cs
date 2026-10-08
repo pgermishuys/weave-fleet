@@ -46,6 +46,34 @@ public sealed class MachineAccessEndpointTests
     }
 
     [Fact]
+    public async Task Machine_identity_says_what_it_can_run_and_how_busy_it_is()
+    {
+        await using var factory = CreateFactory("127.0.0.1");
+        using var client = CreateClient(factory);
+
+        var capabilities = (await client.GetFromJsonAsync<JsonElement>("/api/machine")).GetProperty("capabilities");
+
+        var sessions = capabilities.GetProperty("sessions");
+        sessions.GetProperty("working").GetInt32().ShouldBe(0);
+        sessions.GetProperty("needsYou").GetInt32().ShouldBe(0);
+        // Null until the startup check finishes; never a check of its own.
+        var harnesses = capabilities.GetProperty("harnesses");
+        if (harnesses.ValueKind != JsonValueKind.Null)
+        {
+            foreach (var harness in harnesses.EnumerateArray())
+            {
+                harness.GetProperty("type").GetString().ShouldNotBeNullOrEmpty();
+                harness.GetProperty("available").ValueKind.ShouldBeOneOf(JsonValueKind.True, JsonValueKind.False);
+                harness.GetProperty("enabled").ValueKind.ShouldBeOneOf(JsonValueKind.True, JsonValueKind.False);
+            }
+        }
+
+        var renamed = await client.PutAsJsonAsync("/api/machine", new { name = "hangar" });
+        (await renamed.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("capabilities").GetProperty("sessions")
+            .GetProperty("working").GetInt32().ShouldBe(0);
+    }
+
+    [Fact]
     public async Task A_machine_can_be_renamed_and_an_empty_name_goes_back_to_the_host_name()
     {
         await using var factory = CreateFactory("127.0.0.1");

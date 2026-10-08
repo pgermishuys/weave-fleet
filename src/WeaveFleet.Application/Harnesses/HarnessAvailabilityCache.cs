@@ -58,6 +58,19 @@ public sealed partial class HarnessAvailabilityCache(
         return answer.WaitAsync(ct);
     }
 
+    /// <summary>
+    /// The kept answer, however old, without starting a check; <see langword="null"/> until the first check finishes.
+    /// For readers that are asked often and mustn't start harness processes, like <c>GET /api/machine</c>.
+    /// </summary>
+    public HarnessAvailabilitySnapshot? Last
+    {
+        get
+        {
+            lock (_gate)
+                return _last;
+        }
+    }
+
     /// <summary>Makes the next read wait for a new check: for changes Fleet makes to a harness (an update, say).</summary>
     public void Forget()
     {

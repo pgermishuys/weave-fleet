@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, reactive, shallowRef } from "vue";
 import { storeToRefs } from "pinia";
 import { AlertCircle, Check, Copy, Eye, EyeOff, LoaderCircle, Plus, RefreshCw } from "lucide-vue-next";
-import { useMachinesStore, type MachineAccess, type MachineEntry } from "@/stores/machines";
+import { useMachinesStore, type MachineAccess, type MachineEntry, type MachineHarness } from "@/stores/machines";
 import AddPhonePanel from "@/components/settings/AddPhonePanel.vue";
 import DevicesList from "@/components/settings/DevicesList.vue";
 import { listDevices, type PairedDevice } from "@/lib/devices-api";
@@ -19,7 +19,7 @@ const buttonDangerClass = "inline-flex items-center justify-center gap-2 rounded
 const inputClass = "w-full rounded-btn border border-border bg-main-bg px-3 py-2 text-sm text-text outline-none transition-colors placeholder:text-muted focus:border-accent";
 
 const machines = useMachinesStore();
-const { entries, others, home } = storeToRefs(machines);
+const { entries, others, home, liveReachable } = storeToRefs(machines);
 
 // ── Add ──────────────────────────────────────────────────────────────────────
 const showAddForm = shallowRef(false);
@@ -99,6 +99,35 @@ function stateLine(entry: MachineEntry): { text: string; tone: "ok" | "bad" | "m
   if (state?.error) return { text: state.error, tone: "bad" };
   if (state?.loadedAt) return { text: `reachable · ${state.sessions.length} sessions`, tone: "ok" };
   return { text: "checking…", tone: "muted" };
+}
+
+/**
+ * What the machine last said it can run (its ready harnesses) and how busy it is. Nothing for a Fleet too old to say,
+ * or one that isn't answering now: its last numbers would be out of date.
+ */
+function capabilityLine(entry: MachineEntry): string | null {
+  const capabilities = entry.capabilities;
+  const answering = entry.isLive ? entry.isHome || liveReachable.value : !others.value[entry.key]?.error;
+  if (!capabilities || !answering) return null;
+
+  const parts: string[] = [];
+  if (capabilities.harnesses) {
+    const ready = readyHarnesses(entry).map((harness) => harness.name);
+    parts.push(ready.length ? `Ready: ${ready.join(", ")}` : "No harness ready");
+  }
+  const { working, needsYou } = capabilities.sessions;
+  parts.push(`${working} working`);
+  if (needsYou) parts.push(`${needsYou} ${needsYou === 1 ? "needs" : "need"} you`);
+  return parts.join(" · ");
+}
+
+function readyHarnesses(entry: MachineEntry): MachineHarness[] {
+  return entry.capabilities?.harnesses?.filter((harness) => harness.available && harness.enabled) ?? [];
+}
+
+function harnessVersions(entry: MachineEntry): string | undefined {
+  const versions = readyHarnesses(entry).map((harness) => harness.version ? `${harness.name} ${harness.version}` : harness.name);
+  return versions.length ? versions.join(", ") : undefined;
 }
 
 function location(entry: MachineEntry): string {
@@ -377,6 +406,12 @@ onUnmounted(() => stopPolling?.());
             class="machine-card__state"
             :class="`machine-card__state--${stateLine(entry).tone}`"
           >{{ stateLine(entry).text }}</span>
+          <span
+            v-if="capabilityLine(entry)"
+            class="machine-card__capabilities"
+            :title="harnessVersions(entry)"
+            data-testid="machine-capabilities"
+          >{{ capabilityLine(entry) }}</span>
 
           <form
             v-if="tokenFor === entry.key"
@@ -707,6 +742,12 @@ onUnmounted(() => stopPolling?.());
 }
 
 .machine-card__state {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.machine-card__capabilities {
   font-family: var(--font-mono);
   font-size: 11.5px;
   color: var(--muted);

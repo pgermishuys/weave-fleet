@@ -103,6 +103,21 @@ describe("HarnessesSection", () => {
     expect(wrapper.text()).toContain("Harnesses");
   });
 
+  it("shows a harness on until the user turns it off, so a computer with only Claude Code works", async () => {
+    mockApiResponses({ "opencode.enabled": "false" }, () => [
+      createHarness("claude-code", "Claude Code"),
+      createHarness("opencode", "OpenCode", { userEnabled: false }),
+    ]);
+
+    const wrapper = await mountHarnessesSection();
+
+    const switchOf = (name: string) => wrapper.findAll("article")
+      .find((card) => card.text().includes(name))
+      ?.find("[role='switch']").attributes("aria-checked");
+    expect(switchOf("Claude Code")).toBe("true");
+    expect(switchOf("OpenCode")).toBe("false");
+  });
+
   it("says a harness isn't installed, and why", async () => {
     mockApiResponses({}, () => [createHarness("opencode", "OpenCode", {
       available: false,

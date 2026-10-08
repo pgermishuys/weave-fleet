@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using WeaveFleet.Api.Auth;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Diagnostics;
+using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Services;
 
 namespace WeaveFleet.Api.Endpoints;
@@ -32,8 +33,8 @@ public static class MachineEndpoints
     {
         var group = app.MapGroup("/api/machine").WithTags("Machine");
 
-        group.MapGet("", (MachineIdentityStore store, LoopbackAuthPolicy policy) =>
-            Results.Ok(ToResponse(store.Get(), fleetOptions, policy)))
+        group.MapGet("", async (MachineIdentityStore store, LoopbackAuthPolicy policy, MachineCapabilitiesReader capabilities) =>
+            Results.Ok(ToResponse(store.Get(), fleetOptions, policy) with { Capabilities = await capabilities.ReadAsync() }))
             .Produces<MachineResponse>(200)
             .WithName("GetMachine");
 
@@ -43,7 +44,7 @@ public static class MachineEndpoints
             return app;
 
         // Each field left out stays as it is; an empty one goes back to the default.
-        group.MapPut("", (UpdateMachineRequest request, MachineIdentityStore store, LoopbackAuthPolicy policy) =>
+        group.MapPut("", async (UpdateMachineRequest request, MachineIdentityStore store, LoopbackAuthPolicy policy, MachineCapabilitiesReader capabilities) =>
         {
             var name = request.Name?.Trim();
             if (name is { Length: > MaxNameLength })
@@ -62,7 +63,7 @@ public static class MachineEndpoints
                 Name = request.Name is null ? current.Name : string.IsNullOrEmpty(name) ? null : name,
                 PublicUrl = request.PublicUrl is null ? current.PublicUrl : string.IsNullOrEmpty(publicUrl) ? null : publicUrl,
             });
-            return Results.Ok(ToResponse(identity, fleetOptions, policy));
+            return Results.Ok(ToResponse(identity, fleetOptions, policy) with { Capabilities = await capabilities.ReadAsync() });
         })
         .Produces<MachineResponse>(200)
         // The phone address decides where pairing QR codes point, so only the owner changes it (or the name).
@@ -228,6 +229,7 @@ public static class MachineEndpoints
 /// <param name="RemoteReachable">Whether Fleet listens on an address other devices can reach.</param>
 /// <param name="RequiresToken">Whether every request needs the token, this machine's own included.</param>
 /// <param name="PublicUrl">The address phones should use for this machine, when someone set one; pairing puts it in the QR code.</param>
+/// <param name="Capabilities">What it can run and how busy it is; only <c>GET</c> and <c>PUT /api/machine</c> fill it in.</param>
 public sealed record MachineResponse(
     string Id,
     string Name,
@@ -238,7 +240,8 @@ public sealed record MachineResponse(
     string AuthMode,
     bool RemoteReachable,
     bool RequiresToken,
-    string? PublicUrl = null);
+    string? PublicUrl = null,
+    MachineCapabilities? Capabilities = null);
 
 /// <summary>Changes this machine's name or phone address. A field left out stays; an empty one goes back to the default.</summary>
 public sealed record UpdateMachineRequest(string? Name, string? PublicUrl = null);

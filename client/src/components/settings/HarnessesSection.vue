@@ -145,7 +145,8 @@ async function togglePooledOpenCodeMode(): Promise<void> {
 
 function toHarnessCard(harness: HarnessInfo): HarnessCard {
   const metadata = harnessDisplay(harness.type);
-  const enabled = prefsStore.get(`${harness.type}.enabled`, harness.type === DEFAULT_HARNESS_TYPE ? "true" : "false") === "true";
+  // The saved switch, as soon as it's flipped; without one, what the server says (on until turned off).
+  const enabled = prefsStore.get(`${harness.type}.enabled`, harness.userEnabled ? "true" : "false") === "true";
 
   return {
     id: harness.type,

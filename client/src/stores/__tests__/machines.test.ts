@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { HOME_MACHINE_KEY, loadMachines, loadSessionMachines, saveMachines, setActiveMachine, switchToMachine, type MachineConnection } from "@/lib/machines";
-import { useMachinesStore, type MachineInfo } from "@/stores/machines";
+import { useMachinesStore, type MachineCapabilities, type MachineInfo } from "@/stores/machines";
 
 // Switching machines reloads the page; here it only records where it went.
 vi.mock("@/lib/machines", async (original) => ({ ...await original<typeof import("@/lib/machines")>(), switchToMachine: vi.fn() }));
@@ -379,6 +379,37 @@ describe("machines store", () => {
       expect(reloaded.liveKey).toBe(falcon.id);
       expect(reloaded.others[HOME_MACHINE_KEY].sessions[0]).toMatchObject({ projectId: "p-1", session: { title: "Local work" } });
       expect(reloaded.others[HOME_MACHINE_KEY].projects.map((project) => project.name)).toEqual(["weave-fleet"]);
+    });
+
+    it("keeps what each machine says it can run, and nothing for a Fleet too old to say", async () => {
+      const capabilities: MachineCapabilities = {
+        harnesses: [{ type: "opencode", name: "OpenCode", available: true, enabled: true, version: "1.18.32" }],
+        sessions: { working: 2, needsYou: 1 },
+      };
+      routes["http://100.64.90.72:2113/api/sessions"] = () => json([]);
+      routes["http://100.64.90.72:2113/api/machine"] = () => json({ ...falconInfo, capabilities });
+      const store = useMachinesStore();
+
+      await store.refreshMachine(falcon.id);
+      expect(store.entries.find((entry) => entry.key === falcon.id)?.capabilities).toEqual(capabilities);
+
+      // Home answers without the field: an older Fleet.
+      setActiveMachine(falcon);
+      setActivePinia(createPinia());
+      routes["/api/sessions"] = () => json([]);
+      const fromFalcon = useMachinesStore();
+      await fromFalcon.refreshOthers();
+      expect(fromFalcon.entries.find((entry) => entry.isHome)?.capabilities).toBeNull();
+    });
+
+    it("reads the live machine's capabilities when it checks it's there", async () => {
+      setActiveMachine(falcon);
+      routes["http://100.64.90.72:2113/api/machine"] = () => json({ ...falconInfo, capabilities: { harnesses: null, sessions: { working: 1, needsYou: 0 } } });
+      const store = useMachinesStore();
+
+      await store.checkLive();
+
+      expect(store.live.capabilities?.sessions.working).toBe(1);
     });
 
     it("forgets a machine without touching its sessions", () => {
