@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Skills;
 using WeaveFleet.Application.Tests.Machines;
@@ -61,7 +62,8 @@ public sealed partial class WorkflowRunnerTests
             _preferences,
             _projects,
             user,
-            TimeProvider.System);
+            TimeProvider.System,
+            new HarnessAvailabilityCache(registry, TimeProvider.System, NullLogger<HarnessAvailabilityCache>.Instance));
         var automationWorkflows = new AutomationWorkflows(
             workflows, new WorkflowsFeature(new FleetOptions(), _preferences), _runs, new NoUserScope());
 

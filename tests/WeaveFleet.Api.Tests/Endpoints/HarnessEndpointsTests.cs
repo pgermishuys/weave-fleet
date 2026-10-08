@@ -116,10 +116,25 @@ public sealed class HarnessEndpointsTests
     [Fact]
     public async Task get_harnesses_marks_the_default_harness()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        // OpenCode 2 comes first but isn't installed here; OpenCode 1 is.
+        var registry = new FakeHarnessRegistry();
+        registry.Register(new FakeHarness("opencode2", "OpenCode 2"));
+        registry.Register(new FakeHarnessRuntime("opencode2", available: false, availabilityReason: "OpenCode 2 isn't installed."));
+        registry.Register(new FakeHarness("opencode", "OpenCode"));
+        registry.Register(new FakeHarnessRuntime("opencode"));
+        registry.Register(new FakeHarness("pi", "Pi"));
+        registry.Register(new FakeHarnessRuntime("pi"));
+        await using var factory = new ApiWebApplicationFactory(
+            authEnabled: false,
+            configureTestServices: services =>
+            {
+                var existing = services.FirstOrDefault(d => d.ServiceType == typeof(IHarnessRegistry));
+                if (existing is not null) services.Remove(existing);
+                services.AddSingleton<IHarnessRegistry>(registry);
+            });
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
-        // Without a pick, the fallback.
+        // Without a pick, the first harness that's ready.
         using (var document = JsonDocument.Parse(await client.GetStringAsync("/api/harnesses")))
             DefaultTypes(document).ShouldBe(["opencode"]);
 

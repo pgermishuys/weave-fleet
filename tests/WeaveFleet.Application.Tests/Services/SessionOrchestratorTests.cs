@@ -2,6 +2,7 @@ using System.Text.Json;
 using Shouldly;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.DTOs;
+using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Common;
@@ -1473,10 +1474,11 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task CreateSessionAsync_DefaultsToOpenCode()
+    public async Task create_session_without_a_pick_starts_on_the_first_harness_that_is_ready()
     {
-        var runtime = _builder.RegisterHarness("opencode", "OpenCode");
-        runtime.DefaultSession = _defaultSession;
+        // OpenCode 2 isn't installed here, so a computer with only OpenCode 1 keeps working.
+        _builder.RegisterHarness("opencode2", "OpenCode 2").Available = false;
+        _builder.RegisterHarness("opencode", "OpenCode").DefaultSession = _defaultSession;
         using var tempDirectory = new TempDirectory();
 
         var result = await _sut.CreateSessionAsync(new CreateSessionRequest
@@ -1486,6 +1488,23 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
 
         result.IsSuccess.ShouldBeTrue();
         _builder.SessionRepository.InsertedSessions.ShouldContain(s => s.HarnessType == "opencode");
+    }
+
+    [Fact]
+    public async Task create_session_without_a_pick_skips_a_harness_the_user_turned_off()
+    {
+        _builder.RegisterHarness("opencode2", "OpenCode 2");
+        _builder.RegisterHarness("claude-code", "Claude Code").DefaultSession = _defaultSession;
+        _builder.UserPreferenceRepository.Seed("opencode2.enabled", "false");
+        using var tempDirectory = new TempDirectory();
+
+        var result = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path
+        });
+
+        result.IsSuccess.ShouldBeTrue();
+        _builder.SessionRepository.InsertedSessions.ShouldContain(s => s.HarnessType == "claude-code");
     }
 
     [Fact]
@@ -1894,7 +1913,11 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
             new SessionActivityTracker(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<SessionOrchestrator>.Instance,
             sessionActivityWriteService: null,
-            gitDiffService: null);
+            gitDiffService: null,
+            harnessAvailability: new HarnessAvailabilityCache(
+                _builder.HarnessRegistry,
+                TimeProvider.System,
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<HarnessAvailabilityCache>.Instance));
     }
 
     private static SessionOrchestratorBuilder CreateBuilderWithGitDiffService(GitDiffService gitDiffService)
