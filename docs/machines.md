@@ -63,7 +63,8 @@ fleet node --host 0.0.0.0 --port 2113
 
 A node is the same Fleet API, hub and terminals, with two differences:
 
-- **No web app.** `/` answers a short JSON note saying it's a Fleet node; other pages are `404`.
+- **No web app.** A browser at `/` gets a short page saying it's a Fleet node and how to add it; anything else
+  gets the same as JSON (`{ kind: "fleet-node", message, docs }`). Other pages are `404`.
 - **The token on every request**, whatever address it listens on, this machine's own requests included (as
   `--require-token`).
 

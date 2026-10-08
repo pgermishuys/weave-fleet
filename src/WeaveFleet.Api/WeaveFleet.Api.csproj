@@ -37,6 +37,14 @@
     <EmbeddedResource Include="Browser\preview-bridge.js" LogicalName="browser/preview-bridge.js" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The page a node shows a browser at "/": it serves no web app, so the page and Fleet's logo travel inside. -->
+    <None Remove="Node\node-page.html" />
+    <Content Remove="Node\node-page.html" />
+    <EmbeddedResource Include="Node\node-page.html" LogicalName="node/node-page.html" />
+    <EmbeddedResource Include="..\..\client\src\assets\weave_logo.png" LogicalName="node/weave-logo.png" Link="Node\weave-logo.png" />
+  </ItemGroup>
+
   <!-- Copy frontend SPA build output to wwwroot/ before building the backend.
        The Condition means: skip if client/dist/index.html doesn't exist yet
        (allows backend-only development without a frontend build). -->
