@@ -22,7 +22,28 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 public sealed class NodeModeEndpointTests
 {
     [Fact]
-    public async Task The_root_answers_a_note_instead_of_the_web_app()
+    public async Task A_browser_at_the_root_gets_a_page_saying_what_this_is()
+    {
+        await using var factory = CreateNode();
+        using var client = CreateClient(factory);
+        client.DefaultRequestHeaders.Accept.ParseAdd("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+
+        var response = await client.GetAsync("/");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        response.Content.Headers.ContentType?.MediaType.ShouldBe("text/html");
+        response.Headers.GetValues("Content-Security-Policy").Single().ShouldContain("default-src 'none'");
+        var page = await response.Content.ReadAsStringAsync();
+        page.ShouldContain("Fleet node");
+        page.ShouldContain("Settings → Machines → Add a machine");
+        page.ShouldContain("src=\"data:image/png;base64,");
+        page.ShouldContain(NodeEndpoints.DocsUrl);
+        page.ShouldNotContain("{{");
+        page.ShouldNotContain("<div id=\"app\">");
+    }
+
+    [Fact]
+    public async Task Anything_else_at_the_root_gets_a_json_note()
     {
         await using var factory = CreateNode();
         using var client = CreateClient(factory);
