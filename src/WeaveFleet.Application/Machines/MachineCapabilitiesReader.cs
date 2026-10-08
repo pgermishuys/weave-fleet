@@ -13,7 +13,7 @@ public sealed record MachineCapabilities(IReadOnlyList<MachineHarness>? Harnesse
 /// <param name="Type">The harness type, e.g. <c>opencode</c>.</param>
 /// <param name="Name">What to call it, e.g. <c>OpenCode</c>.</param>
 /// <param name="Available">Whether it's installed and working on this machine.</param>
-/// <param name="Enabled">Whether the user turned it on; a new session can use it only when it's available and on.</param>
+/// <param name="Enabled">Whether it's on (every harness is, until the user turns it off); a new session can use it only when it's available and on.</param>
 /// <param name="Version">The version it reports, when it does.</param>
 public sealed record MachineHarness(string Type, string Name, bool Available, bool Enabled, string? Version);
 

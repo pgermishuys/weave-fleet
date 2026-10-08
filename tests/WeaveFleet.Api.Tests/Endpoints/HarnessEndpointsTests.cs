@@ -40,7 +40,7 @@ public sealed class HarnessEndpointsTests
     }
 
     [Fact]
-    public async Task get_harnesses_defaults_opencode_enabled_and_pi_disabled()
+    public async Task get_harnesses_are_on_until_the_user_turns_them_off()
     {
         await using var factory = new ApiWebApplicationFactory(authEnabled: false);
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
@@ -56,8 +56,10 @@ public sealed class HarnessEndpointsTests
         using var document = JsonDocument.Parse(body);
         var harnesses = document.RootElement.EnumerateArray().ToList();
 
+        // A computer with only Claude Code, or only Pi, starts sessions without a trip to Settings.
         GetUserEnabled(harnesses, "opencode").ShouldBeTrue();
-        GetUserEnabled(harnesses, "pi").ShouldBeFalse();
+        GetUserEnabled(harnesses, "pi").ShouldBeTrue();
+        GetUserEnabled(harnesses, "claude-code").ShouldBeTrue();
     }
 
     [Fact]

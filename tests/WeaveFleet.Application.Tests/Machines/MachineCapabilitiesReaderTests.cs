@@ -34,18 +34,18 @@ public sealed class MachineCapabilitiesReaderTests
     }
 
     [Fact]
-    public async Task Harnesses_come_from_the_kept_check_with_the_users_switches()
+    public async Task Harnesses_come_from_the_kept_check_and_are_on_until_the_user_turns_them_off()
     {
         await _cache.GetAsync(fresh: false, CancellationToken.None);
-        _preferences.Seed("claude-code.enabled", "true");
+        _preferences.Seed("claude-code.enabled", "false");
 
         var harnesses = (await _reader.ReadAsync()).Harnesses!;
 
         harnesses.ShouldBe(
         [
             new MachineHarness("opencode", "OpenCode", Available: true, Enabled: true, "1.18.32"),
-            new MachineHarness("claude-code", "Claude Code", Available: true, Enabled: true, "2.1.0"),
-            new MachineHarness("pi", "Pi", Available: false, Enabled: false, null),
+            new MachineHarness("claude-code", "Claude Code", Available: true, Enabled: false, "2.1.0"),
+            new MachineHarness("pi", "Pi", Available: false, Enabled: true, null),
         ]);
         _registry.Checks.ShouldBe(1);
     }

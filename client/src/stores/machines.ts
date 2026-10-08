@@ -41,7 +41,7 @@ export interface MachineHarness {
   type: string;
   name: string;
   available: boolean;
-  /** Whether the user turned it on there; a new session can use it only when it's available and on. */
+  /** Whether it's on there (every harness is, until the user turns it off); a new session can use it only when it's available and on. */
   enabled: boolean;
   version: string | null;
 }
