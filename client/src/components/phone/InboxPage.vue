@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, shallowRef, useTemplateRef } from "vue";
+import { computed, inject, onMounted, onUnmounted, shallowRef, useTemplateRef } from "vue";
 import { useRouter } from "@tanstack/vue-router";
 import { Bell, Check, ChevronDown, ChevronRight, ExternalLink, Laptop, Plus, Search, Smartphone } from "lucide-vue-next";
 import weaveLogo from "@/assets/weave_logo.png";
@@ -8,7 +8,7 @@ import InboxSessionRow from "@/components/phone/InboxSessionRow.vue";
 import PhoneTabBar, { type PhoneTab } from "@/components/phone/PhoneTabBar.vue";
 import PullIndicator from "@/components/phone/PullIndicator.vue";
 import SwipeRow from "@/components/phone/SwipeRow.vue";
-import { useInbox } from "@/composables/phone/use-inbox";
+import { INBOX, useInbox } from "@/composables/phone/use-inbox";
 import { useLargeTitle } from "@/composables/phone/use-large-title";
 import { usePhoneNav } from "@/composables/phone/use-phone-nav";
 import { showToast } from "@/composables/phone/use-phone-toast";
@@ -16,6 +16,7 @@ import { usePullToRefresh } from "@/composables/phone/use-pull-to-refresh";
 import { usePushSubscription } from "@/composables/phone/use-push-subscription";
 import { readCredentialsSync } from "@/lib/device-credentials";
 import { rememberPhoneMachine } from "@/lib/machines";
+import { useMachinesStore } from "@/stores/machines";
 import { haptic } from "@/lib/phone/haptics";
 import { holdKeyboard } from "@/lib/phone/keyboard";
 import { buildInbox, machinesStatus, type InboxItem } from "@/lib/phone/inbox";
@@ -33,7 +34,9 @@ const props = defineProps<{ tab: PhoneTab }>();
 
 const router = useRouter();
 const nav = usePhoneNav();
-const { inbox, machines, loading, now, answerPermission, answerQuestion, setArchived, refreshAll, targetFor } = useInbox();
+// PhoneStack keeps the inbox, so a session pushed over this page reads the same feeds.
+const { inbox, machines, loading, now, answerPermission, answerQuestion, setArchived, refreshAll, targetFor } = inject(INBOX, null) ?? useInbox();
+const machineList = useMachinesStore();
 
 // Browsers rotate and drop push subscriptions: check on open and whenever the app comes back on screen. A dropped one
 // is quietly made again; permission taken away gets a banner.
@@ -153,10 +156,15 @@ async function open(item: InboxItem): Promise<void> {
     return;
   }
 
-  // Another machine: the page reloads to work there, with the phone's own key for it.
+  // Another machine, with the phone's own key for it: in place with "Keep every machine live", else the page reloads to
+  // work there.
   const target = targetFor(item.machineId);
   if (!target?.token) return;
   rememberPhoneMachine({ id: item.machineId, name: item.machineName, baseUrl: target.baseUrl, token: target.token, addedAt: new Date().toISOString() });
+  if (machineList.opensInPlace) {
+    await nav.openSession(item.machineId, item.sessionId);
+    return;
+  }
   window.location.assign(`/phone/s/${encodeURIComponent(item.machineId)}/${encodeURIComponent(item.sessionId)}`);
 }
 
