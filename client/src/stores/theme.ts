@@ -19,6 +19,9 @@ export type FontFamily = "inter";
 
 export type FontSize = "s" | "m" | "l" | "xl";
 
+/** How the model's thinking shows in conversations: one line per block, every block in full, or not at all. */
+export type ThinkingDisplay = "folded" | "open" | "hidden";
+
 export interface FontSizeDefinition {
   id: FontSize;
   label: string;
@@ -57,6 +60,7 @@ export const themes: readonly ThemeDefinition[] = [
 const themeStorageKey = "weave:theme";
 const fontFamilyStorageKey = "weave:font-family";
 const fontSizeStorageKey = "weave:font-size";
+const thinkingStorageKey = "weave:thinking";
 
 const fontStacks: Record<FontFamily, string> = {
   inter: '"Inter Variable", "Inter", system-ui, -apple-system, sans-serif',
@@ -121,6 +125,23 @@ function readStoredFontSize(): FontSize {
   }
 }
 
+function isValidThinkingDisplay(value: string): value is ThinkingDisplay {
+  return value === "folded" || value === "open" || value === "hidden";
+}
+
+function readStoredThinking(): ThinkingDisplay {
+  if (typeof window === "undefined") {
+    return "folded";
+  }
+
+  try {
+    const raw = window.localStorage.getItem(thinkingStorageKey);
+    return raw && isValidThinkingDisplay(raw) ? raw : "folded";
+  } catch {
+    return "folded";
+  }
+}
+
 function getSystemThemeId(): ThemeId {
   if (typeof window === "undefined") {
     return "dark";
@@ -165,10 +186,23 @@ function persistFontSize(fontSize: FontSize): void {
   }
 }
 
+function persistThinking(thinking: ThinkingDisplay): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(thinkingStorageKey, thinking);
+  } catch {
+    // localStorage unavailable
+  }
+}
+
 export const useThemeStore = defineStore("theme", () => {
   const currentTheme = shallowRef<ThemeSelection>(readStoredTheme());
   const fontFamily = shallowRef<FontFamily>(readStoredFontFamily());
   const fontSize = shallowRef<FontSize>(readStoredFontSize());
+  const thinking = shallowRef<ThinkingDisplay>(readStoredThinking());
 
   const resolvedThemeId = computed<ThemeId>(() => {
     return currentTheme.value === "system" ? getSystemThemeId() : currentTheme.value;
@@ -243,6 +277,11 @@ export const useThemeStore = defineStore("theme", () => {
     applyFontSize();
   }
 
+  function setThinking(display: ThinkingDisplay): void {
+    thinking.value = display;
+    persistThinking(display);
+  }
+
   function toggleTheme(): void {
     const nextColorScheme = resolvedTheme.value.colorScheme === "dark" ? "light" : "dark";
     setTheme(nextColorScheme);
@@ -252,11 +291,13 @@ export const useThemeStore = defineStore("theme", () => {
     currentTheme,
     fontFamily,
     fontSize,
+    thinking,
     resolvedThemeId,
     resolvedTheme,
     initializeTheme,
     setFontFamily,
     setFontSize,
+    setThinking,
     setTheme,
     toggleTheme,
   };
