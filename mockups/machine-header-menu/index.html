@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Start a session on another machine</title>
+<style>
+  /* Tokens copied from client/src/assets/main.css (dark). */
+  :root {
+    --rail-bg: #0d0d10;
+    --panel-bg: #141418;
+    --card-bg: #1b1b20;
+    --main-bg: #0d0d10;
+    --border: rgba(255, 255, 255, 0.075);
+    --text: #e8e8ec;
+    --muted: #8e8e9a;
+    --coral: #D95A3A;
+    --accent: #6366f1;
+    --accent-dim: rgba(99, 102, 241, 0.15);
+    --running: #22c55e;
+    --idle: #f59e0b;
+    --error: #ef4444;
+    --radius-btn: 8px;
+    --radius-panel: 12px;
+    --transition: 150ms ease-out;
+    --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
+    --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--main-bg); color: var(--text); font-family: var(--font-sans); font-size: 13px; }
+  .page { max-width: 1240px; margin: 0 auto; padding: 24px 20px 48px; }
+  h1 { font-size: 19px; margin: 0 0 6px; font-weight: 650; }
+  .lede { color: var(--muted); margin: 0 0 18px; max-width: 800px; line-height: 1.5; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+  .tab { border: 1px solid var(--border); background: transparent; color: var(--muted); border-radius: 999px; padding: 6px 13px; font: inherit; cursor: pointer; }
+  .tab:hover { color: var(--text); }
+  .tab[aria-selected="true"] { background: var(--accent-dim); color: var(--text); border-color: transparent; }
+  .stage { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 18px; align-items: start; }
+
+  .app { position: relative; display: grid; grid-template-columns: 44px 276px minmax(0, 1fr); height: 600px; border: 1px solid var(--border); border-radius: var(--radius-panel); overflow: hidden; background: var(--rail-bg); }
+  .rail { display: flex; flex-direction: column; align-items: center; gap: 10px; padding-top: 12px; }
+  .rail i { width: 22px; height: 22px; border-radius: 6px; background: color-mix(in srgb, var(--text) 8%, transparent); }
+  .rail i:first-child { background: var(--accent-dim); }
+  .sidebar { background: var(--panel-bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+  .sidebar-top { padding: 10px 10px 6px; display: flex; flex-direction: column; gap: 8px; }
+  .new-btn { border: 1px solid var(--border); border-radius: var(--radius-btn); padding: 6px 10px; color: var(--text); font-size: 12.5px; background: color-mix(in srgb, var(--text) 4%, transparent); }
+  .filter { border: 1px solid var(--border); border-radius: var(--radius-btn); padding: 6px 10px; color: var(--muted); font-size: 12px; }
+  .list { flex: 1; overflow-y: auto; padding: 0 6px 16px; scrollbar-width: thin; }
+
+  /* MachineHeader.vue */
+  .machine-header { position: relative; width: 100%; min-height: 28px; display: flex; align-items: center; gap: 7px; margin-top: 6px; padding: 0 10px 0 4px; border: 0; border-radius: var(--radius-btn); background: transparent; color: var(--text); text-align: left; font: inherit; cursor: pointer; }
+  .machine-header:hover, .machine-header.menu-open { background: color-mix(in srgb, var(--text) 5%, transparent); }
+  .machine-header:hover .machine-name, .machine-header.menu-open .machine-name { color: var(--coral); }
+  .chev { width: 12px; height: 12px; flex-shrink: 0; color: color-mix(in srgb, var(--muted) 70%, transparent); transition: transform var(--transition); }
+  .machine-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--running); flex-shrink: 0; }
+  .machine-name { font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em; transition: color var(--transition); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .live-tag { flex-shrink: 0; padding: 1px 5px; border-radius: 4px; background: color-mix(in srgb, var(--coral) 14%, transparent); color: var(--coral); font-family: var(--font-mono); font-size: 9.5px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; }
+  .live-tag.arrive { animation: arrive 600ms ease-out; }
+  @keyframes arrive { from { transform: scale(1.35); opacity: 0; } to { transform: none; opacity: 1; } }
+  .machine-note { margin-left: auto; font-size: 11px; color: color-mix(in srgb, var(--muted) 80%, transparent); font-variant-numeric: tabular-nums; }
+  .plus { display: none; margin-left: auto; width: 20px; height: 20px; border-radius: 5px; place-items: center; color: var(--muted); flex-shrink: 0; }
+  .plus:hover { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
+  .plus svg { width: 13px; height: 13px; }
+  .with-plus .machine-header:hover .plus, .with-plus .machine-header.menu-open .plus { display: grid; }
+  .with-plus .machine-header:hover .machine-note { display: none; }
+
+  .project-header { width: 100%; min-height: 26px; display: flex; align-items: center; gap: 6px; padding: 0 10px 0 6px; color: var(--muted); }
+  .project-title { flex: 1; font-size: 12px; font-weight: 600; }
+  .project-count { font-size: 12px; color: color-mix(in srgb, var(--muted) 70%, transparent); }
+  .row { position: relative; width: 100%; min-height: 30px; display: flex; align-items: center; gap: 9px; padding: 0 10px; border-radius: var(--radius-btn); color: color-mix(in srgb, var(--text) 86%, transparent); }
+  .row.selected { background: var(--accent-dim); color: var(--text); }
+  .slot { width: 10px; flex-shrink: 0; display: grid; place-items: center; }
+  .working { width: 7px; height: 7px; border-radius: 50%; background: var(--running); animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+  .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .meta { flex-shrink: 0; font-size: 11px; color: color-mix(in srgb, var(--muted) 85%, transparent); }
+  .empty { padding: 4px 10px 6px 30px; font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: baseline; }
+  .linkish { border: 0; background: none; padding: 0; font: inherit; color: var(--coral); cursor: pointer; }
+  .linkish:hover { text-decoration: underline; }
+
+  /* Context menu (components/ui/context-menu, PR #379 restyle) */
+  .menu { position: absolute; z-index: 10; min-width: 236px; background: var(--card-bg); border: 1px solid color-mix(in srgb, var(--text) 12%, transparent); border-radius: 10px; padding: 4px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45); }
+  .menu button { width: 100%; display: flex; align-items: center; gap: 9px; border: 0; background: transparent; color: var(--text); font: inherit; font-size: 12.5px; padding: 6px 8px; border-radius: 6px; cursor: pointer; text-align: left; }
+  .menu button:hover { background: color-mix(in srgb, var(--text) 7%, transparent); }
+  .menu button small { margin-left: auto; color: var(--muted); font-size: 11px; }
+  .menu svg { width: 14px; height: 14px; color: var(--muted); flex-shrink: 0; }
+  .menu hr { border: 0; border-top: 1px solid var(--border); margin: 4px 2px; }
+  .menu .mono { font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; }
+
+  /* Right side: conversation or new-session page */
+  .main { background: var(--main-bg); display: flex; flex-direction: column; min-width: 0; }
+  .convo-head { height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--border); font-weight: 600; }
+  .convo-body { padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+  .bubble { align-self: flex-end; background: var(--card-bg); border-radius: 12px; padding: 9px 12px; max-width: 80%; line-height: 1.45; }
+  .line { height: 9px; border-radius: 5px; background: color-mix(in srgb, var(--text) 9%, transparent); }
+  .new-page { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 0 36px 40px; gap: 10px; }
+  .new-page h2 { margin: 0 0 4px; font-size: 18px; font-weight: 600; text-align: center; }
+  .composer { border: 1px solid var(--border); border-radius: 14px; background: var(--panel-bg); padding: 12px 14px; min-height: 92px; color: var(--muted); }
+  .strip { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+  .ns-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; color: var(--text); }
+  .ns-chip .machine-dot { background: var(--coral); }
+  .ns-chip.flash { animation: flash 1.3s ease-out; }
+  @keyframes flash { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--coral) 70%, transparent); border-color: var(--coral); } 100% { box-shadow: 0 0 0 8px transparent; } }
+  .sep { width: 1px; height: 14px; background: var(--border); }
+
+  .reload { position: absolute; inset: 0; background: var(--main-bg); opacity: 0; pointer-events: none; transition: opacity 90ms; }
+  .reload.on { opacity: 1; }
+  .toast { position: absolute; left: calc(320px + (100% - 320px) / 2); bottom: 14px; transform: translateX(-50%); background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px 11px; font-size: 11.5px; color: var(--muted); opacity: 0; transition: opacity 200ms; pointer-events: none; white-space: nowrap; }
+  .toast.on { opacity: 1; }
+
+  .notes { display: flex; flex-direction: column; gap: 12px; }
+  .card { border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--panel-bg); padding: 14px 15px; }
+  .card h2 { font-size: 13px; margin: 0 0 8px; font-weight: 650; }
+  .card p, .card li { color: color-mix(in srgb, var(--text) 82%, transparent); line-height: 1.5; margin: 0; }
+  .card ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+  .try { color: var(--coral); font-weight: 600; }
+  code { font-family: var(--font-mono); font-size: 11.5px; background: color-mix(in srgb, var(--text) 7%, transparent); padding: 0 4px; border-radius: 4px; }
+  .bad { color: #f0a08c; } .good { color: #86e0a6; }
+  .rec { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; background: rgba(34, 197, 94, 0.14); color: #86e0a6; margin-left: 6px; vertical-align: 1px; }
+  [hidden] { display: none !important; }
+  @media (max-width: 980px) { .stage { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Start a session on another machine</h1>
+  <p class="lede">A report asks how to start a session on a machine that isn't live: right-clicking the machine's name does nothing, and there's no way to switch to it. Two ways exist today, but neither is where they looked: the <b>Machine</b> chip under the new-session box, and Settings → Machines → <b>Work here</b>. A machine with no sessions can't be reached from the sidebar at all.</p>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" data-view="today">Today</button>
+    <button class="tab" role="tab" data-view="a" aria-selected="true">A · Right-click menu (recommended)</button>
+    <button class="tab" role="tab" data-view="b">B · Menu and a + on hover</button>
+  </div>
+
+  <div class="stage">
+    <div class="app" id="app">
+      <div class="rail"><i></i><i></i><i></i><i></i></div>
+      <div class="sidebar">
+        <div class="sidebar-top"><div class="new-btn">+ New session</div><div class="filter">Filter sessions</div></div>
+        <div class="list" id="list"></div>
+      </div>
+      <div class="main" id="main"></div>
+      <div class="menu" id="menu" hidden></div>
+      <div class="reload" id="reload"></div>
+      <div class="toast" id="toast"></div>
+    </div>
+
+    <div class="notes">
+      <div class="card" data-for="today">
+        <h2>Today</h2>
+        <ul>
+          <li class="bad">Right-click on a machine's name does nothing; a click only folds it.</li>
+          <li class="bad"><code>build-box</code> has no sessions, so nothing in the sidebar leads to it.</li>
+          <li>The Machine chip sits in the strip under the new-session box, next to Folder. It works, but you have to know it's there.</li>
+          <li><span class="try">Try:</span> right-click <code>build-box</code>.</li>
+        </ul>
+      </div>
+      <div class="card" data-for="a" hidden>
+        <h2>A · Right-click menu <span class="recommended rec">recommended</span></h2>
+        <ul>
+          <li class="good">Right-click a machine's name (or press the menu key on it) for <b>New session on build-box</b> and <b>Work here</b>, the same words as Settings → Machines.</li>
+          <li class="good">New session opens the new-session page with the Machine chip already set. Nothing switches until you send, as today.</li>
+          <li>Work here makes it live, like clicking one of its sessions. The order stays put; only the Live tag moves.</li>
+          <li>The live machine's menu has just <b>New session</b>.</li>
+          <li>An empty machine's “No sessions” line gets a <b>New session</b> link.</li>
+          <li><span class="try">Try:</span> right-click <code>build-box</code>, or the link under it.</li>
+        </ul>
+      </div>
+      <div class="card" data-for="b" hidden>
+        <h2>B · Menu and a + on hover</h2>
+        <ul>
+          <li>Everything in A, plus a <b>+</b> on each machine's heading when you hover it.</li>
+          <li class="good">Easier to find for people who never right-click, and it works on touch.</li>
+          <li class="bad">Project headings don't have a +, so machines would be the odd ones. It also covers the “4s ago” note while you hover.</li>
+          <li><span class="try">Try:</span> hover <code>studio</code> or <code>build-box</code>.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const ICON = {
+  chev: '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  enter: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 22h8M12 18v4"/></svg>',
+};
+
+const machines = [
+  { key: "studio", note: "", projects: [{ name: "orders-api", sessions: [["Paginate the orders endpoint", "2m", true], ["Fix flaky checkout test", "1h"]] }, { name: "docs-site", sessions: [["Rewrite the setup guide", "3h"]] }] },
+  { key: "build-box", note: "4s ago", projects: [] },
+  { key: "old-laptop", note: "12s ago", projects: [{ name: "garden-planner", sessions: [["Add a frost-date lookup", "2d"]] }] },
+];
+
+let view = "a";
+let live = "studio";
+let page = "convo"; // convo | new
+let target = "studio";
+let menuFor = null;
+
+function header(m) {
+  const isLive = m.key === live;
+  return `<button type="button" class="machine-header ${menuFor === m.key ? "menu-open" : ""}" data-key="${m.key}">
+    ${ICON.chev}<span class="machine-dot"></span><span class="machine-name">${m.key}</span>
+    ${isLive ? '<span class="live-tag" data-tag="' + m.key + '">Live</span>' : ""}
+    <span class="machine-note">${isLive ? "" : m.note}</span>
+    ${view === "b" ? `<span class="plus" data-plus="${m.key}" title="New session on ${m.key}">${ICON.plus}</span>` : ""}
+  </button>`;
+}
+
+function renderList() {
+  const html = machines.map((m) => {
+    let body = m.projects.map((p) => `<div class="project-header">${ICON.chev}<span class="project-title">${p.name}</span><span class="project-count">${p.sessions.length}</span></div>` +
+      p.sessions.map(([t, when, working]) => `<div class="row ${m.key === live && working && page === "convo" ? "selected" : ""}"><span class="slot">${working && m.key === "studio" ? '<span class="working"></span>' : ""}</span><span class="title">${t}</span><span class="meta">${when}</span></div>`).join("")).join("");
+    if (m.projects.length === 0) {
+      body = `<div class="empty">No sessions${view === "today" ? "" : ` · <button class="linkish" type="button" data-new="${m.key}">New session</button>`}</div>`;
+    }
+    return header(m) + body;
+  }).join("");
+  const list = document.getElementById("list");
+  list.innerHTML = html;
+  list.parentElement.parentElement.classList.toggle("with-plus", view === "b");
+  list.querySelectorAll(".machine-header").forEach((h) => {
+    h.addEventListener("contextmenu", (e) => { e.preventDefault(); if (view !== "today") openMenu(h.dataset.key, e); else flashToast("Nothing happens"); });
+  });
+  list.querySelectorAll("[data-new]").forEach((b) => b.addEventListener("click", () => startNew(b.dataset.new)));
+  list.querySelectorAll("[data-plus]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); startNew(b.dataset.plus); }));
+}
+
+function renderMain() {
+  const main = document.getElementById("main");
+  if (page === "convo") {
+    main.innerHTML = `<div class="convo-head">Paginate the orders endpoint</div><div class="convo-body"><div class="bubble">The orders list times out for big accounts. Can you page it?</div><div class="line" style="width:88%"></div><div class="line" style="width:72%"></div><div class="line" style="width:80%"></div></div>`;
+    return;
+  }
+  main.innerHTML = `<div class="new-page"><h2>What should we work on?</h2><div class="composer">Describe the task…</div>
+    <div class="strip"><span class="ns-chip flash"><span class="machine-dot"></span><span class="machine-name">${target}</span></span><span class="sep"></span><span class="ns-chip">Folder</span><span class="ns-chip">Claude Code</span></div></div>`;
+}
+
+function render() { renderList(); renderMain(); }
+
+function openMenu(key, e) {
+  menuFor = key;
+  const app = document.getElementById("app").getBoundingClientRect();
+  const menu = document.getElementById("menu");
+  const isLive = key === live;
+  menu.innerHTML = `<button type="button" data-act="new">${ICON.plus}${isLive ? "New session" : `New session on <span class="mono">${key}</span>`}</button>` +
+    (isLive ? "" : `<hr><button type="button" data-act="work">${ICON.enter}Work here</button>`);
+  menu.style.left = `${Math.min(e.clientX - app.left, app.width - 250)}px`;
+  menu.style.top = `${e.clientY - app.top}px`;
+  menu.hidden = false;
+  menu.querySelector('[data-act="new"]').addEventListener("click", () => { closeMenu(); startNew(key); });
+  menu.querySelector('[data-act="work"]')?.addEventListener("click", () => { closeMenu(); workHere(key); });
+  renderList();
+}
+
+function closeMenu() { menuFor = null; document.getElementById("menu").hidden = true; renderList(); }
+
+function startNew(key) { target = key; page = "new"; render(); }
+
+function workHere(key) {
+  const reload = document.getElementById("reload");
+  reload.classList.add("on");
+  setTimeout(() => {
+    live = key; page = "convo"; render();
+    document.querySelector(`[data-tag="${key}"]`)?.classList.add("arrive");
+    reload.classList.remove("on");
+    flashToast(`Working on ${key}`);
+  }, 260);
+}
+
+function flashToast(text) {
+  const toast = document.getElementById("toast");
+  toast.textContent = text;
+  toast.classList.add("on");
+  setTimeout(() => toast.classList.remove("on"), 1400);
+}
+
+function setView(next) {
+  view = next; live = "studio"; page = "convo"; target = "studio";
+  document.getElementById("menu").hidden = true; menuFor = null;
+  document.querySelectorAll(".tab").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.view === view)));
+  document.querySelectorAll("[data-for]").forEach((c) => (c.hidden = c.dataset.for !== view));
+  render();
+}
+
+document.addEventListener("click", (e) => { if (menuFor && !e.target.closest("#menu")) closeMenu(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && menuFor) closeMenu(); });
+document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => setView(t.dataset.view)));
+setView("a");
+</script>
+</body>
+</html>

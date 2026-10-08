@@ -1,10 +1,18 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { ChevronDown } from "lucide-vue-next";
+import { ChevronDown, Monitor, Plus } from "lucide-vue-next";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 
 /**
  * A machine's heading in the sessions list. Machines get coral, a colour of their own, so where a session runs
- * never competes with its status colours.
+ * never competes with its status colours. With `menu`, right-clicking it offers a new session there and, for a machine
+ * that isn't live, Work here.
  */
 const props = withDefaults(defineProps<{
   name: string;
@@ -17,53 +25,94 @@ const props = withDefaults(defineProps<{
   /** Collapsible groups show a chevron and report their state. */
   expanded?: boolean | null;
   count?: number | null;
-}>(), { live: false, unreachable: false, note: null, expanded: null, count: null });
+  /** Right-click offers New session (and Work here on a machine that isn't live). */
+  menu?: boolean;
+}>(), { live: false, unreachable: false, note: null, expanded: null, count: null, menu: false });
 
-const emit = defineEmits<{ toggle: [] }>();
+const emit = defineEmits<{ toggle: []; newSession: []; workHere: [] }>();
 
 const tag = computed(() => (props.expanded === null || props.expanded === undefined ? "div" : "button"));
 </script>
 
 <template>
-  <component
-    :is="tag"
-    :type="tag === 'button' ? 'button' : undefined"
-    class="machine-header"
-    :class="{
-      'machine-header--button': tag === 'button',
-      'machine-header--collapsed': expanded === false,
-    }"
-    :aria-expanded="tag === 'button' ? expanded : undefined"
-    data-testid="machine-header"
-    :data-machine-live="live ? 'true' : undefined"
-    @click="tag === 'button' && emit('toggle')"
-  >
-    <ChevronDown
-      v-if="tag === 'button'"
-      class="machine-header__chevron"
-      aria-hidden="true"
-    />
-    <span
-      class="machine-header__dot"
-      :class="{ 'machine-header__dot--down': unreachable }"
-      aria-hidden="true"
-    />
-    <span class="machine-header__name">{{ name }}</span>
-    <span
-      v-if="live"
-      class="machine-header__live"
-      title="The machine you're working in"
-    >Live</span>
-    <span
-      v-if="note"
-      class="machine-header__note"
-      :class="{ 'machine-header__note--down': unreachable }"
-    >{{ note }}</span>
-    <span
-      v-else-if="count !== null && count !== undefined"
-      class="machine-header__note"
-    >{{ count }}</span>
-  </component>
+  <ContextMenu>
+    <ContextMenuTrigger
+      as-child
+      :disabled="!menu"
+    >
+      <component
+        :is="tag"
+        :type="tag === 'button' ? 'button' : undefined"
+        class="machine-header"
+        :class="{
+          'machine-header--button': tag === 'button',
+          'machine-header--collapsed': expanded === false,
+        }"
+        :aria-expanded="tag === 'button' ? expanded : undefined"
+        data-testid="machine-header"
+        :data-machine-live="live ? 'true' : undefined"
+        @click="tag === 'button' && emit('toggle')"
+      >
+        <ChevronDown
+          v-if="tag === 'button'"
+          class="machine-header__chevron"
+          aria-hidden="true"
+        />
+        <span
+          class="machine-header__dot"
+          :class="{ 'machine-header__dot--down': unreachable }"
+          aria-hidden="true"
+        />
+        <span class="machine-header__name">{{ name }}</span>
+        <span
+          v-if="live"
+          class="machine-header__live"
+          title="The machine you're working in"
+        >Live</span>
+        <span
+          v-if="note"
+          class="machine-header__note"
+          :class="{ 'machine-header__note--down': unreachable }"
+        >{{ note }}</span>
+        <span
+          v-else-if="count !== null && count !== undefined"
+          class="machine-header__note"
+        >{{ count }}</span>
+      </component>
+    </ContextMenuTrigger>
+
+    <ContextMenuContent
+      v-if="menu"
+      class="w-64"
+      data-testid="machine-menu"
+    >
+      <ContextMenuItem
+        :disabled="unreachable && !live"
+        data-testid="machine-menu-new-session"
+        @select="emit('newSession')"
+      >
+        <Plus class="size-3.5" />
+        <template v-if="live">
+          New session
+        </template>
+        <span
+          v-else
+          class="machine-header__menu-label"
+        >New session on <span class="machine-header__menu-name">{{ name }}</span></span>
+      </ContextMenuItem>
+
+      <template v-if="!live">
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          data-testid="machine-menu-work-here"
+          @select="emit('workHere')"
+        >
+          <Monitor class="size-3.5" />
+          Work here
+        </ContextMenuItem>
+      </template>
+    </ContextMenuContent>
+  </ContextMenu>
 </template>
 
 <style scoped>
@@ -94,11 +143,26 @@ const tag = computed(() => (props.expanded === null || props.expanded === undefi
   transition: background var(--transition);
 }
 
-.machine-header--button:hover {
+.machine-header--button:hover,
+.machine-header[data-state="open"] {
   background: color-mix(in srgb, var(--text) 5%, transparent);
 }
 
-.machine-header--button:hover .machine-header__name {
+.machine-header--button:hover /* The menu teleports out of the header, so its label is styled globally. One line; a long name is cut short. */
+:global(.machine-header__menu-label) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:global(.machine-header__menu-name) {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.machine-header__name {
   color: var(--coral);
 }
 

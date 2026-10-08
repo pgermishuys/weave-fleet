@@ -49,7 +49,8 @@ const lineageMoves = useLineageMovesStore();
 const pins = useSessionPinsStore();
 const selection = useSessionSelectionStore();
 const sidebarStore = useSidebarStore();
-const { newSessionDraftRow, newSessionMachine, sessionRowKeys } = storeToRefs(useWorkspaceUiStore());
+const workspaceUiStore = useWorkspaceUiStore();
+const { newSessionDraftRow, newSessionMachine, sessionRowKeys } = storeToRefs(workspaceUiStore);
 const router = useRouter();
 
 let releaseSessionList: (() => void) | null = null;
@@ -175,6 +176,15 @@ function handleMachineSessionOpen(machine: MachineEntry, session: SessionListIte
   const search = session.instanceId ? `?instanceId=${encodeURIComponent(session.instanceId)}` : "";
   if (sessionsList.value) saveSessionListScroll(sessionsList.value.scrollTop);
   machines.openOn(machine.key, `/sessions/${encodeURIComponent(session.session.id)}${search}`, {
+    sessions: sessionsStore.sessions,
+    projects: projects.value,
+  });
+}
+
+/** Work here on another machine: the same switch as opening one of its sessions, landing on its first page. */
+function handleWorkHere(machine: MachineEntry): void {
+  if (sessionsList.value) saveSessionListScroll(sessionsList.value.scrollTop);
+  machines.openOn(machine.key, "/", {
     sessions: sessionsStore.sessions,
     projects: projects.value,
   });
@@ -371,6 +381,12 @@ function openNewSessionPage(projectId: string | null): void {
 }
 
 function handleNewSession(): void {
+  openNewSessionPage(null);
+}
+
+/** A new session on a machine from its heading: the new-session page, with that machine picked. */
+function handleNewSessionOn(machineKey: string): void {
+  workspaceUiStore.setNewSessionMachine(machineKey);
   openNewSessionPage(null);
 }
 
@@ -656,7 +672,9 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
             :note="machines.liveReachable ? null : 'unreachable'"
             :count="liveSessionCount"
             :expanded="liveMachineExpanded"
+            menu
             @toggle="handleToggleLiveMachine"
+            @new-session="handleNewSessionOn(machine.key)"
           />
 
           <template v-if="liveMachineExpanded">
@@ -786,6 +804,8 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
           :draft-active="isNewSessionOpen"
           @open="handleMachineSessionOpen(machine, $event)"
           @open-draft="handleOpenDraft"
+          @new-session="handleNewSessionOn(machine.key)"
+          @work-here="handleWorkHere(machine)"
         />
       </template>
 
