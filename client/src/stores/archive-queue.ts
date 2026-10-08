@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { computed, shallowRef } from "vue";
 import { useArchiveSession, useUnarchiveSession } from "@/composables/use-session-actions";
+import { useMachinesStore } from "@/stores/machines";
 import { useSessionsStore } from "@/stores/sessions";
 
 /** How long an archive waits for Undo before it reaches the server. */
@@ -18,15 +19,18 @@ interface PendingArchive {
  */
 export const useArchiveQueueStore = defineStore("archive-queue", () => {
   const sessionsStore = useSessionsStore();
-  const { archiveSession } = useArchiveSession();
-  const { unarchiveSession } = useUnarchiveSession();
+  // A session opened in place on another machine is archived there.
+  const machines = useMachinesStore();
+  const sessionMachine = (sessionId: string) => machines.sessionTarget(sessionId);
+  const { archiveSession } = useArchiveSession(sessionMachine);
+  const { unarchiveSession } = useUnarchiveSession(sessionMachine);
 
   const pending = shallowRef<PendingArchive | null>(null);
   const error = shallowRef<string | null>(null);
   const pendingIds = computed(() => new Set(pending.value?.ids ?? []));
 
   function titleOf(sessionId: string): string {
-    const title = sessionsStore.sessions.find((item) => item.session.id === sessionId)?.session.title?.trim();
+    const title = sessionsStore.sessionById(sessionId)?.session.title?.trim();
     return title || "Untitled session";
   }
 

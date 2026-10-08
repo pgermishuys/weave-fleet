@@ -2,7 +2,7 @@ import { defineStore } from "pinia";
 import { computed, ref, shallowRef, watch } from "vue";
 import type { SessionListItem } from "@/api/client";
 import type { ProjectSummary } from "@/lib/session-project-groups";
-import { feedHubFor, onDisconnect, onReconnect } from "@/composables/use-signalr-socket";
+import { feedHubFor, onDisconnect, onReconnect, retryConnection } from "@/composables/use-signalr-socket";
 import { liveTarget, targetFor, type MachineTarget } from "@/lib/machine-target";
 import {
   HOME_MACHINE_KEY,
@@ -553,6 +553,8 @@ export const useMachinesStore = defineStore("machines", () => {
   /** Keeps what a machine that isn't live just returned. */
   function applyRead(entry: MachineEntry, read: MachineRead): void {
     const current = sessionsOf(entry.key);
+    // Back after not answering: its sessions' connection needn't wait out its backoff to catch up.
+    if (current.error) retryConnection(targetFor(entry.connection));
     if (read.identity) rememberIdentity(entry.key, read.identity);
     others.value = {
       ...others.value,
@@ -771,6 +773,16 @@ export const useMachinesStore = defineStore("machines", () => {
   }
 
   /**
+   * Whether `key`'s machine answers, with "Keep every machine live" on: one whose live feed can't read it isn't, until
+   * a read gets through again. A turn it was running when it went quiet would otherwise read "Working" for good. The
+   * live machine counts as answering (`liveReachable` covers it), and so does every machine with the switch off.
+   */
+  function isAnswering(key: string): boolean {
+    if (!opensInPlace.value || key === liveKey) return true;
+    return !others.value[key]?.error;
+  }
+
+  /**
    * The machine a session's views ask: with the switch on, the machine it's on, as far as this page knows (a session
    * opened or started here in place, or one any machine's list had); otherwise, and for a session on no machine
    * listed here, the live one.
@@ -832,6 +844,7 @@ export const useMachinesStore = defineStore("machines", () => {
     agentsAllowed,
     setAgentsAllowed,
     opensInPlace,
+    isAnswering,
     sessionTarget,
     openOn,
   };

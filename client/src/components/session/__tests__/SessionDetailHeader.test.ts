@@ -5,6 +5,10 @@ import SessionDetailHeaderComponent from "@/components/session/SessionDetailHead
 import { useSidebarStore } from "@/stores/sidebar";
 import { useSessionsStore } from "@/stores/sessions";
 import type { SessionListItem } from "@/api/client";
+import { MACHINE_TARGET, targetFor } from "@/lib/machine-target";
+import { LIVE_MACHINES_PREFERENCE_KEY, saveMachines, type MachineConnection } from "@/lib/machines";
+import { useMachinesStore } from "@/stores/machines";
+import { usePreferencesStore } from "@/stores/preferences";
 
 interface HeaderProps {
   id: string;
@@ -184,5 +188,45 @@ describe("SessionDetailHeader lineage", () => {
 
   it("has no link for a session the user started", () => {
     expect(mountHeader().find("[data-testid='session-lineage-link']").exists()).toBe(false);
+  });
+});
+
+describe("SessionDetailHeader for a session on a machine that isn't answering", () => {
+  const mini: MachineConnection = {
+    id: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    name: "mini",
+    baseUrl: "http://mini.example.test:2113",
+    token: "mini-token-0123456789",
+    addedAt: "2026-10-08T00:00:00.000Z",
+  };
+
+  function mountOnMini(on: boolean) {
+    saveMachines([mini]);
+    const preferences = usePreferencesStore();
+    preferences.hasFetched = true;
+    preferences.preferences = { [LIVE_MACHINES_PREFERENCE_KEY]: on ? "true" : "false" };
+    useMachinesStore().others = { [mini.id]: { sessions: [], projects: [], error: "Can't reach mini.", loadedAt: 1, loading: false } };
+    return mount(SessionDetailHeader, {
+      props: { id: "session-1", title: "Hero image sizes", activityStatus: "busy", lifecycleStatus: "running" },
+      global: {
+        stubs: { SessionContextChips: true, SessionAnalyticsPopover: true },
+        provide: { [MACHINE_TARGET]: () => targetFor(mini) },
+      },
+    });
+  }
+
+  it("says the machine isn't answering, instead of Working", () => {
+    const wrapper = mountOnMini(true);
+
+    expect(wrapper.get("[data-testid='session-status-indicator']").attributes("data-status")).toBe("not-answering");
+    expect(wrapper.get("[data-testid='session-status-indicator']").text()).toBe("Not answering");
+    expect(wrapper.get("[data-testid='session-machine']").text()).toBe("mini · not answering");
+  });
+
+  it("stays Working with the switch off", () => {
+    const wrapper = mountOnMini(false);
+
+    expect(wrapper.get("[data-testid='session-status-indicator']").attributes("data-status")).toBe("working");
+    expect(wrapper.get("[data-testid='session-machine']").text()).toBe("mini");
   });
 });

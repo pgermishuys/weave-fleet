@@ -114,6 +114,10 @@ const props = defineProps<{
 
 const machine = useMachineTarget();
 const machines = useMachinesStore();
+/** The session's machine's name while it isn't answering: the turn it was running can't be known to run on. */
+const quietMachine = computed(() => (machines.isAnswering(machine.key)
+  ? null
+  : machine.connection?.name ?? machines.entries.find((entry) => entry.key === machine.key)?.name ?? "Its machine"));
 
 const emit = defineEmits<{
   /** Whether a turn is running, and the newest reply's text: a side conversation's tab shows both while it's folded. */
@@ -1530,6 +1534,7 @@ function handleImproveSkill(skill: string, toolId: string): void {
           :since="turnStartedAt"
           :waiting="isWaitingForInput"
           :retry="sessionRetrying"
+          :not-answering="quietMachine"
         />
       </div>
     </section>

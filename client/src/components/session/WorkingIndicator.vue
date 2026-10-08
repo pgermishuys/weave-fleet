@@ -11,6 +11,8 @@ const props = defineProps<{
   waiting?: boolean;
   /** The harness is waiting to retry a failed model call: why, and when it tries again. */
   retry?: RetryStatus | null;
+  /** The session's machine stopped answering (its name): the turn can't be known to run on. */
+  notAnswering?: string | null;
 }>();
 
 // Ticks every second in the turn's first minute, then once a minute, as the strip's times do.
@@ -46,6 +48,19 @@ const retrying = computed(() => (props.retry ? describeRetry(props.retry, now.va
       label="Needs input"
     />
     <span class="working__waiting">Needs input</span>
+  </div>
+  <!-- Its machine went quiet mid-turn: no ticking dots or growing time, since nothing says it still works. -->
+  <div
+    v-else-if="notAnswering"
+    class="working"
+    role="status"
+    data-testid="working-not-answering"
+  >
+    <StatusGlyph
+      status="idle"
+      label="Not answering"
+    />
+    <span>{{ notAnswering }} isn't answering. It was working when last heard.</span>
   </div>
   <!-- Still in the turn, waiting out a failed model call: the row's amber dots, and why. -->
   <div

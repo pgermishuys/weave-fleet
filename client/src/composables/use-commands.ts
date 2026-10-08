@@ -35,6 +35,7 @@ import type { Command } from "@/lib/command-registry";
 import { dispatchCommandEvent } from "@/lib/command-events";
 import { matchesKeyboardShortcut, useKeyboardShortcut } from "@/composables/use-keyboard-shortcut";
 import { useAbortSession, useForkSession, useNewSessionInFolder } from "@/composables/use-session-actions";
+import { useMachinesStore } from "@/stores/machines";
 import type { SessionListItem } from "@/api/client";
 import { api } from "@/api/client";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
@@ -85,9 +86,12 @@ export function useCommands() {
   const terminalsStore = useTerminalsStore();
   const goToFileStore = useGoToFileStore();
   const { toggleSidebar, isMobileNav, mobileDrawerOpen, isRightPanelVisible, toggleRightPanel } = useSidebarMobile();
-  const { abortSession } = useAbortSession();
-  const { forkSession } = useForkSession();
-  const { startSessionInFolderOf } = useNewSessionInFolder();
+  // The commands work on the open session, which may be on another machine (opened in place); they ask its machine.
+  const machines = useMachinesStore();
+  const sessionMachine = (sessionId: string) => machines.sessionTarget(sessionId);
+  const { abortSession } = useAbortSession(sessionMachine);
+  const { forkSession } = useForkSession(sessionMachine);
+  const { startSessionInFolderOf } = useNewSessionInFolder(sessionMachine);
   const router = useRouter();
   const pathname = useLocation({
     select: (location) => location.pathname,
