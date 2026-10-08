@@ -370,6 +370,10 @@ public sealed class HarnessEventRelayTests
         tracker.Register("parent-instance", parent);
         tracker.Register("child-instance", child);
 
+        // Each pump starts by taking its session's status from the harness (idle here) and showing it. Wait for both,
+        // so every row counted below comes from a status this test sent.
+        for (int i = 0; i < 100 && (ListUpdates("parent").Count == 0 || ListUpdates("child").Count == 0); i++) await Task.Delay(10);
+
         await StatusAsync(parent, "parent", ActivityStatuses.Busy);
         await StatusAsync(child, "child", ActivityStatuses.Busy);
         await StatusAsync(child, "child", ActivityStatuses.WaitingInput);
@@ -391,9 +395,10 @@ public sealed class HarnessEventRelayTests
         await cts.CancelAsync();
         await relay.StopAsync(CancellationToken.None);
 
+        // Every status here ends with the parent's row: a subagent's updates its own row first, then its parent's.
         async Task StatusAsync(FakeHarnessSession instance, string sessionId, string status)
         {
-            var seen = ListUpdates(sessionId).Count;
+            var seen = ListUpdates("parent").Count;
             instance.Emit(new HarnessEvent
             {
                 Type = EventTypes.SessionStatus,
@@ -401,7 +406,7 @@ public sealed class HarnessEventRelayTests
                 Timestamp = DateTimeOffset.UtcNow,
                 Payload = JsonSerializer.SerializeToElement(new { status = new { type = status } }),
             });
-            for (int i = 0; i < 100 && ListUpdates(sessionId).Count == seen; i++) await Task.Delay(10);
+            for (int i = 0; i < 100 && ListUpdates("parent").Count == seen; i++) await Task.Delay(10);
         }
 
         List<string> ListUpdates(string sessionId) => broadcaster.Broadcasts
