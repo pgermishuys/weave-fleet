@@ -43,6 +43,7 @@ public sealed class MachineAccessEndpointTests
         first.GetProperty("authMode").GetString().ShouldBe("token");
         first.GetProperty("name").GetString().ShouldBe(Environment.MachineName);
         first.GetProperty("remoteReachable").GetBoolean().ShouldBeFalse();
+        first.GetProperty("webApp").GetBoolean().ShouldBeTrue();
     }
 
     [Fact]

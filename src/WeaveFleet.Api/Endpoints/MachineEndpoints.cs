@@ -119,6 +119,7 @@ public static class MachineEndpoints
             options.Auth.Enabled ? "sign-in" : "token",
             policy.IsRemoteReachable,
             !policy.AllowsLoopbackAutoAuth,
+            options.ServeUi,
             identity.PublicUrl);
     }
 
@@ -228,6 +229,7 @@ public static class MachineEndpoints
 /// <param name="AuthMode"><c>token</c> (local mode: present the access token) or <c>sign-in</c> (cloud mode).</param>
 /// <param name="RemoteReachable">Whether Fleet listens on an address other devices can reach.</param>
 /// <param name="RequiresToken">Whether every request needs the token, this machine's own included.</param>
+/// <param name="WebApp">Whether it serves the web app at its own address; a node (<c>fleet node</c>) doesn't.</param>
 /// <param name="PublicUrl">The address phones should use for this machine, when someone set one; pairing puts it in the QR code.</param>
 /// <param name="Capabilities">What it can run and how busy it is; only <c>GET</c> and <c>PUT /api/machine</c> fill it in.</param>
 public sealed record MachineResponse(
@@ -240,6 +242,7 @@ public sealed record MachineResponse(
     string AuthMode,
     bool RemoteReachable,
     bool RequiresToken,
+    bool WebApp,
     string? PublicUrl = null,
     MachineCapabilities? Capabilities = null);
 

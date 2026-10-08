@@ -125,6 +125,7 @@ public sealed class NodeModeEndpointTests
         machine.GetProperty("apiVersion").GetInt32().ShouldBe(MachineEndpoints.ApiVersion);
         machine.GetProperty("authMode").GetString().ShouldBe("token");
         machine.GetProperty("requiresToken").GetBoolean().ShouldBeTrue();
+        machine.GetProperty("webApp").GetBoolean().ShouldBeFalse();
         (await client.GetAsync("/api/sessions")).StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 

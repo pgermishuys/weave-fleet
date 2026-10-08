@@ -94,7 +94,8 @@ If home is off or unreachable, notifications stop for every machine, and the inb
   typed; **Send now** steers the agent mid-turn where the harness can. **+** adds photos, a file, a command (`!`) or a
   side question (`/btw`). The **⋯** menu has Changes, Files, Terminal, Fork, Rename, Archive.
 - **Not on the phone**: terminals, the editor and app previews. The phone says so, runs a one-off `!` command instead,
-  or sends you a link to open the session on the computer.
+  or sends you a link to open the session on the computer. A machine without the web app (a node) has no such link:
+  open the session in Fleet on the computer the phone is paired with.
 - **When a machine stops answering**: the session stays as you last saw it, the header says when the machine was last
   heard, and what you type is held on the phone and sent when it's back. Answers to permission asks are never held.
 

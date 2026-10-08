@@ -28,6 +28,7 @@ import PhoneComposer from "@/components/phone/session/PhoneComposer.vue";
 import { harnessCapabilities } from "@/composables/use-composer-actions";
 import { useDeskPresence } from "@/composables/use-desk-presence";
 import { useMachineReachability } from "@/composables/phone/use-machine-reachability";
+import { useMachineWebApp } from "@/composables/phone/use-machine-web-app";
 import UnreachableBanner from "@/components/phone/session/UnreachableBanner.vue";
 import { useDiffs } from "@/composables/use-diffs";
 import { useHarnesses } from "@/composables/use-harnesses";
@@ -216,7 +217,12 @@ const { renameSession } = useRenameSession();
 watch(sheet, (open) => {
   if (open === "menu") void fetchDiffs();
 });
-const computerLink = computed(() => `${getActiveMachine()?.baseUrl ?? window.location.origin}/sessions/${encodeURIComponent(sessionId.value)}`);
+// A machine without the web app (a node) has no page for the session: it opens from home's Fleet instead.
+const machineWebApp = useMachineWebApp();
+const homeName = computed(() => readCredentialsSync()?.homeMachineName ?? "your computer");
+const computerLink = computed(() => machineWebApp.value
+  ? `${getActiveMachine()?.baseUrl ?? window.location.origin}/sessions/${encodeURIComponent(sessionId.value)}`
+  : null);
 
 async function onMenu(action: MenuAction): Promise<void> {
   switch (action) {
@@ -235,6 +241,7 @@ async function onMenu(action: MenuAction): Promise<void> {
       break;
     case "computer": {
       sheet.value = null;
+      if (!computerLink.value) break;
       const outcome = await shareLink(`${title.value} on ${machineName.value}`, computerLink.value);
       if (outcome === "copied") showToast("Link copied. Open it on the computer.");
       else if (outcome === "failed") showToast("Couldn't share the link.");
@@ -532,6 +539,7 @@ onUnmounted(() => {
       :supports-side="caps.supportsSide"
       :supports-shell="caps.supportsShell"
       :can-fork="session?.capabilities?.canFork ?? true"
+      :can-open-on-computer="computerLink !== null"
       @pick="onMenu"
       @rename="onRename"
       @close="sheet = null"
@@ -561,6 +569,7 @@ onUnmounted(() => {
       :machine-name="machineName"
       :folder="session?.workspaceDirectory ?? null"
       :link="computerLink"
+      :home-name="homeName"
       :supports-shell="caps.supportsShell"
       @run="runCommand"
       @close="sheet = null"
