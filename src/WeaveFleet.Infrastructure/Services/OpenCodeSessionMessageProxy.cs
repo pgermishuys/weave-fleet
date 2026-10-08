@@ -7,6 +7,7 @@ using WeaveFleet.Application;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
@@ -27,7 +28,8 @@ public sealed class OpenCodeSessionMessageProxy(
     IServiceProvider serviceProvider,
     IHarnessRegistry harnessRegistry,
     ILogger<OpenCodeSessionMessageProxy> logger,
-    IMessageRepository? messageRepository = null) : ISessionMessageProxy
+    IMessageRepository? messageRepository = null,
+    StreamingReplies? streaming = null) : ISessionMessageProxy
 {
     private const string IdleStatus = "idle";
     private const string BusyStatus = "busy";
@@ -61,6 +63,10 @@ public sealed class OpenCodeSessionMessageProxy(
         CancellationToken ct = default)
     {
         var snapshot = await ReadSnapshotAsync(fleetSessionId, pageSize, cursor, ct).ConfigureAwait(false);
+        // The newest page, with the reply streaming now as far as it got: the harness may not have kept that text yet.
+        if (cursor is null && streaming is not null)
+            snapshot = snapshot with { Messages = streaming.Overlay(fleetSessionId, snapshot.Messages) };
+
         if (InTurn(fleetSessionId))
             return snapshot;
 

@@ -108,6 +108,11 @@ internal sealed partial class InProcessFanOutService : BackgroundService
         {
             payload = JsonSerializer.SerializeToElement(turnFailed.Payload, InfrastructureJsonContext.Default.TurnFailedPayload);
         }
+        // And for a text delta: Fleet's shape carries where it starts in the part's text, which the harness's doesn't.
+        else if (domainEvent is MessagePartDeltaStreamed delta)
+        {
+            payload = JsonSerializer.SerializeToElement(delta.Payload, InfrastructureJsonContext.Default.MessagePartDeltaStreamedPayload);
+        }
         else if (eventType == EventTypes.SessionStatus)
         {
             payload = await EnrichSessionStatusPayloadAsync(payload, sessionId, activityStatus, ct)

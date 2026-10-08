@@ -99,6 +99,7 @@ public sealed class HarnessEventRelay : BackgroundService
     private readonly SessionContextRecorder? _context;
     private readonly HarnessUsageLimits? _usageLimits;
     private readonly SessionCallbackDispatcher? _callbacks;
+    private readonly StreamingReplies? _streaming;
     private CancellationToken _stoppingToken;
 
     /// <summary>
@@ -128,8 +129,10 @@ public sealed class HarnessEventRelay : BackgroundService
         SessionCallbackDispatcher? callbacks = null,
         SessionContextRecorder? context = null,
         TurnRetryScheduler? retries = null,
-        HarnessUsageLimits? usageLimits = null)
+        HarnessUsageLimits? usageLimits = null,
+        StreamingReplies? streaming = null)
     {
+        _streaming = streaming;
         _context = context;
         _retries = retries;
         _usageLimits = usageLimits;
@@ -415,6 +418,8 @@ public sealed class HarnessEventRelay : BackgroundService
 
                 var eventToTranslate = eventToPublish with { FleetSessionId = targetFleetSessionId };
                 var domainEvent = translator.Translate(eventToTranslate);
+                if (_streaming is not null)
+                    domainEvent = _streaming.Observe(targetFleetSessionId, domainEvent);
                 _progressObserver?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
                 _updates?.Observe(targetFleetSessionId, domainEvent);
                 _workflows?.Observe(targetFleetSessionId, domainEvent);
@@ -543,6 +548,7 @@ public sealed class HarnessEventRelay : BackgroundService
             // A pump that ends is a harness going away, not a turn finishing: forget what the session was
             // doing rather than call its next idle the end of a turn.
             _notifier?.Forget(fleetSessionId);
+            _streaming?.Forget(fleetSessionId);
 
             // Its asks went with it: nothing can answer them now.
             await ForgetPermissionAsksAsync(fleetSessionId, sessionUserId).ConfigureAwait(false);
