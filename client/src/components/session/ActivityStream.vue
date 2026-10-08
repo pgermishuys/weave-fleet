@@ -136,7 +136,7 @@ builtInSkills.ensureLoaded();
 const { showRightPanel } = useSidebarMobile();
 
 const selectedSession = computed(() => {
-  return sessions.value.find((session) => session.session.id === props.sessionId) ?? null;
+  return sessionsStore.sessionById(props.sessionId);
 });
 
 const stream = useSessionStream(computed(() => props.sessionId));
@@ -678,7 +678,7 @@ const isWaitingForInput = computed(() =>
 // The turn's clock starts at your last prompt.
 // Waiting out a failed model call, as the activity_status push says, for every harness that reports it.
 const sessionRetrying = computed(() => {
-  const item = sessions.value.find((candidate) => candidate.session.id === props.sessionId);
+  const item = sessionsStore.sessionById(props.sessionId);
   return item?.activityStatus === "retry" ? sessionRetry(item) : null;
 });
 const turnStartedAt = computed(() => {
@@ -796,11 +796,11 @@ function openReferencedSession(sessionId: string): void {
 }
 
 /**
- * The machine a sender is on, as this page knows it: the live one for a sender on the same machine, its key for one
+ * The machine a sender is on, as this page knows it: this session's for a sender on the same machine, its key for one
  * in the machine list, null for one that isn't listed here (the chip then names it but doesn't open it).
  */
 function peerMachineKey(peer: PeerSender): string | null {
-  return peer.machineId ? machines.keyOfMachine(peer.machineId) : machines.liveKey;
+  return peer.machineId ? machines.keyOfMachine(peer.machineId) : machine.key;
 }
 
 function handlePeerLinkClick(event: MouseEvent, peer: PeerSender): void {
@@ -809,10 +809,12 @@ function handlePeerLinkClick(event: MouseEvent, peer: PeerSender): void {
   event.preventDefault();
   const key = peerMachineKey(peer);
   if (key === null) return;
-  if (key !== machines.liveKey) {
+  // Another machine's sender opens as the sidebar opens its sessions: in place with every machine live, else there.
+  if (key !== machines.liveKey && !machines.opensInPlace) {
     machines.openOn(key, `/sessions/${encodeURIComponent(peer.sessionId)}`);
     return;
   }
+  if (key !== machines.liveKey) machines.rememberSessions(key, [peer.sessionId]);
   void router.navigate({ to: "/sessions/$id", params: { id: peer.sessionId }, search: { instanceId: undefined, parentSessionId: undefined } });
 }
 
@@ -1090,7 +1092,7 @@ function withDelegation(item: ToolCardItem, part: AccumulatedToolPart): ToolCard
     return item;
   }
 
-  const childSession = sessions.value.find((session) => session.session.id === delegation.childSessionId);
+  const childSession = sessionsStore.sessionById(delegation.childSessionId);
   const childInstanceId = childSession?.instanceId ?? delegation.childSessionId;
   return {
     ...item,

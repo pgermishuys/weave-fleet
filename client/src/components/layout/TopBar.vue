@@ -19,7 +19,7 @@ const sessionsStore = useSessionsStore();
 const appShellStore = useAppShellStore();
 const { isMobileNav, mobileDrawerOpen, openDrawer } = useSidebarMobile();
 
-const { sessions, activeSessionId } = storeToRefs(sessionsStore);
+const { activeSessionId } = storeToRefs(sessionsStore);
 const { config, user } = storeToRefs(appShellStore);
 
 const pathname = useLocation({
@@ -27,7 +27,7 @@ const pathname = useLocation({
 });
 
 const activeSession = computed(() =>
-  sessions.value.find((session) => session.session.id === activeSessionId.value) ?? null,
+  sessionsStore.sessionById(activeSessionId.value),
 );
 
 const routeLabel = computed(() => {

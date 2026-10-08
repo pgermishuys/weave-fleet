@@ -9,6 +9,7 @@ import {
   normalizeBaseUrl,
   rememberSessionMachines,
   restoreActiveMachine,
+  saveLiveMachinesHint,
   saveActiveMachineId,
   saveMachines,
   setActiveMachine,
@@ -215,6 +216,18 @@ describe("machines", () => {
 
       expect(restoreActiveMachine("/sessions/home-session")).toBeNull();
       expect(loadActiveMachineId()).toBeNull();
+    });
+
+    it("with every machine live, opens a session where the tab was: its views ask its machine", () => {
+      rememberSessionMachines(falcon.id, ["remote-session"]);
+      saveLiveMachinesHint(true);
+
+      saveActiveMachineId(null);
+      expect(restoreActiveMachine("/sessions/remote-session")).toBeNull();
+      expect(loadActiveMachineId()).toBeNull();
+
+      saveLiveMachinesHint(false);
+      expect(restoreActiveMachine("/sessions/remote-session")?.id).toBe(falcon.id);
     });
 
     it("goes home when the machine the tab was on has been forgotten", () => {

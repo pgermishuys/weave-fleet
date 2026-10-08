@@ -226,7 +226,7 @@ const SessionDetailPage = defineComponent({
     const search = Route.useSearch();
     const navigate = Route.useNavigate();
     const sessionsStore = useSessionsStore();
-    const { sessions, sessionStateOverrides } = storeToRefs(sessionsStore);
+    const { sessionStateOverrides } = storeToRefs(sessionsStore);
     const remoteSession = shallowRef<SessionDetailResponse | null>(null);
     /** The server has no session under this id (a stale link, or one deleted elsewhere). */
     const sessionMissing = shallowRef(false);
@@ -252,7 +252,7 @@ const SessionDetailPage = defineComponent({
     const { renameSession, isLoading: isRenaming, error: renameError } = useRenameSession();
 
     const selectedSession = computed(() => {
-      return sessions.value.find((session) => session.session.id === params.value.id) ?? null;
+      return sessionsStore.sessionById(params.value.id);
     });
 
     const sessionStateOverride = computed(() => {
@@ -356,7 +356,9 @@ const SessionDetailPage = defineComponent({
               : {}),
           } satisfies SessionListItem;
 
-          sessionsStore.upsertSession(nextSession);
+          // The live machine's list holds only its own sessions.
+          if (machine.isLive) sessionsStore.upsertSession(nextSession);
+          else sessionsStore.upsertElsewhere(machine.key, nextSession);
           dispatchSessionUpsert(nextSession);
         } catch (error) {
           if (error instanceof DOMException && error.name === "AbortError") {
@@ -455,7 +457,7 @@ const SessionDetailPage = defineComponent({
         return null;
       }
 
-      return sessions.value.find((session) => session.session.id === parentSessionId) ?? null;
+      return sessionsStore.sessionById(parentSessionId);
     });
 
     const parentSessionHref = computed(() => {

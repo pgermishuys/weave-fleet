@@ -358,7 +358,7 @@ export function useRenameSession(): UseRenameSessionResult {
   const sessionsStore = getSessionsStoreSafely();
 
   async function renameSession(sessionId: string, title: string, onSuccess?: () => void): Promise<void> {
-    const existingSession = sessionsStore?.sessions.find((item) => item.session.id === sessionId);
+    const existingSession = sessionsStore?.sessionById(sessionId);
     const previousSession = existingSession
       ? {
           ...existingSession,
@@ -537,7 +537,8 @@ export function useUnarchiveSession(): UseUnarchiveSessionResult {
 }
 
 export function useForkSession(): UseForkSessionResult {
-  const { api } = useMachineTarget();
+  const machine = useMachineTarget();
+  const { api } = machine;
   const error = shallowRef<string | undefined>(undefined);
   const forkingSessionId = shallowRef<string | null>(null);
   const isForking = computed(() => forkingSessionId.value !== null);
@@ -548,7 +549,7 @@ export function useForkSession(): UseForkSessionResult {
     error.value = undefined;
 
     try {
-      const sourceSession = sessionsStore?.sessions.find((item) => item.session.id === sessionId);
+      const sourceSession = sessionsStore?.sessionById(sessionId) ?? undefined;
       const { data, error: apiError, response } = await api.POST("/api/sessions/{id}/fork", {
         params: {
           path: { id: sessionId },
@@ -568,7 +569,9 @@ export function useForkSession(): UseForkSessionResult {
         spawnKind: "fork",
       };
 
-      sessionsStore?.upsertSession(nextSession);
+      // A session on another machine opened here isn't the live machine's: its new session isn't either.
+      if (machine.isLive) sessionsStore?.upsertSession(nextSession);
+      else sessionsStore?.upsertElsewhere(machine.key, nextSession);
       sessionsStore?.setActiveSessionId(payload.session.id);
       dispatchSessionUpsert(nextSession);
       trackAction("session.fork", sessionId);
@@ -595,7 +598,8 @@ export function useForkSession(): UseForkSessionResult {
 }
 
 export function useNewSessionInFolder(): UseNewSessionInFolderResult {
-  const { api } = useMachineTarget();
+  const machine = useMachineTarget();
+  const { api } = machine;
   const error = shallowRef<string | undefined>(undefined);
   const startingFromSessionId = shallowRef<string | null>(null);
   const sessionsStore = getSessionsStoreSafely();
@@ -605,7 +609,7 @@ export function useNewSessionInFolder(): UseNewSessionInFolderResult {
     error.value = undefined;
 
     try {
-      const sourceSession = sessionsStore?.sessions.find((item) => item.session.id === sessionId);
+      const sourceSession = sessionsStore?.sessionById(sessionId) ?? undefined;
       const { data, error: apiError, response } = await api.POST("/api/sessions/{id}/new-in-folder", {
         params: { path: { id: sessionId } },
       });
@@ -617,7 +621,9 @@ export function useNewSessionInFolder(): UseNewSessionInFolderResult {
       const payload = data as unknown as CreateSessionResponse;
       const nextSession = { ...buildForkedSessionListItem(sourceSession, payload), totalTokens: 0, totalCost: 0 };
 
-      sessionsStore?.upsertSession(nextSession);
+      // A session on another machine opened here isn't the live machine's: its new session isn't either.
+      if (machine.isLive) sessionsStore?.upsertSession(nextSession);
+      else sessionsStore?.upsertElsewhere(machine.key, nextSession);
       sessionsStore?.setActiveSessionId(payload.session.id);
       dispatchSessionUpsert(nextSession);
       trackAction("session.new-in-folder", sessionId);

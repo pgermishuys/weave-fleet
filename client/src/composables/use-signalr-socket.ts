@@ -3,6 +3,7 @@ import { HubConnection, HubConnectionBuilder, HubConnectionState } from "@micros
 import { apiUrlOn } from "@/lib/api-client"
 import { liveTarget, type MachineTarget } from "@/lib/machine-target"
 import type { DomainEvent } from "@/lib/domain-events"
+import type { FeedHub } from "@/lib/machine-feed"
 import type { SessionHistoryPage, SessionSnapshot } from "@/lib/session-snapshot"
 
 /**
@@ -93,6 +94,8 @@ class MachineHub {
   readonly globalEventHandlers = new Map<string, Set<GlobalEventHandler>>()
 
   connection: HubConnection | null = null
+  /** The connection's start while it's under way, so callers can wait for it. */
+  private opening: Promise<void> | null = null
   subscriberCount = 0
 
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -212,15 +215,23 @@ class MachineHub {
     await Promise.all(topicsV2.map((topic) => this.requestSnapshot(topic, this.topicListenersV2.get(topic) ?? [], true)))
   }
 
-  async connect(): Promise<void> {
+  /** Opens the connection, or waits for the one already opening. */
+  connect(): Promise<void> {
     if (this.connection !== null) {
-      return
+      return this.opening ?? Promise.resolve()
     }
 
     if (suspendConnectionsForTesting) {
-      return
+      return Promise.resolve()
     }
 
+    this.opening = this.open().finally(() => {
+      this.opening = null
+    })
+    return this.opening
+  }
+
+  private async open(): Promise<void> {
     // Home takes the cookie; another machine takes its token in place of it. SignalR sends the token as a header
     // where it can and as access_token on the WebSocket, where a browser can't.
     const machine = this.machine.connection
@@ -702,5 +713,52 @@ export function useWeaveSocket(machine: MachineTarget): WeaveSocketAPI {
 
   return {
     subscribeV2: (topic, onSnapshot, onEvent, onHistory) => hub.addTopicListenerV2(topic, onSnapshot, onEvent, onHistory),
+  }
+}
+
+/**
+ * `machine`'s hub as a live feed's hub (`lib/machine-feed.ts`), so the sidebar's feed for a machine shares the
+ * connection that machine's open sessions use rather than opening a second one. It holds the connection open from
+ * `start` until `stop`, or until a start that couldn't connect: the feed polls then, as with a hub of its own.
+ */
+export function feedHubFor(machine: MachineTarget): FeedHub {
+  const hub = hubFor(machine)
+  const stops: (() => void)[] = []
+  let held = false
+
+  function release(): void {
+    for (const stop of stops.splice(0)) stop()
+    if (held) {
+      held = false
+      hub.decrementSubscribers()
+    }
+  }
+
+  return {
+    async start() {
+      if (!held) {
+        held = true
+        hub.incrementSubscribers()
+      }
+      await hub.connect()
+      if (!hub.isConnected()) {
+        release()
+        throw new Error(`Couldn't connect to the event hub of ${machine.connection?.name ?? "home"}.`)
+      }
+    },
+    async stop() {
+      release()
+    },
+    invoke: (method, ...args) => hub.connection?.invoke(method, ...args) ?? Promise.reject(new Error("The event hub isn't connected.")),
+    // The hub already subscribes the sessions topic and sorts events by topic; the feed only needs that topic's.
+    on(method, handler) {
+      if (method === "Event") stops.push(onGlobalEvent(machine, "sessions", () => handler("sessions")))
+    },
+    onclose(handler) {
+      stops.push(addCallback(hub.disconnectCallbacks, () => handler()))
+    },
+    get state() {
+      return hub.connection?.state ?? HubConnectionState.Disconnected
+    },
   }
 }

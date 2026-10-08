@@ -2,16 +2,19 @@ import { defineStore } from "pinia";
 import { computed, ref, shallowRef, watch } from "vue";
 import type { SessionListItem } from "@/api/client";
 import type { ProjectSummary } from "@/lib/session-project-groups";
-import { onDisconnect, onReconnect } from "@/composables/use-signalr-socket";
-import { liveTarget } from "@/lib/machine-target";
+import { feedHubFor, onDisconnect, onReconnect } from "@/composables/use-signalr-socket";
+import { liveTarget, targetFor, type MachineTarget } from "@/lib/machine-target";
 import {
   HOME_MACHINE_KEY,
   LIVE_MACHINES_PREFERENCE_KEY,
   fetchOnMachine,
   getActiveMachine,
+  loadLiveMachinesHint,
   loadMachines,
+  loadSessionMachines,
   normalizeBaseUrl,
   rememberSessionMachines,
+  saveLiveMachinesHint,
   saveMachines,
   switchToMachine,
   type MachineConnection,
@@ -19,6 +22,7 @@ import {
 import { readCredentialsSync } from "@/lib/device-credentials";
 import { FeedError, HIDDEN_CLOSE_MS, MachineFeed, type FeedRequest } from "@/lib/machine-feed";
 import { usePreferencesStore } from "@/stores/preferences";
+import { useSessionsStore } from "@/stores/sessions";
 
 /** The machine contract this client speaks (`apiVersion` in `GET /api/machine`). */
 export const SUPPORTED_MACHINE_API_VERSION = 1;
@@ -455,6 +459,7 @@ export const useMachinesStore = defineStore("machines", () => {
     delete rest[id];
     others.value = rest;
     saveCachedSessions(rest);
+    sessionsStore.forgetElsewhere(id);
     persist();
     void removeFromServer(id);
     // Working in the machine that's gone: go home.
@@ -554,7 +559,7 @@ export const useMachinesStore = defineStore("machines", () => {
       [entry.key]: { sessions: read.sessions, projects: read.projects ?? current.projects, error: null, loadedAt: Date.now(), loading: false },
     };
     saveCachedSessions(others.value);
-    rememberSessionMachines(entry.isHome ? null : entry.key, read.sessions.map((item) => item.session.id));
+    rememberSessions(entry.key, read.sessions.map((item) => item.session.id));
   }
 
   /** Keeps the last list: an unreachable machine's sessions stay, marked as such. */
@@ -588,10 +593,20 @@ export const useMachinesStore = defineStore("machines", () => {
     await Promise.all(entries.value.filter((entry) => !entry.isLive).map((entry) => refreshMachine(entry.key)));
   }
 
+  /** Which machine each session is on, as far as this client has seen (`rememberSessionMachines`), by session id. */
+  const sessionMachines = shallowRef<Readonly<Record<string, string>>>(loadSessionMachines());
+
+  /** Records that `sessionIds` are on `key`'s machine, so a link to one (or opening it in place) finds it. */
+  function rememberSessions(key: string, sessionIds: readonly string[]): void {
+    if (sessionIds.every((sessionId) => sessionMachines.value[sessionId] === key)) return;
+    rememberSessionMachines(key === HOME_MACHINE_KEY ? null : key, sessionIds);
+    sessionMachines.value = loadSessionMachines();
+  }
+
   /** Records the live machine's sessions, so a link to one opens on this machine later. */
   function rememberLiveSessions(sessionIds: readonly string[]): void {
     if (!hasMachines.value) return;
-    rememberSessionMachines(liveMachine?.id ?? null, sessionIds);
+    rememberSessions(liveKey, sessionIds);
   }
 
   let liveCheckInFlight = false;
@@ -618,8 +633,21 @@ export const useMachinesStore = defineStore("machines", () => {
   let stopHubWatch: (() => void)[] = [];
 
   const preferences = usePreferencesStore();
+  const sessionsStore = useSessionsStore();
   /** Settings → Features: every machine that isn't live keeps a live feed, instead of being polled. */
   const liveFeeds = computed(() => preferences.get(LIVE_MACHINES_PREFERENCE_KEY, "false") === "true");
+  /**
+   * The same switch opens another machine's session in place, without a reload. Until the preferences load it's as
+   * this page started (see `restoreActiveMachine`), so a link to such a session opens where startup put it.
+   */
+  const startedInPlace = loadLiveMachinesHint();
+  const opensInPlace = computed(() => (preferences.hasFetched ? liveFeeds.value : startedInPlace));
+  watch(
+    () => [preferences.hasFetched, liveFeeds.value] as const,
+    ([fetched, on]) => {
+      if (fetched) saveLiveMachinesHint(on);
+    },
+  );
   /** The open feeds, by machine key, with the address and token each was opened with. */
   const feeds = new Map<string, { feed: MachineFeed<MachineRead>; baseUrl: string; token: string | null }>();
   /** The page has been off screen long enough that the feeds closed; they open again when it's back. */
@@ -639,6 +667,8 @@ export const useMachinesStore = defineStore("machines", () => {
       target: { machineId: key, baseUrl: entry.baseUrl, token },
       initial: { sessions: [], projects: null, identity: null },
       read: (request) => readMachine(nameOf(key, entry.name), request),
+      // The machine's event hub, shared with its sessions open in this page.
+      createHub: () => feedHubFor(targetFor(entry.connection)),
       onChange: (snapshot) => {
         // A feed that was closed (forgotten, new token) can still finish a read.
         if (feeds.get(key)?.feed !== feed) return;
@@ -741,6 +771,20 @@ export const useMachinesStore = defineStore("machines", () => {
   }
 
   /**
+   * The machine a session's views ask: with the switch on, the machine it's on, as far as this page knows (a session
+   * opened or started here in place, or one any machine's list had); otherwise, and for a session on no machine
+   * listed here, the live one.
+   */
+  function sessionTarget(sessionId: string | null | undefined): MachineTarget {
+    const key = sessionId && opensInPlace.value
+      ? sessionsStore.elsewhere.get(sessionId)?.machineKey ?? sessionMachines.value[sessionId]
+      : undefined;
+    if (!key || key === liveKey) return liveTarget();
+    const connection = connectionFor(key);
+    return key === HOME_MACHINE_KEY || connection ? targetFor(connection) : liveTarget();
+  }
+
+  /**
    * Makes `key`'s machine live and opens `path` there. The live machine's own list (`liveList`) is kept as its last
    * list first, so after the reload it shows at once, as it did, rather than empty until it's polled.
    */
@@ -782,10 +826,13 @@ export const useMachinesStore = defineStore("machines", () => {
     refreshMachine,
     refreshOthers,
     rememberLiveSessions,
+    rememberSessions,
     startPolling,
     keyOfMachine,
     agentsAllowed,
     setAgentsAllowed,
+    opensInPlace,
+    sessionTarget,
     openOn,
   };
 });

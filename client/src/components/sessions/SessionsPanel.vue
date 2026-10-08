@@ -170,9 +170,19 @@ const sessionsList = useTemplateRef<HTMLElement>("sessionsList");
 
 /**
  * Opening another machine's session reloads the page on that machine. The list keeps its place across the reload, so
- * the row clicked stays under the pointer, and this machine's list is kept so it shows at once afterwards.
+ * the row clicked stays under the pointer, and this machine's list is kept so it shows at once afterwards. With
+ * "Keep every machine live" on it opens in place instead: its views ask its machine.
  */
 function handleMachineSessionOpen(machine: MachineEntry, session: SessionListItem): void {
+  if (machines.opensInPlace) {
+    machines.rememberSessions(machine.key, [session.session.id]);
+    void router.navigate({
+      to: "/sessions/$id",
+      params: { id: session.session.id },
+      search: { instanceId: session.instanceId || undefined, parentSessionId: undefined },
+    });
+    return;
+  }
   const search = session.instanceId ? `?instanceId=${encodeURIComponent(session.instanceId)}` : "";
   if (sessionsList.value) saveSessionListScroll(sessionsList.value.scrollTop);
   machines.openOn(machine.key, `/sessions/${encodeURIComponent(session.session.id)}${search}`, {

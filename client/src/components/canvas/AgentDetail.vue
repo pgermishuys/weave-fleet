@@ -63,7 +63,7 @@ const insideTurn = computed(() => Boolean(props.row.work && isWorkRunning(props.
 const stopError = shallowRef<string | null>(null);
 
 function sessionSearch(sessionId: string): { instanceId: string; parentSessionId: string | undefined } {
-  const listed = sessionsStore.sessions.find((item) => item.session.id === sessionId);
+  const listed = sessionsStore.sessionById(sessionId);
   // A subagent's session is hidden from the list and opens with its parent; a fork or a started session stands alone.
   return { instanceId: listed?.instanceId ?? sessionId, parentSessionId: props.row.work ? props.parentSessionId : undefined };
 }

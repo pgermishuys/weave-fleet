@@ -81,7 +81,7 @@ const historyEl = ref<HTMLElement | null>(null);
 
 const sessionsStore = useSessionsStore();
 const isMobile = useIsMobile();
-const { sessions, sessionStateOverrides } = storeToRefs(sessionsStore);
+const { sessionStateOverrides } = storeToRefs(sessionsStore);
 const optimisticBusy = shallowRef(false);
 const localDisabledOverride = shallowRef<boolean | null>(null);
 const statusIndicatorVisible = shallowRef(false);
@@ -215,7 +215,7 @@ const STATUS_INDICATOR_LINGER_MS = 1600;
 const STATUS_INDICATOR_DOTS_INTERVAL_MS = 400;
 
 const selectedSession = computed(() => {
-  return sessions.value.find((session) => session.session.id === props.sessionId) ?? null;
+  return sessionsStore.sessionById(props.sessionId);
 });
 
 /** The session's harness can run a shell command from the composer; elsewhere `!` is just text. */
@@ -536,7 +536,7 @@ const selectedModelId = computed({
 
 /** "Default" is the session's own agent and model, which prompts that name none get; the chips say which. */
 const defaultLabels = computed(() => {
-  const session = sessions.value.find((candidate) => candidate.session.id === props.sessionId);
+  const session = sessionsStore.sessionById(props.sessionId);
   return describeSessionDefaults({
     sessionAgent: session?.selectedAgent,
     sessionModel: session?.selectedModel,

@@ -5,7 +5,6 @@ import { haptic } from "@/lib/phone/haptics";
 import { holdKeyboard } from "@/lib/phone/keyboard";
 import { shareLink } from "@/lib/phone/share";
 import { ago } from "@/lib/phone/time";
-import { storeToRefs } from "pinia";
 import { Check, CornerDownRight, ImageIcon, LoaderCircle } from "lucide-vue-next";
 import PhoneGlyph from "@/components/phone/PhoneGlyph.vue";
 import ShellCommandBlock from "@/components/session/ShellCommandBlock.vue";
@@ -68,8 +67,7 @@ const sessionId = computed(() => props.sessionId);
 
 useSessions({ retentionStatus: "all" });
 const sessionsStore = useSessionsStore();
-const { sessions } = storeToRefs(sessionsStore);
-const session = computed(() => sessions.value.find((item) => item.session.id === sessionId.value) ?? null);
+const session = computed(() => sessionsStore.sessionById(sessionId.value));
 
 const stream = useSessionStream(sessionId);
 const { progress } = useSessionProgress(sessionId);

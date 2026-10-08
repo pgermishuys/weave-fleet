@@ -6,9 +6,9 @@
  * session on another machine, so it provides that machine to what it uses (folders, harnesses, agents and models,
  * profiles), and they ask it instead. See `NewSessionComposer.vue`.
  *
- * Nothing provides a session's machine yet: one machine is live at a time, so it is the live one. Opening another
- * machine's session without a reload means providing it above both the session view and the right panel (AppShell),
- * since a component can't inject what it provides itself.
+ * The open session's machine is provided around the session view, the right panel and Go to file (`MachineScope` in
+ * AppShell, from `useMachinesStore().sessionTarget`), and around the phone's session page (PhoneStack, from its
+ * address). It's the live machine unless "Keep every machine live" opened another machine's session in place.
  */
 
 import { hasInjectionContext, inject, provide, type InjectionKey } from "vue";

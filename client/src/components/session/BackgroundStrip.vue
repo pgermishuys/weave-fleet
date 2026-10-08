@@ -37,7 +37,7 @@ const summary = computed(() => {
 /** A subagent's model: its session's choice, else whatever answered there last. Unknown until Fleet has said. */
 function modelOf(item: RunningWorkItem): string | null {
   if (item.kind !== "subagent" || !item.childSessionId) return null;
-  const child = sessionsStore.sessions.find((session) => session.session.id === item.childSessionId);
+  const child = sessionsStore.sessionById(item.childSessionId);
   const modelId = child?.selectedModel?.modelID ?? child?.lastAssistantModelId;
   return modelId ? modelDisplayName(modelId, models.value) : null;
 }

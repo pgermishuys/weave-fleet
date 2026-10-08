@@ -6,10 +6,12 @@ import NotificationSetup from "@/components/phone/NotificationSetup.vue";
 import type { PhoneTab } from "@/components/phone/PhoneTabBar.vue";
 import PhoneNewSessionPage from "@/components/phone/new/PhoneNewSessionPage.vue";
 import PhoneSessionPage from "@/components/phone/session/PhoneSessionPage.vue";
+import MachineScope from "@/components/layout/MachineScope.vue";
 import { safariSwipedBack } from "@/composables/phone/use-phone-env";
 import { stack, usePhoneNav } from "@/composables/phone/use-phone-nav";
 import { PARALLAX, UNDER_DIM, useSwipeBack } from "@/composables/phone/use-swipe-back";
-import { getActiveMachine } from "@/lib/machines";
+import { getActiveMachine, loadMachines } from "@/lib/machines";
+import { targetFor } from "@/lib/machine-target";
 import { EASE, EASE_OUT, animateTo, reducedMotion } from "@/lib/phone/animate";
 import { popDuration } from "@/lib/phone/gestures";
 
@@ -45,6 +47,9 @@ const screen = computed<Screen>(() => {
   return { kind: "other", index };
 });
 const session = computed(() => (screen.value.kind === "session" ? screen.value : null));
+// The session's page asks the machine in its address; home when it isn't one this phone lists.
+const sessionTarget = computed(() =>
+  targetFor(loadMachines().find((machine) => machine.id === session.value?.machineId) ?? null));
 const onStack = computed(() => screen.value.kind !== "other");
 
 // The tab the inbox shows: the address's on /phone, and the last one under a session or a sheet.
@@ -232,11 +237,13 @@ function setTop(el: unknown): void {
         :ref="setTop"
         class="ph-screen ph-screen--pushed"
       >
-        <PhoneSessionPage
-          :machine-id="session.machineId"
-          :session-id="session.sessionId"
-          :ask="session.ask"
-        />
+        <MachineScope :target="sessionTarget">
+          <PhoneSessionPage
+            :machine-id="session.machineId"
+            :session-id="session.sessionId"
+            :ask="session.ask"
+          />
+        </MachineScope>
       </section>
     </Transition>
     <PhoneNewSessionPage

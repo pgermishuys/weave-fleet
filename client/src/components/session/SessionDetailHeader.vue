@@ -69,7 +69,8 @@ const { models } = useModels(() => props.id);
 const sessionsStore = useSessionsStore();
 // With more than one machine, say which one this session runs on.
 const machines = useMachinesStore();
-const { sessions } = storeToRefs(sessionsStore);
+/** The machine the session runs on: the live one, or another opened in place. */
+const runsOn = computed(() => machines.entries.find((entry) => entry.key === machine.key) ?? machines.live);
 const { sessionListShown } = storeToRefs(useSidebarStore());
 let composerDisabledSyncTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -84,7 +85,7 @@ const lineageParentTitle = useSessionTitle(() => props.lineageParentId);
 const lineageLink = computed(() => {
   const parentId = props.lineageParentId;
   if (!parentId || !props.lineageKind) return null;
-  const parent = sessions.value.find((item) => item.session.id === parentId);
+  const parent = sessionsStore.sessionById(parentId);
   const instanceId = parent?.instanceId;
   return {
     parentId,
@@ -244,7 +245,7 @@ const harnessLabel = computed(() => {
 });
 // The model the next prompt will get: the session's own choice, else whatever answered last.
 const modelLabel = computed(() => {
-  const session = sessions.value.find((candidate) => candidate.session.id === props.id);
+  const session = sessionsStore.sessionById(props.id);
   const modelId = session?.selectedModel?.modelID ?? session?.lastAssistantModelId;
   return modelDisplayName(modelId, models.value) || null;
 });
@@ -464,9 +465,9 @@ onUnmounted(() => {
           <span
             v-if="machines.hasMachines"
             class="session-detail-header__machine"
-            :title="`Runs on ${machines.live.name}`"
+            :title="`Runs on ${runsOn.name}`"
             data-testid="session-machine"
-          >{{ machines.live.name }}</span>
+          >{{ runsOn.name }}</span>
           <span
             v-if="props.projectName"
             class="session-detail-header__project"
