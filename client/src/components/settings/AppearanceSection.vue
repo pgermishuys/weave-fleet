@@ -1,13 +1,29 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { Check, Monitor } from "lucide-vue-next";
-import { useThemeStore, themes, fontSizes, type FontFamily, type FontSize, type ThemeSelection } from "@/stores/theme";
+import {
+  useThemeStore,
+  themes,
+  fontSizes,
+  type FontFamily,
+  type FontSize,
+  type ThemeSelection,
+  type ThinkingDisplay,
+} from "@/stores/theme";
 
 const themeStore = useThemeStore();
 
 const activeTheme = computed(() => themeStore.currentTheme);
 const activeFontFamily = computed(() => themeStore.fontFamily);
 const activeFontSize = computed(() => themeStore.fontSize);
+
+const thinkingOptions: ReadonlyArray<{ id: ThinkingDisplay; label: string; help: string }> = [
+  { id: "folded", label: "Folded", help: "One line per block, with its gist. Click a line to open it." },
+  { id: "open", label: "Open", help: "Every block in full." },
+  { id: "hidden", label: "Hidden", help: "Not shown. The harness and the history still keep it." },
+];
+
+const activeThinking = computed(() => thinkingOptions.find((option) => option.id === themeStore.thinking) ?? thinkingOptions[0]);
 
 const fontOptions: ReadonlyArray<{ id: FontFamily; label: string; fontFamily: string }> = [
   {
@@ -170,6 +186,46 @@ function selectFontSize(size: FontSize): void {
           {{ size.label }}
         </button>
       </div>
+    </div>
+
+    <div class="mt-6 flex flex-col gap-3">
+      <div class="flex flex-col gap-1">
+        <h3 class="text-sm font-medium text-text">
+          Thinking
+        </h3>
+        <p class="text-xs text-muted">
+          How the model's thinking shows in conversations.
+        </p>
+      </div>
+
+      <div
+        class="inline-flex self-start gap-0 rounded-card border border-border"
+        role="group"
+        aria-label="Thinking"
+      >
+        <button
+          v-for="(option, index) in thinkingOptions"
+          :key="option.id"
+          type="button"
+          class="flex items-center justify-center px-4 py-2 text-sm font-medium transition-colors"
+          :class="[
+            activeThinking.id === option.id
+              ? 'bg-accent text-white'
+              : 'text-muted hover:text-text hover:bg-card-bg',
+            index === 0 ? 'rounded-l-card' : '',
+            index === thinkingOptions.length - 1 ? 'rounded-r-card' : '',
+            index > 0 ? 'border-l border-border' : '',
+          ]"
+          :aria-pressed="activeThinking.id === option.id"
+          :data-testid="`thinking-${option.id}`"
+          @click="themeStore.setThinking(option.id)"
+        >
+          {{ option.label }}
+        </button>
+      </div>
+      <p class="text-xs text-muted">
+        {{ activeThinking.help }}
+      </p>
     </div>
 
     <p class="mt-4 text-xs text-muted">

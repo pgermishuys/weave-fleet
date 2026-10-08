@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thinking in the conversation</title>
+<style>
+  /* Tokens copied from client/src/assets/main.css (dark). */
+  :root {
+    --rail-bg: #0d0d10;
+    --panel-bg: #141418;
+    --card-bg: #1b1b20;
+    --main-bg: #0d0d10;
+    --border: rgba(255, 255, 255, 0.075);
+    --text: #e8e8ec;
+    --muted: #8e8e9a;
+    --text-secondary: #b4b4be;
+    --coral: #D95A3A;
+    --accent: #6366f1;
+    --accent-dim: rgba(99, 102, 241, 0.15);
+    --running: #22c55e;
+    --radius-btn: 8px;
+    --radius-panel: 12px;
+    --transition: 150ms ease-out;
+    --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
+    --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--main-bg); color: var(--text); font-family: var(--font-sans); font-size: 13px; }
+  .page { max-width: 1240px; margin: 0 auto; padding: 24px 20px 48px; }
+  h1 { font-size: 19px; margin: 0 0 6px; font-weight: 650; }
+  .lede { color: var(--muted); margin: 0 0 18px; max-width: 780px; line-height: 1.5; }
+
+  .tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+  .tab { border: 1px solid var(--border); background: transparent; color: var(--muted); border-radius: 999px; padding: 6px 13px; font: inherit; cursor: pointer; }
+  .tab:hover { color: var(--text); }
+  .tab[aria-selected="true"] { background: var(--accent-dim); color: var(--text); border-color: transparent; }
+
+  .stage { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 18px; align-items: start; }
+
+  .app { display: grid; grid-template-columns: 44px minmax(0, 1fr); height: 660px; border: 1px solid var(--border); border-radius: var(--radius-panel); overflow: hidden; background: var(--rail-bg); }
+  .rail { display: flex; flex-direction: column; align-items: center; gap: 10px; padding-top: 12px; }
+  .rail i { width: 22px; height: 22px; border-radius: 6px; background: color-mix(in srgb, var(--text) 8%, transparent); }
+  .rail i:first-child { background: var(--accent-dim); }
+  .convo { background: var(--main-bg); display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  .convo-head { height: 44px; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--border); font-weight: 600; }
+  .convo-head .grow { flex: 1; }
+  .replay { border: 1px solid var(--border); background: transparent; color: var(--muted); border-radius: var(--radius-btn); padding: 4px 10px; font: inherit; font-size: 12px; cursor: pointer; font-weight: 500; }
+  .replay:hover { color: var(--text); }
+  .stream { flex: 1; overflow-y: auto; scrollbar-width: thin; }
+
+  /* Rows, after ActivityStream.vue / ReasoningBlock.vue */
+  .row { padding: 12px; border-bottom: 1px solid var(--border); display: flex; gap: 12px; align-items: flex-start; }
+  .icon { width: 20px; height: 20px; flex-shrink: 0; display: grid; place-items: center; margin-top: 1px; color: var(--muted); }
+  .icon svg { width: 16px; height: 16px; }
+  .content { flex: 1; min-width: 0; line-height: 1.55; }
+  .time { flex-shrink: 0; font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .user .content { background: var(--card-bg); border-radius: 12px; padding: 9px 12px; flex: 0 1 auto; margin-left: auto; max-width: 78%; }
+  .user { justify-content: flex-end; }
+  .reasoning .text { font-size: 13px; color: var(--text-secondary); font-style: italic; white-space: pre-wrap; }
+  .reasoning .text p { margin: 0 0 8px; }
+  .tool { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+  .tool b { color: var(--text); font-weight: 600; }
+  .answer p { margin: 0 0 8px; }
+  .answer code, .card code { font-family: var(--font-mono); font-size: 11.5px; background: color-mix(in srgb, var(--text) 7%, transparent); padding: 0 4px; border-radius: 4px; }
+
+  /* Option A: folded thinking line */
+  .fold { display: flex; flex-direction: column; gap: 6px; }
+  .fold-line {
+    display: flex; align-items: center; gap: 7px; min-width: 0; padding: 2px 6px 2px 4px; margin-left: -4px;
+    border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 12.5px; text-align: left;
+    border-radius: 6px; cursor: pointer; max-width: 100%;
+  }
+  .fold-line:hover { background: color-mix(in srgb, var(--text) 5%, transparent); color: var(--text); }
+  .fold-line .label { flex-shrink: 0; font-weight: 600; }
+  .fold-line .gist { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-style: italic; opacity: 0.85; }
+  .fold-line .chev { width: 12px; height: 12px; flex-shrink: 0; transition: transform var(--transition); }
+  .fold.open .chev { transform: rotate(90deg); }
+  .fold .text { display: none; }
+  .fold.open .text { display: block; }
+  .fold.open .gist { display: none; }
+  .live .label::after { content: "…"; }
+  .live .label { color: var(--text); }
+  .shimmer { background: linear-gradient(90deg, var(--muted) 0%, var(--text) 50%, var(--muted) 100%); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: shimmer 1.6s linear infinite; }
+  @keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+  /* Option B: header switch */
+  .switch { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); font-weight: 500; cursor: pointer; user-select: none; }
+  .switch .track { width: 26px; height: 15px; border-radius: 999px; background: color-mix(in srgb, var(--text) 16%, transparent); position: relative; transition: background var(--transition); }
+  .switch .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; border-radius: 50%; background: var(--text); transition: transform var(--transition); }
+  .switch.on .track { background: var(--accent); }
+  .switch.on .track::after { transform: translateX(11px); }
+
+  /* Settings → Appearance */
+  .settings { border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--panel-bg); padding: 16px 18px; margin-top: 18px; }
+  .settings h3 { margin: 0 0 4px; font-size: 13px; font-weight: 600; }
+  .settings p { margin: 0 0 12px; color: var(--muted); line-height: 1.5; }
+  .seg { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+  .seg button { border: 1px solid var(--border); background: transparent; color: var(--text); border-radius: var(--radius-btn); padding: 8px 12px; font: inherit; cursor: pointer; text-align: left; min-width: 150px; }
+  .seg button small { display: block; color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+  .seg button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-dim); }
+
+  .notes { display: flex; flex-direction: column; gap: 12px; }
+  .card { border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--panel-bg); padding: 14px 15px; }
+  .card h2 { font-size: 13px; margin: 0 0 8px; font-weight: 650; }
+  .card p, .card li { color: color-mix(in srgb, var(--text) 82%, transparent); line-height: 1.5; margin: 0; }
+  .card ul, .card ol { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+  .try { color: var(--coral); font-weight: 600; }
+  .bad { color: #f0a08c; } .good { color: #86e0a6; }
+  .rec { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; background: rgba(34, 197, 94, 0.14); color: #86e0a6; margin-left: 6px; vertical-align: 1px; }
+  [hidden] { display: none !important; }
+  @media (max-width: 980px) { .stage { grid-template-columns: 1fr; } .app { height: 560px; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Thinking in the conversation</h1>
+  <p class="lede">A report asks to hide the model's thinking, or switch it on and off: it helps while a turn runs, but it fills the history afterwards. Today every thinking block is printed in full, open, in every turn, and nothing can fold or hide it. Pick a tab, then press <b>Replay turn</b> to watch a turn arrive.</p>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" data-view="today">Today</button>
+    <button class="tab" role="tab" data-view="a" aria-selected="true">A · Folded to one line (recommended)</button>
+    <button class="tab" role="tab" data-view="b">B · Show thinking switch</button>
+  </div>
+
+  <div class="stage">
+    <div>
+      <div class="app">
+        <div class="rail"><i></i><i></i><i></i><i></i></div>
+        <div class="convo">
+          <div class="convo-head">
+            <span>Paginate the orders endpoint</span>
+            <span class="grow"></span>
+            <label class="switch on" id="switch" hidden><span class="track"></span>Show thinking</label>
+            <button class="replay" id="replay" type="button">Replay turn</button>
+          </div>
+          <div class="stream" id="stream"></div>
+        </div>
+      </div>
+
+      <div class="settings" id="settings">
+        <h3>Thinking</h3>
+        <p id="settings-help">Settings → Appearance. How the model's thinking shows in conversations. Applies to every session and harness; nothing is deleted.</p>
+        <div class="seg" id="seg"></div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="card" data-for="today">
+        <h2>Today</h2>
+        <ul>
+          <li class="bad">Every thinking block is printed in full and stays open, so a long session is mostly thinking.</li>
+          <li class="bad">Nothing folds it and no setting hides it.</li>
+          <li>It does help to watch while a turn is running.</li>
+        </ul>
+      </div>
+      <div class="card" data-for="a" hidden>
+        <h2>A · Folded to one line <span class="rec">recommended</span></h2>
+        <ul>
+          <li class="good">Each thinking block becomes one line: <b>Thinking</b> and its gist (the summary when the harness sends one, otherwise the first sentence).</li>
+          <li class="good">While it streams, the line shows the newest sentence, so you can still follow along, and nothing jumps when it ends.</li>
+          <li><span class="try">Try:</span> click a line to open that block. It stays open until you close it.</li>
+          <li>Settings → Appearance → Thinking: <b>Folded</b> (default) · <b>Open</b> (today) · <b>Hidden</b>.</li>
+          <li>Like Claude's and ChatGPT's “Thought for…” lines.</li>
+        </ul>
+      </div>
+      <div class="card" data-for="b" hidden>
+        <h2>B · Show thinking switch</h2>
+        <ul>
+          <li>A switch in the conversation header shows or hides every thinking block.</li>
+          <li class="good">One click, and the setting is remembered.</li>
+          <li class="bad">All or nothing: to read one block you show them all again.</li>
+          <li class="bad">The header gains a control that's there for every turn.</li>
+          <li><span class="try">Try:</span> flip the switch, then replay.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h2>Either way</h2>
+        <ul>
+          <li>It's only how the thinking shows. The harness and the history keep all of it.</li>
+          <li>The phone app doesn't show thinking today, so it's unchanged.</li>
+          <li>Out of scope: how long the model thought. Fleet doesn't get that time from every harness yet.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const BRAIN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M12 5v13"/></svg>';
+const TOOL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></svg>';
+const BOT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/></svg>';
+const CHEV = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
+
+const turns = [
+  {
+    user: "The orders list times out for big accounts. Can you page it?",
+    thinking: [
+      "The endpoint loads every order for the account and sorts in memory, so the time grows with the account.",
+      "Offset paging would still scan the skipped rows. A cursor on (created_at, id) uses the existing index and stays stable when new orders arrive.",
+      "I should keep the old response shape for one release, so the mobile client doesn't break, and add next_cursor alongside it.",
+    ],
+    tool: ["Read", "src/orders/list_orders.ts"],
+    answer: "The list loaded every order and sorted it in memory. I'll switch it to a cursor on <code>(created_at, id)</code>, which the existing index covers, and keep the old shape for a release.",
+    time: "4m",
+  },
+  {
+    user: "Sounds good, go ahead.",
+    thinking: [
+      "Start with the query: WHERE (created_at, id) < (cursor) ORDER BY created_at DESC, id DESC LIMIT n + 1, so one extra row says whether there's a next page.",
+      "Then encode the cursor as base64 of the two values so clients treat it as opaque.",
+      "Tests: an empty account, exactly one page, and a new order arriving between two page reads.",
+    ],
+    tool: ["Edit", "src/orders/list_orders.ts"],
+    answer: "Done. <code>GET /orders</code> takes <code>cursor</code> and <code>limit</code> and returns <code>next_cursor</code>. Three tests cover an empty account, one exact page and an order arriving mid-paging.",
+    time: "1m",
+  },
+];
+
+let view = "a";
+let mode = { a: "folded", b: "shown" };
+let showSwitch = true;
+const opened = new Set();
+let replayTimer = null;
+let live = null; // { turn, sentences, chars, phase }
+
+function gist(sentences) { return sentences[0]; }
+
+function thinkingRow(t, i, streaming) {
+  const sentences = streaming ? live.sentences : t.thinking;
+  const text = sentences.map((s) => `<p>${s}</p>`).join("");
+  if (view === "today" || (view === "a" && mode.a === "open")) {
+    return `<div class="row reasoning"><div class="icon">${BRAIN}</div><div class="content"><div class="text">${text}</div></div><span class="time">${streaming ? "now" : t.time + " ago"}</span></div>`;
+  }
+  if (view === "b") {
+    if (!showSwitch) return "";
+    return `<div class="row reasoning"><div class="icon">${BRAIN}</div><div class="content"><div class="text">${text}</div></div><span class="time">${streaming ? "now" : t.time + " ago"}</span></div>`;
+  }
+  if (mode.a === "hidden") return "";
+  const key = `t${i}`;
+  const isOpen = opened.has(key);
+  const line = streaming ? sentences[sentences.length - 1] : gist(sentences);
+  return `<div class="row reasoning"><div class="icon">${BRAIN}</div><div class="content"><div class="fold ${isOpen ? "open" : ""}" data-key="${key}">
+      <button type="button" class="fold-line ${streaming ? "live" : ""}" aria-expanded="${isOpen}">${CHEV}<span class="label ${streaming ? "shimmer" : ""}">Thinking</span><span class="gist">${line ?? ""}</span></button>
+      <div class="text">${text}</div></div></div><span class="time">${streaming ? "now" : t.time + " ago"}</span></div>`;
+}
+
+function render() {
+  const out = [];
+  turns.forEach((t, i) => {
+    const streaming = live && live.turn === i;
+    if (live && i > live.turn) return;
+    out.push(`<div class="row user"><div class="content">${t.user}</div></div>`);
+    if (streaming && live.phase === "wait") return;
+    out.push(thinkingRow(t, i, streaming));
+    if (streaming && live.phase === "think") return;
+    out.push(`<div class="row"><div class="icon">${TOOL}</div><div class="content tool"><b>${t.tool[0]}</b> ${t.tool[1]}</div></div>`);
+    if (streaming && live.phase === "tool") return;
+    out.push(`<div class="row answer"><div class="icon">${BOT}</div><div class="content"><p>${t.answer}</p></div><span class="time">${streaming ? "now" : t.time + " ago"}</span></div>`);
+  });
+  const stream = document.getElementById("stream");
+  stream.innerHTML = out.join("");
+  stream.querySelectorAll(".fold").forEach((fold) => {
+    fold.querySelector(".fold-line").addEventListener("click", () => {
+      const key = fold.dataset.key;
+      opened.has(key) ? opened.delete(key) : opened.add(key);
+      render();
+    });
+  });
+  if (live) stream.scrollTop = stream.scrollHeight;
+}
+
+function renderSettings() {
+  const seg = document.getElementById("seg");
+  const settings = document.getElementById("settings");
+  settings.hidden = view !== "a";
+  const choices = [
+    ["folded", "Folded", "One line per block; click to open"],
+    ["open", "Open", "Every block in full (today)"],
+    ["hidden", "Hidden", "Not shown at all"],
+  ];
+  seg.innerHTML = choices.map(([id, label, help]) =>
+    `<button type="button" data-mode="${id}" aria-pressed="${mode.a === id}">${label}<small>${help}</small></button>`).join("");
+  seg.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { mode.a = b.dataset.mode; renderSettings(); render(); }));
+}
+
+function setView(next) {
+  view = next;
+  document.querySelectorAll(".tab").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.view === view)));
+  document.querySelectorAll("[data-for]").forEach((c) => (c.hidden = c.dataset.for !== view));
+  document.getElementById("switch").hidden = view !== "b";
+  stopReplay();
+  renderSettings();
+  render();
+}
+
+function stopReplay() { clearTimeout(replayTimer); live = null; }
+
+function replay() {
+  stopReplay();
+  const turn = turns.length - 1;
+  const t = turns[turn];
+  live = { turn, sentences: [], phase: "wait" };
+  render();
+  const steps = [];
+  steps.push(() => { live.phase = "think"; live.sentences = [""]; });
+  t.thinking.forEach((sentence, s) => {
+    const words = sentence.split(" ");
+    words.forEach((_, w) => steps.push(() => {
+      live.sentences[s] = words.slice(0, w + 1).join(" ");
+    }));
+    if (s < t.thinking.length - 1) steps.push(() => live.sentences.push(""));
+  });
+  steps.push(() => { live.phase = "tool"; });
+  steps.push(() => { live.phase = "answer"; });
+  steps.push(() => { live = null; });
+  let k = 0;
+  const tick = () => {
+    steps[k++]();
+    render();
+    if (k < steps.length) replayTimer = setTimeout(tick, k < 2 ? 500 : live && live.phase === "think" ? 70 : 700);
+  };
+  replayTimer = setTimeout(tick, 400);
+}
+
+document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => setView(t.dataset.view)));
+document.getElementById("replay").addEventListener("click", replay);
+document.getElementById("switch").addEventListener("click", (e) => {
+  e.preventDefault();
+  showSwitch = !showSwitch;
+  e.currentTarget.classList.toggle("on", showSwitch);
+  render();
+});
+setView("a");
+</script>
+</body>
+</html>

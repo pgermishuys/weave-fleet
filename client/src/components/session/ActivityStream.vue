@@ -55,6 +55,7 @@ import TurnFailureRetry from "@/components/session/TurnFailureRetry.vue";
 import ImproveSkillDialog from "@/components/skills/ImproveSkillDialog.vue";
 import { improveTurn, type ImproveTurn } from "@/lib/skill-versions";
 import { useBuiltInSkillsStore } from "@/stores/built-in-skills";
+import { useThemeStore } from "@/stores/theme";
 
 interface ImageAttachmentDisplay {
   url: string;
@@ -128,6 +129,7 @@ const { sessions } = storeToRefs(sessionsStore);
 const canvasesStore = useCanvasesStore();
 /** Fleet's built-in skills: a row that loaded one offers Improve. Loaded once, the first time a session shows. */
 const builtInSkills = useBuiltInSkillsStore();
+const themeStore = useThemeStore();
 builtInSkills.ensureLoaded();
 const { showRightPanel } = useSidebarMobile();
 
@@ -632,6 +634,15 @@ watch(
 );
 
 const isStreaming = computed(() => isStreamWorking(sessionStatus.value));
+
+/** The thinking block the model is writing right now: the last part of the newest message, while the turn runs. */
+const liveReasoningPartId = computed<string | null>(() => {
+  if (!isStreaming.value) return null;
+  const last = sessionMessages.value.at(-1);
+  if (last?.role !== "assistant") return null;
+  const part = last.parts.at(-1);
+  return part?.type === "reasoning" ? part.partId : null;
+});
 
 const latestAnswerMessage = computed<{ id: string; text: string } | null>(() => {
   for (let index = sessionMessages.value.length - 1; index >= 0; index -= 1) {
@@ -1146,6 +1157,9 @@ function normalizeIdentity(value: string): string {
 
 function hasVisibleMessageContent(message: ActivityMessage): boolean {
   return message.body.trim().length > 0
+    // Thinking on its own is a message too, so the folded line follows it while the model is still thinking.
+    || (themeStore.thinking !== "hidden"
+      && (message.reasoningParts?.some((part) => part.text.trim() || part.summary?.trim()) ?? false))
     || message.images.length > 0
     || (message.tools?.length ?? 0) > 0
     || (message.questionParts?.length ?? 0) > 0
@@ -1311,6 +1325,7 @@ function handleImproveSkill(skill: string, toolId: string): void {
           :text="reasoning.text"
           :summary="reasoning.summary"
           :created-at="message.createdAt"
+          :live="reasoning.partId === liveReasoningPartId"
         />
         <div
           v-if="message.background"
