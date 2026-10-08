@@ -6,8 +6,8 @@ import { clearCredentials, saveCredentials } from "@/lib/device-credentials";
 
 const started: { machineId: string; baseUrl: string; token: string | null }[] = [];
 
-vi.mock("@/lib/phone/machine-feed", () => ({
-  MachineFeed: class {
+vi.mock("@/lib/phone/inbox-feed", () => ({
+  InboxFeed: class {
     constructor(private readonly options: { target: { machineId: string; baseUrl: string; token: string | null }; onChange: (s: unknown) => void }) {}
     async start() {
       started.push(this.options.target);

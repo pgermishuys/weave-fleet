@@ -5,14 +5,17 @@ import { useBoardFeature } from "@/composables/use-board-feature";
 import { SESSION_RECAP_PREFERENCE_KEY } from "@/composables/use-session-recap";
 import { RETRY_AFTER_LIMITS_PREFERENCE_KEY } from "@/composables/use-session-retry";
 import { SESSION_MESSAGES_PREFERENCE_KEY } from "@/lib/session-messages";
+import { LIVE_MACHINES_PREFERENCE_KEY } from "@/lib/machines";
 import {
   DESKTOP_NOTIFICATIONS_PREFERENCE_KEY,
   notificationPermission,
   requestNotificationPermission,
 } from "@/composables/use-session-notifications";
+import { useMachinesStore } from "@/stores/machines";
 import { usePreferencesStore } from "@/stores/preferences";
 
 const preferencesStore = usePreferencesStore();
+const machines = useMachinesStore();
 preferencesStore.ensureLoaded();
 const { isBoardFeatureEnabled, setBoardFeatureEnabled } = useBoardFeature();
 
@@ -90,6 +93,20 @@ async function toggleSessionMessages(): Promise<void> {
     await preferencesStore.set(SESSION_MESSAGES_PREFERENCE_KEY, isSessionMessagesEnabled.value ? "false" : "true");
   } finally {
     isSavingSessionMessages.value = false;
+  }
+}
+
+const isLiveMachinesEnabled = computed(
+  () => preferencesStore.get(LIVE_MACHINES_PREFERENCE_KEY, "false") === "true",
+);
+const isSavingLiveMachines = shallowRef(false);
+
+async function toggleLiveMachines(): Promise<void> {
+  isSavingLiveMachines.value = true;
+  try {
+    await preferencesStore.set(LIVE_MACHINES_PREFERENCE_KEY, isLiveMachinesEnabled.value ? "false" : "true");
+  } finally {
+    isSavingLiveMachines.value = false;
   }
 }
 
@@ -323,6 +340,48 @@ async function toggleBoardFeature(): Promise<void> {
           <span
             class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
             :class="isSessionMessagesEnabled ? 'translate-x-5' : 'translate-x-0'"
+          />
+        </button>
+      </div>
+    </div>
+
+    <div
+      v-if="machines.hasMachines"
+      class="mt-3 flex items-start justify-between gap-4 rounded-card border border-border bg-main-bg p-4"
+    >
+      <div>
+        <p class="flex items-center gap-2 text-sm font-medium text-text">
+          Keep every machine live
+          <span class="rounded-full border border-border px-2 py-px text-[0.7rem] font-medium uppercase tracking-wide text-muted">
+            Experimental
+          </span>
+        </p>
+        <p class="mt-1 text-xs text-muted">
+          Other machines' sessions update as they change, instead of every 15 seconds.
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <LoaderCircle
+          v-if="isSavingLiveMachines"
+          :size="16"
+          class="animate-spin text-muted"
+          aria-hidden="true"
+        />
+        <button
+          type="button"
+          role="switch"
+          :aria-checked="isLiveMachinesEnabled"
+          :disabled="preferencesStore.isLoading || isSavingLiveMachines"
+          aria-label="Keep every machine live"
+          data-testid="live-machines-switch"
+          class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-main-bg disabled:cursor-not-allowed disabled:opacity-60"
+          :class="isLiveMachinesEnabled ? 'bg-accent' : 'bg-border'"
+          @click="toggleLiveMachines"
+        >
+          <span
+            class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+            :class="isLiveMachinesEnabled ? 'translate-x-5' : 'translate-x-0'"
           />
         </button>
       </div>

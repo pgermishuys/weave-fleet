@@ -1,10 +1,11 @@
 import { defineStore } from "pinia";
-import { computed, ref, shallowRef } from "vue";
+import { computed, ref, shallowRef, watch } from "vue";
 import type { SessionListItem } from "@/api/client";
 import type { ProjectSummary } from "@/lib/session-project-groups";
 import { onDisconnect, onReconnect } from "@/composables/use-signalr-socket";
 import {
   HOME_MACHINE_KEY,
+  LIVE_MACHINES_PREFERENCE_KEY,
   fetchOnMachine,
   getActiveMachine,
   loadMachines,
@@ -15,6 +16,8 @@ import {
   type MachineConnection,
 } from "@/lib/machines";
 import { readCredentialsSync } from "@/lib/device-credentials";
+import { FeedError, HIDDEN_CLOSE_MS, MachineFeed, type FeedRequest } from "@/lib/machine-feed";
+import { usePreferencesStore } from "@/stores/preferences";
 
 /** The machine contract this client speaks (`apiVersion` in `GET /api/machine`). */
 export const SUPPORTED_MACHINE_API_VERSION = 1;
@@ -190,6 +193,13 @@ function saveCachedSessions(others: Record<string, MachineSessions>): void {
 }
 const SESSION_PAGE_SIZE = 100;
 
+/** One read of a machine that isn't live: its sessions, and its projects and identity when those answer. */
+interface MachineRead {
+  sessions: SessionListItem[];
+  projects: ProjectSummary[] | null;
+  identity: MachineInfo | null;
+}
+
 async function readError(response: Response, fallback: string): Promise<string> {
   try {
     const body = await response.json() as { error?: string; message?: string };
@@ -202,6 +212,23 @@ async function readError(response: Response, fallback: string): Promise<string> 
 function describeFailure(error: unknown, machineName: string): string {
   if (error instanceof TypeError) return `Can't reach ${machineName}.`;
   return error instanceof Error ? error.message : String(error);
+}
+
+/** Reads a machine that isn't live, through `request` (a poll's fetch, or its live feed's). */
+async function readMachine(name: string, request: FeedRequest): Promise<MachineRead> {
+  const [response, projectsResponse, identityResponse] = await Promise.all([
+    request(`/api/sessions?limit=${SESSION_PAGE_SIZE}&offset=0`),
+    // Its projects only order and name the groups: without them the sessions still group by the names they carry.
+    request("/api/projects").catch(() => null),
+    // What it can run, for Settings → Machines; the sessions don't need it.
+    request("/api/machine").catch(() => null),
+  ]);
+  if (response.status === 401) throw new FeedError(`${name} didn't accept the token.`);
+  if (!response.ok) throw new FeedError(await readError(response, `${name} answered ${response.status}.`));
+  const sessions = await response.json() as SessionListItem[];
+  const projects = projectsResponse?.ok ? await (projectsResponse.json() as Promise<ProjectSummary[]>).catch(() => null) : null;
+  const identity = identityResponse?.ok ? await (identityResponse.json() as Promise<MachineInfo>).catch(() => null) : null;
+  return { sessions, projects, identity };
 }
 
 /** Asks `connection` who it is, checking it speaks this client's contract. */
@@ -486,39 +513,50 @@ export const useMachinesStore = defineStore("machines", () => {
     return await response.json() as MachineAccess;
   }
 
-  /** Fetches the session list of a machine that isn't live. */
+  function sessionsOf(key: string): MachineSessions {
+    return others.value[key] ?? { sessions: [], projects: [], error: null, loadedAt: null, loading: false };
+  }
+
+  function markLoading(key: string): void {
+    others.value = { ...others.value, [key]: { ...sessionsOf(key), loading: true } };
+  }
+
+  /** Keeps what a machine that isn't live just returned. */
+  function applyRead(entry: MachineEntry, read: MachineRead): void {
+    const current = sessionsOf(entry.key);
+    if (read.identity) rememberIdentity(entry.key, read.identity);
+    others.value = {
+      ...others.value,
+      [entry.key]: { sessions: read.sessions, projects: read.projects ?? current.projects, error: null, loadedAt: Date.now(), loading: false },
+    };
+    saveCachedSessions(others.value);
+    rememberSessionMachines(entry.isHome ? null : entry.key, read.sessions.map((item) => item.session.id));
+  }
+
+  /** Keeps the last list: an unreachable machine's sessions stay, marked as such. */
+  function markUnreachable(key: string, error: string): void {
+    others.value = { ...others.value, [key]: { ...sessionsOf(key), error, loading: false } };
+  }
+
+  /** Fetches the session list of a machine that isn't live, or has its live feed read it again. */
   async function refreshMachine(key: string): Promise<void> {
     if (key === liveKey) return;
+    if (feedsWanted()) {
+      syncFeeds();
+      await feeds.get(key)?.feed.refresh();
+      return;
+    }
     const entry = entries.value.find((candidate) => candidate.key === key);
     if (!entry) return;
 
-    const current = others.value[key] ?? { sessions: [], projects: [], error: null, loadedAt: null, loading: false };
-    others.value = { ...others.value, [key]: { ...current, loading: true } };
-
+    markLoading(key);
     try {
-      const [response, projectsResponse, identityResponse] = await Promise.all([
-        fetchOnMachine(entry.connection, `/api/sessions?limit=${SESSION_PAGE_SIZE}&offset=0`),
-        // Its projects only order and name the groups: without them the sessions still group by the names they carry.
-        fetchOnMachine(entry.connection, "/api/projects").catch(() => null),
-        // What it can run, for Settings → Machines; the sessions don't need it.
-        fetchOnMachine(entry.connection, "/api/machine").catch(() => null),
-      ]);
-      if (response.status === 401) throw new Error(`${entry.name} didn't accept the token.`);
-      if (!response.ok) throw new Error(await readError(response, `${entry.name} answered ${response.status}.`));
-      const sessions = await response.json() as SessionListItem[];
-      const projects = projectsResponse?.ok
-        ? await (projectsResponse.json() as Promise<ProjectSummary[]>).catch(() => current.projects)
-        : current.projects;
-      const identity = identityResponse?.ok ? await (identityResponse.json() as Promise<MachineInfo>).catch(() => null) : null;
+      const read = await readMachine(entry.name, (path) => fetchOnMachine(entry.connection, path));
       if (!entries.value.some((candidate) => candidate.key === key)) return;
-      if (identity) rememberIdentity(key, identity);
-      others.value = { ...others.value, [key]: { sessions, projects, error: null, loadedAt: Date.now(), loading: false } };
-      saveCachedSessions(others.value);
-      rememberSessionMachines(entry.isHome ? null : key, sessions.map((item) => item.session.id));
+      applyRead(entry, read);
     } catch (error) {
       if (!entries.value.some((candidate) => candidate.key === key)) return;
-      // Keep the last list: an unreachable machine's sessions stay, marked as such.
-      others.value = { ...others.value, [key]: { ...current, error: describeFailure(error, entry.name), loading: false } };
+      markUnreachable(key, describeFailure(error, entry.name));
     }
   }
 
@@ -555,18 +593,100 @@ export const useMachinesStore = defineStore("machines", () => {
   let liveTimer: ReturnType<typeof setInterval> | undefined;
   let stopHubWatch: (() => void)[] = [];
 
-  /** Starts polling machines that aren't live; returns the stop. Several callers share one timer. */
+  const preferences = usePreferencesStore();
+  /** Settings → Features: every machine that isn't live keeps a live feed, instead of being polled. */
+  const liveFeeds = computed(() => preferences.get(LIVE_MACHINES_PREFERENCE_KEY, "false") === "true");
+  /** The open feeds, by machine key, with the address and token each was opened with. */
+  const feeds = new Map<string, { feed: MachineFeed<MachineRead>; baseUrl: string; token: string | null }>();
+  /** The page has been off screen long enough that the feeds closed; they open again when it's back. */
+  let feedsAway = false;
+  let awayTimer: ReturnType<typeof setTimeout> | undefined;
+  let stopFeedWatch: (() => void) | undefined;
+
+  function feedsWanted(): boolean {
+    return pollers > 0 && liveFeeds.value && !feedsAway;
+  }
+
+  function openFeed(entry: MachineEntry): void {
+    const { key } = entry;
+    const token = entry.connection?.token ?? null;
+    let heardAt: number | null = null;
+    const feed: MachineFeed<MachineRead> = new MachineFeed<MachineRead>({
+      target: { machineId: key, baseUrl: entry.baseUrl, token },
+      initial: { sessions: [], projects: null, identity: null },
+      read: (request) => readMachine(nameOf(key, entry.name), request),
+      onChange: (snapshot) => {
+        // A feed that was closed (forgotten, new token) can still finish a read.
+        if (feeds.get(key)?.feed !== feed) return;
+        if (snapshot.status === "unreachable") {
+          markUnreachable(key, snapshot.error ?? `Can't reach ${nameOf(key, entry.name)}.`);
+        } else if (snapshot.lastHeardAt !== heardAt) {
+          heardAt = snapshot.lastHeardAt;
+          applyRead(entry, snapshot);
+        }
+      },
+    });
+    feeds.set(key, { feed, baseUrl: entry.baseUrl, token });
+    markLoading(key);
+    void feed.start();
+  }
+
+  function nameOf(key: string, fallback: string): string {
+    return entries.value.find((candidate) => candidate.key === key)?.name ?? fallback;
+  }
+
+  /** Opens a feed for each machine that isn't live and closes the rest, or closes them all when feeds aren't wanted. */
+  function syncFeeds(): void {
+    const wanted = feedsWanted() ? entries.value.filter((entry) => !entry.isLive) : [];
+    for (const [key, open] of feeds) {
+      const entry = wanted.find((candidate) => candidate.key === key);
+      if (entry && entry.baseUrl === open.baseUrl && (entry.connection?.token ?? null) === open.token) continue;
+      feeds.delete(key);
+      void open.feed.stop();
+    }
+    for (const entry of wanted) if (!feeds.has(entry.key)) openFeed(entry);
+  }
+
+  function onVisibility(): void {
+    if (document.visibilityState === "hidden") {
+      awayTimer ??= setTimeout(() => {
+        feedsAway = true;
+        syncFeeds();
+      }, HIDDEN_CLOSE_MS);
+      return;
+    }
+    clearTimeout(awayTimer);
+    awayTimer = undefined;
+    if (feedsAway) {
+      feedsAway = false;
+      syncFeeds();
+    } else {
+      for (const open of feeds.values()) void open.feed.refresh();
+    }
+  }
+
+  /**
+   * Starts following machines that aren't live, by polling or (with the switch on) a live feed each; returns the
+   * stop. Several callers share one timer and one set of feeds.
+   */
   function startPolling(): () => void {
     pollers += 1;
     if (pollers === 1) {
+      preferences.ensureLoaded();
       void loadHome();
-      void refreshOthers();
+      if (!liveFeeds.value) void refreshOthers();
       pollTimer = setInterval(() => {
         if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
         // Home live isn't among the others; ask it again too, so how busy it is stays current.
         if (liveKey === HOME_MACHINE_KEY) void loadHome();
-        void refreshOthers();
+        if (!liveFeeds.value) void refreshOthers();
       }, POLL_INTERVAL_MS);
+      // Feeds follow the switch and the machine list: added, forgotten, or a new address or token.
+      stopFeedWatch = watch([liveFeeds, entries], ([on], previous) => {
+        syncFeeds();
+        if (previous?.[0] && !on) void refreshOthers();
+      }, { immediate: true });
+      if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisibility);
       if (liveMachine) {
         void checkLive();
         liveTimer = setInterval(() => void checkLive(), LIVE_CHECK_INTERVAL_MS);
@@ -585,6 +705,13 @@ export const useMachinesStore = defineStore("machines", () => {
         liveTimer = undefined;
         for (const stop of stopHubWatch) stop();
         stopHubWatch = [];
+        stopFeedWatch?.();
+        stopFeedWatch = undefined;
+        if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibility);
+        clearTimeout(awayTimer);
+        awayTimer = undefined;
+        feedsAway = false;
+        syncFeeds();
       }
     };
   }

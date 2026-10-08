@@ -1,14 +1,12 @@
 /**
  * The phone's home screen, as data: everything waiting on you across every machine, then what's working, then what
- * finished in the last day. Pure: the feeds (machine-feed.ts) fill it in, the inbox page draws it.
+ * finished in the last day. Pure: the feeds (inbox-feed.ts) fill it in, the inbox page draws it.
  */
 import type { SessionListItem } from "@/api/client";
 import type { PermissionAsk } from "@/composables/use-session-permissions";
 import { isTopLevel, sessionBucket, sessionUpdatedAt } from "@/lib/needs-you";
+import type { FeedStatus } from "@/lib/machine-feed";
 import type { QuestionInfo } from "@/lib/question-types";
-
-/** How a machine's feed is getting news: live over its event hub, by polling, or not at all. */
-export type FeedStatus = "connecting" | "live" | "polling" | "unreachable";
 
 /** What a waiting session waits on, when the phone could find out. */
 export type InboxAsk =

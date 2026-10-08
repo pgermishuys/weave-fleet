@@ -171,6 +171,9 @@ export function rememberSessionMachines(machineId: string | null, sessionIds: re
 /** How `rememberSessionMachines` records the home machine, whose id the client may not know. */
 export const HOME_MACHINE_KEY = "home";
 
+/** The user preference behind "Keep every machine live" in Settings → Features: a live feed per machine, not a poll. */
+export const LIVE_MACHINES_PREFERENCE_KEY = "LiveMachines";
+
 // ─── Startup and switching ────────────────────────────────────────────────────
 
 /**

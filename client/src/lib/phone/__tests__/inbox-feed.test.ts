@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { findPendingQuestion, MachineFeed, POLL_INTERVAL_MS, type FeedHub, type FeedSnapshot, type FeedTarget } from "../machine-feed";
+import { POLL_INTERVAL_MS, type FeedHub, type FeedTarget } from "@/lib/machine-feed";
+import { findPendingQuestion, InboxFeed, type InboxSnapshot } from "../inbox-feed";
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -43,10 +44,10 @@ class FakeHub implements FeedHub {
   }
 }
 
-describe("MachineFeed", () => {
+describe("InboxFeed", () => {
   let routes: Record<string, (init: RequestInit) => Response>;
   let calls: { url: string; init: RequestInit }[];
-  let snapshots: FeedSnapshot[];
+  let snapshots: InboxSnapshot[];
   const fetcher = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = String(input);
     calls.push({ url, init });
@@ -71,7 +72,7 @@ describe("MachineFeed", () => {
   afterEach(() => vi.useRealTimers());
 
   function feed(target: FeedTarget = { machineId: "falcon", baseUrl: "https://falcon.ts.net", token: "fdt_falcon.1" }, hub = new FakeHub(), onUnauthorized?: () => Promise<string | null>) {
-    return { hub, feed: new MachineFeed({ target, fetcher, createHub: () => hub, onChange: (s) => snapshots.push(s), onUnauthorized, now: () => 1000 }) };
+    return { hub, feed: new InboxFeed({ target, fetcher, createHub: () => hub, onChange: (s) => snapshots.push(s), onUnauthorized, now: () => 1000 }) };
   }
 
   it("reads sessions and what the waiting ones wait on, with the phone's token and no cookies", async () => {
