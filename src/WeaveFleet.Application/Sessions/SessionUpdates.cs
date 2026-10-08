@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
@@ -13,7 +14,15 @@ namespace WeaveFleet.Application.Sessions;
 /// <param name="TargetId">The session it messaged.</param>
 /// <param name="UserId">Whose sessions they are.</param>
 /// <param name="MessageId">The id the target's harness was given for the message. Its replies name it as their parent.</param>
-public sealed record SessionUpdateWatch(string AskerId, string TargetId, string UserId, string MessageId);
+/// <param name="Machine">The machine the target is on, when it's another one (agent hand-off); null for this one.</param>
+/// <param name="TargetTitle">The target's title, as that machine gave it; only for a target on another machine.</param>
+public sealed record SessionUpdateWatch(
+    string AskerId,
+    string TargetId,
+    string UserId,
+    string MessageId,
+    SessionMessageMachine? Machine = null,
+    string? TargetTitle = null);
 
 /// <summary>An update ready for the session that asked, built when the target's turn ended.</summary>
 public sealed record SessionUpdate(string AskerId, string TargetId, string UserId, string Text, string Outcome);
@@ -58,8 +67,8 @@ public sealed partial class SessionUpdates(
     public const string Finished = "finished";
     public const string Failed = "failed";
 
-    // A message the target never gets to (it was aborted, or deleted) would otherwise be watched for good.
-    private static readonly TimeSpan WatchLifetime = TimeSpan.FromDays(1);
+    /// <summary>How long a watch is kept: a message the target never gets to (aborted, deleted) would otherwise be watched for good.</summary>
+    public static readonly TimeSpan WatchLifetime = TimeSpan.FromDays(1);
 
     private readonly Lock _gate = new();
     private readonly List<Watched> _watches = [];
@@ -87,6 +96,25 @@ public sealed partial class SessionUpdates(
             _watches.Add(new Watched(watch, DateTimeOffset.UtcNow));
         }
     }
+
+    /// <summary>Whether a session still waits to hear about <paramref name="targetId"/>'s turn.</summary>
+    public bool IsWatching(string targetId)
+    {
+        lock (_gate)
+            return _watches.Any(w => w.Watch.TargetId == targetId && !Expired(w));
+    }
+
+    /// <summary>
+    /// The messages to <paramref name="targetId"/> whose answering turn hasn't been seen to end. A session on another
+    /// machine is asked about them after a gap in its events (<see cref="Machines.RemoteSessionTurns"/>).
+    /// </summary>
+    public IReadOnlyList<string> AwaitedMessages(string targetId)
+    {
+        lock (_gate)
+            return [.. _watches.Where(w => w.Watch.TargetId == targetId && !Expired(w)).Select(w => w.Watch.MessageId).Distinct()];
+    }
+
+    private static bool Expired(Watched watch) => watch.At < DateTimeOffset.UtcNow - WatchLifetime;
 
     /// <summary>
     /// Whether the turn this session is on was started by an update Fleet sent it. Such a turn may message other
@@ -274,13 +302,17 @@ public sealed class SessionUpdateSender(
     ISessionRepository sessions,
     ISessionMessageProxy messages,
     SessionOrchestrator orchestrator,
-    IEventBroadcaster broadcaster) : ISessionUpdateSender
+    IEventBroadcaster broadcaster,
+    RemoteSessions remote) : ISessionUpdateSender
 {
     /// <summary>How much of the target's reply the asker gets. Enough to act on; the rest is in that session.</summary>
     public const int MaxReplyLength = 600;
 
     public async Task<SessionUpdate?> ReadAsync(SessionUpdateWatch watch, TurnError? failure, CancellationToken ct)
     {
+        if (watch.Machine is { } machine)
+            return await ReadOnMachineAsync(watch, machine, failure, ct).ConfigureAwait(false);
+
         var target = await sessions.GetByIdAsync(watch.TargetId).ConfigureAwait(false);
         if (target is null)
             return null;
@@ -302,6 +334,32 @@ public sealed class SessionUpdateSender(
             watch.TargetId,
             watch.UserId,
             SessionMessages.WrapUpdate(watch.TargetId, target.Title, outcome, Shorten(body)),
+            outcome);
+    }
+
+    /// <summary>The update for a session on another machine: its reply read there, with the token this Fleet keeps.</summary>
+    private async Task<SessionUpdate?> ReadOnMachineAsync(SessionUpdateWatch watch, SessionMessageMachine machine, TurnError? failure, CancellationToken ct)
+    {
+        string body;
+        if (failure is not null)
+        {
+            body = failure.Message;
+        }
+        else
+        {
+            var (found, token, error) = await remote.FindAsync(machine.Id).ConfigureAwait(false);
+            var (reply, readError) = found is null
+                ? (null, error)
+                : await remote.LastReplyAsync(found, token!, watch.TargetId, watch.MessageId, ct).ConfigureAwait(false);
+            body = reply ?? (readError is null ? "It finished without writing a reply." : $"It finished, but Fleet couldn't read its reply: {readError}");
+        }
+
+        var outcome = failure is null ? SessionUpdates.Finished : SessionUpdates.Failed;
+        return new SessionUpdate(
+            watch.AskerId,
+            watch.TargetId,
+            watch.UserId,
+            SessionMessages.WrapUpdate(watch.TargetId, watch.TargetTitle ?? watch.TargetId, outcome, Shorten(body), machine),
             outcome);
     }
 

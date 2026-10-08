@@ -554,7 +554,7 @@ export const FleetCanvasPlugin = async (input: { directory?: string }) => ({
               "Start a session on another machine and give it a task.",
               "It's a normal session there, which the user can open and step into; the task arrives marked as coming from this session, as a teammate's request, not the user's.",
               "The work moves by branch: push yours and name it, and the new session works in a fresh worktree of it.",
-              "Its reply stays there: read it with fleet_session_read and message it with fleet_message, naming the machine.",
+              "Its reply stays there unless you set notifyWhenDone: read it with fleet_session_read and message it with fleet_message, naming the machine.",
             ].join(" "),
             args: {
               machine: { type: "string", description: "The machine's name, from fleet_machine_list." },
@@ -572,9 +572,25 @@ export const FleetCanvasPlugin = async (input: { directory?: string }) => ({
                 type: "string",
                 description: "The harness to run there, from fleet_machine_list. An empty string for that machine's default.",
               },
+              notifyWhenDone: {
+                type: "boolean",
+                description: [
+                  "true only when your own work depends on that session's answer: Fleet then sends you its reply, wrapped in <fleet-session-update>,",
+                  "when the turn that handles your message ends, and starts a turn here to read it. Each update costs a turn, so don't poll or check on it meanwhile.",
+                  "false when you're handing work off or just telling it something.",
+                ].join(" "),
+              },
             },
             execute: (
-              args: { machine: string; folder: string; title: string; task: string; branch: string; harness: string },
+              args: {
+                machine: string
+                folder: string
+                title: string
+                task: string
+                branch: string
+                harness: string
+                notifyWhenDone: boolean | string
+              },
               context: ToolContext,
             ) =>
               callFleet(
@@ -587,6 +603,7 @@ export const FleetCanvasPlugin = async (input: { directory?: string }) => ({
                   task: args.task,
                   branch: args.branch || null,
                   harness: args.harness || null,
+                  notifyWhenDone: args.notifyWhenDone === true || args.notifyWhenDone === "true",
                 },
                 SESSION_START_PATH,
               ),

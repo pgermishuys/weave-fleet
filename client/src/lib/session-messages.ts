@@ -17,6 +17,8 @@
  *   …its last reply, or the failure…
  *   </fleet-session-update>
  *
+ * A session on another machine adds machine="<machine id>" machine-name="mini" to the update, as to a message.
+ *
  * The tags are in the text itself, so they survive a reload from the harness's store.
  */
 
@@ -55,15 +57,17 @@ export function parsePeerMessage(body: string): { peer: PeerSender; text: string
 
 export type PeerOutcome = "finished" | "failed";
 
-const PEER_UPDATE = /^<fleet-session-update session="([^"]*)" title="([^"]*)" outcome="(finished|failed)">\n?([\s\S]*?)\n?<\/fleet-session-update>\s*$/;
+const PEER_UPDATE =
+  /^<fleet-session-update session="([^"]*)" title="([^"]*)" outcome="(finished|failed)"(?: machine="([^"]*)" machine-name="([^"]*)")?>\n?([\s\S]*?)\n?<\/fleet-session-update>\s*$/;
 
 /** The session, how its turn ended and what it said, for an update Fleet sent; null for anything else. */
 export function parsePeerUpdate(body: string): { peer: PeerSender; outcome: PeerOutcome; text: string } | null {
   const match = PEER_UPDATE.exec(body);
   if (!match) return null;
-  return {
-    peer: { sessionId: decode(match[1]), title: decode(match[2]) },
-    outcome: match[3] as PeerOutcome,
-    text: match[4],
-  };
+  const peer: PeerSender = { sessionId: decode(match[1]), title: decode(match[2]) };
+  if (match[4] !== undefined) {
+    peer.machineId = decode(match[4]);
+    peer.machineName = decode(match[5]);
+  }
+  return { peer, outcome: match[3] as PeerOutcome, text: match[6] };
 }

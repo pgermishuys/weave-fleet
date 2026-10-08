@@ -1,7 +1,9 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Events;
 
 namespace WeaveFleet.Application.Machines;
 
@@ -178,6 +180,86 @@ public sealed class RemoteSessions(RemoteMachineService machines, IHttpClientFac
         }
     }
 
+    /// <summary>
+    /// The text of the session's last reply after <paramref name="afterMessageId"/>, read from its machine
+    /// (<c>GET /api/sessions/{id}/messages</c>); the last reply at all when the message isn't in the page. Null with no
+    /// error when it wrote none.
+    /// </summary>
+    public async Task<(string? Reply, string? Error)> LastReplyAsync(
+        RemoteMachine machine,
+        string token,
+        string sessionId,
+        string afterMessageId,
+        CancellationToken ct)
+    {
+        var (answer, away, refused) = await GetAsync(machine, token, $"/api/sessions/{Uri.EscapeDataString(sessionId)}/messages?limit=30", ct);
+        if (answer is null)
+            return (null, away ?? refused);
+
+        using (answer)
+        {
+            if (!answer.RootElement.TryGetProperty("messages", out var list) || list.ValueKind != JsonValueKind.Array)
+                return (null, $"{machine.Name} sent something that isn't Fleet's answer.");
+
+            var messages = list.EnumerateArray().ToList();
+            var start = messages.FindLastIndex(message => Text(message, "id") == afterMessageId) + 1;
+            for (var i = messages.Count - 1; i >= start; i--)
+            {
+                if (Text(messages[i], "role") != "assistant" || !messages[i].TryGetProperty("parts", out var parts) || parts.ValueKind != JsonValueKind.Array)
+                    continue;
+
+                var text = string.Concat(parts.EnumerateArray().Where(part => Text(part, "type") == "text").Select(part => Text(part, "text"))).Trim();
+                if (text.Length > 0)
+                    return (text, null);
+            }
+
+            return (null, null);
+        }
+    }
+
+    /// <summary>
+    /// How the turn answering <paramref name="messageId"/> stands on the machine, from its session and messages: ended
+    /// once the session isn't in a turn and a reply to the message is there, or that reply failed. Null when the machine
+    /// didn't answer, which says nothing.
+    /// </summary>
+    public async Task<RemoteTurn?> TurnAsync(RemoteMachine machine, string token, string sessionId, string messageId, CancellationToken ct)
+    {
+        var path = $"/api/sessions/{Uri.EscapeDataString(sessionId)}";
+        var (session, _, _) = await GetAsync(machine, token, path, ct);
+        if (session is null)
+            return null;
+
+        string? status;
+        using (session)
+            status = Text(session.RootElement, "activityStatus");
+        if (SessionActivityTracker.IsInTurn(status))
+            return new RemoteTurn(Ended: false, null, null);
+
+        var (answer, _, _) = await GetAsync(machine, token, $"{path}/messages?limit=30", ct);
+        if (answer is null)
+            return null;
+
+        using (answer)
+        {
+            if (!answer.RootElement.TryGetProperty("messages", out var list) || list.ValueKind != JsonValueKind.Array)
+                return null;
+
+            var messages = list.EnumerateArray().ToList();
+            var asked = messages.FindLastIndex(message => Text(message, "id") == messageId);
+            var reply = asked < 0 ? default : messages.Skip(asked + 1).LastOrDefault(message => Text(message, "role") == "assistant");
+            if (reply.ValueKind != JsonValueKind.Object)
+                return new RemoteTurn(Ended: false, null, null);
+
+            TurnError? failure = null;
+            if (reply.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.Object)
+                failure = new TurnError { Name = Text(error, "name") ?? "Error", Message = Text(error, "message") ?? "The turn failed." };
+            // A reply with nothing in it and no reason it finished was cut off: Fleet there stopped mid-turn.
+            else if (Text(reply, "finish") is null && !HasText(reply))
+                failure = new TurnError { Name = "Stopped", Message = StoppedMessage(machine.Name) };
+            return new RemoteTurn(Ended: true, Text(reply, "id"), failure);
+        }
+    }
+
     private Task<(JsonDocument? Answer, string? Away, string? Refused)> GetAsync(RemoteMachine machine, string token, string path, CancellationToken ct)
         => RemoteMachineRequests.SendAsync<object>(httpClients, RemoteMachineService.HttpClientName, machine, token, HttpMethod.Get, path, null, null, ct);
 
@@ -185,6 +267,14 @@ public sealed class RemoteSessions(RemoteMachineService machines, IHttpClientFac
         element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString()
             : null;
+
+    /// <summary>What the asker is told when the turn there stopped before it answered.</summary>
+    public static string StoppedMessage(string machine) =>
+        $"It stopped before it answered, for example because Fleet on {machine} restarted. Message it again to try again.";
+
+    private static bool HasText(JsonElement message) =>
+        message.TryGetProperty("parts", out var parts) && parts.ValueKind == JsonValueKind.Array
+        && parts.EnumerateArray().Any(part => Text(part, "type") == "text" && !string.IsNullOrWhiteSpace(Text(part, "text")));
 
     private static bool IsTrue(JsonElement element, string name) =>
         element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.True;
@@ -204,6 +294,9 @@ public sealed record RemoteStarted(string SessionId, string Title, string? Branc
 public sealed record RemoteDelivered(string Title, string? MessageId);
 
 public sealed record RemotePage(string Title, string Text);
+
+/// <summary>How the turn answering a message stands on another machine: its reply's id, and the failure when it failed.</summary>
+public sealed record RemoteTurn(bool Ended, string? ReplyId, TurnError? Failure);
 
 internal sealed record RemotePeerMessage(string FromMachineId, string FromMachineName, string FromSessionId, string FromTitle, string Text);
 

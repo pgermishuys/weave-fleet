@@ -124,6 +124,7 @@ public sealed class FleetToolCalls(
                 String(args, "task"),
                 NonEmpty(args, "branch"),
                 NonEmpty(args, "harness"),
+                Boolean(args, "notifyWhenDone"),
                 ct),
             "fleet_memory_save" => memory.SaveAsync(token, session, String(args, "list"), String(args, "text"), String(args, "kind"), String(args, "replaces"), ct),
             "fleet_memory_forget" => memory.ForgetAsync(token, session, String(args, "id"), ct),

@@ -243,6 +243,9 @@ public static class DependencyInjection
         services.AddHttpClient(WeaveFleet.Application.Machines.RemoteAutomationRuns.HttpClientName, client => client.Timeout = TimeSpan.FromMinutes(2))
             .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.SocketsHttpHandler { AllowAutoRedirect = false, ConnectTimeout = TimeSpan.FromSeconds(5) });
         services.AddSingleton<WeaveFleet.Infrastructure.Machines.RemoteMachineWatcher>();
+        // Sessions there that a session here waits to hear from are followed over the watcher's connections.
+        services.AddSingleton<WeaveFleet.Application.Machines.RemoteSessionTurns>();
+        services.AddSingleton<WeaveFleet.Application.Machines.IRemoteSessionEvents>(sp => sp.GetRequiredService<WeaveFleet.Infrastructure.Machines.RemoteMachineWatcher>());
         services.AddHostedService(sp => sp.GetRequiredService<WeaveFleet.Infrastructure.Machines.RemoteMachineWatcher>());
         // Agents that hand work to another machine start, message and read sessions there through this Fleet.
         services.AddSingleton<WeaveFleet.Application.Machines.RemoteSessions>();

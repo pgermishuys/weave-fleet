@@ -411,7 +411,7 @@ if (HANDOFF) {
         "Start a session on another machine and give it a task.",
         "It's a normal session there, which the user can open and step into; the task arrives marked as coming from this session, as a teammate's request, not the user's.",
         "The work moves by branch: push yours and name it, and the new session works in a fresh worktree of it.",
-        "Its reply stays there: read it with fleet_session_read and message it with fleet_message, naming the machine.",
+        "Its reply stays there unless you set notifyWhenDone: read it with fleet_session_read and message it with fleet_message, naming the machine.",
       ].join(" "),
       {
         machine: { type: "string", description: "The machine's name, from fleet_machine_list." },
@@ -420,6 +420,14 @@ if (HANDOFF) {
         task: { type: "string", description: "The task: what you need done and why, with the paths and details it needs to act on its own." },
         branch: { type: "string", description: "A branch you pushed, for a fresh worktree of it there. Leave it out to work in the folder as it is." },
         harness: { type: "string", description: "The harness to run there, from fleet_machine_list. Leave it out for that machine's default." },
+        notifyWhenDone: {
+          type: "boolean",
+          description: [
+            "true only when your own work depends on that session's answer: Fleet then sends you its reply, wrapped in <fleet-session-update>,",
+            "when the turn that handles your message ends, and starts a turn here to read it. Each update costs a turn, so don't poll or check on it meanwhile.",
+            "false when you're handing work off or just telling it something.",
+          ].join(" "),
+        },
       },
       (input, tool) =>
         callFleet(
@@ -432,10 +440,11 @@ if (HANDOFF) {
             task: input.task,
             branch: input.branch || null,
             harness: input.harness || null,
+            notifyWhenDone: input.notifyWhenDone === true,
           },
           SESSION_START_PATH,
         ),
-      { optional: ["branch", "harness"] },
+      { optional: ["branch", "harness", "notifyWhenDone"] },
     ),
   )
 }
