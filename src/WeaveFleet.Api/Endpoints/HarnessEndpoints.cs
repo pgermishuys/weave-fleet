@@ -26,7 +26,7 @@ public static class HarnessEndpoints
             var check = await availability.GetAsync(fresh == true, ct);
             var harnesses = check.Harnesses;
             var preferenceValues = await preferences.GetAllAsync();
-            var defaultHarness = HarnessPreferences.DefaultHarness(preferenceValues.GetValueOrDefault(HarnessPreferences.DefaultHarnessKey));
+            var defaultHarness = HarnessPreferences.DefaultHarness(preferenceValues, harnesses);
 
             // Harnesses are updated on the machine Fleet runs on; in cloud mode that's the server, not the user's.
             var updateInfo = fleetOptions.Cloud.Enabled

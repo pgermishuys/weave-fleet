@@ -170,6 +170,8 @@ public sealed class SessionOrchestratorBuilder
             messageRepository: MessageRepository,
             harnessProfiles: HarnessProfileRepository,
             sessionScreenshots: _sessionScreenshots,
-            agentMemory: _agentMemory);
+            agentMemory: _agentMemory,
+            harnessAvailability: new HarnessAvailabilityCache(
+                HarnessRegistry, TimeProvider.System, NullLogger<HarnessAvailabilityCache>.Instance));
     }
 }

@@ -59,7 +59,8 @@ public sealed partial class SessionOrchestrator(
     SessionNotifier? sessionNotifier = null,
     ISessionScreenshotStore? sessionScreenshots = null,
     WeaveFleet.Application.Pages.IPageStore? sessionPages = null,
-    WeaveFleet.Application.Memory.AgentMemoryService? agentMemory = null) : ISessionActivator
+    WeaveFleet.Application.Memory.AgentMemoryService? agentMemory = null,
+    HarnessAvailabilityCache? harnessAvailability = null) : ISessionActivator
 {
     private readonly DelegationService _delegationService = delegationService;
     private readonly GitDiffService _gitDiffService = gitDiffService ?? new GitDiffService();
@@ -227,7 +228,7 @@ public sealed partial class SessionOrchestrator(
             sourceResolutionResult.Value.Input.Provenance);
 
         // Resolve harness
-        var harnessType = await ResolveHarnessTypeAsync(request);
+        var harnessType = await ResolveHarnessTypeAsync(request, ct);
         var runtimeMode = await ResolveRuntimeModeAsync(harnessType).ConfigureAwait(false);
         var harness = harnessRegistry.GetByType(harnessType);
         if (harness is null)
@@ -1329,15 +1330,18 @@ public sealed partial class SessionOrchestrator(
         return builder.ToString();
     }
 
-    private async Task<string> ResolveHarnessTypeAsync(CreateSessionRequest request)
+    private async Task<string> ResolveHarnessTypeAsync(CreateSessionRequest request, CancellationToken ct)
     {
         if (!string.IsNullOrWhiteSpace(request.HarnessType))
         {
             return request.HarnessType;
         }
 
-        var preferredHarnessType = await userPreferenceRepository.GetAsync(HarnessPreferences.DefaultHarnessKey).ConfigureAwait(false);
-        return HarnessPreferences.DefaultHarness(preferredHarnessType);
+        var preferences = await userPreferenceRepository.GetAllAsync().ConfigureAwait(false);
+        var harnesses = harnessAvailability is null
+            ? null
+            : (await harnessAvailability.GetAsync(fresh: false, ct).ConfigureAwait(false)).Harnesses;
+        return HarnessPreferences.DefaultHarness(preferences, harnesses);
     }
 
     private async Task<string> ResolveRuntimeModeAsync(string harnessType)

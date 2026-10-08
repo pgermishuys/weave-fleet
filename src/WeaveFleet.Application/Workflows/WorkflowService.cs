@@ -46,7 +46,8 @@ public sealed class WorkflowService(
     IUserPreferenceRepository preferences,
     IProjectRepository projects,
     IUserContext user,
-    TimeProvider time)
+    TimeProvider time,
+    HarnessAvailabilityCache? harnessAvailability = null)
 {
     private const int MaxRequestLength = 4000;
 
@@ -117,7 +118,7 @@ public sealed class WorkflowService(
         }
 
         var harnessType = string.IsNullOrWhiteSpace(request.HarnessType)
-            ? HarnessPreferences.DefaultHarness(await preferences.GetAsync(HarnessPreferences.DefaultHarnessKey).ConfigureAwait(false))
+            ? await DefaultHarnessAsync(ct).ConfigureAwait(false)
             : request.HarnessType.Trim();
         if (harnesses.GetByType(harnessType) is not { } harness)
             return FleetError.NotFoundFor("Harness", harnessType);
@@ -271,6 +272,16 @@ public sealed class WorkflowService(
     }
 
     /// <summary>A built-in skill a step uses has to be on; a skill of the user's own isn't Fleet's to check.</summary>
+    /// <summary>The harness a run that names none starts on (<see cref="HarnessPreferences.DefaultHarness"/>).</summary>
+    private async Task<string> DefaultHarnessAsync(CancellationToken ct)
+    {
+        var values = await preferences.GetAllAsync().ConfigureAwait(false);
+        var known = harnessAvailability is null
+            ? null
+            : (await harnessAvailability.GetAsync(fresh: false, ct).ConfigureAwait(false)).Harnesses;
+        return HarnessPreferences.DefaultHarness(values, known);
+    }
+
     private async Task<string?> CheckSkillsAsync(IEnumerable<WorkflowAgentStep> steps)
     {
         foreach (var step in steps)
