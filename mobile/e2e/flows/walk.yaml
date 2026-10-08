@@ -1,0 +1,133 @@
+# The native app against a throwaway Fleet (start-fleet.sh): pair, list, read, allow, answer, Live Activity, and
+# answering an ask from the notification. Run: maestro test -e FLEET_URL=… -e PAIR_CODE=… flows/walk.yaml
+appId: io.tryweave.fleet.experiment
+---
+- launchApp:
+    clearState: true
+    permissions:
+      notifications: allow
+- extendedWaitUntil:
+    visible: "Pair with Fleet"
+    timeout: 60000
+- takeScreenshot: 01-pair
+- tapOn:
+    id: "address"
+- inputText: ${FLEET_URL}
+- tapOn:
+    id: "code"
+- inputText: ${PAIR_CODE}
+- hideKeyboard
+- tapOn: "Continue"
+- extendedWaitUntil:
+    visible: "Connect this phone to.*"
+    timeout: 20000
+- takeScreenshot: 02-connect
+- tapOn: "Connect"
+- tapOn:
+    text: "Allow"
+    optional: true
+- extendedWaitUntil:
+    visible: "Fix pagination off-by-one"
+    timeout: 30000
+- takeScreenshot: 03-sessions
+- tapOn: "Fix pagination off-by-one"
+- extendedWaitUntil:
+    visible: "Here's the plan.*"
+    timeout: 30000
+- takeScreenshot: 04-session
+
+# A command waits for approval in the dock.
+- tapOn:
+    id: "composer"
+- inputText: "Great, run-tests please"
+- tapOn:
+    id: "send"
+- extendedWaitUntil:
+    visible: "Allow once"
+    timeout: 30000
+- takeScreenshot: 05-permission
+- tapOn: "Allow once"
+- extendedWaitUntil:
+    visible: ".*All 42 tests pass.*"
+    timeout: 60000
+- takeScreenshot: 06-allowed
+
+# A question docks its choices.
+- tapOn:
+    id: "composer"
+- inputText: "Before you go on: ask-me which cache"
+- tapOn:
+    id: "send"
+- extendedWaitUntil:
+    visible: "SQLite"
+    timeout: 30000
+- takeScreenshot: 07-question
+- tapOn: "SQLite"
+- extendedWaitUntil:
+    visible: ".*→ SQLite.*"
+    timeout: 30000
+- takeScreenshot: 08-answered
+
+# A long command: the session works for a while; on iOS a Live Activity follows it outside the app.
+- tapOn:
+    id: "composer"
+- inputText: "slow-task: migrate the cache"
+- tapOn:
+    id: "send"
+- extendedWaitUntil:
+    visible: "Allow once"
+    timeout: 30000
+- tapOn: "Allow once"
+- extendedWaitUntil:
+    visible: "Working.*"
+    timeout: 20000
+- takeScreenshot: 09-working
+- pressKey: Home
+- waitForAnimationToEnd:
+    timeout: 3000
+- takeScreenshot: 10-home-live-activity
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible: ".*All 42 tests pass.*"
+    timeout: 90000
+
+# Answer an ask from the notification, with the app in the background.
+- tapOn:
+    id: "composer"
+- inputText: "run-tests one more time"
+- tapOn:
+    id: "send"
+- pressKey: Home
+- extendedWaitUntil:
+    visible: ".*Fix pagination off-by-one.*"
+    timeout: 20000
+    optional: true
+- takeScreenshot: 11-notification
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - longPressOn:
+          text: ".*Fix pagination off-by-one.*"
+          optional: true
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - swipe:
+          start: 50%, 0%
+          end: 50%, 60%
+- takeScreenshot: 12-notification-actions
+- tapOn:
+    text: "Allow once"
+    optional: true
+- waitForAnimationToEnd:
+    timeout: 4000
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible: "Message the agent.*"
+    timeout: 60000
+    optional: true
+- takeScreenshot: 13-after-notification-answer

@@ -1,0 +1,120 @@
+# Experiment only (branch experiment/native-mobile): builds the native mobile spikes for the iPhone simulator, runs
+# them against a throwaway Fleet with a scripted model, and uploads screenshots. Not part of Fleet's CI.
+name: Native mobile experiment
+
+on:
+  push:
+    branches: [experiment/native-mobile]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ios-react-native:
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      OPENCODE_VERSION: '1.18.31'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Tool versions
+        run: |
+          xcodebuild -version
+          xcrun simctl list runtimes | grep iOS
+          sw_vers
+
+      - name: Install OpenCode
+        run: |
+          curl -fsSL https://opencode.ai/install | bash -s -- --version "$OPENCODE_VERSION" --no-modify-path
+          echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
+
+      - name: Build Fleet
+        run: dotnet build src/WeaveFleet.Api -c Debug -p:SkipFrontendBuild=true
+
+      - name: Start a throwaway Fleet
+        run: FLEET_E2E_DIR="$RUNNER_TEMP/fleet-e2e" bash mobile/e2e/start-fleet.sh
+
+      - name: Install app packages
+        working-directory: mobile
+        run: bun install --frozen-lockfile
+
+      - name: Generate the iOS project
+        working-directory: mobile
+        run: |
+          start=$(date +%s)
+          CI=1 bunx expo prebuild -p ios
+          echo "PREBUILD_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+
+      - name: Boot a simulator
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; c=[x for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone') and x['name'].endswith('Pro')]; print(c[-1]['udid'])")
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+
+      - name: Build for the simulator (Release, JS bundled)
+        working-directory: mobile/ios
+        run: |
+          WS=$(ls -d *.xcworkspace | head -1); SCHEME=${WS%.xcworkspace}
+          start=$(date +%s)
+          set -o pipefail
+          xcodebuild -workspace "$WS" -scheme "$SCHEME" -configuration Release -sdk iphonesimulator \
+            -destination "id=$UDID" -derivedDataPath build CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO build \
+            | tee "$RUNNER_TEMP/xcodebuild.log" | grep -E "error:|warning: .*Live|\*\* BUILD" || true
+          grep -q "BUILD SUCCEEDED" "$RUNNER_TEMP/xcodebuild.log"
+          APP=$(ls -d build/Build/Products/Release-iphonesimulator/*.app | head -1)
+          echo "BUILD_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+          echo "APP=$PWD/$APP" >> "$GITHUB_ENV"
+          du -sh "$APP"; ls "$APP/PlugIns" || true
+
+      - name: Install and launch
+        run: |
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl privacy "$UDID" grant notifications io.tryweave.fleet.experiment || true
+
+      - name: Install Maestro
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Walk through the app
+        working-directory: mobile/e2e
+        run: |
+          mkdir -p shots
+          maestro --device "$UDID" test -e FLEET_URL="$FLEET_URL" -e PAIR_CODE="$PAIR_CODE" --test-output-dir shots flows/walk.yaml || echo "WALK_FAILED=1" >> "$GITHUB_ENV"
+          xcrun simctl io "$UDID" screenshot shots/99-final.png || true
+          find shots -name "*.png" | sort
+
+      - name: Measurements
+        if: always()
+        run: |
+          {
+            echo "## React Native (Expo) on iOS"
+            echo "- prebuild: ${PREBUILD_SECONDS:-?} s, xcodebuild (Release, clean): ${BUILD_SECONDS:-?} s"
+            [ -n "${APP:-}" ] && echo "- .app size: $(du -sh "$APP" | cut -f1)"
+            echo "- walk-through: ${WALK_FAILED:+FAILED}${WALK_FAILED:-passed}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-react-native
+          path: |
+            mobile/e2e/shots
+            ${{ runner.temp }}/xcodebuild.log
+            ${{ runner.temp }}/fleet-e2e/*.log
+          if-no-files-found: warn
+
+      - name: Fail if the walk-through failed
+        if: env.WALK_FAILED == '1'
+        run: exit 1
