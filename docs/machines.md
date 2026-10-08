@@ -145,6 +145,7 @@ This is what any client relies on. The web app is one client. A native app would
   "authMode": "token",
   "remoteReachable": true,
   "requiresToken": true,
+  "webApp": true,
   "publicUrl": "https://hangar.tail9c2e.ts.net",
   "capabilities": {
     "harnesses": [
@@ -164,6 +165,9 @@ This is what any client relies on. The web app is one client. A native app would
 - `authMode` is `token` (local mode: present the access token) or `sign-in` (a hosted Fleet with an identity
   provider, which this contract doesn't cover yet).
 
+- `webApp` says whether the machine serves the web app at its own address. A node (`fleet node`) doesn't, so a
+  client doesn't send anyone to its pages; its sessions open from a Fleet that has it in its list. Fleets before it
+  leave it out, and they serve the web app.
 - `publicUrl` is the address phones should use for the machine, when someone saved one (null otherwise). Pairing
   puts it in the QR code.
 - `capabilities` says what the machine can run and how busy it is. Fleets before it leave it out; the `machine` in a
@@ -320,7 +324,7 @@ nothing about the id says so.
 ### Known limits
 
 - The browser canvas (app previews) of another machine doesn't load in the web app, because it relies on that
-  machine's cookie. Open the machine's own URL to use it. A node has no web app, so its previews can't be opened
-  from the web app yet.
+  machine's cookie. Open the machine's own URL to use it, when it serves the web app (`webApp`). A node doesn't, so
+  its previews can't be opened from the web app yet.
 - The machine token has no scopes. Paired devices get their own tokens with one limit (no managing access); there
   are no finer scopes.

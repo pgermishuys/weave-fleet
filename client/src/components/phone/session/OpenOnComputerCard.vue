@@ -9,7 +9,8 @@ import { shareLink } from "@/lib/phone/share";
 /**
  * Run a command: what a phone can't do well (a terminal) offers the closest thing that works — a one-off `!`
  * command in the composer's frame that runs on Return, its output in the conversation — and a link to open a
- * terminal on the computer. The send button stays quiet until there's something to run.
+ * terminal on the computer. A machine without the web app (a node) has no page to link to, so it says to open the
+ * session from home's Fleet instead. The send button stays quiet until there's something to run.
  */
 const props = defineProps<{
   open: boolean;
@@ -17,8 +18,10 @@ const props = defineProps<{
   machineName: string;
   /** The folder it runs in, for the line under the title. */
   folder?: string | null;
-  /** The address of this session on the computer. */
-  link: string;
+  /** The address of this session on the computer; null when its machine has no web app. */
+  link: string | null;
+  /** The Fleet the phone is paired with, whose web app opens sessions on every machine. */
+  homeName: string;
   supportsShell: boolean;
 }>();
 const emit = defineEmits<{ (event: "run", command: string): void; (event: "close"): void }>();
@@ -41,6 +44,7 @@ function run(): void {
 }
 
 async function share(): Promise<void> {
+  if (!props.link) return;
   const outcome = await shareLink(`Fleet on ${props.machineName}`, props.link);
   if (outcome === "copied") showToast("Link copied. Open it on the computer.");
   else if (outcome === "failed") showToast("Couldn't share the link.");
@@ -104,7 +108,10 @@ async function share(): Promise<void> {
     >
       This harness can't run one-off commands. Terminals open on the computer.
     </p>
-    <div class="ph-card ooc__card">
+    <div
+      v-if="link"
+      class="ph-card ooc__card"
+    >
       <button
         type="button"
         class="ph-set"
@@ -125,6 +132,13 @@ async function share(): Promise<void> {
         />
       </button>
     </div>
+    <p
+      v-else
+      class="ph-foot ooc__elsewhere"
+      data-testid="ooc-elsewhere"
+    >
+      To open a terminal, open this session in Fleet on {{ homeName }}.
+    </p>
   </BottomSheet>
 </template>
 
@@ -133,7 +147,8 @@ async function share(): Promise<void> {
   margin-top: 0;
 }
 
-.ooc__card {
+.ooc__card,
+.ooc__elsewhere {
   margin-top: 14px;
 }
 </style>

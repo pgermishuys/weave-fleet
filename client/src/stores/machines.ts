@@ -30,6 +30,8 @@ export interface MachineInfo {
   authMode: string;
   remoteReachable: boolean;
   requiresToken: boolean;
+  /** Whether it serves the web app at its own address; a node doesn't. Missing on a Fleet older than this field, which does. */
+  webApp?: boolean;
   /** The address phones should use for this machine, when someone saved one. */
   publicUrl?: string | null;
   /** What it can run and how busy it is; missing on a Fleet older than this field. */

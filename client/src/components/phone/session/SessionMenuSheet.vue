@@ -15,6 +15,8 @@ const props = defineProps<{
   supportsSide: boolean;
   supportsShell?: boolean;
   canFork: boolean;
+  /** Whether the session's machine has a page to open it on (a node has none). */
+  canOpenOnComputer: boolean;
 }>();
 const emit = defineEmits<{ (event: "pick", action: MenuAction): void; (event: "rename", title: string): void; (event: "close"): void }>();
 
@@ -151,6 +153,7 @@ async function pick(action: MenuAction): Promise<void> {
         <span>Rename</span>
       </button>
       <button
+        v-if="canOpenOnComputer"
         type="button"
         class="ph-mi"
         role="menuitem"
