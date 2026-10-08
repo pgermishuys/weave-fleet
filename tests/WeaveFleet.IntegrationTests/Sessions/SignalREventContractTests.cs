@@ -168,10 +168,15 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
     [Fact]
     public async Task A_harnesses_running_work_reaches_the_session_and_the_status_bar_as_work_events()
     {
-        var sessionId = await CreateSessionAsync();
-        await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
         await _hub.InvokeAsync("SubscribeToSessionsTopicAsync");
         await WaitForBroadcasterSubscriberAsync();
+        var sessionId = await CreateSessionAsync();
+        await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
+
+        // Creating a session announces it on the sessions topic from the outbox, which can send it after create
+        // returns. Wait for it, so only what the harness's events caused is checked below.
+        await WaitForWorkEventAsync("session_created", "sessions");
+        var beforeWork = Received().Count;
 
         // What an adapter sends for a shell it moved to the background, then for its end: Fleet's own work.* events.
         var harness = await HarnessOfAsync(sessionId);
@@ -213,7 +218,7 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
         end.GetProperty("endedAt").GetString().ShouldNotBeNullOrEmpty();
 
         // The harness's own events never reach the conversation as anything else.
-        Received().Select(e => e.Data.GetProperty("type").GetString())
+        Received().Skip(beforeWork).Select(e => e.Data.GetProperty("type").GetString())
             .ShouldAllBe(type => type == "work.started" || type == "work.ended");
 
         // A session opened now gets the work in its snapshot, with its result, while it's recent.
