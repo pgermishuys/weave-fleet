@@ -295,8 +295,8 @@ function handleCreate(): void {
 
 /* The machine its runs go to, in the sidebar's machine coral. */
 .automation-row__machine {
-  flex-shrink: 1;
-  min-width: 0;
+  max-width: 7em;
+  flex-shrink: 0;
   overflow: hidden;
   color: var(--coral);
   font-family: var(--font-mono-stack);
