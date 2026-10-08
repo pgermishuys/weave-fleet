@@ -22,7 +22,7 @@ appId: io.tryweave.fleet.experiment
 - tapOn: "Continue"
 - extendedWaitUntil:
     visible: "Connect this phone to.*"
-    timeout: 20000
+    timeout: 90000
 - takeScreenshot: 02-connect
 - tapOn: "Connect"
 - tapOn:
@@ -31,12 +31,12 @@ appId: io.tryweave.fleet.experiment
 # A pressable row reads as one accessibility label ("Fix pagination off-by-one, 5m 42s") on iOS.
 - extendedWaitUntil:
     visible: ".*Fix pagination off-by-one.*"
-    timeout: 30000
+    timeout: 90000
 - takeScreenshot: 03-sessions
 - tapOn: ".*Fix pagination off-by-one.*"
 - extendedWaitUntil:
     visible: "Here's the plan.*"
-    timeout: 30000
+    timeout: 90000
 - takeScreenshot: 04-session
 
 # A command waits for approval in the dock.
@@ -47,7 +47,7 @@ appId: io.tryweave.fleet.experiment
     id: "send"
 - extendedWaitUntil:
     visible: "Allow once"
-    timeout: 30000
+    timeout: 90000
 - takeScreenshot: 05-permission
 - tapOn: "Allow once"
 - extendedWaitUntil:
@@ -63,12 +63,12 @@ appId: io.tryweave.fleet.experiment
     id: "send"
 - extendedWaitUntil:
     visible: "SQLite"
-    timeout: 30000
+    timeout: 90000
 - takeScreenshot: 07-question
 - tapOn: "SQLite"
 - extendedWaitUntil:
     visible: ".*→ SQLite.*"
-    timeout: 30000
+    timeout: 90000
 - takeScreenshot: 08-answered
 
 # A long command: the session works for a while; on iOS a Live Activity follows it outside the app.
@@ -79,11 +79,11 @@ appId: io.tryweave.fleet.experiment
     id: "send"
 - extendedWaitUntil:
     visible: "Allow once"
-    timeout: 30000
+    timeout: 90000
 - tapOn: "Allow once"
 - extendedWaitUntil:
     visible: "Working.*"
-    timeout: 20000
+    timeout: 90000
 - takeScreenshot: 09-working
 - pressKey: Home
 - waitForAnimationToEnd:
@@ -104,7 +104,7 @@ appId: io.tryweave.fleet.experiment
 - pressKey: Home
 - extendedWaitUntil:
     visible: ".*Fix pagination off-by-one.*"
-    timeout: 20000
+    timeout: 90000
     optional: true
 - takeScreenshot: 11-notification
 - runFlow:

@@ -1,6 +1,7 @@
 // One Live Activity per working session. iOS only shows it outside the app, and expo-widgets' start() is a
 // synchronous native call (ActivityKit's Activity.request) made on the JS thread, so a new activity starts when the
 // app goes to the background; while it's open, only activities that already exist are updated (asynchronously).
+// The start is timed in the log ("[live-activity] start took …").
 // Updating one while the app is suspended needs Fleet to push to the activity's APNs token (see the findings).
 import type { LiveActivity } from "expo-widgets";
 import { AppState } from "react-native";
