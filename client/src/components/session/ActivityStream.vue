@@ -796,11 +796,11 @@ function openReferencedSession(sessionId: string): void {
 }
 
 /**
- * The machine a sender is on, as this page knows it: the live one for a sender on the same machine, its key for one
+ * The machine a sender is on, as this page knows it: this session's for a sender on the same machine, its key for one
  * in the machine list, null for one that isn't listed here (the chip then names it but doesn't open it).
  */
 function peerMachineKey(peer: PeerSender): string | null {
-  return peer.machineId ? machines.keyOfMachine(peer.machineId) : machines.liveKey;
+  return peer.machineId ? machines.keyOfMachine(peer.machineId) : machine.key;
 }
 
 function handlePeerLinkClick(event: MouseEvent, peer: PeerSender): void {
@@ -809,10 +809,12 @@ function handlePeerLinkClick(event: MouseEvent, peer: PeerSender): void {
   event.preventDefault();
   const key = peerMachineKey(peer);
   if (key === null) return;
-  if (key !== machines.liveKey) {
+  // Another machine's sender opens as the sidebar opens its sessions: in place with every machine live, else there.
+  if (key !== machines.liveKey && !machines.opensInPlace) {
     machines.openOn(key, `/sessions/${encodeURIComponent(peer.sessionId)}`);
     return;
   }
+  if (key !== machines.liveKey) machines.rememberSessions(key, [peer.sessionId]);
   void router.navigate({ to: "/sessions/$id", params: { id: peer.sessionId }, search: { instanceId: undefined, parentSessionId: undefined } });
 }
 
