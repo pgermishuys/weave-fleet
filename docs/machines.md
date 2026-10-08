@@ -52,6 +52,29 @@ it.
 The token is a full grant: whoever has it can do anything the Fleet can, including reading files, running
 agents and opening terminals. Treat it like a password.
 
+### Run a node without the web UI
+
+A machine that only does the work, such as a server or a Mac mini under the desk, doesn't need Fleet's web app.
+Start it as a node:
+
+```sh
+fleet node --host 0.0.0.0 --port 2113
+```
+
+A node is the same Fleet API, hub and terminals, with two differences:
+
+- **No web app.** `/` answers a short JSON note saying it's a Fleet node; other pages are `404`.
+- **The token on every request**, whatever address it listens on, this machine's own requests included (as
+  `--require-token`).
+
+At startup it prints its addresses and its token. Add it from another Fleet in Settings → Machines → **Add a
+machine**, and work in its sessions from there. The token is kept next to its database, as on any Fleet (see
+[The access token](#the-access-token)). `fleet node` takes `--host`, `--port`, `--data-dir` and `--profile`, like
+`fleet`. Behind `tailscale serve`, leave out `--host`.
+
+A node can't pair a phone itself (`POST /api/machine/pairing` returns `409`), because the pairing link opens a page
+it doesn't serve. Pair the phone with the Fleet that has the node in its list; the phone reaches the node through it.
+
 ### Keeping a headless machine up
 
 `deploy/fleet-user.service` is a systemd user unit for a machine without a desktop session:
@@ -165,7 +188,7 @@ Local mode only.
   `<baseUrl>/pair#p=<base64url(payload)>`, and `payload` is version 1 of what any client reads from it:
   `{ "v": 1, "machineId", "machineName", "url", "secret" }`. `manualCode` is the same code to type (`XXXX-XXXX`,
   Crockford base32). A code works once, for 10 minutes; at most 5 are live; codes live in memory, so a restart
-  forgets them.
+  forgets them. A node (`fleet node`) returns `409`: it doesn't serve the page the link opens.
 - `POST /api/pairing/preview` (anyone) with `{ "secret" }` or `{ "manualCode" }`: `{ machineId, machineName, os,
   expiresAt }`, or `404` when the code is unknown, used or expired. Doesn't use the code up.
 - `POST /api/pairing/redeem` (anyone) with the code and `{ "deviceName", "platform" }` (`ios`, `android`, `other`;
@@ -255,6 +278,7 @@ nothing about the id says so.
 ### Known limits
 
 - The browser canvas (app previews) of another machine doesn't load in the web app, because it relies on that
-  machine's cookie. Open the machine's own URL to use it.
+  machine's cookie. Open the machine's own URL to use it. A node has no web app, so its previews can't be opened
+  from the web app yet.
 - The machine token has no scopes. Paired devices get their own tokens with one limit (no managing access); there
   are no finer scopes.

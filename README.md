@@ -43,8 +43,13 @@ Another Fleet can add this one as a machine (Settings → Machines) and work in 
 
 App previews in the Browser tab follow Fleet: each preview gets its own port on the address Fleet listens on. With `--host 0.0.0.0`, anyone who can reach this machine can open a running preview without signing in to Fleet, so only do this on a network you trust. The app itself stays on `localhost`. To let previews through a firewall, give them a fixed range with `Fleet__Browser__PortRange=41000-41099`.
 
+### As a node, without the web app
+
+`fleet node --host 0.0.0.0` starts the same Fleet without its web app, and asks every request for the access token. It prints its addresses and token; add it from another Fleet under Settings → Machines. See [Run a node without the web UI](docs/machines.md#run-a-node-without-the-web-ui).
+
 ## Common commands
 
+- `fleet node`
 - `fleet version`
 - `fleet update`
 - `fleet uninstall`

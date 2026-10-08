@@ -24,7 +24,8 @@ public sealed class ApiWebApplicationFactory(
     bool simulateLocalhostRequest = false,
     string? host = null,
     Action<IServiceCollection>? configureTestServices = null,
-    bool requireToken = false) : WebApplicationFactory<Program>
+    bool requireToken = false,
+    bool serveUi = true) : WebApplicationFactory<Program>
 {
     private readonly string _dbPath = Path.Combine(Path.GetTempPath(), $"fleet-api-tests-{Guid.NewGuid():N}.db");
     private readonly string _analyticsDbPath = Path.Combine(Path.GetTempPath(), $"fleet-api-tests-analytics-{Guid.NewGuid():N}.db");
@@ -49,6 +50,8 @@ public sealed class ApiWebApplicationFactory(
         builder.UseSetting("Fleet:Auth:TokenAuthEnabled", tokenAuthEnabled ? "true" : "false");
         if (requireToken)
             builder.UseSetting("Fleet:Auth:RequireToken", "true");
+        if (!serveUi)
+            builder.UseSetting("Fleet:ServeUi", "false");
         builder.UseSetting("Fleet:Auth:Authority", "https://example.test");
         builder.UseSetting("Fleet:Auth:ClientId", "test-client");
         builder.UseSetting("Fleet:Auth:ClientSecret", "test-secret");

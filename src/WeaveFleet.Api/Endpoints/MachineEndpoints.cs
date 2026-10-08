@@ -137,7 +137,7 @@ public static class MachineEndpoints
             policy.IsRemoteReachable ? ReachableAddresses(options) : []);
 
     /// <summary>Addresses another device could use, when Fleet listens beyond loopback. Tailnet first: it's the one that travels.</summary>
-    private static List<MachineAddress> ReachableAddresses(FleetOptions options)
+    internal static List<MachineAddress> ReachableAddresses(FleetOptions options)
     {
         var addresses = new List<MachineAddress>();
 

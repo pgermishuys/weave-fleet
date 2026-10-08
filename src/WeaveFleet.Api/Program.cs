@@ -55,6 +55,12 @@ for (var i = 0; i < args.Length; i++)
         cliOverrides[$"{FleetOptions.SectionName}:Port"] = args[++i];
     else if (args[i] is "--require-token")
         cliOverrides[$"{FleetOptions.SectionName}:Auth:RequireToken"] = "true";
+    else if (args[i] is "--node")
+    {
+        // A node is the API without the web app, and every request needs the token, whatever the bind.
+        cliOverrides[$"{FleetOptions.SectionName}:ServeUi"] = "false";
+        cliOverrides[$"{FleetOptions.SectionName}:Auth:RequireToken"] = "true";
+    }
     else if (args[i] is "--harness" && i + 1 < args.Length)
         harnessMode = args[++i];
     else if (args[i].StartsWith("--harness=", StringComparison.Ordinal))
@@ -325,7 +331,8 @@ else
 
             options.Events.OnRedirectToLogin = async context =>
             {
-                if (IsApiOrWebSocketRequest(context.Request.Path))
+                // Without the web app there's no sign-in page to send anyone to.
+                if (!fleetOptions.ServeUi || IsApiOrWebSocketRequest(context.Request.Path))
                 {
                     context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                     return;
@@ -355,7 +362,7 @@ else
             };
             options.Events.OnRedirectToAccessDenied = context =>
             {
-                if (IsApiOrWebSocketRequest(context.Request.Path))
+                if (!fleetOptions.ServeUi || IsApiOrWebSocketRequest(context.Request.Path))
                 {
                     context.Response.StatusCode = StatusCodes.Status403Forbidden;
                     return Task.CompletedTask;
@@ -514,7 +521,19 @@ app.Lifetime.ApplicationStarted.Register(() =>
 });
 app.Lifetime.ApplicationStopped.Register(() => instanceLock?.Dispose());
 
-if (!fleetOptions.Auth.Enabled)
+if (!fleetOptions.Auth.Enabled && !fleetOptions.ServeUi)
+{
+    // A node has no sign-in page to link to: it prints what another Fleet needs to add it instead.
+    Console.WriteLine();
+    foreach (var line in NodeEndpoints.StartupLines(
+                 fleetOptions,
+                 loopbackAuthPolicy,
+                 app.Services.GetRequiredService<ILocalTokenAuthService>(),
+                 app.Services.GetRequiredService<MachineIdentityStore>().FilePath))
+        Console.WriteLine(line);
+    Console.WriteLine();
+}
+else if (!fleetOptions.Auth.Enabled)
 {
     var localTokenAuthService = app.Services.GetRequiredService<ILocalTokenAuthService>();
     Console.WriteLine();
@@ -705,38 +724,46 @@ app.MapAuthEndpoints(fleetOptions, loopbackAuthPolicy);
 // API endpoints (registered before SPA fallback)
 app.MapFleetEndpoints();
 
-// Static file serving (SPA)
-app.UseDefaultFiles(); // Serves index.html for "/"
-
-// Hashed assets (e.g. /assets/index-abc123.js) get immutable long-lived cache.
-// Everything else (index.html) gets no-cache so browsers always fetch the latest entry point.
-// The web app manifest needs its own type for browsers to offer to install Fleet. The service worker (/sw.js) is
-// unhashed and must never be cached stale, so it falls under no-cache; it may control the whole origin.
-var staticContentTypes = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
-staticContentTypes.Mappings[".webmanifest"] = "application/manifest+json";
-app.UseStaticFiles(new StaticFileOptions
+if (fleetOptions.ServeUi)
 {
-    ContentTypeProvider = staticContentTypes,
-    OnPrepareResponse = ctx =>
+    // Static file serving (SPA)
+    app.UseDefaultFiles(); // Serves index.html for "/"
+
+    // Hashed assets (e.g. /assets/index-abc123.js) get immutable long-lived cache.
+    // Everything else (index.html) gets no-cache so browsers always fetch the latest entry point.
+    // The web app manifest needs its own type for browsers to offer to install Fleet. The service worker (/sw.js) is
+    // unhashed and must never be cached stale, so it falls under no-cache; it may control the whole origin.
+    var staticContentTypes = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
+    staticContentTypes.Mappings[".webmanifest"] = "application/manifest+json";
+    app.UseStaticFiles(new StaticFileOptions
     {
-        var path = ctx.Context.Request.Path.Value ?? string.Empty;
-        if (path.StartsWith("/assets/", StringComparison.OrdinalIgnoreCase))
+        ContentTypeProvider = staticContentTypes,
+        OnPrepareResponse = ctx =>
         {
-            ctx.Context.Response.Headers.CacheControl = "public, max-age=31536000, immutable";
-        }
-        else
-        {
-            ctx.Context.Response.Headers.CacheControl = "no-cache";
-        }
+            var path = ctx.Context.Request.Path.Value ?? string.Empty;
+            if (path.StartsWith("/assets/", StringComparison.OrdinalIgnoreCase))
+            {
+                ctx.Context.Response.Headers.CacheControl = "public, max-age=31536000, immutable";
+            }
+            else
+            {
+                ctx.Context.Response.Headers.CacheControl = "no-cache";
+            }
 
-        if (string.Equals(path, "/sw.js", StringComparison.OrdinalIgnoreCase))
-            ctx.Context.Response.Headers["Service-Worker-Allowed"] = "/";
-    },
-});
+            if (string.Equals(path, "/sw.js", StringComparison.OrdinalIgnoreCase))
+                ctx.Context.Response.Headers["Service-Worker-Allowed"] = "/";
+        },
+    });
 
-// SPA fallback — any unmatched route serves index.html for client-side routing
-app.MapFallbackToFile("index.html")
-    .AllowAnonymous();
+    // SPA fallback — any unmatched route serves index.html for client-side routing
+    app.MapFallbackToFile("index.html")
+        .AllowAnonymous();
+}
+else
+{
+    // A node: no web app, so "/" says what this is and every other page is 404.
+    app.MapNodeNote();
+}
 
 await app.RunAsync();
 
