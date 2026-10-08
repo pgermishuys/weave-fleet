@@ -165,7 +165,8 @@ public sealed class HeadlessChromeScreenshotterTests
 
         // The first start never opens its DevTools port (as Chrome now and then doesn't on a busy CI machine); the
         // second is the real browser.
-        using var stalling = new StallingBrowser(options.Browser.ChromePath ?? ChromeFinder.Find()!, stalls: 1);
+        // The browser Fleet would use: the configured one, else the one it finds (ChromePath is "" when unset).
+        using var stalling = new StallingBrowser(ChromeFinder.Find(options.Browser.ChromePath)!, stalls: 1);
         options.Browser.ChromePath = stalling.Path;
         await using var host = new ChromeHost(options, NullLogger<ChromeHost>.Instance) { LaunchTimeout = TimeSpan.FromSeconds(2) };
         await using var screenshots = new HeadlessChromeScreenshotter(host, NullLogger<HeadlessChromeScreenshotter>.Instance);
