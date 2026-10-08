@@ -337,7 +337,9 @@ public sealed class LeasedInstanceHandleCommandRoutingTests
             Guid.NewGuid(),
             leaseGeneration: 1);
 
-        firstLease.NotifyFaulted(new InvalidOperationException("process crashed"));
+        // A crash as the pool reports it: the instance is marked faulted before its leases hear. Faulting only the
+        // lease left the handle to learn of it from its fault monitor, which may not have run by the reconnect.
+        await firstInstance.ReportCrashAsync(new InvalidOperationException("process crashed"));
         firstLease.NotifyReplaced(secondLease);
         await handle.EnsureConnectedAsync(CancellationToken.None);
 
