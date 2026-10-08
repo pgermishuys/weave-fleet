@@ -95,12 +95,23 @@ describe("useEnabledHarnesses", () => {
     expect(result.enabledHarnesses.value.map((harness) => harness.type)).toEqual(["opencode"]);
   });
 
-  it("falls back to opencode when no preference is stored", async () => {
-    mockApiResponses([]);
+  it("takes the default the server marks when no preference is stored", async () => {
+    mockApiResponses([createHarness("claude-code"), createHarness("opencode", { isDefault: true })]);
 
     const { result } = await mountComposable(() => useEnabledHarnesses());
 
-    expect(result.defaultHarnessType.value).toBe("opencode");
+    await vi.waitFor(() => expect(result.defaultHarnessType.value).toBe("opencode"));
+  });
+
+  it("guesses no harness of its own: with none marked it's the first, with none at all it's empty", async () => {
+    mockApiResponses([createHarness("pi"), createHarness("opencode")]);
+    const first = await mountComposable(() => useEnabledHarnesses());
+    await vi.waitFor(() => expect(first.result.defaultHarnessType.value).toBe("pi"));
+
+    forgetHarnessLists();
+    mockApiResponses([]);
+    const none = await mountComposable(() => useEnabledHarnesses());
+    expect(none.result.defaultHarnessType.value).toBe("");
   });
 
   it("reads defaultHarnessType from the preferences store", async () => {
@@ -118,6 +129,7 @@ describe("useEnabledHarnesses", () => {
     mockApiResponses([
       createHarness("claude-code", { available: false, state: "sign-in-required", reason: "Claude Code isn't signed in." }),
       createHarness("opencode", {
+        isDefault: true,
         available: false,
         state: "not-installed",
         reason: "OpenCode isn't installed: Fleet couldn't find opencode on PATH or in the folders its installer uses.",

@@ -57,8 +57,8 @@ interface HarnessLike {
 }
 
 export function harnessCapabilities(harnessType: string | null | undefined, harnesses: readonly HarnessLike[]): HarnessCapabilities {
-  const type = harnessType ?? "opencode";
-  const caps = harnesses.find((harness) => harness.type === type)?.capabilities;
+  // No session (or none found): nothing harness-specific is on.
+  const caps = harnessType ? harnesses.find((harness) => harness.type === harnessType)?.capabilities : undefined;
   const canSteer = caps?.supportsSteering === true;
   return {
     canSteer,

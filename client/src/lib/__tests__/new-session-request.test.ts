@@ -335,6 +335,8 @@ describe("buildCreatedSessionRow", () => {
     session: { id: "session-1", title: "Fix the login redirect", time: { created: 5, updated: 5 }, tags: ["review"] },
     // The server names the worktree, so the branch comes back in the response.
     branch: "fleet/fix-login-redirect",
+    // The server picked the harness (the request named none), so the row has it from the response.
+    harnessType: "claude-code",
   };
 
   it("is a running, working session in the given project", () => {
@@ -352,6 +354,7 @@ describe("buildCreatedSessionRow", () => {
       branch: "fleet/fix-login-redirect",
       projectId: "scratch",
       projectName: "Scratch",
+      harnessType: "claude-code",
       tags: ["review"],
     });
   });

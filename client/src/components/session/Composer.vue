@@ -227,7 +227,7 @@ const supportsImages = computed(() => capabilities.value.supportsImages);
 /** The session's harness can fork it for a side conversation (`/btw`); the `/` popup offers it only then. */
 /** The agent reads an @-referenced session with fleet_session_read; without Fleet's tools it gets a recap instead. */
 const supportsFleetTools = computed(() => {
-  const harnessType = selectedSession.value?.harnessType ?? "opencode";
+  const harnessType = selectedSession.value?.harnessType;
   return harnesses.value.find((harness) => harness.type === harnessType)?.capabilities.supportsFleetTools === true;
 });
 

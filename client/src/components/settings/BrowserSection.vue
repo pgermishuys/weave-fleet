@@ -24,13 +24,6 @@ const PAGES: readonly { id: Pages; label: string; description: string }[] = [
   { id: "any", label: "Any address", description: "Includes the internet. Pages can then send what they read anywhere." },
 ];
 
-/** How each harness gets the browser; the ones without it are off with a reason. */
-const HOW: Record<string, string> = {
-  opencode2: "Its own browser tools, in Code Mode. Fleet is the browser behind them.",
-  opencode: "Fleet's browser tools: read the page, act on it.",
-  "claude-code": "Fleet's browser tools: read the page, act on it.",
-};
-
 const settings = shallowRef<BrowserSettings>({ enabled: true, pages: "session", scripts: false });
 const loading = shallowRef(true);
 const saving = shallowRef(false);
@@ -44,7 +37,8 @@ const rows = computed(() =>
       type: harness.type,
       name: harness.displayName ?? harness.type,
       on: supported && settings.value.enabled,
-      how: supported ? HOW[harness.type] ?? "Fleet's browser tools." : `Off: Fleet can't add tools to ${harness.displayName ?? harness.type} yet.`,
+      // How it gets the browser, as the harness says; the ones without it are off with a reason.
+      how: supported ? harness.presentation?.agentBrowser ?? "Fleet's browser tools." : `Off: Fleet can't add tools to ${harness.displayName ?? harness.type} yet.`,
     };
   }),
 );

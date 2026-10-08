@@ -221,13 +221,6 @@ export interface ReferableSession {
   updatedAt: number;
 }
 
-const DEFAULT_HARNESS_NAMES: Record<string, string> = {
-  opencode: "OpenCode",
-  opencode2: "OpenCode 2",
-  "claude-code": "Claude Code",
-  pi: "Pi",
-};
-
 function timestamp(value: number | string | undefined | null): number {
   if (typeof value === "number") return value;
   if (!value) return 0;
@@ -274,8 +267,7 @@ export function matchReferableSessions(
 
   return ranked.slice(0, options.limit).map(({ item, updated }) => {
     const parentTitle = item.parentSessionId ? titles.get(item.parentSessionId) : undefined;
-    const harnessType = item.harnessType ?? "opencode";
-    const harness = options.harnessName?.(harnessType) ?? DEFAULT_HARNESS_NAMES[harnessType] ?? harnessType;
+    const harness = options.harnessName?.(item.harnessType) ?? item.harnessType;
     const place = item.projectName ?? item.workspaceDisplayName ?? folderName(item.workspaceDirectory);
     const parts = parentTitle ? [`subagent of ${parentTitle}`] : [place, harness];
     if (item.retentionStatus === "archived") parts.push("archived");

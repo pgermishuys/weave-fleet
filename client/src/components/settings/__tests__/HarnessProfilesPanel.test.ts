@@ -25,9 +25,9 @@ function profile(id: string, name: string, extra: Partial<HarnessProfile> = {}):
   };
 }
 
-function mountPanel() {
+function mountPanel(profileNote: string | null = null) {
   return mount(HarnessProfilesPanel, {
-    props: { harnessType: "opencode", harnessName: "OpenCode" },
+    props: { harnessType: "opencode", harnessName: "OpenCode", profileNote },
     global: { stubs: { ProfileConfigEditor: ConfigEditorStub } },
   });
 }
@@ -59,6 +59,28 @@ describe("HarnessProfilesPanel", () => {
     expect(work.text()).toContain("Used by 2 open sessions");
     expect(view.get("[data-testid='harness-profile-row-local']").text()).toContain("No open sessions");
     expect(view.get("[data-testid='harness-profile-row-none']").text()).toContain("No profile");
+  });
+
+  it("shows what the harness says about a profile under the editor, its code as code", async () => {
+    store.byHarness = { opencode: [profile("work", "Work")] };
+    const view = mountPanel("Fleet hands this over as `ACME_CONFIG`. Keep keys out of it.");
+    await flushPromises();
+
+    await view.get("[data-testid='harness-profile-edit-work']").trigger("click");
+
+    const note = view.get("[data-testid='harness-profile-note']");
+    expect(note.text()).toBe("Fleet hands this over as ACME_CONFIG. Keep keys out of it.");
+    expect(note.get("code").text()).toBe("ACME_CONFIG");
+  });
+
+  it("says nothing under the editor when the harness sends no note", async () => {
+    store.byHarness = { opencode: [profile("work", "Work")] };
+    const view = mountPanel();
+    await flushPromises();
+
+    await view.get("[data-testid='harness-profile-edit-work']").trigger("click");
+
+    expect(view.find("[data-testid='harness-profile-note']").exists()).toBe(false);
   });
 
   it("makes a profile the default", async () => {

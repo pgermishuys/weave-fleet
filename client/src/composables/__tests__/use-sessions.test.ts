@@ -27,6 +27,7 @@ function createJsonResponse<T>(body: T, status = 200): Response {
 
 function createSession(id: string, overrides: Partial<SessionListItem> = {}): SessionListItem {
   return {
+    harnessType: "opencode",
     instanceId: `instance-${id}`,
     workspaceId: `workspace-${id}`,
     workspaceDirectory: "/tmp/project",

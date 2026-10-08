@@ -5,7 +5,16 @@ import { useMachineTarget, type MachineTarget } from "@/lib/machine-target";
 import { readSaved, writeSaved } from "@/lib/saved-per-machine";
 import { usePreferencesStore } from "@/stores/preferences";
 
-const DEFAULT_HARNESS_TYPE = "opencode";
+/** The preference that keeps the user's default harness (`HarnessPreferences.DefaultHarnessKey` on the server). */
+export const DEFAULT_HARNESS_PREFERENCE_KEY = "defaultHarnessType";
+
+/**
+ * The harness a session that names none starts on: the user's pick (`preferred`), else the one the server marks as
+ * the default, else the first. Empty while there are no harnesses.
+ */
+export function resolveDefaultHarness(preferred: string | null | undefined, harnesses: readonly HarnessInfo[]): string {
+  return preferred || harnesses.find((harness) => harness.isDefault)?.type || harnesses[0]?.type || "";
+}
 
 export interface UseEnabledHarnessesResult {
   /** Every harness Fleet knows, on or off, ready or not. */
@@ -51,10 +60,10 @@ export function useEnabledHarnesses(): UseEnabledHarnessesResult {
     return harnesses.value.filter((harness) => harness.available && harness.userEnabled);
   });
 
-  const defaultHarnessType = computed<string>(() => {
-    if (otherMachineDefault) return otherMachineDefault.value ?? DEFAULT_HARNESS_TYPE;
-    return preferencesStore.get("defaultHarnessType", DEFAULT_HARNESS_TYPE);
-  });
+  const defaultHarnessType = computed<string>(() => resolveDefaultHarness(
+    otherMachineDefault ? otherMachineDefault.value : preferencesStore.get(DEFAULT_HARNESS_PREFERENCE_KEY, ""),
+    harnesses.value,
+  ));
 
   const noHarnessReason = computed<string | null>(() => {
     // A list that failed to load says nothing about the harnesses; let the session start and report its own error.

@@ -93,12 +93,6 @@ export function windowShortLabel(window: string): string {
   }
 }
 
-/** The harness as the status bar names it: "Claude" for Claude Code, otherwise its own name. */
-export function harnessShortName(harnessType: string, displayName?: string | null): string {
-  if (harnessType === "claude-code") return "Claude";
-  return displayName?.trim() || harnessType;
-}
-
 /** "resets 14:05" within a day, "resets Mon" within a week, else "resets 12 Oct". */
 export function resetLabel(resetsAt: number | null, now: number, locale?: string): string | null {
   if (resetsAt === null) return null;

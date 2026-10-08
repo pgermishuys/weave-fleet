@@ -155,6 +155,8 @@ async function mountAutocomplete(
     inputRef,
     cursorPosition,
     sessions,
+    // As the composer does, from the harnesses the server lists.
+    harnessName: (type) => ({ "claude-code": "Claude Code" })[type],
   }));
   unmounts.push(() => mounted.wrapper.unmount());
 

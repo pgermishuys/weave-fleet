@@ -68,16 +68,8 @@ function sortedEntries(record: Readonly<Record<string, string>>): [string, strin
   return Object.entries(record).sort(([a], [b]) => a.localeCompare(b));
 }
 
-/** OpenCode 2 first: it's the OpenCode Fleet leads with. */
-const HARNESS_ORDER = ["opencode2", "opencode"];
-
-const harnesses = computed<readonly WeaveHarnessDetection[]>(() => [...view.value?.harnesses ?? []].sort((a, b) =>
-  rank(a.harnessType) - rank(b.harnessType)));
-
-function rank(harnessType: string): number {
-  const index = HARNESS_ORDER.indexOf(harnessType);
-  return index < 0 ? HARNESS_ORDER.length : index;
-}
+/** In the harnesses' own order, as the server sends them. */
+const harnesses = computed<readonly WeaveHarnessDetection[]>(() => view.value?.harnesses ?? []);
 const installs = computed(() => harnesses.value.flatMap((harness) => harness.installs));
 /** The Weaves some harness loads, in the order they're shown. */
 const flavors = computed<WeaveFlavor[]>(() =>

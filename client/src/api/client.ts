@@ -143,6 +143,8 @@ export interface CreateSessionResponse {
   session: FleetSession;
   /** The branch the server gave a new worktree, which the naming templates decided. */
   branch?: string | null;
+  /** The harness the session runs on. */
+  harnessType: string;
 }
 
 export type ClientConfigResponse = components["schemas"]["ClientConfigResponse"];
@@ -217,6 +219,8 @@ export interface ForkSessionResponse {
   workspaceId: string;
   session: FleetSession;
   forkedFromSessionId: string;
+  /** The harness the fork runs on. */
+  harnessType: string;
 }
 
 export interface SendCommandResponse {
@@ -355,6 +359,37 @@ export interface HarnessCapabilities {
   supportsAgentBrowser?: boolean;
   /** The agent has Fleet's tools: an `@`-referenced session goes as a link it reads with `fleet_session_read`, not a recap. */
   supportsFleetTools?: boolean;
+  /** Settings → Permissions levels apply: Fleet turns them into the harness's own rules, and its asks come to Fleet. */
+  supportsPermissionLevels?: boolean;
+}
+
+/** How a harness describes itself (`HarnessPresentation` on the server). Missing from Fleets older than it. */
+export interface HarnessPresentation {
+  /** Where it comes in lists, lowest first. The server already sends harnesses in this order. */
+  order: number;
+  /** The name where room is short (the status bar), e.g. "Claude"; null for the display name. */
+  shortName?: string | null;
+  eyebrow: string;
+  description: string;
+  /** One line for choosing it during setup. */
+  pitch?: string | null;
+  /** An icon key: `terminal`, `hexagon`, `infinity` or `plug`. */
+  icon: string;
+  /** What Fleet hands the harness at each permission level; null when it can't take one. */
+  permissionModes?: Record<"ask" | "edits" | "all", string> | null;
+  /** How the agent gets its browser tab; null without `supportsAgentBrowser`. */
+  agentBrowser?: string | null;
+  /** Shown under the profile editor, with `code` in backticks; null without `supportsProfiles`. */
+  profileNote?: string | null;
+}
+
+/** An on/off switch a harness has in Settings → Harnesses, kept as the preference `key` ("true" or "false"). */
+export interface HarnessSetting {
+  key: string;
+  label: string;
+  description: string;
+  /** Whether it's on while the preference is unset. */
+  default: boolean;
 }
 
 /** A field a sign-in method asks for besides the key or browser (`HarnessSignInField` on the server). */
@@ -618,6 +653,10 @@ export interface HarnessInfo {
   update?: HarnessUpdateInfo | null;
   /** When Fleet last checked the harnesses (ISO). Missing from Fleets that check on every request. */
   checkedAt?: string | null;
+  presentation?: HarnessPresentation | null;
+  settings?: readonly HarnessSetting[] | null;
+  /** A session that names no harness starts on this one: the user's pick, or the server's fallback. */
+  isDefault?: boolean;
 }
 
 export interface WorkspaceRootItem {
@@ -840,7 +879,7 @@ export interface SessionListItem {
   totalCost?: number | null;
   projectId?: string | null;
   projectName?: string | null;
-  harnessType?: string | null;
+  harnessType: string;
   capabilities?: SessionActionCapabilities;
   /** The workflow run this session is a step of; the list nests it under the run. */
   workflowRunId?: string | null;

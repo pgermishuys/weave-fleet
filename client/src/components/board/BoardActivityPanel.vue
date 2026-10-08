@@ -98,6 +98,8 @@ function createFallbackSession(
     archivedAt: null,
     typedInstanceStatus: "running",
     isHidden: false,
+    // A placeholder row, on no harness.
+    harnessType: "",
     projectId: null,
     projectName,
     tags: [],

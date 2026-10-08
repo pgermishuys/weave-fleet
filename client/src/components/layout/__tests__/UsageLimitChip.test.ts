@@ -17,7 +17,8 @@ vi.mock("@/composables/use-signalr-socket", () => ({
 }));
 vi.mock("@/composables/use-weave-socket", () => ({ onReconnect: () => () => undefined }));
 vi.mock("@/composables/use-harnesses", () => ({
-  useHarnesses: () => ({ harnesses: { value: [{ type: "claude-code", displayName: "Claude Code" }] } }),
+  // The short name is the server's (`presentation.shortName`): the usage windows are the Claude subscription's.
+  useHarnesses: () => ({ harnesses: { value: [{ type: "claude-code", displayName: "Claude Code", presentation: { shortName: "Claude" } }] } }),
 }));
 
 import UsageLimitChip from "@/components/layout/UsageLimitChip.vue";

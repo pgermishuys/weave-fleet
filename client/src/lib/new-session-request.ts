@@ -280,7 +280,7 @@ export function buildCreatedSessionRow(
     isHidden: false,
     projectId: project?.id ?? null,
     projectName: project?.name ?? null,
-    harnessType: options.harnessType ?? null,
+    harnessType: response.harnessType,
     tags: response.session.tags ?? [],
     selectedAgent: options.agent ?? null,
     selectedModel: options.model ?? null,

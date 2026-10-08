@@ -32,6 +32,16 @@ async function toggle(): Promise<void> {
 
 /** Roles are mapped per harness: the same model has a different id on each. */
 const harnesses = computed(() => enabledHarnesses.value.filter((harness) => harness.capabilities.supportsWorkflowSteps));
+
+/** Which harnesses can run workflows, for when none of them is on: "Workflows run on A, B and C." */
+const workflowHarnessesNote = computed(() => {
+  const names = allHarnesses.value
+    .filter((harness) => harness.capabilities.supportsWorkflowSteps)
+    .map((harness) => harness.displayName);
+  if (names.length === 0) return "None of the harnesses here can run workflows yet.";
+  const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  return `Workflows run on ${list}. Turn ${names.length === 1 ? "it" : "one of them"} on in Settings → Harnesses.`;
+});
 const harnessChoice = shallowRef<string | null>(null);
 const harnessType = computed(() => harnessChoice.value
   ?? (harnesses.value.some((h) => h.type === defaultHarnessType.value) ? defaultHarnessType.value : harnesses.value[0]?.type ?? ""));
@@ -170,7 +180,7 @@ onMounted(() => {
         v-if="harnesses.length === 0 && allHarnesses.length > 0"
         class="mt-4 text-sm text-muted"
       >
-        Workflows run on OpenCode, OpenCode 2 and Claude Code. Turn one of them on in Settings → Harnesses.
+        {{ workflowHarnessesNote }}
       </p>
 
       <template v-else-if="harnesses.length > 0">

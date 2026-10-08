@@ -5,6 +5,7 @@ import { useSessionsStore } from "@/stores/sessions";
 
 function createSessionListItem(): SessionListItem {
   return {
+    harnessType: "opencode",
     instanceId: "instance-1",
     workspaceId: "workspace-1",
     workspaceDirectory: "/tmp/project",

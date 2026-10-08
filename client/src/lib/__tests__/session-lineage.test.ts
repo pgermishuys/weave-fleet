@@ -15,6 +15,7 @@ import {
 
 function session(id: string, extra: Partial<SessionListItem> = {}): SessionListItem {
   return {
+    harnessType: "opencode",
     instanceId: `i-${id}`, workspaceId: "w", workspaceDirectory: "/repo", workspaceDisplayName: null,
     isolationStrategy: "existing", sessionStatus: "idle", session: { id, title: `Session ${id}` } as SessionListItem["session"],
     instanceStatus: "running", lifecycleStatus: "running", retentionStatus: "active", typedInstanceStatus: "running",
