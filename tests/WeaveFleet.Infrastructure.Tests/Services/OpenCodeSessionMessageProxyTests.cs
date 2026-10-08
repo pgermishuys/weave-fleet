@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
@@ -1695,5 +1696,73 @@ public sealed class OpenCodeSessionMessageProxyTests
         var snapshot = await proxy.GetSnapshotAsync("session-cc");
 
         snapshot.Messages.ShouldHaveSingleItem().Info.Command.ShouldBe(new SlashCommand("review", null));
+    }
+
+    // OpenCode keeps a part's text only once the part ends: mid-reply its history has the part, empty. Opening the
+    // session then showed only what streamed after that.
+    [Fact]
+    public async Task GetSnapshotAsync_puts_the_text_streamed_so_far_into_a_part_the_harness_kept_empty()
+    {
+        var sessionRepository = new InMemorySessionRepository();
+        sessionRepository.Seed(new Session
+        {
+            Id = "session-streaming",
+            InstanceId = "instance-streaming",
+            HarnessType = "opencode",
+            Title = "Rate limit headers",
+            Status = "active",
+            UserId = "user-1",
+        });
+
+        var instanceTracker = new InstanceTracker();
+        instanceTracker.Register("instance-streaming", new FakeHarnessSession("instance-streaming")
+        {
+            GetMessagesBehavior = (_, _) => Task.FromResult(new MessagePage(
+                [
+                    new HarnessMessage
+                    {
+                        Id = "msg_reply",
+                        Role = "assistant",
+                        Parts = [new TextPart(string.Empty) { PartId = "prt_reply" }],
+                        Timestamp = DateTimeOffset.UtcNow,
+                    },
+                ],
+                false)),
+        });
+
+        var activityTracker = new SessionActivityTracker();
+        activityTracker.Update("session-streaming", "busy", "user-1");
+
+        var streaming = new StreamingReplies(TimeProvider.System);
+        foreach (var delta in new[] { "Checking the ", "rate limit headers" })
+        {
+            streaming.Observe("session-streaming", new MessagePartDeltaStreamed
+            {
+                Payload = new MessagePartDeltaStreamedPayload
+                {
+                    SessionId = "session-streaming",
+                    MessageId = "msg_reply",
+                    PartId = "prt_reply",
+                    Field = "text",
+                    Delta = delta,
+                },
+            });
+        }
+
+        var proxy = new OpenCodeSessionMessageProxy(
+            sessionRepository,
+            instanceTracker,
+            activityTracker,
+            new InMemoryDelegationRepository(),
+            new FakeSessionSnapshotBuilder(),
+            CreateServiceProvider(new FakeSessionActivator()),
+            Harnesses(),
+            NullLogger<OpenCodeSessionMessageProxy>.Instance,
+            streaming: streaming);
+
+        var snapshot = await proxy.GetSnapshotAsync("session-streaming");
+
+        snapshot.Messages.ShouldHaveSingleItem().Parts.ShouldHaveSingleItem()
+            .ShouldBeOfType<TextMessageEventPart>().Text.ShouldBe("Checking the rate limit headers");
     }
 }

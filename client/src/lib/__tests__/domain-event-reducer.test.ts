@@ -1023,25 +1023,34 @@ describe("joining a reply mid-stream", () => {
     return part && "text" in part ? part.text : undefined
   }
 
-  // The snapshot came with the reply so far; deltas that went out while it was read arrive too, and say where they start.
-  it("skips the text the snapshot already has and adds the rest", () => {
-    const joined = createSessionStreamState(createSnapshot({
+  function joinedWith(text: string): SessionStreamState {
+    return createSessionStreamState(createSnapshot({
       activityStatus: "busy",
-      messages: [createMessageLifecyclePayload({ id: "msg_reply", role: "assistant", createdAt: 1000, text: "Checking the rate", partId: "prt_reply" })],
+      messages: [createMessageLifecyclePayload({ id: "msg_reply", role: "assistant", createdAt: 1000, text, partId: "prt_reply" })],
     }))
+  }
 
-    const state = applyEvents(joined, [delta("rate limit ", 13), delta("headers", 24), delta(".", 31)])
+  // The snapshot came with the reply so far; deltas that went out while it was read arrive too, and say where they start.
+  it("skips a delta the snapshot already has", () => {
+    expect(replyText(applyDomainEvent(joinedWith("Checking the rate limit "), delta("rate limit ", 13)))).toBe("Checking the rate limit ")
+  })
 
-    expect(replyText(state)).toBe("Checking the rate limit headers.")
+  it("adds only the part of a delta the snapshot doesn't have", () => {
+    expect(replyText(applyDomainEvent(joinedWith("Checking the rate"), delta("rate limit ", 13)))).toBe("Checking the rate limit ")
+  })
+
+  it("adds a delta that starts where the snapshot ends", () => {
+    expect(replyText(applyDomainEvent(joinedWith("Checking the "), delta("rate limit ", 13)))).toBe("Checking the rate limit ")
   })
 
   it("adds a delta without an offset whole, as from a Fleet that doesn't send one", () => {
-    const joined = createSessionStreamState(createSnapshot({
-      activityStatus: "busy",
-      messages: [createMessageLifecyclePayload({ id: "msg_reply", role: "assistant", createdAt: 1000, text: "Checking the ", partId: "prt_reply" })],
-    }))
+    expect(replyText(applyDomainEvent(joinedWith("Checking the "), delta("rate limit ")))).toBe("Checking the rate limit ")
+  })
 
-    expect(replyText(applyDomainEvent(joined, delta("rate limit ")))).toBe("Checking the rate limit ")
+  it("streams on from the snapshot with no text twice", () => {
+    const state = applyEvents(joinedWith("Checking the rate"), [delta("Checking the ", 0), delta("rate limit ", 13), delta("headers", 24), delta(".", 31)])
+
+    expect(replyText(state)).toBe("Checking the rate limit headers.")
   })
 })
 

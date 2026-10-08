@@ -31,8 +31,8 @@ public sealed class StreamingReplies(TimeProvider timeProvider)
             case MessagePartDeltaStreamed { Payload.Field: "text" } delta:
                 return delta with { Payload = delta.Payload with { Offset = Append(sessionId, delta.Payload) } };
 
-            // By the end of a turn the harness has kept its text.
-            case TurnEnded or SessionIdled:
+            // A turn that ended, or failed, ends its replies: the harness has kept what it will keep.
+            case TurnEnded or TurnFailed or SessionIdled:
                 Forget(sessionId);
                 break;
         }

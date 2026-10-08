@@ -66,15 +66,33 @@ public sealed class StreamingRepliesTests
         messages.ShouldHaveSingleItem().Parts.Select(part => ((TextMessageEventPart)part).Text).ShouldBe(["First this", "Then this"]);
     }
 
-    [Fact]
-    public void the_text_goes_when_the_turn_ends()
+    public static TheoryData<DomainEvent> TurnEnds() => new()
+    {
+        new SessionIdled { Payload = new SessionIdledPayload { SessionId = SessionId } },
+        new TurnEnded { Payload = new TurnEndedPayload { SessionId = SessionId, MessageId = "msg_a", Index = 0 } },
+        new TurnFailed { Payload = new TurnFailedPayload { SessionId = SessionId, Error = new TurnError { Name = "ProviderError", Message = "Overloaded" } } },
+    };
+
+    [Theory]
+    [MemberData(nameof(TurnEnds))]
+    public void the_text_goes_when_the_turn_ends(DomainEvent end)
     {
         Stream("msg_a", "prt_1", "Half a reply");
 
-        _sut.Observe(SessionId, new SessionIdled { Payload = new SessionIdledPayload { SessionId = SessionId } });
+        _sut.Observe(SessionId, end);
 
         _sut.Overlay(SessionId, []).ShouldBeEmpty();
         Offset(Delta("msg_a", "prt_1", "A new turn")).ShouldBe(0);
+    }
+
+    [Fact]
+    public void the_text_goes_when_the_harness_goes()
+    {
+        Stream("msg_a", "prt_1", "Half a reply");
+
+        _sut.Forget(SessionId);
+
+        _sut.Overlay(SessionId, []).ShouldBeEmpty();
     }
 
     [Fact]
