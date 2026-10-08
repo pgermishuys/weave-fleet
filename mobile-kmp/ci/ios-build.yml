@@ -1,0 +1,29 @@
+# Sketch: build the KMP iPhone app on a macOS runner. Copy to .github/workflows/ to use.
+name: mobile-kmp iOS
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ["mobile-kmp/**"]
+jobs:
+  ios:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: mobile-kmp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "17" }
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Kotlin tests (JVM + Kotlin/Native simulator)
+        run: ./gradlew :shared:testAndroidHostTest :shared:iosSimulatorArm64Test
+      - name: Kotlin framework
+        run: ./gradlew :shared:assembleFleetSharedDebugXCFramework
+      - name: Xcode project
+        run: brew install xcodegen && (cd iosApp && xcodegen generate)
+      - name: Build for the simulator
+        run: |
+          cd iosApp
+          xcodebuild -project FleetKMP.xcodeproj -scheme FleetKMP -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build

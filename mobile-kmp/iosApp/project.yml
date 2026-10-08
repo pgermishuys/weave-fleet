@@ -1,0 +1,74 @@
+# XcodeGen spec: `xcodegen generate` writes FleetKMP.xcodeproj (not checked in).
+# Build the Kotlin framework first: `./gradlew :shared:assembleFleetSharedDebugXCFramework` (from mobile-kmp/).
+name: FleetKMP
+options:
+  bundleIdPrefix: io.tryweave.fleet
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    # Simulator builds in CI don't sign.
+    CODE_SIGNING_ALLOWED: "NO"
+    CODE_SIGNING_REQUIRED: "NO"
+targets:
+  FleetKMP:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+      - path: Shared
+      - path: ../fonts/res/font
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - framework: ../shared/build/XCFrameworks/debug/FleetShared.xcframework
+        embed: false   # a static framework: linked into the app binary
+      - target: FleetWidget
+        embed: true
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Fleet
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIUserInterfaceStyle: Dark
+        UIAppFonts:
+          - font/inter_regular.ttf
+          - font/inter_medium.ttf
+          - font/inter_semibold.ttf
+          - font/inter_bold.ttf
+          - font/jetbrains_mono_regular.ttf
+          - font/jetbrains_mono_medium.ttf
+        NSSupportsLiveActivities: true
+        NSAppTransportSecurity:
+          # A spike: plain http to a throwaway Fleet on 127.0.0.1 from the simulator. Not for a real build.
+          # (Only this key: with NSAllowsLocalNetworking present, iOS ignores NSAllowsArbitraryLoads.)
+          NSAllowsArbitraryLoads: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.tryweave.fleet.kmp
+        OTHER_LDFLAGS: ["-ObjC", "-lc++"]
+  FleetWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Widget
+      - path: Shared
+    info:
+      path: Widget/Info.plist
+      properties:
+        CFBundleDisplayName: Fleet
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.tryweave.fleet.kmp.widget
+        APPLICATION_EXTENSION_API_ONLY: "YES"

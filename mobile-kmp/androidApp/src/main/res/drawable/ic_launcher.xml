@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A placeholder mark: an indigo "W" on the Fleet background. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item><shape android:shape="oval"><solid android:color="#141418" /></shape></item>
+    <item android:drawable="@drawable/ic_mark" android:inset="22%" />
+</layer-list>

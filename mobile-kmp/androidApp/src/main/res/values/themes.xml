@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- No Material: a bare platform theme, dark, edge to edge. Compose draws everything. -->
+    <style name="Theme.Fleet" parent="android:Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/fleet_bg</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+    <color name="fleet_bg">#0D0D10</color>
+    <color name="fleet_accent">#6366F1</color>
+</resources>

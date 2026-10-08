@@ -11,8 +11,7 @@
       "bundleIdentifier": "io.tryweave.fleet.experiment",
       "infoPlist": {
         "NSAppTransportSecurity": {
-          "NSAllowsArbitraryLoads": true,
-          "NSAllowsLocalNetworking": true
+          "NSAllowsArbitraryLoads": true
         }
       }
     },

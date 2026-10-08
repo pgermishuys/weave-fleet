@@ -1,0 +1,137 @@
+# The KMP app (SwiftUI on iOS, Compose on Android) against a throwaway Fleet (mobile/e2e/start-fleet.sh): pair, list,
+# read, allow, answer, Live Activity, and answering an ask from the notification. Modelled on mobile/e2e/flows/walk.yaml.
+# Run: maestro test -e FLEET_URL=… -e PAIR_CODE=… mobile-kmp/e2e/walk.yaml
+# Same app id on both platforms. Ids: address, code, pair, composer, send (SwiftUI accessibilityIdentifier, Compose testTag).
+# This app pairs in one step (no separate "Connect" screen), so there is no 02 screenshot.
+appId: io.tryweave.fleet.kmp
+---
+- launchApp:
+    clearState: true
+    permissions:
+      notifications: allow
+- extendedWaitUntil:
+    visible: "Pair with a machine"
+    timeout: 60000
+- takeScreenshot: 01-pair
+- tapOn:
+    id: "address"
+- inputText: ${FLEET_URL}
+- tapOn:
+    id: "code"
+- inputText: ${PAIR_CODE}
+- hideKeyboard
+- tapOn:
+    id: "pair"
+- tapOn:
+    text: "Allow"
+    optional: true
+- extendedWaitUntil:
+    visible: "Fix pagination off-by-one"
+    timeout: 30000
+- takeScreenshot: 03-sessions
+- tapOn: "Fix pagination off-by-one"
+- extendedWaitUntil:
+    visible: "Here's the plan.*"
+    timeout: 30000
+- takeScreenshot: 04-session
+
+# A command waits for approval in the dock.
+- tapOn:
+    id: "composer"
+- inputText: "Great, run-tests please"
+- tapOn:
+    id: "send"
+- extendedWaitUntil:
+    visible: "Allow once"
+    timeout: 30000
+- takeScreenshot: 05-permission
+- tapOn: "Allow once"
+- extendedWaitUntil:
+    visible: ".*All 42 tests pass.*"
+    timeout: 60000
+- takeScreenshot: 06-allowed
+
+# A question docks its choices.
+- tapOn:
+    id: "composer"
+- inputText: "Before you go on: ask-me which cache"
+- tapOn:
+    id: "send"
+- extendedWaitUntil:
+    visible: "SQLite"
+    timeout: 30000
+- takeScreenshot: 07-question
+- tapOn: "SQLite"
+- extendedWaitUntil:
+    visible: ".*You answered: SQLite.*"
+    timeout: 30000
+    optional: true
+- takeScreenshot: 08-answered
+
+# A long command: the session works for a while; on iOS a Live Activity follows it outside the app,
+# on Android an ongoing "Working" notification (a Live Update where Android 16 promotes it).
+- tapOn:
+    id: "composer"
+- inputText: "slow-task: migrate the cache"
+- tapOn:
+    id: "send"
+- extendedWaitUntil:
+    visible: "Allow once"
+    timeout: 30000
+- tapOn: "Allow once"
+- extendedWaitUntil:
+    visible: "Working.*"
+    timeout: 20000
+    optional: true
+- takeScreenshot: 09-working
+- pressKey: Home
+- waitForAnimationToEnd:
+    timeout: 3000
+- takeScreenshot: 10-home-live-activity
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible: ".*All 42 tests pass.*"
+    timeout: 90000
+    optional: true
+
+# Answer an ask from the notification, with the app in the background. (On iOS the app is suspended soon after it
+# leaves the screen and Fleet has no APNs push, so this notification may not come; Android keeps the hub open.)
+- tapOn:
+    id: "composer"
+- inputText: "run-tests one more time"
+- tapOn:
+    id: "send"
+- pressKey: Home
+- extendedWaitUntil:
+    visible: ".*Fix pagination off-by-one.*"
+    timeout: 20000
+    optional: true
+- takeScreenshot: 11-notification
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - longPressOn:
+          text: ".*Fix pagination off-by-one.*"
+          optional: true
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - swipe:
+          start: 50%, 0%
+          end: 50%, 60%
+- takeScreenshot: 12-notification-actions
+- tapOn:
+    text: "Allow once"
+    optional: true
+- waitForAnimationToEnd:
+    timeout: 4000
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible: "Message .*"
+    timeout: 60000
+    optional: true
+- takeScreenshot: 13-after-notification-answer
