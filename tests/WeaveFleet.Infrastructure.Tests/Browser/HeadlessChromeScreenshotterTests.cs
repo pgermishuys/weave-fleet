@@ -157,6 +157,83 @@ public sealed class HeadlessChromeScreenshotterTests
         Png(desktop).ShouldNotBe(Png(desktopRed));
     }
 
+    [Fact]
+    public async Task A_browser_that_stalls_on_its_way_up_is_started_again()
+    {
+        if (OperatingSystem.IsWindows() || Browser() is not { } options)
+            return;
+
+        // The first start never opens its DevTools port (as Chrome now and then doesn't on a busy CI machine); the
+        // second is the real browser.
+        using var stalling = new StallingBrowser(options.Browser.ChromePath ?? ChromeFinder.Find()!, stalls: 1);
+        options.Browser.ChromePath = stalling.Path;
+        await using var host = new ChromeHost(options, NullLogger<ChromeHost>.Instance) { LaunchTimeout = TimeSpan.FromSeconds(2) };
+        await using var screenshots = new HeadlessChromeScreenshotter(host, NullLogger<HeadlessChromeScreenshotter>.Instance);
+        using var site = new LocalSite("<body style='background:#101317'>");
+
+        var shot = await screenshots.CaptureAsync(new ScreenshotRequest(site.Url, 800, 600));
+
+        Png(shot).Take(8).ShouldBe(PngHeader);
+        // Two, or three where this Chrome also needs the no-sandbox start (Playwright's, on Ubuntu 23.10+).
+        stalling.Starts.ShouldBeInRange(2, 3);
+    }
+
+    [Fact]
+    public async Task A_browser_that_never_comes_up_is_tried_twice_and_said_to_be_still_running()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        using var stalling = new StallingBrowser(realBrowser: null, stalls: int.MaxValue);
+        var options = new FleetOptions();
+        options.Browser.ChromePath = stalling.Path;
+        await using var host = new ChromeHost(options, NullLogger<ChromeHost>.Instance) { LaunchTimeout = TimeSpan.FromSeconds(1) };
+        await using var screenshots = new HeadlessChromeScreenshotter(host, NullLogger<HeadlessChromeScreenshotter>.Instance);
+
+        var shot = await screenshots.CaptureAsync(new ScreenshotRequest("http://127.0.0.1:1/", 800, 600));
+
+        shot.Image.ShouldBeNull();
+        shot.Problem.ShouldBe($"{stalling.Path} started but was still running after 1 s without opening its DevTools port, so Fleet can't drive it.");
+        stalling.Starts.ShouldBe(2);
+    }
+
+    /// <summary>
+    /// A "browser" that sleeps without opening a DevTools port for its first <c>stalls</c> starts, then runs the real
+    /// one; it counts its starts in a file.
+    /// </summary>
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    private sealed class StallingBrowser : IDisposable
+    {
+        private readonly string _folder = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fleet-stalling-" + Guid.NewGuid().ToString("n"));
+        private readonly string _starts;
+
+        public StallingBrowser(string? realBrowser, int stalls)
+        {
+            Directory.CreateDirectory(_folder);
+            _starts = System.IO.Path.Combine(_folder, "starts");
+            Path = System.IO.Path.Combine(_folder, "chrome");
+            var then = realBrowser is null ? "exec sleep 60" : $"exec '{realBrowser}' \"$@\"";
+            File.WriteAllText(Path, $"""
+                #!/bin/sh
+                echo x >> '{_starts}'
+                if [ "$(wc -l < '{_starts}')" -le {Math.Min(stalls, 1000)} ]; then exec sleep 60; fi
+                {then}
+
+                """);
+            File.SetUnixFileMode(Path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        public string Path { get; }
+
+        public int Starts => File.Exists(_starts) ? File.ReadAllLines(_starts).Length : 0;
+
+        public void Dispose()
+        {
+            try { Directory.Delete(_folder, recursive: true); }
+            catch (IOException) { }
+        }
+    }
+
     /// <summary>The shot's picture, or a failure that says why there isn't one.</summary>
     private static byte[] Png(ScreenshotOutcome shot) => shot.Image.ShouldNotBeNull(shot.Problem).Png;
 

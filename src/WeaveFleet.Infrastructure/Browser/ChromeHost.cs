@@ -22,7 +22,8 @@ public sealed class ChromeHost(FleetOptions options, ILogger<ChromeHost> logger)
     /// <summary>How long the browser waits, once nobody holds it, before quitting.</summary>
     public static readonly TimeSpan IdleTimeout = TimeSpan.FromMinutes(2);
 
-    private static readonly TimeSpan LaunchTimeout = TimeSpan.FromSeconds(20);
+    /// <summary>How long a browser gets to open its DevTools port before Fleet tries another.</summary>
+    internal TimeSpan LaunchTimeout { get; init; } = TimeSpan.FromSeconds(20);
 
     private static readonly Action<ILogger, string, Exception?> LogBrowser =
         LoggerMessage.Define<string>(LogLevel.Information, new EventId(1, "ChromeBrowser"), "Fleet's headless browser is {Path}");
@@ -30,6 +31,10 @@ public sealed class ChromeHost(FleetOptions options, ILogger<ChromeHost> logger)
     private static readonly Action<ILogger, string, Exception?> LogSandbox =
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(4, "ChromeNoSandbox"),
             "{Path} couldn't open its sandbox, so Fleet runs it with --no-sandbox");
+
+    private static readonly Action<ILogger, string, double, Exception?> LogStalled =
+        LoggerMessage.Define<string, double>(LogLevel.Warning, new EventId(5, "ChromeStalled"),
+            "{Path} was still running but hadn't opened its DevTools port after {Seconds} s, so Fleet starts it again");
 
     private readonly SemaphoreSlim _gate = new(1, 1);
     private Process? _browser;
@@ -104,6 +109,15 @@ public sealed class ChromeHost(FleetOptions options, ILogger<ChromeHost> logger)
 
         var launched = await LaunchAsync(path, _sandbox, ct);
 
+        // A browser that's running but silent has stalled on its way up; on a busy machine (CI running every test
+        // project at once) that happens now and then, and a second start with a fresh profile comes up. This goes
+        // first, so the sandbox check below looks at whichever start died.
+        if (launched.Problem is not null && launched.Stalled)
+        {
+            LogStalled(logger, path, LaunchTimeout.TotalSeconds, null);
+            launched = await LaunchAsync(path, _sandbox, ct);
+        }
+
         // A Chrome outside a distribution's own package (Playwright's, a tarball) can't open its sandbox where
         // unprivileged user namespaces are locked down, and nor can a Fleet running as root. Both die before the
         // DevTools port, saying so; the second try drops the sandbox and every later launch skips straight to it.
@@ -121,7 +135,7 @@ public sealed class ChromeHost(FleetOptions options, ILogger<ChromeHost> logger)
         return (_cdp, null);
     }
 
-    private async Task<(bool Started, string? Problem, bool Sandbox)> LaunchAsync(string path, bool sandbox, CancellationToken ct)
+    private async Task<(bool Started, string? Problem, bool Sandbox, bool Stalled)> LaunchAsync(string path, bool sandbox, CancellationToken ct)
     {
         LogBrowser(logger, path, null);
         _profile = Path.Combine(Path.GetTempPath(), "fleet-screenshots-" + Guid.NewGuid().ToString("n"));
@@ -142,11 +156,11 @@ public sealed class ChromeHost(FleetOptions options, ILogger<ChromeHost> logger)
         }
         catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
-            return (false, $"Fleet couldn't start {path}: {error.Message}", false);
+            return (false, $"Fleet couldn't start {path}: {error.Message}", false, false);
         }
 
         if (_browser is null)
-            return (false, $"Fleet couldn't start {path}.", false);
+            return (false, $"Fleet couldn't start {path}.", false, false);
 
         _job = ProcessGroupHelper.AssignToProcessGroup(_browser, logger);
 
@@ -161,8 +175,12 @@ public sealed class ChromeHost(FleetOptions options, ILogger<ChromeHost> logger)
         var endpoint = await DevToolsUrlAsync(_profile, _browser, ct);
         if (endpoint is null)
         {
+            var stalled = !_browser.HasExited;
             await QuitAsync();
-            return (false, $"{path} started but never opened its DevTools port, so Fleet can't drive it.{complaints}", complaints.MentionsSandbox);
+            var what = stalled
+                ? $"was still running after {LaunchTimeout.TotalSeconds:0} s without opening its DevTools port"
+                : "exited before opening its DevTools port";
+            return (false, $"{path} started but {what}, so Fleet can't drive it.{complaints}", complaints.MentionsSandbox, stalled);
         }
 
         try
@@ -172,10 +190,10 @@ public sealed class ChromeHost(FleetOptions options, ILogger<ChromeHost> logger)
         catch (Exception error) when (error is not OperationCanceledException)
         {
             await QuitAsync();
-            return (false, $"Fleet couldn't connect to the browser it started: {error.Message}", false);
+            return (false, $"Fleet couldn't connect to the browser it started: {error.Message}", false, false);
         }
 
-        return (true, null, false);
+        return (true, null, false, false);
     }
 
     /// <summary>
@@ -220,7 +238,7 @@ public sealed class ChromeHost(FleetOptions options, ILogger<ChromeHost> logger)
     /// Chrome writes "port\npath" to DevToolsActivePort in its profile once the debugger listens. Asking for
     /// port 0 and reading it back is the only way to get a free port without racing another process for it.
     /// </summary>
-    private static async Task<Uri?> DevToolsUrlAsync(string profile, Process browser, CancellationToken ct)
+    private async Task<Uri?> DevToolsUrlAsync(string profile, Process browser, CancellationToken ct)
     {
         var file = Path.Combine(profile, "DevToolsActivePort");
         var deadline = DateTimeOffset.UtcNow + LaunchTimeout;
@@ -229,24 +247,33 @@ public sealed class ChromeHost(FleetOptions options, ILogger<ChromeHost> logger)
             if (browser.HasExited)
                 return null;
 
-            if (File.Exists(file))
-            {
-                try
-                {
-                    var lines = await File.ReadAllLinesAsync(file, ct);
-                    if (lines.Length >= 2 && int.TryParse(lines[0], out var port))
-                        return new Uri($"ws://127.0.0.1:{port}{lines[1]}");
-                }
-                catch (IOException)
-                {
-                    // Chrome is still writing it.
-                }
-            }
+            if (await ReadDevToolsUrlAsync(file, ct) is { } url)
+                return url;
 
             await Task.Delay(25, ct);
         }
 
-        return null;
+        // Once more past the deadline: on a busy machine this loop can sleep through it while Chrome is already up.
+        return await ReadDevToolsUrlAsync(file, ct);
+    }
+
+    private static async Task<Uri?> ReadDevToolsUrlAsync(string file, CancellationToken ct)
+    {
+        if (!File.Exists(file))
+            return null;
+
+        try
+        {
+            var lines = await File.ReadAllLinesAsync(file, ct);
+            return lines.Length >= 2 && int.TryParse(lines[0], out var port)
+                ? new Uri($"ws://127.0.0.1:{port}{lines[1]}")
+                : null;
+        }
+        catch (IOException)
+        {
+            // Chrome is still writing it.
+            return null;
+        }
     }
 
     private static IEnumerable<string> Arguments(string profile, bool sandbox)
