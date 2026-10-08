@@ -1,8 +1,8 @@
 import { storeToRefs } from "pinia";
 import { computed, readonly, ref, shallowRef, watch } from "vue";
-import { api } from "@/api/client";
 import type { AutocompleteAgent, ModelReference } from "@/api/client";
 import { sessionCatalogChanges } from "@/lib/harness-catalog-changes";
+import { useMachineTarget, type MachineTarget } from "@/lib/machine-target";
 import { shareInFlight } from "@/lib/shared-request";
 import { useSessionsStore } from "@/stores/sessions";
 
@@ -29,8 +29,8 @@ export function toAgentOptions(agents: readonly AutocompleteAgent[]): AgentOptio
  * The agents a session's harness offers, as the harness lists them (hidden ones too). The agent picker and the `@`
  * suggestions share it, so opening a session, or a pushed change to what it offers, asks once.
  */
-export const loadSessionAgentList = shareInFlight(async (sessionId: string): Promise<AutocompleteAgent[]> => {
-  const { data, error, response } = await api.GET("/api/sessions/{id}/agents", {
+export const loadSessionAgentList = shareInFlight(async (machine: MachineTarget, sessionId: string): Promise<AutocompleteAgent[]> => {
+  const { data, error, response } = await machine.api.GET("/api/sessions/{id}/agents", {
     params: { path: { id: sessionId } },
   });
 
@@ -41,9 +41,10 @@ export const loadSessionAgentList = shareInFlight(async (sessionId: string): Pro
 
   const body = data as unknown as { agents?: AutocompleteAgent[] } | AutocompleteAgent[];
   return Array.isArray(body) ? body : body.agents ?? [];
-});
+}, (machine, sessionId) => `${machine.key}\n${sessionId}`);
 
 export function useAgents(sessionId?: string) {
+  const machine = useMachineTarget();
   const sessionsStore = useSessionsStore();
   const { activeSessionId } = storeToRefs(sessionsStore);
 
@@ -82,7 +83,7 @@ export function useAgents(sessionId?: string) {
       error.value = undefined;
 
       try {
-        const nextAgents = toAgentOptions(await loadSessionAgentList(nextSessionId));
+        const nextAgents = toAgentOptions(await loadSessionAgentList(machine, nextSessionId));
         if (left) {
           return;
         }

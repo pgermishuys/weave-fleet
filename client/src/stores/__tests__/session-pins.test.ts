@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionListItem } from "@/api/client";
+import type { MachineTarget } from "@/lib/machine-target";
 
-const pinSession = vi.fn<(sessionId: string, beforeSessionId: string | null) => Promise<number>>();
-const unpinSession = vi.fn<(sessionId: string) => Promise<void>>();
+const pinSession = vi.fn<(machine: MachineTarget, sessionId: string, beforeSessionId: string | null) => Promise<number>>();
+const unpinSession = vi.fn<(machine: MachineTarget, sessionId: string) => Promise<void>>();
+/** The session list is the live machine's, so pins go there. */
+const live = expect.objectContaining({ key: "home", isLive: true });
 const get = vi.fn();
 
 vi.mock("@/composables/use-session-actions", () => ({ pinSession, unpinSession }));
@@ -34,7 +37,7 @@ describe("session pins", () => {
 
     const pinning = pins.pin("c", "b");
     expect(orderOf("c")).toBe(1.5);
-    expect(pinSession).toHaveBeenCalledWith("c", "b");
+    expect(pinSession).toHaveBeenCalledWith(live, "c", "b");
 
     answer(1.5);
     await pinning;
@@ -66,7 +69,7 @@ describe("session pins", () => {
     const pins = useSessionPinsStore();
 
     await pins.unpin("a");
-    expect(unpinSession).toHaveBeenCalledWith("a");
+    expect(unpinSession).toHaveBeenCalledWith(live, "a");
     expect(orderOf("a")).toBeNull();
 
     unpinSession.mockRejectedValue(new Error("Session not found"));
@@ -83,7 +86,7 @@ describe("session pins", () => {
     expect(pinSession).not.toHaveBeenCalled();
 
     await pins.move("b", -1);
-    expect(pinSession).toHaveBeenCalledWith("b", "a");
+    expect(pinSession).toHaveBeenCalledWith(live, "b", "a");
     expect(orderOf("b")).toBe(0.5);
   });
 });

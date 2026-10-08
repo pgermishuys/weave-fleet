@@ -1,6 +1,6 @@
 import { computed, reactive, shallowRef, toValue, type ComputedRef, type MaybeRefOrGetter, type Ref } from "vue";
-import { api } from "@/api/client";
 import type { SessionContextUsage } from "@/lib/context-usage";
+import { useMachineTarget, type MachineTarget } from "@/lib/machine-target";
 
 /**
  * How full each open session's context window is, for the ring by Send. The session's stream is the source (its
@@ -36,9 +36,9 @@ export type CompactResult = { ok: true } | { ok: false; error: string };
  * Compact now. Fleet answers once the harness has taken the request; the compaction's start and end arrive as
  * `context.updated`. Refused during a turn, and for a harness that can't compact.
  */
-export async function compactSession(sessionId: string): Promise<CompactResult> {
+export async function compactSession(machine: MachineTarget, sessionId: string): Promise<CompactResult> {
   try {
-    const { error, response } = await api.POST("/api/sessions/{id}/compact", { params: { path: { id: sessionId } } });
+    const { error, response } = await machine.api.POST("/api/sessions/{id}/compact", { params: { path: { id: sessionId } } });
     return response.ok ? { ok: true } : { ok: false, error: errorMessage(error, `It couldn't be compacted (HTTP ${response.status}).`) };
   } catch (compactError) {
     return { ok: false, error: compactError instanceof Error ? compactError.message : "It couldn't be compacted." };
@@ -56,6 +56,7 @@ export interface UseSessionContextResult {
 }
 
 export function useSessionContext(sessionId: MaybeRefOrGetter<string>): UseSessionContextResult {
+  const machine = useMachineTarget();
   const isRequesting = shallowRef(false);
   const requestError = shallowRef<string | null>(null);
 
@@ -63,7 +64,7 @@ export function useSessionContext(sessionId: MaybeRefOrGetter<string>): UseSessi
     if (isRequesting.value) return;
     isRequesting.value = true;
     requestError.value = null;
-    const result = await compactSession(toValue(sessionId));
+    const result = await compactSession(machine, toValue(sessionId));
     isRequesting.value = false;
     if (!result.ok) requestError.value = result.error;
   }

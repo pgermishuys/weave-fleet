@@ -1,12 +1,13 @@
 import { shallowRef } from "vue";
 import type { components } from "@/api/generated/schema";
-import { api } from "@/api/client";
+import { useMachineTarget } from "@/lib/machine-target";
 
 /**
  * Composable for answering or rejecting question tool requests.
  * Each call returns fresh `loading` and `error` state.
  */
 export function useQuestionAnswer(sessionId: string) {
+  const { api } = useMachineTarget();
   const loading = shallowRef(false);
   const error = shallowRef<string | null>(null);
 

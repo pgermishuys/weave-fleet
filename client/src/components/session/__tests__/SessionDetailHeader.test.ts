@@ -24,7 +24,7 @@ const SessionDetailHeader = SessionDetailHeaderComponent as unknown as DefineCom
 
 const { navigate, apiFetch } = vi.hoisted(() => ({ navigate: vi.fn(), apiFetch: vi.fn() }));
 vi.mock("@tanstack/vue-router", () => ({ useRouter: () => ({ navigate }) }));
-vi.mock("@/lib/api-client", () => ({ apiFetch }));
+vi.mock("@/lib/api-client", () => ({ apiFetchOn: (_machine: unknown, ...args: unknown[]) => apiFetch(...args) }));
 
 vi.mock("@/composables/use-harnesses", () => ({
   useHarnesses: () => ({ harnesses: ref([]) }),

@@ -12,7 +12,8 @@ import { modelDisplayName } from "@/lib/agent-model-choice";
 import { describeRetry, retryAttemptLabel, type RetryStatus } from "@/lib/retry-status";
 import { useSessionsStore } from "@/stores/sessions";
 import { useMachinesStore } from "@/stores/machines";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetchOn } from "@/lib/api-client";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useSidebarStore } from "@/stores/sidebar";
 import { useSessionTitle } from "@/composables/use-session-lineage";
 import { lineageLinkLabel, type LineageKind } from "@/lib/session-lineage";
@@ -57,6 +58,7 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+const machine = useMachineTarget();
 const emit = defineEmits<{
   "update:editingTitle": [editing: boolean];
   rename: [title: string];
@@ -330,7 +332,7 @@ async function addTag(): Promise<void> {
 
 async function updateTags(tags: readonly string[]): Promise<void> {
   try {
-    const response = await apiFetch(`/api/sessions/${encodeURIComponent(props.id)}/tags`, {
+    const response = await apiFetchOn(machine.connection, `/api/sessions/${encodeURIComponent(props.id)}/tags`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",

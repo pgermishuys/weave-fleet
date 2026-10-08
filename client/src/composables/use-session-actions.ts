@@ -13,8 +13,7 @@ import type {
   SessionSourceSelection,
   UpdateProjectRequest,
 } from "@/api/client";
-import { api } from "@/api/client";
-import { useMachineTarget } from "@/lib/machine-target";
+import { useMachineTarget, type MachineTarget } from "@/lib/machine-target";
 import { trackAction } from "@/lib/track-action";
 import { dispatchSessionUpsert } from "@/lib/session-sync";
 import { useSessionsStore } from "@/stores/sessions";
@@ -274,6 +273,7 @@ export function useCreateSession(): UseCreateSessionResult {
 
 export function useCreateProject(): UseCreateProjectResult {
   const state = createMutationState();
+  const { api } = useMachineTarget();
 
   async function createProject(request: CreateProjectRequest): Promise<ProjectResponse> {
     return state.execute(async () => {
@@ -299,6 +299,7 @@ export function useCreateProject(): UseCreateProjectResult {
 
 export function useDeleteSession(): UseDeleteSessionResult {
   const state = createMutationState();
+  const { api } = useMachineTarget();
 
   async function deleteSession(sessionId: string, instanceId: string): Promise<void> {
     void instanceId;
@@ -327,6 +328,7 @@ export function useDeleteSession(): UseDeleteSessionResult {
 
 export function useDeleteProject(): UseDeleteProjectResult {
   const state = createMutationState();
+  const { api } = useMachineTarget();
 
   async function deleteProject(projectId: string, mode: DeleteProjectMode = "move_to_scratch"): Promise<void> {
     await state.execute(async () => {
@@ -352,6 +354,7 @@ export function useDeleteProject(): UseDeleteProjectResult {
 
 export function useRenameSession(): UseRenameSessionResult {
   const state = createMutationState();
+  const { api } = useMachineTarget();
   const sessionsStore = getSessionsStoreSafely();
 
   async function renameSession(sessionId: string, title: string, onSuccess?: () => void): Promise<void> {
@@ -419,6 +422,7 @@ export function useRenameSession(): UseRenameSessionResult {
 
 export function useMoveSession(): UseMoveSessionResult {
   const state = createMutationState();
+  const { api } = useMachineTarget();
 
   async function moveSession(sessionId: string, projectId: string | null): Promise<void> {
     await state.execute(async () => {
@@ -443,8 +447,8 @@ export function useMoveSession(): UseMoveSessionResult {
 }
 
 /** Moves a fork or a started session out of the session it came from (`detached`), or back under it. */
-export async function updateSessionLineage(sessionId: string, detached: boolean): Promise<void> {
-  const { error, response } = await api.PATCH("/api/sessions/{id}/lineage", {
+export async function updateSessionLineage(machine: MachineTarget, sessionId: string, detached: boolean): Promise<void> {
+  const { error, response } = await machine.api.PATCH("/api/sessions/{id}/lineage", {
     params: {
       path: { id: sessionId },
     },
@@ -457,8 +461,8 @@ export async function updateSessionLineage(sessionId: string, detached: boolean)
 }
 
 /** Pins a session just before another pinned one, or at the end of the Pinned group; answers where it now sits. */
-export async function pinSession(sessionId: string, beforeSessionId: string | null): Promise<number> {
-  const { data, error, response } = await api.PUT("/api/sessions/{id}/pin", {
+export async function pinSession(machine: MachineTarget, sessionId: string, beforeSessionId: string | null): Promise<number> {
+  const { data, error, response } = await machine.api.PUT("/api/sessions/{id}/pin", {
     params: {
       path: { id: sessionId },
     },
@@ -472,8 +476,8 @@ export async function pinSession(sessionId: string, beforeSessionId: string | nu
 }
 
 /** Unpins a session: it goes back to its project. */
-export async function unpinSession(sessionId: string): Promise<void> {
-  const { error, response } = await api.DELETE("/api/sessions/{id}/pin", {
+export async function unpinSession(machine: MachineTarget, sessionId: string): Promise<void> {
+  const { error, response } = await machine.api.DELETE("/api/sessions/{id}/pin", {
     params: {
       path: { id: sessionId },
     },
@@ -486,6 +490,7 @@ export async function unpinSession(sessionId: string): Promise<void> {
 
 function createRetentionMutation(targetStatus: "archived" | "active", actionName: string, fallbackMessage: string) {
   const state = createMutationState();
+  const { api } = useMachineTarget();
 
   async function updateRetention(sessionId: string): Promise<void> {
     await state.execute(async () => {
@@ -532,6 +537,7 @@ export function useUnarchiveSession(): UseUnarchiveSessionResult {
 }
 
 export function useForkSession(): UseForkSessionResult {
+  const { api } = useMachineTarget();
   const error = shallowRef<string | undefined>(undefined);
   const forkingSessionId = shallowRef<string | null>(null);
   const isForking = computed(() => forkingSessionId.value !== null);
@@ -589,6 +595,7 @@ export function useForkSession(): UseForkSessionResult {
 }
 
 export function useNewSessionInFolder(): UseNewSessionInFolderResult {
+  const { api } = useMachineTarget();
   const error = shallowRef<string | undefined>(undefined);
   const startingFromSessionId = shallowRef<string | null>(null);
   const sessionsStore = getSessionsStoreSafely();
@@ -634,6 +641,7 @@ export function useNewSessionInFolder(): UseNewSessionInFolderResult {
 
 export function useAbortSession(): UseAbortSessionResult {
   const state = createMutationState();
+  const { api } = useMachineTarget();
 
   async function abortSession(sessionId: string): Promise<void> {
     await state.execute(async () => {
@@ -660,6 +668,7 @@ export function useAbortSession(): UseAbortSessionResult {
 
 export function useUpdateProject(): UseUpdateProjectResult {
   const state = createMutationState();
+  const { api } = useMachineTarget();
 
   async function updateProject(projectId: string, request: UpdateProjectRequest): Promise<ProjectResponse> {
     return state.execute(async () => {
@@ -688,6 +697,7 @@ export function useUpdateProject(): UseUpdateProjectResult {
 
 export function useReorderProject(): UseReorderProjectResult {
   const state = createMutationState();
+  const { api } = useMachineTarget();
 
   async function reorderProject(projectId: string, newPosition: number): Promise<void> {
     await state.execute(async () => {

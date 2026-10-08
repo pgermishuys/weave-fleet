@@ -2,12 +2,14 @@ import { defineStore } from "pinia";
 import { shallowRef } from "vue";
 import { api, type SessionListItem } from "@/api/client";
 import { pinSession, unpinSession } from "@/composables/use-session-actions";
+import { liveTarget } from "@/lib/machine-target";
 import { pinOrderFor, pinnedNeighbourFor } from "@/lib/session-pins";
 import { useSessionsStore } from "@/stores/sessions";
 
 /**
  * Pinning sessions in the Pinned group above the projects, and putting them in order. The list changes at once and the
  * server is told right away; when the server refuses, the list goes back and the error shows in the archive toast.
+ * The session list is the live machine's, so pins go there.
  */
 export const useSessionPinsStore = defineStore("session-pins", () => {
   const sessionsStore = useSessionsStore();
@@ -27,7 +29,7 @@ export const useSessionPinsStore = defineStore("session-pins", () => {
     const expected = pinOrderFor(sessionsStore.sessions, sessionId, beforeId);
     sessionsStore.patchSession(sessionId, { pinOrder: expected });
     try {
-      const order = await pinSession(sessionId, beforeId);
+      const order = await pinSession(liveTarget(), sessionId, beforeId);
       sessionsStore.patchSession(sessionId, { pinOrder: order });
       // The server numbered every pin again (the gap got too small): read the new numbers.
       if (order !== expected) await refreshPinOrders();
@@ -45,7 +47,7 @@ export const useSessionPinsStore = defineStore("session-pins", () => {
     const previous = item.pinOrder ?? null;
     sessionsStore.patchSession(sessionId, { pinOrder: null });
     try {
-      await unpinSession(sessionId);
+      await unpinSession(liveTarget(), sessionId);
     } catch (unpinError) {
       sessionsStore.patchSession(sessionId, { pinOrder: previous });
       error.value = unpinError instanceof Error ? unpinError.message : "Couldn't unpin the session.";

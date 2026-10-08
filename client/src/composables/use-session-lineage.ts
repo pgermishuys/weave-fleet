@@ -2,7 +2,8 @@ import { computed, reactive, toValue, watch, type ComputedRef, type MaybeRefOrGe
 import type { SessionListItem } from "@/api/client";
 import { useRunningWork, type UseRunningWorkResult } from "@/composables/use-running-work";
 import { useSessions } from "@/composables/use-sessions";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetchOn } from "@/lib/api-client";
+import { useMachineTarget, type MachineTarget } from "@/lib/machine-target";
 import { applyWorkItem, type RunningWorkItem } from "@/lib/running-work";
 import { buildAgentsLineage, lineageOf, type AgentsLineage, type LineageLink } from "@/lib/session-lineage";
 import { useSessionsStore } from "@/stores/sessions";
@@ -17,11 +18,11 @@ import { useSessionsStore } from "@/stores/sessions";
 const fetchedTitles = reactive<Record<string, string | null>>({});
 const fetching = new Set<string>();
 
-async function fetchTitle(sessionId: string): Promise<void> {
+async function fetchTitle(machine: MachineTarget, sessionId: string): Promise<void> {
   if (fetching.has(sessionId) || sessionId in fetchedTitles) return;
   fetching.add(sessionId);
   try {
-    const response = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}`);
+    const response = await apiFetchOn(machine.connection, `/api/sessions/${encodeURIComponent(sessionId)}`);
     const body = response.ok ? (await response.json()) as { title?: string | null } : null;
     fetchedTitles[sessionId] = body?.title?.trim() || null;
   } catch {
@@ -33,13 +34,14 @@ async function fetchTitle(sessionId: string): Promise<void> {
 
 /** A session's title: from the list, else fetched once. Null while unknown. */
 export function useSessionTitle(sessionId: MaybeRefOrGetter<string | null | undefined>): ComputedRef<string | null> {
+  const machine = useMachineTarget();
   const sessionsStore = useSessionsStore();
   const listed = computed(() => {
     const id = toValue(sessionId);
     return id ? sessionsStore.sessions.find((item) => item.session.id === id) ?? null : null;
   });
   watch(() => toValue(sessionId), (id) => {
-    if (id && !listed.value) void fetchTitle(id);
+    if (id && !listed.value) void fetchTitle(machine, id);
   }, { immediate: true });
   return computed(() => {
     const id = toValue(sessionId);

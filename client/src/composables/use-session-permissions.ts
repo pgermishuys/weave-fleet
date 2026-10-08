@@ -1,6 +1,6 @@
 import { computed, onBeforeUnmount, reactive, toValue, watch, type MaybeRefOrGetter } from "vue";
-import { api } from "@/api/client";
 import { onReconnect, useWeaveSocket } from "@/composables/use-weave-socket";
+import { useMachineTarget } from "@/lib/machine-target";
 
 /** What an ask is for, whatever the harness calls the tool. */
 export type PermissionKind = "read" | "edit" | "shell" | "web" | "other";
@@ -89,6 +89,7 @@ function errorMessage(body: unknown, status: number): string {
  * `permission.replied` on the session's topic keep them current. A subagent's asks show on the session it works for.
  */
 export function useSessionPermissions(sessionId: MaybeRefOrGetter<string>) {
+  const { api } = useMachineTarget();
   const { subscribeV2 } = useWeaveSocket();
   const asks = computed<readonly PermissionAsk[]>(() => asksBySession[toValue(sessionId)] ?? []);
   let loadId = 0;

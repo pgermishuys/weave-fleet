@@ -3,7 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SmartLinkWire } from "@/lib/smart-links";
 
 const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }));
-vi.mock("@/lib/api-client", () => ({ apiFetch: apiFetchMock }));
+vi.mock("@/lib/api-client", () => ({
+  apiFetch: apiFetchMock,
+  apiFetchOn: (_machine: unknown, ...args: unknown[]) => apiFetchMock(...args),
+}));
 
 import SessionContextChips from "@/components/session-context/SessionContextChips.vue";
 import { useCanvasesStore } from "@/stores/canvases";

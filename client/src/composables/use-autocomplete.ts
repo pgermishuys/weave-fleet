@@ -1,6 +1,5 @@
 import { computed, readonly, ref, shallowRef, toValue, watch, type ComputedRef, type MaybeRefOrGetter, type Ref, type ShallowRef } from "vue";
 import { useFindFiles } from "@/composables/use-find-files";
-import { api } from "@/api/client";
 import type { AutocompleteAgent, AutocompleteCommand, SessionListItem } from "@/api/client";
 import { loadSessionAgentList } from "@/composables/use-agents";
 import { sessionCatalogChanges } from "@/lib/harness-catalog-changes";
@@ -12,6 +11,7 @@ import {
   sessionReferenceToken,
   type ReferableSession,
 } from "@/lib/session-references";
+import { useMachineTarget } from "@/lib/machine-target";
 
 export interface AutocompleteItem {
   id: string;
@@ -72,6 +72,7 @@ interface UseStaticInstanceDataResult<T> {
 }
 
 function useSessionCommands(sessionId: MaybeRefOrGetter<string | null | undefined>): UseStaticInstanceDataResult<AutocompleteCommand> {
+  const { api } = useMachineTarget();
   const data = ref<AutocompleteCommand[]>([]);
   const currentSessionId = computed(() => toValue(sessionId)?.trim() ?? "");
   const isLoading = shallowRef(Boolean(currentSessionId.value));
@@ -128,6 +129,7 @@ function useSessionCommands(sessionId: MaybeRefOrGetter<string | null | undefine
 }
 
 function useSessionAgents(sessionId: MaybeRefOrGetter<string | null | undefined>): UseStaticInstanceDataResult<AutocompleteAgent> {
+  const machine = useMachineTarget();
   const data = ref<AutocompleteAgent[]>([]);
   const currentSessionId = computed(() => toValue(sessionId)?.trim() ?? "");
   const isLoading = shallowRef(Boolean(currentSessionId.value));
@@ -156,7 +158,7 @@ function useSessionAgents(sessionId: MaybeRefOrGetter<string | null | undefined>
       error.value = undefined;
 
       try {
-        const agents = await loadSessionAgentList(nextSessionId);
+        const agents = await loadSessionAgentList(machine, nextSessionId);
         if (!left) {
           data.value = agents;
         }

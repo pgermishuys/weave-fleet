@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import { readWorkOutput } from "@/composables/use-running-work";
+import { useMachineTarget } from "@/lib/machine-target";
 import { isWorkRunning, type RunningWorkItem } from "@/lib/running-work";
 
 defineOptions({
@@ -14,6 +15,8 @@ defineOptions({
 const props = defineProps<{
   item: RunningWorkItem;
 }>();
+
+const machine = useMachineTarget();
 
 /** How much of the output it keeps: the tail, as a terminal would show it. */
 const TAIL_CHARS = 64 * 1024;
@@ -54,7 +57,7 @@ function atBottom(): boolean {
 async function read(): Promise<void> {
   const follow = atBottom();
   for (let page = 0; page < MAX_PAGES && !disposed; page += 1) {
-    const result = await readWorkOutput(props.item.sessionId, props.item.id, offset);
+    const result = await readWorkOutput(machine, props.item.sessionId, props.item.id, offset);
     if (disposed) return;
     if (!result.ok) {
       // Work that ended may have taken its output with it; what was read stays.

@@ -2,9 +2,9 @@ import { storeToRefs } from "pinia";
 import { computed, readonly, shallowRef } from "vue";
 import type { components } from "@/api/generated/schema";
 import { useDraftState } from "@/composables/use-draft-state";
-import { api } from "@/api/client";
 import { modelFromKey } from "@/lib/agent-model-choice";
 import { useSessionsStore } from "@/stores/sessions";
+import { useMachineTarget } from "@/lib/machine-target";
 
 interface BackendSendCommandRequest {
   command: string;
@@ -43,6 +43,7 @@ async function readCommandErrorMessage(response: Response): Promise<string> {
 }
 
 export function useSendCommand(sessionId: string) {
+  const { api } = useMachineTarget();
   const sessionsStore = useSessionsStore();
   const { sessions } = storeToRefs(sessionsStore);
   const sendError = shallowRef<string | undefined>(undefined);
