@@ -10,12 +10,23 @@ appId: io.tryweave.fleet.experiment
     visible: "Pair with Fleet"
     timeout: 60000
 - takeScreenshot: 01-pair
-- tapOn:
-    id: "address"
-- inputText: ${FLEET_URL}
-- tapOn:
-    id: "code"
-- inputText: ${PAIR_CODE}
+# Typing on the iOS simulator sometimes drops characters; retry until the field holds what was typed.
+- retry:
+    maxRetries: 3
+    commands:
+      - tapOn:
+          id: "address"
+      - eraseText: 60
+      - inputText: ${FLEET_URL}
+      - assertVisible: ${FLEET_URL}
+- retry:
+    maxRetries: 3
+    commands:
+      - tapOn:
+          id: "code"
+      - eraseText: 20
+      - inputText: ${PAIR_CODE}
+      - assertVisible: ${PAIR_CODE}
 # hideKeyboard is unreliable on iOS; the button is above the keyboard anyway.
 - hideKeyboard:
     optional: true

@@ -26,6 +26,10 @@ export default function Pair() {
   const input = { color: p.text, fontFamily: font.regular, fontSize: 16, backgroundColor: p.card, borderRadius: radius.button, borderWidth: 1, borderColor: p.border, paddingHorizontal: 14, minHeight: 48 };
 
   async function check(next: PairingTarget) {
+    if (!/^https?:\/\/[^/\s]+/.test(next.baseUrl)) {
+      setError("Fleet's address starts with https:// (or http:// on your own network).");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {

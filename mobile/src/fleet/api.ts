@@ -65,8 +65,21 @@ export function parsePairingLink(text: string): PairingTarget | null {
   }
 }
 
+/** A fetch that gives up after 15 s, so a wrong address says so instead of spinning. */
+async function fetchWithin(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15_000);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch {
+    throw new FleetError(`Couldn't reach Fleet at ${url.replace(/\/api\/.*$/, "")}.`, 0);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function previewPairing(target: PairingTarget): Promise<{ machineId: string; machineName: string; os: string }> {
-  const response = await fetch(`${target.baseUrl}/api/pairing/preview`, {
+  const response = await fetchWithin(`${target.baseUrl}/api/pairing/preview`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ secret: target.secret ?? null, manualCode: target.manualCode ?? null }),
@@ -76,7 +89,7 @@ export async function previewPairing(target: PairingTarget): Promise<{ machineId
 }
 
 export async function redeemPairing(target: PairingTarget, deviceName: string, platform: string): Promise<Credentials> {
-  const response = await fetch(`${target.baseUrl}/api/pairing/redeem`, {
+  const response = await fetchWithin(`${target.baseUrl}/api/pairing/redeem`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "omit",
