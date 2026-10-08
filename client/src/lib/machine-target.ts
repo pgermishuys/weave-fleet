@@ -1,7 +1,13 @@
 /**
- * The machine a part of the page asks. Almost everything asks the live machine (`api`). The new-session box can start
- * a session on another machine, so it provides that machine to what it uses (folders, harnesses, agents and models,
+ * The machine a part of the page asks. The interface's own pages (Settings, Automations, Workflows) ask the live
+ * machine (`api`). Code working on a session asks its target: typed calls through `target.api`, raw requests, URLs
+ * and sockets through `apiFetchOn`/`apiUrlOn`/`wsUrlOn(target.connection, …)`. The new-session box can start a
+ * session on another machine, so it provides that machine to what it uses (folders, harnesses, agents and models,
  * profiles), and they ask it instead. See `NewSessionComposer.vue`.
+ *
+ * Nothing provides a session's machine yet: one machine is live at a time, so it is the live one. Opening another
+ * machine's session without a reload means providing it above both the session view and the right panel (AppShell),
+ * since a component can't inject what it provides itself.
  */
 
 import { hasInjectionContext, inject, provide, type InjectionKey } from "vue";

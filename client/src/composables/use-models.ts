@@ -1,8 +1,8 @@
 import { storeToRefs } from "pinia";
 import { computed, readonly, shallowRef, toValue, watch, type MaybeRefOrGetter } from "vue";
-import { api } from "@/api/client";
 import type { AvailableProvider } from "@/api/client";
 import { sessionCatalogChanges } from "@/lib/harness-catalog-changes";
+import { useMachineTarget, type MachineTarget } from "@/lib/machine-target";
 import { shareInFlight } from "@/lib/shared-request";
 import { useSessionsStore } from "@/stores/sessions";
 
@@ -34,8 +34,8 @@ export function toModelOptions(providers: readonly AvailableProvider[]): ModelOp
   });
 }
 
-const loadSessionModels = shareInFlight(async (sessionId: string): Promise<ModelOption[]> => {
-  const { data, error, response } = await api.GET("/api/sessions/{id}/models", {
+const loadSessionModels = shareInFlight(async (machine: MachineTarget, sessionId: string): Promise<ModelOption[]> => {
+  const { data, error, response } = await machine.api.GET("/api/sessions/{id}/models", {
     params: { path: { id: sessionId } },
   });
 
@@ -46,9 +46,10 @@ const loadSessionModels = shareInFlight(async (sessionId: string): Promise<Model
 
   const body = data as unknown as { providers?: AvailableProvider[] } | AvailableProvider[];
   return toModelOptions(Array.isArray(body) ? body : body.providers ?? []);
-});
+}, (machine, sessionId) => `${machine.key}\n${sessionId}`);
 
 export function useModels(sessionId?: MaybeRefOrGetter<string | undefined>) {
+  const machine = useMachineTarget();
   const sessionsStore = useSessionsStore();
   const { activeSessionId } = storeToRefs(sessionsStore);
 
@@ -89,7 +90,7 @@ export function useModels(sessionId?: MaybeRefOrGetter<string | undefined>) {
       error.value = undefined;
 
       try {
-        const nextModels = await loadSessionModels(nextSessionId);
+        const nextModels = await loadSessionModels(machine, nextSessionId);
         if (left) {
           return;
         }

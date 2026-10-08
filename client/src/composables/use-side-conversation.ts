@@ -1,8 +1,8 @@
 import { computed, reactive, toValue, watch, type MaybeRefOrGetter } from "vue";
-import { api } from "@/api/client";
 import type { components } from "@/api/generated/schema";
 import { useDraftState } from "@/composables/use-draft-state";
 import { showSentPrompt } from "@/composables/use-send-prompt";
+import { useMachineTarget, type MachineTarget } from "@/lib/machine-target";
 import { readStoredDraft, sideDraftKey, sideMainDraftKey, storedDraftKeys, writeStoredDraft } from "@/lib/draft-storage";
 
 /** A session's side conversation (`/btw`): a hidden session of its own, shown after `boundaryMessageId`. */
@@ -116,10 +116,10 @@ function offerUndo(sessionId: string, state: SideConversationState, discarded: S
   }, ms);
 }
 
-async function load(sessionId: string): Promise<void> {
+async function load(machine: MachineTarget, sessionId: string): Promise<void> {
   const state = stateOf(sessionId);
   try {
-    const { data, response } = await api.GET("/api/sessions/{id}/side", { params: { path: { id: sessionId } } });
+    const { data, response } = await machine.api.GET("/api/sessions/{id}/side", { params: { path: { id: sessionId } } });
     // A question asked while this was loading already knows better.
     if (!state.asking) {
       state.side = response.status === 200 && data ? data : null;
@@ -127,7 +127,7 @@ async function load(sessionId: string): Promise<void> {
 
     // A discard still in its Undo window (the page was reloaded, or left and come back to): Undo again, for what's left.
     if (!state.side && !state.discarded) {
-      const discarded = await api.GET("/api/sessions/{id}/side/discarded", { params: { path: { id: sessionId } } });
+      const discarded = await machine.api.GET("/api/sessions/{id}/side/discarded", { params: { path: { id: sessionId } } });
       if (discarded.response.status === 200 && discarded.data && discarded.data.undoRemainingMs > 0 && !state.side) {
         offerUndo(sessionId, state, discarded.data.sideConversation, discarded.data.undoRemainingMs);
       }
@@ -172,11 +172,12 @@ export function _resetSideConversationsForTesting(): void {
 }
 
 export function useSideConversation(sessionId: MaybeRefOrGetter<string>) {
+  const machine = useMachineTarget();
   const id = computed(() => toValue(sessionId));
   const state = computed(() => stateOf(id.value));
 
   watch(id, (next) => {
-    if (next && !stateOf(next).loaded) void load(next);
+    if (next && !stateOf(next).loaded) void load(machine, next);
   }, { immediate: true });
 
   const side = computed(() => state.value.side);
@@ -201,7 +202,7 @@ export function useSideConversation(sessionId: MaybeRefOrGetter<string>) {
     if (!current.side || current.side.seenAnswerId === answerId) return;
     current.side = { ...current.side, seenAnswerId: answerId };
     try {
-      await api.PUT("/api/sessions/{id}/side/seen", { params: { path: { id: parentId } }, body: { answerId } });
+      await machine.api.PUT("/api/sessions/{id}/side/seen", { params: { path: { id: parentId } }, body: { answerId } });
     } catch {
       // Seen here; a reload may call it new again.
     }
@@ -222,7 +223,7 @@ export function useSideConversation(sessionId: MaybeRefOrGetter<string>) {
     if (!current.side) current.starting = text;
     const correlationId = `side-${crypto.randomUUID().replaceAll("-", "")}`;
     try {
-      const { data, error, response } = await api.POST("/api/sessions/{id}/side", {
+      const { data, error, response } = await machine.api.POST("/api/sessions/{id}/side", {
         params: { path: { id: parentId } },
         body: {
           text,
@@ -274,7 +275,7 @@ export function useSideConversation(sessionId: MaybeRefOrGetter<string>) {
       if (current.latestAnswerId && !current.working) void markSeen(parentId, current.latestAnswerId);
     }
     try {
-      const { data, error, response } = await api.PUT("/api/sessions/{id}/side/minimized", {
+      const { data, error, response } = await machine.api.PUT("/api/sessions/{id}/side/minimized", {
         params: { path: { id: parentId } },
         body: { minimized: value },
       });
@@ -344,7 +345,7 @@ export function useSideConversation(sessionId: MaybeRefOrGetter<string>) {
     current.side = null;
 
     try {
-      const { error, response } = await api.DELETE("/api/sessions/{id}/side", { params: { path: { id: parentId } } });
+      const { error, response } = await machine.api.DELETE("/api/sessions/{id}/side", { params: { path: { id: parentId } } });
       if (!response.ok) {
         restoreClosed(current, closing);
         current.error = errorMessage(error) ?? `The side conversation couldn't be discarded (HTTP ${response.status}).`;
@@ -372,7 +373,7 @@ export function useSideConversation(sessionId: MaybeRefOrGetter<string>) {
     if (current.discardTimer) clearTimeout(current.discardTimer);
     current.discardTimer = null;
     try {
-      const { data, error, response } = await api.POST("/api/sessions/{id}/side/restore", { params: { path: { id: parentId } } });
+      const { data, error, response } = await machine.api.POST("/api/sessions/{id}/side/restore", { params: { path: { id: parentId } } });
       if (!response.ok || !data) {
         current.discarded = null;
         current.error = errorMessage(error) ?? `The side conversation couldn't be brought back (HTTP ${response.status}).`;
@@ -396,7 +397,7 @@ export function useSideConversation(sessionId: MaybeRefOrGetter<string>) {
 
     current.error = undefined;
     try {
-      const { data, error, response } = await api.POST("/api/sessions/{id}/side/keep", { params: { path: { id: parentId } } });
+      const { data, error, response } = await machine.api.POST("/api/sessions/{id}/side/keep", { params: { path: { id: parentId } } });
       if (!response.ok || !data) {
         current.error = errorMessage(error) ?? `The side conversation couldn't be kept (HTTP ${response.status}).`;
         return null;

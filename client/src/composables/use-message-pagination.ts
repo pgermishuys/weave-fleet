@@ -1,8 +1,8 @@
 import { readonly, shallowRef, type ShallowRef } from "vue"
 import type { AccumulatedMessage } from "@/lib/client-types"
-import { api } from "@/api/client"
 import { convertFleetMessageToAccumulated, type FleetMessage } from "@/lib/pagination-utils"
 import type { PaginationSnapshot } from "@/lib/session-cache"
+import { useMachineTarget } from "@/lib/machine-target";
 
 export type { PaginationSnapshot } from "@/lib/session-cache"
 
@@ -33,6 +33,7 @@ const DEFAULT_PAGE_SIZE = 10
 const MIN_FETCH_INTERVAL_MS = 500
 
 export function useMessagePagination(): UseMessagePaginationReturn {
+  const { api } = useMachineTarget();
   const hasMore = shallowRef(false)
   const isLoadingOlder = shallowRef(false)
   const oldestMessageId = shallowRef<string | null>(null)

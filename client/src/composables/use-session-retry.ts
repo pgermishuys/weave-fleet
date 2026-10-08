@@ -1,7 +1,7 @@
 import { computed, onBeforeUnmount, reactive, readonly, shallowRef } from "vue";
-import { api } from "@/api/client";
 import { onReconnect, useWeaveSocket } from "@/composables/use-weave-socket";
 import { toScheduledRetry, type ScheduledRetry } from "@/lib/turn-retry";
+import { useMachineTarget } from "@/lib/machine-target";
 
 /** The Settings → Features switch. On unless the user turned it off. */
 export const RETRY_AFTER_LIMITS_PREFERENCE_KEY = "RetryAfterLimits";
@@ -24,6 +24,7 @@ export function scheduledRetryOf(sessionId: string): ScheduledRetry | null {
  * retry hands the session back to the user.
  */
 export function useSessionRetry(sessionId: string) {
+  const { api } = useMachineTarget();
   const { subscribeV2 } = useWeaveSocket();
   const error = shallowRef<string | undefined>(undefined);
   const busy = shallowRef(false);

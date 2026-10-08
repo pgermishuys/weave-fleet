@@ -38,6 +38,7 @@ vi.mock("@tanstack/vue-router", () => ({
 
 vi.mock("@/lib/api-client", () => ({
   apiFetch: apiFetchMock,
+  apiFetchOn: (_machine: unknown, ...args: unknown[]) => apiFetchMock(...args),
 }));
 
 vi.mock("@/composables/use-diffs", () => ({

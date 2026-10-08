@@ -9,7 +9,8 @@
  *
  * All of that is the home machine, the Fleet that served the page. When another machine is live
  * (`@/lib/machines`), every path resolves against it instead and carries its token. Both are read on every
- * call, never captured, so a request always goes where the app is working now.
+ * call, never captured, so a request always goes where the app is working now. The `…On` functions take the
+ * machine instead: code working on a session names the session's machine (see `@/lib/machine-target`).
  */
 
 import { getActiveMachine, machineRequestInit, machineSocketUrl, machineUrl, type MachineConnection } from "@/lib/machines";
@@ -61,7 +62,12 @@ export function apiUrlOn(machine: MachineConnection | null, path: string): strin
  * WebSocket URL from the current window location at runtime.
  */
 export function wsUrl(path: string): string {
-  return machineSocketUrl(getActiveMachine(), path, getApiBase());
+  return wsUrlOn(getActiveMachine(), path);
+}
+
+/** A WebSocket URL on a given machine (null: home), whichever machine is live. */
+export function wsUrlOn(machine: MachineConnection | null, path: string): string {
+  return machineSocketUrl(machine, path, getApiBase());
 }
 
 /**
@@ -72,7 +78,15 @@ export function apiFetch(
   path: string,
   init?: RequestInit
 ): Promise<Response> {
-  const machine = getActiveMachine();
+  return apiFetchOn(getActiveMachine(), path, init);
+}
+
+/** An API request from the app to a machine (null: home): home base URL and CSRF, or its token. Probes use `fetchOnMachine`. */
+export function apiFetchOn(
+  machine: MachineConnection | null,
+  path: string,
+  init?: RequestInit
+): Promise<Response> {
   const headers = new Headers(init?.headers);
   const method = (init?.method ?? "GET").toUpperCase();
 
@@ -83,7 +97,7 @@ export function apiFetch(
     }
   }
 
-  return fetch(apiUrl(path), machineRequestInit(machine, { ...init, headers }));
+  return fetch(apiUrlOn(machine, path), machineRequestInit(machine, { ...init, headers }));
 }
 
 function getCookieValue(name: string): string | null {

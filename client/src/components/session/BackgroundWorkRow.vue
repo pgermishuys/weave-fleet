@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import WorkOutput from "@/components/session/WorkOutput.vue";
 import { stopWork } from "@/composables/use-running-work";
 import { dispatchCommandEvent } from "@/lib/command-events";
+import { useMachineTarget } from "@/lib/machine-target";
 import {
   formatAgo,
   formatElapsed,
@@ -51,6 +52,8 @@ const props = defineProps<{
   /** Whether its Stop is on its way. */
   stopping?: boolean;
 }>();
+
+const machine = useMachineTarget();
 
 const router = useRouter();
 const sessionsStore = useSessionsStore();
@@ -118,7 +121,7 @@ function showEvents(): void {
 
 async function stop(): Promise<void> {
   stopError.value = null;
-  const outcome = await stopWork(props.item.sessionId, props.item.id);
+  const outcome = await stopWork(machine, props.item.sessionId, props.item.id);
   if (!outcome.ok) stopError.value = outcome.error;
 }
 </script>

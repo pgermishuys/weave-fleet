@@ -5,6 +5,7 @@ import { ArrowUpRight, CircleStop } from "lucide-vue-next";
 import { useSessionStream } from "@/composables/use-session-stream";
 import { readWorkOutput, stopWork } from "@/composables/use-running-work";
 import { formatTokens } from "@/lib/format-utils";
+import { useMachineTarget } from "@/lib/machine-target";
 import { isWorkRunning, workResult } from "@/lib/running-work";
 import { latestOutputLine, summarizeAgentActivity, type AgentRow } from "@/lib/session-lineage";
 import { useSessionsStore } from "@/stores/sessions";
@@ -21,6 +22,8 @@ const props = defineProps<{
   stopping?: boolean;
 }>();
 
+const machine = useMachineTarget();
+
 const emit = defineEmits<{ model: [modelId: string | null] }>();
 
 const router = useRouter();
@@ -36,7 +39,7 @@ const outputLine = shallowRef<string | null>(null);
 watch(() => [props.row.work?.id, props.row.work?.canReadOutput, props.row.sessionId] as const, async ([workId, canRead, sessionId]) => {
   outputLine.value = null;
   if (!workId || !canRead || sessionId) return;
-  const result = await readWorkOutput(props.row.work!.sessionId, workId);
+  const result = await readWorkOutput(machine, props.row.work!.sessionId, workId);
   if (result.ok && props.row.work?.id === workId) outputLine.value = latestOutputLine(result.page.output);
 }, { immediate: true });
 
@@ -84,7 +87,7 @@ async function stop(): Promise<void> {
   const work = props.row.work;
   if (!work) return;
   stopError.value = null;
-  const outcome = await stopWork(work.sessionId, work.id);
+  const outcome = await stopWork(machine, work.sessionId, work.id);
   if (!outcome.ok) stopError.value = outcome.error;
 }
 </script>

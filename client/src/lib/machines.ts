@@ -86,7 +86,7 @@ export function machineSocketUrl(machine: MachineConnection | null, path: string
   return `${protocol}//${window.location.host}${path}`;
 }
 
-/** `fetch` against a specific machine, whichever one is live. The sidebar polls other machines with this. */
+/** A bare, Vue-free probe of a machine (the sidebar polls with it); the app's API requests use `apiFetchOn`. */
 export function fetchOnMachine(machine: MachineConnection | null, path: string, init?: RequestInit): Promise<Response> {
   return fetch(machineUrl(machine, path), machineRequestInit(machine, init));
 }

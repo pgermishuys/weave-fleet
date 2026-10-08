@@ -13,7 +13,10 @@ const { apiFetchMock, mockNavigate } = vi.hoisted(() => ({
   mockNavigate: vi.fn(),
 }));
 
-vi.mock("@/lib/api-client", () => ({ apiFetch: apiFetchMock }));
+vi.mock("@/lib/api-client", () => ({
+  apiFetch: apiFetchMock,
+  apiFetchOn: (_machine: unknown, ...args: unknown[]) => apiFetchMock(...args),
+}));
 // The sessions list comes from the store the test fills.
 vi.mock("@/composables/use-sessions", () => ({ useSessions: () => ({}) }));
 vi.mock("@tanstack/vue-router", () => ({

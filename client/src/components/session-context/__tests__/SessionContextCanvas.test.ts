@@ -3,7 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SmartLinkWire } from "@/lib/smart-links";
 
 const { apiFetchMock, navigateMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn(), navigateMock: vi.fn() }));
-vi.mock("@/lib/api-client", () => ({ apiFetch: apiFetchMock }));
+vi.mock("@/lib/api-client", () => ({
+  apiFetch: apiFetchMock,
+  apiFetchOn: (_machine: unknown, ...args: unknown[]) => apiFetchMock(...args),
+}));
 vi.mock("@tanstack/vue-router", () => ({ useRouter: () => ({ navigate: navigateMock }) }));
 
 import SessionContextCanvas from "@/components/session-context/SessionContextCanvas.vue";

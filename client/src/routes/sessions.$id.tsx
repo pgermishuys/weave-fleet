@@ -30,7 +30,8 @@ import { provideSessionDiffsContext } from "@/composables/use-session-diffs-cont
 import { useSessionRecap } from "@/composables/use-session-recap";
 import { useSessionTerminals } from "@/composables/use-session-terminals";
 import { lineageOf } from "@/lib/session-lineage";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetchOn } from "@/lib/api-client";
+import { useMachineTarget } from "@/lib/machine-target";
 import type { SessionActionCapabilities, SessionListItem, SessionOrigin } from "@/api/client";
 import type { SessionActivityStatus } from "@/lib/types";
 import { dispatchSessionUpsert } from "@/lib/session-sync";
@@ -218,6 +219,7 @@ function isDiffStalingStatus(
 const SessionDetailPage = defineComponent({
   name: "SessionDetailPage",
   setup(_props, { expose }) {
+    const machine = useMachineTarget();
     const params = Route.useParams();
     useSessionTerminals(() => params.value.id);
     const recap = useSessionRecap(() => params.value.id);
@@ -281,7 +283,7 @@ const SessionDetailPage = defineComponent({
         });
 
         try {
-          const response = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}`, {
+          const response = await apiFetchOn(machine.connection, `/api/sessions/${encodeURIComponent(sessionId)}`, {
             signal: abortController.signal,
           });
           if (abortController.signal.aborted) {

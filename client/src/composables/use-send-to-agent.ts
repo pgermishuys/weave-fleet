@@ -1,11 +1,13 @@
 import { ref, shallowRef, toValue, type MaybeRefOrGetter } from "vue"
-import { apiFetch } from "@/lib/api-client"
+import { apiFetchOn } from "@/lib/api-client"
+import { useMachineTarget } from "@/lib/machine-target"
 
 /**
  * Sends a message to a session's agent when the user asks (a failing check, a review comment), keyed so each
  * button shows its own "Sending…" and "Sent".
  */
 export function useSendToAgent(sessionId: MaybeRefOrGetter<string>) {
+  const { connection } = useMachineTarget()
   const sending = shallowRef<ReadonlySet<string>>(new Set())
   const sent = shallowRef<ReadonlySet<string>>(new Set())
   const error = ref<string | null>(null)
@@ -15,7 +17,7 @@ export function useSendToAgent(sessionId: MaybeRefOrGetter<string>) {
     sending.value = new Set([...sending.value, key])
     error.value = null
     try {
-      const response = await apiFetch(`/api/sessions/${encodeURIComponent(toValue(sessionId))}/prompt`, {
+      const response = await apiFetchOn(connection, `/api/sessions/${encodeURIComponent(toValue(sessionId))}/prompt`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, userMessageId: crypto.randomUUID() }),

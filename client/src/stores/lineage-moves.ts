@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { shallowRef } from "vue";
 import { updateSessionLineage } from "@/composables/use-session-actions";
+import { liveTarget } from "@/lib/machine-target";
 import { lineageOriginOf } from "@/lib/session-lineage";
 import { ARCHIVE_UNDO_MS } from "@/stores/archive-queue";
 import { useSessionsStore } from "@/stores/sessions";
@@ -19,7 +20,7 @@ interface PendingLineageMove {
 /**
  * Moving a fork or a session another session started out of its parent, or back under it. The list changes at once and
  * the server is told right away; Undo (the same toast as archiving) moves it back. See *Lineage* in
- * `docs/background-work-and-lineage.md`.
+ * `docs/background-work-and-lineage.md`. The session list is the live machine's, so moves go there.
  */
 export const useLineageMovesStore = defineStore("lineage-moves", () => {
   const sessionsStore = useSessionsStore();
@@ -46,7 +47,7 @@ export const useLineageMovesStore = defineStore("lineage-moves", () => {
     const previous = item?.lineageDetachedAt ?? null;
     sessionsStore.patchSession(sessionId, { lineageDetachedAt: detached ? new Date().toISOString() : null });
     try {
-      await updateSessionLineage(sessionId, detached);
+      await updateSessionLineage(liveTarget(), sessionId, detached);
       return true;
     } catch (moveError) {
       sessionsStore.patchSession(sessionId, { lineageDetachedAt: previous });

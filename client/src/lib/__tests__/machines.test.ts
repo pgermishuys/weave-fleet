@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, apiOnMachine } from "@/api/client";
-import { apiFetch, apiUrl, setApiBase, wsUrl } from "@/lib/api-client";
+import { apiFetch, apiFetchOn, apiUrl, setApiBase, wsUrl, wsUrlOn } from "@/lib/api-client";
 import {
   HOME_MACHINE_KEY,
   loadActiveMachineId,
@@ -140,6 +140,35 @@ describe("machines", () => {
         `ws://100.64.90.72:2113/api/sessions/s1/terminals/t1/socket?cols=80&access_token=${encodeURIComponent(falcon.token)}`,
       );
       expect(apiUrl("/hubs/session-events")).toBe("http://100.64.90.72:2113/hubs/session-events");
+    });
+
+    it("sends a request to the machine it names whichever machine is live, and null is home", async () => {
+      await apiFetchOn(falcon, "/api/sessions/s1/prompt", { method: "POST" });
+      const remote = lastFetch(fetchMock);
+      expect(remote.url).toBe("http://100.64.90.72:2113/api/sessions/s1/prompt");
+      expect(remote.init.credentials).toBe("omit");
+      expect(remote.headers.get("Authorization")).toBe(`Bearer ${falcon.token}`);
+
+      setActiveMachine(falcon);
+      document.cookie = ".WeaveFleet.CSRF=csrf-1";
+      await apiFetchOn(null, "/api/sessions/s1/prompt", { method: "POST" });
+      const home = lastFetch(fetchMock);
+      expect(home.url).toBe("/api/sessions/s1/prompt");
+      expect(home.init.credentials).toBe("include");
+      expect(home.headers.get("X-CSRF-Token")).toBe("csrf-1");
+      expect(home.headers.has("Authorization")).toBe(false);
+      document.cookie = ".WeaveFleet.CSRF=; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    });
+
+    it("opens a socket on the machine it names whichever machine is live", () => {
+      expect(wsUrlOn(falcon, "/api/sessions/s1/terminals/t1/socket?cols=80")).toBe(
+        `ws://100.64.90.72:2113/api/sessions/s1/terminals/t1/socket?cols=80&access_token=${encodeURIComponent(falcon.token)}`,
+      );
+
+      setActiveMachine(falcon);
+      expect(wsUrlOn(null, "/api/sessions/s1/terminals/t1/socket?cols=80")).toMatch(
+        /^ws:\/\/localhost(:\d+)?\/api\/sessions\/s1\/terminals\/t1\/socket\?cols=80$/,
+      );
     });
 
     it("drops a CSRF header and cookies for another machine even when the caller set them", () => {

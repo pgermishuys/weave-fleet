@@ -12,6 +12,7 @@ import {
   type Ref,
 } from "vue";
 import { api } from "@/api/client";
+import { useMachineTarget, type MachineTarget } from "@/lib/machine-target";
 import { onGlobalEvent, onReconnect } from "@/composables/use-signalr-socket";
 import { isWorkEvent } from "@/lib/domain-events";
 import {
@@ -128,11 +129,11 @@ export type StopWorkResult = { ok: true; item: RunningWorkItem | null } | { ok: 
  * applied at once, before its event arrives. Refused when the item can't be stopped on its own, has already ended,
  * or its session isn't running.
  */
-export async function stopWork(sessionId: string, itemId: string): Promise<StopWorkResult> {
+export async function stopWork(machine: MachineTarget, sessionId: string, itemId: string): Promise<StopWorkResult> {
   if (stopping.has(itemId)) return { ok: false, error: "Already stopping." };
   stopping.add(itemId);
   try {
-    const { data, error, response } = await api.POST("/api/sessions/{id}/work/{workId}/stop", {
+    const { data, error, response } = await machine.api.POST("/api/sessions/{id}/work/{workId}/stop", {
       params: { path: { id: sessionId, workId: itemId } },
     });
     if (!response.ok) {
@@ -157,9 +158,9 @@ export type ReadWorkOutputResult = { ok: true; page: WorkOutputPage } | { ok: fa
  * A page of an item's output from byte `offset`. Ask again from `nextOffset`: more may come while it's below `size`,
  * or while the work runs. Only for items with `canReadOutput`.
  */
-export async function readWorkOutput(sessionId: string, itemId: string, offset = 0): Promise<ReadWorkOutputResult> {
+export async function readWorkOutput(machine: MachineTarget, sessionId: string, itemId: string, offset = 0): Promise<ReadWorkOutputResult> {
   try {
-    const { data, error, response } = await api.GET("/api/sessions/{id}/work/{workId}/output", {
+    const { data, error, response } = await machine.api.GET("/api/sessions/{id}/work/{workId}/output", {
       params: { path: { id: sessionId, workId: itemId }, query: { offset } },
     });
     if (!response.ok || !data) {
@@ -273,6 +274,7 @@ export interface UseRunningWorkResult {
  */
 export function useRunningWork(sessionId: MaybeRefOrGetter<string | null | undefined>): UseRunningWorkResult {
   ensureGlobalListener();
+  const machine = useMachineTarget();
   const id = computed(() => toValue(sessionId) ?? "");
   let loadId = 0;
 
@@ -281,7 +283,7 @@ export function useRunningWork(sessionId: MaybeRefOrGetter<string | null | undef
     if (!target) return;
     const current = ++loadId;
     try {
-      const { data, response } = await api.GET("/api/sessions/{id}/work", {
+      const { data, response } = await machine.api.GET("/api/sessions/{id}/work", {
         params: { path: { id: target }, query: options.all ? { all: true } : {} },
       });
       if (current !== loadId || !response.ok || target !== id.value) return;
@@ -317,8 +319,8 @@ export function useRunningWork(sessionId: MaybeRefOrGetter<string | null | undef
     visible,
     now: readonly(clock),
     isStopping: (itemId) => stopping.has(itemId),
-    stop: (itemId) => stopWork(id.value, itemId),
-    readOutput: (itemId, offset = 0) => readWorkOutput(id.value, itemId, offset),
+    stop: (itemId) => stopWork(machine, id.value, itemId),
+    readOutput: (itemId, offset = 0) => readWorkOutput(machine, id.value, itemId, offset),
     refresh,
   };
 }

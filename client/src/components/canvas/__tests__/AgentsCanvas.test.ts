@@ -13,7 +13,7 @@ const { apiGet, apiPost, apiFetch, navigate, childMessages } = vi.hoisted(() => 
 }));
 
 vi.mock("@/api/client", () => ({ api: { GET: apiGet, POST: apiPost } }));
-vi.mock("@/lib/api-client", () => ({ apiFetch }));
+vi.mock("@/lib/api-client", () => ({ apiFetch, apiFetchOn: (_machine: unknown, ...args: unknown[]) => apiFetch(...args) }));
 vi.mock("@/composables/use-signalr-socket", () => ({
   onGlobalEvent: () => () => undefined,
   onReconnect: () => () => undefined,

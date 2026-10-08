@@ -4,12 +4,12 @@ import type { components } from "@/api/generated/schema";
 import { useAgents } from "@/composables/use-agents";
 import { useDraftState, type EffortLevel } from "@/composables/use-draft-state";
 import { useModels } from "@/composables/use-models";
-import { api } from "@/api/client";
 import type { AccumulatedMessage, ImageAttachment } from "@/lib/client-types";
 import { modelFromKey } from "@/lib/agent-model-choice";
 import { diagLog } from "@/lib/message-diagnostics";
 import { sessionReferencesIn, stripSessionReferences, type SessionReference } from "@/lib/session-references";
 import { useSessionsStore } from "@/stores/sessions";
+import { useMachineTarget } from "@/lib/machine-target";
 
 export interface SentPromptImage {
   url: string;
@@ -456,6 +456,7 @@ async function readPromptErrorMessage(response: Response): Promise<string> {
 }
 
 export function useSendPrompt(sessionId: string) {
+  const { api } = useMachineTarget();
   const sessionsStore = useSessionsStore();
   const { sessions } = storeToRefs(sessionsStore);
   const { defaultAgentId, agentsById } = useAgents(sessionId);

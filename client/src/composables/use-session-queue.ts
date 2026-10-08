@@ -1,7 +1,8 @@
 import { computed, onBeforeUnmount, reactive, readonly, shallowRef } from "vue";
-import { api, type ModelReference } from "@/api/client";
+import type { ModelReference } from "@/api/client";
 import { onReconnect, useWeaveSocket } from "@/composables/use-weave-socket";
 import { stripSessionReferences, type SessionReference } from "@/lib/session-references";
+import { useMachineTarget } from "@/lib/machine-target";
 
 /** How a queued item goes out: a message, a slash command, or a shell command (`!git status`). */
 export type QueuedMessageKind = "prompt" | "command" | "shell";
@@ -61,6 +62,7 @@ function errorMessage(body: unknown, fallback: string): string {
  * every open client shows the same queue. Loaded when the session opens and again after a reconnect.
  */
 export function useSessionQueue(sessionId: string) {
+  const { api } = useMachineTarget();
   const { subscribeV2 } = useWeaveSocket();
   const error = shallowRef<string | undefined>(undefined);
   const queue = computed<readonly QueuedMessage[]>(() => queues[sessionId] ?? []);

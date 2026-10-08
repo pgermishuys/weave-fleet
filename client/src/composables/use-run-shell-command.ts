@@ -1,5 +1,5 @@
 import { readonly, shallowRef } from "vue";
-import { api } from "@/api/client";
+import { useMachineTarget } from "@/lib/machine-target";
 
 /** The reason in an error body: Fleet's `{ error }`, or a problem's `detail` or `title`. */
 function errorMessage(body: unknown): string | undefined {
@@ -19,6 +19,7 @@ function errorMessage(body: unknown): string | undefined {
  * conversation as events, so this only reports a command the server or the harness refused.
  */
 export function useRunShellCommand(sessionId: string) {
+  const { api } = useMachineTarget();
   const error = shallowRef<string | undefined>(undefined);
 
   async function runShellCommand(command: string): Promise<boolean> {

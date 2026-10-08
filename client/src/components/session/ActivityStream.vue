@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } fr
 import { ArrowUpRight, Bot, Bug, CornerDownRight, RotateCw, TerminalSquare, TriangleAlert, Workflow } from "lucide-vue-next";
 import { parsePeerMessage, parsePeerUpdate, type PeerOutcome, type PeerSender } from "@/lib/session-messages";
 import { parseSessionReferences, type SessionReference } from "@/lib/session-references";
-import { api } from "@/api/client";
+import { useMachineTarget } from "@/lib/machine-target";
 import {
   backgroundWorkId,
   finishedBackgroundWork,
@@ -109,6 +109,8 @@ const props = defineProps<{
    */
   after?: string | null;
 }>();
+
+const { api } = useMachineTarget();
 
 const emit = defineEmits<{
   /** Whether a turn is running, and the newest reply's text: a side conversation's tab shows both while it's folded. */

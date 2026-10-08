@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionListItem } from "@/api/client";
+import type { MachineTarget } from "@/lib/machine-target";
 
-const updateSessionLineage = vi.fn<(sessionId: string, detached: boolean) => Promise<void>>();
+const updateSessionLineage = vi.fn<(machine: MachineTarget, sessionId: string, detached: boolean) => Promise<void>>();
+/** The session list is the live machine's, so moves go there. */
+const live = expect.objectContaining({ key: "home", isLive: true });
 
 vi.mock("@/composables/use-session-actions", () => ({
   updateSessionLineage,
@@ -35,7 +38,7 @@ describe("lineage moves", () => {
 
     await moves.moveOut("fork");
 
-    expect(updateSessionLineage).toHaveBeenCalledWith("fork", true);
+    expect(updateSessionLineage).toHaveBeenCalledWith(live, "fork", true);
     expect(detachedAt("fork")).toBeTruthy();
     expect(moves.pending?.message).toBe('Moved "Fork: emit jobs" out of "Capture subagents"');
 
@@ -49,7 +52,7 @@ describe("lineage moves", () => {
 
     await moves.undo();
 
-    expect(updateSessionLineage.mock.calls).toEqual([["fork", true], ["fork", false]]);
+    expect(updateSessionLineage.mock.calls).toEqual([[live, "fork", true], [live, "fork", false]]);
     expect(detachedAt("fork")).toBeNull();
     expect(moves.pending).toBeNull();
   });
@@ -63,7 +66,7 @@ describe("lineage moves", () => {
     expect(moves.pending?.message).toBe('Moved "Fork: emit jobs" back under "Capture subagents"');
 
     await moves.undo();
-    expect(updateSessionLineage.mock.calls).toEqual([["fork", false], ["fork", true]]);
+    expect(updateSessionLineage.mock.calls).toEqual([[live, "fork", false], [live, "fork", true]]);
     expect(detachedAt("fork")).toBeTruthy();
   });
 
