@@ -43,6 +43,13 @@ public sealed class InMemoryAutomationRunRepository : IAutomationRunRepository
         return Task.CompletedTask;
     }
 
+    public Task SettleAsync(string id, string state)
+    {
+        lock (_gate)
+            _runs.Single(r => r.Id == id).SettledState = state;
+        return Task.CompletedTask;
+    }
+
     public Task<IReadOnlyList<AutomationRun>> ListByAutomationAsync(string automationId, int limit)
     {
         lock (_gate)
@@ -109,5 +116,6 @@ public sealed class InMemoryAutomationRunRepository : IAutomationRunRepository
         WorkflowRunId = run.WorkflowRunId,
         MachineId = run.MachineId,
         MachineName = run.MachineName,
+        SettledState = run.SettledState,
     };
 }

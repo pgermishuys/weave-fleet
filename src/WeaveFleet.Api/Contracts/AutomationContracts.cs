@@ -96,7 +96,7 @@ public sealed record AutomationResponse(
 
 /// <summary>
 /// One run. State is "starting", "running", "done", "failed" or "skipped"; a run that started a workflow run follows it,
-/// and can also be "waiting" (on you) or "ended".
+/// and can also be "waiting" (on you) or "ended". A run on another machine that didn't answer is "unanswered".
 /// </summary>
 public sealed record AutomationRunResponse(
     string Id,

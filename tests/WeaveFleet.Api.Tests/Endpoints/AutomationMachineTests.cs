@@ -73,6 +73,11 @@ public sealed class AutomationMachineTests : IDisposable
         skipped.GetProperty("state").GetString().ShouldBe("skipped");
         skipped.GetProperty("error").GetString().ShouldBe("Skipped: falcon didn't answer.");
         skipped.GetProperty("machineName").GetString().ShouldBe("falcon");
+
+        // The first run was done when falcon last said so, and it isn't asked again: it stays Done with falcon away.
+        var runs = await owner.GetFromJsonAsync<JsonElement>($"/api/automations/{id}/runs");
+        runs.GetProperty("runs").EnumerateArray().Single(r => r.GetProperty("id").GetString() == run.GetProperty("id").GetString())
+            .GetProperty("state").GetString().ShouldBe("done");
     }
 
     /// <summary>Run now, then the run once it has finished starting.</summary>

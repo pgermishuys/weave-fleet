@@ -19,6 +19,9 @@ internal sealed class FakeMachine : HttpMessageHandler, IHttpClientFactory
     public const string Name = "atlas";
     public const string Token = "fmt_atlas";
 
+    /// <summary>For services that need the way to other machines, in tests that never use it.</summary>
+    public static RemoteAutomationRuns Unused { get; } = new FakeMachine().Runs;
+
     public FakeMachine(FakeTimeProvider? time = null)
     {
         Time = time ?? new FakeTimeProvider(new DateTimeOffset(2026, 10, 8, 7, 30, 0, TimeSpan.Zero));
@@ -48,6 +51,9 @@ internal sealed class FakeMachine : HttpMessageHandler, IHttpClientFactory
     /// <summary>How the machine answers a request ("POST /api/sessions"); null for a 404.</summary>
     public Func<string, (HttpStatusCode Status, string Body)?> Answer { get; set; } = _ => null;
 
+    /// <summary>Awaited before each answer, with the request ("GET /api/sessions/s1").</summary>
+    public Func<string, Task>? BeforeAnswer { get; set; }
+
     /// <summary>The machine is off: nothing answers.</summary>
     public bool Away { get; set; }
 
@@ -59,10 +65,13 @@ internal sealed class FakeMachine : HttpMessageHandler, IHttpClientFactory
     {
         var line = $"{request.Method} {request.RequestUri!.AbsolutePath}";
         var body = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
-        Requests.Add((line, request.Headers.Authorization?.Parameter, body));
+        lock (Requests)
+            Requests.Add((line, request.Headers.Authorization?.Parameter, body));
 
         if (Away)
             throw new HttpRequestException("Connection refused");
+        if (BeforeAnswer is { } before)
+            await before(line);
 
         var (status, json) = Answer(line) ?? (HttpStatusCode.NotFound, """{"error":"Not found."}""");
         return new HttpResponseMessage(status) { Content = new StringContent(json, Encoding.UTF8, "application/json") };

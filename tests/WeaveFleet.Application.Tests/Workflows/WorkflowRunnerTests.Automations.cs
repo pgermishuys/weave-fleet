@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Skills;
+using WeaveFleet.Application.Tests.Machines;
 using WeaveFleet.Application.Workflows;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
@@ -65,7 +66,7 @@ public sealed partial class WorkflowRunnerTests
             workflows, new WorkflowsFeature(new FleetOptions(), _preferences), _runs, new NoUserScope());
 
         // The workflow target never touches sessions itself: the run's steps start them.
-        var executor = new AutomationExecutionService(null!, null!, NullLogger<AutomationExecutionService>.Instance, automationWorkflows);
+        var executor = new AutomationExecutionService(null!, null!, NullLogger<AutomationExecutionService>.Instance, FakeMachine.Unused, automationWorkflows);
         var runRows = new InMemoryAutomationRunRepository();
         return new AutomationRig
         {
@@ -73,7 +74,7 @@ public sealed partial class WorkflowRunnerTests
             RunRows = runRows,
             Harness = runtime,
             Workflows = workflows,
-            Runs = new AutomationRunService(runRows, executor, _activity, TimeProvider.System, NullLogger<AutomationRunService>.Instance, automationWorkflows),
+            Runs = new AutomationRunService(runRows, executor, _activity, TimeProvider.System, NullLogger<AutomationRunService>.Instance, FakeMachine.Unused, automationWorkflows),
         };
     }
 

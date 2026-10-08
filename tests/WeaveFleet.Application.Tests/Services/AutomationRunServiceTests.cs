@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Tests.Machines;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Testing.Fakes.Repositories;
 
@@ -16,7 +17,7 @@ public sealed class AutomationRunServiceTests
 
     public AutomationRunServiceTests()
     {
-        _sut = new AutomationRunService(_runs, _executor, _activity, _time, NullLogger<AutomationRunService>.Instance);
+        _sut = new AutomationRunService(_runs, _executor, _activity, _time, NullLogger<AutomationRunService>.Instance, FakeMachine.Unused);
     }
 
     private static Automation Automation(int maxConcurrentRuns = 1, string targetType = "new_session") => new()

@@ -32,7 +32,7 @@ public sealed class RemoteAutomationRunsTests : IAsyncDisposable
             _builder.Build(),
             _builder.SessionRepository,
             NullLogger<AutomationExecutionService>.Instance,
-            remoteRuns: _atlas.Runs);
+            _atlas.Runs);
     }
 
     public ValueTask DisposeAsync()

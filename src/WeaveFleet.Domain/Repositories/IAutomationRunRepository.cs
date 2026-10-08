@@ -12,6 +12,8 @@ public interface IAutomationRunRepository
     Task CompleteAsync(
         string id, string status, string? sessionId, string? instanceId, string? reason, string? workflowRunId = null,
         string? machineId = null, string? machineName = null);
+    /// <summary>Records how a run on another machine ended (<see cref="AutomationRun.SettledState"/>).</summary>
+    Task SettleAsync(string id, string state);
     /// <summary>An automation's runs, newest first. Not scoped to a user: load the automation as its owner first.</summary>
     Task<IReadOnlyList<AutomationRun>> ListByAutomationAsync(string automationId, int limit);
     /// <summary>Each automation's newest run, keyed by automation id.</summary>

@@ -137,35 +137,46 @@ public sealed class RemoteAutomationRuns(
     }
 
     /// <summary>
-    /// Whether a session on the machine is busy (<c>activityStatus</c>), for a run's Running or Done. Null when the
-    /// machine doesn't answer or no longer has it.
+    /// How a run's session on the machine is going: Running while it's busy, Done once it isn't or the machine no longer
+    /// has it. Null when the machine didn't answer, which isn't Done.
     /// </summary>
-    public async Task<bool?> IsSessionBusyAsync(string machineId, string sessionId, CancellationToken ct = default)
+    public async Task<string?> SessionStateAsync(string machineId, string sessionId, CancellationToken ct = default)
     {
-        using var answer = await GetOnMachineAsync(machineId, $"/api/sessions/{Uri.EscapeDataString(sessionId)}", ct);
-        return answer?.RootElement.TryGetProperty("activityStatus", out var status) == true ? status.GetString() == "busy" : null;
+        var (answered, body) = await GetOnMachineAsync(machineId, $"/api/sessions/{Uri.EscapeDataString(sessionId)}", ct);
+        using (body)
+        {
+            if (!answered)
+                return null;
+            return body is not null && Text(body.RootElement, "activityStatus") == "busy" ? AutomationRunState.Running : AutomationRunState.Done;
+        }
     }
 
     /// <summary>
     /// A workflow run on the machine: its status, and why a new firing shouldn't start while it's unfinished (in
-    /// <see cref="AutomationWorkflows.UnfinishedReason"/>'s words). Null when the machine doesn't answer or no longer has it.
+    /// <see cref="AutomationWorkflows.UnfinishedReason"/>'s words). A run the machine no longer has reads as ended. Null
+    /// when the machine didn't answer.
     /// </summary>
     public async Task<RemoteWorkflowRun?> GetWorkflowRunAsync(string machineId, string workflowRunId, CancellationToken ct = default)
     {
-        using var answer = await GetOnMachineAsync(machineId, $"/api/workflows/runs/{Uri.EscapeDataString(workflowRunId)}", ct);
-        if (answer is null || Text(answer.RootElement, "status") is not { } status)
-            return null;
+        var (answered, body) = await GetOnMachineAsync(machineId, $"/api/workflows/runs/{Uri.EscapeDataString(workflowRunId)}", ct);
+        using (body)
+        {
+            if (!answered)
+                return null;
+            if (body is null || Text(body.RootElement, "status") is not { } status)
+                return new RemoteWorkflowRun(WorkflowRunStatus.Ended, null);
 
-        var root = answer.RootElement;
-        var currentStepId = Text(root, "currentStepId");
-        var currentStep = root.TryGetProperty("steps", out var steps) && steps.ValueKind == JsonValueKind.Array
-            ? steps.EnumerateArray().FirstOrDefault(step => Text(step, "id") == currentStepId)
-            : default;
-        return new RemoteWorkflowRun(status, AutomationWorkflows.UnfinishedReason(
-            status,
-            root.TryGetProperty("waiting", out var waiting) ? Text(waiting, "stepTitle") : null,
-            root.TryGetProperty("withYou", out var withYou) ? Text(withYou, "stepTitle") : null,
-            currentStep.ValueKind == JsonValueKind.Object ? Text(currentStep, "title") : null));
+            var root = body.RootElement;
+            var currentStepId = Text(root, "currentStepId");
+            var currentStep = root.TryGetProperty("steps", out var steps) && steps.ValueKind == JsonValueKind.Array
+                ? steps.EnumerateArray().FirstOrDefault(step => Text(step, "id") == currentStepId)
+                : default;
+            return new RemoteWorkflowRun(status, AutomationWorkflows.UnfinishedReason(
+                status,
+                root.TryGetProperty("waiting", out var waiting) ? Text(waiting, "stepTitle") : null,
+                root.TryGetProperty("withYou", out var withYou) ? Text(withYou, "stepTitle") : null,
+                currentStep.ValueKind == JsonValueKind.Object ? Text(currentStep, "title") : null));
+        }
     }
 
     private static string? Text(JsonElement element, string name) =>
@@ -174,18 +185,32 @@ public sealed class RemoteAutomationRuns(
             : null;
 
     /// <summary>
-    /// Reads from the machine, unless the watcher (<c>RemoteMachineWatcher</c>) last found it away: a list of runs doesn't
-    /// wait on a machine that's off.
+    /// Reads from the machine with the 5-second client. <c>Answered</c> is false when it didn't answer, turned the token
+    /// away, or the watcher (<c>RemoteMachineWatcher</c>) last found it away, so a list of runs doesn't wait on a machine
+    /// that's off. A 404 is an answer with no body: the machine no longer has it.
     /// </summary>
-    private async Task<JsonDocument?> GetOnMachineAsync(string machineId, string path, CancellationToken ct)
+    private async Task<(bool Answered, JsonDocument? Body)> GetOnMachineAsync(string machineId, string path, CancellationToken ct)
     {
         var machine = await machines.GetAsync(machineId);
         var token = machine is null ? null : machines.TryTokenOf(machine);
         if (machine is null || token is null || machine.Status is RemoteMachineStatuses.Unreachable or RemoteMachineStatuses.Unauthorized)
-            return null;
+            return (false, null);
 
-        var (answer, _, _) = await SendAsync<object>(machine, token, HttpMethod.Get, path, null, null, ct, RemoteMachineService.HttpClientName);
-        return answer;
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{machine.BaseUrl}{path}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        try
+        {
+            using var response = await httpClients.CreateClient(RemoteMachineService.HttpClientName).SendAsync(request, ct);
+            if (response.StatusCode == HttpStatusCode.NotFound)
+                return (true, null);
+            if (!response.IsSuccessStatusCode)
+                return (false, null);
+            return (true, await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(ct), cancellationToken: ct));
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException || (ex is TaskCanceledException && !ct.IsCancellationRequested))
+        {
+            return (false, null);
+        }
     }
 
     /// <summary>The automation's machine and its token, or the skipped run that says why there's neither.</summary>

@@ -74,9 +74,14 @@ public static class AutomationEndpoints
                 return Results.Problem(result.Error.Description);
 
             var latest = await runs.GetLatestPerAutomationAsync();
-            var responses = new List<AutomationResponse>(result.Value.Count);
-            foreach (var automation in result.Value)
-                responses.Add(MapToResponse(automation, await MapRunAsync(latest.GetValueOrDefault(automation.Id), runService), time));
+            var latestRuns = result.Value.Select(automation => latest.GetValueOrDefault(automation.Id)).OfType<AutomationRun>().ToList();
+            var states = await runService.StatesOfAsync(latestRuns);
+            var stateOf = latestRuns.Select((run, index) => (run.Id, State: states[index])).ToDictionary(pair => pair.Id, pair => pair.State);
+            var responses = result.Value
+                .Select(automation => latest.GetValueOrDefault(automation.Id) is { } run
+                    ? MapToResponse(automation, MapRun(run, stateOf[run.Id]), time)
+                    : MapToResponse(automation, null, time))
+                .ToList();
             return Results.Ok(new AutomationListResponse(responses));
         });
 
@@ -109,10 +114,8 @@ public static class AutomationEndpoints
                 return ErrorResult(result.Error);
 
             var list = await runs.ListByAutomationAsync(id, Math.Clamp(limit ?? 50, 1, 200));
-            var responses = new List<AutomationRunResponse>(list.Count);
-            foreach (var run in list)
-                responses.Add((await MapRunAsync(run, runService))!);
-            return Results.Ok(new AutomationRunListResponse(responses));
+            var states = await runService.StatesOfAsync(list);
+            return Results.Ok(new AutomationRunListResponse(list.Select((run, index) => MapRun(run, states[index])).ToList()));
         });
 
         // DELETE /{id} — soft-delete
@@ -188,12 +191,13 @@ public static class AutomationEndpoints
         _ => Results.Problem(error.Description)
     };
 
-    private static async Task<AutomationRunResponse?> MapRunAsync(AutomationRun? run, AutomationRunService runService) => run is null
-        ? null
-        : new AutomationRunResponse(
-            run.Id, run.AutomationId, run.Trigger, run.ScheduledFor, run.StartedAt,
-            await runService.StateOfAsync(run), run.SessionId, run.InstanceId, run.Error, run.WorkflowRunId,
-            run.MachineId, run.MachineName);
+    private static async Task<AutomationRunResponse?> MapRunAsync(AutomationRun? run, AutomationRunService runService) =>
+        run is null ? null : MapRun(run, await runService.StateOfAsync(run));
+
+    private static AutomationRunResponse MapRun(AutomationRun run, string state) => new(
+        run.Id, run.AutomationId, run.Trigger, run.ScheduledFor, run.StartedAt,
+        state, run.SessionId, run.InstanceId, run.Error, run.WorkflowRunId,
+        run.MachineId, run.MachineName);
 
     private static AutomationResponse MapToResponse(Automation a, AutomationRunResponse? lastRun, TimeProvider time) => new(
         a.Id, a.Name, a.Prompt, a.TriggerType, a.TriggerConfig,

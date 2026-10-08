@@ -24,6 +24,11 @@ public sealed class AutomationRun
     public string? MachineId { get; set; }
     /// <summary>That machine's name when the run went to it, so the run reads right after a rename or removal.</summary>
     public string? MachineName { get; set; }
+    /// <summary>
+    /// How a run on another machine ended ("done", "ended" or "failed"), once that machine said so, so it isn't asked
+    /// again. Null while it may still be going, and for runs on this machine.
+    /// </summary>
+    public string? SettledState { get; set; }
     /// <summary>Why it failed or was skipped, in words.</summary>
     public string? Error { get; set; }
 }

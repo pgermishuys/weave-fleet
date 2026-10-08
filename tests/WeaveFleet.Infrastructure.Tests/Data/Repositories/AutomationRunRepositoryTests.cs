@@ -191,8 +191,10 @@ public sealed class AutomationRunRepositoryTests
         await repo.InsertAsync(Run("run-2", "auto-1", "2026-10-09T09:00:01.0000000Z", status: "starting"));
         await repo.CompleteAsync("run-2", "started", "session-here", null, null);
 
+        await repo.SettleAsync("run-1", "done");
+
         var runs = await repo.ListByAutomationAsync("auto-1", 10);
-        (runs[1].SessionId, runs[1].MachineId, runs[1].MachineName).ShouldBe(("atlas-session", "machine-atlas", "atlas"));
-        (runs[0].MachineId, runs[0].MachineName).ShouldBe(((string?)null, (string?)null));
+        (runs[1].SessionId, runs[1].MachineId, runs[1].MachineName, runs[1].SettledState).ShouldBe(("atlas-session", "machine-atlas", "atlas", "done"));
+        (runs[0].MachineId, runs[0].MachineName, runs[0].SettledState).ShouldBe(((string?)null, (string?)null, (string?)null));
     }
 }

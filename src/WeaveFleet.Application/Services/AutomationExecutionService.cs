@@ -47,8 +47,8 @@ public sealed partial class AutomationExecutionService(
     SessionOrchestrator sessionOrchestrator,
     ISessionRepository sessionRepository,
     ILogger<AutomationExecutionService> logger,
-    IAutomationWorkflows? workflows = null,
-    RemoteAutomationRuns? remoteRuns = null) : IAutomationExecutor
+    RemoteAutomationRuns remoteRuns,
+    IAutomationWorkflows? workflows = null) : IAutomationExecutor
 {
     /// <summary>
     /// Runs an automation: starts a session with its prompt, or prompts the session a target type picks. Never throws;
@@ -209,13 +209,8 @@ public sealed partial class AutomationExecutionService(
     }
 
     /// <summary>The way to the automation's machine when it runs on another one; null when it runs here.</summary>
-    private RemoteAutomationRuns? OnAnotherMachine(Automation automation)
-    {
-        if (automation.TargetMachineId is null)
-            return null;
-
-        return remoteRuns ?? throw new InvalidOperationException("This Fleet can't run automations on other machines.");
-    }
+    private RemoteAutomationRuns? OnAnotherMachine(Automation automation) =>
+        automation.TargetMachineId is null ? null : remoteRuns;
 
     private AutomationExecutionOutcome Logged(Automation automation, AutomationExecutionOutcome outcome)
     {

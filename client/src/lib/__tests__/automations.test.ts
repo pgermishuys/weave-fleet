@@ -91,6 +91,10 @@ describe("describeRunState", () => {
     expect(describeRunState({ state: "ended" })).toEqual({ label: "Ended", tone: "quiet" });
     expect(describeRunState({ state: "skipped" })).toEqual({ label: "Skipped", tone: "warn" });
   });
+
+  it("says a run's machine didn't answer, rather than Done", () => {
+    expect(describeRunState({ state: "unanswered", machineName: "atlas" })).toEqual({ label: "atlas didn't answer", tone: "warn" });
+  });
 });
 
 describe("describeAutomationPlan for a workflow", () => {

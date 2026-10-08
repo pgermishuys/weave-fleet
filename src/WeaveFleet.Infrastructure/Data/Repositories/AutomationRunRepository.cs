@@ -67,6 +67,18 @@ public sealed class AutomationRunRepository(IDbConnectionFactory connectionFacto
             });
     }
 
+    public async Task SettleAsync(string id, string state)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        await conn.ExecuteNonQueryAsync(
+            "UPDATE automation_runs SET settled_state = @State WHERE id = @Id",
+            cmd =>
+            {
+                cmd.AddParameter("Id", id);
+                cmd.AddParameter("State", state);
+            });
+    }
+
     public async Task<IReadOnlyList<AutomationRun>> ListByAutomationAsync(string automationId, int limit)
     {
         using var conn = connectionFactory.CreateConnection();
@@ -150,5 +162,6 @@ public sealed class AutomationRunRepository(IDbConnectionFactory connectionFacto
         WorkflowRunId = r.GetNullableString(r.GetOrdinal("workflow_run_id")),
         MachineId = r.GetNullableString(r.GetOrdinal("machine_id")),
         MachineName = r.GetNullableString(r.GetOrdinal("machine_name")),
+        SettledState = r.GetNullableString(r.GetOrdinal("settled_state")),
     };
 }

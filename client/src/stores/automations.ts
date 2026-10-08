@@ -38,8 +38,11 @@ export interface Automation {
   targetMachineId?: string | null;
 }
 
-/** A run that started a workflow run follows it, so it can also wait on you or be ended. */
-export type AutomationRunState = "starting" | "running" | "waiting" | "done" | "ended" | "failed" | "skipped";
+/**
+ * A run that started a workflow run follows it, so it can also wait on you or be ended. A run on another machine that
+ * didn't answer when asked is "unanswered".
+ */
+export type AutomationRunState = "starting" | "running" | "waiting" | "done" | "ended" | "failed" | "skipped" | "unanswered";
 
 export interface AutomationRun {
   id: string;

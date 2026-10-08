@@ -278,4 +278,18 @@ describe("An automation that runs on another machine", () => {
     expect(openOn).toHaveBeenCalledWith("m-atlas", "/sessions/atlas-session?instanceId=atlas-inst");
     expect(navigate).not.toHaveBeenCalled();
   });
+
+  it("says when a run's machine didn't answer, rather than Done", async () => {
+    localStorage.setItem("weave:machines", JSON.stringify([atlas]));
+    list = [nightly];
+    runs = [{ ...onAtlas, state: "unanswered" }];
+    await mountScreen();
+
+    await wrapper.get("[data-testid='automation-row']").trigger("click");
+    await flushPromises();
+
+    const run = wrapper.get("[data-testid='automation-run']");
+    expect(run.text()).toContain("atlas didn't answer");
+    expect(run.text()).not.toContain("Done");
+  });
 });

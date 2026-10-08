@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Tests.Machines;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Testing.Builders;
 using WeaveFleet.Testing.Fakes;
@@ -25,7 +26,8 @@ public sealed class AutomationExecutionServiceTests : IAsyncDisposable
         _sut = new AutomationExecutionService(
             _builder.Build(),
             _builder.SessionRepository,
-            NullLogger<AutomationExecutionService>.Instance);
+            NullLogger<AutomationExecutionService>.Instance,
+            FakeMachine.Unused);
     }
 
     public ValueTask DisposeAsync() => _session.DisposeAsync();
