@@ -34,6 +34,8 @@ export interface Automation {
   /** When it runs next (ISO, UTC); null when it's off or waits for an event. */
   nextRunAt?: string | null;
   lastRun?: AutomationRun | null;
+  /** The machine in this Fleet's list its runs go to (`workspaceId` is a folder there); null for this machine. */
+  targetMachineId?: string | null;
 }
 
 /** A run that started a workflow run follows it, so it can also wait on you or be ended. */
@@ -53,6 +55,10 @@ export interface AutomationRun {
   error: string | null;
   /** The workflow run it started, for a "workflow" target. */
   workflowRunId?: string | null;
+  /** The other machine it went to; null for this one. Its session is there. */
+  machineId?: string | null;
+  /** That machine's name when the run went to it. */
+  machineName?: string | null;
 }
 
 /** A new automation's starting point from a session ("Repeat on a schedule…"). */
@@ -84,6 +90,8 @@ export interface CreateAutomationRequest {
   /** For a "workflow" target: the workflow and its optional steps switched on. */
   workflowId?: string | null;
   workflowSteps?: string[];
+  /** Another machine in this Fleet's list to run on; null for this machine. */
+  targetMachineId?: string | null;
 }
 
 export type UpdateAutomationRequest = CreateAutomationRequest;
