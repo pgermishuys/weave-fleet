@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Api.Tests.Infrastructure;
+using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
@@ -60,6 +61,94 @@ public sealed class HarnessEndpointsTests
         GetUserEnabled(harnesses, "opencode").ShouldBeTrue();
         GetUserEnabled(harnesses, "pi").ShouldBeTrue();
         GetUserEnabled(harnesses, "claude-code").ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task get_harnesses_describes_each_harness_so_the_client_keeps_no_table_of_its_own()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var response = await client.GetAsync("/api/harnesses");
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        using var document = JsonDocument.Parse(body);
+        var harnesses = document.RootElement.EnumerateArray().ToList();
+        harnesses.ShouldNotBeEmpty();
+        foreach (var harness in harnesses)
+        {
+            var type = harness.GetProperty("type").GetString();
+            var capabilities = harness.GetProperty("capabilities");
+            var presentation = harness.GetProperty("presentation");
+            presentation.GetProperty("eyebrow").GetString().ShouldNotBeNullOrWhiteSpace(type);
+            presentation.GetProperty("description").GetString().ShouldNotBeNullOrWhiteSpace(type);
+            presentation.GetProperty("icon").GetString().ShouldNotBeNullOrWhiteSpace(type);
+            harness.GetProperty("settings").ValueKind.ShouldBe(JsonValueKind.Array, type);
+
+            // Each text a Settings section shows is there exactly when the harness has the capability behind it.
+            HasText(presentation, "permissionModes").ShouldBe(capabilities.GetProperty("supportsPermissionLevels").GetBoolean(), type);
+            HasText(presentation, "agentBrowser").ShouldBe(capabilities.GetProperty("supportsAgentBrowser").GetBoolean(), type);
+            HasText(presentation, "profileNote").ShouldBe(capabilities.GetProperty("supportsProfiles").GetBoolean(), type);
+        }
+
+        var claudeCode = Find(harnesses, "claude-code").GetProperty("presentation");
+        claudeCode.GetProperty("shortName").GetString().ShouldBe("Claude");
+        claudeCode.GetProperty("permissionModes").GetProperty("all").GetString().ShouldBe("--permission-mode bypassPermissions");
+
+        // Pi can't be handed a permission level: Settings → Permissions learns that from its capabilities.
+        Find(harnesses, "pi").GetProperty("capabilities").GetProperty("supportsPermissionLevels").GetBoolean().ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task get_harnesses_lists_them_in_their_own_order()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var response = await client.GetAsync("/api/harnesses");
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+        document.RootElement.EnumerateArray().Select(h => h.GetProperty("type").GetString())
+            .ShouldBe(["opencode2", "opencode", "claude-code", "pi"]);
+    }
+
+    [Fact]
+    public async Task get_harnesses_marks_the_default_harness()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        // Without a pick, the fallback.
+        using (var document = JsonDocument.Parse(await client.GetStringAsync("/api/harnesses")))
+            DefaultTypes(document).ShouldBe(["opencode"]);
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var preferences = scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>();
+            await preferences.SetAsync(HarnessPreferences.DefaultHarnessKey, "pi");
+        }
+
+        using (var document = JsonDocument.Parse(await client.GetStringAsync("/api/harnesses")))
+            DefaultTypes(document).ShouldBe(["pi"]);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task get_harnesses_describes_the_pooled_opencode_switch_with_the_default_fleet_runs_with(bool pooledByDefault)
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        factory.Services.GetRequiredService<FleetOptions>().Harness.PooledOpenCodeHarness = pooledByDefault;
+
+        using var document = JsonDocument.Parse(await client.GetStringAsync("/api/harnesses"));
+
+        var setting = Find(document.RootElement.EnumerateArray().ToList(), "opencode").GetProperty("settings").EnumerateArray().Single();
+        setting.GetProperty("key").GetString().ShouldBe("PooledOpenCodeHarness");
+        setting.GetProperty("label").GetString().ShouldBe("Pooled OpenCode Mode");
+        setting.GetProperty("description").GetString().ShouldNotBeNullOrWhiteSpace();
+        setting.GetProperty("default").GetBoolean().ShouldBe(pooledByDefault);
     }
 
     [Fact]
@@ -448,6 +537,18 @@ public sealed class HarnessEndpointsTests
 
         return null;
     }
+
+    private static JsonElement Find(IReadOnlyList<JsonElement> harnesses, string harnessType) =>
+        harnesses.Single(harness => harness.GetProperty("type").GetString() == harnessType);
+
+    private static bool HasText(JsonElement presentation, string property) =>
+        presentation.TryGetProperty(property, out var value) && value.ValueKind != JsonValueKind.Null;
+
+    private static List<string?> DefaultTypes(JsonDocument document) =>
+        document.RootElement.EnumerateArray()
+            .Where(h => h.GetProperty("isDefault").GetBoolean())
+            .Select(h => h.GetProperty("type").GetString())
+            .ToList();
 
     private static bool GetUserEnabled(IReadOnlyList<JsonElement> harnesses, string harnessType)
     {

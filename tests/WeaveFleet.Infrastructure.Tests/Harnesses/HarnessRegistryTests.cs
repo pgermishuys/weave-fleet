@@ -94,6 +94,34 @@ public sealed class HarnessRegistryTests
     }
 
     [Fact]
+    public async Task harnesses_come_in_their_own_order_whatever_order_they_were_registered_in()
+    {
+        var pi = new FakeHarness("pi", "Pi") { Presentation = new() { Order = 3 } };
+        var openCode2 = new FakeHarness("opencode2", "OpenCode 2") { Presentation = new() { Order = 0 } };
+        var openCode = new FakeHarness("opencode", "OpenCode") { Presentation = new() { Order = 1 } };
+        var registry = new HarnessRegistry([pi, openCode2, openCode], []);
+
+        registry.GetAll().Select(h => h.Type).ShouldBe(["opencode2", "opencode", "pi"]);
+        (await registry.GetAvailabilityAsync(CancellationToken.None)).Select(h => h.Type).ShouldBe(["opencode2", "opencode", "pi"]);
+    }
+
+    [Fact]
+    public async Task GetAvailabilityAsync_passes_on_how_the_harness_describes_itself()
+    {
+        var harness = new FakeHarness("acme", "Acme")
+        {
+            Presentation = new() { ShortName = "A", Description = "An invented harness.", Icon = HarnessIcons.Hexagon },
+            Settings = [new HarnessSetting("acme.fast", "Fast mode", "Goes faster.", Default: true)],
+        };
+        var registry = new HarnessRegistry([harness], [new FakeHarnessRuntime("acme", available: true)]);
+
+        var info = (await registry.GetAvailabilityAsync(CancellationToken.None)).Single();
+
+        info.Presentation.ShouldBe(harness.Presentation);
+        info.Settings.ShouldBe(harness.Settings);
+    }
+
+    [Fact]
     public async Task GetAvailabilityAsync_NoRuntime_ReturnsNotAvailable()
     {
         var harness = new FakeHarness("opencode", "OpenCode");

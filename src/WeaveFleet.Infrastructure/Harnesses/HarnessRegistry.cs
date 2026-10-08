@@ -14,7 +14,8 @@ public sealed class HarnessRegistry : IHarnessRegistry
 
     public HarnessRegistry(IEnumerable<IHarness> harnesses, IEnumerable<IHarnessRuntime> runtimes)
     {
-        _harnesses = harnesses.ToList();
+        // In their own order (HarnessPresentation.Order), so every list of harnesses comes out the same.
+        _harnesses = harnesses.OrderBy(h => h.Presentation.Order).ToList();
         _runtimes = runtimes.ToList();
     }
 
@@ -40,7 +41,7 @@ public sealed class HarnessRegistry : IHarnessRegistry
             var availability = runtime is not null
                 ? RequireMinimumVersion(harness, runtime, await runtime.CheckAvailabilityAsync(ct).ConfigureAwait(false))
                 : HarnessAvailability.NotWorking("No runtime registered.");
-            return HarnessInfo.From(harness.Type, harness.DisplayName, harness.Capabilities, availability, runtime?.GetSetup(availability));
+            return HarnessInfo.From(harness, availability, runtime?.GetSetup(availability));
         });
 
         var results = await Task.WhenAll(tasks).ConfigureAwait(false);

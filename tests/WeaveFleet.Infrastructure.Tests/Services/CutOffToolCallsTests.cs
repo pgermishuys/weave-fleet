@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
@@ -161,7 +162,7 @@ public sealed class CutOffToolCallsTests
         => snapshot.Messages.SelectMany(m => m.Parts).OfType<ToolMessageEventPart>().ToDictionary(p => p.CallId, p => p.State);
 
     private static HarnessRegistry Harnesses()
-        => new([new OpenCodeHarness(), new OpenCode2Harness(), new ClaudeCodeHarness()], []);
+        => new([new OpenCodeHarness(new FleetOptions()), new OpenCode2Harness(), new ClaudeCodeHarness()], []);
 
     private static OpenCodeSessionMessageProxy LiveProxy(string activity, params ToolUsePart[] tools)
     {

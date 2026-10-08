@@ -41,4 +41,13 @@ public sealed class PiHarness : IHarness
         // words of Fleet's own without a Fleet extension for Pi. So Pi isn't told about lost work yet.
         TakesModelNotes = false,
     };
+
+    /// <inheritdoc />
+    public HarnessPresentation Presentation { get; } = new()
+    {
+        Order = 3,
+        Eyebrow = "CLI harness",
+        Description = "Harness for sessions backed by the Pi command-line runtime from pi.dev.",
+        Icon = HarnessIcons.Infinity,
+    };
 }

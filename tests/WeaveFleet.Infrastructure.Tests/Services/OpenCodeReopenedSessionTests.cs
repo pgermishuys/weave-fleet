@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
@@ -191,7 +192,7 @@ public sealed class OpenCodeReopenedSessionTests
             delegations,
             new FakeSessionSnapshotBuilder(),
             new ServiceCollection().BuildServiceProvider(),
-            new HarnessRegistry([new OpenCodeHarness()], []),
+            new HarnessRegistry([new OpenCodeHarness(new FleetOptions())], []),
             NullLogger<OpenCodeSessionMessageProxy>.Instance);
 
         return await proxy.GetSnapshotAsync(FleetSessionId);

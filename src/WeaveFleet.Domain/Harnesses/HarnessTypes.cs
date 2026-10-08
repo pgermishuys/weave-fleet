@@ -133,7 +133,78 @@ public sealed record HarnessCapabilities
     /// such as the one about work that was lost and won't report back.
     /// </summary>
     public bool TakesModelNotes { get; init; }
+
+    /// <summary>
+    /// The adapter turns Settings → Permissions levels (<see cref="PermissionLevels"/>) into the harness's own rules, and
+    /// the harness's asks come to Fleet. Without it Fleet can't hand the harness a level, and Settings → Permissions says so.
+    /// </summary>
+    public bool SupportsPermissionLevels { get; init; }
 }
+
+/// <summary>
+/// How a harness describes itself to the user, in Settings, in setup and wherever Fleet names it. The client shows it as
+/// it comes, so a new harness needs no change there.
+/// </summary>
+public sealed record HarnessPresentation
+{
+    /// <summary>Where the harness comes in Fleet's lists, lowest first.</summary>
+    public int Order { get; init; }
+
+    /// <summary>The name where room is short (the status bar's usage limits), e.g. "Claude"; null for the display name.</summary>
+    public string? ShortName { get; init; }
+
+    /// <summary>The small heading over its name in Settings, e.g. "CLI harness".</summary>
+    public string Eyebrow { get; init; } = "Harness";
+
+    /// <summary>One sentence on what it is, under its name in Settings.</summary>
+    public string Description { get; init; } = "Harness runtime registered by the backend.";
+
+    /// <summary>One line for choosing it during setup; null to leave it out.</summary>
+    public string? Pitch { get; init; }
+
+    /// <summary>Which icon the client draws, one of <see cref="HarnessIcons"/>. The client draws a plug for one it doesn't know.</summary>
+    public string Icon { get; init; } = HarnessIcons.Plug;
+
+    /// <summary>
+    /// What Fleet hands the harness at each permission level, shown under its name in Settings → Permissions. Null
+    /// without <see cref="HarnessCapabilities.SupportsPermissionLevels"/>.
+    /// </summary>
+    public HarnessPermissionModes? PermissionModes { get; init; }
+
+    /// <summary>
+    /// How the agent gets its browser tab, shown in Settings → Browser. Null without
+    /// <see cref="HarnessCapabilities.SupportsAgentBrowser"/>.
+    /// </summary>
+    public string? AgentBrowser { get; init; }
+
+    /// <summary>
+    /// How Fleet hands the harness a profile's config and what to keep out of it, shown under the profile editor, with
+    /// <c>`code`</c> in backticks. Null without <see cref="HarnessCapabilities.SupportsProfiles"/>.
+    /// </summary>
+    public string? ProfileNote { get; init; }
+}
+
+/// <summary>What Fleet hands a harness at each of the <see cref="PermissionLevels"/>, in a phrase.</summary>
+public sealed record HarnessPermissionModes(string Ask, string Edits, string All);
+
+/// <summary>The icons a harness can ask for (<see cref="HarnessPresentation.Icon"/>).</summary>
+public static class HarnessIcons
+{
+    public const string Terminal = "terminal";
+    public const string Hexagon = "hexagon";
+    public const string Infinity = "infinity";
+    public const string Plug = "plug";
+}
+
+/// <summary>
+/// An on/off switch a harness has in Settings → Harnesses, kept as the user preference <see cref="Key"/>
+/// (<c>"true"</c> or <c>"false"</c>; unset means <see cref="Default"/>).
+/// </summary>
+/// <param name="Key">The preference it's kept as.</param>
+/// <param name="Label">Its name, e.g. "Pooled OpenCode Mode".</param>
+/// <param name="Description">What turning it on does.</param>
+/// <param name="Default">Whether it's on while the user hasn't set it.</param>
+public sealed record HarnessSetting(string Key, string Label, string Description, bool Default);
 
 /// <summary>What a shell command the user ran from the composer looks like in the conversation.</summary>
 /// <remarks>

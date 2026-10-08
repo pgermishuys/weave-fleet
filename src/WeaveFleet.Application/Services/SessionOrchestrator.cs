@@ -171,8 +171,7 @@ public sealed partial class SessionOrchestrator(
     {
     }
 
-    private const string _defaultHarnessTypePreferenceKey = "defaultHarnessType";
-    private const string _fallbackDefaultHarnessType = "opencode";
+    private const string _openCodeHarnessType = "opencode";
     private const string _pooledOpenCodeHarnessPreferenceKey = "PooledOpenCodeHarness";
     private const string _runtimeModeAutomatic = "automatic";
     private const string _runtimeModeManual = "manual";
@@ -1337,15 +1336,13 @@ public sealed partial class SessionOrchestrator(
             return request.HarnessType;
         }
 
-        var preferredHarnessType = await userPreferenceRepository.GetAsync(_defaultHarnessTypePreferenceKey).ConfigureAwait(false);
-        return string.IsNullOrWhiteSpace(preferredHarnessType)
-            ? _fallbackDefaultHarnessType
-            : preferredHarnessType;
+        var preferredHarnessType = await userPreferenceRepository.GetAsync(HarnessPreferences.DefaultHarnessKey).ConfigureAwait(false);
+        return HarnessPreferences.DefaultHarness(preferredHarnessType);
     }
 
     private async Task<string> ResolveRuntimeModeAsync(string harnessType)
     {
-        if (!string.Equals(harnessType, _fallbackDefaultHarnessType, StringComparison.Ordinal))
+        if (!string.Equals(harnessType, _openCodeHarnessType, StringComparison.Ordinal))
         {
             return _runtimeModeManual;
         }

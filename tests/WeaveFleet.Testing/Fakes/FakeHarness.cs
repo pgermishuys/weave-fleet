@@ -15,4 +15,6 @@ public sealed class FakeHarness : IHarness
     public string Type { get; }
     public string DisplayName { get; }
     public HarnessCapabilities Capabilities { get; set; }
+    public HarnessPresentation Presentation { get; set; } = new();
+    public IReadOnlyList<HarnessSetting> Settings { get; set; } = [];
 }

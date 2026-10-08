@@ -16,4 +16,12 @@ public interface IHarness
 
     /// <summary>Declares what this harness supports.</summary>
     HarnessCapabilities Capabilities { get; }
+
+    /// <summary>How the harness describes itself to the user.</summary>
+    HarnessPresentation Presentation => DefaultPresentation;
+
+    /// <summary>Its switches in Settings → Harnesses; none by default.</summary>
+    IReadOnlyList<HarnessSetting> Settings => [];
+
+    private static readonly HarnessPresentation DefaultPresentation = new();
 }
