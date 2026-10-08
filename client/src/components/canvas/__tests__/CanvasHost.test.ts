@@ -85,6 +85,10 @@ function mountHost() {
   });
 }
 
+
+/** Nothing provides another machine here, so calls go to the live one: home. */
+const live = expect.objectContaining({ key: "home", isLive: true });
+
 describe("CanvasHost", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
@@ -163,7 +167,7 @@ describe("CanvasHost", () => {
 
     await tab.get(".canvas-tab__close").trigger("click");
 
-    expect(closeServerCanvasMock).toHaveBeenCalledWith("s1", "cv_1");
+    expect(closeServerCanvasMock).toHaveBeenCalledWith(live, "s1", "cv_1");
     wrapper.unmount();
   });
 
@@ -362,7 +366,7 @@ describe("CanvasHost", () => {
       await flushPromises();
       await wrapper.get('[data-testid="unsaved-save"]').trigger("click");
       await flushPromises();
-      expect(saveBufferMock).toHaveBeenCalledWith("s1", "src/app.ts");
+      expect(saveBufferMock).toHaveBeenCalledWith(live, "s1", "src/app.ts");
       expect(wrapper.find('[data-testid="file-tab-src/app.ts"]').exists()).toBe(true);
 
       saveBufferMock.mockResolvedValueOnce({ kind: "saved" });

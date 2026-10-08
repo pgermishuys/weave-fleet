@@ -4,6 +4,7 @@ import type { DomainEvent } from "@/lib/domain-events";
 import { PROGRESS_UPDATED, parseProgressDetail, type SessionProgressDetail } from "@/lib/session-progress";
 import type { TodoItem } from "@/lib/todo-utils";
 import { useSessionProgressStore } from "@/stores/session-progress";
+import { useMachineTarget } from "@/lib/machine-target";
 
 /**
  * A session's progress: loaded from the API, then kept current by the server's pushes on the session's
@@ -13,6 +14,7 @@ export function useSessionProgress(sessionId: MaybeRefOrGetter<string>): {
   progress: ComputedRef<SessionProgressDetail | null>;
   todos: ComputedRef<readonly TodoItem[]>;
 } {
+  const machine = useMachineTarget();
   const store = useSessionProgressStore();
   const id = computed(() => toValue(sessionId));
   let unsubscribe: (() => void) | null = null;
@@ -24,7 +26,7 @@ export function useSessionProgress(sessionId: MaybeRefOrGetter<string>): {
       unsubscribe = null;
       if (!next) return;
 
-      void store.ensureLoaded(next);
+      void store.ensureLoaded(machine, next);
       unsubscribe = onGlobalEvent(`session:${next}`, (event: DomainEvent) => {
         if ((event.type as string) !== PROGRESS_UPDATED) return;
         const detail = parseProgressDetail(event.payload);
@@ -35,7 +37,7 @@ export function useSessionProgress(sessionId: MaybeRefOrGetter<string>): {
   );
 
   const offReconnect = onReconnect(() => {
-    if (id.value) void store.ensureLoaded(id.value, { force: true });
+    if (id.value) void store.ensureLoaded(machine, id.value, { force: true });
   });
 
   onScopeDispose(() => {

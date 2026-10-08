@@ -12,12 +12,15 @@ import {
   type SmartLink,
 } from "@/lib/smart-links";
 import { useSmartLinksStore } from "@/stores/smart-links";
+import { useMachineTarget } from "@/lib/machine-target";
 
 const props = defineProps<{
   link: SmartLink;
   /** Short context shown before the status, e.g. "Started from a board card". */
   note?: string | null;
 }>();
+
+const machine = useMachineTarget();
 
 const store = useSmartLinksStore();
 
@@ -70,7 +73,7 @@ const detail = computed(() => {
         class="link-row__btn"
         :aria-label="`Pin #${number} to the session header`"
         title="Pin to header"
-        @click="store.setPinned(link.sessionId, link.id, true)"
+        @click="store.setPinned(machine, link.sessionId, link.id, true)"
       >
         <Pin
           :size="12"
@@ -83,7 +86,7 @@ const detail = computed(() => {
         class="link-row__btn"
         :aria-label="`Unpin #${number}`"
         title="Unpin"
-        @click="store.setPinned(link.sessionId, link.id, false)"
+        @click="store.setPinned(machine, link.sessionId, link.id, false)"
       >
         <PinOff
           :size="12"
@@ -96,7 +99,7 @@ const detail = computed(() => {
         class="link-row__btn"
         :aria-label="`Dismiss #${number}`"
         title="Dismiss"
-        @click="store.dismiss(link.sessionId, link.id)"
+        @click="store.dismiss(machine, link.sessionId, link.id)"
       >
         <X
           :size="12"

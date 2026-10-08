@@ -5,7 +5,8 @@ import { useRouter } from "@tanstack/vue-router";
 import { GitBranch, LoaderCircle, Plus, RefreshCw, Zap } from "lucide-vue-next";
 import SmartLinkCard from "@/components/session-context/SmartLinkCard.vue";
 import SmartLinkRow from "@/components/session-context/SmartLinkRow.vue";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetchOn } from "@/lib/api-client";
+import { useMachineTarget } from "@/lib/machine-target";
 import { formatCheckedAgo, isPullRequest, type SmartLink } from "@/lib/smart-links";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSmartLinksStore } from "@/stores/smart-links";
@@ -13,6 +14,8 @@ import { useSmartLinksStore } from "@/stores/smart-links";
 const props = defineProps<{
   sessionId: string;
 }>();
+
+const machine = useMachineTarget();
 
 interface OriginRecord {
   sourceType: string;
@@ -35,12 +38,12 @@ watch(
   async (sessionId, _previous, onCleanup) => {
     originRecords.value = [];
     if (!sessionId) return;
-    void store.ensureLoaded(sessionId);
+    void store.ensureLoaded(machine, sessionId);
 
     const controller = new AbortController();
     onCleanup(() => controller.abort());
     try {
-      const response = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}/origin`, { signal: controller.signal });
+      const response = await apiFetchOn(machine.connection, `/api/sessions/${encodeURIComponent(sessionId)}/origin`, { signal: controller.signal });
       if (response.ok) originRecords.value = (await response.json()) as OriginRecord[];
     } catch {
       // The origin record only adds a detail line; the tab works without it.
@@ -96,7 +99,7 @@ const refreshing = ref(false);
 
 async function refresh(): Promise<void> {
   refreshing.value = true;
-  await store.refresh(props.sessionId);
+  await store.refresh(machine, props.sessionId);
   // Results arrive as pushed updates; keep the spinner long enough to read as an action.
   setTimeout(() => {
     refreshing.value = false;
@@ -123,7 +126,7 @@ async function submitAttach(): Promise<void> {
   const url = attachUrl.value.trim();
   if (!url || attachBusy.value) return;
   attachBusy.value = true;
-  attachError.value = await store.addLink(props.sessionId, url);
+  attachError.value = await store.addLink(machine, props.sessionId, url);
   attachBusy.value = false;
   if (!attachError.value) {
     attachUrl.value = "";

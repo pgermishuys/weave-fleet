@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { defineComponent, h } from "vue";
+import { defineComponent, h, ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
-import { MACHINE_TARGET, targetFor } from "@/lib/machine-target";
+import { MACHINE_TARGET, targetFor, useMachineTarget } from "@/lib/machine-target";
 import { setActiveMachine, type MachineConnection } from "@/lib/machines";
 import { useMessagePagination } from "@/composables/use-message-pagination";
 import { useSendPrompt } from "@/composables/use-send-prompt";
@@ -27,6 +27,19 @@ import {
   useMoveSession,
   useRenameSession,
 } from "@/composables/use-session-actions";
+import { useDiffs } from "@/composables/use-diffs";
+import { clearDiffBaseCache, useDiffBase } from "@/composables/use-diff-base";
+import { useFindFiles } from "@/composables/use-find-files";
+import { useFileBrowser } from "@/composables/use-file-browser";
+import { useOpenFile } from "@/composables/use-open-file";
+import { useOpenDirectory } from "@/composables/use-open-directory";
+import { useServerCanvases } from "@/composables/use-server-canvases";
+import { useAgentBrowser } from "@/composables/use-agent-browser";
+import { useSessionProgress } from "@/composables/use-session-progress";
+import { useSessionTerminals } from "@/composables/use-session-terminals";
+import { useMachineImage } from "@/composables/use-machine-image";
+import { connectTerminal, type TerminalConnectionHandlers } from "@/lib/terminal-socket";
+import { useAppShellStore } from "@/stores/app-shell";
 
 vi.mock("@/composables/use-weave-socket", () => ({
   useWeaveSocket: () => ({ subscribeV2: () => () => {} }),
@@ -81,6 +94,23 @@ const calls: SessionCall[] = [
   { name: "moves the session", use: () => { const { moveSession } = useMoveSession(); return () => moveSession("s1", "p1"); } },
   { name: "forks the session", use: () => { const { forkSession } = useForkSession(); return () => forkSession("s1"); } },
   { name: "deletes the session", use: () => { const { deleteSession } = useDeleteSession(); return () => deleteSession("s1", "i1"); } },
+  { name: "lists the changes", use: () => { const { fetchDiffs } = useDiffs("s1"); return () => fetchDiffs(); } },
+  { name: "reads a changed file's base", use: () => { useDiffBase("s1", "README.md", true); } },
+  { name: "lists the session's files", use: () => { useFindFiles("s1", ""); return () => new Promise((done) => setTimeout(done, 10)); } },
+  { name: "browses the session's folder", use: () => { const { loadRoot } = useFileBrowser(ref("s1")); return () => loadRoot(); } },
+  { name: "opens a file in a tool", use: () => { const { openFile } = useOpenFile(); return () => openFile("README.md", "code"); } },
+  { name: "opens the folder in a tool", use: () => { const { openDirectory } = useOpenDirectory(); return () => openDirectory("/work/harbor-api", "code"); } },
+  { name: "reads the session's canvases", use: () => { useServerCanvases("s1"); } },
+  { name: "reads the agent's browser", use: () => { useAgentBrowser("s1"); } },
+  { name: "reads the session's progress", use: () => { useSessionProgress("s1"); } },
+  {
+    name: "reads the session's terminals",
+    use: () => {
+      const appShell = useAppShellStore();
+      appShell.config = { ...appShell.config, terminalEnabled: true };
+      useSessionTerminals("s1");
+    },
+  },
 ];
 
 interface SentRequest {
@@ -139,6 +169,7 @@ describe("session calls go to the session's machine", () => {
     _resetSideConversationsForTesting();
     _resetRunningWorkForTesting();
     _resetSessionLineageForTesting();
+    clearDiffBaseCache();
     document.cookie = ".WeaveFleet.CSRF=csrf-1";
     fetchMock = vi.fn(async () => Response.json({}));
     vi.stubGlobal("fetch", fetchMock);
@@ -199,5 +230,64 @@ describe("session calls go to the session's machine", () => {
     expect(new URL(requests[0]!.url, window.location.href).origin).toBe(window.location.origin);
     expect(requests[0]!.method).toBe("POST");
     expect(requests[0]!.headers.get("X-CSRF-Token")).toBe("csrf-1");
+  });
+  it("opens a terminal's socket on the machine provided, with its token in the query", async () => {
+    const urls: string[] = [];
+    const handlers: TerminalConnectionHandlers = {
+      onReset: () => {}, onOutput: () => {}, onReady: () => {}, onCleared: () => {}, onExit: () => {}, onStatus: () => {},
+    };
+    const Terminal = defineComponent({
+      setup() {
+        connectTerminal({
+          machine: useMachineTarget(),
+          sessionId: "s1",
+          terminalId: "t1",
+          cols: 80,
+          rows: 24,
+          handlers,
+          createSocket: (url) => {
+            urls.push(url);
+            return { close: () => {} } as unknown as WebSocket;
+          },
+        });
+        return () => h("div");
+      },
+    });
+
+    mount(Terminal, { global: { provide: { [MACHINE_TARGET]: () => targetFor(falcon) } } }).unmount();
+    mount(Terminal).unmount();
+
+    expect(urls).toEqual([
+      `ws://100.64.90.72:2113/api/sessions/s1/terminals/t1/socket?cols=80&rows=24&access_token=${encodeURIComponent(falcon.token)}`,
+      `ws://${window.location.host}/api/sessions/s1/terminals/t1/socket?cols=80&rows=24`,
+    ]);
+  });
+
+  it("shows another machine's picture fetched with its token, and home's straight from its address", async () => {
+    // jsdom has no object URLs.
+    URL.createObjectURL = () => "blob:shot";
+    URL.revokeObjectURL = () => {};
+    fetchMock.mockImplementation(async () => ({ ok: true, blob: async () => new Blob(["png"]) }));
+    let src: { value: string | null } = { value: null };
+    const Picture = defineComponent({
+      setup() {
+        src = useMachineImage("/api/sessions/s1/screenshots/shot_1").src;
+        return () => h("div");
+      },
+    });
+
+    const remote = mount(Picture, { global: { provide: { [MACHINE_TARGET]: () => targetFor(falcon) } } });
+    await flushPromises();
+    expect(src.value).toBe("blob:shot");
+    expect(sent().map((request) => [request.url, request.headers.get("Authorization")])).toEqual([
+      [`${falcon.baseUrl}/api/sessions/s1/screenshots/shot_1`, `Bearer ${falcon.token}`],
+    ]);
+    remote.unmount();
+
+    const home = mount(Picture);
+    await flushPromises();
+    expect(src.value).toBe("/api/sessions/s1/screenshots/shot_1");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    home.unmount();
   });
 });

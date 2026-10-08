@@ -110,7 +110,7 @@ const props = defineProps<{
   after?: string | null;
 }>();
 
-const { api } = useMachineTarget();
+const machine = useMachineTarget();
 
 const emit = defineEmits<{
   /** Whether a turn is running, and the newest reply's text: a side conversation's tab shows both while it's folded. */
@@ -338,7 +338,7 @@ watch(
     if (!needed || olderWorkLoadedFor === sessionId) return;
     olderWorkLoadedFor = sessionId;
     try {
-      const { data, response } = await api.GET("/api/sessions/{id}/work", {
+      const { data, response } = await machine.api.GET("/api/sessions/{id}/work", {
         params: { path: { id: sessionId }, query: { all: true } },
       });
       if (response.ok && sessionId === props.sessionId) olderWork.value = toRunningWorkItems(data);
@@ -1235,7 +1235,7 @@ function handleExpandVisual(payload: VisualPayload): void {
 }
 
 function handleShowCanvas(canvasId: string): void {
-  void focusServerCanvas(props.sessionId, canvasId);
+  void focusServerCanvas(machine, props.sessionId, canvasId);
   showRightPanel();
 }
 

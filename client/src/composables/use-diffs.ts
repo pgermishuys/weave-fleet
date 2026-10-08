@@ -1,8 +1,8 @@
 import { computed, readonly, shallowRef, toValue, watch, type ComputedRef, type MaybeRefOrGetter, type Ref, type ShallowRef } from "vue";
 import type { FileDiffItem, SessionDiffBase, SessionDiffsResponse } from "@/api/client";
-import { api } from "@/api/client";
 import { useWeaveSocket } from "@/composables/use-weave-socket";
 import type { DomainEvent } from "@/lib/domain-events";
+import { useMachineTarget } from "@/lib/machine-target";
 
 export interface UseDiffsResult {
   /** The changed files with their line counts. Contents aren't included; see {@link fetchFileDiff}. */
@@ -32,6 +32,7 @@ export function baseKey(base: SessionDiffBase | null | undefined): string {
 export function useDiffs(
   sessionId: MaybeRefOrGetter<string | null | undefined>,
 ): UseDiffsResult {
+  const { api } = useMachineTarget();
   // Replaced whole, never mutated: a session can change hundreds of files.
   const diffs = shallowRef<readonly FileDiffItem[]>([]);
   const available = shallowRef(false);

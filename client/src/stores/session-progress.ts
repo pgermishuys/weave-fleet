@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { shallowRef } from "vue";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetchOn } from "@/lib/api-client";
+import type { MachineTarget } from "@/lib/machine-target";
 import { parseProgressDetail, sameProgressSummary, type SessionProgressDetail, type SessionProgressSummary } from "@/lib/session-progress";
 
 const path = (sessionId: string) => `/api/sessions/${encodeURIComponent(sessionId)}/progress`;
@@ -35,14 +36,14 @@ export const useSessionProgressStore = defineStore("session-progress", () => {
   }
 
   /** Loads a session's progress once (or again with `force`); pushes keep it current afterwards. */
-  function ensureLoaded(sessionId: string, options: { force?: boolean } = {}): Promise<void> {
+  function ensureLoaded(machine: MachineTarget, sessionId: string, options: { force?: boolean } = {}): Promise<void> {
     if (!sessionId || (!options.force && sessionId in bySession.value)) return Promise.resolve();
     const pending = loading.get(sessionId);
     if (pending) return pending;
 
     const request = (async () => {
       try {
-        const response = await apiFetch(path(sessionId));
+        const response = await apiFetchOn(machine.connection, path(sessionId));
         if (response.status === 204) {
           if (!bySession.value[sessionId]) set(sessionId, null);
           return;

@@ -1,5 +1,6 @@
 import { onBeforeUnmount, toValue, watch, type MaybeRefOrGetter } from "vue";
 import { isTerminalEvent, type TerminalEvent } from "@/lib/domain-events";
+import { useMachineTarget, type MachineTarget } from "@/lib/machine-target";
 import { closeTerminal, createTerminal, listTerminals, TerminalApiError } from "@/lib/terminal-api";
 import { useAppShellStore } from "@/stores/app-shell";
 import { useTerminalsStore } from "@/stores/terminals";
@@ -9,10 +10,10 @@ import { onReconnect, useWeaveSocket } from "@/composables/use-weave-socket";
  * Opens a new terminal in the session and shows it. Returns the error message
  * to show the user, or null when it worked.
  */
-export async function openNewTerminal(sessionId: string, cols: number, rows: number): Promise<string | null> {
+export async function openNewTerminal(machine: MachineTarget, sessionId: string, cols: number, rows: number): Promise<string | null> {
   const store = useTerminalsStore();
   try {
-    const terminal = await createTerminal(sessionId, cols, rows);
+    const terminal = await createTerminal(machine, sessionId, cols, rows);
     store.add(sessionId, terminal, true);
     store.setOpen(sessionId, true);
     return null;
@@ -25,17 +26,17 @@ export async function openNewTerminal(sessionId: string, cols: number, rows: num
  * Closes a terminal tab: it goes at once, and the server ends its shell. If
  * the server refuses, the session's tabs are loaded again so it comes back.
  */
-export async function closeTerminalTab(sessionId: string, terminalId: string): Promise<void> {
+export async function closeTerminalTab(machine: MachineTarget, sessionId: string, terminalId: string): Promise<void> {
   const store = useTerminalsStore();
   store.remove(sessionId, terminalId);
   if (store.terminalsFor(sessionId).length === 0) store.setOpen(sessionId, false);
 
   try {
-    await closeTerminal(sessionId, terminalId);
+    await closeTerminal(machine, sessionId, terminalId);
   } catch (error) {
     console.warn(`Failed to close terminal ${terminalId}:`, error);
     try {
-      store.setTerminals(sessionId, await listTerminals(sessionId));
+      store.setTerminals(sessionId, await listTerminals(machine, sessionId));
     } catch {
       // The next session switch or reconnect loads them again.
     }
@@ -49,6 +50,7 @@ export async function closeTerminalTab(sessionId: string, terminalId: string): P
  * terminals turned off.
  */
 export function useSessionTerminals(sessionId: MaybeRefOrGetter<string | null | undefined>): void {
+  const machine = useMachineTarget();
   const store = useTerminalsStore();
   const appShell = useAppShellStore();
   const { subscribeV2 } = useWeaveSocket();
@@ -63,7 +65,7 @@ export function useSessionTerminals(sessionId: MaybeRefOrGetter<string | null | 
     loading = pending;
 
     try {
-      const list = await listTerminals(id);
+      const list = await listTerminals(machine, id);
       if (current !== loadId) return;
       store.setTerminals(id, list);
       for (const event of pending.buffered) store.applyEvent(event);

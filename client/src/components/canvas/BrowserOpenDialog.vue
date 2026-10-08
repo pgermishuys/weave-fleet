@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { fetchServerCanvases } from "@/composables/use-server-canvases";
+import { useMachineTarget } from "@/lib/machine-target";
 import { browserTarget } from "@/lib/browser-target";
 import { useAppRunsStore } from "@/stores/app-runs";
 import { serverCanvasTabId, useCanvasesStore } from "@/stores/canvases";
@@ -16,6 +17,8 @@ const props = defineProps<{
   sessionId: string;
   open: boolean;
 }>();
+
+const machine = useMachineTarget();
 
 const emit = defineEmits<{
   "update:open": [value: boolean];
@@ -49,7 +52,7 @@ watch(
     suggestions.value = [];
 
     try {
-      const known = await appRuns.listSessionApps(props.sessionId);
+      const known = await appRuns.listSessionApps(machine, props.sessionId);
       const commands = [known.previewCommand, ...known.apps.map((app) => app.command).reverse()];
       suggestions.value = [...new Set(commands.filter((command): command is string => !!command))];
       if (!touched && known.previewCommand) value.value = known.previewCommand;
@@ -79,11 +82,11 @@ async function submit(): Promise<void> {
   error.value = null;
   try {
     const canvasId = next.kind === "command"
-      ? await appRuns.startCommand(props.sessionId, next.command)
-      : await appRuns.openAddress(props.sessionId, next.url);
+      ? await appRuns.startCommand(machine, props.sessionId, next.command)
+      : await appRuns.openAddress(machine, props.sessionId, next.url);
 
     // The canvas events bring the tab too; loading it here doesn't depend on the socket.
-    canvases.setServerCanvases(props.sessionId, await fetchServerCanvases(props.sessionId));
+    canvases.setServerCanvases(props.sessionId, await fetchServerCanvases(machine, props.sessionId));
     canvases.activate(props.sessionId, serverCanvasTabId(canvasId));
     emit("update:open", false);
   } catch (e) {

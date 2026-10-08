@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createMockTerminalConnection } from "@/lib/terminal-mock-shell";
 import type { TerminalConnectionHandlers } from "@/lib/terminal-socket";
+import { liveTarget } from "@/lib/machine-target";
 
 const ESC = String.fromCharCode(27);
 const CTRL_C = String.fromCharCode(3);
@@ -26,10 +27,14 @@ async function start(terminalId: string) {
     onExit: (code) => exits.push(code),
     onStatus: () => {},
   };
-  const connection = createMockTerminalConnection({ sessionId: "s1", terminalId, cols: 80, rows: 24, handlers });
+  const connection = createMockTerminalConnection({ machine: home, sessionId: "s1", terminalId, cols: 80, rows: 24, handlers });
   await Promise.resolve();
   return { connection, screen: () => plain(output), exits };
 }
+
+
+/** The live machine: home, in these tests. */
+const home = liveTarget();
 
 describe("createMockTerminalConnection", () => {
   it("starts the first terminal with some output and a prompt", async () => {

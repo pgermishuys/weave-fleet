@@ -1,6 +1,6 @@
 import { computed, onUnmounted, readonly, ref, shallowRef, toValue, watch, type MaybeRefOrGetter, type Ref, type ShallowRef } from "vue";
-import { api } from "@/api/client";
 import { narrowFileMatches } from "@/lib/file-matches";
+import { useMachineTarget } from "@/lib/machine-target";
 
 interface FindFilesResponse {
   sessionId: string;
@@ -22,6 +22,7 @@ const SEARCH_DEBOUNCE_MS = 80;
  * debounced while typing. Until the answer comes, the last one is narrowed to what still matches the query.
  */
 export function useFindFiles(sessionId: MaybeRefOrGetter<string | null | undefined>, query: MaybeRefOrGetter<string | null>): UseFindFilesResult {
+  const { api } = useMachineTarget();
   // The server's last answer, and the query it answers.
   const answer = ref<{ query: string; files: string[] }>({ query: "", files: [] });
   const isLoading = shallowRef(false);

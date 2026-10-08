@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
-import { apiUrl } from "@/lib/api-client";
 import { agentFrameUrl } from "@/composables/use-agent-browser";
 import { useMachineImage } from "@/composables/use-machine-image";
 import { useAgentBrowserStore } from "@/stores/agent-browser";
@@ -33,7 +32,7 @@ const size = shallowRef({ width: 0, height: 0 });
 // The last picture that loaded stays up while the next one comes, so the view doesn't flicker.
 const shown = shallowRef<string | null>(null);
 
-const { src, failed } = useMachineImage(() => apiUrl(agentFrameUrl(props.sessionId, props.tabId, nonce.value)));
+const { src, failed } = useMachineImage(() => agentFrameUrl(props.sessionId, props.tabId, nonce.value));
 watch(src, (next) => {
   if (!next) return;
   const image = new Image();

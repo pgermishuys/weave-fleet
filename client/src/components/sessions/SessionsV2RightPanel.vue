@@ -21,6 +21,7 @@ import { useCanvasesStore } from "@/stores/canvases";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSidebarStore } from "@/stores/sidebar";
 import { useSmartLinksStore } from "@/stores/smart-links";
+import { useMachineTarget } from "@/lib/machine-target";
 import type { CanvasTabBadge } from "@/lib/canvas-registry";
 import { needsAttention } from "@/lib/smart-links";
 import { formatAnnotationPrompt } from "@/lib/format-annotation-prompt";
@@ -72,11 +73,12 @@ const selectedSession = computed(() =>
 
 // --- Context tab: added (without focus) the first time the session has something attached ---
 const smartLinksStore = useSmartLinksStore();
+const machine = useMachineTarget();
 
 watch(
   activeSessionId,
   (sessionId) => {
-    if (sessionId) void smartLinksStore.ensureLoaded(sessionId);
+    if (sessionId) void smartLinksStore.ensureLoaded(machine, sessionId);
   },
   { immediate: true },
 );

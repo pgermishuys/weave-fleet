@@ -7,10 +7,11 @@ import {
   type TerminalConnectionHandlers,
   type TerminalConnectionStatus,
 } from "@/lib/terminal-socket";
+import { liveTarget } from "@/lib/machine-target";
 
-vi.mock("@/lib/api-client", () => ({
-  wsUrl: (path: string) => `ws://fleet.test${path}`,
-  apiFetch: vi.fn(),
+vi.mock("@/lib/api-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api-client")>()),
+  wsUrlOn: (_machine: unknown, path: string) => `ws://fleet.test${path}`,
 }));
 
 class FakeSocket {
@@ -67,6 +68,7 @@ function setup(extra: Partial<ConnectTerminalOptions> = {}) {
     onStatus: (status) => statuses.push(status),
   };
   const connection = connectTerminal({
+    machine: home,
     sessionId: "s 1",
     terminalId: "t1",
     cols: 100,
@@ -84,6 +86,10 @@ function setup(extra: Partial<ConnectTerminalOptions> = {}) {
   const sentText = (socket: FakeSocket) => socket.sent.map((item) => (typeof item === "string" ? item : decoder.decode(item)));
   return { connection, sockets, scheduled, events, statuses, latest, sentText };
 }
+
+
+/** The live machine: home, in these tests. */
+const home = liveTarget();
 
 describe("connectTerminal", () => {
   beforeEach(() => {

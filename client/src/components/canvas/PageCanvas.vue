@@ -2,7 +2,8 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { ExternalLink, RotateCw, TriangleAlert } from "lucide-vue-next";
 import { appendDraftText } from "@/composables/use-draft-state";
-import { apiUrl } from "@/lib/api-client";
+import { apiUrlOn } from "@/lib/api-client";
+import { useMachineTarget } from "@/lib/machine-target";
 import { dispatchCommandEvent } from "@/lib/command-events";
 import { keepPageState, pageStateMessage, readPageMessage } from "@/lib/page-bridge";
 import { pageAddress, type ShownPage } from "@/lib/server-canvas";
@@ -20,10 +21,12 @@ const props = defineProps<{
   page: ShownPage & { title: string };
 }>();
 
+const machine = useMachineTarget();
+
 const reloads = ref(0);
 const frame = ref<HTMLIFrameElement | null>(null);
 
-const address = computed(() => apiUrl(pageAddress(props.page)));
+const address = computed(() => apiUrlOn(machine.connection, pageAddress(props.page)));
 const frameKey = computed(() => `${props.page.pageId}:${props.page.shownAt}:${reloads.value}`);
 const fileName = computed(() => props.page.source.split(/[\\/]/).pop() || props.page.entry);
 

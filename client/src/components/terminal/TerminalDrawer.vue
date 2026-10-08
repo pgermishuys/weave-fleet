@@ -6,6 +6,7 @@ import type { SelectedLines } from "@/components/terminal/TerminalView.vue";
 import { addDraftTerminalContext } from "@/composables/use-draft-terminal-context";
 import { closeTerminalTab, openNewTerminal } from "@/composables/use-session-terminals";
 import { dispatchCommandEvent } from "@/lib/command-events";
+import { useMachineTarget } from "@/lib/machine-target";
 import type { TerminalSummary } from "@/lib/terminal-api";
 import { DEFAULT_DRAWER_HEIGHT, MIN_DRAWER_HEIGHT, useTerminalsStore } from "@/stores/terminals";
 
@@ -20,6 +21,8 @@ const props = defineProps<{
   /** The session's folder, where new shells start. */
   directory: string | null;
 }>();
+
+const machine = useMachineTarget();
 
 const MAX_HEIGHT_SHARE = 0.6;
 const KEYBOARD_STEP = 24;
@@ -85,7 +88,7 @@ async function newTerminal(): Promise<void> {
   creating.value = true;
   error.value = null;
   const size = activeSize.value ?? INITIAL_SIZE;
-  const failure = await openNewTerminal(props.sessionId, size.cols, size.rows);
+  const failure = await openNewTerminal(machine, props.sessionId, size.cols, size.rows);
   creating.value = false;
   error.value = failure;
 }
@@ -95,7 +98,7 @@ function activate(terminal: TerminalSummary): void {
 }
 
 function close(terminal: TerminalSummary): void {
-  void closeTerminalTab(props.sessionId, terminal.id);
+  void closeTerminalTab(machine, props.sessionId, terminal.id);
 }
 
 function onEnded(terminal: TerminalSummary): void {

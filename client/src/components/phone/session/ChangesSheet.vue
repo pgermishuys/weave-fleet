@@ -3,7 +3,8 @@ import { computed, shallowRef, watch } from "vue";
 import { ChevronLeft, File, LoaderCircle, X } from "lucide-vue-next";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
 import type { FileDiffItem, SessionDiffBase } from "@/api/client";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetchOn } from "@/lib/api-client";
+import { useMachineTarget } from "@/lib/machine-target";
 import { diffBaseLabel } from "@/lib/diff-base";
 import { parseDiffLines, type DiffLine } from "@/lib/diff-parser";
 
@@ -15,6 +16,8 @@ const props = defineProps<{
   loading: boolean;
   base?: SessionDiffBase | null;
 }>();
+
+const machine = useMachineTarget();
 const emit = defineEmits<{ (event: "close"): void }>();
 
 const picked = shallowRef<FileDiffItem | null>(null);
@@ -52,7 +55,7 @@ async function openFile(item: FileDiffItem): Promise<void> {
   lines.value = null;
   failed.value = null;
   try {
-    const response = await apiFetch(`/api/sessions/${encodeURIComponent(props.sessionId)}/diffs/file?path=${encodeURIComponent(item.file)}`);
+    const response = await apiFetchOn(machine.connection, `/api/sessions/${encodeURIComponent(props.sessionId)}/diffs/file?path=${encodeURIComponent(item.file)}`);
     if (!response.ok) throw new Error(`It answered ${response.status}.`);
     const full = await response.json() as FileDiffItem;
     if (full.isBinary || full.binary) {

@@ -1,6 +1,7 @@
 import { shallowRef, toValue, watch, type MaybeRefOrGetter, type ShallowRef } from "vue";
 import type { FileDiffItem } from "@/api/client";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetchOn } from "@/lib/api-client";
+import { useMachineTarget, type MachineTarget } from "@/lib/machine-target";
 
 /** Open files are few; keep the bases of the most recent ones. */
 const MAX_CACHED = 50;
@@ -14,8 +15,8 @@ const cache = new Map<string, Promise<string | null>>();
  * null when it can't be read (it isn't among the changes, or the request failed; failures aren't cached).
  * `base` is {@link baseKey} of that comparison.
  */
-export function fetchDiffBase(sessionId: string, path: string, base = ""): Promise<string | null> {
-  const key = `${sessionId}\u0000${base}\u0000${path}`;
+export function fetchDiffBase(machine: MachineTarget, sessionId: string, path: string, base = ""): Promise<string | null> {
+  const key = `${machine.key}\u0000${sessionId}\u0000${base}\u0000${path}`;
   const cached = cache.get(key);
   if (cached) {
     cache.delete(key);
@@ -25,7 +26,8 @@ export function fetchDiffBase(sessionId: string, path: string, base = ""): Promi
 
   const request = (async () => {
     try {
-      const response = await apiFetch(
+      const response = await apiFetchOn(
+        machine.connection,
         `/api/sessions/${encodeURIComponent(sessionId)}/diffs/file?path=${encodeURIComponent(path)}`,
       );
       if (!response.ok) return null;
@@ -60,6 +62,7 @@ export function useDiffBase(
   changed: MaybeRefOrGetter<boolean>,
   comparedWith: MaybeRefOrGetter<string> = "",
 ): Readonly<ShallowRef<string | null>> {
+  const machine = useMachineTarget();
   const base = shallowRef<string | null>(null);
   let request = 0;
 
@@ -71,7 +74,7 @@ export function useDiffBase(
         base.value = null;
         return;
       }
-      const loaded = await fetchDiffBase(id, file, compared);
+      const loaded = await fetchDiffBase(machine, id, file, compared);
       if (current === request) base.value = loaded;
     },
     { immediate: true },

@@ -6,6 +6,7 @@ import type { DomainEvent } from "@/lib/domain-events";
 import { openBuffer } from "@/lib/code-editor/buffers";
 import { fileCanvasId, useCanvasesStore } from "@/stores/canvases";
 import { useFileBuffersStore } from "@/stores/file-buffers";
+import { liveTarget } from "@/lib/machine-target";
 
 const { readSessionFileMock, handlers, topics } = vi.hoisted(() => ({
   readSessionFileMock: vi.fn(),
@@ -49,10 +50,18 @@ async function settle() {
 async function setup() {
   const wrapper = mount(defineComponent({ setup: () => (useFileLiveUpdates(ref("s1")), () => h("div")) }));
   readSessionFileMock.mockResolvedValueOnce(disk("one\ntwo\n", "h1"));
-  const record = await openBuffer("s1", "src/app.ts");
+  const record = await openBuffer(home, "s1", "src/app.ts");
   readSessionFileMock.mockClear();
   return { wrapper, record };
 }
+
+
+/** The live machine: home, in these tests. */
+const home = liveTarget();
+
+
+/** Nothing provides another machine here, so calls go to the live one: home. */
+const live = expect.objectContaining({ key: "home", isLive: true });
 
 describe("useFileLiveUpdates", () => {
   beforeEach(() => {
@@ -79,7 +88,7 @@ describe("useFileLiveUpdates", () => {
     emit(filesChanged("/repo/src/app.ts"));
     await settle();
 
-    expect(readSessionFileMock).toHaveBeenCalledWith("s1", "src/app.ts");
+    expect(readSessionFileMock).toHaveBeenCalledWith(live, "s1", "src/app.ts");
     expect(record.state?.doc.toString()).toBe("one\nTWO\n");
     expect(useCanvasesStore().updatedAt[fileCanvasId("src/app.ts")]).toBeDefined();
     wrapper.unmount();

@@ -104,7 +104,7 @@ describe("toToolCardItem", () => {
       metadata: { canvasId: "cv_1", version: 2, screenshot: { sessionId: "ses parent", id: "shot_01J", width: 390, height: 844 } },
     }, "fleet_browser_screenshot"));
 
-    expect(shot.screenshot).toEqual({ url: "/api/sessions/ses%20parent/screenshots/shot_01J", width: 390, height: 844 });
+    expect(shot.screenshot).toEqual({ path: "/api/sessions/ses%20parent/screenshots/shot_01J", width: 390, height: 844 });
   });
 
   it("gives a call no screenshot when its metadata doesn't name a whole one", () => {

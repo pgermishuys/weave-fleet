@@ -1,5 +1,6 @@
 import { onBeforeUnmount, toValue, watch, type MaybeRefOrGetter } from "vue";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetchOn } from "@/lib/api-client";
+import { useMachineTarget, type MachineTarget } from "@/lib/machine-target";
 import { isAppEvent, isCanvasEvent, type AppUpdated, type CanvasEvent } from "@/lib/domain-events";
 import type { ServerCanvasSnapshot } from "@/lib/server-canvas";
 import { useAppRunsStore } from "@/stores/app-runs";
@@ -10,8 +11,8 @@ function canvasesPath(sessionId: string): string {
   return `/api/sessions/${encodeURIComponent(sessionId)}/canvases`;
 }
 
-export async function fetchServerCanvases(sessionId: string): Promise<ServerCanvasSnapshot[]> {
-  const response = await apiFetch(canvasesPath(sessionId));
+export async function fetchServerCanvases(machine: MachineTarget, sessionId: string): Promise<ServerCanvasSnapshot[]> {
+  const response = await apiFetchOn(machine.connection, canvasesPath(sessionId));
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const body: unknown = await response.json();
   return Array.isArray(body) ? (body as ServerCanvasSnapshot[]) : [];
@@ -22,17 +23,17 @@ export async function fetchServerCanvases(sessionId: string): Promise<ServerCanv
  * `canvas.closed`, which then finds nothing to remove. If the server refuses,
  * the session's canvases are loaded again so the tab comes back.
  */
-export async function closeServerCanvas(sessionId: string, canvasId: string): Promise<void> {
+export async function closeServerCanvas(machine: MachineTarget, sessionId: string, canvasId: string): Promise<void> {
   const store = useCanvasesStore();
   store.applyCanvasEvent({ type: "canvas.closed", payload: { sessionId, canvasId } });
 
   try {
-    const response = await apiFetch(`${canvasesPath(sessionId)}/${encodeURIComponent(canvasId)}`, { method: "DELETE" });
+    const response = await apiFetchOn(machine.connection, `${canvasesPath(sessionId)}/${encodeURIComponent(canvasId)}`, { method: "DELETE" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
   } catch (error) {
     console.warn(`Failed to close canvas ${canvasId}:`, error);
     try {
-      store.setServerCanvases(sessionId, await fetchServerCanvases(sessionId));
+      store.setServerCanvases(sessionId, await fetchServerCanvases(machine, sessionId));
     } catch {
       // The next session switch or reconnect loads them again.
     }
@@ -43,12 +44,12 @@ export async function closeServerCanvas(sessionId: string, canvasId: string): Pr
  * Bring a server canvas forward: at once when its tab is open here, and through Fleet, which reopens it if it
  * was closed and tells every open client (`canvas.updated`, `canvas.focused`).
  */
-export async function focusServerCanvas(sessionId: string, canvasId: string): Promise<void> {
+export async function focusServerCanvas(machine: MachineTarget, sessionId: string, canvasId: string): Promise<void> {
   const store = useCanvasesStore();
   store.activate(sessionId, serverCanvasTabId(canvasId));
 
   try {
-    const response = await apiFetch(`${canvasesPath(sessionId)}/${encodeURIComponent(canvasId)}/focus`, { method: "POST" });
+    const response = await apiFetchOn(machine.connection, `${canvasesPath(sessionId)}/${encodeURIComponent(canvasId)}/focus`, { method: "POST" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
   } catch (error) {
     console.warn(`Failed to focus canvas ${canvasId}:`, error);
@@ -63,6 +64,7 @@ export async function focusServerCanvas(sessionId: string, canvasId: string): Pr
  * app-runs store, for the apps browser canvases show.
  */
 export function useServerCanvases(sessionId: MaybeRefOrGetter<string | null | undefined>): void {
+  const machine = useMachineTarget();
   const store = useCanvasesStore();
   const appRuns = useAppRunsStore();
 
@@ -87,7 +89,7 @@ export function useServerCanvases(sessionId: MaybeRefOrGetter<string | null | un
     loading = pending;
 
     try {
-      const list = await fetchServerCanvases(id);
+      const list = await fetchServerCanvases(machine, id);
       if (current !== loadId) return;
       store.setServerCanvases(id, list);
       for (const event of pending.buffered) store.applyCanvasEvent(event);

@@ -14,6 +14,7 @@ import {
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { useCanvasesStore } from "@/stores/canvases";
 import { useSmartLinksStore } from "@/stores/smart-links";
+import { useMachineTarget } from "@/lib/machine-target";
 
 const MAX_CHIPS = 2;
 
@@ -22,6 +23,8 @@ const props = defineProps<{
   origin?: SessionOrigin | null;
 }>();
 
+const machine = useMachineTarget();
+
 const smartLinks = useSmartLinksStore();
 const canvases = useCanvasesStore();
 const { showRightPanel } = useSidebarMobile();
@@ -29,7 +32,7 @@ const { showRightPanel } = useSidebarMobile();
 watch(
   () => props.sessionId,
   (sessionId) => {
-    void smartLinks.ensureLoaded(sessionId);
+    void smartLinks.ensureLoaded(machine, sessionId);
   },
   { immediate: true },
 );

@@ -8,6 +8,7 @@ import { useResizeObserver } from "@vueuse/core";
 import { Copy, MessageSquarePlus } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import type { GlobalShortcut } from "@/lib/command-registry";
+import { useMachineTarget } from "@/lib/machine-target";
 import { openTerminalConnection } from "@/lib/terminal-connection";
 import { terminalKeyOwner } from "@/lib/terminal-keys";
 import { terminalLineRange } from "@/lib/format-terminal-context";
@@ -32,6 +33,8 @@ const props = defineProps<{
   /** Typed into the shell once it's ready, without pressing Enter: the user reads it and runs it. */
   initialInput?: string;
 }>();
+
+const machine = useMachineTarget();
 
 const emit = defineEmits<{
   size: [cols: number, rows: number];
@@ -204,6 +207,7 @@ onMounted(async () => {
 
   let typedInitialInput = false;
   connection = openTerminalConnection({
+    machine,
     sessionId: props.sessionId,
     terminalId: props.terminalId,
     basePath: props.basePath,

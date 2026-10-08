@@ -13,6 +13,7 @@ import {
   harnessStatusIcon,
   harnessStatusLabel,
 } from "@/lib/harness-display";
+import { useMachineTarget } from "@/lib/machine-target";
 import { closeSetupTerminal, createSetupTerminal, SETUP_TERMINALS_PATH } from "@/lib/terminal-api";
 import { useAppShellStore } from "@/stores/app-shell";
 import { usePreferencesStore } from "@/stores/preferences";
@@ -43,6 +44,7 @@ interface ActiveTerminal {
 /** How often the harnesses are checked while the setup terminal is open. */
 const CHECK_EVERY_MS = 3000;
 
+const machine = useMachineTarget();
 const { config } = storeToRefs(useAppShellStore());
 const preferences = usePreferencesStore();
 
@@ -144,9 +146,9 @@ async function start(harness: HarnessInfo, action: SetupAction): Promise<void> {
 
   active.value = { harnessType: harness.type, action, command, terminalId: null };
   try {
-    const terminal = await createSetupTerminal(100, 14);
+    const terminal = await createSetupTerminal(machine, 100, 14);
     if (active.value?.harnessType !== harness.type) {
-      void closeSetupTerminal(terminal.id).catch(() => {});
+      void closeSetupTerminal(machine, terminal.id).catch(() => {});
       return;
     }
     active.value = { ...active.value, terminalId: terminal.id };
@@ -200,7 +202,7 @@ async function closeTerminal(): Promise<void> {
   active.value = null;
   if (terminalId) {
     refreshAllHarnesses();
-    await closeSetupTerminal(terminalId).catch(() => {});
+    await closeSetupTerminal(machine, terminalId).catch(() => {});
   }
 }
 

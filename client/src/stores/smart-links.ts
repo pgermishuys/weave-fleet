@@ -1,6 +1,7 @@
 import { defineStore } from "pinia"
 import { shallowRef } from "vue"
-import { apiFetch } from "@/lib/api-client"
+import { apiFetch, apiFetchOn } from "@/lib/api-client"
+import type { MachineTarget } from "@/lib/machine-target"
 import { isHeaderLink, isPullRequest, isVisibleLink, parseWireLink, type SmartLink, type SmartLinkWire } from "@/lib/smart-links"
 
 /** A request from a header chip to show one link in the Context tab. */
@@ -142,14 +143,14 @@ export const useSmartLinksStore = defineStore("smart-links", () => {
   }
 
   /** Loads a session's links once; pushed updates keep them current afterwards. */
-  function ensureLoaded(sessionId: string): Promise<void> {
+  function ensureLoaded(machine: MachineTarget, sessionId: string): Promise<void> {
     if (!sessionId || bySession.value[sessionId]) return Promise.resolve()
     const pending = loading.get(sessionId)
     if (pending) return pending
 
     const request = (async () => {
       try {
-        const response = await apiFetch(path(sessionId, "/all"))
+        const response = await apiFetchOn(machine.connection, path(sessionId, "/all"))
         if (response.ok) setLinks(sessionId, (await response.json()) as SmartLinkWire[])
       } catch {
         // Links are optional context; the session works without them.
@@ -180,9 +181,9 @@ export const useSmartLinksStore = defineStore("smart-links", () => {
   }
 
   /** Attaches a pull request or issue URL. Returns an error message, or null on success. */
-  async function addLink(sessionId: string, url: string): Promise<string | null> {
+  async function addLink(machine: MachineTarget, sessionId: string, url: string): Promise<string | null> {
     try {
-      const response = await apiFetch(path(sessionId), {
+      const response = await apiFetchOn(machine.connection, path(sessionId), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url }),
@@ -198,23 +199,23 @@ export const useSmartLinksStore = defineStore("smart-links", () => {
     }
   }
 
-  async function setPinned(sessionId: string, linkId: string, pinned: boolean): Promise<void> {
+  async function setPinned(machine: MachineTarget, sessionId: string, linkId: string, pinned: boolean): Promise<void> {
     const link = bySession.value[sessionId]?.find((l) => l.id === linkId)
     if (!link) return
     const previous = link.relationship
     patchLink(sessionId, linkId, { relationship: pinned ? "pinned" : "mentioned" })
     try {
-      const response = await apiFetch(path(sessionId, `/${encodeURIComponent(linkId)}/${pinned ? "pin" : "unpin"}`), { method: "PATCH" })
+      const response = await apiFetchOn(machine.connection, path(sessionId, `/${encodeURIComponent(linkId)}/${pinned ? "pin" : "unpin"}`), { method: "PATCH" })
       if (!response.ok) patchLink(sessionId, linkId, { relationship: previous })
     } catch {
       patchLink(sessionId, linkId, { relationship: previous })
     }
   }
 
-  async function dismiss(sessionId: string, linkId: string): Promise<void> {
+  async function dismiss(machine: MachineTarget, sessionId: string, linkId: string): Promise<void> {
     patchLink(sessionId, linkId, { isDismissed: true })
     try {
-      const response = await apiFetch(path(sessionId, `/${encodeURIComponent(linkId)}/dismiss`), { method: "PATCH" })
+      const response = await apiFetchOn(machine.connection, path(sessionId, `/${encodeURIComponent(linkId)}/dismiss`), { method: "PATCH" })
       if (!response.ok) patchLink(sessionId, linkId, { isDismissed: false })
     } catch {
       patchLink(sessionId, linkId, { isDismissed: false })
@@ -222,9 +223,9 @@ export const useSmartLinksStore = defineStore("smart-links", () => {
   }
 
   /** Asks the server to re-check the session's links now; results arrive as pushed updates. */
-  async function refresh(sessionId: string): Promise<boolean> {
+  async function refresh(machine: MachineTarget, sessionId: string): Promise<boolean> {
     try {
-      const response = await apiFetch(path(sessionId, "/refresh"), { method: "POST" })
+      const response = await apiFetchOn(machine.connection, path(sessionId, "/refresh"), { method: "POST" })
       return response.ok
     } catch {
       return false

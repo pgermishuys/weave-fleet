@@ -15,6 +15,7 @@ import UnsavedFileDialog from "@/components/canvas/UnsavedFileDialog.vue";
 import type { UseDiffsResult } from "@/composables/use-diffs";
 import { useDragScroll } from "@/composables/use-drag-scroll";
 import { closeServerCanvas } from "@/composables/use-server-canvases";
+import { useMachineTarget } from "@/lib/machine-target";
 import {
   CANVAS_TYPES,
   PICKABLE_CANVAS_KINDS,
@@ -43,6 +44,7 @@ const props = withDefaults(defineProps<{
   widenable: true,
 });
 
+const machine = useMachineTarget();
 const store = useCanvasesStore();
 const fileBuffers = useFileBuffersStore();
 const sharedDiffs = inject<UseDiffsResult | null>("sharedDiffs", null);
@@ -146,7 +148,7 @@ const closingSaving = ref(false);
 
 function close(canvas: CanvasInstance): void {
   if (canvas.server) {
-    void closeServerCanvas(props.sessionId, canvas.server.canvasId);
+    void closeServerCanvas(machine, props.sessionId, canvas.server.canvasId);
     return;
   }
   if (isUnsaved(canvas)) {
@@ -168,7 +170,7 @@ async function saveAndClose(): Promise<void> {
   closingSaving.value = true;
   try {
     const { saveBuffer } = await import("@/lib/code-editor/buffers");
-    const outcome = await saveBuffer(props.sessionId, canvas.file.path);
+    const outcome = await saveBuffer(machine, props.sessionId, canvas.file.path);
     closingFile.value = null;
     if (outcome.kind === "saved") {
       store.close(props.sessionId, canvas.id);

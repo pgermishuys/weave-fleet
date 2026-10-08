@@ -13,7 +13,10 @@ const { apiFetchMock, handlers, reconnectCallbacks } = vi.hoisted(() => ({
   reconnectCallbacks: new Set<() => void>(),
 }));
 
-vi.mock("@/lib/api-client", () => ({ apiFetch: apiFetchMock }));
+vi.mock("@/lib/api-client", () => ({
+  apiFetch: apiFetchMock,
+  apiFetchOn: (_machine: unknown, ...args: unknown[]) => apiFetchMock(...args),
+}));
 
 vi.mock("@/composables/use-signalr-socket", () => ({
   onGlobalEvent: (topic: string, handler: (event: unknown) => void) => {
