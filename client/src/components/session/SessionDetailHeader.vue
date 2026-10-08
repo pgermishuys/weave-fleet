@@ -71,6 +71,8 @@ const sessionsStore = useSessionsStore();
 const machines = useMachinesStore();
 /** The machine the session runs on: the live one, or another opened in place. */
 const runsOn = computed(() => machines.entries.find((entry) => entry.key === machine.key) ?? machines.live);
+/** Its machine stopped answering: a turn it was running when it went quiet reads so, not "Working". */
+const answering = computed(() => machines.isAnswering(machine.key));
 const { sessionListShown } = storeToRefs(useSidebarStore());
 let composerDisabledSyncTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -168,6 +170,9 @@ const sessionStatusIndicator = computed(() => {
     case "disconnected":
       return "disconnected";
     default:
+      if (!answering.value && ["busy", "delegating", "retry"].includes(effectiveActivityStatus.value ?? "")) {
+        return "not-answering";
+      }
       if (effectiveActivityStatus.value === "retry") {
         return "retry";
       }
@@ -186,6 +191,8 @@ const sessionStatusLabel = computed(() => {
       return "Working";
     case "disconnected":
       return "Disconnected";
+    case "not-answering":
+      return "Not answering";
     case "retry":
       return retryAttemptLabel(retry.value) ? `Retrying (${retryAttemptLabel(retry.value)})…` : "Retrying…";
     case "waiting":
@@ -465,9 +472,10 @@ onUnmounted(() => {
           <span
             v-if="machines.hasMachines"
             class="session-detail-header__machine"
-            :title="`Runs on ${runsOn.name}`"
+            :class="{ 'session-detail-header__machine--quiet': !answering }"
+            :title="answering ? `Runs on ${runsOn.name}` : `${runsOn.name} isn't answering`"
             data-testid="session-machine"
-          >{{ runsOn.name }}</span>
+          >{{ runsOn.name }}<template v-if="!answering"> · not answering</template></span>
           <span
             v-if="props.projectName"
             class="session-detail-header__project"
@@ -865,6 +873,11 @@ onUnmounted(() => {
   font-family: var(--font-mono);
   font-size: 10.5px;
   font-weight: 600;
+}
+
+.session-detail-header__machine--quiet {
+  background: color-mix(in srgb, var(--muted) 14%, transparent);
+  color: var(--muted);
 }
 
 .session-detail-header__project,

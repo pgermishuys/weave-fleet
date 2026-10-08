@@ -488,11 +488,18 @@ export async function unpinSession(machine: MachineTarget, sessionId: string): P
   }
 }
 
-function createRetentionMutation(targetStatus: "archived" | "active", actionName: string, fallbackMessage: string) {
+/**
+ * The machine a session is on, for an action used outside that session's views (the command palette, the archive
+ * queue), which have no machine provided: `useMachinesStore().sessionTarget`. Inside them, leave it out.
+ */
+export type SessionMachine = (sessionId: string) => MachineTarget;
+
+function createRetentionMutation(targetStatus: "archived" | "active", actionName: string, fallbackMessage: string, machineOf?: SessionMachine) {
   const state = createMutationState();
-  const { api } = useMachineTarget();
+  const provided = useMachineTarget();
 
   async function updateRetention(sessionId: string): Promise<void> {
+    const { api } = machineOf?.(sessionId) ?? provided;
     await state.execute(async () => {
       const { error, response } = await api.PATCH("/api/sessions/{id}/retention", {
         params: {
@@ -516,8 +523,8 @@ function createRetentionMutation(targetStatus: "archived" | "active", actionName
   };
 }
 
-export function useArchiveSession(): UseArchiveSessionResult {
-  const mutation = createRetentionMutation("archived", "session.archive", "Failed to archive session");
+export function useArchiveSession(machineOf?: SessionMachine): UseArchiveSessionResult {
+  const mutation = createRetentionMutation("archived", "session.archive", "Failed to archive session", machineOf);
 
   return {
     archiveSession: mutation.updateRetention,
@@ -526,8 +533,8 @@ export function useArchiveSession(): UseArchiveSessionResult {
   };
 }
 
-export function useUnarchiveSession(): UseUnarchiveSessionResult {
-  const mutation = createRetentionMutation("active", "session.unarchive", "Failed to restore session");
+export function useUnarchiveSession(machineOf?: SessionMachine): UseUnarchiveSessionResult {
+  const mutation = createRetentionMutation("active", "session.unarchive", "Failed to restore session", machineOf);
 
   return {
     unarchiveSession: mutation.updateRetention,
@@ -536,15 +543,16 @@ export function useUnarchiveSession(): UseUnarchiveSessionResult {
   };
 }
 
-export function useForkSession(): UseForkSessionResult {
-  const machine = useMachineTarget();
-  const { api } = machine;
+export function useForkSession(machineOf?: SessionMachine): UseForkSessionResult {
+  const provided = useMachineTarget();
   const error = shallowRef<string | undefined>(undefined);
   const forkingSessionId = shallowRef<string | null>(null);
   const isForking = computed(() => forkingSessionId.value !== null);
   const sessionsStore = getSessionsStoreSafely();
 
   async function forkSession(sessionId: string, opts?: ForkSessionRequest): Promise<ForkSessionResponse> {
+    const machine = machineOf?.(sessionId) ?? provided;
+    const { api } = machine;
     forkingSessionId.value = sessionId;
     error.value = undefined;
 
@@ -597,14 +605,15 @@ export function useForkSession(): UseForkSessionResult {
   };
 }
 
-export function useNewSessionInFolder(): UseNewSessionInFolderResult {
-  const machine = useMachineTarget();
-  const { api } = machine;
+export function useNewSessionInFolder(machineOf?: SessionMachine): UseNewSessionInFolderResult {
+  const provided = useMachineTarget();
   const error = shallowRef<string | undefined>(undefined);
   const startingFromSessionId = shallowRef<string | null>(null);
   const sessionsStore = getSessionsStoreSafely();
 
   async function startSessionInFolderOf(sessionId: string): Promise<CreateSessionResponse> {
+    const machine = machineOf?.(sessionId) ?? provided;
+    const { api } = machine;
     startingFromSessionId.value = sessionId;
     error.value = undefined;
 
@@ -645,11 +654,12 @@ export function useNewSessionInFolder(): UseNewSessionInFolderResult {
   };
 }
 
-export function useAbortSession(): UseAbortSessionResult {
+export function useAbortSession(machineOf?: SessionMachine): UseAbortSessionResult {
   const state = createMutationState();
-  const { api } = useMachineTarget();
+  const provided = useMachineTarget();
 
   async function abortSession(sessionId: string): Promise<void> {
+    const { api } = machineOf?.(sessionId) ?? provided;
     await state.execute(async () => {
       const { error, response } = await api.POST("/api/sessions/{id}/abort", {
         params: {

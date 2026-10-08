@@ -130,3 +130,22 @@ describe("sessionRowDim", () => {
     expect(sessionRowDim(noTime, NOW)).toBe(0);
   });
 });
+
+describe("sessionRowStatus while its machine isn't answering", () => {
+  it("says a working session's machine isn't answering, instead of working on", () => {
+    const working = { sessionStatus: "active", activityStatus: "busy", session: { id: "s1", title: "Session", time: { created: 1 } } } as unknown as SessionListItem;
+
+    expect(sessionRowStatus(working, 2, false)).toEqual({
+      label: "Not answering",
+      tone: "quiet",
+      description: "Its machine isn't answering. It was working when last heard.",
+    });
+    expect(sessionRowStatus(working, 2, true).tone).toBe("working");
+  });
+
+  it("leaves a session that wasn't working as it was", () => {
+    const asking = { sessionStatus: "waiting_input", activityStatus: "waiting_input", session: { id: "s1", title: "Session", time: { created: 1 } } } as unknown as SessionListItem;
+
+    expect(sessionRowStatus(asking, 2, false).label).toBe("Needs input");
+  });
+});

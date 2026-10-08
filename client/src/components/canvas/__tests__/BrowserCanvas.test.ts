@@ -5,6 +5,8 @@ import BrowserCanvas from "@/components/canvas/BrowserCanvas.vue";
 import type { AppRunStatus } from "@/lib/domain-events";
 import { RESTART_MARKER, useAppRunsStore } from "@/stores/app-runs";
 import { serverCanvasTabId, useCanvasesStore } from "@/stores/canvases";
+import { MACHINE_TARGET, targetFor } from "@/lib/machine-target";
+import type { MachineConnection } from "@/lib/machines";
 
 const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }));
 vi.mock("@/lib/api-client", () => ({
@@ -205,6 +207,53 @@ describe("BrowserCanvas", () => {
 
     expect(apiFetchMock).toHaveBeenCalledWith("/api/sessions/s1/browser/proxy", expect.objectContaining({ body: JSON.stringify({ url: "http://localhost:5173/" }) }));
     expect(wrapper.find("iframe").attributes("src")).toBe(`${PREVIEW}/`);
+    wrapper.unmount();
+  });
+});
+
+describe("BrowserCanvas of a session on another machine", () => {
+  const mini: MachineConnection = {
+    id: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    name: "mini",
+    baseUrl: "http://mini.example.test:2113",
+    token: "mini-token-0123456789",
+    addedAt: "2026-10-08T00:00:00.000Z",
+  };
+
+  function mountOnMini(webApp: boolean): VueWrapper {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ id: mini.id, name: "mini", webApp })));
+    return mount(BrowserCanvas, {
+      props: { sessionId: "s1", canvasId: "cv_1", url: "http://localhost:5173/", appId: "app_1" },
+      global: { provide: { [MACHINE_TARGET]: () => targetFor(mini) } },
+    });
+  }
+
+  beforeEach(() => {
+    app = { status: "running", url: "http://localhost:5173/", exitCode: null };
+    output = [];
+    apiFetchMock.mockReset();
+    serve();
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("says the app opens on its machine and links there, instead of a frame that can't load", async () => {
+    const wrapper = mountOnMini(true);
+    await flushPromises();
+
+    expect(wrapper.get("[data-testid='browser-canvas-elsewhere']").text()).toContain("This app runs on mini. Its preview opens there.");
+    expect(wrapper.get("[data-testid='browser-canvas-open-there']").attributes("href")).toBe(`${mini.baseUrl}/sessions/s1`);
+    expect(wrapper.find("iframe").exists()).toBe(false);
+    expect(apiFetchMock.mock.calls.map(([path]) => path)).not.toContain("/api/sessions/s1/browser/proxy");
+    wrapper.unmount();
+  });
+
+  it("says plainly that a machine without the web app can't open its previews from here", async () => {
+    const wrapper = mountOnMini(false);
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='browser-canvas-open-there']").exists()).toBe(false);
+    expect(wrapper.get("[data-testid='browser-canvas-elsewhere']").text()).toContain("mini has no web app of its own, so its previews can't open from here yet.");
     wrapper.unmount();
   });
 });

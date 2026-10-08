@@ -55,6 +55,7 @@ import { dispatchSessionRemoved } from "@/lib/session-sync";
 import { isSessionLive, sessionRowDim, sessionRowStatus } from "@/lib/session-row-status";
 import { useRelativeTime } from "@/composables/use-relative-time";
 import { useSessionsStore } from "@/stores/sessions";
+import { useMachinesStore } from "@/stores/machines";
 import { useArchiveQueueStore } from "@/stores/archive-queue";
 import { useLineageMovesStore } from "@/stores/lineage-moves";
 import { useSessionPinsStore } from "@/stores/session-pins";
@@ -87,6 +88,8 @@ interface Props {
    * archiving, dragging and the menu wait until that machine is live, so nothing acts on the wrong machine.
    */
   openOnMachine?: string;
+  /** That machine isn't answering: a working row says so instead of working on for good. */
+  machineNotAnswering?: boolean;
 }
 
 interface Emits {
@@ -151,8 +154,9 @@ const instanceId = computed(() => props.session.instanceId);
 const rawTitle = computed(() => props.session.session.title ?? "");
 const displayTitle = computed(() => props.label || props.session.session.title?.trim() || "Untitled session");
 const now = useRelativeTime();
-const rowStatus = computed(() => sessionRowStatus(props.session, now.value));
-const isLive = computed(() => isSessionLive(props.session));
+const rowStatus = computed(() => sessionRowStatus(props.session, now.value, !props.machineNotAnswering));
+// A working row whose machine went quiet has no working glyph: it can't be known to work.
+const isLive = computed(() => isSessionLive(props.session) && !(props.machineNotAnswering && props.session.sessionStatus === "active"));
 // The open session never dims.
 const rowDim = computed(() => (props.active ? 0 : sessionRowDim(props.session, now.value)));
 const progress = computed(() => {
@@ -182,6 +186,10 @@ const prBadge = computed(() => {
 });
 const isArchivedSession = computed(() => props.session.retentionStatus === "archived");
 const readOnly = computed(() => Boolean(props.openOnMachine));
+// Another machine's row has a menu of what doesn't need that machine (its folder is there, not here) once its sessions
+// open in place.
+const machines = useMachinesStore();
+const hasMenu = computed(() => !readOnly.value || machines.opensInPlace);
 const fallbackCanArchive = computed(() => !isArchivedSession.value);
 // The retention state wins over capabilities, which only refresh with the list.
 const canArchive = computed(() => !readOnly.value
@@ -536,6 +544,14 @@ async function handleMove(projectId: string | null): Promise<void> {
   }
 }
 
+async function handleCopyPath(): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(props.session.workspaceDirectory);
+  } catch {
+    // Clipboard failures are non-fatal.
+  }
+}
+
 async function handleCopySessionId(): Promise<void> {
   try {
     await navigator.clipboard.writeText(sessionId.value);
@@ -581,7 +597,7 @@ function removeSessionFromStore(): void {
   >
     <ContextMenuTrigger
       as-child
-      :disabled="readOnly"
+      :disabled="!hasMenu"
     >
       <div
         class="session-item-shell"
@@ -778,225 +794,246 @@ function removeSessionFromStore(): void {
     </ContextMenuTrigger>
 
     <ContextMenuContent class="w-66">
-      <!-- Change this session -->
-      <ContextMenuItem
-        :disabled="isAnyActionPending"
-        @select="startRename"
-      >
-        <Pencil class="size-3.5" />
-        Rename
-        <ContextMenuShortcut>F2</ContextMenuShortcut>
-      </ContextMenuItem>
-
-      <ContextMenuItem
-        v-if="canPin"
-        :hint="pinned
-          ? 'Puts it back in its project, newest first.'
-          : 'Keeps it in Pinned, above your projects. Drag pinned sessions to put them in order.'"
-        data-testid="session-context-pin"
-        @select="handleTogglePin"
-      >
-        <PinOff
-          v-if="pinned"
-          class="size-3.5"
-        />
-        <Pin
-          v-else
-          class="size-3.5"
-        />
-        {{ pinned ? "Unpin" : "Pin to top" }}
-      </ContextMenuItem>
-      <template v-if="pinned">
+      <template v-if="readOnly">
         <ContextMenuItem
-          :disabled="!canMovePinUp"
-          hint="Or press Alt+↑ on the row."
-          data-testid="session-context-pin-up"
-          @select="handleMovePin(-1)"
+          :hint="`Copies ${session.workspaceDirectory}. It's a folder on ${openOnMachine}, so it doesn't open here.`"
+          data-testid="session-context-copy-path"
+          @select="handleCopyPath"
         >
-          <ArrowUp class="size-3.5" />
-          Move up
-          <ContextMenuShortcut>Alt+↑</ContextMenuShortcut>
+          <Copy class="size-3.5" />
+          Copy path
         </ContextMenuItem>
         <ContextMenuItem
-          :disabled="!canMovePinDown"
-          hint="Or press Alt+↓ on the row."
-          data-testid="session-context-pin-down"
-          @select="handleMovePin(1)"
+          :hint="`Copies ${sessionId}.`"
+          @select="handleCopySessionId"
         >
-          <ArrowDown class="size-3.5" />
-          Move down
-          <ContextMenuShortcut>Alt+↓</ContextMenuShortcut>
+          <Copy class="size-3.5" />
+          Copy session ID
         </ContextMenuItem>
       </template>
-
-      <ContextMenuItem
-        v-if="canArchive"
-        :disabled="isAnyActionPending"
-        hint="Hides it from the list. You can undo it for a few seconds, then find it under Archived."
-        data-testid="session-context-archive"
-        @select="handleArchive"
-      >
-        <Archive class="size-3.5" />
-        Archive
-      </ContextMenuItem>
-
-      <ContextMenuItem
-        v-if="canRestore"
-        :disabled="isAnyActionPending"
-        hint="Puts it back in the list."
-        data-testid="session-context-restore"
-        @select="handleRestore"
-      >
-        <ArchiveRestore class="size-3.5" />
-        Restore
-      </ContextMenuItem>
-
-      <!-- Start from it -->
-      <template v-if="!isArchivedSession">
-        <ContextMenuSeparator />
-
+      <template v-else>
+        <!-- Change this session -->
         <ContextMenuItem
-          v-if="showFork"
-          :disabled="isAnyActionPending || !canFork"
-          :hint="FORK_HINT"
-          data-testid="session-context-fork"
-          @select="handleFork"
+          :disabled="isAnyActionPending"
+          @select="startRename"
         >
-          <GitFork class="size-3.5" />
-          <!-- A row that's off can't be highlighted, so it says why on the row instead of in the footer. -->
-          <span
-            v-if="forkDisabledReason"
-            class="flex min-w-0 flex-col"
-          >
-            <span>Fork</span>
-            <span
-              class="text-[11.5px] text-muted"
-              data-testid="session-context-fork-note"
-            >{{ forkDisabledReason }}</span>
-          </span>
-          <template v-else>
-            Fork
-          </template>
+          <Pencil class="size-3.5" />
+          Rename
+          <ContextMenuShortcut>F2</ContextMenuShortcut>
         </ContextMenuItem>
 
         <ContextMenuItem
-          :disabled="isAnyActionPending"
-          hint="Same folder and harness, an empty conversation."
-          data-testid="session-context-new-in-folder"
-          @select="handleNewSessionInFolder"
+          v-if="canPin"
+          :hint="pinned
+            ? 'Puts it back in its project, newest first.'
+            : 'Keeps it in Pinned, above your projects. Drag pinned sessions to put them in order.'"
+          data-testid="session-context-pin"
+          @select="handleTogglePin"
         >
-          <Plus class="size-3.5" />
-          New session in this folder
+          <PinOff
+            v-if="pinned"
+            class="size-3.5"
+          />
+          <Pin
+            v-else
+            class="size-3.5"
+          />
+          {{ pinned ? "Unpin" : "Pin to top" }}
         </ContextMenuItem>
-      </template>
-
-      <!-- Reuse it -->
-      <ContextMenuSeparator />
-
-      <ContextMenuItem
-        :disabled="isAnyActionPending"
-        hint="Opens Automations with this session's first message and folder filled in."
-        data-testid="session-repeat-on-schedule"
-        @select="handleRepeatOnSchedule"
-      >
-        <Repeat class="size-3.5" />
-        Repeat on a schedule…
-      </ContextMenuItem>
-
-      <ContextMenuItem
-        v-if="canSaveAsWorkflow"
-        :disabled="isAnyActionPending"
-        :hint="DRAFT_COST_NOTE"
-        data-testid="session-save-as-workflow"
-        @select="handleSaveAsWorkflow"
-      >
-        <Sparkles class="size-3.5" />
-        Save as workflow…
-      </ContextMenuItem>
-
-      <!-- Take it elsewhere -->
-      <ContextMenuSeparator />
-
-      <OpenToolContextSubmenu :directory="session.workspaceDirectory" />
-
-      <ContextMenuSub>
-        <ContextMenuSubTrigger
-          :disabled="isAnyActionPending"
-          :hint="currentProjectLabel ? `Now in ${currentProjectLabel}.` : undefined"
-        >
-          <FolderOpen class="size-3.5" />
-          Move to project
-        </ContextMenuSubTrigger>
-        <ContextMenuSubContent class="w-52">
+        <template v-if="pinned">
           <ContextMenuItem
-            v-if="isProjectsLoading"
-            disabled
+            :disabled="!canMovePinUp"
+            hint="Or press Alt+↑ on the row."
+            data-testid="session-context-pin-up"
+            @select="handleMovePin(-1)"
           >
-            Loading projects…
+            <ArrowUp class="size-3.5" />
+            Move up
+            <ContextMenuShortcut>Alt+↑</ContextMenuShortcut>
           </ContextMenuItem>
-          <template v-else>
-            <ContextMenuItem
-              v-for="project in projectTargets"
-              :key="project.id ?? 'ungrouped'"
-              @select="handleMove(project.id)"
+          <ContextMenuItem
+            :disabled="!canMovePinDown"
+            hint="Or press Alt+↓ on the row."
+            data-testid="session-context-pin-down"
+            @select="handleMovePin(1)"
+          >
+            <ArrowDown class="size-3.5" />
+            Move down
+            <ContextMenuShortcut>Alt+↓</ContextMenuShortcut>
+          </ContextMenuItem>
+        </template>
+
+        <ContextMenuItem
+          v-if="canArchive"
+          :disabled="isAnyActionPending"
+          hint="Hides it from the list. You can undo it for a few seconds, then find it under Archived."
+          data-testid="session-context-archive"
+          @select="handleArchive"
+        >
+          <Archive class="size-3.5" />
+          Archive
+        </ContextMenuItem>
+
+        <ContextMenuItem
+          v-if="canRestore"
+          :disabled="isAnyActionPending"
+          hint="Puts it back in the list."
+          data-testid="session-context-restore"
+          @select="handleRestore"
+        >
+          <ArchiveRestore class="size-3.5" />
+          Restore
+        </ContextMenuItem>
+
+        <!-- Start from it -->
+        <template v-if="!isArchivedSession">
+          <ContextMenuSeparator />
+
+          <ContextMenuItem
+            v-if="showFork"
+            :disabled="isAnyActionPending || !canFork"
+            :hint="FORK_HINT"
+            data-testid="session-context-fork"
+            @select="handleFork"
+          >
+            <GitFork class="size-3.5" />
+            <!-- A row that's off can't be highlighted, so it says why on the row instead of in the footer. -->
+            <span
+              v-if="forkDisabledReason"
+              class="flex min-w-0 flex-col"
             >
-              <span class="min-w-0 flex-1 truncate">{{ project.label }}</span>
-              <Check
-                v-if="project.id === currentProjectId"
-                class="size-3.5 text-accent"
-                aria-label="Current project"
-              />
-            </ContextMenuItem>
-          </template>
-        </ContextMenuSubContent>
-      </ContextMenuSub>
+              <span>Fork</span>
+              <span
+                class="text-[11.5px] text-muted"
+                data-testid="session-context-fork-note"
+              >{{ forkDisabledReason }}</span>
+            </span>
+            <template v-else>
+              Fork
+            </template>
+          </ContextMenuItem>
 
-      <ContextMenuItem
-        v-if="moveOutLabel"
-        :disabled="isAnyActionPending"
-        hint="Lists it on its own instead of under the session it came from."
-        data-testid="session-context-move-out"
-        @select="handleMoveOut"
-      >
-        <CornerLeftUp class="size-3.5" />
-        <span class="truncate">{{ moveOutLabel }}</span>
-      </ContextMenuItem>
+          <ContextMenuItem
+            :disabled="isAnyActionPending"
+            hint="Same folder and harness, an empty conversation."
+            data-testid="session-context-new-in-folder"
+            @select="handleNewSessionInFolder"
+          >
+            <Plus class="size-3.5" />
+            New session in this folder
+          </ContextMenuItem>
+        </template>
 
-      <ContextMenuItem
-        v-if="moveBackLabel"
-        :disabled="isAnyActionPending"
-        hint="Lists it under the session it came from again."
-        data-testid="session-context-move-back"
-        @select="handleMoveBack"
-      >
-        <CornerDownRight class="size-3.5" />
-        <span class="truncate">{{ moveBackLabel }}</span>
-      </ContextMenuItem>
-
-      <ContextMenuItem
-        :disabled="isAnyActionPending"
-        :hint="`Copies ${sessionId}.`"
-        @select="handleCopySessionId"
-      >
-        <Copy class="size-3.5" />
-        Copy session ID
-      </ContextMenuItem>
-
-      <template v-if="canDelete">
+        <!-- Reuse it -->
         <ContextMenuSeparator />
 
         <ContextMenuItem
-          variant="destructive"
           :disabled="isAnyActionPending"
-          hint="Deletes the session and its history. Fleet asks first; it can't be undone."
-          @select="openDeleteDialog"
+          hint="Opens Automations with this session's first message and folder filled in."
+          data-testid="session-repeat-on-schedule"
+          @select="handleRepeatOnSchedule"
         >
-          <Trash2 class="size-3.5" />
-          Delete permanently…
+          <Repeat class="size-3.5" />
+          Repeat on a schedule…
         </ContextMenuItem>
+
+        <ContextMenuItem
+          v-if="canSaveAsWorkflow"
+          :disabled="isAnyActionPending"
+          :hint="DRAFT_COST_NOTE"
+          data-testid="session-save-as-workflow"
+          @select="handleSaveAsWorkflow"
+        >
+          <Sparkles class="size-3.5" />
+          Save as workflow…
+        </ContextMenuItem>
+
+        <!-- Take it elsewhere -->
+        <ContextMenuSeparator />
+
+        <OpenToolContextSubmenu :directory="session.workspaceDirectory" />
+
+        <ContextMenuSub>
+          <ContextMenuSubTrigger
+            :disabled="isAnyActionPending"
+            :hint="currentProjectLabel ? `Now in ${currentProjectLabel}.` : undefined"
+          >
+            <FolderOpen class="size-3.5" />
+            Move to project
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent class="w-52">
+            <ContextMenuItem
+              v-if="isProjectsLoading"
+              disabled
+            >
+              Loading projects…
+            </ContextMenuItem>
+            <template v-else>
+              <ContextMenuItem
+                v-for="project in projectTargets"
+                :key="project.id ?? 'ungrouped'"
+                @select="handleMove(project.id)"
+              >
+                <span class="min-w-0 flex-1 truncate">{{ project.label }}</span>
+                <Check
+                  v-if="project.id === currentProjectId"
+                  class="size-3.5 text-accent"
+                  aria-label="Current project"
+                />
+              </ContextMenuItem>
+            </template>
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+
+        <ContextMenuItem
+          v-if="moveOutLabel"
+          :disabled="isAnyActionPending"
+          hint="Lists it on its own instead of under the session it came from."
+          data-testid="session-context-move-out"
+          @select="handleMoveOut"
+        >
+          <CornerLeftUp class="size-3.5" />
+          <span class="truncate">{{ moveOutLabel }}</span>
+        </ContextMenuItem>
+
+        <ContextMenuItem
+          v-if="moveBackLabel"
+          :disabled="isAnyActionPending"
+          hint="Lists it under the session it came from again."
+          data-testid="session-context-move-back"
+          @select="handleMoveBack"
+        >
+          <CornerDownRight class="size-3.5" />
+          <span class="truncate">{{ moveBackLabel }}</span>
+        </ContextMenuItem>
+
+        <ContextMenuItem
+          :disabled="isAnyActionPending"
+          :hint="`Copies ${sessionId}.`"
+          @select="handleCopySessionId"
+        >
+          <Copy class="size-3.5" />
+          Copy session ID
+        </ContextMenuItem>
+
+        <template v-if="canDelete">
+          <ContextMenuSeparator />
+
+          <ContextMenuItem
+            variant="destructive"
+            :disabled="isAnyActionPending"
+            hint="Deletes the session and its history. Fleet asks first; it can't be undone."
+            @select="openDeleteDialog"
+          >
+            <Trash2 class="size-3.5" />
+            Delete permanently…
+          </ContextMenuItem>
+        </template>
       </template>
 
-      <ContextMenuHint>{{ menuFooter }}</ContextMenuHint>
+      <ContextMenuHint v-if="!readOnly">
+        {{ menuFooter }}
+      </ContextMenuHint>
     </ContextMenuContent>
   </ContextMenu>
 

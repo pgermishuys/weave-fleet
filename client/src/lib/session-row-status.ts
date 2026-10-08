@@ -69,7 +69,16 @@ export function sessionRowDim(item: SessionListItem, now: number): SessionRowDim
   return 0;
 }
 
-export function sessionRowStatus(item: SessionListItem, now: number): SessionRowStatus {
+/** A working session on a machine that stopped answering: it can't be known to work still. */
+const NOT_ANSWERING: SessionRowStatus = {
+  label: "Not answering",
+  tone: "quiet",
+  description: "Its machine isn't answering. It was working when last heard.",
+};
+
+/** `machineAnswering`: false while the session's machine isn't answering (`useMachinesStore().isAnswering`). */
+export function sessionRowStatus(item: SessionListItem, now: number, machineAnswering = true): SessionRowStatus {
+  if (!machineAnswering && item.sessionStatus === "active") return NOT_ANSWERING;
   switch (item.sessionStatus) {
     case "waiting_input":
       return { label: "Needs input", tone: "attention", description: "Needs input" };

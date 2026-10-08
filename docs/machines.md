@@ -132,7 +132,9 @@ With **Keep every machine live** on (Settings → Features, Experimental), every
 and clicking a session on another machine opens it where you are, without a reload. Its conversation, Changes, Files
 and terminals come from its own machine, over that machine's connection with its token. Settings, Automations,
 Workflows and the session list stay the live machine's. **Work here** (right-click a machine's heading) still makes
-it live.
+it live. Another machine's rows offer **Copy path**, not Open in: the folder is on that machine. A machine that stops
+answering shows "not answering" on its sessions (row, header and conversation) until it's back, rather than a
+Working that never ends.
 
 An automation can run on another machine in the list: pick it with the Machine chip under the automation's box. The
 automation, its schedule and its runs stay on the machine that holds it. Each run starts its session (or workflow run)
@@ -392,7 +394,7 @@ nothing about the id says so.
 ### Known limits
 
 - The browser canvas (app previews) of another machine doesn't load in the web app, because it relies on that
-  machine's cookie. Open the machine's own URL to use it, when it serves the web app (`webApp`). A node doesn't, so
-  its previews can't be opened from the web app yet.
+  machine's cookie. The canvas says so and links to the session on the machine's own URL, when it serves the web app
+  (`webApp`). A node doesn't, so its previews can't be opened from the web app yet.
 - The machine token has no scopes. Paired devices get their own tokens with one limit (no managing access); there
   are no finer scopes.

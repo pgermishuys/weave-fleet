@@ -14,6 +14,8 @@ import type { MachineFeedOptions } from "@/lib/machine-feed";
 import { useMachinesStore } from "@/stores/machines";
 import { usePreferencesStore } from "@/stores/preferences";
 import { useSessionsStore } from "@/stores/sessions";
+import { useArchiveQueueStore } from "@/stores/archive-queue";
+import { useAbortSession } from "@/composables/use-session-actions";
 
 /**
  * With "Keep every machine live" on, another machine's session opens in place: its views ask the machine it's on
@@ -23,9 +25,10 @@ import { useSessionsStore } from "@/stores/sessions";
 
 vi.mock("@/lib/machines", async (original) => ({ ...await original<typeof import("@/lib/machines")>(), switchToMachine: vi.fn() }));
 
-const { feeds, feedHubFor } = vi.hoisted(() => ({
+const { feeds, feedHubFor, retryConnection } = vi.hoisted(() => ({
   feeds: [] as { options: MachineFeedOptions<object> }[],
   feedHubFor: vi.fn((machine: { key: string }) => ({ sharedHubOf: machine.key })),
+  retryConnection: vi.fn(),
 }));
 
 vi.mock("@/lib/machine-feed", async (original) => ({
@@ -43,6 +46,7 @@ vi.mock("@/lib/machine-feed", async (original) => ({
 vi.mock("@/composables/use-signalr-socket", async (original) => ({
   ...await original<typeof import("@/composables/use-signalr-socket")>(),
   feedHubFor,
+  retryConnection,
 }));
 
 const mini: MachineConnection = {
@@ -149,6 +153,64 @@ describe("opening another machine's session in place", () => {
     setSwitch(true);
     await Promise.resolve();
     expect(loadLiveMachinesHint()).toBe(true);
+  });
+
+  it("says a machine its feed can't read isn't answering, with the switch on only", () => {
+    const store = useMachinesStore();
+    store.others = { [mini.id]: { sessions: [], projects: [], error: "Can't reach mini.", loadedAt: 1, loading: false } };
+
+    setSwitch(false);
+    expect(store.isAnswering(mini.id)).toBe(true);
+
+    setSwitch(true);
+    expect(store.isAnswering(mini.id)).toBe(false);
+    expect(store.isAnswering(lab.id)).toBe(true);
+    expect(store.isAnswering(HOME_MACHINE_KEY)).toBe(true);
+
+    store.others = { [mini.id]: { sessions: [], projects: [], error: null, loadedAt: 2, loading: false } };
+    expect(store.isAnswering(mini.id)).toBe(true);
+  });
+
+  it("archives and stops a session opened in place on its own machine, from outside its views", async () => {
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      urls.push(input instanceof Request ? input.url : String(input));
+      return Response.json({});
+    }));
+    const store = useMachinesStore();
+    setSwitch(true);
+    store.rememberSessions(mini.id, ["mini-1"]);
+
+    const queue = useArchiveQueueStore();
+    queue.archive(["mini-1"]);
+    await queue.flush();
+    // The command palette's Interrupt.
+    await useAbortSession((id) => store.sessionTarget(id)).abortSession("mini-1");
+
+    expect(urls.filter((url) => url.includes("/api/sessions/"))).toEqual([
+      `${mini.baseUrl}/api/sessions/mini-1/retention`,
+      `${mini.baseUrl}/api/sessions/mini-1/abort`,
+    ]);
+  });
+
+  it("has a machine's sessions connect again at once when its feed hears from it after it stopped answering", () => {
+    retryConnection.mockClear();
+    const store = useMachinesStore();
+    setSwitch(true);
+    const stop = store.startPolling();
+    const miniFeed = feeds.find((feed) => feed.options.target.machineId === mini.id)!;
+    const read = (lastHeardAt: number) => ({ sessions: [], projects: null, identity: null, status: "live", lastHeardAt, error: null });
+
+    miniFeed.options.onChange(read(1) as never);
+    expect(retryConnection).not.toHaveBeenCalled();
+    miniFeed.options.onChange({ ...read(1), status: "unreachable", error: "Can't reach mini." } as never);
+    expect(store.isAnswering(mini.id)).toBe(false);
+    miniFeed.options.onChange(read(2) as never);
+
+    expect(store.isAnswering(mini.id)).toBe(true);
+    expect(retryConnection).toHaveBeenCalledOnce();
+    expect(retryConnection.mock.calls[0]![0]).toMatchObject({ key: mini.id });
+    stop();
   });
 
   it("gives each machine's live feed that machine's event hub, shared with its open sessions", () => {

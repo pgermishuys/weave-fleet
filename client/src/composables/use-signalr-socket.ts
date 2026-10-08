@@ -575,6 +575,11 @@ export function describeSocketForReport(machine: MachineTarget): { state: string
   }
 }
 
+/** Connects to `machine` again now if its connection closed and waits out its backoff: the machine answers again. */
+export function retryConnection(machine: MachineTarget): void {
+  hubs.get(machine.key)?.reconnectIfClosed()
+}
+
 export function isWeaveSocketConnected(machine: MachineTarget): boolean {
   return hubs.get(machine.key)?.isConnected() ?? false
 }

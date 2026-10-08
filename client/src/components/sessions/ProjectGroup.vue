@@ -69,6 +69,8 @@ interface Props {
    * and nothing drags, so nothing acts on the wrong machine.
    */
   openOnMachine?: string;
+  /** That machine isn't answering (see SessionItem). */
+  machineNotAnswering?: boolean;
 }
 
 interface Emits {
@@ -668,6 +670,7 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
             :steps="entry.steps"
             :active-session-id="activeSessionId"
             :open-on-machine="openOnMachine"
+            :machine-not-answering="machineNotAnswering"
             @select-session="handleSessionSelect"
             @drag-session-start="handleSessionDragStart"
             @drag-session-end="handleSessionDragEnd"
@@ -680,6 +683,7 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
               :has-children="hasChildren(entry.session)"
               :children-expanded="childrenExpanded(entry.session)"
               :open-on-machine="openOnMachine"
+              :machine-not-answering="machineNotAnswering"
               @select="handleSessionSelect"
               @toggle-children="toggleChildren(entry.session)"
               @drag-session-start="handleSessionDragStart"
@@ -709,6 +713,7 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
                   :active="child.item.session.id === activeSessionId"
                   :running-count="runningCounts?.get(child.item.session.id)"
                   :open-on-machine="openOnMachine"
+                  :machine-not-answering="machineNotAnswering"
                   @select="handleSessionSelect"
                   @drag-session-start="handleSessionDragStart"
                   @drag-session-end="handleSessionDragEnd"

@@ -74,3 +74,13 @@ describe("WorkingIndicator", () => {
     vi.useRealTimers();
   });
 });
+
+describe("WorkingIndicator when the session's machine isn't answering", () => {
+  it("says so instead of working on: no ticking dots, no growing time", () => {
+    const wrapper = mount(WorkingIndicator, { props: { since: Date.now() - 60_000, notAnswering: "mini" } });
+
+    expect(wrapper.get("[data-testid='working-not-answering']").text()).toBe("mini isn't answering. It was working when last heard.");
+    expect(wrapper.find(".status-glyph--working").exists()).toBe(false);
+    expect(wrapper.find(".working__elapsed").exists()).toBe(false);
+  });
+});

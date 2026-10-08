@@ -5,6 +5,8 @@ import AgentTabView from "@/components/canvas/AgentTabView.vue";
 import { apiFetchOn } from "@/lib/api-client";
 import { useMachineTarget } from "@/lib/machine-target";
 import { fetchServerCanvases } from "@/composables/use-server-canvases";
+import { useMachineWebApp } from "@/composables/phone/use-machine-web-app";
+import { useMachinesStore } from "@/stores/machines";
 import { onReconnect } from "@/composables/use-weave-socket";
 import { appAddress, navMessage, readBridgeMessage, type NavAction, type PreviewHmr } from "@/lib/preview-bridge";
 import { addressForPort, currentRunLines, useAppRunsStore } from "@/stores/app-runs";
@@ -26,6 +28,18 @@ const props = defineProps<{
 }>();
 
 const machine = useMachineTarget();
+
+// Another machine's previews need that machine's own sign-in (its cookie), which this page doesn't have
+// (docs/machines.md, known limits). Its tab says where the app opens instead of a frame that can't load.
+const elsewhere = !machine.isLive;
+const machines = useMachinesStore();
+const machineName = computed(() => machine.connection?.name
+  ?? machines.entries.find((entry) => entry.key === machine.key)?.name
+  ?? "that machine");
+const machineWebApp = useMachineWebApp();
+const openThere = computed(() => (elsewhere && machineWebApp.value && machine.connection
+  ? `${machine.connection.baseUrl}/sessions/${encodeURIComponent(props.sessionId)}`
+  : null));
 
 interface ProxyInfo {
   /** Where this browser loads the preview; Fleet picks it from the host the browser used to reach it. */
@@ -122,6 +136,7 @@ function pulse(): void {
 }
 
 async function show(page: string): Promise<void> {
+  if (elsewhere) return;
   // A starting app has no page yet; the canvas gets one when it answers.
   if (!page) {
     error.value = null;
@@ -504,8 +519,34 @@ onBeforeUnmount(() => {
         :tab-id="agentTab.id"
         :active="active"
       />
+      <div
+        v-if="elsewhere"
+        class="browser-canvas__panel"
+        data-testid="browser-canvas-elsewhere"
+      >
+        <p class="browser-canvas__panel-title">
+          This app runs on {{ machineName }}. Its preview opens there.
+        </p>
+        <a
+          v-if="openThere"
+          class="browser-canvas__start"
+          :href="openThere"
+          target="_blank"
+          rel="noopener"
+          data-testid="browser-canvas-open-there"
+        >
+          <ExternalLink :size="13" />
+          Open on {{ machineName }}
+        </a>
+        <p
+          v-else
+          class="browser-canvas__elsewhere-note"
+        >
+          {{ machineName }} has no web app of its own, so its previews can't open from here yet.
+        </p>
+      </div>
       <p
-        v-if="error"
+        v-else-if="error"
         class="browser-canvas__error"
         role="alert"
       >
@@ -835,6 +876,12 @@ onBeforeUnmount(() => {
   gap: 10px;
   max-width: 560px;
   padding: 28px 20px;
+}
+
+.browser-canvas__elsewhere-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
 }
 
 .browser-canvas__panel-head {

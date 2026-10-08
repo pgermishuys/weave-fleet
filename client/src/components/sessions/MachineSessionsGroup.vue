@@ -13,7 +13,7 @@ import {
   pinnedProjectGroup,
   sessionMatchesQuery,
 } from "@/lib/session-project-groups";
-import type { MachineEntry, MachineSessions } from "@/stores/machines";
+import { useMachinesStore, type MachineEntry, type MachineSessions } from "@/stores/machines";
 import type { NewSessionDraftRow } from "@/stores/workspace-ui";
 import { machineGroupKey, projectGroupKey, useSidebarStore } from "@/stores/sidebar";
 
@@ -81,6 +81,7 @@ watch(draftGroupId, (groupId) => {
   if (groupId) sidebar.setGroupCollapsed(projectGroupKey(props.machine.key, groupId), false);
 });
 
+const machines = useMachinesStore();
 const unreachable = computed(() => Boolean(props.state?.error));
 
 const note = computed(() => {
@@ -129,6 +130,7 @@ const note = computed(() => {
         :active-drag-project-id="null"
         :running-counts="runningCounts"
         :open-on-machine="machine.name"
+        :machine-not-answering="!machines.isAnswering(machine.key)"
         data-testid="pinned-group"
         @toggle="toggleProject"
         @select-session="emit('open', $event)"
@@ -145,6 +147,7 @@ const note = computed(() => {
         :draft-active="draftActive"
         :running-counts="runningCounts"
         :open-on-machine="machine.name"
+        :machine-not-answering="!machines.isAnswering(machine.key)"
         @toggle="toggleProject"
         @select-session="emit('open', $event)"
         @open-draft="emit('openDraft')"
