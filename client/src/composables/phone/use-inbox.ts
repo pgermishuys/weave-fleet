@@ -4,7 +4,8 @@ import { useRelativeTime } from "@/composables/use-relative-time";
 import { readCredentials, readCredentialsSync, type DeviceCredentials } from "@/lib/device-credentials";
 import { fetchMachineList, unreachableReason, type ListedMachine } from "@/lib/phone/grants";
 import { buildInbox, type InboxMachineState } from "@/lib/phone/inbox";
-import { MachineFeed, type FeedSnapshot } from "@/lib/phone/machine-feed";
+import { HIDDEN_CLOSE_MS } from "@/lib/machine-feed";
+import { InboxFeed, type InboxSnapshot } from "@/lib/phone/inbox-feed";
 import {
   permissionAnswerRequest,
   questionAnswerRequest,
@@ -27,15 +28,12 @@ async function fetchHomeOs(homeToken: string | null): Promise<string | null> {
   }
 }
 
-/** Feeds close after the app has been off screen this long, and open again when it comes back. */
-export const HIDDEN_CLOSE_MS = 5 * 60_000;
-
 interface MachineEntry {
   listed: ListedMachine;
   isHome: boolean;
   target: AnswerTarget | null;
-  feed: MachineFeed | null;
-  snapshot: FeedSnapshot | null;
+  feed: InboxFeed | null;
+  snapshot: InboxSnapshot | null;
   problem: string | null;
 }
 
@@ -110,7 +108,7 @@ export function useInbox() {
 
     for (const entry of entries.value) {
       if (!entry.target) continue;
-      const feed = new MachineFeed({
+      const feed = new InboxFeed({
         target: { machineId: entry.listed.id, baseUrl: entry.target.baseUrl, token: entry.target.token },
         onChange: (snapshot) => replace(entry, { snapshot }),
         onUnauthorized: entry.isHome ? undefined : async () => {

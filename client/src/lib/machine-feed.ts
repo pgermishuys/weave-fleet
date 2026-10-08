@@ -1,40 +1,44 @@
 /**
- * A live view of one machine for the phone's inbox: its sessions, and what the waiting ones wait on. Listens on the
- * machine's event hub (the global `sessions` topic) and re-reads the list when something changes; if the hub won't
- * connect it polls every 15 seconds; if the machine doesn't answer it keeps the last list and says when it last heard.
+ * A live view of one machine: listens on its event hub (the global `sessions` topic) and re-reads when something
+ * changes; if the hub won't connect it polls every 15 seconds; if the machine doesn't answer it keeps the last read and
+ * says when it last heard. What a read fetches is the caller's: the phone's inbox reads sessions and their asks, the
+ * sidebar sessions and projects.
  *
- * Home is reached same-origin with the phone's cookie; any other machine cross-origin with the phone's own token for
- * it (a device grant), never with cookies. No Vue, so a native wrapper can reuse it.
+ * Home is reached same-origin with the cookie; any other machine cross-origin with a token for it, never with cookies.
+ * No Vue, so a native wrapper can reuse it.
  */
 import { HubConnectionBuilder, HubConnectionState, type HubConnection } from "@microsoft/signalr";
-import type { SessionListItem } from "@/api/client";
-import type { PermissionAsk } from "@/composables/use-session-permissions";
-import { toPermissionAsk } from "@/composables/use-session-permissions";
-import { convertFleetMessageToAccumulated, type FleetMessage } from "@/lib/pagination-utils";
-import type { FeedStatus, InboxAsk } from "@/lib/phone/inbox";
-import { pendingQuestion } from "@/lib/phone/dock-state";
 
 export const POLL_INTERVAL_MS = 15_000;
-/** Even with a live hub, re-read now and then: a missed event shouldn't leave the inbox wrong for long. */
+/** Even with a live hub, re-read now and then: a missed event shouldn't leave the view wrong for long. */
 export const SAFETY_REFRESH_MS = 60_000;
-const SESSION_PAGE = 100;
+/** Feeds close after the page has been off screen this long, and open again when it comes back. */
+export const HIDDEN_CLOSE_MS = 5 * 60_000;
 
-/** Where a machine is and how to present the phone's key to it. */
+/** How a machine's feed is getting news: live over its event hub, by polling, or not at all. */
+export type FeedStatus = "connecting" | "live" | "polling" | "unreachable";
+
+/** Where a machine is and how to present a key to it. */
 export interface FeedTarget {
   machineId: string;
   /** Base URL; empty for home (same origin). */
   baseUrl: string;
-  /** The phone's token for this machine; null for home, where the cookie does. */
+  /** The token for this machine; null for home, where the cookie does. */
   token: string | null;
 }
 
-export interface FeedSnapshot {
+/** How the feed is doing, plus what its last read returned. */
+export type FeedSnapshot<T> = T & {
   status: FeedStatus;
   lastHeardAt: number | null;
-  sessions: SessionListItem[];
-  asks: Record<string, InboxAsk>;
   error: string | null;
-}
+};
+
+/** A request to the feed's machine, with its key. */
+export type FeedRequest = (path: string) => Promise<Response>;
+
+/** Thrown by a read to mark the machine unreachable with a reason the user can read. */
+export class FeedError extends Error {}
 
 /** The parts of a SignalR connection the feed uses, so tests can stand one in. */
 export interface FeedHub {
@@ -46,10 +50,14 @@ export interface FeedHub {
   readonly state: HubConnectionState | string;
 }
 
-export interface FeedOptions {
+export interface MachineFeedOptions<T> {
   target: FeedTarget;
-  onChange: (snapshot: FeedSnapshot) => void;
-  /** Called once when the machine turns the phone's token away; returns a new token, or null. */
+  /** What the feed holds before its first read. */
+  initial: T;
+  /** One read of the machine. Throwing marks it unreachable, with the message of a {@link FeedError}. */
+  read: (request: FeedRequest) => Promise<T>;
+  onChange: (snapshot: FeedSnapshot<T>) => void;
+  /** Called once when the machine turns the token away; returns a new token, or null. */
   onUnauthorized?: () => Promise<string | null>;
   createHub?: (url: string, token: string | null) => FeedHub;
   fetcher?: typeof fetch;
@@ -73,24 +81,27 @@ function defaultHub(url: string, token: string | null): FeedHub {
   };
 }
 
-export class MachineFeed {
-  private readonly options: FeedOptions;
+export class MachineFeed<T extends object> {
+  private readonly options: MachineFeedOptions<T>;
   private token: string | null;
   private hub: FeedHub | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private safetyTimer: ReturnType<typeof setInterval> | null = null;
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
   private refreshing: Promise<void> | null = null;
+  /** An event arrived while a read was under way: read again once it's done, so the change isn't missed. */
+  private readAgain = false;
   private renewed = false;
   private stopped = false;
-  private snapshot: FeedSnapshot = { status: "connecting", lastHeardAt: null, sessions: [], asks: {}, error: null };
+  private snapshot: FeedSnapshot<T>;
 
-  constructor(options: FeedOptions) {
+  constructor(options: MachineFeedOptions<T>) {
     this.options = options;
     this.token = options.target.token;
+    this.snapshot = { ...options.initial, status: "connecting", lastHeardAt: null, error: null };
   }
 
-  get state(): FeedSnapshot {
+  get state(): FeedSnapshot<T> {
     return this.snapshot;
   }
 
@@ -108,6 +119,7 @@ export class MachineFeed {
     await this.refresh();
     if (this.stopped) return;
     await this.connect();
+    if (this.stopped) return;
     this.safetyTimer = setInterval(() => void this.refresh(), SAFETY_REFRESH_MS);
   }
 
@@ -127,7 +139,8 @@ export class MachineFeed {
     if (this.refreshTimer || this.stopped) return;
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = null;
-      void this.refresh();
+      if (this.refreshing) this.readAgain = true;
+      else void this.refresh();
     }, delayMs);
   }
 
@@ -143,9 +156,14 @@ export class MachineFeed {
     try {
       await hub.start();
       await hub.invoke("SubscribeToSessionsTopicAsync");
+      // Stopped while it connected: nothing will stop this connection later.
+      if (this.stopped) {
+        await hub.stop().catch(() => undefined);
+        return;
+      }
       this.hub = hub;
       this.stopPolling();
-      if (this.snapshot.status !== "unreachable") this.update({ status: "live" });
+      if (this.snapshot.status !== "unreachable") this.update({ status: "live" } as Partial<FeedSnapshot<T>>);
     } catch {
       this.startPolling();
     }
@@ -153,7 +171,7 @@ export class MachineFeed {
 
   private startPolling(): void {
     if (this.pollTimer || this.stopped) return;
-    if (this.snapshot.status !== "unreachable") this.update({ status: "polling" });
+    if (this.snapshot.status !== "unreachable") this.update({ status: "polling" } as Partial<FeedSnapshot<T>>);
     this.pollTimer = setInterval(() => void this.refresh(), POLL_INTERVAL_MS);
   }
 
@@ -162,89 +180,56 @@ export class MachineFeed {
     this.pollTimer = null;
   }
 
-  private request(path: string): Promise<Response> {
+  /** A request with the key; when the machine turns the key away, asks for a new one once and tries again. */
+  private async request(path: string): Promise<Response> {
+    const response = await this.send(path);
+    if (response.status !== 401 || this.renewed || !this.options.onUnauthorized) return response;
+    this.renewed = true;
+    const next = await this.options.onUnauthorized();
+    if (!next) return response;
+    this.token = next;
+    return this.send(path);
+  }
+
+  private send(path: string): Promise<Response> {
     const { baseUrl } = this.options.target;
     const headers: Record<string, string> = {};
     if (this.token) headers.Authorization = `Bearer ${this.token}`;
     return this.fetcher(`${baseUrl}${path}`, { headers, credentials: baseUrl ? "omit" : "include" });
   }
 
-  /** Reads the session list and the asks of waiting sessions. Concurrent calls share one read. */
+  /** Reads the machine. Concurrent calls share one read. */
   refresh(): Promise<void> {
     this.refreshing ??= this.read().finally(() => {
       this.refreshing = null;
+      if (this.readAgain && !this.stopped) {
+        this.readAgain = false;
+        void this.refresh();
+      }
     });
     return this.refreshing;
   }
 
   private async read(): Promise<void> {
-    let response: Response;
+    let data: T;
     try {
-      response = await this.request(`/api/sessions?limit=${SESSION_PAGE}&offset=0`);
-    } catch {
-      this.update({ status: "unreachable", error: null });
+      data = await this.options.read((path) => this.request(path));
+    } catch (error) {
+      this.update({ status: "unreachable", error: error instanceof FeedError ? error.message : null } as Partial<FeedSnapshot<T>>);
       return;
     }
 
-    if (response.status === 401 && !this.renewed && this.options.onUnauthorized) {
-      this.renewed = true;
-      const next = await this.options.onUnauthorized();
-      if (next) {
-        this.token = next;
-        return this.read();
-      }
-    }
-    if (!response.ok) {
-      this.update({
-        status: "unreachable",
-        error: response.status === 401 ? "This phone's key for this machine stopped working." : `It answered ${response.status}.`,
-      });
-      return;
-    }
-
-    const sessions = await response.json() as SessionListItem[];
-    const asks = await this.readAsks(sessions.filter((session) => session.sessionStatus === "waiting_input"));
     const live = this.hub?.state === HubConnectionState.Connected;
     this.update({
-      sessions,
-      asks,
+      ...data,
       lastHeardAt: this.now(),
       status: live ? "live" : this.pollTimer ? "polling" : this.snapshot.status === "unreachable" ? "polling" : this.snapshot.status,
       error: null,
     });
   }
 
-  private async readAsks(waiting: readonly SessionListItem[]): Promise<Record<string, InboxAsk>> {
-    const asks: Record<string, InboxAsk> = {};
-    await Promise.all(waiting.slice(0, 12).map(async (session) => {
-      const ask = await this.readAsk(session.session.id).catch(() => null);
-      if (ask) asks[session.session.id] = ask;
-    }));
-    return asks;
-  }
-
-  private async readAsk(sessionId: string): Promise<InboxAsk | null> {
-    const permissions = await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/permissions`);
-    if (permissions.ok) {
-      const list = (await permissions.json() as unknown[]).map(toPermissionAsk).filter((ask): ask is PermissionAsk => ask !== null);
-      if (list.length) return { kind: "permission", ask: list[0] };
-    }
-
-    // No permission ask: look for a question the agent is waiting on in the last few messages.
-    const messages = await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/messages?limit=6`);
-    if (!messages.ok) return null;
-    const body = await messages.json() as { messages?: FleetMessage[] };
-    return findPendingQuestion(body.messages ?? []);
-  }
-
-  private update(patch: Partial<FeedSnapshot>): void {
+  private update(patch: Partial<FeedSnapshot<T>>): void {
     this.snapshot = { ...this.snapshot, ...patch };
     this.options.onChange(this.snapshot);
   }
-}
-
-/** The newest question tool call still waiting for an answer, from Fleet's message shape. */
-export function findPendingQuestion(messages: readonly FleetMessage[]): InboxAsk | null {
-  const pending = pendingQuestion(messages.map(convertFleetMessageToAccumulated));
-  return pending ? { kind: "question", requestId: pending.requestId, question: pending.question, more: pending.more } : null;
 }
