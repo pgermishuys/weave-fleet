@@ -75,6 +75,14 @@ describe("MachineSessionsGroup", () => {
     expect(view.text()).toContain("No sessions");
   });
 
+  // Nothing else in the sidebar leads to a machine with no sessions.
+  it("offers a new session on a machine with no sessions", async () => {
+    const view = mountGroup({ state: { ...listed, projects: [] } });
+
+    await view.get("[data-testid='machine-group-new-session']").trigger("click");
+    expect(view.emitted("newSession")).toHaveLength(1);
+  });
+
   it("groups its sessions like the live machine: Pinned first, then its projects in their order", () => {
     const state = {
       ...listed,

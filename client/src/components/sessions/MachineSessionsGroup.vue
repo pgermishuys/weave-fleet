@@ -33,7 +33,7 @@ const props = defineProps<{
   draftActive?: boolean;
 }>();
 
-const emit = defineEmits<{ open: [session: SessionListItem]; openDraft: [] }>();
+const emit = defineEmits<{ open: [session: SessionListItem]; openDraft: []; newSession: []; workHere: [] }>();
 
 const sidebar = useSidebarStore();
 const expanded = computed(() => !sidebar.isGroupCollapsed(machineGroupKey(props.machine.key)));
@@ -104,7 +104,10 @@ const note = computed(() => {
       :note="note"
       :count="count"
       :expanded="expanded"
+      menu
       @toggle="sidebar.toggleGroupCollapsed(machineGroupKey(machine.key))"
+      @new-session="emit('newSession')"
+      @work-here="emit('workHere')"
     />
 
     <template v-if="expanded">
@@ -150,7 +153,20 @@ const note = computed(() => {
         v-if="!state?.error && state?.loadedAt && projectGroups.length === 0 && pinnedGroup.sessionCount === 0"
         class="machine-group__empty"
       >
-        {{ query ? "No matching sessions" : "No sessions" }}
+        <template v-if="query">
+          No matching sessions
+        </template>
+        <template v-else>
+          No sessions ·
+          <button
+            type="button"
+            class="machine-group__start"
+            data-testid="machine-group-new-session"
+            @click="emit('newSession')"
+          >
+            New session
+          </button>
+        </template>
       </p>
     </template>
   </section>
@@ -163,6 +179,25 @@ const note = computed(() => {
   font-size: 11.5px;
   line-height: 1.4;
   color: var(--muted);
+}
+
+.machine-group__start {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--coral);
+  font: inherit;
+  cursor: pointer;
+}
+
+.machine-group__start:hover {
+  text-decoration: underline;
+}
+
+.machine-group__start:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 .machine-group__error {

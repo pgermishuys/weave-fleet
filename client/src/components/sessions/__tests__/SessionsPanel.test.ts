@@ -1,12 +1,14 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ref, shallowRef } from "vue";
+import MachineSessionsGroup from "@/components/sessions/MachineSessionsGroup.vue";
 import SessionsPanel from "@/components/sessions/SessionsPanel.vue";
 import type { ProjectResponse, SessionListItem } from "@/api/client";
 import { HOME_MACHINE_KEY, saveMachines, setActiveMachine, type MachineConnection } from "@/lib/machines";
 import { saveSessionListScroll } from "@/lib/session-list-scroll";
 import { useMachinesStore } from "@/stores/machines";
 import { useSessionsStore } from "@/stores/sessions";
+import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 
 vi.mock("@tanstack/vue-router", () => ({
   useRouter: () => ({ navigate: vi.fn() }),
@@ -144,5 +146,36 @@ describe("SessionsPanel across machines", () => {
     await flushPromises();
 
     expect(list.scrollTop).toBe(30);
+  });
+
+  it("starts a new session on another machine from its heading, without switching to it", async () => {
+    const machines = useMachinesStore();
+    const openOn = vi.spyOn(machines, "openOn").mockImplementation(() => {});
+    useSessionsStore().setSessions([item("home-1", "Local work", "p-fleet")]);
+    const view = mountPanel();
+    await flushPromises();
+
+    const group = view.findAllComponents(MachineSessionsGroup).find((candidate) => candidate.props("machine").key === hangar.id)!;
+    group.vm.$emit("newSession");
+
+    expect(useWorkspaceUiStore().newSessionMachine).toBe(hangar.id);
+    expect(openOn).not.toHaveBeenCalled();
+    view.unmount();
+  });
+
+  it("works on another machine from its heading, keeping the live list for the way back", async () => {
+    const machines = useMachinesStore();
+    const openOn = vi.spyOn(machines, "openOn").mockImplementation(() => {});
+    useSessionsStore().setSessions([item("home-1", "Local work", "p-fleet")]);
+    const view = mountPanel();
+    await flushPromises();
+
+    const group = view.findAllComponents(MachineSessionsGroup).find((candidate) => candidate.props("machine").key === hangar.id)!;
+    group.vm.$emit("workHere");
+
+    expect(openOn).toHaveBeenCalledWith(hangar.id, "/", expect.objectContaining({
+      sessions: [expect.objectContaining({ session: expect.objectContaining({ id: "home-1" }) })],
+    }));
+    view.unmount();
   });
 });
