@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Workflows;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
@@ -30,6 +31,8 @@ public static class AutomationRunState
     public const string Waiting = "waiting";
     /// <summary>The workflow run it started was ended before it finished.</summary>
     public const string Ended = "ended";
+    /// <summary>It's on another machine, which didn't answer when asked how it's going. Not Done: it may still be.</summary>
+    public const string Unanswered = "unanswered";
 }
 
 /// <summary>
@@ -43,6 +46,7 @@ public sealed partial class AutomationRunService(
     SessionActivityTracker activityTracker,
     TimeProvider timeProvider,
     ILogger<AutomationRunService> logger,
+    RemoteAutomationRuns remoteRuns,
     IAutomationWorkflows? workflows = null)
 {
     /// <summary>A run still "starting" after this is assumed stuck, so it no longer holds up the next one.</summary>
@@ -105,7 +109,7 @@ public sealed partial class AutomationRunService(
             return run;
 
         var previousSessionId = automation.TargetType == "same_session"
-            ? await PreviousSessionIdAsync(automation.Id, run.Id)
+            ? await PreviousSessionIdAsync(automation, run.Id)
             : null;
 
         // Run now sends the prompt as a scheduled run would; "manual" only marks where the session came from.
@@ -123,7 +127,10 @@ public sealed partial class AutomationRunService(
         run.InstanceId = outcome.InstanceId;
         run.Error = outcome.Error;
         run.WorkflowRunId = outcome.WorkflowRunId;
-        await runRepository.CompleteAsync(run.Id, run.Status, run.SessionId, run.InstanceId, run.Error, run.WorkflowRunId);
+        run.MachineId = outcome.MachineId;
+        run.MachineName = outcome.MachineName;
+        await runRepository.CompleteAsync(
+            run.Id, run.Status, run.SessionId, run.InstanceId, run.Error, run.WorkflowRunId, run.MachineId, run.MachineName);
         return run;
     }
 
@@ -136,22 +143,77 @@ public sealed partial class AutomationRunService(
 
     /// <summary>
     /// What the runs list says about a run: a run that started a workflow run follows that run (Running, Needs you,
-    /// Done, Ended, Failed); any other started run is running while its session is busy.
+    /// Done, Ended, Failed); any other started run is running while its session is busy. A run on another machine asks
+    /// that machine until it has ended (see <see cref="RemoteStateOfAsync"/>).
     /// </summary>
     public async Task<string> StateOfAsync(AutomationRun run)
     {
-        if (run.Status != AutomationRunStatus.Started || run.WorkflowRunId is null || workflows is null)
+        if (run.Status != AutomationRunStatus.Started)
             return StateOf(run);
 
-        return await workflows.StatusAsync(run.UserId, run.WorkflowRunId) switch
-        {
-            WorkflowRunStatus.Running => AutomationRunState.Running,
-            WorkflowRunStatus.Waiting => AutomationRunState.Waiting,
-            WorkflowRunStatus.Ended => AutomationRunState.Ended,
-            WorkflowRunStatus.Failed => AutomationRunState.Failed,
-            _ => AutomationRunState.Done,
-        };
+        if (run.MachineId is not null)
+            return await RemoteStateOfAsync(run);
+
+        if (run.WorkflowRunId is null || workflows is null)
+            return StateOf(run);
+
+        return StateOfWorkflowRun(await workflows.StatusAsync(run.UserId, run.WorkflowRunId));
     }
+
+    /// <summary>
+    /// <see cref="StateOfAsync"/> for a list of runs, in its order. Runs on other machines that haven't ended are asked
+    /// at once rather than one after another, so a machine that's slow to answer costs the list its timeout once.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> StatesOfAsync(IReadOnlyList<AutomationRun> runs)
+    {
+        var states = new string[runs.Count];
+        var asking = new List<Task>();
+        for (var i = 0; i < runs.Count; i++)
+        {
+            var index = i;
+            if (runs[i] is { Status: AutomationRunStatus.Started, MachineId: not null, SettledState: null })
+                asking.Add(Task.Run(async () => states[index] = await RemoteStateOfAsync(runs[index])));
+            else
+                states[i] = await StateOfAsync(runs[i]);
+        }
+
+        await Task.WhenAll(asking);
+        return states;
+    }
+
+    /// <summary>
+    /// How a run on another machine is going. Once the machine says it has ended (its session idle, or its workflow run
+    /// done, ended or failed), that's written on the run and it isn't asked again. A machine that doesn't answer is
+    /// <see cref="AutomationRunState.Unanswered"/>, never Done, and nothing is written.
+    /// </summary>
+    private async Task<string> RemoteStateOfAsync(AutomationRun run)
+    {
+        if (run.SettledState is { } settled)
+            return settled;
+
+        var state = run.WorkflowRunId is not null
+            ? await remoteRuns.GetWorkflowRunAsync(run.MachineId!, run.WorkflowRunId) is { } workflowRun ? StateOfWorkflowRun(workflowRun.Status) : null
+            : run.SessionId is not null ? await remoteRuns.SessionStateAsync(run.MachineId!, run.SessionId) : AutomationRunState.Done;
+        if (state is null)
+            return AutomationRunState.Unanswered;
+
+        if (state is AutomationRunState.Done or AutomationRunState.Ended or AutomationRunState.Failed)
+        {
+            await runRepository.SettleAsync(run.Id, state);
+            run.SettledState = state;
+        }
+
+        return state;
+    }
+
+    private static string StateOfWorkflowRun(string? status) => status switch
+    {
+        WorkflowRunStatus.Running => AutomationRunState.Running,
+        WorkflowRunStatus.Waiting => AutomationRunState.Waiting,
+        WorkflowRunStatus.Ended => AutomationRunState.Ended,
+        WorkflowRunStatus.Failed => AutomationRunState.Failed,
+        _ => AutomationRunState.Done,
+    };
 
     /// <summary>What the runs list says about a run that started a session: running while its session is busy.</summary>
     public string StateOf(AutomationRun run) => run.Status switch
@@ -174,9 +236,18 @@ public sealed partial class AutomationRunService(
         {
             AutomationRunStatus.Starting => DateTime.TryParse(run.StartedAt, null, System.Globalization.DateTimeStyles.RoundtripKind, out var at)
                 && nowUtc - at.ToUniversalTime() < StartingTimeout,
-            AutomationRunStatus.Started => StateOf(run) == AutomationRunState.Running,
+            AutomationRunStatus.Started => run.MachineId is null && StateOf(run) == AutomationRunState.Running,
             _ => false,
         });
+
+        // On another machine only the newest started runs are asked about: each is a request to that machine. One that
+        // doesn't answer isn't counted: if it's still down, the new run is skipped with that reason anyway.
+        foreach (var run in recent.Where(run => run.Status == AutomationRunStatus.Started && run.MachineId is not null).Take(automation.MaxConcurrentRuns))
+        {
+            if (await RemoteStateOfAsync(run) == AutomationRunState.Running)
+                going++;
+        }
+
         return going >= automation.MaxConcurrentRuns;
     }
 
@@ -195,13 +266,29 @@ public sealed partial class AutomationRunService(
         }
 
         var last = recent.FirstOrDefault(run => run.Status == AutomationRunStatus.Started && run.WorkflowRunId is not null);
-        return last is null || workflows is null ? null : await workflows.UnfinishedAsync(automation.UserId, last.WorkflowRunId!);
+        if (last is null)
+            return null;
+        if (last.MachineId is not null)
+        {
+            // Ended there, or the machine doesn't answer: nothing holds this run up (a machine that's down skips it anyway).
+            if (last.SettledState is not null || await remoteRuns.GetWorkflowRunAsync(last.MachineId, last.WorkflowRunId!) is not { } remote)
+                return null;
+            var state = StateOfWorkflowRun(remote.Status);
+            if (state is AutomationRunState.Done or AutomationRunState.Ended or AutomationRunState.Failed)
+                await runRepository.SettleAsync(last.Id, state);
+            return remote.Unfinished;
+        }
+        return workflows is null ? null : await workflows.UnfinishedAsync(automation.UserId, last.WorkflowRunId!);
     }
 
-    private async Task<string?> PreviousSessionIdAsync(string automationId, string currentRunId)
+    /// <summary>The session the last started run used, on the machine the automation runs on now.</summary>
+    private async Task<string?> PreviousSessionIdAsync(Automation automation, string currentRunId)
     {
-        var recent = await runRepository.ListByAutomationAsync(automationId, limit: 20);
-        return recent.FirstOrDefault(run => run.Id != currentRunId && run.Status == AutomationRunStatus.Started && run.SessionId is not null)?.SessionId;
+        var recent = await runRepository.ListByAutomationAsync(automation.Id, limit: 20);
+        return recent.FirstOrDefault(run => run.Id != currentRunId && run.Status == AutomationRunStatus.Started && run.SessionId is not null)
+            is { } last && last.MachineId == automation.TargetMachineId
+            ? last.SessionId
+            : null;
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Automation {AutomationId} ({AutomationName}) skipped: its last run is still going")]

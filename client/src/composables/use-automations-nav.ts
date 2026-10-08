@@ -33,6 +33,8 @@ export interface AutomationComposerState {
   model: string;
   /** The harness the agent and model come from, or a workflow runs on; null for the default harness. */
   harnessType: string | null;
+  /** Another machine its runs go to (its id); null for this machine. The folder and harness are that machine's. */
+  machineId: string | null;
 }
 
 /** What "Repeat on a schedule…" in the Workflows Library starts a new automation from. */
@@ -64,6 +66,7 @@ export function freshComposerState(): AutomationComposerState {
     agent: "",
     model: "",
     harnessType: null,
+    machineId: null,
   };
 }
 

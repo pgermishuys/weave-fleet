@@ -11,7 +11,10 @@ const { apiFetchMock, navigate, workflowsOn } = vi.hoisted(() => ({
   navigate: vi.fn(),
   workflowsOn: { value: true },
 }));
-vi.mock("@/lib/api-client", () => ({ apiFetch: apiFetchMock }));
+vi.mock("@/lib/api-client", () => ({
+  apiFetch: apiFetchMock,
+  apiFetchOn: (_machine: unknown, path: string, init?: RequestInit) => apiFetchMock(path, init),
+}));
 vi.mock("@tanstack/vue-router", () => ({ useNavigate: () => navigate, useRouter: () => ({ navigate }) }));
 vi.mock("@/composables/use-signalr-socket", () => ({ onGlobalEvent: () => () => {} }));
 vi.mock("@/lib/automations", async (importOriginal) => ({

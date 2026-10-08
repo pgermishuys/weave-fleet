@@ -2,17 +2,50 @@ using System.Text.Json;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Testing.Fakes;
+using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Application.Tests.Services;
 
 public sealed class AutomationServiceTests
 {
     private readonly FakeAutomationRepository _repository = new();
+    private readonly InMemoryRemoteMachineRepository _machines = new();
     private readonly AutomationService _sut;
 
     public AutomationServiceTests()
     {
-        _sut = new AutomationService(_repository, new TestUserContext());
+        _sut = new AutomationService(_repository, new TestUserContext(), _machines);
+        _machines.UpsertAsync(new RemoteMachine { Id = "machine-atlas", Name = "atlas", BaseUrl = "https://atlas.test", EncryptedToken = "x" })
+            .GetAwaiter().GetResult();
+    }
+
+    [Fact]
+    public async Task An_automation_can_run_on_a_machine_in_the_list_and_keeps_it()
+    {
+        var created = await _sut.CreateAsync(
+            "Nightly check", "Check the build", "schedule", "0 2 * * *", 1, 10, 30,
+            workspaceId: "/home/me/source/harbor-api", isolation: "worktree", targetMachineId: "machine-atlas");
+
+        created.IsSuccess.ShouldBeTrue(created.IsFailure ? created.Error.Description : null);
+        (await _repository.GetByIdAsync(created.Value.Id))!.TargetMachineId.ShouldBe("machine-atlas");
+
+        var updated = await _sut.UpdateAsync(created.Value.Id, "Nightly check", "Check the build", "schedule", "0 2 * * *", 1, 10, 30);
+        updated.Value.TargetMachineId.ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData("machine-gone", "new_session", "That machine isn't in this Fleet's list. Add it in Settings › Machines.")]
+    [InlineData("any", "new_session", "Fleet can't pick a machine yet. Pick one.")]
+    [InlineData("machine-atlas", "most_recent_session", "That target picks a session on this machine. Use a new session or the same session each run.")]
+    [InlineData("machine-atlas", "tagged_session", "That target picks a session on this machine. Use a new session or the same session each run.")]
+    public async Task Only_a_machine_in_the_list_with_a_target_it_can_run(string machine, string targetType, string error)
+    {
+        var result = await _sut.CreateAsync(
+            "Nightly check", "Check the build", "schedule", "0 2 * * *", 1, 10, 30,
+            targetType: targetType, targetMachineId: machine);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Description.ShouldBe(error);
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import "@/components/sessions/new-session/new-session.css";
-import { computed, nextTick, onMounted, shallowRef, useTemplateRef, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from "vue";
+import { useNavigate } from "@tanstack/vue-router";
 import { ArrowUp, GitBranch, LoaderCircle } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,7 @@ import ModelSelector from "@/components/session/ModelSelector.vue";
 import BasePicker from "@/components/sessions/new-session/BasePicker.vue";
 import FolderPicker from "@/components/sessions/new-session/FolderPicker.vue";
 import HarnessPicker from "@/components/sessions/new-session/HarnessPicker.vue";
+import MachinePicker from "@/components/sessions/new-session/MachinePicker.vue";
 import WorkspacePicker from "@/components/sessions/new-session/WorkspacePicker.vue";
 import AutomationMoreOptions from "@/components/automations/AutomationMoreOptions.vue";
 import AutomationRunsInPicker from "@/components/automations/AutomationRunsInPicker.vue";
@@ -22,15 +24,18 @@ import { useIsMobile } from "@/composables/use-media-query";
 import { useNewSessionDefaults } from "@/composables/use-new-session-defaults";
 import { useRepositories } from "@/composables/use-repositories";
 import { useRepositoryDetail } from "@/composables/use-repository-detail";
+import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useWorkflowsFeature } from "@/composables/use-workflows-feature";
 import type { AutomationComposerState } from "@/composables/use-automations-nav";
 import { describeDefaults, modelFromKey, modelToPath } from "@/lib/agent-model-choice";
 import { autoName, parseSchedule, promptFrom, toTrigger, type When } from "@/lib/automation-schedule";
 import { browserTimeZone, describeAutomationPlan } from "@/lib/automations";
+import { useMachineTarget } from "@/lib/machine-target";
 import type { NewSessionFolder } from "@/lib/new-session-request";
 import type { Workflow } from "@/lib/workflows";
 import { useAppShellStore } from "@/stores/app-shell";
 import type { Automation, CreateAutomationRequest } from "@/stores/automations";
+import { useMachinesStore } from "@/stores/machines";
 import { useWorkflowsStore } from "@/stores/workflows";
 
 /**
@@ -66,6 +71,51 @@ const branchName = shallowRef("");
 const timeZone = browserTimeZone() ?? "UTC";
 
 const isEditing = computed(() => props.automation !== null);
+
+// ── The machine runs go to ───────────────────────────────────────────────────────
+// Like the new-session box: AutomationMachineScope provides the machine the state names, and everything here (folders,
+// harnesses, agents and models, workflows) asks it. The list is the one this machine keeps, so the chip only shows
+// while working on it, and only once there's another machine in it.
+const machines = useMachinesStore();
+const target = useMachineTarget();
+const navigate = useNavigate();
+const { setActiveSection } = useSettingsNav();
+const showMachineChip = computed(() => machines.hasMachines && machines.live.isHome);
+const targetName = computed(() => machines.entries.find((entry) => entry.key === target.key)?.name ?? machines.live.name);
+
+/** Runs go to another machine: what was picked on this one (folder, harness, agent, model, workflow) goes. */
+function pickMachine(machineKey: string): void {
+  const machineId = machineKey === machines.live.key ? null : machineKey;
+  if (machineId === state.value.machineId) return;
+  Object.assign(state.value, {
+    machineId,
+    folder: null,
+    hasChosenFolder: false,
+    workspace: { kind: "new" },
+    baseBranch: null,
+    agent: "",
+    model: "",
+    harnessType: null,
+    workflowId: null,
+    workflowSteps: [],
+  } satisfies Partial<AutomationComposerState>);
+  // An older target picks a session on this machine; on another one, runs start a new session.
+  if (machineId && !["new_session", "same_session", "workflow"].includes(state.value.targetType)) {
+    state.value.targetType = "new_session";
+  }
+}
+
+function addMachine(): void {
+  setActiveSection("machines");
+  void navigate({ to: "/settings" });
+}
+
+// The chip's menu says which machines answer, as the sidebar does.
+let stopMachinePolling: (() => void) | null = null;
+watch(showMachineChip, (show) => {
+  if (show && !stopMachinePolling) stopMachinePolling = machines.startPolling();
+}, { immediate: true });
+onUnmounted(() => stopMachinePolling?.());
 const repositoryPath = computed(() => (state.value.folder?.kind === "repository" ? state.value.folder.path : null));
 const { detail: repositoryDetail, isLoading: isLoadingRepositoryDetail } = useRepositoryDetail(repositoryPath);
 const currentBranch = computed(() => repositoryDetail.value?.branch ?? null);
@@ -103,7 +153,7 @@ async function loadLibrary(): Promise<void> {
   }
   isLoadingLibrary.value = true;
   try {
-    const loaded = await workflowsStore.loadLibrary(repositoryPath.value);
+    const loaded = await workflowsStore.loadLibrary(repositoryPath.value, target.connection);
     if (mine === libraryGeneration) library.value = loaded.workflows;
   } catch (error) {
     if (mine === libraryGeneration) libraryNote.value = error instanceof Error ? error.message : "Couldn't load the workflows.";
@@ -252,6 +302,7 @@ const request = computed<CreateAutomationRequest | null>(() => {
       workflowId: state.value.workflowId,
       // A saved step the Library hasn't loaded yet stays; one the workflow no longer has goes.
       workflowSteps: library.value ? state.value.workflowSteps.filter((id) => offered.has(id)) : [...state.value.workflowSteps],
+      targetMachineId: state.value.machineId,
     };
   }
   return {
@@ -273,6 +324,7 @@ const request = computed<CreateAutomationRequest | null>(() => {
     // An older automation with no folder keeps running in the first workspace root until one is picked.
     isolation: existing && !existing.isolation && !workspaceId ? null : isWorktree.value ? "worktree" : "existing",
     baseBranch: isWorktree.value ? state.value.baseBranch : null,
+    targetMachineId: state.value.machineId,
   };
 });
 
@@ -296,7 +348,8 @@ const isDirty = computed(() => {
     || (next.harnessType ?? null) !== (existing.harnessType ?? null)
     || (next.workflowId ?? null) !== (existing.workflowId ?? null)
     || [...(next.workflowSteps ?? [])].sort().join(",") !== [...(existing.workflowSteps ?? [])].sort().join(",")
-    || next.maxConcurrentRuns !== existing.maxConcurrentRuns;
+    || next.maxConcurrentRuns !== existing.maxConcurrentRuns
+    || (next.targetMachineId ?? null) !== (existing.targetMachineId ?? null);
 });
 
 const canSubmit = computed(() => !props.busy && request.value !== null && isDirty.value);
@@ -372,6 +425,13 @@ function applyInitialFolder(): void {
 }
 
 watch(areRepositoriesReady, applyInitialFolder, { immediate: true });
+
+// The page reads a saved folder against this machine's repositories; another machine's says whether it's one there.
+watch(repositories, (found) => {
+  const folder = state.value.folder;
+  if (target.isLive || folder?.kind !== "directory") return;
+  if (found.some((repository) => repository.path === folder.path)) state.value.folder = { kind: "repository", path: folder.path };
+});
 
 // A new schedule phrase is a new question: "Just once" was the answer to the old one.
 watch(() => (hit.value ? state.value.text.slice(hit.value.start, hit.value.end) : null), (phrase, previous) => {
@@ -459,6 +519,23 @@ defineExpose({ focusMessage });
     </ComposerFrame>
 
     <div class="automation-composer__strip">
+      <template v-if="showMachineChip">
+        <MachinePicker
+          :machines="machines.entries"
+          :selected="target.key"
+          :others="machines.others"
+          :live-reachable="machines.liveReachable"
+          :disabled="busy"
+          heading="Runs on"
+          @update:selected="pickMachine"
+          @add-machine="addMachine"
+          @close-auto-focus="returnFocusToMessage"
+        />
+        <span
+          class="automation-composer__separator"
+          aria-hidden="true"
+        />
+      </template>
       <AutomationWhenPicker
         :when="when"
         :parsed="activeHit !== null"
@@ -604,6 +681,11 @@ defineExpose({ focusMessage });
       data-testid="automation-plan"
       aria-live="polite"
     >
+      <span
+        v-if="!target.isLive"
+        class="automation-composer__plan-machine"
+        data-testid="automation-plan-machine"
+      >On {{ targetName }}:</span>
       <template
         v-for="(part, index) in plan.schedule"
         :key="`s${index}`"
@@ -730,6 +812,14 @@ defineExpose({ focusMessage });
   font-size: 12px;
   line-height: 1.55;
   overflow-wrap: anywhere;
+}
+
+/* The machine runs go to, when it's another one, in the sidebar's machine coral. */
+.automation-composer__plan-machine {
+  margin-right: 4px;
+  color: var(--coral);
+  font-family: var(--font-mono-stack);
+  font-size: 11.5px;
 }
 
 .automation-composer__plan b {

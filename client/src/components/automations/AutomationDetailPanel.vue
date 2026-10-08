@@ -4,6 +4,7 @@ import { useNavigate } from "@tanstack/vue-router";
 import { AlertCircle, Ellipsis, Play, Plus, Trash2 } from "lucide-vue-next";
 import { DropdownMenuItem } from "reka-ui";
 import AutomationComposer from "@/components/automations/AutomationComposer.vue";
+import AutomationMachineScope from "@/components/automations/AutomationMachineScope.vue";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -28,6 +29,7 @@ import { describeDate, fromTrigger, nextRun } from "@/lib/automation-schedule";
 import { describeEventType, describeRunState, describeRunTrigger, eventTypeOf } from "@/lib/automations";
 import type { NewSessionFolder } from "@/lib/new-session-request";
 import { useAutomationsStore, type Automation, type AutomationRun, type CreateAutomationRequest } from "@/stores/automations";
+import { useMachinesStore } from "@/stores/machines";
 import { useWorkflowsStore } from "@/stores/workflows";
 
 const navigate = useNavigate();
@@ -48,6 +50,7 @@ const { repositories } = useRepositories();
 const workflowRuns = useWorkflowsStore();
 const { isWorkflowsEnabled } = useWorkflowsFeature();
 const { setActiveSection } = useSettingsNav();
+const machines = useMachinesStore();
 
 const composerRef = useTemplateRef<InstanceType<typeof AutomationComposer>>("composer");
 const isSubmitting = shallowRef(false);
@@ -105,6 +108,7 @@ function stateFor(automation: Automation): AutomationComposerState {
     agent: automation.agent ?? "",
     model: keyForStoredModel(automation.model),
     harnessType: automation.harnessType ?? null,
+    machineId: automation.targetMachineId ?? null,
   };
 }
 
@@ -298,6 +302,12 @@ function sessionOf(run: AutomationRun): string | null {
 function openRun(run: AutomationRun): void {
   const sessionId = sessionOf(run);
   if (!sessionId) return;
+  // Its session is on the machine it went to: the app moves there, as opening that machine's session from the sidebar does.
+  if (run.machineId) {
+    const instance = !run.workflowRunId && run.instanceId ? `?instanceId=${encodeURIComponent(run.instanceId)}` : "";
+    machines.openOn(run.machineId, `/sessions/${encodeURIComponent(sessionId)}${instance}`);
+    return;
+  }
   void navigate({
     to: "/sessions/$id",
     params: { id: sessionId },
@@ -358,13 +368,15 @@ const firstRunHint = computed(() => {
         />
         {{ formError }}
       </div>
-      <AutomationComposer
-        ref="composer"
-        v-model:state="draft"
-        :automation="null"
-        :busy="isSubmitting"
-        @submit="handleCreate"
-      />
+      <AutomationMachineScope :machine-id="draft.machineId">
+        <AutomationComposer
+          ref="composer"
+          v-model:state="draft"
+          :automation="null"
+          :busy="isSubmitting"
+          @submit="handleCreate"
+        />
+      </AutomationMachineScope>
     </template>
 
     <!-- An existing automation: its runs, with its composer underneath -->
@@ -521,6 +533,11 @@ const firstRunHint = computed(() => {
             <span class="automation-run__title">
               {{ runTime(run) }}
               <small v-if="describeRunTrigger(run.trigger)">{{ describeRunTrigger(run.trigger) }}</small>
+              <small
+                v-if="run.machineName"
+                class="automation-run__machine"
+                data-testid="automation-run-machine"
+              >on {{ run.machineName }}</small>
             </span>
             <span class="automation-run__end">
               <span
@@ -552,13 +569,15 @@ const firstRunHint = computed(() => {
         />
         {{ formError }}
       </div>
-      <AutomationComposer
-        ref="composer"
-        v-model:state="editState"
-        :automation="currentAutomation"
-        :busy="isSubmitting"
-        @submit="handleSave"
-      />
+      <AutomationMachineScope :machine-id="editState.machineId">
+        <AutomationComposer
+          ref="composer"
+          v-model:state="editState"
+          :automation="currentAutomation"
+          :busy="isSubmitting"
+          @submit="handleSave"
+        />
+      </AutomationMachineScope>
     </template>
 
     <div
@@ -810,6 +829,13 @@ const firstRunHint = computed(() => {
   margin-left: 6px;
   color: var(--muted);
   font-size: 12px;
+}
+
+/* The machine a run went to, in the sidebar's machine coral. */
+.automation-run__title .automation-run__machine {
+  color: var(--coral);
+  font-family: var(--font-mono-stack);
+  font-size: 11.5px;
 }
 
 .automation-run__end {

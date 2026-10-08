@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Workflows;
 using WeaveFleet.Domain.Entities;
@@ -12,7 +13,16 @@ namespace WeaveFleet.Application.Services;
 /// <summary>Which session a run used, or why it couldn't start one.</summary>
 /// <param name="WorkflowRunId">The workflow run it started, for a <c>workflow</c> target.</param>
 /// <param name="Skipped">Nothing started, on purpose or because the start was refused; <paramref name="Error"/> says why.</param>
-public sealed record AutomationExecutionOutcome(string? SessionId, string? InstanceId, string? Error, string? WorkflowRunId = null, bool Skipped = false)
+/// <param name="MachineId">The other machine it went to (<see cref="Automation.TargetMachineId"/>); null for this one.</param>
+/// <param name="MachineName">That machine's name at the time.</param>
+public sealed record AutomationExecutionOutcome(
+    string? SessionId,
+    string? InstanceId,
+    string? Error,
+    string? WorkflowRunId = null,
+    bool Skipped = false,
+    string? MachineId = null,
+    string? MachineName = null)
 {
     public static AutomationExecutionOutcome Failed(string error) => new(null, null, error);
     public static AutomationExecutionOutcome SkippedBecause(string reason) => new(null, null, reason, Skipped: true);
@@ -30,12 +40,14 @@ public interface IAutomationExecutor
 }
 
 /// <summary>
-/// Service that executes an automation by creating a session via SessionOrchestrator.
+/// Service that executes an automation by creating a session via SessionOrchestrator, or, for an automation that runs on
+/// another machine, through that machine's API (<see cref="RemoteAutomationRuns"/>).
 /// </summary>
 public sealed partial class AutomationExecutionService(
     SessionOrchestrator sessionOrchestrator,
     ISessionRepository sessionRepository,
     ILogger<AutomationExecutionService> logger,
+    RemoteAutomationRuns remoteRuns,
     IAutomationWorkflows? workflows = null) : IAutomationExecutor
 {
     /// <summary>
@@ -87,6 +99,9 @@ public sealed partial class AutomationExecutionService(
     /// </summary>
     private async Task<AutomationExecutionOutcome> ExecuteWorkflowAsync(Automation automation, string finalPrompt, CancellationToken ct)
     {
+        if (OnAnotherMachine(automation) is { } remote)
+            return Logged(automation, await remote.StartWorkflowAsync(automation, finalPrompt, ct));
+
         if (workflows is null)
             return AutomationExecutionOutcome.SkippedBecause($"Skipped: {AutomationWorkflows.TurnedOffReason}");
 
@@ -110,6 +125,9 @@ public sealed partial class AutomationExecutionService(
         string? eventType,
         CancellationToken ct)
     {
+        if (OnAnotherMachine(automation) is { } remote)
+            return Logged(automation, await remote.StartSessionAsync(automation, finalPrompt, ct));
+
         var request = new CreateSessionRequest
         {
             Title = $"Automation: {automation.Name}",
@@ -149,6 +167,14 @@ public sealed partial class AutomationExecutionService(
         string? previousSessionId,
         CancellationToken ct)
     {
+        if (OnAnotherMachine(automation) is { } remote)
+        {
+            var prompted = previousSessionId is null ? null : await remote.PromptSessionAsync(automation, previousSessionId, finalPrompt, ct);
+            return prompted is null
+                ? await ExecuteOnNewSessionAsync(automation, finalPrompt, eventType, ct)
+                : Logged(automation, prompted);
+        }
+
         var previous = previousSessionId is null ? null : await sessionRepository.GetByIdAsync(previousSessionId);
         if (previous is null || previous.RetentionStatus == "archived")
             return await ExecuteOnNewSessionAsync(automation, finalPrompt, eventType, ct);
@@ -180,6 +206,19 @@ public sealed partial class AutomationExecutionService(
 
         LogExecutionFailed(automation.Id, automation.Name, result.Error.Code, result.Error.Description);
         return null;
+    }
+
+    /// <summary>The way to the automation's machine when it runs on another one; null when it runs here.</summary>
+    private RemoteAutomationRuns? OnAnotherMachine(Automation automation) =>
+        automation.TargetMachineId is null ? null : remoteRuns;
+
+    private AutomationExecutionOutcome Logged(Automation automation, AutomationExecutionOutcome outcome)
+    {
+        if (outcome.SessionId is not null || outcome.WorkflowRunId is not null)
+            LogRemoteRunStarted(automation.Id, automation.Name, outcome.MachineName ?? "", outcome.SessionId ?? outcome.WorkflowRunId!);
+        else
+            LogRemoteRunNotStarted(automation.Id, automation.Name, outcome.Error ?? "");
+        return outcome;
     }
 
     private static PromptOptions? ChoicesFor(Automation automation, Session targetSession)
@@ -338,6 +377,12 @@ public sealed partial class AutomationExecutionService(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Automation {AutomationId} ({AutomationName}) started workflow run {RunId}")]
     private partial void LogWorkflowStarted(string automationId, string automationName, string runId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Automation {AutomationId} ({AutomationName}) started {StartedId} on {MachineName}")]
+    private partial void LogRemoteRunStarted(string automationId, string automationName, string machineName, string startedId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Automation {AutomationId} ({AutomationName}) didn't start on its machine: {Reason}")]
+    private partial void LogRemoteRunNotStarted(string automationId, string automationName, string reason);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Automation execution failed: {AutomationId} ({AutomationName}), error: {ErrorCode} - {ErrorMessage}")]
     private partial void LogExecutionFailed(string automationId, string automationName, string errorCode, string errorMessage);

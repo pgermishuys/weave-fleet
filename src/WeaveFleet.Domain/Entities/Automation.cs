@@ -5,6 +5,9 @@ namespace WeaveFleet.Domain.Entities;
 /// </summary>
 public sealed class Automation
 {
+    /// <summary>The <see cref="TargetMachineId"/> reserved for "any machine", which Fleet doesn't offer yet.</summary>
+    public const string AnyMachine = "any";
+
     public string Id { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string Prompt { get; set; } = string.Empty;
@@ -47,6 +50,12 @@ public sealed class Automation
     public string? WorkflowId { get; set; }
     /// <summary>The workflow's optional steps switched on for its runs.</summary>
     public List<string> WorkflowSteps { get; set; } = [];
+    /// <summary>
+    /// The machine in this Fleet's list (<see cref="RemoteMachine.Id"/>) whose API starts each run's session or workflow
+    /// run; <see cref="WorkspaceId"/> is a folder on that machine. The automation and its schedule stay here. Null means
+    /// this machine, as every automation made before ran. <see cref="AnyMachine"/> is reserved for Fleet picking one.
+    /// </summary>
+    public string? TargetMachineId { get; set; }
     /// <summary>
     /// When this automation's runs started being recorded, for automations made before runs were: the scheduler
     /// doesn't count anything earlier as missed. Null means since it was made. Set by migration 034 only.

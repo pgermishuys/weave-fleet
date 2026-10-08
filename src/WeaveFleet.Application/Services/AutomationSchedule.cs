@@ -22,7 +22,7 @@ public sealed record ScheduleDecision(ScheduleDecisionKind Kind, DateTime Occurr
 /// When scheduled automations run. A "schedule" trigger is a cron expression and a "once" trigger a local date and
 /// time (<c>2026-09-21T09:00</c>); both are read in the automation's IANA time zone, and no zone means UTC.
 /// </summary>
-public static class AutomationSchedule
+public static partial class AutomationSchedule
 {
     public const string ScheduleTrigger = "schedule";
     public const string OnceTrigger = "once";
@@ -198,4 +198,22 @@ public static class AutomationSchedule
 
         return null;
     }
+
+    /// <summary>
+    /// A worktree run's branch: <c>fleet/auto-weekly-pr-digest-20260921-0900</c>, the automation's name and the run's
+    /// time on its clock. Made here even for a run on another machine, so the name doesn't depend on that machine's clock.
+    /// </summary>
+    public static string RunBranchName(Automation automation, DateTimeOffset nowUtc)
+    {
+        var slug = NonSlugCharacters().Replace(automation.Name.ToLowerInvariant(), "-").Trim('-');
+        if (slug.Length > 40)
+            slug = slug[..40].TrimEnd('-');
+
+        var local = TimeZoneInfo.ConvertTime(nowUtc, ResolveTimeZone(automation.TimeZone));
+        var stamp = local.ToString("yyyyMMdd-HHmm", CultureInfo.InvariantCulture);
+        return string.IsNullOrEmpty(slug) ? $"fleet/auto-{stamp}" : $"fleet/auto-{slug}-{stamp}";
+    }
+
+    [System.Text.RegularExpressions.GeneratedRegex("[^a-z0-9]+")]
+    private static partial System.Text.RegularExpressions.Regex NonSlugCharacters();
 }

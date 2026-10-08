@@ -24,7 +24,12 @@ public sealed record CreateAutomationRequest(
     /// <summary>For a <c>workflow</c> target: the workflow it runs (<c>builtin:…</c> or <c>repo:…</c>).</summary>
     string? WorkflowId = null,
     /// <summary>For a <c>workflow</c> target: the optional steps switched on.</summary>
-    List<string>? WorkflowSteps = null);
+    List<string>? WorkflowSteps = null,
+    /// <summary>
+    /// The machine in this Fleet's list whose API starts each run (<c>WorkspaceId</c> is a folder there); null for this
+    /// machine. Runs go to a new session, the same session or a workflow there.
+    /// </summary>
+    string? TargetMachineId = null);
 
 public sealed record UpdateAutomationRequest(
     string Name,
@@ -50,7 +55,12 @@ public sealed record UpdateAutomationRequest(
     /// <summary>For a <c>workflow</c> target: the workflow it runs (<c>builtin:…</c> or <c>repo:…</c>).</summary>
     string? WorkflowId = null,
     /// <summary>For a <c>workflow</c> target: the optional steps switched on.</summary>
-    List<string>? WorkflowSteps = null);
+    List<string>? WorkflowSteps = null,
+    /// <summary>
+    /// The machine in this Fleet's list whose API starts each run (<c>WorkspaceId</c> is a folder there); null for this
+    /// machine. Runs go to a new session, the same session or a workflow there.
+    /// </summary>
+    string? TargetMachineId = null);
 
 public sealed record AutomationResponse(
     string Id,
@@ -80,11 +90,13 @@ public sealed record AutomationResponse(
     List<string>? WorkflowSteps,
     /// <summary>When it runs next (UTC, ISO 8601); null when it's off or waits for an event.</summary>
     string? NextRunAt,
-    AutomationRunResponse? LastRun);
+    AutomationRunResponse? LastRun,
+    /// <summary>The machine in this Fleet's list its runs go to; null for this machine.</summary>
+    string? TargetMachineId = null);
 
 /// <summary>
 /// One run. State is "starting", "running", "done", "failed" or "skipped"; a run that started a workflow run follows it,
-/// and can also be "waiting" (on you) or "ended".
+/// and can also be "waiting" (on you) or "ended". A run on another machine that didn't answer is "unanswered".
 /// </summary>
 public sealed record AutomationRunResponse(
     string Id,
@@ -97,7 +109,11 @@ public sealed record AutomationRunResponse(
     string? InstanceId,
     string? Error,
     /// <summary>The workflow run it started, for a <c>workflow</c> target.</summary>
-    string? WorkflowRunId = null);
+    string? WorkflowRunId = null,
+    /// <summary>The other machine it went to; null for this machine. Its session and workflow run are there.</summary>
+    string? MachineId = null,
+    /// <summary>That machine's name when the run went to it.</summary>
+    string? MachineName = null);
 
 public sealed record AutomationRunListResponse(IReadOnlyList<AutomationRunResponse> Runs);
 

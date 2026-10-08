@@ -42,14 +42,16 @@ public sealed class AutomationRunRepository(IDbConnectionFactory connectionFacto
             });
     }
 
-    public async Task CompleteAsync(string id, string status, string? sessionId, string? instanceId, string? reason, string? workflowRunId = null)
+    public async Task CompleteAsync(
+        string id, string status, string? sessionId, string? instanceId, string? reason, string? workflowRunId = null,
+        string? machineId = null, string? machineName = null)
     {
         using var conn = connectionFactory.CreateConnection();
         await conn.ExecuteNonQueryAsync(
             """
             UPDATE automation_runs
             SET status = @Status, session_id = @SessionId, instance_id = @InstanceId, error = @Error,
-                workflow_run_id = @WorkflowRunId
+                workflow_run_id = @WorkflowRunId, machine_id = @MachineId, machine_name = @MachineName
             WHERE id = @Id
             """,
             cmd =>
@@ -60,6 +62,20 @@ public sealed class AutomationRunRepository(IDbConnectionFactory connectionFacto
                 cmd.AddParameter("InstanceId", instanceId);
                 cmd.AddParameter("Error", reason);
                 cmd.AddParameter("WorkflowRunId", workflowRunId);
+                cmd.AddParameter("MachineId", machineId);
+                cmd.AddParameter("MachineName", machineName);
+            });
+    }
+
+    public async Task SettleAsync(string id, string state)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        await conn.ExecuteNonQueryAsync(
+            "UPDATE automation_runs SET settled_state = @State WHERE id = @Id",
+            cmd =>
+            {
+                cmd.AddParameter("Id", id);
+                cmd.AddParameter("State", state);
             });
     }
 
@@ -144,5 +160,8 @@ public sealed class AutomationRunRepository(IDbConnectionFactory connectionFacto
         InstanceId = r.GetNullableString(r.GetOrdinal("instance_id")),
         Error = r.GetNullableString(r.GetOrdinal("error")),
         WorkflowRunId = r.GetNullableString(r.GetOrdinal("workflow_run_id")),
+        MachineId = r.GetNullableString(r.GetOrdinal("machine_id")),
+        MachineName = r.GetNullableString(r.GetOrdinal("machine_name")),
+        SettledState = r.GetNullableString(r.GetOrdinal("settled_state")),
     };
 }

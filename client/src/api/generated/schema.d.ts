@@ -3579,6 +3579,9 @@ export interface components {
             isolation?: null | string;
             baseBranch?: null | string;
             harnessType?: null | string;
+            workflowId?: null | string;
+            workflowSteps?: null | string[];
+            targetMachineId?: null | string;
         };
         CreateBoardCardRequest: {
             laneId: string;
@@ -4484,6 +4487,9 @@ export interface components {
             isolation?: null | string;
             baseBranch?: null | string;
             harnessType?: null | string;
+            workflowId?: null | string;
+            workflowSteps?: null | string[];
+            targetMachineId?: null | string;
         };
         UpdateBoardCardRequest: {
             title: null | string;

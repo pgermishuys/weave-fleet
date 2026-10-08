@@ -94,14 +94,26 @@ public sealed class AutomationWorkflows(
             return null;
 
         var run = found.Value;
-        if (run.Status == WorkflowRunStatus.Waiting)
-            return run.Waiting is { } waiting ? $"the last run is still waiting on you ({waiting.StepTitle})." : "the last run is still waiting on you.";
-        if (run.Status != WorkflowRunStatus.Running)
-            return null;
-        if (run.WithYou is { } withYou)
-            return $"the last run is still with you ({withYou.StepTitle}).";
+        return UnfinishedReason(
+            run.Status,
+            run.Waiting?.StepTitle,
+            run.WithYou?.StepTitle,
+            run.Steps.FirstOrDefault(s => s.Id == run.CurrentStepId)?.Title);
+    }
 
-        var step = run.Steps.FirstOrDefault(s => s.Id == run.CurrentStepId);
-        return step is null ? "the last run is still running." : $"the last run is still running ({step.Title}).";
+    /// <summary>
+    /// <see cref="UnfinishedAsync"/>'s words for a run in <paramref name="status"/>, whichever machine it's on: the step
+    /// it waits on you for, the step you finish that's open, or the step running now.
+    /// </summary>
+    public static string? UnfinishedReason(string status, string? waitingStep, string? withYouStep, string? currentStep)
+    {
+        if (status == WorkflowRunStatus.Waiting)
+            return waitingStep is not null ? $"the last run is still waiting on you ({waitingStep})." : "the last run is still waiting on you.";
+        if (status != WorkflowRunStatus.Running)
+            return null;
+        if (withYouStep is not null)
+            return $"the last run is still with you ({withYouStep}).";
+
+        return currentStep is null ? "the last run is still running." : $"the last run is still running ({currentStep}).";
     }
 }

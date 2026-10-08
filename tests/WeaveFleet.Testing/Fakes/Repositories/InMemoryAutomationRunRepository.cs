@@ -24,7 +24,9 @@ public sealed class InMemoryAutomationRunRepository : IAutomationRunRepository
         return Task.CompletedTask;
     }
 
-    public Task CompleteAsync(string id, string status, string? sessionId, string? instanceId, string? reason, string? workflowRunId = null)
+    public Task CompleteAsync(
+        string id, string status, string? sessionId, string? instanceId, string? reason, string? workflowRunId = null,
+        string? machineId = null, string? machineName = null)
     {
         lock (_gate)
         {
@@ -34,8 +36,17 @@ public sealed class InMemoryAutomationRunRepository : IAutomationRunRepository
             run.InstanceId = instanceId;
             run.Error = reason;
             run.WorkflowRunId = workflowRunId;
+            run.MachineId = machineId;
+            run.MachineName = machineName;
         }
 
+        return Task.CompletedTask;
+    }
+
+    public Task SettleAsync(string id, string state)
+    {
+        lock (_gate)
+            _runs.Single(r => r.Id == id).SettledState = state;
         return Task.CompletedTask;
     }
 
@@ -103,5 +114,8 @@ public sealed class InMemoryAutomationRunRepository : IAutomationRunRepository
         InstanceId = run.InstanceId,
         Error = run.Error,
         WorkflowRunId = run.WorkflowRunId,
+        MachineId = run.MachineId,
+        MachineName = run.MachineName,
+        SettledState = run.SettledState,
     };
 }

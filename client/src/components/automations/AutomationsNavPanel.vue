@@ -7,6 +7,8 @@ import { useAutomationsNav } from "@/composables/use-automations-nav";
 import { useRelativeTime } from "@/composables/use-relative-time";
 import { autoName, parseSchedule, promptFrom } from "@/lib/automation-schedule";
 import { automationRowStatus } from "@/lib/automations";
+import type { Automation } from "@/stores/automations";
+import { useMachinesStore } from "@/stores/machines";
 
 interface Props {
   modelValue: string | null;
@@ -31,9 +33,19 @@ const draftTitle = computed(() => {
   return draft.name.trim() || autoName(promptFrom(text, hit)) || "New automation";
 });
 
+const machines = useMachinesStore();
+
+/** The other machine its runs go to, by the name it has in the list now; null for this machine. */
+function machineOf(automation: Automation): string | null {
+  const id = automation.targetMachineId;
+  if (!id) return null;
+  return machines.entries.find((entry) => entry.key === id)?.name ?? automation.lastRun?.machineName ?? "another machine";
+}
+
 const rows = computed(() => automations.value.map((automation) => ({
   automation,
   status: automationRowStatus(automation, new Date(now.value)),
+  machine: machineOf(automation),
 })));
 
 function selectAutomation(id: string): void {
@@ -91,7 +103,7 @@ function handleCreate(): void {
         <span class="automation-row__meta">Draft</span>
       </button>
       <button
-        v-for="{ automation, status } in rows"
+        v-for="{ automation, status, machine } in rows"
         :key="automation.id"
         type="button"
         class="automation-row"
@@ -119,6 +131,11 @@ function handleCreate(): void {
           aria-hidden="true"
         />
         <span class="automation-row__title">{{ automation.name }}</span>
+        <span
+          v-if="machine"
+          class="automation-row__machine"
+          data-testid="automation-row-machine"
+        >{{ machine }}</span>
         <span
           v-if="status.label"
           class="automation-row__meta"
@@ -272,6 +289,18 @@ function handleCreate(): void {
   overflow: hidden;
   font-size: 13px;
   line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The machine its runs go to, in the sidebar's machine coral. */
+.automation-row__machine {
+  max-width: 7em;
+  flex-shrink: 0;
+  overflow: hidden;
+  color: var(--coral);
+  font-family: var(--font-mono-stack);
+  font-size: 11.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

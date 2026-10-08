@@ -128,6 +128,12 @@ into another. Other machines' rows refresh every 15 seconds. A machine that stop
 dimmed and marked unreachable. If it's the one you're working in, its header turns red, and a reload offers the way
 back to this machine.
 
+An automation can run on another machine in the list: pick it with the Machine chip under the automation's box. The
+automation, its schedule and its runs stay on the machine that holds it. Each run starts its session (or workflow run)
+on the other machine through that machine's own API, with the token kept for it: `POST /api/sessions`,
+`POST /api/sessions/{id}/prompt` or `POST /api/workflows/runs`, the same bodies the web app sends. If that machine
+doesn't answer, or turns the token away, the run is skipped and says why. It isn't retried or moved elsewhere.
+
 ## The client contract
 
 This is what any client relies on. The web app is one client. A native app would speak the same contract.

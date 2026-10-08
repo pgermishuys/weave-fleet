@@ -160,4 +160,41 @@ public sealed class AutomationRunRepositoryTests
         (runs[0].Status, runs[0].WorkflowRunId, runs[0].Error).ShouldBe(("skipped", (string?)null, "Skipped: the last run is still waiting on you (Approve the plan)."));
         (await repo.GetLatestPerAutomationAsync())["auto-1"].Id.ShouldBe("run-2");
     }
+
+    [Fact]
+    public async Task An_automation_keeps_the_machine_it_runs_on_and_its_runs_keep_where_they_went()
+    {
+        var (keeper, factory, repo) = await CreateAsync();
+        using var _ = keeper;
+        var automations = new AutomationRepository(factory, new TestUserContext(OwnerId));
+        await automations.InsertAsync(new Automation
+        {
+            Id = "auto-1",
+            Name = "Nightly check",
+            Prompt = "Check the build",
+            TriggerType = "schedule",
+            TriggerConfig = "0 2 * * *",
+            WorkspaceId = "/home/me/source/harbor-api",
+            Isolation = "worktree",
+            TargetMachineId = "machine-atlas",
+            CreatedAt = "2026-10-08T09:00:00.0000000Z",
+        });
+
+        var stored = (await automations.GetByIdAsync("auto-1")).ShouldNotBeNull();
+        stored.TargetMachineId.ShouldBe("machine-atlas");
+        stored.TargetMachineId = null;
+        await automations.UpdateAsync(stored);
+        (await automations.GetByIdAsync("auto-1")).ShouldNotBeNull().TargetMachineId.ShouldBeNull();
+
+        await repo.InsertAsync(Run("run-1", "auto-1", "2026-10-08T09:00:01.0000000Z", status: "starting"));
+        await repo.CompleteAsync("run-1", "started", "atlas-session", "atlas-inst", null, machineId: "machine-atlas", machineName: "atlas");
+        await repo.InsertAsync(Run("run-2", "auto-1", "2026-10-09T09:00:01.0000000Z", status: "starting"));
+        await repo.CompleteAsync("run-2", "started", "session-here", null, null);
+
+        await repo.SettleAsync("run-1", "done");
+
+        var runs = await repo.ListByAutomationAsync("auto-1", 10);
+        (runs[1].SessionId, runs[1].MachineId, runs[1].MachineName, runs[1].SettledState).ShouldBe(("atlas-session", "machine-atlas", "atlas", "done"));
+        (runs[0].MachineId, runs[0].MachineName, runs[0].SettledState).ShouldBe(((string?)null, (string?)null, (string?)null));
+    }
 }

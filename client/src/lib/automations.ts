@@ -189,7 +189,7 @@ export function describeRunTrigger(trigger: string): string {
 export type RowTone = "working" | "error" | "warn" | "quiet";
 
 /** A run's state in a word, and how it's coloured. */
-export function describeRunState(run: Pick<AutomationRun, "state">): { label: string; tone: RowTone } {
+export function describeRunState(run: Pick<AutomationRun, "state" | "machineName">): { label: string; tone: RowTone } {
   switch (run.state) {
     case "starting":
       return { label: "Starting", tone: "working" };
@@ -203,6 +203,9 @@ export function describeRunState(run: Pick<AutomationRun, "state">): { label: st
       return { label: "Failed", tone: "error" };
     case "skipped":
       return { label: "Skipped", tone: "warn" };
+    // On another machine that didn't answer when asked: it may still be going, so not Done.
+    case "unanswered":
+      return { label: `${run.machineName ?? "Its machine"} didn't answer`, tone: "warn" };
     default:
       return { label: "Done", tone: "quiet" };
   }

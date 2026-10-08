@@ -1,5 +1,8 @@
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
@@ -29,6 +32,13 @@ public sealed class AutomationSchedulerServiceTests : IDisposable
         services.AddSingleton(_activity);
         services.AddSingleton<TimeProvider>(_clock);
         services.AddSingleton(typeof(Microsoft.Extensions.Logging.ILogger<>), typeof(NullLogger<>));
+        // No other machines here; runs only need the way to them.
+        services.AddHttpClient();
+        services.AddSingleton<IRemoteMachineRepository>(new InMemoryRemoteMachineRepository());
+        services.AddSingleton<IDataProtectionProvider>(new EphemeralDataProtectionProvider());
+        services.AddSingleton(new MachineIdentityStore(Path.Combine(Path.GetTempPath(), $"fleet-{Guid.NewGuid():N}.db")));
+        services.AddSingleton<RemoteMachineService>();
+        services.AddSingleton<RemoteAutomationRuns>();
         services.AddScoped<AutomationRunService>();
         var provider = services.BuildServiceProvider();
 

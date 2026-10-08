@@ -125,6 +125,8 @@ curl -s -X POST "$FLEET_URL/api/automations" -H 'content-type: application/json'
   or `existing`.
 - `targetType` is `new_session` (the default), `same_session`, `most_recent_session` or `tagged_session` with
   `targetTags`.
+- `targetMachineId` runs it on another machine in Fleet's list (`GET /api/machines`), with `new_session`,
+  `same_session` or a workflow. `workspaceId` is then a folder on that machine. Leave it out for this machine.
 
 ## Everything else
 

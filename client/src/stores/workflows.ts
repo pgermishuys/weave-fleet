@@ -2,9 +2,10 @@ import { defineStore } from "pinia";
 import { computed, shallowRef } from "vue";
 import { onGlobalEvent } from "@/composables/use-signalr-socket";
 import { liveTarget } from "@/lib/machine-target";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetch, apiFetchOn } from "@/lib/api-client";
 import { extractApiError } from "@/lib/api-error";
 import type { DomainEvent } from "@/lib/domain-events";
+import type { MachineConnection } from "@/lib/machines";
 import type { DraftedWorkflow, WorkflowCheck, WorkflowDraft, WorkflowFile } from "@/lib/workflow-draft";
 import {
   isWorkflowRun,
@@ -131,9 +132,11 @@ export const useWorkflowsStore = defineStore("workflows", () => {
     return loading;
   }
 
-  async function loadLibrary(directory: string | null): Promise<WorkflowLibrary> {
+  /** The Library for `directory`, on the live machine or on `machine` (an automation that runs there). */
+  async function loadLibrary(directory: string | null, machine?: MachineConnection | null): Promise<WorkflowLibrary> {
     const query = directory ? `?directory=${encodeURIComponent(directory)}` : "";
-    const response = await apiFetch(`/api/workflows${query}`);
+    const path = `/api/workflows${query}`;
+    const response = await (machine === undefined ? apiFetch(path) : apiFetchOn(machine, path));
     if (!response.ok) throw new Error(await errorFrom(response, "Couldn't load the workflows."));
     return (await response.json()) as WorkflowLibrary;
   }

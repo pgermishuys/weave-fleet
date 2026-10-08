@@ -7,7 +7,7 @@ using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Infrastructure.SessionSources;
 
-public sealed partial class AutomationSessionSourceProvider(
+public sealed class AutomationSessionSourceProvider(
     IAutomationRepository automationRepository,
     WorkspaceRootService workspaceRootService,
     RepositoryService repositoryService,
@@ -159,20 +159,7 @@ public sealed partial class AutomationSessionSourceProvider(
         return new WorkspaceIntent(roots[0], "existing", null);
     }
 
-    /// <summary><c>fleet/auto-weekly-pr-digest-20260921-0900</c>: the automation's name and the run's time on its clock.</summary>
-    internal string RunBranchName(Automation automation)
-    {
-        var slug = NonSlugCharacters().Replace(automation.Name.ToLowerInvariant(), "-").Trim('-');
-        if (slug.Length > 40)
-            slug = slug[..40].TrimEnd('-');
-
-        var local = TimeZoneInfo.ConvertTime(timeProvider.GetUtcNow(), AutomationSchedule.ResolveTimeZone(automation.TimeZone));
-        var stamp = local.ToString("yyyyMMdd-HHmm", System.Globalization.CultureInfo.InvariantCulture);
-        return string.IsNullOrEmpty(slug) ? $"fleet/auto-{stamp}" : $"fleet/auto-{slug}-{stamp}";
-    }
-
-    [System.Text.RegularExpressions.GeneratedRegex("[^a-z0-9]+")]
-    private static partial System.Text.RegularExpressions.Regex NonSlugCharacters();
+    internal string RunBranchName(Automation automation) => AutomationSchedule.RunBranchName(automation, timeProvider.GetUtcNow());
 
     private static bool Matches(SessionSourceKey actual, SessionSourceKey expected) =>
         string.Equals(actual.ProviderId, expected.ProviderId, StringComparison.Ordinal) &&
