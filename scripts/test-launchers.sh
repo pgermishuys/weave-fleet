@@ -118,6 +118,7 @@ grep -q "Usage: fleet node" "$WORK/stdout" || fail "fleet node help: unexpected 
 NODE_HELP_OPTIONS="$(grep -o -- '--[a-z][a-z-]*' "$WORK/stdout" | sort -u)"
 for option in $NODE_HELP_OPTIONS; do
   case "$option" in
+    --print) continue ;;  # install-service only; checked below
     --port) run_fleet node "$option" 2113 ;;
     --host) run_fleet node "$option" 127.0.0.1 ;;
     --profile) run_fleet node "$option" test ;;
@@ -126,6 +127,111 @@ for option in $NODE_HELP_OPTIONS; do
   esac || true
   expect_started node "$option" && { started_as_node || fail "fleet node $option didn't pass --node"; }
 done
+
+# install-service and uninstall-service, against stand-ins for systemctl, loginctl and launchctl that record their
+# calls. A uname that says Darwin turns the same launcher to its macOS branch.
+mkdir -p "$WORK/stubs" "$WORK/macos" "$WORK/home/.config/systemd/user"
+printf '#!/bin/sh\necho "systemctl $*" | tee -a "$FLEET_TEST_CALLS.all" >> "$FLEET_TEST_CALLS"\n' > "$WORK/stubs/systemctl"
+printf '#!/bin/sh\necho no\n' > "$WORK/stubs/loginctl"
+printf '#!/bin/sh\necho "launchctl $*" | tee -a "$FLEET_TEST_CALLS.all" >> "$FLEET_TEST_CALLS"\n[ "$1" = print ] && [ ! -f "$FLEET_TEST_LOADED" ] && exit 1\nexit 0\n' > "$WORK/stubs/launchctl"
+printf '#!/bin/sh\necho Darwin\n' > "$WORK/macos/uname"
+chmod +x "$WORK/stubs/"* "$WORK/macos/uname"
+# The user's own Fleet service, which install-service must never touch.
+echo "# the user's own Fleet" > "$WORK/home/.config/systemd/user/fleet.service"
+UNIT="$WORK/home/.config/systemd/user/fleet-node.service"
+PLIST="$WORK/home/Library/LaunchAgents/io.tryweave.fleet-node.plist"
+
+# Runs bin/fleet for a service command on "linux" or "macos"; calls land in $WORK/calls, output in $WORK/stdout.
+run_service() {
+  platform=$1
+  shift
+  rm -f "$WORK/out" "$WORK/calls"
+  stub_path="$WORK/stubs:$PATH"
+  [ "$platform" = macos ] && stub_path="$WORK/macos:$stub_path"
+  (cd "$WORK" && env -u XDG_CONFIG_HOME HOME="$WORK/home" PATH="$stub_path" WEAVE_FLEET_DATA_DIR="$WORK/data" \
+    FLEET_TEST_OUT="$WORK/out" FLEET_TEST_CALLS="$WORK/calls" FLEET_TEST_LOADED="$WORK/loaded" \
+    "$WORK/fleet/bin/fleet" "$@" > "$WORK/stdout" 2>&1)
+}
+
+expect_output() {
+  case "$(cat "$WORK/stdout")" in
+    *"$1"*) ;;
+    *) fail "$2: expected '$1' in: $(cat "$WORK/stdout")" ;;
+  esac
+}
+
+expect_calls() {
+  actual="$(cat "$WORK/calls" 2>/dev/null || true)"
+  [ "$actual" = "$1" ] || fail "$2: expected calls [$1], got [$actual]"
+}
+
+# --print shows the unit it would write and the commands it would run, and changes nothing.
+run_service linux node install-service --port 5512 --host 0.0.0.0 --data-dir "node data/a%b" --print || fail "install-service --print failed: $(cat "$WORK/stdout")"
+expect_output "would write $UNIT" "install-service --print"
+expect_output "ExecStart=\"$WORK/fleet/bin/fleet\" \"node\" \"--port\" \"5512\" \"--host\" \"0.0.0.0\" \"--data-dir\" \"$WORK/node data/a%%b\"" "install-service --print"
+expect_output "RestartPreventExitStatus=75" "install-service --print"
+expect_output "systemctl --user enable fleet-node.service" "install-service --print"
+expect_output "Nothing was changed." "install-service --print"
+[ -f "$UNIT" ] && fail "install-service --print wrote $UNIT"
+[ -f "$WORK/out" ] && fail "install-service --print started the app"
+expect_calls "" "install-service --print"
+
+# The macOS --print: a LaunchAgent that runs the launcher as a node, loaded into this user's session.
+run_service macos node install-service --port 5512 --host 0.0.0.0 --data-dir "$WORK/a&b" --print || fail "macOS install-service --print failed: $(cat "$WORK/stdout")"
+expect_output "would write $PLIST" "macOS install-service --print"
+expect_output "<string>io.tryweave.fleet-node</string>" "macOS install-service --print"
+expect_output "    <string>$WORK/fleet/bin/fleet</string>
+    <string>node</string>
+    <string>--port</string>
+    <string>5512</string>
+    <string>--host</string>
+    <string>0.0.0.0</string>
+    <string>--data-dir</string>
+    <string>$WORK/a&amp;b</string>" "macOS install-service --print"
+expect_output "<key>KeepAlive</key>" "macOS install-service --print"
+expect_output "launchctl bootstrap gui/$(id -u) $PLIST" "macOS install-service --print"
+[ -f "$PLIST" ] && fail "macOS install-service --print wrote $PLIST"
+expect_calls "" "macOS install-service --print"
+
+# --print belongs to install-service, and uninstall-service takes no options.
+run_service linux node --print && fail "fleet node --print should fail"
+run_service linux node uninstall-service --port 5512 && fail "fleet node uninstall-service --port should fail"
+
+# Linux: install writes fleet-node.service (a relative data dir made absolute) and starts it; installing again updates
+# it; uninstall stops and removes it. fleet.service is never named, and its file never changes.
+run_service linux node install-service --port 5512 --data-dir node-data || fail "install-service failed: $(cat "$WORK/stdout")"
+grep -qF "\"--data-dir\" \"$WORK/node-data\"" "$UNIT" 2>/dev/null || fail "install-service didn't write the unit with an absolute data dir: $(cat "$UNIT" 2>/dev/null)"
+expect_calls "systemctl --user daemon-reload
+systemctl --user enable fleet-node.service
+systemctl --user restart fleet-node.service" "install-service"
+expect_output "Installed the fleet-node service" "install-service"
+expect_output "loginctl enable-linger" "install-service"
+expect_output "To undo: fleet node uninstall-service" "install-service"
+run_service linux node install-service --port 5512 --data-dir node-data || fail "install-service again failed"
+expect_output "Updated the fleet-node service" "install-service again"
+run_service linux node uninstall-service || fail "uninstall-service failed: $(cat "$WORK/stdout")"
+[ -f "$UNIT" ] && fail "uninstall-service left $UNIT"
+expect_calls "systemctl --user disable --now fleet-node.service
+systemctl --user daemon-reload" "uninstall-service"
+run_service linux node uninstall-service || fail "uninstall-service with nothing installed failed"
+expect_output "There's no fleet-node service to remove." "uninstall-service with nothing installed"
+[ "$(cat "$WORK/home/.config/systemd/user/fleet.service")" = "# the user's own Fleet" ] || fail "fleet.service changed"
+
+# macOS: install writes the LaunchAgent and bootstraps it; once loaded, installing again boots the old one out first.
+run_service macos node install-service --port 5512 || fail "macOS install-service failed: $(cat "$WORK/stdout")"
+[ -f "$PLIST" ] || fail "macOS install-service didn't write $PLIST"
+expect_calls "launchctl print gui/$(id -u)/io.tryweave.fleet-node
+launchctl bootstrap gui/$(id -u) $PLIST" "macOS install-service"
+touch "$WORK/loaded"
+run_service macos node install-service --port 5512 || fail "macOS install-service again failed"
+expect_calls "launchctl print gui/$(id -u)/io.tryweave.fleet-node
+launchctl bootout gui/$(id -u)/io.tryweave.fleet-node
+launchctl bootstrap gui/$(id -u) $PLIST" "macOS install-service again"
+run_service macos node uninstall-service || fail "macOS uninstall-service failed: $(cat "$WORK/stdout")"
+[ -f "$PLIST" ] && fail "macOS uninstall-service left $PLIST"
+
+# No call ever named the user's own fleet.service.
+grep -qE '(^| )fleet\.service' "$WORK/calls.all" && fail "a call named fleet.service: $(cat "$WORK/calls.all")"
 
 # Every option `fleet help` lists is accepted.
 run_fleet help || fail "fleet help failed"

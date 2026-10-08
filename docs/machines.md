@@ -76,6 +76,32 @@ machine**, and work in its sessions from there. The token is kept next to its da
 A node can't pair a phone itself (`POST /api/machine/pairing` returns `409`), because the pairing link opens a page
 it doesn't serve. Pair the phone with the Fleet that has the node in its list; the phone reaches the node through it.
 
+### Keep a node running
+
+`fleet node install-service` keeps the node running: now, when you log in, and after a crash. It takes the same
+options as `fleet node`:
+
+```sh
+fleet node install-service --host 0.0.0.0 --port 2113
+```
+
+| | What it installs | Logs |
+|---|---|---|
+| Linux | a systemd user service, `fleet-node.service` | `journalctl --user -u fleet-node` |
+| macOS | a LaunchAgent, `io.tryweave.fleet-node` | `~/Library/Logs/fleet-node.log` |
+| Windows | a scheduled task, **Fleet node**, that starts when you log on | |
+
+- **It runs as you**, so harness sign-ins, git credentials and repositories work as they do in your shell. On
+  Linux and macOS it keeps the `PATH` you installed it with. On a Linux machine nobody logs in to, also run
+  `loginctl enable-linger "$USER"`, or it stops when you log out.
+- **It runs the launcher**, so a staged update applies when the node restarts.
+- **It's always called fleet-node.** It never touches a `fleet.service` you run for the full Fleet. Running it again
+  updates it.
+- **A node needs its own data directory.** If the full Fleet also runs on that machine, add `--profile node`.
+  Otherwise the node stops at once, because another Fleet holds the data.
+- `--print` shows what it would write and run, and changes nothing.
+- `fleet node uninstall-service` stops the node and removes the service. Its data stays.
+
 ### Keeping a headless machine up
 
 `deploy/fleet-user.service` is a systemd user unit for a machine without a desktop session:

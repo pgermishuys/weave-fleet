@@ -121,6 +121,7 @@ $nodeValues = @{
     '--data-dir' = "`"$(Join-Path $work 'data-dir')`""
 }
 foreach ($option in ([regex]::Matches($nodeHelp, '--[a-z][a-z-]*') | ForEach-Object { $_.Value } | Sort-Object -Unique)) {
+    if ($option -eq '--print') { continue }  # install-service only; checked below
     if (-not $nodeValues.ContainsKey($option)) {
         Fail "fleet node help lists $option, which this test doesn't know how to run"
         continue
@@ -129,6 +130,53 @@ foreach ($option in ([regex]::Matches($nodeHelp, '--[a-z][a-z-]*') | ForEach-Obj
     $output = Invoke-Fleet $arguments
     if ((Test-Started $arguments $output) -and -not (Test-StartedAsNode)) { Fail "fleet $arguments didn't pass --node" }
 }
+
+# install-service --print shows the scheduled task it would register, and changes nothing.
+$taskName = 'Fleet node'
+$output = Invoke-Fleet "node install-service --port 5512 --host 0.0.0.0 --data-dir `"$(Join-Path $work 'node data')`" --print"
+if ($script:fleetExitCode -ne 0) { Fail "fleet node install-service --print failed: $output" }
+if (Test-Path $out) { Fail "fleet node install-service --print started the app" }
+foreach ($expected in @(
+    '<LogonTrigger>',
+    '<LogonType>InteractiveToken</LogonType>',
+    '<RunLevel>LeastPrivilege</RunLevel>',
+    '<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>',
+    '<Command>powershell.exe</Command>',
+    '-WindowStyle Hidden',
+    "fleet.cmd&apos; node --port &apos;5512&apos; --host &apos;0.0.0.0&apos; --data-dir &apos;$(Join-Path $work 'node data')&apos;",
+    'if ($LASTEXITCODE -eq 75) { break }',
+    'Nothing was changed.')) {
+    if (-not $output.Contains($expected)) { Fail "fleet node install-service --print: missing '$expected' in: $output" }
+}
+if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) { Fail "fleet node install-service --print registered the task" }
+Write-Host '--- fleet node install-service --port 5512 --host 0.0.0.0 --print (Windows) ---'
+Write-Host $output
+Write-Host '---'
+
+# --print belongs to install-service, and uninstall-service takes no options.
+$output = Invoke-Fleet 'node --print'
+if ($script:fleetExitCode -eq 0) { Fail "fleet node --print should fail: $output" }
+$output = Invoke-Fleet 'node uninstall-service --port 5512'
+if ($script:fleetExitCode -eq 0) { Fail "fleet node uninstall-service --port should fail: $output" }
+
+# install-service registers the task as this user; installing again updates it; uninstall-service removes it.
+$output = Invoke-Fleet 'node install-service --port 5512'
+$task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+if (-not $task) {
+    Fail "fleet node install-service registered no task: $output"
+} else {
+    if ($task.Actions[0].Execute -ne 'powershell.exe') { Fail "the task runs $($task.Actions[0].Execute), not powershell.exe" }
+    if ($task.Actions[0].Arguments -notmatch "fleet\.cmd' node --port '5512'") { Fail "the task doesn't run the launcher as a node: $($task.Actions[0].Arguments)" }
+    if ($task.Settings.ExecutionTimeLimit -ne 'PT0S') { Fail "the task has a time limit: $($task.Settings.ExecutionTimeLimit)" }
+    if ($task.Triggers[0].CimClass.CimClassName -ne 'MSFT_TaskLogonTrigger') { Fail "the task doesn't start at log on: $($task.Triggers[0].CimClass.CimClassName)" }
+}
+$output = Invoke-Fleet 'node install-service --port 5512'
+if ($output -notmatch 'Updated the Fleet node task') { Fail "installing again didn't update the task: $output" }
+$output = Invoke-Fleet 'node uninstall-service'
+if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) { Fail "fleet node uninstall-service left the task: $output" }
+if ($output -notmatch 'removed it') { Fail "fleet node uninstall-service: unexpected output: $output" }
+$output = Invoke-Fleet 'node uninstall-service'
+if ($output -notmatch "There's no Fleet node task") { Fail "fleet node uninstall-service with nothing installed: unexpected output: $output" }
 
 # Every option `fleet help` lists is accepted.
 $help = Invoke-Fleet 'help'
