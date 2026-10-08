@@ -19,6 +19,18 @@ irm https://github.com/pgermishuys/fleet-releases/releases/latest/download/insta
 fleet version
 ```
 
+### Desktop app
+
+The newest installer for each platform:
+
+- macOS (Apple Silicon): https://github.com/pgermishuys/fleet-releases/releases/latest/download/Fleet-mac-arm64.dmg
+- Windows x64: https://github.com/pgermishuys/fleet-releases/releases/latest/download/Fleet-win-x64-setup.exe
+- Windows arm64: https://github.com/pgermishuys/fleet-releases/releases/latest/download/Fleet-win-arm64-setup.exe
+- Linux AppImage: https://github.com/pgermishuys/fleet-releases/releases/latest/download/Fleet-linux-x86_64.AppImage
+- Linux `.deb`: https://github.com/pgermishuys/fleet-releases/releases/latest/download/Fleet-linux-amd64.deb
+
+The installers aren't signed yet; [RELEASE.md](RELEASE.md#desktop-installers-are-unsigned-for-now) says how to open them.
+
 ## Run
 
 ```bash

@@ -191,6 +191,10 @@ jobs:
         if: runner.os != 'Windows'
         run: sh scripts/test-launchers.sh
 
+      - name: Test add-unversioned-installers.sh
+        if: runner.os != 'Windows'
+        run: bash scripts/test-unversioned-installers.sh
+
       - name: Test launcher.cmd
         if: runner.os == 'Windows'
         shell: powershell

@@ -489,6 +489,9 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           GH_TOKEN="$SOURCE_GH_TOKEN" scripts/mirror-release-notes.sh "$TAG" ./release-notes.md
+          # Fleet-mac-arm64.dmg and friends, so latest/download/<name> links never change. One `gh release create`
+          # uploads everything to a draft and publishes it only once all of it is up, deleting the draft otherwise.
+          scripts/add-unversioned-installers.sh "$TAG" ./assets
           gh release create "$TAG" \
             --repo pgermishuys/fleet-releases \
             --title "Fleet $TAG" \
