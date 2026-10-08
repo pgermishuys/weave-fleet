@@ -1,8 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { liveTarget } from "@/lib/machine-target"
 import { HubConnectionState } from "@microsoft/signalr"
 import type { SessionSnapshot } from "@/lib/session-snapshot"
 import type { DomainEvent, SessionStarted } from "@/lib/domain-events"
 import { flushAll, mountComposable } from "./test-utils"
+
+/** Nothing in these tests makes another machine live, so the live machine is home. */
+const home = liveTarget()
 
 // Mock HubConnection
 const mockHubConnection = {
@@ -177,7 +181,7 @@ describe("useSignalRSocket", () => {
     it("connects when first subscriber mounts", async () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
 
-      await mountComposable(() => useWeaveSocket())
+      await mountComposable(() => useWeaveSocket(home))
 
       expect(mockHubConnection.start).toHaveBeenCalled()
     })
@@ -185,7 +189,7 @@ describe("useSignalRSocket", () => {
     it("disconnects when last subscriber unmounts", async () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
 
-      const { wrapper } = await mountComposable(() => useWeaveSocket())
+      const { wrapper } = await mountComposable(() => useWeaveSocket(home))
 
       expect(mockHubConnection.start).toHaveBeenCalled()
 
@@ -198,8 +202,8 @@ describe("useSignalRSocket", () => {
     it("reuses connection for multiple subscribers", async () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
 
-      const { wrapper: wrapper1 } = await mountComposable(() => useWeaveSocket())
-      const { wrapper: wrapper2 } = await mountComposable(() => useWeaveSocket())
+      const { wrapper: wrapper1 } = await mountComposable(() => useWeaveSocket(home))
+      const { wrapper: wrapper2 } = await mountComposable(() => useWeaveSocket(home))
 
       expect(mockHubConnection.start).toHaveBeenCalledTimes(1)
 
@@ -219,9 +223,9 @@ describe("useSignalRSocket", () => {
 
       const { useWeaveSocket, _isConnected } = await import("@/composables/use-signalr-socket")
 
-      await mountComposable(() => useWeaveSocket())
+      await mountComposable(() => useWeaveSocket(home))
 
-      expect(_isConnected()).toBe(false)
+      expect(_isConnected(home)).toBe(false)
     })
   })
 
@@ -242,7 +246,7 @@ describe("useSignalRSocket", () => {
         return undefined
       })
 
-      const { result } = await mountComposable(() => useWeaveSocket())
+      const { result } = await mountComposable(() => useWeaveSocket(home))
 
       const onSnapshot1 = vi.fn()
       const onEvent1 = vi.fn()
@@ -270,10 +274,10 @@ describe("useSignalRSocket", () => {
     it("triggers reconnect callbacks", async () => {
       const { useWeaveSocket, onReconnect } = await import("@/composables/use-signalr-socket")
 
-      await mountComposable(() => useWeaveSocket())
+      await mountComposable(() => useWeaveSocket(home))
 
       const reconnectCallback = vi.fn()
-      onReconnect(reconnectCallback)
+      onReconnect(home, reconnectCallback)
 
       await reconnectedHandler?.()
       await flushAll()
@@ -284,10 +288,10 @@ describe("useSignalRSocket", () => {
     it("triggers disconnect callbacks on close", async () => {
       const { useWeaveSocket, onDisconnect } = await import("@/composables/use-signalr-socket")
 
-      await mountComposable(() => useWeaveSocket())
+      await mountComposable(() => useWeaveSocket(home))
 
       const disconnectCallback = vi.fn()
-      onDisconnect(disconnectCallback)
+      onDisconnect(home, disconnectCallback)
 
       closeHandler?.()
       await flushAll()
@@ -298,10 +302,10 @@ describe("useSignalRSocket", () => {
     it("cleans up reconnect callback when unsubscribed", async () => {
       const { useWeaveSocket, onReconnect } = await import("@/composables/use-signalr-socket")
 
-      await mountComposable(() => useWeaveSocket())
+      await mountComposable(() => useWeaveSocket(home))
 
       const reconnectCallback = vi.fn()
-      const unsubscribe = onReconnect(reconnectCallback)
+      const unsubscribe = onReconnect(home, reconnectCallback)
 
       unsubscribe()
 
@@ -331,12 +335,12 @@ describe("useSignalRSocket", () => {
     it("starts a new connection, resubscribes sessions and tells listeners", async () => {
       const { useWeaveSocket, onReconnect } = await import("@/composables/use-signalr-socket")
       mockInvokeWithSnapshot(createSessionSnapshot("session-1"))
-      const { result } = await mountComposable(() => useWeaveSocket())
+      const { result } = await mountComposable(() => useWeaveSocket(home))
       const onSnapshot = vi.fn()
       result.subscribeV2("session:session-1", onSnapshot, vi.fn())
       await flushAll()
       const reconnected = vi.fn()
-      onReconnect(reconnected)
+      onReconnect(home, reconnected)
 
       dropConnection()
       await vi.advanceTimersByTimeAsync(2000)
@@ -349,7 +353,7 @@ describe("useSignalRSocket", () => {
 
     it("keeps trying while Fleet is unreachable", async () => {
       const { useWeaveSocket, _isConnected } = await import("@/composables/use-signalr-socket")
-      await mountComposable(() => useWeaveSocket())
+      await mountComposable(() => useWeaveSocket(home))
       mockHubConnection.start
         .mockRejectedValueOnce(new Error("down"))
         .mockRejectedValueOnce(new Error("still down"))
@@ -364,7 +368,7 @@ describe("useSignalRSocket", () => {
       await flushAll()
 
       expect(mockHubConnection.start).toHaveBeenCalledTimes(4)
-      expect(_isConnected()).toBe(true)
+      expect(_isConnected(home)).toBe(true)
     })
 
     it("retries when the first start fails", async () => {
@@ -372,19 +376,19 @@ describe("useSignalRSocket", () => {
       vi.spyOn(console, "error").mockImplementation(() => {})
       const { useWeaveSocket, _isConnected } = await import("@/composables/use-signalr-socket")
 
-      await mountComposable(() => useWeaveSocket())
-      expect(_isConnected()).toBe(false)
+      await mountComposable(() => useWeaveSocket(home))
+      expect(_isConnected(home)).toBe(false)
 
       await vi.advanceTimersByTimeAsync(2000)
       await flushAll()
 
       expect(mockHubConnection.start).toHaveBeenCalledTimes(2)
-      expect(_isConnected()).toBe(true)
+      expect(_isConnected(home)).toBe(true)
     })
 
     it("reconnects at once when the browser comes back online", async () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
-      await mountComposable(() => useWeaveSocket())
+      await mountComposable(() => useWeaveSocket(home))
 
       dropConnection()
       window.dispatchEvent(new Event("online"))
@@ -395,7 +399,7 @@ describe("useSignalRSocket", () => {
 
     it("stays closed once nothing listens any more", async () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
-      const { wrapper } = await mountComposable(() => useWeaveSocket())
+      const { wrapper } = await mountComposable(() => useWeaveSocket(home))
 
       wrapper.unmount()
       await flushAll()
@@ -416,9 +420,9 @@ describe("useSignalRSocket", () => {
       mockHubConnection.invoke.mockImplementation(async (method: string) =>
         method === "LoadHistoryAsync" ? page : undefined)
 
-      await mountComposable(() => useWeaveSocket())
+      await mountComposable(() => useWeaveSocket(home))
 
-      await expect(loadSessionHistory("session-1", "cursor-older")).resolves.toEqual(page)
+      await expect(loadSessionHistory(home, "session-1", "cursor-older")).resolves.toEqual(page)
       expect(mockHubConnection.invoke).toHaveBeenCalledWith("LoadHistoryAsync", "session-1", "cursor-older")
     })
 
@@ -430,9 +434,9 @@ describe("useSignalRSocket", () => {
       })
       vi.spyOn(console, "error").mockImplementation(() => {})
 
-      await mountComposable(() => useWeaveSocket())
+      await mountComposable(() => useWeaveSocket(home))
 
-      await expect(loadSessionHistory("session-1", "cursor-older")).resolves.toBeNull()
+      await expect(loadSessionHistory(home, "session-1", "cursor-older")).resolves.toBeNull()
     })
   })
 
@@ -451,7 +455,7 @@ describe("useSignalRSocket", () => {
         return undefined
       })
 
-      const { result } = await mountComposable(() => useWeaveSocket())
+      const { result } = await mountComposable(() => useWeaveSocket(home))
 
       const onSnapshot = vi.fn()
       const onEvent = vi.fn()
@@ -478,7 +482,7 @@ describe("useSignalRSocket", () => {
         return undefined
       })
 
-      const { result } = await mountComposable(() => useWeaveSocket())
+      const { result } = await mountComposable(() => useWeaveSocket(home))
 
       const onSnapshot1 = vi.fn()
       const onEvent1 = vi.fn()
@@ -506,7 +510,7 @@ describe("useSignalRSocket", () => {
       let answer: SessionSnapshot = opened
       mockInvokeWithSnapshot(() => answer)
 
-      const { result } = await mountComposable(() => useWeaveSocket())
+      const { result } = await mountComposable(() => useWeaveSocket(home))
       const onSnapshotKept = vi.fn()
       result.subscribeV2("session-1", onSnapshotKept, vi.fn())
       await flushAll()
@@ -529,7 +533,7 @@ describe("useSignalRSocket", () => {
       const snapshot = createSessionSnapshot("session-1")
       mockInvokeWithSnapshot(snapshot)
 
-      const { result } = await mountComposable(() => useWeaveSocket())
+      const { result } = await mountComposable(() => useWeaveSocket(home))
       const onSnapshot1 = vi.fn()
       const onSnapshot2 = vi.fn()
       result.subscribeV2("session-1", onSnapshot1, vi.fn())
@@ -559,7 +563,7 @@ describe("useSignalRSocket", () => {
         return Promise.resolve(undefined)
       })
 
-      const { result } = await mountComposable(() => useWeaveSocket())
+      const { result } = await mountComposable(() => useWeaveSocket(home))
       const onSnapshot1 = vi.fn()
       result.subscribeV2("session-1", onSnapshot1, vi.fn())
       connected()
@@ -587,7 +591,7 @@ describe("useSignalRSocket", () => {
         return Promise.resolve(undefined)
       })
 
-      const { result } = await mountComposable(() => useWeaveSocket())
+      const { result } = await mountComposable(() => useWeaveSocket(home))
       const onSnapshot1 = vi.fn()
       result.subscribeV2("session-1", onSnapshot1, vi.fn())
       await flushAll()
@@ -621,7 +625,7 @@ describe("useSignalRSocket", () => {
         return undefined
       })
 
-      const { result } = await mountComposable(() => useWeaveSocket())
+      const { result } = await mountComposable(() => useWeaveSocket(home))
 
       const onSnapshot = vi.fn()
       const onEvent = vi.fn()
@@ -641,7 +645,7 @@ describe("useSignalRSocket", () => {
 
       mockInvokeWithSnapshot(snapshot)
 
-      const { result } = await mountComposable(() => useWeaveSocket())
+      const { result } = await mountComposable(() => useWeaveSocket(home))
 
       const onSnapshot = vi.fn()
       const onEvent = vi.fn()
@@ -661,7 +665,7 @@ describe("useSignalRSocket", () => {
 
       mockInvokeWithSnapshot(snapshot)
 
-      const { result } = await mountComposable(() => useWeaveSocket())
+      const { result } = await mountComposable(() => useWeaveSocket(home))
 
       const onSnapshot = vi.fn()
       const onEvent = vi.fn()
@@ -681,7 +685,7 @@ describe("useSignalRSocket", () => {
 
       mockInvokeWithSnapshot(snapshot)
 
-      const { result } = await mountComposable(() => useWeaveSocket())
+      const { result } = await mountComposable(() => useWeaveSocket(home))
 
       const onEvent1 = vi.fn()
       const onEvent2 = vi.fn()
@@ -704,7 +708,7 @@ describe("useSignalRSocket", () => {
 
       mockInvokeWithSnapshot((sessionId: string) => sessionId === "session-1" ? snapshot1 : snapshot2)
 
-      const { result } = await mountComposable(() => useWeaveSocket())
+      const { result } = await mountComposable(() => useWeaveSocket(home))
 
       const onEvent1 = vi.fn()
       const onEvent2 = vi.fn()
@@ -728,7 +732,7 @@ describe("useSignalRSocket", () => {
 
       mockInvokeWithSnapshot(snapshot)
 
-      const { result } = await mountComposable(() => useWeaveSocket())
+      const { result } = await mountComposable(() => useWeaveSocket(home))
 
       const unsubscribe = result.subscribeV2("session-1", vi.fn(), vi.fn())
       await flushAll()
@@ -747,7 +751,7 @@ describe("useSignalRSocket", () => {
 
       mockInvokeWithSnapshot(snapshot)
 
-      const { result } = await mountComposable(() => useWeaveSocket())
+      const { result } = await mountComposable(() => useWeaveSocket(home))
 
       const unsubscribe1 = result.subscribeV2("session-1", vi.fn(), vi.fn())
       result.subscribeV2("session-1", vi.fn(), vi.fn())
@@ -767,7 +771,7 @@ describe("useSignalRSocket", () => {
 
       mockInvokeWithSnapshot(snapshot)
 
-      const { result } = await mountComposable(() => useWeaveSocket())
+      const { result } = await mountComposable(() => useWeaveSocket(home))
 
       const unsubscribe = result.subscribeV2("session-1", vi.fn(), vi.fn())
       await flushAll()
@@ -790,24 +794,24 @@ describe("useSignalRSocket", () => {
     it("reports connected state correctly", async () => {
       const { useWeaveSocket, isWeaveSocketConnected } = await import("@/composables/use-signalr-socket")
 
-      expect(isWeaveSocketConnected()).toBe(false)
+      expect(isWeaveSocketConnected(home)).toBe(false)
 
-      await mountComposable(() => useWeaveSocket())
+      await mountComposable(() => useWeaveSocket(home))
 
-      expect(isWeaveSocketConnected()).toBe(true)
+      expect(isWeaveSocketConnected(home)).toBe(true)
     })
 
     it("reports disconnected state after close", async () => {
       const { useWeaveSocket, isWeaveSocketConnected } = await import("@/composables/use-signalr-socket")
 
-      const { wrapper } = await mountComposable(() => useWeaveSocket())
+      const { wrapper } = await mountComposable(() => useWeaveSocket(home))
 
-      expect(isWeaveSocketConnected()).toBe(true)
+      expect(isWeaveSocketConnected(home)).toBe(true)
 
       wrapper.unmount()
       await flushAll()
 
-      expect(isWeaveSocketConnected()).toBe(false)
+      expect(isWeaveSocketConnected(home)).toBe(false)
     })
   })
 
@@ -815,7 +819,7 @@ describe("useSignalRSocket", () => {
     it("exposes test API on window", async () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
 
-      await mountComposable(() => useWeaveSocket())
+      await mountComposable(() => useWeaveSocket(home))
 
       expect(window.__WEAVE_SOCKET_TEST_API).toBeDefined()
       expect(window.__WEAVE_SOCKET_TEST_API?.hasOpenSocket()).toBe(true)
@@ -826,7 +830,7 @@ describe("useSignalRSocket", () => {
 
       window.__WEAVE_SOCKET_TEST_API?.suspend()
 
-      await mountComposable(() => useWeaveSocket())
+      await mountComposable(() => useWeaveSocket(home))
 
       expect(mockHubConnection.start).not.toHaveBeenCalled()
       expect(window.__WEAVE_SOCKET_TEST_API?.isSuspended()).toBe(true)
@@ -836,7 +840,7 @@ describe("useSignalRSocket", () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
 
       window.__WEAVE_SOCKET_TEST_API?.suspend()
-      const { wrapper } = await mountComposable(() => useWeaveSocket())
+      const { wrapper } = await mountComposable(() => useWeaveSocket(home))
 
       expect(mockHubConnection.start).not.toHaveBeenCalled()
 
@@ -854,7 +858,7 @@ describe("useSignalRSocket", () => {
 
       mockInvokeWithSnapshot(snapshot)
 
-      const { result } = await mountComposable(() => useWeaveSocket())
+      const { result } = await mountComposable(() => useWeaveSocket(home))
 
       expect(window.__WEAVE_SOCKET_TEST_API?.hasV2Subscriptions()).toBe(false)
 
@@ -879,7 +883,7 @@ describe("useSignalRSocket", () => {
         return undefined
       })
 
-      const { result } = await mountComposable(() => useWeaveSocket())
+      const { result } = await mountComposable(() => useWeaveSocket(home))
 
       result.subscribeV2("session-1", vi.fn(), vi.fn())
       await flushAll()
@@ -896,7 +900,7 @@ describe("useSignalRSocket", () => {
 
       mockInvokeWithSnapshot(snapshot)
 
-      const { result } = await mountComposable(() => useWeaveSocket())
+      const { result } = await mountComposable(() => useWeaveSocket(home))
 
       // Subscribe to session-1
       const unsub1 = result.subscribeV2("session-1", vi.fn(), vi.fn())
@@ -935,7 +939,7 @@ describe("useSignalRSocket", () => {
 
       mockInvokeWithSnapshot(snapshot)
 
-      const { result } = await mountComposable(() => useWeaveSocket())
+      const { result } = await mountComposable(() => useWeaveSocket(home))
 
       // Subscribe to session-1
       const unsub1 = result.subscribeV2("session-1", vi.fn(), vi.fn())
@@ -968,7 +972,7 @@ describe("useSignalRSocket", () => {
 
       mockInvokeWithSnapshot(snapshot)
 
-      const { result } = await mountComposable(() => useWeaveSocket())
+      const { result } = await mountComposable(() => useWeaveSocket(home))
 
       // Subscribe and get snapshot
       const onSnapshot1 = vi.fn()
@@ -999,7 +1003,7 @@ describe("useSignalRSocket", () => {
       const snapshot1 = createSessionSnapshot("session-1")
       const snapshot2 = createSessionSnapshot("session-2")
 
-      const { result } = await mountComposable(() => useWeaveSocket())
+      const { result } = await mountComposable(() => useWeaveSocket(home))
 
       // Subscribe to session-1
       mockInvokeWithSnapshot((sessionId: string) => sessionId === "session-1" ? snapshot1 : snapshot2)
@@ -1043,7 +1047,7 @@ describe("useSignalRSocket", () => {
 
       mockInvokeWithSnapshot(snapshot)
 
-      const { result } = await mountComposable(() => useWeaveSocket())
+      const { result } = await mountComposable(() => useWeaveSocket(home))
 
       // Create two subscriptions to the same session
       const onEvent1 = vi.fn()

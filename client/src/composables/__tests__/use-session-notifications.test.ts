@@ -58,7 +58,7 @@ describe("useSessionNotifications", () => {
     permission = "granted";
     hasFocus = true;
 
-    onGlobalEventMock.mockImplementation((_topic: string, listener: (event: DomainEvent) => void) => {
+    onGlobalEventMock.mockImplementation((_machine: unknown, _topic: string, listener: (event: DomainEvent) => void) => {
       handler = listener;
       return () => { handler = null; };
     });

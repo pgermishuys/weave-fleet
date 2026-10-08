@@ -19,13 +19,13 @@ vi.mock("@/lib/api-client", () => ({
 }));
 
 vi.mock("@/composables/use-signalr-socket", () => ({
-  onGlobalEvent: (topic: string, handler: (event: unknown) => void) => {
+  onGlobalEvent: (_machine: unknown, topic: string, handler: (event: unknown) => void) => {
     const set = handlers.get(topic) ?? new Set();
     set.add(handler);
     handlers.set(topic, set);
     return () => set.delete(handler);
   },
-  onReconnect: (callback: () => void) => {
+  onReconnect: (_machine: unknown, callback: () => void) => {
     reconnectCallbacks.add(callback);
     return () => reconnectCallbacks.delete(callback);
   },

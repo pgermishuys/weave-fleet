@@ -2,6 +2,7 @@ import { computed, onBeforeUnmount, shallowRef, toValue, watch, type MaybeRefOrG
 import { isSessionRecapEvent, type SessionRecapPayload } from "@/lib/domain-events";
 import { setSessionFocus, useWeaveSocket } from "@/composables/use-weave-socket";
 import { DESKTOP_NOTIFICATIONS_PREFERENCE_KEY } from "@/composables/use-session-notifications";
+import { useMachineTarget } from "@/lib/machine-target";
 import { usePreferencesStore } from "@/stores/preferences";
 
 /** The Settings → Features switch for session recaps. Off unless turned on. */
@@ -30,7 +31,8 @@ export function useSessionRecap(
 ): Readonly<Ref<SessionRecapPayload | null>> {
   const preferences = usePreferencesStore();
   preferences.ensureLoaded();
-  const { subscribeV2 } = useWeaveSocket();
+  const machine = useMachineTarget();
+  const { subscribeV2 } = useWeaveSocket(machine);
   const recap = shallowRef<SessionRecapPayload | null>(null);
   const enabled = computed(() =>
     preferences.get(SESSION_RECAP_PREFERENCE_KEY, "false") === "true"
@@ -49,7 +51,7 @@ export function useSessionRecap(
     if (reported?.sessionId === id && reported.focused === focused) return;
 
     reported = { sessionId: id, focused };
-    setSessionFocus(id, focused);
+    setSessionFocus(machine, id, focused);
   }
 
   function reportSoon(): void {
@@ -83,7 +85,7 @@ export function useSessionRecap(
 
       onCleanup(() => {
         unsubscribe();
-        if (reported?.sessionId === id && reported.focused) setSessionFocus(id, false);
+        if (reported?.sessionId === id && reported.focused) setSessionFocus(machine, id, false);
         subscribedId = null;
         reported = null;
       });
@@ -95,7 +97,7 @@ export function useSessionRecap(
     if (on) {
       report();
     } else if (reported?.focused) {
-      setSessionFocus(reported.sessionId, false);
+      setSessionFocus(machine, reported.sessionId, false);
       reported = null;
     }
   });

@@ -26,7 +26,7 @@ const { sessionsTopicHandlers, sessionTopicHandlers } = vi.hoisted(() => ({
 }));
 vi.mock("@/composables/use-signalr-socket", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/composables/use-signalr-socket")>()),
-  onGlobalEvent: (topic: string, handler: (event: unknown) => void) => {
+  onGlobalEvent: (_machine: unknown, topic: string, handler: (event: unknown) => void) => {
     if (topic !== "sessions") return () => {};
     sessionsTopicHandlers.add(handler);
     return () => sessionsTopicHandlers.delete(handler);

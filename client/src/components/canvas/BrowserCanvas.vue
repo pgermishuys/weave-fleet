@@ -360,7 +360,7 @@ onDeactivated(() => {
   active.value = false;
 });
 
-const stopReconnect = onReconnect(() => void loadApp());
+const stopReconnect = onReconnect(machine, () => void loadApp());
 
 onBeforeUnmount(() => {
   window.removeEventListener("message", onMessage);

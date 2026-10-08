@@ -8,7 +8,7 @@ import { useCanvasesStore } from '@/stores/canvases'
 
 export function useFileBrowser(sessionId: Ref<string | null>) {
   const machine = useMachineTarget()
-  const { subscribeV2 } = useWeaveSocket()
+  const { subscribeV2 } = useWeaveSocket(machine)
   const canvases = useCanvasesStore()
 
   // State

@@ -19,6 +19,8 @@ vi.mock("@/composables/use-weave-socket", () => ({
 }));
 
 type Listener = { onSnapshot: (snapshot: SessionSnapshot) => void; onEvent: (event: DomainEvent) => void };
+/** Nothing provides another machine, so the session asks the live one. */
+const live = expect.objectContaining({ key: "home", isLive: true });
 const listeners = new Map<string, Listener>();
 let hasFocus = true;
 let visibility: DocumentVisibilityState = "visible";
@@ -93,7 +95,7 @@ describe("useSessionRecap", () => {
     expect(setSessionFocusMock).not.toHaveBeenCalled();
     listeners.get("session:s1")!.onSnapshot(snapshot());
 
-    expect(setSessionFocusMock).toHaveBeenCalledExactlyOnceWith("s1", true);
+    expect(setSessionFocusMock).toHaveBeenCalledExactlyOnceWith(live, "s1", true);
     wrapper.unmount();
   });
 
@@ -116,17 +118,17 @@ describe("useSessionRecap", () => {
     hasFocus = false;
     window.dispatchEvent(new Event("blur"));
     vi.advanceTimersByTime(250);
-    expect(setSessionFocusMock).toHaveBeenLastCalledWith("s1", false);
+    expect(setSessionFocusMock).toHaveBeenLastCalledWith(live, "s1", false);
 
     hasFocus = true;
     window.dispatchEvent(new Event("focus"));
     vi.advanceTimersByTime(250);
-    expect(setSessionFocusMock).toHaveBeenLastCalledWith("s1", true);
+    expect(setSessionFocusMock).toHaveBeenLastCalledWith(live, "s1", true);
 
     visibility = "hidden";
     document.dispatchEvent(new Event("visibilitychange"));
     vi.advanceTimersByTime(250);
-    expect(setSessionFocusMock).toHaveBeenLastCalledWith("s1", false);
+    expect(setSessionFocusMock).toHaveBeenLastCalledWith(live, "s1", false);
     expect(setSessionFocusMock).toHaveBeenCalledTimes(4);
     wrapper.unmount();
   });
@@ -151,7 +153,7 @@ describe("useSessionRecap", () => {
     await flushAll();
     listeners.get("session:s2")!.onSnapshot({ ...snapshot(), session: { id: "s2", title: "Other", status: "active" } });
 
-    expect(setSessionFocusMock.mock.calls).toEqual([["s1", true], ["s1", false], ["s2", true]]);
+    expect(setSessionFocusMock.mock.calls).toEqual([[live, "s1", true], [live, "s1", false], [live, "s2", true]]);
     wrapper.unmount();
   });
 
@@ -161,7 +163,7 @@ describe("useSessionRecap", () => {
 
     listeners.get("session:s1")!.onSnapshot(snapshot());
 
-    expect(setSessionFocusMock.mock.calls).toEqual([["s1", true], ["s1", true]]);
+    expect(setSessionFocusMock.mock.calls).toEqual([[live, "s1", true], [live, "s1", true]]);
     wrapper.unmount();
   });
 });

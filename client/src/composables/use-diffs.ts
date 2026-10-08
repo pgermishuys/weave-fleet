@@ -32,7 +32,7 @@ export function baseKey(base: SessionDiffBase | null | undefined): string {
 export function useDiffs(
   sessionId: MaybeRefOrGetter<string | null | undefined>,
 ): UseDiffsResult {
-  const { api } = useMachineTarget();
+  const machine = useMachineTarget();
   // Replaced whole, never mutated: a session can change hundreds of files.
   const diffs = shallowRef<readonly FileDiffItem[]>([]);
   const available = shallowRef(false);
@@ -41,7 +41,7 @@ export function useDiffs(
   const isStale = shallowRef(false);
   const error = shallowRef<string | undefined>(undefined);
   const currentSessionId = computed(() => toValue(sessionId) ?? "");
-  const { subscribeV2 } = useWeaveSocket();
+  const { subscribeV2 } = useWeaveSocket(machine);
 
   let requestId = 0;
   let debounceTimeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -65,7 +65,7 @@ export function useDiffs(
     error.value = undefined;
 
     try {
-      const { data, error: apiError, response } = await api.GET("/api/sessions/{id}/diffs", {
+      const { data, error: apiError, response } = await machine.api.GET("/api/sessions/{id}/diffs", {
         params: {
           path: { id: activeSessionId },
         },

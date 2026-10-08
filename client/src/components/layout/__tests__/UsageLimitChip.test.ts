@@ -9,7 +9,7 @@ const { apiGet, globalHandlers } = vi.hoisted(() => ({
 
 vi.mock("@/api/client", () => ({ api: { GET: apiGet, POST: vi.fn() } }));
 vi.mock("@/composables/use-signalr-socket", () => ({
-  onGlobalEvent: (_topic: string, handler: (event: DomainEvent) => void) => {
+  onGlobalEvent: (_machine: unknown, _topic: string, handler: (event: DomainEvent) => void) => {
     globalHandlers.push(handler);
     return () => undefined;
   },

@@ -14,7 +14,7 @@ vi.mock("@/api/client", () => ({ api: { GET: getMock, POST: postMock } }));
 
 vi.mock("@/composables/use-weave-socket", () => ({
   useWeaveSocket: () => ({ subscribeV2: subscribeV2Mock }),
-  onReconnect: (callback: () => void) => {
+  onReconnect: (_machine: unknown, callback: () => void) => {
     reconnectCallbacks.push(callback);
     return () => reconnectCallbacks.splice(reconnectCallbacks.indexOf(callback), 1);
   },

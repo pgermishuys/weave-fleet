@@ -1,6 +1,7 @@
 import { computed, onUnmounted } from "vue";
 import { useRouter } from "@tanstack/vue-router";
 import { onGlobalEvent } from "@/composables/use-signalr-socket";
+import { liveTarget } from "@/lib/machine-target";
 import { usePreferencesStore } from "@/stores/preferences";
 import { isSessionNotificationEvent, type DomainEvent } from "@/lib/domain-events";
 import { useServiceWorker } from "@/composables/use-service-worker";
@@ -53,7 +54,7 @@ export function useSessionNotifications(): void {
   const enabled = computed(() => preferences.get(DESKTOP_NOTIFICATIONS_PREFERENCE_KEY, "false") === "true");
   const { registration } = useServiceWorker();
 
-  const unsubscribe = onGlobalEvent("sessions", (event: DomainEvent) => {
+  const unsubscribe = onGlobalEvent(liveTarget(), "sessions", (event: DomainEvent) => {
     if (!isSessionNotificationEvent(event) || !enabled.value) return;
     if (!notificationsSupported() || Notification.permission !== "granted") return;
 

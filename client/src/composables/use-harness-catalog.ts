@@ -136,8 +136,8 @@ export function useHarnessCatalog(
 
   // The harness says what it offers changed: ask again if it's what's shown. The old list stays up meanwhile.
   const changes = shallowRef(0);
-  stopForgetting ??= listenForCatalogChanges(forgetChanged);
-  onCatalogChange((change) => {
+  stopForgetting ??= listenForCatalogChanges(liveTarget(), forgetChanged);
+  onCatalogChange(liveTarget(), (change) => {
     if (target.isLive && harnessType.value && isCatalogChangeFor(change, harnessType.value, directory.value, profile.value)) {
       changes.value += 1;
     }

@@ -56,7 +56,7 @@ export function useAgents(sessionId?: string) {
   const resolvedSessionId = computed(() => sessionId ?? activeSessionId.value ?? "");
   const defaultAgentId = computed(() => agents.value[0]?.id ?? "");
   // The harness says what the session's folder offers changed (an agent file added): ask again.
-  const changes = sessionCatalogChanges(resolvedSessionId);
+  const changes = sessionCatalogChanges(machine, resolvedSessionId);
 
   watch(
     [resolvedSessionId, changes],

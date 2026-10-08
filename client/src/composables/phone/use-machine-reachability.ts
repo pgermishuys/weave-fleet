@@ -1,16 +1,18 @@
 import { onMounted, onUnmounted, shallowRef } from "vue";
 import { onConnectionLost, onDisconnect, onReconnect } from "@/composables/use-weave-socket";
-import { fetchOnMachine, getActiveMachine } from "@/lib/machines";
+import { useMachineTarget } from "@/lib/machine-target";
+import { fetchOnMachine } from "@/lib/machines";
 
 /** Waits between tries while the machine is away, in seconds. */
 export const RETRY_STEPS = [2, 4, 8, 15, 30];
 
 /**
- * Whether the machine this page works in is answering, for the phone session view. The event hub dropping (or the
+ * Whether the session's machine is answering, for the phone session view. The event hub dropping (or the
  * phone going offline) marks it away; it's then asked again with growing waits, shown as "Trying again in 4 s",
  * until it answers or the hub is back. `heard()` records news from it, for "last heard 14:29".
  */
 export function useMachineReachability(onBack: () => void) {
+  const machine = useMachineTarget();
   const reachable = shallowRef(true);
   const lastHeardAt = shallowRef<number>(Date.now());
   const retryIn = shallowRef(0);
@@ -35,7 +37,7 @@ export function useMachineReachability(onBack: () => void) {
 
   async function probe(): Promise<void> {
     try {
-      const response = await fetchOnMachine(getActiveMachine(), "/api/machine");
+      const response = await fetchOnMachine(machine.connection, "/api/machine");
       if (response.ok) {
         back();
         return;
@@ -80,7 +82,7 @@ export function useMachineReachability(onBack: () => void) {
   }
 
   onMounted(() => {
-    stops.push(onConnectionLost(away), onDisconnect(away), onReconnect(back));
+    stops.push(onConnectionLost(machine, away), onDisconnect(machine, away), onReconnect(machine, back));
     window.addEventListener("offline", away);
     window.addEventListener("online", retry);
     document.addEventListener("visibilitychange", onVisible);

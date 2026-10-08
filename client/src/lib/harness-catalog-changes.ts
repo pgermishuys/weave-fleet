@@ -1,6 +1,7 @@
 import { getCurrentScope, onScopeDispose, shallowRef, toValue, type MaybeRefOrGetter, type Ref } from "vue";
 import { onGlobalEvent } from "@/composables/use-signalr-socket";
 import type { DomainEvent } from "@/lib/domain-events";
+import type { MachineTarget } from "@/lib/machine-target";
 
 /**
  * Event the server pushes on the "sessions" topic when what a harness offers in a folder (agents, models, commands)
@@ -56,18 +57,18 @@ export function isCatalogChangeFor(
   return sameFolder && (profile === undefined || change.profileIds.includes(profile));
 }
 
-/** Calls `handler` for every catalog change pushed until the returned function is called. */
-export function listenForCatalogChanges(handler: (change: HarnessCatalogChange) => void): () => void {
-  return onGlobalEvent("sessions", (event: DomainEvent) => {
+/** Calls `handler` for every catalog change `machine` pushes until the returned function is called. */
+export function listenForCatalogChanges(machine: MachineTarget, handler: (change: HarnessCatalogChange) => void): () => void {
+  return onGlobalEvent(machine, "sessions", (event: DomainEvent) => {
     if ((event.type as string) !== HARNESS_CATALOG_CHANGED) return;
     const change = parseCatalogChange(event.payload);
     if (change) handler(change);
   });
 }
 
-/** Calls `handler` for every catalog change pushed while the calling scope lives. */
-export function onCatalogChange(handler: (change: HarnessCatalogChange) => void): () => void {
-  const unsubscribe = listenForCatalogChanges(handler);
+/** Calls `handler` for every catalog change `machine` pushes while the calling scope lives. */
+export function onCatalogChange(machine: MachineTarget, handler: (change: HarnessCatalogChange) => void): () => void {
+  const unsubscribe = listenForCatalogChanges(machine, handler);
   if (getCurrentScope()) onScopeDispose(unsubscribe);
   return unsubscribe;
 }
@@ -77,9 +78,9 @@ export function onCatalogChange(handler: (change: HarnessCatalogChange) => void)
  * lives, so a list of the session's agents, models or commands that watches the count asks again. The session's lists
  * ask through requests they share, so one change is one request for each kind of list, however many show it.
  */
-export function sessionCatalogChanges(sessionId: MaybeRefOrGetter<string | null | undefined>): Ref<number> {
+export function sessionCatalogChanges(machine: MachineTarget, sessionId: MaybeRefOrGetter<string | null | undefined>): Ref<number> {
   const changes = shallowRef(0);
-  onCatalogChange((change) => {
+  onCatalogChange(machine, (change) => {
     const id = toValue(sessionId);
     if (id && change.sessionIds.includes(id)) {
       changes.value += 1;

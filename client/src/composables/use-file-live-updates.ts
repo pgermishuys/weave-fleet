@@ -28,7 +28,7 @@ export function useFileLiveUpdates(sessionId: MaybeRefOrGetter<string | null | u
   const machine = useMachineTarget();
   const buffers = useFileBuffersStore();
   const canvases = useCanvasesStore();
-  const { subscribeV2 } = useWeaveSocket();
+  const { subscribeV2 } = useWeaveSocket(machine);
 
   const pending = new Set<string>();
   let timer: ReturnType<typeof setTimeout> | undefined;

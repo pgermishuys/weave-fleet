@@ -27,7 +27,7 @@ export function useSessionProgress(sessionId: MaybeRefOrGetter<string>): {
       if (!next) return;
 
       void store.ensureLoaded(machine, next);
-      unsubscribe = onGlobalEvent(`session:${next}`, (event: DomainEvent) => {
+      unsubscribe = onGlobalEvent(machine, `session:${next}`, (event: DomainEvent) => {
         if ((event.type as string) !== PROGRESS_UPDATED) return;
         const detail = parseProgressDetail(event.payload);
         if (detail?.sessionId === next) store.apply(detail);
@@ -36,7 +36,7 @@ export function useSessionProgress(sessionId: MaybeRefOrGetter<string>): {
     { immediate: true },
   );
 
-  const offReconnect = onReconnect(() => {
+  const offReconnect = onReconnect(machine, () => {
     if (id.value) void store.ensureLoaded(machine, id.value, { force: true });
   });
 

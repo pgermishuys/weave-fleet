@@ -87,7 +87,7 @@ Never speculate about what's happening on the wire or in state. Build a test tha
 - Use when: state management, event handling logic, message accumulation bugs
 
 **Key composables:**
-- `use-signalr-socket.ts` — SignalR connection lifecycle, topic dispatch
+- `use-signalr-socket.ts` — SignalR connections (one per machine; every call takes a `MachineTarget`), topic dispatch
 - `use-session-stream.ts` — Subscribes a session's topic, loads history, batches live events per frame
 - `lib/domain-event-reducer.ts` — `applyDomainEvent`: event-to-state reducer, message accumulation
 - `use-weave-socket.ts` — Re-exports from signalr-socket (the active transport)

@@ -63,7 +63,7 @@ export function useModels(sessionId?: MaybeRefOrGetter<string | undefined>) {
   const resolvedSessionId = computed(() => toValue(sessionId) ?? activeSessionId.value ?? "");
   const defaultModelKey = computed(() => models.value[0]?.selectionKey ?? "");
   // The harness says what the session's folder offers changed (a provider signed in, a model added): ask again.
-  const changes = sessionCatalogChanges(resolvedSessionId);
+  const changes = sessionCatalogChanges(machine, resolvedSessionId);
 
   watch(
     [resolvedSessionId, changes],

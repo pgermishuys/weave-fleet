@@ -26,6 +26,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { useCommands } from "@/composables/use-commands";
 import { useWeaveSocket } from "@/composables/use-weave-socket";
+import { liveTarget } from "@/lib/machine-target";
 import { useSessionActivityUpdates } from "@/composables/use-session-activity-updates";
 import { useSessionNotifications } from "@/composables/use-session-notifications";
 import { useDeskPresence } from "@/composables/use-desk-presence";
@@ -43,7 +44,7 @@ import { useCanvasesStore } from "@/stores/canvases";
 import { useSidebarStore } from "@/stores/sidebar";
 
 useCommands();
-useWeaveSocket();
+useWeaveSocket(liveTarget());
 useSessionActivityUpdates();
 useSessionNotifications();
 useDeskPresence();

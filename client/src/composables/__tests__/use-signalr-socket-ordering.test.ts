@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { liveTarget } from "@/lib/machine-target"
 import { HubConnectionState } from "@microsoft/signalr"
 import type { SessionSnapshot } from "@/lib/session-snapshot"
 import { flushAll, mountComposable } from "./test-utils"
+
+/** Nothing in these tests makes another machine live, so the live machine is home. */
+const home = liveTarget()
 
 // Mock HubConnection
 const mockHubConnection = {
@@ -109,7 +113,7 @@ describe("useSignalRSocket subscription ordering (race regression)", () => {
       return Promise.resolve(createSessionSnapshot(sessionId))
     })
 
-    const { result } = await mountComposable(() => useWeaveSocket())
+    const { result } = await mountComposable(() => useWeaveSocket(home))
 
     // Initial subscribe (user opens session A)
     const unsubscribe = result.subscribeV2("session-1", vi.fn(), vi.fn())
@@ -167,7 +171,7 @@ describe("useSignalRSocket subscription ordering (race regression)", () => {
       return Promise.resolve(createSessionSnapshot(sessionId))
     })
 
-    const { result } = await mountComposable(() => useWeaveSocket())
+    const { result } = await mountComposable(() => useWeaveSocket(home))
 
     // Simulate 3 rapid A -> away -> A cycles without waiting for unsubscribes
     let unsubscribe = result.subscribeV2("session-1", vi.fn(), vi.fn())

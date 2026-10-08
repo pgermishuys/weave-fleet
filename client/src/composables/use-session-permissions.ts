@@ -89,15 +89,15 @@ function errorMessage(body: unknown, status: number): string {
  * `permission.replied` on the session's topic keep them current. A subagent's asks show on the session it works for.
  */
 export function useSessionPermissions(sessionId: MaybeRefOrGetter<string>) {
-  const { api } = useMachineTarget();
-  const { subscribeV2 } = useWeaveSocket();
+  const machine = useMachineTarget();
+  const { subscribeV2 } = useWeaveSocket(machine);
   const asks = computed<readonly PermissionAsk[]>(() => asksBySession[toValue(sessionId)] ?? []);
   let loadId = 0;
 
   async function load(id: string): Promise<void> {
     const current = ++loadId;
     try {
-      const { data, response } = await api.GET("/api/sessions/{id}/permissions", { params: { path: { id } } });
+      const { data, response } = await machine.api.GET("/api/sessions/{id}/permissions", { params: { path: { id } } });
       if (current !== loadId || !response.ok) return;
       asksBySession[id] = (Array.isArray(data) ? data : [])
         .map(toPermissionAsk)
@@ -131,7 +131,7 @@ export function useSessionPermissions(sessionId: MaybeRefOrGetter<string>) {
         },
       );
       void load(id);
-      const stopReconnect = onReconnect(() => void load(id));
+      const stopReconnect = onReconnect(machine, () => void load(id));
       onCleanup(() => {
         unsubscribe();
         stopReconnect();
@@ -147,7 +147,7 @@ export function useSessionPermissions(sessionId: MaybeRefOrGetter<string>) {
    * reason when the answer didn't reach the agent, and the card stays.
    */
   async function answer(ask: PermissionAsk, reply: PermissionReply, message?: string): Promise<void> {
-    const { error, response } = await api.POST("/api/sessions/{id}/permissions/{requestId}", {
+    const { error, response } = await machine.api.POST("/api/sessions/{id}/permissions/{requestId}", {
       params: { path: { id: ask.sessionId, requestId: ask.id } },
       body: { reply, message: message?.trim() ? message.trim() : null },
     });

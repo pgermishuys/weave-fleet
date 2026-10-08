@@ -1,5 +1,6 @@
 import { onMounted, onUnmounted } from "vue";
 import { onReconnect, setPresence } from "@/composables/use-weave-socket";
+import { liveTarget } from "@/lib/machine-target";
 
 /** How often a window says it's still there; the server forgets one after 90 s. */
 export const PRESENCE_INTERVAL_MS = 30_000;
@@ -20,13 +21,13 @@ export function useDeskPresence(formFactor?: "desktop" | "phone"): void {
   let timer: ReturnType<typeof setInterval> | null = null;
   let stopReconnect: (() => void) | null = null;
 
-  const report = () => setPresence(document.visibilityState === "visible", formFactor ?? currentFormFactor());
+  const report = () => setPresence(liveTarget(), document.visibilityState === "visible", formFactor ?? currentFormFactor());
 
   onMounted(() => {
     report();
     timer = setInterval(report, PRESENCE_INTERVAL_MS);
     document.addEventListener("visibilitychange", report);
-    stopReconnect = onReconnect(report);
+    stopReconnect = onReconnect(liveTarget(), report);
   });
 
   onUnmounted(() => {

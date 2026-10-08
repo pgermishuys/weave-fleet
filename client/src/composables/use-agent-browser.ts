@@ -26,7 +26,7 @@ export function agentFrameUrl(sessionId: string, tabId: string, nonce: number): 
 export function useAgentBrowser(sessionId: MaybeRefOrGetter<string | null | undefined>): void {
   const machine = useMachineTarget();
   const store = useAgentBrowserStore();
-  const { subscribeV2 } = useWeaveSocket();
+  const { subscribeV2 } = useWeaveSocket(machine);
 
   async function load(id: string): Promise<void> {
     try {
@@ -55,7 +55,7 @@ export function useAgentBrowser(sessionId: MaybeRefOrGetter<string | null | unde
     { immediate: true },
   );
 
-  const stopReconnect = onReconnect(() => {
+  const stopReconnect = onReconnect(machine, () => {
     const id = toValue(sessionId);
     if (id) void load(id);
   });

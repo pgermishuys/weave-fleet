@@ -53,7 +53,7 @@ export function useSessionTerminals(sessionId: MaybeRefOrGetter<string | null | 
   const machine = useMachineTarget();
   const store = useTerminalsStore();
   const appShell = useAppShellStore();
-  const { subscribeV2 } = useWeaveSocket();
+  const { subscribeV2 } = useWeaveSocket(machine);
 
   // Events that arrive while the list is loading are replayed on top of it.
   let loading: { sessionId: string; buffered: TerminalEvent[] } | null = null;
@@ -105,7 +105,7 @@ export function useSessionTerminals(sessionId: MaybeRefOrGetter<string | null | 
     { immediate: true },
   );
 
-  const stopReconnect = onReconnect(() => {
+  const stopReconnect = onReconnect(machine, () => {
     const id = toValue(sessionId);
     if (id && appShell.config.terminalEnabled) void load(id);
   });

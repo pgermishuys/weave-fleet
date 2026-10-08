@@ -1,7 +1,8 @@
 /**
  * The machine a part of the page asks. The interface's own pages (Settings, Automations, Workflows) ask the live
  * machine (`api`). Code working on a session asks its target: typed calls through `target.api`, raw requests, URLs
- * and sockets through `apiFetchOn`/`apiUrlOn`/`wsUrlOn(target.connection, …)`. The new-session box can start a
+ * and sockets through `apiFetchOn`/`apiUrlOn`/`wsUrlOn(target.connection, …)`, live events by passing `target` to the
+ * event hub's calls (`use-signalr-socket.ts`, one connection per machine). The new-session box can start a
  * session on another machine, so it provides that machine to what it uses (folders, harnesses, agents and models,
  * profiles), and they ask it instead. See `NewSessionComposer.vue`.
  *

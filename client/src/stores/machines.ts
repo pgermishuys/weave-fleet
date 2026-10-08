@@ -3,6 +3,7 @@ import { computed, ref, shallowRef, watch } from "vue";
 import type { SessionListItem } from "@/api/client";
 import type { ProjectSummary } from "@/lib/session-project-groups";
 import { onDisconnect, onReconnect } from "@/composables/use-signalr-socket";
+import { liveTarget } from "@/lib/machine-target";
 import {
   HOME_MACHINE_KEY,
   LIVE_MACHINES_PREFERENCE_KEY,
@@ -690,7 +691,7 @@ export const useMachinesStore = defineStore("machines", () => {
       if (liveMachine) {
         void checkLive();
         liveTimer = setInterval(() => void checkLive(), LIVE_CHECK_INTERVAL_MS);
-        stopHubWatch = [onDisconnect(() => void checkLive()), onReconnect(() => void checkLive())];
+        stopHubWatch = [onDisconnect(liveTarget(), () => void checkLive()), onReconnect(liveTarget(), () => void checkLive())];
       }
     }
     let stopped = false;
