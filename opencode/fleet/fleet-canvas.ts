@@ -22,7 +22,13 @@ const BRIDGE_PATH = "/api/bridge/canvas/"
 const MEMORY_PATH = "/api/bridge/memory/"
 const MESSAGE_PATH = "/api/bridge/session/message"
 const SESSION_READ_PATH = "/api/bridge/session/read"
+const SESSION_START_PATH = "/api/bridge/session/start"
+const MACHINE_LIST_PATH = "/api/bridge/session/machines"
 const STEP_DONE_PATH = "/api/bridge/workflow/step-done"
+
+// Agent hand-off: set only in processes started with it on (and so with messages between sessions on). It adds the
+// hand-off tools and a machine on fleet_message and fleet_session_read; without it they're as they always were.
+const HANDOFF = process.env.FLEET_AGENT_HANDOFF === "1"
 
 type PermissionRequest = { permission: string; patterns: string[]; always: string[]; metadata: Record<string, unknown> }
 type ToolContext = { sessionID: string; callID?: string; ask?: (request: PermissionRequest) => Promise<void> }
@@ -456,13 +462,24 @@ export const FleetCanvasPlugin = async (input: { directory?: string }) => ({
           type: "number",
           description: "How many messages, 1 to 50. 20 is a good page.",
         },
+        ...(HANDOFF
+          ? {
+              machine: {
+                type: "string",
+                description: [
+                  "The machine the session is on, from fleet_machine_list, for a session you started or messaged there.",
+                  "An empty string for a session on this machine.",
+                ].join(" "),
+              },
+            }
+          : {}),
       },
-      execute: (args: { sessionId: string; before: string; limit: number | string }, context: ToolContext) =>
+      execute: (args: { sessionId: string; before: string; limit: number | string; machine?: string }, context: ToolContext) =>
         callFleet(
           "read",
           context,
           // OpenCode doesn't check args against the schema, and models sometimes send a number as a string.
-          { sessionId: args.sessionId, before: args.before || null, limit: Number(args.limit) || null },
+          { sessionId: args.sessionId, before: args.before || null, limit: Number(args.limit) || null, machine: args.machine || null },
           SESSION_READ_PATH,
         ),
     },
@@ -494,14 +511,84 @@ export const FleetCanvasPlugin = async (input: { directory?: string }) => ({
                   "false when you're handing work off or just telling it something.",
                 ].join(" "),
               },
+              ...(HANDOFF
+                ? {
+                    machine: {
+                      type: "string",
+                      description: "The machine the session is on, from fleet_machine_list. An empty string for a session on this machine.",
+                    },
+                  }
+                : {}),
             },
-            execute: (args: { sessionId: string; text: string; notifyWhenDone: boolean | string }, context: ToolContext) =>
+            execute: (args: { sessionId: string; text: string; notifyWhenDone: boolean | string; machine?: string }, context: ToolContext) =>
               callFleet(
                 "message",
                 context,
                 // OpenCode doesn't check args against the schema, and models sometimes send a boolean as a string.
-                { sessionId: args.sessionId, text: args.text, notifyWhenDone: args.notifyWhenDone === true || args.notifyWhenDone === "true" },
+                {
+                  sessionId: args.sessionId,
+                  text: args.text,
+                  notifyWhenDone: args.notifyWhenDone === true || args.notifyWhenDone === "true",
+                  machine: args.machine || null,
+                },
                 MESSAGE_PATH,
+              ),
+          },
+        }
+      : {}),
+
+    // Only in processes started with agent hand-off on. This Fleet makes every call to the other machine, with the
+    // token it keeps for it, and only to machines the user allowed; the agent never sees a token.
+    ...(HANDOFF
+      ? {
+          fleet_machine_list: {
+            description: [
+              "List the other machines you may hand work to: each one's name, whether it's answering, its harnesses and its folders.",
+              "Name a machine in fleet_session_start, and in fleet_message or fleet_session_read for a session there.",
+            ].join(" "),
+            args: {},
+            execute: (_args: Record<string, never>, context: ToolContext) => callFleet("machines", context, {}, MACHINE_LIST_PATH),
+          },
+          fleet_session_start: {
+            description: [
+              "Start a session on another machine and give it a task.",
+              "It's a normal session there, which the user can open and step into; the task arrives marked as coming from this session, as a teammate's request, not the user's.",
+              "The work moves by branch: push yours and name it, and the new session works in a fresh worktree of it.",
+              "Its reply stays there: read it with fleet_session_read and message it with fleet_message, naming the machine.",
+            ].join(" "),
+            args: {
+              machine: { type: "string", description: "The machine's name, from fleet_machine_list." },
+              folder: { type: "string", description: "A folder on that machine, from fleet_machine_list." },
+              title: { type: "string", description: "Short title for the new session, e.g. \"Check the Windows installer\"." },
+              task: {
+                type: "string",
+                description: "The task: what you need done and why, with the paths and details it needs to act on its own.",
+              },
+              branch: {
+                type: "string",
+                description: "A branch you pushed, for a fresh worktree of it there. An empty string to work in the folder as it is.",
+              },
+              harness: {
+                type: "string",
+                description: "The harness to run there, from fleet_machine_list. An empty string for that machine's default.",
+              },
+            },
+            execute: (
+              args: { machine: string; folder: string; title: string; task: string; branch: string; harness: string },
+              context: ToolContext,
+            ) =>
+              callFleet(
+                "start",
+                context,
+                {
+                  machine: args.machine,
+                  folder: args.folder,
+                  title: args.title,
+                  task: args.task,
+                  branch: args.branch || null,
+                  harness: args.harness || null,
+                },
+                SESSION_START_PATH,
               ),
           },
         }

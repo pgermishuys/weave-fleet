@@ -1,4 +1,5 @@
 using WeaveFleet.Application.Browser;
+using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Memory;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
@@ -18,6 +19,7 @@ public sealed class FleetToolSettings(
     ISessionRepository sessions,
     IUserPreferenceRepository preferences,
     SessionMessagesFeature sessionMessages,
+    AgentHandoffFeature agentHandoff,
     AgentMemoryFeature memory,
     WorkflowsFeature workflows)
 {
@@ -34,7 +36,8 @@ public sealed class FleetToolSettings(
                 Memory: await memory.IsEnabledAsync().ConfigureAwait(false),
                 WorkflowStep: workflowStep,
                 Browser: AgentBrowserSettings.From(await preferences.GetAllAsync().ConfigureAwait(false)).Enabled,
-                Walkthrough: (await BuiltInSkillService.GetEnabledAsync(preferences).ConfigureAwait(false)).Contains(FleetToolSwitches.WalkthroughSkill));
+                Walkthrough: (await BuiltInSkillService.GetEnabledAsync(preferences).ConfigureAwait(false)).Contains(FleetToolSwitches.WalkthroughSkill),
+                AgentHandoff: await agentHandoff.IsEnabledAsync().ConfigureAwait(false));
         }
     }
 }

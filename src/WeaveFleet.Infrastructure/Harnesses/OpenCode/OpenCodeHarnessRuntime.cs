@@ -11,6 +11,7 @@ using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.FleetTools;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Memory;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
@@ -411,6 +412,10 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         if (await IsSessionMessagesEnabledAsync(context.UserId).ConfigureAwait(false))
             envVars[SessionMessages.EnvironmentVariable] = "1";
 
+        // Agent hand-off adds its tools and a machine on the message tools; on and off never share a process either.
+        if (await IsAgentHandoffEnabledAsync(context.UserId).ConfigureAwait(false))
+            envVars[AgentHandoff.EnvironmentVariable] = "1";
+
         // Workflows add the step tool to the process, and every session on it that isn't a step has it denied. Like
         // messages, sessions with it on and off never share a process.
         if (await IsWorkflowsEnabledAsync(context.UserId).ConfigureAwait(false))
@@ -462,6 +467,14 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         using var userScope = BackgroundUserContext.BeginScope(userId);
         using var scope = _scopeFactory.CreateScope();
         return scope.ServiceProvider.GetService<SessionMessagesFeature>() is { } feature
+            && await feature.IsEnabledAsync().ConfigureAwait(false);
+    }
+
+    private async Task<bool> IsAgentHandoffEnabledAsync(string userId)
+    {
+        using var userScope = BackgroundUserContext.BeginScope(userId);
+        using var scope = _scopeFactory.CreateScope();
+        return scope.ServiceProvider.GetService<AgentHandoffFeature>() is { } feature
             && await feature.IsEnabledAsync().ConfigureAwait(false);
     }
 

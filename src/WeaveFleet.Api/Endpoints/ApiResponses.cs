@@ -355,13 +355,24 @@ public sealed record MemoryBridgeRequest(
     string? Replaces = null,
     string? Id = null);
 
-public sealed record SessionMessageBridgeRequest(string? HarnessSessionId, string? SessionId = null, string? Text = null, bool NotifyWhenDone = false);
+/// <summary><c>fleet_message</c> from the harness process. <c>Machine</c> names another machine the session is on (agent hand-off).</summary>
+public sealed record SessionMessageBridgeRequest(string? HarnessSessionId, string? SessionId = null, string? Text = null, bool NotifyWhenDone = false, string? Machine = null);
 
 /// <summary>
 /// <c>fleet_session_read</c> from the harness process: the session to read, and for an older page the <c>before</c> the
-/// last page named (empty for the latest messages).
+/// last page named (empty for the latest messages). <c>Machine</c> names another machine the session is on (agent hand-off).
 /// </summary>
-public sealed record SessionReadBridgeRequest(string? HarnessSessionId, string? SessionId = null, string? Before = null, int? Limit = null);
+public sealed record SessionReadBridgeRequest(string? HarnessSessionId, string? SessionId = null, string? Before = null, int? Limit = null, string? Machine = null);
+
+/// <summary><c>fleet_session_start</c> from the harness process: a session on another machine, and its task.</summary>
+public sealed record SessionStartBridgeRequest(
+    string? HarnessSessionId,
+    string? Machine = null,
+    string? Folder = null,
+    string? Title = null,
+    string? Task = null,
+    string? Branch = null,
+    string? Harness = null);
 
 /// <summary>
 /// What the tool returns to the harness as-is: a tool-card title, the text the model reads, metadata, and any

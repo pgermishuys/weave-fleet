@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
@@ -21,7 +22,8 @@ public sealed class SessionReadBridge(
     ISessionRepository sessions,
     ISessionMessageProxy messages,
     IHarnessRegistry harnessRegistry,
-    SessionActivityTracker activityTracker)
+    SessionActivityTracker activityTracker,
+    MachineHandoffBridge handoff)
 {
     public const int DefaultLimit = 20;
     public const int MaxLimit = 50;
@@ -35,6 +37,7 @@ public sealed class SessionReadBridge(
         string? sessionId,
         string? before,
         int? limit,
+        string? machine = null,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(bridgeToken) || string.IsNullOrWhiteSpace(harnessSessionId))
@@ -48,6 +51,9 @@ public sealed class SessionReadBridge(
             return Invalid("\"sessionId\" is required: the id of a session in a <fleet-session-references> block.");
         if (limit is < 1 or > MaxLimit)
             return Invalid($"\"limit\" is from 1 to {MaxLimit}.");
+        // A session on another machine: this Fleet reads it there.
+        if (!string.IsNullOrWhiteSpace(machine))
+            return await handoff.ReadAsync(caller, machine, sessionId.Trim(), before, limit, ct).ConfigureAwait(false);
 
         using (userScope.Begin(caller.UserId))
         {

@@ -199,7 +199,7 @@ public sealed partial class OpenCode2FleetFilesTests : IDisposable
     private static List<string> ToolNames(string source)
         => ToolName().Matches(source).Select(match => match.Groups[1].Value).Distinct().Order(StringComparer.Ordinal).ToList();
 
-    [GeneratedRegex(@"""?(fleet_(?:canvas|app|browser|message|memory)[a-z_]*)""?\s*[,:]")]
+    [GeneratedRegex(@"""?(fleet_(?:canvas|app|browser|message|memory|machine|session)[a-z_]*)""?\s*[,:]")]
     private static partial Regex ToolName();
 
     [GeneratedRegex(@"^\s*import\s.*\sfrom\s+""([^""]+)""", RegexOptions.Multiline)]

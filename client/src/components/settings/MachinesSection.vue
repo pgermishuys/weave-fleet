@@ -6,6 +6,9 @@ import { useMachinesStore, type MachineAccess, type MachineEntry, type MachineHa
 import AddPhonePanel from "@/components/settings/AddPhonePanel.vue";
 import DevicesList from "@/components/settings/DevicesList.vue";
 import { listDevices, type PairedDevice } from "@/lib/devices-api";
+import { AGENT_HANDOFF_PREFERENCE_KEY } from "@/lib/machines";
+import { SESSION_MESSAGES_PREFERENCE_KEY } from "@/lib/session-messages";
+import { usePreferencesStore } from "@/stores/preferences";
 
 /**
  * Settings → Machines: the machines this client knows, adding one by URL and token, and how other devices reach
@@ -19,7 +22,9 @@ const buttonDangerClass = "inline-flex items-center justify-center gap-2 rounded
 const inputClass = "w-full rounded-btn border border-border bg-main-bg px-3 py-2 text-sm text-text outline-none transition-colors placeholder:text-muted focus:border-accent";
 
 const machines = useMachinesStore();
-const { entries, others, home, liveReachable } = storeToRefs(machines);
+const { entries, others, home, liveReachable, source } = storeToRefs(machines);
+const preferencesStore = usePreferencesStore();
+preferencesStore.ensureLoaded();
 
 // ── Add ──────────────────────────────────────────────────────────────────────
 const showAddForm = shallowRef(false);
@@ -81,6 +86,28 @@ async function saveToken(entry: MachineEntry): Promise<void> {
   try {
     await machines.updateToken(entry.key, tokenValue.value);
     tokenFor.value = null;
+  } catch (error) {
+    rowError[entry.key] = error instanceof Error ? error.message : String(error);
+  } finally {
+    busyKey.value = null;
+  }
+}
+
+// ── Agent hand-off ───────────────────────────────────────────────────────────
+// Shown with "Hand work to other machines" on, for the machines in home's own list (only its owner sees that list).
+const isAgentHandoffOn = computed(() =>
+  preferencesStore.get(AGENT_HANDOFF_PREFERENCE_KEY, "false") === "true"
+  && preferencesStore.get(SESSION_MESSAGES_PREFERENCE_KEY, "false") === "true");
+
+function showsAgentsAllowed(entry: MachineEntry): boolean {
+  return isAgentHandoffOn.value && !entry.isHome && source.value === "server";
+}
+
+async function toggleAgentsAllowed(entry: MachineEntry): Promise<void> {
+  busyKey.value = entry.key;
+  rowError[entry.key] = null;
+  try {
+    await machines.setAgentsAllowed(entry.key, machines.agentsAllowed[entry.key] !== true);
   } catch (error) {
     rowError[entry.key] = error instanceof Error ? error.message : String(error);
   } finally {
@@ -412,6 +439,19 @@ onUnmounted(() => stopPolling?.());
             :title="harnessVersions(entry)"
             data-testid="machine-capabilities"
           >{{ capabilityLine(entry) }}</span>
+          <label
+            v-if="showsAgentsAllowed(entry)"
+            class="machine-card__agents"
+            data-testid="machine-agents-allowed"
+          >
+            <input
+              type="checkbox"
+              :checked="machines.agentsAllowed[entry.key] === true"
+              :disabled="busyKey === entry.key"
+              @change="toggleAgentsAllowed(entry)"
+            >
+            Agents can hand work here
+          </label>
 
           <form
             v-if="tokenFor === entry.key"
@@ -751,6 +791,16 @@ onUnmounted(() => stopPolling?.());
   font-family: var(--font-mono);
   font-size: 11.5px;
   color: var(--muted);
+}
+
+.machine-card__agents {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--text);
+  cursor: pointer;
 }
 
 .machine-card__state--ok {

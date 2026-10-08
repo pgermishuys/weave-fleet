@@ -91,9 +91,9 @@ const BROWSER_TOOLS = new Set(["fleet_app_start", "fleet_browser_open", "fleet_b
 
 /**
  * Tools whose card title comes from Fleet's answer: "Messaged Update documentation" for fleet_message, "Read t3code
- * notes" for fleet_session_read.
+ * notes" for fleet_session_read, "Started Run the tests on mini" for fleet_session_start.
  */
-const TITLED_TOOLS = new Set([...BROWSER_TOOLS, "fleet_message", "fleet_session_read"]);
+const TITLED_TOOLS = new Set([...BROWSER_TOOLS, "fleet_message", "fleet_session_read", "fleet_machine_list", "fleet_session_start"]);
 
 const tool_output_keys = ["output", "result", "content", "error", "message", "stdout", "stderr"] as const;
 const fallback_excluded_keys = new Set(["input", "status", "summary", "title", "diff", "diffLines", "patch"]);

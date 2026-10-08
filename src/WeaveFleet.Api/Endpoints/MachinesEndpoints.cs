@@ -43,7 +43,7 @@ public static class MachinesEndpoints
 
         group.MapPut("/{id}", async (string id, UpdateRemoteMachineRequest request, RemoteMachineService machines, CancellationToken cancellationToken) =>
         {
-            var (machine, error) = await machines.UpdateAsync(id, request.BaseUrl, request.Token, request.Name, cancellationToken);
+            var (machine, error) = await machines.UpdateAsync(id, request.BaseUrl, request.Token, request.Name, cancellationToken, request.AgentsAllowed);
             if (machine is null)
                 return error == "No such machine." ? Results.NotFound(new ErrorResponse(error)) : Results.BadRequest(new ErrorResponse(error!));
             return Results.Ok(ToResponse(machine, machines.TokenOf(machine)));
@@ -102,6 +102,6 @@ public static class MachinesEndpoints
     }
 
     private static MachineEntryResponse ToResponse(RemoteMachine machine, string? token) =>
-        new(machine.Id, machine.Name, machine.BaseUrl, machine.Os, machine.Status, machine.AddedAt, machine.LastSeenAt, token);
+        new(machine.Id, machine.Name, machine.BaseUrl, machine.Os, machine.Status, machine.AddedAt, machine.LastSeenAt, token, machine.AgentsAllowed);
 }
 #pragma warning restore IL2026

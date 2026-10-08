@@ -22,6 +22,12 @@ public sealed record RemoteMachine
 
     /// <summary>One of <see cref="RemoteMachineStatuses"/>.</summary>
     public string Status { get; init; } = RemoteMachineStatuses.Unknown;
+
+    /// <summary>
+    /// Whether agents in sessions here may hand work to it (start, message and read sessions there), with "Hand work
+    /// to other machines" on. Off until the owner turns it on for this machine.
+    /// </summary>
+    public bool AgentsAllowed { get; init; }
 }
 
 public static class RemoteMachineStatuses

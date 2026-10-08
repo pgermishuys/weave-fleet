@@ -52,7 +52,7 @@ public sealed class RemoteAutomationRuns(
             Model = modelId is null ? null : new RemoteModel(providerId!, modelId),
         };
 
-        var (answer, away, refused) = await SendAsync(machine, token!, HttpMethod.Post, "/api/sessions", body, RemoteRunsJsonContext.Default.RemoteSessionStart, ct);
+        var (answer, away, refused) = await RemoteMachineRequests.SendAsync(httpClients, HttpClientName, machine, token!, HttpMethod.Post, "/api/sessions", body, RemoteRunsJsonContext.Default.RemoteSessionStart, ct);
         if (answer is null)
             return away is not null ? SkippedOn(machine, away) : Failed(machine, refused!);
 
@@ -80,7 +80,7 @@ public sealed class RemoteAutomationRuns(
             return skipped;
 
         var path = $"/api/sessions/{Uri.EscapeDataString(sessionId)}";
-        var (session, away, _) = await SendAsync<object>(machine, token!, HttpMethod.Get, path, null, null, ct, RemoteMachineService.HttpClientName);
+        var (session, away, _) = await RemoteMachineRequests.SendAsync<object>(httpClients, RemoteMachineService.HttpClientName, machine, token!, HttpMethod.Get, path, null, null, ct);
         if (session is null)
             return away is null ? null : SkippedOn(machine, away);
 
@@ -90,7 +90,7 @@ public sealed class RemoteAutomationRuns(
                 return null;
         }
 
-        var (prompted, promptAway, _) = await SendAsync(machine, token!, HttpMethod.Post, $"{path}/prompt", new RemotePrompt(prompt), RemoteRunsJsonContext.Default.RemotePrompt, ct);
+        var (prompted, promptAway, _) = await RemoteMachineRequests.SendAsync(httpClients, HttpClientName, machine, token!, HttpMethod.Post, $"{path}/prompt", new RemotePrompt(prompt), RemoteRunsJsonContext.Default.RemotePrompt, ct);
         if (prompted is null)
             return promptAway is null ? null : SkippedOn(machine, promptAway);
 
@@ -117,7 +117,7 @@ public sealed class RemoteAutomationRuns(
             automation.WorkflowSteps,
             CheckWithMe: false);
 
-        var (answer, away, refused) = await SendAsync(machine, token!, HttpMethod.Post, "/api/workflows/runs", body, RemoteRunsJsonContext.Default.RemoteWorkflowStart, ct);
+        var (answer, away, refused) = await RemoteMachineRequests.SendAsync(httpClients, HttpClientName, machine, token!, HttpMethod.Post, "/api/workflows/runs", body, RemoteRunsJsonContext.Default.RemoteWorkflowStart, ct);
         if (answer is null)
             return SkippedOn(machine, away ?? refused!);
 
@@ -224,77 +224,6 @@ public sealed class RemoteAutomationRuns(
         return token is null
             ? (null, null, SkippedOn(machine, $"can't read the token for {machine.Name}. Enter it again in Settings › Machines."))
             : (machine, token, null);
-    }
-
-    /// <summary>
-    /// Sends a request to the machine. The answer's JSON; or <c>Away</c>, why it can't be asked (it didn't answer, or
-    /// turned the token away); or <c>Refused</c>, what it said was wrong with the request.
-    /// </summary>
-    private async Task<(JsonDocument? Answer, string? Away, string? Refused)> SendAsync<T>(
-        RemoteMachine machine,
-        string token,
-        HttpMethod method,
-        string path,
-        T? body,
-        System.Text.Json.Serialization.Metadata.JsonTypeInfo<T>? bodyType,
-        CancellationToken ct,
-        string clientName = HttpClientName)
-    {
-        using var request = new HttpRequestMessage(method, $"{machine.BaseUrl}{path}");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        if (body is not null && bodyType is not null)
-            request.Content = JsonContent.Create(body, bodyType);
-
-        HttpResponseMessage response;
-        try
-        {
-            response = await httpClients.CreateClient(clientName).SendAsync(request, ct);
-        }
-        catch (HttpRequestException)
-        {
-            return (null, $"{machine.Name} didn't answer.", null);
-        }
-        catch (TaskCanceledException) when (!ct.IsCancellationRequested)
-        {
-            // It took the request but didn't finish in time: the run may have started there.
-            return (null, $"{machine.Name} didn't answer in time. Look there before running it again.", null);
-        }
-
-        using (response)
-        {
-            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
-                return (null, $"{machine.Name} turned this Fleet's token away. Update it in Settings › Machines.", null);
-            if (!response.IsSuccessStatusCode)
-                return (null, null, await ErrorOfAsync(response, machine, ct));
-
-            try
-            {
-                return (await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(ct), cancellationToken: ct), null, null);
-            }
-            catch (JsonException)
-            {
-                return (null, null, $"{machine.Name} sent something that isn't Fleet's answer.");
-            }
-        }
-    }
-
-    /// <summary>What the machine said went wrong (<c>{"error": "…"}</c>), or its status code.</summary>
-    private static async Task<string> ErrorOfAsync(HttpResponseMessage response, RemoteMachine machine, CancellationToken ct)
-    {
-        try
-        {
-            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
-            foreach (var name in (string[])["error", "detail", "message"])
-            {
-                if (document.RootElement.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String && value.GetString() is { Length: > 0 } text)
-                    return $"{machine.Name}: {text}";
-            }
-        }
-        catch (JsonException)
-        {
-        }
-
-        return $"{machine.Name} answered {(int)response.StatusCode}.";
     }
 
     private static bool IsWorktree(Automation automation) =>

@@ -206,6 +206,13 @@ public sealed class HarnessOptions
     public bool SessionMessages { get; set; }
 
     /// <summary>
+    /// Lets agents hand work to other machines in the machine list that the owner allowed: start a session there, and
+    /// message and read sessions there. Needs <see cref="SessionMessages"/>. Experimental: a user's <c>AgentHandoff</c>
+    /// preference wins over this. Default: false.
+    /// </summary>
+    public bool AgentHandoff { get; set; }
+
+    /// <summary>
     /// Lets Fleet run workflows: a short list of steps, one session per agent step, with the <c>fleet_step_done</c>
     /// tool in step sessions only. Experimental: a user's <c>Workflows</c> preference wins over this. Default: false.
     /// </summary>

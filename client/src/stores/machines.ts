@@ -109,6 +109,8 @@ interface ServerMachine {
   addedAt: string;
   lastSeenAt: string | null;
   token: string | null;
+  /** Agents here may hand work to it. Missing from a home too old to say, where it can't. */
+  agentsAllowed?: boolean;
 }
 
 /**
@@ -260,6 +262,8 @@ export const useMachinesStore = defineStore("machines", () => {
   const others = ref<Record<string, MachineSessions>>(loadCachedSessions());
   /** What each machine besides home last said about itself (`GET /api/machine`), by id. */
   const identities = shallowRef<Record<string, MachineInfo>>({});
+  /** Which machines agents here may hand work to, by id, as home keeps it; only the owner's list says. */
+  const agentsAllowed = shallowRef<Record<string, boolean>>({});
   const liveMachine = getActiveMachine();
   const liveKey = liveMachine?.id ?? HOME_MACHINE_KEY;
 
@@ -319,6 +323,7 @@ export const useMachinesStore = defineStore("machines", () => {
     markImported();
     source.value = "server";
     connections.value = listed.map(fromServer).filter((connection): connection is MachineConnection => connection !== null);
+    agentsAllowed.value = Object.fromEntries(listed.map((machine) => [machine.id, machine.agentsAllowed === true]));
     persist();
   }
 
@@ -467,6 +472,18 @@ export const useMachinesStore = defineStore("machines", () => {
   }
 
   /** Renames a machine for every client, on the machine itself. */
+  /** Lets agents here hand work to the machine, or stops them; kept on home, which makes the calls. */
+  async function setAgentsAllowed(id: string, allowed: boolean): Promise<void> {
+    const response = await fetchOnMachine(null, `/api/machines/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agentsAllowed: allowed }),
+    });
+    if (!response.ok) throw new Error(await readError(response, "Couldn't change it."));
+    const saved = await response.json() as ServerMachine;
+    agentsAllowed.value = { ...agentsAllowed.value, [id]: saved.agentsAllowed === true };
+  }
+
   async function renameMachine(key: string, name: string): Promise<void> {
     const connection = connectionFor(key);
     const response = await fetchOnMachine(connection, "/api/machine", {
@@ -767,6 +784,8 @@ export const useMachinesStore = defineStore("machines", () => {
     rememberLiveSessions,
     startPolling,
     keyOfMachine,
+    agentsAllowed,
+    setAgentsAllowed,
     openOn,
   };
 });

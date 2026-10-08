@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
+using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Memory;
 using WeaveFleet.Application.Pages;
 using WeaveFleet.Application.Sessions;
@@ -33,6 +34,7 @@ public sealed class FleetToolCalls(
     WalkthroughBridge walkthroughs,
     SessionReadBridge sessionRead,
     SessionMessageBridge messages,
+    MachineHandoffBridge handoff,
     AgentMemoryBridge memory,
     WorkflowStepBridge steps)
 {
@@ -109,8 +111,20 @@ public sealed class FleetToolCalls(
                 Url: NonEmpty(args, "url"),
                 Read: Boolean(args, "read"),
                 CallId: call.CallId), ct),
-            "fleet_session_read" => sessionRead.ReadAsync(token, session, String(args, "sessionId"), NonEmpty(args, "before"), Limit(args), ct),
-            "fleet_message" => messages.SendAsync(token, session, String(args, "sessionId"), String(args, "text"), Boolean(args, "notifyWhenDone"), ct),
+            "fleet_session_read" => sessionRead.ReadAsync(token, session, String(args, "sessionId"), NonEmpty(args, "before"), Limit(args), NonEmpty(args, "machine"), ct),
+            "fleet_message" => messages.SendAsync(
+                token, session, String(args, "sessionId"), String(args, "text"), Boolean(args, "notifyWhenDone"), NonEmpty(args, "machine"), ct),
+            "fleet_machine_list" => handoff.ListAsync(token, session, ct),
+            "fleet_session_start" => handoff.StartAsync(
+                token,
+                session,
+                String(args, "machine"),
+                String(args, "folder"),
+                String(args, "title"),
+                String(args, "task"),
+                NonEmpty(args, "branch"),
+                NonEmpty(args, "harness"),
+                ct),
             "fleet_memory_save" => memory.SaveAsync(token, session, String(args, "list"), String(args, "text"), String(args, "kind"), String(args, "replaces"), ct),
             "fleet_memory_forget" => memory.ForgetAsync(token, session, String(args, "id"), ct),
             "fleet_step_done" => steps.DoneAsync(token, session, String(args, "outcome"), String(args, "summary"), ct),

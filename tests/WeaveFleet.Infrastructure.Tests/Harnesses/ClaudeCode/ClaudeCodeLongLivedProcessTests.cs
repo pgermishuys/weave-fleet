@@ -656,6 +656,7 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
         services.AddSingleton<IUserPreferenceRepository>(_preferences);
         services.AddSingleton<IBackgroundUserScope, NoUserScope>();
         services.AddSingleton<SessionMessagesFeature>();
+        services.AddSingleton<WeaveFleet.Application.Machines.AgentHandoffFeature>();
         services.AddSingleton<AgentMemoryFeature>();
         services.AddSingleton<WorkflowsFeature>();
         services.AddSingleton<FleetToolSettings>();

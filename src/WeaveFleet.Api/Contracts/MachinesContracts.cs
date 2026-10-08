@@ -5,6 +5,7 @@ namespace WeaveFleet.Api.Contracts;
 /// for a machine through a device grant instead.
 /// </summary>
 /// <param name="Status"><c>unknown</c>, <c>online</c>, <c>unreachable</c> or <c>unauthorized</c>, as this Fleet last saw it.</param>
+/// <param name="AgentsAllowed">Whether agents here may hand work to it, with "Hand work to other machines" on.</param>
 public sealed record MachineEntryResponse(
     string Id,
     string Name,
@@ -13,13 +14,15 @@ public sealed record MachineEntryResponse(
     string Status,
     DateTimeOffset AddedAt,
     DateTimeOffset? LastSeenAt,
-    string? Token);
+    string? Token,
+    bool AgentsAllowed);
 
 public sealed record MachineListResponse(IReadOnlyList<MachineEntryResponse> Machines);
 
 public sealed record AddMachineRequest(string? BaseUrl, string? Token);
 
-public sealed record UpdateRemoteMachineRequest(string? BaseUrl, string? Token, string? Name);
+/// <param name="AgentsAllowed">Whether agents here may hand work to it; left out, it stays as it is.</param>
+public sealed record UpdateRemoteMachineRequest(string? BaseUrl, string? Token, string? Name, bool? AgentsAllowed = null);
 
 /// <summary>One machine from a browser's own list (<c>localStorage["weave:machines"]</c>).</summary>
 public sealed record ImportMachineEntry(string? Id, string? Name, string? BaseUrl, string? Token, string? Os, DateTimeOffset? AddedAt);

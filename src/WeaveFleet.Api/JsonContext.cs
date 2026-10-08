@@ -177,6 +177,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(WalkthroughBridgeRequest))]
 [JsonSerializable(typeof(SessionMessageBridgeRequest))]
 [JsonSerializable(typeof(SessionReadBridgeRequest))]
+[JsonSerializable(typeof(SessionStartBridgeRequest))]
 [JsonSerializable(typeof(SessionReferenceDto))]
 [JsonSerializable(typeof(SessionReferenceDto[]))]
 [JsonSerializable(typeof(WorkflowStepBridgeRequest))]

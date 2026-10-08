@@ -268,13 +268,15 @@ Secrets travel only in request bodies, never in a query string, and Fleet never 
 
 Each machine keeps the list of other machines its clients know.
 
-- `GET /api/machines`: `{ machines: [{ id, name, baseUrl, os, status, addedAt, lastSeenAt, token }] }`. `token` is the
+- `GET /api/machines`: `{ machines: [{ id, name, baseUrl, os, status, addedAt, lastSeenAt, token, agentsAllowed }] }`. `token` is the
   other machine's token for the owner, `null` for a device. `status` is what this machine last saw: `unknown`,
   `online`, `unreachable` or `unauthorized` (it turned the token away).
 - `POST /api/machines` (owner) with `{ baseUrl, token }`: Fleet asks the machine who it is with that token (contract
   1, token auth, not this machine) and keeps it. These calls go out from Fleet: http(s) only, 5-second timeout, no
   redirects.
-- `PUT /api/machines/{id}` (owner) with any of `{ baseUrl, token, name }`; a new address or token is checked first.
+- `PUT /api/machines/{id}` (owner) with any of `{ baseUrl, token, name, agentsAllowed }`; a new address or token is
+  checked first. `agentsAllowed` lets agents here hand work to that machine (see below); it starts `false`, and adding
+  the machine again keeps it.
 - `DELETE /api/machines/{id}` (owner). First removes the device tokens this machine got its phones there; if that
   machine doesn't answer, those tokens stay until they're removed on it (or go unused for 30 days).
 - `POST /api/machines/import` (owner) with `{ machines: [{ id, name, baseUrl, token, os, addedAt }] }`: saves a
@@ -309,6 +311,24 @@ loopback without the token, and an agent on this machine. **A machine trusts the
 as far as it trusts that token.** Whoever has the token can already do anything here; naming the sender only marks
 the message as a peer's rather than the user's. The Fleet sending it names only a session it resolved from its own
 agent's process, never one the agent wrote.
+
+### Agents hand work to another machine
+
+With **Hand work to other machines** on (Settings → Features, experimental; it needs Messages between sessions), an
+agent can start a session on a machine in this Fleet's list, give it a task, and message and read it there. Only
+machines the owner allowed (`agentsAllowed`) are visible to agents. The agent calls Fleet's tools
+(`fleet_machine_list`, `fleet_session_start`, and `fleet_message` / `fleet_session_read` with a `machine`). This Fleet
+works out which session is calling and makes every call to the other machine itself, with the token it keeps:
+
+- `fleet_machine_list`: `GET /api/machine` and `GET /api/repositories` there, when the tool is called.
+- `fleet_session_start`: `GET /api/machine` (it must say `peerMessages`, or the agent is told to update Fleet there),
+  then `POST /api/sessions` there with no prompt. With a branch, the session gets a fresh worktree of
+  `origin/<branch>`, which that machine fetches; without one, it works in the folder as it is. Then the task goes as a
+  peer message from the calling session.
+- `fleet_message` / `fleet_session_read` with a `machine`: the peer endpoints above.
+
+The new session is a normal session there, in the sidebar under that machine. Its first message says which session on
+which machine sent it. The reply stays there: the agent reads it with `fleet_session_read`.
 
 ### Push: `/api/push/*`
 
