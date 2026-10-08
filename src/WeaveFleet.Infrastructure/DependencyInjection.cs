@@ -233,6 +233,8 @@ public static class DependencyInjection
         services.AddHttpClient(WeaveFleet.Application.Machines.RemoteMachineService.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(5))
             .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.SocketsHttpHandler { AllowAutoRedirect = false });
         services.AddSingleton<WeaveFleet.Application.Machines.DeviceGrantService>();
+        // Scoped: it counts the caller's own sessions.
+        services.AddScoped<WeaveFleet.Application.Machines.MachineCapabilitiesReader>();
         services.AddSingleton<WeaveFleet.Infrastructure.Machines.RemoteMachineWatcher>();
         services.AddHostedService(sp => sp.GetRequiredService<WeaveFleet.Infrastructure.Machines.RemoteMachineWatcher>());
         services.AddScoped<PromptQueueService>();

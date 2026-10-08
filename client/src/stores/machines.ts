@@ -32,6 +32,25 @@ export interface MachineInfo {
   requiresToken: boolean;
   /** The address phones should use for this machine, when someone saved one. */
   publicUrl?: string | null;
+  /** What it can run and how busy it is; missing on a Fleet older than this field. */
+  capabilities?: MachineCapabilities | null;
+}
+
+/** A harness as a machine last checked it. */
+export interface MachineHarness {
+  type: string;
+  name: string;
+  available: boolean;
+  /** Whether the user turned it on there; a new session can use it only when it's available and on. */
+  enabled: boolean;
+  version: string | null;
+}
+
+/** What `GET /api/machine` says a machine can run, and how busy it is. */
+export interface MachineCapabilities {
+  /** Null until the machine has checked its harnesses once. */
+  harnesses: MachineHarness[] | null;
+  sessions: { working: number; needsYou: number };
 }
 
 /** What `GET /api/machine/access` says: how other devices reach the home machine. */
@@ -56,6 +75,8 @@ export interface MachineEntry {
   isHome: boolean;
   isLive: boolean;
   connection: MachineConnection | null;
+  /** What it last said it can run; null until it answers, or when it's too old to say. */
+  capabilities: MachineCapabilities | null;
 }
 
 /** A machine that isn't live, as its sidebar group shows it: the last session and project lists it returned. */
@@ -207,6 +228,8 @@ export const useMachinesStore = defineStore("machines", () => {
   const connections = ref<MachineConnection[]>(loadMachines());
   const home = shallowRef<MachineInfo | null>(null);
   const others = ref<Record<string, MachineSessions>>(loadCachedSessions());
+  /** What each machine besides home last said about itself (`GET /api/machine`), by id. */
+  const identities = shallowRef<Record<string, MachineInfo>>({});
   const liveMachine = getActiveMachine();
   const liveKey = liveMachine?.id ?? HOME_MACHINE_KEY;
 
@@ -329,6 +352,7 @@ export const useMachinesStore = defineStore("machines", () => {
       isHome: true,
       isLive: liveKey === HOME_MACHINE_KEY,
       connection: null,
+      capabilities: home.value?.capabilities ?? null,
     },
     ...connections.value.map((connection) => ({
       key: connection.id,
@@ -338,6 +362,7 @@ export const useMachinesStore = defineStore("machines", () => {
       isHome: false,
       isLive: liveKey === connection.id,
       connection,
+      capabilities: identities.value[connection.id]?.capabilities ?? null,
     })),
   ]);
 
@@ -415,11 +440,14 @@ export const useMachinesStore = defineStore("machines", () => {
     });
     if (!response.ok) throw new Error(await readError(response, "Couldn't rename the machine."));
     const info = await response.json() as MachineInfo;
-    if (!connection) {
-      home.value = info;
-      return;
-    }
-    updateConnection(key, { name: info.name, os: info.os });
+    rememberIdentity(key, info);
+    if (connection) updateConnection(key, { name: info.name, os: info.os });
+  }
+
+  /** Keeps what a machine said about itself, for its row. */
+  function rememberIdentity(key: string, info: MachineInfo): void {
+    if (key === HOME_MACHINE_KEY) home.value = info;
+    else identities.value = { ...identities.value, [key]: info };
   }
 
   function updateConnection(id: string, patch: Partial<MachineConnection>): void {
@@ -466,10 +494,12 @@ export const useMachinesStore = defineStore("machines", () => {
     others.value = { ...others.value, [key]: { ...current, loading: true } };
 
     try {
-      const [response, projectsResponse] = await Promise.all([
+      const [response, projectsResponse, identityResponse] = await Promise.all([
         fetchOnMachine(entry.connection, `/api/sessions?limit=${SESSION_PAGE_SIZE}&offset=0`),
         // Its projects only order and name the groups: without them the sessions still group by the names they carry.
         fetchOnMachine(entry.connection, "/api/projects").catch(() => null),
+        // What it can run, for Settings → Machines; the sessions don't need it.
+        fetchOnMachine(entry.connection, "/api/machine").catch(() => null),
       ]);
       if (response.status === 401) throw new Error(`${entry.name} didn't accept the token.`);
       if (!response.ok) throw new Error(await readError(response, `${entry.name} answered ${response.status}.`));
@@ -477,7 +507,9 @@ export const useMachinesStore = defineStore("machines", () => {
       const projects = projectsResponse?.ok
         ? await (projectsResponse.json() as Promise<ProjectSummary[]>).catch(() => current.projects)
         : current.projects;
+      const identity = identityResponse?.ok ? await (identityResponse.json() as Promise<MachineInfo>).catch(() => null) : null;
       if (!entries.value.some((candidate) => candidate.key === key)) return;
+      if (identity) rememberIdentity(key, identity);
       others.value = { ...others.value, [key]: { sessions, projects, error: null, loadedAt: Date.now(), loading: false } };
       saveCachedSessions(others.value);
       rememberSessionMachines(entry.isHome ? null : key, sessions.map((item) => item.session.id));
@@ -507,6 +539,8 @@ export const useMachinesStore = defineStore("machines", () => {
     try {
       const response = await fetchOnMachine(liveMachine, "/api/machine");
       liveReachable.value = response.ok;
+      const info = response.ok ? await (response.json() as Promise<MachineInfo>).catch(() => null) : null;
+      if (info) rememberIdentity(liveMachine.id, info);
     } catch {
       liveReachable.value = false;
     } finally {
@@ -527,6 +561,8 @@ export const useMachinesStore = defineStore("machines", () => {
       void refreshOthers();
       pollTimer = setInterval(() => {
         if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+        // Home live isn't among the others; ask it again too, so how busy it is stays current.
+        if (liveKey === HOME_MACHINE_KEY) void loadHome();
         void refreshOthers();
       }, POLL_INTERVAL_MS);
       if (liveMachine) {

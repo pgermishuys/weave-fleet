@@ -119,7 +119,14 @@ This is what any client relies on. The web app is one client. A native app would
   "authMode": "token",
   "remoteReachable": true,
   "requiresToken": true,
-  "publicUrl": "https://hangar.tail9c2e.ts.net"
+  "publicUrl": "https://hangar.tail9c2e.ts.net",
+  "capabilities": {
+    "harnesses": [
+      { "type": "opencode", "name": "OpenCode", "available": true, "enabled": true, "version": "1.18.32" },
+      { "type": "claude-code", "name": "Claude Code", "available": false, "enabled": false, "version": null }
+    ],
+    "sessions": { "working": 2, "needsYou": 1 }
+  }
 }
 ```
 
@@ -133,6 +140,14 @@ This is what any client relies on. The web app is one client. A native app would
 
 - `publicUrl` is the address phones should use for the machine, when someone saved one (null otherwise). Pairing
   puts it in the QR code.
+- `capabilities` says what the machine can run and how busy it is. Fleets before it leave it out; the `machine` in a
+  pairing answer has it `null`.
+  - `harnesses`: each harness the machine knows, as it last checked them. `available` means installed and working
+    there, `enabled` that its user turned it on; a new session can use one only when both are true. `null` until
+    the machine has checked once. Reading `/api/machine` never starts a check, so a harness installed since shows up
+    after something on that machine asks for the harness list again.
+  - `sessions`: how many of the caller's sessions there are `working` (in a turn) or `needsYou` (stopped on a
+    question or a permission ask). Top-level sessions only, counted as the session list shows them.
 
 `PUT /api/machine` with `{ "name": "…", "publicUrl": "…" }` changes either for every client (local mode only, owner
 only: `403` for a device token or an agent). A

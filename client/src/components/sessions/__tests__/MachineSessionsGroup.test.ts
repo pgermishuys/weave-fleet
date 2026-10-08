@@ -15,6 +15,7 @@ const macbook: MachineEntry = {
   isHome: false,
   isLive: false,
   connection: null,
+  capabilities: null,
 };
 
 const projects: ProjectSummary[] = [

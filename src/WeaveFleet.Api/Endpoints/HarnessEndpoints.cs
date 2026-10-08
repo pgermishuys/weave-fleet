@@ -34,7 +34,7 @@ public static class HarnessEndpoints
 
             var response = harnesses.Select(harness => harness with
             {
-                UserEnabled = IsHarnessUserEnabled(harness.Type, preferenceValues),
+                UserEnabled = HarnessPreferences.IsEnabled(harness.Type, preferenceValues),
                 // Profiles and provider sign-in are off with Fleet's sign-in on (see HarnessProfileService.Supports and
                 // HarnessSignInService.Supports).
                 Capabilities = harness.Capabilities with
@@ -169,18 +169,5 @@ public static class HarnessEndpoints
         var code when code.StartsWith("Validation.", StringComparison.Ordinal) => Results.BadRequest(new ApiErrorResponse(error.Description)),
         _ => Results.Problem(error.Description),
     };
-
-    private static bool IsHarnessUserEnabled(
-        string harnessType,
-        IReadOnlyDictionary<string, string> preferenceValues)
-    {
-        var preferenceKey = $"{harnessType}.enabled";
-        if (preferenceValues.TryGetValue(preferenceKey, out var value))
-        {
-            return string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
-        }
-
-        return string.Equals(harnessType, "opencode", StringComparison.OrdinalIgnoreCase);
-    }
 }
 #pragma warning restore IL2026
