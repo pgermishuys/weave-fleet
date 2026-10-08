@@ -38,7 +38,7 @@ export function useSessionTitle(sessionId: MaybeRefOrGetter<string | null | unde
   const sessionsStore = useSessionsStore();
   const listed = computed(() => {
     const id = toValue(sessionId);
-    return id ? sessionsStore.sessions.find((item) => item.session.id === id) ?? null : null;
+    return id ? sessionsStore.sessionById(id) : null;
   });
   watch(() => toValue(sessionId), (id) => {
     if (id && !listed.value) void fetchTitle(machine, id);
@@ -91,11 +91,11 @@ export function useSessionLineage(sessionId: MaybeRefOrGetter<string | null | un
     if (id.value) remember(id.value, items);
   }, { immediate: true });
 
-  const self = computed(() => sessionsStore.sessions.find((item) => item.session.id === id.value) ?? null);
+  const self = computed(() => sessionsStore.sessionById(id.value));
   const parent = computed(() => (self.value ? lineageOf(self.value) : null));
   const parentSession = computed(() => {
     const parentId = parent.value?.parentId;
-    return parentId ? sessionsStore.sessions.find((item) => item.session.id === parentId) ?? null : null;
+    return parentId ? sessionsStore.sessionById(parentId) : null;
   });
   const parentTitle = useSessionTitle(() => parent.value?.parentId);
 

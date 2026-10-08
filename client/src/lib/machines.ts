@@ -30,6 +30,7 @@ export interface MachineConnection {
 const CATALOG_KEY = "weave:machines";
 const ACTIVE_KEY = "weave:active-machine";
 const SESSION_MACHINES_KEY = "weave:session-machines";
+const LIVE_MACHINES_KEY = "weave:live-machines";
 
 /** The machine requests go to; null is the home machine, the Fleet that served the page. */
 let activeMachine: MachineConnection | null = null;
@@ -180,11 +181,25 @@ export const LIVE_MACHINES_PREFERENCE_KEY = "LiveMachines";
  */
 export const AGENT_HANDOFF_PREFERENCE_KEY = "AgentHandoff";
 
+/**
+ * Whether "Keep every machine live" was on when this browser last read the preferences. Startup decides the live
+ * machine before any request, so it goes by this; a browser that hasn't read them yet starts as with the switch off.
+ */
+export function loadLiveMachinesHint(): boolean {
+  return readJson<unknown>(local(), LIVE_MACHINES_KEY, false) === true;
+}
+
+export function saveLiveMachinesHint(on: boolean): void {
+  writeJson(local(), LIVE_MACHINES_KEY, on);
+}
+
 // ─── Startup and switching ────────────────────────────────────────────────────
 
 /**
  * Decides which machine this page works in, before anything makes a request: the machine that owns the session
- * in the URL when the client knows it, otherwise the one this tab last worked in, otherwise home.
+ * in the URL when the client knows it, otherwise the one this tab last worked in, otherwise home. With "Keep every
+ * machine live" on, a desktop session's machine doesn't become live: the page stays where it was and the session's
+ * views ask its machine (`provideMachineTarget`).
  */
 export function restoreActiveMachine(pathname: string = typeof window === "undefined" ? "/" : window.location.pathname): MachineConnection | null {
   const machines = loadMachines();
@@ -200,7 +215,7 @@ export function restoreActiveMachine(pathname: string = typeof window === "undef
   }
 
   const sessionId = /^\/sessions\/([^/]+)$/.exec(pathname)?.[1];
-  const owner = sessionId && sessionId !== "new" ? loadSessionMachines()[decodeURIComponent(sessionId)] : undefined;
+  const owner = sessionId && sessionId !== "new" && !loadLiveMachinesHint() ? loadSessionMachines()[decodeURIComponent(sessionId)] : undefined;
 
   let machine: MachineConnection | null;
   if (owner === HOME_MACHINE_KEY) {

@@ -10,7 +10,7 @@ import { useSessionsStore } from "@/stores/sessions";
 import { useTerminalsStore } from "@/stores/terminals";
 
 const sessionsStore = useSessionsStore();
-const { sessions, activeSessionId } = storeToRefs(sessionsStore);
+const { activeSessionId } = storeToRefs(sessionsStore);
 const appShell = useAppShellStore();
 const commandStore = useCommandStore();
 const { focused: terminalFocused } = storeToRefs(useTerminalsStore());
@@ -21,7 +21,7 @@ const mod = isMac ? "⌘" : "Ctrl";
 const modKey = isMac ? "Meta" : "Control";
 
 const activeSession = computed(() =>
-  sessions.value.find((session) => session.session.id === activeSessionId.value) ?? null,
+  sessionsStore.sessionById(activeSessionId.value),
 );
 
 /**

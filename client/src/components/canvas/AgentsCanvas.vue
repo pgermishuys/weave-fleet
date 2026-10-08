@@ -31,7 +31,7 @@ const { parent, parentSession, parentTitle, agents, loadHistory, work } = useSes
 onMounted(() => void loadHistory());
 watch(() => props.sessionId, () => void loadHistory());
 
-const self = computed(() => sessionsStore.sessions.find((item) => item.session.id === props.sessionId) ?? null);
+const self = computed(() => sessionsStore.sessionById(props.sessionId));
 
 const earlierOpen = shallowRef(false);
 const selectedKey = shallowRef<string | null>(null);

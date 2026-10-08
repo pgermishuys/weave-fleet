@@ -101,7 +101,7 @@ export function useCommands() {
 
   /** Why the active session can't be forked (its harness can't copy a conversation, or it's archived); null when it can. */
   const activeForkDisabledReason = computed(() => {
-    const active = sessions.value.find((item) => item.session.id === activeSessionId.value);
+    const active = sessionsStore.sessionById(activeSessionId.value);
     return active?.capabilities?.canFork === false
       ? active.capabilities.forkDisabledReason ?? "This session can't be forked."
       : null;
@@ -149,7 +149,7 @@ export function useCommands() {
       to: "/sessions/$id",
       params: { id: sessionId },
       search: {
-        instanceId: sessions.value.find((session) => session.session.id === sessionId)?.instanceId,
+        instanceId: sessionsStore.sessionById(sessionId)?.instanceId,
         parentSessionId: undefined,
       },
     });
@@ -182,7 +182,7 @@ export function useCommands() {
   }
 
   async function interruptCurrentSession(): Promise<void> {
-    const currentSession = sessions.value.find((session) => session.session.id === activeSessionId.value);
+    const currentSession = sessionsStore.sessionById(activeSessionId.value);
 
     if (!currentSession?.instanceId) {
       return;

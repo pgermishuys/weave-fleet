@@ -128,6 +128,12 @@ into another. Other machines' rows refresh every 15 seconds. A machine that stop
 dimmed and marked unreachable. If it's the one you're working in, its header turns red, and a reload offers the way
 back to this machine.
 
+With **Keep every machine live** on (Settings → Features, Experimental), every machine's rows update as they change,
+and clicking a session on another machine opens it where you are, without a reload. Its conversation, Changes, Files
+and terminals come from its own machine, over that machine's connection with its token. Settings, Automations,
+Workflows and the session list stay the live machine's. **Work here** (right-click a machine's heading) still makes
+it live.
+
 An automation can run on another machine in the list: pick it with the Machine chip under the automation's box. The
 automation, its schedule and its runs stay on the machine that holds it. Each run starts its session (or workflow run)
 on the other machine through that machine's own API, with the token kept for it: `POST /api/sessions`,

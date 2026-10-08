@@ -136,7 +136,7 @@ builtInSkills.ensureLoaded();
 const { showRightPanel } = useSidebarMobile();
 
 const selectedSession = computed(() => {
-  return sessions.value.find((session) => session.session.id === props.sessionId) ?? null;
+  return sessionsStore.sessionById(props.sessionId);
 });
 
 const stream = useSessionStream(computed(() => props.sessionId));
@@ -678,7 +678,7 @@ const isWaitingForInput = computed(() =>
 // The turn's clock starts at your last prompt.
 // Waiting out a failed model call, as the activity_status push says, for every harness that reports it.
 const sessionRetrying = computed(() => {
-  const item = sessions.value.find((candidate) => candidate.session.id === props.sessionId);
+  const item = sessionsStore.sessionById(props.sessionId);
   return item?.activityStatus === "retry" ? sessionRetry(item) : null;
 });
 const turnStartedAt = computed(() => {
@@ -1090,7 +1090,7 @@ function withDelegation(item: ToolCardItem, part: AccumulatedToolPart): ToolCard
     return item;
   }
 
-  const childSession = sessions.value.find((session) => session.session.id === delegation.childSessionId);
+  const childSession = sessionsStore.sessionById(delegation.childSessionId);
   const childInstanceId = childSession?.instanceId ?? delegation.childSessionId;
   return {
     ...item,

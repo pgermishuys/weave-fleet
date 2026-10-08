@@ -1,4 +1,3 @@
-import { storeToRefs } from "pinia";
 import { computed, reactive, readonly, shallowRef } from "vue";
 import type { components } from "@/api/generated/schema";
 import { useAgents } from "@/composables/use-agents";
@@ -458,7 +457,6 @@ async function readPromptErrorMessage(response: Response): Promise<string> {
 export function useSendPrompt(sessionId: string) {
   const { api } = useMachineTarget();
   const sessionsStore = useSessionsStore();
-  const { sessions } = storeToRefs(sessionsStore);
   const { defaultAgentId, agentsById } = useAgents(sessionId);
   const { defaultModelKey, modelsByKey } = useModels(sessionId);
   const sendError = shallowRef<string | undefined>(undefined);
@@ -468,7 +466,7 @@ export function useSendPrompt(sessionId: string) {
   });
 
   const selectedSession = computed(() => {
-    return sessions.value.find((session) => session.session.id === sessionId) ?? null;
+    return sessionsStore.sessionById(sessionId);
   });
 
   const sentPrompts = computed(() => sentPromptRegistry[sessionId] ?? []);

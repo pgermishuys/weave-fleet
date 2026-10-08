@@ -52,7 +52,7 @@ watch(
   { immediate: true },
 );
 
-const session = computed(() => sessionsStore.sessions.find((s) => s.session.id === props.sessionId) ?? null);
+const session = computed(() => sessionsStore.sessionById(props.sessionId));
 const links = computed(() => store.visibleLinks(props.sessionId));
 const byRelationship = (relationship: SmartLink["relationship"]) =>
   links.value.filter((link) => link.relationship === relationship);

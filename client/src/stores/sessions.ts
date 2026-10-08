@@ -4,6 +4,9 @@ import type { SessionListItem } from "@/api/client";
 
 type SessionStateOverride = Partial<Pick<SessionListItem, "activityStatus" | "lifecycleStatus" | "retentionStatus" | "sessionStatus">>;
 
+/** How many sessions on other machines `elsewhere` keeps: the ones opened most recently in this page. */
+const ELSEWHERE_KEPT = 20;
+
 export const useSessionsStore = defineStore("sessions", () => {
   const sessions = ref<SessionListItem[]>([]);
   const activeSessionId = shallowRef<string | null>(null);
@@ -11,6 +14,35 @@ export const useSessionsStore = defineStore("sessions", () => {
   const sessionStateOverrides = ref<Record<string, SessionStateOverride>>({});
   /** Whether the list has been loaded from Fleet at least once (sessions upserted one by one don't make a list). */
   const listLoaded = shallowRef(false);
+  /**
+   * Sessions on another machine opened in this page (in place, with "Keep every machine live"), by id, with their
+   * machine's key, oldest first. `sessions` is the live machine's list and never holds them.
+   */
+  const elsewhere = shallowRef<ReadonlyMap<string, { machineKey: string; item: SessionListItem }>>(new Map());
+
+  /** The session's row: from the live machine's list, or from the sessions on other machines opened here. */
+  function sessionById(sessionId: string | null | undefined): SessionListItem | null {
+    if (!sessionId) return null;
+    return sessions.value.find((item) => item.session.id === sessionId) ?? elsewhere.value.get(sessionId)?.item ?? null;
+  }
+
+  /** Keeps the row of a session on another machine (`machineKey`) that's open here. */
+  function upsertElsewhere(machineKey: string, nextSession: SessionListItem): void {
+    const next = new Map(elsewhere.value);
+    const existing = next.get(nextSession.session.id);
+    next.delete(nextSession.session.id);
+    next.set(nextSession.session.id, { machineKey, item: { ...existing?.item, ...nextSession } });
+    for (const id of next.keys()) {
+      if (next.size <= ELSEWHERE_KEPT) break;
+      next.delete(id);
+    }
+    elsewhere.value = next;
+  }
+
+  /** Forgets the sessions of a machine that's no longer listed. */
+  function forgetElsewhere(machineKey: string): void {
+    elsewhere.value = new Map([...elsewhere.value].filter(([, entry]) => entry.machineKey !== machineKey));
+  }
 
   function setActiveSessionId(sessionId: string | null): void {
     activeSessionId.value = sessionId;
@@ -29,6 +61,12 @@ export const useSessionsStore = defineStore("sessions", () => {
     sessionId: string,
     patch: Partial<SessionListItem>,
   ): void {
+    const away = elsewhere.value.get(sessionId);
+    if (away) {
+      elsewhere.value = new Map(elsewhere.value).set(sessionId, { ...away, item: { ...away.item, ...patch } });
+      return;
+    }
+
     if (!sessions.value.some((item) => item.session.id === sessionId)) {
       return;
     }
@@ -58,12 +96,21 @@ export const useSessionsStore = defineStore("sessions", () => {
   }
 
   function removeSession(sessionId: string): void {
+    const wasElsewhere = elsewhere.value.has(sessionId);
+    if (wasElsewhere) {
+      const next = new Map(elsewhere.value);
+      next.delete(sessionId);
+      elsewhere.value = next;
+    }
+
     const sessionIndex = sessions.value.findIndex((item) => item.session.id === sessionId);
-    if (sessionIndex < 0) {
+    if (sessionIndex < 0 && !wasElsewhere) {
       return;
     }
 
-    sessions.value.splice(sessionIndex, 1);
+    if (sessionIndex >= 0) {
+      sessions.value.splice(sessionIndex, 1);
+    }
 
     if (activeSessionId.value === sessionId) {
       activeSessionId.value = null;
@@ -101,6 +148,10 @@ export const useSessionsStore = defineStore("sessions", () => {
     retentionStatus,
     sessionStateOverrides,
     listLoaded,
+    elsewhere,
+    sessionById,
+    upsertElsewhere,
+    forgetElsewhere,
     setActiveSessionId,
     setRetentionStatus,
     patchSession,

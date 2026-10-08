@@ -51,7 +51,6 @@ import { useSmartLinksStore } from "@/stores/smart-links";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 import { useMachinesStore } from "@/stores/machines";
 import { useMachineTarget } from "@/lib/machine-target";
-import { rememberSessionMachines } from "@/lib/machines";
 
 const MAX_TEXTAREA_HEIGHT = 180;
 
@@ -588,9 +587,10 @@ async function submit(withoutMessage: boolean): Promise<void> {
     defaults.remember(chosenFolder, chosenWorkspace, chosenAgentAndModel);
 
     // Started on another machine: the app moves there to show it, as opening one of its sessions from the sidebar
-    // does. That's a reload; the machine keeps the first message, so the session page shows it.
-    if (!target.isLive) {
-      rememberSessionMachines(target.connection?.id ?? null, [sessionId]);
+    // does. That's a reload, unless "Keep every machine live" opens it in place; the machine keeps the first message,
+    // so the session page shows it.
+    if (!target.isLive) machines.rememberSessions(target.key, [sessionId]);
+    if (!target.isLive && !machines.opensInPlace) {
       workspaceUiStore.handOffNewSessionDraft(sessionId);
       const instance = response.instanceId ? `?instanceId=${encodeURIComponent(response.instanceId)}` : "";
       machines.openOn(target.key, `/sessions/${encodeURIComponent(sessionId)}${instance}`);
@@ -602,7 +602,10 @@ async function submit(withoutMessage: boolean): Promise<void> {
     if (firstMessage) {
       seedSentPrompt(sessionId, firstMessage, sentAt.value);
     }
-    sessionsStore.upsertSession(buildCreatedSessionRow(response, request, projectForRow()));
+    // The live machine's list holds only its own sessions.
+    const row = buildCreatedSessionRow(response, request, projectForRow());
+    if (target.isLive) sessionsStore.upsertSession(row);
+    else sessionsStore.upsertElsewhere(target.key, row);
     workspaceUiStore.handOffNewSessionDraft(sessionId);
 
     // Someone who left while it started stays where they went; the row is there for them.

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import { storeToRefs } from "pinia";
 import { LoaderCircle } from "lucide-vue-next";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useSessionContext } from "@/composables/use-session-context";
@@ -26,8 +25,8 @@ const props = defineProps<{
 }>();
 
 const { context, isRequesting, requestError, compact } = useSessionContext(() => props.sessionId);
-const { sessions } = storeToRefs(useSessionsStore());
-const session = computed(() => sessions.value.find((item) => item.session.id === props.sessionId) ?? null);
+const sessionsStore = useSessionsStore();
+const session = computed(() => sessionsStore.sessionById(props.sessionId));
 
 // The account's usage limits under the context, when the session's harness reports them (Claude Code on a claude.ai
 // login); nothing for an API key or a gateway.

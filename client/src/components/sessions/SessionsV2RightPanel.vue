@@ -32,6 +32,11 @@ interface Props {
   width?: number;
   /** The panel fills a sheet over the conversation (phones, narrow windows): no rail, no Widen, and collapsing closes it. */
   inSheet?: boolean;
+  /**
+   * The open session. AppShell passes it in the render that keys the panel by the session's machine; the store's
+   * active session changes as the next session's page mounts, while this panel may still be the last machine's.
+   */
+  sessionId: string | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -44,7 +49,7 @@ const sessionsStore = useSessionsStore();
 const canvasesStore = useCanvasesStore();
 
 const { rightPanelCollapsed } = storeToRefs(sidebarStore);
-const { sessions, activeSessionId } = storeToRefs(sessionsStore);
+const activeSessionId = computed(() => props.sessionId);
 
 // Create shared diffs instance and fetch on mount
 const sharedDiffs = useDiffs(activeSessionId);
@@ -68,7 +73,7 @@ useServerCanvases(activeSessionId);
 useFileLiveUpdates(activeSessionId);
 
 const selectedSession = computed(() =>
-  sessions.value.find((s) => s.session.id === activeSessionId.value) ?? null,
+  sessionsStore.sessionById(activeSessionId.value),
 );
 
 // --- Context tab: added (without focus) the first time the session has something attached ---

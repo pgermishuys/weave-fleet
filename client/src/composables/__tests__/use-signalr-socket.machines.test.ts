@@ -20,7 +20,7 @@ interface FakeConnection {
   closed: (() => void) | null
 }
 
-const { built } = vi.hoisted(() => ({ built: [] as FakeConnection[] }))
+const { built, refuse } = vi.hoisted(() => ({ built: [] as FakeConnection[], refuse: { start: false } }))
 
 vi.mock("@microsoft/signalr", () => {
   class MockHubConnectionBuilder {
@@ -48,6 +48,7 @@ vi.mock("@microsoft/signalr", () => {
         reconnected: null,
         closed: null,
         start: vi.fn(async () => {
+          if (refuse.start) throw new Error("connection refused")
           connection.state = 2
         }),
         on: (name: string, handler: (...args: unknown[]) => void) => connection.handlers.set(name, handler),
@@ -103,6 +104,7 @@ const FALCON_HUB = `${falcon.baseUrl}/hubs/session-events`
 describe("one hub connection per machine", () => {
   beforeEach(async () => {
     built.length = 0
+    refuse.start = false
     setActiveMachine(null)
     const { _resetForTesting } = await import("@/composables/use-signalr-socket")
     _resetForTesting()
@@ -231,5 +233,70 @@ describe("one hub connection per machine", () => {
 
     expect(window.__WEAVE_SOCKET_TEST_API?.hasOpenSocket()).toBe(false)
     expect(window.__WEAVE_SOCKET_TEST_API?.hasV2Subscriptions()).toBe(false)
+  })
+
+  it("gives a machine's live feed the connection its open sessions use, not a second one", async () => {
+    const { feedHubFor, useWeaveSocket } = await import("@/composables/use-signalr-socket")
+    const heard: string[] = []
+
+    const { wrapper } = await mountComposable(() => useWeaveSocket(targetFor(falcon)))
+    const hub = feedHubFor(targetFor(falcon))
+    hub.on("Event", (topic) => heard.push(String(topic)))
+    await hub.start()
+    connectionTo(FALCON_HUB).handlers.get("Event")!("sessions", null, { type: "activity_status", properties: {} })
+    connectionTo(FALCON_HUB).handlers.get("Event")!("session:s1", 3, { type: "message.updated", properties: {} })
+
+    expect(built).toHaveLength(1)
+    expect(hub.state).toBe(2)
+    expect(heard).toEqual(["sessions"])
+
+    // The session still holds the connection after the feed stops, and the feed hears nothing more.
+    await hub.stop()
+    connectionTo(FALCON_HUB).handlers.get("Event")!("sessions", null, { type: "activity_status", properties: {} })
+    expect(connectionTo(FALCON_HUB).stop).not.toHaveBeenCalled()
+    expect(heard).toEqual(["sessions"])
+    wrapper.unmount()
+    await flushAll()
+    expect(connectionTo(FALCON_HUB).stop).toHaveBeenCalled()
+  })
+
+  it("opens the connection for a feed on its own and closes it when the feed stops", async () => {
+    const { feedHubFor, isWeaveSocketConnected } = await import("@/composables/use-signalr-socket")
+
+    const hub = feedHubFor(targetFor(falcon))
+    await hub.start()
+    expect(isWeaveSocketConnected(targetFor(falcon))).toBe(true)
+    expect(connectionTo(FALCON_HUB).options.accessTokenFactory?.()).toBe(falcon.token)
+
+    await hub.stop()
+    await flushAll()
+    expect(connectionTo(FALCON_HUB).stop).toHaveBeenCalled()
+  })
+
+  it("lets go when it can't connect, so the feed polls as with a hub of its own", async () => {
+    const { feedHubFor, _getSubscriberCount } = await import("@/composables/use-signalr-socket")
+    refuse.start = true
+    const heard: string[] = []
+
+    const hub = feedHubFor(targetFor(falcon))
+    hub.on("Event", (topic) => heard.push(String(topic)))
+    await expect(hub.start()).rejects.toThrow()
+
+    expect(_getSubscriberCount(targetFor(falcon))).toBe(0)
+    expect(built.at(-1)?.handlers.has("Event")).toBe(true)
+    built.at(-1)!.handlers.get("Event")!("sessions", null, { type: "activity_status", properties: {} })
+    expect(heard).toEqual([])
+  })
+
+  it("tells the feed when the machine's connection closes", async () => {
+    const { feedHubFor } = await import("@/composables/use-signalr-socket")
+    const closed = vi.fn()
+
+    const hub = feedHubFor(targetFor(falcon))
+    hub.onclose(closed)
+    await hub.start()
+    connectionTo(FALCON_HUB).closed!()
+
+    expect(closed).toHaveBeenCalledOnce()
   })
 })

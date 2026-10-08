@@ -128,7 +128,7 @@ export function canSendQueuedNow(item: QueuedMessage, status: ComposerStatus, ca
  */
 export function useComposerActions(sessionId: string) {
   const sessionsStore = useSessionsStore();
-  const { sessions, sessionStateOverrides } = storeToRefs(sessionsStore);
+  const { sessionStateOverrides } = storeToRefs(sessionsStore);
   const { harnesses } = useHarnesses();
   const { draft, setText } = useDraftState(sessionId, { agentId: "", modelId: "" });
   const { canSend, error: promptError, sendPrompt } = useSendPrompt(sessionId);
@@ -139,7 +139,7 @@ export function useComposerActions(sessionId: string) {
   const side = useSideConversation(() => sessionId);
   const optimisticBusy = shallowRef(false);
 
-  const session = computed(() => sessions.value.find((item) => item.session.id === sessionId) ?? null);
+  const session = computed(() => sessionsStore.sessionById(sessionId));
   const activity = computed(() => sessionStateOverrides.value[sessionId]?.activityStatus ?? session.value?.activityStatus);
   const status = computed(() => composerStatus(activity.value, optimisticBusy.value));
   const caps = computed(() => harnessCapabilities(session.value?.harnessType, harnesses.value as readonly HarnessLike[]));

@@ -13,6 +13,7 @@ import { useHarnessProfilesStore } from "@/stores/harness-profiles";
 import { provideMachineTarget, targetFor } from "@/lib/machine-target";
 import { loadSessionMachines, type MachineConnection } from "@/lib/machines";
 import { useMachinesStore } from "@/stores/machines";
+import { usePreferencesStore } from "@/stores/preferences";
 import { useSessionsStore } from "@/stores/sessions";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 import { useSettingsNav } from "@/composables/use-settings-nav";
@@ -1744,6 +1745,25 @@ describe("NewSessionComposer", () => {
         expect(mocks.navigate).not.toHaveBeenCalled();
         expect(loadSessionMachines()["session-1"]).toBe("m-mac");
         expect(useWorkspaceUiStore().newSessionDraft).toBeNull();
+      });
+
+      it("with every machine live, opens it in place, its row kept out of the live machine's list", async () => {
+        addMachines(macbook);
+        localStorage.setItem(newSessionDefaultsKey("m-mac"), JSON.stringify({ lastFolder: { kind: "repository", path: comet.path } }));
+        const view = await mountOn(macbook);
+        const preferences = usePreferencesStore();
+        preferences.hasFetched = true;
+        preferences.preferences = { ...preferences.preferences, LiveMachines: "true" };
+        const openOn = vi.spyOn(useMachinesStore(), "openOn").mockImplementation(() => {});
+
+        await type(view, "Fix the sign-in loop");
+        await pressEnter(view);
+
+        expect(openOn).not.toHaveBeenCalled();
+        expect(mocks.navigate).toHaveBeenCalledWith(expect.objectContaining({ to: "/sessions/$id", params: { id: "session-1" } }));
+        expect(useSessionsStore().sessions.map((item) => item.session.id)).not.toContain("session-1");
+        expect(useSessionsStore().sessionById("session-1")).not.toBeNull();
+        expect(useMachinesStore().sessionTarget("session-1")).toMatchObject({ key: "m-mac", isLive: false });
       });
 
       it("sends a harness that isn't set up there to that machine's Settings", async () => {

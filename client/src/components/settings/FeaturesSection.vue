@@ -371,7 +371,7 @@ async function toggleBoardFeature(): Promise<void> {
           </span>
         </p>
         <p class="mt-1 text-xs text-muted">
-          Other machines' sessions update as they change, instead of every 15 seconds.
+          Other machines' sessions update as they change, instead of every 15 seconds, and open here without a reload.
         </p>
       </div>
 

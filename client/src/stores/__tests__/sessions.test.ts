@@ -100,3 +100,63 @@ describe("useSessionsStore", () => {
     expect(store.sessions[1]?.session.title).toBe("Renamed");
   });
 });
+
+describe("sessions on other machines opened here", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  function onMini(id: string, title = "Hero image sizes"): SessionListItem {
+    const item = createSessionListItem();
+    return { ...item, session: { ...item.session, id, title } };
+  }
+
+  it("finds them by id without adding them to the live machine's list", () => {
+    const store = useSessionsStore();
+    store.setSessions([createSessionListItem()]);
+
+    store.upsertElsewhere("mini-id", onMini("mini-1"));
+
+    expect(store.sessions.map((item) => item.session.id)).toEqual(["session-1"]);
+    expect(store.sessionById("mini-1")?.session.title).toBe("Hero image sizes");
+    expect(store.sessionById("session-1")?.session.title).toBe("Migration");
+    expect(store.sessionById("nowhere")).toBeNull();
+    expect(store.elsewhere.get("mini-1")?.machineKey).toBe("mini-id");
+  });
+
+  it("patches and removes them like the live machine's", () => {
+    const store = useSessionsStore();
+    store.upsertElsewhere("mini-id", onMini("mini-1"));
+    store.setActiveSessionId("mini-1");
+
+    store.patchSession("mini-1", { activityStatus: "idle", sessionStatus: "idle" });
+    expect(store.sessionById("mini-1")).toMatchObject({ activityStatus: "idle", sessionStatus: "idle" });
+
+    store.removeSession("mini-1");
+    expect(store.sessionById("mini-1")).toBeNull();
+    expect(store.activeSessionId).toBeNull();
+  });
+
+  it("keeps the 20 opened most recently", () => {
+    const store = useSessionsStore();
+    for (let index = 0; index < 22; index += 1) store.upsertElsewhere("mini-id", onMini(`mini-${index}`));
+    // Opening one again makes it the newest.
+    store.upsertElsewhere("mini-id", onMini("mini-2", "Opened again"));
+
+    expect(store.elsewhere.size).toBe(20);
+    expect(store.sessionById("mini-0")).toBeNull();
+    expect(store.sessionById("mini-1")).toBeNull();
+    expect(store.sessionById("mini-2")?.session.title).toBe("Opened again");
+    expect(store.sessionById("mini-3")).not.toBeNull();
+  });
+
+  it("forgets a machine's sessions when the machine is forgotten", () => {
+    const store = useSessionsStore();
+    store.upsertElsewhere("mini-id", onMini("mini-1"));
+    store.upsertElsewhere("lab-id", onMini("lab-1", "Index for slow search"));
+
+    store.forgetElsewhere("mini-id");
+
+    expect([...store.elsewhere.keys()]).toEqual(["lab-1"]);
+  });
+});

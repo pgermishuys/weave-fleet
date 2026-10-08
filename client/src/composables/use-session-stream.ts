@@ -199,7 +199,7 @@ export function useSessionStream(
       return
     }
 
-    const activityStatus = sessionsStore.sessions.find((s) => s.session.id === activeSessionId)?.activityStatus
+    const activityStatus = sessionsStore.sessionById(activeSessionId)?.activityStatus
     streamState.value = activityStatus ? withActivityStatus(kept.state, activityStatus) : kept.state
     hasMore.value = kept.hasMore
     cursor.value = kept.cursor
@@ -362,9 +362,7 @@ export function useSessionStream(
           isLoading.value = false
 
           // Sync activity status from snapshot to sessions store
-          const currentSession = sessionsStore.sessions.find(
-            (s) => s.session.id === activeSessionId
-          )
+          const currentSession = sessionsStore.sessionById(activeSessionId)
           const newSessionStatus = deriveSessionStatus(
             snapshot.activityStatus,
             currentSession?.sessionStatus

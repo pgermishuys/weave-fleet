@@ -7,11 +7,14 @@ import type { ProjectResponse, SessionListItem } from "@/api/client";
 import { HOME_MACHINE_KEY, saveMachines, setActiveMachine, type MachineConnection } from "@/lib/machines";
 import { saveSessionListScroll } from "@/lib/session-list-scroll";
 import { useMachinesStore } from "@/stores/machines";
+import { usePreferencesStore } from "@/stores/preferences";
 import { useSessionsStore } from "@/stores/sessions";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 
+const { navigate } = vi.hoisted(() => ({ navigate: vi.fn() }));
+
 vi.mock("@tanstack/vue-router", () => ({
-  useRouter: () => ({ navigate: vi.fn() }),
+  useRouter: () => ({ navigate }),
   useLocation: () => ref("/"),
 }));
 
@@ -133,6 +136,33 @@ describe("SessionsPanel across machines", () => {
     const reloaded = mountPanel();
     await flushPromises();
     expect((reloaded.get(".sessions-list").element as HTMLElement).scrollTop).toBe(420);
+  });
+
+  it("opens another machine's session in place, without a reload, with every machine live", async () => {
+    navigate.mockClear();
+    const preferences = usePreferencesStore();
+    preferences.hasFetched = true;
+    preferences.preferences = { LiveMachines: "true" };
+    const machines = useMachinesStore();
+    machines.others = {
+      ...machines.others,
+      [hangar.id]: { sessions: [item("hangar-1", "Index for slow search", "p-lumen")], projects: [project("p-lumen", "lumen-site", 1)], error: null, loadedAt: 1, loading: false },
+    };
+    const openOn = vi.spyOn(machines, "openOn").mockImplementation(() => {});
+    useSessionsStore().setSessions([item("home-1", "Local work", "p-fleet")]);
+    const view = mountPanel();
+    await flushPromises();
+
+    await view.get("[data-machine='hangar-id'] [data-testid='machine-session-row']").trigger("click");
+
+    expect(openOn).not.toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledWith({
+      to: "/sessions/$id",
+      params: { id: "hangar-1" },
+      search: { instanceId: "inst-hangar-1", parentSessionId: undefined },
+    });
+    expect(machines.sessionTarget("hangar-1")).toMatchObject({ key: hangar.id, isLive: false });
+    view.unmount();
   });
 
   it("doesn't move a list the user already scrolled after the reload", async () => {

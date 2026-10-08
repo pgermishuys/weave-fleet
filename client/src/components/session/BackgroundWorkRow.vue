@@ -95,7 +95,7 @@ const hasDetails = computed(() => props.item.kind === "subagent" && !props.item.
 const childHref = computed(() => {
   const childId = props.item.childSessionId;
   if (!childId) return undefined;
-  const instanceId = sessionsStore.sessions.find((session) => session.session.id === childId)?.instanceId ?? childId;
+  const instanceId = sessionsStore.sessionById(childId)?.instanceId ?? childId;
   const search = new URLSearchParams({ instanceId, parentSessionId: props.item.sessionId });
   return `/sessions/${encodeURIComponent(childId)}?${search.toString()}`;
 });
@@ -105,7 +105,7 @@ function openChild(event: MouseEvent): void {
   // A modified click opens it elsewhere, as a link would.
   if (!childId || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
   event.preventDefault();
-  const instanceId = sessionsStore.sessions.find((session) => session.session.id === childId)?.instanceId ?? childId;
+  const instanceId = sessionsStore.sessionById(childId)?.instanceId ?? childId;
   void router.navigate({
     to: "/sessions/$id",
     params: { id: childId },

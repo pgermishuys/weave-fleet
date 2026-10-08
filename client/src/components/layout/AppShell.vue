@@ -7,7 +7,7 @@ Panel Vocabulary:
 -->
 <script setup lang="ts">
 import { computed, ref, shallowRef, watch } from "vue";
-import { useLocation } from "@tanstack/vue-router";
+import { useLocation, useParams } from "@tanstack/vue-router";
 import { useElementSize } from "@vueuse/core";
 import { storeToRefs } from "pinia";
 import CommandPalette from "@/components/CommandPalette.vue";
@@ -27,6 +27,8 @@ import { Button } from "@/components/ui/button";
 import { useCommands } from "@/composables/use-commands";
 import { useWeaveSocket } from "@/composables/use-weave-socket";
 import { liveTarget } from "@/lib/machine-target";
+import MachineScope from "@/components/layout/MachineScope.vue";
+import { useMachinesStore } from "@/stores/machines";
 import { useSessionActivityUpdates } from "@/composables/use-session-activity-updates";
 import { useSessionNotifications } from "@/composables/use-session-notifications";
 import { useDeskPresence } from "@/composables/use-desk-presence";
@@ -93,6 +95,13 @@ const showBoardPanel = computed(() =>
 );
 
 const showRightPanel = computed(() => showSessionsV2Panel.value || showBoardPanel.value);
+
+// The open session's views (the conversation, the right panel, Go to file) ask the session's machine; the rest of the
+// shell asks the live one. They're rebuilt when it changes. The id comes from the matched route, as the session page
+// reads it: the address changes a moment earlier, which put one machine's session in the other machine's views.
+const machines = useMachinesStore();
+const openSessionId = useParams({ strict: false, select: (params) => (params as { id?: string }).id ?? null });
+const sessionTarget = computed(() => machines.sessionTarget(openSessionId.value));
 
 // Touch swipe support: swipe right from left edge to open drawer
 let touchStartX = 0;
@@ -284,10 +293,16 @@ function onGutterPointerDown(e: PointerEvent): void {
         <SheetTitle class="sr-only">
           Right panel
         </SheetTitle>
-        <SessionsV2RightPanel
+        <MachineScope
           v-if="showSessionsV2Panel"
-          in-sheet
-        />
+          :key="sessionTarget.key"
+          :target="sessionTarget"
+        >
+          <SessionsV2RightPanel
+            in-sheet
+            :session-id="openSessionId"
+          />
+        </MachineScope>
         <BoardRightPanel
           v-else
           in-sheet
@@ -329,9 +344,14 @@ function onGutterPointerDown(e: PointerEvent): void {
         ref="workspaceSheetRef"
         class="workspace-sheet"
       >
-        <CenterContent>
-          <slot />
-        </CenterContent>
+        <MachineScope
+          :key="sessionTarget.key"
+          :target="sessionTarget"
+        >
+          <CenterContent>
+            <slot />
+          </CenterContent>
+        </MachineScope>
 
         <div
           v-if="showInlineRightPanel"
@@ -341,10 +361,16 @@ function onGutterPointerDown(e: PointerEvent): void {
         />
 
         <template v-if="showInlineRightPanel">
-          <SessionsV2RightPanel
+          <MachineScope
             v-if="showSessionsV2Panel"
-            :width="sessionsRightPanelWidth"
-          />
+            :key="sessionTarget.key"
+            :target="sessionTarget"
+          >
+            <SessionsV2RightPanel
+              :width="sessionsRightPanelWidth"
+              :session-id="openSessionId"
+            />
+          </MachineScope>
           <BoardRightPanel
             v-else
             :width="boardRightPanelWidth"
@@ -356,7 +382,12 @@ function onGutterPointerDown(e: PointerEvent): void {
     <StatusBar />
 
     <CommandPalette />
-    <GoToFileDialog />
+    <MachineScope
+      :key="sessionTarget.key"
+      :target="sessionTarget"
+    >
+      <GoToFileDialog />
+    </MachineScope>
     <ProblemReportDialog />
     <ArchiveUndoToast />
     <NoticeCard />

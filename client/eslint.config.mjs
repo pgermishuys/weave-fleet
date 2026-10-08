@@ -131,6 +131,47 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  {
+    // The open session may be on another machine, whose sessions the live machine's list doesn't hold
+    // (see `elsewhere` in src/stores/sessions.ts).
+    files: [
+      "src/components/canvas/AgentDetail.vue",
+      "src/components/canvas/AgentsCanvas.vue",
+      "src/components/canvas/ProgressSubagentCard.vue",
+      "src/components/layout/StatusBar.vue",
+      "src/components/layout/TopBar.vue",
+      "src/components/phone/session/PhoneSessionPage.vue",
+      "src/components/session-context/SessionContextCanvas.vue",
+      "src/components/session/ActivityStream.vue",
+      "src/components/session/BackgroundStrip.vue",
+      "src/components/session/BackgroundWorkRow.vue",
+      "src/components/session/Composer.vue",
+      "src/components/session/ContextRing.vue",
+      "src/components/session/SessionDetailHeader.vue",
+      "src/components/sessions/SessionsV2RightPanel.vue",
+      "src/composables/use-commands.ts",
+      "src/composables/use-composer-actions.ts",
+      "src/composables/use-send-command.ts",
+      "src/composables/use-send-prompt.ts",
+      "src/composables/use-session-actions.ts",
+      "src/composables/use-session-lineage.ts",
+      "src/composables/use-session-stream.ts",
+      "src/routes/sessions.$id.tsx",
+    ],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "CallExpression[callee.property.name='find'][callee.object.property.name='sessions']",
+          message: "Find a session with `sessionsStore.sessionById(id)`: it also knows sessions on other machines.",
+        },
+        {
+          selector: "CallExpression[callee.property.name='find'][callee.object.property.name='value'][callee.object.object.name='sessions']",
+          message: "Find a session with `sessionsStore.sessionById(id)`: it also knows sessions on other machines.",
+        },
+      ],
+    },
+  },
   globalIgnores([".next/**", "coverage/**", "dist/**", "src/routeTree.gen.ts"]),
 ]);
 

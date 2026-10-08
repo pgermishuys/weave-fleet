@@ -30,7 +30,7 @@ const status = computed(() => {
 const childInstanceId = computed(() => {
   const childId = props.subagent.childSessionId;
   if (!childId) return null;
-  return sessionsStore.sessions.find((session) => session.session.id === childId)?.instanceId ?? childId;
+  return sessionsStore.sessionById(childId)?.instanceId ?? childId;
 });
 
 const href = computed(() => {
