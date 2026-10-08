@@ -22,9 +22,11 @@ python3 "$ROOT/mobile/e2e/fakellm.py" $LLM_PORT "$WORK/fakellm.log" > /dev/null 
 
 ( cd "$HOME/src/demo-app" && git init -q && echo "# demo" > README.md && git add . && git -c user.email=e2e@example.com -c user.name=e2e commit -qm init )
 
+# Fleet's build output sits under a runtime folder (bin/Debug/net10.0/<rid>/) on some platforms.
+DLL=$(find "$ROOT/src/WeaveFleet.Api/bin/Debug" -name WeaveFleet.Api.dll -not -path "*/ref/*" | head -1)
 Fleet__Host=127.0.0.1 Fleet__Port=$PORT Fleet__Auth__RequireToken=true Fleet__DatabasePath="$WORK/fleet/fleet.db" \
   Fleet__AnalyticsEnabled=false Fleet__Update__CheckOnStartup=false ASPNETCORE_ENVIRONMENT=Development \
-  dotnet "$ROOT/src/WeaveFleet.Api/bin/Debug/net10.0/WeaveFleet.Api.dll" > "$WORK/fleet.log" 2>&1 &
+  dotnet "$DLL" > "$WORK/fleet.log" 2>&1 &
 for _ in $(seq 120); do grep -q "Now listening" "$WORK/fleet.log" 2>/dev/null && break; sleep 1; done
 grep -q "Now listening" "$WORK/fleet.log" || { tail -50 "$WORK/fleet.log"; exit 1; }
 

@@ -41,9 +41,6 @@ jobs:
       - name: Build Fleet
         run: dotnet build src/WeaveFleet.Api -c Debug -p:SkipFrontendBuild=true
 
-      - name: Start a throwaway Fleet
-        run: FLEET_E2E_DIR="$RUNNER_TEMP/fleet-e2e" bash mobile/e2e/start-fleet.sh
-
       - name: Install app packages
         working-directory: mobile
         run: bun install --frozen-lockfile
@@ -81,6 +78,9 @@ jobs:
         run: |
           xcrun simctl install "$UDID" "$APP"
           xcrun simctl privacy "$UDID" grant notifications io.tryweave.fleet.experiment || true
+
+      - name: Start a throwaway Fleet
+        run: FLEET_E2E_DIR="$RUNNER_TEMP/fleet-e2e" bash mobile/e2e/start-fleet.sh
 
       - name: Install Maestro
         run: |
