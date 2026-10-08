@@ -16,7 +16,7 @@ struct PairView: View {
                 Text("Pair with a machine").font(Fleet.display).foregroundStyle(Fleet.text).padding(.top, 24)
                 Text("On your computer, open Fleet → Settings → Devices → Pair a phone. Type its address and the 8-character code, or paste the pairing link.")
                     .font(Fleet.body).foregroundStyle(Fleet.muted)
-                field("Address", text: $address, placeholder: "https://my-machine.example.ts.net", mono: false, id: "address")
+                field("Address", text: $address, placeholder: "https://my-machine.example.com", mono: false, id: "address")
                     .keyboardType(.URL)
                 field("Code", text: $code, placeholder: "XXXX-XXXX", mono: true, id: "code")
                 field("This phone's name", text: $name, placeholder: "iPhone", mono: false, id: "device-name")

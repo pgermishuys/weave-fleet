@@ -5,6 +5,8 @@ import io.tryweave.fleet.shared.reducer.PhoneBlock
 import io.tryweave.fleet.shared.signalr.HubState
 import io.tryweave.fleet.shared.store.FleetClient
 import io.tryweave.fleet.shared.store.SessionUiState
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -55,6 +57,33 @@ class LiveSessionTest {
         assertEquals(listOf("SQLite", "Redis"), asked.question!!.options)
         withContext(main) { controller.answerDocked("SQLite") }
         until(60, "question answered") { state -> state.question == null && state.blocks.any { it is PhoneBlock.Question && it.answer == "SQLite" } }
+
+        // A command waits for permission (the scratch Fleet has PermissionLevel=ask): Allow once from the dock.
+        withContext(main) { controller.send("Great, run-tests please") }
+        val ask = until(60, "permission docked") { it.permission != null }.permission!!
+        println("live: ask kind=${ask.kind} tool=${ask.tool} title=${ask.title}")
+        withContext(main) { controller.replyToDocked(true) }
+        until(90, "command ran after Allow once") { state ->
+            state.permission == null && !state.isWorking && state.blocks.any { it is PhoneBlock.Text && it.text.contains("All 42 tests pass") }
+        }
+
+        // Not looking (the app went to the background): Fleet sends a session_notification on the sessions topic
+        // instead, which is what the notification's Allow once answers, over REST, outside the session screen.
+        withContext(main) { controller.setFocused(false) }
+        delay(500)
+        val notification = async {
+            withTimeout(60_000) { client.notifications.first { it.sessionId == sessionId && it.kind == "permission" } }
+        }
+        withContext(main) { controller.send("run-tests one more time") }
+        val n = notification.await()
+        println("live: notification '${n.title}': ${n.body} (request ${n.requestId})")
+        val answered = CompletableDeferred<String?>()
+        withContext(main) { client.replyToPermission(sessionId, n.requestId!!, true) { answered.complete(it) } }
+        assertEquals(null, answered.await())
+        until(90, "command ran after the notification's Allow once") { state ->
+            state.permission == null && !state.isWorking && state.blocks.count { it is PhoneBlock.Text && it.text.contains("All 42 tests pass") } >= 2
+        }
+        withContext(main) { controller.setFocused(true) }
 
         // Past the server's 30 s client timeout: only our pings keep the socket open.
         delay(40_000)

@@ -16,7 +16,9 @@ appId: io.tryweave.fleet.experiment
 - tapOn:
     id: "code"
 - inputText: ${PAIR_CODE}
-- hideKeyboard
+# hideKeyboard is unreliable on iOS; the button is above the keyboard anyway.
+- hideKeyboard:
+    optional: true
 - tapOn: "Continue"
 - extendedWaitUntil:
     visible: "Connect this phone to.*"

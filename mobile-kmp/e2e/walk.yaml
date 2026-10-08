@@ -19,7 +19,9 @@ appId: io.tryweave.fleet.kmp
 - tapOn:
     id: "code"
 - inputText: ${PAIR_CODE}
-- hideKeyboard
+# hideKeyboard is unreliable on iOS; the button is above the keyboard anyway.
+- hideKeyboard:
+    optional: true
 - tapOn:
     id: "pair"
 - tapOn:

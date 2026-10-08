@@ -57,7 +57,7 @@ fun PairScreen(pairing: Pairing, onPaired: (Credentials) -> Unit) {
             style = Fleet.body.copy(color = Fleet.muted),
         )
         Spacer(Modifier.height(6.dp))
-        Field("Address", address, "https://my-machine.example.ts.net", KeyboardType.Uri, tag = "address") { address = it }
+        Field("Address", address, "https://my-machine.example.com", KeyboardType.Uri, tag = "address") { address = it }
         Field("Code", code, "XXXX-XXXX", KeyboardType.Ascii, mono = true, caps = true, tag = "code") { code = it.uppercase().take(9) }
         Field("This phone's name", name, "Pixel", KeyboardType.Text, tag = "device-name") { name = it }
         error?.let { BasicText(it, style = Fleet.small.copy(color = Fleet.error)) }
