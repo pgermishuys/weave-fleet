@@ -188,8 +188,8 @@ public sealed partial class SessionOrchestrator(
     /// 1. Create or reuse workspace
     /// 2. Spawn harness instance
     /// 3. Persist instance + session records
-    /// 4. Deliver the first message, if any
-    /// 5. Optionally register a completion callback
+    /// 4. Optionally register a completion callback
+    /// 5. Deliver the first message, if any
     /// </summary>
     public async Task<Result<CreateSessionResult>> CreateSessionAsync(
         CreateSessionRequest request,
@@ -472,8 +472,37 @@ public sealed partial class SessionOrchestrator(
         });
         LogSessionCreated(session.Id, workspace.Id, harnessInstance.InstanceId);
 
+        // 4. Register callback (optional). Before the first message is sent: a turn that ends quickly must find it,
+        // or only the poll would fire it.
+        var callbackRegistered = false;
+        if (request.OnCompleteTargetSessionId is not null && request.OnCompleteTargetInstanceId is not null)
+        {
+            // Ownership guard: target session must belong to the same user
+            var targetSession = await sessionRepository.GetByIdAsync(request.OnCompleteTargetSessionId);
+            if (targetSession is null)
+                return FleetError.NotFoundFor(nameof(Session), request.OnCompleteTargetSessionId);
+
+            if (!string.Equals(targetSession.UserId, userContext.UserId, StringComparison.Ordinal))
+                return FleetError.Unauthorized;
+
+            var callback = new SessionCallback
+            {
+                Id = Guid.NewGuid().ToString(),
+                SourceSessionId = session.Id,
+                TargetSessionId = request.OnCompleteTargetSessionId,
+                TargetInstanceId = request.OnCompleteTargetInstanceId,
+                // A harness given the first message with its spawn may be replying already. Otherwise the first reply
+                // marks it started, as for any prompt.
+                Status = initialPrompt is not null && !sendInitialPromptAfterSpawn
+                    ? SessionCallbackStatuses.Started
+                    : SessionCallbackStatuses.Pending,
+                CreatedAt = DateTime.UtcNow.ToString("O")
+            };
+            await sessionCallbackRepository.InsertAsync(callback);
+            callbackRegistered = true;
+        }
+
         // 5. Deliver the first message.
-        var initialPromptSent = initialPrompt is not null;
         if (sendInitialPromptAfterSpawn)
         {
             // The page for this session subscribes only after create returns, too late for the
@@ -491,10 +520,10 @@ public sealed partial class SessionOrchestrator(
 
             // The session exists either way; the user sees it without the message and can resend.
             if (promptResult.IsFailure)
-            {
-                initialPromptSent = false;
                 LogInitialPromptFailed(sessionId, promptResult.Error.Description);
-            }
+            else if (callbackRegistered)
+                // A turn that ends without a reply has still run.
+                await sessionCallbackRepository.MarkSourceStartedAsync(sessionId);
         }
         else if (initialPrompt is not null)
         {
@@ -522,30 +551,6 @@ public sealed partial class SessionOrchestrator(
             EndedAt: null,
             DurationSeconds: null,
             UserId: userContext.UserId));
-
-        // 6. Register callback (optional)
-        if (request.OnCompleteTargetSessionId is not null && request.OnCompleteTargetInstanceId is not null)
-        {
-            // Ownership guard: target session must belong to the same user
-            var targetSession = await sessionRepository.GetByIdAsync(request.OnCompleteTargetSessionId);
-            if (targetSession is null)
-                return FleetError.NotFoundFor(nameof(Session), request.OnCompleteTargetSessionId);
-
-            if (!string.Equals(targetSession.UserId, userContext.UserId, StringComparison.Ordinal))
-                return FleetError.Unauthorized;
-
-            var callback = new SessionCallback
-            {
-                Id = Guid.NewGuid().ToString(),
-                SourceSessionId = session.Id,
-                TargetSessionId = request.OnCompleteTargetSessionId,
-                TargetInstanceId = request.OnCompleteTargetInstanceId,
-                // Working already when it has its first message: the reply may have begun before this row existed.
-                Status = initialPromptSent ? SessionCallbackStatuses.Started : SessionCallbackStatuses.Pending,
-                CreatedAt = DateTime.UtcNow.ToString("O")
-            };
-            await sessionCallbackRepository.InsertAsync(callback);
-        }
 
         return new CreateSessionResult(session, harnessInstance.InstanceId, workspace.Id, workspace.Branch);
     }
