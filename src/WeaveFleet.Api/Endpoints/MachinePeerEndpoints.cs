@@ -36,13 +36,11 @@ public static class MachinePeerEndpoints
         if (fleetOptions.Auth.Enabled || !fleetOptions.Auth.TokenAuthEnabled)
             return app;
 
-        var peer = app.MapGroup("/api/machine/peer/sessions")
-            .WithTags("MachinePeer")
-            .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
-            // The owner policy also lets in the owner's browser (cookie) and loopback; neither names a sender.
-            .AddEndpointFilter(async (context, next) => BearerTokenHandler.AuthenticatedWithToken(context.HttpContext.User)
-                ? await next(context)
-                : Results.Json(new ErrorResponse(OnlyTheMachineTokenMessage), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden));
+        // Configured statement by statement: the source generator that makes these endpoints AOT-safe skipped MapX calls
+        // on a group built in one chain ending in a filter lambda, and they failed at startup in the AOT build.
+        var peer = app.MapGroup("/api/machine/peer/sessions").WithTags("MachinePeer");
+        peer.RequireAuthorization(FleetClaims.MachineOwnerPolicy);
+        peer.AddEndpointFilter(OnlyTheMachineTokenAsync);
 
         peer.MapPost("/{id}/message", async (
             string id,
@@ -92,6 +90,12 @@ public static class MachinePeerEndpoints
 
         return app;
     }
+
+    /// <summary>The owner policy also lets in the owner's browser (cookie) and loopback; neither names a sender.</summary>
+    private static async ValueTask<object?> OnlyTheMachineTokenAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+        => BearerTokenHandler.AuthenticatedWithToken(context.HttpContext.User)
+            ? await next(context)
+            : Results.Json(new ErrorResponse(OnlyTheMachineTokenMessage), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
 
     /// <summary>What's wrong with the request, naming the field; null when nothing is.</summary>
     private static string? Invalid(PeerSessionMessageRequest request)
