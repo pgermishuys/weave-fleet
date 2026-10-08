@@ -6,6 +6,7 @@ import type { ServerCanvasSnapshot } from "@/lib/server-canvas";
 import { useAppRunsStore } from "@/stores/app-runs";
 import { serverCanvasTabId, useCanvasesStore } from "@/stores/canvases";
 import { flushAll, mountComposable } from "./test-utils";
+import { liveTarget } from "@/lib/machine-target";
 
 const { apiFetchMock, subscribeV2Mock, reconnectCallbacks } = vi.hoisted(() => ({
   apiFetchMock: vi.fn(),
@@ -13,7 +14,11 @@ const { apiFetchMock, subscribeV2Mock, reconnectCallbacks } = vi.hoisted(() => (
   reconnectCallbacks: [] as Array<() => void>,
 }));
 
-vi.mock("@/lib/api-client", () => ({ apiFetch: apiFetchMock }));
+vi.mock("@/lib/api-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api-client")>()),
+  apiFetch: apiFetchMock,
+  apiFetchOn: (_machine: unknown, ...args: unknown[]) => apiFetchMock(...args),
+}));
 
 vi.mock("@/composables/use-weave-socket", () => ({
   useWeaveSocket: () => ({ subscribeV2: subscribeV2Mock }),
@@ -46,6 +51,10 @@ function jsonResponse(body: unknown, status = 200): Response {
 function serverTabs(sessionId: string) {
   return useCanvasesStore().sessionCanvases(sessionId).canvases.filter((canvas) => canvas.server);
 }
+
+
+/** The live machine: home, in these tests. */
+const home = liveTarget();
 
 describe("useServerCanvases", () => {
   beforeEach(() => {
@@ -143,7 +152,7 @@ describe("closeServerCanvas", () => {
     apiFetchMock.mockResolvedValue(new Response(null, { status: 204 }));
     const { closeServerCanvas } = await import("@/composables/use-server-canvases");
 
-    const done = closeServerCanvas("s1", "cv_1");
+    const done = closeServerCanvas(home, "s1", "cv_1");
 
     expect(serverTabs("s1")).toHaveLength(0);
     await done;
@@ -159,7 +168,7 @@ describe("closeServerCanvas", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { closeServerCanvas } = await import("@/composables/use-server-canvases");
 
-    await closeServerCanvas("s1", "cv_1");
+    await closeServerCanvas(home, "s1", "cv_1");
 
     expect(serverTabs("s1").map((canvas) => canvas.id)).toEqual([serverCanvasTabId("cv_1")]);
     warn.mockRestore();
@@ -191,7 +200,7 @@ describe("closeServerCanvas", () => {
     apiFetchMock.mockResolvedValue(jsonResponse(diagram("cv_1", 1, ["A"])));
     const { focusServerCanvas } = await import("@/composables/use-server-canvases");
 
-    await focusServerCanvas("s1", "cv_1");
+    await focusServerCanvas(home, "s1", "cv_1");
 
     expect(store.sessionCanvases("s1").activeId).toBe(serverCanvasTabId("cv_1"));
     expect(apiFetchMock).toHaveBeenCalledWith("/api/sessions/s1/canvases/cv_1/focus", { method: "POST" });

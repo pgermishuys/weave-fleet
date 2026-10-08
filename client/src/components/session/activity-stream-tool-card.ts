@@ -1,5 +1,4 @@
 import type { AccumulatedToolPart } from "@/lib/client-types";
-import { apiUrl } from "@/lib/api-client";
 import { backgroundWorkId, type BackgroundState } from "@/lib/background-work";
 import { isWorkRunning, type RunningWorkItem } from "@/lib/running-work";
 import { parseUnifiedDiff } from "@/lib/diff-parser";
@@ -31,7 +30,8 @@ export interface ToolCardDelegation {
 
 /** A screenshot the agent took, which Fleet kept so the conversation can show it under the call. */
 export interface ToolCardScreenshot {
-  url: string;
+  /** Its API path; `useMachineImage` asks the session's machine for it. */
+  path: string;
   /** The size it was taken at, so the thumbnail keeps its shape before the image arrives. */
   width: number;
   height: number;
@@ -171,7 +171,7 @@ export function toolScreenshot(part: AccumulatedToolPart): ToolCardScreenshot | 
   if (!sessionId || !id || !width || !height) return undefined;
 
   return {
-    url: apiUrl(`/api/sessions/${encodeURIComponent(sessionId)}/screenshots/${encodeURIComponent(id)}`),
+    path: `/api/sessions/${encodeURIComponent(sessionId)}/screenshots/${encodeURIComponent(id)}`,
     width,
     height,
   };

@@ -44,10 +44,13 @@ import {
   type SmartLink,
 } from "@/lib/smart-links";
 import { useSmartLinksStore } from "@/stores/smart-links";
+import { useMachineTarget } from "@/lib/machine-target";
 
 const props = defineProps<{
   link: SmartLink;
 }>();
+
+const machine = useMachineTarget();
 
 const store = useSmartLinksStore();
 
@@ -177,7 +180,7 @@ const sendThread = (thread: ReviewThread) => send(`thread:${thread.threadNodeId}
           class="link-card__icon-btn"
           :aria-label="`Unpin #${number}`"
           title="Unpin"
-          @click="store.setPinned(link.sessionId, link.id, false)"
+          @click="store.setPinned(machine, link.sessionId, link.id, false)"
         >
           <PinOff
             :size="12"
@@ -190,7 +193,7 @@ const sendThread = (thread: ReviewThread) => send(`thread:${thread.threadNodeId}
           class="link-card__icon-btn"
           :aria-label="`Dismiss #${number}`"
           title="Dismiss"
-          @click="store.dismiss(link.sessionId, link.id)"
+          @click="store.dismiss(machine, link.sessionId, link.id)"
         >
           <X
             :size="12"

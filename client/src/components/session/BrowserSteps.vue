@@ -2,7 +2,6 @@
 import { computed } from "vue";
 import { AlertCircle, Check, Globe } from "lucide-vue-next";
 import ToolScreenshot from "@/components/session/ToolScreenshot.vue";
-import { apiUrl } from "@/lib/api-client";
 import { useAgentBrowserStore } from "@/stores/agent-browser";
 
 /**
@@ -67,7 +66,7 @@ const steps = computed(() => store.stepsOf(props.sessionId, props.callId));
           v-if="step.screenshot"
           class="browser-steps__shot"
           :screenshot="{
-            url: apiUrl(`/api/sessions/${encodeURIComponent(sessionId)}/screenshots/${encodeURIComponent(step.screenshot.id)}`),
+            path: `/api/sessions/${encodeURIComponent(sessionId)}/screenshots/${encodeURIComponent(step.screenshot.id)}`,
             width: step.screenshot.width,
             height: step.screenshot.height,
           }"

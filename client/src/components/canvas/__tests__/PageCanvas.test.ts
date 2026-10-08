@@ -5,7 +5,10 @@ import { useDraftState } from "@/composables/use-draft-state";
 import { forgetPageStates } from "@/lib/page-bridge";
 import type { ShownPage } from "@/lib/server-canvas";
 
-vi.mock("@/lib/api-client", () => ({ apiUrl: (path: string) => `http://fleet.test${path}` }));
+vi.mock("@/lib/api-client", () => ({
+  apiUrl: (path: string) => `http://fleet.test${path}`,
+  apiUrlOn: (_machine: unknown, path: string) => `http://fleet.test${path}`,
+}));
 
 const page: ShownPage & { title: string } = {
   pageId: "pg_0123456789abcdef0123456789abcdef",

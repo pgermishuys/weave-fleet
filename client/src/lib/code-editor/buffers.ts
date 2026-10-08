@@ -1,6 +1,6 @@
 import type { Extension } from "@codemirror/state";
-import { api } from "@/api/client";
 import { readSessionFile, writeSessionFile } from "@/api/session-files";
+import type { MachineTarget } from "@/lib/machine-target";
 import { useFileBuffersStore, type FileBufferRecord } from "@/stores/file-buffers";
 import type { ListFolder } from "./completion";
 import { bufferExtensions, languageSlot } from "./editor-extensions";
@@ -35,13 +35,13 @@ const FOLDER_CACHE_MS = 10_000;
 const folderCache = new Map<string, { at: number; entries: Promise<readonly string[]> }>();
 
 /** Lists a folder of the session's files (what git would list), cached briefly. */
-export function folderLister(sessionId: string): ListFolder {
+export function folderLister(machine: MachineTarget, sessionId: string): ListFolder {
   return (folder) => {
-    const key = `${sessionId}\u0000${folder}`;
+    const key = `${machine.key}\u0000${sessionId}\u0000${folder}`;
     const cached = folderCache.get(key);
     if (cached && Date.now() - cached.at < FOLDER_CACHE_MS) return cached.entries;
 
-    const entries = api
+    const entries = machine.api
       .GET("/api/sessions/{id}/find/files", { params: { path: { id: sessionId }, query: { q: folder } } })
       .then(({ data, response }) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -56,13 +56,13 @@ export function folderLister(sessionId: string): ListFolder {
 
 // ─── Buffers ─────────────────────────────────────────────────────────────────
 
-function builder(store: Store, record: FileBufferRecord): BuildExtensions {
+function builder(machine: MachineTarget, store: Store, record: FileBufferRecord): BuildExtensions {
   return (format) =>
     bufferExtensions({
       path: record.path,
       format,
       language: languages.get(record) ?? null,
-      listFolder: folderLister(record.sessionId),
+      listFolder: folderLister(machine, record.sessionId),
       onSave: () => record.handlers.save?.(),
       onUpdate: (update) => {
         record.state = update.state;
@@ -89,7 +89,7 @@ function toDiskFile(response: Awaited<ReturnType<typeof readSessionFile>>): Disk
 }
 
 /** Open a file's buffer, reading it the first time. Safe to call again; it won't read twice. */
-export async function openBuffer(sessionId: string, path: string): Promise<FileBufferRecord> {
+export async function openBuffer(machine: MachineTarget, sessionId: string, path: string): Promise<FileBufferRecord> {
   const store = useFileBuffersStore();
   const record = store.ensure(sessionId, path);
   const status = store.info(sessionId, path)?.status;
@@ -104,8 +104,8 @@ export async function openBuffer(sessionId: string, path: string): Promise<FileB
   const load = (async (): Promise<DiskUpdate | null> => {
     store.patch(sessionId, path, { status: "loading", message: null });
     try {
-      const file = toDiskFile(await readSessionFile(sessionId, path));
-      const reason = loadBuffer(record, file, builder(store, record));
+      const file = toDiskFile(await readSessionFile(machine, sessionId, path));
+      const reason = loadBuffer(record, file, builder(machine, store, record));
       store.patch(sessionId, path, reason
         ? { status: "unavailable", message: reason }
         : { status: "ready", message: null, dirty: false, conflict: null });
@@ -135,7 +135,7 @@ export async function openBuffer(sessionId: string, path: string): Promise<FileB
  * conflict bar. Skipped while a save is in flight (that save's own `files.changed` would otherwise
  * look like the agent's change). Overlapping calls share one read.
  */
-export async function refreshBuffer(sessionId: string, path: string): Promise<DiskUpdate | null> {
+export async function refreshBuffer(machine: MachineTarget, sessionId: string, path: string): Promise<DiskUpdate | null> {
   const store = useFileBuffersStore();
   const record = store.record(sessionId, path);
   const info = store.info(sessionId, path);
@@ -148,20 +148,20 @@ export async function refreshBuffer(sessionId: string, path: string): Promise<Di
   const run = (async (): Promise<DiskUpdate | null> => {
     let file: DiskFile;
     try {
-      file = toDiskFile(await readSessionFile(sessionId, path));
+      file = toDiskFile(await readSessionFile(machine, sessionId, path));
     } catch {
       return null;
     }
     if (store.info(sessionId, path)?.saving) return null;
 
     if (info.status === "unavailable") {
-      const reason = loadBuffer(record, file, builder(store, record));
+      const reason = loadBuffer(record, file, builder(machine, store, record));
       store.patch(sessionId, path, reason ? { message: reason } : { status: "ready", message: null, dirty: false });
       if (!reason) void applyLanguage(record);
       return reason ? { kind: "unavailable", message: reason } : { kind: "updated", lines: null };
     }
 
-    const result = applyDiskFile(record, file, builder(store, record));
+    const result = applyDiskFile(record, file, builder(machine, store, record));
     switch (result.kind) {
       case "updated":
         store.patch(sessionId, path, { dirty: false, conflict: null });
@@ -199,7 +199,7 @@ export type SaveOutcome =
  * mine") carries the conflicting version's hash instead, so it replaces exactly the file that was
  * shown, and still loses to a newer change.
  */
-export async function saveBuffer(sessionId: string, path: string, options: { overwrite?: boolean } = {}): Promise<SaveOutcome> {
+export async function saveBuffer(machine: MachineTarget, sessionId: string, path: string, options: { overwrite?: boolean } = {}): Promise<SaveOutcome> {
   const store = useFileBuffersStore();
   const record = store.record(sessionId, path);
   const info = store.info(sessionId, path);
@@ -212,7 +212,7 @@ export async function saveBuffer(sessionId: string, path: string, options: { ove
   const content = diskTextOf(record);
   store.patch(sessionId, path, { saving: true });
   try {
-    const result = await writeSessionFile(sessionId, path, content, baseHash);
+    const result = await writeSessionFile(machine, sessionId, path, content, baseHash);
     if (result.saved) {
       markSaved(record, result.hash, sentDoc);
       store.patch(sessionId, path, { saving: false, conflict: null, dirty: isDirty(record) });
@@ -227,12 +227,12 @@ export async function saveBuffer(sessionId: string, path: string, options: { ove
 }
 
 /** "Use the agent's": replace the buffer with the file on disk. */
-export function useDiskVersion(sessionId: string, path: string): void {
+export function useDiskVersion(machine: MachineTarget, sessionId: string, path: string): void {
   const store = useFileBuffersStore();
   const record = store.record(sessionId, path);
   const conflict = store.info(sessionId, path)?.conflict;
   if (!record || !conflict) return;
-  takeDiskVersion(record, conflict, builder(store, record));
+  takeDiskVersion(record, conflict, builder(machine, store, record));
   store.patch(sessionId, path, { conflict: null, dirty: isDirty(record) });
 }
 

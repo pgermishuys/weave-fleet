@@ -2,7 +2,8 @@
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from "vue";
 import { ArrowLeft, ArrowRight, Bot, ExternalLink, Info, Play, RotateCcw, RotateCw, ScrollText, Square } from "lucide-vue-next";
 import AgentTabView from "@/components/canvas/AgentTabView.vue";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetchOn } from "@/lib/api-client";
+import { useMachineTarget } from "@/lib/machine-target";
 import { fetchServerCanvases } from "@/composables/use-server-canvases";
 import { onReconnect } from "@/composables/use-weave-socket";
 import { appAddress, navMessage, readBridgeMessage, type NavAction, type PreviewHmr } from "@/lib/preview-bridge";
@@ -23,6 +24,8 @@ const props = defineProps<{
   url: string;
   appId?: string;
 }>();
+
+const machine = useMachineTarget();
 
 interface ProxyInfo {
   /** Where this browser loads the preview; Fleet picks it from the host the browser used to reach it. */
@@ -138,7 +141,7 @@ async function show(page: string): Promise<void> {
   error.value = null;
   if (!target.value || target.value.origin !== parsed.origin || !proxyOrigin.value) {
     try {
-      const response = await apiFetch(`${sessionPath.value}/browser/proxy`, {
+      const response = await apiFetchOn(machine.connection, `${sessionPath.value}/browser/proxy`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ url: parsed.toString() }),
@@ -196,8 +199,8 @@ async function openLink(href: string, newTab: boolean): Promise<void> {
     return;
   }
   try {
-    const canvasId = await appRuns.openAddress(props.sessionId, href);
-    canvases.setServerCanvases(props.sessionId, await fetchServerCanvases(props.sessionId));
+    const canvasId = await appRuns.openAddress(machine, props.sessionId, href);
+    canvases.setServerCanvases(props.sessionId, await fetchServerCanvases(machine, props.sessionId));
     canvases.activate(props.sessionId, serverCanvasTabId(canvasId));
   } catch {
     // Fleet wouldn't open a tab for it: this one still can.
@@ -261,7 +264,7 @@ function pickPort(event: Event): void {
 async function loadApp(): Promise<void> {
   if (!props.appId) return;
   try {
-    await appRuns.load(props.sessionId, props.appId);
+    await appRuns.load(machine, props.sessionId, props.appId);
   } catch {
     // The next event or reconnect brings it.
   }
@@ -272,7 +275,7 @@ async function appAction(action: "restart" | "stop"): Promise<void> {
   busy.value = true;
   setActionError(null);
   try {
-    setActionError(await appRuns.act(props.sessionId, props.appId, action));
+    setActionError(await appRuns.act(machine, props.sessionId, props.appId, action));
   } finally {
     busy.value = false;
   }
@@ -299,7 +302,7 @@ function scrollLogs(force = false): void {
 }
 
 function fetchOutput(): void {
-  if (props.appId) void appRuns.fetchOutput(props.sessionId, props.appId).catch(() => {});
+  if (props.appId) void appRuns.fetchOutput(machine, props.sessionId, props.appId).catch(() => {});
 }
 
 // Output only while someone can see it: every second while the app runs, once when it doesn't.

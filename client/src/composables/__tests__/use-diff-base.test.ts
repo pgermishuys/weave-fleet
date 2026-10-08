@@ -4,13 +4,22 @@ import { flushAll, mountComposable } from "./test-utils";
 
 const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }));
 
-vi.mock("@/lib/api-client", () => ({ apiFetch: apiFetchMock }));
+vi.mock("@/lib/api-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api-client")>()),
+  apiFetch: apiFetchMock,
+  apiFetchOn: (_machine: unknown, ...args: unknown[]) => apiFetchMock(...args),
+}));
 
 import { clearDiffBaseCache, fetchDiffBase, useDiffBase } from "@/composables/use-diff-base";
+import { liveTarget } from "@/lib/machine-target";
 
 function diffResponse(before: string): Response {
   return new Response(JSON.stringify({ file: "src/a.ts", status: "modified", additions: 1, deletions: 1, before, after: "x" }), { status: 200 });
 }
+
+
+/** The live machine: home, in these tests. */
+const home = liveTarget();
 
 describe("useDiffBase", () => {
   beforeEach(() => {
@@ -21,8 +30,8 @@ describe("useDiffBase", () => {
   it("fetches a changed file's base once and reuses it", async () => {
     apiFetchMock.mockImplementation(async () => diffResponse("old\n"));
 
-    expect(await fetchDiffBase("s1", "src/a.ts")).toBe("old\n");
-    expect(await fetchDiffBase("s1", "src/a.ts")).toBe("old\n");
+    expect(await fetchDiffBase(home, "s1", "src/a.ts")).toBe("old\n");
+    expect(await fetchDiffBase(home, "s1", "src/a.ts")).toBe("old\n");
 
     expect(apiFetchMock).toHaveBeenCalledTimes(1);
     expect(apiFetchMock).toHaveBeenCalledWith("/api/sessions/s1/diffs/file?path=src%2Fa.ts");
@@ -50,9 +59,9 @@ describe("useDiffBase", () => {
     apiFetchMock.mockResolvedValueOnce(new Response(null, { status: 404 }));
     apiFetchMock.mockResolvedValueOnce(diffResponse("old\n"));
 
-    expect(await fetchDiffBase("s1", "src/a.ts")).toBeNull();
+    expect(await fetchDiffBase(home, "s1", "src/a.ts")).toBeNull();
     await flushAll();
-    expect(await fetchDiffBase("s1", "src/a.ts")).toBe("old\n");
+    expect(await fetchDiffBase(home, "s1", "src/a.ts")).toBe("old\n");
   });
 
   it("only loads while the file is among the changes", async () => {

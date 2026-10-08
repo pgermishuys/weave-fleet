@@ -1,4 +1,5 @@
-import { apiFetch, wsUrl } from "@/lib/api-client";
+import { apiFetchOn, wsUrlOn } from "@/lib/api-client";
+import type { MachineTarget } from "@/lib/machine-target";
 
 /**
  * A terminal tab. `stopped` means it was saved before Fleet restarted: opening
@@ -43,15 +44,15 @@ async function failure(response: Response): Promise<TerminalApiError> {
   return new TerminalApiError(message, response.status);
 }
 
-export async function listTerminals(sessionId: string): Promise<TerminalSummary[]> {
-  const response = await apiFetch(terminalsPath(sessionId));
+export async function listTerminals(machine: MachineTarget, sessionId: string): Promise<TerminalSummary[]> {
+  const response = await apiFetchOn(machine.connection, terminalsPath(sessionId));
   if (!response.ok) throw await failure(response);
   const body: unknown = await response.json();
   return Array.isArray(body) ? (body as TerminalSummary[]) : [];
 }
 
-export async function createTerminal(sessionId: string, cols: number, rows: number): Promise<TerminalSummary> {
-  const response = await apiFetch(terminalsPath(sessionId), {
+export async function createTerminal(machine: MachineTarget, sessionId: string, cols: number, rows: number): Promise<TerminalSummary> {
+  const response = await apiFetchOn(machine.connection, terminalsPath(sessionId), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ cols, rows }),
@@ -60,13 +61,13 @@ export async function createTerminal(sessionId: string, cols: number, rows: numb
   return (await response.json()) as TerminalSummary;
 }
 
-export async function closeTerminal(sessionId: string, terminalId: string): Promise<void> {
-  const response = await apiFetch(`${terminalsPath(sessionId)}/${encodeURIComponent(terminalId)}`, { method: "DELETE" });
+export async function closeTerminal(machine: MachineTarget, sessionId: string, terminalId: string): Promise<void> {
+  const response = await apiFetchOn(machine.connection, `${terminalsPath(sessionId)}/${encodeURIComponent(terminalId)}`, { method: "DELETE" });
   if (!response.ok && response.status !== 404) throw await failure(response);
 }
 
-export async function createSetupTerminal(cols: number, rows: number): Promise<TerminalSummary> {
-  const response = await apiFetch(SETUP_TERMINALS_PATH, {
+export async function createSetupTerminal(machine: MachineTarget, cols: number, rows: number): Promise<TerminalSummary> {
+  const response = await apiFetchOn(machine.connection, SETUP_TERMINALS_PATH, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ cols, rows }),
@@ -75,13 +76,13 @@ export async function createSetupTerminal(cols: number, rows: number): Promise<T
   return (await response.json()) as TerminalSummary;
 }
 
-export async function closeSetupTerminal(terminalId: string): Promise<void> {
-  const response = await apiFetch(`${SETUP_TERMINALS_PATH}/${encodeURIComponent(terminalId)}`, { method: "DELETE" });
+export async function closeSetupTerminal(machine: MachineTarget, terminalId: string): Promise<void> {
+  const response = await apiFetchOn(machine.connection, `${SETUP_TERMINALS_PATH}/${encodeURIComponent(terminalId)}`, { method: "DELETE" });
   if (!response.ok && response.status !== 404) throw await failure(response);
 }
 
 /** The socket for a session's terminal, or for any terminal under `basePath` (e.g. {@link SETUP_TERMINALS_PATH}). */
-export function terminalSocketUrl(sessionId: string, terminalId: string, cols: number, rows: number, basePath?: string): string {
+export function terminalSocketUrl(machine: MachineTarget, sessionId: string, terminalId: string, cols: number, rows: number, basePath?: string): string {
   const query = `cols=${Math.round(cols)}&rows=${Math.round(rows)}`;
-  return wsUrl(`${basePath ?? terminalsPath(sessionId)}/${encodeURIComponent(terminalId)}/socket?${query}`);
+  return wsUrlOn(machine.connection, `${basePath ?? terminalsPath(sessionId)}/${encodeURIComponent(terminalId)}/socket?${query}`);
 }

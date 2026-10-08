@@ -1,3 +1,4 @@
+import type { MachineTarget } from "@/lib/machine-target";
 import { terminalSocketUrl } from "@/lib/terminal-api";
 
 /**
@@ -25,6 +26,8 @@ export interface TerminalConnection {
 }
 
 export interface ConnectTerminalOptions {
+  /** The machine the terminal runs on. */
+  machine: MachineTarget;
   sessionId: string;
   terminalId: string;
   /** Where the terminal lives when it isn't a session's, e.g. the setup terminal. */
@@ -78,7 +81,7 @@ export function connectTerminal(options: ConnectTerminalOptions): TerminalConnec
     handlers.onStatus(attempt === 0 ? "connecting" : "reconnecting");
     attempt += 1;
 
-    const current = createSocket(terminalSocketUrl(sessionId, terminalId, cols, rows, options.basePath));
+    const current = createSocket(terminalSocketUrl(options.machine, sessionId, terminalId, cols, rows, options.basePath));
     current.binaryType = "arraybuffer";
     socket = current;
     let reachedReady = false;

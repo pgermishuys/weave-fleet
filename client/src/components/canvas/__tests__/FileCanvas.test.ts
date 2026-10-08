@@ -22,7 +22,7 @@ vi.mock("@/api/session-files", () => ({
 
 // A changed file's base comes from /diffs/file; answer it from the diff list below.
 vi.mock("@/lib/api-client", () => ({
-  apiFetch: vi.fn(async (url: string) => {
+  apiFetchOn: vi.fn(async (_machine: unknown, url: string) => {
     const path = new URL(url, "http://fleet").searchParams.get("path");
     const item = sharedDiffs.diffs.value.find((diff) => diff.file === path);
     return item ? new Response(JSON.stringify(item), { status: 200 }) : new Response(null, { status: 404 });
@@ -73,6 +73,10 @@ function type(text: string, at = 0, path = "src/app.ts") {
   editor(path).dispatch({ changes: { from: at, insert: text }, userEvent: "input.type" });
 }
 
+
+/** Nothing provides another machine here, so calls go to the live one: home. */
+const live = expect.objectContaining({ key: "home", isLive: true });
+
 describe("FileCanvas", () => {
   // The test setup gives each test a fresh pinia, shared with mounted components.
   beforeEach(() => {
@@ -91,7 +95,7 @@ describe("FileCanvas", () => {
     readSessionFileMock.mockResolvedValue(file("const one = 1;\n"));
     const wrapper = await mountCanvas();
 
-    expect(readSessionFileMock).toHaveBeenCalledWith("s1", "src/app.ts");
+    expect(readSessionFileMock).toHaveBeenCalledWith(live, "s1", "src/app.ts");
     expect(editor().state.doc.toString()).toBe("const one = 1;\n");
     expect(wrapper.find('[data-testid="file-state"]').exists()).toBe(false);
     expect(wrapper.get(".file-canvas__crumb-file").text()).toBe("app.ts");
@@ -110,7 +114,7 @@ describe("FileCanvas", () => {
     await wrapper.get('[data-testid="file-save"]').trigger("click");
     await flushPromises();
 
-    expect(writeSessionFileMock).toHaveBeenCalledWith("s1", "src/app.ts", "// hi\nconst one = 1;\n", "h1");
+    expect(writeSessionFileMock).toHaveBeenCalledWith(live, "s1", "src/app.ts", "// hi\nconst one = 1;\n", "h1");
     expect(wrapper.find('[data-testid="file-state"]').exists()).toBe(false);
     expect(wrapper.get(".file-canvas__toast").text()).toBe("Saved src/app.ts");
     expect(useFileBuffersStore().record("s1", "src/app.ts")?.baseHash).toBe("h2");
@@ -185,7 +189,7 @@ describe("FileCanvas", () => {
       await wrapper.get('[data-testid="conflict-mine"]').trigger("click");
       await flushPromises();
 
-      expect(writeSessionFileMock).toHaveBeenLastCalledWith("s1", "src/app.ts", "mine base\n", "h9");
+      expect(writeSessionFileMock).toHaveBeenLastCalledWith(live, "s1", "src/app.ts", "mine base\n", "h9");
       expect(wrapper.find('[data-testid="file-conflict"]').exists()).toBe(false);
       expect(wrapper.get(".file-canvas__toast").text()).toBe("Saved your version of app.ts");
       wrapper.unmount();

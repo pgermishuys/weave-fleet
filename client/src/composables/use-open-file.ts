@@ -1,5 +1,5 @@
 import { readonly, shallowRef, type ShallowRef } from "vue";
-import { api } from "@/api/client";
+import { useMachineTarget } from "@/lib/machine-target";
 
 export interface UseOpenFileResult {
   openFile: (filePath: string, tool: string) => Promise<void>;
@@ -8,6 +8,7 @@ export interface UseOpenFileResult {
 }
 
 export function useOpenFile(): UseOpenFileResult {
+  const { api } = useMachineTarget();
   const isOpening = shallowRef(false);
   const error = shallowRef<string | undefined>(undefined);
 

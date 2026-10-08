@@ -129,6 +129,10 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+
+/** Nothing provides another machine here, so calls go to the live one: home. */
+const live = expect.objectContaining({ key: "home", isLive: true });
+
 describe("HarnessSetupRows", () => {
   it("lists the harnesses Fleet can install, the default first", async () => {
     const view = await mountRows([claudeCode(), pi, openCode()]);
@@ -219,7 +223,7 @@ describe("HarnessSetupRows", () => {
     await view.get("[data-testid='harness-setup-install-claude-code']").trigger("click");
     await flushPromises();
 
-    expect(mocks.createSetupTerminal).toHaveBeenCalledWith(100, 14);
+    expect(mocks.createSetupTerminal).toHaveBeenCalledWith(live, 100, 14);
     expect(view.get("[data-testid='terminal-view']").text())
       .toBe("/api/setup/terminals|t_setup|curl -fsSL https://claude.ai/install.sh | bash");
     expect(view.text()).toContain("Check the command, then press Enter to run it. Fleet won't run it for you.");
@@ -300,6 +304,6 @@ describe("HarnessSetupRows", () => {
     wrapper = null;
     await flushPromises();
 
-    expect(mocks.closeSetupTerminal).toHaveBeenCalledWith("t_setup");
+    expect(mocks.closeSetupTerminal).toHaveBeenCalledWith(live, "t_setup");
   });
 });

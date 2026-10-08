@@ -37,6 +37,10 @@ function mountDrawer() {
   return mount(TerminalDrawer, { props: { sessionId: "s1", directory: "/home/me/source/weave-fleet" } });
 }
 
+
+/** Nothing provides another machine here, so calls go to the live one: home. */
+const live = expect.objectContaining({ key: "home", isLive: true });
+
 describe("TerminalDrawer", () => {
   beforeEach(() => {
     globalThis.localStorage?.clear();
@@ -59,7 +63,7 @@ describe("TerminalDrawer", () => {
 
   it("starts a shell when opened with no terminals, once the list has loaded", async () => {
     const store = useTerminalsStore();
-    openNewTerminalMock.mockImplementation(async (sessionId: string) => {
+    openNewTerminalMock.mockImplementation(async (_machine: unknown, sessionId: string) => {
       store.add(sessionId, terminal("t1"), true);
       return null;
     });
@@ -72,7 +76,7 @@ describe("TerminalDrawer", () => {
     store.setTerminals("s1", []);
     await flushPromises();
 
-    expect(openNewTerminalMock).toHaveBeenCalledWith("s1", 120, 14);
+    expect(openNewTerminalMock).toHaveBeenCalledWith(live, "s1", 120, 14);
     expect(wrapper.findAll(".stub-view").map((view) => view.attributes("data-id"))).toEqual(["t1"]);
   });
 
@@ -117,7 +121,7 @@ describe("TerminalDrawer", () => {
     await wrapper.get(".terminal-tab__close").trigger("click");
 
     expect(clearMock).toHaveBeenCalledWith("t1");
-    expect(closeTerminalTabMock).toHaveBeenCalledWith("s1", "t1");
+    expect(closeTerminalTabMock).toHaveBeenCalledWith(live, "s1", "t1");
   });
 
   it("hides without ending the shells", async () => {

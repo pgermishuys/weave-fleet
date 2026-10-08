@@ -12,7 +12,7 @@ const shotTool: ToolCardItem = {
   output: "Screenshot of http://localhost:5173/ at 1280×800.",
   initiallyCollapsed: true,
   canvasId: "cv_1",
-  screenshot: { url: "/api/sessions/ses-1/screenshots/shot_1", width: 1280, height: 800 },
+  screenshot: { path: "/api/sessions/ses-1/screenshots/shot_1", width: 1280, height: 800 },
 };
 
 let wrapper: { unmount(): void } | undefined;

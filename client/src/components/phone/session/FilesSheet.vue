@@ -4,9 +4,11 @@ import { computed } from "vue";
 import { ChevronLeft, ChevronRight, FileText, Folder, LoaderCircle, X } from "lucide-vue-next";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
 import { browseSessionDirectory, readSessionFile } from "@/api/session-files";
+import { useMachineTarget } from "@/lib/machine-target";
 
 /** The session's folder, read-only: folders to walk through, a file's text to read. Editing is for the computer. */
 const props = defineProps<{ open: boolean; sessionId: string }>();
+const machine = useMachineTarget();
 const emit = defineEmits<{ (event: "close"): void }>();
 
 interface Entry {
@@ -25,7 +27,7 @@ async function browse(next: string): Promise<void> {
   loading.value = true;
   error.value = null;
   try {
-    const listing = await browseSessionDirectory(props.sessionId, next || undefined);
+    const listing = await browseSessionDirectory(machine, props.sessionId, next || undefined);
     entries.value = [...listing.entries].sort((a, b) => Number(b.isDirectory) - Number(a.isDirectory) || a.name.localeCompare(b.name));
     path.value = next;
   } catch (failure) {
@@ -38,7 +40,7 @@ async function browse(next: string): Promise<void> {
 async function read(entry: Entry): Promise<void> {
   loading.value = true;
   try {
-    const content = await readSessionFile(props.sessionId, entry.relativePath);
+    const content = await readSessionFile(machine, props.sessionId, entry.relativePath);
     file.value = {
       path: entry.relativePath,
       text: content.isBinary ? null : content.content,

@@ -6,6 +6,7 @@ import type { TerminalSummary } from "@/lib/terminal-api";
 import { useAppShellStore } from "@/stores/app-shell";
 import { useTerminalsStore } from "@/stores/terminals";
 import { flushAll, mountComposable } from "./test-utils";
+import { liveTarget } from "@/lib/machine-target";
 
 const { apiFetchMock, subscribeV2Mock, reconnectCallbacks } = vi.hoisted(() => ({
   apiFetchMock: vi.fn(),
@@ -13,7 +14,12 @@ const { apiFetchMock, subscribeV2Mock, reconnectCallbacks } = vi.hoisted(() => (
   reconnectCallbacks: [] as Array<() => void>,
 }));
 
-vi.mock("@/lib/api-client", () => ({ apiFetch: apiFetchMock, wsUrl: (path: string) => path }));
+vi.mock("@/lib/api-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api-client")>()),
+  apiFetch: apiFetchMock,
+  apiFetchOn: (_machine: unknown, ...args: unknown[]) => apiFetchMock(...args),
+  wsUrlOn: (_machine: unknown, path: string) => path,
+}));
 
 vi.mock("@/composables/use-weave-socket", () => ({
   useWeaveSocket: () => ({ subscribeV2: subscribeV2Mock }),
@@ -37,6 +43,10 @@ function enableTerminals(enabled: boolean): void {
   const appShell = useAppShellStore();
   appShell.setConfig({ ...appShell.config, terminalEnabled: enabled });
 }
+
+
+/** The live machine: home, in these tests. */
+const home = liveTarget();
 
 describe("useSessionTerminals", () => {
   beforeEach(() => {
@@ -118,7 +128,7 @@ describe("useSessionTerminals", () => {
     apiFetchMock.mockResolvedValue(jsonResponse(terminal("t7"), 201));
     const { openNewTerminal } = await import("@/composables/use-session-terminals");
 
-    const error = await openNewTerminal("s1", 120, 30);
+    const error = await openNewTerminal(home, "s1", 120, 30);
 
     const store = useTerminalsStore();
     expect(error).toBeNull();
@@ -131,7 +141,7 @@ describe("useSessionTerminals", () => {
     apiFetchMock.mockResolvedValue(jsonResponse({ error: "This session already has 8 terminals. Close one to open another." }, 409));
     const { openNewTerminal } = await import("@/composables/use-session-terminals");
 
-    const error = await openNewTerminal("s1", 120, 30);
+    const error = await openNewTerminal(home, "s1", 120, 30);
 
     expect(error).toBe("This session already has 8 terminals. Close one to open another.");
     expect(useTerminalsStore().terminalsFor("s1")).toEqual([]);
@@ -145,7 +155,7 @@ describe("useSessionTerminals", () => {
     apiFetchMock.mockResolvedValueOnce(jsonResponse([terminal("t1")]));
     const { closeTerminalTab } = await import("@/composables/use-session-terminals");
 
-    const closing = closeTerminalTab("s1", "t1");
+    const closing = closeTerminalTab(home, "s1", "t1");
     expect(store.terminalsFor("s1")).toEqual([]);
     expect(store.isOpen("s1")).toBe(false);
     await closing;

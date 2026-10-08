@@ -1,12 +1,13 @@
 import { onBeforeUnmount, toValue, watch, type MaybeRefOrGetter } from "vue";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetchOn } from "@/lib/api-client";
+import { useMachineTarget, type MachineTarget } from "@/lib/machine-target";
 import { isBrowserStepEvent } from "@/lib/domain-events";
 import { useAgentBrowserStore, type AgentBrowserState } from "@/stores/agent-browser";
 import { onReconnect, useWeaveSocket } from "@/composables/use-weave-socket";
 
 /** The agent's tabs and steps for the session, as Fleet has them. */
-export async function fetchAgentBrowser(sessionId: string): Promise<AgentBrowserState> {
-  const response = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}/agent-browser`);
+export async function fetchAgentBrowser(machine: MachineTarget, sessionId: string): Promise<AgentBrowserState> {
+  const response = await apiFetchOn(machine.connection, `/api/sessions/${encodeURIComponent(sessionId)}/agent-browser`);
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const body = (await response.json()) as Partial<AgentBrowserState>;
   return { tabs: body.tabs ?? [], focusedTabId: body.focusedTabId ?? null, steps: body.steps ?? [] };
@@ -23,12 +24,13 @@ export function agentFrameUrl(sessionId: string, tabId: string, nonce: number): 
  * loads them again.
  */
 export function useAgentBrowser(sessionId: MaybeRefOrGetter<string | null | undefined>): void {
+  const machine = useMachineTarget();
   const store = useAgentBrowserStore();
   const { subscribeV2 } = useWeaveSocket();
 
   async function load(id: string): Promise<void> {
     try {
-      store.setFromServer(id, await fetchAgentBrowser(id));
+      store.setFromServer(id, await fetchAgentBrowser(machine, id));
     } catch (error) {
       console.warn(`Failed to load the agent's browser for session ${id}:`, error);
     }

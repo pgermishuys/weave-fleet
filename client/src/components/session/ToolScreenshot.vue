@@ -15,7 +15,7 @@ const expanded = shallowRef(false);
 // A shot whose session was deleted, or kept by a Fleet that has since lost it: show nothing rather than a broken image.
 const missing = shallowRef(false);
 // Another machine's shot needs its token, which an <img> can't send.
-const { src, failed } = useMachineImage(() => props.screenshot.url);
+const { src, failed } = useMachineImage(() => props.screenshot.path);
 watch(failed, (value) => {
   if (value) missing.value = true;
 });

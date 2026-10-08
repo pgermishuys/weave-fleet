@@ -2,6 +2,7 @@ import { onScopeDispose, toValue, watch, type MaybeRefOrGetter } from "vue";
 import { useEventListener } from "@vueuse/core";
 import { useWeaveSocket } from "@/composables/use-weave-socket";
 import type { DomainEvent } from "@/lib/domain-events";
+import { useMachineTarget } from "@/lib/machine-target";
 import { fileCanvasId, useCanvasesStore } from "@/stores/canvases";
 import { useFileBuffersStore } from "@/stores/file-buffers";
 
@@ -24,6 +25,7 @@ export function isSameFile(eventPath: string, openPath: string): boolean {
  * new version means: a clean buffer updates in place, a dirty one gets the conflict bar.
  */
 export function useFileLiveUpdates(sessionId: MaybeRefOrGetter<string | null | undefined>): void {
+  const machine = useMachineTarget();
   const buffers = useFileBuffersStore();
   const canvases = useCanvasesStore();
   const { subscribeV2 } = useWeaveSocket();
@@ -37,7 +39,7 @@ export function useFileLiveUpdates(sessionId: MaybeRefOrGetter<string | null | u
     // Buffers exist only once the editor has loaded, so this import is already resolved.
     const { refreshBuffer } = await import("@/lib/code-editor/buffers");
     for (const path of paths) {
-      const result = await refreshBuffer(id, path);
+      const result = await refreshBuffer(machine, id, path);
       if (result?.kind === "updated" || result?.kind === "conflict") canvases.markUpdated(fileCanvasId(path));
     }
   }

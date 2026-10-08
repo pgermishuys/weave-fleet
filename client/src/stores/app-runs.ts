@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { shallowRef } from "vue";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetchOn } from "@/lib/api-client";
+import type { MachineTarget } from "@/lib/machine-target";
 import type { AppChangeReason, AppRunStatus, AppUpdated } from "@/lib/domain-events";
 
 /**
@@ -135,9 +136,9 @@ export const useAppRunsStore = defineStore("app-runs", () => {
   }
 
   /** Loads the app as it is now; null when the session has no such app. */
-  async function load(sessionId: string, appId: string): Promise<AppRun | null> {
+  async function load(machine: MachineTarget, sessionId: string, appId: string): Promise<AppRun | null> {
     const askedAt = clock;
-    const response = await apiFetch(appPath(sessionId, appId));
+    const response = await apiFetchOn(machine.connection, appPath(sessionId, appId));
     if (response.status === 404) return null;
     if (!response.ok) throw new Error(await errorText(response));
 
@@ -147,13 +148,13 @@ export const useAppRunsStore = defineStore("app-runs", () => {
   }
 
   /** Starts (or restarts) or stops the app. Returns why Fleet refused, or null. */
-  async function act(sessionId: string, appId: string, action: "restart" | "stop"): Promise<string | null> {
+  async function act(machine: MachineTarget, sessionId: string, appId: string, action: "restart" | "stop"): Promise<string | null> {
     const askedAt = clock;
     try {
-      const response = await apiFetch(`${appPath(sessionId, appId)}/${action}`, { method: "POST" });
+      const response = await apiFetchOn(machine.connection, `${appPath(sessionId, appId)}/${action}`, { method: "POST" });
       if (!response.ok) return await errorText(response);
       if (response.status === 200) setIfCurrent(fromResponse(sessionId, (await response.json()) as AppRunResponse), askedAt);
-      else await load(sessionId, appId);
+      else await load(machine, sessionId, appId);
       return null;
     } catch (error) {
       return error instanceof Error ? error.message : String(error);
@@ -161,16 +162,16 @@ export const useAppRunsStore = defineStore("app-runs", () => {
   }
 
   /** Fetches the output after the lines the store has. */
-  async function fetchOutput(sessionId: string, appId: string): Promise<void> {
+  async function fetchOutput(machine: MachineTarget, sessionId: string, appId: string): Promise<void> {
     const current = outputById.value[appId] ?? { lines: [], next: 0 };
-    const response = await apiFetch(`${appPath(sessionId, appId)}/output?after=${current.next}`);
+    const response = await apiFetchOn(machine.connection, `${appPath(sessionId, appId)}/output?after=${current.next}`);
     if (!response.ok) return;
 
     const body = (await response.json()) as AppOutput;
     // Fewer lines than before: Fleet restarted and lost them. Start over from what it has.
     if (body.next < current.next) {
       outputById.value = { ...outputById.value, [appId]: { lines: [], next: 0 } };
-      await fetchOutput(sessionId, appId);
+      await fetchOutput(machine, sessionId, appId);
       return;
     }
     if (body.lines.length === 0 && body.next === current.next && outputById.value[appId]) return;
@@ -182,17 +183,17 @@ export const useAppRunsStore = defineStore("app-runs", () => {
     };
   }
 
-  async function listSessionApps(sessionId: string): Promise<SessionApps> {
-    const response = await apiFetch(`${sessionPath(sessionId)}/apps`);
+  async function listSessionApps(machine: MachineTarget, sessionId: string): Promise<SessionApps> {
+    const response = await apiFetchOn(machine.connection, `${sessionPath(sessionId)}/apps`);
     if (!response.ok) throw new Error(await errorText(response));
     const body = (await response.json()) as { apps: AppRunResponse[]; previewCommand: string | null };
     return { apps: body.apps.map((app) => fromResponse(sessionId, app)), previewCommand: body.previewCommand ?? null };
   }
 
   /** Runs a command in the session's folder and shows it in a browser canvas. Returns that canvas's id. */
-  async function startCommand(sessionId: string, command: string): Promise<string> {
+  async function startCommand(machine: MachineTarget, sessionId: string, command: string): Promise<string> {
     const askedAt = clock;
-    const response = await apiFetch(`${sessionPath(sessionId)}/apps`, {
+    const response = await apiFetchOn(machine.connection, `${sessionPath(sessionId)}/apps`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ command }),
@@ -204,8 +205,8 @@ export const useAppRunsStore = defineStore("app-runs", () => {
   }
 
   /** Shows a page on Fleet's machine in a browser canvas. Returns that canvas's id. */
-  async function openAddress(sessionId: string, url: string): Promise<string> {
-    const response = await apiFetch(`${sessionPath(sessionId)}/browser`, {
+  async function openAddress(machine: MachineTarget, sessionId: string, url: string): Promise<string> {
+    const response = await apiFetchOn(machine.connection, `${sessionPath(sessionId)}/browser`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ url }),

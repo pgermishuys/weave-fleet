@@ -3,9 +3,14 @@ import { createPinia, setActivePinia } from "pinia";
 import type { SessionProgressDetail } from "@/lib/session-progress";
 
 const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }));
-vi.mock("@/lib/api-client", () => ({ apiFetch: apiFetchMock }));
+vi.mock("@/lib/api-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api-client")>()),
+  apiFetch: apiFetchMock,
+  apiFetchOn: (_machine: unknown, ...args: unknown[]) => apiFetchMock(...args),
+}));
 
 import { useSessionProgressStore } from "@/stores/session-progress";
+import { liveTarget } from "@/lib/machine-target";
 
 function detail(done: number, updatedAt: string, overrides: Partial<SessionProgressDetail> = {}): SessionProgressDetail {
   return {
@@ -25,6 +30,10 @@ function detail(done: number, updatedAt: string, overrides: Partial<SessionProgr
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
+
+/** The live machine: home, in these tests. */
+const home = liveTarget();
+
 describe("useSessionProgressStore", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
@@ -35,8 +44,8 @@ describe("useSessionProgressStore", () => {
     apiFetchMock.mockResolvedValue(json(detail(1, "2026-09-13T12:00:00Z")));
     const store = useSessionProgressStore();
 
-    await Promise.all([store.ensureLoaded("s1"), store.ensureLoaded("s1")]);
-    await store.ensureLoaded("s1");
+    await Promise.all([store.ensureLoaded(home, "s1"), store.ensureLoaded(home, "s1")]);
+    await store.ensureLoaded(home, "s1");
 
     expect(apiFetchMock).toHaveBeenCalledTimes(1);
     expect(apiFetchMock).toHaveBeenCalledWith("/api/sessions/s1/progress");
@@ -47,8 +56,8 @@ describe("useSessionProgressStore", () => {
     apiFetchMock.mockResolvedValue(new Response(null, { status: 204 }));
     const store = useSessionProgressStore();
 
-    await store.ensureLoaded("s1");
-    await store.ensureLoaded("s1");
+    await store.ensureLoaded(home, "s1");
+    await store.ensureLoaded(home, "s1");
 
     expect(apiFetchMock).toHaveBeenCalledTimes(1);
     expect(store.progressFor("s1")).toBeNull();
@@ -61,8 +70,8 @@ describe("useSessionProgressStore", () => {
       .mockResolvedValueOnce(json(detail(2, "2026-09-13T12:05:00Z")));
     const store = useSessionProgressStore();
 
-    await store.ensureLoaded("s1");
-    await store.ensureLoaded("s1", { force: true });
+    await store.ensureLoaded(home, "s1");
+    await store.ensureLoaded(home, "s1", { force: true });
 
     expect(store.progressFor("s1")?.done).toBe(2);
   });
@@ -72,7 +81,7 @@ describe("useSessionProgressStore", () => {
     apiFetchMock.mockReturnValue(new Promise<Response>((r) => { resolve = r; }));
     const store = useSessionProgressStore();
 
-    const load = store.ensureLoaded("s1");
+    const load = store.ensureLoaded(home, "s1");
     store.apply(detail(2, "2026-09-13T12:05:00Z"));
     resolve(json(detail(1, "2026-09-13T12:00:00Z")));
     await load;
@@ -95,7 +104,7 @@ describe("useSessionProgressStore", () => {
     apiFetchMock.mockRejectedValue(new Error("offline"));
     const store = useSessionProgressStore();
 
-    await store.ensureLoaded("s1");
+    await store.ensureLoaded(home, "s1");
 
     expect(store.progressFor("s1")).toBeNull();
     expect("s1" in store.bySession).toBe(false);

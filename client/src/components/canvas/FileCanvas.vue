@@ -11,6 +11,7 @@ import type { AnnotationAnchor } from "@/lib/annotation-types";
 import { dispatchCommandEvent } from "@/lib/command-events";
 import { baseText } from "@/lib/code-editor/agent-lines";
 import { finishCompare, openBuffer, saveBuffer, useDiskVersion } from "@/lib/code-editor/buffers";
+import { useMachineTarget } from "@/lib/machine-target";
 import { createDeletedView, markStripe, setMerge } from "@/lib/code-editor/merge";
 import { getVisualRenderer } from "@/lib/visual-renderer-registry";
 import { hasRenderedView, useCanvasesStore, type FileView } from "@/stores/canvases";
@@ -22,6 +23,8 @@ const props = defineProps<{
   path: string;
   view: FileView;
 }>();
+
+const machine = useMachineTarget();
 
 const buffers = useFileBuffersStore();
 const canvases = useCanvasesStore();
@@ -111,7 +114,7 @@ function detach(): void {
  * tabs alive), so a remount, or a cached canvas reused for a reopened file, attaches again.
  */
 async function attach(): Promise<void> {
-  const current = await openBuffer(props.sessionId, props.path);
+  const current = await openBuffer(machine, props.sessionId, props.path);
   if (!editorHost.value || !current.state) return;
   if (attached === current && editor && current.view === editor) {
     editor.requestMeasure();
@@ -212,13 +215,13 @@ async function save(): Promise<void> {
     toast("No changes to save");
     return;
   }
-  const outcome = await saveBuffer(props.sessionId, props.path);
+  const outcome = await saveBuffer(machine, props.sessionId, props.path);
   if (outcome.kind === "saved") toast(`Saved ${props.path}`);
   else if (outcome.kind === "error") toast(`Couldn't save: ${outcome.message}`);
 }
 
 async function keepMine(): Promise<void> {
-  const outcome = await saveBuffer(props.sessionId, props.path, { overwrite: true });
+  const outcome = await saveBuffer(machine, props.sessionId, props.path, { overwrite: true });
   comparing.value = false;
   if (outcome.kind === "saved") toast(`Saved your version of ${fileName.value}`);
   else if (outcome.kind === "error") toast(`Couldn't save: ${outcome.message}`);
@@ -226,7 +229,7 @@ async function keepMine(): Promise<void> {
 
 function useAgents(): void {
   comparing.value = false;
-  useDiskVersion(props.sessionId, props.path);
+  useDiskVersion(machine, props.sessionId, props.path);
   refreshStripe();
   editor?.focus();
 }

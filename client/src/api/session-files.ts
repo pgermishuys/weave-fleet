@@ -1,19 +1,21 @@
-import { api } from "./client";
 import type { BrowseDirectoryResponse, FileContentResponse } from "./client";
+import type { MachineTarget } from "@/lib/machine-target";
 
 /**
  * Browse the directory structure of a session's workspace.
  *
+ * @param machine - The session's machine
  * @param sessionId - The session ID
  * @param path - Optional relative path within the workspace (defaults to root)
  * @returns Directory listing with entries and current path
  * @throws Error if the request fails
  */
 export async function browseSessionDirectory(
+  machine: MachineTarget,
   sessionId: string,
   path?: string
 ): Promise<BrowseDirectoryResponse> {
-  const { data, error, response } = await api.GET("/api/sessions/{id}/files/browse", {
+  const { data, error, response } = await machine.api.GET("/api/sessions/{id}/files/browse", {
     params: {
       path: { id: sessionId },
       query: path ? { path } : undefined,
@@ -30,16 +32,18 @@ export async function browseSessionDirectory(
 /**
  * Read the content of a file from a session's workspace.
  *
+ * @param machine - The session's machine
  * @param sessionId - The session ID
  * @param path - Relative path to the file within the workspace
  * @returns File content with metadata (binary status, truncation)
  * @throws Error if the request fails
  */
 export async function readSessionFile(
+  machine: MachineTarget,
   sessionId: string,
   path: string
 ): Promise<FileContentResponse> {
-  const { data, error, response } = await api.GET("/api/sessions/{id}/files/content", {
+  const { data, error, response } = await machine.api.GET("/api/sessions/{id}/files/content", {
     params: {
       path: { id: sessionId },
       query: { path },
@@ -65,12 +69,13 @@ export type WriteSessionFileResult =
  * @throws Error with the server's reason when the save is refused (outside the session, .git, too large).
  */
 export async function writeSessionFile(
+  machine: MachineTarget,
   sessionId: string,
   path: string,
   content: string,
   baseHash: string,
 ): Promise<WriteSessionFileResult> {
-  const { data, error, response } = await api.PUT("/api/sessions/{id}/files/content", {
+  const { data, error, response } = await machine.api.PUT("/api/sessions/{id}/files/content", {
     params: { path: { id: sessionId } },
     body: { path, content, baseHash },
   });

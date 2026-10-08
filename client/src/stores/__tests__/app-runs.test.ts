@@ -2,9 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import type { AppUpdated } from "@/lib/domain-events";
 import { addressForPort, currentRunLines, RESTART_MARKER, useAppRunsStore } from "@/stores/app-runs";
+import { liveTarget } from "@/lib/machine-target";
 
 const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }));
-vi.mock("@/lib/api-client", () => ({ apiFetch: apiFetchMock }));
+vi.mock("@/lib/api-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api-client")>()),
+  apiFetch: apiFetchMock,
+  apiFetchOn: (_machine: unknown, ...args: unknown[]) => apiFetchMock(...args),
+}));
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -18,6 +23,10 @@ function appUpdated(status: AppUpdated["payload"]["status"], reason: AppUpdated[
 }
 
 const response = { id: "app_1", command: "npm run dev", status: "starting", exitCode: null, url: null, ports: [], logs: [] };
+
+
+/** The live machine: home, in these tests. */
+const home = liveTarget();
 
 describe("app runs", () => {
   beforeEach(() => {
@@ -38,7 +47,7 @@ describe("app runs", () => {
     let answer!: (value: Response) => void;
     apiFetchMock.mockReturnValue(new Promise<Response>((resolve) => { answer = resolve; }));
 
-    const loading = store.load("s1", "app_1");
+    const loading = store.load(home, "s1", "app_1");
     store.applyEvent(appUpdated("running", "ready"));
     answer(jsonResponse(response));
     await loading;
@@ -49,7 +58,7 @@ describe("app runs", () => {
   it("returns why Fleet refused a start", async () => {
     apiFetchMock.mockResolvedValue(jsonResponse({ error: "This session already runs 3 apps, its limit." }, 409));
 
-    expect(await useAppRunsStore().act("s1", "app_1", "restart")).toBe("This session already runs 3 apps, its limit.");
+    expect(await useAppRunsStore().act(home, "s1", "app_1", "restart")).toBe("This session already runs 3 apps, its limit.");
     expect(apiFetchMock).toHaveBeenCalledWith("/api/sessions/s1/apps/app_1/restart", { method: "POST" });
   });
 
@@ -61,12 +70,12 @@ describe("app runs", () => {
       .mockResolvedValueOnce(jsonResponse({ lines: [], next: 1 }))
       .mockResolvedValueOnce(jsonResponse({ lines: ["x"], next: 1 }));
 
-    await store.fetchOutput("s1", "app_1");
-    await store.fetchOutput("s1", "app_1");
+    await store.fetchOutput(home, "s1", "app_1");
+    await store.fetchOutput(home, "s1", "app_1");
     expect(apiFetchMock).toHaveBeenLastCalledWith("/api/sessions/s1/apps/app_1/output?after=2");
     expect(store.outputById.app_1).toEqual({ lines: ["a", "b", "c"], next: 3 });
 
-    await store.fetchOutput("s1", "app_1");
+    await store.fetchOutput(home, "s1", "app_1");
     expect(apiFetchMock).toHaveBeenLastCalledWith("/api/sessions/s1/apps/app_1/output?after=0");
     expect(store.outputById.app_1).toEqual({ lines: ["x"], next: 1 });
   });
@@ -75,7 +84,7 @@ describe("app runs", () => {
     const store = useAppRunsStore();
     apiFetchMock.mockResolvedValue(jsonResponse({ app: response, canvasId: "cv_1" }));
 
-    expect(await store.startCommand("s1", "npm run dev")).toBe("cv_1");
+    expect(await store.startCommand(home, "s1", "npm run dev")).toBe("cv_1");
     expect(apiFetchMock).toHaveBeenCalledWith("/api/sessions/s1/apps", expect.objectContaining({ method: "POST", body: JSON.stringify({ command: "npm run dev" }) }));
     expect(store.byId.app_1?.status).toBe("starting");
   });
@@ -89,7 +98,7 @@ describe("app runs", () => {
     const store = useAppRunsStore();
     apiFetchMock.mockResolvedValueOnce(jsonResponse({ ...response, printedUrls: ["https://localhost:17155/login?t=abc"] }));
 
-    await store.load("s1", "app_1");
+    await store.load(home, "s1", "app_1");
     store.applyEvent(appUpdated("running", "ready"));
     expect(store.byId.app_1?.printedUrls).toEqual(["https://localhost:17155/login?t=abc"]);
 

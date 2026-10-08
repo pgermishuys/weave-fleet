@@ -3,9 +3,11 @@ import { browseSessionDirectory } from '@/api/session-files'
 import type { BrowseDirectoryEntry } from '@/api/client'
 import { useWeaveSocket } from '@/composables/use-weave-socket'
 import type { DomainEvent } from '@/lib/domain-events'
+import { useMachineTarget } from '@/lib/machine-target'
 import { useCanvasesStore } from '@/stores/canvases'
 
 export function useFileBrowser(sessionId: Ref<string | null>) {
+  const machine = useMachineTarget()
   const { subscribeV2 } = useWeaveSocket()
   const canvases = useCanvasesStore()
 
@@ -30,7 +32,7 @@ export function useFileBrowser(sessionId: Ref<string | null>) {
     error.value = null
 
     try {
-      const response = await browseSessionDirectory(sessionId.value)
+      const response = await browseSessionDirectory(machine, sessionId.value)
       rootEntries.value = response.entries || []
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to load root directory'
@@ -55,7 +57,7 @@ export function useFileBrowser(sessionId: Ref<string | null>) {
     error.value = null
 
     try {
-      const response = await browseSessionDirectory(sessionId.value, path)
+      const response = await browseSessionDirectory(machine, sessionId.value, path)
       expandedDirs.value.set(path, response.entries || [])
     } catch (err) {
       error.value = err instanceof Error ? err.message : `Failed to load directory: ${path}`

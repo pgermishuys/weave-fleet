@@ -1,5 +1,5 @@
 import { readonly, shallowRef, type ShallowRef } from "vue";
-import { api } from "@/api/client";
+import { useMachineTarget } from "@/lib/machine-target";
 
 export type OpenTool = string;
 
@@ -10,6 +10,7 @@ export interface UseOpenDirectoryResult {
 }
 
 export function useOpenDirectory(): UseOpenDirectoryResult {
+  const { api } = useMachineTarget();
   const isOpening = shallowRef(false);
   const error = shallowRef<string | undefined>(undefined);
 

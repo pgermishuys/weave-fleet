@@ -3,9 +3,14 @@ import { createPinia, setActivePinia } from "pinia";
 import type { SmartLinkWire } from "@/lib/smart-links";
 
 const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }));
-vi.mock("@/lib/api-client", () => ({ apiFetch: apiFetchMock }));
+vi.mock("@/lib/api-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api-client")>()),
+  apiFetch: apiFetchMock,
+  apiFetchOn: (_machine: unknown, ...args: unknown[]) => apiFetchMock(...args),
+}));
 
 import { useSmartLinksStore } from "@/stores/smart-links";
+import { liveTarget } from "@/lib/machine-target";
 
 function wire(id: string, relationship: string, overrides: Partial<SmartLinkWire> = {}): SmartLinkWire {
   return {
@@ -33,6 +38,10 @@ function wire(id: string, relationship: string, overrides: Partial<SmartLinkWire
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
+
+/** The live machine: home, in these tests. */
+const home = liveTarget();
+
 describe("useSmartLinksStore", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
@@ -43,8 +52,8 @@ describe("useSmartLinksStore", () => {
     apiFetchMock.mockResolvedValue(json([wire("1", "own")]));
     const store = useSmartLinksStore();
 
-    await Promise.all([store.ensureLoaded("s1"), store.ensureLoaded("s1")]);
-    await store.ensureLoaded("s1");
+    await Promise.all([store.ensureLoaded(home, "s1"), store.ensureLoaded(home, "s1")]);
+    await store.ensureLoaded(home, "s1");
 
     expect(apiFetchMock).toHaveBeenCalledTimes(1);
     expect(apiFetchMock).toHaveBeenCalledWith("/api/sessions/s1/smart-links/all");
@@ -76,12 +85,12 @@ describe("useSmartLinksStore", () => {
     store.setLinks("s1", [wire("1", "mentioned")]);
 
     apiFetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
-    await store.setPinned("s1", "1", true);
+    await store.setPinned(home, "s1", "1", true);
     expect(store.visibleLinks("s1")[0]?.relationship).toBe("pinned");
     expect(apiFetchMock).toHaveBeenLastCalledWith("/api/sessions/s1/smart-links/1/pin", { method: "PATCH" });
 
     apiFetchMock.mockResolvedValueOnce(new Response(null, { status: 500 }));
-    await store.setPinned("s1", "1", false);
+    await store.setPinned(home, "s1", "1", false);
     expect(store.visibleLinks("s1")[0]?.relationship).toBe("pinned");
   });
 
@@ -89,10 +98,10 @@ describe("useSmartLinksStore", () => {
     const store = useSmartLinksStore();
     apiFetchMock.mockResolvedValueOnce(new Response("bad", { status: 400 }));
 
-    await expect(store.addLink("s1", "https://example.com")).resolves.toBe("Paste a link to a GitHub pull request or issue.");
+    await expect(store.addLink(home, "s1", "https://example.com")).resolves.toBe("Paste a link to a GitHub pull request or issue.");
 
     apiFetchMock.mockResolvedValueOnce(json(wire("9", "pinned")));
-    await expect(store.addLink("s1", "https://github.com/o/r/pull/9")).resolves.toBeNull();
+    await expect(store.addLink(home, "s1", "https://github.com/o/r/pull/9")).resolves.toBeNull();
     expect(store.headerLinks("s1").map((l) => l.id)).toEqual(["9"]);
   });
 
