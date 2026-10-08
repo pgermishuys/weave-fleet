@@ -209,6 +209,8 @@ public static class DependencyInjection
             client.DefaultRequestHeaders.UserAgent.ParseAdd("fleet-reports/1.0");
         });
         services.AddScoped<SessionMessageDelivery>();
+        services.AddScoped<WeaveFleet.Application.Machines.AgentHandoffFeature>();
+        services.AddScoped<WeaveFleet.Application.Machines.MachineHandoffBridge>();
         services.AddScoped<SessionMessageBridge>();
         // @ sessions in the composer: the block a message's references become, and fleet_session_read.
         services.AddScoped<SessionReferenceExpander>();
@@ -242,6 +244,10 @@ public static class DependencyInjection
             .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.SocketsHttpHandler { AllowAutoRedirect = false, ConnectTimeout = TimeSpan.FromSeconds(5) });
         services.AddSingleton<WeaveFleet.Infrastructure.Machines.RemoteMachineWatcher>();
         services.AddHostedService(sp => sp.GetRequiredService<WeaveFleet.Infrastructure.Machines.RemoteMachineWatcher>());
+        // Agents that hand work to another machine start, message and read sessions there through this Fleet.
+        services.AddSingleton<WeaveFleet.Application.Machines.RemoteSessions>();
+        services.AddHttpClient(WeaveFleet.Application.Machines.RemoteSessions.HttpClientName, client => client.Timeout = TimeSpan.FromMinutes(2))
+            .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.SocketsHttpHandler { AllowAutoRedirect = false, ConnectTimeout = TimeSpan.FromSeconds(5) });
         services.AddScoped<PromptQueueService>();
         // Singleton: the relay hands it every event; it sends a session's next queued message when its turn ends.
         services.AddSingleton<PromptQueueDispatcher>();

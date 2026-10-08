@@ -65,10 +65,33 @@ public sealed partial class FleetToolCatalogPluginTests
             ("fleet_browser_read", "browser"),
             ("fleet_browser_act", "browser"),
             ("fleet_message", "sessionMessages"),
+            ("fleet_machine_list", "agentHandoff"),
+            ("fleet_session_start", "agentHandoff"),
             ("fleet_memory_save", "memory"),
             ("fleet_memory_forget", "memory"),
             ("fleet_step_done", "workflowStep"),
         ]);
+    }
+
+    [Fact]
+    public void Each_input_a_switch_adds_is_the_plugins_too()
+    {
+        var switched = FleetToolCatalog.All
+            .Where(tool => tool.SwitchedProperties.ValueKind == System.Text.Json.JsonValueKind.Object)
+            .SelectMany(tool => tool.SwitchedProperties.EnumerateObject().SelectMany(group =>
+                group.Value.EnumerateObject().Select(property => (Tool: tool.Name, Switch: group.Name, property.Name, property.Value))))
+            .ToList();
+
+        switched.Select(p => (p.Tool, p.Switch, p.Name)).ShouldBe(
+        [
+            ("fleet_session_read", "agentHandoff", "machine"),
+            ("fleet_message", "agentHandoff", "machine"),
+        ]);
+        foreach (var property in switched)
+        {
+            Literals.ShouldContain(property.Value.GetProperty("type").GetString()!);
+            IsWritten(property.Value.GetProperty("description").GetString()!).ShouldBeTrue($"{property.Tool}.{property.Name}'s description isn't the plugin's.");
+        }
     }
 
     /// <summary>Whether <paramref name="text"/> is a literal in the plugin, or a run of them joined with spaces.</summary>

@@ -1,6 +1,7 @@
 using System.Net;
 using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
+using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Memory;
 using WeaveFleet.Application.Pages;
 using WeaveFleet.Application.Sessions;
@@ -91,13 +92,24 @@ public static class CanvasBridgeEndpoints
 
         // fleet_message: one session's agent messages another. The sender is the session the call resolves to.
         session.MapPost("/message", async (SessionMessageBridgeRequest request, HttpContext http, SessionMessageBridge bridge, CancellationToken ct)
-                => ToResult(await bridge.SendAsync(BridgeToken(http), request.HarnessSessionId, request.SessionId, request.Text, request.NotifyWhenDone, ct)))
+                => ToResult(await bridge.SendAsync(BridgeToken(http), request.HarnessSessionId, request.SessionId, request.Text, request.NotifyWhenDone, request.Machine, ct)))
             .WithName("SessionMessageBridgeSend");
 
         // fleet_session_read: a page of a session the user @-referenced, for the agent the reference went to.
         session.MapPost("/read", async (SessionReadBridgeRequest request, HttpContext http, SessionReadBridge bridge, CancellationToken ct)
-                => ToResult(await bridge.ReadAsync(BridgeToken(http), request.HarnessSessionId, request.SessionId, request.Before, request.Limit, ct)))
+                => ToResult(await bridge.ReadAsync(BridgeToken(http), request.HarnessSessionId, request.SessionId, request.Before, request.Limit, request.Machine, ct)))
             .WithName("SessionReadBridgeRead");
+
+        // fleet_machine_list / fleet_session_start: an agent hands work to another machine (agent hand-off). This Fleet
+        // makes the calls there, with the token it keeps for the machine.
+        session.MapPost("/machines", async (CanvasBridgeRequest request, HttpContext http, MachineHandoffBridge bridge, CancellationToken ct)
+                => ToResult(await bridge.ListAsync(BridgeToken(http), request.HarnessSessionId, ct)))
+            .WithName("MachineHandoffBridgeList");
+
+        session.MapPost("/start", async (SessionStartBridgeRequest request, HttpContext http, MachineHandoffBridge bridge, CancellationToken ct)
+                => ToResult(await bridge.StartAsync(
+                    BridgeToken(http), request.HarnessSessionId, request.Machine, request.Folder, request.Title, request.Task, request.Branch, request.Harness, ct)))
+            .WithName("MachineHandoffBridgeStart");
 
         // fleet_step_done: a workflow step's session finishes the step. Only the step's own session can.
         app.MapGroup($"{PathPrefix}/workflow")

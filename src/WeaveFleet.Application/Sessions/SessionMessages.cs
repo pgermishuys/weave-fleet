@@ -3,6 +3,7 @@ using System.Text.Json;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.DTOs;
+using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Events;
@@ -138,7 +139,8 @@ public sealed class SessionMessageBridge(
     SessionMessagesFeature feature,
     SessionService sessions,
     SessionMessageDelivery delivery,
-    SessionUpdates updates)
+    SessionUpdates updates,
+    MachineHandoffBridge handoff)
 {
     public const string TurnedOffMessage = "Messages between sessions are turned off in Fleet's Settings.";
 
@@ -152,6 +154,7 @@ public sealed class SessionMessageBridge(
         string? toSessionId,
         string? text,
         bool notifyWhenDone = false,
+        string? machine = null,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(bridgeToken) || string.IsNullOrWhiteSpace(harnessSessionId))
@@ -171,6 +174,9 @@ public sealed class SessionMessageBridge(
                 return Invalid("\"sessionId\" is required: the Fleet id of the session to message, from GET $FLEET_URL/api/sessions.");
             if (string.IsNullOrWhiteSpace(text))
                 return Invalid("\"text\" is required.");
+            // A session on another machine: this Fleet sends it there, as this session.
+            if (!string.IsNullOrWhiteSpace(machine))
+                return await handoff.MessageAsync(caller, machine, toSessionId.Trim(), text, notifyWhenDone, ct).ConfigureAwait(false);
             if (string.Equals(toSessionId, caller.FleetSessionId, StringComparison.Ordinal))
                 return Invalid("That's this session. Give the id of another one.");
             if (notifyWhenDone && updates.IsStartedByUpdate(caller.FleetSessionId))

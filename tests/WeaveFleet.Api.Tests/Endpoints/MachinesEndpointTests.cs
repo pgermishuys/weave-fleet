@@ -138,6 +138,29 @@ public sealed class MachinesEndpointTests
         stored!.EncryptedToken.ShouldNotContain("falcon-token");
     }
 
+    [Fact]
+    public async Task Only_the_owner_lets_agents_hand_work_to_a_machine_and_adding_it_again_keeps_that()
+    {
+        await using var falcon = Fleet();
+        await using var hangar = Fleet(routeTo: falcon);
+        using var owner = Client(hangar, Token(hangar));
+        var id = Identity(falcon).Id;
+        var added = await (await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl, token = Token(falcon) })).Content.ReadFromJsonAsync<JsonElement>();
+        added.GetProperty("agentsAllowed").GetBoolean().ShouldBeFalse();
+
+        var allowed = await owner.PutAsJsonAsync($"/api/machines/{id}", new { agentsAllowed = true });
+        await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl, token = Token(falcon) });
+        var (_, deviceToken) = await hangar.Services.GetRequiredService<DeviceTokenService>().IssueAsync("Pixel", "android");
+        using var phone = Client(hangar, deviceToken);
+        var fromPhone = await phone.PutAsJsonAsync($"/api/machines/{id}", new { agentsAllowed = false });
+
+        allowed.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await allowed.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("agentsAllowed").GetBoolean().ShouldBeTrue();
+        fromPhone.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        var list = await owner.GetFromJsonAsync<JsonElement>("/api/machines");
+        list.GetProperty("machines")[0].GetProperty("agentsAllowed").GetBoolean().ShouldBeTrue();
+    }
+
     private static ApiWebApplicationFactory Fleet(ApiWebApplicationFactory? routeTo = null, bool routeToSelf = false)
     {
         ApiWebApplicationFactory? self = null;

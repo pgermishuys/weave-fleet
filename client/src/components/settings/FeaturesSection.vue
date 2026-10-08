@@ -5,7 +5,7 @@ import { useBoardFeature } from "@/composables/use-board-feature";
 import { SESSION_RECAP_PREFERENCE_KEY } from "@/composables/use-session-recap";
 import { RETRY_AFTER_LIMITS_PREFERENCE_KEY } from "@/composables/use-session-retry";
 import { SESSION_MESSAGES_PREFERENCE_KEY } from "@/lib/session-messages";
-import { LIVE_MACHINES_PREFERENCE_KEY } from "@/lib/machines";
+import { AGENT_HANDOFF_PREFERENCE_KEY, LIVE_MACHINES_PREFERENCE_KEY } from "@/lib/machines";
 import {
   DESKTOP_NOTIFICATIONS_PREFERENCE_KEY,
   notificationPermission,
@@ -100,6 +100,20 @@ const isLiveMachinesEnabled = computed(
   () => preferencesStore.get(LIVE_MACHINES_PREFERENCE_KEY, "false") === "true",
 );
 const isSavingLiveMachines = shallowRef(false);
+
+const isAgentHandoffEnabled = computed(
+  () => preferencesStore.get(AGENT_HANDOFF_PREFERENCE_KEY, "false") === "true",
+);
+const isSavingAgentHandoff = shallowRef(false);
+
+async function toggleAgentHandoff(): Promise<void> {
+  isSavingAgentHandoff.value = true;
+  try {
+    await preferencesStore.set(AGENT_HANDOFF_PREFERENCE_KEY, isAgentHandoffEnabled.value ? "false" : "true");
+  } finally {
+    isSavingAgentHandoff.value = false;
+  }
+}
 
 async function toggleLiveMachines(): Promise<void> {
   isSavingLiveMachines.value = true;
@@ -382,6 +396,58 @@ async function toggleBoardFeature(): Promise<void> {
           <span
             class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
             :class="isLiveMachinesEnabled ? 'translate-x-5' : 'translate-x-0'"
+          />
+        </button>
+      </div>
+    </div>
+
+    <div
+      v-if="machines.hasMachines"
+      class="mt-3 flex items-start justify-between gap-4 rounded-card border border-border bg-main-bg p-4"
+    >
+      <div>
+        <p class="flex items-center gap-2 text-sm font-medium text-text">
+          Hand work to other machines
+          <span class="rounded-full border border-border px-2 py-px text-[0.7rem] font-medium uppercase tracking-wide text-muted">
+            Experimental
+          </span>
+        </p>
+        <p class="mt-1 text-xs text-muted">
+          Let an agent start a session on another machine, give it a task, and message and read it there. Only on the
+          machines you allow in Settings → Machines. This Fleet makes every call there, so agents never see a
+          machine's token. OpenCode and Claude Code sessions get it; Pi sessions don't. Applies to sessions started
+          afterwards.
+        </p>
+        <p
+          v-if="!isSessionMessagesEnabled"
+          class="mt-1 text-xs text-muted"
+          data-testid="agent-handoff-needs-messages"
+        >
+          Turn on Messages between sessions first: the hand-off uses its tools.
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <LoaderCircle
+          v-if="isSavingAgentHandoff"
+          :size="16"
+          class="animate-spin text-muted"
+          aria-hidden="true"
+        />
+        <button
+          type="button"
+          role="switch"
+          :aria-checked="isAgentHandoffEnabled && isSessionMessagesEnabled"
+          :disabled="preferencesStore.isLoading || isSavingAgentHandoff || !isSessionMessagesEnabled"
+          aria-label="Let agents hand work to other machines"
+          data-testid="agent-handoff-switch"
+          class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-main-bg disabled:cursor-not-allowed disabled:opacity-60"
+          :class="isAgentHandoffEnabled && isSessionMessagesEnabled ? 'bg-accent' : 'bg-border'"
+          @click="toggleAgentHandoff"
+        >
+          <span
+            class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+            :class="isAgentHandoffEnabled && isSessionMessagesEnabled ? 'translate-x-5' : 'translate-x-0'"
           />
         </button>
       </div>

@@ -83,14 +83,24 @@ public sealed class RemoteMachineService(
             AddedAt = existing?.AddedAt ?? time.GetUtcNow(),
             LastSeenAt = time.GetUtcNow(),
             Status = RemoteMachineStatuses.Online,
+            AgentsAllowed = existing?.AgentsAllowed ?? false,
         };
         await machines.UpsertAsync(machine);
         Changed?.Invoke(machine.Id);
         return (machine, null);
     }
 
-    /// <summary>Changes a machine's address, token or name. A new address or token is checked against the machine first.</summary>
-    public async Task<(RemoteMachine? Machine, string? Error)> UpdateAsync(string id, string? baseUrl, string? token, string? name, CancellationToken cancellationToken)
+    /// <summary>
+    /// Changes a machine's address, token, name, or whether agents may hand work to it. A new address or token is checked
+    /// against the machine first.
+    /// </summary>
+    public async Task<(RemoteMachine? Machine, string? Error)> UpdateAsync(
+        string id,
+        string? baseUrl,
+        string? token,
+        string? name,
+        CancellationToken cancellationToken,
+        bool? agentsAllowed = null)
     {
         var current = await machines.GetAsync(id);
         if (current is null)
@@ -122,6 +132,8 @@ public sealed class RemoteMachineService(
 
         if (!string.IsNullOrWhiteSpace(name))
             next = next with { Name = name.Trim() };
+        if (agentsAllowed is { } allowed)
+            next = next with { AgentsAllowed = allowed };
 
         await machines.UpsertAsync(next);
         Changed?.Invoke(id);
@@ -151,6 +163,7 @@ public sealed class RemoteMachineService(
                 Os = entry.Os,
                 AddedAt = existing?.AddedAt ?? entry.AddedAt ?? time.GetUtcNow(),
                 Status = existing?.Status ?? RemoteMachineStatuses.Unknown,
+                AgentsAllowed = existing?.AgentsAllowed ?? false,
             });
             Changed?.Invoke(entry.Id);
         }

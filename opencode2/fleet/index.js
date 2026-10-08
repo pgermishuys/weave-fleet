@@ -20,7 +20,18 @@ const BRIDGE_PATH = "/api/bridge/canvas/"
 const MEMORY_PATH = "/api/bridge/memory/"
 const MESSAGE_PATH = "/api/bridge/session/message"
 const SESSION_READ_PATH = "/api/bridge/session/read"
+const SESSION_START_PATH = "/api/bridge/session/start"
+const MACHINE_LIST_PATH = "/api/bridge/session/machines"
 const STEP_DONE_PATH = "/api/bridge/workflow/step-done"
+
+// Agent hand-off: set only on servers started with it on (and so with messages between sessions on). It adds the
+// hand-off tools and a machine on fleet_message and fleet_session_read; without it they're as they always were.
+const HANDOFF = process.env.FLEET_AGENT_HANDOFF === "1"
+
+const machine = {
+  type: "string",
+  description: "The machine the session is on, from fleet_machine_list. Leave it out for a session on this machine.",
+}
 
 /**
  * Calls Fleet's bridge for one tool call. FLEET_URL names this server (…/agent/{token}), and the bridge token says
@@ -295,10 +306,16 @@ const tools = [
         description: "Leave it out for the latest messages; for older ones, the before value the last page gave.",
       },
       limit: { type: "integer", minimum: 1, maximum: 50, description: "How many messages. 20 is a good page." },
+      ...(HANDOFF ? { machine } : {}),
     },
     (input, tool) =>
-      callFleet("read", tool, { sessionId: input.sessionId, before: input.before || null, limit: input.limit ?? null }, SESSION_READ_PATH),
-    { optional: ["before", "limit"] },
+      callFleet(
+        "read",
+        tool,
+        { sessionId: input.sessionId, before: input.before || null, limit: input.limit ?? null, machine: input.machine || null },
+        SESSION_READ_PATH,
+      ),
+    { optional: ["before", "limit", "machine"] },
   ),
 ]
 
@@ -361,15 +378,64 @@ if (process.env.FLEET_SESSION_MESSAGES === "1") {
             "false when you're handing work off or just telling it something.",
           ].join(" "),
         },
+        ...(HANDOFF ? { machine } : {}),
       },
       (input, tool) =>
         callFleet(
           "message",
           tool,
-          { sessionId: input.sessionId, text: input.text, notifyWhenDone: input.notifyWhenDone === true },
+          { sessionId: input.sessionId, text: input.text, notifyWhenDone: input.notifyWhenDone === true, machine: input.machine || null },
           MESSAGE_PATH,
         ),
-      { optional: ["notifyWhenDone"] },
+      { optional: ["notifyWhenDone", "machine"] },
+    ),
+  )
+}
+
+// Only on servers started with agent hand-off on. This Fleet makes every call to the other machine, with the token it
+// keeps for it, and only to machines the user allowed; the agent never sees a token.
+if (HANDOFF) {
+  tools.push(
+    fleetTool(
+      "fleet_machine_list",
+      [
+        "List the other machines you may hand work to: each one's name, whether it's answering, its harnesses and its folders.",
+        "Name a machine in fleet_session_start, and in fleet_message or fleet_session_read for a session there.",
+      ].join(" "),
+      {},
+      (_input, tool) => callFleet("machines", tool, {}, MACHINE_LIST_PATH),
+    ),
+    fleetTool(
+      "fleet_session_start",
+      [
+        "Start a session on another machine and give it a task.",
+        "It's a normal session there, which the user can open and step into; the task arrives marked as coming from this session, as a teammate's request, not the user's.",
+        "The work moves by branch: push yours and name it, and the new session works in a fresh worktree of it.",
+        "Its reply stays there: read it with fleet_session_read and message it with fleet_message, naming the machine.",
+      ].join(" "),
+      {
+        machine: { type: "string", description: "The machine's name, from fleet_machine_list." },
+        folder: { type: "string", description: "A folder on that machine, from fleet_machine_list." },
+        title: { type: "string", description: "Short title for the new session, e.g. \"Check the Windows installer\"." },
+        task: { type: "string", description: "The task: what you need done and why, with the paths and details it needs to act on its own." },
+        branch: { type: "string", description: "A branch you pushed, for a fresh worktree of it there. Leave it out to work in the folder as it is." },
+        harness: { type: "string", description: "The harness to run there, from fleet_machine_list. Leave it out for that machine's default." },
+      },
+      (input, tool) =>
+        callFleet(
+          "start",
+          tool,
+          {
+            machine: input.machine,
+            folder: input.folder,
+            title: input.title,
+            task: input.task,
+            branch: input.branch || null,
+            harness: input.harness || null,
+          },
+          SESSION_START_PATH,
+        ),
+      { optional: ["branch", "harness"] },
     ),
   )
 }
